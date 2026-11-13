@@ -6,8 +6,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/reliant-labs/forge/pkg/observe"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/agentruns"
@@ -40,6 +45,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
+	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/orgmove"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
@@ -80,6 +89,11 @@ type WorkerDaemonRouter struct {
 	// when self-hosted. manage_machine stops and resizes through it too.
 	ControlPlane controlplane.Service
 }
+
+// A run step's retry reattaches through the worker's router
+// (toolexec.RemoteExecutor.ReattachTool); losing the method would quietly
+// turn every reattach back into a refusal.
+var _ toolexec.ToolRequestReattacher = (*WorkerDaemonRouter)(nil)
 
 // WorkerDaemonRouterDeps is the bus the router routes over, the database the
 // daemon records come from, and the control plane that wakes machines.
@@ -417,17 +431,24 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 	if githubAccess != nil {
 		access = map[string]trigger.IntegrationAccess{ghaccess.IntegrationID: gitHubAccess{githubAccess}}
 	}
+	// An org's linked GitHub App installations: a moved trigger bound to
+	// one resumes only when its new org has it linked (ResumeAfterOrgMove).
+	apps, err := gitTokens(d.ControlPlane)
+	if err != nil {
+		return nil, fmt.Errorf("trigger service: %w", err)
+	}
 	svc, err := trigger.New(trigger.Deps{
-		Logger:       d.Logger,
-		Config:       d.Config,
-		Repo:         repo,
-		Syncer:       syncer,
-		Fires:        fires,
-		ControlPlane: hostedControlPlane(d.ControlPlane),
-		Access:       access,
-		Integrations: d.Integrations.Config,
-		Sealer:       d.Vault,
-		Catalog:      d.Pollers,
+		OrgGitHubApps: apps,
+		Logger:        d.Logger,
+		Config:        d.Config,
+		Repo:          repo,
+		Syncer:        syncer,
+		Fires:         fires,
+		ControlPlane:  hostedControlPlane(d.ControlPlane),
+		Access:        access,
+		Integrations:  d.Integrations.Config,
+		Sealer:        d.Vault,
+		Catalog:       d.Pollers,
 		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
@@ -619,6 +640,38 @@ type TemporalWorkerDeps struct {
 	Worker *configv1.WorkerConfig
 	// NATS delivers the stop nudges the activities on this worker watch.
 	NATS *NATSConn
+	// Membership decides org resources in every activity (authz); the org
+	// resolver.
+	Membership *orgs.Resolver
+	// Policies is the org policy resolver every activity carries
+	// (orgpolicy).
+	Policies *orgpolicy.Resolver
+	// Triggers turns a moved project's triggers back on in their new org
+	// (orgmove's ResumeTriggers step).
+	Triggers *WorkerTrigger
+}
+
+// workerOrgMoves is the steps of a project's move to another org on this
+// worker: nil, so the activities are not registered, without a control plane
+// signed as the internal service (it cannot Prepare, Abort or Record) or the
+// trigger service.
+func workerOrgMoves(d TemporalWorkerDeps) (orgmove.Service, error) {
+	if d.Router == nil || d.Router.ControlPlane == nil || d.Triggers == nil || d.Triggers.Service == nil {
+		return nil, nil
+	}
+	if ControlPlaneEndpoint(d.ControlPlane).InternalServiceSecret == "" {
+		return nil, nil
+	}
+	svc, err := orgmove.New(orgmove.Deps{
+		Logger:       slog.Default(),
+		Store:        d.DB,
+		ControlPlane: d.Router.ControlPlane,
+		Triggers:     d.Triggers.Service,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return orgmove.NewServiceWithForgeMiddleware(svc), nil
 }
 
 // HostedActions is the worker's hosted HTTP action executor: a separate
@@ -698,11 +751,16 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	// the subscription cannot be made, stops still arrive on the regular
 	// heartbeat, one throttle window later: degrade, never refuse to run.
 	nudges := stopnudge.NewHub()
-	if _, err := d.NATS.Conn.Subscribe(stopnudge.Subject, func(m *nats.Msg) { nudges.HandleMessage(m.Data) }); err != nil {
+	if _, err := natsutil.SubscribeWithRecovery(d.NATS.Conn, stopnudge.Subject, func(m *nats.Msg) { nudges.HandleMessage(m.Data) }); err != nil {
 		slog.Default().Warn("stop nudges are DISABLED on this worker: pause and interrupt reach running activities on their next heartbeat",
 			"subject", stopnudge.Subject, "error", err)
 	}
+	moves, err := workerOrgMoves(d)
+	if err != nil {
+		return nil, err
+	}
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
+		OrgMoves:               moves,
 		StopNudges:             nudges,
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,
@@ -714,6 +772,8 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		MCPBinder:              toolexec.NewDaemonMCPContextBinder(d.Router),
 		ConfigProvider:         d.ConfigProvider,
 		TriggerLauncher:        d.Launcher,
+		Membership:             d.Membership,
+		Policies:               d.Policies,
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
@@ -801,4 +861,131 @@ func NewWriteLedgerPrune(d WriteLedgerPruneDeps) (*WriteLedgerPrune, error) {
 func (p *WriteLedgerPrune) Run(ctx context.Context) error {
 	p.ledger.PruneLoop(ctx, p.writes)
 	return nil
+}
+
+// ledgerRetentionInterval is how often the ledger retention pass runs. Each
+// pass covers only what aged out since the last one, so an hour keeps it
+// small once the first pass has worked off the backlog.
+const ledgerRetentionInterval = time.Hour
+
+// ledgerRetentionPause paces a pass's batches (db.LedgerRetentionPause).
+const ledgerRetentionPause = db.LedgerRetentionPause(20 * time.Millisecond)
+
+// LedgerRetention compacts chat update logs and prunes finished runs' internal
+// steps past their retention (internal/db/ledger_retention.go), hourly. Every
+// replica runs it: the work is idempotent and skips what another replica is
+// deleting.
+type LedgerRetention struct {
+	repo        *db.Repo
+	chatUpdates time.Duration
+	steps       time.Duration
+	startDelay  time.Duration
+	deleted     metric.Int64Counter
+
+	// after and runPass are time.After and pass; a test replaces them.
+	after   func(time.Duration) <-chan time.Time
+	runPass func(ctx context.Context, now time.Time)
+}
+
+// LedgerRetentionDeps is the repository, the two retention periods (0: off)
+// and how long after start the first pass waits (0: at once).
+type LedgerRetentionDeps struct {
+	DB                     *db.Repo
+	ChatUpdateRetention    time.Duration
+	StepExecutionRetention time.Duration
+	StartDelay             time.Duration
+}
+
+// NewLedgerRetention builds the retention loop.
+//
+//forge:root-only worker
+func NewLedgerRetention(d LedgerRetentionDeps) (*LedgerRetention, error) {
+	deleted, err := otel.Meter("github.com/reliant-labs/reliant/internal/app/ledger_retention").Int64Counter(
+		"reliant.ledger_retention.rows_deleted",
+		metric.WithUnit("{row}"),
+		metric.WithDescription("Rows the ledger retention pass deleted, by table."))
+	// An instrument the SDK refuses still comes back usable (a no-op).
+	otel.Handle(err)
+	l := &LedgerRetention{
+		repo: d.DB, chatUpdates: d.ChatUpdateRetention, steps: d.StepExecutionRetention,
+		startDelay: d.StartDelay, deleted: deleted, after: time.After,
+	}
+	l.runPass = l.pass
+	return l, nil
+}
+
+// Run waits out the start delay, then runs a pass, then one an hour, until
+// ctx ends.
+//
+// The delay is what keeps compaction from racing a rollout. An api-server
+// of a release before the compaction watermark existed does not read it, so
+// it would replay a stale reconnect straight through compacted rows. A worker
+// that starts in the same rollout deletes nothing until the delay is over, by
+// which time the api-servers are on a release that reads the watermark. A
+// rollout longer than the delay re-opens that window, and only the rollout
+// that introduces the watermark has such servers at all: every later release
+// reads it.
+func (l *LedgerRetention) Run(ctx context.Context) error {
+	if l.chatUpdates <= 0 && l.steps <= 0 {
+		logging.InfoContext(ctx, "ledger retention is off: both retention periods are 0")
+		return nil
+	}
+	if l.startDelay > 0 {
+		logging.InfoContext(ctx, "ledger retention: first pass waits out the start delay", "delay", l.startDelay)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-l.after(l.startDelay):
+		}
+	}
+	ticker := time.NewTicker(ledgerRetentionInterval)
+	defer ticker.Stop()
+	for {
+		l.runPass(ctx, time.Now())
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
+// pass is one retention pass at now. A failure is logged and retried by the
+// next pass: everything it records (watermarks, the step cursor) is recorded
+// only for work that is done.
+func (l *LedgerRetention) pass(ctx context.Context, now time.Time) {
+	if l.chatUpdates > 0 {
+		cutoff := now.Add(-l.chatUpdates)
+		var res db.ChatCompactionResult
+		err := observe.RunRoot(ctx, "worker.ledger_retention.chat_updates", func(ctx context.Context) error {
+			var err error
+			res, err = l.repo.CompactChatUpdates(ctx, cutoff, ledgerRetentionPause)
+			return err
+		})
+		l.deleted.Add(context.WithoutCancel(ctx), res.Deleted, metric.WithAttributes(attribute.String("table", "chat_updates")))
+		attrs := []any{"chats", res.Chats, "examined", res.Examined, "deleted", res.Deleted, "cutoff", cutoff}
+		switch {
+		case err != nil && ctx.Err() == nil:
+			logging.WarnContext(ctx, "ledger retention: compacting chat updates failed", append(attrs, "error", err)...)
+		case res.Chats > 0:
+			logging.InfoContext(ctx, "ledger retention: compacted chat updates", attrs...)
+		}
+	}
+	if l.steps > 0 {
+		cutoff := now.Add(-l.steps)
+		var res db.StepRetentionResult
+		err := observe.RunRoot(ctx, "worker.ledger_retention.step_executions", func(ctx context.Context) error {
+			var err error
+			res, err = l.repo.PruneStepExecutions(ctx, cutoff, ledgerRetentionPause)
+			return err
+		})
+		l.deleted.Add(context.WithoutCancel(ctx), res.Deleted, metric.WithAttributes(attribute.String("table", "step_executions")))
+		attrs := []any{"runs", res.Runs, "deleted", res.Deleted, "cutoff", cutoff}
+		switch {
+		case err != nil && ctx.Err() == nil:
+			logging.WarnContext(ctx, "ledger retention: pruning step executions failed", append(attrs, "error", err)...)
+		case res.Runs > 0:
+			logging.InfoContext(ctx, "ledger retention: pruned step executions", attrs...)
+		}
+	}
 }

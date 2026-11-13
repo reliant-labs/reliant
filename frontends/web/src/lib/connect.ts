@@ -27,7 +27,7 @@
  *
  * ── The routes ─────────────────────────────────────────────────────────
  *
- *   control-plane   `controlplane.v1.*` — control-plane's admin-server.
+ *   control-plane   `controlplane.v1.*` — control-plane's platform-api.
  *   reliant-unauth  the pre-session sign-in procedures (UNAUTH_PROCEDURES).
  *   reliant-stream  `reliant.v1.StreamingService` — binary wire format.
  *   reliant-api     everything else — reliant's api-server, JSON.
@@ -40,11 +40,11 @@
  * ── Why DaemonRegistryService and TokenService are NOT control-plane ────
  *
  * Both are `reliant.v1.*`, served by reliant's api-server, and must never be
- * routed at admin-server — even though admin-server answers the same paths.
+ * routed at platform-api — even though platform-api answers the same paths.
  * `/reliant.v1.DaemonRegistryService/*` returns HTTP 200 from BOTH hosts, from
- * DIFFERENT databases: admin-server's adapter reads `controlplane.daemons`,
+ * DIFFERENT databases: platform-api's adapter reads `controlplane.daemons`,
  * which never receives a self-hosted daemon's registration, so its answer is
- * a confident, successful, wrong "you have no daemon". admin-server neither
+ * a confident, successful, wrong "you have no daemon". platform-api neither
  * serves nor forwards `reliant.v1.TokenService` at all. Both failures only
  * show in a packaged build (dev is same-origin and the Vite proxy sends
  * `/reliant.v1.*` to reliant-api), so `lib/__tests__/connect.routing.test.ts`
@@ -73,7 +73,7 @@ export type TransportRoute =
   | "reliant-unauth"
   | "control-plane";
 
-/** Every service in this proto package is served by control-plane's admin-server. */
+/** Every service in this proto package is served by control-plane's platform-api. */
 const CONTROL_PLANE_PACKAGE = "controlplane.v1.";
 
 /**
@@ -154,11 +154,11 @@ export function isApiReady(): boolean {
 }
 
 /**
- * control-plane's admin-server base URL, or null when this deployment has no
+ * control-plane's platform-api base URL, or null when this deployment has no
  * control plane (config.js's `CONTROL_PLANE_API_URL` unset).
  *
  * An http(s)-served renderer (web-dev AND electron-dev) uses the document
- * origin, so Vite's `/controlplane.v1.*` proxy forwards to admin-server —
+ * origin, so Vite's `/controlplane.v1.*` proxy forwards to platform-api —
  * first-party, ZERO CORS. The absolute URL stays the `hasControlPlane` gate and
  * the proxy TARGET (vite.config.ts reads it from process.env); only the
  * packaged app, which has no proxy, dials it directly.
@@ -317,8 +317,12 @@ export function installShellTransport(t: Transport | Promise<Transport> | null):
  * `renderWithTransport` in src/lib/test-utils and the generated hook tests
  * call it; production code never does.
  */
-export function setTransport(t: Transport | null): void {
+export function setTransport(t: Transport | null): () => void {
+  const previous = _override;
   _override = t;
+  // Preview lifecycles restore the transport they replaced, not necessarily
+  // the live transport (tests and another harness may own the previous one).
+  return () => { if (_override === t) _override = previous; };
 }
 
 /**

@@ -28,10 +28,13 @@ import {
   inboxServiceKeys,
   useCleanupStorage as useCleanupStorageRpc,
   useForgetStorageWorktree as useForgetStorageWorktreeRpc,
+  useKeepMarkedWorktree as useKeepMarkedWorktreeRpc,
+  useReclaimMarkedWorktreeNow as useReclaimMarkedWorktreeNowRpc,
   useDismissInboxItem,
   useListInbox,
   useRestoreInboxItem,
 } from "./inbox-service-hooks_gen";
+import { useDecideWorktreeReclaim as useDecideWorktreeReclaimRpc } from "./worktree-reclaim-service-hooks_gen";
 
 export type { InboxItem, ListInboxResponse } from "../gen/reliant/v1/inbox_pb";
 export { InboxItemKind } from "../gen/reliant/v1/inbox_pb";
@@ -198,6 +201,21 @@ export function useCleanupStorage() {
 }
 
 /**
+ * Answer a machine's worktree-reclaim item (`mutate({ daemonId, decisions })`):
+ * remove or keep each proposed worktree, as shown. The machine records each
+ * decision only while the worktree is still in the state shown. The inbox is
+ * read again either way: the item lists what the machine proposes now.
+ */
+export function useDecideWorktreeReclaim() {
+  const queryClient = useQueryClient();
+  return useDecideWorktreeReclaimRpc({
+    onSettled: () => {
+      void invalidateInbox(queryClient);
+    },
+  });
+}
+
+/**
  * Forget an archived workspace no machine is on record for and no connected
  * machine has (`mutate({ worktreeId })`): Reliant drops its record of the
  * folder and deletes nothing. Refused unless the server still finds it
@@ -207,6 +225,34 @@ export function useForgetStorageWorktree() {
   const queryClient = useQueryClient();
   return useForgetStorageWorktreeRpc({
     onError: () => {
+      void invalidateInbox(queryClient);
+    },
+  });
+}
+
+/**
+ * Keep a worktree marked to be reclaimed (`mutate({ worktreeId, markId })`):
+ * the mark shown is cancelled and its tombstone removed. The inbox is read
+ * again either way.
+ */
+export function useKeepMarkedWorktree() {
+  const queryClient = useQueryClient();
+  return useKeepMarkedWorktreeRpc({
+    onSettled: () => {
+      void invalidateInbox(queryClient);
+    },
+  });
+}
+
+/**
+ * Reclaim a marked worktree now (`mutate({ worktreeId, markId })`): the
+ * mark's wait is skipped and the worktree checked at once; one used since it
+ * was marked is kept. The inbox is read again either way.
+ */
+export function useReclaimMarkedWorktreeNow() {
+  const queryClient = useQueryClient();
+  return useReclaimMarkedWorktreeNowRpc({
+    onSettled: () => {
       void invalidateInbox(queryClient);
     },
   });

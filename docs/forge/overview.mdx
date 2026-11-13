@@ -1,6 +1,7 @@
 ---
-title: "Forge overview"
-description: "Forge is the foundation Reliant's agents build on: a Go and React framework with tests, environments, hosting and monitoring in place from the first commit"
+title: "Forge: Go + React framework for AI-written code"
+sidebarTitle: "Forge overview"
+description: "Forge is an open-source Go and React framework and deploy platform for AI coding agents: tests, dev/staging/prod environments, hosting and monitoring from the first commit"
 ---
 
 Forge is Reliant's framework for building, running and deploying software. Where Reliant is the harness, the agents, workflows and machines that do the work, Forge is the foundation they build on: the Go and React app itself, with the tests, deploys and monitoring that make it something you can run in production rather than a demo.
@@ -38,6 +39,10 @@ An app deployed to Reliant hosting reports on itself from its first deploy: gene
 ### Static sites, with or without a backend
 
 A landing page, docs site, SPA or PWA with no backend is a complete forge project: one static frontend, dev, staging and prod environments, and no server to run. An existing Vite or Next.js app can be adopted in place with `forge project new --in-place --kind site`. Agents can load the `deploy/static-site` skill for the details.
+
+### An app you already have, in any language
+
+A server written in another language keeps its code and its Dockerfile. Your agent adopts it by following `forge skill load adopt`, which works in tiers. Tier 1 ships the app to Reliant hosting with a managed Postgres, and you can stop there. The later tiers add OpenTelemetry, gated promotion and CI, and, only when it pays, moving pieces onto Forge's Go stack. [Escape hatches](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists) has the details.
 
 ## How Forge and Reliant fit together
 

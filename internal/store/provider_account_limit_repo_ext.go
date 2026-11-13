@@ -138,8 +138,8 @@ func ClaimUsageFetch(ctx context.Context, db orm.Context, accountID string, now 
 }
 
 // UpsertAccountLimitSnapshot stores snap's windows when snap is newer than the stored state
-// (monotonic in observed_at, so processes never regress it). An "allowed" snapshot lifts the
-// bench and clears the probe count; a "headers" one also stamps last_traffic_at. It never
+// (monotonic in observed_at, so processes never regress it). An "allowed" or "overage" (served
+// from credits) snapshot lifts the bench and clears the probe count; a "headers" one also stamps last_traffic_at. It never
 // touches the poll schedule. An empty status is "unknown" and an empty source "headers". A
 // snapshot for a deleted account inserts nothing.
 func UpsertAccountLimitSnapshot(ctx context.Context, db orm.Context, snap core.LimitState, now time.Time) error {
@@ -170,9 +170,9 @@ func UpsertAccountLimitSnapshot(ctx context.Context, db orm.Context, snap core.L
 			representative_window = EXCLUDED.representative_window,
 			source = EXCLUDED.source,
 			observed_at = EXCLUDED.observed_at,
-			limited_until = CASE WHEN EXCLUDED.status = 'allowed' THEN NULL ELSE provider_account_limits.limited_until END,
-			limited_window = CASE WHEN EXCLUDED.status = 'allowed' THEN NULL ELSE provider_account_limits.limited_window END,
-			limited_probes = CASE WHEN EXCLUDED.status = 'allowed' THEN 0 ELSE provider_account_limits.limited_probes END,
+			limited_until = CASE WHEN EXCLUDED.status IN ('allowed', 'overage') THEN NULL ELSE provider_account_limits.limited_until END,
+			limited_window = CASE WHEN EXCLUDED.status IN ('allowed', 'overage') THEN NULL ELSE provider_account_limits.limited_window END,
+			limited_probes = CASE WHEN EXCLUDED.status IN ('allowed', 'overage') THEN 0 ELSE provider_account_limits.limited_probes END,
 			updated_at = EXCLUDED.updated_at
 		WHERE provider_account_limits.observed_at < EXCLUDED.observed_at`,
 		snap.AccountID, snap.UserID, status, string(windows), acctNullText(snap.RepresentativeWindow), source,

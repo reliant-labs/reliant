@@ -55,6 +55,11 @@ export function envHeadline(
   const billing = runStates.find((state) => state.kind === "billing");
   if (billing) return { tone: "problem", text: billing.label, detail: billing.detail };
 
+  // An unclaimed preview the platform expired is not the owner's stop either:
+  // "Stopped by you" would hide that claiming it is the fix.
+  const expired = runStates.find((state) => state.kind === "expired");
+  if (expired) return { tone: "problem", text: expired.label, detail: expired.detail };
+
   // A QUEUED deploy outranks the run state and the readings: both describe
   // the release still running, and what the reader needs is that the new one
   // has not started and who has to do what for it to.

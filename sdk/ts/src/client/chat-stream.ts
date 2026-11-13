@@ -23,7 +23,9 @@ import type {
   ProtoMessageUpdate,
   UserUpdate,
 } from "./events.js";
+import { toolBodyModeOf } from "./content-block-bodies.js";
 import { ReconnectingStream, type StreamEnvironment } from "./reconnecting-stream.js";
+import type { ToolBodies } from "./types.js";
 import type { StreamingClient } from "./user-stream.js";
 
 // Log prefix for filtering/debugging
@@ -79,7 +81,15 @@ export interface ChatStreamCallbacks {
   onChatSubscriptionRejected?: (chatId: string) => void;
 }
 
-/** What a snapshot cost to open, for hosts that report it. Timings are `performance.now()`. */
+/**
+ * What a snapshot cost to open, for hosts that report it. Timings are `performance.now()`.
+ *
+ * @deprecated The offsets are measured from the connection's open, not from
+ * the user's intent, and only a snapshot reports them: a replay never does.
+ * Time a chat open on the host's own clock from `onSubscribe`,
+ * `onSnapshotReceived`, `onReplayStarted` and `onCaughtUp` instead. Kept, and
+ * still reported, for existing consumers.
+ */
 export interface SnapshotTiming {
   chatId: string;
   traceId: string;
@@ -92,10 +102,41 @@ export interface SnapshotTiming {
   otherUpdates: number;
 }
 
+/** How a connection brought the chat's state up to date before its caught_up. */
+export type ChatSyncKind = "snapshot" | "replay";
+
+/** A connection's caught_up: the chat's state is now the server's. */
+export interface ChatCaughtUpInfo {
+  chatId: string;
+  /**
+   * "snapshot" when the server sent one on this connection, otherwise
+   * "replay" (from the connection's cursor; possibly a replay of nothing).
+   */
+  sync: ChatSyncKind;
+  /** The first sync of a chat just subscribed to, not a resync of an open one. */
+  initialSync: boolean;
+  /** Persisted updates the connection delivered before caught_up. */
+  replayedUpdates: number;
+  latestSequence: number;
+}
+
 /** Observation points for hosts that profile the stream. All optional, all best-effort. */
 export interface ChatStreamHooks {
   onSubscribe?: (chatId: string) => void;
   onSnapshotReceived?: (info: { chatId: string; messages: number; otherUpdates: number }) => void;
+  /**
+   * The server answered the connection's cursor with a replay: its first
+   * update batch before caught_up, when no snapshot came first. Once per
+   * connection. A replay of nothing sends no batch, so it reports only
+   * `onCaughtUp`.
+   */
+  onReplayStarted?: (info: { chatId: string; sinceSequence: number; updates: number }) => void;
+  /** The server's caught_up for the connection. Once per connection. */
+  onCaughtUp?: (info: ChatCaughtUpInfo) => void;
+  /**
+   * @deprecated See {@link SnapshotTiming}: prefer `onSnapshotReceived` and
+   * `onCaughtUp`. Still called after every snapshot.
+   */
   onSnapshotApplied?: (timing: SnapshotTiming) => void;
 }
 
@@ -106,12 +147,22 @@ export interface ChatStreamOptions extends StreamEnvironment {
   /** The project the user stream is scoped to. */
   projectId?: string;
   hooks?: ChatStreamHooks;
+  /**
+   * How the snapshot and replay send the bodies of finished tool calls.
+   * "full" (the default) is what every client has always had. "stub" sends
+   * them elided (ContentBlock.body_elided) for fetchContentBlockBodies to read
+   * when shown; live frames stay full either way. A server that predates the
+   * option ignores it and sends full bodies, so act on each block's
+   * `bodyElided`, never on the mode asked for.
+   */
+  toolBodies?: ToolBodies;
 }
 
 export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
   private callbacks: ChatStreamCallbacks;
   private readonly client: () => StreamingClient;
   private readonly hooks: ChatStreamHooks;
+  private readonly toolBodies: ToolBodies | undefined;
   private chatId: string | undefined = undefined;
   private lastChatSequence: bigint = 0n;
   // The project the user stream is scoped to. The server forwards, on this
@@ -119,10 +170,16 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
   private projectId: string | undefined = undefined;
   private lastChatGapResyncAt = 0;
   // The current connection's open time (performance.now) and the server
-  // trace it is part of, from its traceresponse header: what the snapshot's
-  // "applied" event reports (lib/chatOpenTelemetry.ts).
+  // trace it is part of, from its traceresponse header: what the deprecated
+  // onSnapshotApplied hook reports.
   private connectionOpenedAtMs = 0;
   private connectionTraceId = "";
+  // How the current connection is bringing the chat up to date, for the
+  // onReplayStarted / onCaughtUp hooks: null until its first snapshot or
+  // update batch, and the persisted updates it delivered before caught_up.
+  private connectionSync: ChatSyncKind | null = null;
+  private connectionCaughtUp = false;
+  private connectionReplayedUpdates = 0;
   // The chat whose initial sync has not arrived yet for the current
   // subscription, or null. Set when a subscription to a chat begins; cleared
   // by settleChatSync when the server sends caught_up for it. Survives
@@ -148,6 +205,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     this.client = options.client;
     this.hooks = options.hooks ?? {};
     this.projectId = options.projectId;
+    this.toolBodies = options.toolBodies;
     // Idle until the first subscribeToChat: there is nothing to stream yet.
     this.isIntentionallyClosed = true;
   }
@@ -220,6 +278,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     this.chatId = chatId;
     this.lastChatSequence = resumeFrom > 0n ? resumeFrom : 0n;
     this.setChatSyncPendingFor(chatId);
+    this.resetConnectionSync();
     if (this.lastChatSequence > 0n) {
       this.log.info("Resuming chat from cached cursor", {
         chatId: chatId.slice(0, 8),
@@ -269,6 +328,17 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     this.close(true);
   }
 
+  /**
+   * Let the next subscribeToChat(chatId) ask the server again, though it
+   * refused the chat before. For an explicit open by the person, never for
+   * the self-healing reconcile: access can come back (a chat shared with
+   * their org again), and only someone choosing the chat should spend the
+   * request on finding out.
+   */
+  forgetRefusal(chatId: string): void {
+    this.rejectedChatIds.delete(chatId);
+  }
+
   getChatId(): string | undefined {
     return this.chatId;
   }
@@ -310,6 +380,12 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     this.setChatSyncPendingFor(null);
     this.close(false);
     this.callbacks.onChatSubscriptionRejected?.(chatId);
+  }
+
+  private resetConnectionSync(): void {
+    this.connectionSync = null;
+    this.connectionCaughtUp = false;
+    this.connectionReplayedUpdates = 0;
   }
 
   private setChatSyncPendingFor(chatId: string | null): void {
@@ -366,6 +442,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
       chatId: this.chatId ?? "",
       sinceSeq: this.lastChatSequence,
       projectId: this.projectId,
+      toolBodies: toolBodyModeOf(this.toolBodies),
     });
     this.log.info("Connecting to chat stream", {
       chatId: this.chatId?.slice(0, 8),
@@ -373,6 +450,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     });
     this.connectionOpenedAtMs = performance.now();
     this.connectionTraceId = "";
+    this.resetConnectionSync();
     return client.streamChatUpdates(request, {
       signal,
       onHeader: (headers) => {
@@ -413,6 +491,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
         // Read before any callback runs, so whatever they settle cannot
         // change how this snapshot is reported.
         const initialOpen = this.chatSyncPendingFor === chatId;
+        if (!this.connectionCaughtUp) this.connectionSync = "snapshot";
         this.hooks.onSnapshotReceived?.({
           chatId,
           messages: snapshot.messages.length,
@@ -474,6 +553,19 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
       case "updates": {
         const batch = event.event.value;
 
+        // Before caught_up, persisted updates are the connection's replay.
+        if (!this.connectionCaughtUp) {
+          const persisted = batch.updates.filter((u) => u.sequenceNumber !== 0n).length;
+          if (persisted > 0 && this.connectionSync === null) {
+            this.connectionSync = "replay";
+            this.hooks.onReplayStarted?.({
+              chatId,
+              sinceSequence: Number(this.lastChatSequence),
+              updates: persisted,
+            });
+          }
+        }
+
         // Persisted chat updates carry contiguous per-chat sequence numbers
         // (ephemeral streaming deltas carry 0). A jump past cursor+1 means an
         // upstream drop (e.g. NATS hub slow consumer): apply the contiguous
@@ -498,6 +590,10 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
             this.lastChatSequence = seq;
           }
           accepted.push(update);
+        }
+
+        if (!this.connectionCaughtUp) {
+          this.connectionReplayedUpdates += accepted.filter((u) => u.sequenceNumber !== 0n).length;
         }
 
         const updates: ChatUpdate[] = accepted
@@ -526,7 +622,17 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
       case "caughtUp": {
         // The initial chat sync for this stream is over — the only signal
         // that clears the syncing indicator. See settleChatSync.
+        const initialSync = this.chatSyncPendingFor === chatId;
         this.settleChatSync(event.event.value.latestSequence);
+        if (this.connectionCaughtUp) break;
+        this.connectionCaughtUp = true;
+        this.hooks.onCaughtUp?.({
+          chatId,
+          sync: this.connectionSync ?? "replay",
+          initialSync,
+          replayedUpdates: this.connectionReplayedUpdates,
+          latestSequence: Number(event.event.value.latestSequence),
+        });
         break;
       }
 

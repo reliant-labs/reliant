@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
@@ -113,7 +114,7 @@ func (s *Service) GetDaemon(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
 	}
-	if daemon.UserID != userID {
+	if !authz.CanReadMachine(ctx, userID, daemon) {
 		return nil, svcerr.NotFound("daemon")
 	}
 
@@ -218,7 +219,7 @@ func (s *Service) ownedOnlineDaemon(ctx context.Context, daemonID string) (userI
 	if err != nil {
 		return "", nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
 	}
-	if daemon == nil || daemon.UserID != userID {
+	if !authz.CanWriteMachine(ctx, userID, daemon) {
 		return "", nil, svcerr.NotFound("daemon")
 	}
 	attached, err := s.attachedDaemonSet(ctx, userID)
@@ -374,7 +375,7 @@ func (s *Service) ResumeDaemon(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
 	}
-	if daemon.UserID != userID {
+	if !authz.CanWriteMachine(ctx, userID, daemon) {
 		return nil, svcerr.NotFound("daemon")
 	}
 
@@ -555,8 +556,25 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 		info.Commit = att.Build.Commit
 		info.CommitTimeUnix = att.Build.CommitTimeUnix
 		info.ForgeVersion = att.Build.ForgeVersion
+		info.Health = machineHealthToProto(att.Health)
 	}
 	return info
+}
+
+// machineHealthToProto is an attached daemon's health. One whose heartbeats
+// report none (it predates the report, or has not probed yet) is healthy:
+// only a daemon that says it is degraded reads DEGRADED.
+func machineHealthToProto(h db.MachineHealth) *reliantv1.MachineHealth {
+	out := &reliantv1.MachineHealth{State: reliantv1.MachineHealthState_MACHINE_HEALTH_STATE_OK}
+	if h.State == db.MachineHealthDegraded {
+		out.State = reliantv1.MachineHealthState_MACHINE_HEALTH_STATE_DEGRADED
+		out.Code = h.Code
+		out.Reason = h.Reason
+	}
+	if !h.Since.IsZero() {
+		out.SinceMs = h.Since.UnixMilli()
+	}
+	return out
 }
 
 func projectPathsToDiscoveredProjects(projectPathsJSON *string) []*reliantv1.DiscoveredProject {

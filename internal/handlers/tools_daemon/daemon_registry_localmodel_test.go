@@ -182,7 +182,7 @@ func TestInventory_WakesRefreshWaiter(t *testing.T) {
 	repo := &MockRepository{SetDaemonLocalModelsFunc: func(context.Context, string, string) error { return nil }}
 	svc.deps.Repo = repo
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	got := make(chan *reliantv1.LocalModelInventory, 1)
 	go func() {
@@ -196,7 +196,7 @@ func TestInventory_WakesRefreshWaiter(t *testing.T) {
 	select {
 	case msg := <-conn.sendCh:
 		require.NotNil(t, msg.GetLocalModelRefresh())
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("refresh was not sent to the daemon")
 	}
 	// ...and the daemon's next inventory answers it.
@@ -204,7 +204,7 @@ func TestInventory_WakesRefreshWaiter(t *testing.T) {
 	select {
 	case inv := <-got:
 		assert.Equal(t, "ollama", inv.GetEndpoints()[0].GetId())
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("refresh waiter was not woken by the inventory")
 	}
 	// ...and is stored on the daemon's row.

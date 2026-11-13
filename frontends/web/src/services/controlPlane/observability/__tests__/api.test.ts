@@ -20,7 +20,7 @@ import {
   WorkloadPodState,
   WorkloadReleaseBasis,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
-import { WorkloadKind } from "@/gen/controlplane/controlplane/v1/deploy_pb";
+import { DeclaredSpecGap, WorkloadKind } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 
 import {
   composeLogQuery,
@@ -235,6 +235,17 @@ describe("traces and panels", () => {
     expect(result.series[0]).toMatchObject({ label: "ratio", group: { "service.name": "api" }, timestamps: [window.startMs / 1000], values: [0.02] });
     expect(result.rows[0]).toEqual({ group: { "span.name": "a/B" }, values: [12] });
     expect(result.columns).toEqual(["requests"]);
+    // no dashboard named: no Forge-Panel label
+    expect(client.queryPanel.mock.calls[0][1]?.headers?.["Forge-Panel"]).toBeUndefined();
+  });
+
+  it("names a dashboard panel's read with Forge-Panel", async () => {
+    client.queryPanel.mockResolvedValue({ panelId: "fleet-now", kind: "sql", unit: "", stepSeconds: 0, truncated: false, columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [] });
+    await queryPanel({ ...env, window, panel: { id: "fleet-now", title: "Fleet now", kind: "sql", signal: "traces", series: [], sql: "SELECT 1" }, services: [], stepSeconds: 0, dashboardId: "devboxes" });
+    const options = client.queryPanel.mock.calls[0][1];
+    expect(options.headers).toEqual({ "Forge-Panel": "devboxes/fleet-now" });
+    // the read scheduler's abort signal still rides along
+    expect(options.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("preserves SQL numeric column metadata separately from string group attributes", async () => {
@@ -576,6 +587,7 @@ describe("workloads: the server's verdict, pods, jobs and the declaration", () =
       name: "api",
       kind: "statefulset",
       specRecorded: true,
+      specGap: null,
       replicas: 2,
       cpuRequestMillicores: 250,
       cpuLimitMillicores: 1000,
@@ -589,5 +601,24 @@ describe("workloads: the server's verdict, pods, jobs and the declaration", () =
       sourceCommit: "992bb09",
       bundleId: "b1",
     });
+  });
+
+  it.each([
+    [DeclaredSpecGap.PENDING, "pending"],
+    [DeclaredSpecGap.UNREADABLE, "unreadable"],
+    [DeclaredSpecGap.NOT_IN_MANIFESTS, "not-in-manifests"],
+    [DeclaredSpecGap.UNSPECIFIED, "unknown"],
+  ] as const)("says why a declared spec is not recorded (%s → %s)", async (gap, want) => {
+    client.getWorkload.mockResolvedValue({
+      stepSeconds: 60,
+      truncated: false,
+      series: [],
+      events: [],
+      imageChanges: [],
+      versionChanges: [],
+      workloads: [wire({ declared: { name: "api", kind: WorkloadKind.DEPLOYMENT, specRecorded: false, specGap: gap, envNames: [], ports: [] } })],
+    });
+    const detail = await getWorkload({ ...env, window, workload: "api" });
+    expect(detail.workloads[0]!.declared).toMatchObject({ specRecorded: false, specGap: want });
   });
 });

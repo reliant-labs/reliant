@@ -14,7 +14,9 @@ import (
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/observe"
+	"google.golang.org/protobuf/encoding/protojson"
 
+	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 )
 
@@ -121,9 +123,18 @@ func (c *Client) IntrospectAccount(ctx context.Context, token string) (auth.Acce
 	return auth.AccessTokenAccount{Principal: p, Email: strings.TrimSpace(out.ActingUserEmail)}, nil
 }
 
+// ErrNoRecognisedScope is an active token that resolved to no scope this
+// server recognises: refused, never authenticated as nothing. A token whose
+// ceiling holds only environment-bound grants resolves so (the control plane
+// clips it to org-wide grants), which ExchangeToken reports as such.
+var ErrNoRecognisedScope = errors.New("the token carries no scope this server recognises")
+
 // principal maps an active introspection onto forge's principal.
 func (out introspectResponse) principal() (*fat.Principal, error) {
 	scopes := wildcardScopes(out.Scopes)
+	if !out.AllScopes && len(out.Scopes) == 0 {
+		return nil, fmt.Errorf("accesstokenclient: token %s: %w", out.TokenID, ErrNoRecognisedScope)
+	}
 	if !out.AllScopes {
 		var err error
 		if scopes, err = fat.NewSet(out.Scopes); err != nil {
@@ -133,13 +144,14 @@ func (out introspectResponse) principal() (*fat.Principal, error) {
 		}
 	}
 	if len(scopes) == 0 {
-		return nil, fmt.Errorf("accesstokenclient: token %s carries no scope this server recognises", out.TokenID)
+		return nil, fmt.Errorf("accesstokenclient: token %s: %w", out.TokenID, ErrNoRecognisedScope)
 	}
 	p := &fat.Principal{
 		TokenID:      out.TokenID,
 		OrgID:        out.OrgID,
 		ActingUserID: out.ActingUserID,
 		Scopes:       scopes,
+		AllScopes:    out.AllScopes, // a daemon's wildcard: auth.MachineBound refuses it
 		Ephemeral:    out.Ephemeral,
 		ExpiresAt:    out.ExpiresAt,
 	}
@@ -335,6 +347,169 @@ func (c *Client) UpdateForUser(
 		}
 	}
 	return info, nil
+}
+
+// OrgMembership is control-plane's answer about one user and one org.
+type OrgMembership struct {
+	// OrgID is the org the answer is about: the one asked for, or the
+	// user's default org when none was. "" when the user has no org.
+	OrgID string
+	// Member reports whether the user is a live member of OrgID.
+	Member bool
+	// Role is the member's role in OrgID: "owner", "admin" or "member". ""
+	// when Member is false, and "" from a control plane that predates the
+	// field: a caller reads "" as "unknown" and refuses
+	// anything only an admin may do.
+	Role string
+	// MemberSince is when the member's CURRENT membership of OrgID began (a
+	// rejoin's time, not the first join's). Zero when Member is false and
+	// from a control plane that predates the field (control-plane#2662): a
+	// caller then counts no grant made in the org (fail closed;
+	// docs/design/org-provider-accounts.md §3.3 there).
+	MemberSince time.Time
+	// OrgLiveMembers is how many live members OrgID has, valid only when
+	// OrgLiveMembersKnown (a member's answer from a control plane that has
+	// the field). It only ever chooses a default, never grants anything.
+	OrgLiveMembers      int32
+	OrgLiveMembersKnown bool
+}
+
+// ErrUnsupported reports a control plane that predates the rpc asked for. A
+// caller treats it as "this deployment has no answer", never as a negative.
+var ErrUnsupported = errors.New("accesstokenclient: the control plane does not support this call yet")
+
+// ResolveOrgMembership asks control-plane whether userID is a live member of
+// orgID, or, with orgID "", which org is their default.
+func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string) (OrgMembership, error) {
+	var out struct {
+		OrgID          string     `json:"orgId"`
+		Member         bool       `json:"member"`
+		Role           string     `json:"role"`
+		MemberSince    *time.Time `json:"memberSince"`
+		OrgLiveMembers *int32     `json:"orgLiveMembers"`
+	}
+	body := map[string]any{"userId": userID}
+	if orgID != "" {
+		body["orgId"] = orgID
+	}
+	if err := c.call(ctx, "ResolveOrgMembership", body, &out); err != nil {
+		if isUnsupported(err) {
+			return OrgMembership{}, fmt.Errorf("%w: ResolveOrgMembership: %w", ErrUnsupported, err)
+		}
+		return OrgMembership{}, err
+	}
+	m := OrgMembership{OrgID: out.OrgID, Member: out.Member}
+	if out.Member {
+		// A role, a membership epoch and a member count are only ever a
+		// member's: never carry one on a negative.
+		m.Role = out.Role
+		if out.MemberSince != nil {
+			m.MemberSince = out.MemberSince.UTC()
+		}
+		if out.OrgLiveMembers != nil {
+			m.OrgLiveMembers, m.OrgLiveMembersKnown = *out.OrgLiveMembers, true
+		}
+	}
+	return m, nil
+}
+
+// isUnsupported is a control plane without the method: Connect's
+// unimplemented, or the 404 connect-go's service handler answers for a
+// procedure it does not know.
+func isUnsupported(err error) bool {
+	var rpc *RPCError
+	return errors.As(err, &rpc) && (rpc.Code == "unimplemented" || rpc.Code == http.StatusText(http.StatusNotFound))
+}
+
+// GoneOrg is an org control-plane reports gone: soft-deleted, or its owner's
+// account deleted with no live member left. At is when it went.
+type GoneOrg struct {
+	OrgID string
+	At    time.Time
+}
+
+// MaxResolveGoneOrgs is the most org ids one ResolveGoneOrgs call may name
+// (control-plane refuses a longer list).
+const MaxResolveGoneOrgs = 500
+
+// ResolveGoneOrgs asks control-plane which of orgIDs are gone. An org it
+// does not report is live, or unknown to it: a caller deletes nothing for
+// one. A control plane that predates the rpc answers ErrUnsupported.
+func (c *Client) ResolveGoneOrgs(ctx context.Context, orgIDs []string) ([]GoneOrg, error) {
+	if len(orgIDs) == 0 {
+		return nil, nil
+	}
+	if len(orgIDs) > MaxResolveGoneOrgs {
+		return nil, fmt.Errorf("accesstokenclient: ResolveGoneOrgs: %d org ids, at most %d", len(orgIDs), MaxResolveGoneOrgs)
+	}
+	var out struct {
+		Gone []struct {
+			OrgID  string    `json:"orgId"`
+			GoneAt time.Time `json:"goneAt"`
+		} `json:"gone"`
+	}
+	if err := c.call(ctx, "ResolveGoneOrgs", map[string]any{"orgIds": orgIDs}, &out); err != nil {
+		if isUnsupported(err) {
+			return nil, fmt.Errorf("%w: ResolveGoneOrgs: %w", ErrUnsupported, err)
+		}
+		return nil, err
+	}
+	asked := make(map[string]bool, len(orgIDs))
+	for _, id := range orgIDs {
+		asked[id] = true
+	}
+	gone := make([]GoneOrg, 0, len(out.Gone))
+	for _, g := range out.Gone {
+		// Only an answer about an org asked for, with a time, counts: the
+		// caller destroys what an answer names.
+		if !asked[g.OrgID] || g.GoneAt.IsZero() {
+			continue
+		}
+		gone = append(gone, GoneOrg{OrgID: g.OrgID, At: g.GoneAt.UTC()})
+	}
+	return gone, nil
+}
+
+// OrgPolicy is one version of an org's admin policy document
+// (control-plane docs/design/org-policies.md).
+type OrgPolicy struct {
+	// Version is 0 while the org has no policy, then moves forward one per
+	// accepted edit, never back.
+	Version int64
+	// Policy is the document; never nil, and empty when there is none.
+	Policy *controlplanev1.OrgPolicy
+}
+
+// ResolveOrgPolicy asks control-plane for orgID's policy document. A control
+// plane that predates the rpc answers ErrUnsupported.
+func (c *Client) ResolveOrgPolicy(ctx context.Context, orgID string) (OrgPolicy, error) {
+	var out struct {
+		// Version is an int64, which protojson writes as a string.
+		Version json.Number     `json:"version"`
+		Policy  json.RawMessage `json:"policy"`
+	}
+	if err := c.call(ctx, "ResolveOrgPolicy", map[string]any{"orgId": orgID}, &out); err != nil {
+		if isUnsupported(err) {
+			return OrgPolicy{}, fmt.Errorf("%w: ResolveOrgPolicy: %w", ErrUnsupported, err)
+		}
+		return OrgPolicy{}, err
+	}
+	p := OrgPolicy{Policy: &controlplanev1.OrgPolicy{}}
+	if out.Version != "" {
+		v, err := out.Version.Int64()
+		if err != nil || v < 0 {
+			return OrgPolicy{}, fmt.Errorf("accesstokenclient: ResolveOrgPolicy: version %q is not a version", out.Version)
+		}
+		p.Version = v
+	}
+	if len(out.Policy) > 0 {
+		// A section or field this release does not know is a rule it does
+		// not enforce yet: it is dropped, never refused.
+		if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(out.Policy, p.Policy); err != nil {
+			return OrgPolicy{}, fmt.Errorf("accesstokenclient: ResolveOrgPolicy: decoding the policy: %w", err)
+		}
+	}
+	return p, nil
 }
 
 // IsNotFound reports whether err is control-plane's not_found.

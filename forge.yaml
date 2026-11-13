@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v1.0.16-0.20261105192403-a54d7bccb888
+forge_version: v1.5.1-0.20261113062323-685069ed7517
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -129,6 +129,8 @@ generate:
         # control-plane's exported public contract. Both dirs are replaced
         # wholesale, only after buf succeeds.
         - name: controlplane-client
+          # Vendored descriptors are inputs to frontend hooks/mock projections.
+          phase: input
           command: [scripts/proto-generate-atomic.sh, buf.gen.controlplane.yaml, gen/controlplane, frontends/web/src/gen/controlplane]
           writes: [gen/controlplane, frontends/web/src/gen/controlplane]
         # The TypeScript SDK's generated protobuf subset (@reliantlabs/sdk),
@@ -137,9 +139,10 @@ generate:
           command: [scripts/proto-generate-atomic.sh, buf.gen.sdk-ts.yaml, sdk/ts/src/gen]
           writes: [sdk/ts/src/gen]
         # The Go SDK's copy of the public protos (sdk/go/gen, its own module),
-        # from buf.gen.sdk-go.yaml. Replaced wholesale, only after buf succeeds.
+        # from buf.gen.sdk-go.yaml. Replaced wholesale, only after buf succeeds;
+        # the script then strips the forgepb import so the SDK needs no forge.
         - name: sdk-go-gen
-          command: [scripts/proto-generate-atomic.sh, buf.gen.sdk-go.yaml, sdk/go/gen]
+          command: [scripts/sdk-go-gen.sh]
           writes: [sdk/go/gen]
         # The app's gen/reliant/v1 does not generate the public protos (buf.gen.yaml
         # routes them into the SDK); this re-exports the pinned SDK's package from
@@ -187,6 +190,47 @@ upgrade:
           commands:
               - [task, "contract:controlplane:sync"]
 ci:
+    vuln_scan:
+        # Exemptions only: no scanner is named, so the derived default scanners
+        # still run (forge's CIVulnConfig.UsesDefaultScanners).
+        #
+        # Two Moby advisories with NO fixed version for github.com/docker/docker
+        # (upstream fixed them only in github.com/moby/moby/v2, a different
+        # module path). Both are unreviewed, so they list no vulnerable symbols
+        # and govulncheck flags ANY package of the module that is linked.
+        #
+        # Reachability (govulncheck -show verbose,traces ./..., go1.27.4,
+        # 2026-11-11): reliant imports no github.com/docker/docker package
+        # itself. `go list -deps ./...` links exactly one,
+        # github.com/docker/docker/api/types/versions (compare.go: string
+        # version comparison, nothing else), and the only trace is its init,
+        # reached through forge's embedded KCL renderer:
+        #   internal/toolexec/daemonruntime/forge_memory.go -> forge/cli
+        #     -> forge/internal/kcloptions -> kcl-lang.io/kpm/pkg/{client,oci}
+        #     -> containers/image/v5/{docker,manifest} -> docker/api/types/versions
+        # Neither the AuthZ plugin middleware nor the plugin-privilege check is
+        # in that package, so the vulnerable code is not in the binary.
+        #
+        # Scoped to these two IDs, so a new docker/docker advisory still fails the
+        # gate. Expiry matches forge's own exemptions for the same two IDs
+        # (forge's forge.yaml): re-check then, when forge's kpm may have moved to
+        # moby/moby/v2 and both entries can go.
+        exemptions:
+            - id: GO-2026-4887
+              reason: >-
+                Moby AuthZ plugin bypass. No fixed version exists for
+                github.com/docker/docker. reliant links only
+                api/types/versions (string version comparison), init-only, via
+                forge's kpm/containers-image chain; it runs no Docker daemon
+                and no AuthZ plugin, so the vulnerable code is not in the binary.
+              expires: "2026-12-31"
+            - id: GO-2026-4883
+              reason: >-
+                Moby plugin-privilege off-by-one. No fixed version exists for
+                github.com/docker/docker. Same init-only linkage of
+                api/types/versions through forge's KCL renderer; reliant never
+                performs plugin privilege validation.
+              expires: "2026-12-31"
     gate:
         # `task ci` = forge's checks + these. Files no Go test reads.
         affected_ignore: ["*.md", "docs/**", "research/**", "dev-docs/**"]

@@ -214,6 +214,45 @@ func TestParseCodex_FullWindowIsRejected(t *testing.T) {
 	assert.Equal(t, StatusRejected, s.Status)
 }
 
+// Credit header names from codex-rs parse_credits_snapshot. A spent window
+// the credits pay for is overage; a CodexHeaderLimit over it is no refusal.
+func TestParseCodex_FullWindowPaidByCreditsIsOverage(t *testing.T) {
+	full := []string{"x-codex-secondary-used-percent", "100", "x-codex-secondary-window-minutes", "10080",
+		"x-codex-secondary-reset-at", "1704069000"}
+	for name, tc := range map[string]struct {
+		extra []string
+		want  Status
+	}{
+		"has credits":       {[]string{"x-codex-credits-has-credits", "true", "x-codex-credits-unlimited", "false"}, StatusOverage},
+		"unlimited, as 1":   {[]string{"x-codex-credits-has-credits", "0", "x-codex-credits-unlimited", "1"}, StatusOverage},
+		"no credits":        {[]string{"x-codex-credits-has-credits", "false", "x-codex-credits-unlimited", "false"}, StatusRejected},
+		"malformed value":   {[]string{"x-codex-credits-has-credits", "yes"}, StatusRejected},
+		"reached type wins": {[]string{"x-codex-credits-has-credits", "true", "x-codex-rate-limit-reached-type", "usage_limit_reached"}, StatusRejected},
+		// Credits pay for the plan's own windows, not another limit family's.
+		"another family spent": {[]string{"x-codex-credits-has-credits", "true", "x-codex-bengalfox-primary-used-percent", "100"}, StatusRejected},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := hdrs(append(append([]string{}, full...), tc.extra...)...)
+			s, ok := ParseCodex(h, fixedNow)
+			require.True(t, ok)
+			assert.Equal(t, tc.want, s.Status)
+			_, refused := CodexHeaderLimit(h, fixedNow)
+			assert.Equal(t, tc.want == StatusRejected, refused, "only a refusal is a usage limit")
+		})
+	}
+}
+
+func TestParseCodexEvent_CreditsMakeASpentWindowOverage(t *testing.T) {
+	const windows = `"rate_limits":{"secondary":{"used_percent":100,"window_minutes":10080,"reset_at":1704500000}}`
+	s, ok := ParseCodexEvent([]byte(`{"type":"codex.rate_limits",`+windows+`,"credits":{"has_credits":true,"unlimited":false,"balance":"12"}}`), fixedNow)
+	require.True(t, ok)
+	assert.Equal(t, StatusOverage, s.Status)
+
+	s, ok = ParseCodexEvent([]byte(`{"type":"codex.rate_limits",`+windows+`,"credits":{"has_credits":false,"unlimited":false,"balance":null}}`), fixedNow)
+	require.True(t, ok)
+	assert.Equal(t, StatusRejected, s.Status)
+}
+
 func TestParseCodexEvent(t *testing.T) {
 	payload := `{"type":"codex.rate_limits","plan_type":"plus","rate_limits":{"primary":{"used_percent":42.0,"window_minutes":300,"reset_at":1704069000},"secondary":{"used_percent":10,"window_minutes":10080,"reset_at":1704500000}},"metered_limit_name":"codex"}`
 	s, ok := ParseCodexEvent([]byte(payload), fixedNow)

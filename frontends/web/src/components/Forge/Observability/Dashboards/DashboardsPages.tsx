@@ -23,7 +23,7 @@ import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useOrgEnvironments } from "@/hooks/apps-queries";
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 
-import { rosterReadFailed, useForgeConsole } from "../../Console/consoleContext";
+import { useForgeConsole } from "../../Console/consoleContext";
 import { ENV_ALL } from "../../Console/envScope";
 import { NoEnvironmentsState } from "../../Console/NoEnvironmentsState";
 import { CloudNotice } from "../../SourceNotices";
@@ -31,9 +31,10 @@ import { orgPlaceOf, type ObsEnvironment } from "../obsPlace";
 import type { ObsSearch } from "../obsSearch";
 import type { ObsTopic } from "../ObsStates";
 import { useDeclaredEnvironments } from "../useDeclaredEnvironments";
-import { compareParam, isDashboardPageKind, rangeParam, refreshParam, type DashboardSearch } from "./dashboardModel";
+import { builtinPageRef, compareParam, isDashboardPageKind, isStandardBuiltinRef, rangeParam, refreshParam, type DashboardSearch } from "./dashboardModel";
 import { DashboardsList, type DashboardsSearch } from "./DashboardsList";
 import { DashboardView, type DashboardHrefs } from "./DashboardView";
+import { useDashboardHub } from "./useDashboardHub";
 
 /** The roster's recorded environments, as the observability pages address them (control-plane id ↔ name). */
 function useRecordedEnvs(): ObsEnvironment[] {
@@ -89,6 +90,7 @@ function useObservabilityHrefs(): DashboardHrefs {
   const { href, env } = useForgeConsole();
   return useMemo(
     () => ({
+      data: (search) => href({ kind: "data" }, { ...search }),
       logs: (search: ObsSearch = {}) => href({ kind: "obs-view", view: "logs" }, { ...search }),
       traces: (search: ObsSearch = {}) => href({ kind: "obs-view", view: "traces" }, { ...search }),
       profiles: (search: ObsSearch = {}) => href({ kind: "obs-view", view: "profiles" }, { ...search }),
@@ -96,7 +98,7 @@ function useObservabilityHrefs(): DashboardHrefs {
       dashboards: href({ kind: "obs-view", view: "dashboards" }),
       list: href({ kind: "obs-view", view: "dashboards" }),
       releases: href({ kind: "releases" }),
-      release: (version: string) => href({ kind: "release", version }),
+      release: (version: string, extra?: Record<string, unknown>) => href({ kind: "release", version }, extra),
       trace: (traceId: string) => href({ kind: "obs-view", view: "traces" }, { trace: traceId, range: "7d" }),
       session: (sessionId: string) => href({ kind: "obs-view", view: "sessions" }, { session: sessionId }),
       workload: (name: string, envName?: string | null) => workloadPath(href, envName ?? env, name),
@@ -142,21 +144,7 @@ export function DashboardsPage() {
   const environments = useRecordedEnvs();
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
-  const { href } = useForgeConsole();
-  const listHrefs = useMemo(
-    () => ({
-      dashboard: hrefs.dashboard,
-      hub: {
-        alerts: href({ kind: "obs-view", view: "alerts" }),
-        releases: href({ kind: "releases" }),
-        errors: href({ kind: "obs-view", view: "errors" }),
-        release: hrefs.release,
-        workload: (name: string, where: string | null) => workloadPath(href, where ?? env, name),
-        logs: (service: string) => hrefs.logs({ service, severity: "error,fatal" }),
-      },
-    }),
-    [hrefs, href, env]
-  );
+  const listHrefs = useMemo(() => ({ dashboard: hrefs.dashboard }), [hrefs]);
   return (
     // Not behind RosterGate: organization costs are a builtin dashboard that
     // needs no deployed environment, so the list stays reachable and the
@@ -170,8 +158,8 @@ export function DashboardsPage() {
         project={forgeProject}
         env={env}
         environments={environments}
-        environmentsUnread={rosterReadFailed(roster)}
-        search={{ view: search.view, q: search.q, group: search.group, source: search.source, owner: search.owner }}
+        // An old `view` (the retired Overview tab) is read and ignored: every link lands on the list.
+        search={{ q: search.q, group: search.group, source: search.source, owner: search.owner }}
         onSearch={onSearch}
         hrefs={listHrefs}
         navigateTo={navigateTo}
@@ -190,7 +178,7 @@ export function DashboardPage() {
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
   const dashRef = useMemo<DashboardRef | null>(
-    () => (isDashboardPageKind(kind) ? { kind, projectId: kind === "builtin" ? "" : forgeProject, key } : null),
+    () => (!isDashboardPageKind(kind) ? null : kind === "builtin" ? builtinPageRef(key, forgeProject) : { kind, projectId: forgeProject, key }),
     [kind, forgeProject, key]
   );
   const search: DashboardSearch = {
@@ -212,9 +200,12 @@ export function DashboardPage() {
     release: typeof raw.release === "string" ? raw.release : undefined,
     orgEnvs: Array.isArray(raw.orgEnvs) ? raw.orgEnvs.filter((name): name is string => typeof name === "string") : undefined,
   };
+  // The hub the dashboard is a tab of, from the index the nav already reads for this scope (one cache entry).
+  const hub = useDashboardHub(forgeProject, env === ENV_ALL ? undefined : environments.find((candidate) => candidate.name === env)?.id, dashRef);
   if (!dashRef) return null;
-  // Organization accounting is discoverable without a deployed environment.
-  if (dashRef.kind === "builtin") return <DashboardView key={`builtin/${key}`} project={forgeProject} dashRef={dashRef} env={env} environments={environments} orgEnvironments={orgEnvironments.environments} orgEnvironmentsLoading={orgEnvironments.loading} orgEnvironmentsError={orgEnvironments.error} onRetryOrgEnvironments={orgEnvironments.retry} search={search} onSearch={onSearch} onEnvChange={setEnv} hrefs={hrefs} navigateTo={navigateTo} />;
+  // Organization accounting is discoverable without a deployed environment. A
+  // project's standard built-ins read its environments, like any dashboard.
+  if (dashRef.kind === "builtin" && !isStandardBuiltinRef(dashRef)) return <DashboardView key={`builtin/${key}`} project={forgeProject} dashRef={dashRef} env={env} environments={environments} orgEnvironments={orgEnvironments.environments} orgEnvironmentsLoading={orgEnvironments.loading} orgEnvironmentsError={orgEnvironments.error} onRetryOrgEnvironments={orgEnvironments.retry} search={search} onSearch={onSearch} onEnvChange={setEnv} hrefs={hrefs} navigateTo={navigateTo} />;
   return (
     <RosterGate testId="console-dashboard" topic="dashboards">
       <DashboardView
@@ -230,6 +221,7 @@ export function DashboardPage() {
         onEnvChange={setEnv}
         hrefs={hrefs}
         navigateTo={navigateTo}
+        hub={hub}
       />
     </RosterGate>
   );

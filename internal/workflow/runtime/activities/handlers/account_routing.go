@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -36,10 +38,10 @@ var lookupAvailableDrivers = drivers.LookupAvailableDrivers
 
 // getAvailableDrivers is lookupAvailableDrivers for best-effort callers: a failed
 // read is logged and reads as no providers.
-func getAvailableDrivers(ctx context.Context, userID string) models.AvailableDrivers {
-	avail, err := lookupAvailableDrivers(ctx, userID)
+func getAvailableDrivers(ctx context.Context, scope drivers.Scope) models.AvailableDrivers {
+	avail, err := lookupAvailableDrivers(ctx, scope)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to build available drivers from settings", "error", err, "userID", userID)
+		logging.ErrorContext(ctx, "Failed to build available drivers from settings", "error", err, "userID", scope.UserID, "orgID", scope.OrgID)
 		return models.AvailableDrivers{Drivers: make(map[models.DriverID]models.DriverConfig)}
 	}
 	return avail
@@ -53,10 +55,23 @@ type DriverForAccountFunc func(ctx context.Context, userID string, cfg models.Dr
 // recorder: an observer to install on a request served by an account, and the
 // bench that takes an account out of rotation until its limit resets.
 type AccountLimitRecorder interface {
-	// For returns the observer to install on a request served by accountID.
-	For(userID, accountID string) ratelimit.Observer
+	// For returns the observer to install on a request served by accountID,
+	// whose owner is owner (accountOwner).
+	For(owner core.AccountOwner, accountID string) ratelimit.Observer
 	// Bench records accountID refused until `until` (zero = unknown reset).
-	Bench(ctx context.Context, userID, accountID string, until time.Time, window string) (time.Time, error)
+	Bench(ctx context.Context, owner core.AccountOwner, accountID string, until time.Time, window string) (time.Time, error)
+}
+
+// accountOwner is who owns the account cfg names: its org when the account is an
+// org's (models.DriverConfig.AccountOrgID), else the person the run acts for. An
+// account's limit state, bench and needs-sign-in mark are the owner's, so an
+// org key benched or rejected for one member is out of rotation for them all
+// (control-plane docs/design/org-provider-accounts.md §3.1, §4.7).
+func accountOwner(userID string, cfg models.DriverConfig) core.AccountOwner {
+	if cfg.AccountOrgID != "" {
+		return core.OrgAccountOwner(cfg.AccountOrgID)
+	}
+	return core.UserAccountOwner(userID)
 }
 
 // routingSettings reads the per-provider routing mode setting.
@@ -87,6 +102,10 @@ type AccountRouting struct {
 	// Credentials takes an account whose API key the provider rejected out of
 	// rotation. Optional: without it a rejected key fails the turn as before.
 	Credentials CredentialMarker
+	// Funding holds each chat's question before it moves from its org's
+	// accounts to the person's own (§10). Optional: without it a call that
+	// would make that move waits, never asks and never spends.
+	Funding PersonalFundingStore
 }
 
 func (r *AccountRouting) active() bool {
@@ -108,7 +127,7 @@ func (r *AccountRouting) observe(ctx context.Context, userID string, acct *route
 	if r == nil || r.Recorder == nil || acct == nil || acct.Config.AccountID == "" {
 		return ctx
 	}
-	o := r.Recorder.For(userID, acct.Config.AccountID)
+	o := r.Recorder.For(accountOwner(userID, acct.Config.DriverConfig), acct.Config.AccountID)
 	if o == nil {
 		return ctx
 	}
@@ -148,7 +167,11 @@ func (e *allAccountsLimited) Unwrap() error { return e.UsageLimitError }
 // routeAccount picks the account of providerDriver that serves this thread.
 // It returns nil, nil when routing does not apply (no router, no per-account
 // driver builder, a provider with no accounts, an injected resolver).
-func routeAccount(ctx context.Context, spec llmCallSpec, avail models.AvailableDrivers, providerDriver, modelID string) (*routedAccount, error) {
+//
+// upgrade lets a thread on a usable account move up to a better tier: at a
+// turn start, or while the chat waits on its funding question (no call was
+// made, so no prompt cache is lost).
+func routeAccount(ctx context.Context, spec llmCallSpec, avail models.AvailableDrivers, providerDriver, modelID string, upgrade bool) (*routedAccount, error) {
 	if !spec.Routing.active() {
 		return nil, nil
 	}
@@ -170,6 +193,7 @@ func routeAccount(ctx context.Context, spec llmCallSpec, avail models.AvailableD
 		Accounts:  accounts,
 		Preferred: spec.Failover.PreferredAccount[providerDriver],
 		Mode:      spec.Routing.routingMode(ctx, spec.UserID, driver),
+		Upgrade:   upgrade,
 	})
 	var all *accountrouter.ErrAllLimited
 	if errors.As(err, &all) {
@@ -227,7 +251,9 @@ func (r *AccountRouting) announceAccountMove(ctx context.Context, post func(text
 
 // usageLimitContext says who was refused, for usageLimitFailure.
 type usageLimitContext struct {
-	UserID   string
+	// Scope is the call's scope (llmCallSpec.scope): whose accounts a
+	// fallback may be chosen from, the same set the call was routed over.
+	Scope    drivers.Scope
 	ThreadID string
 	// Driver is the provider that refused; empty when it cannot be told (the
 	// error then carries no facts and the workflow simply waits).
@@ -237,6 +263,12 @@ type usageLimitContext struct {
 	// request was not routed.
 	Account *routedAccount
 	Policy  types.FailoverPolicy
+	// ChatID and Plan are the chat's funding plan (fundingPlanFor), for the
+	// question before the person's own account replaces the org's (§10).
+	// OrgFundedLimited says the refused tier was the org's.
+	ChatID           string
+	Plan             fundingPlan
+	OrgFundedLimited bool
 }
 
 // usageLimitFailure turns a usage-limit refusal into a *types.UsageLimitFailure
@@ -278,28 +310,32 @@ func (r *AccountRouting) usageLimitFailure(ctx context.Context, err error, uc us
 	case r.active() && uc.Account != nil && uc.Account.Config.AccountID != "":
 		benched := true
 		if r.Recorder != nil {
-			if _, berr := r.Recorder.Bench(ctx, uc.UserID, uc.Account.Config.AccountID, resetAt, window); berr != nil {
+			if _, berr := r.Recorder.Bench(ctx, accountOwner(uc.Scope.UserID, uc.Account.Config.DriverConfig), uc.Account.Config.AccountID, resetAt, window); berr != nil {
 				benched = false
 				logging.WarnContext(ctx, "[Failover] Could not bench the refused account; waiting instead of switching",
-					"userID", uc.UserID, "provider", string(uc.Driver), "accountID", uc.Account.Config.AccountID, "error", berr)
+					"userID", uc.Scope.UserID, "provider", string(uc.Driver), "accountID", uc.Account.Config.AccountID, "error", berr)
 			}
 		} else {
 			benched = false
 		}
 		available, earliest, aerr := r.Router.Alternatives(ctx, accountrouter.Request{
-			UserID: uc.UserID, ThreadID: uc.ThreadID, Driver: uc.Driver,
+			UserID: uc.Scope.UserID, ThreadID: uc.ThreadID, Driver: uc.Driver,
 			ModelID: uc.ModelID, Accounts: uc.Account.Accounts,
 		}, uc.Account.Config.AccountID)
 		switch {
 		case aerr != nil:
 			logging.WarnContext(ctx, "[Failover] Could not ask for another account; waiting",
-				"userID", uc.UserID, "provider", string(uc.Driver), "error", aerr)
+				"userID", uc.Scope.UserID, "provider", string(uc.Driver), "error", aerr)
 		case available && benched:
 			facts.AlternativeAccount = true
 		case !available:
 			facts.ProviderEarliestReset, facts.ProviderResetIsProbe = earliest.At, earliest.Probe
 		}
 	}
+	if !synthetic && uc.Account != nil {
+		uc.OrgFundedLimited = uc.OrgFundedLimited || limitedTierIsOrgFunded(uc.Account.Accounts, uc.ModelID)
+	}
+	r.fundingOnLimit(ctx, uc, &facts)
 	if !facts.AlternativeAccount {
 		facts.FallbackModel = r.fallbackModel(ctx, uc)
 	}
@@ -313,6 +349,19 @@ func (r *AccountRouting) usageLimitFailure(ctx context.Context, err error, uc us
 // comes back unchanged. The next request, from any activity, then routes
 // around the account instead of meeting it first again.
 func (r *AccountRouting) providerFailure(ctx context.Context, err error, uc usageLimitContext) error {
+	// An org policy's verdict is the org's, not the account's: it never
+	// marks a credential, never benches an account and never fails over
+	// (control-plane docs/design/org-policies.md §5.1). It is stamped with
+	// whether a person is behind the run, which decides between pausing the
+	// turn and ending an unattended run, and the org is watched so its chats
+	// wake when the policy changes.
+	if refusal, ok := orgpolicy.RefusalOf(err); ok {
+		refusal.Unattended = !uc.Scope.Attended
+		orgpolicy.WatchRefused(ctx, uc.Scope.OrgID)
+		logging.InfoContext(ctx, "[OrgPolicy] An org policy refused the call; the turn stops with the reason",
+			"userID", uc.Scope.UserID, "orgID", uc.Scope.OrgID, "provider", string(uc.Driver), "reason", refusal.Reason, "unattended", refusal.Unattended)
+		return err
+	}
 	if rejected := r.credentialRejection(ctx, err, uc); rejected != nil {
 		return rejected
 	}
@@ -350,10 +399,10 @@ func (r *AccountRouting) fallbackModel(ctx context.Context, uc usageLimitContext
 		return ""
 	}
 	fd := models.DriverID(driverID)
-	avail, err := lookupAvailableDrivers(ctx, uc.UserID)
+	avail, err := lookupAvailableDrivers(ctx, uc.Scope)
 	if err != nil {
 		logging.WarnContext(ctx, "[Failover] Could not read the user's providers; offering no fallback",
-			"userID", uc.UserID, "error", err)
+			"userID", uc.Scope.UserID, "error", err)
 		return ""
 	}
 	cfg, ok := avail.Drivers[fd]
@@ -365,7 +414,7 @@ func (r *AccountRouting) fallbackModel(ctx context.Context, uc usageLimitContext
 	}
 	if accounts := avail.Accounts[fd]; r.active() && len(accounts) > 0 {
 		usable, _, err := r.Router.Alternatives(ctx, accountrouter.Request{
-			UserID: uc.UserID, Driver: fd, ModelID: modelID, Accounts: accounts,
+			UserID: uc.Scope.UserID, Driver: fd, ModelID: modelID, Accounts: accounts,
 		}, "")
 		if err == nil && !usable {
 			return ""

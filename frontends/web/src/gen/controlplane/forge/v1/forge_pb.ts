@@ -13,7 +13,54 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file forge/v1/forge.proto.
  */
 export const file_forge_v1_forge: GenFile = /*@__PURE__*/
-  fileDesc("ChRmb3JnZS92MS9mb3JnZS5wcm90bxIIZm9yZ2UudjEigAEKDUVudGl0eU9wdGlvbnMSDQoFdGFibGUYASABKAkSEwoLc29mdF9kZWxldGUYAiABKAgSEgoKdGltZXN0YW1wcxgDIAEoCBIjCgdpbmRleGVzGAQgAygLMhIuZm9yZ2UudjEuSW5kZXhEZWYSEgoKbWlkZGxld2FyZRgFIAMoCSI4CghJbmRleERlZhIMCgRuYW1lGAEgASgJEg4KBmZpZWxkcxgCIAMoCRIOCgZ1bmlxdWUYAyABKAgizQEKDEZpZWxkT3B0aW9ucxIKCgJwaxgBIAEoCBIgCgVzdG9yZRgDIAEoDjIRLmZvcmdlLnYxLlN0b3JlQXMSCwoDcmVmGAQgASgJEg4KBnVuaXF1ZRgFIAEoCBINCgVpbmRleBgGIAEoCBIVCg1kZWZhdWx0X3ZhbHVlGAcgASgJEgwKBHNraXAYCCABKAgSKwoIdmFsaWRhdGUYCSABKAsyGS5mb3JnZS52MS5WYWxpZGF0aW9uUnVsZXMSEQoJaW1tdXRhYmxlGAogASgIIq4BCg9WYWxpZGF0aW9uUnVsZXMSEAoIcmVxdWlyZWQYASABKAgSEgoKbWluX2xlbmd0aBgCIAEoBRISCgptYXhfbGVuZ3RoGAMgASgFEg8KB3BhdHRlcm4YBCABKAkSDgoGZm9ybWF0GAUgASgJEgsKA21pbhgGIAEoARILCgNtYXgYByABKAESFgoOYWxsb3dlZF92YWx1ZXMYCCADKAkSDgoGY3VzdG9tGAkgASgJIsEBCg5TZXJ2aWNlT3B0aW9ucxIMCgRuYW1lGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSLwoKdmlzaWJpbGl0eRgEIAEoDjIbLmZvcmdlLnYxLlNlcnZpY2VWaXNpYmlsaXR5EhQKDGRlcGVuZGVuY2llcxgFIAMoCRIiCgRhdXRoGAYgASgLMhQuZm9yZ2UudjEuQXV0aENvbmZpZxIQCghhdWRpZW5jZRgHIAEoCSI6CgpBdXRoQ29uZmlnEhUKDWF1dGhfcmVxdWlyZWQYASABKAgSFQoNYXV0aF9wcm92aWRlchgCIAEoCSLTAQoNTWV0aG9kT3B0aW9ucxIaCg1hdXRoX3JlcXVpcmVkGAEgASgISACIAQESEgoKaWRlbXBvdGVudBgDIAEoCBIqCgd0aW1lb3V0GAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhcKD2lkZW1wb3RlbmN5X2tleRgFIAEoCBIOCgZlcnJvcnMYBiADKAkSKwoIYWN0aXZpdHkYByABKAsyGS5mb3JnZS52MS5BY3Rpdml0eU9wdGlvbnNCEAoOX2F1dGhfcmVxdWlyZWQirQEKD0FjdGl2aXR5T3B0aW9ucxIMCgR2ZXJiGAEgASgJEigKBnRhcmdldBgCIAEoCzIYLmZvcmdlLnYxLkFjdGl2aXR5VGFyZ2V0EgsKA2VudhgDIAEoCRINCgVzY29wZRgEIAEoCRIOCgZkZXRhaWwYBSADKAkSKAoGd3JpdGVyGAYgASgOMhguZm9yZ2UudjEuQWN0aXZpdHlXcml0ZXISDAoEbm9uZRgHIAEoCSI5Cg5BY3Rpdml0eVRhcmdldBIMCgRraW5kGAEgASgJEgoKAmlkGAIgASgJEg0KBWxhYmVsGAMgASgJIvMCChJDb25maWdGaWVsZE9wdGlvbnMSDwoHZW52X3ZhchgBIAEoCRIMCgRmbGFnGAIgASgJEhUKDWRlZmF1bHRfdmFsdWUYAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSEwoLZGVzY3JpcHRpb24YBSABKAkSEQoJc2Vuc2l0aXZlGAYgASgIEhAKCGNhdGVnb3J5GAcgASgJEicKBHJvbGUYCCABKA4yGS5mb3JnZS52MS5Db25maWdGaWVsZFJvbGUSFgoOYWxsb3dlZF92YWx1ZXMYCSADKAkSEAoIb3B0aW9uYWwYCiABKAgSLgoPZW52X3Zhcl9hbGlhc2VzGAsgAygLMhUuZm9yZ2UudjEuRW52VmFyQWxpYXMSEgoKZW52X3ByZWZpeBgMIAEoCRISCgplbnZfc3VmZml4GA0gASgJEjAKDXJlcXVpcmVkX3doZW4YDiADKAsyGS5mb3JnZS52MS5Db25maWdDb25kaXRpb24iMAoPQ29uZmlnQ29uZGl0aW9uEg0KBWZpZWxkGAEgASgJEg4KBmVxdWFscxgCIAEoCSKRAQoLRW52VmFyQWxpYXMSDAoEbmFtZRgBIAEoCRISCgpkZXByZWNhdGVkGAIgASgIEjEKBnZhbHVlcxgDIAMoCzIhLmZvcmdlLnYxLkVudlZhckFsaWFzLlZhbHVlc0VudHJ5Gi0KC1ZhbHVlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiXwoTQmluYXJ5Q29uZmlnT3B0aW9ucxIOCgZiaW5hcnkYASABKAkSDwoHY29tbWFuZBgCIAMoCRInCghzdWJ0cmVlcxgDIAMoCzIVLmZvcmdlLnYxLkNvbW1hbmRQYXRoIhsKC0NvbW1hbmRQYXRoEgwKBHBhdGgYASADKAkiKQoVRnJvbnRlbmRDb25maWdPcHRpb25zEhAKCGZyb250ZW5kGAEgASgJKnEKB1N0b3JlQXMSGAoUU1RPUkVfQVNfVU5TUEVDSUZJRUQQABISCg5TVE9SRV9BU19KU09OQhABEhEKDVNUT1JFX0FTX1RFWFQQAhIRCg1TVE9SRV9BU19CTE9CEAMSEgoOU1RPUkVfQVNfVEFCTEUQBCp0ChFTZXJ2aWNlVmlzaWJpbGl0eRIiCh5TRVJWSUNFX1ZJU0lCSUxJVFlfVU5TUEVDSUZJRUQQABIaChZTRVJWSUNFX1ZJU0lCSUxJVFlfQVBJEAESHwobU0VSVklDRV9WSVNJQklMSVRZX0lOVEVSTkFMEAIqbwoOQWN0aXZpdHlXcml0ZXISHwobQUNUSVZJVFlfV1JJVEVSX1VOU1BFQ0lGSUVEEAASHwobQUNUSVZJVFlfV1JJVEVSX0lOVEVSQ0VQVE9SEAESGwoXQUNUSVZJVFlfV1JJVEVSX0hBTkRMRVIQAirhAQoPQ29uZmlnRmllbGRSb2xlEiEKHUNPTkZJR19GSUVMRF9ST0xFX1VOU1BFQ0lGSUVEEAASGgoWQ09ORklHX0ZJRUxEX1JPTEVfTU9ERRABEh4KGkNPTkZJR19GSUVMRF9ST0xFX1RMU19DRVJUEAISHQoZQ09ORklHX0ZJRUxEX1JPTEVfVExTX0tFWRADEiIKHkNPTkZJR19GSUVMRF9ST0xFX0NPUlNfT1JJR0lOUxAEEiwKKENPTkZJR19GSUVMRF9ST0xFX0NPUlNfQUxMT1dfQ1JFREVOVElBTFMQBTpSCgZlbnRpdHkSHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMYmIgDIAEoCzIXLmZvcmdlLnYxLkVudGl0eU9wdGlvbnNSBmVudGl0eTplCg1iaW5hcnlfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJmIAyABKAsyHS5mb3JnZS52MS5CaW5hcnlDb25maWdPcHRpb25zUgxiaW5hcnlDb25maWc6awoPZnJvbnRlbmRfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJqIAyABKAsyHy5mb3JnZS52MS5Gcm9udGVuZENvbmZpZ09wdGlvbnNSDmZyb250ZW5kQ29uZmlnOk0KBWZpZWxkEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxj8iAMgASgLMhYuZm9yZ2UudjEuRmllbGRPcHRpb25zUgVmaWVsZDpVCgZjb25maWcSHS5nb29nbGUucHJvdG9idWYuRmllbGRPcHRpb25zGOCJAyABKAsyHC5mb3JnZS52MS5Db25maWdGaWVsZE9wdGlvbnNSBmNvbmZpZzpVCgdzZXJ2aWNlEh8uZ29vZ2xlLnByb3RvYnVmLlNlcnZpY2VPcHRpb25zGNCGAyABKAsyGC5mb3JnZS52MS5TZXJ2aWNlT3B0aW9uc1IHc2VydmljZTpRCgZtZXRob2QSHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxi0hwMgASgLMhcuZm9yZ2UudjEuTWV0aG9kT3B0aW9uc1IGbWV0aG9kQo4BCgxjb20uZm9yZ2UudjFCCkZvcmdlUHJvdG9QAVoxZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvZm9yZ2UvcGtnL2ZvcmdlcGI7Zm9yZ2VwYqICA0ZYWKoCCEZvcmdlLlYxygIIRm9yZ2VcVjHiAhRGb3JnZVxWMVxHUEJNZXRhZGF0YeoCCUZvcmdlOjpWMWIGcHJvdG8z", [file_google_protobuf_descriptor, file_google_protobuf_duration]);
+  fileDesc("ChRmb3JnZS92MS9mb3JnZS5wcm90bxIIZm9yZ2UudjEiRwoRTGlzdEZpbHRlck9wdGlvbnMSDgoGY29sdW1uGAEgASgJEiIKAm9wGAIgASgOMhYuZm9yZ2UudjEuTGlzdEZpbHRlck9wIoABCg1FbnRpdHlPcHRpb25zEg0KBXRhYmxlGAEgASgJEhMKC3NvZnRfZGVsZXRlGAIgASgIEhIKCnRpbWVzdGFtcHMYAyABKAgSIwoHaW5kZXhlcxgEIAMoCzISLmZvcmdlLnYxLkluZGV4RGVmEhIKCm1pZGRsZXdhcmUYBSADKAkiOAoISW5kZXhEZWYSDAoEbmFtZRgBIAEoCRIOCgZmaWVsZHMYAiADKAkSDgoGdW5pcXVlGAMgASgIIs0BCgxGaWVsZE9wdGlvbnMSCgoCcGsYASABKAgSIAoFc3RvcmUYAyABKA4yES5mb3JnZS52MS5TdG9yZUFzEgsKA3JlZhgEIAEoCRIOCgZ1bmlxdWUYBSABKAgSDQoFaW5kZXgYBiABKAgSFQoNZGVmYXVsdF92YWx1ZRgHIAEoCRIMCgRza2lwGAggASgIEisKCHZhbGlkYXRlGAkgASgLMhkuZm9yZ2UudjEuVmFsaWRhdGlvblJ1bGVzEhEKCWltbXV0YWJsZRgKIAEoCCKuAQoPVmFsaWRhdGlvblJ1bGVzEhAKCHJlcXVpcmVkGAEgASgIEhIKCm1pbl9sZW5ndGgYAiABKAUSEgoKbWF4X2xlbmd0aBgDIAEoBRIPCgdwYXR0ZXJuGAQgASgJEg4KBmZvcm1hdBgFIAEoCRILCgNtaW4YBiABKAESCwoDbWF4GAcgASgBEhYKDmFsbG93ZWRfdmFsdWVzGAggAygJEg4KBmN1c3RvbRgJIAEoCSLBAQoOU2VydmljZU9wdGlvbnMSDAoEbmFtZRgBIAEoCRIPCgd2ZXJzaW9uGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEi8KCnZpc2liaWxpdHkYBCABKA4yGy5mb3JnZS52MS5TZXJ2aWNlVmlzaWJpbGl0eRIUCgxkZXBlbmRlbmNpZXMYBSADKAkSIgoEYXV0aBgGIAEoCzIULmZvcmdlLnYxLkF1dGhDb25maWcSEAoIYXVkaWVuY2UYByABKAkiOgoKQXV0aENvbmZpZxIVCg1hdXRoX3JlcXVpcmVkGAEgASgIEhUKDWF1dGhfcHJvdmlkZXIYAiABKAki0wEKDU1ldGhvZE9wdGlvbnMSGgoNYXV0aF9yZXF1aXJlZBgBIAEoCEgAiAEBEhIKCmlkZW1wb3RlbnQYAyABKAgSKgoHdGltZW91dBgEIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIXCg9pZGVtcG90ZW5jeV9rZXkYBSABKAgSDgoGZXJyb3JzGAYgAygJEisKCGFjdGl2aXR5GAcgASgLMhkuZm9yZ2UudjEuQWN0aXZpdHlPcHRpb25zQhAKDl9hdXRoX3JlcXVpcmVkIq0BCg9BY3Rpdml0eU9wdGlvbnMSDAoEdmVyYhgBIAEoCRIoCgZ0YXJnZXQYAiABKAsyGC5mb3JnZS52MS5BY3Rpdml0eVRhcmdldBILCgNlbnYYAyABKAkSDQoFc2NvcGUYBCABKAkSDgoGZGV0YWlsGAUgAygJEigKBndyaXRlchgGIAEoDjIYLmZvcmdlLnYxLkFjdGl2aXR5V3JpdGVyEgwKBG5vbmUYByABKAkiOQoOQWN0aXZpdHlUYXJnZXQSDAoEa2luZBgBIAEoCRIKCgJpZBgCIAEoCRINCgVsYWJlbBgDIAEoCSLzAgoSQ29uZmlnRmllbGRPcHRpb25zEg8KB2Vudl92YXIYASABKAkSDAoEZmxhZxgCIAEoCRIVCg1kZWZhdWx0X3ZhbHVlGAMgASgJEhAKCHJlcXVpcmVkGAQgASgIEhMKC2Rlc2NyaXB0aW9uGAUgASgJEhEKCXNlbnNpdGl2ZRgGIAEoCBIQCghjYXRlZ29yeRgHIAEoCRInCgRyb2xlGAggASgOMhkuZm9yZ2UudjEuQ29uZmlnRmllbGRSb2xlEhYKDmFsbG93ZWRfdmFsdWVzGAkgAygJEhAKCG9wdGlvbmFsGAogASgIEi4KD2Vudl92YXJfYWxpYXNlcxgLIAMoCzIVLmZvcmdlLnYxLkVudlZhckFsaWFzEhIKCmVudl9wcmVmaXgYDCABKAkSEgoKZW52X3N1ZmZpeBgNIAEoCRIwCg1yZXF1aXJlZF93aGVuGA4gAygLMhkuZm9yZ2UudjEuQ29uZmlnQ29uZGl0aW9uIjAKD0NvbmZpZ0NvbmRpdGlvbhINCgVmaWVsZBgBIAEoCRIOCgZlcXVhbHMYAiABKAkikQEKC0VudlZhckFsaWFzEgwKBG5hbWUYASABKAkSEgoKZGVwcmVjYXRlZBgCIAEoCBIxCgZ2YWx1ZXMYAyADKAsyIS5mb3JnZS52MS5FbnZWYXJBbGlhcy5WYWx1ZXNFbnRyeRotCgtWYWx1ZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIl8KE0JpbmFyeUNvbmZpZ09wdGlvbnMSDgoGYmluYXJ5GAEgASgJEg8KB2NvbW1hbmQYAiADKAkSJwoIc3VidHJlZXMYAyADKAsyFS5mb3JnZS52MS5Db21tYW5kUGF0aCIbCgtDb21tYW5kUGF0aBIMCgRwYXRoGAEgAygJIikKFUZyb250ZW5kQ29uZmlnT3B0aW9ucxIQCghmcm9udGVuZBgBIAEoCSqnAQoMTGlzdEZpbHRlck9wEh4KGkxJU1RfRklMVEVSX09QX1VOU1BFQ0lGSUVEEAASFQoRTElTVF9GSUxURVJfT1BfR1QQARIWChJMSVNUX0ZJTFRFUl9PUF9HVEUQAhIVChFMSVNUX0ZJTFRFUl9PUF9MVBADEhYKEkxJU1RfRklMVEVSX09QX0xURRAEEhkKFUxJU1RfRklMVEVSX09QX1BSRUZJWBAFKnEKB1N0b3JlQXMSGAoUU1RPUkVfQVNfVU5TUEVDSUZJRUQQABISCg5TVE9SRV9BU19KU09OQhABEhEKDVNUT1JFX0FTX1RFWFQQAhIRCg1TVE9SRV9BU19CTE9CEAMSEgoOU1RPUkVfQVNfVEFCTEUQBCp0ChFTZXJ2aWNlVmlzaWJpbGl0eRIiCh5TRVJWSUNFX1ZJU0lCSUxJVFlfVU5TUEVDSUZJRUQQABIaChZTRVJWSUNFX1ZJU0lCSUxJVFlfQVBJEAESHwobU0VSVklDRV9WSVNJQklMSVRZX0lOVEVSTkFMEAIqbwoOQWN0aXZpdHlXcml0ZXISHwobQUNUSVZJVFlfV1JJVEVSX1VOU1BFQ0lGSUVEEAASHwobQUNUSVZJVFlfV1JJVEVSX0lOVEVSQ0VQVE9SEAESGwoXQUNUSVZJVFlfV1JJVEVSX0hBTkRMRVIQAirhAQoPQ29uZmlnRmllbGRSb2xlEiEKHUNPTkZJR19GSUVMRF9ST0xFX1VOU1BFQ0lGSUVEEAASGgoWQ09ORklHX0ZJRUxEX1JPTEVfTU9ERRABEh4KGkNPTkZJR19GSUVMRF9ST0xFX1RMU19DRVJUEAISHQoZQ09ORklHX0ZJRUxEX1JPTEVfVExTX0tFWRADEiIKHkNPTkZJR19GSUVMRF9ST0xFX0NPUlNfT1JJR0lOUxAEEiwKKENPTkZJR19GSUVMRF9ST0xFX0NPUlNfQUxMT1dfQ1JFREVOVElBTFMQBTpSCgZlbnRpdHkSHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMYmIgDIAEoCzIXLmZvcmdlLnYxLkVudGl0eU9wdGlvbnNSBmVudGl0eTplCg1iaW5hcnlfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJmIAyABKAsyHS5mb3JnZS52MS5CaW5hcnlDb25maWdPcHRpb25zUgxiaW5hcnlDb25maWc6awoPZnJvbnRlbmRfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJqIAyABKAsyHy5mb3JnZS52MS5Gcm9udGVuZENvbmZpZ09wdGlvbnNSDmZyb250ZW5kQ29uZmlnOk0KBWZpZWxkEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxj8iAMgASgLMhYuZm9yZ2UudjEuRmllbGRPcHRpb25zUgVmaWVsZDpVCgZjb25maWcSHS5nb29nbGUucHJvdG9idWYuRmllbGRPcHRpb25zGOCJAyABKAsyHC5mb3JnZS52MS5Db25maWdGaWVsZE9wdGlvbnNSBmNvbmZpZzpUCgZmaWx0ZXISHS5nb29nbGUucHJvdG9idWYuRmllbGRPcHRpb25zGMSKAyABKAsyGy5mb3JnZS52MS5MaXN0RmlsdGVyT3B0aW9uc1IGZmlsdGVyOlUKB3NlcnZpY2USHy5nb29nbGUucHJvdG9idWYuU2VydmljZU9wdGlvbnMY0IYDIAEoCzIYLmZvcmdlLnYxLlNlcnZpY2VPcHRpb25zUgdzZXJ2aWNlOlEKBm1ldGhvZBIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGLSHAyABKAsyFy5mb3JnZS52MS5NZXRob2RPcHRpb25zUgZtZXRob2RCjgEKDGNvbS5mb3JnZS52MUIKRm9yZ2VQcm90b1ABWjFnaXRodWIuY29tL3JlbGlhbnQtbGFicy9mb3JnZS9wa2cvZm9yZ2VwYjtmb3JnZXBiogIDRlhYqgIIRm9yZ2UuVjHKAghGb3JnZVxWMeICFEZvcmdlXFYxXEdQQk1ldGFkYXRh6gIJRm9yZ2U6OlYxYgZwcm90bzM", [file_google_protobuf_descriptor, file_google_protobuf_duration]);
+
+/**
+ * ListFilterOptions declares how a generated List op applies one request
+ * field. Without it a List request field is an exact match on the column of
+ * the same name; with it the field may name another column and compare by
+ * range or prefix:
+ *
+ *   message ListPublicationsRequest {
+ *     google.protobuf.Timestamp published_after = 1 [(forge.v1.filter) = {
+ *       column: "published_at", op: LIST_FILTER_OP_GTE
+ *     }];
+ *     string week_start_from = 2 [(forge.v1.filter) = {
+ *       column: "week_start", op: LIST_FILTER_OP_GTE
+ *     }];
+ *     string key_prefix = 3 [(forge.v1.filter) = {
+ *       column: "key", op: LIST_FILTER_OP_PREFIX
+ *     }];
+ *   }
+ *
+ * An unset field (empty string, zero number, nil Timestamp, nil `optional`)
+ * applies no filter, as for an exact field. `forge generate` fails a column
+ * the entity does not declare, and an op the field's type cannot take.
+ *
+ * @generated from message forge.v1.ListFilterOptions
+ */
+export type ListFilterOptions = Message<"forge.v1.ListFilterOptions"> & {
+  /**
+   * The column compared. Empty: the field's own name.
+   *
+   * @generated from field: string column = 1;
+   */
+  column: string;
+
+  /**
+   * The comparison. Unspecified: equality.
+   *
+   * @generated from field: forge.v1.ListFilterOp op = 2;
+   */
+  op: ListFilterOp;
+};
+
+/**
+ * Describes the message forge.v1.ListFilterOptions.
+ * Use `create(ListFilterOptionsSchema)` to create a new message.
+ */
+export const ListFilterOptionsSchema: GenMessage<ListFilterOptions> = /*@__PURE__*/
+  messageDesc(file_forge_v1_forge, 0);
 
 /**
  * EntityOptions defines how a protobuf message maps to a database table.
@@ -68,7 +115,7 @@ export type EntityOptions = Message<"forge.v1.EntityOptions"> & {
  * Use `create(EntityOptionsSchema)` to create a new message.
  */
 export const EntityOptionsSchema: GenMessage<EntityOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 0);
+  messageDesc(file_forge_v1_forge, 1);
 
 /**
  * IndexDef defines a database index on one or more columns.
@@ -106,7 +153,7 @@ export type IndexDef = Message<"forge.v1.IndexDef"> & {
  * Use `create(IndexDefSchema)` to create a new message.
  */
 export const IndexDefSchema: GenMessage<IndexDef> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 1);
+  messageDesc(file_forge_v1_forge, 2);
 
 /**
  * FieldOptions defines how a protobuf field maps to a database column.
@@ -187,7 +234,7 @@ export type FieldOptions = Message<"forge.v1.FieldOptions"> & {
  * Use `create(FieldOptionsSchema)` to create a new message.
  */
 export const FieldOptionsSchema: GenMessage<FieldOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 2);
+  messageDesc(file_forge_v1_forge, 3);
 
 /**
  * ValidationRules defines application-layer constraints enforced during
@@ -265,7 +312,7 @@ export type ValidationRules = Message<"forge.v1.ValidationRules"> & {
  * Use `create(ValidationRulesSchema)` to create a new message.
  */
 export const ValidationRulesSchema: GenMessage<ValidationRules> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 3);
+  messageDesc(file_forge_v1_forge, 4);
 
 /**
  * ServiceOptions defines metadata and behavior for a Connect RPC service.
@@ -335,7 +382,7 @@ export type ServiceOptions = Message<"forge.v1.ServiceOptions"> & {
  * Use `create(ServiceOptionsSchema)` to create a new message.
  */
 export const ServiceOptionsSchema: GenMessage<ServiceOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 4);
+  messageDesc(file_forge_v1_forge, 5);
 
 /**
  * AuthConfig defines service-wide authentication defaults.
@@ -364,7 +411,7 @@ export type AuthConfig = Message<"forge.v1.AuthConfig"> & {
  * Use `create(AuthConfigSchema)` to create a new message.
  */
 export const AuthConfigSchema: GenMessage<AuthConfig> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 5);
+  messageDesc(file_forge_v1_forge, 6);
 
 /**
  * MethodOptions defines per-method behavior annotations for Connect RPC methods.
@@ -446,7 +493,7 @@ export type MethodOptions = Message<"forge.v1.MethodOptions"> & {
  * Use `create(MethodOptionsSchema)` to create a new message.
  */
 export const MethodOptionsSchema: GenMessage<MethodOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 6);
+  messageDesc(file_forge_v1_forge, 7);
 
 /**
  * ActivityOptions declares the activity event an rpc records, or that it
@@ -465,7 +512,8 @@ export const MethodOptionsSchema: GenMessage<MethodOptions> = /*@__PURE__*/
  * FIELD PATHS (target.id, target.label, env, scope, detail) are dotted proto
  * field names resolved against the REQUEST, or against the RESPONSE when
  * they start with "response." — a created object's id exists only in the
- * response. Every path must end on a scalar or an enum field.
+ * response. A "request." prefix names the request explicitly, the mirror of
+ * "response.". Every path must end on a scalar or an enum field.
  *
  * A Create<E>, Update<E> or Delete<E> rpc whose messages have forge's CRUD
  * shape needs no option: verb create/update/delete and target kind snake(E)
@@ -539,7 +587,7 @@ export type ActivityOptions = Message<"forge.v1.ActivityOptions"> & {
  * Use `create(ActivityOptionsSchema)` to create a new message.
  */
 export const ActivityOptionsSchema: GenMessage<ActivityOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 7);
+  messageDesc(file_forge_v1_forge, 8);
 
 /**
  * ActivityTarget names the object an activity event is about.
@@ -575,7 +623,7 @@ export type ActivityTarget = Message<"forge.v1.ActivityTarget"> & {
  * Use `create(ActivityTargetSchema)` to create a new message.
  */
 export const ActivityTargetSchema: GenMessage<ActivityTarget> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 8);
+  messageDesc(file_forge_v1_forge, 9);
 
 /**
  * ConfigFieldOptions defines how a config protobuf field maps to runtime
@@ -868,7 +916,7 @@ export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
  * Use `create(ConfigFieldOptionsSchema)` to create a new message.
  */
 export const ConfigFieldOptionsSchema: GenMessage<ConfigFieldOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 9);
+  messageDesc(file_forge_v1_forge, 10);
 
 /**
  * ConfigCondition is a predicate over another field of the same config
@@ -900,7 +948,7 @@ export type ConfigCondition = Message<"forge.v1.ConfigCondition"> & {
  * Use `create(ConfigConditionSchema)` to create a new message.
  */
 export const ConfigConditionSchema: GenMessage<ConfigCondition> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 10);
+  messageDesc(file_forge_v1_forge, 11);
 
 /**
  * EnvVarAlias is one fallback environment variable of a config field. See
@@ -960,7 +1008,7 @@ export type EnvVarAlias = Message<"forge.v1.EnvVarAlias"> & {
  * Use `create(EnvVarAliasSchema)` to create a new message.
  */
 export const EnvVarAliasSchema: GenMessage<EnvVarAlias> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 11);
+  messageDesc(file_forge_v1_forge, 12);
 
 /**
  * BinaryConfigOptions binds a config message to the BINARY that loads it,
@@ -1081,7 +1129,7 @@ export type BinaryConfigOptions = Message<"forge.v1.BinaryConfigOptions"> & {
  * Use `create(BinaryConfigOptionsSchema)` to create a new message.
  */
 export const BinaryConfigOptionsSchema: GenMessage<BinaryConfigOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 12);
+  messageDesc(file_forge_v1_forge, 13);
 
 /**
  * CommandPath is one cobra command path below a binary's root, one command
@@ -1101,7 +1149,7 @@ export type CommandPath = Message<"forge.v1.CommandPath"> & {
  * Use `create(CommandPathSchema)` to create a new message.
  */
 export const CommandPathSchema: GenMessage<CommandPath> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 13);
+  messageDesc(file_forge_v1_forge, 14);
 
 /**
  * FrontendConfigOptions binds a config message to the FRONTEND that loads
@@ -1158,7 +1206,63 @@ export type FrontendConfigOptions = Message<"forge.v1.FrontendConfigOptions"> & 
  * Use `create(FrontendConfigOptionsSchema)` to create a new message.
  */
 export const FrontendConfigOptionsSchema: GenMessage<FrontendConfigOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 14);
+  messageDesc(file_forge_v1_forge, 15);
+
+/**
+ * ListFilterOp is a ListFilterOptions comparison: `<column> <op> <value>`.
+ *
+ * @generated from enum forge.v1.ListFilterOp
+ */
+export enum ListFilterOp {
+  /**
+   * Equality (`=`), the default.
+   *
+   * @generated from enum value: LIST_FILTER_OP_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * `>`.
+   *
+   * @generated from enum value: LIST_FILTER_OP_GT = 1;
+   */
+  GT = 1,
+
+  /**
+   * `>=`: a "from" or "after" bound.
+   *
+   * @generated from enum value: LIST_FILTER_OP_GTE = 2;
+   */
+  GTE = 2,
+
+  /**
+   * `<`: a "before" bound.
+   *
+   * @generated from enum value: LIST_FILTER_OP_LT = 3;
+   */
+  LT = 3,
+
+  /**
+   * `<=`.
+   *
+   * @generated from enum value: LIST_FILTER_OP_LTE = 4;
+   */
+  LTE = 4,
+
+  /**
+   * `LIKE '<value>%'`, with %, _ and \ in the value matched literally. A
+   * string field only.
+   *
+   * @generated from enum value: LIST_FILTER_OP_PREFIX = 5;
+   */
+  PREFIX = 5,
+}
+
+/**
+ * Describes the enum forge.v1.ListFilterOp.
+ */
+export const ListFilterOpSchema: GenEnum<ListFilterOp> = /*@__PURE__*/
+  enumDesc(file_forge_v1_forge, 0);
 
 /**
  * StoreAs controls how complex or non-scalar protobuf types are persisted
@@ -1178,7 +1282,7 @@ export enum StoreAs {
   UNSPECIFIED = 0,
 
   /**
-   * Store as a JSONB column (PostgreSQL) or JSON text (SQLite).
+   * Store as a JSONB column.
    *
    * @generated from enum value: STORE_AS_JSONB = 1;
    */
@@ -1210,7 +1314,7 @@ export enum StoreAs {
  * Describes the enum forge.v1.StoreAs.
  */
 export const StoreAsSchema: GenEnum<StoreAs> = /*@__PURE__*/
-  enumDesc(file_forge_v1_forge, 0);
+  enumDesc(file_forge_v1_forge, 1);
 
 /**
  * ServiceVisibility determines how a service is exposed.
@@ -1244,7 +1348,7 @@ export enum ServiceVisibility {
  * Describes the enum forge.v1.ServiceVisibility.
  */
 export const ServiceVisibilitySchema: GenEnum<ServiceVisibility> = /*@__PURE__*/
-  enumDesc(file_forge_v1_forge, 1);
+  enumDesc(file_forge_v1_forge, 2);
 
 /**
  * ActivityWriter selects who writes a declared activity event.
@@ -1282,7 +1386,7 @@ export enum ActivityWriter {
  * Describes the enum forge.v1.ActivityWriter.
  */
 export const ActivityWriterSchema: GenEnum<ActivityWriter> = /*@__PURE__*/
-  enumDesc(file_forge_v1_forge, 2);
+  enumDesc(file_forge_v1_forge, 3);
 
 /**
  * ConfigFieldRole enumerates the semantic roles a config field can carry.
@@ -1348,7 +1452,7 @@ export enum ConfigFieldRole {
  * Describes the enum forge.v1.ConfigFieldRole.
  */
 export const ConfigFieldRoleSchema: GenEnum<ConfigFieldRole> = /*@__PURE__*/
-  enumDesc(file_forge_v1_forge, 3);
+  enumDesc(file_forge_v1_forge, 4);
 
 /**
  * @generated from extension: forge.v1.EntityOptions entity = 50200;
@@ -1393,14 +1497,23 @@ export const config: GenExtension<FieldOptions$1, ConfigFieldOptions> = /*@__PUR
   extDesc(file_forge_v1_forge, 4);
 
 /**
+ * A List request field's filter facet: the column it compares and how.
+ * See ListFilterOptions.
+ *
+ * @generated from extension: forge.v1.ListFilterOptions filter = 50500;
+ */
+export const filter: GenExtension<FieldOptions$1, ListFilterOptions> = /*@__PURE__*/
+  extDesc(file_forge_v1_forge, 5);
+
+/**
  * @generated from extension: forge.v1.ServiceOptions service = 50000;
  */
 export const service: GenExtension<ServiceOptions$1, ServiceOptions> = /*@__PURE__*/
-  extDesc(file_forge_v1_forge, 5);
+  extDesc(file_forge_v1_forge, 6);
 
 /**
  * @generated from extension: forge.v1.MethodOptions method = 50100;
  */
 export const method: GenExtension<MethodOptions$1, MethodOptions> = /*@__PURE__*/
-  extDesc(file_forge_v1_forge, 6);
+  extDesc(file_forge_v1_forge, 7);
 

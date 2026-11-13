@@ -3,11 +3,12 @@ package reconciliation
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
@@ -214,7 +215,7 @@ type mockRepo struct {
 	// Threads the repair's recipient-liveness check can see, and the
 	// tool_calls rows it writes through db.UpsertToolCallStatus. A thread
 	// absent from the map reads as "cannot be loaded", matching the real
-	// store's sql.ErrNoRows.
+	// store's svcerr.NotFound("record").
 	threads           map[string]*db.Thread
 	threadErr         error
 	toolCalls         map[string]*db.ToolCall
@@ -342,7 +343,7 @@ func (m *mockRepo) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
 	if m.daemons[id] {
 		return &db.Daemon{ID: id}, nil
 	}
-	return nil, sql.ErrNoRows
+	return nil, svcerr.NotFound("record")
 }
 
 func (m *mockRepo) EmitToolCallUpdate(_ context.Context, _ string, update db.ToolCallUpdate) error {
@@ -504,14 +505,14 @@ func (m *mockRepo) ReapOrphanedThreads(_ context.Context) ([]db.ReapedThread, er
 }
 
 // GetWorkflow serves workflowRows; a row absent from it reads as not found,
-// matching the real store's sql.ErrNoRows.
+// matching the real store's svcerr.NotFound("record").
 func (m *mockRepo) GetWorkflow(_ context.Context, id string) (*db.Workflow, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if wf, ok := m.workflowRows[id]; ok {
 		return wf, nil
 	}
-	return nil, sql.ErrNoRows
+	return nil, svcerr.NotFound("record")
 }
 
 // The embedded ReconcilerStore is a nil interface, so every method the pass calls
@@ -555,7 +556,7 @@ func (m *mockRepo) ListThreadsWithOrphanedAgentMessages(_ context.Context) ([]st
 
 // GetThread backs the background-spawn repair's recipient-liveness check. A
 // thread this mock has never heard of returns an error, which is exactly what
-// the Postgres store does for a missing row (sql.ErrNoRows out of QueryRow) --
+// the Postgres store does for a missing row (svcerr.NotFound("record") out of QueryRow) --
 // so the default, with no threads registered, exercises the fail-toward-live
 // branch rather than a nil-return branch the real store cannot produce.
 func (m *mockRepo) GetThread(_ context.Context, id string) (*db.Thread, error) {

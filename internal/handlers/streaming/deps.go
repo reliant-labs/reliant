@@ -27,10 +27,21 @@ type Repository interface {
 
 	// The chat and user update logs a stream replays and tails.
 	GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error)
+	// The compaction watermark: a replay from below it would skip rows.
+	GetChatCompactedThrough(ctx context.Context, chatID string) (int64, error)
 	GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int64, limit int) ([]db.ChatUpdate, error)
 	GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID string) ([]db.ChatUpdate, error)
 	GetLatestUserUpdateSequence(ctx context.Context, userID string) (int64, error)
 	GetUserUpdatesSince(ctx context.Context, userID string, sinceSeq int64, limit int) ([]db.UserUpdate, error)
+
+	// The org of the project or saved workflow a user update is about, which
+	// decides whether the user stream delivers it (orgGate).
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
+
+	// An org's feed of what its members shared (StreamOrgUpdates).
+	LatestOrgUpdateSequence(ctx context.Context, orgID string) (int64, error)
+	OrgUpdatesSince(ctx context.Context, orgID string, sinceSeq int64, limit int) ([]core.OrgUpdate, error)
 
 	// What a chat snapshot is assembled from.
 	ListThreadsByConversation(ctx context.Context, chatID string) ([]*db.Thread, error)

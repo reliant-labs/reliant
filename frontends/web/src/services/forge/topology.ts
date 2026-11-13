@@ -254,7 +254,7 @@ export interface ForgeHostedWorkload {
   last_error?: string;
   /**
    * Why the workload is suspended, from the tier CR's Suspended condition:
-   * owner | no_compute_plan | billing_lapsed. Absent or "unspecified" means
+   * owner | no_compute_plan | billing_lapsed | claimable_expired. Absent or "unspecified" means
    * not suspended OR a control plane that reports no reason (older) — the run
    * state vocabulary then falls back to inferring it.
    */
@@ -509,7 +509,7 @@ export function verdictExplanation(verdict: HostedVerdict): string {
     case "converged":
       return "Running what was published, and has held steady past the stability window.";
     case "converging":
-      return "Running what was published, but not yet stable for long enough to call healthy.";
+      return "Rolling out what was published, or running it but not yet stable for long enough to call healthy.";
     case "diverged":
       return "What is running no longer matches what was published.";
     case "degraded":

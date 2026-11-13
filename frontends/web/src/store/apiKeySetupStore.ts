@@ -6,7 +6,8 @@
  */
 
 import { create } from "zustand";
-import { api } from "../api/client";
+import type { ProviderStatus } from "../gen/reliant/v1/settings_pb";
+import { fetchProviderStatuses } from "../hooks/settings-queries";
 import { logger } from "../lib/logger";
 import { useModalStore } from "./modalStore";
 
@@ -31,8 +32,6 @@ const DISMISSED_KEY = "reliant.apiKeySetup.dismissed";
 
 const AUTO_MANAGED_PROVIDERS = new Set(["reliant"]);
 
-type ProviderStatus = Awaited<ReturnType<typeof api.settings.getProviders>>[number];
-
 /**
  * Match onboarding `detectCompletedItems` / checklist: key or OAuth-backed
  * provider. This is backend truth — a live session is NOT treated as
@@ -41,14 +40,14 @@ type ProviderStatus = Awaited<ReturnType<typeof api.settings.getProviders>>[numb
  * new account appear to have the Reliant provider configured.
  */
 function hasAnyProviderCredentials(providers: ProviderStatus[]): boolean {
-  return providers.some((p) => p.hasApiKey || p.configured);
+  return providers.some((p) => p.configured);
 }
 
 function hasAnyManualProviderCredentials(providers: ProviderStatus[]): boolean {
   return providers.some(
     (p) =>
       !AUTO_MANAGED_PROVIDERS.has((p.provider || "").toLowerCase()) &&
-      (p.hasApiKey || p.configured)
+      p.configured
   );
 }
 
@@ -89,7 +88,7 @@ async function loadProviderCredentials(): Promise<{
   hasAnyKey: boolean;
   hasAnyManualKey: boolean;
 }> {
-  const providers = await api.settings.getProviders();
+  const { providers } = await fetchProviderStatuses();
 
   return {
     providers,
@@ -126,6 +125,11 @@ interface ApiKeySetupState {
   reset: () => void;
 }
 
+// Bumped by reset() (an identity change: authStore): a check started for the
+// previous user drops its answer instead of installing it, or opening the
+// setup modal, for the next one.
+let generation = 0;
+
 export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
   showModal: false,
   isChecking: false,
@@ -137,6 +141,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
    * Called when user logs out so we can check again on next login.
    */
   reset: () => {
+    generation++;
     set({
       hasChecked: false,
       isChecking: false,
@@ -160,8 +165,11 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       return;
     }
 
+    const startedIn = generation;
+
     // Check if onboarding welcome hasn't been shown yet - don't show API key modal during welcome
     const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
+    if (startedIn !== generation) return;
     const checklistState = useOnboardingChecklistStore.getState();
     
     if (!checklistState.isInitialized) {
@@ -188,13 +196,14 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       logger.info("[ApiKeySetupStore] Checking for configured API keys...");
       const { providers, hasAnyKey, hasAnyManualKey } =
         await loadProviderCredentials();
+      if (startedIn !== generation) return;
 
       logger.info("[ApiKeySetupStore] API key check result", {
         hasAnyKey,
         hasAnyManualKey,
         providers: providers.map((p) => ({
           provider: p.provider,
-          hasKey: p.hasApiKey
+          hasKey: p.configured
         })),
       });
 
@@ -208,6 +217,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       if (shouldShowModal) openApiKeySetupModal();
     } catch (error) {
       logger.error("[ApiKeySetupStore] Failed to check API keys:", error);
+      if (startedIn !== generation) return;
       set({
         isChecking: false,
         hasChecked: true,
@@ -225,10 +235,12 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
    * or if the cached result says no key is configured.
    */
   ensureApiKeyOrShowModal: async () => {
-    const state = get();
+    const startedIn = generation;
 
     // Check if onboarding welcome hasn't been shown yet - don't show modal during welcome
     const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
+    if (startedIn !== generation) return;
+    const state = get();
     const checklistState = useOnboardingChecklistStore.getState();
     
     if (!checklistState.isInitialized) {
@@ -269,6 +281,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
     try {
       logger.info("[ApiKeySetupStore] Ensuring API key is configured...");
       const { hasAnyKey, hasAnyManualKey } = await loadProviderCredentials();
+      if (startedIn !== generation) return;
 
       logger.info("[ApiKeySetupStore] API key ensure result", { hasAnyKey, hasAnyManualKey });
 
@@ -283,6 +296,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       if (shouldShowModal) openApiKeySetupModal();
     } catch (error) {
       logger.error("[ApiKeySetupStore] Failed to ensure API key:", error);
+      if (startedIn !== generation) return;
       set({
         isChecking: false,
         // On error, don't show modal (fail gracefully)

@@ -190,6 +190,10 @@ var purgeSteps = []step{
 		DELETE FROM questions WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
 	{"chat_updates", `
 		DELETE FROM chat_updates WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
+	// The snapshot heads materialized from chat_updates: copies of its rows,
+	// payloads included, keyed by chat with no foreign key.
+	{"chat_update_heads", `
+		DELETE FROM chat_update_heads WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
 	{"background_process_output", `
 		DELETE FROM background_process_output WHERE process_id IN (
 			SELECT id FROM background_processes WHERE user_id = $1)`},
@@ -242,6 +246,7 @@ var purgeSteps = []step{
 	{"daemon_attachment", `DELETE FROM daemon_attachment WHERE user_id = $1`},
 	{"access_tokens", `DELETE FROM access_tokens WHERE acting_user_id = $1`},
 	{"daemons", `DELETE FROM daemons WHERE user_id = $1`},
+	{"user_default_daemons", `DELETE FROM user_default_daemons WHERE user_id = $1`},
 	{"workflow_scenarios", `DELETE FROM workflow_scenarios WHERE user_id = $1`},
 	{"workflow_drafts", `DELETE FROM workflow_drafts WHERE user_id = $1`},
 	{"presets", `DELETE FROM presets WHERE user_id = $1`},
@@ -257,6 +262,11 @@ var purgeSteps = []step{
 	// go with the account; the privacy page says so.
 	{"llm_call_usage", `DELETE FROM llm_call_usage WHERE user_id = $1`},
 	{"llm_call_usage_daily", `DELETE FROM llm_call_usage_daily WHERE user_id = $1`},
+	// The org-funded rollup an org admin reads: the member's rows go with them.
+	{"llm_org_usage_daily", `DELETE FROM llm_org_usage_daily WHERE user_id = $1`},
+	// A chat's question before it uses the person's own account (§10): it names
+	// their account's label. Chats cascade it too; this covers a chat kept.
+	{"chat_personal_funding", `DELETE FROM chat_personal_funding WHERE user_id = $1`},
 
 	// The durable first-session marker (app_first_session analytics): when the
 	// user first used the app. No users table cascades it.
@@ -277,7 +287,14 @@ var purgeSteps = []step{
 	{"copilot_auth_tokens", `DELETE FROM copilot_auth_tokens WHERE user_id = $1`},
 	{"antigravity_auth_tokens", `DELETE FROM antigravity_auth_tokens WHERE user_id = $1`},
 	{"api_keys", `DELETE FROM api_keys WHERE user_id = $1`},
-	// provider_account_limits and thread_provider_accounts cascade from provider_accounts.
+	// The person's grants to use org accounts (the grants they made as an
+	// admin stay: granted_by_user_id is attribution, not ownership).
+	{"provider_account_grants", `DELETE FROM provider_account_grants WHERE user_id = $1`},
+	// provider_account_limits, thread_provider_accounts and provider_account_grants cascade
+	// from provider_accounts. Only the person's own: an org-owned account's user_id is the
+	// org's owner key 'org:<org_id>', which no person's id matches, so the org keys a person
+	// added (created_by_user_id) outlive their account (control-plane
+	// docs/design/org-provider-accounts.md §3.1, §6).
 	{"provider_accounts", `DELETE FROM provider_accounts WHERE user_id = $1`},
 
 	// Connections (credential vault). connection_secrets cascades from
@@ -285,7 +302,11 @@ var purgeSteps = []step{
 	// deleted account must leave nothing keyed to it.
 	{"oauth_flows", `DELETE FROM oauth_flows WHERE user_id = $1`},
 	{"connection_events", `DELETE FROM connection_events WHERE user_id = $1`},
-	{"connections", `DELETE FROM connections WHERE user_id = $1`},
+	// Only the user's PERSONAL connections. An org connection's user_id is
+	// the admin who created it (attribution): it is the org's, sealed under
+	// the org's tenant, and must outlive the admin's account
+	// (control-plane docs/design/org-sharing.md §7.2).
+	{"connections", `DELETE FROM connections WHERE user_id = $1 AND owner_kind = 'user'`},
 	// Last: dropping the user's wrapped DEK is crypto-shredding. Anything the
 	// purge missed, or a backup, becomes unreadable. Must follow every table
 	// holding data sealed under it (connection_secrets references vault_keys).

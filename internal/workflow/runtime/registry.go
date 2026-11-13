@@ -3,7 +3,6 @@ package runtime
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -94,7 +96,8 @@ func markTextOnlyUserError(err error) error {
 		return svcerr.WithClass(err, svcerr.ClassUser)
 	}
 	if kind, _, ok := chatmarkers.Extract(err.Error()); ok &&
-		(kind == chatmarkers.KindProviderUsageLimit || kind == chatmarkers.KindReliantManagedQuotaExhausted) {
+		(kind == chatmarkers.KindProviderUsageLimit || kind == chatmarkers.KindReliantManagedQuotaExhausted ||
+			kind == chatmarkers.KindOrgPolicyRefused) {
 		return svcerr.WithClass(err, svcerr.ClassUser)
 	}
 	return err
@@ -170,6 +173,24 @@ func classifyError(err error) error {
 			})
 		}
 		return temporal.NewNonRetryableApplicationError(err.Error(), "ProviderUsageLimit", err)
+	}
+
+	// An org policy's verdict (control-plane docs/design/org-policies.md
+	// §5.1): never retried. A run a person is behind pauses on it, resumable
+	// by another model or a policy change; an unattended run ends with it
+	// (activitytypes.OrgPolicyRefusedUnattendedErrType, endsRunInsteadOfPausing),
+	// and its trigger pauses once. Decided before the text rules below, which
+	// would read the gateway's 403 as a bad credential.
+	if refusal, ok := orgpolicy.RefusalOf(err); ok {
+		errType := activitytypes.OrgPolicyRefusedErrType
+		if refusal.Unattended {
+			errType = activitytypes.OrgPolicyRefusedUnattendedErrType
+		}
+		return temporal.NewApplicationErrorWithOptions(err.Error(), errType, temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			// A policy the org's admins set, never a server fault.
+			Category: temporal.ApplicationErrorCategoryBenign,
+		})
 	}
 
 	// Auto-classify based on error content
@@ -545,7 +566,8 @@ func isTerminal(err error) bool {
 	}
 
 	if kind, _, ok := chatmarkers.Extract(err.Error()); ok {
-		return kind == chatmarkers.KindProviderUsageLimit || kind == chatmarkers.KindReliantManagedQuotaExhausted
+		return kind == chatmarkers.KindProviderUsageLimit || kind == chatmarkers.KindReliantManagedQuotaExhausted ||
+			kind == chatmarkers.KindOrgPolicyRefused
 	}
 	return drivererrors.IsProviderCreditExhaustion(err)
 }
@@ -927,7 +949,14 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			// lets Temporal retry, and the next attempt sees the updated row.
 			return zeroOutput, errors.New(msg)
 		}
-		return zeroOutput, temporal.NewNonRetryableApplicationError(msg, "WorkflowStopped", nil)
+		// Benign: the run being stopped (a user's pause or stop) is not a
+		// fault, so the workflow layers that pass this failure up log it at
+		// the user-error level (errclass), not as "[Workflow Runtime] Failed
+		// with error" (prod 23295ad3).
+		return zeroOutput, temporal.NewApplicationErrorWithOptions(msg, "WorkflowStopped", temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Category:     temporal.ApplicationErrorCategoryBenign,
+		})
 	}
 
 	// Execute the typed activity directly - no conversion needed!
@@ -1022,6 +1051,11 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		// starved worker made every activity fail this way on 2026-10-23,
 		// and the ERRORs pointed at Postgres, which was idle.
 		ctxEnded := ctx.Err() != nil
+		// Terminal as Temporal will see it: classifyError (applied by
+		// wrapActivity on the way out) makes some errors terminal by their
+		// text. This is the one line that reports the failure, so it judges
+		// by the same verdict; wrapActivity does not log it again.
+		terminal := isTerminal(execErr) || isTerminal(classifyError(execErr))
 		switch {
 		case ctxEnded:
 			logging.WarnContext(ctx, "[ActivityWrapper] Activity context ended before it finished",
@@ -1036,8 +1070,26 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 				"cause", context.Cause(ctx),
 				"attemptNumber", attemptNumber,
 				"durationMs", durationMs)
-		case isTerminal(execErr):
-			// Terminal errors stay at Error level: each is an issue.
+		case terminal && reportedOnTheRun(activityType, classifyError(execErr)):
+			// A verdict on the user's workflow or machine, which the run
+			// reports (see reportedOnTheRun): a warning.
+			logging.WarnContext(ctx, "[ActivityWrapper] Activity execution failed",
+				"activityType", activityType,
+				"activityID", activityID,
+				"workflowID", workflowID,
+				"chatID", chatID,
+				"stepID", stepID,
+				"error", execErr,
+				"errorCategory", categorizeError(execErr),
+				"attemptNumber", attemptNumber,
+				"durationMs", durationMs)
+		case terminal:
+			// Terminal errors stay at Error level: each is an issue — unless
+			// the error is classed as the user's, or as the other end going
+			// away (a machine that disconnected), which the process logger's
+			// error-class policy (logging.withReporting, errclass.Library)
+			// lowers to INFO from the "error" attribute. Pinned by
+			// logging's TestWithReporting_TerminalActivityFailureLevelFollowsClass.
 			logging.ErrorContext(ctx, "[ActivityWrapper] Activity execution failed",
 				"activityType", activityType,
 				"activityID", activityID,
@@ -1399,9 +1451,12 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 	// Best-effort write to chat_updates
 	if writeErr := w.repo.CreateChatUpdate(writeCtx, chatID, db.UpdateTypeError, errorID, string(errorDataJSON)); writeErr != nil {
 		// Running out of its own deadline is the same starvation that failed
-		// the activity, already reported: WARN. Anything else is a fault.
+		// the activity, already reported: WARN. So is a database that is not
+		// answering — the outage the activity's own failure (and the database
+		// wait in Execute) already reports; one PgBouncer blip was 68 ERROR
+		// issues of this line (prod 7efd1855). Anything else is a fault.
 		logFn := logging.ErrorContext
-		if errors.Is(writeErr, context.DeadlineExceeded) {
+		if errors.Is(writeErr, context.DeadlineExceeded) || dbconn.Unavailable(writeErr) {
 			logFn = logging.WarnContext
 		}
 		logFn(ctx, "[ActivityWrapper] Failed to write error event to chat_updates",
@@ -1907,7 +1962,7 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, attempt 
 			"workflowID", workflowID,
 			"stepID", stepID,
 			"activityType", activityType,
-			"success", verdict.Success.Bool,
+			"success", ptr.From(verdict.Success),
 			"durationMs", attempt.DurationMs)
 	}
 }
@@ -1918,30 +1973,30 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, attempt 
 func buildStepExecution(attempt stepAttempt) *db.StepExecution {
 	// Marshal the output once and reuse it for both the stored JSON and the
 	// verdict, instead of round-tripping through encoding/json twice.
-	var outputJSON sql.NullString
+	var outputJSON *string
 	var outputMap map[string]interface{}
 	if attempt.Output != nil {
 		if jsonBytes, err := json.Marshal(attempt.Output); err == nil {
-			outputJSON = sql.NullString{String: string(jsonBytes), Valid: true}
+			outputJSON = ptr.Of(string(jsonBytes))
 			_ = json.Unmarshal(jsonBytes, &outputMap)
 		}
 	}
 
 	verdict := deriveRecordedVerdict(outputMap, attempt.Err)
 
-	var loopNodeIDSQL sql.NullString
-	var loopIterationSQL sql.NullInt64
+	var loopNodeID *string
+	var loopIteration *int64
 	if attempt.Scope.LoopNodeID != "" {
-		loopNodeIDSQL = sql.NullString{String: attempt.Scope.LoopNodeID, Valid: true}
-		loopIterationSQL = sql.NullInt64{Int64: int64(attempt.Scope.LoopIteration), Valid: true}
+		loopNodeID = ptr.Of(attempt.Scope.LoopNodeID)
+		loopIteration = ptr.Of(int64(attempt.Scope.LoopIteration))
 	}
-	var attemptSQL sql.NullInt32
+	var attemptNumber *int32
 	if attempt.Attempt > 0 {
-		attemptSQL = sql.NullInt32{Int32: int32(attempt.Attempt), Valid: true}
+		attemptNumber = ptr.Of(int32(attempt.Attempt))
 	}
-	var nodePathSQL sql.NullString
+	var nodePath *string
 	if attempt.Scope.NodePath != "" {
-		nodePathSQL = sql.NullString{String: attempt.Scope.NodePath, Valid: true}
+		nodePath = ptr.Of(attempt.Scope.NodePath)
 	}
 
 	return &db.StepExecution{
@@ -1952,13 +2007,13 @@ func buildStepExecution(attempt stepAttempt) *db.StepExecution {
 		OutputJSON:    outputJSON,
 		ExitCode:      verdict.ExitCode,
 		Success:       verdict.Success,
-		DurationMs:    sql.NullInt64{Int64: attempt.DurationMs, Valid: true},
-		LoopNodeID:    loopNodeIDSQL,
-		LoopIteration: loopIterationSQL,
+		DurationMs:    ptr.Of(attempt.DurationMs),
+		LoopNodeID:    loopNodeID,
+		LoopIteration: loopIteration,
 		InputJSON:     attempt.Args,
 		ErrorMessage:  recordedError(attempt.Err),
-		Attempt:       attemptSQL,
-		NodePath:      nodePathSQL,
+		Attempt:       attemptNumber,
+		NodePath:      nodePath,
 		// No .UTC(): created_at is timestamptz, so the offset is preserved and
 		// normalized on the way in and a local time stores the same instant.
 		// This site is where the two-basis bug was found — it wrote local time
@@ -1980,8 +2035,8 @@ func buildStepExecution(attempt stepAttempt) *db.StepExecution {
 // look, which is the node execution event (see emitNodeExecutionEvent) and the
 // `workflow status` renderer.
 type recordedVerdict struct {
-	ExitCode sql.NullInt64
-	Success  sql.NullBool
+	ExitCode *int64
+	Success  *bool
 }
 
 // deriveRecordedVerdict decides what a step execution row claims about its step,
@@ -1995,21 +2050,21 @@ func deriveRecordedVerdict(outputMap map[string]interface{}, execErr error) reco
 	if ec, ok := outputMap["exit_code"]; ok {
 		switch n := ec.(type) {
 		case int:
-			v.ExitCode = sql.NullInt64{Int64: int64(n), Valid: true}
+			v.ExitCode = ptr.Of(int64(n))
 		case int64:
-			v.ExitCode = sql.NullInt64{Int64: n, Valid: true}
+			v.ExitCode = ptr.Of(n)
 		case float64:
-			v.ExitCode = sql.NullInt64{Int64: int64(n), Valid: true}
+			v.ExitCode = ptr.Of(int64(n))
 		}
 	}
 
 	switch {
 	case execErr != nil:
-		v.Success = sql.NullBool{Bool: false, Valid: true}
-	case v.ExitCode.Valid:
-		v.Success = sql.NullBool{Bool: v.ExitCode.Int64 == 0, Valid: true}
+		v.Success = ptr.Of(false)
+	case v.ExitCode != nil:
+		v.Success = ptr.Of(*v.ExitCode == 0)
 	default:
-		v.Success = sql.NullBool{Bool: true, Valid: true}
+		v.Success = ptr.Of(true)
 	}
 	return v
 }
@@ -2167,20 +2222,14 @@ func wrapActivity[TInput any, TOutput any](
 			category := categorizeError(err)
 			terminal := isTerminal(classified)
 
-			// Use Warn for non-terminal errors so they don't trigger Sentry.
-			// An activity whose own context ended was already reported, once,
-			// by ActivityWrapper.Execute as a cancellation.
-			switch {
-			case ctx.Err() != nil:
-				logger.Debug("[Workflow Runtime Registry] Activity failed",
-					"activity", name, "error", err, "category", category, "is_terminal", terminal)
-			case terminal:
-				logger.Error("[Workflow Runtime Registry] Activity failed",
-					"activity", name, "error", err, "category", category, "is_terminal", terminal)
-			default:
-				logger.Warn("[Workflow Runtime Registry] Activity failed",
-					"activity", name, "error", err, "category", category, "is_terminal", terminal)
-			}
+			// ActivityWrapper.Execute already reported this failure, once, at
+			// the level its verdict deserves (it applies the same
+			// classification, including reportedOnTheRun). Logging it again here made every terminal
+			// failure two ERROR issues — "[ActivityWrapper] Activity execution
+			// failed" and this one (prod 48b45b13 + c0323499, 89 + 12 events of
+			// the same refusals) — so this line is DEBUG detail only.
+			logger.Debug("[Workflow Runtime Registry] Activity failed",
+				"activity", name, "error", err, "category", category, "is_terminal", terminal)
 
 			// Return the classified error (terminal or transient), as ONE
 			// failure. Temporal will handle retry logic based on error type.
@@ -2189,6 +2238,24 @@ func wrapActivity[TInput any, TOutput any](
 
 		return output, nil
 	}
+}
+
+// reportedOnTheRun reports whether a terminal activity failure is a verdict
+// about the user's workflow or machine rather than a fault in ours, so it is a
+// warning, not an error an operator is alerted to:
+//
+//   - FailStep: the workflow's own {{ }} expression or node config cannot run
+//     (a missing key, a CEL cost limit). The run fails with it and says so.
+//   - the run step's classified transport outcomes (RunStep* types): the
+//     user's machine never took the command, stopped answering, or the retry
+//     was refused because it may have run. The step's machine is the user's;
+//     the run reports which one and why.
+func reportedOnTheRun(activityName string, classified error) bool {
+	if activityName == failStepActivityName {
+		return true
+	}
+	var app *temporal.ApplicationError
+	return errors.As(classified, &app) && strings.HasPrefix(app.Type(), "RunStep")
 }
 
 // RegisterWithWorker registers all activities with a Temporal worker

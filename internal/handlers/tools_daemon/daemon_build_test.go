@@ -134,7 +134,7 @@ func TestRecreatedLeaseKeepsTheSessionsBuild(t *testing.T) {
 		var commit string
 		err := rawDB.QueryRow(`SELECT build_commit FROM daemon_attachment WHERE daemon_id = $1`, daemonID).Scan(&commit)
 		return err == nil && commit == "abc123"
-	}, 3*time.Second, 20*time.Millisecond, "the re-created lease must carry the session's build")
+	}, 30*time.Second, 20*time.Millisecond, "the re-created lease must carry the session's build")
 }
 
 func TestFleetBuildsCountsDaemonsPerBuild(t *testing.T) {

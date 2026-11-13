@@ -64,6 +64,40 @@ service InboxService {
     };
   }
 
+  // KeepMarkedWorktree answers a marked worktree's item with "Keep": the
+  // reclaim mark the person saw (mark_id) is cancelled and its tombstone
+  // removed, and the worktree's quiet period starts again. NOT_FOUND for a
+  // worktree of the caller's that is not marked; FAILED_PRECONDITION when it
+  // carries a different mark than the one shown (refresh and decide again).
+  rpc KeepMarkedWorktree(KeepMarkedWorktreeRequest) returns (KeepMarkedWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "keep_marked_worktree"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+      }
+    };
+  }
+
+  // ReclaimMarkedWorktreeNow answers a marked worktree's item with "Reclaim
+  // now": the mark's waiting period is skipped and the worktree is checked
+  // at once. Every other check still applies: if it was used since the mark,
+  // its tombstone is gone, or it has new work, the mark is cancelled instead
+  // and nothing is removed. Errors as KeepMarkedWorktree.
+  rpc ReclaimMarkedWorktreeNow(ReclaimMarkedWorktreeNowRequest) returns (ReclaimMarkedWorktreeNowResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "reclaim_marked_worktree"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+      }
+    };
+  }
+
   // DismissInboxItem hides items from the caller's inbox. Every kind can be
   // dismissed. Hiding an approval or a question does not resolve it: the run
   // still waits, and the chat still shows it. A newer failure of the same
@@ -133,6 +167,36 @@ enum InboxItemKind {
   // valid version lands. It replaces those automations' own failing items.
   // Informational.
   INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN = 11;
+  // A machine's worktree reclaim proposes removing idle worktrees that hold
+  // uncommitted, unpushed or reflog-only work, and will not remove any
+  // without the person's approval. One item per machine per set of
+  // proposals: it lists each worktree with what it holds and a reviewing
+  // agent's note, and WorktreeReclaimService.DecideWorktreeReclaim answers
+  // it, worktree by worktree.
+  // Informational: no run waits on it.
+  INBOX_ITEM_KIND_WORKTREE_RECLAIM = 12;
+  // A live worktree is marked to be reclaimed: it has been quiet for a day,
+  // its work has landed (or it is clean and idle), and its machine placed a
+  // tombstone in it (.reliant/RECLAIM_PENDING). It is reclaimed at
+  // reclaim_at unless something happens in it first. One item per mark:
+  // KeepMarkedWorktree cancels it, ReclaimMarkedWorktreeNow skips the wait.
+  // Informational: nothing has to be done to keep a worktree that is used.
+  INBOX_ITEM_KIND_WORKTREE_MARKED = 13;
+  // A chat in an org asks before it moves from the org's AI accounts to the
+  // person's own (control-plane docs/design/org-provider-accounts.md §10):
+  // the org's accounts are rate-limited, unusable, or serve none of the
+  // chat's model, and the person's own account could. The chat waits until
+  // the person answers (ProviderAccountService.ResolvePersonalFundingChoice).
+  // One item per chat per question. Blocks a live run.
+  INBOX_ITEM_KIND_PERSONAL_FUNDING = 14;
+  // The provider rejected one of an org's own AI provider keys (control-plane
+  // docs/design/org-provider-accounts.md §4.7): it is out of every member's
+  // routing until an owner or admin rotates or replaces it. Listed to the
+  // org's owners and admins only, one item per key per incident (a key
+  // rejected again after it was fixed is a new item). Informational: the
+  // org's chats route around the key, and nothing waits on the item. A
+  // member who hit the rejection is not shown it: they cannot fix an org key.
+  INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED = 15;
 }
 
 message ListInboxRequest {
@@ -141,6 +205,14 @@ message ListInboxRequest {
   // Only items of this project. Unset lists every project. The counts follow
   // the same scope.
   optional string project_id = 2;
+  // Only items of this organization: those about its chats, projects and
+  // automations. It must be one the caller is a live member of
+  // (PERMISSION_DENIED otherwise). Items about something created before orgs
+  // list under the caller's default org; a machine's storage and worktree
+  // items belong to no org and list in every one. Unset lists every item,
+  // in any org, as before this field existed. The counts follow the same
+  // scope.
+  optional string org_id = 3;
 }
 
 message ListInboxResponse {
@@ -171,7 +243,8 @@ message InboxItem {
   // Stable key for dismissal and de-duplication, prefixed by kind
   // ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
   // "automation_launch_failed:", "storage:",
-  // "automation_needs_setup:", "automation_run_paused:"). An automation run
+  // "automation_needs_setup:", "automation_run_paused:", "worktree_reclaim:").
+  // An automation run
   // paused embeds the chat id and when the failure that paused it happened,
   // so a later pause is a new item. Approvals and questions
   // embed their row id; waiting-for-machine embeds the chat id and when the
@@ -179,7 +252,10 @@ message InboxItem {
   // current failure episode, so repeated failures stay one item and a new
   // episode is a new item. A needs-setup item embeds the automation and the
   // set of inputs it is missing, so dismissing it holds until a workflow edit
-  // makes it miss something new.
+  // makes it miss something new. A personal-funding item ("personal_funding:")
+  // embeds the chat id and when the chat asked, so a later question is a new
+  // item. A rejected org key ("org_provider_key_rejected:") embeds the account
+  // id and when it was rejected, so a later rejection is a new item.
   string item_id = 2;
 
   // The chat the item belongs to. Empty for automation failure kinds that have
@@ -212,10 +288,32 @@ message InboxItem {
     RecoveryInboxItem recovery = 28;
     InboxAutomationRunPaused automation_run_paused = 29;
     InboxAutomationDefinitionBroken automation_definition_broken = 30;
+    InboxWorktreeReclaim worktree_reclaim = 31;
+    InboxWorktreeMarked worktree_marked = 32;
+    InboxOrgProviderKeyRejected org_provider_key_rejected = 33;
   }
   // 25 was run_finished (InboxRunFinished); see INBOX_ITEM_KIND 6.
   reserved 25;
   reserved "run_finished";
+}
+
+// InboxOrgProviderKeyRejected is one of an org's own AI provider keys that the
+// provider rejected (INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED). The item names
+// no chat, run or project; waiting_since is when the key was rejected. Rotate
+// it with OrgProviderAccountService.RotateOrgProviderAPIKey, or delete it.
+message InboxOrgProviderKeyRejected {
+  // The org that owns the key.
+  string org_id = 1;
+  // The org account (provider_accounts.id).
+  string account_id = 2;
+  // The provider the key is for ("anthropic", "openai", ...).
+  string provider = 3;
+  // The account's label, as the org's admins named it.
+  string label = 4;
+  // The key's last four characters, as the org's admins see it.
+  string key_hint = 5;
+  // Why the provider refused it, as recorded.
+  string reason = 6;
 }
 
 // InboxAutomationRunPaused is a paused run of an automation. The item's
@@ -402,6 +500,66 @@ message HeldWorktree {
   // connected machine answered that it does not have the folder.
   bool forgettable = 10;
 }
+
+// InboxWorktreeReclaim is one machine's pending worktree-reclaim proposals,
+// as it last reported them (DiskReport.worktree_reclaim). The item's id names
+// the machine and the set of proposals (worktree_reclaim:<daemon>:<digest>):
+// a new or changed proposal makes a new item, and a dismissal holds for the
+// set it was made about.
+message InboxWorktreeReclaim {
+  string daemon_id = 1;
+  string daemon_name = 2;
+  // False when the machine is offline: the item still lists what it last
+  // reported, but a decision cannot reach it until it reconnects.
+  bool online = 3;
+  // RFC 3339 of the machine's last report.
+  string reported_at = 4;
+  // "dry-run" or "on". In dry-run an approved worktree is reclaimed once the
+  // machine's reclaim is switched on.
+  string mode = 5;
+  // Oldest proposal first, at most 50; total counts them all.
+  repeated WorktreeReclaimProposal proposals = 6;
+  int32 total = 7;
+}
+
+// InboxWorktreeMarked is a live worktree marked to be reclaimed. The item's
+// project_id and project_name are the worktree's project; waiting_since is
+// when it was marked.
+message InboxWorktreeMarked {
+  string worktree_id = 1;
+  string name = 2;
+  string path = 3;
+  string branch = 4;
+  string daemon_id = 5;
+  string daemon_name = 6;
+  // The mark this item is about; KeepMarkedWorktree and
+  // ReclaimMarkedWorktreeNow act only while the worktree still carries it.
+  string mark_id = 7;
+  // RFC 3339: when it was marked, and when it will be reclaimed if nothing
+  // happens in it before then.
+  string marked_at = 8;
+  string reclaim_at = 9;
+  // Why it qualified: "landed" (its work is merged) or "recoverable-idle"
+  // (clean, pushed and unused).
+  string reason = 10;
+  // True once the person chose "Reclaim now": it is reclaimed at the next
+  // check that finds nothing has happened in it.
+  bool approved = 11;
+}
+
+message KeepMarkedWorktreeRequest {
+  string worktree_id = 1;
+  string mark_id = 2;
+}
+
+message KeepMarkedWorktreeResponse {}
+
+message ReclaimMarkedWorktreeNowRequest {
+  string worktree_id = 1;
+  string mark_id = 2;
+}
+
+message ReclaimMarkedWorktreeNowResponse {}
 
 message ForgetStorageWorktreeRequest {
   string worktree_id = 1;

@@ -9,6 +9,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -68,7 +69,15 @@ type spawnToolInput struct {
 	// providers is the spawn call's own provider policy (`providers`), which
 	// beats its preset's and what the child would inherit. Nil when absent.
 	providers *preset.ProviderRouting
-	rawInput  string
+	// providersFromString is set when `providers` arrived as a JSON-encoded
+	// string and was decoded to the object it holds (or, blank, read as
+	// absent). Builds before spawnStringProvidersVersion refused that shape,
+	// so parseSpawnToolCall gates accepting it on a workflow version.
+	providersFromString bool
+	// strictProvidersErr is what those builds returned for the stringified
+	// value, for a replay that must refuse it again.
+	strictProvidersErr error
+	rawInput           string
 }
 
 // parseSpawnToolInput decodes a spawn tool call's input JSON.
@@ -104,7 +113,18 @@ func parseSpawnToolInput(input string) (spawnToolInput, error) {
 	worktree, _ := toolInput["worktree"].(string)
 	parsed.worktree = strings.TrimSpace(worktree)
 
-	routing, err := preset.ParseProviderRouting(toolInput["providers"])
+	providers := toolInput["providers"]
+	if s, ok := providers.(string); ok {
+		if obj, ok := decodeStringifiedObject(s); ok {
+			_, parsed.strictProvidersErr = preset.ParseProviderRouting(providers)
+			parsed.providersFromString = true
+			providers = nil
+			if obj != nil {
+				providers = obj
+			}
+		}
+	}
+	routing, err := preset.ParseProviderRouting(providers)
 	if err != nil {
 		return parsed, err
 	}
@@ -115,4 +135,87 @@ func parseSpawnToolInput(input string) (spawnToolInput, error) {
 		return parsed, fmt.Errorf("spawn tool requires a non-empty 'prompt' parameter")
 	}
 	return parsed, nil
+}
+
+// spawnStringProvidersVersion gates accepting a spawn call's `providers` sent
+// as a JSON-encoded string. Before it, the call was refused with a tool error;
+// a history recorded then must replay that refusal, so the version is asked
+// per tool call, and only for a call whose `providers` was a string.
+const spawnStringProvidersVersion workflow.Version = 1
+
+// spawnStringProvidersChangeID prefixes spawnStringProvidersVersionID.
+const spawnStringProvidersChangeID = "spawn-string-providers"
+
+// spawnStringProvidersVersionID is the change id gating one spawn call's
+// stringified `providers`: the call's id plus how many earlier calls with
+// that id this run already asked about. Tool-call ids come from the model
+// and may repeat across turns, and Temporal keeps one decision per change
+// id, so the id alone would hand a later call an earlier call's decision.
+func spawnStringProvidersVersionID(toolCallID string, occurrence int) string {
+	return fmt.Sprintf("%s/%s/%d", spawnStringProvidersChangeID, toolCallID, occurrence)
+}
+
+// spawnVersionOccurrences counts, per tool-call id, the spawn version
+// decisions one workflow run has asked for. It lives in the workflow context
+// (installed at the workflow root, like StreamIDTracker) and is advanced only
+// by workflow code driven by history, so a replay numbers every call the way
+// the original run did. Workflow code is cooperatively scheduled: no locking.
+type spawnVersionOccurrences struct {
+	seen map[string]int
+}
+
+type spawnVersionOccurrencesKey struct{}
+
+// withSpawnVersionOccurrences installs a fresh counter in the workflow context.
+func withSpawnVersionOccurrences(ctx workflow.Context) workflow.Context {
+	return workflow.WithValue(ctx, spawnVersionOccurrencesKey{}, &spawnVersionOccurrences{seen: map[string]int{}})
+}
+
+// nextSpawnStringProvidersVersionID returns the change id for this
+// occurrence of toolCallID and advances the count. Without a counter in the
+// context (tests that call parseSpawnToolCall directly) every call is the
+// first occurrence.
+func nextSpawnStringProvidersVersionID(ctx workflow.Context, toolCallID string) string {
+	occ, _ := ctx.Value(spawnVersionOccurrencesKey{}).(*spawnVersionOccurrences)
+	if occ == nil {
+		return spawnStringProvidersVersionID(toolCallID, 0)
+	}
+	n := occ.seen[toolCallID]
+	occ.seen[toolCallID] = n + 1
+	return spawnStringProvidersVersionID(toolCallID, n)
+}
+
+// maxStringifiedDepth bounds how many layers of JSON string encoding
+// decodeStringifiedObject peels, against pathological inputs.
+const maxStringifiedDepth = 5
+
+// decodeStringifiedObject reads an object-typed tool argument a model sent as
+// a JSON-encoded string, as models often do with nested arguments:
+// "{\"prefer\":[\"codex\"]}" is the object it holds, a string encoded twice is
+// peeled twice, and a blank string is the argument left out (nil). It reports
+// false for any other string, which stays the caller's to reject.
+//
+// The registry tools get this from the tools package's schema-guided input
+// normalization; spawn is parsed workflow-side, which cannot import that
+// package (it imports this one).
+func decodeStringifiedObject(s string) (map[string]interface{}, bool) {
+	current := s
+	for depth := 0; depth < maxStringifiedDepth; depth++ {
+		if strings.TrimSpace(current) == "" {
+			return nil, true
+		}
+		var decoded interface{}
+		if err := json.Unmarshal([]byte(current), &decoded); err != nil {
+			return nil, false
+		}
+		switch v := decoded.(type) {
+		case map[string]interface{}:
+			return v, true
+		case string:
+			current = v
+		default:
+			return nil, false
+		}
+	}
+	return nil, false
 }

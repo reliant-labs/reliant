@@ -14,21 +14,22 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/store"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 )
 
 const (
 	// Retry configuration.
 	//
-	// maxRetries bounds the statement-level retries outside a transaction
-	// (execContextWithRetry, queryContextWithRetry). A transaction's budget
-	// is its policy's (RunTx): orm.Serializable carries
-	// orm.DefaultTxMaxAttempts, which is maxRetries+1, sized from the same
-	// measurement below.
+	// maxRetries is the retry count orm.Serializable's attempt budget
+	// (orm.DefaultTxMaxAttempts == maxRetries+1, pinned by
+	// repo_runtx_retry_test.go) was sized from; RunTx spends that budget.
 	//
 	// maxRetries is sized for the contention the product actually generates,
 	// not for an idle database. Update sequences are allocated from ONE
@@ -540,7 +541,7 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts orm.TxOptions, f func(
 			continue
 		}
 
-		// Non-retryable business errors (e.g. sql.ErrNoRows from a lookup
+		// Non-retryable business errors (e.g. a not-found from a lookup
 		// inside the tx, or a TxOutcome such as a declined launch) are
 		// expected control flow for callers — log them quietly so genuine
 		// transaction failures stand out.
@@ -585,7 +586,7 @@ type TxOutcome interface {
 // isExpectedTxOutcome reports whether a RunTx body's error is expected
 // control flow rather than a transaction failure.
 func isExpectedTxOutcome(err error) bool {
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) || errors.Is(err, orm.ErrNoRows) {
 		return true
 	}
 	var outcome TxOutcome
@@ -668,94 +669,6 @@ func (w *WrappedDBTX) Ping(ctx context.Context) error {
 	return w.db.PingContext(ctx)
 }
 
-func (w *WrappedDBTX) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return w.execContextWithRetry(ctx, query, args...)
-}
-
-func (w *WrappedDBTX) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return w.queryContextWithRetry(ctx, query, args...)
-}
-
-func (w *WrappedDBTX) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return w.DB(ctx).QueryRowContext(ctx, query, args...)
-}
-
-// execContextWithRetry executes a query with automatic retry on lock errors.
-// Retries are skipped when inside a transaction — on Postgres, a failed statement
-// poisons the entire transaction so retrying individual statements is futile.
-// Transaction-level retries in RunTx handle recovery instead.
-func (w *WrappedDBTX) execContextWithRetry(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	// Skip statement-level retries when inside a transaction
-	if w.inTx(ctx) {
-		return w.DB(ctx).ExecContext(ctx, query, args...)
-	}
-
-	var lastErr error
-
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		result, err := w.DB(ctx).ExecContext(ctx, query, args...)
-		if err == nil {
-			return result, nil
-		}
-
-		// Check if error is retryable and we have retries left
-		if isRetryableError(err) && attempt < maxRetries {
-			lastErr = err
-			logging.DebugContext(ctx, "Database exec failed, retrying",
-				"attempt", attempt+1,
-				"maxRetries", maxRetries,
-				"error", err)
-			time.Sleep(calculateBackoff(attempt))
-			continue
-		}
-
-		return nil, err
-	}
-
-	if lastErr != nil {
-		return nil, errors.New("exec failed after retries: " + lastErr.Error())
-	}
-	return nil, errors.New("exec failed after retries")
-}
-
-// queryContextWithRetry executes a query with automatic retry on lock errors.
-// Retries are skipped when inside a transaction — on Postgres, a failed statement
-// poisons the entire transaction so retrying individual statements is futile.
-// Transaction-level retries in RunTx handle recovery instead.
-func (w *WrappedDBTX) queryContextWithRetry(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	// Skip statement-level retries when inside a transaction
-	if w.inTx(ctx) {
-		return w.DB(ctx).QueryContext(ctx, query, args...)
-	}
-
-	var lastErr error
-
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		rows, err := w.DB(ctx).QueryContext(ctx, query, args...)
-		if err == nil {
-			return rows, nil
-		}
-
-		// Check if error is retryable and we have retries left
-		if isRetryableError(err) && attempt < maxRetries {
-			lastErr = err
-			logging.DebugContext(ctx, "Database query failed, retrying",
-				"attempt", attempt+1,
-				"maxRetries", maxRetries,
-				"error", err)
-			time.Sleep(calculateBackoff(attempt))
-			continue
-		}
-
-		return nil, err
-	}
-
-	if lastErr != nil {
-		return nil, errors.New("query failed after retries: " + lastErr.Error())
-	}
-	return nil, errors.New("query failed after retries")
-}
-
 // ==================== Sequence-based Sync for WebSocket ====================
 
 // GetLatestUpdateSequence returns the latest sequence number for a given chat
@@ -764,14 +677,31 @@ func (r *Repo) GetLatestUpdateSequence(ctx context.Context, chatID string) (int6
 	return store.LatestChatUpdateSequence(ctx, r.ORM(), chatID)
 }
 
+// GetChatCompactedThrough returns a chat's compaction watermark: at or below
+// it the ledger holds only what a snapshot reads, so a replay must start at or
+// above it (store.CompactChatUpdates). 0 for a chat never compacted.
+func (r *Repo) GetChatCompactedThrough(ctx context.Context, chatID string) (int64, error) {
+	return store.ChatCompactedThrough(ctx, r.ORM(), chatID)
+}
+
 // CreateChatUpdate creates a new chat update (for dual-write pattern)
 // This operation is atomic - the sequence number generation and insert happen in a transaction
 // to prevent race conditions when multiple parallel operations try to create updates.
+//
+// It runs at READ COMMITTED for the reason CreateUserUpdate does: every update
+// for a chat is allocated from ONE counter row, and every thread, tool call and
+// sub-agent of the chat writes through it. Under SERIALIZABLE each commit on
+// that row aborts every writer waiting behind it with SQLSTATE 40001 ("could
+// not serialize access due to concurrent update"); prod's reliant-pg logged
+// thousands a day from this statement. At READ COMMITTED a waiter takes the
+// next number in its one transaction, the row lock still keeps sequence order
+// equal to commit order, and the insert reads nothing but the value the upsert
+// returned. A call that joins an outer transaction inherits its isolation.
 func (r *Repo) CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error {
 	// The allocation and the insert share one transaction: the counter's row
 	// lock is what keeps sequence order equal to commit order, and a rollback
 	// must take both back (store.AllocateUpdateSequence).
-	return r.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
+	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(ctx context.Context) error {
 		chatUpdate, err := store.AppendChatUpdate(ctx, r.ORM(), chatID, updateType, entityID, data)
 		if err != nil {
 			return err
@@ -873,11 +803,11 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// calls.
 	//
 	// "Few" only holds if they can be FOUND without reading the rest:
-	// idx_chat_updates_snapshot_rekeyed is a partial index over exactly the
-	// re-keyed types. Without it the re-keyed read rechecked every row
-	// idx_chat_updates_snapshot_heads holds for the chat (165,843 on chat
-	// 8bb0a875, almost all NODE_EXECUTION) to keep 758: ~350ms of a ~475ms
-	// query. With it, ~3ms.
+	// idx_chat_updates_snapshot_rekey_heads is a partial index over exactly
+	// the re-keyed types, keyed by their dedup key. Without such an index the
+	// re-keyed read rechecked every row the old idx_chat_updates_snapshot_heads
+	// held for the chat (165,843 on chat 8bb0a875, almost all NODE_EXECUTION)
+	// to keep 758: ~350ms of a ~475ms query. With one, ~3ms.
 	//
 	// WORKFLOW_STATUS and NODE_EXECUTION are excluded: they are workflow state,
 	// keyed per workflow and per workflow node, so every run a chat ever made
@@ -910,7 +840,20 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// The statement and the literal-vs-parameter reasoning are
 	// store.SnapshotHeadsSQL's; TestSnapshotHeadsQueryMatchesPartialIndex
 	// pins its literals to the enum values and to both index predicates.
-	return store.LatestNonMessageUpdatesPerEntity(ctx, r.ORM(), chatID)
+	//
+	// That statement is now the fallback. The heads are materialized in
+	// chat_update_heads, in the transaction of every log write, and read from
+	// there when the chat's stream counter vouches for them; a chat the
+	// previous release wrote to, or one not yet backfilled, reads the log as
+	// above (store.SnapshotUpdateHeads, dev-docs/design/chat-update-heads.md).
+	// Which one served is recorded on the caller's span (the snapshot's
+	// chat_snapshot.update_heads) as chat_snapshot.update_heads.source.
+	updates, source, err := store.SnapshotUpdateHeads(ctx, r.ORM(), chatID)
+	if err != nil {
+		return nil, err
+	}
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("chat_snapshot.update_heads.source", source))
+	return updates, nil
 }
 
 // GetLatestWorkflowNodeUpdates returns the newest NODE_EXECUTION update of
@@ -1218,6 +1161,11 @@ func (r *Repo) CreateUserUpdate(ctx context.Context, update *UserUpdate) error {
 	callerSuppliedID := update.ID != ""
 	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		if err := store.AppendUserUpdate(txCtx, r.ORM(), update, callerSuppliedID); err != nil {
+			if chatDeletedUnder(err) {
+				// Not a transaction failure: the caller decides (see
+				// chatDeletedUnder).
+				return chatGoneError{err}
+			}
 			return err
 		}
 		if r.onUserUpdate != nil {
@@ -1252,7 +1200,7 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 		var wt *Worktree
 		if chat.WorktreeID != nil {
 			wt, err = r.GetWorktree(ctx, *chat.WorktreeID)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			if err != nil && !svcerr.IsNotFound(err) {
 				return fmt.Errorf("get bound worktree: %w", err)
 			}
 		}
@@ -1315,7 +1263,9 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 		Data:       dataJSON,
 	}
 
-	if err := r.CreateUserUpdate(ctx, userUpdate); err != nil {
+	if err := r.CreateUserUpdate(ctx, userUpdate); chatDeletedUnder(err) {
+		logging.DebugContext(ctx, "Chat deleted before its state change was announced", "chatID", chatID, "state", state)
+	} else if err != nil {
 		// Log but don't fail - the state update succeeded
 		logging.ErrorContext(ctx, "Failed to create user update for chat state change",
 			"error", err,
@@ -1343,6 +1293,26 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 // When daemonID is nil, the active daemon is cleared (revert to default resolution).
 func (r *Repo) UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error {
 	return store.UpdateChatActiveDaemon(ctx, r.ORM(), chatID, daemonID)
+}
+
+// ChatMove is a chat's move to another project (MoveChatToProject).
+type ChatMove = store.ChatMove
+
+// MoveChatToProject moves an idle (or errored) chat, with its plans, to
+// another project. moved is false, and nothing is written, when the chat is
+// gone, has left m.FromProjectID, or is not idle.
+//
+// It takes the owner's org lock (store.LockUserOrgs) first, before the
+// chat's row lock: call it first in its transaction.
+func (r *Repo) MoveChatToProject(ctx context.Context, m ChatMove) (moved bool, err error) {
+	err = r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockUserOrgs(ctx, r.ORM(), m.UserID); err != nil {
+			return err
+		}
+		moved, err = store.MoveChatToProject(ctx, r.ORM(), m)
+		return err
+	})
+	return moved, err
 }
 
 // PinChatDaemonIfUnset pins an unpinned chat that is on a machine to daemonID
@@ -1477,44 +1447,59 @@ func (r *Repo) ListChatsWaitingForMachine(ctx context.Context, userID string) ([
 	return store.ListChatsWaitingForMachine(ctx, r.ORM(), userID)
 }
 
-// UpdateChatUnread sets the unread flag on a chat and emits a user update.
+// UpdateChatUnread sets the unread flag on a chat and emits the user update
+// that tells connected clients, in one transaction: a client never sees the
+// flag change without its announcement, or the announcement without the flag.
+//
+// Run on its own, the transaction is retried on the repo's ladder like every
+// RunTx. Inside a caller's transaction it joins it, and a failure is returned
+// rather than logged and swallowed: a serialization failure (SQLSTATE 40001,
+// the counter row of a user whose updates race) aborts the WHOLE transaction,
+// so only the caller's RunTx can retry it, and only if the error reaches it.
+// Swallowing it left the caller committing a transaction Postgres had already
+// aborted, an ERROR log per conflict, and the retry happening only because
+// that COMMIT then failed too (reliant #2393).
+//
+// A chat deleted under the update is not a failure on its own transaction:
+// there is nothing left to mark. Inside a caller's transaction the refused
+// write has aborted it, so the error is the caller's.
 func (r *Repo) UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error {
-	chat, err := r.GetChat(ctx, chatID)
+	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
+		chat, err := r.GetChat(txCtx, chatID)
+		if err != nil {
+			return fmt.Errorf("failed to get chat: %w", err)
+		}
+
+		if err := store.UpdateChatUnread(txCtx, r.ORM(), chatID, unread); err != nil {
+			return err
+		}
+
+		dataJSON, err := json.Marshal(map[string]interface{}{
+			"unread":  unread,
+			"reason":  reason,
+			"chat_id": chatID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to marshal unread update: %w", err)
+		}
+
+		return r.CreateUserUpdate(txCtx, &UserUpdate{
+			UserID:     chat.UserID,
+			ProjectID:  &chat.ProjectID,
+			WorktreeID: chat.WorktreeID,
+			ChatID:     &chatID,
+			UpdateType: UserUpdateChatStateChange,
+			EntityType: EntityTypeChat,
+			EntityID:   chatID,
+			Data:       dataJSON,
+		})
+	})
+	if chatDeletedUnder(err) && !orm.InTx(ctx) {
+		logging.DebugContext(ctx, "Chat deleted before its unread change was announced", "chatID", chatID, "unread", unread)
+		return nil
+	}
 	if err != nil {
-		return fmt.Errorf("failed to get chat: %w", err)
-	}
-
-	if err := store.UpdateChatUnread(ctx, r.ORM(), chatID, unread); err != nil {
-		return err
-	}
-
-	updateData := map[string]interface{}{
-		"unread":  unread,
-		"reason":  reason,
-		"chat_id": chatID,
-	}
-
-	dataJSON, err := json.Marshal(updateData)
-	if err != nil {
-		return fmt.Errorf("failed to marshal unread update: %w", err)
-	}
-
-	userUpdate := &UserUpdate{
-		UserID:     chat.UserID,
-		ProjectID:  &chat.ProjectID,
-		WorktreeID: chat.WorktreeID,
-		ChatID:     &chatID,
-		UpdateType: UserUpdateChatStateChange,
-		EntityType: EntityTypeChat,
-		EntityID:   chatID,
-		Data:       dataJSON,
-	}
-
-	if err := r.CreateUserUpdate(ctx, userUpdate); err != nil {
-		logging.ErrorContext(ctx, "Failed to create user update for chat unread change",
-			"error", err,
-			"chatID", chatID,
-			"unread", unread)
+		return fmt.Errorf("update chat unread: %w", err)
 	}
 
 	logging.DebugContext(ctx, "Chat unread updated",
@@ -1590,4 +1575,15 @@ func (r *Repo) EmitNodeExecutionEvent(ctx context.Context, eventType string, sta
 	entityID := fmt.Sprintf("%s:%s", state.WorkflowID, state.NodeID)
 
 	return r.CreateChatUpdate(ctx, state.ChatID, UpdateTypeNodeExecution, entityID, string(eventJSON))
+}
+
+// RecordChatPersonTurn records that a person sent a message into chatID: from this turn on,
+// its calls are attended (org-provider-accounts §11.1, I2).
+func (r *Repo) RecordChatPersonTurn(ctx context.Context, chatID, userID string) error {
+	return store.RecordChatPersonTurn(ctx, r.ORM(), chatID, userID, time.Now())
+}
+
+// ChatPersonTurnAt returns when a person last sent a message into chatID, nil when nobody has.
+func (r *Repo) ChatPersonTurnAt(ctx context.Context, chatID string) (*time.Time, error) {
+	return store.ChatPersonTurnAt(ctx, r.ORM(), chatID)
 }

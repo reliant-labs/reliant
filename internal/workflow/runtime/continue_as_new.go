@@ -343,10 +343,12 @@ func newContinueAsNewError(ctx workflow.Context, input WorkflowInput, nodeID str
 		// load_tool grants are workflow state; without this a tool an agent
 		// loaded would silently stop being offered at the handoff.
 		resume.ToolGrants = childTracker.toolGrantsHandoff()
+		resume.AmbientMemoryExcluded = childTracker.ambientMemoryHandoff()
 		// So are the sub-agents a message can still resume, and the params
 		// the user set on single threads (subagent_resume.go).
 		resume.StoppedSpawns = childTracker.stoppedSpawnHandoffs()
 		resume.ThreadInputs = childTracker.threadInputOverridesHandoff()
+		resume.CapacityParked = childTracker.capacitySlot.isParked()
 	}
 	return workflow.NewContinueAsNewError(ctx, DynamicWorkflow, WorkflowInput{
 		ChatID:       input.ChatID,

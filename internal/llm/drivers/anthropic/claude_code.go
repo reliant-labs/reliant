@@ -62,7 +62,9 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 	// the bundled-SDK version below, the billing header's cc_version and the
 	// embedded prompt bodies must all come from the SAME release — a mixed
 	// combination is one no real client emits. Today that is 2.1.204 for most
-	// models, 2.1.261 for fable-5.1 and 2.1.280 for opus-5.5.
+	// models, 2.1.261 for fable-5.1 and 2.1.280 for opus-5.5. fable-5.2 claims
+	// 2.1.321 over 2.1.280's prompt bodies: the API refuses it below 2.1.290
+	// (see profileFable52).
 	profile := claudeCodeProfileFor(opts.Model.APIModel)
 
 	// Headers that need exact lowercase casing (Go canonicalizes by default)
@@ -529,7 +531,7 @@ func (c *ClaudeCodeClient) preparedMessages(prompts []string, messages []anthrop
 	// Build the exact Claude Code base system prompt — 4 blocks, or 5 for the
 	// 2.1.261 fingerprint (same for every request; compaction/title-gen differ
 	// only by their user message) — then append the caller's own system prompts.
-	system := claudeCodeBaseSystemBlocks(c.options.Model.APIModel, c.options.DisableCache)
+	system := claudeCodeBaseSystemBlocks(c.options.Model.APIModel, c.options.DisableCache, claudeCodeFirstUserText(messages))
 	system = append(system, c.callerSystemBlocks(prompts)...)
 
 	maxTokens := c.options.MaxTokens

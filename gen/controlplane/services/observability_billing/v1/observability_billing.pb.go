@@ -282,9 +282,27 @@ type GetObservabilityUsageResponse struct {
 	// customer.
 	UnchargedBytes int64 `protobuf:"varint,24,opt,name=uncharged_bytes,json=unchargedBytes,proto3" json:"uncharged_bytes,omitempty"`
 	// When the cap was first reached this period; unset before.
-	CapReachedAt  *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=cap_reached_at,json=capReachedAt,proto3" json:"cap_reached_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	CapReachedAt *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=cap_reached_at,json=capReachedAt,proto3" json:"cap_reached_at,omitempty"`
+	// The split of stored bytes across services and categories (by_service,
+	// browser_bytes, operator_bytes, metadata_bytes, and so used_bytes and each
+	// signal's billed_bytes) is an ESTIMATE for at least one hour of the period:
+	// weighted by row count instead of bytes. Only a billing-exempt org, which is
+	// never charged, is metered this way. stored bytes and rows stay exact.
+	BreakdownEstimated bool `protobuf:"varint,26,opt,name=breakdown_estimated,json=breakdownEstimated,proto3" json:"breakdown_estimated,omitempty"`
+	// Dev telemetry: what developers' LOCAL stacks sent with dev tokens
+	// (reliant.source=dev). It is metered inside the allowance and never billed as
+	// overage: dev_bytes is every dev byte stored; dev_billed_bytes the part of it
+	// counted in used_bytes (within the month's dev ceiling, and only while the
+	// allowance has room); dev_ceiling_bytes the month's dev ceiling (25 percent of
+	// the allowance, at least 2 GiB). Past the ceiling dev_state is over_100: the
+	// gateway then drops the org's dev DEBUG logs and error-free dev traces, and
+	// nothing else of the org's.
+	DevBytes        int64                   `protobuf:"varint,27,opt,name=dev_bytes,json=devBytes,proto3" json:"dev_bytes,omitempty"`
+	DevBilledBytes  int64                   `protobuf:"varint,28,opt,name=dev_billed_bytes,json=devBilledBytes,proto3" json:"dev_billed_bytes,omitempty"`
+	DevCeilingBytes int64                   `protobuf:"varint,29,opt,name=dev_ceiling_bytes,json=devCeilingBytes,proto3" json:"dev_ceiling_bytes,omitempty"`
+	DevState        ObservabilityQuotaState `protobuf:"varint,30,opt,name=dev_state,json=devState,proto3,enum=observability_billing.v1.ObservabilityQuotaState" json:"dev_state,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetObservabilityUsageResponse) Reset() {
@@ -492,6 +510,41 @@ func (x *GetObservabilityUsageResponse) GetCapReachedAt() *timestamppb.Timestamp
 	return nil
 }
 
+func (x *GetObservabilityUsageResponse) GetBreakdownEstimated() bool {
+	if x != nil {
+		return x.BreakdownEstimated
+	}
+	return false
+}
+
+func (x *GetObservabilityUsageResponse) GetDevBytes() int64 {
+	if x != nil {
+		return x.DevBytes
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetDevBilledBytes() int64 {
+	if x != nil {
+		return x.DevBilledBytes
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetDevCeilingBytes() int64 {
+	if x != nil {
+		return x.DevCeilingBytes
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetDevState() ObservabilityQuotaState {
+	if x != nil {
+		return x.DevState
+	}
+	return ObservabilityQuotaState_OBSERVABILITY_QUOTA_STATE_UNSPECIFIED
+}
+
 type SignalUsage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "logs", "traces", "metrics" or "profiles".
@@ -564,9 +617,12 @@ func (x *SignalUsage) GetRows() int64 {
 type ServiceUsage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The service.name; empty for data that carried none.
-	Service       string `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
-	Signal        string `protobuf:"bytes,2,opt,name=signal,proto3" json:"signal,omitempty"`
-	BilledBytes   int64  `protobuf:"varint,3,opt,name=billed_bytes,json=billedBytes,proto3" json:"billed_bytes,omitempty"`
+	Service     string `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
+	Signal      string `protobuf:"bytes,2,opt,name=signal,proto3" json:"signal,omitempty"`
+	BilledBytes int64  `protobuf:"varint,3,opt,name=billed_bytes,json=billedBytes,proto3" json:"billed_bytes,omitempty"`
+	// billed_bytes is weighted by rows, not bytes, for at least one hour (see
+	// GetObservabilityUsageResponse.breakdown_estimated).
+	Estimated     bool `protobuf:"varint,4,opt,name=estimated,proto3" json:"estimated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -620,6 +676,13 @@ func (x *ServiceUsage) GetBilledBytes() int64 {
 		return x.BilledBytes
 	}
 	return 0
+}
+
+func (x *ServiceUsage) GetEstimated() bool {
+	if x != nil {
+		return x.Estimated
+	}
+	return false
 }
 
 type ListObservabilityUsageRequest struct {
@@ -735,6 +798,10 @@ type UsageBucket struct {
 	MetadataBytes      int64 `protobuf:"varint,9,opt,name=metadata_bytes,json=metadataBytes,proto3" json:"metadata_bytes,omitempty"`
 	// The part of billed_bytes the spend cap kept off the bill.
 	UnchargedBytes int64 `protobuf:"varint,10,opt,name=uncharged_bytes,json=unchargedBytes,proto3" json:"uncharged_bytes,omitempty"`
+	// Dev telemetry (reliant.source=dev) stored, and the part of it counted in
+	// billed_bytes: inside the allowance, never overage.
+	DevBytes       int64 `protobuf:"varint,11,opt,name=dev_bytes,json=devBytes,proto3" json:"dev_bytes,omitempty"`
+	DevBilledBytes int64 `protobuf:"varint,12,opt,name=dev_billed_bytes,json=devBilledBytes,proto3" json:"dev_billed_bytes,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -835,6 +902,20 @@ func (x *UsageBucket) GetMetadataBytes() int64 {
 func (x *UsageBucket) GetUnchargedBytes() int64 {
 	if x != nil {
 		return x.UnchargedBytes
+	}
+	return 0
+}
+
+func (x *UsageBucket) GetDevBytes() int64 {
+	if x != nil {
+		return x.DevBytes
+	}
+	return 0
+}
+
+func (x *UsageBucket) GetDevBilledBytes() int64 {
+	if x != nil {
+		return x.DevBilledBytes
 	}
 	return 0
 }
@@ -1521,9 +1602,13 @@ type GetObservabilityLimitsResponse struct {
 	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	UpdatedByEmail string                 `protobuf:"bytes,12,opt,name=updated_by_email,json=updatedByEmail,proto3" json:"updated_by_email,omitempty"`
 	// Whether the caller may call UpdateObservabilityLimits for this org.
-	CanUpdate     bool `protobuf:"varint,13,opt,name=can_update,json=canUpdate,proto3" json:"can_update,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	CanUpdate bool `protobuf:"varint,13,opt,name=can_update,json=canUpdate,proto3" json:"can_update,omitempty"`
+	// Whether members' local dev stacks (`forge env up`) may send telemetry to
+	// the org's hosted store. Default true. Off refuses every dev telemetry
+	// mint and revokes the org's live dev tokens within a gateway poll.
+	DevTelemetryEnabled bool `protobuf:"varint,14,opt,name=dev_telemetry_enabled,json=devTelemetryEnabled,proto3" json:"dev_telemetry_enabled,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *GetObservabilityLimitsResponse) Reset() {
@@ -1647,6 +1732,13 @@ func (x *GetObservabilityLimitsResponse) GetCanUpdate() bool {
 	return false
 }
 
+func (x *GetObservabilityLimitsResponse) GetDevTelemetryEnabled() bool {
+	if x != nil {
+		return x.DevTelemetryEnabled
+	}
+	return false
+}
+
 type UpdateObservabilityLimitsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
@@ -1659,9 +1751,12 @@ type UpdateObservabilityLimitsRequest struct {
 	AlertThresholdsPercent []int32 `protobuf:"varint,4,rep,packed,name=alert_thresholds_percent,json=alertThresholdsPercent,proto3" json:"alert_thresholds_percent,omitempty"`
 	SetAlertThresholds     bool    `protobuf:"varint,5,opt,name=set_alert_thresholds,json=setAlertThresholds,proto3" json:"set_alert_thresholds,omitempty"`
 	// Unset leaves it as it is.
-	AlertOnCap    *bool `protobuf:"varint,6,opt,name=alert_on_cap,json=alertOnCap,proto3,oneof" json:"alert_on_cap,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	AlertOnCap *bool `protobuf:"varint,6,opt,name=alert_on_cap,json=alertOnCap,proto3,oneof" json:"alert_on_cap,omitempty"`
+	// The org's dev telemetry switch (see GetObservabilityLimitsResponse).
+	// Unset leaves it as it is.
+	DevTelemetryEnabled *bool `protobuf:"varint,7,opt,name=dev_telemetry_enabled,json=devTelemetryEnabled,proto3,oneof" json:"dev_telemetry_enabled,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *UpdateObservabilityLimitsRequest) Reset() {
@@ -1736,6 +1831,13 @@ func (x *UpdateObservabilityLimitsRequest) GetAlertOnCap() bool {
 	return false
 }
 
+func (x *UpdateObservabilityLimitsRequest) GetDevTelemetryEnabled() bool {
+	if x != nil && x.DevTelemetryEnabled != nil {
+		return *x.DevTelemetryEnabled
+	}
+	return false
+}
+
 type UpdateObservabilityLimitsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The limits after the change.
@@ -1797,7 +1899,7 @@ const file_services_observability_billing_v1_observability_billing_proto_rawDesc
 	"\n" +
 	"=services/observability_billing/v1/observability_billing.proto\x12\x18observability_billing.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"5\n" +
 	"\x1cGetObservabilityUsageRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\xe6\t\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\xda\v\n" +
 	"\x1dGetObservabilityUsageResponse\x12=\n" +
 	"\fperiod_start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
 	"\n" +
@@ -1828,16 +1930,22 @@ const file_services_observability_billing_v1_observability_billing_proto_rawDesc
 	"\x0emetadata_bytes\x18\x16 \x01(\x03R\rmetadataBytes\x12#\n" +
 	"\rcharged_cents\x18\x17 \x01(\x03R\fchargedCents\x12'\n" +
 	"\x0funcharged_bytes\x18\x18 \x01(\x03R\x0eunchargedBytes\x12@\n" +
-	"\x0ecap_reached_at\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\fcapReachedAt\"\x7f\n" +
+	"\x0ecap_reached_at\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\fcapReachedAt\x12/\n" +
+	"\x13breakdown_estimated\x18\x1a \x01(\bR\x12breakdownEstimated\x12\x1b\n" +
+	"\tdev_bytes\x18\x1b \x01(\x03R\bdevBytes\x12(\n" +
+	"\x10dev_billed_bytes\x18\x1c \x01(\x03R\x0edevBilledBytes\x12*\n" +
+	"\x11dev_ceiling_bytes\x18\x1d \x01(\x03R\x0fdevCeilingBytes\x12N\n" +
+	"\tdev_state\x18\x1e \x01(\x0e21.observability_billing.v1.ObservabilityQuotaStateR\bdevState\"\x7f\n" +
 	"\vSignalUsage\x12\x16\n" +
 	"\x06signal\x18\x01 \x01(\tR\x06signal\x12!\n" +
 	"\fbilled_bytes\x18\x02 \x01(\x03R\vbilledBytes\x12!\n" +
 	"\fstored_bytes\x18\x03 \x01(\x03R\vstoredBytes\x12\x12\n" +
-	"\x04rows\x18\x04 \x01(\x03R\x04rows\"c\n" +
+	"\x04rows\x18\x04 \x01(\x03R\x04rows\"\x81\x01\n" +
 	"\fServiceUsage\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12\x16\n" +
 	"\x06signal\x18\x02 \x01(\tR\x06signal\x12!\n" +
-	"\fbilled_bytes\x18\x03 \x01(\x03R\vbilledBytes\"\xea\x04\n" +
+	"\fbilled_bytes\x18\x03 \x01(\x03R\vbilledBytes\x12\x1c\n" +
+	"\testimated\x18\x04 \x01(\bR\testimated\"\xea\x04\n" +
 	"\x1dListObservabilityUsageRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x120\n" +
 	"\x05start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
@@ -1856,7 +1964,7 @@ const file_services_observability_billing_v1_observability_billing_proto_rawDesc
 	"\x0fGROUP_BY_SIGNAL\x10\x01\x12\x1b\n" +
 	"\x17GROUP_BY_SIGNAL_SERVICE\x10\x02B\x0e\n" +
 	"\f_granularityB\v\n" +
-	"\t_group_by\"\x83\x03\n" +
+	"\t_group_by\"\xca\x03\n" +
 	"\vUsageBucket\x12=\n" +
 	"\fbucket_start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vbucketStart\x12\x16\n" +
 	"\x06signal\x18\x02 \x01(\tR\x06signal\x12\x18\n" +
@@ -1868,7 +1976,9 @@ const file_services_observability_billing_v1_observability_billing_proto_rawDesc
 	"\x14browser_billed_bytes\x18\b \x01(\x03R\x12browserBilledBytes\x12%\n" +
 	"\x0emetadata_bytes\x18\t \x01(\x03R\rmetadataBytes\x12'\n" +
 	"\x0funcharged_bytes\x18\n" +
-	" \x01(\x03R\x0eunchargedBytes\"\xb4\x01\n" +
+	" \x01(\x03R\x0eunchargedBytes\x12\x1b\n" +
+	"\tdev_bytes\x18\v \x01(\x03R\bdevBytes\x12(\n" +
+	"\x10dev_billed_bytes\x18\f \x01(\x03R\x0edevBilledBytes\"\xb4\x01\n" +
 	"\x1eListObservabilityUsageResponse\x12?\n" +
 	"\abuckets\x18\x01 \x03(\v2%.observability_billing.v1.UsageBucketR\abuckets\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12)\n" +
@@ -1915,7 +2025,7 @@ const file_services_observability_billing_v1_observability_billing_proto_rawDesc
 	"\x06signal\x18\x01 \x01(\tR\x06signal\x12=\n" +
 	"\x05tiers\x18\x02 \x03(\v2'.observability_billing.v1.RetentionTierR\x05tiers\"6\n" +
 	"\x1dGetObservabilityLimitsRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\xb7\x05\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\xeb\x05\n" +
 	"\x1eGetObservabilityLimitsResponse\x12&\n" +
 	"\x0fspend_cap_cents\x18\x01 \x01(\x03R\rspendCapCents\x12@\n" +
 	"\x06bounds\x18\x02 \x01(\v2(.observability_billing.v1.SpendCapBoundsR\x06bounds\x128\n" +
@@ -1934,7 +2044,8 @@ const file_services_observability_billing_v1_observability_billing_proto_rawDesc
 	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12(\n" +
 	"\x10updated_by_email\x18\f \x01(\tR\x0eupdatedByEmail\x12\x1d\n" +
 	"\n" +
-	"can_update\x18\r \x01(\bR\tcanUpdate\"\xc9\x02\n" +
+	"can_update\x18\r \x01(\bR\tcanUpdate\x122\n" +
+	"\x15dev_telemetry_enabled\x18\x0e \x01(\bR\x13devTelemetryEnabled\"\x9c\x03\n" +
 	" UpdateObservabilityLimitsRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12)\n" +
 	"\x10expected_version\x18\x02 \x01(\x03R\x0fexpectedVersion\x12+\n" +
@@ -1942,9 +2053,11 @@ const file_services_observability_billing_v1_observability_billing_proto_rawDesc
 	"\x18alert_thresholds_percent\x18\x04 \x03(\x05R\x16alertThresholdsPercent\x120\n" +
 	"\x14set_alert_thresholds\x18\x05 \x01(\bR\x12setAlertThresholds\x12%\n" +
 	"\falert_on_cap\x18\x06 \x01(\bH\x01R\n" +
-	"alertOnCap\x88\x01\x01B\x12\n" +
+	"alertOnCap\x88\x01\x01\x127\n" +
+	"\x15dev_telemetry_enabled\x18\a \x01(\bH\x02R\x13devTelemetryEnabled\x88\x01\x01B\x12\n" +
 	"\x10_spend_cap_centsB\x0f\n" +
-	"\r_alert_on_cap\"\xb3\x01\n" +
+	"\r_alert_on_capB\x18\n" +
+	"\x16_dev_telemetry_enabled\"\xb3\x01\n" +
 	"!UpdateObservabilityLimitsResponse\x12P\n" +
 	"\x06limits\x18\x01 \x01(\v28.observability_billing.v1.GetObservabilityLimitsResponseR\x06limits\x12<\n" +
 	"\x1bspend_cap_raised_to_charged\x18\x02 \x01(\bR\x17spendCapRaisedToCharged*\xb6\x01\n" +
@@ -2010,42 +2123,43 @@ var file_services_observability_billing_v1_observability_billing_proto_depIdxs =
 	5,  // 5: observability_billing.v1.GetObservabilityUsageResponse.by_signal:type_name -> observability_billing.v1.SignalUsage
 	6,  // 6: observability_billing.v1.GetObservabilityUsageResponse.by_service:type_name -> observability_billing.v1.ServiceUsage
 	22, // 7: observability_billing.v1.GetObservabilityUsageResponse.cap_reached_at:type_name -> google.protobuf.Timestamp
-	22, // 8: observability_billing.v1.ListObservabilityUsageRequest.start:type_name -> google.protobuf.Timestamp
-	22, // 9: observability_billing.v1.ListObservabilityUsageRequest.end:type_name -> google.protobuf.Timestamp
-	1,  // 10: observability_billing.v1.ListObservabilityUsageRequest.granularity:type_name -> observability_billing.v1.ListObservabilityUsageRequest.Granularity
-	2,  // 11: observability_billing.v1.ListObservabilityUsageRequest.group_by:type_name -> observability_billing.v1.ListObservabilityUsageRequest.GroupBy
-	22, // 12: observability_billing.v1.UsageBucket.bucket_start:type_name -> google.protobuf.Timestamp
-	8,  // 13: observability_billing.v1.ListObservabilityUsageResponse.buckets:type_name -> observability_billing.v1.UsageBucket
-	22, // 14: observability_billing.v1.SignalStorage.oldest_at:type_name -> google.protobuf.Timestamp
-	11, // 15: observability_billing.v1.SignalStorage.services:type_name -> observability_billing.v1.ServiceStorageEstimate
-	22, // 16: observability_billing.v1.GetObservabilityStorageResponse.as_of:type_name -> google.protobuf.Timestamp
-	12, // 17: observability_billing.v1.GetObservabilityStorageResponse.signals:type_name -> observability_billing.v1.SignalStorage
-	22, // 18: observability_billing.v1.QueryLane.resets_at:type_name -> google.protobuf.Timestamp
-	22, // 19: observability_billing.v1.QueryLane.usage_as_of:type_name -> google.protobuf.Timestamp
-	22, // 20: observability_billing.v1.QueryLane.usage_expires_at:type_name -> google.protobuf.Timestamp
-	23, // 21: observability_billing.v1.RetentionTier.keep:type_name -> google.protobuf.Duration
-	16, // 22: observability_billing.v1.SignalRetention.tiers:type_name -> observability_billing.v1.RetentionTier
-	14, // 23: observability_billing.v1.GetObservabilityLimitsResponse.bounds:type_name -> observability_billing.v1.SpendCapBounds
-	15, // 24: observability_billing.v1.GetObservabilityLimitsResponse.query_lanes:type_name -> observability_billing.v1.QueryLane
-	23, // 25: observability_billing.v1.GetObservabilityLimitsResponse.max_query_range:type_name -> google.protobuf.Duration
-	17, // 26: observability_billing.v1.GetObservabilityLimitsResponse.retention:type_name -> observability_billing.v1.SignalRetention
-	22, // 27: observability_billing.v1.GetObservabilityLimitsResponse.updated_at:type_name -> google.protobuf.Timestamp
-	19, // 28: observability_billing.v1.UpdateObservabilityLimitsResponse.limits:type_name -> observability_billing.v1.GetObservabilityLimitsResponse
-	3,  // 29: observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage:input_type -> observability_billing.v1.GetObservabilityUsageRequest
-	7,  // 30: observability_billing.v1.ObservabilityBillingService.ListObservabilityUsage:input_type -> observability_billing.v1.ListObservabilityUsageRequest
-	10, // 31: observability_billing.v1.ObservabilityBillingService.GetObservabilityStorage:input_type -> observability_billing.v1.GetObservabilityStorageRequest
-	18, // 32: observability_billing.v1.ObservabilityBillingService.GetObservabilityLimits:input_type -> observability_billing.v1.GetObservabilityLimitsRequest
-	20, // 33: observability_billing.v1.ObservabilityBillingService.UpdateObservabilityLimits:input_type -> observability_billing.v1.UpdateObservabilityLimitsRequest
-	4,  // 34: observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage:output_type -> observability_billing.v1.GetObservabilityUsageResponse
-	9,  // 35: observability_billing.v1.ObservabilityBillingService.ListObservabilityUsage:output_type -> observability_billing.v1.ListObservabilityUsageResponse
-	13, // 36: observability_billing.v1.ObservabilityBillingService.GetObservabilityStorage:output_type -> observability_billing.v1.GetObservabilityStorageResponse
-	19, // 37: observability_billing.v1.ObservabilityBillingService.GetObservabilityLimits:output_type -> observability_billing.v1.GetObservabilityLimitsResponse
-	21, // 38: observability_billing.v1.ObservabilityBillingService.UpdateObservabilityLimits:output_type -> observability_billing.v1.UpdateObservabilityLimitsResponse
-	34, // [34:39] is the sub-list for method output_type
-	29, // [29:34] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	0,  // 8: observability_billing.v1.GetObservabilityUsageResponse.dev_state:type_name -> observability_billing.v1.ObservabilityQuotaState
+	22, // 9: observability_billing.v1.ListObservabilityUsageRequest.start:type_name -> google.protobuf.Timestamp
+	22, // 10: observability_billing.v1.ListObservabilityUsageRequest.end:type_name -> google.protobuf.Timestamp
+	1,  // 11: observability_billing.v1.ListObservabilityUsageRequest.granularity:type_name -> observability_billing.v1.ListObservabilityUsageRequest.Granularity
+	2,  // 12: observability_billing.v1.ListObservabilityUsageRequest.group_by:type_name -> observability_billing.v1.ListObservabilityUsageRequest.GroupBy
+	22, // 13: observability_billing.v1.UsageBucket.bucket_start:type_name -> google.protobuf.Timestamp
+	8,  // 14: observability_billing.v1.ListObservabilityUsageResponse.buckets:type_name -> observability_billing.v1.UsageBucket
+	22, // 15: observability_billing.v1.SignalStorage.oldest_at:type_name -> google.protobuf.Timestamp
+	11, // 16: observability_billing.v1.SignalStorage.services:type_name -> observability_billing.v1.ServiceStorageEstimate
+	22, // 17: observability_billing.v1.GetObservabilityStorageResponse.as_of:type_name -> google.protobuf.Timestamp
+	12, // 18: observability_billing.v1.GetObservabilityStorageResponse.signals:type_name -> observability_billing.v1.SignalStorage
+	22, // 19: observability_billing.v1.QueryLane.resets_at:type_name -> google.protobuf.Timestamp
+	22, // 20: observability_billing.v1.QueryLane.usage_as_of:type_name -> google.protobuf.Timestamp
+	22, // 21: observability_billing.v1.QueryLane.usage_expires_at:type_name -> google.protobuf.Timestamp
+	23, // 22: observability_billing.v1.RetentionTier.keep:type_name -> google.protobuf.Duration
+	16, // 23: observability_billing.v1.SignalRetention.tiers:type_name -> observability_billing.v1.RetentionTier
+	14, // 24: observability_billing.v1.GetObservabilityLimitsResponse.bounds:type_name -> observability_billing.v1.SpendCapBounds
+	15, // 25: observability_billing.v1.GetObservabilityLimitsResponse.query_lanes:type_name -> observability_billing.v1.QueryLane
+	23, // 26: observability_billing.v1.GetObservabilityLimitsResponse.max_query_range:type_name -> google.protobuf.Duration
+	17, // 27: observability_billing.v1.GetObservabilityLimitsResponse.retention:type_name -> observability_billing.v1.SignalRetention
+	22, // 28: observability_billing.v1.GetObservabilityLimitsResponse.updated_at:type_name -> google.protobuf.Timestamp
+	19, // 29: observability_billing.v1.UpdateObservabilityLimitsResponse.limits:type_name -> observability_billing.v1.GetObservabilityLimitsResponse
+	3,  // 30: observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage:input_type -> observability_billing.v1.GetObservabilityUsageRequest
+	7,  // 31: observability_billing.v1.ObservabilityBillingService.ListObservabilityUsage:input_type -> observability_billing.v1.ListObservabilityUsageRequest
+	10, // 32: observability_billing.v1.ObservabilityBillingService.GetObservabilityStorage:input_type -> observability_billing.v1.GetObservabilityStorageRequest
+	18, // 33: observability_billing.v1.ObservabilityBillingService.GetObservabilityLimits:input_type -> observability_billing.v1.GetObservabilityLimitsRequest
+	20, // 34: observability_billing.v1.ObservabilityBillingService.UpdateObservabilityLimits:input_type -> observability_billing.v1.UpdateObservabilityLimitsRequest
+	4,  // 35: observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage:output_type -> observability_billing.v1.GetObservabilityUsageResponse
+	9,  // 36: observability_billing.v1.ObservabilityBillingService.ListObservabilityUsage:output_type -> observability_billing.v1.ListObservabilityUsageResponse
+	13, // 37: observability_billing.v1.ObservabilityBillingService.GetObservabilityStorage:output_type -> observability_billing.v1.GetObservabilityStorageResponse
+	19, // 38: observability_billing.v1.ObservabilityBillingService.GetObservabilityLimits:output_type -> observability_billing.v1.GetObservabilityLimitsResponse
+	21, // 39: observability_billing.v1.ObservabilityBillingService.UpdateObservabilityLimits:output_type -> observability_billing.v1.UpdateObservabilityLimitsResponse
+	35, // [35:40] is the sub-list for method output_type
+	30, // [30:35] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_services_observability_billing_v1_observability_billing_proto_init() }

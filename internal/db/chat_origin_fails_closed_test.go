@@ -144,7 +144,7 @@ func TestUnrecordedOriginFailsClosed(t *testing.T) {
 	// Archived runs stay out of the Archived tab too.
 	require.NoError(t, repo.UpdateChatState(ctx, "old-"+string(core.TriggerEventKindSchedule), ChatStateArchived, ""))
 	require.NoError(t, repo.UpdateChatState(ctx, "old-"+string(core.TriggerEventKindChatStart), ChatStateArchived, ""))
-	archived, err := repo.ListArchivedChats(ctx, "test-user")
+	archived, err := repo.ListArchivedChats(ctx, "test-user", nil)
 	require.NoError(t, err)
 	archivedIDs := map[string]bool{}
 	for _, a := range archived {
@@ -199,8 +199,13 @@ func TestChatOriginFailsClosedMigrationReclassifiesMislabelledRuns(t *testing.T)
 	require.Len(t, matches, 1)
 	body, err := forgedb.MigrationsFS.ReadFile(matches[0])
 	require.NoError(t, err)
+	// Its view predates later columns (org_id): it is laid over no view,
+	// and the newest is restored after.
+	_, err = raw.Exec("DROP VIEW chats_with_activity")
+	require.NoError(t, err)
 	_, err = raw.Exec(string(body))
 	require.NoError(t, err)
+	restoreLatestChatsView(t, raw)
 
 	for _, kind := range allLaunchKinds {
 		id := "ml-" + string(kind)

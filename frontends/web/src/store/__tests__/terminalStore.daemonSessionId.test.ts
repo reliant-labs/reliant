@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Closing a terminal must address the DAEMON's session id, not the local one.
  *

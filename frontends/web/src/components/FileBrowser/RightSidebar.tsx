@@ -560,13 +560,16 @@ export function RightSidebar() {
       data-context="right-sidebar"
       tabIndex={-1}
     >
-      {/* Tabs */}
-      <div className="flex justify-center bg-accent border-b border-border h-10 overflow-visible pt-1">
-        <div role="tablist" aria-label="Sidebar" className="flex h-full">
+      {/* Share the available width, including the Tooltip trigger wrappers:
+          all five Electron tabs and the terminal fit even at the 200px
+          file-browser minimum. Cap the strip on wider panels. */}
+      <div className="flex h-10 shrink-0 overflow-x-auto bg-accent border-b border-border pt-1">
+        <div className="mx-auto flex h-full w-full max-w-60 shrink-0">
+        <div role="tablist" aria-label="Sidebar" className="flex h-full min-w-0 flex-1">
           {tabs.map((tab, index) => {
             const selected = activeSidebarTab === tab.id;
             return (
-              <Tooltip key={tab.id} content={tab.tooltip} side="bottom" delay={300}>
+              <Tooltip key={tab.id} content={tab.tooltip} side="bottom" delay={300} triggerClassName="inline-flex h-full min-w-0 flex-1">
                 <button
                   ref={(el) => {
                     tabRefs.current[tab.id] = el;
@@ -581,7 +584,7 @@ export function RightSidebar() {
                   onClick={() => handleTabClick(tab.id)}
                   onKeyDown={(event) => onTabKeyDown(event, index)}
                   className={cn(
-                    "px-3 h-full transition-colors border-b-2 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    "w-full min-w-0 h-full transition-colors border-b-2 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                     selected ? "text-foreground" : "border-transparent text-muted-foreground bg-accent header-icon-btn",
                   )}
                   style={selected ? {
@@ -609,15 +612,15 @@ export function RightSidebar() {
             content. Separated by a divider to make that distinction visible. */}
         {currentProject && (
           <>
-            <span className="self-center h-4 w-px bg-border mx-1" />
-            <Tooltip content={withShortcut(isTerminalOpen ? "Hide terminal" : "Show terminal", shortcuts.terminal)} side="bottom" delay={300}>
+            <span aria-hidden="true" className="self-center h-4 w-px shrink-0 bg-border mx-1" />
+            <Tooltip content={withShortcut(isTerminalOpen ? "Hide terminal" : "Show terminal", shortcuts.terminal)} side="bottom" delay={300} triggerClassName="inline-flex h-full w-8 shrink-0">
               <button
                 type="button"
                 onClick={toggleTerminal}
                 aria-pressed={isTerminalOpen}
                 aria-label={isTerminalOpen ? "Hide Terminal" : "Show Terminal"}
                 className={cn(
-                  "px-3 h-full transition-colors border-b-2 border-transparent flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                  "w-full h-full transition-colors border-b-2 border-transparent flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                   isTerminalOpen
                     ? "text-foreground"
                     : "text-muted-foreground bg-accent header-icon-btn"
@@ -632,6 +635,7 @@ export function RightSidebar() {
             </Tooltip>
           </>
         )}
+        </div>
       </div>
 
       {/* Header and search bar - only show for files tab */}

@@ -10,8 +10,8 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -30,18 +30,53 @@ func InsertStepExecution(ctx context.Context, db orm.Context, exec *core.StepExe
 		WorkflowID:    exec.WorkflowID,
 		StepID:        exec.StepID,
 		ActivityName:  exec.ActivityName,
-		OutputJSON:    nullStringPtr(exec.OutputJSON),
-		ExitCode:      nullInt64Ptr(exec.ExitCode),
+		OutputJSON:    jsonbStorable(exec.OutputJSON),
+		ExitCode:      exec.ExitCode,
 		Success:       successFlag(exec.Success),
-		DurationMs:    nullInt64Ptr(exec.DurationMs),
+		DurationMs:    exec.DurationMs,
 		CreatedAt:     exec.CreatedAt,
-		LoopNodeID:    nullStringPtr(exec.LoopNodeID),
-		LoopIteration: nullInt64Ptr(exec.LoopIteration),
-		InputJSON:     nullStringPtr(exec.InputJSON),
-		ErrorMessage:  nullStringPtr(exec.ErrorMessage),
-		Attempt:       nullInt32Ptr(exec.Attempt),
-		NodePath:      nullStringPtr(exec.NodePath),
+		LoopNodeID:    exec.LoopNodeID,
+		LoopIteration: exec.LoopIteration,
+		InputJSON:     jsonbStorable(exec.InputJSON),
+		ErrorMessage:  validUTF8Ptr(exec.ErrorMessage),
+		Attempt:       exec.Attempt,
+		NodePath:      exec.NodePath,
 	})
+}
+
+// jsonbStorable makes JSON text castable to jsonb. encoding/json writes a NUL
+// in a string as the escape \u0000, which a text column stores but jsonb
+// refuses ("unsupported Unicode escape sequence", SQLSTATE 22P05). The
+// step_executions row casts output_json to jsonb in its generated
+// saved_message_id column, so in prod one NUL in a SaveMessage step's tool
+// output failed the whole INSERT and the step's history was lost; the run
+// diagnostics read casts it too. Each escaped NUL becomes \ufffd (U+FFFD, as
+// validUTF8 does for a raw NUL); an escaped backslash followed by "u0000" is
+// text, not a NUL, and is kept. Anything else returns unchanged.
+func jsonbStorable(text *string) *string {
+	if text == nil || !strings.Contains(*text, `\u0000`) {
+		return text
+	}
+	in := *text
+	var b strings.Builder
+	b.Grow(len(in))
+	for i := 0; i < len(in); i++ {
+		if in[i] != '\\' || i+1 == len(in) {
+			b.WriteByte(in[i])
+			continue
+		}
+		if strings.HasPrefix(in[i:], `\u0000`) {
+			b.WriteString(`\ufffd`)
+			i += len(`\u0000`) - 1
+			continue
+		}
+		// Any other escape: copy it whole so its second byte (an escaped
+		// backslash, say) is never read as the start of another escape.
+		b.WriteString(in[i : i+2])
+		i++
+	}
+	out := b.String()
+	return &out
 }
 
 // LoadStepExecution reads one step attempt by id.
@@ -308,6 +343,171 @@ func ListBasicChatStepExecutions(ctx context.Context, db orm.Context, chatID str
 	return scanChatStepExecutions(ctx, db.Bun().NewRaw(BasicChatStepExecutionsSQL, chatID))
 }
 
+// ─── Retention ───────────────────────────────────────────────────────────────
+//
+// step_executions was never pruned (prod 2026-11-10: 2.7M rows, 8.8 GB, most
+// of it CallLLM / ExecuteTools / SaveMessage output out of line). What a
+// finished run's steps are read for afterwards is the chat timeline
+// (BasicChatStepExecutionsSQL: the user-facing steps and the "-save" rows that
+// render them as messages, a handful per run) and diagnostics (get_run, the
+// builder's Run tab: everything). Retention keeps the first exactly and lets
+// the second degrade: it deletes a finished run's INTERNAL steps, except a
+// "-save" row the timeline renders. The run's own row (workflows: state,
+// outcome, failure_detail) is untouched, so its summary stays.
+//
+// The unit is a root run — what get_run and ListRunNodeExecutions read as one
+// tree — that COMPLETED or was CANCELLED before the cutoff. Inside it, every
+// workflow is judged on its own: only one that itself completed or was
+// cancelled before the cutoff loses its internal steps. A FAILED workflow is
+// resumable, a PAUSED one live, an ACTIVE or PENDING one running, and one that
+// finished after the cutoff is too recent: their steps stay. A root that still
+// holds any such workflow is DEFERRED (step_retention_deferred_roots) and
+// revisited every pass until its whole tree has been pruned, so a child that
+// finishes after its root was first visited is pruned in its turn. A FAILED
+// root is never visited; if it is resumed and completes, its completed_at moves
+// past the cursor and it is visited then.
+
+// StepRetentionRoot is a root run whose internal steps may be pruned.
+type StepRetentionRoot struct {
+	ID          string    `bun:"id"`
+	CompletedAt time.Time `bun:"completed_at"`
+}
+
+// stepRetentionRootsSQL: root runs that completed (stop reason 1) or were
+// cancelled (4) before ?0, after (?1, ?2) in (completed_at, id) order, at most
+// ?3. state 3 is STOPPED (TestStepRetentionLiteralsMatchTheEnums).
+const stepRetentionRootsSQL = `
+SELECT id, completed_at FROM workflows
+ WHERE parent_id IS NULL AND state = 3 AND stop_reason IN (1, 4)
+   AND completed_at < ?0
+   AND (completed_at, id) > (?1, ?2)
+ ORDER BY completed_at, id
+ LIMIT ?3`
+
+// StepRetentionRoots returns up to limit root runs that finished before
+// cutoff, after (afterAt, afterID) in (completed_at, id) order.
+func StepRetentionRoots(ctx context.Context, db orm.Context, cutoff, afterAt time.Time, afterID string, limit int) ([]StepRetentionRoot, error) {
+	var out []StepRetentionRoot
+	if err := db.Bun().NewRaw(stepRetentionRootsSQL, cutoff.UTC(), afterAt.UTC(), afterID, limit).Scan(ctx, &out); err != nil {
+		return nil, fmt.Errorf("step retention roots: %w", err)
+	}
+	return out, nil
+}
+
+// stepRetentionTreeSQL is root run ?0's tree (the tree ListRunNodeExecutions
+// reads), each workflow marked prunable when it itself completed (stop reason
+// 1) or was cancelled (4) before ?1. Every other workflow — running, pending,
+// paused, failed, finished since the cutoff, or with no completed_at — is not.
+const stepRetentionTreeSQL = `
+WITH RECURSIVE tree AS (
+    SELECT id, chat_id FROM workflows WHERE id = ?0
+    UNION ALL
+    SELECT w.id, w.chat_id FROM workflows w JOIN tree t ON w.parent_id = t.id AND w.chat_id = t.chat_id
+), judged AS (
+    SELECT t.id, COALESCE(w.state = 3 AND w.stop_reason IN (1, 4) AND w.completed_at < ?1, false) AS prunable
+      FROM tree t JOIN workflows w ON w.id = t.id
+)`
+
+// prunableStepsSQL selects the prunable steps of the prunable workflows of
+// stepRetentionTreeSQL. The prunable list is model.InternalActivities, and the
+// "-save" exemption is BasicChatStepExecutionsSQL's second arm verbatim: a
+// save row whose user-facing step (same workflow, step id, loop scope)
+// renders it in the chat timeline. Both literals are pinned by
+// TestUserFacingStepIndexPredicateMatchesInternalActivities and
+// TestStepRetentionLiteralsMatchTheEnums.
+const prunableStepsSQL = `
+    SELECT se.id FROM step_executions se
+      JOIN judged j ON j.id = se.workflow_id AND j.prunable
+     WHERE se.activity_name IN (
+             'WorkflowStatus', 'WorkflowError', 'Cleanup', 'FetchThreadResult',
+             'FailStep', 'SaveMessage', 'CallLLM', 'Approval', 'ExecuteTools')
+       AND NOT (se.saved_message_id IS NOT NULL AND EXISTS (
+             SELECT 1 FROM step_executions vis
+              WHERE vis.workflow_id = se.workflow_id
+                AND se.step_id = vis.step_id || '-save'
+                AND ARRAY[se.loop_node_id, se.loop_iteration::text]
+                    = ARRAY[vis.loop_node_id, vis.loop_iteration::text]
+                AND vis.activity_name NOT IN (
+                    'WorkflowStatus', 'WorkflowError', 'Cleanup', 'FetchThreadResult',
+                    'FailStep', 'SaveMessage', 'CallLLM', 'Approval', 'ExecuteTools')))`
+
+// pruneRunStepsSQL deletes up to ?2 of them. No SKIP LOCKED: a row another
+// replica is deleting is waited for, so a batch never passes over a row whose
+// delete then rolls back.
+const pruneRunStepsSQL = stepRetentionTreeSQL + `
+DELETE FROM step_executions WHERE id IN (` + prunableStepsSQL + `
+     LIMIT ?2)`
+
+// runStepsLeftSQL: whether any prunable step of the tree is left. A short
+// batch does not prove there is none (rows another replica deleted under the
+// LIMIT count for nothing), so the prune ends only on this.
+const runStepsLeftSQL = stepRetentionTreeSQL + `
+SELECT EXISTS (` + prunableStepsSQL + `)`
+
+// runHasUnprunableWorkflowsSQL: whether the tree holds a workflow that is not
+// prunable yet, so the root must be revisited.
+const runHasUnprunableWorkflowsSQL = stepRetentionTreeSQL + `
+SELECT EXISTS (SELECT 1 FROM judged WHERE NOT prunable)`
+
+// PruneRunSteps deletes up to limit prunable steps of root run rootID's tree,
+// as of cutoff, and returns how many.
+func PruneRunSteps(ctx context.Context, db orm.Context, rootID string, cutoff time.Time, limit int) (int64, error) {
+	if limit <= 0 {
+		return 0, fmt.Errorf("prune run steps: limit must be positive")
+	}
+	res, err := db.Bun().NewRaw(pruneRunStepsSQL, rootID, cutoff.UTC(), limit).Exec(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("prune run steps: %w", err)
+	}
+	return res.RowsAffected()
+}
+
+// RunStepsLeft reports whether root run rootID's tree still has a step
+// PruneRunSteps would delete.
+func RunStepsLeft(ctx context.Context, db orm.Context, rootID string, cutoff time.Time) (bool, error) {
+	var left bool
+	if err := db.Bun().NewRaw(runStepsLeftSQL, rootID, cutoff.UTC()).Scan(ctx, &left); err != nil {
+		return false, fmt.Errorf("run steps left: %w", err)
+	}
+	return left, nil
+}
+
+// RunHasUnprunableWorkflows reports whether root run rootID's tree holds a
+// workflow that is not prunable as of cutoff: the root must be revisited.
+func RunHasUnprunableWorkflows(ctx context.Context, db orm.Context, rootID string, cutoff time.Time) (bool, error) {
+	var pending bool
+	if err := db.Bun().NewRaw(runHasUnprunableWorkflowsSQL, rootID, cutoff.UTC()).Scan(ctx, &pending); err != nil {
+		return false, fmt.Errorf("run has unprunable workflows: %w", err)
+	}
+	return pending, nil
+}
+
+// DeferStepRetentionRoot records that root run rootID must be revisited.
+func DeferStepRetentionRoot(ctx context.Context, db orm.Context, rootID string) error {
+	if _, err := db.Exec(ctx, `INSERT INTO step_retention_deferred_roots (root_id) VALUES ($1) ON CONFLICT (root_id) DO NOTHING`, rootID); err != nil {
+		return fmt.Errorf("defer step retention root: %w", err)
+	}
+	return nil
+}
+
+// ClearStepRetentionRoot records that root run rootID's tree is fully pruned.
+func ClearStepRetentionRoot(ctx context.Context, db orm.Context, rootID string) error {
+	if _, err := db.Exec(ctx, `DELETE FROM step_retention_deferred_roots WHERE root_id = $1`, rootID); err != nil {
+		return fmt.Errorf("clear step retention root: %w", err)
+	}
+	return nil
+}
+
+// DeferredStepRetentionRoots returns up to limit deferred root runs after
+// afterID, in id order.
+func DeferredStepRetentionRoots(ctx context.Context, db orm.Context, afterID string, limit int) ([]string, error) {
+	var ids []string
+	if err := db.Bun().NewRaw(`SELECT root_id FROM step_retention_deferred_roots WHERE root_id > ?0 ORDER BY root_id LIMIT ?1`, afterID, limit).Scan(ctx, &ids); err != nil {
+		return nil, fmt.Errorf("deferred step retention roots: %w", err)
+	}
+	return ids, nil
+}
+
 // chatStepExecutionRow is one row of the chat-wide step reads.
 type chatStepExecutionRow struct {
 	ID             string    `bun:"id"`
@@ -336,13 +536,13 @@ func scanChatStepExecutions(ctx context.Context, q *bun.RawQuery) ([]*core.ChatS
 			WorkflowID:     row.WorkflowID,
 			StepID:         row.StepID,
 			ActivityName:   row.ActivityName,
-			ExitCode:       toNullInt64(row.ExitCode),
-			Success:        toNullBool(row.Success),
-			DurationMs:     toNullInt64(row.DurationMs),
-			LoopNodeID:     toNullString(row.LoopNodeID),
-			LoopIteration:  toNullInt64(row.LoopIteration),
+			ExitCode:       row.ExitCode,
+			Success:        successBool(row.Success),
+			DurationMs:     row.DurationMs,
+			LoopNodeID:     row.LoopNodeID,
+			LoopIteration:  row.LoopIteration,
 			CreatedAt:      row.CreatedAt,
-			SavedMessageID: toNullString(row.SavedMessageID),
+			SavedMessageID: row.SavedMessageID,
 			OutputJSON:     row.OutputJSON,
 		}
 	}
@@ -363,88 +563,40 @@ func stepExecutionToCore(row *StepExecution) *core.StepExecution {
 		WorkflowID:     row.WorkflowID,
 		StepID:         row.StepID,
 		ActivityName:   row.ActivityName,
-		OutputJSON:     toNullString(row.OutputJSON),
-		ExitCode:       toNullInt64(row.ExitCode),
-		Success:        toNullBool(row.Success),
-		DurationMs:     toNullInt64(row.DurationMs),
-		LoopNodeID:     toNullString(row.LoopNodeID),
-		LoopIteration:  toNullInt64(row.LoopIteration),
+		OutputJSON:     row.OutputJSON,
+		ExitCode:       row.ExitCode,
+		Success:        successBool(row.Success),
+		DurationMs:     row.DurationMs,
+		LoopNodeID:     row.LoopNodeID,
+		LoopIteration:  row.LoopIteration,
 		CreatedAt:      row.CreatedAt,
-		SavedMessageID: toNullString(row.SavedMessageID),
-		InputJSON:      toNullString(row.InputJSON),
-		ErrorMessage:   toNullString(row.ErrorMessage),
-		Attempt:        toNullInt32(row.Attempt),
-		NodePath:       toNullString(row.NodePath),
+		SavedMessageID: row.SavedMessageID,
+		InputJSON:      row.InputJSON,
+		ErrorMessage:   row.ErrorMessage,
+		Attempt:        row.Attempt,
+		NodePath:       row.NodePath,
 	}
 }
 
 // successFlag stores a step's success as the column's 0/1 bigint.
-func successFlag(success sql.NullBool) *int64 {
-	if !success.Valid {
+func successFlag(success *bool) *int64 {
+	if success == nil {
 		return nil
 	}
 	var v int64
-	if success.Bool {
+	if *success {
 		v = 1
 	}
 	return &v
 }
 
-// toNullBool reads the 0/1 success flag back.
-func toNullBool(v *int64) sql.NullBool {
+// successBool reads the 0/1 success flag back.
+func successBool(v *int64) *bool {
 	if v == nil {
-		return sql.NullBool{}
-	}
-	return sql.NullBool{Bool: *v != 0, Valid: true}
-}
-
-func nullStringPtr(v sql.NullString) *string {
-	if !v.Valid {
 		return nil
 	}
-	return &v.String
-}
-
-func nullInt64Ptr(v sql.NullInt64) *int64 {
-	if !v.Valid {
-		return nil
-	}
-	return &v.Int64
-}
-
-func nullInt32Ptr(v sql.NullInt32) *int32 {
-	if !v.Valid {
-		return nil
-	}
-	return &v.Int32
-}
-
-func toNullString(v *string) sql.NullString {
-	if v == nil {
-		return sql.NullString{}
-	}
-	return sql.NullString{String: *v, Valid: true}
-}
-
-func toNullInt64(v *int64) sql.NullInt64 {
-	if v == nil {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: *v, Valid: true}
-}
-
-func toNullTime(v *time.Time) sql.NullTime {
-	if v == nil {
-		return sql.NullTime{}
-	}
-	return sql.NullTime{Time: *v, Valid: true}
-}
-
-func toNullInt32(v *int32) sql.NullInt32 {
-	if v == nil {
-		return sql.NullInt32{}
-	}
-	return sql.NullInt32{Int32: *v, Valid: true}
+	b := *v != 0
+	return &b
 }
 
 // StepExecutionExtra carries fields on StepExecution that are NOT columns — computed

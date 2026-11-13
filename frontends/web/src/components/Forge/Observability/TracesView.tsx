@@ -54,7 +54,7 @@ import { TraceDetail } from "./TraceDetail";
 import { TraceLatencyChart } from "./traceScatter/TraceLatencyChart";
 import { inRegion, pointsOf, type TraceRegion } from "./traceScatter/traceScatterModel";
 import { parseLatParam } from "./Home/SignalTiles";
-import { operationName } from "./traceTitle";
+import { operationName, rootSpanQuery } from "./traceTitle";
 import { UserIdFilter } from "./UserIdFilter";
 import { useRovingFocus } from "./useRovingFocus";
 import DataTable, { STACK, type DataTableColumn } from "@/components/forge-ui/data_table";
@@ -62,6 +62,7 @@ import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 import { hasClient, type ServiceBuild } from "@/services/controlPlane/observability/client";
 import { clientLabel, ClientSummary } from "./Client";
 import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "./ClientFilters";
+import { CONTROL_FIELD } from "../controlStyles";
 
 const features = tableFeatures({
   rowSortingFeature,
@@ -164,7 +165,7 @@ function TraceList({
   const filters: TraceFilters = useMemo(
     () => ({
       range,
-      rootSpanName,
+      rootSpanName: rootSpanQuery(rootSpanName),
       services: service ? [service] : [],
       errorsOnly,
       minDurationMs: Math.max(MIN_DURATION_MS[minDuration ?? ""] ?? 0, band ? Math.floor(band.loMs) : 0),
@@ -463,18 +464,18 @@ function TraceToolbar({
           Root operation contains
         </label>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
           <input
             id="obs-trace-query"
             type="search"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="Root operation contains, e.g. GetUser or orders.v1.OrdersService/"
+            placeholder="Root operation contains, e.g. a method name or HTTP route"
             aria-invalid={filterError ? true : undefined}
             aria-describedby={filterError ? "obs-trace-query-error" : undefined}
             className={cn(
-              "h-8 w-full rounded-md border bg-surface-sunken pl-8 pr-3 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              filterError ? "border-danger" : "border-border"
+              `${CONTROL_FIELD} h-8 w-full pl-8 pr-3 font-mono text-sm placeholder:font-sans`,
+              filterError && "border-danger"
             )}
             data-testid="obs-trace-query"
           />
@@ -499,7 +500,7 @@ function TraceToolbar({
         id="obs-min-duration"
         value={minDuration ?? ""}
         onChange={(event) => navigate({ minDuration: event.target.value || undefined }, { replace: true })}
-        className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={`${CONTROL_FIELD} h-8 px-2 text-sm`}
         data-testid="obs-min-duration"
       >
         <option value="">Any duration</option>
@@ -758,14 +759,19 @@ function TraceTable({
         {/* Not a DataTable: it is virtualized (spacer rows) with roving focus,
             which DataTable does not do. It stacks on a phone with DataTable's
             own STACK classes, so the two layouts cannot drift apart. */}
-        <table className={cn("w-full table-fixed text-sm", STACK.table)} data-testid="obs-trace-table">
+        {/* The fixed columns sum to 59rem; the root operation (the row's
+            button) takes the rest. min-w keeps it 11rem wide: narrower, the
+            table scrolls sideways instead of squeezing the operation, the one
+            column a reader opens a trace by, to nothing. 70rem fits a 1440px
+            laptop beside the nav without a sideways scrollbar. */}
+        <table className={cn("w-full table-fixed text-sm md:min-w-[70rem]", STACK.table)} data-testid="obs-trace-table">
           <caption className="sr-only">Traces from {subject}. Activate a root operation to open its waterfall.</caption>
           <colgroup className="max-md:hidden">
             <col className="w-36" />
             <col />
-            <col className="w-56" />
+            <col className="w-44" />
+            <col className="w-36" />
             <col className="w-40" />
-            <col className="w-48" />
             <col className="w-40" />
             <col className="w-16" />
             <col className="w-24" />

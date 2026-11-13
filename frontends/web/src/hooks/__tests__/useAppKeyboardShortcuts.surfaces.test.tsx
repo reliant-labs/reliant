@@ -15,13 +15,10 @@ const getShortcuts = vi.hoisted(() =>
   vi.fn(async () => ({ shortcuts: "{}" })),
 );
 
-vi.mock("../../api/client", () => ({
-  api: {
-    settings: {
-      getShortcuts,
-      updateShortcuts: vi.fn(async () => ({ message: "" })),
-    },
-  },
+vi.mock("../settings-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../settings-queries")>()),
+  fetchShortcuts: async () => (await getShortcuts()).shortcuts,
+  updateShortcuts: vi.fn(async () => ({ success: true, message: "" })),
 }));
 
 import { useAppKeyboardShortcuts } from "../useAppKeyboardShortcuts";

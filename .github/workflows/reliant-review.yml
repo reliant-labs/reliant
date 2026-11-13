@@ -6,8 +6,9 @@ name: Reliant review
 # (`<!-- review-passed sha=<head> -->` in a review whose commit_id is the head,
 # by the pipeline's reviewer). pr-review's skip mode (the owner override,
 # labelled review:skipped) posts the same exact-head marker, so it passes here
-# too; a bare label is tied to no head and never counts. The head's FIRST
-# marker is its verdict; a later one on the same sha changes nothing. In the merge queue it judges every pull request in the group.
+# too; a bare label is tied to no head and never counts. The head's verdict is
+# its newest evidence re-review by the bot (review-rereview), else its FIRST
+# marker; any other later one on the same sha changes nothing. In the merge queue it judges every pull request in the group.
 #
 # Red until pr-review passes the head, then green: the marker is a review
 # (pull_request_review), and a pass also labels the PR (labeled). A push makes

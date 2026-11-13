@@ -80,6 +80,10 @@ type MachineStorage struct {
 	// for being near its process limit (internal/procguard): the count, the
 	// limit and the largest process trees. Its own inbox item.
 	Processes *reliantv1.ProcessReport
+	// Reclaim is the machine sweep's pending proposals: idle worktrees with
+	// work only they hold, which the daemon removes only once the person
+	// approves (worktreereclaim). Its own inbox item.
+	Reclaim *reliantv1.WorktreeReclaimProposals
 }
 
 // StorageItem reports whether the machine has a disk or kept-workspace
@@ -163,6 +167,13 @@ func StorageView(ctx context.Context, store StorageStore, userID string) ([]*Mac
 		}
 		if diskwatch.RefusingForProcesses(rep) {
 			get(id).Processes = rep.Processes
+		}
+		if len(rep.GetWorktreeReclaim().GetProposals()) > 0 {
+			m := get(id)
+			m.Reclaim = rep.WorktreeReclaim
+			if m.Disk == nil {
+				m.Disk = rep
+			}
 		}
 	}
 

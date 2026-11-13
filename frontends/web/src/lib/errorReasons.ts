@@ -47,6 +47,10 @@ export const ERROR_REASONS = [
   // ── reliant: handlers ──
   /** SendMessage on a chat whose root run has not started (handlers/chat). */
   "chat_not_started",
+  /** Input to a live run in which no agent is running right now; nothing was queued (handlers/chat run_recipient.go). */
+  "run_no_listening_agent",
+  /** Input to a run with several agents running in parallel that names none of them; the message lists them (handlers/chat run_recipient.go). */
+  "run_recipient_ambiguous",
   /** A save raced a newer revision of the same definition (handlers/workflow). */
   "stale_revision",
   /** Killing a process that already exited (handlers/package_commands, background). */
@@ -75,6 +79,19 @@ export const ERROR_REASONS = [
   "billing_email_missing",
   /** The org's Reliant credit is at or below zero. */
   "reliant_credit_exhausted",
+  // ── control-plane: coupon redemption (internal/coupon RedeemError) ──
+  /** No such code. NotFound. */
+  "coupon_not_found",
+  /** The coupon was switched off. FailedPrecondition. */
+  "coupon_inactive",
+  /** Past its end date. FailedPrecondition. */
+  "coupon_expired",
+  /** Every redemption of it is spent. ResourceExhausted. */
+  "coupon_exhausted",
+  /** This org already redeemed it (once, or its per-org maximum). AlreadyExists. */
+  "coupon_already_redeemed",
+  /** The anti-guessing limiter tripped. ResourceExhausted. */
+  "coupon_too_many_attempts",
   // ── access tokens and deploy (control-plane handlers/access_token, reliant handlers/token) ──
   /** Authenticated, but the token lacks a scope; the scopes ride ERROR_SCOPES_HEADER. */
   "scope_missing",
@@ -85,12 +102,27 @@ export const ERROR_REASONS = [
   "observability_not_configured",
   /** The caller is not a member of the organization asked about. */
   "not_org_member",
+  // ── reliant: moving a project to another org (handlers/project rpc_move_project_to_org.go) ──
+  /** Running work in the project refuses the move; the preview names it. FailedPrecondition. */
+  "project_busy",
+  /** The project left the organization the dialog saw it in. FailedPrecondition. */
+  "org_changed",
   /** The org's hourly observability query quota is spent; the QueryQuotaExhausted detail says when it resets. */
   "obs_query_quota",
   /** A background poll refused early, to keep the last of the quota for a person's own query. */
   "obs_query_quota_soft",
   /** A console user already has the server's cap of observability reads running; the RetryInfo detail says when to try again. */
   "in_flight_limit",
+  // ── control-plane: audited Data and Storage reads ──
+  "confirmation_required",
+  "shape_unknown",
+  "rate_limited",
+  "datasource_unreachable",
+  "query_in_flight",
+  "bucket_unreachable",
+  "bad_page_token",
+  "not_previewable",
+  "too_large",
   // ── control-plane: git credentials (internal/gitcredential; reliant token_git.go) ──
   /** No git provider account is connected for the user. */
   "git_credential_not_connected",
@@ -109,6 +141,45 @@ export const ERROR_REASONS = [
   "claimable_upgrade_required",
   /** CompleteClaim (FailedPrecondition): the caller already has their one free static site; choose which stays live. */
   "claimable_free_site_choice_required",
+  // ── control-plane: org members (OrganizationService; docs/design/orgs-and-members.md §2.14) ──
+  /** A machine credential called a person-only rpc. */
+  "human_only",
+  /** The caller's role in the org is below admin. */
+  "admin_required",
+  /** The target or the assigned role is owner, and the caller is not one. */
+  "owner_required",
+  /** Assigning admin or owner without holding that role's whole permission set. */
+  "grant_ceiling",
+  /** The accepting person's verified email is not the invited one; the invitation stays pending. */
+  "invite_email_mismatch",
+  /** No verified email on the session (anonymous, or not yet verified). */
+  "email_unverified",
+  /** The org is an unclaimed no-signup deploy's. */
+  "org_unclaimed",
+  /** Leaving, removing or demoting would leave the org with no owner. */
+  "last_owner",
+  /** The invitee (or the accepting person) is already a member. */
+  "already_member",
+  /** The invitation is past its expiry. */
+  "invitation_expired",
+  /** An admin revoked the invitation. */
+  "invitation_revoked",
+  /** The invitation was already accepted. */
+  "invitation_not_pending",
+  /** The same address was re-invited inside the last minute. */
+  "invite_resend_too_soon",
+  /** RemoveMember on the caller: leaving is LeaveOrganization. */
+  "cannot_remove_self",
+  /** Every seat is taken (members plus pending invitations, or members at accept). */
+  "seat_limit_reached",
+  /** The caller owns as many orgs as one person may. */
+  "owned_org_limit",
+  /** The org holds as many pending invitations as it may. */
+  "pending_invite_limit",
+  /** The caller sent too many invitations in the last hour. */
+  "invite_rate_limited",
+  /** CreateOrganization: the slug is taken. */
+  "slug_taken",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

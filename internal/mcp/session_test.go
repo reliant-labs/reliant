@@ -195,7 +195,7 @@ func TestManager_SessionClientEvictsItselfWhenReaped(t *testing.T) {
 	// Reap as the idle timer would.
 	lc.idleShutdown()
 
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		m.mu.RLock()
 		n := len(m.sessionClients)

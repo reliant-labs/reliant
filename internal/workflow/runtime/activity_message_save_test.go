@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/ptr"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
@@ -176,7 +178,7 @@ func TestWrapperSave_WritesMessageAndStripsThinking(t *testing.T) {
 		if row.StepID == "call_llm-save" {
 			saveRow = true
 			assert.Equal(t, "SaveMessage", row.ActivityName)
-			assert.Contains(t, row.OutputJSON.String, `"message_id":"msg-call_llm-save"`)
+			assert.Contains(t, ptr.From(row.OutputJSON), `"message_id":"msg-call_llm-save"`)
 		}
 	}
 	assert.True(t, saveRow, "a <node>-save step_executions row must be written")

@@ -4,6 +4,8 @@ import type { Logger } from "./logger.js";
 import type { ChatState } from "./chat-state.js";
 import { decodeChatUpdate } from "./decode.js";
 import type { ChatUpdate } from "./events.js";
+import { keepHeldBodies, mergeMessages } from "./reducers.js";
+import { fullerToolResult, mergeToolResults } from "./tool-results.js";
 import type { Message } from "./types.js";
 import {
   approvalData,
@@ -484,5 +486,175 @@ describe("an older page of history", () => {
       env,
     );
     expect(s.errors.map((e) => [e.id, e.error_message])).toEqual([["e1", "newer"], ["e0", "history"]]);
+  });
+});
+
+describe("tool bodies a stub read left out", () => {
+  const FULL_INPUT = JSON.stringify({ file_path: "a.go", content: "x".repeat(4000) });
+  const SKELETON = JSON.stringify({ file_path: "a.go", content: "xxxx…" });
+  const FULL_OUTPUT = "y".repeat(3000);
+  const STUB_OUTPUT = "yyyy…";
+
+  const call = (seq: number, o: { elided?: boolean; blockId?: string; completedAt?: string } = {}) =>
+    updateData(ChatUpdateType.MESSAGE, seq, "a-1", {
+      message: {
+        id: "a-1",
+        chat_id: CHAT,
+        role: 2,
+        seq: 1,
+        thread: "",
+        streaming_state: 2,
+        content_blocks: [
+          {
+            id: o.blockId ?? "a-1-b0",
+            type: 2,
+            index: 0,
+            tool_call_id: "call-1",
+            tool_name: "write",
+            input: o.elided ? SKELETON : FULL_INPUT,
+            ...(o.completedAt ? { completed_at: o.completedAt } : {}),
+            ...(o.elided ? { body_elided: true, body_size: FULL_INPUT.length } : {}),
+          },
+        ],
+      },
+    });
+  const result = (seq: number, o: { elided?: boolean; blockId?: string; messageId?: string } = {}) =>
+    updateData(ChatUpdateType.MESSAGE, seq, o.messageId ?? "r-1", {
+      message: {
+        id: o.messageId ?? "r-1",
+        chat_id: CHAT,
+        role: 4,
+        seq: 2,
+        thread: "",
+        streaming_state: 2,
+        content_blocks: [
+          {
+            id: o.blockId ?? "r-1-r0",
+            type: 3,
+            index: 0,
+            tool_call_id: "call-1",
+            tool_name: "write",
+            content: o.elided ? STUB_OUTPUT : FULL_OUTPUT,
+            ...(o.elided
+              ? { truncated: true, original_size: FULL_OUTPUT.length, body_elided: true, body_size: FULL_OUTPUT.length }
+              : {}),
+          },
+        ],
+      },
+    });
+  const callBlock = (s: ChatState) => s.messages.find((m) => m.id === "a-1")!.contentBlocks[0]!;
+  const watchedLive = () => apply(fresh(), call(1), result(2));
+
+  it("a snapshot of stubs keeps the bodies the chat holds, and takes every other field from the snapshot", () => {
+    const s = snapshot(watchedLive(), call(10, { elided: true, completedAt: "2026-01-01T00:00:05Z" }), result(11, { elided: true }));
+    expect(s.messages.map((m) => m.id)).toEqual(["a-1", "r-1"]);
+    expect(callBlock(s).input).toBe(FULL_INPUT);
+    expect(callBlock(s).bodyElided).toBeUndefined();
+    expect(callBlock(s).bodySize).toBeUndefined();
+    expect(callBlock(s).completedAt).toBe("2026-01-01T00:00:05Z");
+    const resultBlock = s.messages.find((m) => m.id === "r-1")!.contentBlocks[0]!;
+    expect(resultBlock).toMatchObject({ content: FULL_OUTPUT });
+    expect(resultBlock.truncated).toBeUndefined();
+    expect(s.toolResults["call-1"]).toMatchObject({ content: FULL_OUTPUT, block_id: "r-1-r0" });
+    expect(s.toolResults["call-1"]!.elided).toBeUndefined();
+  });
+
+  it("a replayed stub never displaces a held body, and is not reported as a conflicting re-delivery", () => {
+    const log = spyLog();
+    const s = reduceChat(
+      watchedLive(),
+      { kind: "updates", updates: decode(call(3, { elided: true }), result(4, { elided: true })), cursor: 9n },
+      { ...env, log },
+    );
+    expect(callBlock(s).input).toBe(FULL_INPUT);
+    expect(s.toolResults["call-1"]!.content).toBe(FULL_OUTPUT);
+    expect(s.toolResults["call-1"]!.elided).toBeUndefined();
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it("a body upgrades a stub", () => {
+    let s = snapshot(fresh(), call(1, { elided: true }), result(2, { elided: true }));
+    expect(callBlock(s)).toMatchObject({ input: SKELETON, bodyElided: true, bodySize: BigInt(FULL_INPUT.length) });
+    expect(s.toolResults["call-1"]).toMatchObject({ content: STUB_OUTPUT, elided: true, truncated: true, block_id: "r-1-r0" });
+
+    s = apply(s, call(3), result(4));
+    expect(callBlock(s).input).toBe(FULL_INPUT);
+    expect(callBlock(s).bodyElided).toBeUndefined();
+    expect(s.toolResults["call-1"]!.content).toBe(FULL_OUTPUT);
+    expect(s.toolResults["call-1"]!.elided).toBeUndefined();
+  });
+
+  it("a body upgrades a stub carried in the same batch, whichever copy comes first", () => {
+    const s = apply(fresh(), result(1, { elided: true }), result(2, { messageId: "r-1b" }));
+    expect(s.toolResults["call-1"]!.content).toBe(FULL_OUTPUT);
+    const t = apply(fresh(), result(1, { messageId: "r-1b" }), result(2, { elided: true }));
+    expect(t.toolResults["call-1"]!.content).toBe(FULL_OUTPUT);
+  });
+
+  it("an older page's body upgrades a stub the index holds", () => {
+    const held = snapshot(fresh(), result(5, { elided: true }));
+    const page = decode(result(1, { messageId: "r-0" })).map((u) => (u as unknown as { message: Message }).message);
+    const s = reduceChat(held, { kind: "olderPage", messages: page, errors: [], total: 2, hasMore: false }, env);
+    expect(s.toolResults["call-1"]!.content).toBe(FULL_OUTPUT);
+  });
+
+  it("a stub of another block is never given this block's body", () => {
+    const s = snapshot(watchedLive(), call(10, { elided: true, blockId: "a-1-b9" }), result(11, { elided: true, blockId: "r-1-r9" }));
+    expect(callBlock(s)).toMatchObject({ id: "a-1-b9", input: SKELETON, bodyElided: true });
+    expect(s.toolResults["call-1"]).toMatchObject({ content: STUB_OUTPUT, elided: true, block_id: "r-1-r9" });
+  });
+
+  it("partial arguments held from a stream that dropped never displace a finished call's elided input", () => {
+    const PARTIAL_INPUT = FULL_INPUT.slice(0, 100);
+    const streaming = updateData(ChatUpdateType.MESSAGE, 1, "a-1", {
+      message: {
+        id: "a-1",
+        chat_id: CHAT,
+        role: 2,
+        seq: 1,
+        thread: "",
+        streaming_state: 1,
+        content_blocks: [
+          { id: "a-1-b0", type: 2, index: 0, tool_call_id: "call-1", tool_name: "write", input: PARTIAL_INPUT },
+        ],
+      },
+    });
+    const held = apply(fresh(), streaming);
+    expect(callBlock(held).input).toBe(PARTIAL_INPUT);
+
+    const s = snapshot(held, call(10, { elided: true }));
+    expect(callBlock(s)).toMatchObject({ input: SKELETON, bodyElided: true, bodySize: BigInt(FULL_INPUT.length) });
+    const t = apply(held, call(10, { elided: true }));
+    expect(callBlock(t)).toMatchObject({ input: SKELETON, bodyElided: true });
+  });
+
+  it("a full read hands back the incoming messages untouched", () => {
+    const live = watchedLive();
+    const incoming = decode(call(3)).map((u) => (u as unknown as { message: Message }).message);
+    const merged = mergeMessages(live.messages, incoming, false);
+    expect(merged.find((m) => m.id === "a-1")).toBe(incoming[0]);
+    expect(keepHeldBodies(live.messages[0]!, incoming[0]!)).toBe(incoming[0]);
+  });
+});
+
+describe("fullerToolResult and mergeToolResults", () => {
+  const full = { content: "body", block_id: "b" };
+  const stub = { content: "st…", block_id: "b", elided: true, truncated: true };
+
+  it("keep a body over a stub, a body for a stub, and otherwise the copy held", () => {
+    expect(fullerToolResult(undefined, stub)).toBe(stub);
+    expect(fullerToolResult(full, stub)).toBe(full);
+    expect(fullerToolResult(stub, full)).toBe(full);
+    const again = { content: "other", block_id: "b" };
+    expect(fullerToolResult(full, again)).toBe(full);
+    expect(fullerToolResult(stub, { ...stub })).toBe(stub);
+  });
+
+  it("hand back the held index itself when nothing is fuller", () => {
+    const held = { c1: full };
+    expect(mergeToolResults(held, { c1: stub })).toBe(held);
+    expect(mergeToolResults(held, { c1: { content: "dup" } })).toBe(held);
+    expect(mergeToolResults({ c1: stub }, { c1: full })).toEqual({ c1: full });
+    expect(mergeToolResults(held, { c2: stub })).toEqual({ c1: full, c2: stub });
   });
 });

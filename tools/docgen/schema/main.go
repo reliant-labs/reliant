@@ -64,7 +64,10 @@ var toolHints = map[string]string{
 		"`trigger` grouping the firings that replace each other). See WorkflowConcurrency below.",
 	// WorkflowConcurrency's fields (the generated descriptors carry no comments).
 	"max_running": "How many trigger-launched runs of the workflow run at once; later firings wait. Set it, " +
-		"per_member, or both; with per_member it is a ceiling over the scaled cap.",
+		"per_member, or both; with per_member it is a ceiling over the scaled cap. A run waiting on a provider " +
+		"(a usage limit, provider capacity, no provider that can serve it) with nothing else executing does not " +
+		"count: it gives its slot back, and takes one again before its next step, ahead of every waiting firing " +
+		"but never above the cap.",
 	"per_member": "Scales the cap with the trigger's machine pool: this many runs for each member that can take " +
 		"work (installed, synced with the pool's catalog, not failed or removed), so adding a machine raises " +
 		"throughput with no workflow edit. A trigger on one machine, or on none, counts as a pool of one.",
@@ -79,7 +82,13 @@ var toolHints = map[string]string{
 		"unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). " +
 		"Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, " +
 		"error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends " +
-		"FAILED; an error in the handler is logged and never recursive.",
+		"FAILED; an error in the handler is logged and never recursive. To release something however the run ends, " +
+		"cancel included, use `finally`.",
+	"finally": "A handler for however a run ends: an inline graph ({entry, nodes, edges}) that runs once when a run " +
+		"completes, fails (after on_failure) or is cancelled. Never when it pauses or hands off to a successor run. Its " +
+		"nodes read `run.status` ('completed' | 'failed' | 'cancelled'), `failure.*` (empty unless the run failed), " +
+		"`inputs`, and the `nodes` outputs the run produced (guard them with `.?`). It cannot change how the run ended; " +
+		"an error in it is logged and never recursive. Release leases, claims and labels here.",
 }
 
 func main() {
@@ -118,7 +127,8 @@ func extractTypesFromProto() []TypeInfo {
 		extractTypeFromMessage("WorkflowConcurrency",
 			(&reliantv1.WorkflowConcurrency{}).ProtoReflect().Descriptor(),
 			"A trigger admission policy (`concurrency:`), not a worker task limit. Pooled per owner, project and "+
-				"workflow; manual trigger fires participate, chat starts do not. Example, one release at a time with "+
+				"workflow; manual trigger fires participate, chat starts do not. It bounds runs that are running: "+
+				"a run waiting on a provider holds no slot until it resumes. Example, one release at a time with "+
 				"only the newest waiting merge per repository: `concurrency: {max_running: 1, waiting: latest, key: "+
 				"'{{ trigger.payload.attributes.repository }}'}`.", 4),
 	}

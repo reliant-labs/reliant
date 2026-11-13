@@ -13,6 +13,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"google.golang.org/protobuf/proto"
 )
 
 // ListMessages used to fetch content blocks with three separate
@@ -122,12 +126,38 @@ func TestListMessages_BatchedContentBlocks_MatchesPerMessageAssembly(t *testing.
 		CreatedAt: now, UpdatedAt: now,
 	}))
 
+	// The RPC span the interceptor would start, recorded, so the transcript
+	// byte accounting ListMessages puts on it can be read back.
+	recorder := tracetest.NewSpanRecorder()
+	spanCtx, rpcSpan := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).
+		Tracer("test").Start(ctx, "ListMessages")
+
 	svc := &Service{deps: Deps{Repo: repo}}
-	resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	resp, err := svc.ListMessages(spanCtx, connect.NewRequest(&reliantv1.ListMessagesRequest{
 		ChatId: chatID,
 	}))
+	rpcSpan.End()
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Messages, 4, "all four messages must be present")
+
+	require.Len(t, recorder.Ended(), 1)
+	attrs := map[attribute.Key]int64{}
+	for _, kv := range recorder.Ended()[0].Attributes() {
+		attrs[kv.Key] = kv.Value.AsInt64()
+	}
+	var wireBytes int64
+	for _, m := range resp.Msg.Messages {
+		wireBytes += int64(proto.Size(m))
+	}
+	assert.Equal(t, int64(4), attrs["transcript.messages"])
+	assert.Equal(t, wireBytes, attrs["transcript.bytes"])
+	assert.Equal(t, int64(5), attrs["transcript.blocks"])
+	assert.Equal(t, int64(3), attrs["transcript.text_blocks"])
+	assert.Equal(t, int64(len("please check the weather")+len("let me check")+len("it's 72F in NYC")), attrs["transcript.text_bytes"])
+	assert.Equal(t, int64(len(toolInput)), attrs["transcript.tool_input_bytes"])
+	assert.Equal(t, int64(len(resultContent)), attrs["transcript.tool_result_bytes"])
+	assert.Equal(t, int64(0), attrs["transcript.thinking_bytes"])
+	assert.Contains(t, attrs, attribute.Key("transcript.other_bytes"))
 
 	// Order and identity preserved.
 	assert.Equal(t, msg1ID, resp.Msg.Messages[0].Id)

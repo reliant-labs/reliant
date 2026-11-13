@@ -121,9 +121,17 @@ func GetTrigger(ctx context.Context, db orm.Context, id string) (*core.Trigger, 
 // user" can never be reached by passing an empty string.
 func ListTriggersForUser(ctx context.Context, db orm.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
 	var rows []namedTrigger
+	// ?2 is the org a list names (NULL: no org filter); ?3 also lists the
+	// triggers with no org yet (the caller's default org, core.OrgScope).
+	var orgID *string
+	unassigned := false
+	if f.Org != nil {
+		orgID, unassigned = &f.Org.OrgID, f.Org.IncludeUnassigned
+	}
 	err := db.Bun().NewRaw(namedTriggerSQL+`WHERE t.user_id = ?0
 	AND (?1::text IS NULL OR t.project_id = ?1::text)
-ORDER BY t.created_at DESC, t.id`, f.UserID, f.ProjectID).Scan(ctx, &rows)
+	AND (?2::text IS NULL OR t.org_id = ?2::text OR (?3 AND t.org_id IS NULL))
+ORDER BY t.created_at DESC, t.id`, f.UserID, f.ProjectID, orgID, unassigned).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list triggers: %w", err)
 	}
@@ -179,13 +187,31 @@ var triggerDefinitionColumns = []string{
 }
 
 // ReplaceTrigger rewrites a trigger's definition and stamps updated_at, or
-// returns core.ErrTriggerNotFound.
+// returns core.ErrTriggerNotFound. A trigger's org is fixed, so it is not a
+// definition column: t.OrgID only fills one the trigger does not have yet
+// (an update that moved it decided its org, see the trigger handler). It
+// writes an org, so its caller holds the owner's org lock (LockUserOrgs).
 func ReplaceTrigger(ctx context.Context, db orm.Context, t *core.Trigger) error {
 	row, err := triggerFromCore(t)
 	if err != nil {
 		return err
 	}
-	return writeTrigger(ctx, db, row, "definition", triggerDefinitionColumns...)
+	columns := triggerDefinitionColumns
+	if t.Enabled {
+		// Enabling a trigger the system paused clears why it was paused; a
+		// definition that stays disabled keeps the reason it has.
+		columns = append(append([]string(nil), columns...), TriggerFieldPausedReason)
+	}
+	if err := writeTrigger(ctx, db, row, "definition", columns...); err != nil {
+		return err
+	}
+	if t.OrgID == nil {
+		return nil
+	}
+	if _, err := db.Bun().NewRaw(`UPDATE triggers SET org_id = ? WHERE id = ? AND org_id IS NULL`, *t.OrgID, t.ID).Exec(ctx); err != nil {
+		return fmt.Errorf("stamp the trigger's org: %w", err)
+	}
+	return nil
 }
 
 // RemoveTrigger deletes a trigger. Deleting one that does not exist is not an
@@ -198,9 +224,17 @@ func RemoveTrigger(ctx context.Context, db orm.Context, id string) error {
 }
 
 // SetTriggerEnabled turns a trigger on or off, or returns
-// core.ErrTriggerNotFound.
+// core.ErrTriggerNotFound. Either way it clears paused_reason: a person
+// pausing or resuming it is the reason now.
 func SetTriggerEnabled(ctx context.Context, db orm.Context, id string, enabled bool) error {
-	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled}, "enabled", TriggerFieldEnabled)
+	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled}, "enabled", TriggerFieldEnabled, TriggerFieldPausedReason)
+}
+
+// PauseTrigger turns a trigger off with the reason the system paused it
+// (core.TriggerPaused*), or returns core.ErrTriggerNotFound.
+func PauseTrigger(ctx context.Context, db orm.Context, id, reason string) error {
+	enabled := false
+	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled, PausedReason: &reason}, "paused", TriggerFieldEnabled, TriggerFieldPausedReason)
 }
 
 // SetTriggerWebhookTokenHash rotates a webhook trigger's token hash. The hash
@@ -248,9 +282,17 @@ func GetTriggerWebhookCredentials(ctx context.Context, db orm.Context, id string
 // The kind is not here: an activation whose declaration changed kind is
 // broken (its connection or webhook token belongs to the old kind), never
 // re-projected. An id that is not an activation is core.ErrTriggerNotFound.
+//
+// The org GitHub App installation an activation is bound to (config
+// "installation") is the activation's, not the declaration's: the write keeps
+// the row's CURRENT binding and ignores any in p. The UPDATE reads config at
+// the row version it writes, so a binding committed after the reconciler
+// read its snapshot is neither dropped nor overwritten with the old one.
 func SetTriggerProjection(ctx context.Context, db orm.Context, id string, p core.TriggerProjection) error {
+	cfg := string(triggerConfigJSON(p.Config))
 	res, err := db.Bun().NewUpdate().Model((*Trigger)(nil)).
-		Set("config = ?", string(triggerConfigJSON(p.Config))).
+		Set(projectionConfigSQL, cfg, cfg, core.ActivationInstallationKey, core.ActivationInstallationKey,
+			core.ActivationInstallationKey, core.ActivationInstallationKey, cfg).
 		Set("filter = ?", p.Filter).
 		Set("updated_at = NOW()").
 		Where("id = ?", id).
@@ -268,6 +310,16 @@ func SetTriggerProjection(ctx context.Context, db orm.Context, id string, p core
 	}
 	return nil
 }
+
+// projectionConfigSQL is the new config: the projection without any
+// "installation", plus the row's own "installation" when it has one. A
+// projection that is not an object is stored as it is.
+// Its placeholders: the projection twice, core.ActivationInstallationKey four
+// times, the projection.
+const projectionConfigSQL = `config = CASE WHEN jsonb_typeof(?::jsonb) = 'object'
+	THEN (?::jsonb - ?::text) || CASE WHEN jsonb_typeof(config -> ?::text) = 'string'
+		THEN jsonb_build_object(?::text, config -> ?::text) ELSE '{}'::jsonb END
+	ELSE ?::jsonb END`
 
 // ListAllWorkflowTriggerActivations lists every activation of a declared
 // trigger, for the periodic reconcile.
@@ -288,7 +340,11 @@ func ListAllWorkflowTriggerActivations(ctx context.Context, db orm.Context) ([]*
 // listIntegrationTriggersSQL is every ENABLED integration trigger for one
 // integration, with its connection's routing identity. The inner join drops
 // triggers whose connection is gone, revoked or belongs to someone else: an
-// event can only reach a trigger through its own owner's live connection.
+// event can only reach a trigger through its own owner's live personal
+// connection, or through a live connection of the trigger's own org
+// (control-plane docs/design/org-sharing.md §7). Whether the trigger's owner
+// is still a member of that org is the firing's check (CreatorLeftOrg), as
+// for every org trigger.
 // Status is returned rather than filtered so a caller can tell needs_reauth
 // apart.
 var listIntegrationTriggersSQL = `SELECT ` + columnsOf[Trigger]("t") + `,
@@ -297,8 +353,8 @@ var listIntegrationTriggersSQL = `SELECT ` + columnsOf[Trigger]("t") + `,
 FROM triggers t
 JOIN connections c
 	ON c.id = t.connection_id
-	AND c.user_id = t.user_id
-	AND c.owner_kind = 'user'
+	AND ((c.owner_kind = 'user' AND c.user_id = t.user_id)
+		OR (c.owner_kind = 'org' AND c.org_id = t.org_id))
 	AND c.deleted_at IS NULL
 WHERE t.kind = 'integration'
 	AND t.enabled
@@ -337,7 +393,11 @@ func ListIntegrationTriggers(ctx context.Context, db orm.Context, integration st
 // is only trusted while recently confirmed. A trigger that names a connection
 // must name its own owner's live one; one with no connection (a delegated
 // authority, e.g. GitHub via control-plane) is routed on access alone. The
-// model is in 20261005061008_integration_event_access.sql.
+// model is in 20261005061008_integration_event_access.sql. An org trigger may
+// name a connection of its own org instead; the event still reaches it only
+// on its owner's own access. A trigger bound to one of its org's GitHub App
+// installations (config "installation") takes only that installation's
+// events (?1 is the event's account: the installation id).
 var listAccessRoutedTriggersSQL = `SELECT ` + columnsOf[Trigger]("t") + `
 FROM triggers t
 JOIN integration_event_access a
@@ -351,9 +411,12 @@ LEFT JOIN connections c
 WHERE t.kind = 'integration'
 	AND t.enabled
 	AND t.config ->> 'integration' = ?0::text
+	AND (t.config ->> '` + core.ActivationInstallationKey + `' IS NULL OR t.config ->> '` + core.ActivationInstallationKey + `' = ?1::text)
 	AND (
 		t.connection_id IS NULL
-		OR (c.id IS NOT NULL AND c.user_id = t.user_id AND c.owner_kind = 'user'
+		OR (c.id IS NOT NULL
+			AND ((c.owner_kind = 'user' AND c.user_id = t.user_id)
+				OR (c.owner_kind = 'org' AND c.org_id = t.org_id))
 			AND c.deleted_at IS NULL AND c.status = 'active')
 	)
 ORDER BY t.id`
@@ -383,6 +446,7 @@ func triggerFromCore(t *core.Trigger) (*Trigger, error) {
 	row := &Trigger{
 		ID:               t.ID,
 		UserID:           t.UserID,
+		OrgID:            t.OrgID,
 		ProjectID:        t.ProjectID,
 		WorktreeID:       t.WorktreeID,
 		Name:             t.Name,
@@ -412,6 +476,10 @@ func triggerFromCore(t *core.Trigger) (*Trigger, error) {
 		poolID := t.MachinePoolID
 		row.MachinePoolID = &poolID
 	}
+	if !t.Enabled && t.PausedReason != "" {
+		reason := t.PausedReason
+		row.PausedReason = &reason
+	}
 	return row, nil
 }
 
@@ -431,6 +499,7 @@ func triggerToCore(row *Trigger) (*core.Trigger, error) {
 	t := &core.Trigger{
 		ID:               row.ID,
 		UserID:           row.UserID,
+		OrgID:            row.OrgID,
 		ProjectID:        row.ProjectID,
 		WorktreeID:       row.WorktreeID,
 		Name:             row.Name,
@@ -455,6 +524,11 @@ func triggerToCore(row *Trigger) (*core.Trigger, error) {
 	}
 	if row.MachinePoolID != nil {
 		t.MachinePoolID = *row.MachinePoolID
+	}
+	// A reason the previous release left on a trigger it re-enabled (it
+	// does not know the column) means nothing.
+	if row.PausedReason != nil && !t.Enabled {
+		t.PausedReason = *row.PausedReason
 	}
 	return t, nil
 }

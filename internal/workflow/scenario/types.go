@@ -121,7 +121,9 @@ const (
 	OutcomeCompleted ExpectedOutcome = "completed"
 	// OutcomeError means the workflow terminated with an error.
 	OutcomeError ExpectedOutcome = "error"
-	// OutcomeFailed means the workflow failed (distinct from error - e.g., validation failure).
+	// OutcomeFailed means the workflow ran its graph to the end without an
+	// error but the graph declared the run failed: it reached a terminal node
+	// with `outcome: failure` (ExecutionDetails.OutcomeNode names it).
 	OutcomeFailed ExpectedOutcome = "failed"
 )
 
@@ -230,6 +232,35 @@ type Expectation struct {
 	//	  error_code: node_error
 	//	  error_contains: "no such key"
 	OnFailure *OnFailureExpectation `json:"on_failure,omitempty" yaml:"on_failure,omitempty"`
+
+	// Finally asserts on the workflow's `finally` handler: whether it ran and
+	// for which ending. Its nodes are named `finally.<node>` in reached,
+	// completed, node_outputs, messages and in the scenario's events.
+	//
+	//	finally:
+	//	  ran: true
+	//	  status: failed
+	Finally *FinallyExpectation `json:"finally,omitempty" yaml:"finally,omitempty"`
+}
+
+// FinallyExpectation asserts on a finally handler's run.
+type FinallyExpectation struct {
+	// Ran: true requires the handler to have run, false requires it not to
+	// (the run paused, or the workflow has none). Omit to assert only on the
+	// fields below, which imply it ran.
+	Ran *bool `json:"ran,omitempty" yaml:"ran,omitempty"`
+	// Status is the `run.status` it ran for: completed, failed or cancelled.
+	Status string `json:"status,omitempty" yaml:"status,omitempty"`
+	// HandlerFailed: true requires the handler itself to have errored; false
+	// requires it to have finished cleanly.
+	HandlerFailed *bool `json:"handler_failed,omitempty" yaml:"handler_failed,omitempty"`
+}
+
+// FinallyObserved is what the run's finally handler did.
+type FinallyObserved struct {
+	Ran          bool   `json:"ran"`
+	Status       string `json:"status,omitempty"`
+	HandlerError string `json:"handler_error,omitempty"`
 }
 
 // OnFailureExpectation asserts on an on_failure handler's run.
@@ -414,6 +445,7 @@ type ExecutionDetails struct {
 	NodesSkipped    []string                          `json:"nodes_skipped,omitempty"`   // Nodes skipped due to false conditions
 	NodeStates      map[string]NodeExecutionState     `json:"node_states,omitempty"`     // Explicit state for each node
 	Outcome         string                            `json:"outcome"`                   // "completed", "error", or "failed"
+	OutcomeNode     string                            `json:"outcome_node,omitempty"`    // For "failed": the terminal node declaring outcome: failure
 	Error           *ErrorDetails                     `json:"error,omitempty"`
 	DurationMs      int64                             `json:"duration_ms"`
 	NodeOutputs     map[string]map[string]interface{} `json:"node_outputs,omitempty"`     // Actual outputs from each node
@@ -425,6 +457,10 @@ type ExecutionDetails struct {
 	// OnFailure is what the run's on_failure handler did; nil when the
 	// workflow declares none.
 	OnFailure *OnFailureObserved `json:"on_failure,omitempty"`
+
+	// Finally is what the run's finally handler did; nil when the workflow
+	// declares none.
+	Finally *FinallyObserved `json:"finally,omitempty"`
 }
 
 // ErrorDetails contains information about an error that occurred

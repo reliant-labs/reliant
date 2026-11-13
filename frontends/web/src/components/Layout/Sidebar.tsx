@@ -41,6 +41,8 @@ import {
   Activity,
   MessageCircleQuestion,
   Loader2,
+  FolderInput,
+  Server,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -52,7 +54,9 @@ import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
 import { SidebarApps } from "../Apps/SidebarApps";
+import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
 import { OrgSwitcher } from "../Orgs/OrgSwitcher";
+import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import type { RunsSearch } from "../../routeSchemas";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
@@ -63,6 +67,18 @@ import { openChat, openNewChat } from "../../store/openChat";
 import { openAddProject } from "../../store/addProjectDialogStore";
 import { useProjects } from "../../hooks/project-queries";
 import { ProjectFilterMenu } from "./ProjectFilterMenu";
+import { MachineFilterMenu, machineFilterLabel } from "./MachineFilterMenu";
+import { useDaemonList } from "../../hooks/useOnboardingQueries";
+import { useMachineOrgs } from "../../hooks/useMachineOrgs";
+import { ALL_PROJECTS, useCachedWorktrees } from "../../hooks/worktree-queries";
+import {
+  countByMachine,
+  effectiveMachineFilter,
+  filterChatsByMachine,
+  machineResolver,
+  NO_MACHINE,
+  type MachineFilter,
+} from "../../lib/sidebarMachineFilter";
 import { ProjectMark } from "./ProjectMark";
 import { useShortcutLabel } from "../../store/shortcutsStore";
 import { cn } from "../../lib/utils";
@@ -92,6 +108,7 @@ import {
 } from "../../store/activityStore";
 
 import { archiveWorktree } from "../../hooks/worktree-actions";
+import { MoveChatToProjectDialog } from "../Chat/MoveChatToProjectDialog";
 
 const CHAT_HEADER_ACTION_BUTTON_CLASS =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring";
@@ -983,18 +1000,50 @@ function SidebarComponent({
   // and the update stream keeps current, so a run opened from Runs or the
   // Inbox has a row, and one whose question was just answered keeps it.
   const { data: openedChat } = useChat(activeChatId ?? undefined);
+  // The machine filter (null: All machines) narrows the same list further. It
+  // is read through effectiveMachineFilter: a machine the user no longer has
+  // drops out of it, and with one machine there is nothing to filter.
+  const machineFilterIds = useWorkspaceStateStore((state) => state.machineFilterIds);
+  const setMachineFilterIds = useWorkspaceStateStore((state) => state.setMachineFilterIds);
+  const { data: machines } = useDaemonList();
+  // Branch workspaces' machines, for a chat not pinned yet; never fetched here.
+  const cachedWorkspaces = useCachedWorktrees(ALL_PROJECTS);
+  const machineContext = useMemo(
+    () => machineResolver(machines ?? [], cachedWorkspaces),
+    [machines, cachedWorkspaces],
+  );
+  const machineFilter = useMemo(
+    () => effectiveMachineFilter(machineFilterIds, machines ?? []),
+    [machineFilterIds, machines],
+  );
+  // The menu offers the active org's machines (with several orgs), plus any
+  // the filter already names; the chats it filters are the active org's.
+  const machineOrgs = useMachineOrgs();
+  const menuMachines = useMemo(
+    () => machineOrgs.inActiveOrg(machines ?? [], machineFilter ?? []),
+    [machineOrgs, machines, machineFilter],
+  );
+  const showMachineFilter = menuMachines.length > 1;
+  const handleMachineFilterChange = useCallback(
+    (filter: MachineFilter) => setMachineFilterIds(filter),
+    [setMachineFilterIds],
+  );
   const releasedChatId = useSidebarPinStore((state) => state.releasedChatId);
   const forgetReleasedUnless = useSidebarPinStore((state) => state.forgetUnless);
   useEffect(() => {
     forgetReleasedUnless(activeChatId);
   }, [activeChatId, forgetReleasedUnless]);
+  // Another member's shared chat is never pinned into the person's own list:
+  // its row is in "Shared with <org>" (SharedWithOrgSection), and pinned here
+  // it would sit under a project and workspace that are not theirs.
+  const pinnable = openedChat?.id === activeChatId && !openedChat?.viewerAccess ? openedChat : undefined;
   const chats = useMemo(
     () =>
-      withOpenChatPinned(listedChats, openedChat?.id === activeChatId ? openedChat : undefined, {
+      withOpenChatPinned(listedChats, pinnable, {
         scope: projectFilterId,
         releasedChatId,
       }),
-    [listedChats, openedChat, activeChatId, projectFilterId, releasedChatId],
+    [listedChats, pinnable, projectFilterId, releasedChatId],
   );
   // The rows the list renders: a run counted here has its own row, so the
   // automation pill does not count it again.
@@ -1066,6 +1115,7 @@ function SidebarComponent({
   >(null);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
+  const [movingChatId, setMovingChatId] = useState<string | null>(null);
 
   // Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1140,14 +1190,16 @@ function SidebarComponent({
   );
 
   // Filtered and sorted chats grouped by project → workspace (or flat list)
-  const { projectGroups, activeGroups, flatList, archivedChats: filteredArchivedChats, archivedGroups } = useMemo(() => {
+  const { projectGroups, activeGroups, flatList, archivedChats: filteredArchivedChats, archivedGroups, hiddenByMachine } = useMemo(() => {
     // ONLY active (non-archived) chats from the main list; a chat on a closed
     // workspace is not listed as active (chatsWithActivity already dropped the
     // archived ones).
-    const activeWorktreeChats = activeWorkspaceChats(chatsWithActivity, mainWorktrees);
+    const allActiveWorktreeChats = activeWorkspaceChats(chatsWithActivity, mainWorktrees);
+    const activeWorktreeChats = filterChatsByMachine(allActiveWorktreeChats, machineFilter, machineContext);
+    const machineArchivedChats = filterChatsByMachine(projectArchivedChats, machineFilter, machineContext);
 
     // Convert archived chats from store to ChatWithActivity format
-    const archivedList: ChatWithActivity[] = projectArchivedChats.map((chat) => ({
+    const archivedList: ChatWithActivity[] = machineArchivedChats.map((chat) => ({
       ...chat,
       activityState: "idle" as const,
       liveActivity: ChatActivity.IDLE,
@@ -1227,8 +1279,14 @@ function SidebarComponent({
       flatList,
       archivedChats: sortChatList([...archivedList]),
       archivedGroups: archivedGroupsArray,
+      hiddenByMachine: {
+        active: allActiveWorktreeChats.length - activeWorktreeChats.length,
+        archived: projectArchivedChats.length - machineArchivedChats.length,
+      },
     };
   }, [
+    machineFilter,
+    machineContext,
     chatsWithActivity,
     projectArchivedChats,
     sortOrder,
@@ -1295,6 +1353,17 @@ function SidebarComponent({
     }
     return counts;
   }, [chatsWithActivity]);
+
+  // The same, per machine, so filtering to one never hides that another needs you.
+  const needsYouByMachine = useMemo(
+    () => countByMachine(chatsWithActivity, machineContext, chatNeedsAttention),
+    [chatsWithActivity, machineContext],
+  );
+  // Offer "No machine" only while some listed chat runs without one.
+  const hasNoMachineChats = useMemo(
+    () => chatsWithActivity.some((chat) => chat.noMachine) || projectArchivedChats.some((chat) => chat.noMachine),
+    [chatsWithActivity, projectArchivedChats],
+  );
 
   const handleChatContextMenu = useCallback((e: React.MouseEvent, chat: Chat) => {
     e.preventDefault();
@@ -1370,6 +1439,11 @@ function SidebarComponent({
         onClick: () => {
           handleRenameChat(chatId);
         },
+      },
+      {
+        label: "Move to project…",
+        icon: <FolderInput className="w-4 h-4" />,
+        onClick: () => setMovingChatId(chatId),
       },
       {
         label: "Copy Chat ID",
@@ -1884,6 +1958,10 @@ function SidebarComponent({
   const emptyTitle = chatListTab === "active" ? "No active chats" : "No archived chats";
   const emptyDescription =
     chatListTab === "active" ? "Create your first chat to get started" : "Archived chats will appear here";
+  // Chats the machine filter keeps out of the current tab.
+  const hiddenByMachineCount = chatListTab === "active" ? hiddenByMachine.active : hiddenByMachine.archived;
+  const machineFilterName = machineFilter ? machineFilterLabel(machineFilter, machines ?? []) : "";
+  const hiddenByMachineText = `${hiddenByMachineCount} ${hiddenByMachineCount === 1 ? "chat" : "chats"} on other machines`;
   const currentSortOption =
     SORT_OPTIONS.find((option) => option.value === sortOrder) ?? SORT_OPTIONS[0];
   if (!currentSortOption) {
@@ -1960,6 +2038,17 @@ function SidebarComponent({
               needsYouByProject={needsYouByProject}
             />
           </div>
+
+          {/* Hidden while there is one machine: nothing to choose between. */}
+          {showMachineFilter && (
+            <MachineFilterMenu
+              filter={machineFilter}
+              machines={menuMachines}
+              onChange={handleMachineFilterChange}
+              includeNoMachine={hasNoMachineChats || !!machineFilter?.includes(NO_MACHINE)}
+              needsYouByMachine={needsYouByMachine}
+            />
+          )}
 
           <DropdownMenu
             align="right"
@@ -2147,6 +2236,9 @@ function SidebarComponent({
             )
           ) : null}
 
+          {/* Other members' shared chats, read-only; nothing when there are none. */}
+          {chatListTab === "active" && <SharedWithOrgSection activeChatId={activeChatId ?? null} />}
+
           {listLoading && (
             <div role="status" aria-label="Loading chats" className="space-y-1.5 px-1 py-2" data-testid="chat-list-loading">
               {Array.from({ length: 6 }, (_, i) => (
@@ -2165,8 +2257,43 @@ function SidebarComponent({
             </div>
           )}
 
+          {/* The machine filter hides everything here: say so, and undo it. */}
+          {!hasAnyVisibleChats && !listLoading && !listFailed && machineFilter && hiddenByMachineCount > 0 && (
+            <div className="px-2 py-8 text-center text-muted-foreground" data-testid="machine-filter-empty">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-border/50 bg-muted/30">
+                <Server className="h-4 w-4" />
+              </div>
+              <p className="mb-1 text-sm font-medium text-foreground/75">
+                No {chatListTab === "active" ? "active" : "archived"} chats on {machineFilterName}
+              </p>
+              <p className="text-xs text-muted-foreground/70">
+                {hiddenByMachineText} {hiddenByMachineCount === 1 ? "is" : "are"} hidden by the machine filter.
+              </p>
+              <Button className="mt-3" onClick={() => setMachineFilterIds(null)} variant="ghost" size="sm">
+                Show all machines
+              </Button>
+            </div>
+          )}
+
+          {/* Some chats are on other machines: one line says so, with the way back. */}
+          {hasAnyVisibleChats && machineFilter && hiddenByMachineCount > 0 && (
+            <div
+              className="mt-2 flex items-center justify-between gap-2 px-2 text-2xs text-muted-foreground"
+              data-testid="machine-filter-hidden"
+            >
+              <span className="min-w-0 truncate">{hiddenByMachineText} hidden</span>
+              <button
+                type="button"
+                onClick={() => setMachineFilterIds(null)}
+                className="shrink-0 rounded font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Show all
+              </button>
+            </div>
+          )}
+
           {/* Empty State */}
-          {!hasAnyVisibleChats && !listLoading && !listFailed && (
+          {!hasAnyVisibleChats && !listLoading && !listFailed && !(machineFilter && hiddenByMachineCount > 0) && (
             <div className="px-2 py-8 text-center text-muted-foreground">
               <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-border/50 bg-muted/30">
                 {chatListTab === "active" ? <Plus className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
@@ -2207,11 +2334,17 @@ function SidebarComponent({
         <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />
         {/* Renders nothing for a person with one org. */}
         <OrgSwitcher />
-        <SidebarNavButton
-          icon={<Settings className="h-4 w-4" />}
-          label="Settings"
-          onClick={onNavigateToSettings}
-        />
+        <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <SidebarNavButton
+              icon={<Settings className="h-4 w-4" />}
+              label="Settings"
+              onClick={onNavigateToSettings}
+            />
+          </div>
+          {/* Renders nothing unless the desktop app has an update waiting. */}
+          <SidebarUpdateButton />
+        </div>
       </div>
 
       {/* One context menu for every row; its items follow the row. */}
@@ -2236,6 +2369,9 @@ function SidebarComponent({
             });
           }}
         />
+      )}
+      {movingChatId && (
+        <MoveChatToProjectDialog chatId={movingChatId} open onClose={() => setMovingChatId(null)} />
       )}
       {/* Render complete */}
     </div>

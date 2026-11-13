@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { ToolCallStatus } from "../../../gen/reliant/v1/chat_pb";
 import {
   formatTurnWorkHeadline,
+  formatTurnWorkElapsed,
+  formatTurnWorkCounts,
   summarizeTurnWork,
   type TurnWorkExecution,
 } from "../turnWorkSummary";
@@ -113,27 +115,25 @@ describe("summarizeTurnWork", () => {
 describe("formatTurnWorkHeadline", () => {
   const base = summarizeTurnWork([]);
 
-  it("live: Working… with the current call and running agents", () => {
+  it("leads with the action and keeps parallel-agent activity stable", () => {
     const s = { ...base, current: "Reading ChatInput.tsx" };
-    expect(formatTurnWorkHeadline(s, { live: true })).toBe("Working… · Reading ChatInput.tsx");
-    expect(formatTurnWorkHeadline({ ...s, spawnsRunning: 2 }, { live: true })).toBe(
-      "Working… · Reading ChatInput.tsx · 2 agents running",
-    );
-    expect(formatTurnWorkHeadline({ ...base, spawnsRunning: 1 }, { live: true })).toBe(
-      "Working… · 1 agent running",
-    );
-    expect(formatTurnWorkHeadline(base, { live: true })).toBe("Working…");
+    expect(formatTurnWorkHeadline(s, { live: true })).toBe("Reading ChatInput.tsx");
+    for (const spawnsRunning of [1, 2, 5]) {
+      const label = `Coordinating ${spawnsRunning} ${spawnsRunning === 1 ? "agent" : "agents"}`;
+      expect(formatTurnWorkHeadline({ ...s, spawnsRunning }, { live: true })).toBe(label);
+      expect(formatTurnWorkHeadline({ ...s, current: "Running tests", spawnsRunning }, { live: true })).toBe(label);
+    }
+    expect(formatTurnWorkHeadline(base, { live: true })).toBe("Thinking");
   });
 
-  it("done: duration and distinct nouns, zero counts omitted", () => {
+  it("done: plain Activity, counts noun-first with zeros omitted", () => {
     const s = summarizeTurnWork([
       ...Array.from({ length: 6 }, () => exec("view")),
       ...Array.from({ length: 3 }, () => exec("shell")),
       ...Array.from({ length: 3 }, () => exec("edit")),
     ]);
-    expect(formatTurnWorkHeadline(s, { live: false, elapsedMs: 72_000 })).toBe(
-      "Worked for 1m 12s · read 6 files · ran 3 commands · edited 3 files",
-    );
+    expect(formatTurnWorkHeadline(s, { live: false, elapsedMs: 72_000 })).toBe("Activity");
+    expect(formatTurnWorkCounts(s)).toBe("6 files read · 3 commands · 3 files edited");
   });
 
   it("pluralizes each noun", () => {
@@ -141,25 +141,26 @@ describe("formatTurnWorkHeadline", () => {
       exec("view"), exec("grep"), exec("websearch"), exec("shell"),
       exec("edit"), exec("update_plan"), exec("spawn"), exec("mcp__x__y"),
     ]);
-    expect(formatTurnWorkHeadline(one, { live: false, elapsedMs: 5_000 })).toBe(
-      "Worked for 5s · read 1 file · 1 search · 1 web lookup · ran 1 command · edited 1 file · 1 plan update · spawned 1 agent · used 1 tool",
+    expect(formatTurnWorkCounts(one, { messages: 1 })).toBe(
+      "1 file read · 1 search · 1 web lookup · 1 command · 1 file edited · 1 plan update · 1 sub-agent action · 1 other tool · 1 agent message",
     );
     const many = summarizeTurnWork([
       exec("grep"), exec("grep"), exec("websearch"), exec("fetch"),
       exec("mcp__x__y"), exec("mcp__x__z"), exec("spawn"), exec("spawn"),
     ]);
-    expect(formatTurnWorkHeadline(many, { live: false, elapsedMs: 5_000 })).toBe(
-      "Worked for 5s · 2 searches · 2 web lookups · spawned 2 agents · used 2 tools",
+    expect(formatTurnWorkCounts(many, { messages: 4 })).toBe(
+      "2 searches · 2 web lookups · 2 sub-agent actions · 2 other tools · 4 agent messages",
     );
+    expect(formatTurnWorkCounts(base, { messages: 2 })).toBe("2 agent messages");
+    expect(formatTurnWorkCounts(base)).toBe("");
   });
 
-  it("omits the duration when unknown and rounds sub-second to 1s", () => {
-    const s = summarizeTurnWork([exec("view")]);
-    expect(formatTurnWorkHeadline(s, { live: false })).toBe("Worked · read 1 file");
-    expect(formatTurnWorkHeadline(s, { live: false, elapsedMs: null })).toBe("Worked · read 1 file");
-    expect(formatTurnWorkHeadline(s, { live: false, elapsedMs: 300 })).toBe("Worked for 1s · read 1 file");
-    expect(formatTurnWorkHeadline(s, { live: false, elapsedMs: 3_723_000 })).toBe(
-      "Worked for 1h 02m · read 1 file",
-    );
+  it.each([
+    [null, null], [Number.NaN, null], [Number.POSITIVE_INFINITY, null],
+    [-1, "0:00"], [300, "0:00"], [59_999, "0:59"], [60_000, "1:00"],
+    [72_000, "1:12"], [3_600_000, "1:00:00"], [3_723_000, "1:02:03"],
+  ])("formats elapsed %s as %s independently of the headline", (ms, expected) => {
+    expect(formatTurnWorkElapsed(ms)).toBe(expected);
+    expect(formatTurnWorkHeadline(base, { live: false, elapsedMs: ms })).toBe("Activity");
   });
 });

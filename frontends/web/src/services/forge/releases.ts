@@ -138,6 +138,8 @@ export interface ReleasePromotion {
   gates: ReleaseGate[];
   bundleId: string;
   bundleDigest: string;
+  /** The release's artifacts as this promotion froze them: artifact name → digest. */
+  resolvedArtifacts: Record<string, string>;
 }
 
 export type CommitComparisonState = "computed" | "same" | "by-cut-time" | "unrecorded" | "unknown";
@@ -183,6 +185,8 @@ export interface ReleaseComparison {
     deltas: ObjectDelta[];
     unchanged: number;
     summariesMissing: boolean;
+    /** The workload the server filtered the objects to; "" when it compared every object (or predates the filter). */
+    workload: string;
   };
 }
 
@@ -250,6 +254,8 @@ export interface ReleaseBundle {
   snapshotDigest: string;
   createdAt?: string;
   createdBy: string;
+  /** Workload → artifact → pinned digest, from the exact bundle's rendered shape. */
+  workloadImages?: Record<string, Record<string, string>>;
 }
 
 // ── Mapping ─────────────────────────────────────────────────────────────────
@@ -351,6 +357,7 @@ export function toReleasePromotion(msg: DeployPromotion): ReleasePromotion {
     gates: [...(msg.gates ?? []).map((g) => toGate(g, "claimed")), ...(msg.recordedGates ?? []).map((g) => toGate(g, "recorded"))],
     bundleId: msg.bundleId,
     bundleDigest: msg.bundleDigest,
+    resolvedArtifacts: { ...(msg.resolvedArtifacts ?? {}) },
   };
 }
 
@@ -430,6 +437,7 @@ export function toReleaseComparison(msg: CompareDeployReleasesResponse): Release
       deltas: (objects?.deltas ?? []).map(toObjectDelta),
       unchanged: objects?.unchanged ?? 0,
       summariesMissing: objects?.summariesMissing === true,
+      workload: objects?.workload ?? "",
     },
   };
 }
@@ -525,6 +533,21 @@ export function toReleaseRollout(msg: DeployRollout): ReleaseRollout {
 }
 
 export function toReleaseBundle(msg: DeployBundle): ReleaseBundle {
+  const workloadImages: Record<string, Record<string, string>> = Object.create(null);
+  const objects = msg.shape?.objects;
+  if (Array.isArray(objects)) {
+    for (const object of objects) {
+      if (!object || typeof object !== "object" || Array.isArray(object)) continue;
+      const name = typeof object.workload === "string" && object.workload ? object.workload : typeof object.name === "string" ? object.name : "";
+      const images = object.images;
+      if (!name || !images || typeof images !== "object" || Array.isArray(images)) continue;
+      for (const [artifact, digest] of Object.entries(images)) {
+        if (typeof digest === "string" && digest.startsWith("sha256:")) {
+          (workloadImages[name] ??= Object.create(null))[artifact] = digest;
+        }
+      }
+    }
+  }
   return {
     id: msg.id,
     digest: msg.digest,
@@ -533,6 +556,7 @@ export function toReleaseBundle(msg: DeployBundle): ReleaseBundle {
     snapshotDigest: msg.snapshotDigest,
     createdAt: toISO(msg.createdAt),
     createdBy: msg.createdBy,
+    workloadImages,
   };
 }
 
@@ -574,24 +598,34 @@ export async function getProjectRelease(
   }
 }
 
-/** What changed from `from` to `to`; objects are compared in `environmentId` when given. */
+/**
+ * What changed from `from` to `to`; objects are compared in `environmentId`
+ * when given, and only `workload`'s objects when that is given too. A control
+ * plane that predates the filter compares every object (objects.workload is
+ * then ""), so a caller that names one filters the deltas itself as well.
+ */
 export async function compareProjectReleases(req: {
   project: string;
   from: string;
   to: string;
   environmentId?: string;
+  workload?: string;
 }): Promise<ReleaseComparison> {
   const res = await client().compareReleases({
     project: req.project,
     fromVersion: req.from,
     toVersion: req.to,
     environmentId: req.environmentId ?? "",
+    ...(req.workload ? { workload: req.workload } : {}),
   });
   return toReleaseComparison(res);
 }
 
+/** How many promotions one ledger read loads: a ledger this long may hold older ones. */
+export const PROMOTIONS_PAGE = 100;
+
 /** One environment's promotion ledger, newest first. */
-export async function listReleasePromotions(environmentId: string, limit = 100): Promise<ReleasePromotion[]> {
+export async function listReleasePromotions(environmentId: string, limit = PROMOTIONS_PAGE): Promise<ReleasePromotion[]> {
   const res = await client().listPromotions({ environmentId, limit });
   return (res.promotions ?? []).map(toReleasePromotion);
 }

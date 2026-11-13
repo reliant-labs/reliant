@@ -1,50 +1,61 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * OBSERVABILITY › DASHBOARDS: every dashboard of the project in the console's
- * scope, as the reader looks for one. Two views, in the URL (`view`):
+ * OBSERVABILITY › DASHBOARDS: the dashboard browser. Every dashboard of the
+ * project in the console's scope, as the reader looks for one, and nothing
+ * else: what is wrong right now (health, issues, failing jobs, releases) is
+ * the project Overview's, so this page does not repeat it.
  *
- *   Overview          the landing view (DashboardsHub): health, failing
- *                     jobs, releases, issues, and a card per group.
- *   All dashboards    the grouped list:
- *     toolbar         search (across every group: title, key, tags, group),
- *                     Group, Source (release / workspace), Owner (forge, the
- *                     repo, or a person) — narrowed in place, in the URL.
- *     Starred         cards with up to three headline panels drawn small
- *                     (the server picks them: number and line panels first).
- *                     The first three also sit in the nav.
- *     groups          Overview, Services, Jobs, Product, Platform, Releases,
- *                     Custom (dashboardGroups.ts): collapsible, with counts.
- *                     A row names its Forge workload; where it came from
- *                     (source, release, file) is secondary, in a tooltip.
- *     Templates       the gallery to start from (and a blank dashboard).
+ *   toolbar         search (across every dashboard: title, key, tags, group),
+ *                   Group, Source (release / workspace), Owner (forge, the
+ *                   repo, or a person) — narrowed in place, in the URL.
+ *   Starred         one row of chips, the caller's stars; the first three
+ *                   also sit in the nav.
+ *   cards           what forge and Reliant provide, one card each
+ *                   (dashboardHubs.ts landingOf): Overview, the Product
+ *                   analytics hub (Users · Product · Acquisition as tabs),
+ *                   the Services hub (every workload's dashboard behind one
+ *                   card), Releases, Workloads, the organization views. A
+ *                   project with sixteen services shows one Services card,
+ *                   not sixteen rows.
+ *   Your dashboards the repo's and the workspace's, one quiet row each: the
+ *                   name, its tags, when it last changed (where it came from
+ *                   in the tooltip), and the star. The whole row opens it.
+ *   results         a search or a filter lists every matching dashboard as a
+ *                   row, the ones inside a hub included, so one service's
+ *                   dashboard is a search away.
+ *   Templates       the gallery to start from (and a blank dashboard).
  *
- * Searching or narrowing opens the list. "New dashboard" offers a blank one,
- * a template, or a forge dashboard file to import. Authoring needs the admin
- * role (the index says, `canWrite`): without it the write actions stay
- * visible, disabled, with the reason.
+ * Inside the project, a generated title's "<project>: " prefix is dropped
+ * (displayTitle): every dashboard on the page is the project's.
+ *
+ * The page used to open on an "Overview" tab of health panels: the project
+ * Overview's KPI strip, a process table, open issues, failing jobs and
+ * recent releases. They live on the Overview alone now; an old `?view=all`
+ * or `?tab=overview` link lands here, on the list.
+ *
+ * "New dashboard" offers a blank one, a template, or a forge dashboard file
+ * to import. Authoring needs the admin role (the index says, `canWrite`):
+ * without it the write actions stay visible, disabled, with the reason.
  *
  * ORG MODE (`project` undefined): the dashboards of EVERY app, as a read-only
- * grouped list with no Overview (health belongs to one app). Each row names
- * its app and opens in that app's console; creating, copying and saving
- * belong to an app, so the list offers none of them.
+ * list. Each row names its app and opens in that app's console; creating,
+ * copying and saving belong to an app, so the list offers none of them.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Boxes, ChevronDown, ChevronRight, LayoutDashboard, Lock, Plus, Search } from "lucide-react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { Boxes, Building2, ChevronDown, ChevronRight, LayoutDashboard, Lock, Plus, Search, Server, Star, Tag as TagIcon, Users, type LucideIcon } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
 import { GettingStarted } from "@/components/Forge/GettingStarted";
 import Mono from "@/components/forge-ui/mono";
-import Tabs from "@/components/forge-ui/tabs";
 import Tag from "@/components/forge-ui/tag";
 import Tooltip from "@/components/forge-ui/tooltip";
 import { useDashboardIndex, useDashboardMutation, useDashboardTemplates, useStarDashboard } from "@/hooks/dashboard-queries";
-import { useObservabilityOrg, usePanelQuery } from "@/hooks/observability-queries";
+import { useObservabilityOrg } from "@/hooks/observability-queries";
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
-import type { Dashboard, ObsScope, Panel } from "@/services/controlPlane/observability/types";
+import type { Dashboard } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
 import { ENV_ALL } from "../../Console/envScope";
@@ -53,19 +64,15 @@ import { formatAgo } from "../format";
 import { appLabel, type ObsEnvironment } from "../obsPlace";
 import { OBS_TOPICS, ObsError } from "../ObsStates";
 import { DashboardHeader } from "./DashboardHeader";
-import { DASHBOARD_GROUPS, GROUP_ABOUT, GROUP_LABELS, groupIndex, groupOf, workloadOf, type DashboardGroup } from "./dashboardGroups";
-import { filterIndex, NAV_STARRED, ownerOf, ownersOf, SOURCE_LABELS, starredOf, type SourceFilter } from "./dashboardModel";
-import { DashboardsHub, type DashboardsHubHrefs } from "./DashboardsHub";
+import { DASHBOARD_GROUPS, GROUP_LABELS, groupOf, listSections, SECTION_ABOUT, SECTION_LABELS, workloadOf, type DashboardGroup, type ListSection } from "./dashboardGroups";
+import { displayTitle, landingOf, withoutSuperseded, type Landing as LandingModel, type LandingCard } from "./dashboardHubs";
+import { filterIndex, galleryTemplates, isStandardBuiltin, NAV_STARRED, ownerOf, ownersOf, SOURCE_LABELS, starredOf, type SourceFilter } from "./dashboardModel";
 import { NewDashboardDialog, SaveCopyDialog, envScopeOf } from "./dialogs";
-import { PanelBody } from "./PanelBody";
 import { BUTTON_PRIMARY, INK_LINK, Menu, StarButton } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
-
-/** The list's own view: absent is the Overview (when the app has one). */
-export type DashboardsView = "all";
+import { FIELD_BARE, FIELD_SHELL, toggleTone } from "../../controlStyles";
 
 export interface DashboardsSearch {
-  view?: DashboardsView;
   q?: string;
   group?: DashboardGroup;
   source?: SourceFilter;
@@ -86,17 +93,11 @@ export interface DashboardsListProps {
   environments: readonly ObsEnvironment[];
   search: DashboardsSearch;
   onSearch: (next: Partial<DashboardsSearch>) => void;
-  /**
-   * An empty `dashboard` href is a dashboard with no console to open (a
-   * project-less one). `hub` is where the Overview links; without it (org
-   * mode, a harness) the page is the list alone.
-   */
-  hrefs: { dashboard: (ref: DashboardRef) => string; hub?: DashboardsHubHrefs };
+  /** An empty `dashboard` href is a dashboard with no console to open (a project-less one). */
+  hrefs: { dashboard: (ref: DashboardRef) => string };
   navigateTo: (href: string) => void;
   /** Org mode: narrow to some apps. */
   appFilter?: DashboardsAppFilter;
-  /** The environment list could not be read: `environments` is empty for that reason, not because nothing is deployed. */
-  environmentsUnread?: boolean;
 }
 
 function requireProject(project: string | undefined): string {
@@ -106,7 +107,7 @@ function requireProject(project: string | undefined): string {
 
 const NO_FILTERS: Partial<DashboardsSearch> = { q: undefined, group: undefined, source: undefined, owner: undefined };
 
-export function DashboardsList({ project, env, environments, search, onSearch, hrefs, navigateTo, appFilter, environmentsUnread }: DashboardsListProps) {
+export function DashboardsList({ project, env, environments, search, onSearch, hrefs, navigateTo, appFilter }: DashboardsListProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
   const orgWide = project === undefined;
@@ -117,8 +118,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
   const galleryRef = useRef<HTMLDivElement | null>(null);
   const [creating, setCreating] = useState<"blank" | "import" | null>(null);
   const [fromTemplate, setFromTemplate] = useState<DashboardSummary | null>(null);
-  const [collapsed, setCollapsed] = useState<ReadonlySet<DashboardGroup>>(new Set());
-  const [scrollToGallery, setScrollToGallery] = useState(false);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<ListSection>>(new Set());
 
   const envIdOf = (name: string) => environments.find((candidate) => candidate.name === name)?.id;
   const create = useDashboardMutation(orgId, (api, org, input: { slug: string; spec: Dashboard; scope: "scope" | "all" }) =>
@@ -128,55 +128,40 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
     api.saveDashboardAsCopy({ orgId: org, from: input.from, projectId: requireProject(project), title: input.title, envScope: envScopeOf(input.scope, env, envIdOf) })
   );
 
-  // A card's sparklines read the app the dashboard belongs to, never the whole org.
-  const scopeOf = useMemo(
-    () => (appOf: string | undefined): ObsScope | null => (orgId ? { orgId, projectId: appOf || undefined, envIds: envId ? [envId] : [], filters: [] } : null),
-    [orgId, envId]
-  );
-  const all = useMemo(() => index.data?.dashboards ?? [], [index.data]);
-  const canWrite = !!index.data?.canWrite;
+  // A built-in another dashboard in the list supersedes is never shown (dashboardHubs.ts).
+  const all = useMemo(() => withoutSuperseded(index.data?.dashboards ?? []), [index.data]);
+  // The demo console writes nothing, whatever the index says (obsReadOnly.tsx).
+  const obsLock = useObsReadOnly();
+  const canWrite = !!index.data?.canWrite && !obsLock.readOnly;
   const pickedApps = appFilter?.selected;
   const shown = useMemo(
     () => filterIndex(all, search).filter((d) => !pickedApps?.length || pickedApps.includes(d.ref.projectId)),
     [all, search, pickedApps]
   );
-  const grouped = useMemo(() => groupIndex(shown).filter((g) => g.dashboards.length > 0), [shown]);
+  const sections = useMemo(() => listSections(shown), [shown]);
   const apps = useMemo(() => [...new Set(all.map((d) => d.ref.projectId))].sort(compareApps), [all]);
   const filtered = !!(search.q || search.group || search.source || search.owner || pickedApps?.length);
-  const hub = !orgWide && hrefs.hub ? hrefs.hub : null;
-  // Narrowing is a list question: a search typed on the Overview opens the list.
-  const view: "overview" | "all" = hub && search.view !== "all" && !filtered ? "overview" : "all";
-  useEffect(() => {
-    if (!scrollToGallery || view !== "all" || !galleryRef.current) return;
-    galleryRef.current.scrollIntoView({ block: "start", behavior: "smooth" });
-    setScrollToGallery(false);
-  }, [scrollToGallery, view]);
   const clearFilters = () => {
     onSearch(NO_FILTERS);
     appFilter?.onChange([]);
   };
   const onToolbar = (next: Partial<DashboardsSearch>) => {
-    // A new search shows every match: no group stays folded over one.
+    // A new search shows every match: no section stays folded over one.
     if (next.q && !search.q) setCollapsed(new Set());
     onSearch(next);
   };
-  const openGroup = (group: DashboardGroup) => {
-    setCollapsed(new Set());
-    onSearch({ ...NO_FILTERS, view: "all", group });
-  };
-  const toggleGroup = (group: DashboardGroup) =>
+  const toggleSection = (id: ListSection) =>
     setCollapsed((prev) => {
       const next = new Set(prev);
-      if (next.has(group)) next.delete(group);
-      else next.add(group);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   const starred = starredOf(shown);
   const owners = ownersOf(all);
-  const readOnlyReason = useObsReadOnly().reason;
   const toggleStar = (d: DashboardSummary) => star.mutate({ ref: d.ref, starred: !d.starred });
   // The demo's reason first (obsReadOnly.tsx): there, nobody can, admin or not.
-  const writeHint = canWrite ? undefined : readOnlyReason ?? "Only organization admins can create dashboards.";
+  const writeHint = canWrite ? undefined : obsLock.reason ?? "Only organization admins can create dashboards.";
 
   const header = (
     <DashboardHeader
@@ -198,124 +183,80 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
               {env === ENV_ALL ? " · all environments" : ""}
             </span>
             {env !== ENV_ALL && <Tag>{env}</Tag>}
-            <span>Release dashboards are code; workspace dashboards are edited here</span>
           </>
         )
       }
       actions={
         orgWide ? undefined : (
-        <Menu
-          label="New dashboard"
-          trigger={
-            <>
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              New dashboard
-              <ChevronDown className="h-3 w-3" aria-hidden="true" />
-            </>
-          }
-          triggerClassName={BUTTON_PRIMARY}
-          testId="dashboards-new"
-          entries={[
-            { label: "Blank dashboard", onSelect: () => setCreating("blank"), disabled: !canWrite, hint: writeHint, testId: "dashboards-new-blank" },
-            {
-              label: "From a template…",
-              onSelect: () => {
-                // The gallery sits under the list: open it there, then scroll.
-                if (view === "all") galleryRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-                else {
-                  setScrollToGallery(true);
-                  onSearch({ ...NO_FILTERS, view: "all" });
-                }
-              },
-              testId: "dashboards-new-template",
-            },
-            { label: "Import JSON…", detail: "a forge dashboard file", onSelect: () => setCreating("import"), disabled: !canWrite, hint: writeHint, testId: "dashboards-new-import" },
-          ]}
-        />
+          <Menu
+            label="New dashboard"
+            trigger={
+              <>
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                New dashboard
+                <ChevronDown className="h-3 w-3" aria-hidden="true" />
+              </>
+            }
+            triggerClassName={BUTTON_PRIMARY}
+            testId="dashboards-new"
+            entries={[
+              { label: "Blank dashboard", onSelect: () => setCreating("blank"), disabled: !canWrite, hint: writeHint, testId: "dashboards-new-blank" },
+              // The gallery sits under the list.
+              { label: "From a template…", onSelect: () => galleryRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }), testId: "dashboards-new-template" },
+              { label: "Import JSON…", detail: "a forge dashboard file", onSelect: () => setCreating("import"), disabled: !canWrite, hint: writeHint, testId: "dashboards-new-import" },
+            ]}
+          />
         )
       }
     />
   );
 
   const gallery = (
-    <div ref={galleryRef} className="scroll-mt-6">
-      <Section title="Start from a template" meta="Filled with this project's services and environments">
-        {templates.error ? (
-          <p className="text-sm text-ink-muted">The template gallery could not be read.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="dashboards-templates">
-            <button
-              type="button"
-              disabled={!canWrite}
-              title={writeHint}
-              onClick={() => setCreating("blank")}
-              className="flex min-h-24 items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-ink-muted transition-colors hover:border-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-              data-testid="dashboards-template-blank"
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Blank dashboard
-            </button>
-            {templates.isLoading
-              ? [0, 1, 2].map((i) => <div key={i} className="h-24 animate-pulse rounded-lg border border-border bg-surface motion-reduce:animate-none" />)
-              : (templates.data ?? []).map((template) => (
-                  <button
-                    key={template.ref.key}
-                    type="button"
-                    disabled={!canWrite}
-                    title={writeHint}
-                    onClick={() => setFromTemplate(template)}
-                    className="flex min-h-24 flex-col items-start gap-1 rounded-lg border border-border bg-surface px-4 py-3 text-left transition-colors hover:border-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                    data-testid={`dashboards-template-${template.ref.key}`}
-                  >
-                    <span className="flex w-full items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium text-ink">{template.title}</span>
-                      {template.category === "platform" && <Tag>platform</Tag>}
-                    </span>
-                    <span className="line-clamp-2 text-xs text-ink-muted">{template.description || `${template.panelCount} panels`}</span>
-                  </button>
-                ))}
-          </div>
-        )}
-      </Section>
-    </div>
+    <section ref={galleryRef} className="scroll-mt-6 space-y-3 pt-6" aria-labelledby="dashboards-templates-heading">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <h2 id="dashboards-templates-heading" className="text-sm font-medium text-ink">
+          Start from a template
+        </h2>
+        <span className="text-xs text-ink-muted">Filled with this project&apos;s services and environments</span>
+      </div>
+      {templates.error ? (
+        <p className="text-sm text-ink-muted">The template gallery could not be read.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="dashboards-templates">
+          <button
+            type="button"
+            disabled={!canWrite}
+            title={writeHint}
+            onClick={() => setCreating("blank")}
+            className="flex min-h-16 items-center justify-center gap-2 rounded-lg border border-dashed border-border-strong px-4 py-3 text-sm text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+            data-testid="dashboards-template-blank"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Blank dashboard
+          </button>
+          {templates.isLoading
+            ? [0, 1, 2].map((i) => <div key={i} className="h-16 animate-pulse rounded-lg border border-border bg-surface motion-reduce:animate-none" />)
+            : galleryTemplates(templates.data ?? [], all).map((template) => (
+                <button
+                  key={template.ref.key}
+                  type="button"
+                  disabled={!canWrite}
+                  title={writeHint}
+                  onClick={() => setFromTemplate(template)}
+                  className="flex min-h-16 flex-col items-start gap-0.5 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-border-strong hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid={`dashboards-template-${template.ref.key}`}
+                >
+                  <span className="flex w-full items-center justify-between gap-2">
+                    <span className="truncate text-sm font-medium text-ink">{template.title}</span>
+                    {template.category === "platform" && <Tag>platform</Tag>}
+                  </span>
+                  <span className="line-clamp-2 text-xs text-ink-muted">{template.description || `${template.panelCount} panels`}</span>
+                </button>
+              ))}
+        </div>
+      )}
+    </section>
   );
-
-  // Every group's table shares its columns: the name (with the workload it is
-  // about and its tags), its app in org mode, where it came from (secondary),
-  // when it last changed, its panels, and the star.
-  const columns: DataTableColumn<DashRow>[] = [
-    {
-      key: "name",
-      header: "Name",
-      render: (_, { d }) => <NameCell d={d} />,
-    },
-    ...(orgWide ? [{ key: "app", header: "App", render: (_: unknown, { d }: DashRow) => <AppTag app={d.ref.projectId} /> }] : []),
-    {
-      key: "source",
-      header: "Source",
-      interactive: true,
-      headerClassName: "hidden md:table-cell",
-      className: "hidden md:table-cell",
-      render: (_, { d }) => <SourceCell d={d} environments={environments} />,
-    },
-    {
-      key: "updated",
-      header: "Updated",
-      headerClassName: "hidden lg:table-cell",
-      className: "hidden lg:table-cell",
-      render: (_, { d }) => <span className="text-xs text-ink-muted">{updatedOf(d)}</span>,
-    },
-    { key: "panels", header: "Panels", numeric: true, render: (_, { d }) => <span className="text-ink-muted">{d.panelCount || "—"}</span> },
-    {
-      key: "star",
-      header: "Star",
-      srHeader: true,
-      interactive: true,
-      width: "2.75rem",
-      className: "pl-0 pr-2 text-right",
-      render: (_, { d }) => <StarButton starred={d.starred} title={d.title} onToggle={() => toggleStar(d)} />,
-    },
-  ];
 
   const empty = (
     <div data-testid="dashboards-empty">
@@ -355,92 +296,51 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
     list = empty;
   } else {
     list = (
-      <>
+      <div className="space-y-4">
         <Toolbar search={search} onSearch={onToolbar} owners={owners} filtered={filtered} apps={appFilter ? apps : undefined} appFilter={appFilter} onClear={clearFilters} />
         {shown.length === 0 ? (
-          <Card className="mt-4 py-8 text-center text-sm text-ink-muted" data-testid="dashboards-no-match">
+          <Card className="py-8 text-center text-sm text-ink-muted" data-testid="dashboards-no-match">
             No dashboards match.{" "}
             <button type="button" className={INK_LINK} onClick={clearFilters}>
               Clear the filters
             </button>
             {orgWide ? "." : " or start from a template below."}
           </Card>
+        ) : orgWide ? (
+          <>
+            <StarredStrip dashboards={starred} href={hrefs.dashboard} filtered={filtered} />
+            <DashboardTable
+              sections={sections}
+              orgWide={orgWide}
+              environments={environments}
+              collapsed={collapsed}
+              onToggle={toggleSection}
+              href={hrefs.dashboard}
+              onStar={toggleStar}
+            />
+          </>
         ) : (
           <>
-            {starred.length > 0 && (
-              <Section title="Starred" meta={`${starred.length} · the first ${NAV_STARRED} also sit in the nav`}>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" data-testid="dashboards-starred">
-                  {starred.map((d) => (
-                    <StarredCard key={rowKey(d)} summary={d} scope={scopeOf(d.ref.projectId)} href={hrefs.dashboard(d.ref)} app={orgWide ? d.ref.projectId : undefined} onStar={() => toggleStar(d)} />
-                  ))}
-                </div>
-              </Section>
+            <StarredStrip dashboards={starred} href={hrefs.dashboard} filtered={filtered} project={project} />
+            {filtered ? (
+              <div data-testid="dashboards-list">
+                <DashboardRows testId="dashboards-results" label="Matching dashboards" dashboards={shown} project={project} environments={environments} href={hrefs.dashboard} onStar={toggleStar} withGroup />
+              </div>
+            ) : (
+              <Landing landing={landingOf(all, project)} project={project} environments={environments} href={hrefs.dashboard} onStar={toggleStar} canWrite={canWrite} />
             )}
-            {grouped.map(({ group, dashboards }) => (
-              <GroupSection key={group} group={group} count={dashboards.length} open={!collapsed.has(group)} onToggle={() => toggleGroup(group)}>
-                <Card padding="none" className="overflow-hidden">
-                  <DataTable<DashRow>
-                    flush
-                    stacked
-                    ariaLabel={`${GROUP_LABELS[group]} dashboards`}
-                    columns={columns}
-                    data={dashboards.map((d) => ({ d }))}
-                    getRowKey={({ d }) => rowKey(d)}
-                    getRowHref={({ d }) => hrefs.dashboard(d.ref) || undefined}
-                    getRowLabel={({ d }) => d.title}
-                  />
-                </Card>
-              </GroupSection>
-            ))}
           </>
         )}
-      </>
+      </div>
     );
   }
 
-  const ready = !index.isLoading && !org.isLoading && !index.error && !(!orgId && org.error);
-  const body = hub ? (
-    <Tabs
-      ariaLabel="Dashboards views"
-      activeTab={view}
-      onChange={(tab) => onSearch(tab === "all" ? { view: "all" } : { ...NO_FILTERS, view: undefined })}
-      tabs={[
-        { id: "overview", label: "Overview" },
-        { id: "all", label: "All dashboards", badge: index.data ? all.length : undefined },
-      ]}
-    >
-      {(active) =>
-        active === "overview" ? (
-          !ready ? (
-            list
-          ) : (
-            <DashboardsHub
-              project={project!}
-              env={env}
-              environments={environments}
-              environmentsUnread={environmentsUnread}
-              dashboards={all}
-              hrefs={{ ...hub, dashboard: hrefs.dashboard }}
-              onOpenGroup={openGroup}
-              onOpenAll={() => onSearch({ view: "all" })}
-              empty={all.length === 0 ? empty : undefined}
-            />
-          )
-        ) : (
-          list
-        )
-      }
-    </Tabs>
-  ) : (
-    list
-  );
-
+  const ready = !index.isLoading && !org.isLoading && !index.error;
   return (
-    <div className="space-y-2" data-testid="dashboards" data-view={view} data-state={index.isLoading ? "loading" : index.error ? "error" : "ready"}>
+    <div className="space-y-2" data-testid="dashboards" data-state={index.isLoading ? "loading" : index.error ? "error" : "ready"}>
       {header}
-      <div className="pt-4">{body}</div>
-      {/* A list-view affordance (the Overview is about what is happening now), unless there is nothing yet to list. */}
-      {!orgWide && (view === "all" || all.length === 0) && !index.isLoading && !index.error && gallery}
+      <div className="pt-4">{list}</div>
+      {!orgWide && ready && gallery}
       {!orgWide && !canWrite && index.data && (
         <p className="pt-2 text-xs text-ink-muted" data-testid="dashboards-read-only">
           You can view and star dashboards. Creating, copying and changing them needs an organization admin.
@@ -498,76 +398,404 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
 
 const rowKey = (d: DashboardSummary) => `${d.ref.kind}/${d.ref.projectId}/${d.ref.key}`;
 
-function Section({ title, meta, children }: { title: string; meta?: string; children: ReactNode }) {
+/** The caller's stars as one row of chips, pinned above the list. */
+function StarredStrip({ dashboards, href, filtered, project }: { dashboards: DashboardSummary[]; href: (ref: DashboardRef) => string; filtered: boolean; project?: string }) {
+  // A filter that hides every star says nothing about stars: the strip goes with them.
+  if (dashboards.length === 0 && filtered) return null;
   return (
-    <section className="pt-8 first:pt-4">
-      <div className="mb-3 flex items-baseline gap-2">
-        <h2 className="text-sm font-medium text-ink">{title}</h2>
-        {meta && <span className="text-xs text-ink-muted">{meta}</span>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-/** One group of the list: a heading that folds it, its count, and what it holds. */
-function GroupSection({ group, count, open, onToggle, children }: { group: DashboardGroup; count: number; open: boolean; onToggle: () => void; children: ReactNode }) {
-  const bodyId = `dashboards-group-${group}-body`;
-  return (
-    <section className="pt-8 first:pt-4" data-testid={`dashboards-group-${group}`} data-open={open}>
-      <h2 className="mb-3">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={bodyId}
-          onClick={onToggle}
-          className="group flex items-baseline gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          data-testid={`dashboards-group-${group}-toggle`}
-        >
-          <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 self-center text-ink-muted transition-transform motion-reduce:transition-none", open && "rotate-90")} aria-hidden="true" />
-          <span className="text-sm font-medium text-ink">{GROUP_LABELS[group]}</span>
-          <span className="text-xs tabular-nums text-ink-muted" data-testid={`dashboards-group-${group}-count`}>
-            {count}
-          </span>
-          <span className="hidden text-xs text-ink-muted group-hover:text-ink sm:inline">· {GROUP_ABOUT[group]}</span>
-        </button>
+    <section className="flex min-w-0 flex-wrap items-center gap-2" aria-labelledby="dashboards-starred-heading" data-testid="dashboards-starred">
+      <h2 id="dashboards-starred-heading" className="mr-1 flex items-center gap-1.5 text-sm font-medium text-ink" title={`The first ${NAV_STARRED} also sit in the nav`}>
+        <Star className="h-3.5 w-3.5 fill-current text-warning-ink" aria-hidden="true" />
+        Starred
       </h2>
-      <div id={bodyId} hidden={!open}>
-        {children}
-      </div>
+      {dashboards.length === 0 ? (
+        <p className="text-sm text-ink-muted">Star a dashboard to pin it here and in the nav.</p>
+      ) : (
+        <ul className="contents">
+          {dashboards.map((d) => {
+            const target = href(d.ref);
+            const chip = "inline-flex h-7 max-w-[16rem] items-center rounded-md border border-border bg-surface px-2.5 text-sm text-ink";
+            return (
+              <li key={rowKey(d)} className="min-w-0" data-testid={`dashboards-card-${d.ref.key}`}>
+                {target ? (
+                  <Link
+                    href={target}
+                    title={d.title}
+                    className={cn(chip, "transition-colors hover:border-border-strong hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
+                  >
+                    <span className="truncate">{displayTitle(d.title, project)}</span>
+                  </Link>
+                ) : (
+                  <span className={chip}>
+                    <span className="truncate">{displayTitle(d.title, project)}</span>
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }
 
-/** A row's name: the title, then — small — the Forge workload it is about and its tags. */
-function NameCell({ d }: { d: DashboardSummary }) {
-  const workload = workloadOf(d);
-  const tags = d.tags ?? [];
-  const secondary = workload || tags.length > 0;
+// ── The project's landing ───────────────────────────────────────────────────
+
+const CARD_ICON: Record<string, LucideIcon> = { overview: LayoutDashboard, product: Users, services: Server, jobs: Server, releases: TagIcon, platform: Boxes, custom: LayoutDashboard };
+
+/** The cards (hubs and provided dashboards), then the team's own dashboards as rows. */
+function Landing({
+  landing,
+  project,
+  environments,
+  href,
+  onStar,
+  canWrite,
+}: {
+  landing: LandingModel;
+  project: string;
+  environments: readonly ObsEnvironment[];
+  href: (ref: DashboardRef) => string;
+  onStar: (d: DashboardSummary) => void;
+  canWrite: boolean;
+}) {
   return (
-    <span className="flex min-w-0 flex-col gap-0.5">
-      <span className="inline-flex min-w-0 items-center gap-2 font-medium">
-        {d.readOnly && <Lock className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-label="read-only" />}
-        <span className="truncate">{d.title}</span>
-      </span>
-      {secondary ? (
-        <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-ink-muted">
-          {workload && (
-            <span className="inline-flex items-center gap-1" data-testid="dashboards-row-workload">
-              <span className="sr-only">Workload</span>
-              <Mono value={workload} copy={false} className="text-xs text-ink-muted" />
+    <div className="space-y-6" data-testid="dashboards-list">
+      {landing.cards.length > 0 && (
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Dashboards forge and Reliant provide" data-testid="dashboards-hubs">
+          {landing.cards.map((card) => (
+            <LandingCardItem key={card.id} card={card} href={href} onStar={onStar} />
+          ))}
+        </ul>
+      )}
+      <section className="space-y-2" aria-labelledby="dashboards-own-heading">
+        <div className="flex items-baseline gap-2">
+          <h2 id="dashboards-own-heading" className="text-sm font-medium text-ink">
+            Your dashboards
+          </h2>
+          <span className="text-xs tabular-nums text-ink-muted" data-testid="dashboards-own-count">
+            {landing.own.length}
+          </span>
+          <span className="hidden text-xs text-ink-muted sm:inline">Declared in {project}&apos;s repo or saved here</span>
+        </div>
+        {landing.own.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-ink-muted" data-testid="dashboards-own-empty">
+            {canWrite ? "None yet. Start one from a template below, or save a copy of any dashboard to change it." : "None yet. A dashboard the team saves here, or declares in the repo, is listed here."}
+          </p>
+        ) : (
+          <DashboardRows testId="dashboards-own" label="Your dashboards" dashboards={landing.own} project={project} environments={environments} href={href} onStar={onStar} />
+        )}
+      </section>
+    </div>
+  );
+}
+
+/** What forge's own dashboards are for, in a line: their descriptions are written for the dashboard, not a card. */
+const CARD_ABOUT: Record<string, string> = {
+  overview: "The whole project at a glance: requests, errors, latency, traffic and users",
+  releases: "Whether the last release was good, and how each one changed errors and latency",
+  workloads: "Replicas, restarts, CPU and memory against limits",
+  frontend: "Your frontend as visitors see it: sessions, errors and web vitals",
+};
+
+const CARD = "relative flex min-h-24 flex-col rounded-lg border border-border bg-surface px-3.5 py-3 transition-colors hover:border-border-strong hover:bg-ink/5";
+const CARD_LINK =
+  "min-w-0 truncate text-sm font-medium text-ink after:absolute after:inset-0 after:rounded-lg after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring";
+
+/** One card: a hub (its tabs named under it) or one dashboard (with its star). The whole card opens it. */
+function LandingCardItem({ card, href, onStar }: { card: LandingCard; href: (ref: DashboardRef) => string; onStar: (d: DashboardSummary) => void }) {
+  if (card.kind === "hub") {
+    const { hub } = card;
+    const Icon = CARD_ICON[hub.id] ?? LayoutDashboard;
+    const workloads = hub.id === "services" ? hub.tabs.filter((tab) => workloadOf(tab.summary)).length : 0;
+    const named = hub.tabs.slice(0, 3).map((tab) => tab.label);
+    const more = hub.tabs.length - named.length;
+    return (
+      <li className={CARD} data-testid={`dashboards-hub-${hub.id}`}>
+        <span className="flex min-w-0 items-center gap-2">
+          <Icon className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+          <Link href={href(hub.tabs[0]!.ref)} className={CARD_LINK}>
+            {hub.title}
+          </Link>
+          {workloads > 0 && (
+            <span className="text-xs tabular-nums text-ink-muted" aria-label={`${workloads} services`}>
+              {workloads}
             </span>
           )}
+        </span>
+        <span className="mt-1 line-clamp-2 text-xs text-ink-muted">{hub.about}</span>
+        <span className="mt-auto truncate pt-2 text-xs text-ink-muted" data-testid={`dashboards-hub-${hub.id}-tabs`}>
+          {named.join(" · ")}
+          {more > 0 ? ` · +${more} more` : ""}
+        </span>
+      </li>
+    );
+  }
+  const d = card.dashboard;
+  const target = href(d.ref);
+  const Icon = d.source === "builtin" && !isStandardBuiltin(d) ? Building2 : (CARD_ICON[groupOf(d)] ?? LayoutDashboard);
+  const note = d.source === "builtin" && d.viewKind !== "llm-usage" && !isStandardBuiltin(d) ? "Requires cost-read permission" : null;
+  return (
+    <li className={CARD} data-testid={`dashboards-hub-${d.ref.key}`}>
+      <span className="flex min-w-0 items-center gap-2">
+        <Icon className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+        {target ? (
+          <Link href={target} aria-label={d.title} className={CARD_LINK}>
+            {card.title}
+          </Link>
+        ) : (
+          <span className="min-w-0 truncate text-sm font-medium text-ink">{card.title}</span>
+        )}
+        <span className="relative z-10 -my-1.5 -mr-1.5 ml-auto shrink-0">
+          <StarButton starred={d.starred} title={d.title} onToggle={() => onStar(d)} />
+        </span>
+      </span>
+      <span className="mt-1 line-clamp-2 text-xs text-ink-muted">{(d.source !== "builtin" || isStandardBuiltin(d) ? CARD_ABOUT[d.ref.key] : undefined) ?? (d.description || "\u00a0")}</span>
+      {note && <span className="mt-auto pt-2 text-xs text-ink-muted">{note}</span>}
+    </li>
+  );
+}
+
+/**
+ * Dashboards as quiet rows: the name, its tags, a line of description where
+ * there is room, when it last changed (where it came from in the tooltip),
+ * and the star. The whole row opens it. `withGroup` names the group, for
+ * search results that mix them.
+ */
+function DashboardRows({
+  testId,
+  label,
+  dashboards,
+  project,
+  environments,
+  href,
+  onStar,
+  withGroup = false,
+}: {
+  testId: string;
+  label: string;
+  dashboards: DashboardSummary[];
+  project: string;
+  environments: readonly ObsEnvironment[];
+  href: (ref: DashboardRef) => string;
+  onStar: (d: DashboardSummary) => void;
+  withGroup?: boolean;
+}) {
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <ul className="divide-y divide-border" aria-label={label} data-testid={testId}>
+        {dashboards.map((d) => {
+          const target = href(d.ref);
+          const title = displayTitle(d.title, project);
+          const tags = d.tags ?? [];
+          return (
+            <li key={rowKey(d)} className={cn("flex min-h-10 items-center gap-3 px-3 py-1.5", target && "relative hover:bg-ink/5")} data-testid="dashboards-row">
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                {target ? (
+                  <Link
+                    href={target}
+                    aria-label={d.title}
+                    className="min-w-0 shrink-0 truncate text-sm font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring sm:max-w-[60%]"
+                  >
+                    {title}
+                  </Link>
+                ) : (
+                  <span className="min-w-0 truncate text-sm font-medium text-ink">{title}</span>
+                )}
+                {withGroup && <span className="shrink-0 text-xs text-ink-muted">{d.source === "builtin" && !isStandardBuiltin(d) ? "Built-in" : GROUP_LABELS[groupOf(d)]}</span>}
+                {tags.length > 0 && (
+                  <span className="hidden min-w-0 items-center gap-1 overflow-hidden sm:inline-flex">
+                    {tags.slice(0, 3).map((tag) => (
+                      <Tag key={tag}>{tag}</Tag>
+                    ))}
+                  </span>
+                )}
+                {d.description && tags.length === 0 && !withGroup && <span className="hidden min-w-0 flex-1 truncate text-xs text-ink-muted lg:block">{d.description}</span>}
+              </span>
+              <span className="relative z-10 hidden shrink-0 md:inline">
+                <UpdatedCell d={d} environments={environments} />
+              </span>
+              <span className="relative z-10 -my-1 shrink-0">
+                <StarButton starred={d.starred} title={d.title} onToggle={() => onStar(d)} />
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
+/**
+ * A column of the list. A secondary column collapses to zero width below its
+ * breakpoint rather than leaving the table (display: none would): the
+ * section headers span every column, and a colSpan wider than the columns
+ * left on screen makes phantom columns that squeeze the name on a phone.
+ */
+interface Column {
+  key: string;
+  header: string;
+  /** The header cell's width classes (table-fixed reads the first row). */
+  width?: string;
+  /** Below its breakpoint: cell padding and content, shown from it. */
+  pad?: string;
+  show?: string;
+  numeric?: boolean;
+  sr?: boolean;
+}
+
+const COLLAPSE = {
+  sm: { pad: "px-0 sm:px-3", show: "hidden sm:inline" },
+  md: { pad: "px-0 md:px-3", show: "hidden md:inline" },
+  lg: { pad: "px-0 lg:px-3", show: "hidden lg:inline" },
+} as const;
+
+function DashboardTable({
+  sections,
+  orgWide,
+  environments,
+  collapsed,
+  onToggle,
+  href,
+  onStar,
+}: {
+  sections: Array<{ id: ListSection; dashboards: DashboardSummary[] }>;
+  orgWide: boolean;
+  environments: readonly ObsEnvironment[];
+  collapsed: ReadonlySet<ListSection>;
+  onToggle: (id: ListSection) => void;
+  href: (ref: DashboardRef) => string;
+  onStar: (d: DashboardSummary) => void;
+}) {
+  // Fixed widths, so every section's columns line up under the one header; a phone keeps the name and the star.
+  const columns: Column[] = [
+    { key: "name", header: "Name" },
+    ...(orgWide ? [{ key: "app", header: "App", width: "w-0 sm:w-36", ...COLLAPSE.sm }] : []),
+    { key: "source", header: "Source", width: "w-0 md:w-28", ...COLLAPSE.md },
+    { key: "viewed", header: "Viewed", width: "w-0 md:w-24", ...COLLAPSE.md },
+    { key: "updated", header: "Updated", width: "w-0 lg:w-24", ...COLLAPSE.lg },
+    { key: "panels", header: "Panels", width: "w-0 sm:w-16", numeric: true, ...COLLAPSE.sm },
+    { key: "star", header: "Star", width: "w-11", sr: true },
+  ];
+  const col = (key: string) => columns.find((c) => c.key === key)!;
+  const cell = (key: string, extra: string | false, content: ReactNode) => {
+    const c = col(key);
+    return (
+      <td className={cn("overflow-hidden", c.pad ?? "px-3", c.numeric && "text-right tabular-nums", extra)}>
+        <span className={c.show}>{content}</span>
+      </td>
+    );
+  };
+  return (
+    <Card padding="none" className="overflow-hidden" data-testid="dashboards-list">
+      <table className="w-full table-fixed border-collapse text-sm" aria-label="Dashboards">
+        <thead>
+          <tr className="h-8 border-b border-border text-left text-xs text-ink-muted">
+            {columns.map((c) => (
+              <th key={c.key} scope="col" className={cn("overflow-hidden font-medium", c.width, c.pad ?? "px-3", c.numeric && "text-right")}>
+                <span className={cn(c.sr ? "sr-only" : c.show)}>{c.header}</span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        {sections.map(({ id, dashboards }) => {
+          const open = !collapsed.has(id);
+          return (
+            <tbody key={id} data-testid={`dashboards-group-${id}`} data-open={open} className="border-b border-border last:border-b-0">
+              <tr>
+                <th scope="rowgroup" colSpan={columns.length} className="px-1.5 pb-1 pt-3 text-left font-normal">
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => onToggle(id)}
+                    className="group flex max-w-full items-baseline gap-2 rounded-sm px-1.5 py-0.5 text-left hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    data-testid={`dashboards-group-${id}-toggle`}
+                  >
+                    <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 self-center text-ink-muted transition-transform motion-reduce:transition-none", open && "rotate-90")} aria-hidden="true" />
+                    <span className="text-sm font-medium text-ink">{SECTION_LABELS[id]}</span>
+                    <span className="text-xs tabular-nums text-ink-muted" data-testid={`dashboards-group-${id}-count`}>
+                      {dashboards.length}
+                    </span>
+                    <span className="hidden truncate text-xs text-ink-muted sm:inline">{SECTION_ABOUT[id]}</span>
+                  </button>
+                </th>
+              </tr>
+              {open &&
+                dashboards.map((d) => {
+                  const target = href(d.ref);
+                  return (
+                    <tr key={rowKey(d)} className={cn("h-9", target && "relative hover:bg-ink/5")} data-testid="dashboards-row">
+                      <td className="min-w-0 px-3">
+                        <NameCell d={d} href={target} />
+                      </td>
+                      {orgWide && cell("app", false, <AppTag app={d.ref.projectId} />)}
+                      {cell("source", "relative z-10", <SourceCell d={d} environments={environments} />)}
+                      {cell("viewed", "text-xs text-ink-muted", d.lastViewedAtMs !== null ? formatAgo(d.lastViewedAtMs) : "—")}
+                      {cell("updated", "text-xs text-ink-muted", updatedOf(d))}
+                      {cell("panels", "text-ink-muted", d.panelCount || "—")}
+                      <td className="relative z-10 pr-2 text-right">
+                        <StarButton starred={d.starred} title={d.title} onToggle={() => onStar(d)} />
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          );
+        })}
+      </table>
+    </Card>
+  );
+}
+
+/**
+ * A row's name: the title as plain ink (the row is the link: hover lifts it,
+ * no underline), then — small, on the same line — the Forge workload it is
+ * about and its tags, or what a built-in needs.
+ */
+function NameCell({ d, href }: { d: DashboardSummary; href: string }) {
+  const workload = workloadOf(d);
+  const tags = d.tags ?? [];
+  const title = (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      {/* The lock keeps its slot on every row, so names start in one column. */}
+      {d.readOnly ? <Lock className="h-3 w-3 shrink-0 text-ink-muted" aria-label="read-only" /> : <span className="w-3 shrink-0" aria-hidden="true" />}
+      <span className="truncate font-medium text-ink">{d.title}</span>
+    </span>
+  );
+  // The name keeps its room; what follows it on the line truncates first.
+  const detail = workload ? (
+    <span className="inline-flex shrink-0 items-center gap-1" data-testid="dashboards-row-workload">
+      <span className="sr-only">Workload</span>
+      <Mono value={workload} copy={false} className="text-xs text-ink-muted" />
+    </span>
+  ) : d.source === "builtin" && d.viewKind !== "llm-usage" && !isStandardBuiltin(d) ? (
+    // LLM usage is the caller's own: it needs no billing permission.
+    <span className="truncate text-xs text-ink-muted">Requires cost-read permission</span>
+  ) : d.description && tags.length === 0 ? (
+    <span className="hidden min-w-0 flex-1 truncate text-xs text-ink-muted sm:block">{d.description}</span>
+  ) : null;
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      {href ? (
+        // The anchor stretches across the row (after:inset-0): the whole row opens it, and its name is the title.
+        <Link
+          href={href}
+          aria-label={d.title}
+          className="flex min-w-0 max-w-full shrink-0 items-center text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
+        >
+          {title}
+        </Link>
+      ) : (
+        <span className="flex min-w-0 max-w-full shrink-0">{title}</span>
+      )}
+      {detail}
+      {tags.length > 0 && (
+        <span className="hidden min-w-0 items-center gap-1 overflow-hidden sm:inline-flex">
           {tags.slice(0, 3).map((tag) => (
             <Tag key={tag}>{tag}</Tag>
           ))}
         </span>
-      ) : d.source === "builtin" && d.viewKind !== "llm-usage" ? (
-        // LLM usage is the caller's own: it needs no billing permission.
-        <span className="text-xs text-ink-muted">Requires cost-read permission, not billing management.</span>
-      ) : d.description ? (
-        <span className="line-clamp-1 text-xs text-ink-muted">{d.description}</span>
-      ) : null}
+      )}
     </span>
   );
 }
@@ -576,8 +804,20 @@ function NameCell({ d }: { d: DashboardSummary }) {
 function SourceCell({ d, environments }: { d: DashboardSummary; environments: readonly ObsEnvironment[] }) {
   return (
     <Tooltip content={originOf(d, environments)}>
-      <span className="text-xs text-ink-muted underline decoration-dotted decoration-ink-muted/40 underline-offset-2" data-testid="dashboards-row-source">
+      <span className="text-xs text-ink-muted underline decoration-dotted decoration-ink-muted/50 underline-offset-2" data-testid="dashboards-row-source">
         {SOURCE_LABELS[d.source]}
+      </span>
+    </Tooltip>
+  );
+}
+
+/** When a dashboard last changed, quietly; where it came from (the release, the file, who saved it) is the tooltip. */
+function UpdatedCell({ d, environments }: { d: DashboardSummary; environments: readonly ObsEnvironment[] }) {
+  const updated = updatedOf(d);
+  return (
+    <Tooltip content={originOf(d, environments)}>
+      <span className="text-xs text-ink-muted" data-testid="dashboards-row-source">
+        {updated === "—" ? SOURCE_LABELS[d.source] : `${SOURCE_LABELS[d.source]} · ${updated}`}
       </span>
     </Tooltip>
   );
@@ -585,6 +825,7 @@ function SourceCell({ d, environments }: { d: DashboardSummary; environments: re
 
 /** The tooltip's words: which release shipped it and from where, or who saved it and for which environments. */
 function originOf(d: DashboardSummary, environments: readonly ObsEnvironment[]): string {
+  if (isStandardBuiltin(d)) return "Built in for every project, over this project's data. Read-only here; save a copy to change it.";
   if (d.source === "builtin") return "Organization accounting from canonical billing sources.";
   if (d.release) {
     const shipped = d.release.releaseVersion ? `Shipped in ${d.release.releaseVersion}` : "Shipped in a release";
@@ -606,7 +847,7 @@ function updatedOf(d: DashboardSummary): string {
   return at ? formatAgo(at) : "—";
 }
 
-const CHIP = "inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-md border px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const CHIP = "inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function Toolbar({
   search,
@@ -626,17 +867,17 @@ function Toolbar({
   appFilter?: DashboardsAppFilter;
   onClear: () => void;
 }) {
-  const chip = (on: boolean) => cn(CHIP, on ? "border-ink/40 bg-ink/8 text-ink" : "border-border bg-surface text-ink-muted hover:text-ink");
+  const chip = (on: boolean) => cn(CHIP, toggleTone(on));
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="dashboards-toolbar">
-      <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
+      <label className={cn(FIELD_SHELL, "w-full sm:w-auto sm:min-w-72")}>
         <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span className="sr-only">Search dashboards</span>
         <input
           value={search.q ?? ""}
           onChange={(event) => onSearch({ q: event.target.value || undefined })}
           placeholder="Search dashboards, workloads, tags"
-          className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink-muted focus:outline-none"
+          className={FIELD_BARE}
           data-testid="dashboards-search"
         />
       </label>
@@ -656,6 +897,8 @@ function Toolbar({
           ...DASHBOARD_GROUPS.map((group) => ({ label: GROUP_LABELS[group], checked: search.group === group, onSelect: () => onSearch({ group }) })),
         ]}
       />
+      {/* Where a dashboard came from and who owns it are refinements: a phone keeps search and Group. */}
+      <span className="hidden sm:contents">
       <button type="button" aria-pressed={search.source === "release"} className={chip(search.source === "release")} onClick={() => onSearch({ source: search.source === "release" ? undefined : "release" })} data-testid="dashboards-chip-release">
         Source: Release
       </button>
@@ -675,6 +918,7 @@ function Toolbar({
         testId="dashboards-chip-owner"
         entries={[{ label: "anyone", checked: !search.owner, onSelect: () => onSearch({ owner: undefined }) }, ...owners.map((owner) => ({ label: owner, checked: search.owner === owner, onSelect: () => onSearch({ owner }) }))]}
       />
+      </span>
       {apps && appFilter && (
         <Menu
           label="App"
@@ -708,9 +952,6 @@ function Toolbar({
   );
 }
 
-/** A dashboards table's row: the whole row links to the dashboard. */
-type DashRow = { d: DashboardSummary };
-
 /** The app a dashboard belongs to (org mode). Unassigned is a dashboard with no app: it has no console. */
 function AppTag({ app }: { app: string }) {
   return (
@@ -728,68 +969,14 @@ function compareApps(a: string, b: string): number {
   return a.localeCompare(b);
 }
 
-function StarredCard({ summary, scope, href, app, onStar }: { summary: DashboardSummary; scope: ObsScope | null; href: string; app?: string; onStar: () => void }) {
-  const workload = workloadOf(summary);
-  return (
-    <Card padding="none" className="relative min-w-0 transition-colors hover:border-ink-muted" data-testid={`dashboards-card-${summary.ref.key}`}>
-      <div className="flex items-center justify-between gap-2 px-4 pt-3">
-        {href ? (
-          <Link href={href} className="no-color min-w-0 truncate text-sm font-medium text-ink after:absolute after:inset-0 after:content-['']">
-            {summary.title}
-          </Link>
-        ) : (
-          <span className="min-w-0 truncate text-sm font-medium text-ink">{summary.title}</span>
-        )}
-        <span className="relative z-10">
-          <StarButton starred={summary.starred} title={summary.title} onToggle={onStar} />
-        </span>
-      </div>
-      <div className="flex min-h-5 items-center gap-1.5 px-4 text-xs text-ink-muted">
-        {app !== undefined && <AppTag app={app} />}
-        <span>{GROUP_LABELS[groupOf(summary)]}</span>
-        {workload && (
-          <>
-            <span aria-hidden="true">·</span>
-            <Mono value={workload} copy={false} className="truncate text-xs text-ink-muted" />
-          </>
-        )}
-      </div>
-      <div className="grid grid-cols-3 gap-3 px-4 pb-3.5 pt-3">
-        {summary.previewPanels.length ? (
-          summary.previewPanels.slice(0, 3).map((panel, index) => <PreviewSpark key={`${panel.id}-${index}`} panel={panel} scope={scope} />)
-        ) : (
-          <p className="col-span-3 text-xs text-ink-muted">{summary.panelCount} panels</p>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-/** One headline panel, small: its title and its last day, drawn by the same PanelBody as the dashboard. */
-function PreviewSpark({ panel, scope }: { panel: Panel; scope: ObsScope | null }) {
-  const query = usePanelQuery(scope, "24h", panel, []);
-  return (
-    <div className="min-w-0">
-      <div className="mb-1 truncate text-xs text-ink-muted" title={panel.title}>
-        {panel.title}
-      </div>
-      <PanelBody panel={panel} query={query} compact height={28} />
-    </div>
-  );
-}
-
 function ListSkeleton() {
   return (
-    <div className="space-y-6" aria-busy="true" aria-label="Loading dashboards" data-testid="dashboards-loading">
-      <div className="h-8 w-96 animate-pulse rounded-md bg-ink/5 motion-reduce:animate-none" />
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="h-32 animate-pulse rounded-lg border border-border bg-surface motion-reduce:animate-none" />
-        ))}
-      </div>
+    <div className="space-y-4" aria-busy="true" aria-label="Loading dashboards" data-testid="dashboards-loading">
+      <div className="h-8 w-96 max-w-full animate-pulse rounded-md bg-ink/5 motion-reduce:animate-none" />
+      <div className="h-7 w-72 max-w-full animate-pulse rounded-md bg-ink/5 motion-reduce:animate-none" />
       <div className="space-y-px overflow-hidden rounded-lg border border-border bg-surface">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-10 animate-pulse bg-ink/5 motion-reduce:animate-none" />
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="h-9 animate-pulse bg-ink/5 motion-reduce:animate-none" />
         ))}
       </div>
     </div>

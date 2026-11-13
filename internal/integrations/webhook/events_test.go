@@ -216,3 +216,21 @@ func TestEventsRouteOnlyInScope(t *testing.T) {
 	assert.Equal(t, []string{"in-scope", "unscoped", "unscoped"}, env.intake.triggerIDs(),
 		"an event outside every scope is handed to no scoped trigger; only the unscoped one hears it")
 }
+
+// A sender that hangs up after its delivery was verified (GitHub waits 10s and
+// never redelivers on its own) must not cost the event: recording finishes
+// without it.
+func TestEventsAreRecordedWhenTheSenderHangsUp(t *testing.T) {
+	env := newEventsEnv(t, "https://api.example.com")
+	env.route(integrationTrigger(t, "t1", "alice", core.IntegrationConfig{Events: []string{"issues.opened"}}, ""), "100", core.ConnectionStatusActive)
+
+	body, err := json.Marshal(issueOpened("delivery-1", "100", "acme/app"))
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "http://internal:8080/integrations/test/events", strings.NewReader(string(body)))
+	req.Header.Set(TestSignatureHeader, SignTestDelivery("test-secret", "https://api.example.com/integrations/test/events", body))
+	env.handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	assert.Equal(t, []string{"t1"}, env.intake.triggerIDs())
+}

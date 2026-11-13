@@ -3,8 +3,6 @@ package tools_daemon
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -158,9 +156,9 @@ type daemonConnection struct {
 	// lease for a stream that is gone.
 	leaseMu sync.Mutex
 	// leaseRecreated is set by the renewer when it had to re-create a
-	// missing lease row, whose detected_ports then holds the column default;
-	// the inbound state worker clears it and rewrites the ports
-	// (lastDetectedPortsKey is the worker's alone).
+	// missing lease row, whose detected_ports and health then hold the
+	// column defaults; the inbound state worker clears it and rewrites both
+	// (lastDetectedPortsKey and the health cache are the worker's alone).
 	leaseRecreated atomic.Bool
 
 	// ackedDaemonHeartbeat is the timestamp of the newest DaemonHeartbeat the
@@ -215,6 +213,14 @@ type daemonConnection struct {
 	// every 15s but the port set rarely changes; caching the last write
 	// avoids a per-heartbeat UPDATE. Only the inbound state worker touches it.
 	lastDetectedPortsKey string
+
+	// Machine-health bookkeeping (see recordMachineHealth). lastHealth is
+	// the health last stored, with the Since it was stamped; healthWritten
+	// is whether the lease row holds it (false after a re-created lease, so
+	// it is written again with its Since carried forward). Only the inbound
+	// state worker touches them.
+	lastHealth    db.MachineHealth
+	healthWritten bool
 
 	// Disk report bookkeeping (see recordDiskReport). lastDiskSig is the
 	// material signature last stored, lastDiskWrite when, and lastDiskUrgent
@@ -637,7 +643,7 @@ func isNotFoundErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		return true
 	}
 	errText := strings.ToLower(err.Error())

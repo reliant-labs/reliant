@@ -6,8 +6,10 @@
  */
 
 import { useRef, useState, memo, useMemo, useEffect, useCallback } from "react";
+import { useCurrentMachineStore } from "../../store/currentMachineStore";
 import { GripHorizontal, GripVertical } from "lucide-react";
 import { ChatInputWrapper } from "./ChatInputWrapper";
+import { ViewerNotice } from "../Sharing/ViewerNotice";
 import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
 import { ChatMachineNoticeLine } from "./ChatMachineNotice";
 import { QueuedForMachineNote } from "./QueuedForMachineNote";
@@ -18,11 +20,12 @@ import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { TimelineCatchUpOverlay, TimelineCatchUpStatus } from "./TimelineCatchUpOverlay";
 import { useDelayedVisibility } from "../../hooks/useDelayedVisibility";
 import {
-  CATCH_UP_MIN_VISIBLE_MS,
+  CATCH_UP_EXIT_MS,
   CATCH_UP_SHOW_DELAY_MS,
   isTimelineCatchingUp,
 } from "../../lib/timelineCatchUp";
 import { useTimelineSync } from "../../store/chatStoreHooks";
+import { useChatOpenEnd } from "../../lib/chatOpenInteraction";
 import { PermissionsPanelWrapper } from "./PermissionsPanelWrapper";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { ChatHeader } from "./ChatHeader";
@@ -30,6 +33,8 @@ import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { ComposerStatusSlot, RecoveryBanner, StatusSlotItem } from "./ComposerStatusSlot";
 import { OomKillBanner } from "./OomKillBanner";
 import { DiskPressureBanner } from "./DiskPressureBanner";
+import { MachineHealthBanner } from "./MachineHealthBanner";
+import { OrgMovedBanner } from "./OrgMovedBanner";
 import { ComposerWakeStatus } from "./ComposerWakeStatus";
 import { ContinueWithoutMachineButton, NoMachineComposerHint } from "./NoMachine";
 import { continueBranchPoint } from "../../lib/chatMachine";
@@ -478,6 +483,10 @@ export const ChatPresenter = memo(function ChatPresenter({
   // machine surfaces apply, and the composer says what the chat can do.
   const currentChat = chatForQueue?.id === chatId ? chatForQueue : undefined;
   const noMachine = !!currentChat?.noMachine;
+  // A viewer of a chat another member shared: read-only. Nothing between the
+  // transcript and the composer is theirs (queued messages, background work,
+  // approvals, the machine), and the composer is replaced by ViewerNotice.
+  const isViewer = !!currentChat?.viewerAccess;
 
   // The run is parked until a provider's usage limit resets (server-side timer;
   // it retries by itself). The reset time rides on the chat, the activity says
@@ -530,6 +539,11 @@ export const ChatPresenter = memo(function ChatPresenter({
   // so. The run's state does not gate it: chat 66a045ce's run was failing its
   // replay while its machine resumed, never reached the machine wait, and
   // read "Processing" throughout.
+  useEffect(() => {
+    if (isFocused && currentChat) {
+      useCurrentMachineStore.getState().setCurrentMachine(currentChat.noMachine ? null : currentChat.activeDaemonId ?? null);
+    }
+  }, [isFocused, currentChat]);
   const sendingThisChat = !!chatId && sendingChatId === chatId;
   const workWaitsOnMachine =
     !noMachine &&
@@ -655,19 +669,21 @@ export const ChatPresenter = memo(function ChatPresenter({
   }, [selectedThreadMessages, messages]);
 
   // Catch-up overlay, for the timeline in view: the chat's (main thread) or
-  // the selected side thread's (lib/timelineCatchUp). Delayed so a cached,
-  // instant switch shows nothing, and held briefly once up so it never
-  // flickers.
+  // the selected side thread's (lib/timelineCatchUp). Delayed so a quick
+  // catch-up shows nothing. It stands for the catch-up only while that lasts:
+  // the render the timeline caught up in makes it usable, and the overlay
+  // just fades out over it ("leaving", which covers and blocks nothing).
   const timelineSync = useTimelineSync(chatId, selectedSideThreadId);
   const timelineCatchingUp = isTimelineCatchingUp({
     ...timelineSync,
     messages: timelineMessages,
     connectionStatus,
   });
-  const catchUpOverlayVisible = useDelayedVisibility(timelineCatchingUp, {
+  const catchUpOverlay = useDelayedVisibility(timelineCatchingUp, {
     showDelayMs: CATCH_UP_SHOW_DELAY_MS,
-    minVisibleMs: CATCH_UP_MIN_VISIBLE_MS,
+    exitMs: CATCH_UP_EXIT_MS,
   });
+  const catchUpOverlayVisible = catchUpOverlay === "shown";
   // The reader could not scroll while the overlay was up, so where they are
   // meant to be when it lifts is the end of the caught-up transcript.
   const catchUpOverlayWasVisibleRef = useRef(false);
@@ -677,6 +693,17 @@ export const ChatPresenter = memo(function ChatPresenter({
     }
     catchUpOverlayWasVisibleRef.current = catchUpOverlayVisible;
   }, [catchUpOverlayVisible, scrollToBottom]);
+  // The chat.open interaction started for this chat (chatStore.selectChat,
+  // or the mobile chat route) ends on the frame after the timeline is
+  // usable: caught up, which lifts the overlay in the same render.
+  useChatOpenEnd(chatId, {
+    catchingUp: timelineCatchingUp,
+    overlayVisible: catchUpOverlayVisible,
+    syncAbandoned:
+      timelineSync.chatSyncPending &&
+      connectionStatus !== "connecting" &&
+      connectionStatus !== "connected",
+  });
 
   // Render the timeline
   const renderTimeline = () => (
@@ -796,7 +823,9 @@ export const ChatPresenter = memo(function ChatPresenter({
           </div>
           {/* Overlaid rather than inserted, so the transcript never shifts
               when it appears or lifts. */}
-          {catchUpOverlayVisible && <TimelineCatchUpOverlay hasContent={showsTimeline} />}
+          {catchUpOverlay !== "hidden" && (
+            <TimelineCatchUpOverlay hasContent={showsTimeline} leaving={catchUpOverlay === "leaving"} />
+          )}
           {/* Inside the transcript frame, anchored to its bottom edge, so the
               band between the transcript and the composer (queued strip,
               background-work pill, permissions) can never sit on top of it. */}
@@ -831,6 +860,10 @@ export const ChatPresenter = memo(function ChatPresenter({
               the status slot: in full on desktop and on a wide phone column,
               one line (three at medium width) plus a sheet on a narrow phone
               column. Approvals are never collapsed. */}
+          {isViewer && currentChat ? (
+            <ViewerNotice chat={currentChat} />
+          ) : (
+          <>
           <ComposerStatusSlot
             upper={
               <>
@@ -887,12 +920,22 @@ export const ChatPresenter = memo(function ChatPresenter({
                     <OomKillBanner />
                   </StatusSlotItem>
                 )}
+                {/* Health banner — the chat's machine is connected but cannot start processes */}
+                {!noMachine && (
+                  <StatusSlotItem id="machine-health">
+                    <MachineHealthBanner daemonId={currentChat?.activeDaemonId} />
+                  </StatusSlotItem>
+                )}
                 {/* Disk banner — a volume on the chat's machine is (nearly) full */}
                 {!noMachine && (
                   <StatusSlotItem id="disk">
                     <DiskPressureBanner daemonId={currentChat?.activeDaemonId} />
                   </StatusSlotItem>
                 )}
+                {/* The chat is in another org than the app acts in (its project moved) */}
+                <StatusSlotItem id="org-moved">
+                  <OrgMovedBanner chatOrgId={currentChat?.orgId} chatUserId={currentChat?.userId} />
+                </StatusSlotItem>
                 {noMachine && chatId ? (
                   <StatusSlotItem id="no-machine">
                     <NoMachineComposerHint chatId={chatId} />
@@ -963,6 +1006,8 @@ export const ChatPresenter = memo(function ChatPresenter({
               Click to focus and type a message
             </div>
           ) : null}
+          </>
+          )}
         </div>
       </div>
       

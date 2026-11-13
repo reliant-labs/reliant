@@ -109,6 +109,7 @@ vi.mock('@/services/controlPlane/environments', () => ({
 
 import { MachinesSection, daemonDisplayName } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
+import { MachineHealthState } from '@/gen/reliant/v1/tools_daemon_pb'
 import { setTransport } from '@/lib/connect'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
 
@@ -308,6 +309,25 @@ describe('MachinesSection', () => {
       expect(screen.queryByText(/ws-ws-/)).not.toBeInTheDocument()
     })
 
+    // reliant#1919: a machine whose process table was full stayed connected
+    // and listed as Active for 24 minutes while every command on it failed.
+    // Its daemon now reports it degraded, and the list says so, with why.
+    it('marks a connected machine that cannot start processes as degraded, with the reason', async () => {
+      const reason = 'This machine cannot start new processes: its process table is full.'
+      mocks.listDaemons.mockResolvedValue({
+        daemons: [
+          { ...managedDaemon, health: { state: MachineHealthState.DEGRADED, code: 'process_table_full', reason } },
+          { ...externalDaemon, health: { state: MachineHealthState.OK } },
+        ],
+      })
+      renderSection()
+
+      expect(await screen.findByText('Degraded')).toBeInTheDocument()
+      expect(screen.getByTestId('machine-degraded-reason')).toHaveTextContent(reason)
+      // Only the degraded machine: the healthy one keeps its status.
+      expect(screen.getAllByTestId('machine-degraded-reason')).toHaveLength(1)
+    })
+
     it('omits an empty group instead of rendering an empty table', async () => {
       mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon] })
       renderSection()
@@ -328,6 +348,27 @@ describe('MachinesSection', () => {
         params: { machineId: managedDaemon.daemonId },
       })
     })
+
+    it.each([managedDaemon, { ...externalDaemon, name: 'My laptop' }])(
+      'reserves vertical clearance for the default badge and build in a $daemonType row',
+      async (daemon) => {
+        mocks.listDaemons.mockResolvedValue({
+          daemons: [{ ...daemon, isDefault: true, version: 'v1.2.3' }],
+        })
+        renderSection()
+
+        const badge = await screen.findByText('Default')
+        const nameLine = badge.parentElement!
+        // A real flex line centers badge and name without inline baseline lift.
+        expect(nameLine).toHaveClass('flex', 'items-center')
+        expect(nameLine).toHaveTextContent(daemon.name!)
+        // DataTable provides only a minimum height. Both lines need padding;
+        // centering alone still leaves a two-line name against the row border.
+        expect(nameLine.parentElement).toHaveClass('block', 'py-2')
+        expect(screen.getByText('v1.2.3').parentElement).toBe(nameLine.parentElement)
+        expect(screen.getByText('v1.2.3')).toHaveClass('block')
+      },
+    )
 
     it('names the icon-only delete button', async () => {
       mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon] })

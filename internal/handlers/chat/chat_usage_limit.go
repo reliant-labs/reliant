@@ -31,7 +31,7 @@ func usableFallbackModel(ctx context.Context, userID, modelAtDriver string) (str
 	if _, ok := models.MustGetRegistry().GetDefinition(modelID); !ok {
 		return "", svcerr.InvalidArgument(fmt.Sprintf("unknown model %q", modelID))
 	}
-	avail := drivers.GetAvailableDrivers(ctx, userID)
+	avail := drivers.GetAvailableDrivers(ctx, drivers.PersonalScope(userID))
 	cfg, ok := avail.Drivers[models.DriverID(driverID)]
 	if !ok || !cfg.IsConfigured() {
 		return "", svcerr.InvalidArgument(fmt.Sprintf("the %s provider is not connected", models.ProviderDisplayName(driverID)))

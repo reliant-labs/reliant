@@ -29,6 +29,9 @@ import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
 import { TruncatedOutputNotice } from "./tool-renderers/TruncatedOutputNotice";
+import { ToolBodyError, ToolBodyPlaceholder, ToolResultWithheld } from "./tool-renderers/ToolBodyPending";
+import { viewerSafeResult } from "../../lib/viewerResults";
+import { useElidedToolBodies } from "./useElidedToolBodies";
 import { fetchFullToolResult, useFullToolResult } from "../../hooks/tool-result-queries";
 import { useChat, useChatMessages, useStreamingMessages, useToolCallStates } from "../../store/chatStoreHooks";
 import {
@@ -36,9 +39,9 @@ import {
   useDenyToolRequest,
 } from "../../hooks/approval-queries";
 import { FileLink } from "./FileLink";
-import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool, isShellTool } from "../../lib/toolFormatters";
+import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool } from "../../lib/toolFormatters";
 import { formatToolDuration, toolActionVerb, toolDurationMs } from "../../lib/toolAction";
-import { DeployedAppCard, deployOfShellCall } from "../Apps/DeployedAppCard";
+import { DeployedAppCard, deployOfToolCall } from "../Apps/DeployedAppCard";
 import { parseFilePath } from "../../lib/filePath";
 import { openFile, classifyPath } from "../../lib/fileOpener";
 import { toast } from "../../lib/toast-manager";
@@ -265,6 +268,13 @@ interface ToolExecutionProps {
      * thread the call owns.
      */
     childWorkflowId?: string;
+    /**
+     * `input` is a skeleton: the transcript left the input out (a stub
+     * read). It labels the row; the open row fetches the body.
+     */
+    inputElided?: boolean;
+    /** Byte length of the stored input, when it was elided. */
+    inputSize?: number;
   };
   toolResult?: ToolResultData;
   onApprove?: (id: string) => void;
@@ -293,7 +303,7 @@ interface ToolExecutionProps {
 
 function ToolExecutionComponent({
   toolCall,
-  toolResult,
+  toolResult: sentResult,
   onApprove,
   onDeny,
   onCancel,
@@ -305,6 +315,15 @@ function ToolExecutionComponent({
   onSelectThread,
   density = "compact",
 }: ToolExecutionProps) {
+  // A viewer of another member's shared chat never sees a tool's result,
+  // however it arrived (the server elides them; this does not rely on it):
+  // everything below reads the result through this.
+  const currentChat = useChat(chatId || "");
+  const isViewer = !!currentChat?.viewerAccess;
+  const toolResult = useMemo(
+    () => viewerSafeResult(sentResult, toolCall.name, isViewer),
+    [sentResult, toolCall.name, isViewer],
+  );
   const toolNameLower = (toolCall.name || '').toLowerCase();
   const toolBaseName = baseToolName(toolCall.name || '');
   const isViewOnlyToolFlag = isViewOnlyTool(toolNameLower);
@@ -345,30 +364,52 @@ function ToolExecutionComponent({
     }
   }, [isReadToolFlag, toolResult?.content, isExpanded, userHasToggled, toolCall.name, surface]);
 
+  // The bodies a stub transcript read left out. Everything above the content
+  // (the header, the collapsed row, the deploy card) reads `toolCall.input`
+  // and `toolResult` as sent: a skeleton labels the call. The content area
+  // renders `bodies.input` / `bodies.result`, and only once `bodies.ready`
+  // (useElidedToolBodies) — the single place a skeleton could be mistaken
+  // for an input.
+  const needsApprovalNow = approval?.status === ApprovalStatus.PENDING;
+  const bodies = useElidedToolBodies({
+    chatId,
+    toolName: toolCall.name,
+    call: toolCall,
+    result: toolResult,
+    shown: isExpanded || (needsApprovalNow && showRichContent),
+    expanded: isExpanded,
+    viewer: isViewer,
+  });
+  const contentResult = bodies.result;
+  const toggleExpanded = () => {
+    if (!isExpanded) bodies.noteUserExpand();
+    setIsExpanded(!isExpanded);
+  };
+
   // A large result arrives as a preview (truncated). The full output is
   // fetched when the user asks for it, and then rendered in the preview's
   // place by the same renderer; a copy fetches it too (loadFullResult).
-  const isTruncatedResult = !!toolResult?.truncated && !!chatId;
+  const isTruncatedResult = !!contentResult?.truncated && !!chatId;
+  const elidedResultBlockId = toolResult?.elided ? toolResult.block_id : undefined;
   const [wantFullResult, setWantFullResult] = useState(false);
-  const fullResult = useFullToolResult(chatId, toolCall.id, isTruncatedResult && wantFullResult);
+  const fullResult = useFullToolResult(chatId, toolCall.id, isTruncatedResult && wantFullResult, elidedResultBlockId);
   const fullResultContent = isTruncatedResult ? fullResult.data?.content : undefined;
   const displayResult = useMemo<ToolResultData | undefined>(
     () =>
-      toolResult && fullResultContent !== undefined
-        ? { ...toolResult, content: fullResultContent, truncated: false }
-        : toolResult,
-    [toolResult, fullResultContent],
+      contentResult && fullResultContent !== undefined
+        ? { ...contentResult, content: fullResultContent, truncated: false }
+        : contentResult,
+    [contentResult, fullResultContent],
   );
   const loadFullResult = useMemo(
     () =>
       isTruncatedResult && chatId
-        ? () => fetchFullToolResult(chatId, toolCall.id)
+        ? () => fetchFullToolResult(chatId, toolCall.id, elidedResultBlockId)
         : undefined,
-    [isTruncatedResult, chatId, toolCall.id],
+    [isTruncatedResult, chatId, toolCall.id, elidedResultBlockId],
   );
   const showTruncatedNotice = isTruncatedResult && fullResultContent === undefined;
 
-  const currentChat = useChat(chatId || "");
   const chatWorktreeId = currentChat?.worktreeId;
   const chatMessages = useChatMessages(chatId || undefined);
   const streamingMessages = useStreamingMessages(chatId || "");
@@ -464,10 +505,11 @@ function ToolExecutionComponent({
       ? toolDurationMs(toolCall.durableStartedAt, toolCall.durableCompletedAt)
       : null;
   const durationLabel = durationMs !== null ? formatToolDuration(durationMs) : null;
-  const actionVerb = toolActionVerb(toolCall.name, isCompleted || hasFailed || isCancelled ? "done" : "live");
-  // A shell call that deployed a forge app links to what it deployed (Apps/DeployedAppCard).
+  const actionVerb = toolActionVerb(toolCall.name, isCompleted || hasFailed || isCancelled ? "done" : "live", toolCall.input);
+  // A shell call that deployed a forge app links to what it deployed
+  // (Apps/DeployedAppCard).
   const shellDeploy = useMemo(
-    () => (isShellTool(toolNameLower) ? deployOfShellCall(toolCall.input, toolResult) : null),
+    () => deployOfToolCall(toolNameLower, toolCall.input, toolResult),
     [toolNameLower, toolCall.input, toolResult]
   );
 
@@ -528,20 +570,25 @@ function ToolExecutionComponent({
     return paramDescription || paramNotes || null;
   }, [isTaskToolFlag, toolCall.input, toolNameLower, storedTask]);
 
+  // What a wait or a message to an agent is about, resolved from the call it
+  // names: an overlay of fields on its input, for the header (the skeleton)
+  // and the content (the body) alike. The keys it reads (process_id,
+  // agent_id) are kept whole in a skeleton.
   const resolvedWaitTarget = useMemo(() => {
+    const none = { overlay: undefined as Record<string, unknown> | undefined, threadId: undefined as string | undefined };
     const input = inputObject(toolCall.input);
-    if (!input) return { displayInput: toolCall.input, threadId: undefined as string | undefined };
+    if (!input) return none;
 
     if (toolBaseName === "shell_wait") {
       const processId = stringField(input.process_id);
-      if (!processId) return { displayInput: toolCall.input, threadId: undefined as string | undefined };
+      if (!processId) return none;
       const shellCall = findShellCallForProcess(allDisplayMessages, processId);
       const shellInput = parseToolInput(shellCall?.input);
       const shellObj = inputObject(shellInput);
       const description = stringField(shellObj?.description) || stringField(shellObj?.Description);
       const command = stringField(shellObj?.command) || stringField(shellObj?.Command);
       return {
-        displayInput: description || command ? { ...input, description, command } : toolCall.input,
+        overlay: description || command ? { description, command } : undefined,
         threadId: undefined,
       };
     }
@@ -550,7 +597,7 @@ function ToolExecutionComponent({
     // its title for the row and make the thread openable.
     if (toolBaseName === "spawn_status" || toolBaseName === "spawn_send") {
       const agentId = stringField(input.agent_id);
-      if (!agentId) return { displayInput: toolCall.input, threadId: undefined as string | undefined };
+      if (!agentId) return none;
 
       const activeThread = activeThreads.find((thread) => thread.thread === agentId || thread.workflow_id === agentId);
       const workflow = findWorkflowById(allWorkflows, agentId) ||
@@ -565,13 +612,23 @@ function ToolExecutionComponent({
         nonGenericStringField(activeThread?.agent_name);
 
       return {
-        displayInput: title ? { ...input, title } : toolCall.input,
+        overlay: title ? { title } : undefined,
         threadId: agentId,
       };
     }
 
-    return { displayInput: toolCall.input, threadId: undefined as string | undefined };
+    return none;
   }, [toolCall.input, toolBaseName, allDisplayMessages, activeThreads, allWorkflows]);
+  const waitOverlay = resolvedWaitTarget.overlay;
+  const withWaitOverlay = useCallback(
+    (input: ToolCallInput): ToolCallInput => {
+      const obj = inputObject(input);
+      return obj && waitOverlay ? { ...obj, ...waitOverlay } : input;
+    },
+    [waitOverlay],
+  );
+  const headerInput = useMemo(() => withWaitOverlay(toolCall.input), [withWaitOverlay, toolCall.input]);
+  const contentInput = useMemo(() => withWaitOverlay(bodies.input), [withWaitOverlay, bodies.input]);
 
   // The thread this tool can open, as recorded by the code that created it or
   // directly named by spawn_status/spawn_send. For spawn calls,
@@ -647,7 +704,7 @@ function ToolExecutionComponent({
       );
     }
 
-    const formatted = formatToolParams(rawName, input as ToolInput);
+    const formatted = formatToolParams(rawName, input as ToolInput, { inputSize: toolCall.inputSize });
     if (formatted) {
       // File paths with links
       if (formatted.structured?.filePaths && formatted.structured.filePaths.length > 0) {
@@ -803,7 +860,8 @@ function ToolExecutionComponent({
     // Normalize the streaming-window undefined to {} HERE, once, rather than
     // in every renderer: ToolCallData.input is absent until the call's
     // arguments arrive, but a renderer's contract is that `input` is present.
-    input: resolvedWaitTarget.displayInput ?? {},
+    // The body, never the skeleton: content renders only once bodies.ready.
+    input: contentInput ?? {},
     result: displayResult,
     loadFullResult,
     worktreeId: chatWorktreeId,
@@ -815,6 +873,20 @@ function ToolExecutionComponent({
     hasFailed,
     onSelectThread,
   };
+
+  // The content area's body: the renderer once every elided body is here,
+  // else a placeholder sized from the body, or the error with Retry.
+  const renderToolContent = (content: React.ReactNode): React.ReactNode =>
+    bodies.ready ? (
+      <>
+        {content}
+        {bodies.withheld && <ToolResultWithheld />}
+      </>
+    ) : bodies.failed ? (
+      <ToolBodyError onRetry={bodies.retry} />
+    ) : (
+      <ToolBodyPlaceholder bytes={bodies.bytes} />
+    );
 
   // Expanding is an act of attention, so the open card is drawn more strongly
   // than the collapsed rows around it: brighter border, real elevation. Idle
@@ -887,7 +959,7 @@ function ToolExecutionComponent({
         {/* Header */}
         <div
           className={cn(headerClassName, "gap-2")}
-          onClick={() => hasExpandedContent && setIsExpanded(!isExpanded)} role={hasExpandedContent ? "button" : undefined} tabIndex={hasExpandedContent ? 0 : undefined} onKeyDown={(e) => hasExpandedContent && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setIsExpanded(!isExpanded))} aria-expanded={hasExpandedContent ? isExpanded : undefined} aria-label={hasExpandedContent ? `Toggle task details for ${displayTitle}` : undefined}
+          onClick={() => hasExpandedContent && toggleExpanded()} role={hasExpandedContent ? "button" : undefined} tabIndex={hasExpandedContent ? 0 : undefined} onKeyDown={(e) => hasExpandedContent && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), toggleExpanded())} aria-expanded={hasExpandedContent ? isExpanded : undefined} aria-label={hasExpandedContent ? `Toggle task details for ${displayTitle}` : undefined}
         >
           <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
             {isPreparing ? (
@@ -917,7 +989,7 @@ function ToolExecutionComponent({
                 <p>{taskDescription}</p>
               </div>
             )}
-            <GenericToolRenderer ctx={renderContext} />
+            {renderToolContent(<GenericToolRenderer ctx={renderContext} />)}
           </div>
         )}
       </div>
@@ -933,7 +1005,7 @@ function ToolExecutionComponent({
         onClick={() => {
           if (isExpandable) {
             setUserHasToggled(true);
-            setIsExpanded(!isExpanded);
+            toggleExpanded();
           }
         }}
         role={isExpandable ? "button" : undefined}
@@ -942,7 +1014,7 @@ function ToolExecutionComponent({
           if (isExpandable && (e.key === "Enter" || e.key === " ")) {
             e.preventDefault();
             setUserHasToggled(true);
-            setIsExpanded(!isExpanded);
+            toggleExpanded();
           }
         }}
         aria-expanded={isExpandable ? isExpanded : undefined}
@@ -953,7 +1025,7 @@ function ToolExecutionComponent({
               {getStatusIcon()}
             </span>
             <span className="min-w-0 text-xs truncate">
-              {formatToolCallDisplay(toolCall.name, resolvedWaitTarget.displayInput)}
+              {formatToolCallDisplay(toolCall.name, headerInput)}
             </span>
             {/* Success needs no word — the check carries it — so a long run
                 is not a column of identical "Completed" pills. Every other
@@ -1038,7 +1110,7 @@ function ToolExecutionComponent({
             desktop's compact row. */}
         {shouldShowApprovalUI && (
           <div className="px-2 py-2 border-t border-warning/20 bg-warning/5">
-            {showRichContent && toolCall.input && <ToolContentArea ctx={renderContext} />}
+            {showRichContent && toolCall.input && renderToolContent(<ToolContentArea ctx={renderContext} />)}
             <p className="text-xs font-medium text-warning-ink mb-1.5">Approval required</p>
             <div className={cn("flex gap-2", surface !== "desktop" && "flex-col")}>
               <button
@@ -1073,17 +1145,21 @@ function ToolExecutionComponent({
         {/* Content area - only shown when expanded */}
         {isExpandable && !shouldShowApprovalUI && isExpanded && (
           <div className={contentClassName}>
-            <ToolContentArea ctx={renderContext} />
-            {showTruncatedNotice && (
-              <TruncatedOutputNotice
-                originalSize={toolResult?.original_size}
-                isLoading={fullResult.isFetching}
-                error={fullResult.error ?? undefined}
-                onShowFull={() => {
-                  if (wantFullResult) void fullResult.refetch();
-                  else setWantFullResult(true);
-                }}
-              />
+            {renderToolContent(
+              <>
+                <ToolContentArea ctx={renderContext} />
+                {showTruncatedNotice && (
+                  <TruncatedOutputNotice
+                    originalSize={contentResult?.original_size}
+                    isLoading={fullResult.isFetching}
+                    error={fullResult.error ?? undefined}
+                    onShowFull={() => {
+                      if (wantFullResult) void fullResult.refetch();
+                      else setWantFullResult(true);
+                    }}
+                  />
+                )}
+              </>,
             )}
           </div>
         )}

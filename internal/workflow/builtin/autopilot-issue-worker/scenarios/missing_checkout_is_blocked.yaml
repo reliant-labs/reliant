@@ -32,6 +32,6 @@ events:
     black_box: true
     output: {"recheck_found": 0, "other_live_lease": false}
 expect:
-  outcome: completed
+  outcome: failed
   completed: [dir, no_checkout, release]
   not_reached: [agent, gate, publish]

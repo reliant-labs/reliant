@@ -49,6 +49,13 @@ function open(props: Partial<React.ComponentProps<typeof MachinePicker>> = {}) {
 }
 
 describe("MachinePicker: where the project is set up", () => {
+  it("offers an existing folder even for projects without a git remote", () => {
+    const onUseFolder = vi.fn();
+    open({ project: project({ onSetUp: undefined, onUseFolder }) });
+    fireEvent.click(screen.getByText("Use a folder on cicd…"));
+    expect(onUseFolder).toHaveBeenCalledWith("d-cicd");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
   it("lists the project's machines first, marked ready (or setting up), with their online state", () => {
     open();
     const ready = screen.getByRole("group", { name: "Set up for temp" });

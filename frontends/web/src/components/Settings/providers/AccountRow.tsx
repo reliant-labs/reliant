@@ -11,9 +11,10 @@ import { limitedSentence, planLabel } from "./accountFormat";
  * One account as the cells of its provider's accounts table (AccountList), so
  * every account lines up under the same columns: its place in the rotation,
  * the account itself, its usage, and its actions — with the full usage bars
- * and identity line in the row's expanded detail. Exception-first: a healthy
- * account is one line; a limited, nearly limited or signed-out one opens by
- * itself (AccountList decides) to say what is wrong and when it ends.
+ * and identity line in the row's expanded detail. Every row starts collapsed
+ * to one line and opens only on request: a limited or signed-out account says
+ * what is wrong (and when it ends) in its status sentence, its meters turn
+ * amber or red, and Reconnect sits in its actions, all without opening it.
  */
 
 const STATUS_INK: Record<Exclude<AccountStatus, "available">, string> = {

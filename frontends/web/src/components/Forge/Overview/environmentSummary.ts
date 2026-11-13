@@ -19,7 +19,7 @@
  * An unread fact is said to be unread; it never reads as healthy.
  */
 
-import { verdictTone } from "@/components/Apps/appParts";
+import { inFlight, verdictBusy, verdictTone } from "@/components/Apps/appParts";
 import type { StatusTone } from "@/components/forge-ui/status";
 import type { ReleaseHealth } from "@/services/controlPlane/observability/deliveryTypes";
 import type { Workload } from "@/services/controlPlane/observability/types";
@@ -42,6 +42,8 @@ export interface Fact {
   label: string;
   /** One more line of context, or "". */
   detail: string;
+  /** A change is in flight: shown as a spinner instead of the tone's dot (appParts inFlight). */
+  busy?: boolean;
 }
 
 export interface WorkloadCount {
@@ -76,26 +78,37 @@ export interface EnvSummary {
 
 const UNREAD = (label: string): Fact => ({ tone: "neutral", label, detail: "" });
 
+const DEPLOYING = "A deploy is in progress.";
+
 export function summarizeEnvironment(input: EnvSummaryInput): EnvSummary {
   const { env } = input;
   const placed = isPlacedKind(env.kind);
   const mine = (input.workloads.data?.workloads ?? []).filter((w) => w.envName === env.name && !isJobKind(w.kind));
+  const lastDeploy = (input.runs.data ?? []).find((run) => run.env === env.name) ?? null;
   return {
     env,
-    health: healthOf(input, placed),
+    health: healthOf(input, placed, lastDeploy?.state === "running"),
     workloads: workloadCount(mine, placed ? input.status.data : undefined),
-    lastDeploy: (input.runs.data ?? []).find((run) => run.env === env.name) ?? null,
+    lastDeploy,
     check: checkOf(input.check, env),
     drift: driftOf(env),
   };
 }
 
-function healthOf(input: EnvSummaryInput, placed: boolean): Fact {
+/**
+ * `deploying`: the env's newest deploy run is still running. It spins the
+ * health fact (say why in the detail) unless the health is already known-bad —
+ * the same rule as appParts inFlight, so a deploy never paints over red.
+ */
+function healthOf(input: EnvSummaryInput, placed: boolean, deploying: boolean): Fact {
   if (placed) {
     if (input.status.loading && !input.status.data) return UNREAD("Checking");
     if (!input.status.data) return UNREAD(input.status.failed ? "Not read" : "Not reported");
     const verdict = input.status.data.verdict;
-    return { tone: verdictTone(verdict), label: verdictLabel(verdict), detail: "" };
+    const busy = inFlight(verdict, deploying);
+    // Settling already says it is mid-change; any other word spinning needs the reason.
+    const detail = busy && !verdictBusy(verdict) ? DEPLOYING : "";
+    return { tone: verdictTone(verdict), label: verdictLabel(verdict), detail, busy };
   }
   if (input.workloads.loading && !input.workloads.data) return UNREAD("Checking");
   if (!input.workloads.data) return UNREAD(input.workloads.failed ? "Not read" : "Not reported");
@@ -109,7 +122,8 @@ function healthOf(input: EnvSummaryInput, placed: boolean): Fact {
     declared: input.declared,
   };
   const cell = stripCell(strip, input.workloads.data.workloads, input.workloads.data.jobs);
-  return { tone: cell.tone, label: cell.label, detail: "" };
+  const busy = deploying && cell.tone !== "danger";
+  return { tone: cell.tone, label: cell.label, detail: busy ? DEPLOYING : "", busy };
 }
 
 /**

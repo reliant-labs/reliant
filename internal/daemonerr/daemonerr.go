@@ -24,6 +24,7 @@
 package daemonerr
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -211,7 +212,17 @@ func Error(doing string, err error) error {
 	if text, ok := toolexec.DaemonReportedText(err); ok {
 		msg = prefixed(msg, text)
 	}
-	return svcerr.WithCause(svcerr.Unavailable(msg), err)
+	result := svcerr.WithCause(svcerr.Unavailable(msg), err)
+	// The machine's connection closed while the command was in flight: the
+	// other end went away (a laptop that slept, a machine that restarted).
+	// The wire is unchanged — Unavailable, retryable — but it is the canceled
+	// class, which the cause's own class cannot say from behind WithCause.
+	// Unclassed, every interrupted worktree.validate_path or fs.get_tree was
+	// an ERROR "rpc failed" (prod 939023e3).
+	if errors.Is(err, toolexec.ErrDaemonConnectionInterrupted) {
+		return svcerr.WithClass(result, svcerr.ClassCanceled)
+	}
+	return result
 }
 
 // daemonText is the text of a failure recognised by a marker the daemon

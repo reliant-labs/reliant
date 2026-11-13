@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
 	"github.com/reliant-labs/reliant/internal/handlers/attachment"
+	"github.com/reliant-labs/reliant/internal/handlers/automation_takeover"
 	"github.com/reliant-labs/reliant/internal/handlers/background"
 	"github.com/reliant-labs/reliant/internal/handlers/catalog"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
@@ -40,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/mcp"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
+	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
@@ -50,6 +52,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/scenario"
 	"github.com/reliant-labs/reliant/internal/handlers/settings"
+	"github.com/reliant-labs/reliant/internal/handlers/sharing"
 	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/handlers/task"
@@ -60,12 +63,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/usage"
 	workflowhandler "github.com/reliant-labs/reliant/internal/handlers/workflow"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree"
+	"github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim"
 )
 
 const routesTestAPIKey = "api-routes-test-key"
 
-// userServices are the 36 services the api-server has always mounted on its
-// listener (grpc.NewAPI's list, before the api became a root).
+// userServices are the services the api-server mounts on its listener: the
+// 36 of grpc.NewAPI's list, from before the api became a root, and the ones
+// added since.
 var userServices = []string{
 	reliantv1connect.SystemServiceName, reliantv1connect.PlanServiceName, reliantv1connect.TaskServiceName,
 	reliantv1connect.CatalogServiceName, reliantv1connect.ProjectServiceName, reliantv1connect.WorktreeServiceName,
@@ -79,6 +84,8 @@ var userServices = []string{
 	reliantv1connect.ModelEndpointServiceName, reliantv1connect.TokenServiceName, reliantv1connect.DaemonServiceName,
 	reliantv1connect.AccountServiceName, reliantv1connect.ConnectionServiceName, reliantv1connect.ConnectorServiceName,
 	reliantv1connect.BackgroundServiceName, reliantv1connect.TerminalServiceName, reliantv1connect.UsageServiceName,
+	reliantv1connect.WorktreeReclaimServiceName, reliantv1connect.SharingServiceName, reliantv1connect.AutomationTakeoverServiceName,
+	reliantv1connect.OrgProviderAccountServiceName,
 }
 
 // testUserRoutes is the api's route set over services that are never called
@@ -95,9 +102,10 @@ func testUserRoutes(t *testing.T, opts MountOptions) *UserRoutes {
 		Message: &message.Service{}, ModelEndpoint: &model_endpoint.Service{}, PackageCommands: &package_commands.Service{},
 		Task: &task.Service{}, Plan: &plan.Service{}, Preset: &preset.Service{}, Project: &project.Service{},
 		ProviderAccount: &provider_account.Service{}, Question: &question.Service{}, Repo: &repo.Service{},
-		Scenario: &scenario.Service{}, Settings: &settings.Service{}, Streaming: &streaminghandler.Service{},
+		Scenario: &scenario.Service{}, Settings: &settings.Service{}, Sharing: &sharing.Service{}, Streaming: &streaminghandler.Service{},
 		System: &system.Service{}, Terminal: &terminal.Service{}, Token: &token.Service{}, ToolCall: &tool_call.Service{},
-		Workflow: &workflowhandler.Service{}, Usage: &usage.Service{},
+		Workflow: &workflowhandler.Service{}, Usage: &usage.Service{}, WorktreeReclaim: &worktree_reclaim.Service{},
+		AutomationTakeover: &automation_takeover.Service{}, OrgProviderAccount: &org_provider_account.Service{},
 		Logger:  slog.Default(),
 		Options: opts,
 	})

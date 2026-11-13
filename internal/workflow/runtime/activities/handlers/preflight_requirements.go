@@ -155,8 +155,8 @@ type runExecutorMachine struct {
 }
 
 func (m runExecutorMachine) Run(ctx context.Context, command string) (string, int, error) {
-	stdout, _, code, _, err := m.exec.ExecuteCommand(ctx, command, m.dir, int(preflightProbeTimeout/time.Millisecond), nil)
-	return stdout, code, err
+	result, err := m.exec.ExecuteCommand(ctx, command, m.dir, int(preflightProbeTimeout/time.Millisecond), nil)
+	return result.Stdout, result.ExitCode, err
 }
 
 // connectionCheck resolves an integration's connection the way an action

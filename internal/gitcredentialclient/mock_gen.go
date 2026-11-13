@@ -14,7 +14,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=31f7de4dd131e12961c277c0dd311e6051057b8dca99112ff02b322a4334cc61
+// forge:hash=bcfe52a0b5086453719f99590e8a585f4480648232cedff8f03d2da94de59fd3
 
 // MockService is a test mock for the Service interface.
 //
@@ -24,8 +24,9 @@ import (
 // "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
-	UserAccessTokenFunc       func(context.Context, string, string) (Token, error)
-	MintInstallationTokenFunc func(context.Context, InstallationRequest) (InstallationToken, error)
+	UserAccessTokenFunc            func(context.Context, string, string) (Token, error)
+	MintInstallationTokenFunc      func(context.Context, InstallationRequest) (InstallationToken, error)
+	ListOrgGitHubInstallationsFunc func(context.Context, string) ([]OrgInstallation, error)
 }
 
 // UserAccessToken records the call and delegates to UserAccessTokenFunc when set.
@@ -44,6 +45,15 @@ func (m *MockService) MintInstallationToken(ctx context.Context, req Installatio
 		return m.MintInstallationTokenFunc(ctx, req)
 	}
 	return InstallationToken{}, contractkit.MockNotSet("MockService", "MintInstallationToken")
+}
+
+// ListOrgGitHubInstallations records the call and delegates to ListOrgGitHubInstallationsFunc when set.
+func (m *MockService) ListOrgGitHubInstallations(ctx context.Context, orgID string) ([]OrgInstallation, error) {
+	m.Recorder.Record("ListOrgGitHubInstallations", ctx, orgID)
+	if m.ListOrgGitHubInstallationsFunc != nil {
+		return m.ListOrgGitHubInstallationsFunc(ctx, orgID)
+	}
+	return nil, contractkit.MockNotSet("MockService", "ListOrgGitHubInstallations")
 }
 
 // Compile-time check.

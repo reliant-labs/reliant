@@ -11,10 +11,10 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
+	"github.com/reliant-labs/reliant/internal/chatproto"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/runstateproto"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 )
 
@@ -146,73 +146,9 @@ func inputsDiffer(current, incoming map[string]interface{}) bool {
 	return false
 }
 
-// chatToProto converts a db.Chat to proto Chat
-// chatToProto converts a db.Chat to proto Chat
-// NOTE: model/temperature/max_tokens are no longer stored on chat - they are workflow input params
-// NOTE: WorkflowStatus comes from JOIN with workflows table (see GetChat query)
+// chatToProto is the chat as its owner reads it (chatproto.Chat).
 func chatToProto(c *db.Chat) *reliantv1.Chat {
-	proto := &reliantv1.Chat{
-		Id:              c.ID,
-		UserId:          c.UserID,
-		Title:           c.Title,
-		ProjectId:       c.ProjectID,
-		State:           c.State,
-		CreatedAt:       c.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:       c.UpdatedAt.Format(time.RFC3339),
-		LastActive:      c.LastActive.Format(time.RFC3339),
-		SelectedPresets: c.SelectedPresets,
-	}
-	if c.WorktreeID != nil {
-		proto.WorktreeId = c.WorktreeID
-	}
-	if c.WorkflowName != nil {
-		proto.WorkflowName = c.WorkflowName
-	}
-	if c.WorkflowID != nil {
-		proto.WorkflowId = c.WorkflowID
-	}
-	if c.RunID != nil {
-		proto.RunId = c.RunID
-	}
-	if c.LastMessageAt != nil {
-		formatted := c.LastMessageAt.Format(time.RFC3339)
-		proto.LastMessageAt = &formatted
-	}
-	// Activity is the computed activity from chats_with_activity view
-	if c.Activity != nil {
-		proto.Activity = reliantv1.ChatActivity(*c.Activity)
-	}
-	proto.Unread = c.Unread
-	if c.ActiveDaemonID != nil {
-		proto.ActiveDaemonId = c.ActiveDaemonID
-	}
-	proto.NoMachine = c.NoMachine
-	proto.WorkingThreads = int32(c.WorkingThreads)
-	if c.UsageLimitResumesAt != nil {
-		resumes := c.UsageLimitResumesAt.UTC().Format(time.RFC3339)
-		proto.UsageLimitResumesAt = &resumes
-		proto.UsageLimitProbing = c.UsageLimitProbing
-		if c.UsageLimitProvider != "" {
-			provider := c.UsageLimitProvider
-			proto.UsageLimitProvider = &provider
-		}
-	}
-	// The root run's lifecycle: the web decides paused/pending from these, and
-	// a pending state is what tells it to StartChat rather than SendMessage.
-	proto.WorkflowState = runstateproto.State(c.RootStatus.State)
-	proto.WorkflowStopReason = runstateproto.StopReason(c.RootStatus.StopReason)
-	if c.LaunchKind != "" {
-		proto.LaunchKind = &c.LaunchKind
-	}
-	proto.Origin = c.Origin
-	if c.TriggerID != nil {
-		proto.TriggerId = c.TriggerID
-	}
-	if c.AdoptedAt != nil {
-		adopted := c.AdoptedAt.Format(time.RFC3339)
-		proto.AdoptedAt = &adopted
-	}
-	return proto
+	return chatproto.Chat(c)
 }
 
 // displayStyleProtoToInt32Ptr converts a proto DisplayStyle pointer to an *int32 for the database.
@@ -243,9 +179,10 @@ func seedMessagesFromInput(messages []*reliantv1.InputMessage) []launch.SeedMess
 
 // trackStartedChatMessage records the user message a chat start carries as a
 // message_sent: StartChat is the only way a chat's first message reaches the
-// server, and the web no longer reports it. The seed carries no stored message
-// id, so the client's named id (or, failing that, the chat's) identifies it.
-func (s *Service) trackStartedChatMessage(ctx context.Context, userID string, chat *db.Chat, clientMessageID string, msg *reliantv1.StartChatRequest) {
+// server, and the web no longer reports it. savedMessageID is the stored id
+// the launcher gave the seed; a start that saved none (a replay) falls back to
+// the client's named id, then the chat's, which no activation claim matches.
+func (s *Service) trackStartedChatMessage(ctx context.Context, userID string, chat *db.Chat, savedMessageID, clientMessageID string, msg *reliantv1.StartChatRequest) {
 	if chat == nil {
 		return
 	}
@@ -259,7 +196,10 @@ func (s *Service) trackStartedChatMessage(ctx context.Context, userID string, ch
 	if content == "" {
 		return
 	}
-	messageID := clientMessageID
+	messageID := savedMessageID
+	if messageID == "" {
+		messageID = clientMessageID
+	}
 	if messageID == "" {
 		messageID = chat.ID
 	}
@@ -309,21 +249,36 @@ func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.
 	analyticsClient := analytics.ForUser(ctx, userID)
 	analyticsClient.TrackMessageSent(metrics)
 
-	// Check if this is the user's first-ever message across all chats
-	if isFirstInChat {
-		// List all chats for this user to see if they have any other chats with messages
-		chats, err := s.deps.Repo.SearchChats(ctx, db.ChatSearchFilters{
-			UserID: userID,
-			Limit:  2, // We only need to know if there's more than 1
+	// The message is already stored. It is the user's first ever exactly when
+	// it qualifies (typed by them, on a main thread, in a chat a person
+	// started), no message of theirs precedes it, and no activation is
+	// recorded yet; the claim checks all three and records it in one
+	// statement, so a replayed send or another replica never emits it twice.
+	// A failed claim reports nothing rather than a wrong first.
+	firstForUser, err := s.deps.Repo.ClaimUserActivation(ctx, userID, chat.ID, messageID)
+	if err != nil {
+		firstForUser = false
+		logging.WarnContext(ctx, "[Analytics] Could not claim the user's activation; user_first_message not emitted",
+			"userID", userID, "error", err)
+	}
+	if firstForUser {
+		analyticsClient.TrackUserFirstMessage(analytics.UserFirstMessageMetrics{
+			MessageID:    messageID,
+			ChatID:       chat.ID,
+			ProjectID:    chat.ProjectID,
+			WorkflowType: workflowType,
 		})
-		if err == nil && len(chats) <= 1 {
-			analyticsClient.TrackFirstMessageSent(analytics.FirstMessageSentMetrics{
-				ChatID:       chat.ID,
-				ProjectID:    chat.ProjectID,
-				WorkflowName: workflowName,
-				WorkflowType: workflowType,
-			})
-		}
+	}
+
+	// first_message_sent is per chat.
+	if isFirstInChat {
+		analyticsClient.TrackFirstMessageSent(analytics.FirstMessageSentMetrics{
+			ChatID:       chat.ID,
+			ProjectID:    chat.ProjectID,
+			WorkflowName: workflowName,
+			WorkflowType: workflowType,
+			FirstForUser: firstForUser,
+		})
 	}
 }
 

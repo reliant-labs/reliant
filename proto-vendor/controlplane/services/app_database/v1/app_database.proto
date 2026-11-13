@@ -81,6 +81,57 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/app_data
 //  10. at run time: DeadlineExceeded, reason "lock_timeout" (a migration holds a
 //      lock; the panel gave up in 500ms instead of queueing behind it), then
 //      "statement_timeout".
+//
+// THE DATA BROWSER (ListBrowsableDatabases, DescribeDatabase, BrowseTable) is
+// the console's read-only table viewer: the same databases, the same forge_ro
+// role, the same READ ONLY transaction and the same policy as QueryDatabase,
+// with no SQL on the wire. A request names a table, columns, filters, a sort
+// and a page; the server checks every identifier against what forge_ro may
+// SELECT (has_table_privilege / has_column_privilege), quotes it, and binds
+// every value as a parameter. So the browser reads exactly what forge_ro reads,
+// and a forge:secret column is neither listed nor readable. It covers every
+// database of the environment: each forge.ManagedDatabase and each
+// forge.ExternalDatabase. Admission order, each step's error:
+//   1. unknown environment: NotFound.
+//   2. not a member of its org: NotFound (existence is not revealed).
+//   3. no db:query grant or scope: PermissionDenied.
+//   ListBrowsableDatabases stops here: it lists names, kinds and policies and
+//   reads no rows, so a deny environment still answers, with policy DENY, and
+//   the console can say why it shows no data.
+//   4. data_access policy deny (or unknown), or a machine credential on an
+//      audited environment: PermissionDenied.
+//   5. audited environment without confirm_env_id equal to environment_id and
+//      a reason: FailedPrecondition, reason "confirmation_required". The
+//      console asks once per tab session and sends both on every call.
+//   6. unknown database: NotFound.
+//   7. the control plane has no way to reach the database (no hosted
+//      placement, an external database it cannot dial): FailedPrecondition,
+//      reason "datasource_unreachable". An external database is reached as
+//      its `reach` says: "direct" by a control plane running in its cluster,
+//      with the role's password Secret mounted into it; "port_forward" is
+//      listed and not reachable yet.
+//   8. per-principal budget (shared with QueryDatabase): ResourceExhausted,
+//      reason "rate_limited", with Retry-After; too many reads in flight for
+//      this principal on this environment (a few, so a row page's Related
+//      counts run together; separate from QueryDatabase's one):
+//      ResourceExhausted, reason "query_in_flight".
+//   9. (BrowseTable) a table forge_ro cannot read: NotFound. A table that
+//      exists but is not readable looks the same as one that does not exist.
+//      It is judged against the database's description, which is a read of
+//      its catalog and so runs inside the budget.
+//  10. at run time: DeadlineExceeded, reason "statement_timeout"; Unavailable
+//      when the database does not answer. For an external database, before
+//      anything runs: FailedPrecondition, reason "credential_missing", when
+//      its password Secret is not mounted on this control plane, and reason
+//      "writable_role" when the role the route names can do more than read
+//      (the server is asked; the declaration is not trusted).
+// DescribeDatabase and BrowseTable each write ONE audit_log row per call, like
+// QueryDatabase, with the structured request, the statements as run and their
+// bound values, and the reason; a counted page runs two statements and is
+// still one row. DescribeDatabase also records a typed activity event, so the
+// feed shows who opened which database of an audited environment and why;
+// BrowseTable records none (a page view is not a feed line), and its audit
+// rows are the per-read record.
 service AppDatabaseService {
   option (forge.v1.service) = {
     name: "AppDatabaseService"
@@ -129,6 +180,78 @@ service AppDatabaseService {
   // are not enabled: those are simply absent.
   rpc ListDashboardDatabases(ListDashboardDatabasesRequest) returns (ListDashboardDatabasesResponse) {
     option (forge.v1.method) = {auth_required: true};
+  }
+
+  // ListBrowsableDatabases returns every database of the environment the data
+  // browser can offer: each managed and each external database, the policy a
+  // read of it runs under, and whether the control plane can reach it. Reads
+  // no rows and writes no audit row.
+  //
+  // Admission is the data browser's steps 1 to 3. A database the control plane
+  // cannot reach is still listed, with reachable false and unreachable_reason
+  // saying why, because the environment declares it.
+  //
+  // ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3),
+  // FailedPrecondition reason "shape_unknown" (the environment has not
+  // recorded what it deploys yet, so its databases are not known),
+  // Unavailable (browsing is not configured on this server).
+  rpc ListBrowsableDatabases(ListBrowsableDatabasesRequest) returns (ListBrowsableDatabasesResponse) {
+    // A read: the console's hook is a query, not a mutation.
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // DescribeDatabase returns the tables and views forge_ro may SELECT in one
+  // database, each with the columns it may read, its primary key, its foreign
+  // keys and the foreign keys of readable tables that point at it (what the
+  // row page's Related section lists). Read by live introspection on every
+  // call; BrowseTable then compiles against that reading for up to a minute.
+  //
+  // ERRORS: every step of the data browser's admission except step 9.
+  // InvalidArgument when a bound is out of range.
+  rpc DescribeDatabase(DescribeDatabaseRequest) returns (DescribeDatabaseResponse) {
+    // A read: the console's hook is a query. Each call still writes its
+    // audit_log row and activity event, which no caller observes.
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "describe_database"
+        target: {
+          kind: "database"
+          id: "response.database"
+        }
+        env: "environment_id"
+        detail: [
+          "reason",
+          "response.duration_ms"
+        ]
+      }
+    };
+  }
+
+  // BrowseTable returns one page of one table or view: the chosen columns,
+  // filtered, sorted and paged, compiled into one parameterised SELECT. It also
+  // serves the row page (a primary-key eq filter, limit 1) and the Related
+  // counts (a foreign-key eq filter with count ESTIMATED or EXACT).
+  //
+  // The request is checked against a description of the database at most a
+  // minute old (the one DescribeDatabase last read, or a fresh one); a table
+  // the description does not know is looked up live once before it is
+  // refused.
+  //
+  // ERRORS: every step of the data browser's admission. InvalidArgument when a
+  // bound is out of range; a column (in columns, filters or sort) forge_ro
+  // cannot read in the table; a filter whose values do not fit its op; or a
+  // value Postgres cannot convert to the column's type.
+  rpc BrowseTable(BrowseTableRequest) returns (BrowseTableResponse) {
+    // A read: the console's hook is a query. Each call still writes its
+    // audit_log row, which no caller observes.
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "a page view: every call writes its audit_log row (with the reason), and the feed's one line per opened database is DescribeDatabase's"}
+    };
   }
 }
 
@@ -194,6 +317,11 @@ message DatabaseColumn {
 // DatabaseRow is one result row: one JSON value per column.
 message DatabaseRow {
   repeated google.protobuf.Value values = 1;
+  // The 0-based indexes, into values, of the cells cut at 4 KiB, ascending;
+  // empty when none was. A cut cell's text also ends with a
+  // "…[truncated: N of M bytes shown]" marker, for a reader that shows the
+  // text as is.
+  repeated int32 truncated_cells = 2;
 }
 
 message QueryDatabasePanelRequest {
@@ -331,4 +459,330 @@ message DashboardColumn {
   string name = 1;
   // The Postgres type, e.g. "bigint", "timestamp with time zone".
   string pg_type = 2;
+}
+
+message ListBrowsableDatabasesRequest {
+  // The control-plane environment id (deploy_environments.id).
+  string environment_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message ListBrowsableDatabasesResponse {
+  // Sorted by name.
+  repeated BrowsableDatabase databases = 1;
+}
+
+// BrowsableDatabase is one database of the environment, as the data browser's
+// database selector shows it.
+message BrowsableDatabase {
+  // The name DescribeDatabase and BrowseTable take as database: the
+  // ManagedDatabase's or ExternalDatabase's name in the release shape.
+  string name = 1;
+  BrowsableDatabaseKind kind = 2;
+  // The data_access policy a read of this database runs under. AUDITED means
+  // DescribeDatabase and BrowseTable need confirm_env_id and a reason; DENY
+  // means they are refused.
+  DataAccessPolicy policy = 3;
+  // Whether the control plane can connect to the database. False: the
+  // database is listed but cannot be browsed, and unreachable_reason says why.
+  bool reachable = 4;
+  // Why the database cannot be reached, for a person: "self-managed: no hosted
+  // placement", "external database not dialable from the control plane".
+  // Empty when reachable.
+  string unreachable_reason = 5;
+}
+
+// BrowsableDatabaseKind is how the environment declares a database.
+enum BrowsableDatabaseKind {
+  BROWSABLE_DATABASE_KIND_UNSPECIFIED = 0;
+  // A forge.ManagedDatabase: forge provisions and runs it.
+  BROWSABLE_DATABASE_KIND_MANAGED = 1;
+  // A forge.ExternalDatabase: a Postgres the environment uses and forge does
+  // not run.
+  BROWSABLE_DATABASE_KIND_EXTERNAL = 2;
+}
+
+// DataAccessPolicy is the environment's recorded forge.DataAccess db_query
+// policy (the service header's POLICY).
+enum DataAccessPolicy {
+  // Not recorded or not understood: refused, as DENY.
+  DATA_ACCESS_POLICY_UNSPECIFIED = 0;
+  // Anyone who may query reads without a confirmation or reason.
+  DATA_ACCESS_POLICY_OPEN = 1;
+  // A person with the db:query grant, plus confirm_env_id and a reason on
+  // every call.
+  DATA_ACCESS_POLICY_AUDITED = 2;
+  // Every read is refused.
+  DATA_ACCESS_POLICY_DENY = 3;
+}
+
+message DescribeDatabaseRequest {
+  // The control-plane environment id (deploy_environments.id).
+  string environment_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Which database of the environment: a BrowsableDatabase.name.
+  string database = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // For an audited environment: must equal environment_id, as in
+  // QueryDatabaseRequest.
+  optional string confirm_env_id = 3 [(buf.validate.field).string.max_len = 128];
+  // For an audited environment: why. Recorded in the audit row and the
+  // activity feed.
+  optional string reason = 4 [(buf.validate.field).string.max_len = 500];
+}
+
+message DescribeDatabaseResponse {
+  // The database described: the request's.
+  string database = 1;
+  // Every table and view forge_ro may SELECT, sorted by schema then name.
+  // System schemas (pg_catalog, information_schema, pg_toast) are absent.
+  repeated DatabaseTable tables = 2;
+  int64 duration_ms = 3;
+  // The audit_log row that recorded this call.
+  string audit_id = 4;
+}
+
+// DatabaseTable is one table or view as forge_ro sees it.
+message DatabaseTable {
+  string schema = 1;
+  string name = 2;
+  DatabaseTableKind kind = 3;
+  // The planner's estimate (pg_class.reltuples), not a count. -1 when
+  // unknown: a view, or a table never analyzed.
+  int64 estimated_rows = 4;
+  // COMMENT ON TABLE, or empty.
+  string comment = 5;
+  // The columns forge_ro may SELECT, in table order. A column it cannot read
+  // (forge:secret) is absent.
+  repeated DatabaseTableColumn columns = 6;
+  // The primary key's columns, in key order. Empty when the table has none
+  // (or is a view); the row page then has no stable address. A key column
+  // forge_ro cannot read makes this empty too.
+  repeated string primary_key = 7;
+  // The foreign keys declared on this table, pointing out of it: schema and
+  // table are this table's, ref_schema and ref_table the referenced one's.
+  // The referenced table may be absent from tables when forge_ro cannot read
+  // it; the value is still shown, without a link.
+  repeated DatabaseForeignKey foreign_keys = 8;
+  // The foreign keys of other readable tables that point at this one: schema
+  // and table are the referencing table's, ref_schema and ref_table this
+  // table's. A referencing table forge_ro cannot read is absent, so every
+  // entry can be browsed with an eq filter on its columns.
+  repeated DatabaseForeignKey referenced_by = 9;
+}
+
+// DatabaseTableKind is what kind of relation a DatabaseTable is.
+enum DatabaseTableKind {
+  DATABASE_TABLE_KIND_UNSPECIFIED = 0;
+  // An ordinary or partitioned table.
+  DATABASE_TABLE_KIND_TABLE = 1;
+  DATABASE_TABLE_KIND_VIEW = 2;
+  DATABASE_TABLE_KIND_MATERIALIZED_VIEW = 3;
+  // A foreign table (postgres_fdw and the like).
+  DATABASE_TABLE_KIND_FOREIGN_TABLE = 4;
+}
+
+// IdentitySubjectKind describes an explicitly marked managed-identity subject.
+enum IdentitySubjectKind {
+  IDENTITY_SUBJECT_KIND_UNSPECIFIED = 0;
+  IDENTITY_SUBJECT_KIND_ID = 1;
+  IDENTITY_SUBJECT_KIND_EMAIL = 2;
+}
+
+// DatabaseTableColumn is one column of a DatabaseTable.
+message DatabaseTableColumn {
+  string name = 1;
+  // The column's declared type as Postgres prints it (format_type), with
+  // its modifiers: "bigint", "character varying(40)", "timestamp with time
+  // zone", "text[]", an enum's name. For display: it is the spelling a
+  // person reads, not DatabaseColumn's internal name ("int8") that a
+  // BrowseTable result column carries.
+  string pg_type = 2;
+  bool nullable = 3;
+  // COMMENT ON COLUMN, or empty.
+  string comment = 4;
+  // The column is part of the table's primary key.
+  bool is_primary_key = 5;
+  // Explicit forge:identity-subject marker on this role-visible column.
+  // Invalid or conflicting markers are UNSPECIFIED; names are never inferred.
+  IdentitySubjectKind identity_subject = 6;
+}
+
+// DatabaseForeignKey is one foreign-key constraint, always written from the
+// referencing side: columns[i] of schema.table references ref_columns[i] of
+// ref_schema.ref_table.
+message DatabaseForeignKey {
+  // The constraint's name.
+  string constraint = 1;
+  // The referencing table.
+  string schema = 2;
+  string table = 3;
+  // The referencing columns, in constraint order.
+  repeated string columns = 4;
+  // The referenced table.
+  string ref_schema = 5;
+  string ref_table = 6;
+  // The referenced columns, in constraint order: as long as columns.
+  repeated string ref_columns = 7;
+}
+
+message BrowseTableRequest {
+  // The control-plane environment id (deploy_environments.id).
+  string environment_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Which database of the environment: a BrowsableDatabase.name.
+  string database = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // The table or view, schema-qualified and unquoted: "public.chats". It must
+  // equal schema + "." + name of one DescribeDatabase table.
+  string table = 3 [
+    (buf.validate.field).string.min_len = 3,
+    (buf.validate.field).string.max_len = 127
+  ];
+  // The columns to return, in this order. Empty = every column forge_ro may
+  // read, in table order.
+  repeated string columns = 4 [
+    (buf.validate.field).repeated.max_items = 1600,
+    (buf.validate.field).repeated.unique = true,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 63
+  ];
+  // ANDed together.
+  repeated BrowseFilter filters = 5 [(buf.validate.field).repeated.max_items = 20];
+  // In priority order. Empty = the primary key ascending, or no ORDER BY when
+  // the table has none (pages are then not stable).
+  repeated BrowseSort sort = 6 [(buf.validate.field).repeated.max_items = 8];
+  // Rows in the page, 1 to 500.
+  int32 limit = 7 [
+    (buf.validate.field).int32.gte = 1,
+    (buf.validate.field).int32.lte = 500
+  ];
+  // Rows skipped before the page. At most 1,000,000: past that, narrow with a
+  // filter or a sort instead.
+  int64 offset = 8 [
+    (buf.validate.field).int64.gte = 0,
+    (buf.validate.field).int64.lte = 1000000
+  ];
+  // Whether and how to count the rows that match the filters.
+  BrowseCount count = 9 [(buf.validate.field).enum.defined_only = true];
+  // For an audited environment: must equal environment_id, as in
+  // QueryDatabaseRequest.
+  optional string confirm_env_id = 10 [(buf.validate.field).string.max_len = 128];
+  // For an audited environment: why. Recorded in the audit row and the
+  // activity feed.
+  optional string reason = 11 [(buf.validate.field).string.max_len = 500];
+}
+
+// BrowseFilter is one condition on one column. Values are bound as text
+// parameters and converted by Postgres to the column's type, so "42",
+// "2026-01-31" and "true" all work against the matching types.
+message BrowseFilter {
+  string column = 1 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 63
+  ];
+  BrowseFilterOp op = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Exactly one for EQ through ILIKE; one or more for IN; none for IS_NULL
+  // and NOT_NULL.
+  repeated string values = 3 [
+    (buf.validate.field).repeated.max_items = 100,
+    (buf.validate.field).repeated.items.string.max_len = 4096
+  ];
+}
+
+// BrowseFilterOp is a BrowseFilter's comparison.
+enum BrowseFilterOp {
+  // Refused.
+  BROWSE_FILTER_OP_UNSPECIFIED = 0;
+  // column = value
+  BROWSE_FILTER_OP_EQ = 1;
+  // column <> value. A NULL cell does not match.
+  BROWSE_FILTER_OP_NEQ = 2;
+  BROWSE_FILTER_OP_LT = 3;
+  BROWSE_FILTER_OP_LTE = 4;
+  BROWSE_FILTER_OP_GT = 5;
+  BROWSE_FILTER_OP_GTE = 6;
+  // column LIKE value, the value's % and _ as Postgres reads them. A text
+  // column only.
+  BROWSE_FILTER_OP_LIKE = 7;
+  // column ILIKE value. A text column only.
+  BROWSE_FILTER_OP_ILIKE = 8;
+  // column IS NULL
+  BROWSE_FILTER_OP_IS_NULL = 9;
+  // column IS NOT NULL
+  BROWSE_FILTER_OP_NOT_NULL = 10;
+  // column = ANY(values)
+  BROWSE_FILTER_OP_IN = 11;
+}
+
+// BrowseSort orders the page by one column.
+message BrowseSort {
+  string column = 1 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 63
+  ];
+  // Descending, NULLs first (Postgres's default for DESC); ascending puts
+  // them last.
+  bool desc = 2;
+}
+
+// BrowseCount is whether BrowseTable counts the matching rows.
+enum BrowseCount {
+  // As NONE.
+  BROWSE_COUNT_UNSPECIFIED = 0;
+  // No count: total is absent. The cheapest; has_more still says whether
+  // there is a next page.
+  BROWSE_COUNT_NONE = 1;
+  // The planner's estimate for the filtered query: total_is_estimate is set.
+  BROWSE_COUNT_ESTIMATED = 2;
+  // count(*) over the filtered query, stopping at a cap the server sets: past
+  // it, total is the cap and total_is_lower_bound is set.
+  BROWSE_COUNT_EXACT = 3;
+}
+
+message BrowseTableResponse {
+  // The columns returned, in order: the request's, or every readable one.
+  repeated DatabaseColumn columns = 1;
+  // In column order. A cell longer than 4 KiB is cut and marked.
+  repeated DatabaseRow rows = 2;
+  // There are rows past this page. The next page is offset + len(rows): the
+  // response-size cap may cut a page shorter than limit.
+  bool has_more = 3;
+  // The matching rows, when count was ESTIMATED or EXACT. Absent for NONE.
+  optional int64 total = 4;
+  // total is the planner's estimate (count ESTIMATED).
+  bool total_is_estimate = 5;
+  // total is the EXACT count's cap: at least this many rows match.
+  bool total_is_lower_bound = 6;
+  int64 duration_ms = 7;
+  // The audit_log row that recorded this call.
+  string audit_id = 8;
+  // The database and table that answered, as the request named them.
+  string database = 9;
+  string table = 10;
+  // Which server answered: "ro" (a read replica) or "rw" (the primary).
+  string replica = 11;
+  // The response-size cap cut the page short of limit: fewer rows came back
+  // than asked for although more match (has_more is set too). Continue from
+  // next_offset, not offset + limit.
+  bool truncated = 12;
+  // The offset of the next page: the request's offset plus the rows
+  // returned. Meaningful when has_more is set.
+  int64 next_offset = 13;
 }

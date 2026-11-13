@@ -119,6 +119,87 @@ service StreamingService {
   rpc StreamChatUpdates(StreamChatUpdatesRequest) returns (stream ChatStreamEvent) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // StreamOrgUpdates opens an organization's feed of what its members shared
+  // (control-plane docs/design/org-sharing.md §5.2): a replay of the org's
+  // coarse events since since_seq, exactly one caught_up, then live events,
+  // for the "Shared with the org" list. One row per event, never one per
+  // viewer, and never the transcript: a chat's detail is its own
+  // StreamChatUpdates, opened when a viewer opens it. The caller's own
+  // chats and projects are left out (their own list has them).
+  //
+  // The org must be one the caller is a live member of (PERMISSION_DENIED
+  // otherwise; unset: their default org), the caller must be a person signed
+  // in to the app (PERMISSION_DENIED, person_required), and membership is
+  // asked again while the stream is open: a member removed from the org has
+  // the stream ended. since_seq 0 (or a cursor ahead of the feed) replays
+  // nothing: the client reads ListSharedChats/ListSharedProjects and follows
+  // from the caught_up sequence.
+  rpc StreamOrgUpdates(StreamOrgUpdatesRequest) returns (stream OrgStreamEvent) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// ============================================
+// Org feed (StreamOrgUpdates)
+// ============================================
+
+// OrgUpdateType is what happened to a shared chat or project.
+enum OrgUpdateType {
+  ORG_UPDATE_TYPE_UNSPECIFIED = 0;
+  // It was shared with the org: add it to the list.
+  ORG_UPDATE_TYPE_SHARED = 1;
+  // It was made private: remove it (a bare marker, ids only).
+  ORG_UPDATE_TYPE_UNSHARED = 2;
+  // Its title, state or activity changed: refresh its row.
+  ORG_UPDATE_TYPE_CHANGED = 3;
+  // It was deleted: remove it (a bare marker, ids only).
+  ORG_UPDATE_TYPE_DELETED = 4;
+}
+
+message StreamOrgUpdatesRequest {
+  // The org to follow; unset is the caller's default org.
+  optional string org_id = 1;
+  // The org-feed sequence to resume after (OrgUpdate.sequence_number). 0 is
+  // a fresh start: nothing is replayed.
+  int64 since_seq = 2;
+}
+
+// OrgUpdate is one coarse event about a chat or project shared with an org.
+message OrgUpdate {
+  int64 sequence_number = 1;
+  OrgUpdateType type = 2;
+  // "chat" or "project".
+  string resource_kind = 3;
+  string resource_id = 4;
+  // Whose it is.
+  string owner_user_id = 5;
+  // The project a chat is in.
+  optional string project_id = 6;
+  // Unset on UNSHARED and DELETED.
+  optional string title = 7;
+  // A chat's coarse activity; unset for a project and on a marker.
+  optional ChatActivity activity = 8;
+  string created_at = 9;
+}
+
+message OrgUpdateBatch {
+  repeated OrgUpdate updates = 1;
+  int64 latest_sequence = 2;
+}
+
+message OrgCaughtUp {
+  // The org feed's sequence the replay delivered through: the cursor to
+  // resume from.
+  int64 latest_sequence = 1;
+}
+
+message OrgStreamEvent {
+  oneof event {
+    OrgUpdateBatch updates = 1;
+    OrgCaughtUp caught_up = 2;
+    Heartbeat heartbeat = 3;
+  }
 }
 
 // ============================================
@@ -135,6 +216,10 @@ message StreamChatUpdatesRequest {
   // The project the client's user stream (StreamUserUpdates) is scoped to,
   // or unset when it streams every project. See ChatUserUpdates.
   optional string project_id = 3;
+  // How finished tool calls' bodies are sent in the snapshot and in replayed
+  // updates. Live updates are always sent in full. Unset is
+  // TOOL_BODY_MODE_FULL.
+  optional ToolBodyMode tool_bodies = 4;
 }
 
 // ChatStreamEvent is one frame of a chat's detail stream.
@@ -260,6 +345,12 @@ message UserUpdateData {
   string entity_id = 9;
   string data_json = 10;                       // JSON-encoded update data
   string created_at = 11;
+  // The org the update is about: the one it was stored with, else the org of
+  // the chat, project or saved workflow it names, as the stream decided when
+  // it chose to deliver it. Unset for an update about nothing of an org (a
+  // daemon signal), or about a resource not yet stamped with one. A client
+  // showing one org at a time ignores updates about another.
+  optional string org_id = 12;
 }
 
 // ============================================

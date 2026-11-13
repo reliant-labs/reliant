@@ -40,11 +40,24 @@ const (
 	OnLimitFallback OnLimit = "fallback"
 )
 
+// Funding is whose accounts a chat in an org uses first. The empty value
+// inherits the person's per-org setting.
+type Funding string
+
+const (
+	FundingInherit       Funding = ""
+	FundingOrgFirst      Funding = "org_first"
+	FundingPersonalFirst Funding = "personal_first"
+	FundingOrgOnly       Funding = "org_only"
+)
+
 // ProviderPolicy is stored and returned, never interpreted here.
 type ProviderPolicy struct {
 	OnLimit OnLimit `json:"on_limit,omitempty"`
 	// FallbackModel is "<model>@<driver>".
 	FallbackModel string `json:"fallback_model,omitempty"`
+	// Funding is the chat's funding order (org-provider-accounts §4.4).
+	Funding Funding `json:"funding,omitempty"`
 }
 
 // Selection is one chat's record.
@@ -110,6 +123,9 @@ type Service interface {
 	// that changes nothing stores nothing and keeps the version.
 	Merge(ctx context.Context, chatID, userID, workflowName string, patch map[string]any, expectedVersion int64) (*Selection, error)
 	// SetPolicy replaces the provider policy, with the same version rules.
+	// Only a person changes its Funding (auth.RequirePerson): for anyone else
+	// an unspecified Funding keeps the current one, and another is refused,
+	// decided under the record's lock.
 	SetPolicy(ctx context.Context, chatID, userID, workflowName string, policy ProviderPolicy, expectedVersion int64) (*Selection, error)
 	// Copy gives toChatID a copy of fromChatID's selection (BranchChat).
 	Copy(ctx context.Context, fromChatID, toChatID, userID string) error

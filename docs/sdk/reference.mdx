@@ -3,7 +3,7 @@ title: "SDK API reference"
 description: "Every remote procedure in Reliant's public API, which Go SDK method wraps it, and what the SDK deliberately leaves out"
 ---
 
-Reliant's public API is a deliberately small slice of its full API: 22 procedures across six services, all in the `reliant.v1` package and all served over [Connect](https://connectrpc.com/). This page lists them. The Go SDK wraps each in a method, and its generated clients contain exactly these procedures and no others, so a procedure that is not here cannot be called through the SDK, whatever token you hold.
+Reliant's public API is a deliberately small slice of its full API: 27 procedures across six services, all in the `reliant.v1` package and all served over [Connect](https://connectrpc.com/). This page lists them. The Go SDK wraps each in a method, and its generated clients contain exactly these procedures and no others, so a procedure that is not here cannot be called through the SDK, whatever token you hold.
 
 <Note>
   This page is written by hand from `proto/public-api.txt` in the [Reliant repository](https://github.com/reliant-labs/reliant), the file that decides what is public. It is not generated yet, so it can fall behind that file. A generator that writes it from the public descriptors is planned. When this page and the file disagree, the file is right.
@@ -53,9 +53,11 @@ A run's progress is the update feed of the session it lives in, and its open gat
 |---|---|---|
 | `ChatService/GetChatUpdates` | Used by `Runs.Follow` | Fetches a session's updates since a sequence number. |
 | `ChatService/GetWorkflowExecutions` | Used by `Runs.Follow`, `Runs.Status`, `Gates.Pending` | Returns the session's tree of workflow executions. |
+| `ChatService/GetContentBlockBodies` | `Runs.ContentBlockBodies` | Returns the bodies of a session's content blocks by block id: the tool inputs, tool results and thinking that a read with `tool_bodies` set to `TOOL_BODY_MODE_STUB` left out and marked `body_elided`. At most 100 ids a request; ids past the response's byte budget come back in `deferred`, and the method asks for them again. |
 | `QuestionService/ListPendingQuestions` | `Gates.Pending` | Lists the pending questions in a session, oldest first, each naming the thread that asked. |
 | `QuestionService/ResolveQuestion` | `Gates.Answer` | Answers a pending question. |
 | `ApprovalService/ListApprovalsByChat` | `Gates.Pending`, `Approvals.List`, `Approvals.ListForRun` | Lists a session's approvals. Reading only. |
+| `ApprovalService/Approve`, `Deny`, `BatchApprove`, `BatchDeny` | `Approvals.Approve`, `Approvals.Deny`, `Approvals.BatchApprove`, `Approvals.BatchDeny` | Decides approvals. Needs `approvals:decide` granted explicitly (`reliant:api` is not enough); a machine-bound token is refused. |
 
 ## Inbox
 
@@ -87,7 +89,6 @@ Every other procedure on this page, including the trigger reads, the chat reads,
 | Withheld | Why |
 |---|---|
 | Enabling, disabling, creating, updating or deleting a trigger (`EnableWorkflow`, `DisableWorkflow`, `SetTriggerEnabled`, `CreateTrigger`, `UpdateTrigger`, `DeleteTrigger`) and `RotateWebhookToken` | They decide whether an automation runs at all, as whom and where. The `triggers:manage` scope guards them on the server; see [scopes](/sdk/overview#scopes). |
-| Approving or denying (`Approve`, `Deny`, `BatchApprove`, `BatchDeny`) | An approval means a person said yes. |
 | Minting tokens (`TokenService`) | A token never mints a token. |
 | Binding a chat to a machine (`SetChatDaemon`), the inbox's machine-storage actions (`CleanupStorage`, `ForgetStorageWorktree`) and every service a machine uses to talk to Reliant | They wire up or change infrastructure, not your code. |
 
@@ -95,7 +96,7 @@ Every other service in the API, such as projects, workflows, settings, connectio
 
 ## The TypeScript SDK
 
-`@reliantlabs/sdk` generates its own, smaller set, for the streams a frontend renders. It is `StreamingService` (`StreamUserUpdates` and `StreamChatUpdates`), `BackgroundService/StreamProcessOutput` and `ChatService/SendMessage`. These are not in the Go list above, because a chat stream is how a UI shows a conversation rather than how a program drives a run. [The TypeScript guide](/sdk/typescript) covers them, and the Go SDK does not wrap them.
+`@reliantlabs/sdk` generates its own, smaller set, for the streams a frontend renders. It is `StreamingService` (`StreamUserUpdates` and `StreamChatUpdates`), `BackgroundService/StreamProcessOutput` and `ChatService/SendMessage`, with the transcript reads a chat view needs: `ChatService/ListMessages` for older pages and `ChatService/GetContentBlockBodies` for the tool bodies a stub read left out. These are not in the Go list above, because a chat stream is how a UI shows a conversation rather than how a program drives a run. [The TypeScript guide](/sdk/typescript) covers them, and the Go SDK does not wrap them.
 
 ## Related topics
 

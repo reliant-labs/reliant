@@ -112,6 +112,12 @@ type Runner struct {
 
 	// onRunStep is Options.OnRunStep.
 	onRunStep func(nodePath, command string)
+
+	// cancelAtRunStep, when set, is the path of a `run` node whose dispatch
+	// cancels the whole run, the way control_run cancel does, while the
+	// command is still running — a test seam for what a cancel runs
+	// (finally) and what it leaves alone (on_failure).
+	cancelAtRunStep string
 }
 
 // versionOverride is what GetVersion(changeID, DefaultVersion, max) returns.
@@ -216,6 +222,15 @@ type recorder struct {
 	// stepError is the first step-level failure the runtime reported
 	// (FailStep): which node, and why.
 	stepErrorNode, stepErrorMessage string
+
+	// verdict and verdictNode are the outcome the ROOT run's terminal
+	// "completed" WorkflowStatus carried ("success"/"failure"; empty when the
+	// graph declared none) and the node that declared it.
+	verdict, verdictNode string
+
+	// implicitApprovals are approval nodes resolved as approved because the
+	// scenario gave them no status.
+	implicitApprovals []string
 }
 
 func newRecorder() *recorder {
@@ -335,6 +350,57 @@ func (r *recorder) snapshotReached() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]string(nil), r.reached...)
+}
+
+// recordWorkflowStatus keeps the verdict of the root run's completion. A child
+// run's status (one with a parent) is its own business: its verdict reaches
+// the parent through the node that ran it, not as the parent's verdict.
+func (r *recorder) recordWorkflowStatus(in map[string]interface{}) {
+	status, _ := in["status"].(string)
+	parent, _ := in["parent_workflow_id"].(string)
+	if status != "completed" || parent != "" {
+		return
+	}
+	outcome, _ := in["outcome"].(string)
+	node, _ := in["outcome_node"].(string)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.verdict, r.verdictNode = outcome, node
+}
+
+func (r *recorder) recordImplicitApproval(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, seen := range r.implicitApprovals {
+		if seen == id {
+			return
+		}
+	}
+	r.implicitApprovals = append(r.implicitApprovals, id)
+}
+
+// implicitApprovalWarnings names each approval the run resolved as approved
+// only because the scenario said nothing about it.
+func (r *recorder) implicitApprovalWarnings() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, 0, len(r.implicitApprovals))
+	for _, id := range r.implicitApprovals {
+		out = append(out, fmt.Sprintf("approval %q had no status in the scenario and was resolved as "+
+			"approved; production waits for a person (approved or denied) or its timeout — add an event "+
+			"with status: approved to make this the tested path on purpose", id))
+	}
+	return out
+}
+
+func (r *recorder) snapshotLoopIterations() map[string]int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make(map[string]int, len(r.loopIterations))
+	for id, n := range r.loopIterations {
+		out[id] = n
+	}
+	return out
 }
 
 func (r *recorder) recordCompleted(id string, out map[string]interface{}) {
@@ -700,6 +766,10 @@ func (r *Runner) Run(sc *scenario.Scenario) *Result {
 // really happened. It never panics and always returns within the runner's
 // timeout (or ctx's deadline, whichever is sooner).
 func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result *Result) {
+	// The SDK's per-process cold start is paid here, before this scenario's
+	// clock and budget start, so every scenario gets the same budget wherever
+	// it falls in the order (see temporaltest.WarmUp).
+	temporaltest.WarmUp()
 	start := time.Now()
 	defer func() {
 		if p := recover(); p != nil {
@@ -768,7 +838,15 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 	go func() {
 		defer close(runDone)
 		defer func() { runPanic = recover() }()
-		env.ExecuteWorkflow(runtime.DynamicWorkflow, runtime.WorkflowInput{
+		// Fixtures enter only the root's in-memory workflow context, not the
+		// production WorkflowInput/resume contract or child workflow arguments.
+		root := runtime.DynamicWorkflow
+		if len(sc.State) > 0 {
+			root = func(ctx workflow.Context, input runtime.WorkflowInput) (*runtime.WorkflowResult, error) {
+				return runtime.DynamicWorkflow(runtime.WithScenarioState(ctx, sc.State), input)
+			}
+		}
+		env.ExecuteWorkflow(root, runtime.WorkflowInput{
 			ChatID:       "scenario-chat",
 			WorkflowName: r.workflow.GetName(),
 			Inputs:       inputs,
@@ -797,7 +875,7 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		case <-runDone:
 		case <-time.After(2 * time.Second):
 		}
-		msg := nonTerminatingMessage
+		msg := budgetExhaustedMessage(time.Since(start), rec.snapshotLoopIterations())
 		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			msg = "scenario run cancelled: " + ctx.Err().Error()
 		}
@@ -819,8 +897,9 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		msg := fmt.Sprint(runPanic)
 		if strings.HasPrefix(msg, "test timeout") {
 			// The env's idle timeout: the workflow blocked on something no
-			// scenario event can satisfy.
-			msg = nonTerminatingMessage + " (" + firstLine(msg) + ")"
+			// scenario event can satisfy. Nothing was dispatching, so this
+			// is a stall, never a spinning loop.
+			msg = stalledMessage + " (" + firstLine(msg) + ")"
 		} else {
 			msg = "workflow panicked: " + firstLine(msg)
 		}
@@ -862,8 +941,11 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 	// stays assertable — under the same field name the real runtime uses
 	// (model.LoopOutputIterationsField). A loop the query DID report already
 	// carries a real `_iterations` from the runtime itself and is skipped here.
+	//
+	// Only LOOP nodes: the runtime checkpoints every top-level node's entry,
+	// and a run node that errored has no outputs either, but no `_iterations`.
 	for nodeID, iterations := range rec.loopIterations {
-		if _, isActivityNode := rec.outputs[nodeID]; isActivityNode {
+		if _, isActivityNode := rec.outputs[nodeID]; isActivityNode || !isTopLevelLoop(r.workflow, nodeID) {
 			continue
 		}
 		rec.outputs[nodeID] = map[string]interface{}{model.LoopOutputIterationsField: iterations}
@@ -903,6 +985,16 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		}
 	}
 
+	// And the finally handler.
+	var finally *scenario.FinallyObserved
+	if r.workflow.GetFinally() != nil {
+		finally = &scenario.FinallyObserved{}
+		var rec runtime.FinallyRecord
+		if q, qErr := env.QueryWorkflow(runtime.FinallyQuery); qErr == nil && q.Get(&rec) == nil {
+			*finally = scenario.FinallyObserved{Ran: rec.Ran, Status: rec.Status, HandlerError: rec.HandlerError}
+		}
+	}
+
 	execution := scenario.ExecutionDetails{
 		NodesReached:   rec.reached,
 		NodesCompleted: rec.completed,
@@ -914,6 +1006,7 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		// saved" is a real answer (see scenario.checkMessageExpectations).
 		SavedMessages: append([]scenario.SavedMessage{}, rec.saved...),
 		OnFailure:     onFailure,
+		Finally:       finally,
 	}
 
 	if runErr := env.GetWorkflowError(); runErr != nil {
@@ -929,7 +1022,15 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 			}
 		}
 	} else {
-		execution.Outcome = "completed"
+		execution.Outcome = string(scenario.OutcomeCompleted)
+		// "Ran to the end of the graph" is not "passed": a run that routed to
+		// a terminal node declaring `outcome: failure` returns no error, and
+		// production records it failed (it is not archived, on_failure runs,
+		// the CLI exits non-zero). Report it the same way.
+		if rec.verdict == model.OutcomeFailure {
+			execution.Outcome = string(scenario.OutcomeFailed)
+			execution.OutcomeNode = rec.verdictNode
+		}
 		var wfResult *runtime.WorkflowResult
 		if err := env.GetWorkflowResult(&wfResult); err == nil && wfResult != nil {
 			execution.WorkflowOutputs = wfResult.Outputs
@@ -949,6 +1050,10 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 	}
 	result.Mismatches = mismatches
 	result.Warnings = scenario.AnalyzeFalsePasses(sc, r.workflow, &execution, scenario.WorkflowRefLoader(r.loadRef))
+	if w := scenario.CompletedOverFailedWarning(sc.Expect, &execution); w != "" {
+		result.Warnings = append(result.Warnings, w)
+	}
+	result.Warnings = append(result.Warnings, rec.implicitApprovalWarnings()...)
 
 	switch {
 	case len(mismatches) > 0:
@@ -959,6 +1064,17 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		result.Status = scenario.StatusPassed
 	}
 	return result
+}
+
+// isTopLevelLoop reports whether id names a loop node at the top of wf, the
+// only nodes whose iterations the runtime checkpoints.
+func isTopLevelLoop(wf *reliantv1.Workflow, id string) bool {
+	for _, n := range wf.GetNodes() {
+		if n.GetId() == id {
+			return n.GetType() == model.NodeTypeLoop
+		}
+	}
+	return false
 }
 
 // quietLogger discards the Temporal SDK's workflow and activity logging.
@@ -1069,7 +1185,9 @@ func nodeActivities() []string {
 // types.EmitStreamFinalizedInput), and Temporal's reflective dispatch fails
 // outright on a stub whose parameter type does not match.
 var infrastructureActivities = []string{
-	"WorkflowStatus",
+	// WorkflowStatus is NOT here: its terminal call carries the run's verdict
+	// (a terminal node's `outcome: failure`), so it is registered explicitly
+	// below and observed.
 	"WorkflowError",
 	"Cleanup",
 	"LoadPresetParams",
@@ -1106,13 +1224,42 @@ var infrastructureActivities = []string{
 	"LookupStoppedSubAgent",
 }
 
-// nonTerminatingMessage is reported when a scenario exhausts scenarioRunBudget.
-// It names the usual cause: a loop whose `while` reads mocked outputs stays true
-// once the scenario's events run out, because an unmatched node falls back to an
-// empty mock rather than to "the loop should stop".
-const nonTerminatingMessage = "scenario did not terminate within the run budget — " +
-	"a loop's while condition never went false (check that the scenario supplies " +
-	"a final event whose output exits the loop)"
+// nonTerminatingPrefix starts every message for a run cut off by its
+// wall-clock budget.
+const nonTerminatingPrefix = "scenario did not terminate within the run budget"
+
+// budgetExhaustedMessage reports a run cut off by its wall-clock budget after
+// elapsed. It blames a loop only when one was actually iterating: the usual
+// cause is a loop whose `while` reads mocked outputs and stays true once the
+// scenario's events run out, because an unmatched node falls back to an empty
+// mock rather than to "the loop should stop". A run with no loop iterating
+// was still working through its nodes, and saying "loop" there sends the
+// author hunting for a loop the workflow does not have.
+func budgetExhaustedMessage(elapsed time.Duration, loopIterations map[string]int) string {
+	msg := fmt.Sprintf("%s (cut off after %s)", nonTerminatingPrefix, elapsed.Round(100*time.Millisecond))
+	busiest, most := "", 0
+	for id, n := range loopIterations {
+		if n > most || (n == most && id < busiest) {
+			busiest, most = id, n
+		}
+	}
+	// A loop that re-entered its body at least once had its while evaluate
+	// true. One entry alone is not a loop spinning (a `workflow:` node also
+	// reports a single entry), just a body still running.
+	if most > 1 {
+		return msg + fmt.Sprintf(" — loop %q was still iterating after %d iteration(s): its while "+
+			"condition never went false (check that the scenario supplies a final event whose "+
+			"output exits the loop)", busiest, most)
+	}
+	return msg + " — no loop was iterating, so this is not a non-terminating loop: the run was " +
+		"still working through its nodes when the budget ran out (an overloaded machine, or a " +
+		"node waiting on something the scenario never supplies)"
+}
+
+// stalledMessage is reported when the workflow went idle — no activity, timer
+// or signal pending that the environment could deliver — before finishing.
+const stalledMessage = "scenario stalled: the workflow is waiting on something no scenario " +
+	"event supplies (an approval, question or signal with no event, or a timer)"
 
 // bareWorkflowName strips a workflow ref's scheme ("builtin://agent" -> "agent")
 // so a ref can be compared against a loaded workflow's own name.
@@ -1768,14 +1915,20 @@ func (r *Runner) registerActivities(
 	// is the real runtime's node-entry signal and is the only place a top-level
 	// loop node announces itself — which is what makes `reached: [agent_loop]`
 	// mean the same thing here as in the scenario.
+	//
+	// The runtime dispatches it as a LOCAL activity (executeBookkeeping), whose
+	// arguments are not serialized: Temporal calls the function with the Go
+	// value itself and refuses one whose parameter type differs. So the mock
+	// takes types.WorkflowCheckpointInput — with a map parameter every
+	// checkpoint failed argument validation, the runtime logged and ignored
+	// it, and no loop iteration was ever recorded here.
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
+		func(_ context.Context, in types.WorkflowCheckpointInput) (map[string]interface{}, error) {
 			if err := guard.check(); err != nil {
 				return nil, err
 			}
-			if nodeID, _ := in["node_id"].(string); nodeID != "" {
-				iteration, _ := in["loop_iteration"].(float64)
-				rec.recordEntered(nodeID, int(iteration))
+			if in.NodeID != "" {
+				rec.recordEntered(in.NodeID, int(in.LoopIteration))
 			}
 			return map[string]interface{}{"success": true}, nil
 		},
@@ -1811,8 +1964,12 @@ func (r *Runner) registerActivities(
 			status, _ := out["status"].(string)
 			if status == "" {
 				// No scenario event for this node: treat it as approved rather
-				// than hanging. A scenario that cares says so explicitly.
+				// than hanging, as scenarios have always relied on. Production
+				// has no such default — a person decides, or the timer fires
+				// — so the run is warned that it tested the approved path
+				// without saying so.
 				status = "approved"
+				rec.recordImplicitApproval(id)
 			}
 			actionTaken, _ := out["action_taken"].(string)
 			approvalID, _ := out["approval_id"].(string)
@@ -1863,7 +2020,16 @@ func (r *Runner) registerActivities(
 			out := events.next(id)
 			rec.recordCompleted(id, out)
 
-			hasFeedback, _ := out["has_feedback"].(bool)
+			hasFeedback, set := out["has_feedback"].(bool)
+			if !set {
+				// A response IS feedback in production (parseQuestionResponse
+				// sets has_feedback for any text or clicked option), so a mock
+				// that gives only a response means exactly that, rather than
+				// having its response blanked. A response with an explicit
+				// has_feedback: false is rejected by scenario validation.
+				response, _ := out["response"].(string)
+				hasFeedback = response != ""
+			}
 			answer := map[string]interface{}{"question": "", "selected": []string{"Continue"}, "freetext": ""}
 			if hasFeedback {
 				response, _ := out["response"].(string)
@@ -1901,6 +2067,21 @@ func (r *Runner) registerActivities(
 		)
 	}
 
+	// WorkflowStatus is bookkeeping like the stubs above, except that the
+	// root run's terminal "completed" call carries the graph's verdict: a run
+	// that routed to a node declaring `outcome: failure` finished its graph
+	// with no error and still did not pass. Observed, never steered.
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
+			if err := guard.check(); err != nil {
+				return nil, err
+			}
+			rec.recordWorkflowStatus(in)
+			return map[string]interface{}{}, nil
+		},
+		activity.RegisterOptions{Name: "WorkflowStatus"},
+	)
+
 	// FailStep is how the real runtime surfaces a step-level defect (a node
 	// config that fails CEL evaluation, an unknown node type). It MUST fail,
 	// exactly as the real handler does — stubbing it to success would turn the
@@ -1915,7 +2096,7 @@ func (r *Runner) registerActivities(
 			nodePath, _ := in["node_path"].(string)
 			rec.recordStepError(nodePath, msg)
 			// Non-retryable, as the real handler is (handlers.FailStepActivity).
-			return nil, temporal.NewNonRetryableApplicationError(fmt.Sprintf("workflow validation failed: %s", msg), "", nil)
+			return nil, temporal.NewNonRetryableApplicationError(handlers.FailStepMessagePrefix+msg, "", nil)
 		},
 		activity.RegisterOptions{Name: "FailStep"},
 	)
@@ -1948,7 +2129,7 @@ func (r *Runner) registerActivities(
 		// reached node. Register the shape the runtime actually sends.
 		if activityName == "ExecuteRunStep" {
 			env.RegisterActivityWithOptions(
-				func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
+				func(ctx context.Context, in map[string]interface{}) (map[string]interface{}, error) {
 					if err := guard.check(); err != nil {
 						return nil, err
 					}
@@ -1974,6 +2155,13 @@ func (r *Runner) registerActivities(
 					if r.onRunStep != nil {
 						command, _ := in["command"].(string)
 						r.onRunStep(id, command)
+					}
+					if r.cancelAtRunStep != "" && id == r.cancelAtRunStep {
+						// The command is in flight when the run is cancelled:
+						// it ends only when Temporal cancels it.
+						env.CancelWorkflow()
+						<-ctx.Done()
+						return nil, ctx.Err()
 					}
 					out := normalizeOutput(events.next(id), activityName)
 					var req *types.SaveMessageRequest

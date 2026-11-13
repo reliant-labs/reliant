@@ -11,7 +11,7 @@
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Interceptor } from '@connectrpc/connect'
+import { createContextValues, type Interceptor } from '@connectrpc/connect'
 import type { TransportBackend } from '../transport'
 
 // Stub the lib/constants module so importing transport.ts in the test env
@@ -64,26 +64,31 @@ beforeEach(() => {
 })
 
 describe('buildInterceptors factory', () => {
-  it('produces an 11-stage authed chain in the documented order', async () => {
+  it('produces a 13-stage authed chain in the documented order', async () => {
     const { buildInterceptors, traceStage } = await import('../transport')
+    const { writeOwnerInterceptor } = await import('../writeOwner')
     const chain = buildInterceptors({ withAuth: true })
     // error-normalize → timeout → auth → missing-token → org → daemon-last-seen →
-    // trace → error-log → upgrade → machine-wake → unauth
-    expect(chain).toHaveLength(11)
+    // trace → error-log → upgrade → machine-wake → unauth → write-owner → request-sent
+    expect(chain).toHaveLength(13)
     // The trace stage (the forge runtime's traceInterceptor) is at its documented position.
     expect(chain[6]).toBe(traceStage)
+    // The write-owner check is the innermost stage that can refuse: only the
+    // request-sent observer, which changes nothing, runs inside it, so it sees
+    // the header that leaves, retries included.
+    expect(chain[11]).toBe(writeOwnerInterceptor)
     // Every entry must be a function (Connect Interceptor shape).
     for (const entry of chain) {
       expect(typeof entry).toBe('function')
     }
   })
 
-  it('produces a 7-stage unauthed chain that omits auth, missing-token + 401-signout', async () => {
+  it('produces an 8-stage unauthed chain that omits auth, missing-token, 401-signout + write-owner', async () => {
     const { buildInterceptors } = await import('../transport')
     const authed = buildInterceptors({ withAuth: true })
     const unauthed = buildInterceptors({ withAuth: false })
-    // 11 - 4 (auth, missing-token, org, unauth) = 7
-    expect(unauthed).toHaveLength(7)
+    // 13 - 5 (auth, missing-token, org, unauth, write-owner) = 8
+    expect(unauthed).toHaveLength(8)
     // The unauthed chain is a subset of the authed chain — every entry in
     // unauthed must also appear in authed at the same relative ordering. If
     // someone reorders authentication into the unauthed path the lengths
@@ -95,21 +100,26 @@ describe('buildInterceptors factory', () => {
 
   it('defaults withAuth to true when no option object is passed', async () => {
     const { buildInterceptors } = await import('../transport')
-    expect(buildInterceptors()).toHaveLength(11)
-    expect(buildInterceptors({})).toHaveLength(11)
+    expect(buildInterceptors()).toHaveLength(13)
+    expect(buildInterceptors({})).toHaveLength(13)
   })
 
-  it('swaps exactly one stage (daemon-last-seen for forge-via) in the control-plane chain', async () => {
+  it('swaps one stage (daemon-last-seen for forge-via) and adds signup attribution in the control-plane chain', async () => {
     const { buildInterceptors } = await import('../transport')
+    const { signupAttributionInterceptor } = await import('../signupAttribution')
     const reliantApi = buildInterceptors({ withAuth: true })
     const controlPlane = buildInterceptors({ withAuth: true, backend: 'control-plane' })
-    expect(controlPlane).toHaveLength(reliantApi.length)
-    expect(controlPlane.filter((entry) => !reliantApi.includes(entry))).toHaveLength(1)
+    expect(controlPlane).toHaveLength(reliantApi.length + 1)
+    expect(controlPlane.filter((entry) => !reliantApi.includes(entry))).toHaveLength(2)
+    expect(controlPlane).toContain(signupAttributionInterceptor)
+    expect(reliantApi).not.toContain(signupAttributionInterceptor)
+    // Only signed-in requests carry it.
+    expect(buildInterceptors({ withAuth: false, backend: 'control-plane' })).not.toContain(signupAttributionInterceptor)
   })
 })
 
 // x-daemon-last-seen is read only by the reliant api-server. A production
-// build calls both servers cross-origin, and the control-plane admin-server's
+// build calls both servers cross-origin, and the control-plane platform-api's
 // CORS preflight does not allow this header, so attaching it there made the
 // browser block every controlplane.v1 RPC once a machine heartbeated. These
 // run the real chain end to end and look at what reaches the wire.
@@ -141,6 +151,8 @@ describe('x-daemon-last-seen scoping', () => {
       method: { name: 'Ping', input: { fields: [] } },
       header: new Headers(),
       signal: new AbortController().signal,
+      // Every real Connect request carries context values; the org stage reads them.
+      contextValues: createContextValues(),
       message: {},
     } as unknown as Parameters<Next>[0])
 

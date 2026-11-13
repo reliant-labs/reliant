@@ -17,7 +17,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=7064aff373de2307c7ba2d6923366a8cda113d2a5cd155655d5f38072de343dc
+// forge:hash=31ca19fe8887c32bad250a97b66e4eaade281737dedc87d86c619ae700483ec7
 
 // MockService is a test mock for the Service interface.
 //
@@ -27,14 +27,17 @@ import (
 // "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
-	IntrospectFunc        func(context.Context, string) (*fat.Principal, error)
-	IntrospectAccountFunc func(context.Context, string) (auth.AccessTokenAccount, error)
-	MintForUserFunc       func(context.Context, MintRequest) (Minted, error)
-	ListForUserFunc       func(context.Context, string, fat.Scope) ([]TokenInfo, error)
-	RevokeForUserFunc     func(context.Context, string, string) error
-	UpdateForUserFunc     func(context.Context, string, string, *string, fat.Set) (TokenInfo, error)
-	RevokeResourceFunc    func(context.Context, fat.Resource) (int64, error)
-	RevokeEphemeralFunc   func(context.Context, string) (int64, error)
+	IntrospectFunc           func(context.Context, string) (*fat.Principal, error)
+	IntrospectAccountFunc    func(context.Context, string) (auth.AccessTokenAccount, error)
+	MintForUserFunc          func(context.Context, MintRequest) (Minted, error)
+	ListForUserFunc          func(context.Context, string, fat.Scope) ([]TokenInfo, error)
+	RevokeForUserFunc        func(context.Context, string, string) error
+	UpdateForUserFunc        func(context.Context, string, string, *string, fat.Set) (TokenInfo, error)
+	RevokeResourceFunc       func(context.Context, fat.Resource) (int64, error)
+	RevokeEphemeralFunc      func(context.Context, string) (int64, error)
+	ResolveOrgMembershipFunc func(context.Context, string, string) (OrgMembership, error)
+	ResolveGoneOrgsFunc      func(context.Context, []string) ([]GoneOrg, error)
+	ResolveOrgPolicyFunc     func(context.Context, string) (OrgPolicy, error)
 }
 
 // Introspect records the call and delegates to IntrospectFunc when set.
@@ -107,6 +110,33 @@ func (m *MockService) RevokeEphemeral(ctx context.Context, userID string) (int64
 		return m.RevokeEphemeralFunc(ctx, userID)
 	}
 	return 0, contractkit.MockNotSet("MockService", "RevokeEphemeral")
+}
+
+// ResolveOrgMembership records the call and delegates to ResolveOrgMembershipFunc when set.
+func (m *MockService) ResolveOrgMembership(ctx context.Context, userID string, orgID string) (OrgMembership, error) {
+	m.Recorder.Record("ResolveOrgMembership", ctx, userID, orgID)
+	if m.ResolveOrgMembershipFunc != nil {
+		return m.ResolveOrgMembershipFunc(ctx, userID, orgID)
+	}
+	return OrgMembership{}, contractkit.MockNotSet("MockService", "ResolveOrgMembership")
+}
+
+// ResolveGoneOrgs records the call and delegates to ResolveGoneOrgsFunc when set.
+func (m *MockService) ResolveGoneOrgs(ctx context.Context, orgIDs []string) ([]GoneOrg, error) {
+	m.Recorder.Record("ResolveGoneOrgs", ctx, orgIDs)
+	if m.ResolveGoneOrgsFunc != nil {
+		return m.ResolveGoneOrgsFunc(ctx, orgIDs)
+	}
+	return nil, contractkit.MockNotSet("MockService", "ResolveGoneOrgs")
+}
+
+// ResolveOrgPolicy records the call and delegates to ResolveOrgPolicyFunc when set.
+func (m *MockService) ResolveOrgPolicy(ctx context.Context, orgID string) (OrgPolicy, error) {
+	m.Recorder.Record("ResolveOrgPolicy", ctx, orgID)
+	if m.ResolveOrgPolicyFunc != nil {
+		return m.ResolveOrgPolicyFunc(ctx, orgID)
+	}
+	return OrgPolicy{}, contractkit.MockNotSet("MockService", "ResolveOrgPolicy")
 }
 
 // Compile-time check.

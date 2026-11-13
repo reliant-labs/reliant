@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Copyright (c) 2025 Reliant Labs
 
 import { describe, expect, it } from "vitest";
@@ -36,6 +37,17 @@ describe("runStateOf with a reported suspend reason", () => {
     expect(v.kind).toBe("billing");
     expect(v.detail).toContain("Settle the invoice in Billing");
     expect(v.detail).not.toContain("Enable independent app hosting billing");
+  });
+
+  it("claimable_expired → expired (unclaimed), telling the user to claim it, not to press Start", () => {
+    const v = runStateOf(wl({ declared_run_state: "suspended", suspend_reason: "claimable_expired" }));
+    expect(v).toMatchObject({ kind: "expired", label: "Expired (unclaimed)" });
+    expect(v.detail).toContain("Claim it");
+    expect(v.label).not.toContain("Stopped by you");
+  });
+
+  it("claimable_expired stays expired even if declared running (a start cannot revive it)", () => {
+    expect(runStateOf(wl({ declared_run_state: "running", suspend_reason: "claimable_expired" })).kind).toBe("expired");
   });
 
   it("appends the platform's own words when it gave any", () => {
@@ -86,6 +98,12 @@ describe("envHeadline with a reported suspend reason", () => {
     expect(line.detail).toContain("Settle the invoice in Billing");
   });
 
+  it("an expired unclaimed preview is a problem that names the claim, not 'Stopped by you'", () => {
+    const line = envHeadline(live, status([wl({ declared_run_state: "suspended", suspend_reason: "claimable_expired" })]));
+    expect(line).toMatchObject({ tone: "problem", text: "Expired (unclaimed)" });
+    expect(line.detail).toContain("Claim it");
+  });
+
   it("owner reason is Stopped by you", () => {
     const line = envHeadline(live, status([wl({ declared_run_state: "suspended", suspend_reason: "owner" })]));
     expect(line).toMatchObject({ tone: "quiet", text: "Stopped by you" });
@@ -93,18 +111,21 @@ describe("envHeadline with a reported suspend reason", () => {
 });
 
 describe("toCloudEnvStatus maps the wire enum", () => {
-  const msg = (r: DeploySuspendReason) =>
+  const msg = (r: DeploySuspendReason | number) =>
     ({
       deployments: [{ deployment: { id: "d", name: "api", observed: { suspendReason: r } } }],
     }) as unknown as Parameters<typeof toCloudEnvStatus>[0];
-  const cases: [DeploySuspendReason, string][] = [
+  const cases: [DeploySuspendReason | number, string][] = [
+    // DEPLOY_SUSPEND_REASON_CLAIMABLE_EXPIRED: not in the vendored enum until the next re-vendor.
+    [4, "claimable_expired"],
+    [99, "unspecified"],
     [DeploySuspendReason.OWNER, "owner"],
     [DeploySuspendReason.NO_COMPUTE_PLAN, "no_compute_plan"],
     [DeploySuspendReason.BILLING_LAPSED, "billing_lapsed"],
     [DeploySuspendReason.UNSPECIFIED, "unspecified"],
   ];
   for (const [wire, want] of cases) {
-    it(`${DeploySuspendReason[wire]} → ${want}`, () => {
+    it(`${DeploySuspendReason[wire] ?? wire} → ${want}`, () => {
       expect(toCloudEnvStatus(msg(wire)).workloads[0].suspend_reason).toBe(want);
     });
   }

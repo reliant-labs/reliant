@@ -110,25 +110,38 @@ describe("frontendsOf", () => {
 
 describe("frontendsInScope", () => {
   const envs: ScopeEnv[] = [
-    { id: "env-staging", name: "staging", release: "v1.7.14", preview: false, placed: true },
-    { id: "env-prod", name: "prod", release: "v1.7.15", preview: false, placed: true },
-    { id: "env-pr-1", name: "pr-1", release: "v1.7.16", preview: true, placed: true },
-    { id: "env-self", name: "self", release: "v1", preview: false, placed: false },
+    { id: "env-staging", name: "staging", release: "v1.7.14", preview: false },
+    { id: "env-prod", name: "prod", release: "v1.7.15", preview: false },
+    { id: "env-pr-1", name: "pr-1", release: "v1.7.16", preview: true },
+    { id: "env-self", name: "self", release: "v1", preview: false },
+    { id: "env-cluster", name: "cluster", release: "v1", preview: false },
   ];
   const site = (url: string) => new Map([["web", workload({ url })]]);
   const hosted = new Map([
     ["staging", site("https://s.sites.example.dev")],
     ["prod", site("https://p.sites.example.dev")],
     ["pr-1", site("https://pr.sites.example.dev")],
-    ["self", site("https://self.example.dev")],
+    // A self-managed environment whose site the platform serves (control-plane's prod and reliant-web)…
+    ["self", site("https://self.sites.example.dev")],
+    // …and one with none: its GetStatus reports no static deployment.
+    ["cluster", new Map()],
   ]);
 
-  it("covers every long-lived environment for 'all', prod first, never previews or self-managed ones", () => {
-    expect(frontendsInScope("all", envs, hosted, null).map((f) => f.env)).toEqual(["prod", "staging"]);
+  it("covers every long-lived environment for 'all', prod first, never previews", () => {
+    expect(frontendsInScope("all", envs, hosted, null).map((f) => f.env)).toEqual(["prod", "staging", "self"]);
   });
 
   it("covers just the named environment, a preview included", () => {
     expect(frontendsInScope("pr-1", envs, hosted, null).map((f) => f.url)).toEqual(["https://pr.sites.example.dev"]);
-    expect(frontendsInScope("self", envs, hosted, null)).toEqual([]);
+  });
+
+  // Prod: control-plane's prod is self-managed (its services on its own GKE
+  // cluster) and the platform serves its reliant-web site. The console listed
+  // only Reliant-run environments' sites, so that live site had no link.
+  it("lists the sites the platform serves for a self-managed environment, and none for one without", () => {
+    expect(frontendsInScope("self", envs, hosted, null).map((f) => [f.name, f.url, f.release])).toEqual([
+      ["web", "https://self.sites.example.dev", "v1"],
+    ]);
+    expect(frontendsInScope("cluster", envs, hosted, null)).toEqual([]);
   });
 });

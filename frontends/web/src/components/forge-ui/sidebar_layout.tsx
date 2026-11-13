@@ -38,11 +38,22 @@ export interface SidebarNavItem {
    * NAVIGATES to its own overview (`href`) and its children expand inline
    * under it. The group holding the current route stays open and every other
    * group closes (an accordion) — so open/closed is derived from `active`,
-   * never stored. A sub-page may carry a short list of its own (starred
+   * never stored (unless `defaultExpanded`, below). A sub-page may carry a short list of its own (starred
    * dashboards under Dashboards), shown indented and muted whenever its
    * group is open.
    */
   children?: SidebarNavItem[];
+  /**
+   * The group is a standing section rather than an accordion: it is expanded
+   * on every page, not only its own, and its chevron becomes a button of its
+   * own that collapses it (the row still navigates, and reopens it). Hidden,
+   * its current sub-page is marked on the parent, as on the rail.
+   */
+  defaultExpanded?: boolean;
+  /** Controlled `defaultExpanded` (forge#2011's API): the reader's choice, kept by the caller (to remember it). */
+  open?: boolean;
+  /** Called when the reader expands or collapses a `defaultExpanded`/`open` group. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 export interface SidebarUserInfo {
@@ -108,6 +119,24 @@ function useNarrow(): boolean {
     return () => query.removeEventListener("change", onChange);
   }, []);
   return narrow;
+}
+
+// Resolve on each keypress: collapsing a group changes the drawer's tab stops.
+// CSS-hidden desktop controls must not become the mobile trap's last stop.
+function drawerTabStops(panel: HTMLElement): HTMLElement[] {
+  return Array.from(
+    panel.querySelectorAll<HTMLElement>(
+      'a[href], button, input, select, textarea, [tabindex], [contenteditable="true"]',
+    ),
+  ).filter((element) => {
+    if (element.tabIndex < 0 || element.matches(":disabled") || element.closest("[inert], [hidden]")) return false;
+    for (let ancestor: HTMLElement | null = element; ancestor; ancestor = ancestor.parentElement) {
+      const style = window.getComputedStyle(ancestor);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+      if (ancestor === panel) break;
+    }
+    return true;
+  });
 }
 
 function itemKey(item: SidebarNavItem, i: number): string {
@@ -261,8 +290,8 @@ export default function SidebarLayout({
   // it closes, so a keyboard or screen-reader user is never left behind it.
   const wasShown = useRef(false);
   useEffect(() => {
-    if (drawerShown) {
-      navRef.current?.querySelector<HTMLElement>("a[href], button:not([disabled])")?.focus();
+    if (drawerShown && navRef.current) {
+      (drawerTabStops(navRef.current)[0] ?? navRef.current).focus();
     } else if (wasShown.current) {
       menuButtonRef.current?.focus();
     }
@@ -271,18 +300,34 @@ export default function SidebarLayout({
   useEffect(() => {
     if (!drawerShown) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // The open drawer is `aria-modal`, so a page-level Escape binding that
-      // defers to open dialogs (a console's "leave") steps aside for it.
-      event.preventDefault();
-      setDrawerOpen(false);
+      const panel = navRef.current;
+      if (!panel) return;
+      // A nested modal (including a portalled one) owns its own keyboard cycle.
+      const active = document.activeElement;
+      const owner = active instanceof Element ? active.closest('[aria-modal="true"]') : null;
+      if (owner && owner !== panel) return;
+      if (event.key === "Escape") {
+        // Page-level Escape bindings defer to this open modal.
+        event.preventDefault();
+        setDrawerOpen(false);
+      } else if (event.key === "Tab") {
+        const stops = drawerTabStops(panel);
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        // Also recover focus from page siblings/portals outside the inert column.
+        const outside = !panel.contains(active) || active === panel;
+        if (!first || outside || (event.shiftKey ? active === first : active === last)) {
+          event.preventDefault();
+          (event.shiftKey ? last ?? panel : first ?? panel).focus();
+        }
+      }
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [drawerShown]);
   const handleToggle = onToggle ?? (() => setInternalCollapsed((prev) => !prev));
   // A parent with children but no href of its own cannot open by navigating,
-  // so it toggles locally instead.
+  // so it toggles locally instead — as does an uncontrolled `defaultExpanded` group.
   const [openLocal, setOpenLocal] = useState<Record<string, boolean>>({});
 
   const sections: { label: string; items: SidebarNavItem[] }[] = [];
@@ -334,10 +379,21 @@ export default function SidebarLayout({
   function renderItem(item: SidebarNavItem, i: number) {
     const key = itemKey(item, i);
     const hasChildren = !!item.children && item.children.length > 0;
-    const open = hasChildren && (containsActive(item) || (!item.href && !!openLocal[key]));
-    // On the rail the sub-pages are hidden, so the parent stands in for
-    // whichever of them is current.
-    const marked = collapsed ? containsActive(item) : !!item.active;
+    // A standing group is open by the reader's choice, whatever the route.
+    const standing = hasChildren && (item.defaultExpanded !== undefined || item.open !== undefined);
+    const open = standing
+      ? (item.open ?? openLocal[key] ?? (!!item.defaultExpanded || containsActive(item)))
+      : hasChildren && (containsActive(item) || (!item.href && !!openLocal[key]));
+    const setOpen = (next: boolean) => {
+      setOpenLocal((prev) => ({ ...prev, [key]: next }));
+      item.onOpenChange?.(next);
+    };
+    // On the rail (or in a collapsed group) the sub-pages are hidden, so the
+    // parent stands in for whichever of them is current.
+    const marked = collapsed || !open ? containsActive(item) : !!item.active;
+    // A standing group with a page of its own needs a separate expand button:
+    // its row is a link, and a button cannot sit inside one.
+    const ownToggle = standing && !!item.href && !collapsed;
     const inner = (
       <>
         {item.icon && (
@@ -357,38 +413,62 @@ export default function SidebarLayout({
         )}
         {item.badge && <NavBadge badge={item.badge} rail={collapsed} />}
         {!collapsed && item.trailing && <span className="shrink-0">{item.trailing}</span>}
-        {!collapsed && hasChildren && <Chevron open={open} />}
+        {!collapsed && hasChildren && !ownToggle && <Chevron open={open} />}
       </>
     );
     const cls = `${rowBase} h-9 w-full ${
-      collapsed ? "justify-center px-0" : "gap-2.5 pl-3 pr-2"
+      collapsed ? "justify-center px-0" : `gap-2.5 pl-3 ${ownToggle ? "pr-9" : "pr-2"}`
     } ${marked ? "bg-ink/8" : "hover:bg-ink/5"}`;
+    const listId = `sidebar-group-${key.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+
+    const row =
+      hasChildren && !item.href ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => (standing ? setOpen(!open) : setOpenLocal((prev) => ({ ...prev, [key]: !prev[key] })))}
+          className={`${cls} text-left`}
+          title={collapsed ? item.label : undefined}
+        >
+          {inner}
+        </button>
+      ) : (
+        <Link
+          href={item.href ?? "#"}
+          aria-current={item.active ? "page" : undefined}
+          aria-expanded={hasChildren && !ownToggle ? open : undefined}
+          // Following the row opens its group, as an accordion's does.
+          onClick={ownToggle && !open ? () => setOpen(true) : undefined}
+          className={cls}
+          title={collapsed ? item.label : undefined}
+        >
+          {inner}
+        </Link>
+      );
 
     return (
       <li key={key}>
-        {hasChildren && !item.href ? (
-          <button
-            type="button"
-            aria-expanded={open}
-            onClick={() => setOpenLocal((prev) => ({ ...prev, [key]: !prev[key] }))}
-            className={`${cls} text-left`}
-            title={collapsed ? item.label : undefined}
-          >
-            {inner}
-          </button>
+        {ownToggle ? (
+          <div className="relative">
+            {row}
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={open ? listId : undefined}
+              aria-label={`${item.label} pages`}
+              onClick={() => setOpen(!open)}
+              className="absolute inset-y-0 right-1 my-auto grid h-7 w-7 place-items-center rounded-md hover:bg-ink/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"
+            >
+              <Chevron open={open} />
+            </button>
+          </div>
         ) : (
-          <Link
-            href={item.href ?? "#"}
-            aria-current={item.active ? "page" : undefined}
-            aria-expanded={hasChildren ? open : undefined}
-            className={cls}
-            title={collapsed ? item.label : undefined}
-          >
-            {inner}
-          </Link>
+          row
         )}
         {open && !collapsed && (
-          <ul className="mb-1 mt-px flex flex-col gap-px">{item.children!.map(renderChild)}</ul>
+          <ul id={listId} className="mb-1 mt-px flex flex-col gap-px">
+            {item.children!.map(renderChild)}
+          </ul>
         )}
       </li>
     );
@@ -413,6 +493,7 @@ export default function SidebarLayout({
         role={drawerShown ? "dialog" : undefined}
         aria-modal={drawerShown ? true : undefined}
         aria-label={drawerShown ? (navLabel ?? "Navigation") : undefined}
+        tabIndex={drawerShown ? -1 : undefined}
         className={`flex shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 motion-reduce:transition-none ${
           collapsed ? "w-14" : "w-60"
         } max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[min(18rem,85vw)] max-md:pb-[env(safe-area-inset-bottom)] max-md:pt-[env(safe-area-inset-top)] max-md:transition-transform ${
@@ -501,8 +582,8 @@ export default function SidebarLayout({
         </div>
       </aside>
 
-      {/* Main */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      {/* Inert clears in the closing commit, before focus returns to the trigger. */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden" inert={drawerShown}>
         {/* Top bar — omitted when there is nothing to put in it, so a page
             that owns its own header does not sit under an empty bar. */}
         {(headerContent || narrow) && (

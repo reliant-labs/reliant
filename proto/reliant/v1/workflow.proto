@@ -151,6 +151,42 @@ service WorkflowService {
     };
   }
 
+  // ForkOrphanedWorkflow copies a saved workflow whose creator left its
+  // organization into one of the caller's own, in the same org, with
+  // forked_from naming the original (TriggerService.ListOrphanedAutomations
+  // lists them). The original is never re-owned: a saved workflow executes
+  // nothing, so no identity changes hands. Org admins only (the org role
+  // admin or owner, read fresh, signed in as a person); the fork keeps the
+  // original's status when its definition validates for the caller, else it
+  // is a draft. control-plane docs/design/org-sharing.md §8.3.
+  rpc ForkOrphanedWorkflow(ForkOrphanedWorkflowRequest) returns (ForkOrphanedWorkflowResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "fork_orphan"
+        target: {
+          kind: "workflow"
+          id: "response.slug"
+        }
+        detail: ["workflow_id"]
+      }
+    };
+  }
+}
+
+message ForkOrphanedWorkflowRequest {
+  // The orphaned saved workflow's id (OrphanedWorkflow.id).
+  string workflow_id = 1 [(buf.validate.field).string.min_len = 1];
+  // One of the caller's projects, for the new slug's uniqueness.
+  string project_id = 2 [(buf.validate.field).string.min_len = 1];
+  // A name for the fork. Unset keeps the original's, made unique.
+  optional string new_name = 3;
+}
+
+message ForkOrphanedWorkflowResponse {
+  // The fork's id and slug (what a trigger's workflow names).
+  string id = 1;
+  string slug = 2;
+  string name = 3;
 }
 
 // ============================================
@@ -211,6 +247,9 @@ message WorkflowListItem {
   // The definition's declared `triggers:` (its WHEN), so a list can show the
   // ones the caller has not activated yet.
   repeated WorkflowTrigger triggers = 22;
+  // The definition's declared `permissions:` (Workflow.permissions), so a list
+  // or detail page can say the workflow can decide approvals.
+  repeated string permissions = 23;
 }
 
 // ============================================
@@ -261,6 +300,13 @@ message ListWorkflowsRequest {
   string project_id = 1 [(buf.validate.field).required = true]; // Required: project ID to list workflows for
   optional string worktree_id = 2; // Optional: worktree ID for layered config (worktree > project > global)
   optional bool include_hidden = 3; // If true, include items hidden by default (for management UIs)
+
+  // List only this organization's saved workflows. It must be one the caller is a
+  // live member of (PERMISSION_DENIED otherwise). Saved workflows created before orgs
+  // list under the caller's default org. Unset lists every one the caller
+  // owns, in any org, as before this field existed.
+  // Workflows defined in the repository are listed whatever the org.
+  optional string org_id = 4;
 }
 
 message ListWorkflowsResponse {
@@ -356,6 +402,14 @@ message SaveWorkflowRequest {
   // UNSPECIFIED keeps the current status (new workflows start as drafts), so
   // re-saving a complete workflow is gated like COMPLETE.
   WorkflowDraftStatus status = 11;
+
+  // The organization to act in (control-plane organizations.id); the web
+  // fills it with the active org. It must be one the caller is a live member
+  // of (PERMISSION_DENIED otherwise), and a machine credential may name only
+  // its own org. Unset is the caller's default org.
+  // Applies when the save creates a saved workflow; an existing one keeps
+  // its org.
+  optional string org_id = 12;
 }
 
 message SaveWorkflowResponse {
@@ -465,6 +519,12 @@ message CreateWorkflowDraftRequest {
   // ("builtin://agent") copies that built-in's graph, with this draft's own
   // name and title and an empty description.
   string template = 4;
+
+  // The organization to act in (control-plane organizations.id); the web
+  // fills it with the active org. It must be one the caller is a live member
+  // of (PERMISSION_DENIED otherwise), and a machine credential may name only
+  // its own org. Unset is the caller's default org.
+  optional string org_id = 5;
 }
 
 message CreateWorkflowDraftResponse {

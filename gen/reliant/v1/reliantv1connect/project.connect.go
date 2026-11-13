@@ -104,9 +104,27 @@ const (
 	// ProjectServiceRemoveProjectFromDaemonProcedure is the fully-qualified name of the
 	// ProjectService's RemoveProjectFromDaemon RPC.
 	ProjectServiceRemoveProjectFromDaemonProcedure = "/reliant.v1.ProjectService/RemoveProjectFromDaemon"
+	// ProjectServiceAttachProjectToDaemonProcedure is the fully-qualified name of the ProjectService's
+	// AttachProjectToDaemon RPC.
+	ProjectServiceAttachProjectToDaemonProcedure = "/reliant.v1.ProjectService/AttachProjectToDaemon"
+	// ProjectServiceDetachProjectFromDaemonProcedure is the fully-qualified name of the
+	// ProjectService's DetachProjectFromDaemon RPC.
+	ProjectServiceDetachProjectFromDaemonProcedure = "/reliant.v1.ProjectService/DetachProjectFromDaemon"
 	// ProjectServiceRecloneProjectOnDaemonProcedure is the fully-qualified name of the ProjectService's
 	// RecloneProjectOnDaemon RPC.
 	ProjectServiceRecloneProjectOnDaemonProcedure = "/reliant.v1.ProjectService/RecloneProjectOnDaemon"
+	// ProjectServicePreviewProjectOrgMoveProcedure is the fully-qualified name of the ProjectService's
+	// PreviewProjectOrgMove RPC.
+	ProjectServicePreviewProjectOrgMoveProcedure = "/reliant.v1.ProjectService/PreviewProjectOrgMove"
+	// ProjectServiceMoveProjectToOrgProcedure is the fully-qualified name of the ProjectService's
+	// MoveProjectToOrg RPC.
+	ProjectServiceMoveProjectToOrgProcedure = "/reliant.v1.ProjectService/MoveProjectToOrg"
+	// ProjectServiceGetProjectOrgMoveProcedure is the fully-qualified name of the ProjectService's
+	// GetProjectOrgMove RPC.
+	ProjectServiceGetProjectOrgMoveProcedure = "/reliant.v1.ProjectService/GetProjectOrgMove"
+	// ProjectServiceListProjectOrgMovesProcedure is the fully-qualified name of the ProjectService's
+	// ListProjectOrgMoves RPC.
+	ProjectServiceListProjectOrgMovesProcedure = "/reliant.v1.ProjectService/ListProjectOrgMoves"
 )
 
 // ProjectServiceClient is a client for the reliant.v1.ProjectService service.
@@ -197,11 +215,64 @@ type ProjectServiceClient interface {
 	// deleted — other daemons may still host clones. Idempotent: succeeds even
 	// if the row was already absent (the on-disk delete is best-effort).
 	RemoveProjectFromDaemon(context.Context, *connect.Request[v1.RemoveProjectFromDaemonRequest]) (*connect.Response[v1.RemoveProjectFromDaemonResponse], error)
+	// AttachProjectToDaemon records that a folder already on one of the
+	// caller's machines is this project's checkout there — "it's already at
+	// /Users/me/properties on this machine". Nothing is cloned or created: the
+	// machine is asked first, and a path that does not exist there, or is not
+	// a folder, is refused (FailedPrecondition) instead of recorded. A machine
+	// that is offline is Unavailable. A folder that is not a git checkout of
+	// the project's remote is attached with a warning, not refused.
+	//
+	// Re-attaching the same machine at another path moves its checkout there.
+	// It also undoes DetachProjectFromDaemon for that machine.
+	//
+	// Prefer it to MarkProjectInstalled, which records a clone some other route
+	// made and checks nothing on the machine.
+	AttachProjectToDaemon(context.Context, *connect.Request[v1.AttachProjectToDaemonRequest]) (*connect.Response[v1.AttachProjectToDaemonResponse], error)
+	// DetachProjectFromDaemon forgets a project's checkout on one machine
+	// WITHOUT touching its files: the project_daemons row and that machine's
+	// synced config for the project go; the folder stays on disk, and the
+	// machine does not re-record it on its next connect. Contrast
+	// RemoveProjectFromDaemon, which deletes the folder.
+	//
+	// Refused (FailedPrecondition) when it would leave the project on no
+	// machine, or while workspaces (branch worktrees) of the project live on
+	// that machine. Chats pinned to the machine are left as they are: their
+	// next tool call is refused with the machines that do have the project,
+	// and switching machine (or attaching it again) continues them.
+	// Idempotent: a machine the project is not on succeeds.
+	DetachProjectFromDaemon(context.Context, *connect.Request[v1.DetachProjectFromDaemonRequest]) (*connect.Response[v1.DetachProjectFromDaemonResponse], error)
 	// RecloneProjectOnDaemon removes the existing on-disk clone and re-clones
 	// it from the project's remote_url at the recorded default branch. Any
 	// local-only changes are lost; UI must confirm before calling. The
 	// project_daemons row is updated with the new cloned_at.
 	RecloneProjectOnDaemon(context.Context, *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error)
+	// PreviewProjectOrgMove says what moving the project to another
+	// organization would do, and what running work refuses it now
+	// (control-plane docs/design/org-project-move.md §2, §4, §5). It changes
+	// nothing. Only the project's owner may ask, signed in as a person, while
+	// an admin or owner of the project's organization and a live member of
+	// the target; anyone else is refused as the move itself would refuse them.
+	PreviewProjectOrgMove(context.Context, *connect.Request[v1.PreviewProjectOrgMoveRequest]) (*connect.Response[v1.PreviewProjectOrgMoveResponse], error)
+	// MoveProjectToOrg moves the project, with every chat, run and trigger of
+	// it, to another organization (control-plane
+	// docs/design/org-project-move.md). The caller is admitted as for
+	// PreviewProjectOrgMove; the project must be in expected_from_org_id
+	// still, and nothing may be running in it. The move runs as a saga: this
+	// returns once it has committed or stopped, or after about 15 seconds with
+	// the move still under way (GetProjectOrgMove follows it). A repeat of the
+	// same request_key is the same move. Refused while the deployment's
+	// orgs.project_moves_enabled is off.
+	MoveProjectToOrg(context.Context, *connect.Request[v1.MoveProjectToOrgRequest]) (*connect.Response[v1.MoveProjectToOrgResponse], error)
+	// GetProjectOrgMove reads one move: its owner's, or one in or out of an
+	// organization the caller administers.
+	// forge:custom — the move's owner, or an admin of either org, reads it
+	GetProjectOrgMove(context.Context, *connect.Request[v1.GetProjectOrgMoveRequest]) (*connect.Response[v1.GetProjectOrgMoveResponse], error)
+	// ListProjectOrgMoves lists the moves of projects out of and into an
+	// organization, newest first: the move ledger its admins and owners read.
+	// With no org_id, the caller's own moves.
+	// forge:custom — an org's ledger, for its admins and owners; else the caller's own moves
+	ListProjectOrgMoves(context.Context, *connect.Request[v1.ListProjectOrgMovesRequest]) (*connect.Response[v1.ListProjectOrgMovesResponse], error)
 }
 
 // NewProjectServiceClient constructs a client for the reliant.v1.ProjectService service. By
@@ -353,10 +424,49 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(projectServiceMethods.ByName("RemoveProjectFromDaemon")),
 			connect.WithClientOptions(opts...),
 		),
+		attachProjectToDaemon: connect.NewClient[v1.AttachProjectToDaemonRequest, v1.AttachProjectToDaemonResponse](
+			httpClient,
+			baseURL+ProjectServiceAttachProjectToDaemonProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("AttachProjectToDaemon")),
+			connect.WithClientOptions(opts...),
+		),
+		detachProjectFromDaemon: connect.NewClient[v1.DetachProjectFromDaemonRequest, v1.DetachProjectFromDaemonResponse](
+			httpClient,
+			baseURL+ProjectServiceDetachProjectFromDaemonProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("DetachProjectFromDaemon")),
+			connect.WithClientOptions(opts...),
+		),
 		recloneProjectOnDaemon: connect.NewClient[v1.RecloneProjectOnDaemonRequest, v1.RecloneProjectOnDaemonResponse](
 			httpClient,
 			baseURL+ProjectServiceRecloneProjectOnDaemonProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("RecloneProjectOnDaemon")),
+			connect.WithClientOptions(opts...),
+		),
+		previewProjectOrgMove: connect.NewClient[v1.PreviewProjectOrgMoveRequest, v1.PreviewProjectOrgMoveResponse](
+			httpClient,
+			baseURL+ProjectServicePreviewProjectOrgMoveProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("PreviewProjectOrgMove")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		moveProjectToOrg: connect.NewClient[v1.MoveProjectToOrgRequest, v1.MoveProjectToOrgResponse](
+			httpClient,
+			baseURL+ProjectServiceMoveProjectToOrgProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("MoveProjectToOrg")),
+			connect.WithClientOptions(opts...),
+		),
+		getProjectOrgMove: connect.NewClient[v1.GetProjectOrgMoveRequest, v1.GetProjectOrgMoveResponse](
+			httpClient,
+			baseURL+ProjectServiceGetProjectOrgMoveProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("GetProjectOrgMove")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		listProjectOrgMoves: connect.NewClient[v1.ListProjectOrgMovesRequest, v1.ListProjectOrgMovesResponse](
+			httpClient,
+			baseURL+ProjectServiceListProjectOrgMovesProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("ListProjectOrgMoves")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -387,7 +497,13 @@ type projectServiceClient struct {
 	listRepositoriesForDaemon   *connect.Client[v1.ListRepositoriesForDaemonRequest, v1.ListRepositoriesForDaemonResponse]
 	pullProjectOnDaemon         *connect.Client[v1.PullProjectOnDaemonRequest, v1.PullProjectOnDaemonResponse]
 	removeProjectFromDaemon     *connect.Client[v1.RemoveProjectFromDaemonRequest, v1.RemoveProjectFromDaemonResponse]
+	attachProjectToDaemon       *connect.Client[v1.AttachProjectToDaemonRequest, v1.AttachProjectToDaemonResponse]
+	detachProjectFromDaemon     *connect.Client[v1.DetachProjectFromDaemonRequest, v1.DetachProjectFromDaemonResponse]
 	recloneProjectOnDaemon      *connect.Client[v1.RecloneProjectOnDaemonRequest, v1.RecloneProjectOnDaemonResponse]
+	previewProjectOrgMove       *connect.Client[v1.PreviewProjectOrgMoveRequest, v1.PreviewProjectOrgMoveResponse]
+	moveProjectToOrg            *connect.Client[v1.MoveProjectToOrgRequest, v1.MoveProjectToOrgResponse]
+	getProjectOrgMove           *connect.Client[v1.GetProjectOrgMoveRequest, v1.GetProjectOrgMoveResponse]
+	listProjectOrgMoves         *connect.Client[v1.ListProjectOrgMovesRequest, v1.ListProjectOrgMovesResponse]
 }
 
 // CreateProject calls reliant.v1.ProjectService.CreateProject.
@@ -505,9 +621,39 @@ func (c *projectServiceClient) RemoveProjectFromDaemon(ctx context.Context, req 
 	return c.removeProjectFromDaemon.CallUnary(ctx, req)
 }
 
+// AttachProjectToDaemon calls reliant.v1.ProjectService.AttachProjectToDaemon.
+func (c *projectServiceClient) AttachProjectToDaemon(ctx context.Context, req *connect.Request[v1.AttachProjectToDaemonRequest]) (*connect.Response[v1.AttachProjectToDaemonResponse], error) {
+	return c.attachProjectToDaemon.CallUnary(ctx, req)
+}
+
+// DetachProjectFromDaemon calls reliant.v1.ProjectService.DetachProjectFromDaemon.
+func (c *projectServiceClient) DetachProjectFromDaemon(ctx context.Context, req *connect.Request[v1.DetachProjectFromDaemonRequest]) (*connect.Response[v1.DetachProjectFromDaemonResponse], error) {
+	return c.detachProjectFromDaemon.CallUnary(ctx, req)
+}
+
 // RecloneProjectOnDaemon calls reliant.v1.ProjectService.RecloneProjectOnDaemon.
 func (c *projectServiceClient) RecloneProjectOnDaemon(ctx context.Context, req *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error) {
 	return c.recloneProjectOnDaemon.CallUnary(ctx, req)
+}
+
+// PreviewProjectOrgMove calls reliant.v1.ProjectService.PreviewProjectOrgMove.
+func (c *projectServiceClient) PreviewProjectOrgMove(ctx context.Context, req *connect.Request[v1.PreviewProjectOrgMoveRequest]) (*connect.Response[v1.PreviewProjectOrgMoveResponse], error) {
+	return c.previewProjectOrgMove.CallUnary(ctx, req)
+}
+
+// MoveProjectToOrg calls reliant.v1.ProjectService.MoveProjectToOrg.
+func (c *projectServiceClient) MoveProjectToOrg(ctx context.Context, req *connect.Request[v1.MoveProjectToOrgRequest]) (*connect.Response[v1.MoveProjectToOrgResponse], error) {
+	return c.moveProjectToOrg.CallUnary(ctx, req)
+}
+
+// GetProjectOrgMove calls reliant.v1.ProjectService.GetProjectOrgMove.
+func (c *projectServiceClient) GetProjectOrgMove(ctx context.Context, req *connect.Request[v1.GetProjectOrgMoveRequest]) (*connect.Response[v1.GetProjectOrgMoveResponse], error) {
+	return c.getProjectOrgMove.CallUnary(ctx, req)
+}
+
+// ListProjectOrgMoves calls reliant.v1.ProjectService.ListProjectOrgMoves.
+func (c *projectServiceClient) ListProjectOrgMoves(ctx context.Context, req *connect.Request[v1.ListProjectOrgMovesRequest]) (*connect.Response[v1.ListProjectOrgMovesResponse], error) {
+	return c.listProjectOrgMoves.CallUnary(ctx, req)
 }
 
 // ProjectServiceHandler is an implementation of the reliant.v1.ProjectService service.
@@ -598,11 +744,64 @@ type ProjectServiceHandler interface {
 	// deleted — other daemons may still host clones. Idempotent: succeeds even
 	// if the row was already absent (the on-disk delete is best-effort).
 	RemoveProjectFromDaemon(context.Context, *connect.Request[v1.RemoveProjectFromDaemonRequest]) (*connect.Response[v1.RemoveProjectFromDaemonResponse], error)
+	// AttachProjectToDaemon records that a folder already on one of the
+	// caller's machines is this project's checkout there — "it's already at
+	// /Users/me/properties on this machine". Nothing is cloned or created: the
+	// machine is asked first, and a path that does not exist there, or is not
+	// a folder, is refused (FailedPrecondition) instead of recorded. A machine
+	// that is offline is Unavailable. A folder that is not a git checkout of
+	// the project's remote is attached with a warning, not refused.
+	//
+	// Re-attaching the same machine at another path moves its checkout there.
+	// It also undoes DetachProjectFromDaemon for that machine.
+	//
+	// Prefer it to MarkProjectInstalled, which records a clone some other route
+	// made and checks nothing on the machine.
+	AttachProjectToDaemon(context.Context, *connect.Request[v1.AttachProjectToDaemonRequest]) (*connect.Response[v1.AttachProjectToDaemonResponse], error)
+	// DetachProjectFromDaemon forgets a project's checkout on one machine
+	// WITHOUT touching its files: the project_daemons row and that machine's
+	// synced config for the project go; the folder stays on disk, and the
+	// machine does not re-record it on its next connect. Contrast
+	// RemoveProjectFromDaemon, which deletes the folder.
+	//
+	// Refused (FailedPrecondition) when it would leave the project on no
+	// machine, or while workspaces (branch worktrees) of the project live on
+	// that machine. Chats pinned to the machine are left as they are: their
+	// next tool call is refused with the machines that do have the project,
+	// and switching machine (or attaching it again) continues them.
+	// Idempotent: a machine the project is not on succeeds.
+	DetachProjectFromDaemon(context.Context, *connect.Request[v1.DetachProjectFromDaemonRequest]) (*connect.Response[v1.DetachProjectFromDaemonResponse], error)
 	// RecloneProjectOnDaemon removes the existing on-disk clone and re-clones
 	// it from the project's remote_url at the recorded default branch. Any
 	// local-only changes are lost; UI must confirm before calling. The
 	// project_daemons row is updated with the new cloned_at.
 	RecloneProjectOnDaemon(context.Context, *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error)
+	// PreviewProjectOrgMove says what moving the project to another
+	// organization would do, and what running work refuses it now
+	// (control-plane docs/design/org-project-move.md §2, §4, §5). It changes
+	// nothing. Only the project's owner may ask, signed in as a person, while
+	// an admin or owner of the project's organization and a live member of
+	// the target; anyone else is refused as the move itself would refuse them.
+	PreviewProjectOrgMove(context.Context, *connect.Request[v1.PreviewProjectOrgMoveRequest]) (*connect.Response[v1.PreviewProjectOrgMoveResponse], error)
+	// MoveProjectToOrg moves the project, with every chat, run and trigger of
+	// it, to another organization (control-plane
+	// docs/design/org-project-move.md). The caller is admitted as for
+	// PreviewProjectOrgMove; the project must be in expected_from_org_id
+	// still, and nothing may be running in it. The move runs as a saga: this
+	// returns once it has committed or stopped, or after about 15 seconds with
+	// the move still under way (GetProjectOrgMove follows it). A repeat of the
+	// same request_key is the same move. Refused while the deployment's
+	// orgs.project_moves_enabled is off.
+	MoveProjectToOrg(context.Context, *connect.Request[v1.MoveProjectToOrgRequest]) (*connect.Response[v1.MoveProjectToOrgResponse], error)
+	// GetProjectOrgMove reads one move: its owner's, or one in or out of an
+	// organization the caller administers.
+	// forge:custom — the move's owner, or an admin of either org, reads it
+	GetProjectOrgMove(context.Context, *connect.Request[v1.GetProjectOrgMoveRequest]) (*connect.Response[v1.GetProjectOrgMoveResponse], error)
+	// ListProjectOrgMoves lists the moves of projects out of and into an
+	// organization, newest first: the move ledger its admins and owners read.
+	// With no org_id, the caller's own moves.
+	// forge:custom — an org's ledger, for its admins and owners; else the caller's own moves
+	ListProjectOrgMoves(context.Context, *connect.Request[v1.ListProjectOrgMovesRequest]) (*connect.Response[v1.ListProjectOrgMovesResponse], error)
 }
 
 // NewProjectServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -750,10 +949,49 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		connect.WithSchema(projectServiceMethods.ByName("RemoveProjectFromDaemon")),
 		connect.WithHandlerOptions(opts...),
 	)
+	projectServiceAttachProjectToDaemonHandler := connect.NewUnaryHandler(
+		ProjectServiceAttachProjectToDaemonProcedure,
+		svc.AttachProjectToDaemon,
+		connect.WithSchema(projectServiceMethods.ByName("AttachProjectToDaemon")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceDetachProjectFromDaemonHandler := connect.NewUnaryHandler(
+		ProjectServiceDetachProjectFromDaemonProcedure,
+		svc.DetachProjectFromDaemon,
+		connect.WithSchema(projectServiceMethods.ByName("DetachProjectFromDaemon")),
+		connect.WithHandlerOptions(opts...),
+	)
 	projectServiceRecloneProjectOnDaemonHandler := connect.NewUnaryHandler(
 		ProjectServiceRecloneProjectOnDaemonProcedure,
 		svc.RecloneProjectOnDaemon,
 		connect.WithSchema(projectServiceMethods.ByName("RecloneProjectOnDaemon")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServicePreviewProjectOrgMoveHandler := connect.NewUnaryHandler(
+		ProjectServicePreviewProjectOrgMoveProcedure,
+		svc.PreviewProjectOrgMove,
+		connect.WithSchema(projectServiceMethods.ByName("PreviewProjectOrgMove")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceMoveProjectToOrgHandler := connect.NewUnaryHandler(
+		ProjectServiceMoveProjectToOrgProcedure,
+		svc.MoveProjectToOrg,
+		connect.WithSchema(projectServiceMethods.ByName("MoveProjectToOrg")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceGetProjectOrgMoveHandler := connect.NewUnaryHandler(
+		ProjectServiceGetProjectOrgMoveProcedure,
+		svc.GetProjectOrgMove,
+		connect.WithSchema(projectServiceMethods.ByName("GetProjectOrgMove")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceListProjectOrgMovesHandler := connect.NewUnaryHandler(
+		ProjectServiceListProjectOrgMovesProcedure,
+		svc.ListProjectOrgMoves,
+		connect.WithSchema(projectServiceMethods.ByName("ListProjectOrgMoves")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.ProjectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -804,8 +1042,20 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 			projectServicePullProjectOnDaemonHandler.ServeHTTP(w, r)
 		case ProjectServiceRemoveProjectFromDaemonProcedure:
 			projectServiceRemoveProjectFromDaemonHandler.ServeHTTP(w, r)
+		case ProjectServiceAttachProjectToDaemonProcedure:
+			projectServiceAttachProjectToDaemonHandler.ServeHTTP(w, r)
+		case ProjectServiceDetachProjectFromDaemonProcedure:
+			projectServiceDetachProjectFromDaemonHandler.ServeHTTP(w, r)
 		case ProjectServiceRecloneProjectOnDaemonProcedure:
 			projectServiceRecloneProjectOnDaemonHandler.ServeHTTP(w, r)
+		case ProjectServicePreviewProjectOrgMoveProcedure:
+			projectServicePreviewProjectOrgMoveHandler.ServeHTTP(w, r)
+		case ProjectServiceMoveProjectToOrgProcedure:
+			projectServiceMoveProjectToOrgHandler.ServeHTTP(w, r)
+		case ProjectServiceGetProjectOrgMoveProcedure:
+			projectServiceGetProjectOrgMoveHandler.ServeHTTP(w, r)
+		case ProjectServiceListProjectOrgMovesProcedure:
+			projectServiceListProjectOrgMovesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -907,6 +1157,30 @@ func (UnimplementedProjectServiceHandler) RemoveProjectFromDaemon(context.Contex
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.RemoveProjectFromDaemon is not implemented"))
 }
 
+func (UnimplementedProjectServiceHandler) AttachProjectToDaemon(context.Context, *connect.Request[v1.AttachProjectToDaemonRequest]) (*connect.Response[v1.AttachProjectToDaemonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.AttachProjectToDaemon is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) DetachProjectFromDaemon(context.Context, *connect.Request[v1.DetachProjectFromDaemonRequest]) (*connect.Response[v1.DetachProjectFromDaemonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.DetachProjectFromDaemon is not implemented"))
+}
+
 func (UnimplementedProjectServiceHandler) RecloneProjectOnDaemon(context.Context, *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.RecloneProjectOnDaemon is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) PreviewProjectOrgMove(context.Context, *connect.Request[v1.PreviewProjectOrgMoveRequest]) (*connect.Response[v1.PreviewProjectOrgMoveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.PreviewProjectOrgMove is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) MoveProjectToOrg(context.Context, *connect.Request[v1.MoveProjectToOrgRequest]) (*connect.Response[v1.MoveProjectToOrgResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.MoveProjectToOrg is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) GetProjectOrgMove(context.Context, *connect.Request[v1.GetProjectOrgMoveRequest]) (*connect.Response[v1.GetProjectOrgMoveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.GetProjectOrgMove is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) ListProjectOrgMoves(context.Context, *connect.Request[v1.ListProjectOrgMovesRequest]) (*connect.Response[v1.ListProjectOrgMovesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.ListProjectOrgMoves is not implemented"))
 }

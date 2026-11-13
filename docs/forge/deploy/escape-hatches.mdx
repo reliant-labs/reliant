@@ -101,6 +101,8 @@ There are four ways to declare it. Pick by what you already have.
     ```
 
     Every image on a cluster or compose workload must name its registry host, because there is no environment registry to complete a bare name from. A third-party image with ports gets a TCP probe on its first port, since forge cannot know it serves `/readyz`.
+
+    On Reliant hosting, write the image the same way, registry host included. The platform pulls only from its own registry, so when a deploy cuts a release forge copies the image into your organization's registry path and the release pins the copy by digest (see below).
   </Tab>
   <Tab title="Your own Dockerfile">
     `forge.DockerBuild` runs `docker build` for any language.
@@ -145,7 +147,18 @@ There are four ways to declare it. Pick by what you already have.
 
 What a non-forge workload gives up is whatever relies on forge knowing the binary. A service forge did not build gets no default `/readyz` and `/healthz` probes unless you declare `probes`, and `GOMEMLIMIT` is derived only for `GoBuild` workloads (set `go_memory_limit_percent` for others). It does not read forge's typed config unless you project environment variables into it yourself, and its logs and traces appear in [Observability](/forge/observability) only if it exports OpenTelemetry. Its deploy, its plan, its release and its rollout wait are forge's, and are identical.
 
-On Reliant hosting, a workload's image must live in the platform's registry. A bare `image = "billing"` resolves to your organization's path and forge pushes it there; an image that names another registry host is reported at render as outside the subtree the platform will admit. A hosted workload that needs to pull from your own registry belongs on a cluster you run.
+On Reliant hosting, every image a workload runs comes from the platform's registry, under your organization's path, `registry.reliantapi.com/<org>/<project>/`. Forge puts it there in each case:
+
+| What the hosted workload declares | What forge does |
+|---|---|
+| A `build` and a bare image (`image = "billing"`) | Builds it and pushes it to `<org path>/billing`. This is the form to use for your own code, in any language. |
+| No `build` and a full third-party image (`image = "docker.io/traefik/whoami:v1.10.3"`) | When the deploy cuts a release, copies the image registry to registry to `<org path>/traefik/whoami` and pins the copy by digest. The digest is the upstream one, and every platform of a multi-architecture image comes along. |
+| No `build` and a bare image (`image = "worker:v2"`) | Expects the image to have been pushed to `<org path>/worker` already, for example by your CI, and pins its digest at the cut. |
+| A `build` and an image that names another registry | Refused at `forge env render`: forge would push its build somewhere the platform does not pull from. Drop the registry host. |
+
+A third-party image must include its registry host (`docker.io/traefik/whoami`, not `traefik/whoami`), because a bare name means your own registry path. A private source image is read with the credentials `docker login` stored for its registry. Wrapping an image in a one-line `FROM` Dockerfile with a `forge.DockerBuild` also works, but is only needed when you want to change the image.
+
+A non-forge app reads its credentials from environment variables, so deliver each one in the workload's `env`, for example `env = {JWT_SECRET = forge.ManagedSecret {name = "JWT_SECRET"}}`, and set the value with `forge secret set --env <env> JWT_SECRET`. `config_secrets` delivers nothing by itself: it selects which credentials forge's generated config projection puts in a forge Go service's `env`. A name in `config_secrets` that the workload's `env` does not deliver fails the render, so an app never starts silently on a fallback value.
 
 <Note>
 `forge.RemoteBuild` is in the schema as a way to build from a pinned git source on a hosted build service, but this forge cannot submit one yet, and the build refuses it with an explanation. Do not rely on it.
@@ -193,7 +206,30 @@ forge project new --in-place --kind site --name my-site
 
 That writes `forge.yaml` (with no Go module, since a site has none) and `deploy/kcl/{dev,staging,prod}/main.k`, each declaring the app at the project root and binding it to its dev server in `dev` and to hosted static hosting in `staging` and `prod`. Your own files are untouched and `.gitignore` is merged. Build-time keys such as `VITE_*` and `NEXT_PUBLIC_*` become `env_vars` on the frontend, baked in per release; values that must change without a rebuild belong in `runtime_config`, which the platform writes into `config.js` after each deploy. [Hosting on Reliant](/forge/hosting) covers what static hosting serves.
 
-A server that already has its own protos and handlers adopts in place, one service per pull request, with `// forge:unmanaged`. Agents can run `forge skill load migration` for that path.
+A server in another language, such as Node, Python, Ruby or Java, keeps every file. It is not scaffolded: there is no `forge project new` kind for it, and `forge project new --in-place` refuses a directory that has a Dockerfile and no `go.mod` rather than writing a Go server into it. Instead, your agent writes the declarations, following a skill:
+
+```bash
+forge skill load adopt
+```
+
+The skill is organised as tiers. Each tier is complete, so you can stop after any of them:
+
+| Tier | What you get | What it takes |
+|---|---|---|
+| 1. Ship it | `dev`, `staging` and `prod` environments, the app on Reliant hosting with a managed Postgres and managed secrets, and releases you can redeploy | About an hour, and no change to the app's code |
+| 2. See it | Traces, metrics, dashboards, alerts, and `forge obs check` verdicts that pass or fail a release | An OpenTelemetry SDK in the app. Hosting already sets `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| 3. Harden it | Promotion to prod gated on staging's verdict, deploys from CI, and real health probes | A little configuration per environment |
+| 4. Move in | Forge's Go stack: a generated API, ORM and typed frontend hooks | A port, done only when it pays for itself |
+
+Tier 1 is copy-paste templates for `forge.yaml` and `deploy/kcl/`:
+
+- **`workloads.k`** declares the app once, as a `forge.DockerBuild` on your Dockerfile, with its port and a TCP probe. It also declares a pre-rollout migration job that runs the app's own migrate command from the same image.
+- **`dev/main.k`** runs the app as a host process with your dev command, next to a Postgres that forge runs on your machine.
+- **`staging/main.k`** and **`prod/main.k`** run it on hosting, with `DATABASE_URL` from a `forge.ManagedDatabase` and each credential delivered as a `forge.ManagedSecret`.
+
+The skill ends Tier 1 with the commands that prove it works: `forge lint`, `forge env up dev`, `forge env deploy staging --plan-only`, the deploy, and `forge obs check`. It also lists the gotchas that came up when it was tested on a real Express and Prisma app. For example, the Dockerfile must build on its own, and `obs check` stays INCONCLUSIVE with `reason_code: no_request_telemetry` until Tier 2.
+
+A Go server that already has its own protos and handlers adopts in place with `forge project new --in-place --kind service`, one service per pull request, using `// forge:unmanaged`. That path is Tier 4, and `forge skill load migration` covers it.
 
 ## Turn features off
 

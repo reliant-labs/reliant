@@ -12,7 +12,10 @@ in its own change.
 | `journeys/workflows.tsx`, `journeys/forge.tsx` | **Content.** Yours to replace. |
 | `journeys/signals.ts` | The tour signals (typed events) steps can wait on. Add yours here. |
 | `journeys/layoutActions.ts` | Workspace panel actions for `onEnter` / `onComplete`. |
-| `journeys/registry.ts` | Validation, ordering, `?tour=` resolution. |
+| `journeys/registry.ts` | Validation, ordering, `?tour=` resolution. Builds in the forge journey only. |
+| `journeys/catalog.ts` | Registers the workflows journey and Reliant's end-of-tour hooks. The Reliant and forge shells import it; the forge demo's bundle doesn't. |
+| `calloutPlacement.ts` | Where a spotlight's card goes so it never covers its target. |
+| `TourControls.tsx` | A step's own controls inside its card (`controls: "callout"`). |
 | `types.ts` | `Journey`, `JourneyStep`, `AdvanceOn`, … The schema below is defined here. |
 | `advanceOn.ts` | Required actions (`advanceOn`) and `phases`. |
 | `useTourNavigation.ts` | Moving between steps, finishing, skipping, analytics. |
@@ -52,8 +55,46 @@ export const workflowsJourney: Journey = {
   elsewhere: { label: "Try AI workflows in Reliant", href: () => `${reliantAppOrigin()}/?journey=workflows` }, // lib/shell.ts: runtime config APP_URL
   isAvailable: () => true,          // e.g. a feature flag
   reshowAfterVersionBump: true,     // default true
+  phone: MyPhoneDeck,               // optional: shown on Reliant phones instead of "Open this on a computer"
+  controls: "bar",                  // or "callout"; see "Controls"
 };
 ```
+
+**Registering content.** `registry.ts` imports the forge journey itself. The
+workflows journey's content pulls in Reliant's workflow hooks and stores, so
+it is registered by `journeys/catalog.ts` (`registerJourney`), which the
+Reliant and forge shells import for its effects. Until then (in the forge
+demo's bundle, always) `workflows` is `WORKFLOWS_ELSEWHERE`: no steps, never
+available, only its `elsewhere` link for the end card. A test keeps the
+placeholder's version, title and link equal to the real journey's. The
+Reliant-only end of a tour (land on the chat, ask for an API key) is
+installed the same way, through `setReliantTourHooks` (tourShell.ts).
+
+**Controls.** Every step carries its own controls in its card (the default,
+`controls: "callout"`, in every shell): **Step X of Y**, **Back** (not on the
+first step; ← works too), **Next** / **Finish**, and **Exit tour** (not on the
+last step). There is no bottom nav bar and no generic Skip step.
+- A required action (`advanceOn`) keeps Next **disabled** until it's done
+  (the step's `actionHint` is the button's title and one line in the card);
+  then Next shows a **check**. With `autoAdvance` the tour moves on by itself
+  instead (default false).
+- A step's own `skip` with a label ("Create it for me") is a button in the
+  card while the action is pending.
+- The card is placed beside its target first (right, left, then below,
+  above), flipped to whichever side has room, and never over the target
+  unless no side can hold it (`calloutPlacement.ts`, tested by a sweep). A
+  multi-spotlight keeps its labels and adds a centred card for the copy and
+  controls.
+- On a phone (below 640px) the card is a bottom sheet (at most 45% of the
+  screen) and the target is scrolled into the space above it. Reliant's
+  mobile surface defers instead ("Open this on a computer"); the forge shell
+  and the demo use the sheet. Every control is at least 44px tall there.
+  A journey with its own phone presentation, `Journey.phone` (a component
+  taking `{ onFinish, onExit }`), shows that there instead, on the mobile
+  surface too: the workflows journey's lessons as a swipeable card deck with
+  still diagrams (`journeys/workflowsPhone.tsx`).
+- `controls: "bar"` keeps the retired bottom nav bar, for a journey that
+  still needs it. Nothing ships with it.
 
 **Versioning.** Each journey records its outcome per version, under
 `onboarding.tour.<id>.v<version>.completed`, with the value `completed`,
@@ -79,26 +120,27 @@ export const workflowsJourney: Journey = {
 | `target` | CSS selector to spotlight. Prefer `[data-tour='…']`; see "Anchors". No target (and no `targets`) means a centred card. |
 | `targets` | Multi-spotlight: several labelled targets (`{selector, label, description}`). |
 | `type` | `spotlight` / `multi-spotlight` / `card`. Inferred from `target` / `targets`. |
-| `tooltipPosition`, `tooltipPadding`, `spotlightConfig` | Placement. Keep the card off its target; `auto` already picks a free side. |
+| `tooltipPosition`, `tooltipPadding`, `spotlightConfig` | Placement. A preferred side; the card flips to a side with room and never covers its target (`calloutPlacement.ts`). |
 | `copyByShell` | `{ forge: { description: … } }`: per-shell title / description / target. |
 | `shell` | `"reliant"` / `"forge"` / `"both"` (default). A step that doesn't match is left out. |
 | `isAvailable` | The step's `when`: `() => boolean`, read at navigation time. False leaves the step out (Next / Back skip it and it isn't counted). |
 | `route` | The page the step lives on; see below. |
 | `phases` | Sub-targets within one step; see below. |
 | `advanceOn` | The step's **required action**; see below. |
-| `autoAdvance` | Once the action is done, move on by itself after 600 ms. Default false: show a check and Next. |
+| `card` | `{ wide?, modal? }` for a step with no target: `wide` gives the card room (a player), `modal` locks the page's scroll and takes the backdrop's clicks. No spotlight either way. |
+| `autoAdvance` | Once the action is done, move on by itself after 600 ms. Default false: Next shows a check and the user clicks it. |
 | `afterAction` | Extra copy appended once the action is done ("Copy something to try it."). |
-| `actionHint` | Nav-bar text while waiting ("Drag Review to the loop"). Announced to screen readers. |
-| `showNext` | Keep Next visible while the action is pending. Default false. |
+| `actionHint` | What to do, while waiting ("Drag Review to the loop"): one line in the card and disabled Next's title. Announced to screen readers. |
+| `showNext` | Keep Next enabled while the action is pending. Default false. |
 | `blockOutside` | While pending, block pointer clicks outside the target (spotlight steps). Keyboard and screen readers are unaffected. Off by default; the spotlight is normally click-through. |
 | `advanceIfAlreadyDone` | If the state already holds on entry, advance at once. |
 | `skip` | `{ label?, run? }`. Overrides **Skip step** for a step that later steps depend on (W1: "Create it for me" seeds the draft). If `run` throws, the user stays on the step; show your own toast. `run` gets `{context, setContext}`. |
 | `signal` | Analytics name for the action (`draft_created`). Sent as `signal` on `journey_step_completed` when the action completed the step. |
 | `onEnter` | Runs once when the step opens (e.g. `layoutActions.showSidebar`). |
-| `onComplete` | Runs once when the user leaves the step forward: Next, the action, Skip step or Finish. It doesn't run on Back or End tour. |
+| `onComplete` | Runs once when the user leaves the step forward: Next, the action, the step's skip or Finish. It doesn't run on Back or Exit tour. |
 
-Every card has **Skip step** (until the action is done) and **End tour**.
-- End tour records the journey as skipped at this version, and remembers the
+Every card but the last has **Exit tour** (the bar called it End tour).
+- Exit tour records the journey as skipped at this version, and remembers the
   step in `onboarding.journey_resume`. The picker then offers "Resume where you
   left off".
 - Back goes to the previous step. On the first step it closes the tour.
@@ -128,9 +170,9 @@ route: {
 ### `advanceOn`: required actions
 
 `advanceOn` takes one condition or an array, and the step completes when any
-of them is met. Until one is met, Next is hidden, the nav bar shows
-`actionHint` plus **Skip step**, and Enter/arrow-key navigation is off (the
-user is typing into the app).
+of them is met. Until one is met, Next is disabled, the card shows
+`actionHint`, and Enter/arrow-key navigation is off (the user is typing into
+the app).
 
 | Condition | Kind | Fires when |
 |---|---|---|
@@ -299,33 +341,86 @@ by ForgeShell/landingJourney.ts:
 
 The public demo host (`demo.reliantlabs.io`, the `demo` shell,
 `demoShellRoutes.tsx`) boots the tour as the forge shell does, but with
-`memoryTourStorage()`: nothing is remembered. `Forge/Demo/DemoAutoStart`
-starts the forge journey once per page load (`source: "demo"`), unless the URL
-already names a forge step. The forge journey runs its own cut there, chosen
-with `isAvailable` (`lib/demoTour.ts`, runtime config `DEMO_TOUR`):
+`memoryTourStorage()`: nothing is remembered. A bare entry **opens on the
+Home** (`/forge/demo?section=home`), free to explore:
+- The Home's hero and the action row under every page's header offer **Take
+  the tour** (`TOUR_START`, `Forge/Demo/DemoScreenActions.tsx`). Nothing starts
+  the tour by itself. (`DemoTourToast` has rendered nothing since #2334.)
+- On the demo host the tour walks the **sample app's own console pages**
+  (`/forge/p/shop/…`, the led console a visitor explores): each step's route is
+  built per shell in `journeys/forge.tsx` (`stop`). The root route keeps
+  `?tour=` across the console's links (`retainTourParam`), and an older
+  `/forge/demo?view=…&tour=…` link is redirected to the console page it names
+  (`consoleTourHref`). Reliant and the forge shell keep `/forge/demo`.
+- `Forge/Demo/tips` explains each page (below, "Page tours"). Its card opens by
+  itself on a section's first visit this session; tips are off while the tour
+  is open.
+
+The forge journey runs its own cut there, chosen with `isAvailable`
+(`lib/demoTour.ts`, runtime config `DEMO_TOUR`):
 
 | Step | Reliant / forge shell | demo, `short` (default) | demo, `full` |
 |---|---|---|---|
-| fg-console, fg-instrumented, fg-trace | ✓ | ✓ | ✓ |
-| fg-hops, fg-inside (between and inside services) | | ✓ | ✓ |
+| fg-intro (what forge is, Install forge) | ✓ | ✓ | ✓ |
+| fg-console | ✓ | | ✓ |
+| fg-instrumented | ✓ | ✓ | ✓ |
+| fg-trace | ✓ | ✓ | ✓ |
+| fg-hops (between services) | ✓ | ✓ | ✓ |
+| fg-inside (inside a service) | | ✓ | ✓ |
 | fg-logs | ✓ | ✓ | ✓ |
 | fg-profile | ✓ | | ✓ |
 | fg-graph | | | ✓ |
 | fg-issue | ✓ | ✓ | ✓ |
 | fg-oncall | ✓ | | ✓ |
-| fg-agent (what a coding agent reads) | | ✓ | ✓ |
-| fg-ask, fg-done | ✓ | ✓ | ✓ |
-| **steps** | 9 | 10 | 13 |
+| fg-agent (what a coding agent reads) | | | ✓ |
+| fg-ask | ✓ | ✓ | ✓ |
+| fg-built (the recorded forge run, a wide modal card, `card: { wide, modal }`) | | ✓ | ✓ |
+| fg-done | ✓ | ✓ | ✓ |
+| **steps** | 11 | 10 | 15 |
 
-Keep the short cut at ten or fewer: an auto-started tour has to earn each
-step (`forgeJourney.test.tsx` pins it). `finish` returns null on the demo
-host, so the visitor stays on the console.
+fg-built is the demo's last step before the end card. It does not replace
+fg-instrumented, which runs in every cut; the short cut leaves out fg-agent
+instead (fg-built's card says what forge gives an agent, and fg-ask hands the
+issue to one).
+
+The short cut takes the best moments only; each view's tip covers the rest.
+`forgeJourney.test.tsx` pins it. `finish` returns null on the demo host, so
+the visitor stays on the console.
+
+### Page tours (the demo)
+
+The public demo gives each page one compact, non-modal explanation: what it
+is, why it helps, and how to use it (2–3 sentences). Dismiss leaves an
+accessible `?` restore button. Secondary agent help is a click/tap/keyboard
+disclosure, not hover-only. Deploy yours free is primary (the only button on a phone), Install forge and Sign up free secondary.
+There is no global toast or automatic local multi-stop sequence.
+
+A section's first visit this session opens that page's explanation by itself
+on a laptop; a reload, coming back, or a sub-page does not (a phone gets a
+closed "About this page" disclosure instead). `DemoTips` owns `PageEntryTour`,
+with Step 1 of 1, Dismiss and Done inside its callout. There is no full-site
+sequence or prerequisite action. `?` replays it. Same-page filters, polling and
+rerenders do not restart it. Legacy `/forge/demo?view=logs&tour=forge:fg-logs`
+explains Logs.
+Phone callouts use a bottom sheet after the drawer closes; their targets scroll
+into view above it. No auth or modal is required to explore.
+
+Copy and a single optional anchor live in `tips/tipCopy.ts`; page mapping is
+`tips/tipKeys.ts`. `DemoTipsAndToast.test.tsx` pins automatic entry, Dismiss /
+restore, current-page legacy links, real navigation and plain-language copy.
+
+| Event | Props |
+|---|---|
+| `demo_tip_shown`, `demo_tip_dismissed`, `demo_tips_exited` | `tip` |
+| `demo_page_tour_started`, `demo_page_tour_completed` | `tip` |
+| `demo_page_tour_exited` | `tip, at` (the stop it was on) |
+| `demo_cta_clicked` | `cta: signup\|install, placement: banner\|corner\|end_card\|page_card\|toast\|tour_intro` |
 
 ## Analytics (through `trackEvent`)
 
 | Event | Props |
 |---|---|
-| `journey_selected` | `journey, source: landing\|picker\|menu, version` (+ `from_journey` from the end card, `resumed`) |
+| `journey_selected` | `journey, source: landing\|picker\|menu\|demo, version` (+ `from_journey` from the end card, `resumed`) |
 | `journey_step_viewed` | `journey, step, version, step_index, total_steps` |
 | `journey_step_completed` | `journey, step, version, via: action\|next\|skip, duration_ms, signal?` |
 | `journey_completed` | `journey, version, duration_ms` |

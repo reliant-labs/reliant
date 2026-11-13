@@ -17,7 +17,7 @@ func TestThreeRepoTargetKeepsSiblingDefaults(t *testing.T) {
 	req.FetchRepoID, req.FetchBranch, req.ExpectedHead = "r1", "feature/target-only", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	st := &fakeStore{}
 	m := &targetOnlyMachine{fakeMachine: fakeMachine{root: "/w/target-case"}}
-	wt, err := Insert(context.Background(), st, req)
+	wt, err := Insert(context.Background(), st, nil, req)
 	require.NoError(t, err)
 	require.NoError(t, Finish(context.Background(), st, m, req, wt))
 	creates := m.cmds("worktree.create")

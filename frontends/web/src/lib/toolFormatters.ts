@@ -47,9 +47,21 @@ export interface FormattedToolParams {
 }
 
 /**
+ * What a formatter may know about a call beyond its input.
+ */
+export interface ToolFormatContext {
+  /**
+   * Byte length of the stored input, when the server sent a skeleton of it
+   * (a stub transcript read, ToolCallData.inputElided). A formatter that
+   * reads the size of a field the skeleton cuts reads this instead.
+   */
+  inputSize?: number;
+}
+
+/**
  * Tool formatter function signature
  */
-export type ToolFormatter = (input: ToolInput) => FormattedToolParams;
+export type ToolFormatter = (input: ToolInput, context?: ToolFormatContext) => FormattedToolParams;
 
 /**
  * Map of tool names to their categories
@@ -573,7 +585,7 @@ export const formatEditParams: ToolFormatter = (input) => {
 /**
  * Format patch tool parameters
  */
-export const formatPatchParams: ToolFormatter = (input) => {
+export const formatPatchParams: ToolFormatter = (input, context) => {
   if (typeof input !== 'object' || input === null) {
     return { summary: '', fullText: 'patch()' };
   }
@@ -581,6 +593,12 @@ export const formatPatchParams: ToolFormatter = (input) => {
   const patchText = input.patch_text as string | undefined;
   
   if (!patchText) {
+    // A skeleton keeps only a patch's header lines, so a header-less patch
+    // arrives empty: its size is the stored input's (the whole JSON, a few
+    // bytes more than the patch text the full input would count).
+    if (context?.inputSize) {
+      return { summary: `${context.inputSize} chars`, fullText: 'patch()', structured: {} };
+    }
     return { summary: '', fullText: 'patch()' };
   }
   
@@ -879,10 +897,11 @@ function formatGenericParams(toolName: string, input: ToolInput): FormattedToolP
  */
 export function formatToolParams(
   toolName: string,
-  input: ToolInput
+  input: ToolInput,
+  context?: ToolFormatContext,
 ): FormattedToolParams | undefined {
   const formatter = getToolFormatter(toolName);
-  if (formatter) return formatter(input);
+  if (formatter) return formatter(input, context);
   // Generic fallthrough — try to show something useful
   return formatGenericParams(toolName, input);
 }

@@ -61,6 +61,11 @@ func TestBuiltinWorkflowScenarios(t *testing.T) {
 			for _, sc := range scenarios {
 				t.Run(sc.Name, func(t *testing.T) {
 					res := r.Run(sc)
+					// The builtin corpus asserts the verdict it reaches: a
+					// run ending at an outcome: failure node is `failed`.
+					if w := wfscenario.CompletedOverFailedWarning(sc.Expect, &res.Execution); w != "" {
+						t.Errorf("scenario %q: %s", sc.Name, w)
+					}
 					if res.Status == wfscenario.StatusPassed {
 						return
 					}

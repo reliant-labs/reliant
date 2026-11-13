@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 
 	"connectrpc.com/connect"
@@ -25,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -88,6 +90,17 @@ func (s *Service) CreateTrigger(
 	if trigger.Kind == core.TriggerKindSchedule && s.deps.Syncer == nil {
 		return nil, svcerr.Unavailable("the schedule backend is unavailable; cannot create a trigger that would never fire")
 	}
+	// Fixed at creation: every chat the trigger launches belongs to it.
+	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, trigger.ProjectID, userID)
+	if err != nil {
+		return nil, triggerDBError("get project", err)
+	}
+	if trigger.OrgID, err = s.triggerOrg(ctx, userID, req.Msg.GetOrgId(), project); err != nil {
+		return nil, err
+	}
+	if err := s.bindOrgGitHubApp(ctx, userID, def, trigger); err != nil {
+		return nil, err
+	}
 	trigger.ID = uuid.NewString()
 	// nil enabled means true: a create that omits the field wants a working
 	// trigger, not a disabled one.
@@ -98,7 +111,9 @@ func (s *Service) CreateTrigger(
 		return nil, err
 	}
 
-	if err := s.deps.Repo.CreateTrigger(ctx, trigger); err != nil {
+	// Under the owner's org lock, only while the project's org this decision
+	// read still holds.
+	if err := s.deps.Repo.CreateTriggerInOrg(ctx, trigger, db.OrgRead{Table: "projects", ID: project.ID, Org: project.OrgID}); err != nil {
 		return nil, triggerDBError("create trigger", err)
 	}
 
@@ -195,11 +210,18 @@ func (s *Service) ListTriggers(
 
 	// The filter carries the caller's id, so this can never return another
 	// user's triggers regardless of what project id was asked for.
-	filters := core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId}
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
+	filters := core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId, Org: scope}
 	stored, err := s.deps.Repo.ListTriggers(ctx, filters)
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
 	}
+	// A trigger of an org the caller has left is not listed, named org or
+	// not: the list shows what GetTrigger would.
+	stored = authz.Visible(ctx, userID, stored, authz.CanReadTrigger)
 
 	// One query for every trigger's recent firings: health and last_event are
 	// computed from it, so the list costs a constant number of queries.
@@ -257,6 +279,34 @@ func (s *Service) UpdateTrigger(
 	}
 	updated.ID = existing.ID
 	updated.CreatedAt = existing.CreatedAt
+	// A trigger's org is fixed (no moving between orgs): it may move only to
+	// a project of the same org, and only a caller acting in that org may
+	// change it at all (updatedTriggerOrg).
+	var source, target *core.Project
+	if existing.OrgID == nil {
+		if source, err = s.deps.Repo.GetProjectWithUserCheck(ctx, existing.ProjectID, existing.UserID); err != nil && !svcerr.IsNotFound(err) {
+			return nil, triggerDBError("get project", err)
+		}
+	}
+	if updated.ProjectID != existing.ProjectID {
+		if target, err = s.deps.Repo.GetProjectWithUserCheck(ctx, updated.ProjectID, existing.UserID); err != nil {
+			return nil, triggerDBError("get project", err)
+		}
+	}
+	if updated.OrgID, err = s.updatedTriggerOrg(ctx, existing.UserID, existing, source, target); err != nil {
+		return nil, err
+	}
+	if err := s.bindOrgGitHubApp(ctx, existing.UserID, def, updated); err != nil {
+		return nil, err
+	}
+	// The write re-reads, under the owner's org lock, every org this
+	// decision read: a backfill between here and there refuses it.
+	reads := []db.OrgRead{{Table: "triggers", ID: existing.ID, Org: existing.OrgID}}
+	for _, p := range []*core.Project{source, target} {
+		if p != nil {
+			reads = append(reads, db.OrgRead{Table: "projects", ID: p.ID, Org: p.OrgID})
+		}
+	}
 	// nil enabled on update means "leave it as it is": an update of the
 	// schedule should not silently resume a trigger the owner paused.
 	updated.Enabled = existing.Enabled
@@ -267,7 +317,7 @@ func (s *Service) UpdateTrigger(
 		return nil, err
 	}
 
-	if err := s.deps.Repo.UpdateTrigger(ctx, updated); err != nil {
+	if err := s.deps.Repo.UpdateTriggerInOrg(ctx, updated, reads...); err != nil {
 		return nil, triggerDBError("update trigger", err)
 	}
 
@@ -350,6 +400,9 @@ func (s *Service) SetTriggerEnabled(
 		return nil, svcerr.Unavailable("the schedule backend is unavailable")
 	}
 	if req.Msg.Enabled {
+		if err := s.requireProjectWritable(ctx, trigger); err != nil {
+			return nil, err
+		}
 		// Turning an activation back on is not a way around setup: its params
 		// are checked against the workflow as it is now, because the workflow
 		// may have gained a required input while it was paused.
@@ -367,6 +420,9 @@ func (s *Service) SetTriggerEnabled(
 		return nil, triggerDBError("set trigger enabled", err)
 	}
 	trigger.Enabled = req.Msg.Enabled
+	// A person pausing or resuming it is the reason now (the write cleared
+	// paused_reason too).
+	trigger.PausedReason = ""
 
 	// A pushed trigger needs nothing converged — the receivers read
 	// `enabled` off the row for every event — but a polled one pauses its
@@ -451,7 +507,7 @@ func (s *Service) GetLaunchEvent(
 	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, triggerDBError("get chat", err)
 	}
-	if err != nil || chat == nil || chat.UserID != userID {
+	if err != nil || !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 	ev, err := s.deps.Repo.GetTriggerEventByChatID(ctx, chat.ID)
@@ -461,7 +517,7 @@ func (s *Service) GetLaunchEvent(
 		}
 		return nil, triggerDBError("get launch event", err)
 	}
-	if ev == nil || ev.UserID != userID {
+	if !authz.CanReadTriggerEvent(ctx, userID, ev) {
 		return connect.NewResponse(&reliantv1.GetLaunchEventResponse{}), nil
 	}
 	out, err := triggers.EventToProto(ev)
@@ -586,10 +642,30 @@ func (s *Service) ownedTrigger(ctx context.Context, id string) (*core.Trigger, e
 		// core.ErrTriggerNotFound is a NotFound kind, so it passes as itself.
 		return nil, triggerDBError("get trigger", err)
 	}
-	if trigger.UserID != userID {
+	if !authz.CanWriteTrigger(ctx, userID, trigger) {
 		return nil, svcerr.NotFound("trigger")
 	}
 	return trigger, nil
+}
+
+// requireProjectWritable refuses to turn trigger on while the caller may not
+// run work in its project: the check every launch of it meets. ownedTrigger
+// decides on the trigger's own org, and a trigger written before orgs has
+// none, so without this its creator could resume it after leaving the
+// project's org, and each resume would buy one more refused, re-paused
+// firing (triggers.AutoPause). An outage is Unavailable, never an answer.
+func (s *Service) requireProjectWritable(ctx context.Context, trigger *core.Trigger) error {
+	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, trigger.ProjectID, auth.MustGetUserID(ctx))
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, authz.ErrMembershipUnavailable):
+		return orgs.LookupFailed(ctx, "could not verify the trigger's organization; try again", err)
+	case errors.Is(err, core.ErrProjectNotFound):
+		return svcerr.NotFound("trigger")
+	default:
+		return triggerDBError("get the trigger's project", err)
+	}
 }
 
 // triggerFromDefinition validates a wire definition into a storable row.
@@ -1053,7 +1129,7 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 		}
 	}
 
-	proto, err := triggers.ToProto(t, nextFireAt, firings, reg)
+	proto, err := renderTrigger(t, nextFireAt, firings, reg)
 	if err != nil {
 		// Params that will not round-trip through structpb. Report the trigger
 		// without them rather than failing the whole call.

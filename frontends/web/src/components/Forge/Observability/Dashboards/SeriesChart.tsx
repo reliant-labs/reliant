@@ -16,8 +16,11 @@ import type React from "react";
 import { useMemo, useState } from "react";
 
 import type { Panel, PanelResult, Unit } from "@/services/controlPlane/observability/types";
+import { spanMs } from "@/services/controlPlane/observability/window";
 
+import { useChartDensity } from "../charts/chartDensity";
 import { UPlotChart, type ChartBand, type ChartSeries } from "../charts/UPlotChart";
+import { formatValue } from "../format";
 import {
   additivityOf,
   alignShifted,
@@ -83,7 +86,9 @@ export function TimeSeriesChart({ panel, data, unit, keys, compare, bands, onDri
     [panel, data, keyText, timestamps, ranking]
   );
   const ranked = useMemo(() => rankEntries(entries, ranking), [entries, ranking]);
-  const topN = topNOf(panel);
+  // A host that asks for calmer charts (charts/chartDensity) draws fewer series before "Show all".
+  const density = useChartDensity();
+  const topN = density.maxSeries ? Math.min(topNOf(panel), density.maxSeries) : topNOf(panel);
 
   const [showAll, setShowAll] = useState(false);
   const [sort, setSort] = useState<Stat | null>(null);
@@ -93,13 +98,14 @@ export function TimeSeriesChart({ panel, data, unit, keys, compare, bands, onDri
 
   const { shown, rest, restErrors } = useMemo(() => {
     if (showAll) return { shown: ranked, rest: [], restErrors: [] };
-    const folded = foldTopN(ranked, topN);
+    // A calmer chart's limit is strict: foldTopN would rather draw one more than fold one away.
+    const folded = density.maxSeries && ranked.length > topN ? { shown: ranked.slice(0, topN), rest: ranked.slice(topN) } : foldTopN(ranked, topN);
     const tailErrors = folded.rest.filter((e) => e.error);
     const tail = folded.rest.filter((e) => !e.error);
     // Errors are never folded away: summed into "Other errors" when the values
     // add up, else drawn as themselves.
     return additivity.foldable ? { shown: folded.shown, rest: tail, restErrors: tailErrors } : { shown: [...folded.shown, ...tailErrors], rest: tail, restErrors: [] };
-  }, [ranked, topN, showAll, additivity.foldable]);
+  }, [ranked, topN, showAll, additivity.foldable, density.maxSeries]);
   // A key the latest result no longer has is not "shown alone": forget it.
   const isolated = useMemo(() => {
     const present = new Set(entries.map((e) => e.key));
@@ -114,7 +120,8 @@ export function TimeSeriesChart({ panel, data, unit, keys, compare, bands, onDri
   }, [isolated, entries, shown]);
   const otherValues = useMemo(() => (rest.length && additivity.foldable ? sumSeries(rest, timestamps.length) : null), [rest, additivity.foldable, timestamps.length]);
   const otherErrorValues = useMemo(() => (restErrors.length ? sumSeries(restErrors, timestamps.length) : null), [restErrors, timestamps.length]);
-  const drawOther = isolated.size === 0;
+  // A calmer chart keeps "Other" in the legend, not on the plot: its lines are the ones that matter.
+  const drawOther = isolated.size === 0 && !density.maxSeries;
 
   const style = panel.display?.style;
   const barStyle = style === "bars";
@@ -137,13 +144,18 @@ export function TimeSeriesChart({ panel, data, unit, keys, compare, bands, onDri
     return [...main, ...compared];
   }, [drawn, drawOther, otherValues, otherErrorValues, rest.length, restErrors.length, previous, compareLabel, offsetSec, timestamps]);
 
+  // The panel's minStep IS its bucket (a weekly statement groups by toMonday):
+  // the server can only infer one from the first column's type, and a Date
+  // reads as a day whatever the statement grouped it by.
+  const bucketSeconds = panelBucketSeconds(panel, data);
   const calendar = useMemo(
-    () => (data.bucketTimezone === "UTC" ? { timezone: "UTC" as const, bucketSeconds: data.bucketSeconds } : undefined),
-    [data.bucketTimezone, data.bucketSeconds]
+    () => (data.bucketTimezone === "UTC" ? { timezone: "UTC" as const, bucketSeconds } : undefined),
+    [data.bucketTimezone, bucketSeconds]
   );
   const windowSec = useMemo(() => data.window && { startSec: data.window.startMs / 1000, endSec: data.window.endMs / 1000 }, [data.window]);
 
-  const legend = !compact && (entries.length > 1 || !!onDrill);
+  // A calmer chart (chartDensity) lists its series below only when some are folded away ("Show all").
+  const legend = !compact && (density.maxSeries ? entries.length > density.maxSeries : entries.length > 1 || !!onDrill);
   const highlightIndex = highlighted === null ? null : drawn.findIndex((e) => e.key === highlighted);
   const columns = statColumns(additivity);
   const activeSort = sort ?? ranking;
@@ -152,6 +164,7 @@ export function TimeSeriesChart({ panel, data, unit, keys, compare, bands, onDri
 
   return (
     <div>
+      {density.headline && !compact && <ChartHeadline entries={ranked} foldable={additivity.foldable} unit={unit} />}
       <UPlotChart
         height={height}
         timestamps={timestamps}
@@ -215,9 +228,59 @@ export function TimeSeriesChart({ panel, data, unit, keys, compare, bands, onDri
   );
 }
 
+/**
+ * The figure a chart is about, large, and one sentence saying what it is:
+ * the series' sum when they add up (requests, errors), else the leading
+ * series' latest value. Only where a host asked for it (chartDensity).
+ */
+function ChartHeadline({
+  entries,
+  foldable,
+  unit,
+}: {
+  entries: readonly { label: string; stats: { last: number | null; avg: number | null } }[];
+  foldable: boolean;
+  unit: Unit;
+}) {
+  if (entries.length === 0) return null;
+  const sum = (pick: (e: (typeof entries)[number]) => number | null) => entries.reduce((a, e) => a + (pick(e) ?? 0), 0);
+  const lead = entries[0];
+  const now = foldable && entries.length > 1 ? sum((e) => e.stats.last) : lead.stats.last;
+  const avg = foldable && entries.length > 1 ? sum((e) => e.stats.avg) : lead.stats.avg;
+  if (now === null) return null;
+  const subject = foldable && entries.length > 1 ? `All ${entries.length} series together` : entries.length > 1 ? `${lead.label}, the highest` : "Latest value";
+  // With no average to compare against (nothing earlier in the window), the subject says it all.
+  if (avg === null || avg === 0) {
+    return (
+      <div className="mb-2" data-testid="chart-headline">
+        <p className="text-xl font-semibold tabular-nums text-ink">{formatValue(now, unit)}</p>
+        <p className="text-sm text-ink-muted">{`${subject}.`}</p>
+      </div>
+    );
+  }
+  const compared =
+    now > avg * 1.25
+      ? `above its average of ${formatValue(avg, unit)} for this window`
+      : now < avg * 0.75
+        ? `below its average of ${formatValue(avg, unit)} for this window`
+        : "about the same as its average for this window";
+  return (
+    <div className="mb-2" data-testid="chart-headline">
+      <p className="text-xl font-semibold tabular-nums text-ink">{formatValue(now, unit)}</p>
+      <p className="text-sm text-ink-muted">{`${subject}: ${compared}.`}</p>
+    </div>
+  );
+}
+
 /** The bucket under the pointer: its time, or its date for calendar buckets. */
 function bucketTime(sec: number, calendar?: { timezone: "UTC" }): string {
   const date = new Date(sec * 1000);
   if (calendar) return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
   return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+/** A panel's bucket in seconds: its declared minStep, else what the server reported. */
+export function panelBucketSeconds(panel: Pick<Panel, "minStep">, data: Pick<PanelResult, "bucketSeconds">): number | undefined {
+  const declared = spanMs(panel.minStep);
+  return declared !== undefined ? declared / 1000 : data.bucketSeconds;
 }

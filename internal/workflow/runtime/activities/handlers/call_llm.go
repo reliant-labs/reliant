@@ -397,6 +397,15 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 		ctx = nomachine.With(ctx)
 	}
 
+	// Latch before assembling or sending anything. Durable thread lineage is
+	// authoritative after coarse restarts and stopped-agent resumption, which
+	// may reconstruct runtime inputs without their former in-memory policy.
+	rtx.ExcludeAmbientMemory, err = a.repo.ResolveThreadAmbientMemoryExclusion(ctx, chat.ID, thread,
+		rtx.ExcludeAmbientMemory || args.GetExcludeAmbientMemory())
+	if err != nil {
+		return nil, fmt.Errorf("resolve ambient memory exclusion: %w", err)
+	}
+
 	// Hydrate the user's JWT into the in-memory auth map so the Reliant LLM
 	// driver can be resolved on workers that didn't see the originating gRPC
 	// request. The JWT travels through workflow inputs; see RuntimeContext.
@@ -607,6 +616,90 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 	}
 }
 
+// resumeContinueText is the hidden user message that continues a cut-off
+// turn on resume. It is LLM-only (DISPLAY_STYLE_HIDDEN): the transcript the
+// user sees is unchanged.
+const resumeContinueText = "Your previous turn was cut off before it finished, and the run has now resumed. " +
+	"Continue where you left off."
+
+// historyStartsTurn reports whether a call over history begins a turn: the
+// newest message past any trailing system framing is a person's or an agent's
+// (new input), not a tool result inside a turn. A turn start is the only point
+// a thread moves up to a better account tier (org-provider-accounts §4.5).
+func historyStartsTurn(history []message.Message) bool {
+	tail := len(history) - 1
+	for tail >= 0 && history[tail].Role == message.System {
+		tail--
+	}
+	return tail >= 0 && (history[tail].Role == message.User || history[tail].Role == message.Agent)
+}
+
+// endsWithCutOffAssistantTurn reports whether history, past any trailing
+// system framing, ends with an assistant message that requested no tools:
+// on a resumed loop's first turn, the turn that was cut off (reasoning only,
+// or a partial reply). One with tool calls is not: the orphan repair already
+// gave its calls results, and the provider can be called as it is.
+func endsWithCutOffAssistantTurn(history []message.Message) bool {
+	tail := len(history) - 1
+	for tail >= 0 && history[tail].Role == message.System {
+		tail--
+	}
+	return tail >= 0 && history[tail].Role == message.Assistant && len(history[tail].ToolCalls()) == 0
+}
+
+// resumeCutOffTurn saves the hidden "continue" user message for a resumed
+// loop whose history ends with its cut-off turn, and returns it for this
+// request.
+//
+// Why: an agent stopped on a failure (a usage limit, a spent provider) whose
+// last saved turn was cut off is resumed with no new input by a capacity wake.
+// Its first turn found history ending with the assistant and yielded, so the
+// resumed agent did no work and "failed again" with the report its parent
+// already had (reliant #2394: sub-agent ae9723c5, a thinking-only turn).
+//
+// Saved, not only sent, so the conversation stays well-formed for the turns
+// after this one. Keyed on the turn's position (MessageIdempotencyKey), so a
+// retry of this activity finds the row it already wrote. A failed save is
+// logged and the message still goes on this request: the turn proceeding
+// matters more than the row.
+func (a *CallLLMActivity) resumeCutOffTurn(ctx context.Context, rtx RuntimeContext, chatID, thread string) message.Message {
+	continued := message.Message{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: resumeContinueText}},
+	}
+	key := rtx.MessageIdempotencyKey
+	if key == "" && activity.IsActivity(ctx) {
+		info := activity.GetInfo(ctx)
+		key = info.WorkflowExecution.ID + "-" + info.ActivityID
+	}
+	key += "|resume-continue"
+	var workflowID *string
+	if rtx.WorkflowID != "" {
+		workflowID = &rtx.WorkflowID
+	}
+	saved, err := threads.NewService(a.repo).SaveMessage(ctx, threads.SaveMessageOpts{
+		ChatID:       chatID,
+		Thread:       thread,
+		Role:         int32(reliantv1.MessageRole_MESSAGE_ROLE_USER),
+		Content:      resumeContinueText,
+		WorkflowID:   workflowID,
+		StepID:       rtx.StepID,
+		ActivityID:   &key,
+		DisplayStyle: int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN),
+	})
+	if err != nil {
+		logging.WarnContext(ctx, "[CallLLM] Could not save the hidden continue message of a resumed turn; sending it anyway",
+			"chatID", chatID, "thread", thread, "error", err)
+		return continued
+	}
+	if saved != nil {
+		continued.ID = saved.MessageID
+	}
+	logging.InfoContext(ctx, "[CallLLM] Resumed loop's history ends with its cut-off turn; continuing it with a hidden message",
+		"chatID", chatID, "thread", thread)
+	return continued
+}
+
 // interruptedTurnWriteTimeout bounds the detached write of an interrupted
 // turn's partial. Short: one insert on a live pool, with the caller unwinding.
 const interruptedTurnWriteTimeout = 5 * time.Second
@@ -813,6 +906,33 @@ func heartbeatKilledStream(ctx context.Context) bool {
 		return false
 	}
 	return true
+}
+
+// workerStopKilledStream reports whether ctx was cancelled because the worker
+// running this activity began stopping, rather than by a real instruction to
+// stop the turn.
+//
+// A real stop wins when both happened: a server-side cancel, pause or reset
+// recorded as the cause means the workflow no longer wants this attempt, and
+// retrying it on the next worker would run a turn nobody is waiting for. Only
+// a cancel with no such cause, on a worker whose stop channel is closed, is
+// the shutdown's own (ActivityWrapper's cancelForWorkerStop).
+func workerStopKilledStream(ctx context.Context) bool {
+	if !errors.Is(ctx.Err(), context.Canceled) || !activity.IsActivity(ctx) {
+		return false
+	}
+	cause := context.Cause(ctx)
+	if temporal.IsCanceledError(cause) ||
+		errors.Is(cause, activity.ErrActivityPaused) ||
+		errors.Is(cause, activity.ErrActivityReset) {
+		return false
+	}
+	select {
+	case <-activity.GetWorkerStopChannel(ctx):
+		return true
+	default:
+		return false
+	}
 }
 
 // reportContentFreeTurn puts the content-free turn on screen as an error.
@@ -1110,6 +1230,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		modelSelector.Tags = protoModel.GetTags()
 		modelSelector.Providers = protoModel.GetProviders()
 	}
+	modelSelector = agentTurnSelector(modelSelector)
 	// While the thread is on a fallback model (its own provider hit a usage
 	// limit and the chat allows another), that model replaces the selector.
 	// The workflow only sets it inside the lease, so this needs no clock.
@@ -1174,6 +1295,19 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to load project config: %w", err)
 	}
+	if args.GetExcludeSkillCatalog() {
+		if len(model.CelStringListValue(args.GetSkills())) > 0 {
+			return nil, fmt.Errorf("exclude_skill_catalog cannot be combined with nonempty skills")
+		}
+		// The snapshot may be shared across concurrent calls. Filter a shallow
+		// copy so all downstream consumers (announcement, forge auto-preload,
+		// and skill-tool factory) see no catalog without mutating the snapshot.
+		if projectCfg != nil {
+			filtered := *projectCfg
+			filtered.Skills = nil
+			projectCfg = &filtered
+		}
+	}
 
 	// Explicit per-call overrides from workflow args. Zero values mean "use
 	// the model default" — resolveLLMCall (the request-construction path
@@ -1189,26 +1323,32 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// Resolve model and driver through the shared request-construction path.
 	// When a custom driver resolver is injected (e.g., in tests), it skips
 	// registry resolution and probes the resolver for its model.
+	who := chatAttendance(ctx, a.repo, chat)
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, llmCallSpec{
-		UserID:            chat.UserID,
-		SessionID:         chat.ID,
-		Selector:          modelSelector,
-		RunProviders:      rtx.ProviderPreference,
-		ChatProvider:      rtx.ChatProvider,
-		ClearProviderPins: rtx.ClearProviderPins,
-		Descendant:        rtx.Descendant,
-		PresetModelTags:   rtx.PresetModelTags,
-		ChatModel:         chatModelSelector(rtx.ChatModel),
-		ThreadModelChosen: rtx.ThreadModelChosen,
-		ThreadID:          thread,
-		Routing:           a.routing,
-		Failover:          rtx.Failover,
-		Temperature:       explicitTemperature,
-		ThinkingLevel:     explicitThinkingLevel,
-		MaxTokens:         explicitMaxTokens,
-		WorkingDir:        workingDir,
-		TagPrefsReader:    a.repo,
-		Local:             a.localModelSpec(worktreeDaemonID, chat.NoMachine),
+		UserID:              chat.UserID,
+		OrgID:               chatOrgID(chat),
+		Attended:            who.attended,
+		UnattendedAnySource: who.anySource,
+		SessionID:           chat.ID,
+		ChatID:              chat.ID,
+		TurnStart:           historyStartsTurn(history),
+		Selector:            modelSelector,
+		RunProviders:        rtx.ProviderPreference,
+		ChatProvider:        rtx.ChatProvider,
+		ClearProviderPins:   rtx.ClearProviderPins,
+		Descendant:          rtx.Descendant,
+		PresetModelTags:     rtx.PresetModelTags,
+		ChatModel:           chatModelSelector(rtx.ChatModel),
+		ThreadModelChosen:   rtx.ThreadModelChosen,
+		ThreadID:            thread,
+		Routing:             a.routing,
+		Failover:            rtx.Failover,
+		Temperature:         explicitTemperature,
+		ThinkingLevel:       explicitThinkingLevel,
+		MaxTokens:           explicitMaxTokens,
+		WorkingDir:          workingDir,
+		TagPrefsReader:      a.repo,
+		Local:               a.localModelSpec(worktreeDaemonID, chat.NoMachine),
 	})
 	if err != nil {
 		return nil, err
@@ -1487,7 +1627,19 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// These are NOT saved to DB — re-injected each turn so the Anthropic
 	// cache handles deduplication.
 	var prefix []message.Message
-	if memoryContent := formatStoredMemories(projectCfg); memoryContent != "" {
+	// This excludes only automatic memory injection, not bootstrap prompts,
+	// history, explicit skills/messages or tool access. An inherited exclusion
+	// cannot be undone by this call's default/false value.
+	excludeAmbientMemory := rtx.ExcludeAmbientMemory || args.GetExcludeAmbientMemory()
+	var memoryContent string
+	if !excludeAmbientMemory {
+		memoryContent = formatStoredMemories(projectCfg)
+	} else if projectCfg != nil {
+		// The sandbox capability note shares the memory block historically,
+		// but is harness guidance, not user memory. Keep it under exclusion.
+		memoryContent = daemonRuntimeLimitationNote(projectCfg.DaemonRuntimeType)
+	}
+	if memoryContent != "" {
 		prefix = append(prefix, message.Message{
 			Role:  message.System,
 			Parts: []message.ContentPart{message.TextContent{Text: memoryContent}},
@@ -1497,7 +1649,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// config snapshot, within a share of this model's window (see
 	// repoMemoryBudgetFraction). Sorted by repo name for prefix-cache
 	// stability.
-	if projectCfg != nil && len(projectCfg.RepoMemories) > 0 {
+	if !excludeAmbientMemory && projectCfg != nil && len(projectCfg.RepoMemories) > 0 {
 		budget := repoMemoryBudgetChars(ceiling)
 		memMsgs, omitted := formatRepoMemoryMessages(projectCfg.RepoMemories, budget)
 		if len(memMsgs) > 0 {
@@ -1607,6 +1759,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 		activity.GetLogger(ctx).Debug("[CallLLM] Appended injected messages",
 			"count", len(args.GetMessages()))
+	}
+
+	// A loop resumed mid-work with nothing new to read: continue its cut-off
+	// turn rather than yield it as the agent's last word (resumeCutOffTurn).
+	if rtx.ResumeTurn && !model.CelBoolValue(args.GetContinueTurn()) && endsWithCutOffAssistantTurn(history) {
+		history = append(history, a.resumeCutOffTurn(ctx, rtx, chat.ID, thread))
 	}
 
 	if err := validateToolNamesForLLMRequest(availableTools); err != nil {
@@ -1959,7 +2117,7 @@ streamLoop:
 	if streamInterrupted {
 		usageErr = nil
 	}
-	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
+	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, resolved, llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
 	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
 	a.trackLLMCallCompleted(ctx, chat, driver, rtx.WorkflowID, rtx.StepID, llmLatencyMs, streamState.usage, usageErr)
 
@@ -2002,8 +2160,9 @@ streamLoop:
 			return nil, stalled
 		}
 		failedCall := usageLimitContext{
-			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
+			Scope: llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope(), ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: rtx.Failover,
+			ChatID: chat.ID, Plan: resolved.plan,
 		}
 		return nil, a.routing.providerFailure(ctx, streamErr, failedCall)
 	}
@@ -2046,6 +2205,32 @@ streamLoop:
 			"toolCalls", len(streamState.toolCalls),
 		)
 		return nil, fmt.Errorf("heartbeat RPC cancelled the LLM stream: %w", context.Cause(ctx))
+	}
+
+	// The same holds for the worker going away under the turn: a rollout or a
+	// hot reload is not the user asking the agent to stop. ActivityWrapper
+	// cancels every in-flight activity the moment the worker begins stopping
+	// (cancelForWorkerStop, a plain cancel with no cause), so the stream
+	// arrives here looking like an interrupt. Treated as one, the partial was
+	// persisted as the turn's final answer and the activity returned success,
+	// which skipped the wrapper's WorkerShutdown retry: the loop then
+	// re-entered on a history that ended with that partial and yielded it as
+	// the agent's last word ("History ends with an assistant message after
+	// the mailbox drain", every prod event of which landed within seconds of
+	// a worker stop; chat 84e0a94f's sub-agent handed its parent a truncated
+	// answer that way). Failing here lets the wrapper rewrite the error to a
+	// retryable WorkerShutdown, and the next worker re-streams the turn under
+	// the same pre-allocated message id.
+	if streamInterrupted && workerStopKilledStream(ctx) {
+		activity.GetLogger(ctx).Info(
+			"[CallLLM] Stream cancelled because the worker is stopping, not by a real interrupt — "+
+				"failing the turn so the next worker retries it",
+			"chatID", chat.ID,
+			"thread", thread,
+			"responseChars", len(strings.Join(streamState.textParts, "")),
+			"toolCalls", len(streamState.toolCalls),
+		)
+		return nil, fmt.Errorf("worker stopped during the LLM stream: %w", context.Cause(ctx))
 	}
 
 	// The provider served the turn, so a chat that was returning to it is back.

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -20,6 +21,25 @@ import (
 // (GitHub's largest, a push, is capped at 25MB by GitHub but a trigger never
 // needs one that large: the run can fetch the rest).
 const MaxBodyBytes = 1 << 20
+
+// recordTimeout bounds recording one verified delivery.
+const recordTimeout = time.Minute
+
+// recordingContext is the context a verified delivery is recorded under: the
+// request's values (trace, logger) without its cancellation, bounded by
+// recordTimeout.
+//
+// A sender gives up on its own clock: GitHub closes the connection after 10s
+// and does NOT redeliver on its own. Recording under the request context then
+// cancelled mid-write, the delivery was neither recorded nor retried, and the
+// trigger's history had no row for it at all, not even a skip (seen on
+// 2026-11-01: pull_request.labeled events on a busy API server failed with
+// "failed to create trigger event: context canceled"). Once the delivery is
+// verified, the work to record it finishes whether or not anyone is still
+// waiting for the answer; a redelivery dedupes against the row it wrote.
+func recordingContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), recordTimeout)
+}
 
 // errBodyTooLarge is a body over MaxBodyBytes.
 var errBodyTooLarge = errors.New("webhook: body too large")

@@ -39,7 +39,7 @@ func TestRemoteRunExecutor_CarriesCredentials(t *testing.T) {
 		cap := &capturingToolExecutor{}
 		exec := NewRemoteRunExecutor(cap)
 		exec.SetContext(RunExecutorContext{UserID: "u", ProjectPath: "/p", Credentials: tc.credentials})
-		_, _, _, _, err := exec.ExecuteCommand(context.Background(), "git push", "/p", 1000, nil)
+		_, err := exec.ExecuteCommand(context.Background(), "git push", "/p", 1000, nil)
 		require.NoError(t, err)
 		require.Len(t, cap.reqs, 1)
 		in := shellInputOf(t, cap.reqs[0])
@@ -71,4 +71,16 @@ func TestRunStep_UnknownCredentialsFailsTheStepWithoutRunningTheCommand(t *testi
 	assert.Equal(t, -1, out.ExitCode)
 	assert.Contains(t, out.Stderr, "credentials")
 	assert.Empty(t, mock.calls, "a typo in credentials must never run the command")
+}
+
+// A run node's writable_checkouts reach the shell tool beside its credentials.
+func TestRemoteRunExecutor_CarriesWritableCheckouts(t *testing.T) {
+	t.Parallel()
+	cap := &capturingToolExecutor{}
+	exec := NewRemoteRunExecutor(cap)
+	exec.SetContext(RunExecutorContext{UserID: "u", ProjectPath: "/p", Credentials: "none", WritableCheckouts: []string{"reliant"}})
+	_, err := exec.ExecuteCommand(context.Background(), "make gen", "/p", 1000, nil)
+	require.NoError(t, err)
+	require.Len(t, cap.reqs, 1)
+	assert.Equal(t, []any{"reliant"}, shellInputOf(t, cap.reqs[0])["writable_checkouts"])
 }

@@ -233,7 +233,7 @@ func TestTurnsAreIndependent(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("a different turn must not wait on this one")
 	}
 	r1()

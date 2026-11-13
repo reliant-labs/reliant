@@ -62,7 +62,7 @@ func InsertOAuthFlow(ctx context.Context, db orm.Context, f *core.OAuthFlow) err
 		StateHash: f.StateHash, UserID: f.UserID, SessionIDHash: f.SessionIDHash, IntegrationID: f.IntegrationID,
 		PkceVerifierSealed: f.PKCEVerifierSealed, RedirectAfter: emptyToNil(f.RedirectAfter),
 		ReconnectConnectionID: emptyToNil(f.ReconnectConnectionID), ConnectionName: emptyToNil(f.ConnectionName),
-		ExpiresAt: f.ExpiresAt, Params: params, ReturnTo: emptyToNil(f.ReturnTo),
+		ExpiresAt: f.ExpiresAt, Params: params, ReturnTo: emptyToNil(f.ReturnTo), OrgID: emptyToNil(f.OrgID),
 	})
 }
 
@@ -108,7 +108,7 @@ func oauthFlowToCore(row *OauthFlow, err error) (*core.OAuthFlow, error) {
 		StateHash: row.StateHash, UserID: row.UserID, SessionIDHash: row.SessionIDHash, IntegrationID: row.IntegrationID,
 		PKCEVerifierSealed: row.PkceVerifierSealed, RedirectAfter: deref(row.RedirectAfter),
 		ReconnectConnectionID: deref(row.ReconnectConnectionID), ConnectionName: deref(row.ConnectionName),
-		Params: params, ReturnTo: deref(row.ReturnTo), ExpiresAt: row.ExpiresAt,
+		Params: params, ReturnTo: deref(row.ReturnTo), ExpiresAt: row.ExpiresAt, OrgID: deref(row.OrgID),
 	}, nil
 }
 

@@ -36,8 +36,8 @@ func TestWorkflowAttentionAdditiveWireContract(t *testing.T) {
 	if !proto.Equal(configured, got) {
 		t.Fatalf("workflow attention lost fields: %v", got)
 	}
-	field := configured.ProtoReflect().Descriptor().Fields().ByNumber(23)
+	field := configured.ProtoReflect().Descriptor().Fields().ByNumber(25)
 	if field == nil || field.Name() != "attention" || field.Message().Name() != "WorkflowAttention" {
-		t.Fatal("Workflow.attention must retain field 23 and WorkflowAttention message")
+		t.Fatal("Workflow.attention must retain field 25 and WorkflowAttention message")
 	}
 }

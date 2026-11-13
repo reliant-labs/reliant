@@ -1,7 +1,8 @@
 /**
  * The simplified thread through the real InterleavedTimeline, ChatMessage and
- * TurnWorkFold: each agent turn becomes one fold row plus its answer, and the
- * fold's contents come and go with its header.
+ * TurnWorkFold: the agent's prose stays on screen, each run of tool work
+ * between it becomes one fold row, and the fold's contents come and go with
+ * its header.
  *
  * Only the leaves are stubbed (virtualizer, markdown, tool cards, stores);
  * the timeline pass, the slicing and the fold are real.
@@ -10,11 +11,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { create } from "@bufbuild/protobuf";
-import { ContentBlockType, MessageRole, StreamingState } from "../../../../types/chat";
+import { ContentBlockType, DisplayStyle, MessageRole, StreamingState } from "../../../../types/chat";
 import type { Message } from "../../../../types/chat";
 import { ApprovalSchema, ApprovalStatus } from "../../../../gen/reliant/v1/approval_pb";
 import type { Approval } from "../../../../gen/reliant/v1/approval_pb";
 import { InterleavedTimeline } from "../InterleavedTimeline";
+import type { ErrorUpdate } from "../../../../types/streaming";
 import { SurfaceProvider } from "../../../../lib/surfaceContext";
 import { setChatThreadMode } from "../useChatThreadMode";
 
@@ -98,9 +100,13 @@ vi.mock("../../BranchOptionsMenu", () => ({ BranchOptionsMenu: () => null }));
 vi.mock("../../BranchToWorktreeModal", () => ({ BranchToWorktreeModal: () => null }));
 vi.mock("../../BranchToExistingWorktreeModal", () => ({ BranchToExistingWorktreeModal: () => null }));
 vi.mock("../../CodeContextPill", () => ({ CodeContextPill: () => null }));
+vi.mock("../../WorkflowErrorMessage", () => ({
+  WorkflowErrorMessage: ({ error }: { error: { error_summary?: string } }) => <div data-testid="error-row">{error.error_summary}</div>,
+}));
 
 vi.mock("../../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
+  useChatIdOrActive: (chatId?: string | null) => chatId || "chat-1",
   useToolResultsByCallId: () => ({}),
   useToolCallStates: () => new Map(),
   useChat: () => ({ worktreeId: "worktree-1" }),
@@ -201,11 +207,17 @@ const pendingApproval = (blockId: string): Approval =>
 
 function renderTimeline(
   messages: Message[],
-  props: { isStreaming?: boolean; approvals?: Approval[] } = {},
+  props: { isStreaming?: boolean; approvals?: Approval[]; errorEvents?: ErrorUpdate[] } = {},
 ) {
   const element = (next: Message[], p: typeof props) => (
     <SurfaceProvider surface="mobile">
-      <InterleavedTimeline messages={next} chatId="chat-1" isStreaming={p.isStreaming ?? false} approvals={p.approvals} />
+      <InterleavedTimeline
+        messages={next}
+        chatId="chat-1"
+        isStreaming={p.isStreaming ?? false}
+        approvals={p.approvals}
+        errorEvents={p.errorEvents}
+      />
     </SurfaceProvider>
   );
   const result = render(element(messages, props));
@@ -213,6 +225,19 @@ function renderTimeline(
 }
 
 const fold = () => screen.getByTestId("turn-work-fold");
+/** The timeline's rows, in order, each named by what it shows. */
+const rowSequence = () =>
+  Array.from(document.querySelectorAll("[data-timeline-index]"))
+    .sort((a, b) => Number(a.getAttribute("data-timeline-index")) - Number(b.getAttribute("data-timeline-index")))
+    .map((row) => {
+      if (row.querySelector('[data-testid="turn-work-fold"]')) return "fold";
+      if (row.querySelector('[data-testid="ask-user-card"]')) return "ask-card";
+      if (row.querySelector('[data-testid="error-row"]')) return "error";
+      const card = row.querySelector('[data-testid="tool-card"]');
+      if (card) return card.textContent?.replace(/Approve tool execution/, "") ?? "tool";
+      // The message itself, not the phone's date separator above it.
+      return row.querySelector('[data-testid^="message-"]')?.textContent?.trim() || "empty";
+    });
 const foldButton = () => within(fold()).getAllByRole("button")[0];
 const visible = (content: string) => screen.queryByText(content) !== null;
 
@@ -240,38 +265,172 @@ describe("InterleavedTimeline simplified thread", () => {
     expect(screen.getAllByTestId("tool-card")).toHaveLength(2);
   });
 
-  it("folds a finished turn into one collapsed header followed by the answer", () => {
+  it("keeps the agent's prose on screen and folds only the tool run between it", () => {
     settings.store.set("appearance.chatThreadMode", "simplified");
     renderTimeline(finishedTurn());
 
     expect(visible("Fix the flaky test")).toBe(true);
     expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
     expect(foldButton()).toHaveAttribute("aria-expanded", "false");
-    expect(foldButton()).toHaveTextContent(/^Worked/);
+    expect(foldButton()).toHaveTextContent(/^Activity · 2 other tools/);
+    expect(visible("Let me look at the test.")).toBe(true);
     expect(visible("Fixed: the race is gone.")).toBe(true);
-    expect(visible("Let me look at the test.")).toBe(false);
     expect(screen.queryAllByTestId("tool-card")).toHaveLength(0);
 
-    // The header sits between the question and the answer.
+    // question, narration, fold, answer — in transcript order.
     const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(follows(screen.getByText("Fix the flaky test"), fold())).toBe(true);
+    expect(follows(screen.getByText("Fix the flaky test"), screen.getByText("Let me look at the test."))).toBe(true);
+    expect(follows(screen.getByText("Let me look at the test."), fold())).toBe(true);
     expect(follows(fold(), screen.getByText("Fixed: the race is gone."))).toBe(true);
   });
 
-  it("reveals the interim narration and tool calls when the fold is expanded", () => {
+  it("reveals the tool calls when the fold is expanded, never a second copy of the prose", () => {
     settings.store.set("appearance.chatThreadMode", "simplified");
     renderTimeline(finishedTurn());
 
     fireEvent.click(foldButton());
 
     expect(foldButton()).toHaveAttribute("aria-expanded", "true");
-    expect(visible("Let me look at the test.")).toBe(true);
-    expect(screen.getAllByTestId("tool-card").length).toBeGreaterThan(0);
-    // The answer is not duplicated into the fold.
+    expect(screen.getAllByTestId("tool-card")).toHaveLength(2);
+    expect(screen.getAllByText("Let me look at the test.")).toHaveLength(1);
     expect(screen.getAllByText("Fixed: the race is gone.")).toHaveLength(1);
 
     fireEvent.click(foldButton());
-    expect(visible("Let me look at the test.")).toBe(false);
+    expect(screen.queryAllByTestId("tool-card")).toHaveLength(0);
+  });
+
+  it("cuts a message around its tool run and gives it one set of actions", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Check it"),
+      assistant(2, [text(0, "Reading first."), tool(1, "read_file", "call-read"), text(2, "Looks right.")]),
+    ]);
+
+    expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
+    const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(screen.getByText("Reading first."), fold())).toBe(true);
+    expect(follows(fold(), screen.getByText("Looks right."))).toBe(true);
+    // The chrome is the message's last prose slice's alone (the phone's
+    // actions button; the user message has its own).
+    expect(screen.getByTestId("message-m2-prose")).toHaveTextContent("Reading first.");
+    expect(screen.getByTestId("message-m2")).toHaveTextContent("Looks right.");
+    expect(within(screen.getByTestId("message-m2")).getAllByRole("button", { name: "Message actions" })).toHaveLength(1);
+    expect(within(screen.getByTestId("message-m2-prose")).queryByRole("button", { name: "Message actions" })).toBeNull();
+  });
+
+  it("keeps a question at its place: tool, ask_user, tool is fold / card / fold", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Set it up"),
+      assistant(2, [tool(0, "read_file", "call-read")]),
+      assistant(3, [tool(0, "ask_user", "call-ask")]),
+      assistant(4, [tool(0, "bash", "call-bash")]),
+      assistant(5, [text(0, "Set up.")]),
+    ]);
+
+    expect(rowSequence()).toEqual(["Set it up", "fold", "ask-card", "fold", "Set up."]);
+    // Opening a fold never brings the card in with it, or moves it.
+    for (const header of screen.getAllByTestId("turn-work-fold")) {
+      fireEvent.click(within(header).getAllByRole("button")[0]);
+    }
+    expect(screen.getAllByTestId("ask-user-card")).toHaveLength(1);
+    expect(rowSequence()).toEqual(["Set it up", "fold", "ask-card", "fold", "Set up."]);
+  });
+
+  it("keeps a generated image at its place in the middle of a run, even inside one tools segment", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Make a logo"),
+      assistant(2, [tool(0, "read_file", "call-read"), tool(1, "generate_image", "call-img"), tool(2, "bash", "call-bash")]),
+      assistant(3, [text(0, "Logo ready.")]),
+    ]);
+
+    expect(rowSequence()).toEqual(["Make a logo", "fold", "tool:generate_image", "fold", "Logo ready."]);
+  });
+
+  it("keeps a call awaiting approval at its place in the run", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Deploy it"),
+      assistant(2, [tool(0, "read_file", "call-read"), tool(1, "bash", "call-bash"), tool(2, "read_file", "call-read-2")]),
+    ], { approvals: [pendingApproval("m2-b1")] });
+
+    expect(rowSequence()).toEqual(["Deploy it", "fold", "tool:bash", "fold"]);
+    expect(screen.getAllByRole("button", { name: /approve tool execution/i })).toHaveLength(1);
+  });
+
+  it("puts an error that happened mid-run between the folds either side of it", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Go"),
+      assistant(2, [tool(0, "read_file", "call-read")]),
+      assistant(4, [tool(0, "bash", "call-bash")]),
+      assistant(5, [text(0, "Recovered.")]),
+    ], {
+      errorEvents: [{
+        id: "error-1",
+        update_type: "error",
+        chat_id: "chat-1",
+        activity_type: "CallLLM",
+        activity_id: "1",
+        error_message: "provider error",
+        error_summary: "Provider hiccup",
+        // Between m2 (00:00:20) and m4 (00:00:40).
+        timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, 30)).toISOString(),
+        sequence_number: 1,
+      } as ErrorUpdate],
+    });
+
+    expect(rowSequence()).toEqual(["Go", "fold", "error", "fold", "Recovered."]);
+  });
+
+  it.each(["simplified", "detailed"])("orders two events after the same message by time (%s)", (mode) => {
+    settings.store.set("appearance.chatThreadMode", mode);
+    const error = (id: string, summary: string, seconds: number) => ({
+      id: `error-${id}`,
+      update_type: "error",
+      chat_id: "chat-1",
+      activity_type: "CallLLM",
+      activity_id: id,
+      error_message: summary,
+      error_summary: summary,
+      timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, seconds)).toISOString(),
+      sequence_number: Number(id),
+    }) as ErrorUpdate;
+    renderTimeline([
+      user(1, "Go"),
+      assistant(2, [tool(0, "read_file", "call-read")]),
+      assistant(4, [text(0, "Recovered.")]),
+    ], { errorEvents: [error("1", "First failure", 25), error("2", "Second failure", 28)] });
+
+    expect(screen.getAllByTestId("error-row").map((row) => row.textContent)).toEqual(["First failure", "Second failure"]);
+  });
+
+  it("folds an orchestrator's sub-agent mail and tool runs into one row", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    const mail = (seq: number, subject: string): Message => ({
+      ...user(seq, `Full report ${seq}`),
+      sender: { threadId: `child-${seq}`, kind: 1, subject, title: `agent ${seq}` },
+    }) as unknown as Message;
+    renderTimeline([
+      user(1, "Fan out"),
+      assistant(2, [tool(0, "spawn", "call-spawn")]),
+      mail(3, "Research done"),
+      assistant(4, [tool(0, "bash", "call-bash")]),
+      mail(5, "Review done"),
+      mail(6, "Tests done"),
+      assistant(7, [text(0, "Everyone reported back.")]),
+    ]);
+
+    expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
+    expect(foldButton()).toHaveTextContent("3 agent messages");
+    expect(screen.queryByText("Research done")).toBeNull();
+    expect(visible("Everyone reported back.")).toBe(true);
+
+    fireEvent.click(foldButton());
+    expect(screen.getAllByTestId("agent-message-subject").map((el) => el.textContent)).toEqual([
+      "Research done", "Review done", "Tests done",
+    ]);
   });
 
   it("keeps a pending-approval call and an ask_user card visible while collapsed", () => {
@@ -285,7 +444,7 @@ describe("InterleavedTimeline simplified thread", () => {
     renderTimeline(messages, { approvals: [pendingApproval("m3-b0")] });
 
     expect(foldButton()).toHaveAttribute("aria-expanded", "false");
-    expect(visible("Checking first.")).toBe(false);
+    expect(visible("Checking first.")).toBe(true);
     expect(screen.getByRole("button", { name: /approve tool execution/i })).toBeInTheDocument();
     expect(screen.getByTestId("ask-user-card")).toBeInTheDocument();
     // Nothing else of the work leaks out: only the approval's own card.
@@ -309,7 +468,7 @@ describe("InterleavedTimeline simplified thread", () => {
     expect(screen.getAllByRole("button", { name: /approve tool execution/i })).toHaveLength(1);
   });
 
-  it("labels the fold of a streaming turn 'Working…'", () => {
+  it("labels the fold of a streaming turn with its current action", () => {
     settings.store.set("appearance.chatThreadMode", "simplified");
     const messages = [
       user(1, "Run the suite"),
@@ -319,9 +478,45 @@ describe("InterleavedTimeline simplified thread", () => {
     renderTimeline(messages, { isStreaming: true });
 
     expect(fold()).toHaveAttribute("data-live", "true");
-    expect(foldButton()).toHaveTextContent(/Working…/);
+    expect(foldButton()).toHaveTextContent(/^bash/);
     expect(foldButton()).toHaveAttribute("aria-expanded", "false");
-    expect(visible("Starting.")).toBe(false);
+    expect(visible("Starting.")).toBe(true);
+  });
+
+  it("is no longer live once the agent writes after its tool run", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Run the suite"),
+      assistant(2, [tool(0, "bash", "call-bash")]),
+      assistant(3, [text(0, "All green.")], StreamingState.STREAMING),
+    ], { isStreaming: true });
+
+    expect(fold()).toHaveAttribute("data-live", "false");
+    expect(foldButton()).toHaveTextContent(/^Activity/);
+  });
+
+  it("keeps successful spawn notices inspectable inside one activity and unchanged in detailed mode", async () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    const completion = {
+      ...assistant(3, [text(0, 'spawn "research" completed')]),
+      role: MessageRole.SYSTEM,
+      displayStyle: DisplayStyle.INFO,
+    };
+    renderTimeline([
+      user(1, "Investigate"),
+      assistant(2, [tool(0, "read_file", "read")]),
+      completion,
+      assistant(4, [tool(0, "bash", "check")]),
+      assistant(5, [text(0, "Verified.")]),
+    ]);
+    expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
+    expect(visible('spawn "research" completed')).toBe(false);
+    fireEvent.click(foldButton());
+    expect(visible('spawn "research" completed')).toBe(true);
+    expect(visible("Verified.")).toBe(true);
+    await act(async () => setChatThreadMode("detailed"));
+    expect(screen.queryByTestId("turn-work-fold")).toBeNull();
+    expect(visible('spawn "research" completed')).toBe(true);
   });
 
   it("switches modes through the setting without remount errors", async () => {
@@ -332,11 +527,11 @@ describe("InterleavedTimeline simplified thread", () => {
 
     await act(async () => setChatThreadMode("simplified"));
     expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
-    expect(visible("Let me look at the test.")).toBe(false);
+    expect(screen.queryAllByTestId("tool-card")).toHaveLength(0);
 
     await act(async () => setChatThreadMode("detailed"));
     expect(screen.queryByTestId("turn-work-fold")).toBeNull();
-    expect(visible("Let me look at the test.")).toBe(true);
+    expect(screen.getAllByTestId("tool-card")).toHaveLength(2);
 
     await act(async () => setChatThreadMode("simplified"));
     expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
@@ -358,5 +553,18 @@ describe("InterleavedTimeline simplified thread", () => {
     expect(scrollToIndex).toHaveBeenCalledTimes(1);
     const foldRow = fold().closest("[data-timeline-index]");
     expect(scrollToIndex).toHaveBeenCalledWith(Number(foldRow?.getAttribute("data-timeline-index")), expect.anything());
+  });
+
+  it("scroll-to-message for a message with prose lands on its prose row", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline(finishedTurn());
+
+    // m2 is cut in two: its narration row and its part of the fold.
+    act(() => {
+      window.dispatchEvent(new CustomEvent("scroll-to-message", { detail: { messageId: "m2" } }));
+    });
+
+    const proseRow = screen.getByText("Let me look at the test.").closest("[data-timeline-index]");
+    expect(scrollToIndex).toHaveBeenCalledWith(Number(proseRow?.getAttribute("data-timeline-index")), expect.anything());
   });
 });

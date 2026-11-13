@@ -31,7 +31,7 @@ type usageStore interface {
 	ClaimUsageFetch(ctx context.Context, accountID string, now time.Time, floor time.Duration) (bool, error)
 	ScheduleUsagePoll(ctx context.Context, accountID string, next time.Time, failures int, errText string) error
 	UpsertAccountLimitSnapshot(ctx context.Context, s core.LimitState) error
-	BenchAccount(ctx context.Context, userID, accountID string, until time.Time, window string, probe bool) error
+	BenchAccount(ctx context.Context, owner core.AccountOwner, accountID string, until time.Time, window string, probe bool) error
 }
 
 // FetchUsage reads the usage windows of one subscription credential from its
@@ -249,7 +249,7 @@ func (f *Fetcher) recordSuccess(ctx context.Context, res Result, cur *core.Limit
 // disconnect and reconnect it.
 func (f *Fetcher) reconcileBench(ctx context.Context, acct core.ProviderAccount, cur *core.LimitState, st core.LimitState, now time.Time) time.Time {
 	if ex := exhausted(st.Windows, st.RepresentativeWindow, st.Status, now); ex.Exhausted {
-		eff, err := bench(ctx, f.Store, now, acct.UserID, acct.ID, ex.Until, ex.Window)
+		eff, err := bench(ctx, f.Store, now, acct.Owner(), acct.ID, ex.Until, ex.Window)
 		if err != nil {
 			logging.WarnContext(ctx, "benching account from its usage reading failed", "account_id", acct.ID, "error", err)
 			return time.Time{}
@@ -263,7 +263,7 @@ func (f *Fetcher) reconcileBench(ctx context.Context, acct core.ProviderAccount,
 				"account_id", acct.ID, "provider", acct.Provider, "window", cur.LimitedWindow, "was_limited_until", *cur.LimitedUntil)
 			return time.Time{}
 		}
-		if err := f.Store.BenchAccount(ctx, acct.UserID, acct.ID, *cur.LimitedUntil, cur.LimitedWindow, false); err != nil {
+		if err := f.Store.BenchAccount(ctx, acct.Owner(), acct.ID, *cur.LimitedUntil, cur.LimitedWindow, false); err != nil {
 			logging.WarnContext(ctx, "restoring account bench after usage reading failed", "account_id", acct.ID, "error", err)
 			return time.Time{}
 		}
@@ -335,11 +335,13 @@ func nextForLease(l *core.LimitState, now time.Time) (next time.Time, due bool) 
 	if l == nil {
 		return time.Time{}, true
 	}
-	// Benched: nothing to learn before the bench ends; confirm the reset just after.
+	// Benched: read again every benchRecheckEvery since the last observation,
+	// and just after the bench ends to confirm the reset.
 	if l.LimitedUntil != nil && l.LimitedUntil.After(now) {
-		if at := l.LimitedUntil.Add(confirmAfterReset); at.After(now) {
+		if at := benchRecheckAt(*l.LimitedUntil, l.ObservedAt); at.After(now) {
 			return at, false
 		}
+		return time.Time{}, true
 	}
 	// Headers are fresher and free while the account is in use.
 	if !l.LastTrafficAt.IsZero() && now.Sub(l.LastTrafficAt) < headerFreshFor {
@@ -348,13 +350,25 @@ func nextForLease(l *core.LimitState, now time.Time) (next time.Time, due bool) 
 	return time.Time{}, true
 }
 
-// nextAfterPoll is when to poll again after a successful reading: just after a
-// bench ends, every ten minutes while the account has been used in the last day
-// and no headers are arriving, and never for an idle account (the Recorder
-// schedules it again when traffic returns; Settings refreshes it on demand).
+// benchRecheckAt is when to read a benched account again: just after the bench
+// ends, or benchRecheckEvery after `since` (its last observation), whichever
+// comes first.
+func benchRecheckAt(until, since time.Time) time.Time {
+	at := until.Add(confirmAfterReset)
+	if recheck := since.Add(benchRecheckEvery); !since.IsZero() && recheck.Before(at) {
+		return recheck
+	}
+	return at
+}
+
+// nextAfterPoll is when to poll again after a successful reading: while
+// benched, at benchRecheckAt; every ten minutes while the account has been used
+// in the last day and no headers are arriving; and never for an idle account
+// (the Recorder schedules it again when traffic returns; Settings refreshes it
+// on demand).
 func nextAfterPoll(cur *core.LimitState, benchUntil, now time.Time) time.Time {
 	if benchUntil.After(now) {
-		return benchUntil.Add(confirmAfterReset)
+		return benchRecheckAt(benchUntil, now)
 	}
 	if cur != nil && !cur.LastTrafficAt.IsZero() && now.Sub(cur.LastTrafficAt) < idleAfter {
 		return now.Add(headerFreshFor)
@@ -451,7 +465,14 @@ func wasBenched(cur *core.LimitState, now time.Time) bool {
 //
 // A reading that does not report the benched window says nothing about it, so
 // the bench stands.
+//
+// An "overage" reading (Codex only) says the account is served past its spent
+// windows from credits, so it lifts any bench but one on another limit
+// family's window ("codex_other.primary"), which credits do not cover.
 func readingClearsBench(st core.LimitState, benchWindow string) bool {
+	if st.Status == string(ratelimit.StatusOverage) {
+		return !isScoped(benchWindow)
+	}
 	if st.Status != string(ratelimit.StatusAllowed) {
 		return false
 	}

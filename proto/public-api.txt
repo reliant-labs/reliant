@@ -18,9 +18,9 @@
 #
 # NEVER publish (the test refuses them even if listed): the activation rpcs
 # (EnableWorkflow, DisableWorkflow, SetTriggerEnabled, CreateTrigger,
-# UpdateTrigger, DeleteTrigger, RotateWebhookToken), approval decisions
-# (Approve, Deny, BatchApprove, BatchDeny), token minting (TokenService), the
-# chat's daemon wiring (SetChatDaemon) and every daemon-facing service.
+# UpdateTrigger, DeleteTrigger, RotateWebhookToken), token minting
+# (TokenService), the chat's daemon wiring (SetChatDaemon) and every
+# daemon-facing service.
 #
 # Stability: PauseRun, ResumeRun and InterruptRun are beta (their semantics
 # are still settling); the rest is stable within reliant.v1.
@@ -43,14 +43,22 @@ export   TriggerService/GetLaunchEvent
 partial  ChatService
 export   ChatService/GetChatUpdates
 export   ChatService/GetWorkflowExecutions
+# The bodies a TOOL_BODY_MODE_STUB read left out (GetChatUpdatesRequest's
+# tool_bodies), by block id. Owner decision (2026-11-08): exported.
+export   ChatService/GetContentBlockBodies
 
 partial  QuestionService
 export   QuestionService/ListPendingQuestions
 export   QuestionService/ResolveQuestion
 
-# Reads only. Approve and Deny need a person and are never public.
+# Owner decision (2026-11-06): the SDK may decide approvals. The server requires
+# the approvals:decide scope and refuses a token bound to a machine (daemon).
 partial  ApprovalService
 export   ApprovalService/ListApprovalsByChat
+export   ApprovalService/Approve
+export   ApprovalService/Deny
+export   ApprovalService/BatchApprove
+export   ApprovalService/BatchDeny
 
 # --- Inbox: what is waiting on the caller. -----------------------------------
 # CleanupStorage and ForgetStorageWorktree manage the machine and stay out.
@@ -63,6 +71,7 @@ export   InboxService/RestoreInboxItem
 
 withhold AccountService           # not part of the first public surface
 withhold AttachmentService        # not part of the first public surface
+withhold AutomationTakeoverService # org-admin takeover of a departed member's automations; person-only
 withhold BackgroundService        # daemon-facing wiring
 withhold CatalogService           # not part of the first public surface
 withhold ConnectionService        # not part of the first public surface
@@ -74,6 +83,7 @@ withhold ForgeService             # not part of the first public surface
 withhold MCPService               # not part of the first public surface
 withhold MessageService           # not part of the first public surface
 withhold ModelEndpointService     # not part of the first public surface
+withhold OrgProviderAccountService # an org's AI accounts are administered by its admins as people (human_only)
 withhold PackageCommandsService   # daemon-facing wiring
 withhold PlanService              # not part of the first public surface
 withhold PresetService            # not part of the first public surface
@@ -82,6 +92,7 @@ withhold ProviderAccountService   # not part of the first public surface
 withhold RepoService              # not part of the first public surface
 withhold ScenarioService          # not part of the first public surface
 withhold SettingsService          # not part of the first public surface
+withhold SharingService           # read-only sharing is the app's (org members, as a person)
 withhold StreamingService         # UI plumbing; a run-shaped stream is a later addition
 withhold SystemService            # not part of the first public surface
 withhold TaskService              # not part of the first public surface
@@ -92,3 +103,4 @@ withhold ToolsDaemonService       # daemon-facing wiring
 withhold UsageService             # not part of the first public surface
 withhold WorkflowService          # authoring; read-only workflow verbs come later
 withhold WorktreeService          # not part of the first public surface
+withhold WorktreeReclaimService   # manages the caller's own machine (like CleanupStorage)

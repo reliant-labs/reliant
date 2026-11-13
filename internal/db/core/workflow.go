@@ -1,7 +1,6 @@
 package core
 
 import (
-	"database/sql"
 	"time"
 )
 
@@ -39,6 +38,10 @@ type Workflow struct {
 	// was deleted. Readers must therefore still fall back to the chat while
 	// both sources exist; see the migration for the ordering.
 	OwnerUserID *string `json:"owner_user_id,omitempty"`
+	// OrgID is the organization the run belongs to: its chat's, filled by
+	// the database on insert (workflows_inherit_chat_org). Writers leave it
+	// nil. nil on a read: the run's chat has no org yet.
+	OrgID *string `json:"org_id,omitempty"`
 
 	// Outcome is the run's own verdict — "success" or "failure" — stamped by
 	// the terminal node it reached (Node.outcome in the workflow YAML).
@@ -73,17 +76,17 @@ type WorkflowCheckpoint struct {
 
 // StepExecution represents a single execution of a workflow step.
 type StepExecution struct {
-	ID            string         `json:"id"`
-	WorkflowID    string         `json:"workflow_id"`
-	StepID        string         `json:"step_id"`
-	ActivityName  string         `json:"activity_name"`
-	OutputJSON    sql.NullString `json:"output_json"`
-	ExitCode      sql.NullInt64  `json:"exit_code"`
-	Success       sql.NullBool   `json:"success"`
-	DurationMs    sql.NullInt64  `json:"duration_ms"`
-	LoopNodeID    sql.NullString `json:"loop_node_id"`
-	LoopIteration sql.NullInt64  `json:"loop_iteration"`
-	CreatedAt     time.Time      `json:"created_at"`
+	ID            string    `json:"id"`
+	WorkflowID    string    `json:"workflow_id"`
+	StepID        string    `json:"step_id"`
+	ActivityName  string    `json:"activity_name"`
+	OutputJSON    *string   `json:"output_json"`
+	ExitCode      *int64    `json:"exit_code"`
+	Success       *bool     `json:"success"`
+	DurationMs    *int64    `json:"duration_ms"`
+	LoopNodeID    *string   `json:"loop_node_id"`
+	LoopIteration *int64    `json:"loop_iteration"`
+	CreatedAt     time.Time `json:"created_at"`
 
 	// SavedMessageID is the message a "-save" step wrote, derived by the
 	// database from OutputJSON (a generated column — see migration
@@ -93,21 +96,21 @@ type StepExecution struct {
 	// It exists so a reader can answer "did this step save a message, and
 	// which one" without loading OutputJSON, which is TOASTed and can be
 	// megabytes per row.
-	SavedMessageID sql.NullString `json:"saved_message_id"`
+	SavedMessageID *string `json:"saved_message_id"`
 
 	// The debugging record of this attempt (migration 20261007011605): what
 	// the step was given and how it ended. NULL on rows written before it.
 	//
 	// InputJSON is the node's resolved args as JSON, bounded by the writer;
 	// NULL for activities that are not graph nodes.
-	InputJSON sql.NullString `json:"input_json"`
+	InputJSON *string `json:"input_json"`
 	// ErrorMessage is why this attempt failed; NULL when it did not.
-	ErrorMessage sql.NullString `json:"error_message"`
+	ErrorMessage *string `json:"error_message"`
 	// Attempt is Temporal's 1-based attempt number. A retried step writes one
 	// row per attempt.
-	Attempt sql.NullInt32 `json:"attempt"`
+	Attempt *int32 `json:"attempt"`
 	// NodePath is the node's dotted graph position ("agent.agent_loop.call_llm").
-	NodePath sql.NullString `json:"node_path"`
+	NodePath *string `json:"node_path"`
 }
 
 // ChatStepExecution is one step of one workflow of a chat, as the chat's
@@ -124,15 +127,15 @@ type ChatStepExecution struct {
 	WorkflowID    string
 	StepID        string
 	ActivityName  string
-	ExitCode      sql.NullInt64
-	Success       sql.NullBool
-	DurationMs    sql.NullInt64
-	LoopNodeID    sql.NullString
-	LoopIteration sql.NullInt64
+	ExitCode      *int64
+	Success       *bool
+	DurationMs    *int64
+	LoopNodeID    *string
+	LoopIteration *int64
 	CreatedAt     time.Time
 
 	// SavedMessageID is the message a "-save" step wrote, if it wrote one.
-	SavedMessageID sql.NullString
+	SavedMessageID *string
 
 	// OutputJSON is the step's raw output, populated ONLY for user-facing
 	// activities. Empty for every internal activity by design — not because

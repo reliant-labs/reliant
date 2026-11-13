@@ -1,87 +1,91 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Overview's SERVICES as health cards: one card per long-running workload,
- * shaped unlike the lists around it (Processes, compact lines; Jobs, a run
- * timeline), so the three never read as the same table again.
+ * The Overview's SERVICES: one tight list of everything the app runs, a row
+ * each, as tall as what it says (the model is overviewRows.ts).
  *
- *   ▌admin-server  Deployment          ● Healthy
- *   ▌2/2 ready · 20261018.155157
- *   ▌37.1/s      0.8%      86ms
- *   ▌req/s       errors    p95
- *   ▌CPU ▬▬▭ 36%           Memory ▬▬▭ 41%
- *   ▌Restarts 24h  0
+ *   Service                  Status                  req/s  errors  p95   Error logs  Alerts
+ *   api  Deployment          ● Degraded              23.1/s  0.3%   78ms  8,259       2 firing
+ *   3/3 ready · v1.8.3       3 restarts · Ran out of memory
+ *   search-reindex  CronJob  ● Failed
+ *   ran 1h ago · v1.8.3      Failed after exhausting its retries
+ *   payments  Process        ● No workload data      5/s     0.4%   910ms 2,373       ·
  *
- * The left rule is the health tone: a wall of cards is scanned by colour
- * first. The RED figures are the workload's own requests, from the same
- * GetServiceOverview answer Process health reads (the caller passes it in, by
- * name and environment); a workload that serves no requests says so once.
+ * Services, jobs and telemetry-only processes share one set of columns; the
+ * kind is a word beside the name. A crash loop, an out-of-memory exit or a
+ * failed run is the row's status and the line under it, so nothing the old
+ * Processes table showed is lost. CPU, memory and pods are on the workload
+ * page, which the whole row opens. A telemetry-only process has no workload
+ * page: its row opens its traces.
  *
- * The whole card opens the workload (its name is the link, stretched over the
- * card); the release link inside stays its own target. A declared-only
- * (unobserved) workload has no page to open: its card is dashed and links
- * nowhere.
+ * On a desktop the columns line up under one header row; on a phone a row is
+ * the name and its status, then its figures, labelled in place.
  */
 
 import { useState, type ReactNode } from "react";
 
 import Link from "@/components/forge-ui/link";
-import Status, { type StatusTone } from "@/components/forge-ui/status";
+import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import type { ServiceHealth } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
-import { formatBytes, formatCores, formatDuration, formatPercent, formatRate } from "../Observability/format";
+import { formatDuration, formatPercent, formatRate } from "../Observability/format";
 import { ERROR_RATE_ALERT } from "../Observability/OverviewView";
+import { Ago, INK_LINK } from "../Releases/releaseParts";
+import { shortVersion } from "../Releases/releaseModel";
 import type { HostedByEnv, OverviewHrefs } from "./OverviewHome";
-import { HEALTH_STATUS, KIND_LABEL, lastExitOf, replicasShort, replicasText, worstUsage, type ServiceRow } from "./workloadModel";
-import { exitPhrase } from "./plainHealth";
-import { HealthStatus, UsageMeter, WorkloadRelease } from "./workloadParts";
+import type { OverviewRow } from "./overviewRows";
+import { lastExitOf, replicasShort, replicasText } from "./workloadModel";
+import { exitPhrase, jobFailurePhrase } from "./plainHealth";
+import { HealthStatus, WorkloadRelease } from "./workloadParts";
 
-/** Cards shown before "Show all": two rows at the widest layout. */
-export const CARDS_SHOWN = 6;
+/** Rows shown before "Show all". */
+export const CARDS_SHOWN = 10;
 
-const RULE: Record<StatusTone, string> = {
-  success: "bg-success",
-  warning: "bg-warning",
-  danger: "bg-danger",
-  neutral: "bg-ink-subtle",
-};
+/**
+ * One grid for the header and every row, so the columns line up. Below `lg`
+ * a row is two columns (the name, its status) and the rest wraps under them.
+ */
+const ROW_GRID =
+  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-4 py-2.5 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_14rem_6rem_5.5rem] lg:gap-y-0";
 
-/** The request side of a card: found by workload name and environment, or not instrumented. */
-export interface RedLookup {
-  /** The process's figures; undefined when it sent no request telemetry. */
-  of: (workload: string, env: string) => ServiceHealth | undefined;
-  /** The read has not answered yet. */
-  loading: boolean;
+/** Where a row's links go, beyond the Overview's own hrefs. */
+export interface RowHrefs {
+  /** A process's error logs. */
+  logs: (name: string) => string;
+  /** A telemetry-only process's traces: it has no workload page. */
+  traces: (name: string) => string;
 }
 
 export function ServiceCards({
   rows,
   loading,
   showEnv,
-  windowShort,
   hosted,
   hrefs,
-  red,
+  rowHrefs,
+  redLoading,
   empty,
 }: {
-  rows: ServiceRow[];
+  rows: OverviewRow[];
   loading: boolean;
   showEnv: boolean;
-  windowShort: string;
   hosted: HostedByEnv;
   hrefs: OverviewHrefs;
-  red: RedLookup;
+  rowHrefs: RowHrefs;
+  /** The request telemetry has not answered yet. */
+  redLoading: boolean;
   empty: ReactNode;
 }) {
   const [all, setAll] = useState(false);
   if (loading) {
     return (
-      <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label="Services" aria-busy="true">
+      <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface" aria-label="Services" aria-busy="true">
         {Array.from({ length: 3 }).map((_, i) => (
-          <li key={i} className="h-40 animate-pulse rounded-lg border border-border bg-surface motion-reduce:animate-none">
+          <li key={i} className="flex h-14 items-center gap-4 px-4">
             <span className="sr-only">Loading…</span>
+            <span aria-hidden="true" className="h-3 w-32 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />
+            <span aria-hidden="true" className="h-3 flex-1 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />
           </li>
         ))}
       </ul>
@@ -89,142 +93,141 @@ export function ServiceCards({
   }
   if (rows.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-5 text-sm text-ink-muted" data-testid="overview-services-empty">
+      <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-3 text-sm text-ink-muted" data-testid="overview-services-empty">
         {empty}
       </p>
     );
   }
   const shown = all ? rows : rows.slice(0, CARDS_SHOWN);
   return (
-    <div className="space-y-2">
-      <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label="Services">
-        {shown.map((w) => (
-          <ServiceCard
-            key={`${w.envName}/${w.workload}`}
-            w={w}
-            showEnv={showEnv}
-            windowShort={windowShort}
-            hosted={hosted}
-            hrefs={hrefs}
-            health={red.of(w.workload, w.envName)}
-            redLoading={red.loading}
-          />
+    <div className="overflow-hidden rounded-lg border border-border bg-surface">
+      {/* The column names, once, for a desktop; a phone labels each figure in place. */}
+      <div aria-hidden="true" className={cn(ROW_GRID, "hidden border-b border-border py-2 text-xs text-ink-muted lg:grid")}>
+        <span>Name</span>
+        <span>Status</span>
+        <span className="grid grid-cols-3 gap-2 text-right">
+          <span>req/s</span>
+          <span>errors</span>
+          <span>p95</span>
+        </span>
+        <span className="text-right">Error logs</span>
+        <span className="text-right">Alerts</span>
+      </div>
+      <ul className="divide-y divide-border" aria-label="Services">
+        {shown.map((row) => (
+          <Row key={row.key} row={row} showEnv={showEnv} hosted={hosted} hrefs={hrefs} rowHrefs={rowHrefs} redLoading={redLoading} />
         ))}
       </ul>
       {rows.length > CARDS_SHOWN && (
-        <button
-          type="button"
-          onClick={() => setAll((prev) => !prev)}
-          className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-ink-muted hover:bg-ink/5 hover:text-ink"
-          data-testid="overview-services-more"
-        >
-          {all ? "Show fewer" : `Show all ${rows.length} services`}
-        </button>
+        <div className="border-t border-border px-2 py-1">
+          <button
+            type="button"
+            onClick={() => setAll((prev) => !prev)}
+            className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid="overview-services-more"
+          >
+            {all ? "Show fewer" : `Show all ${rows.length}`}
+          </button>
+        </div>
       )}
     </div>
   );
 }
 
-function ServiceCard({
-  w,
+/** A row's test id: services keep the id the tour and the tests know; jobs and processes get their own. */
+function testIdOf(row: OverviewRow, showEnv: boolean): string {
+  const env = showEnv && row.envName ? `-${row.envName}` : "";
+  if (row.type === "service") return `overview-service-${row.name}${env}`;
+  if (row.type === "job") return `overview-service-job-${row.name}${env}`;
+  return `overview-service-process-${row.name}${env}`;
+}
+
+const TONE_INK = { danger: "text-danger-ink", warning: "text-warning-ink", success: "text-ink-muted", neutral: "text-ink-muted" } as const;
+
+function Row({
+  row,
   showEnv,
-  windowShort,
   hosted,
   hrefs,
-  health,
+  rowHrefs,
   redLoading,
 }: {
-  w: ServiceRow;
+  row: OverviewRow;
   showEnv: boolean;
-  windowShort: string;
   hosted: HostedByEnv;
   hrefs: OverviewHrefs;
-  health: ServiceHealth | undefined;
+  rowHrefs: RowHrefs;
   redLoading: boolean;
 }) {
-  const tone: StatusTone = w.unobserved ? "neutral" : HEALTH_STATUS[w.health].tone;
-  const exit = w.unobserved ? null : lastExitOf(w);
+  const unobserved = row.type === "service" && !!row.service.unobserved;
+  const href = unobserved ? null : row.type === "process" ? rowHrefs.traces(row.name) : hrefs.workload(row.name, row.envName);
   return (
     <li
-      className={cn(
-        "relative flex min-w-0 flex-col gap-2.5 overflow-hidden rounded-lg border bg-surface py-3 pl-4 pr-3 transition-colors",
-        w.unobserved ? "border-dashed border-border" : "border-border hover:border-ink-subtle"
-      )}
-      data-testid={`overview-service-${w.workload}${showEnv ? `-${w.envName}` : ""}`}
-      data-health={w.unobserved ? "unobserved" : w.health}
+      className={cn(ROW_GRID, "relative min-w-0 transition-colors", href && "hover:bg-ink/5")}
+      data-testid={testIdOf(row, showEnv)}
+      data-kind={row.kind}
+      data-tone={row.tone}
+      data-health={row.type === "service" ? (unobserved ? "unobserved" : row.service.health) : undefined}
     >
-      <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-1", RULE[tone])} />
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-            {w.unobserved ? (
-              <span className="truncate font-medium text-ink">{w.workload}</span>
-            ) : (
-              <Link
-                href={hrefs.workload(w.workload, w.envName)}
-                className="no-color truncate font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring"
-              >
-                {w.workload}
-              </Link>
-            )}
-            {!w.unobserved && KIND_LABEL[w.kind] && <span className="text-xs text-ink-muted">{KIND_LABEL[w.kind]}</span>}
-          </div>
-          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-ink-muted">
-            {showEnv && <Tag>{w.envName}</Tag>}
-            {w.unobserved ? (
-              <span>Declared by {w.envName}&apos;s last recorded render; nothing reports from it.</span>
-            ) : (
-              <>
-                <span className={cn("tabular-nums", replicasShort(w) && "text-warning-ink")}>{replicasText(w)} ready</span>
-                <span aria-hidden="true">·</span>
-                <span className="relative z-10">
-                  <WorkloadRelease workload={w} releaseHref={hrefs.release} hosted={hosted.get(w.envName)?.get(w.workload) ?? null} />
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-        <span className="shrink-0">
-          {w.unobserved ? (
-            <span title={w.healthReason}>
-              <Status tone="neutral" label="Unobserved" />
-            </span>
+      {/* Name, kind, environment; then what the row runs. */}
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-baseline gap-x-2">
+          {href ? (
+            <Link
+              href={href}
+              title={row.type === "process" ? `${row.name}: no workload reports under this name, so this opens its traces` : undefined}
+              className="no-color truncate text-sm font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
+            >
+              {row.name}
+            </Link>
           ) : (
-            <HealthStatus workload={w} />
+            <span className="truncate text-sm font-medium text-ink-muted">{row.name}</span>
           )}
-        </span>
+          {row.kindLabel && <span className="shrink-0 text-xs text-ink-muted" data-testid="overview-row-kind">{row.kindLabel}</span>}
+          {showEnv && row.envName && <Tag>{row.envName}</Tag>}
+        </div>
+        <Subject row={row} hosted={hosted} hrefs={hrefs} />
       </div>
 
-      {!w.unobserved && (
+      {/* The status, and the line that says why. */}
+      <div className="min-w-0 justify-self-end text-right lg:justify-self-start lg:text-left">
+        {row.type === "service" && !unobserved ? (
+          <HealthStatus workload={row.service} />
+        ) : (
+          <span title={row.type === "process" ? (row.process.reason ?? undefined) : unobserved ? row.service.healthReason : undefined}>
+            <Status tone={row.tone} label={row.status} />
+          </span>
+        )}
+        <Why row={row} />
+      </div>
+
+      {unobserved ? (
+        <p className="col-span-2 text-xs text-ink-muted lg:col-span-3">Declared by {row.envName}&apos;s last recorded render; nothing reports from it.</p>
+      ) : (
         <>
-          <Red health={health} loading={redLoading} />
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="text-ink-muted">CPU</span>
-              <UsageMeter usage={worstUsage(w, "cpu")} format={formatCores} what="CPU" />
-            </span>
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="text-ink-muted">Memory</span>
-              <UsageMeter usage={worstUsage(w, "memory")} format={formatBytes} what="Memory" />
-            </span>
+          <div className="col-span-2 lg:col-span-1">
+            <Red row={row} loading={redLoading} />
           </div>
-          <div className="text-xs text-ink-muted">
-            <span>Restarts {windowShort}</span>{" "}
-            {w.restartsInWindow ? (
-              <>
-                <span className="tabular-nums text-ink">{w.restartsInWindow}</span>
-                {exit && (
-                  <span
-                    className={cn("ml-1", tone === "danger" ? "text-danger-ink" : tone === "warning" ? "text-warning-ink" : "text-ink-muted")}
-                    title={exit.atMs ? `Last exited ${new Date(exit.atMs).toLocaleString()}` : undefined}
-                  >
-                    · {exitPhrase(exit.reason)}
-                  </span>
-                )}
-              </>
-            ) : (
-              <span className="tabular-nums">0</span>
-            )}
+          {/* A phone puts error logs and alerts on one line; a desktop gives each its column. */}
+          <div className={cn("col-span-2 flex gap-4 text-xs lg:contents", !row.health && !row.alertsFiring && "max-lg:hidden")}>
+            <span className="flex items-baseline gap-1 lg:justify-end lg:text-sm">
+              <span className="text-ink-muted lg:sr-only">Error logs</span>
+              {row.health ? (
+                <Link href={rowHrefs.logs(row.name)} className={cn(INK_LINK, "relative z-10 tabular-nums")} title={`Error logs from ${row.name}`}>
+                  {row.health.errorLogCount.toLocaleString()}
+                </Link>
+              ) : (
+                <span className="text-ink-muted">—</span>
+              )}
+            </span>
+            <span className="flex items-baseline gap-1 lg:justify-end lg:text-sm">
+              <span className="text-ink-muted lg:sr-only">Alerts</span>
+              {row.alertsFiring > 0 ? (
+                <span className="text-warning-ink" data-testid="overview-row-alerts">{row.alertsFiring} firing</span>
+              ) : (
+                <span className="text-ink-muted">·</span>
+              )}
+            </span>
           </div>
         </>
       )}
@@ -232,15 +235,82 @@ function ServiceCard({
   );
 }
 
-/** Rate, errors and p95, big enough to read across a row of cards. */
-function Red({ health, loading }: { health: ServiceHealth | undefined; loading: boolean }) {
-  if (loading && !health) return <div className="h-9 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-hidden="true" />;
+/** The muted line under the name: ready replicas and release; a job's last run; nothing for a process. */
+function Subject({ row, hosted, hrefs }: { row: OverviewRow; hosted: HostedByEnv; hrefs: OverviewHrefs }) {
+  if (row.type === "service") {
+    if (row.service.unobserved) return null;
+    const w = row.service;
+    return (
+      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-ink-muted">
+        <span className={cn("tabular-nums", replicasShort(w) && "text-warning-ink")}>{replicasText(w)} ready</span>
+        <span aria-hidden="true">·</span>
+        <span className="relative z-10">
+          <WorkloadRelease workload={w} releaseHref={hrefs.release} hosted={hosted.get(w.envName)?.get(w.workload) ?? null} />
+        </span>
+      </div>
+    );
+  }
+  if (row.type === "job") {
+    const { latest } = row.job;
+    const at = latest.finishedAtMs ?? latest.startedAtMs;
+    return (
+      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-ink-muted">
+        <span>
+          {latest.result === "running" ? "running since " : "ran "}
+          {at ? <Ago at={new Date(at).toISOString()} /> : "at an unknown time"}
+        </span>
+        {latest.releaseVersion && (
+          <>
+            <span aria-hidden="true">·</span>
+            <Link href={hrefs.release(latest.releaseVersion)} className={cn(INK_LINK, "relative z-10")}>
+              {shortVersion(latest.releaseVersion)}
+            </Link>
+          </>
+        )}
+      </div>
+    );
+  }
+  return <div className="text-xs text-ink-muted">Sends telemetry; no workload reports under this name</div>;
+}
+
+/** Why the status is what it is: restarts and the last exit, a job's failure and its run count, a process's signal. */
+function Why({ row }: { row: OverviewRow }) {
+  let text: ReactNode = null;
+  if (row.type === "service" && !row.service.unobserved && row.service.restartsInWindow) {
+    const exit = lastExitOf(row.service);
+    text = (
+      <span title={exit?.atMs ? `Last exited ${new Date(exit.atMs).toLocaleString()}` : undefined}>
+        {row.service.restartsInWindow} restart{row.service.restartsInWindow === 1 ? "" : "s"}
+        {exit && <> · {exitPhrase(exit.reason)}</>}
+      </span>
+    );
+  } else if (row.type === "job") {
+    const { latest, runs, failedRuns } = row.job;
+    if (latest.result === "failed") text = jobFailurePhrase(latest.reason);
+    else if (failedRuns > 0) text = `${failedRuns} of ${runs} runs failed`;
+  } else if (row.type === "process" && row.process.reason) {
+    text = row.process.reason;
+  }
+  if (!text) return null;
+  return (
+    <div className={cn("truncate text-xs", TONE_INK[row.tone])} data-testid="overview-row-why">
+      {text}
+    </div>
+  );
+}
+
+/** Rate, errors and p95: three right-aligned figures on a desktop, labelled in place on a phone. */
+function Red({ row, loading }: { row: OverviewRow; loading: boolean }) {
+  const health = row.health;
+  if (loading && !health) return <div className="h-4 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-hidden="true" />;
   if (!health || health.requestCount === 0) {
-    return <p className="text-xs text-ink-muted" data-testid="service-card-no-requests">No requests traced in this window.</p>;
+    // A job serves no requests: say nothing rather than "no requests traced".
+    if (row.type === "job") return <p className="hidden text-right text-xs text-ink-muted lg:block">—</p>;
+    return <p className="text-xs text-ink-muted lg:text-right" data-testid="service-card-no-requests">No requests traced in this window.</p>;
   }
   const erroring = health.errorRate >= ERROR_RATE_ALERT;
   return (
-    <dl className="grid grid-cols-3 gap-2" data-testid="service-card-red">
+    <dl className="flex gap-4 lg:grid lg:grid-cols-3 lg:gap-2" data-testid="service-card-red">
       <Figure name="req/s" value={formatRate(health.requestRate)} />
       <Figure name="errors" value={formatPercent(health.errorRate)} tone={erroring ? "text-danger-ink" : undefined} />
       <Figure name="p95" value={formatDuration(health.p95Ms)} />
@@ -250,10 +320,10 @@ function Red({ health, loading }: { health: ServiceHealth | undefined; loading: 
 
 function Figure({ name, value, tone }: { name: string; value: string; tone?: string }) {
   return (
-    // The term is first in the markup, as a description list requires; the figure is drawn above it.
-    <div className="flex min-w-0 flex-col-reverse">
-      <dt className="text-2xs uppercase tracking-wide text-ink-muted">{name}</dt>
-      <dd className={cn("truncate text-base font-semibold tabular-nums text-ink", tone)}>{value}</dd>
+    // The term is first in the markup, as a description list requires; it is drawn after the figure, and only on a phone.
+    <div className="flex min-w-0 flex-row-reverse items-baseline justify-end gap-1 lg:justify-start">
+      <dt className="text-xs text-ink-muted lg:sr-only">{name}</dt>
+      <dd className={cn("truncate text-sm tabular-nums text-ink lg:w-full lg:text-right", tone)}>{value}</dd>
     </div>
   );
 }

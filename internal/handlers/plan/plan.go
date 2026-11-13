@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/planproto"
@@ -45,7 +46,7 @@ func (s *Service) planBelongsToUser(ctx context.Context, planID string, userID s
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	if chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return svcerr.PermissionDenied("access denied")
 	}
 
@@ -68,7 +69,7 @@ func (s *Service) CreatePlan(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return nil, svcerr.PermissionDenied("access denied")
 	}
 
@@ -162,18 +163,20 @@ func (s *Service) GetPlanByChatId(
 	req *connect.Request[reliantv1.GetPlanByChatIdRequest],
 ) (*connect.Response[reliantv1.GetPlanByChatIdResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Serves viewers of a shared chat (authz.WithViewerReads).
+	ctx = authz.WithViewerReads(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	// Verify the chat belongs to the user
+	// The owner, or a viewer of a shared chat.
 	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	if chat.UserID != userID {
+	if _, denied := authz.ReadChatAccess(ctx, userID, chat); denied != nil {
 		return nil, svcerr.PermissionDenied("access denied")
 	}
 

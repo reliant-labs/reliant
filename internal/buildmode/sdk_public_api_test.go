@@ -53,10 +53,6 @@ var neverPublic = map[string]string{
 	"TriggerService/DeleteTrigger":         "activation",
 	"TriggerService/RotateWebhookToken":    "returns a secret once",
 	"TriggerService/DraftAutomation":       "uses the caller's own model; a UI affordance",
-	"ApprovalService/Approve":              "approval decisions need a person",
-	"ApprovalService/Deny":                 "approval decisions need a person",
-	"ApprovalService/BatchApprove":         "approval decisions need a person",
-	"ApprovalService/BatchDeny":            "approval decisions need a person",
 	"ChatService/SetChatDaemon":            "daemon wiring",
 	"ChatService/AdoptChat":                "daemon wiring",
 	"ChatService/UpdateChatProviderPolicy": "billing wiring",
@@ -562,7 +558,8 @@ func TestGeneratedTreeMatchesThePublicAPI(t *testing.T) {
 func TestSDKHasOneRegistrationOfEachPublicProto(t *testing.T) {
 	t.Parallel()
 
-	var viaApp *reliantv1.Run = &sdkv1.Run{Id: "x"}
+	// A return, not a conversion: it compiles only when the two are one type.
+	viaApp := func() *reliantv1.Run { return &sdkv1.Run{Id: "x"} }()
 	if got := reflect.TypeOf(viaApp).Elem().PkgPath(); got != sdkPkgPath {
 		t.Fatalf("reliantv1.Run lives in %q, want %q: the app has its own copy", got, sdkPkgPath)
 	}

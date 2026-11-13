@@ -173,7 +173,7 @@ func TestStorageItem_DismissalHoldsWhileThePictureChurns(t *testing.T) {
 	putCacheVolume(t, f, daemonID, 3<<30, true, 0)
 	assert.Empty(t, f.storage(t), "the disk getting better must never re-raise the item")
 
-	_, err := f.repo.DB.ExecContext(f.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, daemonID)
+	_, err := f.repo.DB.DB(f.ctx).ExecContext(f.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, daemonID)
 	require.NoError(t, err)
 	assert.Empty(t, f.storage(t), "the machine going offline is not news")
 }
@@ -325,7 +325,7 @@ func TestCleanupStorage_RejectsAnotherUsersMachineAndAskedNothing(t *testing.T) 
 
 func TestCleanupStorage_OfflineMachineIsAPreconditionNotAnError(t *testing.T) {
 	f, daemonID, wtID := storageFixture(t)
-	_, err := f.repo.DB.ExecContext(f.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, daemonID)
+	_, err := f.repo.DB.DB(f.ctx).ExecContext(f.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, daemonID)
 	require.NoError(t, err)
 	f.withSweeper(t, worktreesweep.New(f.repo, &neverSender{}))
 	_, err = f.inbox.CleanupStorage(f.ctx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
@@ -424,7 +424,7 @@ func TestListInbox_StorageViewIsCachedBetweenPolls(t *testing.T) {
 	f, _, _ := storageFixture(t)
 	first := inboxByKind(f.inbox.mustList(t, f), reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE)
 	require.Len(t, first, 1)
-	_, err := f.repo.DB.ExecContext(f.ctx, `UPDATE worktrees SET cleanup_metadata = NULL`)
+	_, err := f.repo.DB.DB(f.ctx).ExecContext(f.ctx, `UPDATE worktrees SET cleanup_metadata = NULL`)
 	require.NoError(t, err)
 	cached := inboxByKind(f.inbox.mustList(t, f), reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE)
 	require.Len(t, cached, 1)

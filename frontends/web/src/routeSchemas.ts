@@ -12,12 +12,15 @@
  */
 
 import { z } from "zod";
+import { START_VALUES } from "./components/Apps/appStart";
 import type { LaunchPlan } from "./components/OnboardingFlow/types";
 import { DASHBOARD_GROUPS } from "./components/Forge/Observability/Dashboards/dashboardGroups";
 import { COMPARE_MODES, REFRESH_INTERVALS } from "./components/Forge/Observability/Dashboards/dashboardModel";
 import { RELEASE_TABS, STATUS_FILTERS } from "./components/Forge/Releases/releaseModel";
 import { OVERVIEW_KIND_FILTERS, OVERVIEW_STATUS_FILTERS, WORKLOAD_TABS } from "./components/Forge/Workloads/workloadModel";
 import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
+import { isBucketName, isSendableKey, MAX_TOKEN_LENGTH, type StorageSearch } from "./components/Forge/Storage/storageUrl-model";
+import { DATA_PAGE_SIZES, MAX_OFFSET, type DataSearch } from "./components/Forge/Data/dataUrl-model";
 import { HEALTH_WINDOWS } from "./services/controlPlane/observability/deliveryTypes";
 import { ISSUE_PLATFORMS, ISSUE_SORTS } from "./services/controlPlane/observability/issuesTypes";
 import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
@@ -165,11 +168,12 @@ export const indexSearchSchema = z.object({
   devForceShow: z.boolean().optional(),
   "onboarding-credits": z.string().optional(),
   tour: tourParam,
-  // `?start=app` opens the new chat with the app-building composer
-  // (components/Apps/appStart.ts): onboarding's "Build an app" and every
-  // other "build an app" entry land here. NewChatView applies it once and
-  // drops it.
-  start: z.enum(["app"]).optional(),
+  // `?start=` opens the new chat with a starter in the composer
+  // (components/Apps/appStart.ts): `app` is the app-building composer every
+  // "build an app" entry lands on; `repo` and `chat` are the first messages
+  // onboarding offers on finishing. HomeNewChat applies it and drops it once
+  // the chat is created.
+  start: z.enum(START_VALUES).optional(),
 });
 
 export const authSearchSchema = z.object({
@@ -555,6 +559,62 @@ export const forgeConsoleSecretsSearchSchema = z.object({
   secret: z.string().optional().catch(undefined),
 });
 
+/**
+ * Storage (components/Forge/Storage): the scope, and the browser's view —
+ * which bucket, which level (`prefix`), the open object and the listing page
+ * (`token`, opaque). Every view is a link someone can send ("look at this
+ * upload"). Keys are arbitrary text, so a numeric-looking one ("2026") is
+ * read back as the string it was; the bounds (1024-byte keys, the bucket
+ * name's pattern) are Storage/storageUrl-model.ts's, which reads a value that
+ * does not fit as absent rather than failing the route.
+ */
+const storageTextParam = z.union([z.string(), z.number().transform(String)]);
+export const forgeConsoleStorageSearchSchema = z.object({
+  env: envScopeParam,
+  bucket: storageTextParam.refine(isBucketName).optional().catch(undefined),
+  prefix: storageTextParam.refine(isSendableKey).optional().catch(undefined),
+  object: storageTextParam.refine((key) => key.length > 0 && isSendableKey(key)).optional().catch(undefined),
+  token: storageTextParam.refine((token) => token.length <= MAX_TOKEN_LENGTH).optional().catch(undefined),
+});
+
+/** Every StorageSearch key has a schema entry and vice versa. */
+export type _StorageSchemaCoversSearch = AssertNoDrift<Exclude<keyof StorageSearch, keyof z.output<typeof forgeConsoleStorageSearchSchema>>>;
+export type _StorageSearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleStorageSearchSchema>, "env">, keyof StorageSearch>>;
+/**
+ * Data (components/Forge/Data): the scope, and the browser's view — which
+ * database, which table, its filters, sort, visible columns, the first row
+ * shown (`offset`; a legacy `page` still opens) and the open row. Every
+ * view is a link someone can send ("look at this chat"). The token grammar
+ * of `f`, `sort` and `row` is Data/dataUrl-model.ts's; here only the shape is
+ * checked, and a key that does not fit is dropped rather than failing the
+ * route.
+ */
+const textListParam = z.array(z.union([z.string(), z.number().transform(String)])).optional().catch(undefined);
+
+export const forgeConsoleDataSearchSchema = z.object({
+  env: envScopeParam,
+  subject: z.string().max(1600).optional().catch(undefined),
+  db: textParam,
+  table: textParam,
+  f: textListParam,
+  sort: textListParam,
+  cols: textListParam,
+  offset: z.number().int().nonnegative().max(MAX_OFFSET).optional().catch(undefined),
+  // Legacy: a page number from a link made before `offset`, read as (page-1)*size.
+  page: z.number().int().positive().optional().catch(undefined),
+  size: z
+    .number()
+    .int()
+    .refine((size) => (DATA_PAGE_SIZES as readonly number[]).includes(size))
+    .optional()
+    .catch(undefined),
+  row: textParam,
+});
+
+/** Every DataSearch key has a schema entry and vice versa. */
+export type _DataSchemaCoversSearch = AssertNoDrift<Exclude<keyof DataSearch, keyof z.output<typeof forgeConsoleDataSearchSchema>>>;
+export type _DataSearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleDataSearchSchema>, "env">, keyof DataSearch>>;
+
 // ── Observability URL state ────────────────────────────────────────────────
 
 /**
@@ -668,7 +728,8 @@ export const forgeConsoleWorkloadSearchSchema = z.object({
  */
 export const forgeConsoleDashboardsSearchSchema = z.object({
   env: envScopeParam,
-  // Absent is the Overview hub; "all" is the grouped list.
+  // Retired: the page's Overview tab is gone (health is the project
+  // Overview's). Still parsed so an old `?view=all` link stays valid; ignored.
   view: z.enum(["all"]).optional().catch(undefined),
   q: z.string().optional().catch(undefined),
   group: z.enum(DASHBOARD_GROUPS).optional().catch(undefined),
@@ -767,10 +828,25 @@ const envPageTab = z
  * `secret` selects one secret's detail in the Secrets tab (see
  * forgeConsoleSecretsSearchSchema).
  */
+const identitySubjectParam = z.string().min(1).max(200).refine((v) => v.trim() === v && ![...v].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)).optional().catch(undefined);
 export const forgeConsoleEnvSearchSchema = z.object({
   env: envScopeParam,
   secret: z.string().optional(),
   tab: envPageTab,
+  user: identitySubjectParam.refine((v) => v === undefined || v.length <= 128).catch(undefined),
+  q: identitySubjectParam,
+});
+
+/**
+ * /forge/p/$project/users — who can sign in to the scoped environment. `user`
+ * (an identity subject) opens one person and `q` searches by email, exactly
+ * as the environment page's Identity tab reads them, so a link written for
+ * either opens the same person.
+ */
+export const forgeConsoleUsersSearchSchema = z.object({
+  env: envScopeParam,
+  user: identitySubjectParam.refine((v) => v === undefined || v.length <= 128).catch(undefined),
+  q: identitySubjectParam,
 });
 
 /** The retired /forge/env/$env: read only to redirect (Console/paths.ts legacyEnvTarget). */

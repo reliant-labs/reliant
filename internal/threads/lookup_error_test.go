@@ -3,12 +3,12 @@ package threads
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/dbconn"
@@ -64,7 +64,7 @@ func TestSaveMessage_OutageIsNotAMissingThread(t *testing.T) {
 
 	t.Run("a genuinely missing thread still says so", func(t *testing.T) {
 		t.Parallel()
-		svc := NewService(latestCWRepo{err: sql.ErrNoRows})
+		svc := NewService(latestCWRepo{err: svcerr.NotFound("context window")})
 		_, err := svc.SaveMessage(context.Background(), opts)
 		if err == nil || !strings.Contains(err.Error(), "thread thread-1 does not exist") {
 			t.Fatalf("want a missing-thread error, got %v", err)

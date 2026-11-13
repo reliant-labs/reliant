@@ -53,6 +53,11 @@ export interface ProviderAccount {
   usageObservedAt?: string;
   usageSource: UsageSourceKind;
   usageError?: string;
+  /**
+   * A plan window is used up but the provider keeps serving the account from
+   * credits (a ChatGPT workspace's, or purchased Codex credits). Not limited.
+   */
+  usingCredits?: boolean;
   createdAt: string;
 }
 
@@ -110,6 +115,7 @@ export function accountFromProto(a: ProtoProviderAccount): ProviderAccount {
     usageObservedAt: a.usageObservedAt || undefined,
     usageSource: USAGE_SOURCE_FROM_PROTO[a.usageSource] ?? "unknown",
     usageError: a.usageError || undefined,
+    usingCredits: a.usingCredits || undefined,
     createdAt: a.createdAt,
   };
 }

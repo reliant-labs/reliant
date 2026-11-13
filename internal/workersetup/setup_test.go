@@ -2,9 +2,14 @@
 package workersetup
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/version"
 )
 
@@ -122,3 +127,46 @@ func TestWorkerOptionsBuildIDIsTheBinaryVersion(t *testing.T) {
 		t.Error("UseBuildIDForVersioning is set; the BuildID only labels the build")
 	}
 }
+
+type membershipOnlyAcme struct{}
+
+func (membershipOnlyAcme) IsMember(_ context.Context, _, orgID string) (bool, bool, error) {
+	return orgID == "acme", true, nil
+}
+
+// Every activity's context derives from BackgroundActivityContext, so it
+// carries the worker's membership for authz.
+func TestWorkerOptionsCarryMembershipToActivities(t *testing.T) {
+	acme, globex := "acme", "globex"
+	ctx := workerOptions(&Config{Membership: membershipOnlyAcme{}}, nil, 3).BackgroundActivityContext
+	if !authz.CanWriteChat(ctx, "u", &core.Chat{UserID: "u", OrgID: &acme}) ||
+		authz.CanWriteChat(ctx, "u", &core.Chat{UserID: "u", OrgID: &globex}) {
+		t.Fatal("the activity context does not decide with the worker's membership")
+	}
+	noOrgs := workerOptions(&Config{}, nil, 3).BackgroundActivityContext
+	if !authz.CanWriteChat(noOrgs, "u", &core.Chat{UserID: "u", OrgID: &globex}) {
+		t.Fatal("with no membership configured the worker has no orgs: owner-only")
+	}
+}
+
+// Every activity's context carries the worker's org policy resolver beside
+// its membership, so a tool, a launch or a trigger fire reads the run's org
+// policy where it reads membership.
+func TestWorkerOptionsCarryTheOrgPolicyResolverToActivities(t *testing.T) {
+	r := orgpolicy.New(policySource{})
+	ctx := workerOptions(&Config{Membership: membershipOnlyAcme{}, Policies: r}, nil, 3).BackgroundActivityContext
+	if orgpolicy.ResolverFrom(ctx) != r {
+		t.Fatal("the activity context does not carry the worker's org policy resolver")
+	}
+	if !authz.CanWriteChat(ctx, "u", &core.Chat{UserID: "u", OrgID: ptr("acme")}) {
+		t.Fatal("membership is no longer on the activity context")
+	}
+}
+
+type policySource struct{}
+
+func (policySource) ResolveOrgPolicy(context.Context, string) (accesstokenclient.OrgPolicy, error) {
+	return accesstokenclient.OrgPolicy{}, nil
+}
+
+func ptr(s string) *string { return &s }

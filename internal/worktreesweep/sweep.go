@@ -178,6 +178,7 @@ type Sweeper struct {
 	sender   Sender
 	keep     KeepFilesSetting
 	auto     *autoArchive
+	marks    *reclaimMarks
 	shed     *liveShed
 	recovery *recoveryEngine
 	// candidates and archived count this pass's finished active worktrees.
@@ -902,6 +903,10 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 			// An unarchive that could not reach the machine left a fence to retire.
 			w.Retire = wt.CleanupMetadata.RetireFence
 		}
+		if state == worktreereclaim.StateArchived && wt.CleanupMetadata.Marked() {
+			// Reclaimed under a mark: removed only while its tombstone stands.
+			w.ReclaimMark = wt.CleanupMetadata.ReclaimMarkID
+		}
 		// A user who chose "Keep everything" keeps their workspaces visible too.
 		// eligible is a live row the sweep may ask more of than a lock.
 		eligible := state == worktreereclaim.StateActive && s.auto != nil && w.Retire == "" && !keep && wt.DeletedAt == nil
@@ -1125,6 +1130,8 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 		return
 	}
 	if wt.DeletedAt == nil {
+		// Before anything decides on the row's quiet: the daemon saw it used.
+		useRecorded := s.noteUse(ctx, wt, r.LastUse)
 		if r.Outcome == worktreereclaim.OutcomeProbeInconclusive {
 			// Locked, but whether it is finished is unknown. LockedAt is not
 			// stamped (that is a 24h silence) and the row is not marked
@@ -1157,6 +1164,12 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 				"worktreeID", wt.ID, "bytes", r.StrippedBytes, "paths", r.Stripped)
 		}
 		switch {
+		case !useRecorded:
+			// Use the row does not show yet: never archive on a quiet that
+			// the daemon just contradicted.
+		case s.marks != nil && (r.Landed || r.RecoverableIdle || wt.CleanupMetadata.Marked()):
+			// Every automatic reclaim goes through a mark (mark.go).
+			s.advanceMark(ctx, userID, daemonID, wt, projectPath, r)
 		case r.Landed:
 			s.reclaimLanded(ctx, userID, wt)
 		case r.RecoverableIdle:
@@ -1192,6 +1205,37 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 		s.recordHold(ctx, wt, r.Reason, r.Detail, r.SizeBytes, r.SnapshotRefs)
 		s.recordStripped(ctx, wt, r)
 	}
+}
+
+// UseStore records the use a daemon saw of a live worktree.
+type UseStore interface {
+	// NoteWorktreeUse raises the row's last_active to at (never past the
+	// database's now, never lower).
+	NoteWorktreeUse(ctx context.Context, id string, at time.Time) error
+}
+
+// noteUse records the last use the daemon saw of a live worktree
+// (Result.LastUse) as the row's last_active, which every quiet check reads
+// (WorktreeRunActivities, ArchiveLandedWorktree): an agent working in it by
+// path, with its chat bound elsewhere, is activity no row shows. A failure
+// to record it fails closed: the row is not archived this pass.
+func (s *Sweeper) noteUse(ctx context.Context, wt *core.Worktree, at *time.Time) bool {
+	if at == nil || !at.After(wt.LastActive) {
+		return true
+	}
+	if m := wt.CleanupMetadata; m.Marked() && m.ReclaimMarkUse != nil && !at.After(*m.ReclaimMarkUse) {
+		// The stamp of the tombstone's own writes (mark.go): not use.
+		return true
+	}
+	store, ok := s.store.(UseStore)
+	if !ok {
+		return true
+	}
+	if err := store.NoteWorktreeUse(ctx, wt.ID, *at); err != nil {
+		logging.WarnContext(ctx, "[WorktreeSweep] could not record worktree use", "worktreeID", wt.ID, "error", err)
+		return false
+	}
+	return true
 }
 
 // recordAbsent records that daemonID, asked about an archived row with no

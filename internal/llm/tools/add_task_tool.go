@@ -11,13 +11,12 @@
 package tools
 
 import (
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -137,7 +136,7 @@ func (a *AddTaskTool) Execute(rctx *rctx.ToolContext, params AddTaskParams) (Too
 	// board into private per-sub-agent copies.
 	plan, err := resolvePlanForWrite(rctx.Context, a.repo, threadID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			if inherited, resolveErr := resolvePlanForRead(rctx.Context, a.repo, threadID); resolveErr == nil && inherited.inherited {
 				return NewTextErrorResponse(inheritedPlanWriteRefusal(inherited.ownerThreadID)), nil
 			}

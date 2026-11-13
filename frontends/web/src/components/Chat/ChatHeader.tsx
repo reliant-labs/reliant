@@ -24,6 +24,8 @@ import {
   ArrowLeft,
   Check,
   ListCollapse,
+  FolderInput,
+  Users,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useChat } from "../../hooks/chat-queries";
@@ -36,8 +38,12 @@ import { useThreads, ThreadTabs } from "./thread-views";
 import { ChildRunsStrip } from "../runs/ChildRunsStrip";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { useChatActions } from "./useChatActions";
+import { MoveChatToProjectDialog } from "./MoveChatToProjectDialog";
 import { useThreadNavigation } from "./useThreadNavigation";
 import { setChatThreadMode, useChatThreadMode } from "./thread-views/useChatThreadMode";
+import { ShareChatDialog } from "../Sharing/ShareChatDialog";
+import { ResourceVisibility } from "../../gen/reliant/v1/common_pb";
+import { hasControlPlane } from "../../services/controlPlane/config";
 
 interface ChatHeaderProps {
   chatId: string | null;
@@ -102,6 +108,13 @@ export function ChatHeader({
   const contextUsageByThread = useContextUsageByThread(chatId || "");
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMoveOpen, setIsMoveOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  // A viewer reads someone else's shared chat: nothing here may change it.
+  const isViewer = !!chat?.viewerAccess;
+  const isShared = chat?.visibility === ResourceVisibility.ORG;
+  // Only the owner shares, and only a chat of an org (SharingService).
+  const canShare = hasControlPlane && !isViewer && !!chat?.orgId;
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
@@ -136,7 +149,7 @@ export function ChatHeader({
 
   // Handle inline title editing
   const handleTitleClick = () => {
-    if (isNewChat) return; // Don't allow editing for new chat
+    if (isNewChat || isViewer) return; // A new chat has no title yet; a viewer's is read-only
     setEditedTitle(chat?.title || "");
     setIsEditingTitle(true);
     setTimeout(() => titleInputRef.current?.select(), 0);
@@ -216,7 +229,7 @@ export function ChatHeader({
                 <h1 
                   onClick={handleTitleClick}
                   className={`text-base font-semibold text-foreground leading-tight truncate ${
-                    isNewChat ? '' : 'cursor-text hover:text-foreground/80'
+                    isNewChat || isViewer ? '' : 'cursor-text hover:text-foreground/80'
                   } transition-colors`}
                 >
                   {title}
@@ -239,16 +252,32 @@ export function ChatHeader({
                   {/* Dropdown menu */}
                   {isMenuOpen && (
                     <div className="absolute left-0 top-full mt-1 w-64 bg-popover border border-border rounded-md shadow-lg py-1 z-50">
-                      <button
-                        onClick={() => {
-                          handleTitleClick();
-                          setIsMenuOpen(false);
-                        }}
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                        Edit Title
-                      </button>
+                      {!isViewer && (
+                        <button
+                          onClick={() => {
+                            handleTitleClick();
+                            setIsMenuOpen(false);
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                          Edit Title
+                        </button>
+                      )}
+
+                      {canShare && (
+                        <button
+                          onClick={() => {
+                            setIsShareOpen(true);
+                            setIsMenuOpen(false);
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                          data-testid="chat-menu-share"
+                        >
+                          <Users className="h-4 w-4" />
+                          {isShared ? "Stop sharing…" : "Share with organization…"}
+                        </button>
+                      )}
                       
                       {workflowExecution && onToggleWorkflowViewer && (
                         <button
@@ -276,7 +305,7 @@ export function ChatHeader({
                         {isSimplified && <Check className="h-4 w-4 text-primary-ink" aria-hidden />}
                       </button>
 
-                      {actions.openTerminal && (
+                      {!isViewer && actions.openTerminal && (
                         <button
                           onClick={runAndClose(actions.openTerminal)}
                           className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
@@ -286,7 +315,7 @@ export function ChatHeader({
                         </button>
                       )}
 
-                      {actions.worktree && (
+                      {!isViewer && actions.worktree && (
                         <WorkspaceRecoveryMenuItems
                           chatId={chatId}
                           worktree={actions.worktree}
@@ -295,13 +324,28 @@ export function ChatHeader({
                         />
                       )}
                       
-                      <button
-                        onClick={runAndClose(actions.exportChat)}
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                      >
-                        <Download className="h-4 w-4" />
-                        Export Chat
-                      </button>
+                      {!isViewer && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setIsMoveOpen(true);
+                              setIsMenuOpen(false);
+                            }}
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                          >
+                            <FolderInput className="h-4 w-4" />
+                            Move to project…
+                          </button>
+
+                          <button
+                            onClick={runAndClose(actions.exportChat)}
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                          >
+                            <Download className="h-4 w-4" />
+                            Export Chat
+                          </button>
+                        </>
+                      )}
                       
                       <button
                         onClick={runAndClose(actions.copyChatId)}
@@ -311,15 +355,19 @@ export function ChatHeader({
                         Copy Chat ID
                       </button>
                       
-                      <div className="border-t border-border my-1" />
-                      
-                      <button
-                        onClick={runAndClose(actions.archive)}
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                      >
-                        <Archive className="h-4 w-4" />
-                        Archive chat
-                      </button>
+                      {!isViewer && (
+                        <>
+                          <div className="border-t border-border my-1" />
+
+                          <button
+                            onClick={runAndClose(actions.archive)}
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                          >
+                            <Archive className="h-4 w-4" />
+                            Archive chat
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -327,7 +375,18 @@ export function ChatHeader({
               
               {/* A chat with no machine says so where the user looks first, and
                   the pill is the way to connect one (NO_MACHINE_CHATS.md §2.4). */}
-              {!isNewChat && chatId && chat?.noMachine && <NoMachinePill chatId={chatId} />}
+              {!isNewChat && chatId && chat?.noMachine && !isViewer && <NoMachinePill chatId={chatId} />}
+
+              {/* Shared with the org: the owner's reminder, the viewer's "read only". */}
+              {!isNewChat && (isShared || isViewer) && (
+                <span
+                  className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-border px-2 py-0.5 text-2xs font-medium text-muted-foreground"
+                  data-testid="chat-shared-chip"
+                >
+                  <Users className="h-3 w-3" aria-hidden />
+                  {isViewer ? "Read only" : "Shared"}
+                </span>
+              )}
 
               {/* Spacer to push time to the right */}
               <div className="flex-1" />
@@ -365,6 +424,12 @@ export function ChatHeader({
           </div>
         </div>
       </div>
+      {!isNewChat && chatId && !isViewer && (
+        <MoveChatToProjectDialog chatId={chatId} open={isMoveOpen} onClose={() => setIsMoveOpen(false)} />
+      )}
+      {canShare && chatId && (
+        <ShareChatDialog chatId={chatId} open={isShareOpen} onClose={() => setIsShareOpen(false)} />
+      )}
     </div>
   );
 }

@@ -444,6 +444,9 @@ export function snapshotReplacesMessages(
  *   placeholder (`optimistic-user-*`) once a real user message arrives.
  * A failed send (`optimistic-failed-*`, see lib/pendingSends.ts) survives both:
  * the server never got it, so nothing it sends describes it.
+ * Both keep the bodies the client holds: an incoming message whose blocks the
+ * server sent elided (a toolBodies: "stub" read) keeps the full body of each
+ * such block it already has — see keepHeldBodies.
  * Pure — `existing` comes from the RQ message cache; the result is written back
  * to it. Ordering is applied later by sortMessagesForDisplay at the render layer.
  */
@@ -456,7 +459,15 @@ export function mergeMessages(
     // Replacing the list must not take away the user's only copy of a message
     // that was never sent, nor its Retry.
     const failed = existing.filter((m) => m.id.startsWith(FAILED_SEND_PREFIX));
-    return [...incoming, ...failed];
+    let replacement = incoming;
+    if (incoming.some(hasElidedBlock)) {
+      const held = new Map(existing.map((m) => [m.id, m]));
+      replacement = incoming.map((m) => {
+        const prior = held.get(m.id);
+        return prior ? keepHeldBodies(prior, m) : m;
+      });
+    }
+    return [...replacement, ...failed];
   }
 
   let next = [...existing];
@@ -471,10 +482,57 @@ export function mergeMessages(
 
   for (const newMessage of incoming) {
     const idx = next.findIndex((m) => m.id === newMessage.id);
-    if (idx >= 0) next[idx] = newMessage;
+    if (idx >= 0) next[idx] = keepHeldBodies(next[idx]!, newMessage);
     else next.push(newMessage);
   }
   return next;
+}
+
+/** Whether the server left any of a message's block bodies out (ContentBlock.body_elided). */
+export function hasElidedBlock(message: Message): boolean {
+  return (message.contentBlocks || []).some((block) => block.bodyElided);
+}
+
+/**
+ * `incoming` with the bodies `held` has and it lacks. A block the server sent
+ * elided (body_elided: a skeleton input, a stub result, empty thinking) that
+ * `held` holds in full under the same block id takes the held body: its
+ * input, content, truncated and original_size. Every other field comes from
+ * `incoming`, the newer copy. A block's body never changes once it is
+ * written, so the held body is the block's body — but only once it is
+ * written: a held copy that was still streaming (a disconnect while the LLM
+ * wrote a tool's arguments) holds a PARTIAL body under the same block id.
+ * So bodies are kept only from a held message that is COMPLETE; any other
+ * held copy leaves the incoming elision marker in place, and the row fetches
+ * the finished body when it is shown.
+ *
+ * This is the live → reload → resync path: a turn watched live holds full
+ * blocks, a reconnect's snapshot re-delivers them as stubs, and the rows the
+ * user has open must not blank out. Returns `incoming` itself when nothing is
+ * restored, so a FULL read costs one scan of its blocks.
+ */
+export function keepHeldBodies(held: Message, incoming: Message): Message {
+  if (held === incoming || !hasElidedBlock(incoming)) return incoming;
+  if (held.streamingState !== StreamingState.COMPLETE) return incoming;
+  const heldBlocks = new Map<string, ContentBlock>();
+  for (const block of held.contentBlocks || []) {
+    if (block.id && !block.bodyElided) heldBlocks.set(block.id, block);
+  }
+  let restored = false;
+  const contentBlocks = incoming.contentBlocks.map((block) => {
+    const body = block.bodyElided && block.id ? heldBlocks.get(block.id) : undefined;
+    if (!body) return block;
+    restored = true;
+    const { bodyElided: _elided, bodySize: _size, ...rest } = block;
+    return {
+      ...rest,
+      input: body.input,
+      content: body.content,
+      truncated: body.truncated,
+      originalSize: body.originalSize,
+    } as ContentBlock;
+  });
+  return restored ? { ...incoming, contentBlocks } : incoming;
 }
 
 // ── Shared predicates of the streaming-message protocol ─────────────────────

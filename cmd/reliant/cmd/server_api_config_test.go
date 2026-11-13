@@ -22,7 +22,7 @@ import (
 // serverAPIConfigEnv is every variable `server api` reads through
 // ApiServerConfig.
 var serverAPIConfigEnv = []string{"JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "ALLOWED_EMAIL_DOMAINS", "RELIANT_DISABLE_FORGE_API", "RELIANT_CONFIG",
-	"AUTH_MODE", "AUTH_API_KEY", "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "RELIANT_AUTHORIZATION_SERVER", "MCP_OAUTH_ISSUERS", "MAX_UPLOAD_SIZE", "RELIANT_WORKTREE_AUTO_ARCHIVE"}
+	"AUTH_MODE", "AUTH_API_KEY", "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "RELIANT_AUTHORIZATION_SERVER", "MCP_OAUTH_ISSUERS", "MAX_UPLOAD_SIZE", "RELIANT_WORKTREE_AUTO_ARCHIVE", "RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED", "RELIANT_ORGS_CONNECTIONS_ENABLED", "RELIANT_ORGS_PROJECT_MOVES_ENABLED"}
 
 // TestServerAPIConfigEnvContract pins that the variables `server api` now
 // reads through ApiServerConfig reach apiOptions exactly as the flag
@@ -234,6 +234,8 @@ func TestServerAPIAuthMisconfigurationFailsBoot(t *testing.T) {
 		{map[string]string{"MAX_UPLOAD_SIZE": "10MB"}, "MAX_UPLOAD_SIZE"},
 		{map[string]string{"MAX_UPLOAD_SIZE": "0"}, "MAX_UPLOAD_SIZE"},
 		{map[string]string{"RELIANT_WORKTREE_AUTO_ARCHIVE": "true"}, "worktree_auto_archive"},
+		// A kill switch must not fail open on a typo: only on and off.
+		{map[string]string{"RELIANT_TRANSCRIPT_TOOL_BODY_STUBS": "false"}, "tool_body_stubs"},
 	} {
 		t.Run(fmt.Sprint(tc.env), func(t *testing.T) {
 			isolateServerAPIConfigEnv(t)

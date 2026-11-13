@@ -72,6 +72,12 @@ const (
 	// AccessTokenServiceResetDaemonScopePolicyProcedure is the fully-qualified name of the
 	// AccessTokenService's ResetDaemonScopePolicy RPC.
 	AccessTokenServiceResetDaemonScopePolicyProcedure = "/controlplane.v1.AccessTokenService/ResetDaemonScopePolicy"
+	// AccessTokenServiceListMyCLILoginsProcedure is the fully-qualified name of the
+	// AccessTokenService's ListMyCLILogins RPC.
+	AccessTokenServiceListMyCLILoginsProcedure = "/controlplane.v1.AccessTokenService/ListMyCLILogins"
+	// AccessTokenServiceRevokeMyCLILoginProcedure is the fully-qualified name of the
+	// AccessTokenService's RevokeMyCLILogin RPC.
+	AccessTokenServiceRevokeMyCLILoginProcedure = "/controlplane.v1.AccessTokenService/RevokeMyCLILogin"
 	// AccessTokenServiceExchangeTokenProcedure is the fully-qualified name of the AccessTokenService's
 	// ExchangeToken RPC.
 	AccessTokenServiceExchangeTokenProcedure = "/controlplane.v1.AccessTokenService/ExchangeToken"
@@ -117,6 +123,14 @@ type AccessTokenServiceClient interface {
 	// scope sets are never widened: reissue through authenticated login afterwards.
 	// Renewal, label edits and token revocation never reset this durable policy.
 	ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error)
+	// ListMyCLILogins lists the caller's human CLI logins (`forge login`): the
+	// device, when each was issued and last used, and when it ends. Browser
+	// session only: a CLI login is refused, like every rpc of this service.
+	ListMyCLILogins(context.Context, *connect.Request[v1.ListMyCLILoginsRequest]) (*connect.Response[v1.ListMyCLILoginsResponse], error)
+	// RevokeMyCLILogin ends one of the caller's own CLI logins at once: its
+	// next request is refused. Idempotent: revoking a revoked login succeeds.
+	// Another person's login, or none, is NotFound. Browser session only.
+	RevokeMyCLILogin(context.Context, *connect.Request[v1.RevokeMyCLILoginRequest]) (*connect.Response[v1.RevokeMyCLILoginResponse], error)
 	// ExchangeToken attenuates a machine credential acting as a person to a
 	// short-lived helper. It NEVER widens: requested scopes must be explicitly
 	// held by the caller (not merely implied by write), exchangeable, and still
@@ -196,6 +210,18 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(accessTokenServiceMethods.ByName("ResetDaemonScopePolicy")),
 			connect.WithClientOptions(opts...),
 		),
+		listMyCLILogins: connect.NewClient[v1.ListMyCLILoginsRequest, v1.ListMyCLILoginsResponse](
+			httpClient,
+			baseURL+AccessTokenServiceListMyCLILoginsProcedure,
+			connect.WithSchema(accessTokenServiceMethods.ByName("ListMyCLILogins")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeMyCLILogin: connect.NewClient[v1.RevokeMyCLILoginRequest, v1.RevokeMyCLILoginResponse](
+			httpClient,
+			baseURL+AccessTokenServiceRevokeMyCLILoginProcedure,
+			connect.WithSchema(accessTokenServiceMethods.ByName("RevokeMyCLILogin")),
+			connect.WithClientOptions(opts...),
+		),
 		exchangeToken: connect.NewClient[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse](
 			httpClient,
 			baseURL+AccessTokenServiceExchangeTokenProcedure,
@@ -227,6 +253,8 @@ type accessTokenServiceClient struct {
 	revokeMyToken          *connect.Client[v1.RevokeMyTokenRequest, v1.RevokeMyTokenResponse]
 	updateMyToken          *connect.Client[v1.UpdateMyTokenRequest, v1.UpdateMyTokenResponse]
 	resetDaemonScopePolicy *connect.Client[v1.ResetDaemonScopePolicyRequest, v1.ResetDaemonScopePolicyResponse]
+	listMyCLILogins        *connect.Client[v1.ListMyCLILoginsRequest, v1.ListMyCLILoginsResponse]
+	revokeMyCLILogin       *connect.Client[v1.RevokeMyCLILoginRequest, v1.RevokeMyCLILoginResponse]
 	exchangeToken          *connect.Client[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse]
 	listOrgMemberGrants    *connect.Client[v1.ListOrgMemberGrantsRequest, v1.ListOrgMemberGrantsResponse]
 	updateOrgMemberGrants  *connect.Client[v1.UpdateOrgMemberGrantsRequest, v1.UpdateOrgMemberGrantsResponse]
@@ -270,6 +298,16 @@ func (c *accessTokenServiceClient) UpdateMyToken(ctx context.Context, req *conne
 // ResetDaemonScopePolicy calls controlplane.v1.AccessTokenService.ResetDaemonScopePolicy.
 func (c *accessTokenServiceClient) ResetDaemonScopePolicy(ctx context.Context, req *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error) {
 	return c.resetDaemonScopePolicy.CallUnary(ctx, req)
+}
+
+// ListMyCLILogins calls controlplane.v1.AccessTokenService.ListMyCLILogins.
+func (c *accessTokenServiceClient) ListMyCLILogins(ctx context.Context, req *connect.Request[v1.ListMyCLILoginsRequest]) (*connect.Response[v1.ListMyCLILoginsResponse], error) {
+	return c.listMyCLILogins.CallUnary(ctx, req)
+}
+
+// RevokeMyCLILogin calls controlplane.v1.AccessTokenService.RevokeMyCLILogin.
+func (c *accessTokenServiceClient) RevokeMyCLILogin(ctx context.Context, req *connect.Request[v1.RevokeMyCLILoginRequest]) (*connect.Response[v1.RevokeMyCLILoginResponse], error) {
+	return c.revokeMyCLILogin.CallUnary(ctx, req)
 }
 
 // ExchangeToken calls controlplane.v1.AccessTokenService.ExchangeToken.
@@ -321,6 +359,14 @@ type AccessTokenServiceHandler interface {
 	// scope sets are never widened: reissue through authenticated login afterwards.
 	// Renewal, label edits and token revocation never reset this durable policy.
 	ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error)
+	// ListMyCLILogins lists the caller's human CLI logins (`forge login`): the
+	// device, when each was issued and last used, and when it ends. Browser
+	// session only: a CLI login is refused, like every rpc of this service.
+	ListMyCLILogins(context.Context, *connect.Request[v1.ListMyCLILoginsRequest]) (*connect.Response[v1.ListMyCLILoginsResponse], error)
+	// RevokeMyCLILogin ends one of the caller's own CLI logins at once: its
+	// next request is refused. Idempotent: revoking a revoked login succeeds.
+	// Another person's login, or none, is NotFound. Browser session only.
+	RevokeMyCLILogin(context.Context, *connect.Request[v1.RevokeMyCLILoginRequest]) (*connect.Response[v1.RevokeMyCLILoginResponse], error)
 	// ExchangeToken attenuates a machine credential acting as a person to a
 	// short-lived helper. It NEVER widens: requested scopes must be explicitly
 	// held by the caller (not merely implied by write), exchangeable, and still
@@ -396,6 +442,18 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 		connect.WithSchema(accessTokenServiceMethods.ByName("ResetDaemonScopePolicy")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessTokenServiceListMyCLILoginsHandler := connect.NewUnaryHandler(
+		AccessTokenServiceListMyCLILoginsProcedure,
+		svc.ListMyCLILogins,
+		connect.WithSchema(accessTokenServiceMethods.ByName("ListMyCLILogins")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accessTokenServiceRevokeMyCLILoginHandler := connect.NewUnaryHandler(
+		AccessTokenServiceRevokeMyCLILoginProcedure,
+		svc.RevokeMyCLILogin,
+		connect.WithSchema(accessTokenServiceMethods.ByName("RevokeMyCLILogin")),
+		connect.WithHandlerOptions(opts...),
+	)
 	accessTokenServiceExchangeTokenHandler := connect.NewUnaryHandler(
 		AccessTokenServiceExchangeTokenProcedure,
 		svc.ExchangeToken,
@@ -432,6 +490,10 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 			accessTokenServiceUpdateMyTokenHandler.ServeHTTP(w, r)
 		case AccessTokenServiceResetDaemonScopePolicyProcedure:
 			accessTokenServiceResetDaemonScopePolicyHandler.ServeHTTP(w, r)
+		case AccessTokenServiceListMyCLILoginsProcedure:
+			accessTokenServiceListMyCLILoginsHandler.ServeHTTP(w, r)
+		case AccessTokenServiceRevokeMyCLILoginProcedure:
+			accessTokenServiceRevokeMyCLILoginHandler.ServeHTTP(w, r)
 		case AccessTokenServiceExchangeTokenProcedure:
 			accessTokenServiceExchangeTokenHandler.ServeHTTP(w, r)
 		case AccessTokenServiceListOrgMemberGrantsProcedure:
@@ -477,6 +539,14 @@ func (UnimplementedAccessTokenServiceHandler) UpdateMyToken(context.Context, *co
 
 func (UnimplementedAccessTokenServiceHandler) ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.ResetDaemonScopePolicy is not implemented"))
+}
+
+func (UnimplementedAccessTokenServiceHandler) ListMyCLILogins(context.Context, *connect.Request[v1.ListMyCLILoginsRequest]) (*connect.Response[v1.ListMyCLILoginsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.ListMyCLILogins is not implemented"))
+}
+
+func (UnimplementedAccessTokenServiceHandler) RevokeMyCLILogin(context.Context, *connect.Request[v1.RevokeMyCLILoginRequest]) (*connect.Response[v1.RevokeMyCLILoginResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.RevokeMyCLILogin is not implemented"))
 }
 
 func (UnimplementedAccessTokenServiceHandler) ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error) {

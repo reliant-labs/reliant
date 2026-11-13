@@ -50,6 +50,19 @@ export function useIdentityStatus(orgId: string | null, envId: string) {
   });
 }
 
+export function useIdentityUser(orgId: string, envId: string, userId: string | null, enabled: boolean) {
+  const api = useIdentityApi();
+  return useQuery({
+    queryKey: [...identityKeys.env(orgId, envId), "user", userId],
+    queryFn: () => {
+      if (!api.getUser) throw new Error("This server does not support identity lookup.");
+      return api.getUser(orgId, envId, userId!);
+    },
+    enabled: enabled && !!userId,
+    retry: identityRetry,
+  });
+}
+
 export function useIdentityUsers(orgId: string | null, envId: string, filter: IdentityUserFilter, enabled: boolean) {
   const api = useIdentityApi();
   return useInfiniteQuery({

@@ -89,6 +89,15 @@ const (
 	DeployServiceDeleteDeploymentProcedure = "/controlplane.v1.DeployService/DeleteDeployment"
 	// DeployServicePromoteProcedure is the fully-qualified name of the DeployService's Promote RPC.
 	DeployServicePromoteProcedure = "/controlplane.v1.DeployService/Promote"
+	// DeployServiceSetRollbackFloorProcedure is the fully-qualified name of the DeployService's
+	// SetRollbackFloor RPC.
+	DeployServiceSetRollbackFloorProcedure = "/controlplane.v1.DeployService/SetRollbackFloor"
+	// DeployServiceLiftRollbackFloorProcedure is the fully-qualified name of the DeployService's
+	// LiftRollbackFloor RPC.
+	DeployServiceLiftRollbackFloorProcedure = "/controlplane.v1.DeployService/LiftRollbackFloor"
+	// DeployServiceListRollbackFloorsProcedure is the fully-qualified name of the DeployService's
+	// ListRollbackFloors RPC.
+	DeployServiceListRollbackFloorsProcedure = "/controlplane.v1.DeployService/ListRollbackFloors"
 	// DeployServiceScaleProcedure is the fully-qualified name of the DeployService's Scale RPC.
 	DeployServiceScaleProcedure = "/controlplane.v1.DeployService/Scale"
 	// DeployServiceSetEnvironmentRunStateProcedure is the fully-qualified name of the DeployService's
@@ -137,6 +146,9 @@ const (
 	DeployServiceRecordBundleProcedure = "/controlplane.v1.DeployService/RecordBundle"
 	// DeployServiceGetBundleProcedure is the fully-qualified name of the DeployService's GetBundle RPC.
 	DeployServiceGetBundleProcedure = "/controlplane.v1.DeployService/GetBundle"
+	// DeployServiceGetWorkloadConfigProcedure is the fully-qualified name of the DeployService's
+	// GetWorkloadConfig RPC.
+	DeployServiceGetWorkloadConfigProcedure = "/controlplane.v1.DeployService/GetWorkloadConfig"
 	// DeployServiceListConvergencesProcedure is the fully-qualified name of the DeployService's
 	// ListConvergences RPC.
 	DeployServiceListConvergencesProcedure = "/controlplane.v1.DeployService/ListConvergences"
@@ -161,6 +173,9 @@ const (
 	// DeployServiceGetEnvironmentShapeProcedure is the fully-qualified name of the DeployService's
 	// GetEnvironmentShape RPC.
 	DeployServiceGetEnvironmentShapeProcedure = "/controlplane.v1.DeployService/GetEnvironmentShape"
+	// DeployServiceGetProjectTopologyProcedure is the fully-qualified name of the DeployService's
+	// GetProjectTopology RPC.
+	DeployServiceGetProjectTopologyProcedure = "/controlplane.v1.DeployService/GetProjectTopology"
 	// DeployServicePlanDeployProcedure is the fully-qualified name of the DeployService's PlanDeploy
 	// RPC.
 	DeployServicePlanDeployProcedure = "/controlplane.v1.DeployService/PlanDeploy"
@@ -170,6 +185,9 @@ const (
 	// DeployServiceReportLocalSessionProcedure is the fully-qualified name of the DeployService's
 	// ReportLocalSession RPC.
 	DeployServiceReportLocalSessionProcedure = "/controlplane.v1.DeployService/ReportLocalSession"
+	// DeployServiceMintLocalTelemetryTokenProcedure is the fully-qualified name of the DeployService's
+	// MintLocalTelemetryToken RPC.
+	DeployServiceMintLocalTelemetryTokenProcedure = "/controlplane.v1.DeployService/MintLocalTelemetryToken"
 	// DeployServiceImportLedgerProcedure is the fully-qualified name of the DeployService's
 	// ImportLedger RPC.
 	DeployServiceImportLedgerProcedure = "/controlplane.v1.DeployService/ImportLedger"
@@ -245,6 +263,22 @@ type DeployServiceClient interface {
 	// policy. A version that was never cut fails with FailedPrecondition; there
 	// is no path that responds by building it.
 	Promote(context.Context, *connect.Request[v1.PromoteReleaseRequest]) (*connect.Response[v1.PromoteReleaseResponse], error)
+	// SetRollbackFloor sets an ORDER floor: at a named release (source manual)
+	// or at the release the environment runs now (current; source
+	// roll_forward_only — "roll forward only from here"). A floor the
+	// environment's current release would fail is refused (InvalidArgument):
+	// the current binding always satisfies every active floor.
+	SetRollbackFloor(context.Context, *connect.Request[v1.SetRollbackFloorRequest]) (*connect.Response[v1.SetRollbackFloorResponse], error)
+	// LiftRollbackFloor lifts floors — named ones (`floor lift`), every order
+	// floor above a release followed by a manual floor at it (`floor lower`),
+	// or every order floor (`floor clear`) — as one transaction. A declared
+	// floor lifts only by id, and only with every declaration it requires
+	// acknowledged. Each lifted floor (and the floor `lower` sets) is its own
+	// activity event.
+	LiftRollbackFloor(context.Context, *connect.Request[v1.LiftRollbackFloorRequest]) (*connect.Response[v1.LiftRollbackFloorResponse], error)
+	// ListRollbackFloors returns an environment's floors, oldest first: the
+	// active ones, or every one with include_lifted.
+	ListRollbackFloors(context.Context, *connect.Request[v1.ListRollbackFloorsRequest]) (*connect.Response[v1.ListRollbackFloorsResponse], error)
 	// Scale changes the RUN STATE (running / suspended) and nothing else.
 	// Narrow on purpose: this is the button on a detail page, and a request
 	// shape that could also change reserved capacity would let a mis-wired
@@ -383,7 +417,11 @@ type DeployServiceClient interface {
 	// ListUsage returns metered infrastructure usage for the caller's org, with
 	// per-resource attribution. Post-hoc: these rows come from a sweeper that
 	// read the live cluster, so a deployment declared and never applied appears
-	// in none of them.
+	// in none of them. Quantities and dollar amounts are readable by any
+	// member. A client that renders withheld costs sets
+	// withhold_costs_without_billing_read: then dollar amounts need billing:read
+	// (org owners and admins), the rule of every other cost read, and without it
+	// the rows come back with costs_withheld set.
 	ListUsage(context.Context, *connect.Request[v1.ListDeployUsageRequest]) (*connect.Response[v1.ListDeployUsageResponse], error)
 	// RecordBundle records one rendered deploy artifact against an environment.
 	//
@@ -407,6 +445,9 @@ type DeployServiceClient interface {
 	// created=false.
 	RecordBundle(context.Context, *connect.Request[v1.RecordDeployBundleRequest]) (*connect.Response[v1.RecordDeployBundleResponse], error)
 	GetBundle(context.Context, *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error)
+	// Values require BOTH deploy:read and deploy:config:read. Every read is
+	// synchronously audited. The names-only GetBundle endpoint is unchanged.
+	GetWorkloadConfig(context.Context, *connect.Request[v1.GetWorkloadConfigRequest]) (*connect.Response[v1.GetWorkloadConfigResponse], error)
 	// ListConvergences returns an environment's OBSERVATION TIMELINE, newest
 	// first, keyset-paged for ListPromotions' reason: rows arrive while a reader
 	// pages, so an offset would skip or repeat one.
@@ -482,6 +523,24 @@ type DeployServiceClient interface {
 	// A NEVER-DECLARED ENVIRONMENT IS NOT AN ERROR: the response comes back
 	// with no shape, which is the "never built" state, never an empty shape.
 	GetEnvironmentShape(context.Context, *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error)
+	// GetProjectTopology returns one forge project's release/environment
+	// topology: forge's `env status --json` document, assembled from this
+	// control plane's records by forge's own pkg/topology. No daemon and no
+	// checkout are involved.
+	//
+	// WHAT IT READS: the environment rows (with their declared shapes), each
+	// environment's current promotion, the project's newest releases, the
+	// bundle each promotion names, the reconciler's observations, the hosted
+	// deployments' observed images, and the declared-environment catalog
+	// sealed into the project's newest RELEASED bundle — which is how an env
+	// declared in code but never recorded here (a file ledger, or an env never
+	// built) still appears, as `tracked: false`.
+	//
+	// MEMBER (machine: deploy:read), the same scoping as GetLiveView. Another
+	// org's project, an unknown project and a project nobody has deployed are
+	// the same answer: a report with no environments. It names no secret value
+	// and no machine path.
+	GetProjectTopology(context.Context, *connect.Request[v1.GetDeployProjectTopologyRequest]) (*connect.Response[v1.GetDeployProjectTopologyResponse], error)
 	// PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
 	//
 	// IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
@@ -513,7 +572,8 @@ type DeployServiceClient interface {
 	// ReportLocalSession upserts one `forge env up` worktree's presence.
 	//
 	// THE SECOND REPORTED-STATE EXCEPTION — see the service header. LOCAL
-	// environments only, enforced by the database rather than by this handler.
+	// environments only, enforced by the database (the handler checks the kind
+	// first only so the refusal names the mistake: FailedPrecondition).
 	//
 	// It must NEVER block `forge env up`. A developer whose network is down, or
 	// whose token has expired, keeps working — the session record is a courtesy
@@ -521,6 +581,27 @@ type DeployServiceClient interface {
 	// plane being reachable is a worse product than one with a gap in a
 	// dashboard.
 	ReportLocalSession(context.Context, *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error)
+	// MintLocalTelemetryToken issues the two short-lived credentials a local
+	// dev stack exports its telemetry to the hosted store with
+	// (docs/design/dev-telemetry-to-hosted.md §2): a process token for the
+	// stack's host processes and a browser token for its dev server's /_otel
+	// proxy. Both are ES256 JWTs from the telemetry-token issuer, live one hour
+	// and carry the instance (`sid`), its owner (`uid`) and an ingest class.
+	//
+	// The caller must own a LIVE session (ReportLocalSession) of a LOCAL
+	// environment, in an org whose admin has not switched dev telemetry off,
+	// on a control plane whose local_telemetry_mode admits the org. Every
+	// refusal is one forge maps to "keep telemetry local, print why":
+	// FailedPrecondition with reason dev_telemetry_disabled (the org switch),
+	// dev_telemetry_not_enabled (the platform gate) or session_not_live;
+	// NotFound for an unknown session or environment; PermissionDenied for a
+	// session someone else owns. Unimplemented means a control plane that
+	// predates this rpc.
+	//
+	// Idempotent per session: each call re-mints and refreshes the instance's
+	// grant (local_telemetry_grants). forge calls it again at each token's
+	// half-life.
+	MintLocalTelemetryToken(context.Context, *connect.Request[v1.MintLocalTelemetryTokenRequest]) (*connect.Response[v1.MintLocalTelemetryTokenResponse], error)
 	// ImportLedger loads a project's existing file-based deploy history into the
 	// hosted ledger, in one transaction.
 	//
@@ -673,6 +754,24 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("Promote")),
 			connect.WithClientOptions(opts...),
 		),
+		setRollbackFloor: connect.NewClient[v1.SetRollbackFloorRequest, v1.SetRollbackFloorResponse](
+			httpClient,
+			baseURL+DeployServiceSetRollbackFloorProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("SetRollbackFloor")),
+			connect.WithClientOptions(opts...),
+		),
+		liftRollbackFloor: connect.NewClient[v1.LiftRollbackFloorRequest, v1.LiftRollbackFloorResponse](
+			httpClient,
+			baseURL+DeployServiceLiftRollbackFloorProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("LiftRollbackFloor")),
+			connect.WithClientOptions(opts...),
+		),
+		listRollbackFloors: connect.NewClient[v1.ListRollbackFloorsRequest, v1.ListRollbackFloorsResponse](
+			httpClient,
+			baseURL+DeployServiceListRollbackFloorsProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ListRollbackFloors")),
+			connect.WithClientOptions(opts...),
+		),
 		scale: connect.NewClient[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse](
 			httpClient,
 			baseURL+DeployServiceScaleProcedure,
@@ -781,6 +880,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("GetBundle")),
 			connect.WithClientOptions(opts...),
 		),
+		getWorkloadConfig: connect.NewClient[v1.GetWorkloadConfigRequest, v1.GetWorkloadConfigResponse](
+			httpClient,
+			baseURL+DeployServiceGetWorkloadConfigProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetWorkloadConfig")),
+			connect.WithClientOptions(opts...),
+		),
 		listConvergences: connect.NewClient[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse](
 			httpClient,
 			baseURL+DeployServiceListConvergencesProcedure,
@@ -829,6 +934,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("GetEnvironmentShape")),
 			connect.WithClientOptions(opts...),
 		),
+		getProjectTopology: connect.NewClient[v1.GetDeployProjectTopologyRequest, v1.GetDeployProjectTopologyResponse](
+			httpClient,
+			baseURL+DeployServiceGetProjectTopologyProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetProjectTopology")),
+			connect.WithClientOptions(opts...),
+		),
 		planDeploy: connect.NewClient[v1.PlanDeployRequest, v1.PlanDeployResponse](
 			httpClient,
 			baseURL+DeployServicePlanDeployProcedure,
@@ -845,6 +956,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceReportLocalSessionProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("ReportLocalSession")),
+			connect.WithClientOptions(opts...),
+		),
+		mintLocalTelemetryToken: connect.NewClient[v1.MintLocalTelemetryTokenRequest, v1.MintLocalTelemetryTokenResponse](
+			httpClient,
+			baseURL+DeployServiceMintLocalTelemetryTokenProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("MintLocalTelemetryToken")),
 			connect.WithClientOptions(opts...),
 		),
 		importLedger: connect.NewClient[v1.ImportLedgerRequest, v1.ImportLedgerResponse](
@@ -882,6 +999,9 @@ type deployServiceClient struct {
 	updateDeployment        *connect.Client[v1.UpdateDeploymentRequest, v1.UpdateDeploymentResponse]
 	deleteDeployment        *connect.Client[v1.DeleteDeploymentRequest, v1.DeleteDeploymentResponse]
 	promote                 *connect.Client[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse]
+	setRollbackFloor        *connect.Client[v1.SetRollbackFloorRequest, v1.SetRollbackFloorResponse]
+	liftRollbackFloor       *connect.Client[v1.LiftRollbackFloorRequest, v1.LiftRollbackFloorResponse]
+	listRollbackFloors      *connect.Client[v1.ListRollbackFloorsRequest, v1.ListRollbackFloorsResponse]
 	scale                   *connect.Client[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse]
 	setEnvironmentRunState  *connect.Client[v1.SetEnvironmentRunStateRequest, v1.SetEnvironmentRunStateResponse]
 	restartWorkload         *connect.Client[v1.RestartWorkloadRequest, v1.RestartWorkloadResponse]
@@ -900,6 +1020,7 @@ type deployServiceClient struct {
 	listUsage               *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
 	recordBundle            *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
 	getBundle               *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
+	getWorkloadConfig       *connect.Client[v1.GetWorkloadConfigRequest, v1.GetWorkloadConfigResponse]
 	listConvergences        *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
 	openDeployAttempt       *connect.Client[v1.OpenDeployAttemptRequest, v1.OpenDeployAttemptResponse]
 	reportDeployAttempt     *connect.Client[v1.ReportDeployAttemptRequest, v1.ReportDeployAttemptResponse]
@@ -908,9 +1029,11 @@ type deployServiceClient struct {
 	getDeployAttempt        *connect.Client[v1.GetDeployAttemptRequest, v1.GetDeployAttemptResponse]
 	getLiveView             *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
 	getEnvironmentShape     *connect.Client[v1.GetDeployEnvironmentShapeRequest, v1.GetDeployEnvironmentShapeResponse]
+	getProjectTopology      *connect.Client[v1.GetDeployProjectTopologyRequest, v1.GetDeployProjectTopologyResponse]
 	planDeploy              *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
 	checkDeployCapacity     *connect.Client[v1.CheckDeployCapacityRequest, v1.CheckDeployCapacityResponse]
 	reportLocalSession      *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
+	mintLocalTelemetryToken *connect.Client[v1.MintLocalTelemetryTokenRequest, v1.MintLocalTelemetryTokenResponse]
 	importLedger            *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
 	getDrift                *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
 }
@@ -1005,6 +1128,21 @@ func (c *deployServiceClient) Promote(ctx context.Context, req *connect.Request[
 	return c.promote.CallUnary(ctx, req)
 }
 
+// SetRollbackFloor calls controlplane.v1.DeployService.SetRollbackFloor.
+func (c *deployServiceClient) SetRollbackFloor(ctx context.Context, req *connect.Request[v1.SetRollbackFloorRequest]) (*connect.Response[v1.SetRollbackFloorResponse], error) {
+	return c.setRollbackFloor.CallUnary(ctx, req)
+}
+
+// LiftRollbackFloor calls controlplane.v1.DeployService.LiftRollbackFloor.
+func (c *deployServiceClient) LiftRollbackFloor(ctx context.Context, req *connect.Request[v1.LiftRollbackFloorRequest]) (*connect.Response[v1.LiftRollbackFloorResponse], error) {
+	return c.liftRollbackFloor.CallUnary(ctx, req)
+}
+
+// ListRollbackFloors calls controlplane.v1.DeployService.ListRollbackFloors.
+func (c *deployServiceClient) ListRollbackFloors(ctx context.Context, req *connect.Request[v1.ListRollbackFloorsRequest]) (*connect.Response[v1.ListRollbackFloorsResponse], error) {
+	return c.listRollbackFloors.CallUnary(ctx, req)
+}
+
 // Scale calls controlplane.v1.DeployService.Scale.
 func (c *deployServiceClient) Scale(ctx context.Context, req *connect.Request[v1.ScaleDeploymentRequest]) (*connect.Response[v1.ScaleDeploymentResponse], error) {
 	return c.scale.CallUnary(ctx, req)
@@ -1095,6 +1233,11 @@ func (c *deployServiceClient) GetBundle(ctx context.Context, req *connect.Reques
 	return c.getBundle.CallUnary(ctx, req)
 }
 
+// GetWorkloadConfig calls controlplane.v1.DeployService.GetWorkloadConfig.
+func (c *deployServiceClient) GetWorkloadConfig(ctx context.Context, req *connect.Request[v1.GetWorkloadConfigRequest]) (*connect.Response[v1.GetWorkloadConfigResponse], error) {
+	return c.getWorkloadConfig.CallUnary(ctx, req)
+}
+
 // ListConvergences calls controlplane.v1.DeployService.ListConvergences.
 func (c *deployServiceClient) ListConvergences(ctx context.Context, req *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error) {
 	return c.listConvergences.CallUnary(ctx, req)
@@ -1135,6 +1278,11 @@ func (c *deployServiceClient) GetEnvironmentShape(ctx context.Context, req *conn
 	return c.getEnvironmentShape.CallUnary(ctx, req)
 }
 
+// GetProjectTopology calls controlplane.v1.DeployService.GetProjectTopology.
+func (c *deployServiceClient) GetProjectTopology(ctx context.Context, req *connect.Request[v1.GetDeployProjectTopologyRequest]) (*connect.Response[v1.GetDeployProjectTopologyResponse], error) {
+	return c.getProjectTopology.CallUnary(ctx, req)
+}
+
 // PlanDeploy calls controlplane.v1.DeployService.PlanDeploy.
 func (c *deployServiceClient) PlanDeploy(ctx context.Context, req *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error) {
 	return c.planDeploy.CallUnary(ctx, req)
@@ -1148,6 +1296,11 @@ func (c *deployServiceClient) CheckDeployCapacity(ctx context.Context, req *conn
 // ReportLocalSession calls controlplane.v1.DeployService.ReportLocalSession.
 func (c *deployServiceClient) ReportLocalSession(ctx context.Context, req *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error) {
 	return c.reportLocalSession.CallUnary(ctx, req)
+}
+
+// MintLocalTelemetryToken calls controlplane.v1.DeployService.MintLocalTelemetryToken.
+func (c *deployServiceClient) MintLocalTelemetryToken(ctx context.Context, req *connect.Request[v1.MintLocalTelemetryTokenRequest]) (*connect.Response[v1.MintLocalTelemetryTokenResponse], error) {
+	return c.mintLocalTelemetryToken.CallUnary(ctx, req)
 }
 
 // ImportLedger calls controlplane.v1.DeployService.ImportLedger.
@@ -1228,6 +1381,22 @@ type DeployServiceHandler interface {
 	// policy. A version that was never cut fails with FailedPrecondition; there
 	// is no path that responds by building it.
 	Promote(context.Context, *connect.Request[v1.PromoteReleaseRequest]) (*connect.Response[v1.PromoteReleaseResponse], error)
+	// SetRollbackFloor sets an ORDER floor: at a named release (source manual)
+	// or at the release the environment runs now (current; source
+	// roll_forward_only — "roll forward only from here"). A floor the
+	// environment's current release would fail is refused (InvalidArgument):
+	// the current binding always satisfies every active floor.
+	SetRollbackFloor(context.Context, *connect.Request[v1.SetRollbackFloorRequest]) (*connect.Response[v1.SetRollbackFloorResponse], error)
+	// LiftRollbackFloor lifts floors — named ones (`floor lift`), every order
+	// floor above a release followed by a manual floor at it (`floor lower`),
+	// or every order floor (`floor clear`) — as one transaction. A declared
+	// floor lifts only by id, and only with every declaration it requires
+	// acknowledged. Each lifted floor (and the floor `lower` sets) is its own
+	// activity event.
+	LiftRollbackFloor(context.Context, *connect.Request[v1.LiftRollbackFloorRequest]) (*connect.Response[v1.LiftRollbackFloorResponse], error)
+	// ListRollbackFloors returns an environment's floors, oldest first: the
+	// active ones, or every one with include_lifted.
+	ListRollbackFloors(context.Context, *connect.Request[v1.ListRollbackFloorsRequest]) (*connect.Response[v1.ListRollbackFloorsResponse], error)
 	// Scale changes the RUN STATE (running / suspended) and nothing else.
 	// Narrow on purpose: this is the button on a detail page, and a request
 	// shape that could also change reserved capacity would let a mis-wired
@@ -1366,7 +1535,11 @@ type DeployServiceHandler interface {
 	// ListUsage returns metered infrastructure usage for the caller's org, with
 	// per-resource attribution. Post-hoc: these rows come from a sweeper that
 	// read the live cluster, so a deployment declared and never applied appears
-	// in none of them.
+	// in none of them. Quantities and dollar amounts are readable by any
+	// member. A client that renders withheld costs sets
+	// withhold_costs_without_billing_read: then dollar amounts need billing:read
+	// (org owners and admins), the rule of every other cost read, and without it
+	// the rows come back with costs_withheld set.
 	ListUsage(context.Context, *connect.Request[v1.ListDeployUsageRequest]) (*connect.Response[v1.ListDeployUsageResponse], error)
 	// RecordBundle records one rendered deploy artifact against an environment.
 	//
@@ -1390,6 +1563,9 @@ type DeployServiceHandler interface {
 	// created=false.
 	RecordBundle(context.Context, *connect.Request[v1.RecordDeployBundleRequest]) (*connect.Response[v1.RecordDeployBundleResponse], error)
 	GetBundle(context.Context, *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error)
+	// Values require BOTH deploy:read and deploy:config:read. Every read is
+	// synchronously audited. The names-only GetBundle endpoint is unchanged.
+	GetWorkloadConfig(context.Context, *connect.Request[v1.GetWorkloadConfigRequest]) (*connect.Response[v1.GetWorkloadConfigResponse], error)
 	// ListConvergences returns an environment's OBSERVATION TIMELINE, newest
 	// first, keyset-paged for ListPromotions' reason: rows arrive while a reader
 	// pages, so an offset would skip or repeat one.
@@ -1465,6 +1641,24 @@ type DeployServiceHandler interface {
 	// A NEVER-DECLARED ENVIRONMENT IS NOT AN ERROR: the response comes back
 	// with no shape, which is the "never built" state, never an empty shape.
 	GetEnvironmentShape(context.Context, *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error)
+	// GetProjectTopology returns one forge project's release/environment
+	// topology: forge's `env status --json` document, assembled from this
+	// control plane's records by forge's own pkg/topology. No daemon and no
+	// checkout are involved.
+	//
+	// WHAT IT READS: the environment rows (with their declared shapes), each
+	// environment's current promotion, the project's newest releases, the
+	// bundle each promotion names, the reconciler's observations, the hosted
+	// deployments' observed images, and the declared-environment catalog
+	// sealed into the project's newest RELEASED bundle — which is how an env
+	// declared in code but never recorded here (a file ledger, or an env never
+	// built) still appears, as `tracked: false`.
+	//
+	// MEMBER (machine: deploy:read), the same scoping as GetLiveView. Another
+	// org's project, an unknown project and a project nobody has deployed are
+	// the same answer: a report with no environments. It names no secret value
+	// and no machine path.
+	GetProjectTopology(context.Context, *connect.Request[v1.GetDeployProjectTopologyRequest]) (*connect.Response[v1.GetDeployProjectTopologyResponse], error)
 	// PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
 	//
 	// IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
@@ -1496,7 +1690,8 @@ type DeployServiceHandler interface {
 	// ReportLocalSession upserts one `forge env up` worktree's presence.
 	//
 	// THE SECOND REPORTED-STATE EXCEPTION — see the service header. LOCAL
-	// environments only, enforced by the database rather than by this handler.
+	// environments only, enforced by the database (the handler checks the kind
+	// first only so the refusal names the mistake: FailedPrecondition).
 	//
 	// It must NEVER block `forge env up`. A developer whose network is down, or
 	// whose token has expired, keeps working — the session record is a courtesy
@@ -1504,6 +1699,27 @@ type DeployServiceHandler interface {
 	// plane being reachable is a worse product than one with a gap in a
 	// dashboard.
 	ReportLocalSession(context.Context, *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error)
+	// MintLocalTelemetryToken issues the two short-lived credentials a local
+	// dev stack exports its telemetry to the hosted store with
+	// (docs/design/dev-telemetry-to-hosted.md §2): a process token for the
+	// stack's host processes and a browser token for its dev server's /_otel
+	// proxy. Both are ES256 JWTs from the telemetry-token issuer, live one hour
+	// and carry the instance (`sid`), its owner (`uid`) and an ingest class.
+	//
+	// The caller must own a LIVE session (ReportLocalSession) of a LOCAL
+	// environment, in an org whose admin has not switched dev telemetry off,
+	// on a control plane whose local_telemetry_mode admits the org. Every
+	// refusal is one forge maps to "keep telemetry local, print why":
+	// FailedPrecondition with reason dev_telemetry_disabled (the org switch),
+	// dev_telemetry_not_enabled (the platform gate) or session_not_live;
+	// NotFound for an unknown session or environment; PermissionDenied for a
+	// session someone else owns. Unimplemented means a control plane that
+	// predates this rpc.
+	//
+	// Idempotent per session: each call re-mints and refreshes the instance's
+	// grant (local_telemetry_grants). forge calls it again at each token's
+	// half-life.
+	MintLocalTelemetryToken(context.Context, *connect.Request[v1.MintLocalTelemetryTokenRequest]) (*connect.Response[v1.MintLocalTelemetryTokenResponse], error)
 	// ImportLedger loads a project's existing file-based deploy history into the
 	// hosted ledger, in one transaction.
 	//
@@ -1652,6 +1868,24 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("Promote")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceSetRollbackFloorHandler := connect.NewUnaryHandler(
+		DeployServiceSetRollbackFloorProcedure,
+		svc.SetRollbackFloor,
+		connect.WithSchema(deployServiceMethods.ByName("SetRollbackFloor")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceLiftRollbackFloorHandler := connect.NewUnaryHandler(
+		DeployServiceLiftRollbackFloorProcedure,
+		svc.LiftRollbackFloor,
+		connect.WithSchema(deployServiceMethods.ByName("LiftRollbackFloor")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceListRollbackFloorsHandler := connect.NewUnaryHandler(
+		DeployServiceListRollbackFloorsProcedure,
+		svc.ListRollbackFloors,
+		connect.WithSchema(deployServiceMethods.ByName("ListRollbackFloors")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceScaleHandler := connect.NewUnaryHandler(
 		DeployServiceScaleProcedure,
 		svc.Scale,
@@ -1760,6 +1994,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("GetBundle")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceGetWorkloadConfigHandler := connect.NewUnaryHandler(
+		DeployServiceGetWorkloadConfigProcedure,
+		svc.GetWorkloadConfig,
+		connect.WithSchema(deployServiceMethods.ByName("GetWorkloadConfig")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceListConvergencesHandler := connect.NewUnaryHandler(
 		DeployServiceListConvergencesProcedure,
 		svc.ListConvergences,
@@ -1808,6 +2048,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("GetEnvironmentShape")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceGetProjectTopologyHandler := connect.NewUnaryHandler(
+		DeployServiceGetProjectTopologyProcedure,
+		svc.GetProjectTopology,
+		connect.WithSchema(deployServiceMethods.ByName("GetProjectTopology")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServicePlanDeployHandler := connect.NewUnaryHandler(
 		DeployServicePlanDeployProcedure,
 		svc.PlanDeploy,
@@ -1824,6 +2070,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceReportLocalSessionProcedure,
 		svc.ReportLocalSession,
 		connect.WithSchema(deployServiceMethods.ByName("ReportLocalSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceMintLocalTelemetryTokenHandler := connect.NewUnaryHandler(
+		DeployServiceMintLocalTelemetryTokenProcedure,
+		svc.MintLocalTelemetryToken,
+		connect.WithSchema(deployServiceMethods.ByName("MintLocalTelemetryToken")),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceImportLedgerHandler := connect.NewUnaryHandler(
@@ -1876,6 +2128,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceDeleteDeploymentHandler.ServeHTTP(w, r)
 		case DeployServicePromoteProcedure:
 			deployServicePromoteHandler.ServeHTTP(w, r)
+		case DeployServiceSetRollbackFloorProcedure:
+			deployServiceSetRollbackFloorHandler.ServeHTTP(w, r)
+		case DeployServiceLiftRollbackFloorProcedure:
+			deployServiceLiftRollbackFloorHandler.ServeHTTP(w, r)
+		case DeployServiceListRollbackFloorsProcedure:
+			deployServiceListRollbackFloorsHandler.ServeHTTP(w, r)
 		case DeployServiceScaleProcedure:
 			deployServiceScaleHandler.ServeHTTP(w, r)
 		case DeployServiceSetEnvironmentRunStateProcedure:
@@ -1912,6 +2170,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceRecordBundleHandler.ServeHTTP(w, r)
 		case DeployServiceGetBundleProcedure:
 			deployServiceGetBundleHandler.ServeHTTP(w, r)
+		case DeployServiceGetWorkloadConfigProcedure:
+			deployServiceGetWorkloadConfigHandler.ServeHTTP(w, r)
 		case DeployServiceListConvergencesProcedure:
 			deployServiceListConvergencesHandler.ServeHTTP(w, r)
 		case DeployServiceOpenDeployAttemptProcedure:
@@ -1928,12 +2188,16 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetLiveViewHandler.ServeHTTP(w, r)
 		case DeployServiceGetEnvironmentShapeProcedure:
 			deployServiceGetEnvironmentShapeHandler.ServeHTTP(w, r)
+		case DeployServiceGetProjectTopologyProcedure:
+			deployServiceGetProjectTopologyHandler.ServeHTTP(w, r)
 		case DeployServicePlanDeployProcedure:
 			deployServicePlanDeployHandler.ServeHTTP(w, r)
 		case DeployServiceCheckDeployCapacityProcedure:
 			deployServiceCheckDeployCapacityHandler.ServeHTTP(w, r)
 		case DeployServiceReportLocalSessionProcedure:
 			deployServiceReportLocalSessionHandler.ServeHTTP(w, r)
+		case DeployServiceMintLocalTelemetryTokenProcedure:
+			deployServiceMintLocalTelemetryTokenHandler.ServeHTTP(w, r)
 		case DeployServiceImportLedgerProcedure:
 			deployServiceImportLedgerHandler.ServeHTTP(w, r)
 		case DeployServiceGetDriftProcedure:
@@ -2019,6 +2283,18 @@ func (UnimplementedDeployServiceHandler) Promote(context.Context, *connect.Reque
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.Promote is not implemented"))
 }
 
+func (UnimplementedDeployServiceHandler) SetRollbackFloor(context.Context, *connect.Request[v1.SetRollbackFloorRequest]) (*connect.Response[v1.SetRollbackFloorResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.SetRollbackFloor is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) LiftRollbackFloor(context.Context, *connect.Request[v1.LiftRollbackFloorRequest]) (*connect.Response[v1.LiftRollbackFloorResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.LiftRollbackFloor is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ListRollbackFloors(context.Context, *connect.Request[v1.ListRollbackFloorsRequest]) (*connect.Response[v1.ListRollbackFloorsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListRollbackFloors is not implemented"))
+}
+
 func (UnimplementedDeployServiceHandler) Scale(context.Context, *connect.Request[v1.ScaleDeploymentRequest]) (*connect.Response[v1.ScaleDeploymentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.Scale is not implemented"))
 }
@@ -2091,6 +2367,10 @@ func (UnimplementedDeployServiceHandler) GetBundle(context.Context, *connect.Req
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetBundle is not implemented"))
 }
 
+func (UnimplementedDeployServiceHandler) GetWorkloadConfig(context.Context, *connect.Request[v1.GetWorkloadConfigRequest]) (*connect.Response[v1.GetWorkloadConfigResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetWorkloadConfig is not implemented"))
+}
+
 func (UnimplementedDeployServiceHandler) ListConvergences(context.Context, *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListConvergences is not implemented"))
 }
@@ -2123,6 +2403,10 @@ func (UnimplementedDeployServiceHandler) GetEnvironmentShape(context.Context, *c
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetEnvironmentShape is not implemented"))
 }
 
+func (UnimplementedDeployServiceHandler) GetProjectTopology(context.Context, *connect.Request[v1.GetDeployProjectTopologyRequest]) (*connect.Response[v1.GetDeployProjectTopologyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetProjectTopology is not implemented"))
+}
+
 func (UnimplementedDeployServiceHandler) PlanDeploy(context.Context, *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.PlanDeploy is not implemented"))
 }
@@ -2133,6 +2417,10 @@ func (UnimplementedDeployServiceHandler) CheckDeployCapacity(context.Context, *c
 
 func (UnimplementedDeployServiceHandler) ReportLocalSession(context.Context, *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ReportLocalSession is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) MintLocalTelemetryToken(context.Context, *connect.Request[v1.MintLocalTelemetryTokenRequest]) (*connect.Response[v1.MintLocalTelemetryTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.MintLocalTelemetryToken is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) ImportLedger(context.Context, *connect.Request[v1.ImportLedgerRequest]) (*connect.Response[v1.ImportLedgerResponse], error) {

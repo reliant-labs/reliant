@@ -27,6 +27,7 @@ import {
 } from "../lib/chatStreamReducers";
 import {
   createChatState,
+  mergeToolResults,
   reduceChat,
   type ChatState as SdkChatState,
   type Logger as SdkLogger,
@@ -137,6 +138,7 @@ import { workflowExecutionsOfChat } from "../hooks/useWorkflowExecutions";
 import { chatServiceKeys } from "../hooks/chat-service-hooks_gen";
 import { DEFAULT_WORKFLOW } from "../hooks/settings-queries";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
+import { armChatOpen, beginChatOpen, leaveChatOpen, type ChatOpenEntry } from "../lib/chatOpenInteraction";
 import {
   STREAMING_FLUSH_FALLBACK_MS,
 } from "../lib/constants";
@@ -319,6 +321,14 @@ function routeChatErrorMarker(
       // The prefix names the provider, the window and when it resets, so the
       // stripped message is complete. The error_summary the timeline prefers
       // carries the same sentence without the marker.
+      errorUpdate.error_message = stripChatMarker(errorUpdate.error_message);
+      return;
+    }
+    case CHAT_MARKER_KINDS.OrgPolicyRefused: {
+      // The prefix says which of the org's policies refused the request and
+      // what the person can do (switch model, ask an admin, resume); the
+      // chat is paused, resumable. The payload (the policy reason) adds
+      // nothing to display.
       errorUpdate.error_message = stripChatMarker(errorUpdate.error_message);
       return;
     }
@@ -943,7 +953,9 @@ interface ChatStoreState {
   // deferPersist skips recording the chat as the worktree's active chat: a
   // caller still resolving the chat's worktree context calls persistActiveChat
   // once that context is current (see selectChatWithWorktreeContext).
-  selectChat: (chat: Chat, options?: { deferPersist?: boolean }) => void;
+  // retryRefused asks the server again for a chat whose stream it refused
+  // before (a shared chat shared again; openSharedChat).
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean; openEntry?: ChatOpenEntry; retryRefused?: boolean }) => void;
   persistActiveChat: (chatId: string) => void;
   clearCurrentChat: (worktreeId?: string | null) => void;
 
@@ -1484,7 +1496,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   // Select a chat (make it active and load its data)
-  selectChat: (chat: Chat, options?: { deferPersist?: boolean }) => {
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean; openEntry?: ChatOpenEntry; retryRefused?: boolean }) => {
     // Start profiler session here since this is the reliable entry point for tab switching
     tabSwitchProfiler.startSession(chat.id);
 
@@ -1502,6 +1514,17 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (activeChatId === chat.id) {
       return;
     }
+
+    // A real switch: the chat.open interaction runs from here to the frame
+    // after its timeline caught up (ChatPresenter). Started before anything
+    // below, so the RPCs this kicks off (the chat stream among them) are its
+    // children; a quicker second click supersedes it.
+    const cachedMessages = getMessagesFromCache(chat.id).length;
+    beginChatOpen(
+      chat.id,
+      { "chat.cached": cachedMessages > 0, "chat.cached_messages": cachedMessages },
+      options?.openEntry ?? "switch",
+    );
 
     // Opening a different chat ABANDONS any pending new-chat compose, so its
     // scratch params die here.
@@ -1615,10 +1638,13 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("subscribeToChatDetails-call");
     }
-    getGlobalUpdatesStore()?.subscribeToChatDetails(chat.id);
+    getGlobalUpdatesStore()?.subscribeToChatDetails(chat.id, { retryRefused: options?.retryRefused });
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("subscribeToChatDetails-end");
     }
+    // The subscription is asserted, so whether the timeline is catching up
+    // now speaks for this open.
+    armChatOpen(chat.id);
 
     // The plan and its tasks, pending approvals and pending questions are
     // server data owned by the React Query cache: their hooks fetch them on
@@ -1665,6 +1691,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // The worktree context is managed by worktreeStore (single source of truth)
 
     if (activeChatId) {
+      // An open still in flight was abandoned, not slow.
+      leaveChatOpen(activeChatId);
       // Don't clean up the state, just deselect
       // State cleanup happens when chat is deleted or after timeout
       set({ activeChatId: null });
@@ -2032,13 +2060,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // merged over anything already known for this chat, so processMessage can
       // resolve call→result the same way the live stream path does. The server
       // does not copy a result onto its call block: this index is the join.
-      const loadedToolResults: ToolResultsByCallId = {
-        ...(state.toolResultsByCallId[chatId] || {}),
-      };
+      // A stub of a result already held whole never replaces it.
+      const foundToolResults: ToolResultsByCallId = {};
       for (const message of messages) {
         if (message.role !== MessageRole.TOOL) continue;
-        foldToolResultMessage(message, loadedToolResults);
+        foldToolResultMessage(message, foundToolResults);
       }
+      const loadedToolResults = mergeToolResults(
+        state.toolResultsByCallId[chatId] || {},
+        foundToolResults,
+      );
 
       // Warm the reference-keyed processMessage memo so the first render after
       // a tab switch reads cached parses instead of reparsing every message —
@@ -2062,9 +2093,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // This request is unbounded (no `recent`), so it returns the whole chat —
       // assert that explicitly. Without it a stale hasMore from an earlier
       // bounded snapshot would survive and offer scroll-back that can only ever
-      // come back empty. hasMore is trustworthy here specifically BECAUSE
-      // beforeSeq is 0: the server's `|| beforeSeq > 0` disjunct, which
-      // makes it useless for paged requests, does not apply.
+      // come back empty.
       setMessagesInCache(chatId, messages, {
         total: response.total,
         hasMore: response.hasMore,
@@ -2089,11 +2118,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     for (const message of messages) {
       if (message.role === MessageRole.TOOL) foldToolResultMessage(message, found);
     }
+    // A result already indexed is the same one re-delivered, kept unless it
+    // is a stub and this read has its body (mergeToolResults).
     const existing = get().toolResultsByCallId[chatId] || {};
-    const added = Object.keys(found).filter((id) => !(id in existing));
-    if (added.length === 0) return;
-    const merged: ToolResultsByCallId = { ...existing };
-    for (const id of added) merged[id] = found[id];
+    const merged = mergeToolResults(existing, found);
+    if (merged === existing) return;
     set((state) => ({
       toolResultsByCallId: { ...state.toolResultsByCallId, [chatId]: merged },
     }));
@@ -2144,22 +2173,27 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         normalizeMessageAttachmentFields,
       );
 
-      // End of history is read off the page itself: an empty page means
-      // nothing lies below the cursor, and a page shorter than requested
-      // (below) means this one consumed the remainder. The server's has_more
-      // is accurate on this path, but the page answers the same question
-      // without a second source of truth to disagree with.
+      // End of history is the server's has_more: it probes one row past the
+      // page, so it is exact. The page's LENGTH cannot answer the question —
+      // the server sizes a page on the transcript's rows and a page can come
+      // back shorter than requested with more history below it (an older
+      // server counts LLM-only HIDDEN rows and then drops them from the
+      // response). Reading a short page as the end is what put "Start of
+      // conversation" in the middle of a long chat and stopped scroll-back.
+      //
+      // A page that cannot move the cursor still ends paging whatever
+      // has_more says, so no server can make this loop: an empty page, or
+      // one holding nothing strictly below the cursor.
       if (older.length === 0) {
         logger.debug("[ChatStore] Reached the start of chat history", {
           chatId: chatId.slice(0, 8),
+          serverHasMore: response.hasMore,
         });
         setMessagesMetaInCache(chatId, { hasMore: false });
         return false;
       }
-
-      // A short page means the server had fewer than we asked for below the
-      // cursor, i.e. we just consumed the remainder. Serve it, then stop.
-      const reachedStart = older.length < OLDER_MESSAGES_PAGE_SIZE;
+      const movesCursor = older.some((m) => Number(m.seq) < beforeSeq);
+      const reachedStart = !response.hasMore || !movesCursor;
 
       // The page is folded by the SDK's reducer like any other history: it is
       // prepended (the newer messages already rendered stay), its tool results

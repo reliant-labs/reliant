@@ -140,6 +140,30 @@ func GetLiveWorktreeByName(ctx context.Context, db orm.Context, projectID, name 
 	})
 }
 
+// ListFailedWorktreesForDaemon returns the FAILED workspaces, archived ones
+// included, created on daemonID since `since` that hold no path and whose
+// leftover checkouts are not yet known to be gone (cleanup_metadata
+// directory_deleted), newest first, at most limit. A create whose answer was
+// lost leaves its finished checkout behind under such a row (reliant #2413);
+// the daemon is asked to remove it when it next connects.
+func ListFailedWorktreesForDaemon(ctx context.Context, db orm.Context, daemonID string, since time.Time, limit int) ([]*core.Worktree, error) {
+	var rows []*Worktree
+	err := db.Bun().NewSelect().Model(&rows).
+		Where("worktrees.daemon_id = ?", daemonID).
+		Where("worktrees.status = ?", reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED).
+		Where("worktrees.is_main = false").
+		Where("worktrees.path = ''").
+		Where("worktrees.created_at >= ?", since).
+		Where(cleanupMetadataPending).
+		OrderExpr("worktrees.created_at DESC").
+		Limit(int64(limit)).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list failed worktrees for daemon: %w", err)
+	}
+	return worktreesToCore(rows), nil
+}
+
 // ListWorktreesByBranch returns every worktree, archived included, recorded
 // against a branch: an archived row's checkout or branch may outlive the
 // archive.
@@ -174,6 +198,9 @@ func ListWorktrees(ctx context.Context, db orm.Context, f core.WorktreeFilters) 
 	}
 	if f.Status != nil {
 		q.Where("status = ?", *f.Status)
+	}
+	if f.DaemonID != nil {
+		q.Where("daemon_id = ?", *f.DaemonID)
 	}
 	if f.MainOnly {
 		q.Where("is_main")
@@ -631,13 +658,25 @@ func encodeCleanupMetadata(m *core.CleanupMetadata) (*string, error) {
 	return &s, nil
 }
 
+// providerWaitSQL is the predicate on provider_backoff pb for a thread parked
+// on a provider wait: waiting_since is set until the wait clears
+// (clearProviderBackoff). A run held on a usage limit is waiting, not over,
+// whatever its workflow row says (a sub-agent that stopped on the limit is
+// resumed by the next message), so a worktree it works in is in use until the
+// wait's resume time. A marker a dead run left behind stops counting at that
+// time, and from then on only ages the worktree's last activity.
+const providerWaitSQL = `pb.waiting_since IS NOT NULL`
+
 // worktreeRunActivitySQL is what the chats working in each worktree say
 // about it (core.WorktreeRunActivity). A chat works in a worktree when it is
 // bound to it or one of its threads is (a sub-agent spawned into it). A run
 // counts while it is pending, active, or paused awaiting a resume — the same
-// "live" the recovery admission triggers use. The last activity is the
-// latest of the worktree's own stamps and, for each such chat, its
-// last_active and its runs' start and stop times. GREATEST skips NULLs.
+// "live" the recovery admission triggers use — or while one of its threads
+// is parked on a provider wait (a usage limit, a rate-limit backoff) whose
+// resume time has not passed, whatever its run's state (providerWaitSQL).
+// The last activity is the latest of the worktree's own stamps and, for each
+// such chat, its last_active, its runs' start and stop times, and the start
+// and resume time of each wait it holds. GREATEST skips NULLs.
 const worktreeRunActivitySQL = `
 WITH bound AS (
     SELECT c.id AS chat_id, c.worktree_id FROM chats c WHERE c.worktree_id IN (?0)
@@ -645,10 +684,14 @@ WITH bound AS (
     SELECT t.chat_id, t.worktree_id FROM threads t WHERE t.worktree_id IN (?0)
 ), per_chat AS (
     SELECT b.worktree_id,
-        EXISTS (SELECT 1 FROM workflows f WHERE f.chat_id = b.chat_id
-            AND (f.state IN (1, 2) OR (f.state = 3 AND f.stop_reason = 3))) AS running,
+        (EXISTS (SELECT 1 FROM workflows f WHERE f.chat_id = b.chat_id
+            AND (f.state IN (1, 2) OR (f.state = 3 AND f.stop_reason = 3)))
+         OR EXISTS (SELECT 1 FROM provider_backoff pb WHERE pb.chat_id = b.chat_id
+            AND ` + providerWaitSQL + ` AND pb.resume_at >= NOW())) AS running,
         GREATEST(c.last_active, (SELECT max(GREATEST(f.created_at, f.completed_at, f.worker_started_at, f.worker_stopped_at))
-            FROM workflows f WHERE f.chat_id = b.chat_id)) AS last_active
+            FROM workflows f WHERE f.chat_id = b.chat_id),
+            (SELECT max(GREATEST(pb.waiting_since, pb.resume_at)) FROM provider_backoff pb
+            WHERE pb.chat_id = b.chat_id AND ` + providerWaitSQL + `)) AS last_active
     FROM bound b JOIN chats c ON c.id = b.chat_id
 )
 SELECT w.id AS worktree_id,
@@ -679,6 +722,27 @@ func WorktreeRunActivities(ctx context.Context, db orm.Context, ids []string) (m
 	return out, nil
 }
 
+// NoteWorktreeUse raises a live worktree's last_active to at, the last time
+// its daemon saw it used (worktreereclaim.Result.LastUse): a tool call that
+// named a path inside it, a command run in it, a file written in it. That use
+// has no chat bound to the worktree to show it, and last_active is part of
+// every quiet check (worktreeRunActivitySQL). A time ahead of the database's
+// clock is taken as now, so a daemon whose clock runs fast cannot push the
+// worktree's quiet period into the future. It never lowers last_active, and
+// leaves archived rows alone, and a row a recovery is finalizing (its
+// admission trigger refuses a last_active change; the recovery's own
+// activity fence is what settles that row). Raising last_active also bumps
+// the row's activity_generation (recovery_worktree_admission).
+func NoteWorktreeUse(ctx context.Context, db orm.Context, id string, at time.Time) error {
+	_, err := db.Bun().NewRaw(`UPDATE worktrees SET last_active = LEAST(?1::timestamptz, NOW())
+WHERE id = ?0 AND deleted_at IS NULL AND recovery_finalizing_id IS NULL
+  AND last_active < LEAST(?1::timestamptz, NOW())`, id, at.UTC()).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("note worktree use: %w", err)
+	}
+	return nil
+}
+
 // ArchiveLandedWorktree archives a live worktree whose work has landed, but
 // only if, under its row lock, nothing has happened in it since quietSince
 // and no chat run is going in it. Chat and run admission lock the same row
@@ -689,14 +753,245 @@ func WorktreeRunActivities(ctx context.Context, db orm.Context, ids []string) (m
 // are. false, with no error, means it was not archived: main, already
 // archived, being finalized by a recovery, or not quiet.
 func ArchiveLandedWorktree(ctx context.Context, db orm.Context, id string, quietSince time.Time) (bool, error) {
-	return archiveRecoverableWorktree(ctx, db, id, quietSince, core.ArchivedBecauseLanded)
+	return archiveRecoverableWorktree(ctx, db, id, quietSince, core.ArchivedBecauseLanded, nil)
 }
 
 func ArchiveRecoverableIdleWorktree(ctx context.Context, db orm.Context, id string, quietSince time.Time) (bool, error) {
-	return archiveRecoverableWorktree(ctx, db, id, quietSince, core.ArchivedBecauseRecoverableIdle)
+	return archiveRecoverableWorktree(ctx, db, id, quietSince, core.ArchivedBecauseRecoverableIdle, nil)
 }
 
-func archiveRecoverableWorktree(ctx context.Context, db orm.Context, id string, quietSince time.Time, reason string) (bool, error) {
+// ArchiveMarkedWorktree reclaims a live worktree under its reclaim mark: under
+// the row lock it must still carry markID, no chat run may be going in it,
+// and nothing may have happened in it since the mark was placed. The mark id
+// is kept on the archived row; its removal is sent with it, so the daemon
+// removes nothing once the tombstone is gone. false, with no error, means it
+// was not archived.
+func ArchiveMarkedWorktree(ctx context.Context, db orm.Context, id, markID string) (bool, error) {
+	if markID == "" {
+		return false, nil
+	}
+	return archiveRecoverableWorktree(ctx, db, id, time.Time{}, "", func(m *core.CleanupMetadata) (time.Time, string, bool) {
+		if m.ReclaimMarkID != markID || m.ReclaimMarkedAt == nil {
+			return time.Time{}, "", false
+		}
+		reason := m.ReclaimMarkReason
+		if reason == "" {
+			reason = core.ArchivedBecauseLanded
+		}
+		return *m.ReclaimMarkedAt, reason, true
+	})
+}
+
+// MarkWorktreeForReclaim records a reclaim mark on a live worktree whose
+// daemon has placed its tombstone (markID), only if, under its row lock, it
+// is unmarked, no chat run is going in it and nothing has happened in it
+// since quietSince. The mark's time is the database's now. use is the
+// daemon's last-use stamp after placing it; reason the ArchivedBecause a
+// reclaim will record. false, with no error, means it was not marked (and
+// the caller removes the tombstone it placed).
+func MarkWorktreeForReclaim(ctx context.Context, db orm.Context, id, markID string, quietSince time.Time, use *time.Time, reason string) (bool, error) {
+	marked := false
+	err := recoveryTx(ctx, db, func(ctx context.Context) error {
+		marked = false
+		meta, ok, err := lockLiveWorktreeMeta(ctx, db, id)
+		if err != nil || !ok || meta.Marked() {
+			return err
+		}
+		acts, err := WorktreeRunActivities(ctx, db, []string{id})
+		if err != nil {
+			return err
+		}
+		if a := acts[id]; a.Running || a.LastActive.After(quietSince) {
+			return nil
+		}
+		var now time.Time
+		if err := db.Bun().NewRaw(`SELECT NOW()`).Scan(ctx, &now); err != nil {
+			return err
+		}
+		now = now.UTC()
+		meta.ReclaimMarkID, meta.ReclaimMarkedAt, meta.ReclaimMarkUse, meta.ReclaimMarkReason = markID, &now, use, reason
+		if err := writeWorktreeMeta(ctx, db, id, meta); err != nil {
+			return err
+		}
+		marked = true
+		return nil
+	})
+	return marked && err == nil, err
+}
+
+// ClearWorktreeMark cancels a worktree's reclaim mark markID ("" any),
+// archived or not. It reports whether there was such a mark.
+func ClearWorktreeMark(ctx context.Context, db orm.Context, id, markID string) (bool, error) {
+	return clearWorktreeMark(ctx, db, "", id, markID)
+}
+
+// ClearWorktreeMarkForUser is ClearWorktreeMark for the Inbox's "Keep": it
+// applies only while userID owns the worktree's project, decided in the same
+// transaction as the clear (ownedWorktreeTx), so an ownership change between
+// the person's list and their decision never clears another owner's mark.
+func ClearWorktreeMarkForUser(ctx context.Context, db orm.Context, userID, id, markID string) (bool, error) {
+	if userID == "" {
+		return false, nil
+	}
+	return clearWorktreeMark(ctx, db, userID, id, markID)
+}
+
+// ownedWorktreeTx reports, inside a transaction, whether userID owns worktree
+// id's project, and holds that project row FOR SHARE until the transaction
+// ends, so its owner cannot change before the decision it guards commits.
+func ownedWorktreeTx(ctx context.Context, db orm.Context, userID, id string) (bool, error) {
+	var one int
+	err := db.Bun().NewRaw(`SELECT 1 FROM projects p JOIN worktrees w ON w.project_id = p.id
+		WHERE w.id = ? AND p.user_id = ? FOR SHARE OF p`, id, userID).Scan(ctx, &one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func clearWorktreeMark(ctx context.Context, db orm.Context, owner, id, markID string) (bool, error) {
+	cleared := false
+	err := recoveryTx(ctx, db, func(ctx context.Context) error {
+		cleared = false
+		if owner != "" {
+			if owned, err := ownedWorktreeTx(ctx, db, owner, id); err != nil || !owned {
+				return err
+			}
+		}
+		var raw *string
+		err := db.Bun().NewRaw(`SELECT cleanup_metadata FROM worktrees WHERE id = ? FOR NO KEY UPDATE`, id).Scan(ctx, &raw)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		meta := decodeCleanupMetadata(raw)
+		if !meta.Marked() || (markID != "" && meta.ReclaimMarkID != markID) {
+			return nil
+		}
+		meta.ReclaimMarkID, meta.ReclaimMarkedAt, meta.ReclaimMarkUse, meta.ReclaimMarkReason = "", nil, nil, ""
+		meta.ReclaimApprovedAt = nil
+		if err := writeWorktreeMeta(ctx, db, id, meta); err != nil {
+			return err
+		}
+		cleared = true
+		return nil
+	})
+	return cleared && err == nil, err
+}
+
+// ApproveWorktreeMarkForUser records the person's "Reclaim now" for mark
+// markID of a live worktree userID owns, under its row lock: false, with no
+// error, when the row no longer carries that mark (cancelled, or replaced by a
+// newer one), or its project is no longer userID's, so an approval of what
+// the person saw never applies to anything else. Ownership is decided in the
+// same transaction (ownedWorktreeTx).
+func ApproveWorktreeMarkForUser(ctx context.Context, db orm.Context, userID, id, markID string) (bool, error) {
+	approved := false
+	if userID == "" {
+		return false, nil
+	}
+	err := recoveryTx(ctx, db, func(ctx context.Context) error {
+		approved = false
+		if owned, err := ownedWorktreeTx(ctx, db, userID, id); err != nil || !owned {
+			return err
+		}
+		meta, ok, err := lockLiveWorktreeMeta(ctx, db, id)
+		if err != nil || !ok || markID == "" || meta.ReclaimMarkID != markID {
+			return err
+		}
+		var now time.Time
+		if err := db.Bun().NewRaw(`SELECT NOW()`).Scan(ctx, &now); err != nil {
+			return err
+		}
+		now = now.UTC()
+		meta.ReclaimApprovedAt = &now
+		if err := writeWorktreeMeta(ctx, db, id, meta); err != nil {
+			return err
+		}
+		approved = true
+		return nil
+	})
+	return approved && err == nil, err
+}
+
+// ListMarkedWorktreesForUser returns the user's live worktrees that carry a
+// reclaim mark, the mark nearest its reclaim first, for the Inbox.
+func ListMarkedWorktreesForUser(ctx context.Context, db orm.Context, userID string) ([]*core.HeldWorktree, error) {
+	var rows []worktreeWithProject
+	err := db.Bun().NewSelect().Model(&rows).
+		ColumnExpr("?TableColumns").
+		ColumnExpr("p.name AS project_name").
+		ColumnExpr(ownerCheckoutPath+" AS project_path").
+		Join("JOIN projects AS p ON p.id = worktrees.project_id").
+		Join(ownerCheckoutJoin).
+		Where("p.user_id = ?", userID).
+		Where("worktrees.is_main = false").
+		Where("worktrees.deleted_at IS NULL").
+		Where(`(CASE WHEN worktrees.cleanup_metadata IS NULL OR worktrees.cleanup_metadata = '' THEN ''
+			ELSE COALESCE(worktrees.cleanup_metadata::jsonb ->> 'reclaim_mark_id', '') END) <> ''`).
+		OrderExpr("worktrees.cleanup_metadata::jsonb ->> 'reclaim_marked_at', worktrees.id").
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list marked worktrees: %w", err)
+	}
+	out := make([]*core.HeldWorktree, len(rows))
+	for i := range rows {
+		out[i] = &core.HeldWorktree{
+			Worktree:    worktreeToCore(&rows[i].Worktree),
+			ProjectName: rows[i].ProjectName,
+			ProjectPath: rows[i].ProjectPath,
+		}
+	}
+	return out, nil
+}
+
+// lockLiveWorktreeMeta locks a live, non-main row no recovery is finalizing
+// and returns its metadata; ok is false for any other row.
+func lockLiveWorktreeMeta(ctx context.Context, db orm.Context, id string) (*core.CleanupMetadata, bool, error) {
+	var row struct {
+		IsMain          bool       `bun:"is_main"`
+		DeletedAt       *time.Time `bun:"deleted_at"`
+		Finalizing      *string    `bun:"recovery_finalizing_id"`
+		CleanupMetadata *string    `bun:"cleanup_metadata"`
+	}
+	err := db.Bun().NewRaw(`SELECT is_main, deleted_at, recovery_finalizing_id, cleanup_metadata FROM worktrees WHERE id = ? FOR UPDATE`, id).Scan(ctx, &row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if row.IsMain || row.DeletedAt != nil || row.Finalizing != nil {
+		return nil, false, nil
+	}
+	return decodeCleanupMetadata(row.CleanupMetadata), true, nil
+}
+
+// decodeCleanupMetadata reads stored metadata; NULL, empty or unreadable is
+// the zero value.
+func decodeCleanupMetadata(raw *string) *core.CleanupMetadata {
+	meta := &core.CleanupMetadata{}
+	if raw != nil && *raw != "" {
+		_ = json.Unmarshal([]byte(*raw), meta)
+	}
+	return meta
+}
+
+func writeWorktreeMeta(ctx context.Context, db orm.Context, id string, meta *core.CleanupMetadata) error {
+	encoded, err := encodeCleanupMetadata(meta)
+	if err != nil {
+		return err
+	}
+	_, err = db.Bun().NewRaw(`UPDATE worktrees SET cleanup_metadata = ? WHERE id = ?`, encoded, id).Exec(ctx)
+	return err
+}
+
+// archiveRecoverableWorktree archives a live row quiet since quietSince for
+// reason. guard, when set, decides from the locked row's metadata instead:
+// whether to archive, and the quiet bound and reason to archive with.
+func archiveRecoverableWorktree(ctx context.Context, db orm.Context, id string, quietSince time.Time, reason string, guard func(*core.CleanupMetadata) (time.Time, string, bool)) (bool, error) {
 	archived := false
 	err := recoveryTx(ctx, db, func(ctx context.Context) error {
 		archived = false
@@ -716,18 +1011,24 @@ func archiveRecoverableWorktree(ctx context.Context, db orm.Context, id string, 
 		if row.IsMain || row.DeletedAt != nil || row.Finalizing != nil {
 			return nil
 		}
+		meta := core.CleanupMetadata{}
+		if row.CleanupMetadata != nil && *row.CleanupMetadata != "" {
+			if err := json.Unmarshal([]byte(*row.CleanupMetadata), &meta); err != nil {
+				return err
+			}
+		}
+		if guard != nil {
+			var ok bool
+			if quietSince, reason, ok = guard(&meta); !ok {
+				return nil
+			}
+		}
 		acts, err := WorktreeRunActivities(ctx, db, []string{id})
 		if err != nil {
 			return err
 		}
 		if a := acts[id]; a.Running || a.LastActive.After(quietSince) {
 			return nil
-		}
-		meta := core.CleanupMetadata{}
-		if row.CleanupMetadata != nil && *row.CleanupMetadata != "" {
-			if err := json.Unmarshal([]byte(*row.CleanupMetadata), &meta); err != nil {
-				return err
-			}
 		}
 		// Never stamp branch-only revival provenance over preserved recovery
 		// state, even when a stale daemon answer reports a clean checkout.

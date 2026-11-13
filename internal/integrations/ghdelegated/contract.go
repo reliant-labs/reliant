@@ -44,6 +44,19 @@ type Service interface {
 	// is the one place that knows whether it was revoked, and a GitHub call
 	// is already a network round trip.
 	Credential(ctx context.Context, ownerUserID string) (httpaction.Credential, error)
+
+	// OwnsConnectionID reports whether id names an org's GitHub App
+	// installation (OrgAppConnectionID): the connection a call names to
+	// write as the org's bot.
+	OwnsConnectionID(id string) bool
+
+	// OrgActingCredential mints the org's bot token for the ONE repository
+	// req.Params names, through the installation linked to orgID: control-plane
+	// checks the installation is the org's (ErrAppNotLinked otherwise), the
+	// owner a live member, and the owner's own push access, exactly as for
+	// ActingCredential. The caller has checked the owner is a live member of
+	// orgID and that req.ConnectionID is one OwnsConnectionID accepts.
+	OrgActingCredential(ctx context.Context, ownerUserID, orgID string, req httpaction.CredentialRequest) (httpaction.Credential, error)
 }
 
 // TokenSource is what the broker needs from control-plane.

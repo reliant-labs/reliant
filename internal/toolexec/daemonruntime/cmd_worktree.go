@@ -55,6 +55,8 @@ func init() {
 	RegisterCommand("worktree.revert", handleWorktreeRevert)
 	RegisterCommand("worktree.get_default_branch", handleWorktreeGetDefaultBranch)
 	RegisterCommand("worktree.reconcile", handleWorktreeReconcile)
+	RegisterCommand(worktreereclaim.MarkCommand, handleWorktreeMarkReclaim)
+	RegisterCommand(worktreereclaim.UnmarkCommand, handleWorktreeUnmarkReclaim)
 	RegisterCommand("worktree.snapshot_remove", handleWorktreeSnapshotRemove)
 	RegisterCommand("worktree.recovery_observe", handleWorktreeRecoveryObserve)
 	RegisterCommand("worktree.recovery_capture", handleWorktreeRecoveryCapture)
@@ -159,6 +161,14 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		req.Branch = fmt.Sprintf("worktree/%s-%d", req.Name, time.Now().Unix())
 	}
 
+	// The request fixes the checkout's path, and a failed create removes it
+	// whole, so it must stay inside the worktrees root
+	// (cmd_worktree_create_guard.go).
+	worktreePath, err := worktreeCreatePath(req.WorkspaceID, req.SubPath)
+	if err != nil {
+		return json.Marshal(worktreeCreateResponse{Error: err.Error()})
+	}
+
 	// Only a base the caller named is theirs to fix if it does not resolve;
 	// one detected below that fails is our bug (diagnoseWorktreeAdd).
 	baseSupplied := req.BaseBranch != ""
@@ -227,18 +237,24 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 
-	// Resolve the on-disk worktree path:
-	//   <HOME>/.reliant/worktrees/<workspace_id>[/<sub_path>]
-	// A sub_path of "" puts the checkout at the workspace root itself
-	// (single-repo project).
-	homeDir, err := os.UserHomeDir()
+	// `git worktree add` runs under the repository's add lock, shared, so
+	// the repair never prunes a registration while an add may be making it
+	// (worktreereclaim/addlock.go). Released as soon as git exits.
+	releaseAdd, err := worktreereclaim.LockWorktreeAdd(ctx, req.ProjectPath)
 	if err != nil {
-		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf("failed to get home directory: %v", err)})
+		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf("failed to create worktree: %v", err)})
 	}
-	worktreePath := filepath.Join(homeDir, ".reliant", "worktrees", req.WorkspaceID)
-	if req.SubPath != "" {
-		worktreePath = filepath.Join(worktreePath, req.SubPath)
-	}
+	addLocked := true
+	defer func() {
+		if addLocked {
+			releaseAdd()
+		}
+	}()
+
+	// Whether the checkout's directory predates this call decides what a
+	// failure may take back: only a directory this call made is wholly ours.
+	_, statErr := os.Lstat(worktreePath)
+	preExisted := !errors.Is(statErr, fs.ErrNotExist)
 
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0755); err != nil {
@@ -255,25 +271,52 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	branchCheckCmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", req.Branch)
 	branchCheckCmd.Dir = req.ProjectPath
 	branchExists := branchCheckCmd.Run() == nil
+	// The branch a failed or abandoned create may delete again: only one
+	// this call made. Absence observed earlier proves nothing (any git
+	// process may create the branch between that check and the add, and its
+	// tip may well be the start point too), so a new branch is created here
+	// first, by a compare-and-swap that succeeds only while the ref does not
+	// exist (createBranch), and then checked out. The branch is this call's
+	// exactly when that swap succeeded, and a rollback deletes it only while
+	// it is provably still that branch: the reflog token createBranch wrote,
+	// checked under the ref's lock (deleteOwnedBranch), not its tip.
+	var createdBranch *ownedBranch
 
 	// Create the git worktree. A new branch starts from the resolved start
-	// point with --no-track: a base taken from origin is a starting commit,
+	// point with no upstream: a base taken from origin is a starting commit,
 	// not the branch's upstream, exactly as a local base is.
 	var worktreeCmd *exec.Cmd
+	// A forced create (-B) resets an existing branch before the checkout
+	// runs. What a failed one may take back depends on that branch's prior
+	// tip, which this file does not track, so a forced create that fails is
+	// left as git left it (the startup repair prunes a dead registration).
+	forced := false
+	var output []byte
 	switch {
 	case reuseLocal:
 		// No -B and no --force: git itself refuses when the branch is
 		// checked out in another worktree.
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", worktreePath, req.Branch)
 	case !req.ReuseBranch && (branchExists || req.Force):
+		forced = true
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "--no-track", "-B", req.Branch, worktreePath, startPoint)
 	default:
-		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "--no-track", "-b", req.Branch, worktreePath, startPoint)
+		if beforeBranchCreate != nil {
+			beforeBranchCreate(req.ProjectPath, req.Branch)
+		}
+		if createdBranch, output, err = createBranch(ctx, req.ProjectPath, req.Branch, startPoint); err == nil {
+			worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", worktreePath, req.Branch)
+		}
 	}
-	worktreeCmd.Dir = req.ProjectPath
 
 	checkoutStart := time.Now()
-	if output, err := worktreeCmd.CombinedOutput(); err != nil {
+	if worktreeCmd != nil {
+		worktreeCmd.Dir = req.ProjectPath
+		output, err = worktreeCmd.CombinedOutput()
+	}
+	releaseAdd()
+	addLocked = false
+	if err != nil {
 		// Roll back the directory this call created.
 		//
 		// MkdirAll above runs BEFORE git, so a failing `git worktree add`
@@ -287,11 +330,15 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		// to that worktree then failed with "no workspace path to scope this
 		// request to", which reads as a database problem and is not one.
 		//
-		// Removed only when EMPTY. git may have written a partial checkout
-		// before failing, and in a --force flow the directory can predate this
-		// call entirely; deleting a non-empty directory here could destroy
-		// work this function did not create. An empty directory is
-		// unambiguously ours and unambiguously useless.
+		// A checkout directory this call made is taken back whole, with its
+		// registration and the branch this call made: git may have written a
+		// partial checkout before failing, and a `git worktree add` killed at
+		// the deadline leaves its registration locked "initializing", which
+		// holds the branch against every later create
+		// (cmd_worktree_create_guard.go). A directory that predates this call,
+		// or any directory of a forced create, is removed only when EMPTY:
+		// deleting a non-empty one could destroy work this function did not
+		// create, and a forced create's branch is not this call's to judge.
 		//
 		// BOTH levels are swept, because MkdirAll above creates
 		// filepath.Dir(worktreePath), not worktreePath itself:
@@ -313,7 +360,11 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 				_ = os.Remove(dir)
 			}
 		}
-		removeIfEmpty(worktreePath)
+		if preExisted || forced {
+			removeIfEmpty(worktreePath)
+		} else {
+			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch)
+		}
 		if parent := filepath.Dir(worktreePath); parent != worktreePath {
 			removeIfEmpty(parent)
 		}
@@ -326,6 +377,19 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		})
 	}
 
+	// The context ended while git ran, but git finished. That is not proof
+	// the caller gave up: its wait is not this context, and the answer can
+	// still reach it, so a finished checkout is never taken back here. It is
+	// finished as usual on a context of its own, so it is locked for its
+	// worktree id: what names it if the answer is lost.
+	if ctx.Err() != nil {
+		logging.WarnContext(ctx, "worktree.create finished its checkout after its deadline; answering anyway",
+			"worktree_path", worktreePath, "error", ctx.Err())
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), worktreeFinishTimeout)
+		defer cancel()
+	}
+
 	if req.ExpectedHead != "" {
 		// Verify the postcondition on the actual checkout as well as the
 		// immutable starting argument; never report a wrong-head success.
@@ -333,7 +397,21 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		head.Dir = worktreePath
 		out, err := head.Output()
 		if err != nil || strings.TrimSpace(string(out)) != req.ExpectedHead {
-			return json.Marshal(worktreeCreateResponse{Error: "created checkout does not match verified expected head", WorktreePath: worktreePath})
+			// A checkout on the wrong head is never handed over, and it must
+			// not be left behind either: its registration would hold the
+			// branch against the retry's own `git worktree add`. Take it back
+			// as a failed add is taken back, so the retry starts clean. A
+			// directory that predates this call was empty (git adds only into
+			// an empty one), so it is put back empty. A forced create's is
+			// left as git left it, as a failed forced add is.
+			if forced {
+				return json.Marshal(worktreeCreateResponse{Error: "created checkout does not match verified expected head", WorktreePath: worktreePath})
+			}
+			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch)
+			if preExisted {
+				_ = os.MkdirAll(worktreePath, 0o755)
+			}
+			return json.Marshal(worktreeCreateResponse{Error: "created checkout does not match verified expected head"})
 		}
 	}
 
@@ -346,6 +424,25 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 			logging.WarnContext(ctx, "worktree created but not locked; reconcile will retry",
 				"worktree_path", worktreePath, "error", err)
 		}
+	}
+	// A checkout whose git metadata did not reach the disk is not handed
+	// over: a VM killed now would leave a workspace reported created whose
+	// .git is empty. It is taken back as one on the wrong head is, so the
+	// caller's retry starts clean.
+	if err := syncNewCheckout(ctx, req.ProjectPath, worktreePath, req.Branch); err != nil {
+		msg := fmt.Sprintf("failed to create worktree: its git metadata could not be synced to disk: %v", err)
+		if forced {
+			return json.Marshal(worktreeCreateResponse{Error: msg, WorktreePath: worktreePath})
+		}
+		abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch)
+		if preExisted {
+			_ = os.MkdirAll(worktreePath, 0o755)
+		} else if parent := filepath.Dir(worktreePath); parent != worktreePath {
+			// The multi-repo workspace root this call made, as a failed add
+			// sweeps it: os.Remove refuses one that is not empty.
+			_ = os.Remove(parent)
+		}
+		return json.Marshal(worktreeCreateResponse{Error: msg})
 	}
 
 	// A new workspace waits on this whole command; say how long git took, so
@@ -440,8 +537,14 @@ func diagnoseWorktreeAdd(ctx context.Context, repoPath, branch, base string, che
 // feat/x instead of <new>, and succeeds: the worktree row records <new>, a
 // branch that was never made. So base is resolved here, in order:
 //
-//  1. refs/heads/<base>, the local branch;
-//  2. refs/remotes/origin/<base>, origin's copy;
+//  1. refs/heads/<base>, the local branch — unless origin's copy is strictly
+//     ahead of it (the local branch is an ancestor of origin's), when
+//     origin's copy is used instead. A local main nobody fast-forwarded
+//     holds nothing origin lacks, and branching from it put new work weeks
+//     behind the tip (agents' bug reports, 2026-11-06..09). A local branch
+//     with commits of its own (ahead, or diverged) is the user's, and wins;
+//  2. refs/remotes/origin/<base>, origin's copy, as this clone last fetched
+//     it (nothing is fetched for a base this clone already has);
 //  3. anything else that names a commit — a tag, a sha, an explicit remote
 //     ref — as the commit id it names;
 //  4. origin's <base>, fetched (that one ref) when this clone has never seen
@@ -458,10 +561,14 @@ func resolveWorktreeStartPoint(ctx context.Context, repoPath, base string) (star
 	isBranch := gitRefFormatValid(ctx, repoPath, "refs/heads/"+base)
 	local, remote := "refs/heads/"+base, "refs/remotes/origin/"+base
 	if isBranch {
-		if gitRefExists(ctx, repoPath, local) {
+		hasLocal, hasRemote := gitRefExists(ctx, repoPath, local), gitRefExists(ctx, repoPath, remote)
+		if hasLocal && hasRemote && gitStrictlyBehind(ctx, repoPath, local, remote) {
+			return remote, true
+		}
+		if hasLocal {
 			return local, true
 		}
-		if gitRefExists(ctx, repoPath, remote) {
+		if hasRemote {
 			return remote, true
 		}
 	}
@@ -483,6 +590,28 @@ func gitRefFormatValid(ctx context.Context, repoPath, ref string) bool {
 	cmd := exec.CommandContext(ctx, "git", "check-ref-format", ref)
 	cmd.Dir = repoPath
 	return cmd.Run() == nil
+}
+
+// gitStrictlyBehind reports whether ref is an ancestor of other and not the
+// same commit: other holds everything ref does, and more. Any error (an
+// unrelated history, a git that cannot answer) reports false, which keeps
+// ref.
+func gitStrictlyBehind(ctx context.Context, repoPath, ref, other string) bool {
+	// Both are full refs this file built (refs/heads/…, refs/remotes/…), so
+	// neither can be read as an option. (rev-parse echoes --end-of-options
+	// rather than consuming it, on git 2.43.)
+	revs := exec.CommandContext(ctx, "git", "rev-parse", ref+"^{commit}", other+"^{commit}")
+	revs.Dir = repoPath
+	out, err := revs.Output()
+	if err != nil {
+		return false
+	}
+	if shas := strings.Fields(string(out)); len(shas) != 2 || shas[0] == shas[1] {
+		return false
+	}
+	ancestor := exec.CommandContext(ctx, "git", "merge-base", "--is-ancestor", ref, other)
+	ancestor.Dir = repoPath
+	return ancestor.Run() == nil
 }
 
 // gitRefExists reports whether the full ref exists.
@@ -546,15 +675,7 @@ type worktreeAdoptMoveResponse struct {
 }
 
 func workspaceCheckoutPath(workspaceID, subPath string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-	p := filepath.Join(home, ".reliant", "worktrees", workspaceID)
-	if subPath != "" {
-		p = filepath.Join(p, subPath)
-	}
-	return p, nil
+	return worktreeCreatePath(workspaceID, subPath)
 }
 
 func handleWorktreeAdoptMove(ctx context.Context, payload []byte) ([]byte, error) {
@@ -1248,6 +1369,30 @@ type worktreeRecreateResponse struct {
 	// RestoredFromQuarantine names checkouts that were parked and moved back
 	// instead of being recreated.
 	RestoredFromQuarantine []string `json:"restored_from_quarantine,omitempty"`
+	// CaptureApplied names the checkouts (by rel) whose reclaim capture was
+	// put back; CaptureNote says so, and names any capture that could not be.
+	CaptureApplied []string `json:"capture_applied,omitempty"`
+	CaptureNote    string   `json:"capture_note,omitempty"`
+}
+
+func relName(rel string) string {
+	if rel == "" {
+		return "the checkout"
+	}
+	return rel
+}
+
+// captureNote is RestoredWork for the chat's notice: what came back from
+// the reclaim captures, and what is kept on a ref because it could not.
+func captureNote(applied, kept []string) string {
+	var parts []string
+	if len(applied) > 0 {
+		parts = append(parts, "the work "+strings.Join(applied, ", ")+" held when it was reclaimed (uncommitted and staged changes, untracked files) was put back from its capture")
+	}
+	if len(kept) > 0 {
+		parts = append(parts, "the work of "+strings.Join(kept, "; ")+" was NOT put back; restore it with `reliant worktree restore <ref> --repo <repo> --to <dir>`")
+	}
+	return strings.Join(parts, "; ")
 }
 
 func handleWorktreeRecreate(ctx context.Context, payload []byte) ([]byte, error) {
@@ -1360,6 +1505,33 @@ func recreateWorktree(ctx context.Context, req worktreeRecreateRequest) worktree
 		}
 	}
 
+	// A checkout the machine sweep reclaimed while its chat was idle gets its
+	// capture back first: everything it held then, staged and unstaged apart
+	// (worktreereclaim.ApplyCapture). The newest capture of exactly this path
+	// is applied, once; it is then moved to refs/reliant/restored/.
+	fromCapture := map[int]bool{}
+	if req.WorktreeID != "" {
+		var applied, kept []string
+		for i, repo := range repos {
+			if created[i] == "" {
+				continue
+			}
+			info, ok := worktreereclaim.LatestCapture(ctx, repo.RepoPath, req.WorktreeID, created[i])
+			if !ok {
+				continue
+			}
+			fromCapture[i] = true
+			if err := worktreereclaim.ApplyCapture(ctx, created[i], info); err != nil {
+				kept = append(kept, fmt.Sprintf("%s (kept at %s in %s: %v)", relName(repo.Rel), info.Ref, repo.RepoPath, err))
+				logging.WarnContext(ctx, "worktree recreated but its reclaim capture was not applied", "ref", info.Ref, "error", err)
+				continue
+			}
+			resp.CaptureApplied = append(resp.CaptureApplied, repo.Rel)
+			applied = append(applied, relName(repo.Rel))
+		}
+		resp.CaptureNote = captureNote(applied, kept)
+	}
+
 	// Put back the work each checkout had. Applied per checkout, from that
 	// checkout's own repository, and reported honestly: the refs are only safe
 	// to forget once EVERY one of them was re-applied.
@@ -1367,7 +1539,7 @@ func recreateWorktree(ctx context.Context, req worktreeRecreateRequest) worktree
 	anySnapshot := false
 	if req.WorktreeID != "" {
 		for i, repo := range repos {
-			if created[i] == "" {
+			if created[i] == "" || fromCapture[i] {
 				continue
 			}
 			ref := worktreereclaim.LatestSnapshot(ctx, repo.RepoPath, req.WorktreeID, snapshotRefsFor(req.WorktreeID, repo, req.SnapshotRefs))
@@ -2016,18 +2188,52 @@ func handleWorktreeGetPR(ctx context.Context, payload []byte) ([]byte, error) {
 
 	branch, err := resolveCurrentBranch(ctx, req.WorktreePath)
 	if err != nil {
-		// No detected branch -> no PR (mirrors original "no PR exists" path).
 		resp.Error = err.Error()
 		return json.Marshal(resp)
 	}
 
-	// Use gh pr view to check if a PR exists
-	prCmd := exec.CommandContext(ctx, "gh", "pr", "view", branch, "--json", "url,number,title,state,headRefOid")
-	prCmd.Dir = req.WorktreePath
-	output, err := prCmd.Output()
+	return json.Marshal(lookupWorktreePR(ctx, req.WorktreePath, branch, func(cmd *exec.Cmd) ([]byte, error) {
+		return cmd.Output()
+	}))
+}
+
+// Keep gh's repository and fork selection for view. A list is used only to
+// establish absence: view reports both absence and operational failures via
+// its exit status. Never infer absence from a localized error message.
+func lookupWorktreePR(ctx context.Context, repoPath, branch string, run func(*exec.Cmd) ([]byte, error)) worktreeGetPRResponse {
+	resp := worktreeGetPRResponse{}
+	fail := func(err error) worktreeGetPRResponse {
+		resp = worktreeGetPRResponse{}
+		if errors.Is(err, exec.ErrNotFound) {
+			resp.Error = "GitHub CLI (gh) is missing on this machine; install gh and run gh auth login"
+		} else {
+			resp.Error = fmt.Sprintf("failed to look up pull request: %v; check gh auth status and repository access on this machine", err)
+		}
+		return resp
+	}
+	listCmd := exec.CommandContext(ctx, "gh", "pr", "list", "--head", branch, "--state", "all", "--limit", "1", "--json", "number")
+	listCmd.Dir = repoPath
+	output, err := run(listCmd)
 	if err != nil {
-		// No PR exists
-		return json.Marshal(resp)
+		return fail(err)
+	}
+	var candidates []struct {
+		Number int `json:"number"`
+	}
+	if err := json.Unmarshal(output, &candidates); err != nil {
+		return fail(fmt.Errorf("invalid PR list response: %w", err))
+	}
+	if candidates == nil {
+		return fail(errors.New("invalid PR list response: expected an array"))
+	}
+	if len(candidates) == 0 {
+		return resp
+	}
+	prCmd := exec.CommandContext(ctx, "gh", "pr", "view", branch, "--json", "url,number,title,state,headRefOid")
+	prCmd.Dir = repoPath
+	output, err = run(prCmd)
+	if err != nil {
+		return fail(err)
 	}
 
 	var prInfo struct {
@@ -2038,7 +2244,10 @@ func handleWorktreeGetPR(ctx context.Context, payload []byte) ([]byte, error) {
 		HeadRefOid string `json:"headRefOid"`
 	}
 	if err := json.Unmarshal(output, &prInfo); err != nil {
-		return json.Marshal(resp)
+		return fail(fmt.Errorf("invalid PR response: %w", err))
+	}
+	if prInfo.Number <= 0 || prInfo.URL == "" || (prInfo.State != "OPEN" && prInfo.State != "CLOSED" && prInfo.State != "MERGED") {
+		return fail(errors.New("invalid PR response: missing number, URL or state"))
 	}
 
 	resp.Exists = true
@@ -2050,12 +2259,17 @@ func handleWorktreeGetPR(ctx context.Context, payload []byte) ([]byte, error) {
 
 	// Get local HEAD
 	localHeadCmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
-	localHeadCmd.Dir = req.WorktreePath
-	if localHeadOutput, err := localHeadCmd.Output(); err == nil {
-		resp.LocalHead = strings.TrimSpace(string(localHeadOutput))
+	localHeadCmd.Dir = repoPath
+	localHeadOutput, err := run(localHeadCmd)
+	if err != nil {
+		return fail(fmt.Errorf("resolve local HEAD: %w", err))
+	}
+	resp.LocalHead = strings.TrimSpace(string(localHeadOutput))
+	if resp.LocalHead == "" {
+		return fail(errors.New("resolve local HEAD: empty result"))
 	}
 
-	return json.Marshal(resp)
+	return resp
 }
 
 // =============================================================================
@@ -2669,6 +2883,7 @@ func sharedWorktreeReclaimer() (*worktreereclaim.Reclaimer, error) {
 			return AcquireWorktreeRecovery(ctx, paths)
 		}
 		r.OnRepair = logRepairReport
+		r.Use = sharedWorktreeUse()
 		worktreeReclaimers[root] = r
 		// Checkouts parked by a clean-up that a crash interrupted go back to
 		// their paths before anything else looks at this root.
@@ -2735,6 +2950,16 @@ func logRepairReport(rep worktreereclaim.RepairReport) {
 
 func handleWorktreeReconcile(ctx context.Context, payload []byte) ([]byte, error) {
 	return handleWorktreeReclaim(ctx, payload, (*worktreereclaim.Reclaimer).Reconcile)
+}
+
+// handleWorktreeMarkReclaim places reclaim tombstones (worktreereclaim
+// tombstone.go); handleWorktreeUnmarkReclaim removes them.
+func handleWorktreeMarkReclaim(ctx context.Context, payload []byte) ([]byte, error) {
+	return handleWorktreeReclaim(ctx, payload, (*worktreereclaim.Reclaimer).Mark)
+}
+
+func handleWorktreeUnmarkReclaim(ctx context.Context, payload []byte) ([]byte, error) {
+	return handleWorktreeReclaim(ctx, payload, (*worktreereclaim.Reclaimer).Unmark)
 }
 
 func handleWorktreeSnapshotRemove(ctx context.Context, payload []byte) ([]byte, error) {

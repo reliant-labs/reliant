@@ -9,7 +9,10 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -32,6 +35,26 @@ import (
 type llmCallSpec struct {
 	UserID    string
 	SessionID string
+
+	// OrgID and Attended scope the accounts the call may draw on (see
+	// scope). Both come from the chat row the activity loaded, on the
+	// server, through chatOrgID and chatAttended: never from workflow inputs,
+	// a client or a daemon, which are replayed and inherited and so are not
+	// authority. A call with no chat leaves them unset: the personal scope.
+	OrgID    string
+	Attended bool
+	// ChatID is the chat the call is for: whose funding question (§10) it
+	// reads and writes. Empty for a call with no chat.
+	ChatID string
+	// TurnStart reports that the call begins a turn (its history ends with a
+	// person's or an agent's message, not a tool result). Only a turn start
+	// moves a thread up to a better tier (§4.5, D6).
+	TurnStart bool
+
+	// UnattendedAnySource lifts the org-funded-only rule of an unattended run
+	// whose automation may use any source (drivers.Scope.UnattendedAnySource),
+	// read through chatUnattendedAnySource.
+	UnattendedAnySource bool
 
 	// Selector picks the model via the registry. Ignored when an injected
 	// resolver (tests) supplies its own driver/model, mirroring CallLLM.
@@ -113,6 +136,139 @@ type llmCallSpec struct {
 	Local *LocalModelSpec
 }
 
+// scope is the drivers.Scope every account read of this call uses: the
+// registry's candidates, the router's accounts, the default-account fallback
+// and the failover's alternatives, so none of them can pick from a different
+// set. A call with no org (no chat, or a chat that predates orgs) gets the
+// person's own accounts.
+func (s llmCallSpec) scope() drivers.Scope {
+	if s.OrgID == "" {
+		return drivers.PersonalScope(s.UserID)
+	}
+	return drivers.Scope{UserID: s.UserID, OrgID: s.OrgID, Attended: s.Attended, UnattendedAnySource: s.UnattendedAnySource}
+}
+
+// chatOrgID is the org a call made for chat is scoped to: the chat row's
+// org_id, "" when the chat has none (or there is no chat).
+func chatOrgID(chat *db.Chat) string {
+	if chat == nil || chat.OrgID == nil {
+		return ""
+	}
+	return *chat.OrgID
+}
+
+// AttendanceStore is what deciding who is behind a chat's call reads
+// (chatAttendance): the chat rows of an agent.start_run lineage, its launch
+// events, and whether a person has taken a turn in a chat.
+type AttendanceStore interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error)
+	// ChatPersonTurnAt is when a person last sent a message into the chat,
+	// nil when nobody has.
+	ChatPersonTurnAt(ctx context.Context, chatID string) (*time.Time, error)
+}
+
+// attendance is who is behind a call made for a chat (org-provider-accounts
+// §11.1): attended runs follow the chat rules (§10), unattended ones draw on
+// org-funded sources only, unless anySource (§11.3).
+type attendance struct {
+	attended  bool
+	anySource bool
+}
+
+// attendanceVerdict is what deciding attendance concluded: a person is
+// behind the run, it was resolved as an automation's, or it could not be
+// decided at all.
+type attendanceVerdict int
+
+const (
+	verdictAttended attendanceVerdict = iota
+	// verdictUnattended: resolved, a stored trigger launched the run (or the
+	// root of its agent lineage).
+	verdictUnattended
+	// verdictUnknown: a read failed, there was no store, an agent-started
+	// run had no launch event or parent, or the lineage was broken or too
+	// deep to walk.
+	verdictUnknown
+)
+
+// maxAttendanceLineage bounds the agent.start_run walk; the fork-bomb guard
+// (tools.MaxAgentStartRunDepth) keeps real lineages far shorter.
+const maxAttendanceLineage = 8
+
+// chatAttendance decides, on the server and per call, whether a person is
+// behind a call made for chat (§11.1):
+//
+//   - I2, per turn: a chat a person has sent a message into (adopting an
+//     automation's chat) is attended from then on, with its sub-agents; each
+//     trigger fire is a chat of its own, so no later trigger turn shares it.
+//   - a run a stored trigger launched (core.TriggerEventKind.Unattended) is
+//     unattended, a hand fire of the trigger included;
+//   - I1: a run an agent started (agent.start_run) is what its lineage root
+//     is: the parent_chat_id walk the fork-bomb guard does;
+//   - every other run (chat.start, manual.run, cli.run, builder.test, a chat
+//     that predates launch events), and a call with no chat, is attended.
+//
+// A resolved unattended run may draw on every source (anySource), as every
+// automation predates the unattended-funding stamp (I4: NULL reads as "any",
+// today's behaviour; P11 reads the stamp). A run whose attendance could not
+// be decided is unattended with anySource false: org-funded sources only,
+// never the person's own (fail closed).
+func chatAttendance(ctx context.Context, store AttendanceStore, chat *db.Chat) attendance {
+	switch chatAttended(ctx, store, chat) {
+	case verdictAttended:
+		return attendance{attended: true}
+	case verdictUnattended:
+		return attendance{anySource: true}
+	default:
+		return attendance{}
+	}
+}
+
+func chatAttended(ctx context.Context, store AttendanceStore, chat *db.Chat) attendanceVerdict {
+	for range maxAttendanceLineage {
+		if chat == nil {
+			return verdictAttended
+		}
+		launched := core.TriggerEventKind(chat.LaunchKind)
+		triggered := chat.TriggerID != nil && launched.Unattended()
+		if !triggered && launched != core.TriggerEventKindAgentStartRun {
+			return verdictAttended
+		}
+		if store == nil {
+			return verdictUnknown
+		}
+		at, err := store.ChatPersonTurnAt(ctx, chat.ID)
+		if err != nil {
+			logging.WarnContext(ctx, "Could not read whether a person took a turn in the chat; using only the org's sources", "chatID", chat.ID, "error", err)
+			return verdictUnknown
+		}
+		if at != nil {
+			return verdictAttended
+		}
+		if triggered {
+			return verdictUnattended
+		}
+		// agent.start_run: the lineage root decides.
+		event, err := store.GetTriggerEventByChat(ctx, core.TriggerEventKindAgentStartRun, chat.ID)
+		if err != nil {
+			logging.WarnContext(ctx, "Could not read an agent-started run's launch; using only the org's sources", "chatID", chat.ID, "error", err)
+			return verdictUnknown
+		}
+		parent, _ := event.Payload["parent_chat_id"].(string)
+		if parent == "" {
+			logging.WarnContext(ctx, "An agent-started run names no parent; using only the org's sources", "chatID", chat.ID)
+			return verdictUnknown
+		}
+		if chat, err = store.GetChat(ctx, parent); err != nil {
+			logging.WarnContext(ctx, "Could not read an agent-started run's parent chat; using only the org's sources", "chatID", parent, "error", err)
+			return verdictUnknown
+		}
+	}
+	logging.WarnContext(ctx, "An agent-started run's lineage is too deep to walk; using only the org's sources")
+	return verdictUnknown
+}
+
 // LocalModelSpec is what resolving a local model needs beyond the selector.
 // Exported so the dev probe can supply an in-process relay.
 type LocalModelSpec struct {
@@ -163,6 +319,19 @@ type resolvedLLMCall struct {
 	// the call was not routed (local, injected resolver, a provider with no
 	// accounts, routing off).
 	Account *routedAccount
+
+	// OrgID is the org whose work the call was (llmCallSpec.OrgID): the org
+	// its usage row is recorded against.
+	OrgID string
+
+	// FundingNotice is a transcript notice the call owes about who pays for
+	// it (the person's own account in place of the org's, or the org's
+	// again); "" when none.
+	FundingNotice string
+
+	// plan is the funding plan the call was routed under, for the refusal
+	// path's question (§10).
+	plan fundingPlan
 
 	// TagCompactionThreshold is the tag preference's compaction threshold, 0
 	// when none applied. The caller uses it only when neither the node arg
@@ -226,6 +395,11 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 	var providerDriver string
 	var localTransport http.RoundTripper
 	var routingDrivers models.AvailableDrivers
+	// scopeDrivers is the scope as drivers.GetDriver reads it (no funding
+	// plan applied): what its default account is.
+	var scopeDrivers models.AvailableDrivers
+	var plan fundingPlan
+	var fundingNotice string
 	effectiveTemperature := spec.Temperature
 	effectiveThinkingLevel := spec.ThinkingLevel
 	var tagCompactionThreshold int32
@@ -283,10 +457,15 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		// configured.
 		// A store failure says nothing about what the user has connected, so it
 		// must not read as "connect a provider", which is terminal.
-		availableDrivers, lerr := lookupAvailableDriversWithRetry(ctx, spec.UserID)
+		availableDrivers, lerr := lookupAvailableDriversWithRetry(ctx, spec.scope())
 		if lerr != nil {
 			return nil, lerr
 		}
+		// Who pays (§4.4, §10): the person's order for the org, a lease they
+		// granted, and the thread kept on its provider mid-turn.
+		scopeDrivers = availableDrivers
+		plan = spec.Routing.fundingPlanFor(ctx, spec, availableDrivers)
+		availableDrivers = spec.Routing.applyFundingPlan(ctx, spec, plan, availableDrivers)
 		routingDrivers = availableDrivers
 		availableProviders := slices.DeleteFunc(configuredProviderIDs(availableDrivers), func(p string) bool {
 			return slices.Contains(spec.ExcludeProviders, p)
@@ -301,7 +480,13 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 			}
 		}
 
+		// The driver rank is the weakest rule: among the drivers serving the
+		// model resolution picks, the one with the run's org-paid account wins
+		// (org-provider-accounts §4.3). It never changes the model.
 		registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
+		if availableDrivers.DriverRank != nil {
+			registry = registry.WithDriverRank(availableDrivers.TierFor)
+		}
 		resolve := registry.Resolve
 		if len(spec.FallbackSelector.Tags) > 0 || spec.FallbackSelector.ID != "" {
 			resolve = func(selector models.ModelSelector, providers []string) (*models.ResolvedModel, error) {
@@ -426,14 +611,23 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 	var account *routedAccount
 	if localTransport == nil && resolver == nil && providerDriver != "" && !drivers.ReplayMode.Enabled {
 		var rerr error
-		account, rerr = routeAccount(ctx, spec, routingDrivers, providerDriver, definitionID(definition))
+		upgrade := spec.TurnStart || (plan.question != nil && plan.question.State != core.PersonalFundingUsePersonal)
+		account, rerr = routeAccount(ctx, spec, routingDrivers, providerDriver, definitionID(definition), upgrade)
 		if rerr != nil {
 			// Every account is limited: refuse here, with no provider call, the
 			// way the provider would have, carrying the facts to decide on.
 			return nil, spec.Routing.usageLimitFailure(ctx, rerr, usageLimitContext{
-				UserID: spec.UserID, ThreadID: spec.ThreadID, Driver: models.DriverID(providerDriver),
+				Scope: spec.scope(), ThreadID: spec.ThreadID, Driver: models.DriverID(providerDriver),
 				ModelID: definitionID(definition), Policy: spec.Failover,
+				ChatID: spec.ChatID, Plan: plan,
+				OrgFundedLimited: limitedTierIsOrgFunded(routingDrivers.Accounts[models.DriverID(providerDriver)], definitionID(definition)),
 			})
+		}
+		// Before any provider call: does this call move the chat from the
+		// org's accounts to the person's own without their say (§10.1)?
+		var ferr error
+		if fundingNotice, ferr = spec.Routing.checkPersonalFunding(ctx, spec, plan, routingDrivers, account, providerDriver, definitionID(definition)); ferr != nil {
+			return nil, ferr
 		}
 	}
 	if localTransport != nil {
@@ -453,6 +647,14 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		}
 	} else {
 		if account != nil {
+			// The re-check at the driver build (org-provider-accounts §8.1 point
+			// 3): an account of another org never serves this run. Refused, the
+			// call falls to the default account of the same scope, never fails.
+			if serr := drivers.CheckAccountScope(ctx, spec.scope(), account.Config.DriverConfig); serr != nil {
+				account = nil
+			}
+		}
+		if account != nil {
 			if d, aerr := spec.Routing.DriverFor(ctx, spec.UserID, account.Config.DriverConfig, legacyModel, append(drivers.PreferenceDriverOptions(legacyModel, preferences[0]), driverOpts...)...); aerr != nil {
 				// A driver for the chosen account that cannot be built is not
 				// worth a failed turn: the provider's default account serves.
@@ -463,13 +665,28 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 				driver = d
 			}
 		}
-		if driver == nil {
-			resolve := drivers.GetDriver
-			if resolver != nil {
-				resolve = resolver
+		if driver == nil && resolver == nil && providerDriver != "" && !drivers.ReplayMode.Enabled {
+			// No routed account serves: the provider's default account will,
+			// and it answers to the same consent (§10).
+			notice, ferr := spec.Routing.checkDefaultAccountFunding(ctx, spec, plan, scopeDrivers, routingDrivers, providerDriver, definitionID(definition))
+			if ferr != nil {
+				return nil, ferr
 			}
+			if notice != "" {
+				fundingNotice = notice
+			}
+		}
+		if driver == nil {
 			var err error
-			if driver, err = resolve(ctx, spec.UserID, preferences, driverOpts...); err != nil {
+			if resolver != nil {
+				// An injected resolver (tests) reads no accounts.
+				driver, err = resolver(ctx, spec.UserID, preferences, driverOpts...)
+			} else {
+				// The provider's default account, from the same scope the
+				// router saw.
+				driver, err = drivers.GetDriver(ctx, spec.scope(), preferences, driverOpts...)
+			}
+			if err != nil {
 				return nil, fmt.Errorf("failed to get LLM driver: %w", err)
 			}
 		}
@@ -484,6 +701,9 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		Account:        account,
 		ThinkingLevel:  effectiveThinkingLevel,
 		Temperature:    effectiveTemperature,
+		OrgID:          spec.OrgID,
+		FundingNotice:  fundingNotice,
+		plan:           plan,
 
 		TagCompactionThreshold: tagCompactionThreshold,
 	}, nil

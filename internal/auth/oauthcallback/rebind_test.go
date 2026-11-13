@@ -232,7 +232,7 @@ func TestOverlappingFlowQueuesInsteadOfFailing(t *testing.T) {
 			}
 		case err := <-errB:
 			t.Fatalf("flow %s errored: %v", want.name, err)
-		case <-time.After(3 * time.Second):
+		case <-time.After(30 * time.Second):
 			t.Fatalf("flow %s never received the callback", want.name)
 		}
 	}

@@ -61,6 +61,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
+import "./uplot-theme.css";
 
 
 import { cn } from "@/lib/utils";
@@ -337,9 +338,10 @@ export function UPlotChart({
       axes: compact
         ? [{ show: false }, { show: false }]
         : [
-            { stroke: palette.axis, grid: { stroke: palette.grid, width: 1 }, ticks: { stroke: palette.grid } },
+            { stroke: palette.axis, font: palette.axisFont, grid: { stroke: palette.grid, width: 1 }, ticks: { stroke: palette.grid } },
             {
               stroke: palette.axis,
+              font: palette.axisFont,
               grid: { stroke: palette.grid, width: 1 },
               ticks: { stroke: palette.grid },
               size: 64,
@@ -429,7 +431,7 @@ export function UPlotChart({
   const caption = [describeSeries(series, unit), describeMarkers(markers), describeBands(shown), calendarNote && `${calendarNote}.`].filter(Boolean).join(" ");
 
   return (
-    <figure className={exemplars ? cn("relative", className) : className} aria-label={label} role="group">
+    <figure className={cn("obs-uplot", exemplars && "relative", className)} aria-label={label} role="group">
       <div ref={hostRef} aria-hidden="true" style={{ minHeight: height }} />
       {exemplars && layout && layout.dots.length > 0 && (
         <div
@@ -479,16 +481,21 @@ export function UPlotChart({
 /**
  * The data columns of a stacked chart: each solid series' running total, in
  * order, so a column's top edge is the sum of it and every solid series before
- * it. A null point is a gap in that series (the total carries on without it);
- * a dashed series is left as it is.
+ * it. Positive and negative values stack apart, up and down from zero (a
+ * lifecycle chart's churned users sit below the axis, under the new, retained
+ * and resurrected above it), so a negative segment never eats into the
+ * positive ones. A null point is a gap in that series (the total carries on
+ * without it); a dashed series is left as it is.
  */
 export function stackValues(series: readonly ChartSeries[]): (number | null)[][] {
   const length = Math.max(0, ...series.map((s) => s.values.length));
-  const running = new Array<number>(length).fill(0);
+  const up = new Array<number>(length).fill(0);
+  const down = new Array<number>(length).fill(0);
   return series.map((s) => {
     if (s.dashed) return s.values;
     return s.values.map((value, i) => {
       if (value === null || !Number.isFinite(value)) return null;
+      const running = value < 0 ? down : up;
       running[i] += value;
       return running[i];
     });
@@ -736,6 +743,13 @@ function drawMarkers(u: uPlot, markers: readonly ChartMarker[], palette: Palette
 interface Palette {
   tones: Record<ChartTone, string>;
   axis: string;
+  /**
+   * The axis labels' canvas font: text-2xs in the app's typeface, the bottom
+   * rung of the chart's type ladder (uplot-theme.css). uPlot's default is 12px
+   * system-ui, as loud as the legend and the panel title. Read from the DOM so
+   * it follows the Appearance font-size and font-family preferences.
+   */
+  axisFont: string;
   grid: string;
   /** A palette token (`--chart-3`) as a colour the canvas can paint. */
   resolve: (token: string) => string;
@@ -753,9 +767,19 @@ function readPalette(): Palette {
   return {
     tones,
     axis: token("--muted-foreground", "rgb(100, 116, 139)"),
+    axisFont: axisFont(),
     grid: withAlpha(token("--border", "rgb(203, 213, 225)"), 0.6),
     resolve: (name: string) => token(name, "rgb(100, 116, 139)"),
   };
+}
+
+/** text-2xs (0.714rem, tailwind.config.js) at the root size, in the body's typeface. */
+const AXIS_FONT_REM = 0.714;
+
+function axisFont(): string {
+  const root = parseFloat(getComputedStyle(document.documentElement).fontSize) || 14;
+  const family = getComputedStyle(document.body).fontFamily || "system-ui, sans-serif";
+  return `${Math.round(root * AXIS_FONT_REM * 10) / 10}px ${family}`;
 }
 
 /** `hsl(217 91% 60%)` → `hsl(217 91% 60% / 0.12)`. Anything else passes through. */
@@ -763,13 +787,13 @@ function withAlpha(color: string, alpha: number): string {
   return color.startsWith("hsl(") && !color.includes("/") ? color.replace(/\)$/, ` / ${alpha})`) : color;
 }
 
-/** Bumps when the colour scheme or light/dark mode changes, so canvases redraw in the new palette. */
+/** Bumps when the colour scheme, light/dark mode or font preference changes, so canvases redraw in the new palette and axis font. */
 function useThemeVersion(): number {
   const [version, setVersion] = useState(0);
   useEffect(() => {
     if (typeof MutationObserver === "undefined") return;
     const observer = new MutationObserver(() => setVersion((v) => v + 1));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-color-scheme"] });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-color-scheme", "data-font", "style"] });
     return () => observer.disconnect();
   }, []);
   return version;

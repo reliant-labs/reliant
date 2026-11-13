@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { DaemonStatus } from "../gen/reliant/v1/daemon_registry_pb";
 import { logger } from "../lib/logger";
+import { heartbeatHealthDisagrees } from "../lib/machineHealth";
 import {
   cachedDaemonList,
   daemonListQuery,
@@ -45,12 +46,24 @@ const lastContradictionRead = new Map<string, number>();
  * Throttled per daemon, so a registry that keeps disagreeing costs one read
  * per window rather than one per 15s heartbeat. A list nobody has loaded is
  * left alone: its first reader's fetch answers.
+ *
+ * healthState is the heartbeat's `health_state` ("ok" | "degraded"): one
+ * that disagrees with the cached machine's health re-reads the list the same
+ * way, so a machine that can no longer start processes shows it at once.
  */
-export function reconcileDaemonHeartbeat(queryClient: QueryClient, daemonId: string, now = Date.now()): void {
+export function reconcileDaemonHeartbeat(
+  queryClient: QueryClient,
+  daemonId: string,
+  now = Date.now(),
+  healthState?: unknown,
+): void {
   const list = cachedDaemonList(queryClient);
   if (!list) return;
   const daemon = list.find((d) => d.daemonId === daemonId);
-  if (daemon && (daemon.status === DaemonStatus.ACTIVE || daemon.status === DaemonStatus.IDLE)) return;
+  // A connected machine whose heartbeat says it became degraded, or
+  // recovered, is stale in the list too (lib/machineHealth).
+  const connected = daemon && (daemon.status === DaemonStatus.ACTIVE || daemon.status === DaemonStatus.IDLE);
+  if (connected && !heartbeatHealthDisagrees(daemon, healthState)) return;
   const last = lastContradictionRead.get(daemonId);
   if (last !== undefined && now - last < HEARTBEAT_CONTRADICTION_REFETCH_MS) return;
   lastContradictionRead.set(daemonId, now);
@@ -76,57 +89,97 @@ export function resetDaemonHeartbeatReconcile(): void {
  * (daemon-registry-queries), refreshed by push and backstopped by a slow poll —
  * see DAEMON_LIST_FALLBACK_POLL_MS.
  */
+/**
+ * Refetch the moment the desktop app reports its daemon connected, rather
+ * than waiting for the gateway's announcement or the fallback poll.
+ *
+ * The poll alone was not sufficient after sign-in even at 5s: it sets
+ * `refetchIntervalInBackground: false`, and OAuth backgrounds the window by
+ * design when consent goes to the system browser. Measured on a real prod
+ * sign-in, the daemon connected ~1.2s after the restart while the UI sat on
+ * the onboarding daemon step for roughly a minute, because the poll had
+ * stopped and nothing woke it.
+ *
+ * The event is a trigger, not data — see electron/src/preload.js's
+ * onDaemonConnected. Registration (which makes the daemon listable) was
+ * measured 1.1s BEFORE the connected event, so we refetch rather than
+ * synthesising a daemon from the payload.
+ *
+ * Returns the unsubscribe.
+ */
+function listenForDesktopDaemon(queryClient: QueryClient): () => void {
+  const api = (window as unknown as {
+    electronAPI?: {
+      onDaemonConnected?: (cb: (p: unknown) => void) => () => void;
+      isDaemonConnected?: () => Promise<boolean>;
+    };
+  }).electronAPI;
+  // Ask once on subscribing, because the event may already have fired.
+  //
+  // The renderer RELOADS after the post-sign-in daemon restart, and the
+  // main-process watcher de-duplicates on the stream value — so a renderer
+  // that mounts after "connected" was published receives no event at all.
+  // Measured: the daemon was listable at 22:20:11.2 while the UI only
+  // learned at 22:20:15.3, on the next poll tick, with zero events
+  // delivered. Asking removes the dependence on having been listening.
+  void (async () => {
+    try {
+      if (!api?.isDaemonConnected) return;
+      if (await api.isDaemonConnected()) {
+        invalidateDaemonList(queryClient);
+      }
+    } catch {
+      // A failed probe just falls back to the event + poll.
+    }
+  })();
+
+  if (!api?.onDaemonConnected) return () => {};
+  return api.onDaemonConnected(() => {
+    logger.warn("[DaemonStatus] daemon-connected event -> invalidating", {
+      atMs: Date.now(),
+    });
+    invalidateDaemonList(queryClient);
+  });
+}
+
+/**
+ * One desktop-daemon subscription per QueryClient, shared by every mounted
+ * useDaemonStatus.
+ *
+ * The hook has two dozen call sites, and when each instance owned its own
+ * probe and listener, a cold start or workspace restore that mounted ten of
+ * them asked the desktop app ten times and invalidated the list ten times in
+ * one tick (dev log: ten `ListDaemons` aborted at durationMs 0, then one
+ * answered). The signal is about the machine, not about a reader, so it is
+ * listened for once while any reader is mounted; a mount after every reader
+ * left subscribes, and so probes, again — the case the probe exists for.
+ */
+const desktopDaemonSubscriptions = new WeakMap<QueryClient, { readers: number; stop: () => void }>();
+
+function acquireDesktopDaemonSignal(queryClient: QueryClient): () => void {
+  let entry = desktopDaemonSubscriptions.get(queryClient);
+  if (!entry) {
+    entry = { readers: 0, stop: listenForDesktopDaemon(queryClient) };
+    desktopDaemonSubscriptions.set(queryClient, entry);
+  }
+  entry.readers += 1;
+  const acquired = entry;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    acquired.readers -= 1;
+    if (acquired.readers === 0) {
+      acquired.stop();
+      desktopDaemonSubscriptions.delete(queryClient);
+    }
+  };
+}
+
 export function useDaemonStatus() {
   const queryClient = useQueryClient();
 
-  // Refetch the moment the desktop app reports its daemon connected, rather
-  // than waiting for the gateway's announcement or the fallback poll.
-  //
-  // The poll alone was not sufficient after sign-in even at 5s: it sets
-  // `refetchIntervalInBackground: false`, and OAuth backgrounds the window by
-  // design when consent goes to the system browser. Measured on a real prod
-  // sign-in, the daemon connected ~1.2s after the restart while the UI sat on
-  // the onboarding daemon step for roughly a minute, because the poll had
-  // stopped and nothing woke it.
-  //
-  // The event is a trigger, not data — see electron/src/preload.js's
-  // onDaemonConnected. Registration (which makes the daemon listable) was
-  // measured 1.1s BEFORE the connected event, so we refetch rather than
-  // synthesising a daemon from the payload.
-  useEffect(() => {
-    const api = (window as unknown as {
-      electronAPI?: {
-        onDaemonConnected?: (cb: (p: unknown) => void) => () => void;
-        isDaemonConnected?: () => Promise<boolean>;
-      };
-    }).electronAPI;
-    // Ask once on mount, because the event may already have fired.
-    //
-    // The renderer RELOADS after the post-sign-in daemon restart, and the
-    // main-process watcher de-duplicates on the stream value — so a renderer
-    // that mounts after "connected" was published receives no event at all.
-    // Measured: the daemon was listable at 22:20:11.2 while the UI only
-    // learned at 22:20:15.3, on the next poll tick, with zero events
-    // delivered. Asking removes the dependence on having been listening.
-    void (async () => {
-      try {
-        if (!api?.isDaemonConnected) return;
-        if (await api.isDaemonConnected()) {
-          invalidateDaemonList(queryClient);
-        }
-      } catch {
-        // A failed probe just falls back to the event + poll.
-      }
-    })();
-
-    if (!api?.onDaemonConnected) return;
-    return api.onDaemonConnected(() => {
-      logger.warn("[DaemonStatus] daemon-connected event -> invalidating", {
-        atMs: Date.now(),
-      });
-      invalidateDaemonList(queryClient);
-    });
-  }, [queryClient]);
+  useEffect(() => acquireDesktopDaemonSignal(queryClient), [queryClient]);
 
   const { data, dataUpdatedAt, isError, failureCount } = useQuery(daemonListQuery({
     refetchInterval: DAEMON_LIST_FALLBACK_POLL_MS,

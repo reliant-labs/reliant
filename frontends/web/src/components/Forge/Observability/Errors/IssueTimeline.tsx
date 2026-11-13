@@ -46,12 +46,13 @@ import {
   isEdited,
   mergeTimelinePages,
 } from "./issueTimelineModel";
+import { CONTROL_FIELD } from "../../controlStyles";
 
 /** The server's limit on a comment (AddIssueCommentRequest.body). */
 export const COMMENT_MAX_LENGTH = 10_000;
 
 const TEXTAREA =
-  "w-full rounded-md border border-border bg-surface-sunken px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  `${CONTROL_FIELD} w-full px-3 py-2 text-sm`;
 
 export function IssueTimeline({ issueId, orgId }: { issueId: string; orgId: string }) {
   const timeline = useIssueTimeline(issueId);

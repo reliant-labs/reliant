@@ -98,6 +98,8 @@ type stopsReadingGateway struct {
 	// neverAck makes the gateway behave like one that predates
 	// acknowledgements: it reads everything and always acknowledges 0.
 	neverAck bool
+	// heartbeats counts the heartbeats a neverAck gateway has read.
+	heartbeats atomic.Int32
 }
 
 func (g *stopsReadingGateway) ConnectDaemon(ctx context.Context, stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]) error {
@@ -115,8 +117,12 @@ func (g *stopsReadingGateway) ConnectDaemon(ctx context.Context, stream *connect
 	if g.neverAck {
 		go func() {
 			for {
-				if _, err := stream.Receive(); err != nil {
+				msg, err := stream.Receive()
+				if err != nil {
 					return
+				}
+				if msg.GetHeartbeat() != nil {
+					g.heartbeats.Add(1)
 				}
 			}
 		}()
@@ -192,7 +198,12 @@ func TestDaemonKeepsItsSessionWithAGatewayThatNeverAcknowledges(t *testing.T) {
 
 	startDaemon(t, client)
 
-	require.Eventually(t, func() bool { return gw.sessions.Load() == 1 }, 2*time.Second, 10*time.Millisecond)
-	time.Sleep(4 * fastTiming.heartbeatAckTimeout)
+	require.Eventually(t, func() bool { return gw.sessions.Load() == 1 }, 30*time.Second, 10*time.Millisecond)
+	// Wait on the daemon's own clock, not the test's: a session that has sent
+	// this many heartbeats has lived through four ack timeouts, however busy
+	// the machine is.
+	beats := int32(4 * fastTiming.heartbeatAckTimeout / fastTiming.heartbeatInterval)
+	require.Eventually(t, func() bool { return gw.heartbeats.Load() >= beats }, 30*time.Second, 10*time.Millisecond,
+		"the daemon stopped heartbeating")
 	require.Equal(t, int32(1), gw.sessions.Load(), "a gateway that never acknowledges must not be treated as dead")
 }

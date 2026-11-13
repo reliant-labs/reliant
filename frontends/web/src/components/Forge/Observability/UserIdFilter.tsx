@@ -10,6 +10,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { UserRound, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { CONTROL_FIELD } from "../controlStyles";
 
 export function UserIdFilter({ id, value, onChange, className }: { id: string; value: string; onChange: (next: string | undefined) => void; className?: string }) {
   const [draft, setDraft] = useState(value);
@@ -23,14 +24,14 @@ export function UserIdFilter({ id, value, onChange, className }: { id: string; v
       <label htmlFor={id} className="sr-only">
         User id
       </label>
-      <UserRound className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
+      <UserRound className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
       <input
         id={id}
         type="search"
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         placeholder="User id"
-        className="h-8 w-full rounded-md border border-border bg-surface-sunken pl-8 pr-7 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={`${CONTROL_FIELD} h-8 w-full pl-8 pr-7 font-mono text-sm placeholder:font-sans`}
         data-testid={id}
       />
       {value && (

@@ -217,6 +217,9 @@ function renderAt(initialEntry: string) {
     observabilityView: probe("observability-view"),
     dashboards: probe("dashboards"),
     dashboard: probe("dashboard"),
+    storage: probe("storage"),
+    data: probe("data"),
+    users: probe("users"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),
@@ -427,6 +430,37 @@ describe("the environment scope", () => {
     await landsOn(router, "/forge/p/alpha/releases", { env: "pr-7" });
   });
 
+  it("routes the storage browser, keeping its view in the URL as text", async () => {
+    const router = renderAt(
+      `/forge/p/alpha/storage?env=e2e&bucket=uploads&prefix=${encodeURIComponent('"2026/"')}&object=${encodeURIComponent('"2026/a b%#?.png"')}&token=opaque-1`
+    );
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "storage");
+    await landsOn(router, "/forge/p/alpha/storage", { env: "e2e", bucket: "uploads", prefix: "2026/", object: "2026/a b%#?.png", token: "opaque-1" });
+  });
+
+  it("reads a numeric-looking key back as the text it is", async () => {
+    const router = renderAt("/forge/p/alpha/storage?env=e2e&bucket=uploads&prefix=2026");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "storage");
+    await landsOn(router, "/forge/p/alpha/storage", { env: "e2e", bucket: "uploads", prefix: "2026" });
+  });
+
+  it("routes the data browser, keeping its view in the URL", async () => {
+    const router = renderAt(
+      "/forge/p/alpha/data?env=e2e&db=shop&table=public.orders&f=%5B%22status.eq.paid%22%5D&sort=%5B%22id.desc%22%5D&cols=%5B%22id%22%5D&page=2&row=%221042%22"
+    );
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "data");
+    await landsOn(router, "/forge/p/alpha/data", {
+      env: "e2e",
+      db: "shop",
+      table: "public.orders",
+      f: ["status.eq.paid"],
+      sort: ["id.desc"],
+      cols: ["id"],
+      page: 2,
+      row: "1042",
+    });
+  });
+
   it("is left alone on a page that pins its own environment", async () => {
     const router = renderAt("/forge/p/alpha/environments/dev");
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "environment");
@@ -471,6 +505,17 @@ describe("the nav", () => {
     await screen.findByTestId("page");
     // prod and e2e fire; another project's env and a pending alert do not count.
     expect(screen.getByRole("link", { name: /Alerts/ })).toHaveTextContent("2");
+  });
+
+  it("is the led console's grouped nav, with each view under its group in the breadcrumb", async () => {
+    renderAt("/forge/p/alpha/observability/errors?env=prod");
+    await screen.findByTestId("page");
+    const nav = screen.getByRole("navigation", { name: "alpha" });
+    for (const row of ["Overview", "Issues", "Performance", "Sessions", "Releases", "More tools"]) expect(within(nav).getByText(row)).toBeInTheDocument();
+    // The console's own "Observability" parent is gone; its views sit in their groups.
+    expect(within(nav).queryByText("Observability")).toBeNull();
+    expect(screen.getByRole("link", { name: "Errors" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Issues›Errors");
   });
 
   it("marks an environment whose deploy is queued", async () => {

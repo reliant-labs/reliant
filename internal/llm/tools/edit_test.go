@@ -86,12 +86,12 @@ func TestEditToolFileModifiedCheck(t *testing.T) {
 		// Record initial read in this thread
 		recordFileAwareness(chatID, thread, testFile)
 
-		// Wait a bit to ensure time difference
-		time.Sleep(10 * time.Millisecond)
-
-		// Modify file externally (simulating user edit)
+		// Modify file externally (simulating user edit), stamped after the
+		// read: the filesystem's coarse clock alone may not order them.
 		err = os.WriteFile(testFile, []byte("externally modified content"), 0644)
 		require.NoError(t, err)
+		later := time.Now().Add(time.Minute)
+		require.NoError(t, os.Chtimes(testFile, later, later))
 
 		ctx := newTestToolContext(t, tempDir, chatID, thread)
 
@@ -115,9 +115,6 @@ func TestEditToolFileModifiedCheck(t *testing.T) {
 
 		// Record read
 		recordFileAwareness(chatID, thread, testFile)
-
-		// Wait a bit
-		time.Sleep(10 * time.Millisecond)
 
 		// AI writes the file
 		newContent := "AI modified content\nline 2\nline 3"

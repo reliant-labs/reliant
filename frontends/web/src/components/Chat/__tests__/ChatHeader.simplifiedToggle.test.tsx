@@ -38,6 +38,10 @@ vi.mock("../thread-views", () => ({ useThreads: () => [], ThreadTabs: () => null
 vi.mock("../../runs/ChildRunsStrip", () => ({ ChildRunsStrip: () => null }));
 vi.mock("../NoMachine", () => ({ NoMachinePill: () => null }));
 vi.mock("../WorkspaceRecoveryMenuItems", () => ({ WorkspaceRecoveryMenuItems: () => null }));
+vi.mock("../MoveChatToProjectDialog", () => ({
+  MoveChatToProjectDialog: ({ open, chatId }: { open: boolean; chatId: string }) =>
+    open ? <div role="dialog">Move {chatId}</div> : null,
+}));
 
 const { ChatHeader } = await import("../ChatHeader");
 
@@ -74,5 +78,15 @@ describe("ChatHeader Simplified view toggle", () => {
     expect(item).toHaveAttribute("aria-pressed", "true");
     await user.click(item);
     expect(mocks.setChatThreadMode).toHaveBeenCalledWith("detailed");
+  });
+});
+
+describe("ChatHeader Move to project", () => {
+  it("opens the project picker for this chat, closing the menu", async () => {
+    const user = await openMenu();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Move to project…" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Move chat-1");
+    expect(screen.queryByRole("button", { name: "Move to project…" })).not.toBeInTheDocument();
   });
 });

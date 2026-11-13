@@ -11,87 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
-	"github.com/reliant-labs/reliant/internal/logging"
 )
-
-// sortModels sorts models with newer/best models first, grouped by model family
-// Uses centralized priority from models.yaml order
-func sortModels(modelList []models.Model) {
-	reg := models.MustGetRegistry()
-	sort.Slice(modelList, func(i, j int) bool {
-		mi, mj := modelList[i], modelList[j]
-		miID := string(mi.ID)
-		mjID := string(mj.ID)
-
-		// First sort by model family
-		fi := models.FamilyPriority[models.GetModelFamily(miID)]
-		fj := models.FamilyPriority[models.GetModelFamily(mjID)]
-		if fi == 0 {
-			fi = 99
-		}
-		if fj == 0 {
-			fj = 99
-		}
-		if fi != fj {
-			return fi < fj
-		}
-
-		// Within same family, sort by model priority (from YAML order)
-		miPriority := reg.GetModelPriority(miID)
-		mjPriority := reg.GetModelPriority(mjID)
-		if miPriority != mjPriority {
-			return miPriority < mjPriority
-		}
-
-		// Fall back to alphabetical by name
-		return mi.Name < mj.Name
-	})
-}
-
-// GetAvailableModelsForUser returns all models user can access with their configured API keys
-// Models are sorted by family (Claude, GPT, Gemini) with newest first within each family
-func GetAvailableModelsForUser(ctx context.Context, userID string) []models.Model {
-	availableDrivers := GetAvailableDrivers(ctx, userID)
-	registry := models.MustGetRegistry()
-	userVisible := registry.GetUserVisibleModels()
-
-	var available []models.Model
-
-	for _, def := range userVisible {
-		modelID := models.ModelID(def.ID)
-		// Check if we have a driver that can use this model
-		_, found := models.SelectBestDriver(modelID, availableDrivers)
-		if found {
-			available = append(available, def.ToModel())
-			logging.DebugContext(ctx, "Model available for user", "userID", userID, "modelID", modelID)
-		}
-	}
-
-	// Sort models: grouped by family, newest first within each family
-	sortModels(available)
-
-	return available
-}
-
-// ValidateModelIsAvailable checks if a specific model can be used with configured API keys
-func ValidateModelIsAvailable(ctx context.Context, userID string, modelID string) error {
-	// Parse model ID to extract base model (handle driver suffix like "gemini-2.5-pro@gemini")
-	baseModelID, _ := ParseModelIDWithDriver(modelID)
-	registry := models.MustGetRegistry()
-	def, ok := registry.GetDefinition(baseModelID)
-	if !ok {
-		return fmt.Errorf("model %s not found", modelID)
-	}
-
-	availableDrivers := GetAvailableDrivers(ctx, userID)
-	_, found := models.SelectBestDriver(models.ModelID(def.ID), availableDrivers)
-
-	if !found {
-		return fmt.Errorf("model %s is not available with your configured API keys", modelID)
-	}
-
-	return nil
-}
 
 // ValidateModelSelector validates that a model selector can be resolved with the user's configured API keys.
 // This is used for early validation during chat creation to fail fast if the model isn't available.
@@ -105,7 +25,7 @@ func ValidateModelIsAvailable(ctx context.Context, userID string, modelID string
 // String-to-object conversion happens at the gRPC ingestion boundary only.
 //
 // Returns nil if the model can be resolved, or an error with actionable guidance.
-func ValidateModelSelector(ctx context.Context, userID string, selector interface{}) error {
+func ValidateModelSelector(ctx context.Context, scope Scope, selector interface{}) error {
 	// Convert selector to models.ModelSelector
 	ms, err := toModelSelector(selector)
 	if err != nil {
@@ -134,7 +54,7 @@ func ValidateModelSelector(ctx context.Context, userID string, selector interfac
 
 	// Get available drivers/providers for the user. A failed settings read is
 	// not "no API keys": it must stay distinguishable so callers can retry it.
-	availableDrivers, err := LookupAvailableDrivers(ctx, userID)
+	availableDrivers, err := LookupAvailableDrivers(ctx, scope)
 	if err != nil {
 		return err
 	}

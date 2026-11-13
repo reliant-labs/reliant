@@ -22,7 +22,8 @@ import { FileChangeRow } from "./FileChangeRow";
 import { IconButton } from "./IconButton";
 import { changeGroupOf, pluralize, splitPath } from "./fileStatus";
 import { MOD } from "./keys";
-import { useExistingPR, useRepoChanges } from "./useRepoChanges";
+import { useRepoChanges } from "./useRepoChanges";
+import { useWorktreePR, useWorktreeMachineActive } from "../../../hooks/worktree-git-queries";
 import type { ChangeGroup, FileChange } from "./types";
 import { useWorktreeById } from "../../../hooks/worktree-queries";
 
@@ -113,7 +114,17 @@ export function RepoChangesPanel({
   const [pendingPaths, setPendingPaths] = useState<Set<string>>(new Set());
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
   const [isPRDialogOpen, setIsPRDialogOpen] = useState(false);
-  const [prRefreshKey, setPrRefreshKey] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const panelRef = useCallback((element: HTMLDivElement | null) => {
+    if (!element) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const [historyKey, setHistoryKey] = useState(0);
   const [expanded, setExpanded] = useState<Record<ChangeGroup | "history", boolean>>({
     staged: true,
@@ -138,7 +149,12 @@ export function RepoChangesPanel({
     onScopeChange,
   });
 
-  const { existingPR, ghCliMissing } = useExistingPR(worktreeId, repoId, true, prRefreshKey);
+  const machineActive = useWorktreeMachineActive(worktreeId);
+  const prLookup = useWorktreePR({
+    worktreeId, repoId, branch: data?.branch,
+    enabled: isGitRepo && !!data && !waitingOnDaemon && !loadError,
+    visible, machineActive,
+  });
 
   // The machine isn't serving yet — asleep and being woken, or starting. The
   // shared wait says so ("Waking up…") and reloads on its cadence until the
@@ -605,7 +621,7 @@ export function RepoChangesPanel({
   );
 
   return (
-    <div className={containerClass}>
+    <div ref={panelRef} className={containerClass}>
       {mode === "single" && (
         <BranchHeader
           branch={data?.branch}
@@ -614,7 +630,7 @@ export function RepoChangesPanel({
           behind={behind}
           loading={loading}
           refreshing={refreshing}
-          onRefresh={() => void refresh()}
+          onRefresh={() => { void refresh(); prLookup.retry(); }}
           onClose={inline ? undefined : onClose}
         />
       )}
@@ -641,7 +657,7 @@ export function RepoChangesPanel({
           onPull={handlePull}
           pr={
             data && !isDefaultBranch
-              ? { existing: existingPR, ghCliMissing, onCreate: () => setIsPRDialogOpen(true) }
+              ? { ...prLookup, onCreate: () => setIsPRDialogOpen(true) }
               : null
           }
         />
@@ -653,7 +669,7 @@ export function RepoChangesPanel({
         <PRDialog
           isOpen={isPRDialogOpen}
           onClose={() => setIsPRDialogOpen(false)}
-          onPRCreated={() => setPrRefreshKey((k) => k + 1)}
+          onPRCreated={() => setIsPRDialogOpen(false)}
           worktreeId={worktreeId}
           defaultBranch={data?.default_branch}
           currentBranch={data?.branch}

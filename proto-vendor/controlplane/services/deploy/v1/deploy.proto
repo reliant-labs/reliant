@@ -296,6 +296,69 @@ service DeployService {
     };
   }
 
+  // --- Rollback floors ------------------------------------------------
+  //
+  // A rollback floor is "never bind this environment to a release older than
+  // X" (controlplane.v1.DeployRollbackFloor). Promote refuses a target that
+  // fails an active floor with reason `below_rollback_floor`; there is no
+  // flag that skips it. Changing floors is its own audited act: every set and
+  // every lift carries the caller's principal and a non-empty reason, is an
+  // append-only row, and is an activity event. Anyone who may promote may
+  // set, lower, clear or lift (owner decision, 2026-11-08) — the audit is the
+  // guard rail. A server that implements these advertises
+  // GetCapabilities.rollback_floors.
+
+  // SetRollbackFloor sets an ORDER floor: at a named release (source manual)
+  // or at the release the environment runs now (current; source
+  // roll_forward_only — "roll forward only from here"). A floor the
+  // environment's current release would fail is refused (InvalidArgument):
+  // the current binding always satisfies every active floor.
+  rpc SetRollbackFloor(SetRollbackFloorRequest) returns (SetRollbackFloorResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "set_floor"
+        target: {
+          kind: "release"
+          id: "response.floor.version"
+          label: "response.floor.version"
+        }
+        env: "environment_id"
+        detail: [
+          "reason",
+          "response.floor.source",
+          "response.floor.id"
+        ]
+      }
+    };
+  }
+  // LiftRollbackFloor lifts floors — named ones (`floor lift`), every order
+  // floor above a release followed by a manual floor at it (`floor lower`),
+  // or every order floor (`floor clear`) — as one transaction. A declared
+  // floor lifts only by id, and only with every declaration it requires
+  // acknowledged. Each lifted floor (and the floor `lower` sets) is its own
+  // activity event.
+  rpc LiftRollbackFloor(LiftRollbackFloorRequest) returns (LiftRollbackFloorResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "lift_floor"
+        target: {
+          kind: "environment"
+          id: "environment_id"
+        }
+        env: "environment_id"
+        detail: ["reason"]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+  // ListRollbackFloors returns an environment's floors, oldest first: the
+  // active ones, or every one with include_lifted.
+  rpc ListRollbackFloors(ListRollbackFloorsRequest) returns (ListRollbackFloorsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
   // There is no Rollback RPC. A rollback claims to undo a release it cannot
   // undo — the release already ran its migrations and wrote data — so
   // recovery is ROLL FORWARD: cut a release with the fix and Promote it.
@@ -574,7 +637,11 @@ service DeployService {
   // ListUsage returns metered infrastructure usage for the caller's org, with
   // per-resource attribution. Post-hoc: these rows come from a sweeper that
   // read the live cluster, so a deployment declared and never applied appears
-  // in none of them.
+  // in none of them. Quantities and dollar amounts are readable by any
+  // member. A client that renders withheld costs sets
+  // withhold_costs_without_billing_read: then dollar amounts need billing:read
+  // (org owners and admins), the rule of every other cost read, and without it
+  // the rows come back with costs_withheld set.
   rpc ListUsage(ListDeployUsageRequest) returns (ListDeployUsageResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -616,6 +683,12 @@ service DeployService {
   }
 
   rpc GetBundle(GetDeployBundleRequest) returns (GetDeployBundleResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // Values require BOTH deploy:read and deploy:config:read. Every read is
+  // synchronously audited. The names-only GetBundle endpoint is unchanged.
+  rpc GetWorkloadConfig(GetWorkloadConfigRequest) returns (GetWorkloadConfigResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -767,6 +840,27 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
 
+  // GetProjectTopology returns one forge project's release/environment
+  // topology: forge's `env status --json` document, assembled from this
+  // control plane's records by forge's own pkg/topology. No daemon and no
+  // checkout are involved.
+  //
+  // WHAT IT READS: the environment rows (with their declared shapes), each
+  // environment's current promotion, the project's newest releases, the
+  // bundle each promotion names, the reconciler's observations, the hosted
+  // deployments' observed images, and the declared-environment catalog
+  // sealed into the project's newest RELEASED bundle — which is how an env
+  // declared in code but never recorded here (a file ledger, or an env never
+  // built) still appears, as `tracked: false`.
+  //
+  // MEMBER (machine: deploy:read), the same scoping as GetLiveView. Another
+  // org's project, an unknown project and a project nobody has deployed are
+  // the same answer: a report with no environments. It names no secret value
+  // and no machine path.
+  rpc GetProjectTopology(GetDeployProjectTopologyRequest) returns (GetDeployProjectTopologyResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
   // PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
   //
   // IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
@@ -810,7 +904,8 @@ service DeployService {
   // ReportLocalSession upserts one `forge env up` worktree's presence.
   //
   // THE SECOND REPORTED-STATE EXCEPTION — see the service header. LOCAL
-  // environments only, enforced by the database rather than by this handler.
+  // environments only, enforced by the database (the handler checks the kind
+  // first only so the refusal names the mistake: FailedPrecondition).
   //
   // It must NEVER block `forge env up`. A developer whose network is down, or
   // whose token has expired, keeps working — the session record is a courtesy
@@ -821,6 +916,33 @@ service DeployService {
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "dev-loop telemetry about a local session"}
+    };
+  }
+
+  // MintLocalTelemetryToken issues the two short-lived credentials a local
+  // dev stack exports its telemetry to the hosted store with
+  // (docs/design/dev-telemetry-to-hosted.md §2): a process token for the
+  // stack's host processes and a browser token for its dev server's /_otel
+  // proxy. Both are ES256 JWTs from the telemetry-token issuer, live one hour
+  // and carry the instance (`sid`), its owner (`uid`) and an ingest class.
+  //
+  // The caller must own a LIVE session (ReportLocalSession) of a LOCAL
+  // environment, in an org whose admin has not switched dev telemetry off,
+  // on a control plane whose local_telemetry_mode admits the org. Every
+  // refusal is one forge maps to "keep telemetry local, print why":
+  // FailedPrecondition with reason dev_telemetry_disabled (the org switch),
+  // dev_telemetry_not_enabled (the platform gate) or session_not_live;
+  // NotFound for an unknown session or environment; PermissionDenied for a
+  // session someone else owns. Unimplemented means a control plane that
+  // predates this rpc.
+  //
+  // Idempotent per session: each call re-mints and refreshes the instance's
+  // grant (local_telemetry_grants). forge calls it again at each token's
+  // half-life.
+  rpc MintLocalTelemetryToken(MintLocalTelemetryTokenRequest) returns (MintLocalTelemetryTokenResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "dev-loop credential for a local session, renewed every half hour"}
     };
   }
 
@@ -894,6 +1016,22 @@ message GetDeployCapabilitiesResponse {
   // "object-summaries"). forge sends a hosted bundle only the parts named here;
   // a server that names none gets the document every older decoder knew.
   repeated string bundle_document_features = 4;
+  // Snapshot semantics this server implements beyond the intent seals
+  // immutable_snapshot_seals names. forge attaches a snapshot to a bundle only
+  // when the feature that makes the server keep it is named here:
+  //   "evidence-seal": RecordDeployBundle accepts a schema-v2 bundle carrying
+  //   a complete snapshot for a release cut WITHOUT snapshot intents (a plain
+  //   `forge env deploy`), records an evidence seal on that bundle, and the
+  //   promotion that ships the bundle freezes the snapshot (snapshot,
+  //   snapshot_digest, bundle_id, bundle_digest on DeployPromotion).
+  repeated string snapshot_features = 5;
+
+  // Rollback floors are implemented: Promote enforces them (refusal
+  // `below_rollback_floor`) and raises declared floors, and SetRollbackFloor,
+  // LiftRollbackFloor, ListRollbackFloors, PromoteReleaseRequest.
+  // raise_floor_reason and DeployEnvironment.rollback_floors are live. forge
+  // sends none of them to a server that does not say so.
+  bool rollback_floors = 6;
 }
 
 message ResolveHostedProjectRequest {
@@ -1309,6 +1447,13 @@ message PromoteReleaseRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 16;
+
+  // Also set a roll-forward-only rollback floor at the promoted release, in
+  // the promote's own transaction, with this reason (`forge env deploy <env>
+  // <v> --floor "<why>"`): "deploy this, and never come back below it". On a
+  // re-promote of the bound release the floor is still set if none is active
+  // at it. Empty: no floor (declared floors are raised regardless).
+  string raise_floor_reason = 17;
 }
 
 message PromoteReleaseResponse {
@@ -1318,6 +1463,84 @@ message PromoteReleaseResponse {
   // and nothing needs to be re-run. Also set on an idempotent re-promote of a
   // release that is still queued.
   repeated controlplane.v1.DeployHold holds = 2;
+  // The rollback floors THIS call raised: a declared floor for declarations
+  // the release carries that no active floor required, and the order floor
+  // raise_floor_reason asked for.
+  repeated controlplane.v1.DeployRollbackFloor floors_raised = 3;
+}
+
+message SetRollbackFloorRequest {
+  string environment_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Where the floor goes: a release version (manual), or the release the
+  // environment runs now, resolved under its row lock (roll_forward_only).
+  oneof at {
+    string version = 2;
+    bool current = 3;
+  }
+  // Why. Required; recorded on the floor and in the activity stream.
+  string reason = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1024
+  }];
+  // The caller's view of the environment's current promotion, as on
+  // Promote: "floor at what I saw" must not land on a release someone
+  // promoted a second ago.
+  oneof expected_current {
+    string expected_current_promotion_id = 5;
+    bool expect_unbound = 6;
+  }
+  // Automation identity when no human sets it; a person is identified from
+  // their claims.
+  string set_by_actor = 7;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 8;
+}
+
+message SetRollbackFloorResponse {
+  controlplane.v1.DeployRollbackFloor floor = 1;
+}
+
+message LiftRollbackFloorRequest {
+  string environment_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Floors to lift by id (`floor lift`).
+  repeated string floor_ids = 2;
+  // `floor lower <env> <version>`: lift every active order floor that refuses
+  // this release, then set a manual order floor at it, in one transaction.
+  string lower_to_version = 3;
+  // `floor clear`: lift every active order floor. Declared floors are kept:
+  // they lift only by id.
+  bool clear_order_floors = 4;
+  // Why. Required; recorded on every lift and in the activity stream.
+  string reason = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1024
+  }];
+  // For a declared floor: every declaration it requires, which the lifter
+  // vouches no longer applies (typically: the rollout that raised the floor
+  // never ran its migrator).
+  repeated controlplane.v1.DeployDeclarationRef acknowledged = 6;
+  string lifted_by_actor = 7;
+  optional string org_id = 8;
+}
+
+message LiftRollbackFloorResponse {
+  // The floors lifted, as they read after the lift.
+  repeated controlplane.v1.DeployRollbackFloor lifted = 1;
+  // The floor `lower` set, when it set one.
+  controlplane.v1.DeployRollbackFloor set = 2;
+}
+
+message ListRollbackFloorsRequest {
+  string environment_id = 1 [(buf.validate.field).required = true];
+  // Also return lifted floors, with their lifts. Unset: active floors only.
+  optional bool include_lifted = 2;
+  optional string org_id = 3;
+}
+
+message ListRollbackFloorsResponse {
+  repeated controlplane.v1.DeployRollbackFloor floors = 1;
 }
 
 // === Scale and status ===
@@ -1594,6 +1817,11 @@ message CompareDeployReleasesRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 5;
+  // Only this workload's objects: those whose forge workload is this name, or
+  // which belong to no workload and are named it. objects.unchanged then
+  // counts that workload's objects alone. Commits and artifacts are the
+  // release's and are not filtered. Unset compares every object.
+  optional string workload = 6;
 }
 
 message CompareDeployReleasesResponse {
@@ -1680,6 +1908,11 @@ message DeployObjectComparison {
   // summaries: objects are named without saying what they are or what in them
   // changed.
   bool summaries_missing = 8;
+  // The workload the objects were filtered to, echoing the request's. Empty
+  // when every object was compared — including from a control plane that
+  // predates the filter, so a client that asked for one and reads "" filters
+  // the deltas itself.
+  string workload = 9;
 }
 
 enum DeployObjectComparisonState {
@@ -1883,6 +2116,12 @@ message ListDeployUsageRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 7;
+  // The caller renders costs_withheld, so the dollars may follow billing:read:
+  // a caller without it gets every cost as 0 with costs_withheld set. Unset
+  // (every client that predates this field), every member gets the dollars as
+  // before and costs_withheld is never set.
+  // forge:lint-disable-next-line forgeconv-list-filter-optional: an opt-in behaviour flag, not a list filter; unset = false is the backward-compatible default for older clients (owner decision 79d4908b), and `optional` would be a buf-breaking cardinality change.
+  bool withhold_costs_without_billing_read = 8;
 }
 
 message ListDeployUsageResponse {
@@ -1891,6 +2130,12 @@ message ListDeployUsageResponse {
   // total without re-summing integers it may have narrowed to floats on the
   // way in.
   int64 total_cost_usd_nanos = 2;
+  // Set only when the request asked for withhold_costs_without_billing_read
+  // and the caller does not hold billing:read in the org: no dollar amount is
+  // returned, so every cost_usd_nanos and total_cost_usd_nanos is 0 meaning
+  // "not shown", never "free". Render the quantities and say who can grant
+  // billing:read.
+  bool costs_withheld = 3;
 }
 
 // === Bundles ===
@@ -1944,6 +2189,34 @@ message RecordDeployBundleResponse {
 
 // Address a bundle by id, or by (environment_id, digest) — which is the pair a
 // client holds after a render, before it has ever seen the row.
+// Exactly one recorded environment; no registry URL is accepted. Selectors
+// are mutually exclusive. Absent selector resolves the current promotion.
+message GetWorkloadConfigRequest {
+  string environment_id = 1;
+  optional string bundle_id = 2;
+  optional string release_version = 3;
+  string workload = 4;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 5;
+}
+
+message GetWorkloadConfigResponse {
+  string environment_id = 1;
+  string bundle_id = 2;
+  string release_version = 3;
+  string workload = 4;
+  // All fields originate from the same server-redacted tree. Secret values
+  // are fixed withheld markers, never hashes; compare these projections only.
+  repeated google.protobuf.Struct objects = 5;
+  string rendered_yaml = 6;
+  // No unverified config.js URL fetch is performed.
+  string frontend_config_unsupported_reason = 7;
+  // Verified immutable OCI manifest digest from the resolved bundle row.
+  string bundle_digest = 8;
+}
+
 message GetDeployBundleRequest {
   string bundle_id = 1;
   string environment_id = 2;
@@ -2159,6 +2432,32 @@ message GetDeployEnvironmentShapeResponse {
   google.protobuf.Timestamp declared_at = 3;
 }
 
+message GetDeployProjectTopologyRequest {
+  // The forge project (forge.yaml `name`). "" is the legacy project, as on
+  // GetLiveView.
+  string project = 1;
+  // Narrow the report to these environments. Empty: every environment. The
+  // header (releases, latest release) is the project's either way, so a
+  // narrowed row's lag is still measured against the whole project.
+  repeated string envs = 2 [(buf.validate.field).repeated.max_items = 100];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
+}
+
+message GetDeployProjectTopologyResponse {
+  // forge pkg/topology Report, as JSON with snake_case keys — the document
+  // `forge env status --json` prints, plus the additive fields a control
+  // plane fills: `source: "control_plane"`, `catalog` (which released bundle
+  // the declared-env list came from; absent when none carried one), and per
+  // environment `tracked`, `bundle_digest`, `bundle_git` and, on images the
+  // platform observed, `observed_by: "platform"`.
+  google.protobuf.Struct report = 1;
+  // When the report was assembled.
+  google.protobuf.Timestamp computed_at = 2;
+}
+
 // === Plans ===
 
 message PlanDeployRequest {
@@ -2281,10 +2580,82 @@ message ReportLocalSessionRequest {
   // running | stopped. `stopped` stamps stopped_at, which is what separates a
   // clean exit from a session that merely went quiet.
   string state = 7;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 8;
 }
 
 message ReportLocalSessionResponse {
   DeployLocalSession session = 1;
+}
+
+// === Local dev telemetry ===
+
+message MintLocalTelemetryTokenRequest {
+  // The session id forge reported to ReportLocalSession for this stack.
+  string session_id = 1;
+  // The environment, addressed as ReportLocalSession addresses it.
+  string project = 2;
+  string environment = 3;
+  // The retention the project declares for its dev telemetry. Unset, and any
+  // unset field in it, means the default of 3 days. Every value is clamped to
+  // [1, the org's tenant default for the signal].
+  LocalTelemetryRetention retention = 4;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it.
+  optional string org_id = 5;
+}
+
+// LocalTelemetryRetention is a dev instance's retention, in whole days per
+// signal, with per-service overrides.
+message LocalTelemetryRetention {
+  optional int32 traces_days = 1;
+  optional int32 metrics_days = 2;
+  optional int32 logs_days = 3;
+  optional int32 browser_days = 4;
+  repeated LocalTelemetryRetentionOverride overrides = 5 [(buf.validate.field).repeated.max_items = 200];
+}
+
+// LocalTelemetryRetentionOverride narrows one service's retention for one
+// signal.
+message LocalTelemetryRetentionOverride {
+  string service = 1;
+  // One of traces, metrics, logs, browser.
+  string signal = 2;
+  int32 days = 3;
+}
+
+// LocalTelemetryInstance is the instance the tokens attribute data to, as
+// `forge obs` scopes and renders it.
+message LocalTelemetryInstance {
+  // The instance id: the gateway stamps it as reliant.instance.id, and
+  // `forge obs` narrows on it. The control plane's id for this run of the
+  // stack AND this user (one per session server row and user; a session
+  // taken over by another user is a new instance), NOT the client's session
+  // id: that one repeats across a worktree's runs and across orgs.
+  string id = 1;
+  // "<user>/<worktree label>", e.g. "alice/fix-login".
+  string label = 2;
+  // The owner's email.
+  string user = 3;
+}
+
+message MintLocalTelemetryTokenResponse {
+  // For the stack's host processes: OTEL_EXPORTER_OTLP_HEADERS_FILE's
+  // `authorization=Bearer <process_token>`.
+  string process_token = 1;
+  // For the dev server's /_otel proxy only; never shipped to the browser.
+  string browser_token = 2;
+  // When both tokens expire. forge renews at half-life.
+  google.protobuf.Timestamp expires_at = 3;
+  // The OTLP/HTTP base URL to export to.
+  string endpoint = 4;
+  string org_id = 5;
+  string environment_id = 6;
+  LocalTelemetryInstance instance = 7;
+  // The effective retention, after clamping. Every signal field is set.
+  LocalTelemetryRetention retention = 8;
 }
 
 // === Ledger import ===

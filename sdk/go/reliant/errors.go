@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"connectrpc.com/connect"
 )
@@ -38,7 +39,32 @@ var (
 	// ErrTruncated: a list walk yielded what it could, but the server still
 	// cut the list short at the most the client asks for, so items are missing.
 	ErrTruncated = errors.New("reliant: truncated")
+	// ErrScopeMissing: the token is valid but lacks a scope the call needs.
+	// Error.Scopes names what to grant; signing in again does not help.
+	ErrScopeMissing = errors.New("reliant: scope missing")
+	// ErrMachineCredential: the token is bound to a machine (a daemon), and
+	// such a token never decides an approval, whatever scopes it holds.
+	ErrMachineCredential = errors.New("reliant: machine credential cannot decide")
+	// ErrApprovalNotPending: every approval named was already resolved
+	// (decided elsewhere, expired, or its run ended). Nothing changed.
+	ErrApprovalNotPending = errors.New("reliant: approval not pending")
 )
+
+// Reasons the server attaches to a refusal (x-forge-error-reason) that the
+// client turns into a sentinel.
+const (
+	reasonScopeMissing       = "scope_missing"
+	reasonMachineCredential  = "machine_credential_cannot_decide"
+	reasonApprovalNotPending = "approval_not_pending"
+	headerErrorReason        = "x-forge-error-reason"
+	headerErrorScopes        = "x-forge-error-scopes"
+)
+
+var reasonKinds = map[string]error{
+	reasonScopeMissing:       ErrScopeMissing,
+	reasonMachineCredential:  ErrMachineCredential,
+	reasonApprovalNotPending: ErrApprovalNotPending,
+}
 
 // Error is a failed call. Op names the operation, in the client's own words
 // ("runs.start"); Server is the base URL it was sent to, so a caller with two
@@ -53,6 +79,11 @@ type Error struct {
 	Code connect.Code
 	// Message is the server's explanation, without the "code:" prefix.
 	Message string
+	// Reason is the server's machine-readable reason for a refusal
+	// ("scope_missing", "machine_credential_cannot_decide"), or empty.
+	Reason string
+	// Scopes is, with Reason "scope_missing", the scopes the call needs.
+	Scopes []string
 
 	kind  error
 	cause error
@@ -67,7 +98,13 @@ func (e *Error) Error() string {
 }
 
 // Is makes errors.Is(err, ErrNotFound) and friends work.
-func (e *Error) Is(target error) bool { return target == e.kind }
+func (e *Error) Is(target error) bool {
+	if target == e.kind {
+		return true
+	}
+	k, ok := reasonKinds[e.Reason]
+	return ok && target == k
+}
 
 // Unwrap exposes the underlying Connect error, so connect.CodeOf works through
 // it.
@@ -88,6 +125,10 @@ func (c *Client) wrap(op string, err error) error {
 		return &Error{Op: op, Server: c.baseURL, Code: connect.CodeUnavailable, Message: err.Error(), kind: ErrUnavailable, cause: err}
 	}
 	e := &Error{Op: op, Server: c.baseURL, Code: ce.Code(), Message: ce.Message(), cause: err}
+	e.Reason = ce.Meta().Get(headerErrorReason)
+	if v := ce.Meta().Get(headerErrorScopes); v != "" {
+		e.Scopes = strings.Split(v, ",")
+	}
 	switch ce.Code() {
 	case connect.CodeNotFound:
 		e.kind = ErrNotFound

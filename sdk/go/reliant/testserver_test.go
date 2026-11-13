@@ -38,10 +38,15 @@ type fake struct {
 
 	getChatUpdates        func(*reliantv1.GetChatUpdatesRequest) (*reliantv1.GetChatUpdatesResponse, error)
 	getWorkflowExecutions func(*reliantv1.GetWorkflowExecutionsRequest) (*reliantv1.GetWorkflowExecutionsResponse, error)
+	getContentBlockBodies func(*reliantv1.GetContentBlockBodiesRequest) (*reliantv1.GetContentBlockBodiesResponse, error)
 
 	listPendingQuestions func(*reliantv1.ListPendingQuestionsRequest) (*reliantv1.ListPendingQuestionsResponse, error)
 	resolveQuestion      func(*reliantv1.ResolveQuestionRequest) (*reliantv1.ResolveQuestionResponse, error)
 	listApprovals        func(*reliantv1.ListApprovalsByChatRequest) (*reliantv1.ListApprovalsByChatResponse, error)
+	approve              func(*reliantv1.ApproveRequest) (*reliantv1.ApproveResponse, error)
+	deny                 func(*reliantv1.DenyRequest) (*reliantv1.DenyResponse, error)
+	batchApprove         func(*reliantv1.BatchApproveRequest) (*reliantv1.BatchApproveResponse, error)
+	batchDeny            func(*reliantv1.BatchDenyRequest) (*reliantv1.BatchDenyResponse, error)
 
 	getTrigger        func(*reliantv1.GetTriggerRequest) (*reliantv1.GetTriggerResponse, error)
 	listTriggers      func(*reliantv1.ListTriggersRequest) (*reliantv1.ListTriggersResponse, error)
@@ -107,6 +112,9 @@ func (s chatSvc) GetChatUpdates(_ context.Context, r *connect.Request[reliantv1.
 func (s chatSvc) GetWorkflowExecutions(_ context.Context, r *connect.Request[reliantv1.GetWorkflowExecutionsRequest]) (*connect.Response[reliantv1.GetWorkflowExecutionsResponse], error) {
 	return call(s.f.getWorkflowExecutions, r.Msg)
 }
+func (s chatSvc) GetContentBlockBodies(_ context.Context, r *connect.Request[reliantv1.GetContentBlockBodiesRequest]) (*connect.Response[reliantv1.GetContentBlockBodiesResponse], error) {
+	return call(s.f.getContentBlockBodies, r.Msg)
+}
 
 type questionSvc struct {
 	reliantv1connect.UnimplementedQuestionServiceHandler
@@ -127,6 +135,19 @@ type approvalSvc struct {
 
 func (s approvalSvc) ListApprovalsByChat(_ context.Context, r *connect.Request[reliantv1.ListApprovalsByChatRequest]) (*connect.Response[reliantv1.ListApprovalsByChatResponse], error) {
 	return call(s.f.listApprovals, r.Msg)
+}
+
+func (s approvalSvc) Approve(_ context.Context, r *connect.Request[reliantv1.ApproveRequest]) (*connect.Response[reliantv1.ApproveResponse], error) {
+	return call(s.f.approve, r.Msg)
+}
+func (s approvalSvc) Deny(_ context.Context, r *connect.Request[reliantv1.DenyRequest]) (*connect.Response[reliantv1.DenyResponse], error) {
+	return call(s.f.deny, r.Msg)
+}
+func (s approvalSvc) BatchApprove(_ context.Context, r *connect.Request[reliantv1.BatchApproveRequest]) (*connect.Response[reliantv1.BatchApproveResponse], error) {
+	return call(s.f.batchApprove, r.Msg)
+}
+func (s approvalSvc) BatchDeny(_ context.Context, r *connect.Request[reliantv1.BatchDenyRequest]) (*connect.Response[reliantv1.BatchDenyResponse], error) {
+	return call(s.f.batchDeny, r.Msg)
 }
 
 type triggerSvc struct {

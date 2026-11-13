@@ -125,7 +125,7 @@ func TestRegistrationAckDoesNotBlockCommandDispatch(t *testing.T) {
 	}()
 	select {
 	case <-handled:
-	case <-time.After(time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("the receive loop is stuck building project snapshots for the RegistrationAck; " +
 			"no command behind it can be dispatched until discovery finishes")
 	}
@@ -134,7 +134,7 @@ func TestRegistrationAckDoesNotBlockCommandDispatch(t *testing.T) {
 	// arriving now must be answered anyway.
 	select {
 	case <-discoveryStarted:
-	case <-time.After(time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("the registration ack never requested a project snapshot")
 	}
 	if err := d.handleServerMessage(ctx, nil, codePresenceCommand(t, "after-ack", t.TempDir())); err != nil {

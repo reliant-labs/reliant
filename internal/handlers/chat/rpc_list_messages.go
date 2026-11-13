@@ -11,10 +11,12 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -25,17 +27,21 @@ func (s *Service) ListMessages(
 	req *connect.Request[reliantv1.ListMessagesRequest],
 ) (*connect.Response[reliantv1.ListMessagesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Serves viewers of a shared chat: their transcript leaves every tool
+	// result out (messageproto.ElideForViewer).
+	ctx = authz.WithViewerReads(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	// Verify user owns the chat
+	// The owner, or a viewer of a shared chat
 	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat.UserID != userID {
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -170,11 +176,24 @@ func (s *Service) ListMessages(
 		}
 	}
 
+	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoMessages := messageproto.AssembleForDisplay(
-		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0)
+		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0, toolBodies)
+	if access.Viewer() {
+		messageproto.ElideForViewer(protoMessages)
+	}
+	// What this read sent, by block kind, on the RPC's span: counted after
+	// the stub policy, so a STUB read reports the bytes it really sent and
+	// what it left out (transcript.blocks_elided, transcript.bytes_elided).
+	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
+	sent.AddMessages(protoMessages...)
+	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 
 	var pageErrors []*reliantv1.ChatErrorUpdate
-	if beforeSeq > 0 && (req.Msg.ThreadId == nil || *req.Msg.ThreadId == "") && len(messages) > 0 {
+	// A scroll-back's errors are raw failure text (what a command or tool
+	// printed), which a viewer never reads: their live ERROR updates carry
+	// none either (messageproto.ViewerChatUpdate).
+	if !access.Viewer() && beforeSeq > 0 && (req.Msg.ThreadId == nil || *req.Msg.ThreadId == "") && len(messages) > 0 {
 		pageErrors = s.pageErrors(ctx, req.Msg.ChatId, mainThreadID, beforeSeq, messages, hasMore)
 	}
 

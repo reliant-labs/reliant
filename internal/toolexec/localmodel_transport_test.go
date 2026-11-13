@@ -279,11 +279,11 @@ func TestLocalModelTransport_MidStreamCancelAbortsDaemonRequest(t *testing.T) {
 	assert.Less(t, seen, 10000)
 
 	reqID := mgr.firstRequest(t).GetRequestId()
-	require.Eventually(t, func() bool { return mgr.wasCancelled(reqID) }, 3*time.Second, 10*time.Millisecond,
+	require.Eventually(t, func() bool { return mgr.wasCancelled(reqID) }, 30*time.Second, 10*time.Millisecond,
 		"the cancel must reach the daemon")
 	select {
 	case <-stopped:
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("upstream server never saw its request context end")
 	}
 }
@@ -296,13 +296,13 @@ func TestLocalModelTransport_DaemonOfflineIsTypedAndNamesDaemon(t *testing.T) {
 	rt := NewLocalModelTransport(router, "user-1", "daemon-ghost", "ollama")
 
 	httpReq, _ := http.NewRequest(http.MethodGet, "http://local-model.invalid/models", nil)
-	start := time.Now()
 	_, err := rt.RoundTrip(httpReq)
 	require.Error(t, err)
-	assert.Less(t, time.Since(start), 3*time.Second, "offline must fail fast")
 	assert.ErrorIs(t, err, ErrLocalModelDaemonUnavailable)
 	var typed *LocalModelDaemonUnavailableError
 	require.True(t, errors.As(err, &typed))
+	assert.Equal(t, "daemon is not connected", typed.Reason,
+		"offline must fail fast: on NATS's no-responders answer, not after the ack timeout")
 	assert.Equal(t, "daemon-ghost", typed.DaemonID)
 	assert.Contains(t, err.Error(), "daemon-ghost")
 }

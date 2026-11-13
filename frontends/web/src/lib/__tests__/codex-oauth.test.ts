@@ -1,9 +1,7 @@
 import { vi } from "vitest";
 
-vi.mock("@/api/settings-grpc", () => ({
-  settingsGrpc: {
-    completeCodexOAuth: vi.fn(),
-  },
+vi.mock("@/hooks/settings-queries", () => ({
+  completeCodexOAuth: vi.fn(),
 }));
 
 vi.mock("@/lib/oauth-local", async (importOriginal) => ({
@@ -11,7 +9,7 @@ vi.mock("@/lib/oauth-local", async (importOriginal) => ({
   startOAuthViaDaemon: vi.fn(),
 }));
 
-import { settingsGrpc } from "@/api/settings-grpc";
+import { completeCodexOAuth } from "@/hooks/settings-queries";
 import { startOAuthViaDaemon } from "@/lib/oauth-local";
 import { CODEX_OAUTH_STATE_PREFIX, runCodexOAuthFlow } from "@/lib/codex-oauth";
 
@@ -50,7 +48,7 @@ const setCryptoMock = () => {
 };
 
 describe("runCodexOAuthFlow", () => {
-  const completeCodexOAuthMock = vi.mocked(settingsGrpc.completeCodexOAuth);
+  const completeCodexOAuthMock = vi.mocked(completeCodexOAuth);
   const startOAuthViaDaemonMock = vi.mocked(startOAuthViaDaemon);
 
   beforeEach(() => {
@@ -122,18 +120,18 @@ describe("runCodexOAuthFlow", () => {
     ).toBe(true);
 
     // Verify completeCodexOAuth was called with the right args
-    expect(completeCodexOAuthMock).toHaveBeenCalledWith(
-      "test-code",
-      expect.any(String),
-      "http://127.0.0.1:9999/callback",
-      undefined,
-    );
+    expect(completeCodexOAuthMock).toHaveBeenCalledWith({
+      code: "test-code",
+      codeVerifier: expect.any(String),
+      redirectUri: "http://127.0.0.1:9999/callback",
+      accountId: undefined,
+    });
   });
 
   it("names the reconnect target on the exchange", async () => {
     completeCodexOAuthMock.mockResolvedValue({ success: true, message: "Connected", created: false });
     await runCodexOAuthFlow({ accountId: "acct-7" });
-    expect(completeCodexOAuthMock.mock.calls[0][3]).toBe("acct-7");
+    expect(completeCodexOAuthMock.mock.calls[0][0].accountId).toBe("acct-7");
   });
 
   it("fails when daemon returns mismatched state", async () => {

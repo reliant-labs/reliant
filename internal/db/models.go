@@ -84,6 +84,9 @@ type Project = core.Project
 // model. Tracks per-daemon clones of a Project.
 type ProjectDaemon = core.ProjectDaemon
 
+// ProjectDaemonDetachment is a project the user detached from a machine.
+type ProjectDaemonDetachment = core.ProjectDaemonDetachment
+
 // ProjectConfigRecord is an alias to the shared core project config record.
 type ProjectConfigRecord = core.ProjectConfigRecord
 
@@ -194,11 +197,17 @@ type (
 	DaemonAttachmentSource = core.DaemonAttachmentSource
 	DaemonAttachment       = core.DaemonAttachment
 	DaemonBuild            = core.DaemonBuild
+	MachineHealth          = core.MachineHealth
+	MachineHealthState     = core.MachineHealthState
 )
 
 const (
 	DaemonAttachmentSourceInbound  = core.DaemonAttachmentSourceInbound
 	DaemonAttachmentSourceOutbound = core.DaemonAttachmentSourceOutbound
+
+	MachineHealthUnreported = core.MachineHealthUnreported
+	MachineHealthOK         = core.MachineHealthOK
+	MachineHealthDegraded   = core.MachineHealthDegraded
 )
 
 // DiscoveredProject represents a daemon-reported project on disk.

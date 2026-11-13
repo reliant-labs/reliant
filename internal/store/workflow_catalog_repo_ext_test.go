@@ -302,7 +302,7 @@ func TestUpsertWorkflowDraftBySlug(t *testing.T) {
 	// A new slug inserts at version 1 with the caller's stamps.
 	first := newDraft("up-1", "up", core.WorkflowDraftStatusDraft, l2Base)
 	first.ForkedFrom, first.SourcePath = ptr("builtin://agent"), ptr("/a.yaml")
-	got, err := store.UpsertWorkflowDraftBySlug(ctx, env.ORM, first)
+	got, err := store.UpsertWorkflowDraftBySlug(ctx, env.ORM, first, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +313,7 @@ func TestUpsertWorkflowDraftBySlug(t *testing.T) {
 	second := newDraft("up-2", "up", core.WorkflowDraftStatusComplete, l2Base.Add(time.Hour))
 	second.Name, second.Description, second.Definition, second.IsHidden = "Upserted", ptr("new text"), "name: upserted", true
 	second.ForkedFrom, second.SourcePath = ptr("builtin://plan"), ptr("/b.yaml")
-	got, err = store.UpsertWorkflowDraftBySlug(ctx, env.ORM, second)
+	got, err = store.UpsertWorkflowDraftBySlug(ctx, env.ORM, second, "up-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,10 +332,18 @@ func TestUpsertWorkflowDraftBySlug(t *testing.T) {
 		t.Fatalf("the upserted id exists as a second row: %v", err)
 	}
 
+	// The upsert overwrites only the row its caller locked: a conflict with
+	// another (none expected, or a different id) writes nothing.
+	for _, over := range []string{"", "up-other"} {
+		if _, err := store.UpsertWorkflowDraftBySlug(ctx, env.ORM, newDraft("up-x", "up", core.WorkflowDraftStatusDraft, l2Base), over); !errors.Is(err, store.ErrWorkflowDraftChanged) {
+			t.Fatalf("upsert over %q of up-1's slug = %v, want ErrWorkflowDraftChanged", over, err)
+		}
+	}
+
 	// Upserting again bumps again, and clearing the description sticks.
 	third := newDraft("up-3", "up", core.WorkflowDraftStatusDraft, l2Base)
 	third.Description = nil
-	got, err = store.UpsertWorkflowDraftBySlug(ctx, env.ORM, third)
+	got, err = store.UpsertWorkflowDraftBySlug(ctx, env.ORM, third, "up-1")
 	if err != nil || got.Version != 3 || got.Description != nil || got.Status != core.WorkflowDraftStatusDraft || got.IsHidden {
 		t.Fatalf("third upsert = %+v, %v; want version 3, no description, draft, visible", got, err)
 	}
@@ -343,7 +351,7 @@ func TestUpsertWorkflowDraftBySlug(t *testing.T) {
 	// Another user's draft with the same slug is a different row.
 	foreign := newDraft("up-f", "up", core.WorkflowDraftStatusDraft, l2Base)
 	foreign.UserID = "someone-else"
-	got, err = store.UpsertWorkflowDraftBySlug(ctx, env.ORM, foreign)
+	got, err = store.UpsertWorkflowDraftBySlug(ctx, env.ORM, foreign, "")
 	if err != nil || got.ID != "up-f" || got.Version != 1 {
 		t.Fatalf("another user's upsert = %+v, %v; want a new row at version 1", got, err)
 	}
@@ -358,17 +366,14 @@ func TestRemoveWorkflowDraft(t *testing.T) {
 	ctx := context.Background()
 	seeded := seedDrafts(t, env)
 
-	// By slug: the user's own draft, never someone else's with the same slug.
-	removed, err := store.RemoveWorkflowDraftBySlug(ctx, env.ORM, storetest.SeedUserID, "wip")
+	// By id: that draft, never another user's with the same slug.
+	removed, err := store.RemoveWorkflowDraft(ctx, env.ORM, "d-draft")
 	if err != nil {
 		t.Fatal(err)
 	}
-	requireSame(t, "removed by slug", removed, seeded["d-draft"])
-	if _, err := store.RemoveWorkflowDraftBySlug(ctx, env.ORM, storetest.SeedUserID, "wip"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("removing the removed slug = %v, want sql.ErrNoRows", err)
-	}
-	if _, err := store.RemoveWorkflowDraftBySlug(ctx, env.ORM, "nobody", "done"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("removing another user's slug = %v, want sql.ErrNoRows", err)
+	requireSame(t, "removed by id", removed, seeded["d-draft"])
+	if _, err := store.RemoveWorkflowDraft(ctx, env.ORM, "d-draft"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("removing the removed draft = %v, want sql.ErrNoRows", err)
 	}
 	if foreign, err := store.LoadWorkflowDraft(ctx, env.ORM, "d-foreign"); err != nil || foreign.Slug != "wip" {
 		t.Fatalf("the other user's draft with the same slug was removed: %v", err)
@@ -379,7 +384,7 @@ func TestRemoveWorkflowDraft(t *testing.T) {
 	}
 }
 
-func sampleScenarios(draft sql.NullString) []*core.WorkflowScenario {
+func sampleScenarios(draft *string) []*core.WorkflowScenario {
 	return []*core.WorkflowScenario{
 		{ID: "sc-1", WorkflowDraftID: draft, Name: "happy", Events: `[{"a":1}]`, Expect: nstr(`{"ok":true}`), CreatedAt: l2Base, UpdatedAt: l2Base.Add(3 * time.Minute)},
 		{ID: "sc-2", WorkflowDraftID: draft, Name: "sad", Description: nstr("fails"), Events: `[]`, CreatedAt: l2Base.Add(time.Minute), UpdatedAt: l2Base.Add(time.Minute)},
@@ -501,7 +506,7 @@ func TestWorkflowScenarioWrites(t *testing.T) {
 	// and updated_at, and leaves the draft, owner, created_at and last run.
 	edited := *want["sc-1"]
 	edited.Name, edited.Events, edited.Description = "happy path", `[{"a":2}]`, nstr("now described")
-	edited.Expect = sql.NullString{} // cleared
+	edited.Expect = nil // cleared
 	edited.UserID, edited.CreatedAt = "ignored", l2Base.Add(99*time.Hour)
 	if err := store.ReplaceWorkflowScenario(ctx, env.ORM, &edited); err != nil {
 		t.Fatal(err)
@@ -515,10 +520,10 @@ func TestWorkflowScenarioWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireRecent(t, "updated_at", sc1.UpdatedAt)
-	if !sc1.LastRunAt.Valid {
+	if sc1.LastRunAt == nil {
 		t.Fatal("last_run_at not stamped")
 	}
-	requireRecent(t, "last_run_at", sc1.LastRunAt.Time)
+	requireRecent(t, "last_run_at", fromPtr(sc1.LastRunAt))
 	requireSame(t, "sc-1 after an edit and a result", sc1, &core.WorkflowScenario{
 		ID: "sc-1", WorkflowDraftID: nstr("d-sc"), UserID: storetest.SeedUserID, Name: "happy path", Description: nstr("now described"),
 		Events: `[{"a":2}]`, LastRunAt: sc1.LastRunAt, LastRunStatus: nstr("passed"), LastRunResult: nstr(`{"steps":3}`),
@@ -536,7 +541,7 @@ func TestWorkflowScenarioWrites(t *testing.T) {
 	exp := *want["sc-2"]
 	exp.LastRunStatus, exp.LastRunResult, exp.LastRunAt, exp.UpdatedAt, exp.Version = nstr("error"), nstr(`{"steps":0}`), sc2.LastRunAt, sc2.UpdatedAt, 3
 	requireSame(t, "sc-2 after two results", sc2, &exp)
-	requireRecent(t, "sc-2 last_run_at", sc2.LastRunAt.Time)
+	requireRecent(t, "sc-2 last_run_at", fromPtr(sc2.LastRunAt))
 
 	// The others were not touched.
 	for _, id := range []string{"sc-raw", "sc-foreign"} {

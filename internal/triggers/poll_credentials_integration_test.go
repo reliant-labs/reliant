@@ -273,12 +273,12 @@ func TestTriggerRegistrationStateInTheStore(t *testing.T) {
 	}
 	first := save(&core.TriggerRegistration{TriggerID: trigger.ID, Provider: "github", Cursor: "1", Status: core.TriggerRegistrationNeedsReauth, StatusDetail: "reconnect"})
 	require.False(t, first.StatusSince.IsZero())
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(2 * time.Millisecond) // a clock tick: the re-poll is stamped after the first save
 	polled := time.Now()
 	again := save(&core.TriggerRegistration{TriggerID: trigger.ID, Provider: "github", Cursor: "1", Status: core.TriggerRegistrationNeedsReauth, StatusDetail: "reconnect", LastPolledAt: &polled})
 	assert.True(t, first.StatusSince.Equal(again.StatusSince), "re-polling a stuck source keeps its episode start")
 
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(2 * time.Millisecond) // a clock tick: the gap is stamped after the episode began
 	gapAt := time.Now().UTC().Truncate(time.Microsecond)
 	active := save(&core.TriggerRegistration{TriggerID: trigger.ID, Provider: "github", Cursor: "2", Status: core.TriggerRegistrationActive, LastGapAt: &gapAt, LastGapDetail: "lost"})
 	assert.True(t, active.StatusSince.After(first.StatusSince), "a status change starts a new episode")

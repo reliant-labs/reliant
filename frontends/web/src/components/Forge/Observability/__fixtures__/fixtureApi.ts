@@ -518,11 +518,77 @@ export function fixtureDayGrainedDashboard(): Dashboard {
         width: 12,
         height: 8,
       },
+      {
+        // A weekly bucket: the server reports a Date column as one day, the panel's minStep says seven.
+        id: "signups-weekly",
+        title: "Sign-ups per week",
+        kind: "sql",
+        signal: "",
+        series: [],
+        sql: "SELECT toDate(toMonday(Timestamp)) AS week, count() AS \"Sign-ups\" FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY week ORDER BY week",
+        minStep: "7d",
+        width: 12,
+        height: 8,
+      },
+      // A delivery panel (dashspec delivery.go): drawn from the release ledger, with no spans to explore or alert on.
+      { id: "promotions", title: "Promotions", kind: "promotions", signal: "", series: [], width: 24, height: 9 },
       // A metrics panel, so the dashboard's own range reaches "Explore in Metrics".
       { id: "goroutines", title: "Goroutines", kind: "line", signal: "metrics", series: [{ label: "goroutines", agg: "sum", field: "go.goroutine.count", metricType: "sum" }], unit: "count", width: 12, height: 7 },
     ],
   };
   return usage;
+}
+
+/**
+ * forge's generated Product usage shape: sections with headings, headline
+ * figures that open beside their change (defaultCompare) with a trendSql
+ * sparkline each, palette colours, and retention as a heatmap. Opt-in
+ * (`dashboardsHeadline`).
+ */
+export function fixtureHeadlineDashboard(): Dashboard {
+  const figure = (id: string, title: string, color: string): Dashboard["panels"][number] => ({
+    id,
+    section: "glance",
+    title,
+    kind: "sql",
+    signal: "",
+    series: [],
+    sql: `SELECT uniqExact(UserId) AS "${title}" FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}`,
+    trendSql: `SELECT toDate(Timestamp) AS day, uniqExact(UserId) AS "${title}" FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY day ORDER BY day`,
+    unit: "count",
+    display: { color },
+    width: 6,
+    height: 4,
+  });
+  return {
+    id: "usage",
+    title: "shop: product usage",
+    filters: [],
+    annotations: [],
+    defaultRange: "7d",
+    defaultCompare: "period",
+    sections: [
+      { id: "glance", title: "At a glance", description: "The headline figures, each beside its change against the previous period." },
+      { id: "retention", title: "Retention", description: "Whether people come back." },
+    ],
+    panels: [
+      {
+        id: "weekly-retention",
+        section: "retention",
+        title: "Weekly retention by cohort",
+        kind: "sql",
+        signal: "",
+        series: [],
+        sql: "SELECT concat(toString(cohort), ' · ', toString(count()), ' users') AS \"Cohort (week of)\", 0.5 AS \"W1\" FROM cohorts GROUP BY cohort ORDER BY cohort",
+        unit: "percent",
+        display: { style: "heatmap", color: "violet" },
+        width: 24,
+        height: 10,
+      },
+      figure("dau", "Daily active users", "blue"),
+      figure("wau", "Weekly active users", "cyan"),
+    ],
+  };
 }
 
 /**
@@ -534,6 +600,26 @@ export function fixtureDayGrainedDashboard(): Dashboard {
 function fixtureSqlPanel(panel: Panel, window: TimeWindow): PanelResult {
   const base = { kind: "sql", unit: panel.unit ?? "", truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"], ...NO_BROWSER_ROWS, ...NO_METRIC_EXTRAS, window };
   const DAY = 86_400_000;
+  // One row of figures (no GROUP BY), named by its alias: 42 today, 36 the period before.
+  if (!/GROUP BY/i.test(panel.sql ?? "")) {
+    const alias = /AS "([^"]+)"/.exec(panel.sql ?? "")?.[1] ?? "value";
+    const earlier = window.endMs < Date.now() - DAY;
+    return { ...base, stepSeconds: 0, series: [], columns: [alias], rows: [{ group: {}, values: [earlier ? 36 : 42] }] };
+  }
+  // A retention table: a row per weekly cohort, its size in its name, a share per later week.
+  if (/cohort/.test(panel.sql ?? "")) {
+    return {
+      ...base,
+      stepSeconds: 0,
+      series: [],
+      columns: ["W1", "W2", "W3"],
+      rows: [
+        { group: { "Cohort (week of)": "2026-10-05 · 40 users" }, values: [0.5, 0.25, 0.1] },
+        { group: { "Cohort (week of)": "2026-10-12 · 32 users" }, values: [0.4, 0.2, null] },
+        { group: { "Cohort (week of)": "2026-10-19 · 12 users" }, values: [0.3, null, null] },
+      ],
+    };
+  }
   if (/toDate\(/.test(panel.sql ?? "")) {
     const first = Math.floor(window.startMs / DAY) * DAY;
     const days: number[] = [];
@@ -542,6 +628,11 @@ function fixtureSqlPanel(panel: Panel, window: TimeWindow): PanelResult {
     const failed = [0, 0, 1, 3439, 5479, 17, 2];
     const at = (i: number, from: number[]) => from[from.length - days.length + i] ?? from[0]!;
     const timestamps = days.map((d) => d / 1000);
+    // A figure's trend: one line, named by the figure's alias.
+    const alias = /AS "([^"]+)"/.exec(panel.sql ?? "")?.[1];
+    if (alias) {
+      return { ...base, stepSeconds: 3600, bucketSeconds: 86_400, bucketTimezone: "UTC", series: [{ label: alias, group: {}, timestamps, values: days.map((_, i) => 30 + ((i * 5) % 13)), value: null }] };
+    }
     return {
       ...base,
       stepSeconds: 3600,
@@ -1106,13 +1197,17 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         const make = (scale: number, seed: number, group: Record<string, string>) => [
           { ...health("api", req.window, 42 * scale, 0.012 / scale, 3 + seed, 86 / scale), group },
           { ...health("worker", req.window, 6 * scale, 0.004, 5 + seed, 240), group },
+          // The demo's sample app: the inventory service the toured trace crosses into.
+          ...(options.crossService ? [{ ...health("inventory", req.window, 6 * scale, 0.001, 2 + seed, 21), group }] : []),
         ];
         const all = groupBy.length
           ? fixtureGroups(groupBy, req).flatMap((group, index) => make(1 / (index + 1), index * 7, group))
           : make(1, 0, {});
         const services = req.services?.length ? all.filter((s) => req.services!.includes(s.name)) : all;
+        // A Reliant daemon's operator row; the demo's sample app has no daemon.
         const daemon: ServiceHealth = { ...health("reliant-daemon", req.window, 0, 0, 9, 0), requestCount: 0, requestRate: 0, errorLogCount: 3, source: "daemon", operatorData: true };
-        return { services: req.services?.length || groupBy.length ? services : [...services, daemon], trendStepSeconds };
+        const withDaemon = !(req.services?.length || groupBy.length) && !options.crossService;
+        return { services: withDaemon ? [...services, daemon] : services, trendStepSeconds };
       }),
     searchLogs: (req) =>
       call("SearchLogs", req, () => {

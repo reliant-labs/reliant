@@ -30,6 +30,8 @@ import { consolePath, withSearch, type ConsolePage } from "../../Console/paths";
 import { BUTTON_SECONDARY } from "../Dashboards/parts";
 import { useAskAgentMode } from "./askAgentMode";
 import { askAgentCommands, askAgentPlaybook, buildAskReliantPrompt, type AskIntent, type AskSubject } from "./askReliantPrompt";
+import { SEGMENTED, segmentTone } from "../../controlStyles";
+import { ReliantWorkflowNote } from "./ReliantWorkflowNote";
 
 /** Reliant's web app, where the console's chat actions run. */
 export const RELIANT_APP_URL = "https://app.reliantlabs.io";
@@ -163,7 +165,7 @@ export function AskAgentSheet({ subject, intent: initialIntent, forgeProject, en
       >
         <div className="space-y-5" data-testid="ask-agent-sheet" data-subject-kind={subject.kind}>
           <Section title="Paste into your agent">
-            <div role="radiogroup" aria-label="What the agent should do" className="inline-flex rounded-md border border-border p-0.5 text-xs">
+            <div role="radiogroup" aria-label="What the agent should do" className={`${SEGMENTED} text-xs`}>
               {(["investigate", "fix"] as const).map((option) => (
                 <button
                   key={option}
@@ -171,7 +173,7 @@ export function AskAgentSheet({ subject, intent: initialIntent, forgeProject, en
                   role="radio"
                   aria-checked={intent === option}
                   onClick={() => setIntent(option)}
-                  className={`rounded px-2.5 py-1 ${intent === option ? "bg-ink/10 font-medium text-ink" : "text-ink-muted hover:text-ink"}`}
+                  className={`rounded px-2.5 py-1 ${segmentTone(intent === option)}`}
                   data-testid={`ask-agent-intent-${option}`}
                 >
                   {option === "investigate" ? "Investigate" : "Fix"}
@@ -208,6 +210,8 @@ export function AskAgentSheet({ subject, intent: initialIntent, forgeProject, en
               forge&apos;s MCP server covers introspection, skills, lint and generate; <code className="font-mono">{cli} obs</code> runs in your agent&apos;s shell.
             </p>
           </Section>
+
+          {(demo || standalone) && <ReliantWorkflowNote />}
 
           {standalone && (
             <p className="text-xs text-ink-muted" data-testid="ask-agent-login">

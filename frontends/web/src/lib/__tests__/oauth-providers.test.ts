@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import {
   REDIRECT_OAUTH_DISPLAY_NAMES,

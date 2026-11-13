@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
@@ -16,9 +17,11 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/streaming"
 )
 
@@ -52,6 +55,10 @@ func (s *Service) StreamChatUpdates(
 	rpcSpan := trace.SpanFromContext(ctx)
 	rpcSpan.SetAttributes(attribute.String("chat.id", chatID), attribute.Int64("chat.since_seq", sinceSeq))
 
+	// A shared chat's viewers follow it too (authz.WithViewerReads): every
+	// frame they get is shaped for a viewer (viewerChatSender).
+	ctx = authz.WithViewerReads(ctx)
+
 	// Verify user owns the chat before subscribing. A missing chat and
 	// another user's chat are deliberately the same NotFound: the client drops
 	// a refused chat instead of retrying it. The identity read here is also
@@ -69,8 +76,19 @@ func (s *Service) StreamChatUpdates(
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat == nil || chat.UserID != userID {
+	// Decided once, here, and every frame of the stream is shaped from it:
+	// a viewer of a shared chat follows it read-only (viewerChatSender: no
+	// tool result, no run output, no resolved value) and is not forwarded
+	// the owner's user-level updates. The tick below only asks whether the
+	// stream may go on (stillReadable); it never reshapes it.
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
 		return svcerr.NotFound("chat")
+	}
+	viewer := access.Viewer()
+	var out chatSender = stream
+	if viewer {
+		out = viewerChatSender{stream}
 	}
 
 	logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Opening chat stream",
@@ -105,6 +123,12 @@ func (s *Service) StreamChatUpdates(
 	// project-scoped user stream drops (see chatFocusFilter). Only a
 	// project-scoped client has any.
 	focus := newChatFocusFilter(s.deps.Repo, req.Msg.GetProjectId(), chatID)
+	if viewer {
+		focus = nil // the owner's user-level updates are theirs
+	}
+	// Each is decided as the user stream decides it (orgGate): an update
+	// about a chat of an org the caller may not read is not forwarded.
+	updateOrgs := newOrgGate(s.deps.Repo, userID, s.unassignedOrgRecheck)
 	var userUpdateCh <-chan streaming.UpdateEvent[db.UserUpdate]
 	if focus != nil && s.deps.UserUpdates != nil {
 		userUpdateSub := s.deps.UserUpdates.Subscribe(ctx, userID)
@@ -112,7 +136,8 @@ func (s *Service) StreamChatUpdates(
 		userUpdateCh = userUpdateSub.Events()
 	}
 
-	lastChatSeq, err := s.sendInitialChatSync(ctx, chat, sinceSeq, stream)
+	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
+	lastChatSeq, err := s.sendInitialChatSync(ctx, chat, sinceSeq, toolBodies, out)
 	if err != nil {
 		return err
 	}
@@ -139,6 +164,28 @@ func (s *Service) StreamChatUpdates(
 	heartbeatTicker := time.NewTicker(s.heartbeatInterval)
 	defer heartbeatTicker.Stop()
 
+	// The open's decision is re-asked while the stream lives: a chat of an
+	// org is its owner's only while they are a live member of it, and a
+	// removal must end a stream opened before it, not just refuse the next
+	// open. The row is re-read on every tick, owner and viewer alike: its
+	// org changes when the backfill stamps it and when its project moves to
+	// another org (control-plane docs/design/org-project-move.md §4.3), and
+	// a stream opened through a credential of the old org must not go on
+	// passing a stale check. That is one primary-key read per open stream
+	// per interval; membership answers are cached (orgs.CacheTTL), so the
+	// decision costs no round trip most of the time. A removal ends the
+	// stream within orgs.CacheTTL plus this interval, a move within this
+	// interval, and a failed check ends it too (authz fails closed).
+	reauthorizeTicker := time.NewTicker(s.reauthorizeInterval)
+	defer reauthorizeTicker.Stop()
+
+	// The transcript the live frames carried after the initial sync, by
+	// block kind, summed over the stream's life and put on the RPC span as
+	// it ends (the initial sync's own spans carry theirs).
+	// Live frames are always FULL (sendSingleChatUpdate).
+	liveSent := messageproto.TranscriptBytes{ToolBodies: reliantv1.ToolBodyMode_TOOL_BODY_MODE_FULL}
+	defer func() { rpcSpan.SetAttributes(liveSent.Attributes("transcript.live")...) }()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -150,7 +197,7 @@ func (s *Service) StreamChatUpdates(
 				continue
 			}
 			lastChatSeq = event.SequenceNumber
-			if err := s.sendSingleChatUpdate(event.Payload, lastChatSeq, stream); err != nil {
+			if err := s.sendSingleChatUpdate(event.Payload, lastChatSeq, &liveSent, out); err != nil {
 				return err
 			}
 
@@ -179,7 +226,7 @@ func (s *Service) StreamChatUpdates(
 			if !open {
 				deltaCh = nil
 			}
-			if err := s.sendStreamingDeltas(chatID, batch, lastChatSeq, stream); err != nil {
+			if err := s.sendStreamingDeltas(chatID, batch, lastChatSeq, out); err != nil {
 				return err
 			}
 
@@ -191,7 +238,7 @@ func (s *Service) StreamChatUpdates(
 				userUpdateCh = nil
 				continue
 			}
-			if !focus.matches(ctx, &event.Payload) {
+			if !focus.matches(ctx, &event.Payload) || !updateOrgs.allows(ctx, &event.Payload) {
 				continue
 			}
 			if err := stream.Send(&reliantv1.ChatStreamEvent{
@@ -204,13 +251,40 @@ func (s *Service) StreamChatUpdates(
 				return err
 			}
 
+		case <-reauthorizeTicker.C:
+			// The decision is made on the row as it is now, not the one
+			// the stream opened with: the backfill may have stamped its
+			// org, its project may have moved to another org, and a
+			// viewer's owner (or an admin) may have made it private. Each
+			// must end the stream within one interval rather than at the
+			// next reconnect.
+			refreshed, err := s.deps.Repo.GetChatRow(ctx, chatID)
+			switch {
+			case svcerr.IsNotFound(err):
+				return svcerr.NotFound("chat")
+			case err != nil:
+				// Fails closed: the client reopens, and the open decides.
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Could not re-read the chat; ending its stream",
+					"userID", userID, "chatID", shortID(chatID), "error", err)
+				return svcerr.Unavailable("could not re-check access to the chat")
+			}
+			chat = refreshed
+			if !stillReadable(ctx, userID, chat) {
+				logging.InfoContext(ctx, LOG_PREFIX_STREAM_CHAT+" Caller may no longer read the chat; ending its stream",
+					"userID", userID, "chatID", shortID(chatID))
+				return svcerr.NotFound("chat")
+			}
+
 		case <-heartbeatTicker.C:
 			if err := stream.Send(&reliantv1.ChatStreamEvent{
 				Event: &reliantv1.ChatStreamEvent_Heartbeat{
 					Heartbeat: &reliantv1.Heartbeat{Timestamp: time.Now().Unix()},
 				},
 			}); err != nil {
-				logging.ErrorContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to send heartbeat", "error", err)
+				// A failed send is the client gone or no longer reading; the
+				// stream's end is reported once, at the RPC edge, with its
+				// code (see sendStreamingDeltas).
+				logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to send heartbeat", "error", err)
 				return err
 			}
 		}
@@ -221,7 +295,7 @@ func (s *Service) StreamChatUpdates(
 // otherwise a replay of (sinceSeq, latest] — unless that replay should not be
 // attempted (see chatCursorNeedsSnapshot), which also gets a snapshot. It
 // returns the chat sequence the sync delivered up to.
-func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sinceSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (_ int64, err error) {
+func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sinceSeq int64, toolBodies reliantv1.ToolBodyMode, stream chatSender) (_ int64, err error) {
 	chatID := chat.ID
 	ctx, span := startSpan(ctx, "chat_stream.initial_sync", attribute.Int64("chat.since_seq", sinceSeq))
 	defer func() {
@@ -237,9 +311,14 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 		if err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to read the latest chat update sequence"))
 		}
-		if chatCursorNeedsSnapshot(sinceSeq, chatLatestSeq) {
+		compactedThrough, err := s.deps.Repo.GetChatCompactedThrough(ctx, chatID)
+		if err != nil {
+			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to read the chat's compaction watermark"))
+		}
+		if chatCursorNeedsSnapshot(sinceSeq, chatLatestSeq, compactedThrough) {
 			logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Cursor not replayable, sending snapshot",
-				"chatID", shortID(chatID), "chatSinceSeq", sinceSeq, "chatLatestSeq", chatLatestSeq)
+				"chatID", shortID(chatID), "chatSinceSeq", sinceSeq, "chatLatestSeq", chatLatestSeq,
+				"chatCompactedThrough", compactedThrough)
 			useSnapshot = true
 		}
 	}
@@ -249,7 +328,7 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 		// The cursor comes from the snapshot's own high-water mark, not
 		// chatLatestSeq above: the snapshot reads it again, later, and
 		// anything committed in between is in the snapshot.
-		snapshotSeq, err := s.sendChatSnapshot(ctx, chat, stream)
+		snapshotSeq, err := s.sendChatSnapshot(ctx, chat, toolBodies, stream)
 		if err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat snapshot"))
 		}
@@ -258,8 +337,20 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 
 	span.SetAttributes(attribute.String("chat_stream.sync", "replay"), attribute.Int64("chat.latest_sequence", chatLatestSeq))
 	if chatLatestSeq > sinceSeq {
-		if err := s.sendChatUpdateBatches(ctx, chatID, sinceSeq, chatLatestSeq, stream); err != nil {
+		overtaken, err := s.sendChatUpdateBatches(ctx, chatID, sinceSeq, chatLatestSeq, toolBodies, stream)
+		if err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat updates"))
+		}
+		if overtaken {
+			// Compaction passed the replay's position while it read: the
+			// batch it would have sent next may be missing rows, and was
+			// not sent. A snapshot replaces whatever the replay built.
+			span.SetAttributes(attribute.String("chat_stream.sync", "replay+snapshot"))
+			snapshotSeq, err := s.sendChatSnapshot(ctx, chat, toolBodies, stream)
+			if err != nil {
+				return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat snapshot"))
+			}
+			return snapshotSeq, nil
 		}
 	}
 	return chatLatestSeq, nil
@@ -275,37 +366,99 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 //     cursor belongs to another database, or to a chat whose update log was
 //     rebuilt; "replay nothing" sent no chat state at all, leaving the client
 //     on its stale cache with no signal that it was wrong.
-func chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq int64) bool {
-	return chatSinceSeq > chatLatestSeq || chatLatestSeq-chatSinceSeq > maxChatReplayGap
+//   - The cursor is BELOW the chat's compaction watermark: the ledger there
+//     keeps only each entity's newest update (store.CompactChatUpdates), so a
+//     replay would skip rows — a message update, a tool call's progress —
+//     and the client could not tell. A small gap on an idle chat is exactly
+//     this case: the cap above does not catch it.
+func chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq, chatCompactedThrough int64) bool {
+	return chatSinceSeq > chatLatestSeq || chatLatestSeq-chatSinceSeq > maxChatReplayGap || chatSinceSeq < chatCompactedThrough
 }
 
 // chatUpdateToProto converts a persisted chat update to its wire form.
-func chatUpdateToProto(update db.ChatUpdate) *reliantv1.ChatUpdateData {
+func chatUpdateToProto(update db.ChatUpdate, toolBodies reliantv1.ToolBodyMode) *reliantv1.ChatUpdateData {
 	return &reliantv1.ChatUpdateData{
 		UpdateType:     update.UpdateType,
 		SequenceNumber: update.SequenceNumber,
 		EntityId:       update.EntityID,
 		ChatId:         update.ChatID,
-		DataJson:       formatChatUpdateDataJSON(update.UpdateType, update.Data),
+		DataJson:       formatChatUpdateDataJSON(update.UpdateType, update.Data, toolBodies),
 		CreatedAt:      update.CreatedAt.Format(time.RFC3339Nano),
 	}
 }
 
-// sendSingleChatUpdate sends a single chat update event received from the UpdateHub.
-func (s *Service) sendSingleChatUpdate(update db.ChatUpdate, latestSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) error {
+// sendSingleChatUpdate sends a single chat update event received from the
+// UpdateHub, counting what it carried into sent.
+//
+// A live frame is always FULL, whatever mode the stream asked for: it arrives
+// one at a time while someone watches, and detailed mode expands an edit's
+// diff the moment it lands (dev-docs/design/chat-lazy-tool-bodies.md, owner
+// decision 2).
+func (s *Service) sendSingleChatUpdate(update db.ChatUpdate, latestSeq int64, sent *messageproto.TranscriptBytes, stream chatSender) error {
+	protoUpdate := chatUpdateToProto(update, reliantv1.ToolBodyMode_TOOL_BODY_MODE_FULL)
+	sent.AddChatUpdate(protoUpdate.UpdateType, protoUpdate.DataJson)
 	event := &reliantv1.ChatStreamEvent{
 		Event: &reliantv1.ChatStreamEvent_Updates{
 			Updates: &reliantv1.ChatUpdateBatch{
-				Updates:        []*reliantv1.ChatUpdateData{chatUpdateToProto(update)},
+				Updates:        []*reliantv1.ChatUpdateData{protoUpdate},
 				LatestSequence: latestSeq,
 			},
 		},
 	}
 	if err := stream.Send(event); err != nil {
-		logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to send chat update", "error", err)
+		// See sendStreamingDeltas: reported once, at the RPC edge.
+		logging.Debug(LOG_PREFIX_STREAM_CHAT+" Failed to send chat update", "error", err)
 		return err
 	}
 	return nil
+}
+
+// stillReadable is whether an open chat stream may go on: the read decision
+// again, on the row as it is now. It only ever ends a stream; the stream's
+// shape is the one decided at its open, so a later answer can never turn a
+// viewer's frames into the owner's.
+func stillReadable(ctx context.Context, userID string, chat *db.ChatRow) bool {
+	_, denied := authz.ReadChatAccess(ctx, userID, chat)
+	return denied == nil
+}
+
+// chatSender is where a chat stream's frames go: the stream itself, or, for
+// a viewer, viewerChatSender in front of it.
+type chatSender interface {
+	Send(*reliantv1.ChatStreamEvent) error
+}
+
+// viewerChatSender shapes every frame of a viewer's chat stream (control-plane
+// docs/design/org-sharing.md §5.1): the snapshot's transcript without tool
+// results and its runs without outputs, and each update through
+// messageproto.ViewerChatUpdate, the same rule the viewer's reads apply.
+// Streaming deltas are the model's own output and pass as they are.
+type viewerChatSender struct{ out chatSender }
+
+func (v viewerChatSender) Send(ev *reliantv1.ChatStreamEvent) error {
+	return v.out.Send(viewerChatEvent(ev))
+}
+
+// viewerChatEvent reshapes ev for a viewer, in place.
+func viewerChatEvent(ev *reliantv1.ChatStreamEvent) *reliantv1.ChatStreamEvent {
+	switch e := ev.GetEvent().(type) {
+	case *reliantv1.ChatStreamEvent_Snapshot:
+		snap := e.Snapshot
+		messageproto.ElideForViewer(snap.GetMessages())
+		for _, u := range snap.GetOtherUpdates() {
+			u.DataJson = messageproto.ViewerChatUpdate(u.GetUpdateType(), u.GetDataJson())
+		}
+		messageproto.ElideWorkflowStatesForViewer(snap.GetActiveWorkflows())
+	case *reliantv1.ChatStreamEvent_Updates:
+		for _, u := range e.Updates.GetUpdates() {
+			u.DataJson = messageproto.ViewerChatUpdate(u.GetUpdateType(), u.GetDataJson())
+		}
+	case *reliantv1.ChatStreamEvent_UserUpdates:
+		// Never sent to a viewer (the focus filter is off); if one were,
+		// it is the owner's and carries nothing for them.
+		e.UserUpdates.Updates = nil
+	}
+	return ev
 }
 
 // maxDeltaBatch bounds the deltas one frame carries, so a long backlog still
@@ -341,7 +494,7 @@ func drainDeltas(first streaming.StreamingDelta, ch <-chan streaming.StreamingDe
 
 // sendStreamingDeltas sends ephemeral streaming deltas, in order, as one
 // frame.
-func (s *Service) sendStreamingDeltas(chatID string, deltas []streaming.StreamingDelta, lastChatSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) error {
+func (s *Service) sendStreamingDeltas(chatID string, deltas []streaming.StreamingDelta, lastChatSeq int64, stream chatSender) error {
 	now := time.Now().Format(time.RFC3339Nano)
 	updates := make([]*reliantv1.ChatUpdateData, 0, len(deltas))
 	for _, delta := range deltas {
@@ -372,7 +525,12 @@ func (s *Service) sendStreamingDeltas(chatID string, deltas []streaming.Streamin
 		},
 	}
 	if err := stream.Send(event); err != nil {
-		logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to send streaming delta", "error", err, "chatID", shortID(chatID))
+		// A send fails when the client went away or stopped reading (a
+		// write deadline on a browser tab that froze: "i/o timeout"). The
+		// error ends the stream and the RPC edge logs that once, at the
+		// level its code calls for; an ERROR here as well was an issue per
+		// stalled tab (prod ebd5bc38).
+		logging.Debug(LOG_PREFIX_STREAM_CHAT+" Failed to send streaming delta", "error", err, "chatID", shortID(chatID))
 		return err
 	}
 	return nil
@@ -380,8 +538,8 @@ func (s *Service) sendStreamingDeltas(chatID string, deltas []streaming.Streamin
 
 // sendChatSnapshot builds and sends the chat's snapshot, returning the chat
 // sequence it is current as of.
-func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.ChatRow, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (int64, error) {
-	snapshot, latestSeq, err := s.buildChatSnapshot(ctx, chat)
+func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.ChatRow, toolBodies reliantv1.ToolBodyMode, stream chatSender) (int64, error) {
+	snapshot, latestSeq, err := s.buildChatSnapshot(ctx, chat, toolBodies)
 	if err != nil {
 		return 0, err
 	}
@@ -405,9 +563,23 @@ func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.ChatRow, stream
 }
 
 // sendChatUpdateBatches replays the chat updates in (startSeq, latestSeq].
-func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, startSeq, latestSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (err error) {
+//
+// Every batch is verified before it is sent. Compaction raises the chat's
+// watermark before it deletes anything under it, and the watermark only
+// rises, so a batch read from currentSeq is whole if the watermark, read
+// AFTER the batch, is still at or below currentSeq. If it is above, the batch
+// may be missing rows: it is not sent, and the replay stops with overtaken
+// true (the caller sends a snapshot). If the watermark cannot be read, the
+// replay fails without sending the batch, so the client's cursor never passes
+// a batch that was not verified and its reconnect resumes safely.
+func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, startSeq, latestSeq int64, toolBodies reliantv1.ToolBodyMode, stream chatSender) (overtaken bool, err error) {
 	ctx, span := startSpan(ctx, "chat_stream.replay", attribute.Int64("chat_stream.replay_from", startSeq), attribute.Int64("chat_stream.replay_to", latestSeq))
+	// What the replay sent, by block kind, over all its batches (after the
+	// stub policy).
+	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
 	defer func() {
+		span.SetAttributes(sent.Attributes("transcript")...)
+		span.SetAttributes(attribute.Bool("chat_stream.replay_overtaken", overtaken))
 		observe.RecordSpanError(span, err)
 		span.End()
 	}()
@@ -416,11 +588,18 @@ func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, star
 	for currentSeq < latestSeq {
 		updates, err := s.deps.Repo.GetUpdatesSince(ctx, chatID, currentSeq, chatReplayBatchSize)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		if len(updates) == 0 {
 			break
+		}
+		compactedThrough, err := s.deps.Repo.GetChatCompactedThrough(ctx, chatID)
+		if err != nil {
+			return false, fmt.Errorf("verify replay batch against the compaction watermark: %w", err)
+		}
+		if compactedThrough > currentSeq {
+			return true, nil
 		}
 
 		protoUpdates := make([]*reliantv1.ChatUpdateData, 0, len(updates))
@@ -429,7 +608,9 @@ func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, star
 			if update.SequenceNumber > maxSeq {
 				maxSeq = update.SequenceNumber
 			}
-			protoUpdates = append(protoUpdates, chatUpdateToProto(update))
+			protoUpdate := chatUpdateToProto(update, toolBodies)
+			sent.AddChatUpdate(protoUpdate.UpdateType, protoUpdate.DataJson)
+			protoUpdates = append(protoUpdates, protoUpdate)
 		}
 
 		event := &reliantv1.ChatStreamEvent{
@@ -441,13 +622,13 @@ func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, star
 			},
 		}
 		if err := stream.Send(event); err != nil {
-			return err
+			return false, err
 		}
 
 		currentSeq = maxSeq
 	}
 
-	return nil
+	return false, nil
 }
 
 // chatFocusFilter picks the user-level updates a chat stream forwards: those

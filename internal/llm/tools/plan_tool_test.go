@@ -2,12 +2,12 @@
 package tools
 
 import (
-	"database/sql"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,12 +26,12 @@ func TestPlanTools_MissingPlanErrorNamesTheRemedy(t *testing.T) {
 	createTestChat(t, repo, chatID)
 	ctx := createTestContext(t, chatID)
 
-	// The store must report a missing plan as sql.ErrNoRows so every caller's
+	// The store must report a missing plan as svcerr.NotFound so every caller's
 	// errors.Is branch fires.
 	_, err := repo.GetPlanByThreadID(ctx.Context, chatID)
 	require.Error(t, err)
-	require.ErrorIs(t, err, sql.ErrNoRows,
-		"missing plan must wrap sql.ErrNoRows; the tool layer branches on it")
+	require.True(t, svcerr.IsNotFound(err),
+		"missing plan must be svcerr.NotFound; the tool layer branches on it")
 
 	t.Run("list_tasks", func(t *testing.T) {
 		resp, err := (&ListTasksTool{repo: repo}).Execute(ctx, ListTasksParams{})

@@ -313,10 +313,10 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 	}
 
 	// Context-window pages and ranges.
-	if page, err := store.ListRecentMessagesInContextWindowBeforeSeq(ctx, o, f.mainCW1, 0, 1); err != nil || ids(page) != "[m7]" {
+	if page, err := store.ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx, o, f.mainCW1, 0, 1); err != nil || ids(page) != "[m7]" {
 		t.Fatalf("recent before 0 = %s, %v; want [m7]", ids(page), err)
 	}
-	if page, _ := store.ListRecentMessagesInContextWindowBeforeSeq(ctx, o, f.mainCW1, 7, 5); ids(page) != "[m4]" {
+	if page, _ := store.ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx, o, f.mainCW1, 7, 5); ids(page) != "[m4]" {
 		t.Fatalf("recent before 7 = %s; want [m4]", ids(page))
 	}
 	// Sibling ranges: the snapshot's filter (not main, never spawn), bounded

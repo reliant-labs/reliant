@@ -3,6 +3,8 @@ import {
   probeOAuthHelper,
   releaseOAuthHelper,
   requestOAuthHelper,
+  type OAuthHelperOutcome,
+  type OAuthHelperProblemReason,
 } from '@/lib/oauth-local'
 
 export interface UseOAuthAvailabilityOptions {
@@ -24,28 +26,44 @@ export interface UseOAuthAvailabilityReturn {
   /** True while a health check is in flight (web mode, while enabled). */
   loading: boolean
   /**
-   * Force a one-off availability check on demand (e.g. the panel's Retry
-   * button). Works regardless of `enabled` since it's an explicit user action.
+   * Check again now and restart the poll from a clean slate (backoff reset,
+   * stop lifted) — the panel's Retry button. Only acts while `enabled`.
    */
   recheck: () => void
+  /**
+   * Why the helper is not usable, from the most recent attempt; null while it
+   * is available or before the first answer. Lets the panel say what to DO
+   * ("install the desktop app") instead of only that it failed.
+   */
+  problem: OAuthHelperProblemReason | null
+  /**
+   * The hook stopped asking because the answer will not change by waiting
+   * (the account has no machine). `recheck` starts it again.
+   */
+  stopped: boolean
 }
 
 /**
- * How often the panel re-checks the helper while it is on screen — and so the
- * longest a dead helper can go unnoticed before the UI falls back to the
- * instructions. Exported so tests can drive the poll on a fake clock instead of
- * racing a wall clock.
+ * The first re-check after a failure, and the unit the delay doubles from. The
+ * longest a helper that just came up can go unnoticed is the current delay, so
+ * this stays short; exported so tests can drive the poll on a fake clock.
  */
 export const OAUTH_HELPER_POLL_INTERVAL_MS = 2000
-const HEALTH_TIMEOUT_MS = 2000
 
-// Identity-checked: a 200 alone proves only that SOMETHING holds port 19284,
-// and offering an OAuth flow to an unrelated dev server fails silently. See
-// probeOAuthHelper.
-async function pingHealth(): Promise<boolean> {
-  const health = await probeOAuthHelper(HEALTH_TIMEOUT_MS)
-  return !!health?.ready
-}
+/**
+ * Ceiling on the delay between re-checks. A failing poll used to fire every 2s
+ * forever — ~40 refused RPCs in a 5-minute stay on the model step, 250 in the
+ * worst session — so consecutive failures back off to here.
+ */
+export const OAUTH_HELPER_MAX_POLL_INTERVAL_MS = 30_000
+
+/**
+ * Consecutive "no machine is connected to your account" refusals after which
+ * the hook stops asking. That answer is about the account, not about timing:
+ * nothing changes until the user installs and starts something, and Retry
+ * covers the moment they do.
+ */
+export const OAUTH_HELPER_NO_MACHINE_STOP_AFTER = 2
 
 /**
  * Determines whether OAuth flows (Claude/Codex) can run.
@@ -73,97 +91,122 @@ export function useOAuthAvailability(
   const [available, setAvailable] = useState(isElectron)
   // Not "loading" until we actually probe (web + enabled).
   const [loading, setLoading] = useState(false)
+  const [problem, setProblem] = useState<OAuthHelperProblemReason | null>(null)
+  const [stopped, setStopped] = useState(false)
+  // Bumped by `recheck`: restarts the loop below from a clean slate (backoff
+  // reset, stop lifted), which is what an explicit Retry means.
+  const [attempt, setAttempt] = useState(0)
 
-  const check = useCallback(async () => {
+  const recheck = useCallback(() => {
     if (isElectron) {
       setAvailable(true)
       setLoading(false)
       return
     }
-    setLoading(true)
-    // An explicit retry ASKS again: the user may have started a daemon since
-    // the last attempt, and re-probing alone would never open a port.
-    const health = await requestOAuthHelper()
-    setAvailable(!!health?.ready)
-    setLoading(false)
+    setStopped(false)
+    setAttempt((n) => n + 1)
   }, [isElectron])
 
-  // Ask the daemon to OPEN the port when the panel appears, then confirm it is
-  // reachable here.
+  // Ask the daemon to OPEN the port when the panel appears, confirm it is
+  // reachable here, then keep checking — in BOTH directions — for as long as
+  // the panel is on screen.
   //
   // Requesting rather than merely probing is what removes the second terminal
   // command: a connected daemon on this machine opens the port on demand, so
   // `reliant auth serve` is only needed when the daemon is remote or absent.
   // The request is also the co-location test — see requestOAuthHelper.
   //
+  // The poll runs both ways because `available` is a live signal, not a latch:
+  // if the user Ctrl-C's `reliant auth serve`, the panel must fall back to the
+  // instructions within one tick instead of offering a login that dies with a
+  // raw "Failed to fetch". A failed bare probe is not proof of absence — the
+  // port may still be opening, or may have closed on an idle timeout — so the
+  // tick ASKS again before it reports false, which is also what reopens it.
+  //
   // In Electron we never touch the network; while disabled we stay quiet so
   // nothing fires for users who never chose the local-OAuth path.
   useEffect(() => {
     if (isElectron || !enabled) return
     let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let failures = 0
+    let noMachineRefusals = 0
+    let heldOpen = false
+
+    const apply = (outcome: OAuthHelperOutcome) => {
+      if (outcome.ready) {
+        failures = 0
+        noMachineRefusals = 0
+        heldOpen = true
+        setAvailable(true)
+        setProblem(null)
+        return
+      }
+      heldOpen = false
+      failures += 1
+      noMachineRefusals =
+        outcome.reason === 'no_machine' ? noMachineRefusals + 1 : 0
+      setAvailable(false)
+      setProblem(outcome.reason)
+    }
+
+    const scheduleNext = () => {
+      if (cancelled) return
+      if (noMachineRefusals >= OAUTH_HELPER_NO_MACHINE_STOP_AFTER) {
+        setStopped(true)
+        return
+      }
+      const delay = Math.min(
+        OAUTH_HELPER_POLL_INTERVAL_MS * 2 ** Math.max(0, failures - 1),
+        OAUTH_HELPER_MAX_POLL_INTERVAL_MS,
+      )
+      timer = setTimeout(() => void tick(), delay)
+    }
+
+    // Whatever the check throws is "not running", never a halt: a poll that
+    // dies on one rejection (a failed lazy import, an unexpected RPC error)
+    // would stop re-checking for the rest of the panel's life.
+    const check = async (): Promise<OAuthHelperOutcome> => {
+      try {
+        const health = await probeOAuthHelper()
+        return health?.ready ? { ready: true, health } : await requestOAuthHelper()
+      } catch {
+        return { ready: false, reason: 'not_running' }
+      }
+    }
+
+    const tick = async () => {
+      const outcome = await check()
+      if (cancelled) return
+      apply(outcome)
+      scheduleNext()
+    }
+
     void (async () => {
       setLoading(true)
-      const health = await requestOAuthHelper()
+      let outcome: OAuthHelperOutcome
+      try {
+        outcome = await requestOAuthHelper()
+      } catch {
+        outcome = { ready: false, reason: 'not_running' }
+      }
       if (cancelled) return
-      setAvailable(!!health?.ready)
+      apply(outcome)
       setLoading(false)
+      scheduleNext()
     })()
+
     return () => {
       cancelled = true
+      if (timer) clearTimeout(timer)
       // Release the port when the panel goes away. The daemon's idle timeout
       // is the backstop for a tab that closes without unmounting; this is the
-      // fast path that keeps the listener's life equal to the task.
-      void releaseOAuthHelper()
+      // fast path that keeps the listener's life equal to the task. Skipped
+      // when nothing was opened: with no machine the release is itself a
+      // refused RPC.
+      if (heldOpen) void releaseOAuthHelper()
     }
-  }, [enabled, isElectron])
+  }, [enabled, isElectron, attempt])
 
-  // Poll while the panel is on screen, in BOTH directions.
-  //
-  // This used to stop once the helper answered (`available` was in the guard
-  // and the interval only ever set it to true), which made `available` a latch
-  // rather than a live signal. If the user then Ctrl-C'd `reliant auth serve`,
-  // the panel kept offering "Login with Codex" and the click died with a raw
-  // "Failed to fetch" — no explanation and no route back to the instructions
-  // that would fix it.
-  //
-  // `available` is deliberately NOT a dependency: it would tear down and
-  // recreate the interval on every flip, and the poll must run at a steady
-  // cadence regardless of the current state.
-  useEffect(() => {
-    if (isElectron || !enabled) return
-    let inFlight = false
-    const id = setInterval(async () => {
-      // Overlapping ticks would let a slow re-open be judged by a probe fired
-      // before it finished — the same race this guard exists to close.
-      if (inFlight) return
-      inFlight = true
-      try {
-        if (await pingHealth()) {
-          setAvailable(true)
-          return
-        }
-        // A bare probe FAILING does not mean the helper is unavailable — it
-        // may mean the port is not open yet, or not open any more.
-        //
-        // This poll used to `setAvailable(await pingHealth())` directly, which
-        // made it the last writer over the request above: the request asks the
-        // daemon to bind the port (a round trip through the gateway), the
-        // first tick fires before that lands, probes nothing, and latches
-        // `false`. Because a probe never ASKS, it could not recover — so a
-        // healthy local daemon showed the `auth serve` instructions forever.
-        //
-        // Asking again on failure is what makes this self-correcting: it
-        // reopens a port closed by an idle timeout, a daemon restart, or a
-        // Ctrl-C'd `auth serve`, and it cannot mistake "still opening" for
-        // "unavailable". Only when the ASK also fails do we report false —
-        // which is the honest signal the instructions should key off.
-        setAvailable(!!(await requestOAuthHelper())?.ready)
-      } finally {
-        inFlight = false
-      }
-    }, OAUTH_HELPER_POLL_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [isElectron, enabled])
-
-  return { available, loading, recheck: check }
+  return { available, loading, recheck, problem, stopped }
 }

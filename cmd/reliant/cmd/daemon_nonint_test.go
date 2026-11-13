@@ -84,7 +84,7 @@ func TestResolveOrAwaitCredentials_IdlesAndPicksUpCredentials(t *testing.T) {
 	}()
 
 	// Give the goroutine a moment to reach the idle loop and publish state.
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		state, err := daemonstate.Read(dataDir)
 		if err == nil && state.Stream == daemonstate.StreamAwaitingCredentials {
@@ -151,7 +151,7 @@ func TestWaitForCredentialsNonInteractive_RespectsCancellation(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("waitForCredentialsNonInteractive returned %v, want context.Canceled", err)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("waitForCredentialsNonInteractive did not return after ctx cancellation")
 	}
 

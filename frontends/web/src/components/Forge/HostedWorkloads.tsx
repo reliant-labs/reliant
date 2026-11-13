@@ -10,6 +10,7 @@
 import { AlertTriangle, CheckCircle2, CircleDashed, Loader2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import { inFlight, verdictBusy } from "@/components/Apps/appParts";
 import Tooltip from "@/components/forge-ui/tooltip";
 import { cn } from "@/lib/utils";
 import { verdictCertainty, verdictExplanation, verdictLabel, type HostedVerdict } from "@/services/forge/topology";
@@ -41,17 +42,24 @@ const VERDICT_ICON: Record<HostedVerdict, LucideIcon> = {
 export function VerdictChip({
   verdict,
   reason,
+  deploying = false,
   testId,
 }: {
   verdict: HostedVerdict;
   reason?: string;
+  /** A deploy run for this environment is in progress (when the surface knows). */
+  deploying?: boolean;
   testId?: string;
 }) {
   const certainty = verdictCertainty(verdict);
   const style = CERTAINTY_STYLES[certainty];
   const label = verdictLabel(verdict);
-  const Icon = VERDICT_ICON[verdict];
-  const detail = reason ? `${verdictExplanation(verdict)} Control plane: ${reason}.` : verdictExplanation(verdict);
+  // In flight, the icon is the spinner and it spins: the same rule (appParts
+  // inFlight) that turns the Apps list's dot into a ring.
+  const busy = inFlight(verdict, deploying);
+  const Icon = busy ? Loader2 : VERDICT_ICON[verdict];
+  const explanation = deploying && busy && !verdictBusy(verdict) ? `A deploy is in progress. ${verdictExplanation(verdict)}` : verdictExplanation(verdict);
+  const detail = reason ? `${explanation} Control plane: ${reason}.` : explanation;
   return (
     <Tooltip content={detail}>
       <span
@@ -61,9 +69,13 @@ export function VerdictChip({
         )}
         data-verdict={verdict}
         data-certainty={certainty}
+        data-busy={busy ? "true" : undefined}
         data-testid={testId}
       >
-        <Icon className={cn("h-3 w-3 shrink-0", style.foreground)} aria-hidden="true" />
+        <Icon
+          className={cn("h-3 w-3 shrink-0", style.foreground, busy && "animate-spin motion-reduce:animate-none")}
+          aria-hidden="true"
+        />
         {label}
       </span>
     </Tooltip>

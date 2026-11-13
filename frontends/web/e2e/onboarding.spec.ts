@@ -392,7 +392,7 @@ test.describe('Onboarding Flow', () => {
     // it now reads as a claim about POSITION that is no longer true: the
     // panel sits at the bottom of the step, not inside the list.
     await expect(
-      dialog.getByText('Install Reliant on that machine', { exact: true }),
+      dialog.getByText('Download / install', { exact: true }),
     ).toBeVisible({ timeout: 5_000 });
     // .first(): the folded "Not seeing a code?" hint repeats the command.
     await expect(dialog.getByText('reliant daemon start', { exact: true }).first()).toBeVisible();
@@ -552,7 +552,7 @@ test.describe('Onboarding Flow', () => {
     // ProvisioningGate's "nothing to do" branch exits onboarding by itself
     // (#289); no Continue button is rendered on this path.
     listProjects.release();
-    await expect(page).toHaveURL((url) => url.pathname === '/' && url.searchParams.get('tour') === 'pick', { timeout: 10_000 });
+    await expect(page).toHaveURL((url) => url.pathname === '/' && url.searchParams.get('start') === 'chat' && !url.searchParams.has('tour'), { timeout: 10_000 });
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('workspace-state') ?? '{}').state?.lastProjectId)).toBe('proj_existing');
     await expect(dialog).toBeHidden();
     expect(createProjectCalls).toEqual([]);
@@ -879,7 +879,7 @@ test.describe('Onboarding – Project-choice branch selection', () => {
         await dialog.getByRole('button', { name: 'Continue' }).click();
       }
 
-      await expect(page).toHaveURL((url) => url.pathname === '/' && url.searchParams.get('tour') === 'pick', { timeout: 10_000 });
+      await expect(page).toHaveURL((url) => url.pathname === '/' && url.searchParams.get('start') === 'chat' && !url.searchParams.has('tour'), { timeout: 10_000 });
       await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('workspace-state') ?? '{}').state?.lastProjectId)).toBe('proj_default');
       await expect(dialog).toBeHidden();
     });
@@ -940,7 +940,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
 
     await dialog.getByRole('button', { name: 'Use your own computer' }).click();
     await expect(
-      dialog.getByText('Install Reliant on that machine', { exact: true }),
+      dialog.getByText('Download / install', { exact: true }),
     ).toBeVisible({ timeout: 5_000 });
   });
 });

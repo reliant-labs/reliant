@@ -80,6 +80,14 @@ type ToolStatusRequest struct {
 // ToolStatusResponse is ToolStatusCommand's answer.
 type ToolStatusResponse struct {
 	State ToolRequestState `json:"state"`
+	// Resent reports that the daemon sent the request's result again along
+	// with this answer. Every daemon that answers tool.status does that for
+	// "completed" (and says so here once it knows the field). A daemon that
+	// retains a delivered run step's result for a while
+	// (daemonruntime.resultRetainTTL) also does it for "delivered", and only
+	// this field tells the two "delivered"s apart: from a daemon that never
+	// sets it, "delivered" means the result is gone.
+	Resent bool `json:"resent,omitempty"`
 }
 
 // ToolRequestState is what a daemon knows about one tool request.
@@ -193,12 +201,24 @@ func (r *NATSDaemonRouter) awaitRedelivery(
 	ctx context.Context, inbox *replyInbox, userID, daemonID string,
 	request *ToolExecutionRequest, interrupted *ToolExecutionResponse, deadline time.Time,
 ) (*ToolExecutionResponse, dispatchOutcome, error) {
-	start := time.Now()
 	logging.InfoContext(ctx, "[DaemonRouter] daemon stream dropped under a tool request; waiting for its result to be redelivered",
 		"user_id", userID, "daemon_id", daemonID, "request_id", request.RequestID, "tool", request.ToolName,
 		"deadline", deadline)
+	return r.followToolResult(ctx, inbox, userID, daemonID, request.RequestID, interrupted, deadline)
+}
+
+// followToolResult waits on inbox, requestID's result subject, for the result
+// of a request daemonID is running or holds: awaitRedelivery's wait, and
+// ReattachToolRequest's. interrupted is what to report, with a note, when the
+// result cannot come.
+func (r *NATSDaemonRouter) followToolResult(
+	ctx context.Context, inbox *replyInbox, userID, daemonID, requestID string,
+	interrupted *ToolExecutionResponse, deadline time.Time,
+) (*ToolExecutionResponse, dispatchOutcome, error) {
+	start := time.Now()
+	request := &ToolExecutionRequest{RequestID: requestID}
 	delivered := func(resp *ToolExecutionResponse) (*ToolExecutionResponse, dispatchOutcome, error) {
-		logging.InfoContext(ctx, "[DaemonRouter] tool result redelivered after its daemon stream dropped",
+		logging.InfoContext(ctx, "[DaemonRouter] tool result redelivered",
 			"user_id", userID, "daemon_id", daemonID, "request_id", request.RequestID,
 			"waited", time.Since(start).Round(time.Millisecond))
 		return resp, dispatchFinal, nil
@@ -330,25 +350,144 @@ func (r *NATSDaemonRouter) awaitDaemonOrReply(ctx context.Context, inbox *replyI
 // answered with a failure (it does not know the command) is reported as
 // errDaemonReportedFailure; anything else is the transport's error.
 func (r *NATSDaemonRouter) toolRequestState(ctx context.Context, userID, daemonID, requestID string) (ToolRequestState, error) {
+	status, err := r.toolRequestStatus(ctx, userID, daemonID, requestID)
+	return status.State, err
+}
+
+// toolRequestStatus is toolRequestState with the daemon's whole answer.
+func (r *NATSDaemonRouter) toolRequestStatus(ctx context.Context, userID, daemonID, requestID string) (ToolStatusResponse, error) {
 	payload, err := json.Marshal(ToolStatusRequest{RequestID: requestID})
 	if err != nil {
-		return "", err
+		return ToolStatusResponse{}, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, toolStatusTimeout)
 	defer cancel()
 	data, cmdID, err := r.buildDaemonCommand(ctx, ToolStatusCommand, payload, int32(toolStatusTimeout.Milliseconds()))
 	if err != nil {
-		return "", err
+		return ToolStatusResponse{}, err
 	}
 	reply, err := r.sendDaemonCommandData(ctx, userID, daemonID, ToolStatusCommand, data, cmdID, int32(toolStatusTimeout.Milliseconds()))
 	if err != nil {
-		return "", err
+		return ToolStatusResponse{}, err
 	}
 	var status ToolStatusResponse
 	if err := json.Unmarshal(reply, &status); err != nil {
-		return "", fmt.Errorf("%w: unreadable %s answer: %v", errDaemonReportedFailure, ToolStatusCommand, err)
+		return ToolStatusResponse{}, fmt.Errorf("%w: unreadable %s answer: %v", errDaemonReportedFailure, ToolStatusCommand, err)
 	}
-	return status.State, nil
+	return status, nil
+}
+
+// Reattaching to a tool request from another process.
+//
+// awaitRedelivery covers a STREAM that drops under a call: the worker that
+// sent it is still waiting. A worker that goes away itself — every
+// reliant-temporal-worker rollout releases its in-flight activities — leaves
+// nobody waiting, and Temporal retries the activity on another worker. For a
+// run step that retry used to be refused outright (the command may have run),
+// pausing the run on every deploy. The daemon still has the command, though:
+// running, or finished with its result held. A caller that sent the request
+// under an id it can derive again (ToolRequest.RequestID) reattaches to it
+// here: subscribe to its result subject, ask the daemon what became of it, and
+// wait for the result while the daemon vouches for it. Nothing is ever sent
+// to run.
+
+var _ ToolRequestReattacher = (*NATSDaemonRouter)(nil)
+
+// ReattachToolRequest implements ToolRequestReattacher. The daemon is the
+// one selector resolves to now, which is the one the request went to for a
+// selector naming a machine by id (a run step's always does once its checkout
+// is resolved); another daemon does not know the request, and the call is not
+// attached.
+func (r *NATSDaemonRouter) ReattachToolRequest(ctx context.Context, userID, requestID string, selector *DaemonSelector) (*ToolExecutionResponse, bool, error) {
+	if !resultRequestIDPattern.MatchString(requestID) {
+		return nil, false, nil
+	}
+	daemonID, err := r.resolveDaemonID(ctx, userID, selector)
+	if err != nil {
+		logging.InfoContext(ctx, "[DaemonRouter] cannot reattach to a tool request: its machine does not resolve",
+			"user_id", userID, "request_id", requestID, "error", err)
+		return nil, false, nil
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(10 * time.Minute) // toolRequestRoundTrip's default
+	}
+	inbox, err := openReplyInbox(r.nc, toolResultSubject(userID, daemonID, requestID))
+	if err != nil {
+		logging.WarnContext(ctx, "[DaemonRouter] cannot reattach to a tool request: no result subscription",
+			"user_id", userID, "daemon_id", daemonID, "request_id", requestID, "error", err)
+		return nil, false, nil
+	}
+	defer inbox.close()
+
+	status, early, err := r.reattachStatus(ctx, inbox, userID, daemonID, requestID, earliest(deadline, time.Now().Add(DaemonReconnectGrace)))
+	if early != nil {
+		return early, true, nil
+	}
+	if err != nil {
+		// A daemon older than tool.status answers it with a failure, and one
+		// that cannot be reached cannot vouch for the request either.
+		logging.InfoContext(ctx, "[DaemonRouter] cannot reattach to a tool request: the daemon cannot say what became of it",
+			"user_id", userID, "daemon_id", daemonID, "request_id", requestID, "error", err)
+		return nil, false, nil
+	}
+	switch {
+	case status.State == ToolRequestRunning, status.State == ToolRequestCompleted:
+	case status.State == ToolRequestDelivered && status.Resent:
+	default:
+		// Unknown: the daemon restarted (or never got it). Delivered and not
+		// resent: a gateway took the result for a waiter that is gone, and
+		// this daemon keeps no copy. Either way no result is coming.
+		logging.InfoContext(ctx, "[DaemonRouter] cannot reattach to a tool request: the daemon holds neither it nor its result",
+			"user_id", userID, "daemon_id", daemonID, "request_id", requestID, "state", status.State)
+		return nil, false, nil
+	}
+
+	logging.InfoContext(ctx, "[DaemonRouter] reattached to a tool request an earlier process sent; waiting for its result",
+		"user_id", userID, "daemon_id", daemonID, "request_id", requestID, "state", status.State, "deadline", deadline)
+	msg := fmt.Sprintf("%s while waiting for tool request %q, which an earlier attempt sent; the request outcome is unknown",
+		ErrDaemonConnectionInterrupted, requestID)
+	interrupted := &ToolExecutionResponse{RequestID: requestID, IsError: true, ErrorCode: ErrorCodeDaemonInterrupted,
+		Content: msg, ErrorMessage: msg}
+	resp, _, err := r.followToolResult(ctx, inbox, userID, daemonID, requestID, interrupted, deadline)
+	if err != nil {
+		return nil, true, err
+	}
+	return resp, true, nil
+}
+
+// reattachStatus asks daemonID about requestID, riding out a daemon that is
+// briefly unreachable until by. A result that lands on inbox meanwhile is
+// returned as early. err wraps errDaemonReportedFailure when the daemon
+// answered and could not say (one too old to know tool.status).
+func (r *NATSDaemonRouter) reattachStatus(ctx context.Context, inbox *replyInbox, userID, daemonID, requestID string, by time.Time) (status ToolStatusResponse, early *ToolExecutionResponse, err error) {
+	for {
+		status, err = r.toolRequestStatus(ctx, userID, daemonID, requestID)
+		if err == nil || errors.Is(err, errDaemonReportedFailure) || ctx.Err() != nil {
+			return status, nil, err
+		}
+		msg, reachable, waitErr := r.awaitDaemonOrReply(ctx, inbox, userID, daemonID, by)
+		switch {
+		case waitErr != nil:
+			return status, nil, waitErr
+		case msg != nil:
+			resp, decodeErr := decodeToolReply(msg)
+			if decodeErr == nil && resp.ErrorCode != ErrorCodeDaemonInterrupted {
+				return status, resp, nil
+			}
+		case !reachable:
+			return status, nil, err
+		}
+		// Reachable, and the question still failed: pause before asking
+		// again, taking a result that lands meanwhile.
+		resp, done, nextErr := r.nextToolReply(ctx, inbox, earliest(by, time.Now().Add(reconnectProbeInterval)))
+		if done && nextErr == nil && resp.ErrorCode != ErrorCodeDaemonInterrupted {
+			return status, resp, nil
+		}
+		if !time.Now().Before(by) {
+			return status, nil, err
+		}
+	}
 }
 
 // decodeToolReply reads one tools.request.sync reply.

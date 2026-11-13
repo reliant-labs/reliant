@@ -19,6 +19,13 @@ import (
 func TestKillAllRunningKillsProcessesConcurrently(t *testing.T) {
 	const count = 4
 
+	// The production grace (3s) would make this test wait 3s for nothing: the
+	// claim is about concurrency, which a shorter grace shows just as well.
+	// Serial kills would take 2s against the 1s bound below.
+	grace := KillGraceTimeout
+	KillGraceTimeout = 500 * time.Millisecond
+	t.Cleanup(func() { KillGraceTimeout = grace })
+
 	m := &BackgroundManager{processes: map[string]*BackgroundProcess{}}
 	for i := 0; i < count; i++ {
 		id := fmt.Sprintf("proc-%d", i)
@@ -52,11 +59,17 @@ func TestKillAllRunningKillsProcessesConcurrently(t *testing.T) {
 
 // Nothing to kill must not cost anything.
 func TestKillAllRunningWithNoRunningProcessesReturnsImmediately(t *testing.T) {
+	// A kill would cost a whole grace: far longer than the bound below, so
+	// a shutdown that killed something fails however busy the machine is.
+	grace := KillGraceTimeout
+	KillGraceTimeout = time.Minute
+	t.Cleanup(func() { KillGraceTimeout = grace })
+
 	m := &BackgroundManager{processes: map[string]*BackgroundProcess{
 		"done": {ID: "done", Status: "completed"},
 	}}
 
 	start := time.Now()
 	m.KillAllRunning()
-	require.Less(t, time.Since(start), time.Second)
+	require.Less(t, time.Since(start), 30*time.Second)
 }

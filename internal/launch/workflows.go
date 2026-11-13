@@ -48,6 +48,9 @@ import (
 // refusal is an svcerr.InvalidArgument naming the key.
 func ValidateWorkflowParamStructure(params map[string]*structpb.Value) error {
 	for key, value := range params {
+		if key == "__reset_keys" {
+			return svcerr.InvalidArgument("__reset_keys is reserved for runtime reset metadata")
+		}
 		if strings.Contains(key, ".") {
 			return svcerr.InvalidArgument(fmt.Sprintf("workflow_params contains dotted key %q; use nested objects instead (for example {\"agent\": {\"model\": ...}})", key))
 		}
@@ -260,7 +263,13 @@ func (l *Launcher) buildWorkflowInputs(
 		layered[key] = value
 	}
 	for key, value := range send {
-		layered[key] = value
+		// Null removes the stored override, exposing the preset/schema baseline.
+		// Omission is deliberately different: it retains the stored selection.
+		if value == nil {
+			delete(layered, key)
+		} else {
+			layered[key] = value
+		}
 	}
 	for key, v := range layered {
 		// An engine-injected input is the engine's to set: validation skips
@@ -292,6 +301,11 @@ func (l *Launcher) buildWorkflowInputs(
 	protoInputs := l.loadWorkflowInputs(ctx, scope, workflowName)
 	if len(protoInputs) > 0 {
 		initialData = v2.ApplyDefaults(initialData, protoInputs)
+	}
+	for key, value := range send {
+		if value == nil && initialData[key] == nil && !workflow.RuntimeInjectedInputs[key] {
+			return nil, svcerr.FailedPrecondition(fmt.Sprintf("Cannot reset %q: this workflow has no default value for it. Choose an explicit value instead.", key))
+		}
 	}
 
 	// Normalize model inputs: convert any remaining string model values to {id: string} objects.
@@ -415,6 +429,11 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 			continue
 		}
 		update[key] = value
+	}
+	// Resolve deletion sentinels separately from the raw selection patch. A live
+	// run needs a concrete value; nil is not a request to reapply its defaults.
+	if err := l.ResolveInputResets(ctx, userID, chat, workflowName, chat.SelectedPresets, update); err != nil {
+		return nil, err
 	}
 	if protoInputs := l.loadWorkflowInputs(ctx, chatScope(userID, chat, workflowName), workflowName); len(protoInputs) > 0 {
 		NormalizeModelInputs(update, protoInputs)
@@ -591,7 +610,7 @@ func (l *Launcher) validateChatWorkflowInputsAt(ctx context.Context, userID stri
 	// explained error in the chat (models.ProviderUnavailableError.Explain).
 	modelSelectors := ExtractModelSelectors(finalInputs, wf.GetInputs(), "")
 	for inputPath, selector := range modelSelectors {
-		if err := drivers.ValidateModelSelector(ctx, userID, selector); err != nil {
+		if err := drivers.ValidateModelSelector(ctx, drivers.PersonalScope(userID), selector); err != nil {
 			if errors.Is(err, drivererrors.ErrNoServableProvider) {
 				logging.InfoContext(ctx, "Model input has no servable provider now; leaving it to the run to explain",
 					"input", inputPath, "workflow", workflowName, "reason", err.Error())
@@ -631,7 +650,7 @@ func (l *Launcher) SubstituteUnservableModels(ctx context.Context, userID string
 	if err != nil {
 		return nil
 	}
-	available, err := drivers.LookupAvailableDrivers(ctx, userID)
+	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
 	if err != nil {
 		// Validation reports the failed settings read.
 		return nil

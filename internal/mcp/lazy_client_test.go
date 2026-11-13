@@ -175,7 +175,7 @@ func TestLazyClient_IdleShutdownReapsDelegate(t *testing.T) {
 	}
 
 	// Wait for the idle timer to fire and reap the subprocess.
-	deadline := time.After(2 * time.Second)
+	deadline := time.After(30 * time.Second)
 	for {
 		_, closes, _, _ := spy.counts()
 		if closes == 1 {

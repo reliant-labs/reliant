@@ -46,9 +46,15 @@ func newTestHub(t *testing.T) *NATSHub {
 	return hub
 }
 
+// drainSettle is how long drainAll keeps reading once the delta the test
+// published last has arrived, so anything delivered after it is still seen.
+const drainSettle = 200 * time.Millisecond
+
 // drainAll reads deltas off a subscription until it has been idle for quiet,
-// reassembling the per-block text so we can assert nothing was lost.
-func drainAll(sub Subscription, quiet time.Duration) []StreamingDelta {
+// reassembling the per-block text so we can assert nothing was lost. Once a
+// delta of type last arrives, idle means drainSettle instead: waiting out the
+// whole quiet window after the stream's end was most of each test's run time.
+func drainAll(sub Subscription, quiet time.Duration, last DeltaType) []StreamingDelta {
 	var got []StreamingDelta
 	timer := time.NewTimer(quiet)
 	defer timer.Stop()
@@ -61,6 +67,9 @@ func drainAll(sub Subscription, quiet time.Duration) []StreamingDelta {
 			got = append(got, d)
 			if !timer.Stop() {
 				<-timer.C
+			}
+			if d.DeltaType == last {
+				quiet = drainSettle
 			}
 			timer.Reset(quiet)
 		case <-timer.C:
@@ -96,7 +105,7 @@ func TestConsumeLoop_NoLossUnderBackpressure(t *testing.T) {
 	// Consumer deliberately starts draining only after a delay, forcing the
 	// producer side to hit backpressure and coalesce.
 	time.Sleep(200 * time.Millisecond)
-	got := drainAll(sub, 2*time.Second)
+	got := drainAll(sub, 2*time.Second, DeltaTypeContentBlockStop)
 
 	if len(got) == 0 {
 		t.Fatal("received no deltas")
@@ -153,7 +162,7 @@ func TestConsumeLoop_StructuralDeltasNeverCoalesced(t *testing.T) {
 		hub.Publish(ctx, chatID, d)
 	}
 
-	got := drainAll(sub, 2*time.Second)
+	got := drainAll(sub, 2*time.Second, DeltaTypeMessageStop)
 
 	var structural []DeltaType
 	for _, d := range got {
@@ -189,11 +198,13 @@ func TestConsumeLoop_UnsubscribeNoPanic(t *testing.T) {
 	// Tear down without draining — the loop may be parked in a blocking send.
 	sub.Unsubscribe()
 
-	// Give the loop a moment to observe cancellation and close cleanly.
-	time.Sleep(200 * time.Millisecond)
-	// Reaching here without a panic is the assertion; also confirm the
-	// subscriber was deregistered.
-	if c := hub.SubscriberCount(chatID); c != 0 {
-		t.Errorf("SubscriberCount after unsubscribe = %d, want 0", c)
+	// Reaching the deregistration without a panic is the assertion: the
+	// loop observes cancellation and closes cleanly.
+	deadline := time.Now().Add(30 * time.Second)
+	for hub.SubscriberCount(chatID) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("SubscriberCount after unsubscribe = %d, want 0", hub.SubscriberCount(chatID))
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }

@@ -404,12 +404,13 @@ run_step() {
     build) go build ./... ;;
     webbuild) task build:web:verify ;;
     typecheck) npm --prefix frontends/web run --silent typecheck ;;
-    vet) go vet ./... ;;
+    vet) bash scripts/vet.sh ./... ;;
     test-go)
       local pkgs
       pkgs=$(go_shard_packages | tr '\n' ' ')
       [ -n "${pkgs// /}" ] || { echo "test-go: shard $RG_GO_SHARD is empty; lower the shard count"; return 1; }
       echo "test-go${RG_GO_SHARD:+ shard $RG_GO_SHARD}: $(wc -w <<<"$pkgs") package pattern(s)"
+      pinned_forge_bin || { echo "test-go: could not build the pinned forge (go.mod's github.com/reliant-labs/forge/cmd/forge)"; return 1; }
       # shellcheck disable=SC2086 # one word per package
       task test -- $pkgs ;;
     test-web) task test:web ;;
@@ -418,6 +419,20 @@ run_step() {
     e2e) task test:e2e ;;
     *) echo "unknown step $1"; return 2 ;;
   esac
+}
+
+# pinned_forge_bin builds the forge go.mod pins ONCE, before the Go tests, and
+# exports it as FORGE_BIN, unless FORGE_BIN is already given. A test that runs
+# forge (cmd/reliant/cmd's pinnedForge) otherwise builds it inside its own
+# package's 5m budget: on a cold runner that build took 4m23s on main at
+# 922d5ed89, and the package timed out (#2005). Building here spends the
+# step's time, never a test's.
+pinned_forge_bin() {
+  [ -z "${FORGE_BIN:-}" ] || return 0
+  local dir
+  dir=$(mktemp -d "${TMPDIR:-/tmp}/release-gate-forge.XXXXXXXX") || return 1
+  GOFLAGS=-trimpath go build -o "$dir/forge" github.com/reliant-labs/forge/cmd/forge || return 1
+  export FORGE_BIN="$dir/forge"
 }
 
 sub=${1:-}; [ $# -gt 0 ] && shift

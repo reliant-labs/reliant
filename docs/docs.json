@@ -39,6 +39,7 @@
               "features/git-integration",
               "features/threads",
               "workflows/spawn",
+              "workflows/ambient-memory",
               "features/attachments",
               "features/processes"
             ]
@@ -207,6 +208,7 @@
               },
               "forge/hosting",
               "forge/secrets",
+              "forge/llm-provider",
               "forge/custom-domains",
               "forge/sign-in"
             ]

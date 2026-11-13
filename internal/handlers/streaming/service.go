@@ -42,6 +42,20 @@ type Deps struct {
 	// it the stream reads them from the chat update log on each tick.
 	// forge:optional-dep
 	ChatUpdates ChatUpdateSubscriber
+	// Orgs resolves the org an org feed (StreamOrgUpdates) follows and
+	// re-asks the caller's membership of it while it is open. Without one
+	// (a deployment with no control plane) there are no orgs and the feed
+	// is empty.
+	// forge:optional-dep
+	Orgs OrgFeedResolver
+}
+
+// OrgFeedResolver is what StreamOrgUpdates asks of org membership.
+// *orgs.Resolver is one.
+type OrgFeedResolver interface {
+	Named(ctx context.Context, userID, requested string) (string, error)
+	DefaultOrg(ctx context.Context, userID string) (string, error)
+	IsMember(ctx context.Context, userID, orgID string) (member, ok bool, err error)
 }
 
 // DeltaSubscriber subscribes to one chat's streaming deltas.
@@ -87,6 +101,24 @@ type Service struct {
 	// Always defaultHeartbeatInterval in production; a field only so a test
 	// can observe a real heartbeat frame without waiting 30 seconds for it.
 	heartbeatInterval time.Duration
+
+	// reauthorizeInterval is how often an open chat stream re-asks authz
+	// whether its caller may still read the chat. Always
+	// defaultReauthorizeInterval in production; a field so a test can watch
+	// a removal end a stream without waiting for it.
+	reauthorizeInterval time.Duration
+
+	// unassignedOrgRecheck bounds how often the user stream's org gate
+	// re-reads a resource it last found with no org (orgGate). Always
+	// defaultUnassignedOrgRecheck in production; a field so a test can
+	// watch a stamp take effect without waiting for it.
+	unassignedOrgRecheck time.Duration
+
+	// orgFeedPollInterval is how often an open org feed reads the org's
+	// new rows. The feed is coarse (a few rows per shared chat per turn),
+	// so it is read, not pushed. Always defaultOrgFeedPollInterval in
+	// production; a field so a test need not wait.
+	orgFeedPollInterval time.Duration
 }
 
 // New creates a new streaming service instance with the supplied Deps.
@@ -95,7 +127,8 @@ func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
-	return &Service{deps: deps, heartbeatInterval: defaultHeartbeatInterval}, nil
+	return &Service{deps: deps, heartbeatInterval: defaultHeartbeatInterval, reauthorizeInterval: defaultReauthorizeInterval,
+		unassignedOrgRecheck: defaultUnassignedOrgRecheck, orgFeedPollInterval: defaultOrgFeedPollInterval}, nil
 }
 
 // Name returns the service name for logging and registry.

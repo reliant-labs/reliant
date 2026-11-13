@@ -30,6 +30,7 @@ const runtime = vi.hoisted(() => ({
   enableAttribution: vi.fn(),
   disableTelemetry: vi.fn(),
   setTelemetryUser: vi.fn(),
+  grantAnalyticsConsent: vi.fn(),
   reportException: vi.fn(() => true),
   setGlobalAttributes: vi.fn(),
 }));
@@ -37,6 +38,7 @@ const runtime = vi.hoisted(() => ({
 vi.mock("@reliantlabs/forge-web-runtime", () => ({
   disableTelemetry: runtime.disableTelemetry,
   setTelemetryUser: runtime.setTelemetryUser,
+  grantAnalyticsConsent: runtime.grantAnalyticsConsent,
   reportException: runtime.reportException,
 }));
 vi.mock("@reliantlabs/forge-web-runtime/telemetry", () => ({
@@ -86,6 +88,7 @@ type Config = {
   replay?: boolean;
   replaySampleRate?: number;
   appClient?: string;
+  analytics?: string;
 };
 
 function lastConfig(): Config {
@@ -506,11 +509,13 @@ describe("the demo shell", () => {
   };
   afterEach(() => setNavigator({ doNotTrack: null, globalPrivacyControl: undefined }));
 
-  it("reports as forge-demo, still the reliant-web frontend (source maps)", () => {
-    const config = buildTelemetryConfig({ ...base, shell: "demo", demoTelemetry: "replay" });
+  it("reports as reliant-forge-demo; the demo's own build is the forge-demo frontend (source maps)", () => {
+    const config = buildTelemetryConfig({ ...base, shell: "demo", demoTelemetry: "replay", demoBuild: true });
     expect(config.serviceName).toBe(DEMO_SHELL_SERVICE_NAME);
-    expect(DEMO_SHELL_SERVICE_NAME).toBe("forge-demo");
-    expect(config.frontend).toBe("reliant-web");
+    expect(DEMO_SHELL_SERVICE_NAME).toBe("reliant-forge-demo");
+    expect(config.frontend).toBe("forge-demo");
+    // ?shell=demo in the app's own bundle: still reliant-web's source maps.
+    expect(buildTelemetryConfig({ ...base, shell: "demo", demoTelemetry: "replay" }).frontend).toBe("reliant-web");
     expect(buildTelemetryConfig({ ...base, shell: "forge" }).serviceName).toBe("forge-web");
     expect(buildTelemetryConfig(base).serviceName).toBe("reliant-web");
   });
@@ -525,8 +530,25 @@ describe("the demo shell", () => {
   it("starts anonymously with replay on by default", async () => {
     resetShellForTests("demo");
     expect(await initTelemetry()).toBe(true);
-    expect(lastConfig()).toMatchObject({ serviceName: "forge-demo", replay: true, replaySampleRate: 1 });
+    expect(lastConfig()).toMatchObject({ serviceName: "reliant-forge-demo", replay: true, replaySampleRate: 1 });
     expect(runtime.setTelemetryUser).not.toHaveBeenCalled();
+  });
+
+  it("runs the full analytics tier on its notice: consent granted before the SDK starts", async () => {
+    resetShellForTests("demo");
+    expect(await initTelemetry()).toBe(true);
+    expect(lastConfig().analytics).toBe("full");
+    expect(runtime.grantAnalyticsConsent).toHaveBeenCalledTimes(1);
+    expect(runtime.grantAnalyticsConsent.mock.invocationCallOrder[0]).toBeLessThan(runtime.initBrowserTelemetry.mock.invocationCallOrder[0]!);
+    expect(buildTelemetryConfig({ ...base, shell: "demo", demoTelemetry: "analytics" }).analytics).toBe("full");
+  });
+
+  it("leaves the app's own shells on forge's default tier, without consent", async () => {
+    expect(buildTelemetryConfig(base).analytics).toBeUndefined();
+    expect(buildTelemetryConfig({ ...base, shell: "forge" }).analytics).toBeUndefined();
+    resetShellForTests("forge");
+    expect(await initTelemetry()).toBe(true);
+    expect(runtime.grantAnalyticsConsent).not.toHaveBeenCalled();
   });
 
   it("records analytics without replay when DEMO_TELEMETRY=analytics, and nothing when off", async () => {
@@ -611,7 +633,7 @@ describe("the demo host on the production config document", () => {
     setRuntimeConfig(PROD_DOCUMENT);
     resetShellForTests("demo");
     expect(await initTelemetry()).toBe(true);
-    expect(lastConfig()).toMatchObject({ serviceName: "forge-demo", endpoint: "/_otel", replay: true, replaySampleRate: 1 });
+    expect(lastConfig()).toMatchObject({ serviceName: "reliant-forge-demo", endpoint: "/_otel", replay: true, replaySampleRate: 1 });
     // A relative endpoint is the demo host's own origin: no cross-origin ingest.
     expect(lastConfig().endpoint?.startsWith("/")).toBe(true);
   });
@@ -622,7 +644,7 @@ describe("the demo host on the production config document", () => {
     expect(shellOn("demo.reliantlabs.io")).toBe("reliant");
     resetShellForTests("demo");
     expect(await initTelemetry()).toBe(true);
-    expect(lastConfig()).toMatchObject({ serviceName: "forge-demo", endpoint: "/_otel", replay: false });
+    expect(lastConfig()).toMatchObject({ serviceName: "reliant-forge-demo", endpoint: "/_otel", replay: false });
 
     resetTelemetryForTests();
     runtime.initBrowserTelemetry.mockClear();
@@ -704,5 +726,71 @@ describe("initTelemetry: the landing attribution handoff", () => {
   it("leaves the runtime's own capture alone when nothing is held", async () => {
     await initTelemetry();
     expect(runtime.enableAttribution).not.toHaveBeenCalled();
+  });
+});
+
+describe("a console.error about an RPC failure the transport already decided on", () => {
+  // The SDK records any Error passed to console.error. Stand in for its
+  // wrapper: the mocked init wraps console.error the way the SDK does.
+  function installSdkWrapper(recorded: unknown[][]) {
+    runtime.initBrowserTelemetry.mockImplementationOnce(async () => {
+      const inner = console.error;
+      console.error = (...args: unknown[]) => {
+        recorded.push(args);
+        inner(...args);
+      };
+      return true;
+    });
+  }
+
+  let original: typeof console.error;
+  let printed: unknown[][];
+  beforeEach(() => {
+    original = console.error;
+    printed = [];
+    console.error = (...args: unknown[]) => void printed.push(args);
+  });
+  afterEach(() => {
+    resetTelemetryForTests();
+    console.error = original;
+  });
+
+  it("is logged but not recorded by the SDK", async () => {
+    const { ConnectError, Code } = await import("@connectrpc/connect");
+    const { noteRpcFailureDecided } = await import("../handledRpcFailures");
+    const recorded: unknown[][] = [];
+    installSdkWrapper(recorded);
+    await initTelemetry();
+
+    // What the transport saw, and what the caller holds: the runtime's
+    // normalized error wrapping it.
+    const seen = new ConnectError("file not found: /w/post.md", Code.NotFound);
+    noteRpcFailureDecided(seen);
+    const held = new ConnectError("file not found: /w/post.md", Code.NotFound, undefined, undefined, seen);
+    console.error("Failed to fetch file preview info:", held);
+
+    expect(recorded).toEqual([]);
+    expect(printed).toEqual([["Failed to fetch file preview info:", held]]);
+  });
+
+  it("leaves every other console.error to the SDK", async () => {
+    const { ConnectError, Code } = await import("@connectrpc/connect");
+    const recorded: unknown[][] = [];
+    installSdkWrapper(recorded);
+    await initTelemetry();
+
+    const bug = new TypeError("Cannot read properties of undefined (reading 'id')");
+    const undecided = new ConnectError("stream reset", Code.Internal);
+    console.error("render failed:", bug);
+    console.error(undecided);
+
+    expect(recorded).toEqual([["render failed:", bug], [undecided]]);
+  });
+
+  it("is not installed when the SDK did not start", async () => {
+    runtime.initBrowserTelemetry.mockResolvedValueOnce(false);
+    const before = console.error;
+    await initTelemetry();
+    expect(console.error).toBe(before);
   });
 });

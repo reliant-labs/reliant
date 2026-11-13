@@ -36,7 +36,7 @@ import type { ApprovalBatchPlan } from "./lib/approvalCard";
 import { ApprovalBatchConfirm } from "./components/Chat/ApprovalBatchConfirm";
 import { ESCAPE_STOP_WINDOW_MS, escapeStopDecision, isTypingIn } from "./lib/escapeToStop";
 import ConfirmationDialog from "./components/forge-ui/confirmation_dialog";
-import { useChatListWithWorkspaces, getCachedChatList, getChatFromCache } from "./hooks/chat-queries";
+import { useChat, useChatListWithWorkspaces, getCachedChatList, getChatFromCache } from "./hooks/chat-queries";
 
 
 import { Header, type HeaderRef } from "./components/Layout/Header";
@@ -46,7 +46,6 @@ import { RescanModal } from "./components/Projects/RescanModal";
 
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { LoadingSpinner } from "./components/Layout/LoadingSpinner";
-import { GlobalUpdateHandler } from "./components/Settings/GlobalUpdateHandler";
 import { useChatStore } from "./store/chatStore";
 import { useActivityStore, ChatActivity, isBusyActivity } from "./store/activityStore";
 import { useChatNavigationStore } from "./store/chatNavigationStore";
@@ -93,6 +92,11 @@ function App() {
   const chatError = useChatStore((state) => state.error);
   const activeChatId = useChatStore((state) => state.activeChatId);
   const currentProject = useProjectStore((state) => state.currentProject);
+  // The open chat is another member's, shared with the org (openSharedChat):
+  // it needs no project of the viewer's, so the chat shell shows it even to a
+  // member who has none.
+  const { data: activeChatDetail } = useChat(activeChatId ?? undefined);
+  const viewingSharedChat = !!activeChatDetail?.viewerAccess;
   // Chat list from the React Query cache (the single source of truth), used by
   // the tray-status effect below: the sidebar's list, every project or the
   // filter's one.
@@ -1619,7 +1623,7 @@ function App() {
     // account with no projects yet sees the first-run state. Header is
     // hoisted to the App-level return — this branch returns only the content
     // rendered below it.
-    if (!currentProject) {
+    if (!currentProject && !viewingSharedChat) {
       if (!projectsLoading && projects.length === 0) {
         return (
           <div className="flex-1 min-h-0 overflow-hidden">
@@ -1845,9 +1849,6 @@ function App() {
         isOpen={showQuickFileOpen}
         onClose={() => setShowQuickFileOpen(false)}
       />
-
-      {/* Global Update Handler - shows update modal when updates are available */}
-      <GlobalUpdateHandler />
     </div>
   );
 

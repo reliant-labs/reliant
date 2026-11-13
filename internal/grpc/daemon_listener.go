@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"connectrpc.com/otelconnect"
 	"github.com/reliant-labs/forge/pkg/observe"
@@ -19,8 +20,10 @@ import (
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // The daemon-gateway's daemon-facing listener, as forge components: a
@@ -152,6 +155,13 @@ type DaemonListenerDeps struct {
 	// Logger receives the listener's lines and its drain phase; nil is
 	// slog.Default().
 	Logger *slog.Logger
+	// Membership is put on every request's context (authz.WithMembership),
+	// so authz decides org resources against live membership. nil is a
+	// deployment with no orgs (authz.NoOrgs): owner-only.
+	Membership authz.Membership
+	// Policies is put on every request's context beside Membership
+	// (orgpolicy.WithResolver). nil is a deployment with no org policies.
+	Policies *orgpolicy.Resolver
 }
 
 // NewDaemonListener builds the daemon listener; it binds nothing until it
@@ -191,7 +201,9 @@ func NewDaemonListener(deps DaemonListenerDeps) (*DaemonListener, error) {
 		Chain:  deps.Chain.Chain,
 		Routes: deps.Routes,
 		Logger: deps.Logger,
-		Edge:   securityHeaders,
+		Edge: func(h http.Handler) http.Handler {
+			return withMembership(deps.Membership, deps.Policies, securityHeaders(h))
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("daemon listener: %w", err)

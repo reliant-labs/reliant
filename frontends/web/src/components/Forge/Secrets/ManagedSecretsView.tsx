@@ -78,6 +78,7 @@ import { formatCountdown } from "@/services/forge/stepUp";
 import { Ago } from "../Releases/releaseParts";
 import { SecretVersionHistory } from "./SecretVersionHistory";
 import { useNow } from "./useStepUpGate";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 import type { ManagedSecretVersion } from "@/services/forge/secretStore";
 
 export interface ManagedSecretsViewProps {
@@ -233,6 +234,7 @@ function StoreHeader({
   protection?: ManagedSecretsViewProps["protection"];
   onUnlock?: () => void;
 }) {
+  const lock = useObsReadOnly();
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1.5">
@@ -247,7 +249,8 @@ function StoreHeader({
           <WithCode text={availabilityExplanation(availability) ?? modeExplanation(mode, envKind)} />
         </p>
 
-        {protection?.protected && <ProtectionLine protection={protection} onUnlock={onUnlock} />}
+        {/* Read-only (the demo): nothing to confirm ahead of, so no "Confirm now". */}
+        {protection?.protected && <ProtectionLine protection={protection} onUnlock={lock.readOnly ? undefined : onUnlock} />}
 
         {/* The one documentation link on this surface. It sits under the
             explanation rather than beside the heading because it is the
@@ -303,10 +306,12 @@ function StoreHeader({
         <button
           type="button"
           onClick={onAdd}
+          disabled={lock.readOnly}
+          title={lock.readOnly ? lock.reason : undefined}
           data-testid="add-secret"
           className={cn(
             "inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium",
-            "bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+            "bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           )}
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -539,6 +544,7 @@ function SecretDetail({
   ...props
 }: ManagedSecretsViewProps & { row: SecretSurfaceRow; onBack: () => void }) {
   const canWrite = canWriteHere(mode, availability);
+  const lock = useObsReadOnly();
 
   return (
     <div className="space-y-5" data-testid="secret-detail">
@@ -580,10 +586,12 @@ function SecretDetail({
           <button
             type="button"
             onClick={() => onSet(row)}
+            disabled={lock.readOnly}
+            title={lock.readOnly ? lock.reason : undefined}
             data-testid="set-new-version"
             className={cn(
               "inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium",
-              "bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+              "bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             )}
           >
             {row.origin === "declared-unset" ? "Set value" : "Set new version"}
@@ -678,6 +686,7 @@ function EmptyState({
   canWrite: boolean;
   onAdd: () => void;
 }) {
+  const lock = useObsReadOnly();
   return (
     <div
       data-testid="secrets-empty"
@@ -715,8 +724,10 @@ function EmptyState({
         <button
           type="button"
           onClick={onAdd}
+          disabled={lock.readOnly}
+          title={lock.readOnly ? lock.reason : undefined}
           data-testid="add-secret-empty"
-          className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          className="mt-1 disabled:cursor-not-allowed disabled:opacity-50 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           Add secret

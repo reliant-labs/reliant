@@ -6,8 +6,9 @@
  * persistence to both storage layers.
  */
 
-import type { Setting } from "../api/settings-grpc";
-import { api } from "../api/client";
+import { create } from "@bufbuild/protobuf";
+import { SettingSchema, type Setting } from "../gen/reliant/v1/settings_pb";
+import { deleteSetting as deleteStoredSetting, fetchSettings } from "../hooks/settings-queries";
 import { waitForConfig } from "../lib/configReady";
 import { logger } from "../lib/logger";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../lib/rootFontSize";
@@ -64,6 +65,10 @@ export class SettingsSyncService {
   private settingsAppliedToDOM = false;
   private settingsCache = new Map<string, Setting>();
   private initPromise: Promise<void> | null = null;
+  // Bumped by reset(): a load started for the previous user drops its answer
+  // instead of filling the next user's cache with that user's settings.
+  private generation = 0;
+  private initListeners = new Set<() => void>();
 
   /**
    * Initialize the settings sync service by loading all settings from the database
@@ -79,13 +84,31 @@ export class SettingsSyncService {
     return this.initPromise;
   }
 
+  /**
+   * Forget the signed-in user's settings (an identity change: authStore).
+   *
+   * The cache is per user: readSetting() serves straight from it once
+   * initialized, so without this the next user reads the previous one's
+   * settings (the onboarding checklist's welcome/completion/dismissal among
+   * them) and initialize() never loads theirs.
+   */
+  reset(): void {
+    this.generation++;
+    this.settingsCache.clear();
+    this.initialized = false;
+    this.initPromise = null;
+    this.settingsAppliedToDOM = false;
+  }
+
   private async doInitialize(): Promise<void> {
+    const startedIn = this.generation;
 
     const attemptLoad = async (retryCount = 0): Promise<void> => {
       try {
         // Fetch all appearance settings from the database (via gRPC)
         logger.info('[SettingsSync] Fetching settings from database...');
-        const response = await api.settings.listSettings();
+        const response = await fetchSettings();
+        if (startedIn !== this.generation) return;
         
         const settings = response.settings || [];
         logger.info(`[SettingsSync] Received ${settings.length} total settings from database`);
@@ -123,13 +146,21 @@ export class SettingsSyncService {
         }
 
         this.initialized = true;
-        logger.info(`[SettingsSync] ✅ Settings loaded successfully: ${loadedCount} settings from database`);
+        // Only the appearance/toolcalls/notifications keys are mirrored into
+        // localStorage; the rest stay in the cache above. Say both numbers, or
+        // "Received 6" followed by "loaded 0" reads like a failure.
+        logger.info(
+          `[SettingsSync] ✅ Applied ${loadedCount} of ${settings.length} settings to localStorage (appearance/toolcalls/notifications)`,
+        );
         if (appearanceSettings.length > 0) {
           logger.info(`[SettingsSync] Appearance settings found: ${appearanceSettings.join(', ')}`);
         } else {
-          logger.warn(`[SettingsSync] ⚠️ No appearance settings found in database! Will use localStorage values.`);
+          // The normal case for a user who never changed an appearance
+          // setting, so not a warning.
+          logger.info(`[SettingsSync] No saved appearance settings; keeping localStorage/default values`);
         }
       } catch (error) {
+        if (startedIn !== this.generation) return;
         const errorMessage = error instanceof Error ? error.message : String(error);
         
         // Retry on network/gRPC errors - these often happen if gRPC isn't ready yet
@@ -146,12 +177,14 @@ export class SettingsSyncService {
           try {
             await waitForConfig(5000);
             await new Promise(resolve => setTimeout(resolve, delay));
+            if (startedIn !== this.generation) return;
             return attemptLoad(retryCount + 1);
           } catch (configErr) {
             logger.error('[SettingsSync] Config wait failed:', configErr);
           }
         }
         
+        if (startedIn !== this.generation) return;
         logger.error("[SettingsSync] Failed to initialize after retries:", errorMessage);
         logger.warn("[SettingsSync] Continuing with localStorage-only mode - settings may not persist across restarts");
         // Continue with localStorage-only mode on error
@@ -161,6 +194,42 @@ export class SettingsSyncService {
     };
     
     await attemptLoad();
+    // A load reset() superseded initialized nothing: its listeners wait for
+    // the next user's load.
+    if (startedIn === this.generation) this.notifyInitialized();
+  }
+
+  /**
+   * Run `listener` once initialization has completed — immediately if it
+   * already has. Returns an unsubscribe.
+   *
+   * Initialization happens after sign-in (AuthInitializer), well after the
+   * app's first render, so a reader that only checks isInitialized() on mount
+   * always finds it false. This is how such a reader waits without polling,
+   * and without starting the authenticated ListSettings itself (initialize()
+   * would, even on the sign-in screen).
+   */
+  onInitialized(listener: () => void): () => void {
+    if (this.initialized) {
+      listener();
+      return () => {};
+    }
+    this.initListeners.add(listener);
+    return () => {
+      this.initListeners.delete(listener);
+    };
+  }
+
+  private notifyInitialized(): void {
+    const listeners = [...this.initListeners];
+    this.initListeners.clear();
+    for (const listener of listeners) {
+      try {
+        listener();
+      } catch (error) {
+        logger.error("[SettingsSync] Initialization listener failed:", error);
+      }
+    }
   }
 
   /**
@@ -258,7 +327,7 @@ export class SettingsSyncService {
       this.removeFromCache(key);
 
       // Remove from database (via gRPC)
-      await api.settings.deleteSetting(key);
+      await deleteStoredSetting(key);
     } catch (error) {
       console.error(`[SettingsSync] Failed to delete setting ${key}:`, error);
       throw error;
@@ -299,7 +368,7 @@ export class SettingsSyncService {
     const result: Record<string, string> = {};
 
     try {
-      const response = await api.settings.listSettings();
+      const response = await fetchSettings();
       
       const settings = response.settings || [];
       
@@ -343,18 +412,13 @@ export class SettingsSyncService {
    */
   updateCache(key: string, value: string): void {
     const existing = this.settingsCache.get(key);
-    if (existing) {
-      this.settingsCache.set(key, { ...existing, value, updated_at: new Date().toISOString() });
-    } else {
-      this.settingsCache.set(key, {
-        id: '',
-        key,
-        value,
-        value_type: 'string',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-    }
+    const now = new Date().toISOString();
+    this.settingsCache.set(
+      key,
+      existing
+        ? { ...existing, value, updatedAt: now }
+        : create(SettingSchema, { key, value, valueType: "string", createdAt: now, updatedAt: now }),
+    );
   }
 
   /**
@@ -380,7 +444,9 @@ export class SettingsSyncService {
     const hasColorScheme = localStorage.getItem(SETTINGS_KEYS.COLOR_SCHEME);
     
     if (!hasTheme && !hasColorScheme) {
-      logger.warn('[SettingsSync] No appearance settings found in localStorage - using defaults. Settings may not have loaded from database.');
+      // A user who never picked a theme has neither: not a warning. A failed
+      // database load is logged where it fails, in initialize().
+      logger.debug('[SettingsSync] No theme or color scheme saved - using defaults');
     }
 
 

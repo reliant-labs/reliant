@@ -61,6 +61,14 @@ export interface ToolResultData {
    */
   truncated?: boolean;
   original_size?: number;
+  /**
+   * The server left this result's body out (ContentBlock.body_elided):
+   * `content` is a stub. ToolExecution resolves it before a renderer sees
+   * the result, so a renderer never receives an elided one.
+   */
+  elided?: boolean;
+  /** The TOOL_RESULT block this came from: what GetContentBlockBodies takes. */
+  block_id?: string;
 }
 
 /**

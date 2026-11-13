@@ -21,7 +21,9 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
@@ -314,8 +316,30 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 			ctx = WithDaemonLastSeen(ctx, v)
 		}
 
-		return next(ctx, req)
+		resp, err := next(ctx, req)
+		return resp, credentialMismatch(ctx, err)
 	}
+}
+
+// credentialMismatch turns a refusal the handler answered as missing into one
+// that says why, when authz refused this request's credential a resource of
+// another org: a CLI user then knows to sign in for that org instead of
+// hunting for a resource that exists. Any other error passes as it is.
+func credentialMismatch(ctx context.Context, err error) error {
+	if err == nil {
+		return nil
+	}
+	bound, refused, ok := authz.CredentialRefusal(ctx)
+	if !ok {
+		return err
+	}
+	if code := svcerr.Code(err); code != connect.CodeNotFound && code != connect.CodePermissionDenied {
+		return err
+	}
+	return svcerr.ToConnect(svcerr.WithReason(svcerr.PermissionDenied(fmt.Sprintf(
+		"this credential acts in organization %s only, and this belongs to organization %s; "+
+			"to act there, sign in for it: `reliant auth login` (or `forge login --org %s`)",
+		bound, refused, refused)), orgs.ReasonOrgMismatch))
 }
 
 // WrapStreamingClient implements connect.Interceptor for client streaming (not used server-side)
@@ -336,6 +360,6 @@ func (i *AuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc
 
 		i.trackSession(ctx, claims)
 
-		return next(ctx, conn)
+		return credentialMismatch(ctx, next(ctx, conn))
 	}
 }

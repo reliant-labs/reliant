@@ -2,6 +2,7 @@
 package scenario
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -70,6 +71,12 @@ func ValidateScenario(scenario *Scenario, workflow *reliantv1.Workflow) *Validat
 			validNodes[id] = info
 		}
 	}
+	// And the finally handler's under "finally.".
+	if handler := workflow.GetFinally(); handler != nil {
+		for id, info := range collectValidNodes(handler, finallyPathPrefix) {
+			validNodes[id] = info
+		}
+	}
 
 	// Validate event node references
 	for i, event := range scenario.Events {
@@ -86,6 +93,7 @@ func ValidateScenario(scenario *Scenario, workflow *reliantv1.Workflow) *Validat
 			} else {
 				// Validate output fields against activity type (warnings only)
 				validateOutputFields(result, event, workflow, i)
+				validateHumanGateEvent(result, event, getNodeType(event.Node, workflow), i)
 			}
 		}
 	}
@@ -234,6 +242,10 @@ func canSaveMessage(info nodeInfo) bool {
 // handler's nodes (runtime.OnFailureNodeID). A literal for the same reason as
 // spawnNodeRefPrefix; pinned by TestOnFailurePathPrefixMatchesRuntime in the runner package.
 const onFailurePathPrefix = "on_failure"
+
+// finallyPathPrefix is the path segment of a finally handler's nodes
+// (runtime.FinallyNodeID); pinned by TestFinallyPathPrefixMatchesRuntime.
+const finallyPathPrefix = "finally"
 
 func collectValidNodes(workflow *reliantv1.Workflow, prefix string) map[string]nodeInfo {
 	nodes := make(map[string]nodeInfo)
@@ -417,6 +429,49 @@ func validateOutputFields(result *ValidationResult, event SimulatedEvent, workfl
 	}
 }
 
+// approvalStatuses are the only values a resolved approval node's `status`
+// takes in production: the approval service signals approved or denied, and
+// the node's own timer resolves it as timeout.
+var approvalStatuses = []string{"approved", "denied", "timeout"}
+
+// validateHumanGateEvent rejects an approval or ask_question mock the runtime
+// could never produce. A gate is the one node whose output a scenario author
+// writes from memory of what a person does, and a fictional shape there passes
+// a scenario whose production run resolves the other way.
+func validateHumanGateEvent(result *ValidationResult, event SimulatedEvent, nodeType string, eventIndex int) {
+	switch nodeType {
+	case model.NodeTypeApproval:
+		status, present := event.Output["status"]
+		if !present {
+			return
+		}
+		s, _ := status.(string)
+		for _, ok := range approvalStatuses {
+			if s == ok {
+				return
+			}
+		}
+		result.AddError("event[%d]: approval %q status %v is not a status the runtime produces (one of: %s)",
+			eventIndex, event.Node, status, strings.Join(approvalStatuses, ", "))
+	case model.NodeTypeAskQuestion:
+		response, _ := event.Output["response"].(string)
+		if hasFeedback, set := event.Output["has_feedback"].(bool); set && !hasFeedback && response != "" {
+			result.AddError("event[%d]: ask_question %q sets a response with has_feedback: false — the runtime "+
+				"never produces that (an answer with any text or a clicked option has feedback; \"Continue\" "+
+				"has none and an empty response); drop has_feedback, or the response", eventIndex, event.Node)
+		}
+		var raw struct {
+			Answers []interface{} `json:"answers"`
+		}
+		if strings.HasPrefix(strings.TrimSpace(response), "{") &&
+			json.Unmarshal([]byte(response), &raw) == nil && raw.Answers != nil {
+			result.AddError("event[%d]: ask_question %q response is the question service's raw answer payload "+
+				"({\"answers\": [...]}); the node's response is what the person gave — the text they typed, or "+
+				"else the label of the option they clicked — so mock that text", eventIndex, event.Node)
+		}
+	}
+}
+
 // validateOutputValueTypes checks a raw mock output against the activity's proto
 // output descriptor, recursively.
 //
@@ -556,14 +611,30 @@ func asStringKeyedMap(value interface{}) (map[string]interface{}, bool) {
 		return m, true
 	}
 	rv := reflect.ValueOf(value)
-	if rv.Kind() != reflect.Map || rv.Type().Key().Kind() != reflect.String {
+	if rv.Kind() != reflect.Map {
 		return nil, false
 	}
-	m := make(map[string]interface{}, rv.Len())
-	for _, k := range rv.MapKeys() {
-		m[k.String()] = rv.MapIndex(k).Interface()
+	switch rv.Type().Key().Kind() {
+	case reflect.String:
+		m := make(map[string]interface{}, rv.Len())
+		for _, k := range rv.MapKeys() {
+			m[k.String()] = rv.MapIndex(k).Interface()
+		}
+		return m, true
+	case reflect.Interface:
+		// map[interface{}]interface{}, as some YAML decoders produce: a
+		// mapping only when every key is a string.
+		m := make(map[string]interface{}, rv.Len())
+		for _, k := range rv.MapKeys() {
+			s, ok := k.Interface().(string)
+			if !ok {
+				return nil, false
+			}
+			m[s] = rv.MapIndex(k).Interface()
+		}
+		return m, true
 	}
-	return m, true
+	return nil, false
 }
 
 // joinFieldPath builds a dotted field path for error messages.

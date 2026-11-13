@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"connectrpc.com/connect"
@@ -100,14 +101,16 @@ func newTestConn(userID, daemonID string, stream daemonStream) *daemonConnection
 func TestHandleIncomingEndsImmediatelyWhenSuperseded(t *testing.T) {
 	svc := newDaemonlessService(t)
 
-	conn := newTestConn("user-1", uuid.NewString(), newParkedStream())
+	stream := newParkedStream()
+	conn := newTestConn("user-1", uuid.NewString(), stream)
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- svc.handleIncoming(context.Background(), conn) }()
 
-	// Let the reader goroutine park inside Receive, which is where a healthy
-	// idle daemon stream spends nearly all of its time.
-	time.Sleep(100 * time.Millisecond)
+	// Wait for the reader goroutine to park inside Receive, which is where a
+	// healthy idle daemon stream spends nearly all of its time.
+	require.Eventually(t, func() bool { return stream.receiving.Load() == 1 }, 30*time.Second, time.Millisecond,
+		"the reader never parked in Receive")
 
 	svc.supersedeIncumbent(conn)
 
@@ -116,7 +119,7 @@ func TestHandleIncomingEndsImmediatelyWhenSuperseded(t *testing.T) {
 		require.Error(t, err, "a superseded stream must not end with a bare nil/EOF")
 		require.Equal(t, connect.CodeAborted, svcerr.Code(err),
 			"the daemon distinguishes supersession from a network drop by this code")
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("handleIncoming stayed parked in Receive after the connection was superseded")
 	}
 }
@@ -126,18 +129,20 @@ func TestHandleIncomingEndsImmediatelyWhenSuperseded(t *testing.T) {
 func TestHandleIncomingEndsWithoutErrorOnOrdinaryTeardown(t *testing.T) {
 	svc := newDaemonlessService(t)
 
-	conn := newTestConn("user-1", uuid.NewString(), newParkedStream())
+	stream := newParkedStream()
+	conn := newTestConn("user-1", uuid.NewString(), stream)
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- svc.handleIncoming(context.Background(), conn) }()
-	time.Sleep(100 * time.Millisecond)
+	require.Eventually(t, func() bool { return stream.receiving.Load() == 1 }, 30*time.Second, time.Millisecond,
+		"the reader never parked in Receive")
 
 	conn.closeDone()
 
 	select {
 	case err := <-errCh:
 		require.NoError(t, err)
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("handleIncoming did not return after an ordinary teardown")
 	}
 }
@@ -187,7 +192,7 @@ func TestSendToolRequestGoesToTheConnectionThatIsWaiting(t *testing.T) {
 		require.Equal(t, "req-1", msg.GetToolRequest().GetRequestId())
 	case msg := <-usurper.sendCh:
 		t.Fatalf("tool request was sent to a connection with no pending waiter (%q) — its answer would be dropped", msg.GetToolRequest().GetRequestId())
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("tool request was never sent")
 	}
 }
@@ -226,7 +231,7 @@ func TestToolResponseIsStampedWithTheAnsweringDaemon(t *testing.T) {
 
 	select {
 	case <-conn.sendCh:
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("tool request was never sent")
 	}
 	stream.recv <- &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_ToolResponse{
@@ -237,7 +242,7 @@ func TestToolResponseIsStampedWithTheAnsweringDaemon(t *testing.T) {
 	case resp := <-respCh:
 		require.True(t, resp.Backgrounded)
 		require.Equal(t, daemonID, resp.DaemonID, "the response must name the daemon whose connection answered")
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("tool response never arrived")
 	}
 }
@@ -248,49 +253,54 @@ func TestToolResponseIsStampedWithTheAnsweringDaemon(t *testing.T) {
 // be replaced by a transport failure — which a run step can only read as
 // "outcome unknown" and refuse to re-run.
 func TestToolResponseJustAfterTheRequestTimeoutIsDelivered(t *testing.T) {
-	svc := newDaemonlessService(t)
-	stream := newParkedStream()
-	conn := newTestConn("user-1", uuid.NewString(), stream)
-	svc.mu.Lock()
-	registerTestConn(svc, conn)
-	svc.mu.Unlock()
+	synctest.Test(t, func(t *testing.T) {
+		svc := newDaemonlessService(t)
+		stream := newParkedStream()
+		conn := newTestConn("user-1", uuid.NewString(), stream)
+		svc.mu.Lock()
+		registerTestConn(svc, conn)
+		svc.mu.Unlock()
 
-	go func() { _ = svc.handleIncoming(context.Background(), conn) }()
-	defer close(stream.recv)
+		go func() { _ = svc.handleIncoming(context.Background(), conn) }()
+		defer close(stream.recv)
 
-	type result struct {
-		resp *toolexec.ToolExecutionResponse
-		err  error
-	}
-	resCh := make(chan result, 1)
-	go func() {
-		resp, err := svc.sendToolRequestToConn(context.Background(), conn, &toolexec.ToolExecutionRequest{
-			RequestID: "req-timeout",
-			ToolName:  "shell",
-			ToolInput: `{"command":"sleep 600","timeout":50}`,
-			TimeoutMs: 50,
-		})
-		resCh <- result{resp, err}
-	}()
+		type result struct {
+			resp *toolexec.ToolExecutionResponse
+			err  error
+		}
+		resCh := make(chan result, 1)
+		go func() {
+			resp, err := svc.sendToolRequestToConn(context.Background(), conn, &toolexec.ToolExecutionRequest{
+				RequestID: "req-timeout",
+				ToolName:  "shell",
+				ToolInput: `{"command":"sleep 600","timeout":50}`,
+				TimeoutMs: 50,
+			})
+			resCh <- result{resp, err}
+		}()
 
-	select {
-	case <-conn.sendCh:
-	case <-time.After(3 * time.Second):
-		t.Fatal("tool request was never sent")
-	}
-	time.Sleep(300 * time.Millisecond) // well past the request's 50ms timeout
-	stream.recv <- &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_ToolResponse{
-		ToolResponse: &reliantv1.ToolResponse{RequestId: "req-timeout", Success: true,
-			Content: `{"stdout":"","stderr":"command timed out","exit_code":124}`},
-	}}
+		select {
+		case <-conn.sendCh:
+		case <-time.After(30 * time.Second):
+			t.Fatal("tool request was never sent")
+		}
+		// The bubble's clock moves only when every goroutine in it is blocked,
+		// so this lands past the request's 50ms timeout however busy the
+		// machine is, and inside the gateway's grace however slow.
+		time.Sleep(300 * time.Millisecond)
+		stream.recv <- &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_ToolResponse{
+			ToolResponse: &reliantv1.ToolResponse{RequestId: "req-timeout", Success: true,
+				Content: `{"stdout":"","stderr":"command timed out","exit_code":124}`},
+		}}
 
-	select {
-	case res := <-resCh:
-		require.NoError(t, res.err, "the daemon's verdict arrived within the grace; it is the answer")
-		require.Contains(t, res.resp.Content, `"exit_code":124`)
-	case <-time.After(5 * time.Second):
-		t.Fatal("tool response never arrived")
-	}
+		select {
+		case res := <-resCh:
+			require.NoError(t, res.err, "the daemon's verdict arrived within the grace; it is the answer")
+			require.Contains(t, res.resp.Content, `"exit_code":124`)
+		case <-time.After(5 * time.Second):
+			t.Fatal("tool response never arrived")
+		}
+	})
 }
 
 // A tool request whose connection dies must fail as soon as the connection
@@ -314,7 +324,7 @@ func TestSendToolRequestFailsAsSoonAsItsConnectionEnds(t *testing.T) {
 
 	select {
 	case <-conn.sendCh:
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("tool request was never sent to the connection that is waiting for its answer")
 	}
 	svc.supersedeIncumbent(conn)
@@ -328,7 +338,7 @@ func TestSendToolRequestFailsAsSoonAsItsConnectionEnds(t *testing.T) {
 		// (and the requester can ask again when that is safe) without
 		// parsing this message.
 		require.ErrorIs(t, err, toolexec.ErrDaemonConnectionInterrupted)
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("the caller was still waiting after its daemon connection ended")
 	}
 }

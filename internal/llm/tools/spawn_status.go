@@ -42,7 +42,10 @@ type SpawnAgentInfo struct {
 type SpawnStatusParams struct {
 	// AgentID selects a single agent to inspect and (optionally) wait on. If
 	// omitted, this lists ALL of the caller's own sub-agents.
-	AgentID string `json:"agent_id,omitempty" jsonschema:"description=The agent_id (thread id) of a sub-agent you spawned. Omit to list all of your sub-agents."`
+	AgentID string `json:"agent_id,omitempty" jsonschema:"description=The agent_id (thread id) of a sub-agent you spawned. An unambiguous prefix of at least 4 characters is accepted. Omit to list your sub-agents."`
+	// Status narrows a listing (no agent_id): "running" lists only live
+	// agents, "finished" only the rest. Empty lists both, running first.
+	Status string `json:"status,omitempty" jsonschema:"enum=running,enum=finished,description=Listing only: 'running' lists only agents still working and 'finished' only the ones that stopped. Omit for both (running first)."`
 	// Wait blocks until agent_id reaches a terminal state, or the timeout
 	// budget elapses — mirrors shell_wait. Requires agent_id.
 	Wait bool `json:"wait,omitempty" jsonschema:"description=Block until the agent reaches a terminal state (completed/failed/cancelled/expired). Requires agent_id. Ignored when listing all agents."`
@@ -114,13 +117,17 @@ WORKSPACE SCOPING:
   wait on, message, or stop them.
 
 TWO MODES:
-1. LISTING (omit agent_id): returns every sub-agent you spawned — agent_id,
+1. LISTING (omit agent_id): returns the sub-agents you spawned — agent_id,
    title, preset, status, elapsed time, last activity time, turn count, and
    whether it appears gated on a question or approval (best-effort — this
-   signal can be unavailable and is never a hard guarantee).
+   signal can be unavailable and is never a hard guarantee). Running agents
+   come first, newest first, then the most recent finished ones; each agent
+   is listed once however often it was resumed. status: "running" or
+   "finished" narrows the list.
 2. SINGLE AGENT (agent_id set): returns that agent's status and its LAST
    ASSISTANT MESSAGE — "is it done, and what did it say?" without cancelling
-   it.
+   it. An unambiguous prefix of the agent_id (at least 4 characters) works
+   here and in spawn_send and spawn_stop.
 
 WAITING:
 Set wait: true with agent_id to block server-side until that agent reaches a
@@ -168,19 +175,38 @@ func (s *spawnStatusTool) Execute(rctx *rctx.ToolContext, params SpawnStatusPara
 	}
 
 	if params.AgentID == "" {
-		return s.listChildren(rctx, threadID)
+		return s.listChildren(rctx, threadID, params.Status)
 	}
+	resolved, err := resolveSpawnAgentID(rctx, s.repo, threadID, params.AgentID)
+	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	params.AgentID = resolved
 	return s.singleAgent(rctx, threadID, params)
 }
 
-// listChildren returns every sub-agent the caller has spawned, with
-// best-effort gating signals — followed by any it INHERITED by being a branch
-// of the conversation that spawned them, listed read-only.
-func (s *spawnStatusTool) listChildren(rctx *rctx.ToolContext, threadID string) (ToolResponse, error) {
+// spawnStatusListFinishedLimit caps how many FINISHED agents one listing
+// renders. Running agents are never capped: they are the ones a parent can
+// still act on. An orchestrator with hundreds of children otherwise produced
+// a listing the output budget cut off before it reached any recent agent.
+const spawnStatusListFinishedLimit = 40
+
+// listChildren returns the sub-agents the caller has spawned, with
+// best-effort gating signals — running ones first, then the most recent
+// finished ones — followed by any it INHERITED by being a branch of the
+// conversation that spawned them, listed read-only.
+func (s *spawnStatusTool) listChildren(rctx *rctx.ToolContext, threadID, statusFilter string) (ToolResponse, error) {
+	statusFilter = strings.ToLower(strings.TrimSpace(statusFilter))
+	switch statusFilter {
+	case "", "running", "finished":
+	default:
+		return NewTextErrorResponse(fmt.Sprintf("status %q is not a listing filter: use \"running\", \"finished\", or omit it", statusFilter)), nil
+	}
 	children, err := s.repo.ListSpawnChildren(rctx.Context, threadID)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to list spawned agents: %v", err)), nil
 	}
+	children = latestSpawnPerAgent(children)
 	// Inheritance is advisory context for a branch, never a reason to fail
 	// the listing of the caller's own children.
 	inherited, inhErr := s.repo.ListInheritedSpawnChildren(rctx.Context, threadID)
@@ -202,26 +228,48 @@ func (s *spawnStatusTool) listChildren(rctx *rctx.ToolContext, threadID string) 
 		return signals
 	}
 
-	infos := make([]SpawnAgentInfo, 0, len(children))
-	runningCount := 0
-	for _, child := range children {
-		info, running := s.describeChild(rctx, child, signalsFor(rctx.ChatID), now)
+	// Newest first within each group: ListSpawnChildren is in request order.
+	var runningInfos, finishedInfos []SpawnAgentInfo
+	for i := len(children) - 1; i >= 0; i-- {
+		info, running := s.describeChild(rctx, children[i], signalsFor(rctx.ChatID), now)
 		if running {
-			runningCount++
+			runningInfos = append(runningInfos, info)
+		} else {
+			finishedInfos = append(finishedInfos, info)
 		}
-		infos = append(infos, info)
+	}
+	total := len(runningInfos) + len(finishedInfos)
+
+	shown := make([]SpawnAgentInfo, 0, total)
+	if statusFilter != "finished" {
+		shown = append(shown, runningInfos...)
+	}
+	omitted := 0
+	if statusFilter != "running" {
+		visible := finishedInfos
+		if len(visible) > spawnStatusListFinishedLimit {
+			omitted = len(visible) - spawnStatusListFinishedLimit
+			visible = visible[:spawnStatusListFinishedLimit]
+		}
+		shown = append(shown, visible...)
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "=== Sub-Agents (%d) ===\n\n", len(infos))
-	if len(infos) == 0 {
+	fmt.Fprintf(&sb, "=== Sub-Agents (%d: %d running, %d finished) ===\n\n", total, len(runningInfos), len(finishedInfos))
+	switch {
+	case total == 0:
 		sb.WriteString("None spawned from this thread.\n")
+	case len(shown) == 0:
+		fmt.Fprintf(&sb, "No %s sub-agents.\n", statusFilter)
 	}
-	writeSpawnAgentInfos(&sb, infos)
+	writeSpawnAgentInfos(&sb, shown)
+	if omitted > 0 {
+		fmt.Fprintf(&sb, "\n---\n\n%d older finished agents are not shown. spawn_status(agent_id=...) still inspects any of them.\n", omitted)
+	}
 
 	metadata := SpawnStatusResponseMetadata{
-		TotalAgents:   len(infos),
-		RunningAgents: runningCount,
+		TotalAgents:   total,
+		RunningAgents: len(runningInfos),
 	}
 
 	// Grouped by owning conversation, nearest first — the order
@@ -254,6 +302,28 @@ func (s *spawnStatusTool) listChildren(rctx *rctx.ToolContext, threadID string) 
 	}
 
 	return WithResponseMetadata(NewTextResponse(sb.String()), metadata), nil
+}
+
+// latestSpawnPerAgent keeps one entry per agent: the latest spawn call that
+// names it. Resuming an agent (spawn with agent_id) is a new spawn call for
+// the same thread, so without this an agent resumed twice was listed three
+// times. Calls whose child has not landed yet (no thread) are kept as they
+// are. Request order is preserved, by each agent's latest call.
+func latestSpawnPerAgent(children []*db.SpawnChild) []*db.SpawnChild {
+	latest := make(map[string]int, len(children))
+	for i, child := range children {
+		if child.ChildThreadID != nil {
+			latest[*child.ChildThreadID] = i
+		}
+	}
+	out := make([]*db.SpawnChild, 0, len(children))
+	for i, child := range children {
+		if child.ChildThreadID != nil && latest[*child.ChildThreadID] != i {
+			continue
+		}
+		out = append(out, child)
+	}
+	return out
 }
 
 // spawnSignals is the best-effort per-chat context a listing decorates each

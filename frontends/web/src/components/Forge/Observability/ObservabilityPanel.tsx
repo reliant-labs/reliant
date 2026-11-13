@@ -71,6 +71,7 @@ import {
   type ObsSearch,
   type ObsView,
 } from "./obsSearch";
+import { Foldable } from "./detailDensity";
 import { envIdsOf, orgPickerEnvironments, orgSelectionIsEmpty, placeEnvironments, type ObsPlace } from "./obsPlace";
 import { ObsScopeBar } from "./ObsScopeBar";
 import { ObsQuotaBanner, ObsError, ObsLoadingRows, ObsNoAppEnvironments, ObsNothingYet, ObsNotSetUp } from "./ObsStates";
@@ -84,14 +85,19 @@ import { SessionsView } from "./Sessions/SessionsView";
 import { TracesView } from "./TracesView";
 import { GraphView } from "./Graph/GraphView";
 import { NO_CLIENT_FILTERS } from "./ClientFilters";
+import { CONTROL_FIELD } from "../controlStyles";
 
 export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 
 /** The views with time-series charts, where release markers are drawn and listed. */
 const MARKED_VIEWS: readonly ObsView[] = ["overview"];
 
-/** The views that read the scope's telemetry, so "nothing has arrived yet" is true of them (not Alerts). */
-const NOTHING_YET_VIEWS: readonly ObsView[] = ["overview", "errors", "sessions", "logs", "traces", "profiles"];
+/**
+ * The views that read the scope's telemetry, so "nothing has arrived yet" is
+ * true of them (not Alerts). Not Sessions: its own empty state says how to turn
+ * replay on, which a brand-new project needs most.
+ */
+const NOTHING_YET_VIEWS: readonly ObsView[] = ["overview", "errors", "logs", "traces", "profiles"];
 
 export interface ObservabilityPanelProps {
   place: ObsPlace;
@@ -208,7 +214,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             id="obs-range"
             value={range}
             onChange={(event) => navigate({ range: rangeOf(event.target.value) }, { replace: true })}
-            className="h-8 min-h-[32px] touch:h-11 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={`${CONTROL_FIELD} h-8 min-h-[32px] touch:h-11 px-2 text-sm`}
             data-testid="obs-range"
           >
             {RANGE_PRESETS.filter((preset) => (view !== "graph" && view !== "rpc") || preset === "15m" || preset === "1h" || preset === range).map((preset) => (
@@ -251,6 +257,8 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       {/* Attribute filters and group-by mean nothing on Alerts. */}
       {/* Only the org place draws app and environment pickers: in an app's console the top bar is the scope. */}
       {scope && scopeBarShown && (
+        // On an open trace the scope bar is the list's: a host may fold it behind its title (detailDensity's "trace-toolbar").
+        <Foldable id={view === "traces" && search.trace ? "trace-toolbar" : ""} title="Filters and time range" hint="for the list of traces">
         <ObsScopeBar
           scope={scope}
           trailing={controls}
@@ -275,6 +283,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
           groupable={groupable && !noEnvironments}
           filterable={view !== "alerts" && view !== "errors" && view !== "sessions" && !noEnvironments}
         />
+        </Foldable>
       )}
 
       {marked && (
@@ -359,6 +368,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             sessionId={search.session}
             atMs={search.t}
             navigate={navigate}
+            environments={environments}
           />
         ) : view === "overview" ? (
           <OverviewView scope={scope} subject={subject} range={range} service={search.service} groupBy={groupBy} navigate={navigate} />

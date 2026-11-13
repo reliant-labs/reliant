@@ -256,10 +256,9 @@ func TestDeletingToolCallCascadesToResult(t *testing.T) {
 	require.Zero(t, count)
 }
 
-// The batch reads are the read path's entry point, and sqlc's Postgres
-// slice codegen is broken (it emits IN ($1) and only ever matches the first
-// id), so these stores hand-build the IN clause. This test is what catches a
-// regression back to the generated version.
+// The batch reads are the read path's entry point. A slice bound as a single
+// placeholder (IN ($1)) only ever matches the first id, which is how the old
+// sqlc-generated version failed; this test catches a regression to it.
 func TestListToolCallsByMessageIDsMatchesEveryID(t *testing.T) {
 	t.Parallel()
 

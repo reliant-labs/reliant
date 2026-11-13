@@ -55,8 +55,8 @@ service ObservabilityService {
   }
 
   // ListTraces returns one summary row per trace in the range (root span, total
-  // duration, span and error counts, services touched) plus a RED summary of
-  // the matched traces. Max range 7 days.
+  // duration, span and error counts, services touched) plus, on the first
+  // page, a RED summary of the matched traces. Max range 7 days.
   rpc ListTraces(ListTracesRequest) returns (ListTracesResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -280,6 +280,33 @@ service ObservabilityService {
       idempotent: true
     };
   }
+
+  // ListFrontendReplay answers "is session replay on for this frontend, in
+  // this environment": one row per (environment, frontend). Replay is a
+  // setting of a frontend INSTANCE (forge.BrowserTelemetry.replay, rendered
+  // into its runtime config as OTEL_REPLAY), gated by the environment's
+  // observability policy, which must opt in to replay for the ingest to keep
+  // the recordings.
+  //
+  // A hosted frontend (a StaticSite) is read LIVE, from the runtime config the
+  // platform serves it now. Any other frontend is read from the runtime config
+  // its environment's current release recorded (RELEASE); a self-hosted
+  // frontend serves its own config.js, which the control plane cannot read. A
+  // frontend the release names with neither reads UNKNOWN (source NONE).
+  //
+  // Admission is every other read's: a member of org_id, or a machine
+  // credential holding obs:read in it, whose environment binding covers the
+  // environments read. Postgres and Kubernetes reads only; nothing here
+  // queries ClickHouse. At most 100 environments in scope.
+  //
+  // forge:custom — a read over runtime configs and the release ledger; a
+  // FrontendReplay row is not a stored entity.
+  rpc ListFrontendReplay(ListFrontendReplayRequest) returns (ListFrontendReplayResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
 }
 
 // === Shared ===
@@ -359,6 +386,26 @@ message QueryScope {
   // environment. It takes no env_ids and no project_id (both narrow by
   // environment): sending either is InvalidArgument.
   bool platform_scope = 8;
+  // Narrow to these dev instances: reliant.instance.id, which the OTLP gateway
+  // stamps from a dev token's `sid` (dropping any a client sent). ANDed with
+  // the environments and everything else. Empty = not narrowed. A response
+  // says it applied this in instance_scope; one without instance_scope was
+  // not narrowed (controlplane.v1.InstanceScope).
+  repeated string instance_ids = 9 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 128
+  ];
+  // Narrow to the instances of these people, by email. Each email is resolved
+  // to the org member's user id (reliant.instance.user, the gateway's stamp of
+  // the token's `uid`); an email that names no member of org_id matches
+  // nothing, never the whole scope. ANDed with instance_ids. Empty = not
+  // narrowed.
+  repeated string instance_users = 10 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 320
+  ];
 }
 
 // === Service graph: identities never contain URLs, SQL or arbitrary attributes. ===
@@ -381,6 +428,10 @@ message GetServiceGraphResponse {
   repeated GraphEdge edges = 2;
   GraphCompleteness completeness = 3;
   TimeRange effective_time_range = 4;
+  // Always unset: this read is never narrowed to dev instances (the service graph is read from edges that keep no dev instance),
+  // so it answers for the whole scope even when scope.instance_ids or
+  // instance_users is set (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 5;
 }
 enum GraphNodeKind {
   GRAPH_NODE_KIND_UNSPECIFIED = 0;
@@ -532,6 +583,10 @@ message GetServiceGraphCatalogResponse {
   string declared_catalog_status = 3;
   string declared_catalog_unavailable_reason = 4;
   repeated GraphDeclaredCatalog declared_catalogs = 5;
+  // Always unset: this read is never narrowed to dev instances (the service graph is read from edges that keep no dev instance),
+  // so it answers for the whole scope even when scope.instance_ids or
+  // instance_users is set (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 6;
 }
 
 enum SortOrder {
@@ -618,6 +673,10 @@ message SearchLogsResponse {
   repeated LogRecord logs = 1;
   // Empty when there are no more rows.
   string next_page_token = 2;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 message LogRecord {
@@ -697,10 +756,17 @@ message ListTracesResponse {
   repeated TraceSummary traces = 1;
   string next_page_token = 2;
   // RED summary of the matched traces in the range (not just this page).
+  // Populated on the first page only (an empty request.page_token): it covers
+  // the whole range, so a cursor page leaves it unset rather than recompute it.
   TraceRedSummary red = 3;
   // One RED summary per distinct group (request.group_by), busiest first, at
-  // most 50. Empty without group_by.
+  // most 50. Empty without group_by, and on every page after the first (as
+  // red).
   repeated TraceRedGroup red_groups = 4;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 5;
 }
 
 message TraceRedGroup {
@@ -777,6 +843,10 @@ message GetTraceResponse {
   repeated RelatedTrace related_traces = 4;
   // At most 100 references are returned, in stable identity order.
   bool related_traces_truncated = 5;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 6;
 }
 
 message RelatedTrace {
@@ -861,6 +931,10 @@ message ListMetricsRequest {
 message ListMetricsResponse {
   repeated MetricInfo metrics = 1;
   bool truncated = 2;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 // One catalog entry: what ListMetrics returns and GetMetric echoes. A metric
@@ -933,6 +1007,10 @@ message GetMetricResponse {
   // Attribute keys worth grouping by, best first: enumerated keys, then keys
   // with 2 to 50 distinct values.
   repeated string suggested_breakdowns = 5;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 6;
 }
 
 message MetricAttribute {
@@ -979,6 +1057,10 @@ message ListMetricExemplarsRequest {
 message ListMetricExemplarsResponse {
   // Exemplars whose trace is stored first, then by time.
   repeated MetricExemplar exemplars = 1;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 2;
 }
 
 message MetricExemplar {
@@ -1030,6 +1112,10 @@ message QueryMetricResponse {
   MetricAggregation aggregation = 6;
   // True when more than 50 series matched; the largest 50 are returned.
   bool series_truncated = 5;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 7;
 }
 
 message MetricSeries {
@@ -1055,6 +1141,17 @@ message GetServiceOverviewResponse {
   repeated ServiceOverview services = 1;
   // Width of one trend bucket.
   int32 trend_step_seconds = 2;
+  // The parts of the answer that are missing because their statement failed
+  // or did not finish within the read's deadline: "red" (request rate, errors
+  // and latency), "logs" (error_log_count) and "trend" (request_trend and
+  // error_trend). Empty when the answer is complete. The rest of the answer
+  // is exact; a missing part reads as absent, never as zero. A client shows
+  // what arrived and says which part did not.
+  repeated string unavailable_sections = 3;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 4;
 }
 
 message ServiceOverview {
@@ -1109,6 +1206,10 @@ message GetFlamegraphResponse {
   repeated string available_profile_types = 5;
   // True when the stack list was cut at the cap (the heaviest stacks are kept).
   bool truncated = 6;
+  // Always unset: this read is never narrowed to dev instances (profiles keep no dev instance),
+  // so it answers for the whole scope even when scope.instance_ids or
+  // instance_users is set (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 7;
 }
 
 // === Attribute values (filter autocomplete) ===
@@ -1149,6 +1250,10 @@ message ListAttributeValuesResponse {
   repeated AttributeValue values = 1;
   // True when more values matched than limit.
   bool truncated = 2;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 message AttributeValue {
@@ -1170,6 +1275,10 @@ message GetServiceSignalsResponse {
   repeated ServiceSignals services = 1;
   // True when more services emitted than the 500 listed.
   bool truncated = 2;
+  // Always unset: this read is never narrowed to dev instances (the signal summaries keep no dev instance),
+  // so it answers for the whole scope even when scope.instance_ids or
+  // instance_users is set (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 // ServiceSignals is one service's signals. A signal name is "traces", "logs"
@@ -1218,6 +1327,18 @@ message ListWorkloadsResponse {
   // more matched.
   repeated WorkloadJob jobs = 3;
   bool jobs_truncated = 4;
+  // The parts of the answer that are missing because their statement failed
+  // or did not finish within the read's deadline: "usage" (CPU and memory),
+  // "replicas", "restarts", "terminations", "warnings", "history"
+  // (health_since), "jobs" and "versions" (service_version). Empty when the
+  // answer is complete. A client shows what arrived and says which part did
+  // not, instead of failing the whole Overview: the server keeps reading a
+  // missing part and serves it to the next request (a retry or the poll).
+  repeated string unavailable_sections = 5;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 6;
 }
 
 message Workload {
@@ -1240,10 +1361,14 @@ message Workload {
 
   // How the workload runs, from the environment's recorded bundle (the
   // telemetry carries no kind). UNSPECIFIED when the environment has no
-  // recorded bundle or the bundle does not declare the workload.
+  // recorded bundle or the bundle does not declare the workload, and always on
+  // a read narrowed to dev instances (scope.instance_ids / instance_users),
+  // which reads no deploy ledger or bundle: those are the hosted deployment's.
   WorkloadKind kind = 10;
   // ONE server-side verdict per workload, so the list, the detail page and the
-  // nav badge cannot disagree. Rules: see WorkloadHealth.
+  // nav badge cannot disagree. Rules: see WorkloadHealth. Narrowed to dev
+  // instances, from the instances' own telemetry alone: no hosted suspension,
+  // rollout or ready count enters it.
   WorkloadHealth health = 11;
   // One line saying why: "2 of 3 replicas ready", "restarted 14x, last exit
   // OOMKilled". Empty for HEALTHY.
@@ -1252,10 +1377,13 @@ message Workload {
   // count when it observes the workload, else replicas_observed (pods
   // reporting). desired: the ledger's desired count, else the bundle's
   // declared replicas; unset when neither is known (then render ready alone).
+  // Narrowed to dev instances: ready is the instances' pods reporting, and
+  // desired is unset (an instance declares no replica count).
   optional int32 ready_replicas = 13;
   optional int32 desired_replicas = 14;
   // The release this workload is running, e.g. "v1.7.44". Empty when it cannot
-  // be established; release_basis says how it was.
+  // be established; release_basis says how it was. Empty, with release_basis
+  // unset, on a read narrowed to dev instances: a dev instance runs no release.
   string release_version = 15;
   WorkloadReleaseBasis release_basis = 16;
   // GetWorkload only (the list leaves it empty): this workload's pods in the
@@ -1264,7 +1392,7 @@ message Workload {
   // GetWorkload only (the list leaves it unset): what the environment's recorded
   // bundle declares for the workload, the same message DeployService.GetBundle
   // returns. Unset when the environment has no recorded bundle or the bundle
-  // does not declare it.
+  // does not declare it, and on a read narrowed to dev instances.
   DeclaredWorkload declared = 18;
   // Whose side the fault is on, when health is not HEALTHY. The platform alerts
   // on PLATFORM; the console says "this is on us" instead of asking the user to
@@ -1413,7 +1541,8 @@ message WorkloadJob {
   // BackoffLimitExceeded, DeadlineExceeded, ... for a FAILED run.
   string reason = 6;
   // The release in effect when the run started (newest promotion that moved
-  // the workload at or before started_at). Empty when unknown.
+  // the workload at or before started_at). Empty when unknown, and on a read
+  // narrowed to dev instances, which reads no promotion.
   string release_version = 7;
   google.protobuf.Timestamp started_at = 8;
   google.protobuf.Timestamp finished_at = 9;
@@ -1507,6 +1636,10 @@ message GetWorkloadResponse {
   // The workload's health transitions in the range, oldest first, per
   // environment in scope. Derived from the readiness series, not recorded.
   repeated WorkloadHealthChange health_changes = 8;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 9;
 }
 
 enum WorkloadMetric {
@@ -1553,10 +1686,21 @@ message VersionChange {
 // as-is (protojson, camelCase names).
 
 message QueryPanelRequest {
+  // A request names the panel it runs one of two ways: the panel itself, or a
+  // reference to a dashboard panel the control plane ships.
+  option (buf.validate.message).oneof = {
+    fields: [
+      "panel",
+      "panel_ref"
+    ]
+    required: true
+  };
+
   // The scope's environments, services and filters apply as the dashboard's
   // filters.
   QueryScope scope = 1 [(buf.validate.field).required = true];
-  Panel panel = 2 [(buf.validate.field).required = true];
+  // The panel to run. Exactly one of panel and panel_ref.
+  Panel panel = 2;
   // Extra predicates ANDed to every series of the panel (the dashboard's other
   // filter dropdowns, e.g. deployment.environment.name). Same vocabulary as
   // Panel.where.
@@ -1572,6 +1716,32 @@ message QueryPanelRequest {
   // and no data. The panel is still validated and the scope still checked.
   // A metrics panel looks up each series' metric to choose its statement.
   bool explain = 6;
+  // Runs a panel of a dashboard the control plane ships
+  // (deploy/observability/dashboards/<dashboard>.json, embedded in the server
+  // at build time), by id, instead of a panel the caller sends: the server
+  // substitutes the panel it holds, its SQL or series and its unit, so a
+  // caller that reuses a dashboard's definition cannot drift from it. It runs
+  // whether or not an environment's release recorded the dashboard (what
+  // GetDashboards serves). Everything else is as for `panel`: the scope's
+  // org, environments and time range, filters, group_by, step_seconds and
+  // explain apply, under the same admission (membership, or an obs:read
+  // credential of the org) and the same guardrails. An unknown dashboard or
+  // panel id is NotFound. Exactly one of panel and panel_ref.
+  PanelRef panel_ref = 7;
+}
+
+// A panel of a dashboard the control plane ships, by id.
+message PanelRef {
+  // The dashboard's id, e.g. "product-usage".
+  string dashboard_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+  // The panel's id within the dashboard, e.g. "engagement-headline".
+  string panel_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
 }
 
 // One statement a panel compiles to, as ClickHouse receives it: the SQL with
@@ -1614,13 +1784,15 @@ message QueryPanelResponse {
   // with `value` set over the whole range (metrics panels: the most recent
   // bucket's value); an ungrouped number panel also fills `points`, a short
   // series over the range for a sparkline (step_seconds wide).
-  // sql panels whose first column is a time: one entry per (numeric column x
-  // group of the string columns), with points.
+  // sql panels folded as a time series (draw "line"; by default, when the first
+  // column is a time): one entry per (numeric column x group of the string
+  // columns), with points.
   repeated PanelSeriesResult series = 4;
   // table and bar panels: the columns after the group-by columns, in series
   // order, heaviest group first (bar: at most panel.limit, default 10).
-  // sql panels that are not a time series: the numeric columns; each row's
-  // group holds the other columns by name.
+  // sql panels that are not a time series (Panel.draw "table" asks for this
+  // whatever the columns): the numeric columns; each row's group holds the
+  // other columns by name, so sql_columns gives every row back in SELECT order.
   repeated string columns = 5;
   repeated PanelTableRow rows = 6;
   int32 step_seconds = 7;
@@ -1659,8 +1831,9 @@ message QueryPanelResponse {
   // the scope and range: its series is empty, never an error). Metrics panels.
   repeated string warnings = 17;
   // sql panels drawn as a time series: the width of one bucket in seconds, so a
-  // client need not guess it from the points. A Date or Date32 first column is
-  // a calendar day (86400). A DateTime column is the {step} the statement was
+  // client need not guess it from the points. A panel that declares min_step
+  // reports that duration. Otherwise a Date or Date32 first column is a
+  // calendar day (86400), and a DateTime column is the {step} the statement was
   // bound to when it uses {step}; a statement that buckets by its own rule
   // reports 0 (unknown). 0 for every other panel kind (see step_seconds).
   int32 bucket_seconds = 18;
@@ -1669,6 +1842,22 @@ message QueryPanelResponse {
   // midnight UTC and a client labels it as that calendar date, never converts it
   // to its own zone. Empty when the first column is a DateTime (instants).
   string bucket_timezone = 19;
+  // With QueryPanelRequest.panel_ref: the panel the server ran, as it holds it
+  // (a sql panel's statement included), so a caller can record exactly what
+  // its numbers came from. Unset when the request sent the panel itself.
+  Panel panel = 20;
+  // sql panels: what the result was folded as, "line", "number", "table" or
+  // "bar" (Panel.draw resolved against the result's columns). "line" fills
+  // series; every other draw fills columns and rows. Empty with explain, for
+  // every other kind, and from a server older than Panel.draw.
+  string draw = 21;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none; always
+  // for a sql panel, whose statement is its author's and is never narrowed;
+  // and always for a browser panel (funnel, issues, sessions), which is
+  // narrowed to the sessions the instances' spans carry, but a session can
+  // span instances (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 22;
 }
 
 // What one PanelSeriesResult of a metrics panel measures, so a client can
@@ -1782,6 +1971,10 @@ message GetDashboardsResponse {
   // never recorded (a failed registry push, a self-managed environment), or
   // predates dashboards in the bundle, or nothing has been promoted into it.
   string source = 2;
+  // Always unset: this read is never narrowed to dev instances (dashboards are the environment's definitions),
+  // so it answers for the whole scope even when scope.instance_ids or
+  // instance_users is set (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 message DashboardSpec {
@@ -1895,6 +2088,19 @@ message Panel {
   string sql = 18;
   // Optional declared presentation section; no implicit query filtering.
   string section = 19;
+  // sql panels only: how the result is folded, as QueryDatabasePanelRequest's
+  // draw: "auto" (or empty), "line", "number", "table" or "bar". "line" folds
+  // to series over the first date or time column; anything but "line" folds to
+  // rows (sql_columns, columns and rows of the response), whatever the column
+  // types. Empty or "auto" is a time series when the first column is a time
+  // (and something follows it), rows otherwise. Refused on other kinds.
+  string draw = 20 [(buf.validate.field).string.max_len = 16];
+  // sql panels only: the panel's bucket (forge dashspec Panel.minStep), a
+  // number and a unit of s, m, h or d ("1d", "7d"), at most 30 days. A
+  // statement that groups by a fixed bucket (toDate, toMonday) declares it, and
+  // QueryPanel reports it as bucket_seconds instead of guessing from the first
+  // column's type. Refused on other kinds or when it does not parse.
+  string min_step = 21 [(buf.validate.field).string.max_len = 16];
 }
 
 // The definition a funnel panel draws (forge.Funnel): product event names in
@@ -2053,6 +2259,25 @@ message GetObservabilityUsageResponse {
   // its own line. Node- and cluster-level platform data ("infrastructure") is
   // Reliant's own and is never billed.
   int64 metadata_bytes = 22;
+  // The split of stored bytes across services and categories (by_service,
+  // browser_bytes, operator_bytes, metadata_bytes, and so used_bytes and each
+  // signal's billed_bytes) is an ESTIMATE for at least one hour of the period:
+  // weighted by row count instead of bytes. Only a billing-exempt org, which is
+  // never charged, is metered this way. stored bytes and rows stay exact.
+  bool breakdown_estimated = 23;
+
+  // Dev telemetry: what developers' LOCAL stacks sent with dev tokens
+  // (reliant.source=dev). It is metered inside the allowance and never billed as
+  // overage: dev_bytes is every dev byte stored; dev_billed_bytes the part of it
+  // counted in used_bytes (within the month's dev ceiling, and only while the
+  // allowance has room); dev_ceiling_bytes the month's dev ceiling (25 percent of
+  // the allowance, at least 2 GiB). Past the ceiling dev_state is over_100: the
+  // gateway then drops the org's dev DEBUG logs and error-free dev traces, and
+  // nothing else of the org's.
+  int64 dev_bytes = 24;
+  int64 dev_billed_bytes = 25;
+  int64 dev_ceiling_bytes = 26;
+  ObservabilityQuotaState dev_state = 27;
 }
 
 message SignalUsage {
@@ -2068,6 +2293,9 @@ message ServiceUsage {
   string service = 1;
   string signal = 2;
   int64 billed_bytes = 3;
+  // billed_bytes is weighted by rows, not bytes, for at least one hour (see
+  // GetObservabilityUsageResponse.breakdown_estimated).
+  bool estimated = 4;
 }
 
 // === Release health ===
@@ -2113,6 +2341,10 @@ message GetReleaseHealthResponse {
   // Finding codes this server could not check (no alert state, no issue
   // reader), so a PASS is not read as covering them.
   repeated string not_evaluated = 13;
+  // Always unset: this read is never narrowed to dev instances (a release is judged over its whole environment),
+  // so it answers for the whole scope even when scope.instance_ids or
+  // instance_users is set (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 14;
 }
 
 // ReleasePromotionRef names the promotion a health check judged.
@@ -2123,6 +2355,16 @@ message ReleasePromotionRef {
   google.protobuf.Timestamp promoted_at = 4;
   // The release it replaced, empty for the first.
   string previous_release_version = 5;
+  // True when the deploy ledger holds no promotion of release_version and the
+  // marker is INFERRED: promoted_at is the first time the environment's
+  // telemetry showed service.version = release_version (an app whose deploys
+  // nothing records). id and git_commit are empty then, and
+  // previous_release_version is the version first seen before it.
+  bool inferred = 6;
+  // Where promoted_at came from: "promotion" (the deploy ledger) or
+  // "telemetry_first_seen" (inferred). Always set by a server that knows the
+  // field; an older server leaves it empty, which means "promotion".
+  string marker_source = 7;
 }
 
 // ServiceHealthDelta is one service's before and after, over weighted server
@@ -2198,4 +2440,79 @@ message EffectiveThreshold {
   string value = 2;
   // "release_shape" (declared in KCL), "default" or "request".
   string source = 3;
+}
+
+// === Session replay per frontend ===
+
+message ListFrontendReplayRequest {
+  // The org whose environments are read. Verified against the caller, never
+  // assumed.
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The forge project whose environments are in scope. Unset = not narrowed by
+  // project; set to "" = the project-less environments.
+  optional string project_id = 2 [(buf.validate.field).string.max_len = 128];
+  // Control-plane environment ids (deploy_environments.id). Empty = every
+  // environment the caller may read in the org (of the project, when named).
+  repeated string env_ids = 3 [(buf.validate.field).repeated.max_items = 50];
+}
+
+message ListFrontendReplayResponse {
+  // One row per (environment, frontend), in environment scope order, then by
+  // frontend name.
+  repeated FrontendReplay frontends = 1;
+  // Environments in scope whose frontends could not be read at all (the
+  // release ledger was unreadable). They have no rows; that is not "no
+  // frontends".
+  repeated string unavailable_env_ids = 2;
+}
+
+// FrontendReplay is one frontend instance's session replay state.
+message FrontendReplay {
+  string env_id = 1;
+  string env_name = 2;
+  // The forge frontend's name: the forge.frontend attribute its telemetry
+  // carries.
+  string frontend = 3;
+  FrontendReplayState state = 4;
+  // Where the frontend's runtime config was read from.
+  FrontendReplaySource source = 5;
+  // The fraction of sessions recorded (REPLAY_SAMPLE_RATE), 0 to 1. 1 when the
+  // config does not set it, and when the state is UNKNOWN.
+  double sample_rate = 6;
+}
+
+// FrontendReplayState is what a frontend's runtime config and its environment's
+// policy together decide.
+//
+// A frontend that enables replay with the DEPRECATED build flag
+// ({VITE_,NEXT_PUBLIC_}OTEL_REPLAY baked into its bundle) has no OTEL_REPLAY
+// in its runtime config, so it reads OFF here though it may still record: a
+// reader reconciles OFF with the sessions it observed carrying a replay.
+enum FrontendReplayState {
+  FRONTEND_REPLAY_STATE_UNSPECIFIED = 0;
+  // The frontend records sessions and the environment keeps them.
+  FRONTEND_REPLAY_STATE_ON = 1;
+  // The frontend's runtime config does not turn replay on.
+  FRONTEND_REPLAY_STATE_OFF = 2;
+  // The frontend turns replay on but nothing is recorded or kept: its runtime
+  // config sends no browser telemetry (OTEL_ENDPOINT blank or "off", after the
+  // platform fills a hosted site's missing one), its environment's
+  // observability policy does not opt in to replay (a release cut by a forge
+  // that predates per-frontend replay), or browser telemetry is off.
+  FRONTEND_REPLAY_STATE_BLOCKED = 3;
+  // Not known: no runtime config could be read for the frontend, or it turns
+  // replay on and the environment's policy could not be read.
+  FRONTEND_REPLAY_STATE_UNKNOWN = 4;
+}
+
+// FrontendReplaySource is where a frontend's runtime config was read from.
+enum FrontendReplaySource {
+  FRONTEND_REPLAY_SOURCE_UNSPECIFIED = 0;
+  // The hosted StaticSite's runtime config, as the platform serves it now.
+  FRONTEND_REPLAY_SOURCE_LIVE = 1;
+  // The runtime config recorded in the environment's current release (a
+  // frontend the platform does not serve).
+  FRONTEND_REPLAY_SOURCE_RELEASE = 2;
+  // No runtime config was readable.
+  FRONTEND_REPLAY_SOURCE_NONE = 3;
 }

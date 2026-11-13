@@ -90,6 +90,9 @@ export interface Project {
   // control-plane environments are filed under. Absent until a daemon has
   // read it; see services/forge/environments.ts resolveForgeProjectName.
   forge_project_name?: string;
+  // The org the project belongs to (Project.org_id). Absent only for a row
+  // written before orgs and not yet stamped (an org-scoped list stamps it).
+  org_id?: string;
 }
 
 // ProjectDaemonInfo mirrors the proto ProjectDaemon row — one record per
@@ -102,6 +105,12 @@ export interface ProjectDaemonInfo {
   cloned_at: string;
   /** A row can be mid-clone or failed; only INSTALLED means the checkout is there. */
   install_state: ProjectInstallState;
+  /** Why the clone failed; empty unless install_state is FAILED. */
+  install_error?: string;
+  /** When the machine last showed the checkout on its disk (RFC 3339); absent when it never has. */
+  verified_at?: string;
+  /** The machine's display name, as the server resolved it. */
+  daemon_name?: string;
 }
 
 export interface FileChange {
@@ -146,6 +155,7 @@ export function projectFromProto(proto: ProtoProject): Project {
     remote_url: proto.remoteUrl || undefined,
     is_forge: proto.isForge,
     forge_project_name: proto.forgeProjectName || undefined,
+    org_id: proto.orgId || undefined,
   };
 }
 
@@ -157,6 +167,9 @@ function projectDaemonFromProto(proto: ProtoProjectDaemon): ProjectDaemonInfo {
     default_branch: proto.defaultBranch || undefined,
     cloned_at: proto.clonedAt,
     install_state: proto.installState,
+    install_error: proto.installError || undefined,
+    verified_at: proto.verifiedAt || undefined,
+    daemon_name: proto.daemonName || undefined,
   };
 }
 
@@ -199,7 +212,8 @@ export function sameProject(a: Project, b: Project): boolean {
     a.updated_at === b.updated_at &&
     a.remote_url === b.remote_url &&
     a.is_forge === b.is_forge &&
-    a.forge_project_name === b.forge_project_name
+    a.forge_project_name === b.forge_project_name &&
+    a.org_id === b.org_id
   );
 }
 
@@ -357,6 +371,21 @@ export interface CreateProjectInput {
   path: string;
   description?: string;
   default_branch?: string;
+  /**
+   * The machine the folder is on. Unset: the user's default machine, as
+   * before the field existed. Set, a folder that is already an existing
+   * project (same creation path or same git remote) is attached to that
+   * project instead of creating a second one (`attached`).
+   */
+  daemon_id?: string;
+}
+
+export interface CreateProjectResult {
+  project: Project;
+  /** The folder joined an EXISTING project on that machine; no new project was made. */
+  attached: boolean;
+  /** The checkout on the requested machine; set only when `daemon_id` was. */
+  projectDaemon?: ProjectDaemonInfo;
 }
 
 /**
@@ -364,12 +393,22 @@ export interface CreateProjectInput {
  * existing project is a normal path every caller handles itself.
  */
 export async function createProject(input: CreateProjectInput): Promise<Project> {
+  return (await createProjectWithResult(input)).project;
+}
+
+/**
+ * createProject, saying whether the folder made a new project or joined an
+ * existing one on the named machine. The success toast says which:
+ * "Added <machine> to existing project <name>" for an attach.
+ */
+export async function createProjectWithResult(input: CreateProjectInput): Promise<CreateProjectResult> {
   try {
     const response = await client.createProject({
       name: input.name,
       path: input.path,
       description: input.description,
       defaultBranch: input.default_branch,
+      daemonId: input.daemon_id || undefined,
     });
     if (!response.project) throw new Error("No project in response");
     const created = response.project;
@@ -380,13 +419,27 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     );
     await invalidateProjects();
     const project = projectFromProto(created);
-    trackEvent("project_created", {
-      is_forge: project.is_forge,
-      is_git_repo: project.is_git_repo,
-      has_remote: Boolean(project.remote_url),
-    });
-    toast.success(`Added ${project.name}`);
-    return project;
+    const projectDaemon = response.projectDaemon ? projectDaemonFromProto(response.projectDaemon) : undefined;
+    // A server that knows daemon_id always answers with the checkout on that
+    // machine. An older one ignores the field and registers the folder on the
+    // user's default machine: refuse rather than open it on the chosen one.
+    if (input.daemon_id && projectDaemon?.daemon_id !== input.daemon_id) {
+      throw new Error(
+        `The server registered ${project.name} without the machine you chose; it does not support adding a folder from another machine yet`,
+      );
+    }
+    if (response.attached) {
+      const machine = projectDaemon?.daemon_name || "this machine";
+      toast.success(`Added ${machine} to existing project ${project.name}`);
+    } else {
+      trackEvent("project_created", {
+        is_forge: project.is_forge,
+        is_git_repo: project.is_git_repo,
+        has_remote: Boolean(project.remote_url),
+      });
+      toast.success(`Added ${project.name}`);
+    }
+    return { project, attached: response.attached, projectDaemon };
   } catch (error) {
     if (!(error instanceof ConnectError && error.code === Code.AlreadyExists)) {
       toast.error(error);

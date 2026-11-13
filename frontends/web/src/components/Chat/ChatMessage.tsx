@@ -16,7 +16,7 @@ import { cn } from "../../lib/utils";
 import { tabSwitchProfiler } from "../../lib/tabSwitchProfiler";
 import { ToolExecution, type ToolResultData } from "./ToolExecution";
 import { ToolExecutionGroup } from "./ToolExecutionGroup";
-import { fetchFullToolResult } from "../../hooks/tool-result-queries";
+import { fetchFullToolBodies } from "../../hooks/tool-result-queries";
 import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
 import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
@@ -27,18 +27,17 @@ import { ErrorMessage } from "./ErrorMessage";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageGeneratedImages } from "./MessageGeneratedImages";
 import { MessageGeneratedVideos, isVideoMimeType } from "./MessageGeneratedVideos";
-import { BranchOptionsMenu } from "./BranchOptionsMenu";
-import { BranchToWorktreeModal } from "./BranchToWorktreeModal";
-import { BranchToExistingWorktreeModal } from "./BranchToExistingWorktreeModal";
+import { MessageTimestamp, useMessageBranching } from "./MessageChrome";
+import { viewerSafeMessage } from "../../lib/viewerResults";
 import { MessageActionsSheet, type MessageActionsSheetAction } from "./MessageActionsSheet";
 import { CodeContextPill } from "./CodeContextPill";
 import { FailedSendStatus } from "./FailedSendStatus";
 import { clientIdOfFailedSend } from "../../lib/pendingSends";
 import type { Message } from "../../api/client";
-import { ApprovalStatus, type Approval } from "../../gen/reliant/v1/approval_pb";
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
 import {
-  useActiveChatId,
+  useChatIdOrActive,
   useToolResultsByCallId,
   useToolCallStates,
   useChat,
@@ -46,7 +45,6 @@ import {
 import { useSurface, useCapability } from "../../lib/surfaceContext";
 
 // import { useChatNavigationStore } from "../../store/chatNavigationStore";
-import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
 import {
@@ -60,6 +58,64 @@ import { isQuietToolRun } from "./thread-views/transcriptPresentation";
 import type { MessageSlice } from "./thread-views/simplifiedTurns";
 
 export type ChatTimelineVariant = "compact" | "card" | "minimal";
+
+type CopiedExecution = {
+  call: Pick<ToolCallData, "id" | "input" | "inputElided" | "content_block_id">;
+  result?: Pick<ProcessedToolResultData, "content" | "truncated" | "elided" | "block_id">;
+};
+
+function parseCopiedInput(raw: string | undefined): ToolCallData["input"] {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Each execution's input and result as a copy writes them: the bodies a stub
+ * read elided and the results a read previewed, fetched whole in one batch
+ * (fetchFullToolBodies). Throws rather than copy a skeleton or a stub.
+ */
+async function fullBodiesOfExecutions(
+  chatId: string | null | undefined,
+  executions: CopiedExecution[],
+): Promise<{ inputs: ToolCallData["input"][]; results: (string | undefined)[] }> {
+  const elidedBlockIds: string[] = [];
+  const truncatedCallIds: string[] = [];
+  for (const { call, result } of executions) {
+    if (call.inputElided) {
+      if (!call.content_block_id) throw new Error("A tool call's input was left out and cannot be read");
+      elidedBlockIds.push(call.content_block_id);
+    }
+    if (result?.elided) {
+      if (!result.block_id) throw new Error("A tool result was left out and cannot be read");
+      elidedBlockIds.push(result.block_id);
+    } else if (result?.truncated) {
+      truncatedCallIds.push(call.id);
+    }
+  }
+  const needsFetch = elidedBlockIds.length > 0 || truncatedCallIds.length > 0;
+  if (needsFetch && !chatId) throw new Error("Tool bodies cannot be read without the chat");
+  const full = needsFetch && chatId
+    ? await fetchFullToolBodies(chatId, { elidedBlockIds, truncatedCallIds })
+    : { bodies: {}, fullResults: new Map<string, string>() };
+  return {
+    inputs: executions.map(({ call }) =>
+      call.inputElided && call.content_block_id
+        ? parseCopiedInput(full.bodies[call.content_block_id]?.input)
+        : call.input,
+    ),
+    results: executions.map(({ call, result }) =>
+      result?.elided && result.block_id
+        ? full.bodies[result.block_id]?.content
+        : result?.truncated
+          ? full.fullResults.get(call.id)
+          : result?.content,
+    ),
+  };
+}
 
 /**
  * User-message bubble heights.
@@ -121,12 +177,14 @@ interface ChatMessageProps {
 
 function sameSlice(a: MessageSlice | undefined, b: MessageSlice | undefined): boolean {
   if (a === b) return true;
-  if (!a || !b || a.role !== b.role) return false;
-  if (a.segmentIndexes === b.segmentIndexes) return true;
-  return (
-    a.segmentIndexes.length === b.segmentIndexes.length &&
-    a.segmentIndexes.every((idx, i) => idx === b.segmentIndexes[i])
-  );
+  if (!a || !b || a.role !== b.role || Boolean(a.chrome) !== Boolean(b.chrome)) return false;
+  return sameList(a.segmentIndexes, b.segmentIndexes) && sameList(a.callIds, b.callIds);
+}
+
+function sameList<T>(a: readonly T[] | undefined, b: readonly T[] | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((value, i) => value === b[i]);
 }
 
 // Re-export for components that import from here
@@ -221,9 +279,8 @@ function ChatMessageComponent({
   // A slice only ever cuts an assistant message.
   const slice = isUser ? undefined : sliceProp;
   const sliceRole = slice?.role;
-  const activeChatId = useActiveChatId();
   // Prefer chatId from props (command center), fallback to chat navigation store
-  const chatId = propChatId || activeChatId;
+  const chatId = useChatIdOrActive(propChatId);
 
   // PERFORMANCE: Track message render timing
   const renderStartRef = useRef<number | undefined>(undefined);
@@ -238,8 +295,6 @@ function ChatMessageComponent({
   // tool calls at read time via the reference-keyed processMessage memo below.
   const toolResultsByCallId = useToolResultsByCallId(chatId || "");
 
-  const currentProject = useProjectStore((state) => state.currentProject);
-
   // Get worktree_id from chat data for file link context
   const currentChat = useChat(chatId || "");
   const chatWorktreeId = currentChat?.worktreeId;
@@ -247,19 +302,16 @@ function ChatMessageComponent({
   const [fontKey, setFontKey] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
-  const [branchMenuPosition, setBranchMenuPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-  const [showBranchToWorktreeModal, setShowBranchToWorktreeModal] =
-    useState(false);
-  const [
-    showBranchToExistingWorktreeModal,
-    setShowBranchToExistingWorktreeModal,
-  ] = useState(false);
+  const {
+    available: branchAvailable,
+    openBranchMenu,
+    branchInPlace: handleBranchChat,
+    branchToExistingWorkspace: handleBranchToExistingWorkspace,
+    branchUi,
+  } = useMessageBranching(chatId, message.id);
   const surface = useSurface();
   const isMobile = surface === "mobile";
-  const canBranch = useCapability("chatBranching");
+  const canBranch = useCapability("chatBranching") && branchAvailable;
   const [showActionsSheet, setShowActionsSheet] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -290,27 +342,6 @@ function ChatMessageComponent({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isExpanded]);
 
-  // Format timestamp to relative time (e.g., "2 minutes ago")
-  const formatTimestamp = (dateString: string) => {
-    const now = new Date();
-    const then = new Date(dateString);
-    const seconds = Math.floor((now.getTime() - then.getTime()) / 1000);
-
-    if (seconds < 60) return "less than a minute ago";
-    if (seconds < 120) return "1 minute ago";
-    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
-    if (seconds < 7200) return "1 hour ago";
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
-    if (seconds < 172800) return "1 day ago";
-    if (seconds < 2592000) return `${Math.floor(seconds / 86400)} days ago`;
-    if (seconds < 5184000) return "1 month ago";
-    if (seconds < 31536000)
-      return `${Math.floor(seconds / 2592000)} months ago`;
-    return `${Math.floor(seconds / 31536000)} year${
-      Math.floor(seconds / 31536000) > 1 ? "s" : ""
-    } ago`;
-  };
-
   // OPTIMIZED: Memoize approvals by content_block_id to avoid re-filtering on every render
   const approvalsByContentBlockId = useMemo(() => {
     const map = new Map<string, Approval>();
@@ -331,53 +362,16 @@ function ChatMessageComponent({
     [approvalsByContentBlockId],
   );
 
-  // Show branch options menu when clicking the branch button
-  const handleBranchClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setBranchMenuPosition({ x: rect.left, y: rect.bottom + 4 });
-  }, []);
-
-  // Branch chat in same worktree (original behavior)
-  const handleBranchChat = useCallback(async () => {
-    const effectiveChatId = chatId || activeChatId;
-    if (!effectiveChatId) {
-      logger.error("No chat ID available for branching");
-      return;
-    }
-    try {
-      logger.info("Branching chat:", {
-        chatId: effectiveChatId,
-        messageId: message.id,
-      });
-      await useChatStore.getState().branchChat(effectiveChatId, message.id);
-    } catch (error) {
-      logger.error("Failed to branch chat:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      toast.error(`Failed to branch chat: ${errorMessage}`, { duration: 5000 });
-    }
-  }, [activeChatId, chatId, message.id]);
-
-  // Open modal to branch chat to a new worktree
-  const handleBranchToWorkspace = useCallback(() => {
-    setShowBranchToWorktreeModal(true);
-  }, []);
-
-  // Open modal to branch chat to an existing worktree
-  const handleBranchToExistingWorkspace = useCallback(() => {
-    setShowBranchToExistingWorktreeModal(true);
-  }, []);
-
   const handleCopy = async () => {
     try {
       // Copy formatted content instead of raw JSON
       let contentToCopy = "";
 
-      if (sliceRole === "answer") {
-        // The answer row copies the answer, not the work folded above it.
-        contentToCopy += visibleSegments
-          .flatMap(({ segment }) => (segment.kind === "text" && segment.text ? [segment.text] : []))
+      if (sliceRole === "prose") {
+        // The message's prose, every slice of it — the chrome stands for the
+        // whole message — but never the work folded between its slices.
+        contentToCopy += parsed.segments
+          .flatMap((segment) => (segment.kind === "text" && segment.text.trim() ? [segment.text] : []))
           .join("\n\n");
       } else if (parsed.text) {
         // Include full text with code contexts for copy
@@ -385,23 +379,26 @@ function ChatMessageComponent({
       }
 
       if (!slice && parsed.toolExecutions && parsed.toolExecutions.length > 0) {
-        // A large result is held as a preview: copy the full output instead.
-        const resultContents = await Promise.all(
-          parsed.toolExecutions.map((execution) =>
-            execution.result?.truncated && chatId
-              ? fetchFullToolResult(chatId, execution.call.id)
-              : Promise.resolve(execution.result?.content),
-          ),
-        );
-        parsed.toolExecutions.forEach((execution, index) => {
+        // The transcript may hold a call's input as a skeleton, its result as
+        // a stub (both elided by a stub read) or a large result as a preview:
+        // copy the bodies, read whole in one batch, never what labelled the row.
+        // A viewer of another member's shared chat copies each call's input
+        // and never its result, however the result reached this client.
+        const viewer = isViewer;
+        const executions = viewer
+          ? parsed.toolExecutions.map((execution) => ({ ...execution, result: undefined }))
+          : parsed.toolExecutions;
+        const { inputs, results } = await fullBodiesOfExecutions(chatId, executions);
+        executions.forEach((execution, index) => {
+          const input = inputs[index];
           // Format tool call with parameters like Claude does
           let toolCallText = `Tool: ${execution.call.name}`;
           if (
-            execution.call.input &&
-            typeof execution.call.input === "object" &&
-            execution.call.input !== null
+            input &&
+            typeof input === "object" &&
+            input !== null
           ) {
-            const params = Object.entries(execution.call.input)
+            const params = Object.entries(input)
               .map(([key, value]) => {
                 if (typeof value === "string") {
                   return `${key}: ${value}`;
@@ -415,10 +412,10 @@ function ChatMessageComponent({
 
             // Check if the formatted parameters would be too long or cluttered
             const totalLength = params.length;
-            const hasLongStrings = Object.values(execution.call.input).some(
+            const hasLongStrings = Object.values(input).some(
               (val) => typeof val === "string" && val.length > 50,
             );
-            const hasComplexObjects = Object.values(execution.call.input).some(
+            const hasComplexObjects = Object.values(input).some(
               (val) =>
                 typeof val === "object" &&
                 val !== null &&
@@ -436,13 +433,15 @@ function ChatMessageComponent({
           }
 
           contentToCopy += `${toolCallText}\n`;
-          const resultContent = resultContents[index];
-          if (resultContent) {
+          const resultContent = results[index];
+          if (viewer) {
+            contentToCopy += "Result withheld: it stays on the owner's machine\n";
+          } else if (resultContent) {
             contentToCopy += resultContent + "\n";
           } else {
             contentToCopy += "No output available\n";
           }
-          if (index < parsed.toolExecutions!.length - 1) {
+          if (index < executions.length - 1) {
             contentToCopy += "\n";
           }
         });
@@ -461,6 +460,8 @@ function ChatMessageComponent({
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       logger.error("Failed to copy message:", error);
+      // A copy that would need a body it could not read copies nothing.
+      void toast.error(error);
     }
   };
 
@@ -469,8 +470,12 @@ function ChatMessageComponent({
   // the approvals list changes reference (all fresh on immutable content
   // change, stable otherwise) — so this stays fast on tab switches / re-renders
   // without a hand-maintained store cache, and never renders stale results.
+  // A viewer of another member's shared chat never sees a tool's result:
+  // every view of the message below (rows, cards, media, copy) reads it
+  // through viewerSafeMessage.
+  const isViewer = !!currentChat?.viewerAccess;
   const parsed = useMemo((): ParsedContent => {
-    const processed = getProcessedMessage(message, toolResultsByCallId, approvals);
+    const processed = viewerSafeMessage(getProcessedMessage(message, toolResultsByCallId, approvals), isViewer);
     return {
       text: processed.text,
       toolExecutions: processed.toolExecutions?.map((exec) => ({
@@ -480,7 +485,7 @@ function ChatMessageComponent({
       })),
       segments: processed.segments,
     };
-  }, [message, approvals, toolResultsByCallId]);
+  }, [message, approvals, toolResultsByCallId, isViewer]);
 
   // The segments this row renders: all of them, or the slice's.
   const visibleSegments = (() => {
@@ -632,11 +637,14 @@ function ChatMessageComponent({
         (isDraftAutomationTool(exec.call.name) && !!exec.result && !exec.result.is_error),
     ),
   );
-  // A slice judges visibility from its own segments. work / work-surfaced rows
+  // A prose slice without the chrome is text alone: no actions, timestamp or
+  // attachments (those are the message's last prose slice's).
+  const hasChrome = !slice || Boolean(slice.chrome);
+  // A slice judges visibility from its own segments. work / surfaced rows
   // only know once they have rendered, so they are checked after the helpers.
   const hasVisibleContent = slice
-    ? sliceRole !== "answer" ||
-      hasAttachments ||
+    ? sliceRole !== "prose" ||
+      (hasChrome && hasAttachments) ||
       visibleSegments.some(({ segment }) => segment.kind === "text" && Boolean(segment.text))
     : parsed.text ||
       hasAttachments ||
@@ -783,23 +791,10 @@ function ChatMessageComponent({
     segIdx: number,
   ): JSX.Element | null => {
     const keyBase = `${message.id}-seg-${segIdx}`;
-    // The answer row carries no tools; the work fold renders the rows only,
-    // its cards and images being the work-surfaced row's.
-    if (sliceRole === "answer") return null;
-    if (sliceRole === "work") {
-      if (hideToolExecutions) return null;
-      // A call awaiting approval is the work-surfaced row's, which stays on
-      // screen whether or not the fold is open: rendering it here too would
-      // put two sets of approve/deny buttons on screen.
-      const rows = executions.filter(
-        (exec) =>
-          !isRequestMachineTool(exec.call.name) &&
-          exec.call.name !== "ask_user" &&
-          exec.approval?.status !== ApprovalStatus.PENDING,
-      );
-      const run = renderToolRun(rows, keyBase);
-      return run ? <Fragment key={keyBase}>{run}</Fragment> : null;
-    }
+    // A prose row carries no tools. A fold's work row and a surfaced call's
+    // row render what they were given exactly as the detailed transcript
+    // does: the simplified pass decides which calls go where.
+    if (sliceRole === "prose") return null;
 
     // request_machine is a question to the user, not a record of
     // work: it renders as its own card, outside the tool rows and
@@ -838,7 +833,7 @@ function ChatMessageComponent({
         />
       ));
     const userCards = [...machineRequestCards, ...askUserCards, ...draftCards];
-    if (hideToolExecutions && sliceRole !== "work-surfaced") {
+    if (hideToolExecutions) {
       return userCards.length > 0 ? <Fragment key={keyBase}>{userCards}</Fragment> : null;
     }
     const runExecutions = executions.filter(
@@ -860,38 +855,6 @@ function ChatMessageComponent({
       </>
     );
 
-    if (sliceRole === "work-surfaced") {
-      // What must stay visible while the fold is collapsed: a call waiting
-      // on the user's approval, plus the cards and media above.
-      const pending = runExecutions.filter((exec) => exec.approval?.status === ApprovalStatus.PENDING);
-      if (pending.length + userCards.length + runImages.length + runVideos.length === 0) return null;
-      return (
-        <Fragment key={keyBase}>
-          {pending.length > 0 && (
-            <div className="space-y-1">
-              {pending.map((exec) => (
-                <ToolExecution
-                  key={exec.call.content_block_id || exec.call.id}
-                  toolCall={exec.call}
-                  toolResult={exec.result}
-                  status={exec.status}
-                  onCancel={exec.onCancel}
-                  onConvertToBackground={exec.onConvertToBackground}
-                  approval={exec.approval}
-                  chatId={chatId || undefined}
-                  showRichContent
-                  onSelectThread={onSelectThread}
-                  density={toolDensity}
-                />
-              ))}
-            </div>
-          )}
-          {userCards}
-          {media}
-        </Fragment>
-      );
-    }
-
     return (
       <Fragment key={keyBase}>
         {renderToolRun(runExecutions, keyBase)}
@@ -901,25 +864,35 @@ function ChatMessageComponent({
     );
   };
 
+  // A slice that names calls renders only those of its tools segments.
+  const sliceCalls = slice?.callIds ? new Set(slice.callIds) : null;
+
   // Tool-run segments show during streaming too (preparing state).
   const renderSegment = (segment: MessageSegment, segIdx: number): JSX.Element | null => {
     if (segment.kind === "text") {
-      return sliceRole === "work-surfaced" ? null : renderTextSegment(segment.text, segIdx);
+      return sliceRole === "surfaced" ? null : renderTextSegment(segment.text, segIdx);
     }
     const executions = segment.executions
+      .filter((exec) => !sliceCalls || sliceCalls.has(exec.call.id))
       .map((exec) => enhancedById.get(exec.call.id))
       .filter((e): e is EnhancedToolExecution => e !== undefined);
     return renderToolsSegment(executions, segIdx);
   };
 
-  // The fold's rows carry none of a message's chrome (avatar, timestamp,
-  // actions): they are part of the turn's work, not a message of their own.
-  if (sliceRole === "work" || sliceRole === "work-surfaced") {
+  // A fold's work rows and a surfaced call's row carry none of a message's
+  // chrome (avatar, timestamp, actions): they are part of the turn's work,
+  // not a message of their own.
+  if (sliceRole === "work" || sliceRole === "surfaced") {
     const rendered = visibleSegments.map(({ segment, segIdx }) => renderSegment(segment, segIdx));
     if (rendered.every((node) => node === null)) return null;
     return (
       <div
-        className={cn("space-y-1", isMobile && "select-text")}
+        className={cn(
+          "space-y-1",
+          // A surfaced row stands in the transcript: aligned with prose.
+          sliceRole === "surfaced" && "message-content mb-1 w-full px-2",
+          isMobile && "select-text",
+        )}
         data-testid={`message-${message.id}-${sliceRole}`}
       >
         {rendered}
@@ -931,7 +904,6 @@ function ChatMessageComponent({
   // A send that failed for good: still local-only (no branching from it), but
   // shown at full strength with a "Not sent" line rather than as pending.
   const failedClientMessageId = clientIdOfFailedSend(message.id);
-  const timestampText = message.createdAt ? formatTimestamp(message.createdAt) : "";
   const fullTimestampText = message.createdAt
     ? new Date(message.createdAt).toLocaleString()
     : "";
@@ -977,17 +949,9 @@ function ChatMessageComponent({
 
   const actionControls = (
     <>
-      {timestampText && (
-        <time
-          dateTime={message.createdAt}
-          className="px-1 text-xs leading-none text-muted-foreground"
-          title={fullTimestampText}
-        >
-          {timestampText}
-        </time>
-      )}
+      {message.createdAt && <MessageTimestamp at={message.createdAt} className="px-1" />}
       {/* Separates the timestamp (information) from the buttons (actions). */}
-      {timestampText && <span aria-hidden className="h-3 w-px bg-border" />}
+      {message.createdAt && <span aria-hidden className="h-3 w-px bg-border" />}
       <Tooltip content={copied ? "Copied" : "Copy message"} side="top" delay={300} triggerClassName="inline-flex">
       <button
         onClick={(e) => {
@@ -1005,6 +969,7 @@ function ChatMessageComponent({
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
       </Tooltip>
+      {branchAvailable && (
       <Tooltip
         content={
           failedClientMessageId
@@ -1020,7 +985,7 @@ function ChatMessageComponent({
       <button
         onClick={(e) => {
           e.stopPropagation();
-          handleBranchClick(e);
+          openBranchMenu(e);
         }}
         disabled={isOptimistic}
         aria-label="Branch from message"
@@ -1035,6 +1000,7 @@ function ChatMessageComponent({
         <GitBranch className="h-3.5 w-3.5" />
       </button>
       </Tooltip>
+      )}
     </>
   );
 
@@ -1140,8 +1106,10 @@ function ChatMessageComponent({
   );
 
   // The pin is a breadcrumb of a message that already exists below; it gets no
-  // toolbar at all.
-  const showInlineActions = isLatestMessage && !pinned && !isMobile;
+  // toolbar at all. Nor does a prose slice without the chrome: the message's
+  // last prose slice carries it.
+  const hasToolbar = !pinned && hasChrome;
+  const showInlineActions = isLatestMessage && hasToolbar && !isMobile;
 
   // Only the floating variant overlaps the message, so only it needs the column
   // to reserve the band. Charging it unconditionally would push every message
@@ -1156,7 +1124,7 @@ function ChatMessageComponent({
   // on top of exactly those buttons the moment the row was hovered, so the
   // condition tracks "does this message float a toolbar", which is the same
   // test the render below uses.
-  const reservesToolbarBand = !pinned && !showInlineActions && !isMobile;
+  const reservesToolbarBand = hasToolbar && !showInlineActions && !isMobile;
 
   return (
     <div
@@ -1167,7 +1135,7 @@ function ChatMessageComponent({
         copied && "copied",
         isOptimistic && !failedClientMessageId && "opacity-60",
       )}
-      data-testid={`message-${message.id}`}
+      data-testid={hasChrome ? `message-${message.id}` : `message-${message.id}-prose`}
       data-chat-timeline-variant={timelineVariant}
     >
       <div className="message-layout lg:message-layout-lg">
@@ -1325,7 +1293,7 @@ function ChatMessageComponent({
               {visibleSegments.map(({ segment, segIdx }) => renderSegment(segment, segIdx))}
 
               {/* Attachments */}
-              {hasAttachments && (
+              {hasAttachments && hasChrome && (
                 <MessageAttachments
                   attachments={message.attachments}
                   isUser={isUser}
@@ -1340,8 +1308,8 @@ function ChatMessageComponent({
           {/* Rendered once, outside the role branches, so it anchors to the
               content column rather than to the user bubble or the assistant
               block. The pin is a breadcrumb and gets no toolbar at all. */}
-          {!pinned && !isMobile && !showInlineActions && floatingMessageActions}
-          {isMobile && !pinned && (
+          {hasToolbar && !isMobile && !showInlineActions && floatingMessageActions}
+          {isMobile && hasToolbar && (
             <button type="button" aria-label="Message actions" aria-haspopup="dialog"
               aria-expanded={showActionsSheet}
               onClick={() => setShowActionsSheet(true)}
@@ -1352,43 +1320,11 @@ function ChatMessageComponent({
         </div>
       </div>
 
-      {/* Branch options menu */}
-      {branchMenuPosition && (
-        <BranchOptionsMenu
-          position={branchMenuPosition}
-          onClose={() => setBranchMenuPosition(null)}
-          onBranchChat={handleBranchChat}
-          onBranchToWorkspace={handleBranchToWorkspace}
-          onBranchToExistingWorkspace={handleBranchToExistingWorkspace}
-        />
-      )}
-
-      {/* Branch to worktree modal */}
-      {showBranchToWorktreeModal && chatId && currentProject && (
-        <BranchToWorktreeModal
-          isOpen={showBranchToWorktreeModal}
-          onClose={() => setShowBranchToWorktreeModal(false)}
-          chatId={chatId}
-          messageId={message.id}
-          projectId={currentProject.id}
-          sourceWorktreeId={chatWorktreeId}
-        />
-      )}
-
-      {/* Branch to existing worktree modal */}
-      {showBranchToExistingWorktreeModal && chatId && currentProject && (
-        <BranchToExistingWorktreeModal
-          isOpen={showBranchToExistingWorktreeModal}
-          onClose={() => setShowBranchToExistingWorktreeModal(false)}
-          chatId={chatId}
-          messageId={message.id}
-          projectId={currentProject.id}
-          sourceWorktreeId={chatWorktreeId}
-        />
-      )}
+      {/* Branch options menu and its modals */}
+      {branchUi}
 
       {/* Explicit mobile actions leave native prose selection untouched. */}
-      {isMobile && (
+      {isMobile && hasToolbar && (
         <MessageActionsSheet
           isOpen={showActionsSheet}
           onClose={() => setShowActionsSheet(false)}

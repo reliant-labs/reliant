@@ -13,7 +13,9 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -131,6 +133,11 @@ func (s *Service) applyInboundDefinition(ctx context.Context, userID string, def
 // integration, or the caller's default for it. A foreign id is NotFound,
 // exactly like a missing one.
 func (s *Service) resolveTriggerConnection(ctx context.Context, userID, integration string, requested *string) (string, error) {
+	if requested != nil && ghdelegated.IsOrgAppConnectionID(*requested) {
+		// Bound after the trigger's org is decided (bindOrgGitHubApp), and
+		// only for a GitHub trigger, which comes through the access-gated path.
+		return "", svcerr.InvalidArgument("an organization's GitHub App can only be the source of a GitHub trigger")
+	}
 	store := s.connections()
 	if store == nil {
 		return "", inboundUnavailable("integration")
@@ -147,7 +154,7 @@ func (s *Service) resolveTriggerConnection(ctx context.Context, userID, integrat
 	if err != nil && !svcerr.IsNotFound(err) {
 		return "", svcerr.WrapOr(err, svcerr.Internal("failed to get connection"))
 	}
-	if err != nil || conn == nil || conn.UserID != userID {
+	if err != nil || conn == nil || !authz.CanAccessPersonal(userID, conn.UserID) {
 		if requested == nil || *requested == "" {
 			msg := fmt.Sprintf("connect %s first: an integration trigger listens through one of your connections", integration)
 			return "", tools.RefuseActivation(msg, svcerr.FailedPrecondition(msg))
@@ -168,6 +175,11 @@ func (s *Service) resolveTriggerConnection(ctx context.Context, userID, integrat
 // there, but with none named, the caller's default is bound when it exists
 // and nil is returned when it does not.
 func (s *Service) resolveOptionalTriggerConnection(ctx context.Context, userID, integration string, requested *string) (*string, error) {
+	if requested != nil && ghdelegated.IsOrgAppConnectionID(*requested) {
+		// The org's installation has no row to bind: it is recorded in the
+		// trigger's config once its org is decided (bindOrgGitHubApp).
+		return nil, nil
+	}
 	if requested != nil && *requested != "" {
 		id, err := s.resolveTriggerConnection(ctx, userID, integration, requested)
 		if err != nil {
@@ -180,7 +192,7 @@ func (s *Service) resolveOptionalTriggerConnection(ctx context.Context, userID, 
 		return nil, nil
 	}
 	conn, err := store.DefaultConnection(ctx, userID, integration)
-	if err != nil || conn == nil || conn.UserID != userID || conn.Status == core.ConnectionStatusRevoked {
+	if err != nil || conn == nil || !authz.CanAccessPersonal(userID, conn.UserID) || conn.Status == core.ConnectionStatusRevoked {
 		return nil, nil
 	}
 	return &conn.ID, nil

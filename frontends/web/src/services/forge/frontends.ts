@@ -109,14 +109,18 @@ export function frontendsOf(
 /** An environment as the Overview's strip holds it. */
 export interface ScopeEnv extends FrontendEnv {
   preview: boolean;
-  /** Reliant runs it. Only those have a platform hostname. */
-  placed: boolean;
 }
 
 /**
  * The frontends of the environments a console scope covers: the one named, or
  * every long-lived one for "all" (previews are one per pull request and would
  * bury the real sites). Prod leads.
+ *
+ * Whatever the environment's kind. A site the platform serves is a deployment
+ * on its static tier, so a self-managed environment (its services on a cluster
+ * the customer runs) still has its sites here, and GetStatus reports them like
+ * any other: control-plane's prod serves reliant-web that way. An environment
+ * with no static deployment contributes none.
  */
 export function frontendsInScope(
   scope: string,
@@ -124,7 +128,7 @@ export function frontendsInScope(
   hosted: ReadonlyMap<string, ReadonlyMap<string, ForgeHostedWorkload>>,
   domains: readonly ForgeDomain[] | null
 ): Frontend[] {
-  const covered = envs.filter((env) => env.placed && (scope === "all" ? !env.preview : env.name === scope));
+  const covered = envs.filter((env) => (scope === "all" ? !env.preview : env.name === scope));
   return covered
     .sort((a, b) => compareEnvNames(a.name, b.name))
     .flatMap((env) => frontendsOf(env, [...(hosted.get(env.name)?.values() ?? [])], domains));

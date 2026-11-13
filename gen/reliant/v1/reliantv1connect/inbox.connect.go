@@ -43,6 +43,12 @@ const (
 	// InboxServiceForgetStorageWorktreeProcedure is the fully-qualified name of the InboxService's
 	// ForgetStorageWorktree RPC.
 	InboxServiceForgetStorageWorktreeProcedure = "/reliant.v1.InboxService/ForgetStorageWorktree"
+	// InboxServiceKeepMarkedWorktreeProcedure is the fully-qualified name of the InboxService's
+	// KeepMarkedWorktree RPC.
+	InboxServiceKeepMarkedWorktreeProcedure = "/reliant.v1.InboxService/KeepMarkedWorktree"
+	// InboxServiceReclaimMarkedWorktreeNowProcedure is the fully-qualified name of the InboxService's
+	// ReclaimMarkedWorktreeNow RPC.
+	InboxServiceReclaimMarkedWorktreeNowProcedure = "/reliant.v1.InboxService/ReclaimMarkedWorktreeNow"
 	// InboxServiceDismissInboxItemProcedure is the fully-qualified name of the InboxService's
 	// DismissInboxItem RPC.
 	InboxServiceDismissInboxItemProcedure = "/reliant.v1.InboxService/DismissInboxItem"
@@ -76,6 +82,18 @@ type InboxServiceClient interface {
 	// caller's. The archived workspace stays in the archive; restoring it later
 	// makes a new folder.
 	ForgetStorageWorktree(context.Context, *connect.Request[v1.ForgetStorageWorktreeRequest]) (*connect.Response[v1.ForgetStorageWorktreeResponse], error)
+	// KeepMarkedWorktree answers a marked worktree's item with "Keep": the
+	// reclaim mark the person saw (mark_id) is cancelled and its tombstone
+	// removed, and the worktree's quiet period starts again. NOT_FOUND for a
+	// worktree of the caller's that is not marked; FAILED_PRECONDITION when it
+	// carries a different mark than the one shown (refresh and decide again).
+	KeepMarkedWorktree(context.Context, *connect.Request[v1.KeepMarkedWorktreeRequest]) (*connect.Response[v1.KeepMarkedWorktreeResponse], error)
+	// ReclaimMarkedWorktreeNow answers a marked worktree's item with "Reclaim
+	// now": the mark's waiting period is skipped and the worktree is checked
+	// at once. Every other check still applies: if it was used since the mark,
+	// its tombstone is gone, or it has new work, the mark is cancelled instead
+	// and nothing is removed. Errors as KeepMarkedWorktree.
+	ReclaimMarkedWorktreeNow(context.Context, *connect.Request[v1.ReclaimMarkedWorktreeNowRequest]) (*connect.Response[v1.ReclaimMarkedWorktreeNowResponse], error)
 	// DismissInboxItem hides items from the caller's inbox. Every kind can be
 	// dismissed. Hiding an approval or a question does not resolve it: the run
 	// still waits, and the chat still shows it. A newer failure of the same
@@ -116,6 +134,18 @@ func NewInboxServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(inboxServiceMethods.ByName("ForgetStorageWorktree")),
 			connect.WithClientOptions(opts...),
 		),
+		keepMarkedWorktree: connect.NewClient[v1.KeepMarkedWorktreeRequest, v1.KeepMarkedWorktreeResponse](
+			httpClient,
+			baseURL+InboxServiceKeepMarkedWorktreeProcedure,
+			connect.WithSchema(inboxServiceMethods.ByName("KeepMarkedWorktree")),
+			connect.WithClientOptions(opts...),
+		),
+		reclaimMarkedWorktreeNow: connect.NewClient[v1.ReclaimMarkedWorktreeNowRequest, v1.ReclaimMarkedWorktreeNowResponse](
+			httpClient,
+			baseURL+InboxServiceReclaimMarkedWorktreeNowProcedure,
+			connect.WithSchema(inboxServiceMethods.ByName("ReclaimMarkedWorktreeNow")),
+			connect.WithClientOptions(opts...),
+		),
 		dismissInboxItem: connect.NewClient[v1.DismissInboxItemRequest, v1.DismissInboxItemResponse](
 			httpClient,
 			baseURL+InboxServiceDismissInboxItemProcedure,
@@ -133,11 +163,13 @@ func NewInboxServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // inboxServiceClient implements InboxServiceClient.
 type inboxServiceClient struct {
-	listInbox             *connect.Client[v1.ListInboxRequest, v1.ListInboxResponse]
-	cleanupStorage        *connect.Client[v1.CleanupStorageRequest, v1.CleanupStorageResponse]
-	forgetStorageWorktree *connect.Client[v1.ForgetStorageWorktreeRequest, v1.ForgetStorageWorktreeResponse]
-	dismissInboxItem      *connect.Client[v1.DismissInboxItemRequest, v1.DismissInboxItemResponse]
-	restoreInboxItem      *connect.Client[v1.RestoreInboxItemRequest, v1.RestoreInboxItemResponse]
+	listInbox                *connect.Client[v1.ListInboxRequest, v1.ListInboxResponse]
+	cleanupStorage           *connect.Client[v1.CleanupStorageRequest, v1.CleanupStorageResponse]
+	forgetStorageWorktree    *connect.Client[v1.ForgetStorageWorktreeRequest, v1.ForgetStorageWorktreeResponse]
+	keepMarkedWorktree       *connect.Client[v1.KeepMarkedWorktreeRequest, v1.KeepMarkedWorktreeResponse]
+	reclaimMarkedWorktreeNow *connect.Client[v1.ReclaimMarkedWorktreeNowRequest, v1.ReclaimMarkedWorktreeNowResponse]
+	dismissInboxItem         *connect.Client[v1.DismissInboxItemRequest, v1.DismissInboxItemResponse]
+	restoreInboxItem         *connect.Client[v1.RestoreInboxItemRequest, v1.RestoreInboxItemResponse]
 }
 
 // ListInbox calls reliant.v1.InboxService.ListInbox.
@@ -153,6 +185,16 @@ func (c *inboxServiceClient) CleanupStorage(ctx context.Context, req *connect.Re
 // ForgetStorageWorktree calls reliant.v1.InboxService.ForgetStorageWorktree.
 func (c *inboxServiceClient) ForgetStorageWorktree(ctx context.Context, req *connect.Request[v1.ForgetStorageWorktreeRequest]) (*connect.Response[v1.ForgetStorageWorktreeResponse], error) {
 	return c.forgetStorageWorktree.CallUnary(ctx, req)
+}
+
+// KeepMarkedWorktree calls reliant.v1.InboxService.KeepMarkedWorktree.
+func (c *inboxServiceClient) KeepMarkedWorktree(ctx context.Context, req *connect.Request[v1.KeepMarkedWorktreeRequest]) (*connect.Response[v1.KeepMarkedWorktreeResponse], error) {
+	return c.keepMarkedWorktree.CallUnary(ctx, req)
+}
+
+// ReclaimMarkedWorktreeNow calls reliant.v1.InboxService.ReclaimMarkedWorktreeNow.
+func (c *inboxServiceClient) ReclaimMarkedWorktreeNow(ctx context.Context, req *connect.Request[v1.ReclaimMarkedWorktreeNowRequest]) (*connect.Response[v1.ReclaimMarkedWorktreeNowResponse], error) {
+	return c.reclaimMarkedWorktreeNow.CallUnary(ctx, req)
 }
 
 // DismissInboxItem calls reliant.v1.InboxService.DismissInboxItem.
@@ -190,6 +232,18 @@ type InboxServiceHandler interface {
 	// caller's. The archived workspace stays in the archive; restoring it later
 	// makes a new folder.
 	ForgetStorageWorktree(context.Context, *connect.Request[v1.ForgetStorageWorktreeRequest]) (*connect.Response[v1.ForgetStorageWorktreeResponse], error)
+	// KeepMarkedWorktree answers a marked worktree's item with "Keep": the
+	// reclaim mark the person saw (mark_id) is cancelled and its tombstone
+	// removed, and the worktree's quiet period starts again. NOT_FOUND for a
+	// worktree of the caller's that is not marked; FAILED_PRECONDITION when it
+	// carries a different mark than the one shown (refresh and decide again).
+	KeepMarkedWorktree(context.Context, *connect.Request[v1.KeepMarkedWorktreeRequest]) (*connect.Response[v1.KeepMarkedWorktreeResponse], error)
+	// ReclaimMarkedWorktreeNow answers a marked worktree's item with "Reclaim
+	// now": the mark's waiting period is skipped and the worktree is checked
+	// at once. Every other check still applies: if it was used since the mark,
+	// its tombstone is gone, or it has new work, the mark is cancelled instead
+	// and nothing is removed. Errors as KeepMarkedWorktree.
+	ReclaimMarkedWorktreeNow(context.Context, *connect.Request[v1.ReclaimMarkedWorktreeNowRequest]) (*connect.Response[v1.ReclaimMarkedWorktreeNowResponse], error)
 	// DismissInboxItem hides items from the caller's inbox. Every kind can be
 	// dismissed. Hiding an approval or a question does not resolve it: the run
 	// still waits, and the chat still shows it. A newer failure of the same
@@ -226,6 +280,18 @@ func NewInboxServiceHandler(svc InboxServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(inboxServiceMethods.ByName("ForgetStorageWorktree")),
 		connect.WithHandlerOptions(opts...),
 	)
+	inboxServiceKeepMarkedWorktreeHandler := connect.NewUnaryHandler(
+		InboxServiceKeepMarkedWorktreeProcedure,
+		svc.KeepMarkedWorktree,
+		connect.WithSchema(inboxServiceMethods.ByName("KeepMarkedWorktree")),
+		connect.WithHandlerOptions(opts...),
+	)
+	inboxServiceReclaimMarkedWorktreeNowHandler := connect.NewUnaryHandler(
+		InboxServiceReclaimMarkedWorktreeNowProcedure,
+		svc.ReclaimMarkedWorktreeNow,
+		connect.WithSchema(inboxServiceMethods.ByName("ReclaimMarkedWorktreeNow")),
+		connect.WithHandlerOptions(opts...),
+	)
 	inboxServiceDismissInboxItemHandler := connect.NewUnaryHandler(
 		InboxServiceDismissInboxItemProcedure,
 		svc.DismissInboxItem,
@@ -246,6 +312,10 @@ func NewInboxServiceHandler(svc InboxServiceHandler, opts ...connect.HandlerOpti
 			inboxServiceCleanupStorageHandler.ServeHTTP(w, r)
 		case InboxServiceForgetStorageWorktreeProcedure:
 			inboxServiceForgetStorageWorktreeHandler.ServeHTTP(w, r)
+		case InboxServiceKeepMarkedWorktreeProcedure:
+			inboxServiceKeepMarkedWorktreeHandler.ServeHTTP(w, r)
+		case InboxServiceReclaimMarkedWorktreeNowProcedure:
+			inboxServiceReclaimMarkedWorktreeNowHandler.ServeHTTP(w, r)
 		case InboxServiceDismissInboxItemProcedure:
 			inboxServiceDismissInboxItemHandler.ServeHTTP(w, r)
 		case InboxServiceRestoreInboxItemProcedure:
@@ -269,6 +339,14 @@ func (UnimplementedInboxServiceHandler) CleanupStorage(context.Context, *connect
 
 func (UnimplementedInboxServiceHandler) ForgetStorageWorktree(context.Context, *connect.Request[v1.ForgetStorageWorktreeRequest]) (*connect.Response[v1.ForgetStorageWorktreeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.InboxService.ForgetStorageWorktree is not implemented"))
+}
+
+func (UnimplementedInboxServiceHandler) KeepMarkedWorktree(context.Context, *connect.Request[v1.KeepMarkedWorktreeRequest]) (*connect.Response[v1.KeepMarkedWorktreeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.InboxService.KeepMarkedWorktree is not implemented"))
+}
+
+func (UnimplementedInboxServiceHandler) ReclaimMarkedWorktreeNow(context.Context, *connect.Request[v1.ReclaimMarkedWorktreeNowRequest]) (*connect.Response[v1.ReclaimMarkedWorktreeNowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.InboxService.ReclaimMarkedWorktreeNow is not implemented"))
 }
 
 func (UnimplementedInboxServiceHandler) DismissInboxItem(context.Context, *connect.Request[v1.DismissInboxItemRequest]) (*connect.Response[v1.DismissInboxItemResponse], error) {

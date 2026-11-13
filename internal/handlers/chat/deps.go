@@ -20,12 +20,23 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/messageproto"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
+// OrgResolver answers the org questions of chat rpcs. *orgs.Resolver is one.
+type OrgResolver interface {
+	Named(ctx context.Context, userID, requested string) (string, error)
+	DefaultOrg(ctx context.Context, userID string) (string, error)
+	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
+}
+
 // Repository is everything the chat handlers read and write.
 type Repository interface {
+	// AssignUnassignedOrg stamps the caller's projects and chats that have
+	// no org with their default org (the lazy backfill, orgs.ListScope).
+	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	// Chat rows: listing and search, delete, and the state, unread,
 	// adoption and machine flags the handlers flip.
 	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)
@@ -35,14 +46,18 @@ type Repository interface {
 	// The chat with its activity-derived fields, for a handler that reads one.
 	GetChatWithUserCheck(ctx context.Context, id, userID string) (*db.Chat, error)
 	SearchChats(ctx context.Context, filters db.ChatSearchFilters) ([]*db.Chat, error)
-	ListArchivedChats(ctx context.Context, userID string) ([]*db.ArchivedChatInfo, error)
+	ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope) ([]*db.ArchivedChatInfo, error)
 	DeleteChat(ctx context.Context, id string) error
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error)
+	// RecordChatPersonTurn marks a launched chat attended from a person's send on.
+	RecordChatPersonTurn(ctx context.Context, chatID, userID string) error
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
+	// MoveChatToProject moves an idle chat, with its plans, to another project.
+	MoveChatToProject(ctx context.Context, m db.ChatMove) (bool, error)
 	// ListCapacityWakeTargets lists the root runs of a user's chats that may
 	// have a thread blocked on a provider (WakeUserChats).
 	ListCapacityWakeTargets(ctx context.Context, userID string) ([]string, error)
@@ -55,6 +70,10 @@ type Repository interface {
 	ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error)
 	IsLatestTurnInThread(ctx context.Context, threadID, messageID string) (bool, error)
 	CountMessagesInThread(ctx context.Context, threadID string) (int, error)
+	// ClaimUserActivation records a message as the user's activation (their
+	// first typed message ever) once, durably, and reports whether this call
+	// did (user_first_message).
+	ClaimUserActivation(ctx context.Context, userID, chatID, messageID string) (bool, error)
 	CountMessagesInChatOutsideThread(ctx context.Context, chatID, threadID string) (int, error)
 	ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64, limit int) ([]*db.Message, error)
 	GetWorkflowByThread(ctx context.Context, chatID, thread string) (*db.Workflow, error)
@@ -66,6 +85,8 @@ type Repository interface {
 	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
 	GetToolResultBlock(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error)
 	ListToolResultBlocks(ctx context.Context, toolCallID string) ([]*db.MessageContentBlock, error)
+	ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*db.MessageContentBlock, error)
+	ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error)
 	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
 
 	// The agent mailbox: messages queued for a thread until it can take them.
@@ -90,6 +111,9 @@ type Repository interface {
 
 	// The chat and user update logs.
 	GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error)
+	// The compaction watermark: at or below it the log keeps only each
+	// entity's newest update.
+	GetChatCompactedThrough(ctx context.Context, chatID string) (int64, error)
 	GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int64, limit int) ([]db.ChatUpdate, error)
 	ListErrorUpdatesInRange(ctx context.Context, chatID string, from *time.Time, thread string, beforeSeq int64) ([]db.ChatUpdate, error)
 	GetLatestWorkflowNodeUpdates(ctx context.Context, chatID, workflowID string) ([]db.ChatUpdate, error)

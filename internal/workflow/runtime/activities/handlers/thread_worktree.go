@@ -3,10 +3,9 @@ package handlers
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -26,7 +25,7 @@ func effectiveWorktreeID(ctx context.Context, repo ThreadWorktreeReader, chat *d
 			if t != nil && t.WorktreeID != nil && *t.WorktreeID != "" {
 				return t.WorktreeID, true, nil
 			}
-		case errors.Is(err, sql.ErrNoRows):
+		case svcerr.IsNotFound(err):
 		default:
 			return nil, false, fmt.Errorf("load thread %s: %w", thread, err)
 		}

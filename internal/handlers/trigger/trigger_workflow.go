@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -17,6 +18,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -61,6 +63,12 @@ func (s *Service) EnableWorkflow(
 	if msg.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
+	// The activations are the project's, in its org: a caller who may not
+	// work in the project (authz: another owner, an org they left, a
+	// credential of another org) enables nothing, before anything is read.
+	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, msg.ProjectId, userID); err != nil {
+		return nil, triggerDBError("get project", err)
+	}
 
 	// Enabling activates the workflow's triggers: resolve it as they will.
 	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(userID, msg.ProjectId, msg.GetDaemonId()), msg.Workflow)
@@ -90,8 +98,10 @@ func (s *Service) EnableWorkflow(
 	activations := map[string]*core.Trigger{}
 	taken := map[string]bool{}
 	for _, t := range mine {
+		// Every stored name is taken, but only a trigger the caller may
+		// still change is an activation to update.
 		taken[t.Name] = true
-		if t.WorkflowTrigger != nil && sameWorkflowRef(t.Workflow, msg.Workflow) {
+		if t.WorkflowTrigger != nil && sameWorkflowRef(t.Workflow, msg.Workflow) && authz.CanWriteTrigger(ctx, userID, t) {
 			activations[*t.WorkflowTrigger] = t
 		}
 	}
@@ -150,7 +160,7 @@ func (s *Service) EnableWorkflow(
 				err = svcerr.AlreadyExists(fmt.Sprintf("you already have an automation named %q in this project; pick another name", def.Name))
 			} else {
 				var row *core.Trigger
-				if row, err = s.triggerFromDefinition(ctx, userID, def, nil); err == nil {
+				if row, err = s.activationRow(ctx, userID, def, nil); err == nil {
 					row.Enabled = true
 					if err = s.refreshTriggerAccess(ctx, row); err == nil {
 						warnings, err = s.checkReachability(ctx, userID, wf, wt, msg, row)
@@ -189,7 +199,14 @@ func (s *Service) EnableWorkflow(
 		if err := s.applyEnableStep(ctx, step, results[i], &undo); err != nil {
 			results[i].Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED
 			results[i].Message = connectMessage(err)
-			s.undoEnable(ctx, steps, results, undo)
+			var left *leftEnabledError
+			if errors.As(err, &left) {
+				results[i].Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED
+				results[i].Message = left.message()
+			}
+			undoCtx, cancel := enableUndoContext(ctx)
+			s.undoEnable(undoCtx, steps, results, undo)
+			cancel()
 			activity.Skip(ctx) // every write was undone: no "enable" event
 			return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Results: results}), nil
 		}
@@ -223,15 +240,16 @@ func (s *Service) existingActivationStep(
 		return nil, err
 	}
 	// A connection the request does not name stays the one this activation
-	// listens through, rather than falling back to the default.
-	if def.ConnectionId == nil && existing.ConnectionID != nil {
-		id := *existing.ConnectionID
-		def.ConnectionId = &id
+	// listens through, rather than falling back to the default: its saved
+	// connection or its org GitHub App installation, which has no
+	// ConnectionID and would otherwise be dropped (widening the trigger).
+	if def.ConnectionId == nil {
+		def.ConnectionId = effectiveConnectionID(existing)
 	}
 	if def.Name != existing.Name && taken[def.Name] {
 		return nil, svcerr.AlreadyExists(fmt.Sprintf("you already have an automation named %q in this project; pick another name", def.Name))
 	}
-	row, err := s.triggerFromDefinition(ctx, userID, def, existing)
+	row, err := s.activationRow(ctx, userID, def, existing)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +284,7 @@ func sameActivationSettings(a, b *core.Trigger) bool {
 		a.MachinePoolID == b.MachinePoolID &&
 		a.NotifyOnComplete == b.NotifyOnComplete &&
 		a.ActingIdentity.OrOwner() == b.ActingIdentity.OrOwner() &&
-		ptrValue(a.ConnectionID) == ptrValue(b.ConnectionID) &&
+		ptrValue(effectiveConnectionID(a)) == ptrValue(effectiveConnectionID(b)) &&
 		sameJSON(a.Presets, b.Presets) &&
 		sameJSON(a.Params, b.Params)
 }
@@ -290,6 +308,35 @@ func sameJSON[M ~map[string]V, V any](a, b M) bool {
 	return errA == nil && errB == nil && bytes.Equal(ja, jb)
 }
 
+// enableUndoTimeout bounds putting an enable back. The undo runs on a context
+// detached from the request's: the commonest reason to undo is that the
+// request's deadline passed mid-write, and an undo on that dead context could
+// not run at all — the row stayed enabled while the result said it was not.
+const enableUndoTimeout = 30 * time.Second
+
+func enableUndoContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), enableUndoTimeout)
+}
+
+// leftEnabledError is a write that failed after it took effect, and whose
+// revert failed too: the trigger is running, whatever the write's error says.
+type leftEnabledError struct {
+	cause, revert error
+	// settings is an update whose previous settings could not be put back,
+	// rather than an enable that could not be switched back off.
+	settings bool
+}
+
+func (e *leftEnabledError) Error() string { return e.cause.Error() }
+func (e *leftEnabledError) Unwrap() error { return e.cause }
+
+func (e *leftEnabledError) message() string {
+	if e.settings {
+		return "Saving failed (" + connectMessage(e.cause) + ") and this trigger's previous settings could not be put back: " + connectMessage(e.revert) + " It is enabled; check its settings, or disable it from Automations if it should not run."
+	}
+	return "Enabling failed (" + connectMessage(e.cause) + ") but the trigger is enabled and could not be switched back off: " + connectMessage(e.revert) + " Disable it from Automations if it should not run."
+}
+
 func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result *reliantv1.WorkflowTriggerResult, undo *[]func(context.Context) error) error {
 	if step.existing != nil && step.def != nil {
 		return s.applyActivationUpdate(ctx, step, result, undo)
@@ -299,7 +346,17 @@ func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result 
 		if err != nil {
 			// SetTriggerEnabled writes the row before it converges, so a
 			// failure can leave it on; put it back.
-			_, _ = s.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: step.existing.ID, Enabled: false}))
+			undoCtx, cancel := enableUndoContext(ctx)
+			defer cancel()
+			if _, revertErr := s.SetTriggerEnabled(undoCtx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: step.existing.ID, Enabled: false})); revertErr != nil {
+				// SetTriggerEnabled writes the row before it converges, so its
+				// error alone does not say whether the trigger is still on.
+				if cur, getErr := s.deps.Repo.GetTrigger(undoCtx, step.existing.ID); getErr != nil || cur.Enabled {
+					logging.ErrorContext(ctx, "could not switch off a trigger whose enable failed; it is still running",
+						"trigger_id", step.existing.ID, "error", err, "revert_error", revertErr)
+					return &leftEnabledError{cause: err, revert: revertErr}
+				}
+			}
 			return err
 		}
 		id := step.existing.ID
@@ -339,7 +396,19 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 	if err != nil {
 		// UpdateTrigger writes the row before it converges, so a failure
 		// can leave the new settings stored; put the old ones back.
-		_ = s.restoreActivation(ctx, &prev)
+		undoCtx, cancel := enableUndoContext(ctx)
+		defer cancel()
+		if revertErr := s.restoreActivation(undoCtx, &prev); revertErr != nil {
+			// The restore can fail after it wrote, or before: the row may hold
+			// either settings, and is running if it is on.
+			if cur, getErr := s.deps.Repo.GetTrigger(undoCtx, prev.ID); getErr != nil || cur.Enabled {
+				logging.ErrorContext(ctx, "could not restore a trigger whose update failed; it is still running",
+					"trigger_id", prev.ID, "error", err, "revert_error", revertErr)
+				return &leftEnabledError{cause: err, revert: revertErr, settings: true}
+			}
+			logging.WarnContext(ctx, "restoring a trigger whose update failed did not complete",
+				"trigger_id", prev.ID, "error", err, "revert_error", revertErr)
+		}
 		return err
 	}
 	*undo = append(*undo, func(ctx context.Context) error { return s.restoreActivation(ctx, &prev) })
@@ -557,7 +626,9 @@ func (s *Service) DisableWorkflow(
 		return nil, triggerDBError("list triggers", err)
 	}
 	resp := &reliantv1.DisableWorkflowResponse{}
-	for _, t := range mine {
+	// With no project named this is every project's: only activations the
+	// caller may still change are paused or reported.
+	for _, t := range authz.Visible(ctx, userID, mine, authz.CanWriteTrigger) {
 		if t.WorkflowTrigger == nil || !sameWorkflowRef(t.Workflow, req.Msg.Workflow) {
 			continue
 		}

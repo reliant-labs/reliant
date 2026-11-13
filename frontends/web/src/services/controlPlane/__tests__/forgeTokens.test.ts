@@ -1,11 +1,13 @@
+// @vitest-environment node
 /**
  * The forge shell's personal-token client (forgeTokens.ts), through the real
  * generated client and request/response types over a mock transport.
  *
  * What is pinned: every rpc carries the active org, scopes and expiry reach
  * the wire as chosen, revoked and ephemeral credentials are never listed, a
- * refused mutation stays an error, and the scope labels disclose what each
- * scope really authorizes.
+ * refused mutation stays an error, the scope labels disclose what each
+ * scope really authorizes, every scope the server accepts unbound is offered,
+ * and a registry-only scope (sourcemaps:write) is minted as an org token.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -21,9 +23,12 @@ import { mockTransport } from "@/lib/test-utils";
 import {
   createForgeToken,
   FORGE_TOKEN_ENV,
+  FORGE_TOKEN_SCOPE_GROUPS,
   FORGE_TOKEN_SCOPES,
   listForgeTokens,
+  listOrgForgeTokens,
   revokeForgeToken,
+  revokeOrgForgeToken,
 } from "../forgeTokens";
 
 const ORG = "org_acme";
@@ -92,7 +97,7 @@ describe("createForgeToken", () => {
 
     const res = await createForgeToken({ orgId: ORG, name: "ci", scopes: ["deploy:read", "deploy:write"], expiresInDays: 90, nowMs: now });
 
-    expect(res).toEqual({ secret: "rlt_secret" });
+    expect(res).toEqual({ secret: "rlt_secret", kind: "personal" });
     expect(seen).toHaveBeenCalledWith(
       expect.objectContaining({
         orgId: ORG,
@@ -124,6 +129,60 @@ describe("createForgeToken", () => {
     await expect(createForgeToken({ orgId: ORG, name: "ci", scopes: ["deploy:read"], expiresInDays: 30 })).rejects.toMatchObject({
       code: Code.PermissionDenied,
     });
+  });
+});
+
+describe("createForgeToken with sourcemaps:write", () => {
+  it("mints an org automation token through CreateToken, never CreateMyToken", async () => {
+    const org = vi.fn(() => ({ secret: "rlat_maps" }));
+    const mine = vi.fn(() => ({ secret: "rlat_mine" }));
+    setTransport(mockTransport({ "AccessTokenService.CreateToken": org, "AccessTokenService.CreateMyToken": mine }));
+
+    const res = await createForgeToken({ orgId: ORG, name: "desktop-maps", scopes: ["sourcemaps:write"], expiresInDays: 365 });
+
+    expect(res).toEqual({ secret: "rlat_maps", kind: "org" });
+    expect(org).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, name: "desktop-maps", scopes: ["sourcemaps:write"] }));
+    expect(mine).not.toHaveBeenCalled();
+  });
+
+  it("refuses to combine it with another scope, without calling the server", async () => {
+    const org = vi.fn(() => ({ secret: "x" }));
+    const mine = vi.fn(() => ({ secret: "x" }));
+    setTransport(mockTransport({ "AccessTokenService.CreateToken": org, "AccessTokenService.CreateMyToken": mine }));
+
+    await expect(
+      createForgeToken({ orgId: ORG, name: "ci", scopes: ["sourcemaps:write", "deploy:write"], expiresInDays: null }),
+    ).rejects.toThrow(/cannot be combined/);
+    expect(org).not.toHaveBeenCalled();
+    expect(mine).not.toHaveBeenCalled();
+  });
+});
+
+describe("listOrgForgeTokens", () => {
+  it("lists the org's live automation tokens only: no person's token, revoked or ephemeral one", async () => {
+    const seen = vi.fn(() => ({
+      tokens: [
+        { id: "t_maps", name: "desktop-maps", displayPrefix: "rlat_m", scopes: ["sourcemaps:write"] },
+        { id: "t_person", name: "laptop", actingUserId: "u_1", scopes: ["deploy:read"] },
+        { id: "t_revoked", name: "old", revokedAt: timestampFromDate(CREATED) },
+        { id: "t_ephemeral", name: "session", ephemeral: true },
+      ],
+    }));
+    setTransport(mockTransport({ "AccessTokenService.ListTokens": seen }));
+
+    const tokens = await listOrgForgeTokens(ORG);
+
+    expect(seen).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG }));
+    expect(tokens.map((t) => t.id)).toEqual(["t_maps"]);
+  });
+
+  it("revokes an org token through RevokeToken in the active org", async () => {
+    const seen = vi.fn(() => ({}));
+    setTransport(mockTransport({ "AccessTokenService.RevokeToken": seen }));
+
+    await revokeOrgForgeToken(ORG, "t_maps");
+
+    expect(seen).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, id: "t_maps" }));
   });
 });
 
@@ -160,5 +219,36 @@ describe("what the token UI tells a person", () => {
     expect(label).toMatch(/metadata/i);
     expect(label).toMatch(/values/i);
     expect(label).toMatch(/local environments/i);
+  });
+
+  it("offers obs:read and sourcemaps:write, which forge's CI skills need", () => {
+    const offered = FORGE_TOKEN_SCOPES.map((s) => s.scope);
+    expect(offered).toContain("obs:read");
+    expect(offered).toContain("sourcemaps:write");
+  });
+
+  it("offers every scope of forge's catalog except the three that must be bound to a resource", () => {
+    // forge pkg/accesstoken/scope.go AllScopes. A scope forge adds fails this
+    // test until it is offered here or listed as binding-only.
+    const catalog = [
+      "deploy:read", "deploy:write", "deploy:config:read", "billing:read", "cluster:manage", "token:read",
+      "token:write", "reliant:api", "daemon:connect", "llm:invoke", "proxy:port", "mcp:connector",
+      "daemon:resume", "daemon:manage", "secret:read", "secret:write", "domain:read", "domain:write",
+      "identity:read", "identity:manage", "obs:read", "obs:triage", "obs:write", "db:query", "storage:read",
+      "runs:start", "runs:read", "runs:control", "triggers:fire", "triggers:manage", "inbox:read",
+      "inbox:manage", "approvals:decide", "questions:answer", "sourcemaps:write",
+    ];
+    const bindingOnly = ["proxy:port", "mcp:connector", "daemon:resume"];
+    const offered = FORGE_TOKEN_SCOPES.map((s) => s.scope);
+
+    expect(new Set(offered).size).toBe(offered.length);
+    expect([...offered].sort()).toEqual(catalog.filter((s) => !bindingOnly.includes(s)).sort());
+  });
+
+  it("describes every scope and titles every group", () => {
+    for (const group of FORGE_TOKEN_SCOPE_GROUPS) {
+      expect(group.title).not.toBe("");
+      for (const { scope, label } of group.scopes) expect(label, scope).not.toBe("");
+    }
   });
 });

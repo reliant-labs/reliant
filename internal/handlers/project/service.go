@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"connectrpc.com/connect"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -36,6 +38,26 @@ type Deps struct {
 	// there.
 	// forge:optional-dep
 	ControlPlane CloneDispatcher
+	// Orgs says which organization a create acts in and verifies the org a
+	// list names (internal/orgs). Nil, or a nil *orgs.Resolver, is a
+	// deployment with no orgs: projects are created with none and lists
+	// ignore org_id.
+	// forge:optional-dep
+	Orgs OrgResolver
+	// OrgRollout is the deployment's org rollout gates: MoveProjectToOrg is
+	// refused unless orgs.project_moves_enabled is on (MovesAllowed). Nil is
+	// every gate off.
+	// forge:optional-dep
+	OrgRollout *configv1.OrgsConfig
+	// Moves starts a move's saga (orgmove.ProjectOrgMoveWorkflow). Nil — no
+	// Temporal — refuses MoveProjectToOrg.
+	// forge:optional-dep
+	Moves MoveStarter
+	// MoveFacts is control-plane's half of PreviewProjectOrgMove, signed as
+	// the internal service. Nil (self-hosted, or no internal-service
+	// identity) previews those facts as unknown.
+	// forge:optional-dep
+	MoveFacts MoveFacts
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -57,6 +79,10 @@ func (d Deps) validateDeps() error {
 type Service struct {
 	reliantv1connect.UnimplementedProjectServiceHandler
 	deps Deps
+	// failedCreateCleanups holds the daemon ids whose connect-time
+	// failed-create cleanup is running (failed_create_cleanup.go), so a
+	// machine that reconnects in a loop runs one at a time.
+	failedCreateCleanups sync.Map
 }
 
 // New creates a new project service instance with the supplied Deps.

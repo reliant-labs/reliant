@@ -8,6 +8,8 @@ import (
 	"net/http"
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // APIListener is the API server's listener: the address browsers, the CLI
@@ -38,6 +40,13 @@ type APIListenerDeps struct {
 	// Logger receives the listener's lines and its drain phase; nil is
 	// slog.Default().
 	Logger *slog.Logger
+	// Membership is put on every request's context (authz.WithMembership),
+	// so authz decides org resources against live membership. nil is a
+	// deployment with no orgs (authz.NoOrgs): owner-only.
+	Membership authz.Membership
+	// Policies is put on every request's context beside Membership
+	// (orgpolicy.WithResolver). nil is a deployment with no org policies.
+	Policies *orgpolicy.Resolver
 }
 
 // NewAPIListener builds the API listener; it binds nothing until it runs.
@@ -76,7 +85,9 @@ func NewAPIListener(deps APIListenerDeps) (*APIListener, error) {
 		Chain:  deps.Chain.Chain,
 		Routes: deps.Routes,
 		Logger: deps.Logger,
-		Edge:   func(h http.Handler) http.Handler { return cors(securityHeaders(compressBrowserStreams(h))) },
+		Edge: func(h http.Handler) http.Handler {
+			return withMembership(deps.Membership, deps.Policies, cors(securityHeaders(compressBrowserStreams(h))))
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("api listener: %w", err)

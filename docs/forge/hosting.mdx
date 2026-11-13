@@ -22,13 +22,48 @@ Because the frontend is served as static files, a hosted frontend must be a stat
 
 Telemetry is collected from the first deploy too: see [Observability](/forge/observability).
 
+## Any app, any language
+
+A workload does not have to be forge-generated Go. Hosting runs any container image, so an existing Node, Python, Rails or Java app deploys from its own Dockerfile, and third-party software deploys from its published image. To bring an existing app, have your agent run `forge skill load adopt`. That skill writes the declarations below, plus the environments, a managed database and a migration job, in tiers you can stop after. See [Adopt an app that already exists](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists).
+
+```python
+# Your app, built from its own Dockerfile (any language).
+api = fw.Workload {
+    name = "api"
+    kind = "service"
+    image = "api"   # bare: forge pushes it to your organization's registry path
+    build = forge.DockerBuild {dockerfile = "Dockerfile"}
+    ports = [fw.Port {name = "http", port = 3000, expose = True}]
+    probes = tiers.Probes {readinessPath = "/", livenessPath = "/"}
+    env = {JWT_SECRET = forge.ManagedSecret {name = "JWT_SECRET"}}
+    runtime = forge.OnHosted {}
+}
+
+# A third-party image, unchanged: no build, registry host included.
+whoami = fw.Workload {
+    name = "whoami"
+    kind = "service"
+    image = "docker.io/traefik/whoami:v1.10.3"
+    args = ["--port", "8080"]
+    ports = [fw.Port {name = "http", port = 8080, expose = True}]
+    runtime = forge.OnHosted {}
+}
+```
+
+The platform pulls only from its own registry, and forge handles both cases for you:
+
+- An image forge **builds** (`forge.DockerBuild`, `forge.ShellBuild`, Go) is written bare. Forge pushes it to `registry.reliantapi.com/<your org>/<project>/<image>`, using your Reliant sign-in, with no registry to configure.
+- A **third-party image** (no `build`) is written in full, with its registry host. When a deploy cuts a release, forge copies it registry to registry into `registry.reliantapi.com/<your org>/<project>/<its path>` (here `.../traefik/whoami`), and the release pins that copy by digest. The digest is the upstream image's own, every platform of a multi-architecture image is included, and a later push to the upstream tag changes nothing until your next release. A private image is read with the credentials `docker login` stored for its registry. `docker.io/traefik/whoami` must name `docker.io`: a bare `traefik/whoami` would mean an image in your own registry path.
+
+Such an app reads its credentials from environment variables, so deliver each one in the workload's `env` from the environment's secret store (`forge.ManagedSecret`, set with `forge secret set --env <env> <NAME>`; see [Secrets](/forge/secrets)). A name listed in a workload's `config_secrets` that its `env` does not deliver fails `forge env render` and the deploy, rather than letting the app start on a fallback value. More on non-forge workloads, including what they give up: [Deploy code forge never compiled](/forge/deploy/escape-hatches#deploy-code-forge-never-compiled).
+
 ## Billing
 
 Paid app hosting requires an independent, organization-wide **pay-as-you-go usage billing agreement**, authorized explicitly by an owner or admin under **Settings → Billing → Usage & invoices → App hosting billing**. There is no base fee and no machine purchase is required. CPU, memory and storage are billed from first use at the displayed usage rates; machine subscriptions include no separately spendable app hosting allowance.
 
 Choose a positive **monthly admission budget** and accept the displayed policy before continuing to checkout. A saved card, AI wallet credit, machine subscription or checkout return alone does not activate hosting: the server must verify the agreement's funding. The budget controls admission and suspension against measured usage, not a guaranteed maximum invoice. Enforcement can lag and in-flight workloads can keep accruing charges; storage is not deleted. Changing the consented budget is not currently supported in the app.
 
-Independent hosting billing is rolling out separately. If the app says it is unavailable, buying a machine plan does not enable it. Hosting authorization does not add an observability allowance or unlock longer product-event retention; [observability billing](/account/observability-billing) remains separate.
+Hosting authorization does not add an observability allowance or unlock longer product-event retention; [observability billing](/account/observability-billing) remains separate.
 
 Static sites are the exception. They run no process, just files behind the CDN, so an organization with no plan gets a free tier for them:
 

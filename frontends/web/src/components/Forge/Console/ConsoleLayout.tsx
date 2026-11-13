@@ -19,7 +19,9 @@
  *    when the reader picks one.
  *
  * 3. THE CHROME: ConsoleShell — the nav, the top bar with the breadcrumb and
- *    scope, the rail (its collapsed state remembered per user).
+ *    scope, the rail (its collapsed state remembered per user) — in the led
+ *    console (ledConsole.tsx): the grouped nav, and pages that lead with one
+ *    sentence and the item worth opening first.
  *
  * Escape and the way out belong to the parent `_forge` layout (ForgeLayout),
  * which also hosts the redirects from the retired URLs.
@@ -31,13 +33,12 @@ import { Outlet, useLocation, useNavigate, useParams, useSearch } from "@tanstac
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useForgeRoster } from "@/hooks/forge-queries";
 import { useDashboard, useDashboardIndex } from "@/hooks/dashboard-queries";
+import { displayTitle, hubOf, hubsOf, hubTabLabel } from "../Observability/Dashboards/dashboardHubs";
+import { DOCS } from "../GettingStarted";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 import { isQueued, queuedOnLabel } from "@/services/forge/live";
-import { useAuthStore } from "@/store/authStore";
-import { useProjectStore, type Project } from "@/store/projectStore";
-import { useProjects } from "@/hooks/project-queries";
 import { isForgeShell } from "@/lib/shell";
 import { ForgeMark } from "@/components/ForgeShell/ForgeBrand";
 
@@ -46,26 +47,15 @@ import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitcher";
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { ConsoleShell, type ConsoleNavEnv } from "./ConsoleShell";
+import { LedConsoleProvider, type LedConsoleHost } from "./ledConsole";
 import { ForgeConsoleContext, type ForgeConsole } from "./consoleContext";
+import { useConsoleReliantProject, useConsoleUser } from "./consoleHost";
 import { useOptionalViews } from "./useOptionalViews";
+import { useObsNavOpen } from "./obsNavOpen";
 import { ENV_ALL, rememberedEnv, rememberEnv, resolveEnvScope, scopeOptions } from "./envScope";
 import { APPS_PATH, consolePageOf, consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 
 const RAIL_KEY = "forge.console.rail";
-
-/**
- * The Reliant project that declares `forgeProject`: the current one when it
- * does (two checkouts of one repo both declare it), else the first that does.
- */
-export function projectDeclaring(
-  forgeProject: string,
-  projects: readonly Project[],
-  current: Project | null
-): Project | null {
-  const declares = (project: Project) => (project.forge_project_name ?? "").trim() === forgeProject;
-  if (current && declares(current)) return current;
-  return projects.find(declares) ?? null;
-}
 
 /** Where switching to the forge app `app` lands: the same page there. */
 export function switchTarget(app: string, page: ConsolePage): string {
@@ -93,22 +83,9 @@ export function ConsoleLayout() {
   const page = useMemo<ConsolePage>(() => consolePageOf(pathname)?.page ?? { kind: "overview" }, [pathname]);
   const pinnedEnv = pinnedEnvOf(page);
 
-  // ── 1. The Reliant project. ──
-  // `listed` once the project list has answered (or failed): until then a
-  // forge name matches nothing only because nothing is loaded yet. The forge
-  // shell has no Reliant projects (useProjects is off there): the forge name
-  // in the URL is the whole scope, and nothing is waited for.
+  // ── 1. The Reliant project (consoleHost.ts). ──
   const forgeShell = isForgeShell();
-  const { projects, isLoading: listing } = useProjects();
-  const listed = forgeShell || projects.length > 0 || !listing;
-  const currentProject = useProjectStore((state) => state.currentProject);
-  const selectProject = useProjectStore((state) => state.selectProject);
-
-  const match = listed && !forgeShell ? projectDeclaring(forgeProject, projects, currentProject) : null;
-  useEffect(() => {
-    if (match && match.id !== currentProject?.id) void selectProject(match);
-  }, [match, currentProject?.id, selectProject]);
-  const projectId = match?.id ?? null;
+  const { listed, projectId } = useConsoleReliantProject(forgeProject);
 
   const roster = useForgeRoster(listed ? projectId : null, forgeProject);
 
@@ -176,14 +153,20 @@ export function ConsoleLayout() {
   const starred = useMemo(
     () =>
       (dashboards.data?.dashboards ?? []).flatMap((d) =>
-        d.starred && d.ref.kind !== "template" ? [{ title: d.title, dashKind: d.ref.kind, key: d.ref.key }] : []
+        d.starred && d.ref.kind !== "template" ? [{ title: displayTitle(d.title, forgeProject), dashKind: d.ref.kind, key: d.ref.key }] : []
       ),
-    [dashboards.data]
+    [dashboards.data, forgeProject]
   );
-  const dashboardTitle =
-    page.kind === "dashboard"
-      ? dashboards.data?.dashboards.find((d) => d.ref.kind === page.dashKind && d.ref.key === page.key)?.title
-      : undefined;
+  // A hub's tab is named by the hub and the tab ("Product analytics · Users"); anything else by its title, less the project prefix.
+  const dashboardTitle = useMemo(() => {
+    if (page.kind !== "dashboard" || !dashboards.data) return undefined;
+    const ref = { kind: page.dashKind, key: page.key };
+    const hub = hubOf(dashboards.data.dashboards, ref, forgeProject);
+    const tab = hub && hubTabLabel(hub, ref);
+    if (hub && tab) return `${hub.title} · ${tab}`;
+    const title = dashboards.data.dashboards.find((d) => d.ref.kind === page.dashKind && d.ref.key === page.key)?.title;
+    return title === undefined ? undefined : displayTitle(title, forgeProject);
+  }, [page, dashboards.data, forgeProject]);
 
   // The open dashboard's own scope (the same cached read the page makes): a
   // platform dashboard is not per environment, and the control must not imply it is.
@@ -201,17 +184,9 @@ export function ConsoleLayout() {
     });
   }, []);
 
-  const authUser = useAuthStore((state) => state.user);
-  const user = authUser
-    ? {
-        name:
-          (authUser.user_metadata?.full_name as string | undefined) ??
-          (authUser.user_metadata?.name as string | undefined) ??
-          authUser.email?.split("@")[0] ??
-          "You",
-        email: authUser.email ?? undefined,
-      }
-    : undefined;
+  const [obsOpen, setObsOpen] = useObsNavOpen();
+
+  const user = useConsoleUser();
 
   const { trafficLightPadding, dragRegionStyle } = useTitleBarChrome({ collapsedPadding: "0px" });
   const onClose = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
@@ -227,7 +202,18 @@ export function ConsoleLayout() {
     [forgeProject, projectId, page, env, setEnv, roster, href]
   );
 
+  // The led console is the console's default (ledConsole.tsx): Product analytics leads to the project's hub, when it has one.
+  const ledHost = useMemo<LedConsoleHost>(() => {
+    const hub = hubsOf(dashboards.data?.dashboards ?? [], forgeProject).find((candidate) => candidate.id === "product");
+    const first = hub?.tabs[0];
+    return {
+      productAnalytics: hub && first && first.ref.kind !== "template" ? { open: { kind: "dashboard", dashKind: first.ref.kind, key: first.ref.key }, keys: hub.tabs.map((tab) => tab.ref.key) } : undefined,
+      releasesExplainer: { href: DOCS.deploys, label: "How releases work" },
+    };
+  }, [dashboards.data, forgeProject]);
+
   return (
+    <LedConsoleProvider host={ledHost}>
     <ConsoleShell
       project={forgeProject}
       orgSwitcher={<OrgSwitcher />}
@@ -238,6 +224,8 @@ export function ConsoleLayout() {
       starred={starred}
       dashboardTitle={dashboardTitle}
       optionalViews={optionalViews}
+      obsOpen={obsOpen}
+      onObsOpenChange={setObsOpen}
       scope={scope}
       platformWide={platformWide}
       onEnvChange={setEnv}
@@ -278,6 +266,7 @@ export function ConsoleLayout() {
         </div>
       )}
     </ConsoleShell>
+    </LedConsoleProvider>
   );
 }
 

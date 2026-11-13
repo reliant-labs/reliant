@@ -48,10 +48,10 @@ reliant.WebhookBearer(token))` delivers with the trigger's own credential.
 
 | | |
 |---|---|
-| `Runs` | `Start`, `Get`, `List`, `LastPerWorkflow`, `Signal`, `Cancel`, `Pause`\*, `Resume`\*, `Interrupt`\*, `CancelWithResult`, `PauseWithResult`\*, `ResumeWithResult`\*, `Follow`, `Status`, `Nodes` |
+| `Runs` | `Start`, `Get`, `List`, `LastPerWorkflow`, `Signal`, `Cancel`, `Pause`\*, `Resume`\*, `Interrupt`\*, `CancelWithResult`, `PauseWithResult`\*, `ResumeWithResult`\*, `Follow`, `Status`, `Nodes`, `ContentBlockBodies` |
 | `Gates` | `Pending`, `Answer` |
 | `Inbox` | `List` (filters: project, kinds, automation; follows truncation), `Counts`, `Dismiss`, `Restore` |
-| `Approvals` | `List` (by chat), `ListForRun`; read-only |
+| `Approvals` | `List` (by chat), `ListForRun`, `Approve`, `Deny`, `BatchApprove`, `BatchDeny` (these four need an explicitly granted `approvals:decide`) |
 | `Triggers` | `Get`, `List`, `Fire`, `Events`, `LaunchEvent` |
 | `NewWebhook` | `POST /hooks/{id}` with a bearer token, a path token or an HMAC signature |
 | `reliant/follow` | the follow engine, if you have your own source of updates |
@@ -62,7 +62,7 @@ Lists (`Runs.List`, `Triggers.List`, `Triggers.Events`) return an `*Iter` that
 follows page tokens lazily. Failures are `*reliant.Error`; branch on
 `errors.Is(err, reliant.ErrNotFound)` and friends (`ErrUnauthenticated`,
 `ErrPermissionDenied`, `ErrUnavailable`, `ErrInvalidArgument`,
-`ErrFailedPrecondition`, `ErrAmbiguous`, `ErrNotApplied`, `ErrTruncated`).
+`ErrFailedPrecondition`, `ErrAmbiguous`, `ErrNotApplied`, `ErrTruncated`, `ErrScopeMissing`, `ErrMachineCredential`, `ErrApprovalNotPending`).
 
 ## "Did it succeed?"
 
@@ -75,11 +75,21 @@ the two; reading status alone is the false green.
 ## What is not in it
 
 Anything that decides who a run executes as, where, or whether an automation runs
-at all: enabling, creating or editing triggers, approving. The inbox's machine
+at all: enabling, creating or editing triggers. The inbox's machine
 actions (`CleanupStorage`, `ForgetStorageWorktree`) are not here either. They are not in the
 generated clients either (`proto/public-api.txt` in the repository lists exactly
-which rpcs are public). Approval gates are reported by `Gates.Pending` so a
-supervisor can tell a person; this API cannot decide them.
+which rpcs are public). Approval gates are reported by `Gates.Pending`.
+
+### Deciding approvals
+
+`Approvals.Approve`, `Deny`, `BatchApprove` and `BatchDeny` need the
+`approvals:decide` scope **granted explicitly** on the token. `reliant:api` does
+not stand in for it here, so every token minted for runs, triggers or the inbox
+still cannot approve. A token bound to a machine (a daemon credential, which is
+what a run executes with) is refused even if it holds `approvals:decide`. The
+errors are `ErrScopeMissing` (`Error.Scopes` names the scope) and
+`ErrMachineCredential`, both also `ErrPermissionDenied`; deciding what is
+already resolved is `ErrApprovalNotPending`.
 
 For an rpc this package does not wrap, build a generated client from the
 authenticated HTTP client:
@@ -93,6 +103,11 @@ runs := reliantv1connect.NewRunServiceClient(c.HTTPClient(), c.BaseURL())
 Additive within `reliant.v1`. The public protos are generated into `gen/` from
 the repository's `proto/` (`buf.gen.sdk-go.yaml`, run by `forge generate`), so
 the SDK cannot drift from the server it ships with.
+
+The module depends only on connect, protobuf and protovalidate: not on forge. The
+public protos carry `forge.v1` options, and `scripts/sdk-go-gen.sh` drops the
+`forgepb` import protoc-gen-go would add for them. The options stay in the
+descriptors, undecoded; a program that links forge itself decodes them as usual.
 
 The module has no tags yet. Require it at a commit of `main`, and Go resolves
 that to a pseudo-version through the module proxy:

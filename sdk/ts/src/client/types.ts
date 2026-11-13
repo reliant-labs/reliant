@@ -5,6 +5,7 @@
 import type {
   Attachment as ProtoAttachment,
   ContentBlock as ProtoContentBlock,
+  ContentBlockBody as ProtoContentBlockBody,
   Message as ProtoMessage,
 } from "#gen/reliant/v1/chat_pb.js";
 
@@ -14,6 +15,20 @@ export type ContentBlock = Omit<ProtoContentBlock, "$typeName"> & {
 };
 
 export type Attachment = ProtoAttachment;
+
+/**
+ * How a transcript read sends the bodies of finished tool calls (the API's
+ * ToolBodyMode). "full", the default: inputs whole, results previewed at
+ * 8 KiB. "stub": each finished call's input is a skeleton and its result a
+ * short stub, both flagged `bodyElided` on the block, and thinking is left
+ * out; fetchContentBlockBodies returns a body when it is shown.
+ */
+export type ToolBodies = "full" | "stub";
+
+/** One block's body, as GetContentBlockBodies returns it. */
+export type ContentBlockBody = Omit<ProtoContentBlockBody, "$typeName"> & {
+  $typeName?: string;
+};
 
 export type Message = Omit<ProtoMessage, "contentBlocks" | "$typeName"> & {
   $typeName?: string;

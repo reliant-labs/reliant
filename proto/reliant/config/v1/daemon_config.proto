@@ -196,14 +196,14 @@ message DaemonConfig {
   }];
 
   // The disk guard's thresholds (internal/diskguard), each a percentage of
-  // a volume used ("90", "95%") or "off". Past reclaim_at the daemon runs its
+  // a volume used ("80", "95%") or "off". Past reclaim_at the daemon runs its
   // reclaimers; past refuse_at it refuses new heavy commands. Strings because
   // "off" is a value. A value the guard cannot read is logged and that
   // threshold keeps its default: a misconfigured guard never stops the
-  // daemon. Unset: 90 and 95.
+  // daemon. Unset: 80 and 95; a reclaim then runs until the volume is under 70%.
   string disk_reclaim_at = 20 [(forge.v1.config) = {
     env_var: "RELIANT_DISK_RECLAIM_AT"
-    description: "Disk use (percent, or off) past which the daemon reclaims space (default 90)"
+    description: "Disk use (percent, or off) past which the daemon reclaims space (default 80)"
   }];
   string disk_refuse_at = 21 [(forge.v1.config) = {
     env_var: "RELIANT_DISK_REFUSE_AT"

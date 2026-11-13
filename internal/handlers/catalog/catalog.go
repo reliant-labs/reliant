@@ -32,7 +32,7 @@ func (s *Service) ListModels(
 	userID := auth.MustGetUserID(ctx)
 
 	// Get user's available drivers (configured API keys)
-	availableDrivers := drivers.GetAvailableDrivers(ctx, userID)
+	availableDrivers := drivers.GetAvailableDrivers(ctx, drivers.PersonalScope(userID))
 
 	// Per-account availability (Enabled per {driver, model}) comes from the
 	// modular provider capability, not a provider special-case. Static providers
@@ -41,7 +41,7 @@ func (s *Service) ListModels(
 	// the picker. We index it by driver -> model id -> enabled to gate the loop
 	// below uniformly.
 	enabledByDriver := make(map[string]map[string]bool)
-	for _, mi := range drivers.ListAvailableModelsOrEmpty(ctx, userID) {
+	for _, mi := range drivers.ListAvailableModelsOrEmpty(ctx, drivers.PersonalScope(userID)) {
 		byModel := enabledByDriver[mi.DriverID]
 		if byModel == nil {
 			byModel = make(map[string]bool)
@@ -412,7 +412,7 @@ func (s *Service) ListAvailableModels(
 ) (*connect.Response[reliantv1.ListAvailableModelsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	infos, err := drivers.ListAvailableModels(ctx, userID)
+	infos, err := drivers.ListAvailableModels(ctx, drivers.PersonalScope(userID))
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list available models"))
 	}

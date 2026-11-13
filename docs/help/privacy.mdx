@@ -117,6 +117,8 @@ Two kinds of request are not recorded: image and video generation (the generatio
 - which of your chats and runs the call belonged to, and your account ID
 - the provider (for example `anthropic` or `claude`) and the model
 - how the call was paid for: Reliant AI, your own API key, a subscription login, or a local model
+- which of your connected accounts served it (an internal account ID; the key itself is never recorded)
+- who paid for it: an organization (with its own API key, a Claude or ChatGPT team seat it pays for, or its Reliant AI credits) or you (your own subscription or API key, or a local model)
 - the number of input, output, cache-read and cache-write tokens
 - whether it succeeded, was cancelled or failed, and for a failure one of a fixed set of categories (rate limit, usage limit, context length, sign-in, timeout, stalled, network or unknown)
 - what the request was for (a chat turn, summarizing a conversation, titling a chat or drafting an automation)
@@ -127,6 +129,8 @@ Two kinds of request are not recorded: image and video generation (the generatio
 **Why we keep it:** to show you your own usage (tokens, models, error rates) and to run the service: spotting a runaway loop, diagnosing a provider outage, and planning capacity.
 
 **Who can see it:** only you, and only your own. Organization admins can't see usage on your own API keys or logins. Usage on Reliant AI is also part of your billing records.
+
+**What an organization keeps of calls it pays for:** for a call made on an organization's API key, a team seat it pays for, or its Reliant AI credits, a daily total per day, account, member, provider, model and purpose (token counts, calls and errors, and time taken), so its admins can see what their accounts are used for. It never includes calls on your own accounts. Deleting your account deletes your rows.
 
 **How long we keep it:** each call's record is deleted **90 days** after the call. We keep a daily total per model, provider, payment type and purpose, with no chat or run IDs, until you delete your account. Deleting your account deletes both.
 
@@ -174,6 +178,66 @@ Turning off analytics also stops the analytics events our servers record about y
 
 This docs site is hosted by Mintlify, which may collect usage analytics about it under [its privacy policy](https://www.mintlify.com/legal/privacy). Our marketing site, reliantlabs.io, has its own cookie choices under **Your privacy choices** in its footer; they don't apply to this docs site.
 
+### Visitors to apps you host with us
+
+This section is for people who deploy an app with Reliant (Forge), and for anyone who wants to know what a hosted app collects about its visitors. It is about the visitors to *your* app, not about your own use of Reliant, and the switches in Settings → Privacy don't control it.
+
+Apps you host with us send usage data about their visitors to our telemetry store, so that your app's dashboards can show how many people visit, which pages they view, where they came from and who signs up. We handle this data on your behalf: **you are the controller of your app's visitor data, and we are your processor.** That means you decide why it is collected, you give your visitors any notice the law requires, and you answer their requests. We help on request, and a data processing agreement is available from support@reliantlabs.io. This page lists what is collected so that you can describe it in your own privacy notice.
+
+**Cookieless by default.** By default an app counts its visitors without cookies, without anything stored on the visitor's device and without a fingerprinting script. For visitors who aren't signed in there is no persistent identifier, because the daily code described below changes every day.
+
+#### The daily visitor code
+
+Our servers, not the visitor's browser, work out the code, at the same place where they look up approximate location (see [Approximate location](#approximate-location)). They combine a random value that is different for every app and every day, the visitor's IP address (for IPv6, only its first 64 bits) and the browser's User-Agent, run them through a one-way hash (SHA-256) and keep a shortened result. In practice:
+
+- **The IP address is dropped.** It is used for this calculation and isn't stored with the visitor's usage data. (Server logs are separate; see [above](#device-and-app-version).)
+- **The random value is deleted every day.** We make a new one each day for each app and keep it only in memory, never in a database, on a disk or in a backup. It is deleted shortly after its day ends (about ten minutes past midnight UTC, and never held for more than 48 hours). After that, nobody, including us, can recompute that day's codes.
+- **A new code every day, and a different code for every app.** We can't tell that Monday's visitor is Tuesday's, or that one person visited two apps.
+- **Bots get no code.** We don't compute one for traffic recognised as a bot, or when the address or User-Agent is missing.
+
+The count is approximate. One person on two devices or browsers counts as two visitors, and so does a person whose network changes during the day. Several people on the same network with the same browser can count as one.
+
+#### What an app's usage data includes by default
+
+| What | What it includes |
+| --- | --- |
+| Daily visitor code | The code above. It changes every day, and bots get none |
+| Pages and sources | The page (route) viewed, the website that linked to it, the campaign (UTM) parameters in the link, and which advertising network a link came from (not an advertising click's own identifier) |
+| Approximate location, browser and device | Country and region, the browser and operating system names, and desktop, phone or tablet. No city, and no versions, in usage data |
+| Sign-up, sign-in and sign-out | That the event happened, how (for example password, social sign-in, magic link or passkey), and your app's opaque user ID: the identifier your sign-in system uses for the person, never their email address or name |
+| Events your app records | Events Forge records for some actions automatically, such as a record being created, plus any your own code adds. Tied to the user ID when the person is signed in |
+
+#### Analytics modes
+
+Each app has an analytics mode. The visitor's browser runs at the lowest of the mode, the consent your app has recorded, and the browser's privacy signals.
+
+| Mode | What it does |
+| --- | --- |
+| `off` | No product events from the browser |
+| `aggregate` | Strictly anonymous: the daily visitor code and the location, browser and device details only. No user ID, and no linking of a visit to a person |
+| `identified` (the default) | Nothing is stored on the visitor's device. Signed-in users' events carry their opaque user ID, and a visit can be linked to a sign-up on the same day (below) |
+| `full` | Only after your app records the visitor's consent: a persistent visitor ID and a session cookie are stored in the browser, a visitor can be recognised across days, and session replay can be switched on |
+
+#### Linking a sign-up to its visit
+
+Our servers also add the daily code to the requests they forward to your app's backend. When someone signs up, the sign-up event can carry that day's code, so you can see which source produced it without any code of your own. The link is made only within the same UTC day, and only when the code matches exactly one user that day: if several users share a code, as on a shared office network, none is linked. It is never made across days unless the visitor has consented to `full` mode. Once a visit is linked to a user, that day's visit data is personal data about that user.
+
+#### Global Privacy Control and Do Not Track
+
+If a visitor's browser sends Global Privacy Control or Do Not Track, the visitor is still counted, as part of the totals, but is never identified or linked. Browser events carry no user ID, and the browser sends no sign-up, sign-in or sign-out events. Our servers stamp no daily code on requests to your backend, so server-side events aren't linked to that visitor's browsing. Nothing is stored on the device. Events your app's server records for a signed-in user's own action, such as a sign-in, are still recorded, but without a daily code.
+
+#### Who can see it, and how long it is kept
+
+Usage data is stored in our own telemetry store, in a database set aside for your organization. It is visible to you and, like the rest of our telemetry, to the Reliant staff who operate the service. We use it to show it to you and to run the service, not to advertise to your visitors, and we don't combine it across customers' apps. It is kept for up to 90 days by default, or for the shorter period your app is set to.
+
+#### Our own sites
+
+reliantlabs.io and demo.reliantlabs.io are apps hosted on our own platform, so the same counting applies to them, and for these two sites we are the controller. Their cookie choices are described in the [Privacy Policy](https://reliantlabs.io/privacy#website-cookies).
+
+#### Other tools in your app
+
+This section covers what Reliant's hosting collects. Anything else your app adds, such as a third-party analytics script, an advertising tag or your own cookies, is yours, and whether you need a consent banner depends on where your visitors are and on everything your app does. We don't give legal advice on that.
+
 ## Deleting your data
 
 ### Chats
@@ -214,6 +278,8 @@ Go to **Settings → Account → Delete account**, or email support@reliantlabs.
 | Model usage records, per call | 90 days |
 | Model usage daily totals | Until you delete your account |
 | Analytics events | Up to 90 days |
+| Usage data about the visitors to a hosted app, including the daily visitor code | Up to 90 days by default, or the shorter period the app is set to |
+| A day's random value for the daily visitor code | Held in memory only and deleted shortly after its day ends (never more than 48 hours). Never written to disk or to a backup |
 | Crash and error data in our telemetry store | 30 days |
 | Session replays (web app and desktop window) in our telemetry store | 14 days |
 | Crash and error data and session replays sent to Sentry (web app and desktop window) before we moved error reporting off it | According to Sentry's retention settings for our account |

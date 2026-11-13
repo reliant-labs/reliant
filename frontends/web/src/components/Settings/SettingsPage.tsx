@@ -7,19 +7,19 @@ import {
   DEFAULT_SETTINGS_SECTION,
   isSettingsSection,
   type SettingsSection,
+  type SettingsTab,
 } from "../../routeSchemas";
+import { readSettingsDestination, rememberSettingsDestination } from "./settingsDestination";
 
 export function SettingsPage() {
   // Escape closes the page (matches the WorkflowBuilderPage convention). The
   // arrow-key section navigator inside SettingsViewerTab also listens with
   // capture, so we don't fight it: this handler only fires for Escape.
-  // `section` is the URL — bare /settings yields no param and falls back to
-  // DEFAULT_SETTINGS_SECTION. /settings/$section provides it, and
-  // /settings/machines/$machineId is the Machines section with one machine
-  // open. An unknown slug never gets here: the route redirects it to bare
-  // /settings with `notFound=<slug>` (settingsSectionRoutes.tsx).
+  // Explicit paths are authoritative. Bare /settings restores the last
+  // destination onto the URL, where subtab/detail readers can see it too.
+  // Unknown slugs arrive here via /settings?notFound=<slug>.
   const params = useParams({ strict: false }) as { section?: string; machineId?: string };
-  const search = useSearch({ strict: false }) as { notFound?: string };
+  const search = useSearch({ strict: false }) as { notFound?: string; tab?: SettingsTab };
   const navigate = useNavigate();
   const onClose = useSettingsClose();
 
@@ -28,6 +28,33 @@ export function SettingsPage() {
     : isSettingsSection(params.section)
       ? params.section
       : DEFAULT_SETTINGS_SECTION;
+  const hasExplicitDestination = !!params.machineId || isSettingsSection(params.section);
+
+  useEffect(() => {
+    if (hasExplicitDestination) {
+      rememberSettingsDestination({ section, machineId: params.machineId, tab: search.tab });
+      return;
+    }
+    const destination = readSettingsDestination();
+    // Preserve this visit's search (e.g. the unknown-page notice), never saved
+    // callback markers. An explicitly supplied tab wins over the remembered one.
+    const restoredSearch = { ...search, tab: search.tab ?? destination.tab };
+    if (destination.machineId) {
+      void navigate({
+        to: "/settings/machines/$machineId",
+        params: { machineId: destination.machineId },
+        search: restoredSearch,
+        replace: true,
+      });
+    } else {
+      void navigate({
+        to: "/settings/$section",
+        params: { section: destination.section },
+        search: restoredSearch,
+        replace: true,
+      });
+    }
+  }, [hasExplicitDestination, section, params.machineId, search, navigate]);
 
   const onSectionChange = useCallback(
     (next: SettingsSection) => {
@@ -58,6 +85,9 @@ export function SettingsPage() {
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [onClose]);
 
+  // Don't mount Account (and its effects) while restoring another page.
+  if (!hasExplicitDestination) return null;
+
   return (
     <div className="flex h-screen w-full flex-col bg-background">
       {search.notFound && (
@@ -68,7 +98,7 @@ export function SettingsPage() {
           <span>
             There is no settings page called{" "}
             <code className="rounded bg-background px-1 font-mono text-xs">{search.notFound}</code>. Showing{" "}
-            your account settings instead.
+            your settings instead.
           </span>
           <button
             type="button"

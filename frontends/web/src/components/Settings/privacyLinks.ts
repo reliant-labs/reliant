@@ -1,3 +1,4 @@
-/** The docs page that lists, item by item, what is stored where. */
-export const PRIVACY_DOCS_URL = "https://docs.reliantlabs.io/help/privacy";
-export const PRIVACY_POLICY_URL = "https://reliantlabs.io/privacy";
+// The links live in lib/privacyLinks.ts (the forge demo bundle shows the
+// policy link, and may not import from Settings/); this keeps the settings'
+// import path.
+export { PRIVACY_DOCS_URL, PRIVACY_POLICY_URL } from "@/lib/privacyLinks";

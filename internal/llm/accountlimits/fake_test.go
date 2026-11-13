@@ -47,6 +47,8 @@ type fakeStore struct {
 
 	// slow, when set, blocks UpsertAccountLimitSnapshot until closed.
 	slow chan struct{}
+	// slowEntered, when set, is sent on as an upsert parks on slow.
+	slowEntered chan struct{}
 
 	upserts   int
 	benches   []benchCall
@@ -124,6 +126,9 @@ func (s *fakeStore) GetProviderAccountWithSecrets(_ context.Context, userID, id 
 
 func (s *fakeStore) UpsertAccountLimitSnapshot(_ context.Context, st core.LimitState) error {
 	if s.slow != nil {
+		if s.slowEntered != nil {
+			s.slowEntered <- struct{}{}
+		}
 		<-s.slow
 	}
 	s.mu.Lock()
@@ -143,13 +148,13 @@ func (s *fakeStore) UpsertAccountLimitSnapshot(_ context.Context, st core.LimitS
 	if st.Source == SourceHeaders {
 		l.LastTrafficAt = st.ObservedAt
 	}
-	if st.Status == "allowed" {
+	if st.Status == "allowed" || st.Status == "overage" {
 		l.LimitedUntil, l.LimitedWindow, l.LimitedProbes = nil, "", 0
 	}
 	return nil
 }
 
-func (s *fakeStore) BenchAccount(_ context.Context, userID, id string, until time.Time, window string, probe bool) error {
+func (s *fakeStore) BenchAccount(_ context.Context, _ core.AccountOwner, id string, until time.Time, window string, probe bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.accounts[id] == nil {

@@ -9,6 +9,7 @@ import { useMemo, useCallback, useEffect } from "react";
 import { MessageRole } from "../../gen/reliant/v1/chat_pb";
 import { sendOnExistingChat } from "../../lib/chatSendRouting";
 import { sortMessagesForDisplay } from "../../lib/messageOrder";
+import { armChatOpen } from "../../lib/chatOpenInteraction";
 import { ChatPresenter } from "./ChatPresenter";
 import {
   useChat,
@@ -37,6 +38,7 @@ import { toast } from "../../lib/toast-manager";
 import { isDaemonConnectingError } from "../../lib/daemon-errors";
 import { sendWithDaemonWait } from "../../lib/daemon-retry";
 import { newClientMessageId } from "../../lib/pendingSends";
+import { runRecipientRefusal } from "../../lib/runRecipient";
 
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
 
@@ -100,14 +102,17 @@ export function ChatContainer({
     return msgs;
   }, [storeMessages, streamingMessages]);
 
-  const approvals = useApprovals(chatId).data?.approvals ?? NO_APPROVALS;
+  const currentChat = useChat(chatId);
+  // A viewer of a shared chat has no approvals to read or act on: the server
+  // answers ListApprovalsByChat as not found for them, so it is not asked.
+  const approvalsChatId = currentChat?.viewerAccess ? undefined : chatId;
+  const approvals = useApprovals(approvalsChatId).data?.approvals ?? NO_APPROVALS;
   const errorEvents = useErrorEvents(chatId);
   const infoEvents = useInfoEvents(chatId);
   const runOutputs = useRunOutputs(chatId);
-  const currentChat = useChat(chatId);
   const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
   const isChatBusy = useIsChatRunning(chatId);
-  const pendingApprovals = usePendingApprovals(chatId).data?.approvals ?? NO_APPROVALS;
+  const pendingApprovals = usePendingApprovals(approvalsChatId).data?.approvals ?? NO_APPROVALS;
 
   // Self-healing subscription invariant: this component renders the active
   // chat, so it's the natural place to assert "the rendered chat is the
@@ -122,6 +127,10 @@ export function ChatContainer({
   );
   useEffect(() => {
     reconcileChatSubscription(chatId);
+    // An open the router started (the mobile chat screen, which never goes
+    // through selectChat) is set up once the subscription is asserted, here.
+    // selectChat's own opens are armed already, so this is a no-op for them.
+    armChatOpen(chatId);
   }, [chatId, connectionStatus, reconcileChatSubscription]);
 
   // Process messages: canonical order (lib/messageOrder), filter out tool messages
@@ -238,8 +247,10 @@ export function ChatContainer({
             new Error("Your machine didn't come online, so the message wasn't sent."),
           );
         } else {
-          // Show error toast to user
-          toast.error(error);
+          // A run with several agents running (open one's thread to message
+          // it), or none, refuses the message: nothing was queued.
+          const refusal = runRecipientRefusal(error);
+          toast.error(refusal ? new Error(refusal) : error);
         }
         throw error;
       }

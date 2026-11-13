@@ -52,12 +52,13 @@ import {
   type TraceRedSummary as WireRed,
   type TraceSummary as WireTraceSummary,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
-import { WorkloadKind as WireWorkloadKind, type DeclaredWorkload as WireDeclaredWorkload } from "@/gen/controlplane/controlplane/v1/deploy_pb";
+import { DeclaredSpecGap as WireDeclaredSpecGap, WorkloadKind as WireWorkloadKind, type DeclaredWorkload as WireDeclaredWorkload } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 
 import { obsClient } from "./obsClient";
 import type {
   AttributeFilter,
   AttributeOp,
+  DeclaredSpecGap,
   DeclaredWorkload,
   Workload,
   WorkloadCause,
@@ -405,11 +406,19 @@ function predicateInit(p: Predicate) {
 }
 
 /**
+ * The request header naming the dashboard panel a read draws, `<dashboard>/<panel>`:
+ * control-plane (obsread.PanelHeader) stamps it on the read's ClickHouse statements
+ * as log_comment, and allows it cross-origin.
+ */
+export const PANEL_HEADER = "Forge-Panel";
+
+/**
  * Runs one dashboard panel server-side: line, number and table panels over a
  * signal, and the browser kinds (funnel, issues, sessions) over the tenant's
  * browser tables. Search panels are not run here.
  */
 export async function queryPanel(req: QueryPanelRequest, options: { signal?: AbortSignal } = {}): Promise<PanelResult> {
+  const headers = req.dashboardId ? { [PANEL_HEADER]: `${req.dashboardId}/${req.panel.id}` } : undefined;
   const res = await client().queryPanel(
     {
       scope: scope(req, req.window, req.services),
@@ -418,7 +427,7 @@ export async function queryPanel(req: QueryPanelRequest, options: { signal?: Abo
       groupBy: req.groupBy ?? [],
       explain: req.explain ?? false,
     },
-    options.signal ? { signal: options.signal } : undefined
+    options.signal || headers ? { ...(options.signal ? { signal: options.signal } : {}), ...(headers ? { headers } : {}) } : undefined
   );
   return {
     kind: res.kind,
@@ -735,11 +744,26 @@ function mapPod(p: WireWorkloadPod): WorkloadPod {
   };
 }
 
+/** Why a declared spec is not recorded; "unknown" from a control plane that predates the reason. */
+function specGapOf(gap: WireDeclaredSpecGap): DeclaredSpecGap {
+  switch (gap) {
+    case WireDeclaredSpecGap.PENDING:
+      return "pending";
+    case WireDeclaredSpecGap.UNREADABLE:
+      return "unreadable";
+    case WireDeclaredSpecGap.NOT_IN_MANIFESTS:
+      return "not-in-manifests";
+    default:
+      return "unknown";
+  }
+}
+
 function mapDeclared(d: WireDeclaredWorkload): DeclaredWorkload {
   return {
     name: d.name,
     kind: kindOf(d.kind),
     specRecorded: d.specRecorded,
+    specGap: d.specRecorded ? null : specGapOf(d.specGap),
     replicas: d.replicas ?? null,
     cpuRequestMillicores: Number(d.cpuRequestMillicores),
     cpuLimitMillicores: Number(d.cpuLimitMillicores),

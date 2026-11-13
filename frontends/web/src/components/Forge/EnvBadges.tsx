@@ -82,7 +82,8 @@ function QuietChip({ label, detail, testId }: { label: string; detail: string; t
   );
 }
 
-export function HealthChip({ env, health }: { env: string; health: EnvHealth }) {
+/** `deploying`: a deploy run for this environment is in progress, when the caller has the runs. */
+export function HealthChip({ env, health, deploying }: { env: string; health: EnvHealth; deploying?: boolean }) {
   const testId = `health-${env}`;
   switch (health.kind) {
     case "hosted":
@@ -98,7 +99,7 @@ export function HealthChip({ env, health }: { env: string; health: EnvHealth }) 
           </span>
         );
       }
-      return <VerdictChip verdict={health.verdict} testId={testId} />;
+      return <VerdictChip verdict={health.verdict} deploying={deploying} testId={testId} />;
     case "not-deployed":
       return (
         <QuietChip

@@ -97,6 +97,12 @@ type PauseController struct {
 	// machine, and in tests.
 	MachineWake *machineResumeWaker
 
+	// CapacitySlot is the run's workflow-capacity slot (capacity_slot.go): a
+	// provider wait gives it back, and the next step takes it again first.
+	// One per run, shared by every thread. nil for a run that was not
+	// trigger-launched, for on_failure handlers, and in tests.
+	CapacitySlot *capacitySlot
+
 	// GaveUp is the error the run must end with because an unattended
 	// self-pause outlived its self-resume ladder (pauseCoordinator.GaveUp),
 	// or nil. nil func when not wired (tests, on_failure handlers).
@@ -119,7 +125,10 @@ func (pc *PauseController) gaveUp() error {
 //   - the step's machine never took its command within the run step's own
 //     wait (types.RunStepMachineUnavailableErrType). That wait was the retry:
 //     a pause would only hold the run, and an automation's capacity slot, for
-//     a resume nobody may send.
+//     a resume nobody may send;
+//   - the step's own config cannot run (stepConfigFailedErrType): a resume
+//     re-evaluates the same definition over the same data and fails the
+//     same way.
 //
 // Every executor's pause site asks this first.
 func (pc *PauseController) endsRunInsteadOfPausing(stepID string, err error) error {
@@ -137,6 +146,19 @@ func (pc *PauseController) endsRunInsteadOfPausing(stepID string, err error) err
 			return temporal.NewNonRetryableApplicationError(
 				fmt.Sprintf("step %s failed: %s", stepID, appErr.Message()),
 				types.RunStepMachineUnavailableErrType, nil)
+		}
+		if appErr.Type() == stepConfigFailedErrType {
+			return appErr
+		}
+		// An org policy refused an unattended run: nobody is present to
+		// switch model, and a self-resume ladder would only meet the same
+		// verdict on every rung while holding the automation's slot. The run
+		// ends with the reason; its trigger pauses once
+		// (WorkflowStatusActivity). An attended run pauses as usual.
+		if appErr.Type() == types.OrgPolicyRefusedUnattendedErrType {
+			return temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("step %s failed: %s", stepID, appErr.Message()),
+				types.OrgPolicyRefusedUnattendedErrType, nil)
 		}
 		e = appErr
 	}

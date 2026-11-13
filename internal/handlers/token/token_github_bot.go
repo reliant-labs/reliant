@@ -121,6 +121,11 @@ func botMintError(ctx context.Context, userID, repository string, err error) err
 		return refuse(svcerr.FailedPrecondition(
 			"your GitHub connection expired; reconnect it in Reliant"), reasonGitNeedsReconnect)
 	}
-	slog.ErrorContext(ctx, "github bot token unavailable", "user_id", userID, "repository", repository, "outcome", "unavailable")
+	// WARN: gitcredentialclient's component log layer already recorded this
+	// failure at ERROR, and the RPC log layer records the Unavailable below.
+	// At ERROR here it was a second issue for the same failure. The cause
+	// stays out of this line: it may quote upstream text
+	// (TestGetGitHubBotToken_NeverLogsToken).
+	slog.WarnContext(ctx, "github bot token unavailable", "user_id", userID, "repository", repository, "outcome", "unavailable")
 	return svcerr.WithCause(svcerr.Unavailable("GitHub App token service unavailable; retry"), err)
 }

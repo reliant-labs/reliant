@@ -14,7 +14,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=0dce7da21b4b92907ff63f62110e0a7be20c3c584c13ba350b0ea97f93f8d7f4
+// forge:hash=1016533f7d0e5c6981e9ee1fb84f3b5a75b7c451f8d1bde9f2ae205c9b519369
 
 // MockService is a test mock for the Service interface.
 //
@@ -27,6 +27,7 @@ type MockService struct {
 	MintLLMKeyFunc                   func(context.Context, string, string) (LLMKey, error)
 	MintDaemonResumeTokenFunc        func(context.Context, string, string, string) (DaemonResumeToken, error)
 	RevokeDaemonResumeTokensFunc     func(context.Context, string, string) error
+	ListMyOrganizationsFunc          func(context.Context, string) ([]MyOrganization, error)
 	PreviewAccountDeletionWalletFunc func(context.Context, string) (*AccountDeletionWalletQuote, error)
 	DeleteCurrentUserAccountFunc     func(context.Context, string) (*AccountDeletionResult, error)
 	CloneRepoOntoDaemonFunc          func(context.Context, string, CloneRepoRequest) (CloneRepoResult, error)
@@ -39,6 +40,10 @@ type MockService struct {
 	UpsertAutopilotReceiverFunc      func(context.Context, AutopilotReceiver) error
 	DeleteAutopilotReceiverFunc      func(context.Context, string) error
 	ListAutopilotReceiversFunc       func(context.Context) ([]string, error)
+	PrepareProjectOrgMoveFunc        func(context.Context, ProjectOrgMoveStep, string) (int, error)
+	AbortProjectOrgMoveFunc          func(context.Context, ProjectOrgMoveStep) error
+	RecordProjectOrgMoveFunc         func(context.Context, ProjectOrgMoveStep, string, map[string]int64) error
+	PreviewProjectOrgMoveFunc        func(context.Context, ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
 }
 
 // MintLLMKey records the call and delegates to MintLLMKeyFunc when set.
@@ -66,6 +71,15 @@ func (m *MockService) RevokeDaemonResumeTokens(ctx context.Context, jwt string, 
 		return m.RevokeDaemonResumeTokensFunc(ctx, jwt, daemonID)
 	}
 	return contractkit.MockNotSet("MockService", "RevokeDaemonResumeTokens")
+}
+
+// ListMyOrganizations records the call and delegates to ListMyOrganizationsFunc when set.
+func (m *MockService) ListMyOrganizations(ctx context.Context, jwt string) ([]MyOrganization, error) {
+	m.Recorder.Record("ListMyOrganizations", ctx, jwt)
+	if m.ListMyOrganizationsFunc != nil {
+		return m.ListMyOrganizationsFunc(ctx, jwt)
+	}
+	return nil, contractkit.MockNotSet("MockService", "ListMyOrganizations")
 }
 
 // PreviewAccountDeletionWallet records the call and delegates to PreviewAccountDeletionWalletFunc when set.
@@ -174,6 +188,42 @@ func (m *MockService) ListAutopilotReceivers(ctx context.Context) ([]string, err
 		return m.ListAutopilotReceiversFunc(ctx)
 	}
 	return nil, contractkit.MockNotSet("MockService", "ListAutopilotReceivers")
+}
+
+// PrepareProjectOrgMove records the call and delegates to PrepareProjectOrgMoveFunc when set.
+func (m *MockService) PrepareProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep, actorUserID string) (int, error) {
+	m.Recorder.Record("PrepareProjectOrgMove", ctx, s, actorUserID)
+	if m.PrepareProjectOrgMoveFunc != nil {
+		return m.PrepareProjectOrgMoveFunc(ctx, s, actorUserID)
+	}
+	return 0, contractkit.MockNotSet("MockService", "PrepareProjectOrgMove")
+}
+
+// AbortProjectOrgMove records the call and delegates to AbortProjectOrgMoveFunc when set.
+func (m *MockService) AbortProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep) error {
+	m.Recorder.Record("AbortProjectOrgMove", ctx, s)
+	if m.AbortProjectOrgMoveFunc != nil {
+		return m.AbortProjectOrgMoveFunc(ctx, s)
+	}
+	return contractkit.MockNotSet("MockService", "AbortProjectOrgMove")
+}
+
+// RecordProjectOrgMove records the call and delegates to RecordProjectOrgMoveFunc when set.
+func (m *MockService) RecordProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep, projectName string, counts map[string]int64) error {
+	m.Recorder.Record("RecordProjectOrgMove", ctx, s, projectName, counts)
+	if m.RecordProjectOrgMoveFunc != nil {
+		return m.RecordProjectOrgMoveFunc(ctx, s, projectName, counts)
+	}
+	return contractkit.MockNotSet("MockService", "RecordProjectOrgMove")
+}
+
+// PreviewProjectOrgMove records the call and delegates to PreviewProjectOrgMoveFunc when set.
+func (m *MockService) PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error) {
+	m.Recorder.Record("PreviewProjectOrgMove", ctx, q)
+	if m.PreviewProjectOrgMoveFunc != nil {
+		return m.PreviewProjectOrgMoveFunc(ctx, q)
+	}
+	return nil, contractkit.MockNotSet("MockService", "PreviewProjectOrgMove")
 }
 
 // Compile-time check.

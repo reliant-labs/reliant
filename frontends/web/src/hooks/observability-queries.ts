@@ -262,25 +262,33 @@ export interface TraceFilters {
 export const TRACE_PAGE_SIZE = 100;
 
 /**
- * Refuse rows a control plane older than the user/session filters answered
- * without them (it ignores the unknown fields). A server that applies a filter
- * returns only traces with a span carrying the id, so every summary names one;
- * an older one never fills either field, so rows with none are its signature.
+ * Refuse rows a control plane older than a filter answered without it (it
+ * ignores the unknown field, so the list would look filtered and not be).
+ *
+ * A row proves the filter was ignored when it names a DIFFERENT value. A list
+ * where no row names any value is an older server's signature too, unless
+ * the request narrowed the counted spans (a service or an attribute filter):
+ * then the browser spans that carry the client, the build and often the user
+ * are not part of any row, and a server that applied the filter answers with
+ * the fields empty. "The api's traces from Chrome" are api spans only.
  */
-function assertTraceFiltersApplied(filters: TraceFilters, traces: TraceSummary[]) {
+export function assertTraceFiltersApplied(filters: TraceFilters, traces: TraceSummary[], narrowed: boolean) {
   if (traces.length === 0) return;
-  if (filters.userId && traces.every((t) => !t.userId)) throw new FilterUnsupportedError("user", "traces");
-  if (filters.sessionId && traces.every((t) => !t.sessionId)) throw new FilterUnsupportedError("browser session", "traces");
-  // A server that applies these returns only traces naming the value; an older
-  // one never fills the fields at all.
-  if (filters.browser && traces.some((t) => t.client.browserName !== filters.browser)) throw new FilterUnsupportedError("browser", "traces");
-  if (filters.os && traces.some((t) => t.client.osName !== filters.os)) throw new FilterUnsupportedError("OS", "traces");
-  if (filters.frontendVersion && traces.some((t) => t.frontendVersion !== filters.frontendVersion)) {
-    throw new FilterUnsupportedError("frontend version", "traces");
-  }
-  if (filters.backendVersion && traces.some((t) => !t.backendBuilds.some((b) => b.version === filters.backendVersion))) {
-    throw new FilterUnsupportedError("backend version", "traces");
-  }
+  const ignored = (wanted: string | undefined, valuesOf: (t: TraceSummary) => string[], what: string) => {
+    if (!wanted) return;
+    const contradicted = traces.some((t) => {
+      const values = valuesOf(t).filter(Boolean);
+      return values.length > 0 && !values.includes(wanted);
+    });
+    const neverNamed = !narrowed && traces.every((t) => valuesOf(t).every((v) => !v));
+    if (contradicted || neverNamed) throw new FilterUnsupportedError(what, "traces");
+  };
+  ignored(filters.userId, (t) => [t.userId], "user");
+  ignored(filters.sessionId, (t) => [t.sessionId], "browser session");
+  ignored(filters.browser, (t) => [t.client.browserName], "browser");
+  ignored(filters.os, (t) => [t.client.osName], "OS");
+  ignored(filters.frontendVersion, (t) => [t.frontendVersion], "frontend version");
+  ignored(filters.backendVersion, (t) => t.backendBuilds.map((b) => b.version), "backend version");
 }
 
 export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
@@ -306,7 +314,7 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
         limit: TRACE_PAGE_SIZE,
         cursor: pageParam?.cursor,
       }, { signal });
-      assertTraceFiltersApplied(filters, result.traces);
+      assertTraceFiltersApplied(filters, result.traces, filters.services.length > 0 || (scope?.filters.length ?? 0) > 0);
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,
@@ -352,6 +360,8 @@ export interface PanelQueryOptions {
   /** Auto-refresh: re-read the panel this often (ms). */
   refetchInterval?: number | false;
   enabled?: boolean;
+  /** The dashboard the panel belongs to: labels the read in control-plane's query_log (Forge-Panel). */
+  dashboardId?: string;
 }
 
 /**
@@ -385,7 +395,7 @@ export function usePanelQuery(
       const offset = options.offsetMs?.() ?? 0;
       const window = resolveWindow(range, Date.now() - offset);
       if (panel.kind === "postgres") return queryPostgresPanel(databaseApi, scope as ObsScope, window, panel, signal);
-      return api.queryPanel({ ...(scope as ObsScope), window, panel, services, stepSeconds: 0, groupBy }, { signal });
+      return api.queryPanel({ ...(scope as ObsScope), window, panel, services, stepSeconds: 0, groupBy, dashboardId: options.dashboardId }, { signal });
     },
     enabled,
     staleTime: 30_000,
@@ -814,6 +824,40 @@ export function useReleaseHealths(
   });
   const byEnv = new Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }>();
   items.forEach(({ envId }, index) => {
+    const result = results[index];
+    byEnv.set(envId, { data: result?.data, isLoading: !!result?.isLoading, error: result?.error ?? null });
+  });
+  return byEnv;
+}
+
+/**
+ * GetReleaseHealth for each environment's CURRENT promotion (no promotion id:
+ * the server judges the env's running release against the one it replaced),
+ * by environment id: a Releases dashboard's release_health panel. Polled
+ * while a verdict's after window is still open, like useReleaseHealth.
+ */
+export function useCurrentReleaseHealths(
+  scope: DeliveryScope | null,
+  envIds: readonly string[],
+  windowMs: number
+): Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }> {
+  const api = useObsReadApi();
+  const results = useQueries({
+    queries: envIds.map((envId) => {
+      const one: DeliveryScope = { orgId: scope?.orgId ?? "", projectId: scope?.projectId, envIds: [envId] };
+      return {
+        queryKey: [...deliveryKeys.all(one), "health", "current", windowMs] as const,
+        queryFn: ({ signal }: { signal: AbortSignal }) => api.getReleaseHealth({ ...one, windowMs }, { signal }),
+        enabled: !!scope?.orgId,
+        staleTime: 30_000,
+        refetchInterval: (query: { state: { data?: ReleaseHealth } }) => (query.state.data && !query.state.data.afterComplete ? 60_000 : false),
+        retry: releaseHealthRetry,
+        retryDelay: obsRetryDelay,
+      };
+    }),
+  });
+  const byEnv = new Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }>();
+  envIds.forEach((envId, index) => {
     const result = results[index];
     byEnv.set(envId, { data: result?.data, isLoading: !!result?.isLoading, error: result?.error ?? null });
   });

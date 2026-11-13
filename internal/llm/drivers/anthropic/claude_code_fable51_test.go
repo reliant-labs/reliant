@@ -98,7 +98,7 @@ type systemBlock struct {
 // the actual wire shape rather than the param structs.
 func marshalSystemBlocks(t *testing.T, apiModel string, disableCache bool) []systemBlock {
 	t.Helper()
-	raw, err := json.Marshal(claudeCodeBaseSystemBlocks(apiModel, disableCache))
+	raw, err := json.Marshal(claudeCodeBaseSystemBlocks(apiModel, disableCache, ""))
 	if err != nil {
 		t.Fatalf("marshal system blocks: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestClaudeCodeBillingHeader_PerProfile(t *testing.T) {
 				t.Errorf("billingVersion %q is not on cli release %s", profile.billingVersion, tc.wantCLI)
 			}
 
-			header := claudeCodeBillingHeader(profile)
+			header := claudeCodeBillingHeader(profile, "")
 			if !strings.Contains(header, tc.wantVersion) {
 				t.Errorf("header %q does not contain %q", header, tc.wantVersion)
 			}
@@ -263,7 +263,7 @@ func TestClaudeCodeBillingHeader_PerProfile(t *testing.T) {
 
 			// cc_prompt_id must be a FRESH uuid per request.
 			if tc.wantPromptID {
-				second := claudeCodeBillingHeader(profile)
+				second := claudeCodeBillingHeader(profile, "")
 				if promptID(t, header) == promptID(t, second) {
 					t.Errorf("cc_prompt_id repeated across requests: %q", header)
 				}
@@ -284,6 +284,28 @@ func promptID(t *testing.T, header string) string {
 		t.Fatalf("cc_prompt_id %q is not a uuid", id)
 	}
 	return id
+}
+
+// capturedThinkingAsSent returns a capture's thinking config with the one field
+// the driver deliberately diverges on: the captures send display "updates",
+// which streams only empty thinking deltas, and claudeCodeThinkingConfig sends
+// "summarized" so thinking text reaches the user. Every other field must still
+// match the capture.
+func capturedThinkingAsSent(t *testing.T, captured json.RawMessage) json.RawMessage {
+	t.Helper()
+	var thinking map[string]any
+	if err := json.Unmarshal(captured, &thinking); err != nil {
+		t.Fatalf("unmarshal captured thinking: %v", err)
+	}
+	if thinking["display"] != "updates" {
+		t.Fatalf("captured thinking display = %v, want updates", thinking["display"])
+	}
+	thinking["display"] = "summarized"
+	out, err := json.Marshal(thinking)
+	if err != nil {
+		t.Fatalf("marshal thinking: %v", err)
+	}
+	return out
 }
 
 // TestClaudeCodeThinkingConfig_DisplayUpdates verifies display:"updates" is
@@ -494,8 +516,8 @@ func TestPreparedMessages_MatchesCaptureShape(t *testing.T) {
 	if got.MaxTokens != capture.MaxTokens {
 		t.Errorf("max_tokens = %d, want %d", got.MaxTokens, capture.MaxTokens)
 	}
-	if !jsonEquivalent(t, got.Thinking, capture.Thinking) {
-		t.Errorf("thinking = %s, want %s", got.Thinking, capture.Thinking)
+	if want := capturedThinkingAsSent(t, capture.Thinking); !jsonEquivalent(t, got.Thinking, want) {
+		t.Errorf("thinking = %s, want %s", got.Thinking, want)
 	}
 	if !jsonEquivalent(t, got.Fallbacks, capture.Fallbacks) {
 		t.Errorf("fallbacks = %s, want %s", got.Fallbacks, capture.Fallbacks)

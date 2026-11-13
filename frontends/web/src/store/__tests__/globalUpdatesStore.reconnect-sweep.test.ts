@@ -136,7 +136,7 @@ const REFETCH_TYPES = Object.keys({
 } satisfies Record<RefetchType, true>) as RefetchType[];
 
 /** The refetch types handled before refetchStore (not RefetchType members). */
-const STORE_ONLY_REFETCH_TYPES = ["daemons", "daemon_local_models", "inbox"];
+const STORE_ONLY_REFETCH_TYPES = ["daemons", "daemon_local_models", "inbox", "project_org_moved"];
 
 function userUpdate(type: UserUpdateType, data: Record<string, unknown>): UserUpdate {
   return {

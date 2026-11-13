@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
-	"time"
 )
 
 // deadPID is above Linux's pid_max ceiling (2^22), so no process has it.
@@ -25,24 +24,10 @@ func TestDirIsInMemoryWhereTheMachineHasTmpfs(t *testing.T) {
 	if filepath.Dir(dir) != root {
 		t.Fatalf("Dir = %q, want a directory in %s", dir, root)
 	}
-	f, err := os.Create(filepath.Join(dir, "f"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	start := time.Now()
-	for range 50 {
-		if _, err := f.Write([]byte("x")); err != nil {
-			t.Fatal(err)
-		}
-		if err := f.Sync(); err != nil {
-			t.Fatal(err)
-		}
-	}
 	// 50 fsyncs on the shared disk took up to 40s under load; on tmpfs they
-	// are microseconds. A second is two orders of magnitude of slack.
-	if d := time.Since(start); d > time.Second {
-		t.Errorf("50 fsyncs in %s took %s: not in memory", dir, d)
+	// are microseconds. Ask the filesystem what it is rather than timing it.
+	if !usable(dir) {
+		t.Errorf("%s is not on a tmpfs: not in memory", dir)
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -36,6 +37,8 @@ import (
 	v2activities "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
@@ -80,6 +83,23 @@ type Config struct {
 	// no launcher fails loudly and is retried on one that has it, instead of
 	// being silently dropped.
 	TriggerLauncher triggers.Launcher
+
+	// Membership is on every activity's context (authz.WithMembership,
+	// through worker.Options.BackgroundActivityContext), so a tool, a launch
+	// or a trigger fire decides org resources against live membership as an
+	// API request does. nil is a deployment with no orgs: owner-only.
+	Membership authz.Membership
+
+	// Policies is on every activity's context beside Membership
+	// (orgpolicy.WithResolver), so an enforcement point in a tool, a launch
+	// or a trigger fire reads the run's org policy. nil is a deployment with
+	// no org policies.
+	Policies *orgpolicy.Resolver
+	// OrgMoves runs the steps of a project's move to another org
+	// (orgmove.ProjectOrgMoveWorkflow). The workflow is always registered;
+	// its activities only with this set, so a move's saga on a worker
+	// without them retries until one that has them takes it.
+	OrgMoves orgmove.Service
 
 	// TriggerPollers looks up a polled integration's poll function. nil
 	// registers the poll workflow without its activity: a poll that reaches
@@ -315,16 +335,30 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
 			pools = pools.WithWaker(poolMemberWaker{w: w})
 		}
+		pause := triggerAutoPause(cfg)
 		w.RegisterActivityWithOptions(
-			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).Fire,
+			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
 		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).Fire,
+			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
 			activity.RegisterOptions{Name: triggers.EventFireActivityName},
 		)
 	} else {
 		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
+	}
+
+	// Moving a project to another org: the saga is pure orchestration; its
+	// steps need the control plane and the trigger service.
+	w.RegisterWorkflowWithOptions(orgmove.ProjectOrgMoveWorkflow, workflow.RegisterOptions{
+		Name: orgmove.WorkflowName,
+	})
+	if m := cfg.OrgMoves; m != nil {
+		w.RegisterActivityWithOptions(m.Prepare, activity.RegisterOptions{Name: orgmove.PrepareActivityName})
+		w.RegisterActivityWithOptions(m.Commit, activity.RegisterOptions{Name: orgmove.CommitActivityName})
+		w.RegisterActivityWithOptions(m.Abort, activity.RegisterOptions{Name: orgmove.AbortActivityName})
+		w.RegisterActivityWithOptions(m.Record, activity.RegisterOptions{Name: orgmove.RecordActivityName})
+		w.RegisterActivityWithOptions(m.ResumeTriggers, activity.RegisterOptions{Name: orgmove.ResumeTriggersActivityName})
 	}
 
 	// Workflow-event triggers: same split as schedules. The dispatch workflow
@@ -333,7 +367,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		Name: workflowevent.DispatchWorkflowName,
 	})
 	if cfg.TriggerLauncher != nil {
-		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil).WithWorkflows(declarations)
+		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil).WithWorkflows(declarations).WithAutoPause(triggerAutoPause(cfg))
 		w.RegisterActivityWithOptions(
 			workflowevent.NewActivity(cfg.Database, dispatcher).Dispatch,
 			activity.RegisterOptions{Name: workflowevent.DispatchActivityName},
@@ -346,7 +380,14 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 // workerOptions is the shared worker's worker.Options, gomaxprocs being the
 // runtime's (a parameter so the derivation is testable).
 func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker.Options {
+	membership := cfg.Membership
+	if membership == nil {
+		membership = authz.NoOrgs{}
+	}
 	return worker.Options{
+		// Every activity's context derives from it: authz reads membership
+		// there (Config.Membership).
+		BackgroundActivityContext: orgpolicy.WithResolver(authz.WithMembership(context.Background(), membership), cfg.Policies),
 		// How Worker.Run learns the worker died; see temporalWorker.
 		OnFatalError:                 onFatalError,
 		StickyScheduleToStartTimeout: 5 * time.Second,
@@ -437,6 +478,19 @@ func chatOwners(cfg *Config) *telemetry.ChatOwnerCache {
 		}
 		return chat.UserID, nil
 	}, time.Hour, 10000)
+}
+
+// triggerAutoPause pauses a trigger whose creator left its org, and its
+// Temporal schedule when the worker has a client (triggers.AutoPause).
+func triggerAutoPause(cfg *Config) *triggers.AutoPause {
+	if cfg.Database == nil {
+		return nil
+	}
+	var schedules triggers.ScheduleClient
+	if cfg.TemporalClient != nil {
+		schedules = cfg.TemporalClient.ScheduleClient()
+	}
+	return triggers.NewAutoPause(cfg.Database, schedules)
 }
 
 // TaskQueueName returns the task queue name that would be used by a worker with the given config.

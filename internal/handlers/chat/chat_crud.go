@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"connectrpc.com/connect"
@@ -15,6 +16,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/chatproto"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -22,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/planproto"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 )
 
@@ -156,6 +160,13 @@ func (s *Service) startChat(
 	if jwt, ok := auth.GetUserJWT(userID); ok {
 		spec.UserJWT = jwt
 	}
+	// A new chat's org is fixed here and never changes; an existing chat
+	// keeps its own.
+	if msg.GetChatId() == "" {
+		if spec.OrgID, spec.DefaultOrgID, err = s.newChatOrgs(ctx, userID, msg.ProjectId, msg.GetOrgId()); err != nil {
+			return nil, err
+		}
+	}
 
 	// A chat with no machine by design: there is nothing to choose, validate
 	// or wake. The launcher refuses the contradictions (with a daemon_id, or
@@ -235,7 +246,7 @@ func (s *Service) startChat(
 	}
 
 	if eventKind == core.TriggerEventKindChatStart {
-		s.trackStartedChatMessage(ctx, userID, result.Chat, clientID, msg)
+		s.trackStartedChatMessage(ctx, userID, result.Chat, result.UserMessageID, clientID, msg)
 	}
 
 	return connect.NewResponse(&reliantv1.StartChatResponse{
@@ -260,7 +271,7 @@ func (s *Service) validateBuilderTest(ctx context.Context, userID string, msg *r
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to look up workflow draft"))
 	}
-	if draft == nil || draft.UserID != userID {
+	if !authz.CanReadWorkflow(ctx, userID, draft) {
 		return svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("builder_test requires a saved workflow draft you own: %q", msg.Workflow))
 	}
 	return nil
@@ -284,9 +295,14 @@ func (s *Service) ListChats(
 	if req.Msg.ProjectId != "" {
 		projectID = &req.Msg.ProjectId
 	}
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 	filters := db.ChatFilters{
 		UserID:          userID,
 		ProjectID:       projectID,
+		Org:             scope,
 		Limit:           limit,
 		ExcludeArchived: true,
 		// The chat list holds conversations: USER-origin chats and adopted
@@ -298,13 +314,16 @@ func (s *Service) ListChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list chats"))
 	}
+	// The store lists what the caller owns; a chat of an org they have left
+	// is not theirs to see, named org or not (GetChat refuses it too).
+	chats = authz.Visible(ctx, userID, chats, authz.CanReadChat[*db.Chat])
 
 	// The background reconciler repairs stale DB status against Temporal.
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
 	}
-	mainWorktrees := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, chats, protoChats)
+	mainWorktrees := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, scope, chats, protoChats)
 
 	// Get latest user update sequence for stream sync —
 	// the frontend uses this to connect the streaming RPC without redundant event replay.
@@ -328,6 +347,8 @@ func (s *Service) GetChat(
 	req *connect.Request[reliantv1.GetChatRequest],
 ) (*connect.Response[reliantv1.GetChatResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Serves viewers of a shared chat (chatproto.ForViewer).
+	ctx = authz.WithViewerReads(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
@@ -338,9 +359,15 @@ func (s *Service) GetChat(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	// Verify user owns the chat
-	if chat.UserID != userID {
+	// The owner, or a viewer of a shared chat.
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
 		return nil, svcerr.NotFound("chat")
+	}
+	// A viewer reads the chat, never the owner's composer, workspace or run
+	// recovery: no selection read, no Temporal describe.
+	if access.Viewer() {
+		return connect.NewResponse(&reliantv1.GetChatResponse{Chat: chatproto.ForViewer(chatToProto(chat))}), nil
 	}
 
 	// Ghost detection (DB says running, but Temporal lost it) is advisory
@@ -414,7 +441,7 @@ func (s *Service) UpdateChat(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	if chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -643,7 +670,8 @@ func (s *Service) cancelArchivedChatWorkflow(ctx context.Context, chat *db.Chat)
 }
 
 // SearchChats searches the caller's chats by title and message content: in
-// one project, or in all of their projects when project_id is empty.
+// one project, or in all of their projects when project_id is empty; in the
+// named org's chats (orgs.ListScope), or in every org's when it names none.
 func (s *Service) SearchChats(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SearchChatsRequest],
@@ -663,10 +691,15 @@ func (s *Service) SearchChats(
 		limit = int(*req.Msg.Limit)
 	}
 
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 	filters := db.ChatSearchFilters{
 		UserID:      userID,
 		ProjectID:   req.Msg.ProjectId,
 		SearchQuery: req.Msg.Query,
+		Org:         scope,
 		Limit:       limit,
 	}
 
@@ -674,6 +707,7 @@ func (s *Service) SearchChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to search chats"))
 	}
+	chats = authz.Visible(ctx, userID, chats, authz.CanReadChat[*db.Chat])
 
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
@@ -686,17 +720,25 @@ func (s *Service) SearchChats(
 	}), nil
 }
 
-// ListArchivedChats lists all archived chats with worktree info
+// ListArchivedChats lists the caller's archived chats with worktree info: the
+// named org's (orgs.ListScope), or every org's when it names none.
 func (s *Service) ListArchivedChats(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListArchivedChatsRequest],
 ) (*connect.Response[reliantv1.ListArchivedChatsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	archivedChats, err := s.deps.Repo.ListArchivedChats(ctx, userID)
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
+	archivedChats, err := s.deps.Repo.ListArchivedChats(ctx, userID, scope)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list archived chats"))
 	}
+	archivedChats = authz.Visible(ctx, userID, archivedChats, func(ctx context.Context, userID string, ac *db.ArchivedChatInfo) bool {
+		return authz.CanReadChat(ctx, userID, &ac.Chat)
+	})
 
 	protoChats := make([]*reliantv1.ArchivedChat, len(archivedChats))
 	for i, ac := range archivedChats {
@@ -718,6 +760,27 @@ func (s *Service) ListArchivedChats(
 		Total: int32(len(protoChats)),
 	}), nil
 }
+
+// ChatCompactedThroughHeader is the GetChatUpdates response header carrying
+// the chat's compaction watermark (store.CompactChatUpdates). At or below it
+// the log is compacted: MESSAGE, TOOL_CALL, STREAM_FINALIZED and
+// AGENT_MESSAGES_DRAINED updates are gone, NODE_EXECUTION keeps each node's
+// newest update and every other type each entity's newest, while THREAD,
+// WORKFLOW_STATUS, ERROR and QUESTION are whole. A poll from at or above it
+// gets every update. A poll from below it fails with OutOfRange, reason
+// ChatHistoryCompactedReason, and this header on the error: a successful
+// replay there would be a partial one, and a poller that does not know about
+// compaction (every client released before it) would advance its cursor past
+// transitions it never saw. A poller that does know re-reads the chat's
+// current state (GetChat, ListMessages, its open gates) and resumes from the
+// watermark. A header, not a response field: GetChatUpdatesResponse is public
+// SDK API, which changes in its own PR (sdk/go/README.md), and a header is
+// invisible to every client that does not look for it. 0: never compacted.
+const ChatCompactedThroughHeader = "Reliant-Chat-Compacted-Through"
+
+// ChatHistoryCompactedReason is the error reason (svcerr.ReasonHeader) of a
+// GetChatUpdates poll from below the compaction watermark.
+const ChatHistoryCompactedReason = "chat_history_compacted"
 
 // GetChatUpdates fetches chat updates since a sequence number
 func (s *Service) GetChatUpdates(
@@ -748,28 +811,55 @@ func (s *Service) GetChatUpdates(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get latest sequence"))
 	}
 
+	// The compaction watermark, read AFTER the updates: compaction raises it
+	// before it deletes, and it only rises, so a value at or below since_seq
+	// proves nothing under the updates above was deleted, and anything a
+	// concurrent compaction took from this read is under the value reported.
+	// Unreadable, the poll fails rather than claim a log it cannot vouch for.
+	compactedThrough, err := s.deps.Repo.GetChatCompactedThrough(ctx, req.Msg.ChatId)
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the chat's compaction watermark"))
+	}
+	// Below the watermark the log no longer holds every transition: refuse the
+	// replay rather than hand back a partial one a poller would advance past.
+	if req.Msg.SinceSeq < compactedThrough {
+		through := strconv.FormatInt(compactedThrough, 10)
+		return nil, svcerr.WithMetadata(svcerr.WithReason(svcerr.OutOfRange(fmt.Sprintf(
+			"chat updates through sequence %s were compacted, so a replay from %d would be incomplete: re-read the chat's current state and poll again from since_seq %s",
+			through, req.Msg.SinceSeq, through)), ChatHistoryCompactedReason), ChatCompactedThroughHeader, through)
+	}
+
 	// Convert to proto messages
+	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoUpdates := make([]*reliantv1.ChatUpdate, len(updates))
+	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
 	for i, update := range updates {
 		data := []byte(update.Data)
 		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
 			// The same tool-result preview every client-facing read sends.
-			data = messageproto.PreviewMessageUpdate(data)
+			data = messageproto.PreviewMessageUpdate(data, toolBodies)
 		}
+		dataJSON := string(data)
+		sent.AddChatUpdate(update.UpdateType, dataJSON)
 		protoUpdates[i] = &reliantv1.ChatUpdate{
 			SequenceNumber: update.SequenceNumber,
 			UpdateType:     update.UpdateType.String(),
 			EntityId:       update.EntityID,
-			Data:           string(data),
+			Data:           dataJSON,
 			CreatedAt:      update.CreatedAt.Format(time.RFC3339),
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetChatUpdatesResponse{
+	// What this read sent, by block kind, on the RPC's span.
+	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
+
+	resp := connect.NewResponse(&reliantv1.GetChatUpdatesResponse{
 		Updates:        protoUpdates,
 		Total:          int32(len(updates)),
 		LatestSequence: latestSeq,
-	}), nil
+	})
+	resp.Header().Set(ChatCompactedThroughHeader, strconv.FormatInt(compactedThrough, 10))
+	return resp, nil
 }
 
 // ListChatPlans lists plans associated with a chat
@@ -778,17 +868,19 @@ func (s *Service) ListChatPlans(
 	req *connect.Request[reliantv1.ListChatPlansRequest],
 ) (*connect.Response[reliantv1.ListChatPlansResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Serves viewers of a shared chat (authz.WithViewerReads).
+	ctx = authz.WithViewerReads(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	// Get chat to verify ownership
+	// The owner, or a viewer of a shared chat.
 	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat.UserID != userID {
+	if _, denied := authz.ReadChatAccess(ctx, userID, chat); denied != nil {
 		return nil, svcerr.NotFound("chat")
 	}
 

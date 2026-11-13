@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/ptr"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -50,8 +52,7 @@ func loopStep(stepID, activity, loopNode string, iteration int64, at time.Time, 
 		OutputJSON:   stepOutput(output),
 		CreatedAt:    at,
 	}
-	step.LoopNodeID.String, step.LoopNodeID.Valid = loopNode, true
-	step.LoopIteration.Int64, step.LoopIteration.Valid = iteration, true
+	step.LoopNodeID, step.LoopIteration = ptr.Of(loopNode), ptr.Of(iteration)
 	return step
 }
 

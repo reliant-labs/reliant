@@ -103,6 +103,13 @@ interface WorkspaceStateStore {
    * open chat runs in (projectStore.currentProject).
    */
   projectFilterId: string | null;
+  /**
+   * The sidebar's machine filter: the machine ids (and maybe NO_MACHINE) whose
+   * chats it lists, or null for "All machines". Read it through
+   * lib/sidebarMachineFilter effectiveMachineFilter, which drops machines the
+   * user no longer has.
+   */
+  machineFilterIds: string[] | null;
   /** Global left sidebar (chat sidebar) expanded state - same across all workspaces */
   leftSidebarExpanded: boolean;
 
@@ -112,6 +119,7 @@ interface WorkspaceStateStore {
   // === Global Actions ===
   setLastProject: (projectId: string | null) => void;
   setProjectFilterId: (projectId: string | null) => void;
+  setMachineFilterIds: (machineIds: readonly string[] | null) => void;
   setLeftSidebarExpandedGlobal: (expanded: boolean) => void;
 
   // === Project-level Actions ===
@@ -425,6 +433,7 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
       version: CURRENT_VERSION,
       lastProjectId: null,
       projectFilterId: null,
+      machineFilterIds: null,
       leftSidebarExpanded: true,
       projects: {},
 
@@ -436,6 +445,10 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
 
       setProjectFilterId: (projectId) => {
         set({ projectFilterId: projectId });
+      },
+
+      setMachineFilterIds: (machineIds) => {
+        set({ machineFilterIds: machineIds ? [...machineIds] : null });
       },
 
       setLeftSidebarExpandedGlobal: (expanded) => {
@@ -971,6 +984,7 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
           version: CURRENT_VERSION,
           lastProjectId: null,
           projectFilterId: null,
+          machineFilterIds: null,
           projects: {},
         });
       },
@@ -982,6 +996,7 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
         version: state.version,
         lastProjectId: state.lastProjectId,
         projectFilterId: state.projectFilterId,
+        machineFilterIds: state.machineFilterIds,
         leftSidebarExpanded: state.leftSidebarExpanded,
         projects: state.projects,
       }),

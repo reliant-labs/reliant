@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/config.proto.
  */
 export const file_reliant_config_v1_config: GenFile = /*@__PURE__*/
-  fileDesc("Ch5yZWxpYW50L2NvbmZpZy92MS9jb25maWcucHJvdG8SEXJlbGlhbnQuY29uZmlnLnYxIrwBCg1SZWxpYW50Q29uZmlnEikKA2xvZxgBIAEoCzIcLnJlbGlhbnQuY29uZmlnLnYxLkxvZ0NvbmZpZxIxCgdydW50aW1lGAIgASgLMiAucmVsaWFudC5jb25maWcudjEuUnVudGltZUNvbmZpZxI+Cg5zdG9yYWdlX3JlYXBlchgDIAEoCzImLnJlbGlhbnQuY29uZmlnLnYxLlN0b3JhZ2VSZWFwZXJDb25maWc6DcrBGAkKB3JlbGlhbnQiiAEKDVJ1bnRpbWVDb25maWcSdwoLZW52aXJvbm1lbnQYASABKAlCYoLOGF4KC1JFTElBTlRfRU5WKkNFbnZpcm9ubWVudCB0aWVyOiBkZXYsIHRlc3Qgb3IgcHJvZCAodW5zZXQgb3IgdW5yZWNvZ25pc2VkIGlzIHByb2QpWgoKCE5PREVfRU5WIuoBCglMb2dDb25maWcSZwoFbGV2ZWwYASABKAlCWILOGFQKEVJFTElBTlRfTE9HX0xFVkVMEglsb2ctbGV2ZWwqNExvZyBsZXZlbDogZGVidWcsIGluZm8sIHdhcm4gb3IgZXJyb3IgKGRlZmF1bHQgaW5mbykSdAoGZm9ybWF0GAIgASgJQmSCzhhgCgpMT0dfRk9STUFUEgpsb2ctZm9ybWF0KkZMb2cgbGluZSBmb3JtYXQ6IHRleHQgb3IganNvbiAoZGVmYXVsdCB0ZXh0OyBqc29uIGZvciBhIGhvc3RlZCBkYWVtb24pIqwGChNTdG9yYWdlUmVhcGVyQ29uZmlnEpQBCgRtb2RlGAEgASgJQoUBgs4YgAEKFlJFTElBTlRfU1RPUkFHRV9SRUFQRVIaBGF1dG8qUVJ1biBmb3JnZSdzIHN0b3JhZ2UgcmVhcGVyIG9uIGEgc2NoZWR1bGU6IGF1dG8gKG1hbmFnZWQgZGFlbW9ucyBvbmx5KSwgb24sIG9yIG9mZkoEYXV0b0oCb25KA29mZhKEAQoIaW50ZXJ2YWwYAiABKAlCcoLOGG4KH1JFTElBTlRfU1RPUkFHRV9SRUFQRVJfSU5URVJWQUwaAjFoKkdJbnRlcnZhbCBvZiB0aGUgc2NoZWR1bGVkIHN0b3JhZ2UgcmVhcGVyIHBhc3MgKEdvIGR1cmF0aW9uLCBtaW5pbXVtIDVtKRK2AQoRcHJlc3N1cmVfaW50ZXJ2YWwYAyABKAlCmgGCzhiVAQooUkVMSUFOVF9TVE9SQUdFX1JFQVBFUl9QUkVTU1VSRV9JTlRFUlZBTBoDMTBtKmRNaW5pbXVtIGdhcCBiZXR3ZWVuIHN0b3JhZ2UgcmVhcGVyIHBhc3NlcyB3aGlsZSBhIHZvbHVtZSBpcyB1bmRlciBwcmVzc3VyZSAoR28gZHVyYXRpb24sIG1pbmltdW0gMW0pEoIBCgtwb2xpY3lfcGF0aBgEIAEoCUJtgs4YaQoURk9SR0VfU1RPUkFHRV9QT0xJQ1kqUUZvcmdlIG1hY2hpbmUgc3RvcmFnZSBwb2xpY3kgZmlsZSAoZGVmYXVsdDogPHVzZXIgY29uZmlnIGRpcj4vZm9yZ2Uvc3RvcmFnZS5qc29uKRK4AQoQZ29jYWNoZV9pbnRlcnZhbBgFIAEoCUKdAYLOGJgBCidSRUxJQU5UX1NUT1JBR0VfUkVBUEVSX0dPQ0FDSEVfSU5URVJWQUwaAzEwbSpoSW50ZXJ2YWwgb2YgdGhlIEdvLWNhY2hlIHRyaW0gYmV0d2VlbiBmdWxsIHN0b3JhZ2UgcmVhcGVyIHBhc3NlcyAoR28gZHVyYXRpb24sIG1pbmltdW0gMm07IG9mZiBkaXNhYmxlcylCQFo+Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_forge_v1_forge]);
+  fileDesc("Ch5yZWxpYW50L2NvbmZpZy92MS9jb25maWcucHJvdG8SEXJlbGlhbnQuY29uZmlnLnYxIrkCCg1SZWxpYW50Q29uZmlnEikKA2xvZxgBIAEoCzIcLnJlbGlhbnQuY29uZmlnLnYxLkxvZ0NvbmZpZxIxCgdydW50aW1lGAIgASgLMiAucmVsaWFudC5jb25maWcudjEuUnVudGltZUNvbmZpZxI+Cg5zdG9yYWdlX3JlYXBlchgDIAEoCzImLnJlbGlhbnQuY29uZmlnLnYxLlN0b3JhZ2VSZWFwZXJDb25maWcSNwoKdHJhbnNjcmlwdBgEIAEoCzIjLnJlbGlhbnQuY29uZmlnLnYxLlRyYW5zY3JpcHRDb25maWcSQgoQd29ya3RyZWVfcmVjbGFpbRgFIAEoCzIoLnJlbGlhbnQuY29uZmlnLnYxLldvcmt0cmVlUmVjbGFpbUNvbmZpZzoNysEYCQoHcmVsaWFudCLZAQoQVHJhbnNjcmlwdENvbmZpZxLEAQoPdG9vbF9ib2R5X3N0dWJzGAEgASgJQqoBgs4YpQEKIlJFTElBTlRfVFJBTlNDUklQVF9UT09MX0JPRFlfU1RVQlMaAm9uKnJUcmFuc2NyaXB0IHJlYWRzIG1heSBsZWF2ZSBmaW5pc2hlZCB0b29sIGNhbGxzJyBib2RpZXMgb3V0IHdoZW4gYSBjbGllbnQgYXNrcyAob24pIG9yIGFsd2F5cyBzZW5kIHRoZW0gd2hvbGUgKG9mZilKAm9uSgNvZmYiiAEKDVJ1bnRpbWVDb25maWcSdwoLZW52aXJvbm1lbnQYASABKAlCYoLOGF4KC1JFTElBTlRfRU5WKkNFbnZpcm9ubWVudCB0aWVyOiBkZXYsIHRlc3Qgb3IgcHJvZCAodW5zZXQgb3IgdW5yZWNvZ25pc2VkIGlzIHByb2QpWgoKCE5PREVfRU5WIuoBCglMb2dDb25maWcSZwoFbGV2ZWwYASABKAlCWILOGFQKEVJFTElBTlRfTE9HX0xFVkVMEglsb2ctbGV2ZWwqNExvZyBsZXZlbDogZGVidWcsIGluZm8sIHdhcm4gb3IgZXJyb3IgKGRlZmF1bHQgaW5mbykSdAoGZm9ybWF0GAIgASgJQmSCzhhgCgpMT0dfRk9STUFUEgpsb2ctZm9ybWF0KkZMb2cgbGluZSBmb3JtYXQ6IHRleHQgb3IganNvbiAoZGVmYXVsdCB0ZXh0OyBqc29uIGZvciBhIGhvc3RlZCBkYWVtb24pIqwGChNTdG9yYWdlUmVhcGVyQ29uZmlnEpQBCgRtb2RlGAEgASgJQoUBgs4YgAEKFlJFTElBTlRfU1RPUkFHRV9SRUFQRVIaBGF1dG8qUVJ1biBmb3JnZSdzIHN0b3JhZ2UgcmVhcGVyIG9uIGEgc2NoZWR1bGU6IGF1dG8gKG1hbmFnZWQgZGFlbW9ucyBvbmx5KSwgb24sIG9yIG9mZkoEYXV0b0oCb25KA29mZhKEAQoIaW50ZXJ2YWwYAiABKAlCcoLOGG4KH1JFTElBTlRfU1RPUkFHRV9SRUFQRVJfSU5URVJWQUwaAjFoKkdJbnRlcnZhbCBvZiB0aGUgc2NoZWR1bGVkIHN0b3JhZ2UgcmVhcGVyIHBhc3MgKEdvIGR1cmF0aW9uLCBtaW5pbXVtIDVtKRK2AQoRcHJlc3N1cmVfaW50ZXJ2YWwYAyABKAlCmgGCzhiVAQooUkVMSUFOVF9TVE9SQUdFX1JFQVBFUl9QUkVTU1VSRV9JTlRFUlZBTBoDMTBtKmRNaW5pbXVtIGdhcCBiZXR3ZWVuIHN0b3JhZ2UgcmVhcGVyIHBhc3NlcyB3aGlsZSBhIHZvbHVtZSBpcyB1bmRlciBwcmVzc3VyZSAoR28gZHVyYXRpb24sIG1pbmltdW0gMW0pEoIBCgtwb2xpY3lfcGF0aBgEIAEoCUJtgs4YaQoURk9SR0VfU1RPUkFHRV9QT0xJQ1kqUUZvcmdlIG1hY2hpbmUgc3RvcmFnZSBwb2xpY3kgZmlsZSAoZGVmYXVsdDogPHVzZXIgY29uZmlnIGRpcj4vZm9yZ2Uvc3RvcmFnZS5qc29uKRK4AQoQZ29jYWNoZV9pbnRlcnZhbBgFIAEoCUKdAYLOGJgBCidSRUxJQU5UX1NUT1JBR0VfUkVBUEVSX0dPQ0FDSEVfSU5URVJWQUwaAzEwbSpoSW50ZXJ2YWwgb2YgdGhlIEdvLWNhY2hlIHRyaW0gYmV0d2VlbiBmdWxsIHN0b3JhZ2UgcmVhcGVyIHBhc3NlcyAoR28gZHVyYXRpb24sIG1pbmltdW0gMm07IG9mZiBkaXNhYmxlcykiyQUKFVdvcmt0cmVlUmVjbGFpbUNvbmZpZxKiAQoEbW9kZRgBIAEoCUKTAYLOGI4BChhSRUxJQU5UX1dPUktUUkVFX1JFQ0xBSU0aB2RyeS1ydW4qV01hY2hpbmUtd2lkZSB3b3JrdHJlZSByZWNsYWltOiBvZmYsIGRyeS1ydW4gKHJlcG9ydCBvbmx5KSBvciBvbiAoY2FwdHVyZSwgdGhlbiByZWNsYWltKUoDb2ZmSgdkcnktcnVuSgJvbhLBAQoFcm9vdHMYAiABKAlCsQGCzhisAQoeUkVMSUFOVF9XT1JLVFJFRV9SRUNMQUlNX1JPT1RTKokBRGlyZWN0b3JpZXMgdGhlIHdvcmt0cmVlIHJlY2xhaW0gd2Fsa3MgZm9yIHJlcG9zaXRvcmllcywgY29tbWEtc2VwYXJhdGVkIHBhdGhbOmRlcHRoXSAoZGVmYXVsdDogd29ya3RyZWUgcm9vdCwgdGVtcCwgY2FjaGUgYW5kIGhvbWUgZGlycykSlQEKCmNsZWFuX2lkbGUYAyABKAlCgAGCzhh8CiNSRUxJQU5UX1dPUktUUkVFX1JFQ0xBSU1fQ0xFQU5fSURMRRoDMjRoKlBJZGxlIHRpbWUgYmVmb3JlIGEgY2xlYW4sIHB1c2hlZCB3b3JrdHJlZSBpcyByZWNsYWltZWQgKEdvIGR1cmF0aW9uLCBtaW5pbXVtIDFoKRKuAQoNYXBwcm92YWxfaWRsZRgEIAEoCUKWAYLOGJEBCiZSRUxJQU5UX1dPUktUUkVFX1JFQ0xBSU1fQVBQUk9WQUxfSURMRRoEMTIwaCphSWRsZSB0aW1lIGJlZm9yZSBhIHdvcmt0cmVlIHdpdGggdW5zYXZlZCB3b3JrIGlzIHByb3Bvc2VkIGZvciBhcHByb3ZhbCAoR28gZHVyYXRpb24sIG1pbmltdW0gMjRoKUJAWj5naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_forge_v1_forge]);
 
 /**
  * ReliantConfig is the reliant binary's root config: the surface every
@@ -35,6 +35,16 @@ export type ReliantConfig = Message<"reliant.config.v1.ReliantConfig"> & {
    * @generated from field: reliant.config.v1.StorageReaperConfig storage_reaper = 3;
    */
   storageReaper?: StorageReaperConfig | undefined;
+
+  /**
+   * @generated from field: reliant.config.v1.TranscriptConfig transcript = 4;
+   */
+  transcript?: TranscriptConfig | undefined;
+
+  /**
+   * @generated from field: reliant.config.v1.WorktreeReclaimConfig worktree_reclaim = 5;
+   */
+  worktreeReclaim?: WorktreeReclaimConfig | undefined;
 };
 
 /**
@@ -43,6 +53,36 @@ export type ReliantConfig = Message<"reliant.config.v1.ReliantConfig"> & {
  */
 export const ReliantConfigSchema: GenMessage<ReliantConfig> = /*@__PURE__*/
   messageDesc(file_reliant_config_v1_config, 0);
+
+/**
+ * TranscriptConfig is how the transcript read paths (ListMessages,
+ * GetMessage, the chat stream, GetChatUpdates) send a chat's messages. The
+ * handlers that serve them read it through their Deps.Config, so it is on the
+ * root config; only the API server serves those rpcs.
+ *
+ * @generated from message reliant.config.v1.TranscriptConfig
+ */
+export type TranscriptConfig = Message<"reliant.config.v1.TranscriptConfig"> & {
+  /**
+   * The kill switch for TOOL_BODY_MODE_STUB reads
+   * (dev-docs/design/chat-lazy-tool-bodies.md): off answers every read that
+   * asks for STUB as if it asked for FULL, so a stub regression is undone by
+   * a config flip, not a client release. Clients act on each block's flags,
+   * never on the mode they asked for, so either value is safe for every
+   * client version. Only on and off: a kill switch must not fail open on a
+   * typo.
+   *
+   * @generated from field: string tool_body_stubs = 1;
+   */
+  toolBodyStubs: string;
+};
+
+/**
+ * Describes the message reliant.config.v1.TranscriptConfig.
+ * Use `create(TranscriptConfigSchema)` to create a new message.
+ */
+export const TranscriptConfigSchema: GenMessage<TranscriptConfig> = /*@__PURE__*/
+  messageDesc(file_reliant_config_v1_config, 1);
 
 /**
  * RuntimeConfig is where the process is running. The entrypoint hands it to
@@ -69,7 +109,7 @@ export type RuntimeConfig = Message<"reliant.config.v1.RuntimeConfig"> & {
  * Use `create(RuntimeConfigSchema)` to create a new message.
  */
 export const RuntimeConfigSchema: GenMessage<RuntimeConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_config, 1);
+  messageDesc(file_reliant_config_v1_config, 2);
 
 /**
  * LogConfig is how a process's logger is built. Both fields carry the value
@@ -101,7 +141,7 @@ export type LogConfig = Message<"reliant.config.v1.LogConfig"> & {
  * Use `create(LogConfigSchema)` to create a new message.
  */
 export const LogConfigSchema: GenMessage<LogConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_config, 2);
+  messageDesc(file_reliant_config_v1_config, 3);
 
 /**
  * StorageReaperConfig is how the daemon schedules forge's storage reaper
@@ -168,5 +208,63 @@ export type StorageReaperConfig = Message<"reliant.config.v1.StorageReaperConfig
  * Use `create(StorageReaperConfigSchema)` to create a new message.
  */
 export const StorageReaperConfigSchema: GenMessage<StorageReaperConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_config, 3);
+  messageDesc(file_reliant_config_v1_config, 4);
+
+/**
+ * WorktreeReclaimConfig is the daemon's machine-wide worktree reclaim
+ * (internal/worktreereclaim/sweep.go): every linked git worktree on the
+ * machine, whether Reliant made it or an agent ran `git worktree add`, is
+ * captured into a local ref of its own repository
+ * (refs/reliant/reclaimed/...) before it is deleted. It rides the storage
+ * reaper's schedule and single-flight (RELIANT_STORAGE_REAPER), so it runs
+ * only where that does. Durations are Go durations; a value the daemon cannot
+ * use is named in a warning and replaced by its default.
+ *
+ * @generated from message reliant.config.v1.WorktreeReclaimConfig
+ */
+export type WorktreeReclaimConfig = Message<"reliant.config.v1.WorktreeReclaimConfig"> & {
+  /**
+   * off never runs it. dry-run records what it would reclaim, and the bytes,
+   * in ~/.reliant/reclaim/report.json and its journal, captures and deletes
+   * nothing, and leaves forge's worktree reaper running as before. on
+   * reclaims clean, pushed, idle worktrees after capturing them, proposes
+   * the rest for a person's approval, and replaces forge's worktree reaper.
+   *
+   * @generated from field: string mode = 1;
+   */
+  mode: string;
+
+  /**
+   * Where discovery looks for repositories besides the ones it knows:
+   * comma-separated path[:depth] entries. Unset: the worktree root (depth
+   * 4), the temp dir, the user cache dir and $HOME (depth 3 each).
+   *
+   * @generated from field: string roots = 2;
+   */
+  roots: string;
+
+  /**
+   * How long a clean worktree whose HEAD is on a remote must have had no
+   * commit and no file change before it is reclaimed without asking.
+   *
+   * @generated from field: string clean_idle = 3;
+   */
+  cleanIdle: string;
+
+  /**
+   * How long a worktree with uncommitted, unpushed or reflog-only work must
+   * have had no commit and no file change before it is proposed for a
+   * person's approval. It is never reclaimed without one.
+   *
+   * @generated from field: string approval_idle = 4;
+   */
+  approvalIdle: string;
+};
+
+/**
+ * Describes the message reliant.config.v1.WorktreeReclaimConfig.
+ * Use `create(WorktreeReclaimConfigSchema)` to create a new message.
+ */
+export const WorktreeReclaimConfigSchema: GenMessage<WorktreeReclaimConfig> = /*@__PURE__*/
+  messageDesc(file_reliant_config_v1_config, 5);
 

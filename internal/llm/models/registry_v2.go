@@ -35,6 +35,27 @@ type ModelRegistry struct {
 	// avail is the per-account availability filter set by WithAvailability.
 	// Nil on the shared global registry.
 	avail AvailabilityFunc
+
+	// rank is the per-run driver tier set by WithDriverRank, per model. Nil on
+	// the shared global registry.
+	rank func(driver DriverID, modelID string) AccountTier
+}
+
+// WithDriverRank returns a view of the registry whose provider choice, among
+// the drivers that serve the model resolution already picked, prefers the
+// driver with the better account tier for that model
+// (AvailableDrivers.TierFor) before the system priority. It is the weakest
+// rule: an explicit "@driver", a selector's or run's providers, and the
+// chat's provider switch all decide first, and it never changes which model
+// a selector resolves to (control-plane docs/design/org-provider-accounts.md
+// §4.3). A nil rank returns the registry unchanged.
+func (r *ModelRegistry) WithDriverRank(rank func(driver DriverID, modelID string) AccountTier) *ModelRegistry {
+	if rank == nil {
+		return r
+	}
+	view := *r
+	view.rank = rank
+	return &view
 }
 
 // WithAvailability returns a view of the registry whose Resolve honors a
@@ -609,8 +630,13 @@ func (r *ModelRegistry) findBestProvider(model *ModelDefinition, preferredProvid
 	// the earlier YAML entry, except that user-owned (BYO) credentials always
 	// beat the managed reliant driver on a priority tie — a user who
 	// connected their own subscription expects it to be used.
+	//
+	// A run's driver rank (WithDriverRank) comes before the system priority:
+	// among the drivers serving this model, the one with the better account
+	// tier wins, so the run's org pays for the model rather than the person.
 	var bestProvider *ProviderMapping
 	bestPriority := 1000 // Start with a high number
+	var bestTier AccountTier
 
 	for i := range model.Providers {
 		p := &model.Providers[i]
@@ -622,8 +648,17 @@ func (r *ModelRegistry) findBestProvider(model *ModelDefinition, preferredProvid
 		if !ok {
 			priority = 5 // Default priority for unknown providers
 		}
+		tier := TierSecond
+		if r.rank != nil {
+			tier = r.rank(DriverID(p.Driver), model.ID)
+		}
 
 		switch {
+		case bestProvider == nil || tier < bestTier:
+			bestPriority, bestTier = priority, tier
+			bestProvider = p
+		case tier > bestTier:
+			// A worse tier never wins on priority.
 		case priority < bestPriority:
 			bestPriority = priority
 			bestProvider = p

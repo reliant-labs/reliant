@@ -57,7 +57,7 @@ export function alertService(alert: Pick<AlertInstance, "labels">): string | und
  * the process stamps `reliant.source=platform` (or daemon/gateway), which is
  * exactly what the platform's own project (control-plane, in tenant zero)
  * does for every one of its processes — dropping those rows emptied its
- * Process health ("No process sent telemetry") while admin-server and the
+ * Process health ("No process sent telemetry") while platform-api and the
  * rest were sending spans.
  */
 export function serviceRows(

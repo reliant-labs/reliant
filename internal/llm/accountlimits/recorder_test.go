@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 )
 
@@ -42,7 +43,7 @@ func newTestRecorder(t *testing.T) (*Recorder, *fakeStore, *fakeClock) {
 
 func TestRecorderCoalescesAHundredSnapshotsIntoFewWrites(t *testing.T) {
 	r, st, c := newTestRecorder(t)
-	obs := r.For("u1", "a1")
+	obs := r.For(core.UserAccountOwner("u1"), "a1")
 
 	// First sighting is written (nothing known yet); then 100 snapshots in a minute whose
 	// used fraction creeps by 0.0001 each: below the 2-point threshold, within the heartbeat.
@@ -83,7 +84,7 @@ func TestRecorderWritesTheFlushTriggers(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r, st, c := newTestRecorder(t)
-			obs := r.For("u1", "a1")
+			obs := r.For(core.UserAccountOwner("u1"), "a1")
 			first := snap(c.Now(), ratelimit.StatusAllowed, 0.10, 0.20)
 			obs.ObserveRateLimits(context.Background(), first)
 			r.flush(context.Background(), false)
@@ -99,7 +100,7 @@ func TestRecorderWritesTheFlushTriggers(t *testing.T) {
 
 func TestRecorderWritesRejectedImmediatelyAndBenchesOnAKnownReset(t *testing.T) {
 	r, st, c := newTestRecorder(t)
-	obs := r.For("u1", "a1")
+	obs := r.For(core.UserAccountOwner("u1"), "a1")
 	obs.ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.10, 0.20))
 	r.flush(context.Background(), false)
 
@@ -122,22 +123,42 @@ func TestRecorderDoesNotBenchOnAScopedWindow(t *testing.T) {
 	r, st, c := newTestRecorder(t)
 	s := snap(c.Now(), ratelimit.StatusAllowed, 0.10, 0.20)
 	s.Windows = append(s.Windows, ratelimit.Window{Name: "7d.opus", UsedFraction: f64(1), ResetsAt: c.Now().Add(24 * time.Hour)})
-	r.For("u1", "a1").ObserveRateLimits(context.Background(), s)
+	r.For(core.UserAccountOwner("u1"), "a1").ObserveRateLimits(context.Background(), s)
 	r.flush(context.Background(), false)
 	assert.Empty(t, st.benches, "Opus' weekly cap does not stop Sonnet")
+}
+
+// A response served from credits past a spent window (Codex overage) says the
+// account serves: it lifts a bench rather than setting one.
+func TestRecorderDoesNotBenchAnAccountInOverage(t *testing.T) {
+	r, st, c := newTestRecorder(t)
+	until := c.Now().Add(72 * time.Hour)
+	st.ensureRow("a1").LimitedUntil = &until
+	r.For(core.UserAccountOwner("u1"), "a1").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusOverage, 0.10, 1.0))
+	r.flush(context.Background(), false)
+	assert.Empty(t, st.benches, "credits pay for the spent weekly window")
+	l := st.limit("a1")
+	require.NotNil(t, l)
+	assert.Equal(t, "overage", l.Status)
+	assert.Nil(t, l.LimitedUntil, "a served response lifts the bench")
 }
 
 func TestRecorderObserverNeverBlocksOnASlowStore(t *testing.T) {
 	r, st, c := newTestRecorder(t)
 	st.slow = make(chan struct{})
-	obs := r.For("u1", "a1")
+	st.slowEntered = make(chan struct{}, 1)
+	obs := r.For(core.UserAccountOwner("u1"), "a1")
 
 	// Park a flush inside the slow store.
 	obs.ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.1, 0.2))
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() { defer wg.Done(); r.flush(context.Background(), false) }()
-	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-st.slowEntered:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the flush never reached the store")
+	}
 
 	s := snap(c.Now(), ratelimit.StatusRejected, 1, 1)
 	start := time.Now()
@@ -155,8 +176,8 @@ func TestRecorderKeepsAccountsApart(t *testing.T) {
 	r, st, c := newTestRecorder(t)
 	st.addAccount("a2", "u1", "claude")
 	st.ensureRow("a2")
-	r.For("u1", "a1").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.9, 0.2))
-	r.For("u1", "a2").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.1, 0.2))
+	r.For(core.UserAccountOwner("u1"), "a1").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.9, 0.2))
+	r.For(core.UserAccountOwner("u1"), "a2").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.1, 0.2))
 	r.flush(context.Background(), false)
 	assert.InDelta(t, 0.9, *st.limit("a1").Windows[0].UsedFraction, 1e-9)
 	assert.InDelta(t, 0.1, *st.limit("a2").Windows[0].UsedFraction, 1e-9)
@@ -164,15 +185,15 @@ func TestRecorderKeepsAccountsApart(t *testing.T) {
 
 func TestRecorderIgnoresAnObservationWithoutIdentity(t *testing.T) {
 	r, st, c := newTestRecorder(t)
-	r.For("", "a1").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.9, 0.2))
-	r.For("u1", "").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.9, 0.2))
+	r.For(core.UserAccountOwner(""), "a1").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.9, 0.2))
+	r.For(core.UserAccountOwner("u1"), "").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.9, 0.2))
 	r.flush(context.Background(), true)
 	assert.Zero(t, st.upserts)
 }
 
 func TestRecorderRetriesAfterAFailedWrite(t *testing.T) {
 	r, st, c := newTestRecorder(t)
-	obs := r.For("u1", "a1")
+	obs := r.For(core.UserAccountOwner("u1"), "a1")
 	obs.ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.1, 0.2))
 
 	st.upsertErr = errors.New("db down")
@@ -197,12 +218,12 @@ func TestBenchWithUnknownResetClimbsTheProbeLadder(t *testing.T) {
 	r, st, c := newTestRecorder(t)
 	ctx := context.Background()
 
-	got, err := r.Bench(ctx, "u1", "a1", time.Time{}, "")
+	got, err := r.Bench(ctx, core.UserAccountOwner("u1"), "a1", time.Time{}, "")
 	require.NoError(t, err)
 	assert.True(t, got.Equal(c.Now().Add(5*time.Minute)), "first unknown-reset refusal: 5 minutes")
 
 	// A second refusal while the bench still runs does not climb: concurrent refusals cost one rung.
-	again, err := r.Bench(ctx, "u1", "a1", time.Time{}, "")
+	again, err := r.Bench(ctx, core.UserAccountOwner("u1"), "a1", time.Time{}, "")
 	require.NoError(t, err)
 	assert.True(t, again.Equal(got))
 	assert.Equal(t, 1, st.limit("a1").LimitedProbes)
@@ -210,7 +231,7 @@ func TestBenchWithUnknownResetClimbsTheProbeLadder(t *testing.T) {
 	want := []time.Duration{15 * time.Minute, 30 * time.Minute, time.Hour, time.Hour}
 	for i, d := range want {
 		c.Advance(time.Hour + time.Minute) // the previous bench has ended
-		got, err = r.Bench(ctx, "u1", "a1", time.Time{}, "")
+		got, err = r.Bench(ctx, core.UserAccountOwner("u1"), "a1", time.Time{}, "")
 		require.NoError(t, err)
 		assert.True(t, got.Equal(c.Now().Add(d)), "rung %d: %s", i+2, d)
 	}
@@ -219,12 +240,12 @@ func TestBenchWithUnknownResetClimbsTheProbeLadder(t *testing.T) {
 func TestBenchWithAKnownResetResetsTheLadderAndKeepsTheLaterBench(t *testing.T) {
 	r, st, c := newTestRecorder(t)
 	ctx := context.Background()
-	_, err := r.Bench(ctx, "u1", "a1", time.Time{}, "")
+	_, err := r.Bench(ctx, core.UserAccountOwner("u1"), "a1", time.Time{}, "")
 	require.NoError(t, err)
 	require.Equal(t, 1, st.limit("a1").LimitedProbes)
 
 	reset := c.Now().Add(3 * time.Hour)
-	got, err := r.Bench(ctx, "u1", "a1", reset, "five_hour")
+	got, err := r.Bench(ctx, core.UserAccountOwner("u1"), "a1", reset, "five_hour")
 	require.NoError(t, err)
 	assert.True(t, got.Equal(reset))
 	l := st.limit("a1")
@@ -232,23 +253,35 @@ func TestBenchWithAKnownResetResetsTheLadderAndKeepsTheLaterBench(t *testing.T) 
 	assert.Equal(t, "five_hour", l.LimitedWindow)
 
 	// An earlier reset does not shorten a bench already in force.
-	got, err = r.Bench(ctx, "u1", "a1", c.Now().Add(time.Hour), "five_hour")
+	got, err = r.Bench(ctx, core.UserAccountOwner("u1"), "a1", c.Now().Add(time.Hour), "five_hour")
 	require.NoError(t, err)
 	assert.True(t, got.Equal(reset), "returns the bench in force, not the one asked for")
 }
 
 func TestBenchSchedulesAConfirmationPollAfterTheReset(t *testing.T) {
 	r, st, c := newTestRecorder(t)
-	reset := c.Now().Add(2 * time.Hour)
-	_, err := r.Bench(context.Background(), "u1", "a1", reset, "five_hour")
+	reset := c.Now().Add(10 * time.Minute)
+	_, err := r.Bench(context.Background(), core.UserAccountOwner("u1"), "a1", reset, "five_hour")
 	require.NoError(t, err)
 	require.Len(t, st.ensures, 1)
 	assert.True(t, st.ensures[0].Equal(reset.Add(30*time.Second)))
 }
 
+// A bench can outlive its cause (credits bought, a limit reset spent), and no
+// request reaches a benched account to say so: a long one is read again
+// within benchRecheckEvery instead of after its reset.
+func TestLongBenchSchedulesARecheckBeforeTheReset(t *testing.T) {
+	r, st, c := newTestRecorder(t)
+	reset := c.Now().Add(72 * time.Hour)
+	_, err := r.Bench(context.Background(), core.UserAccountOwner("u1"), "a1", reset, "seven_day")
+	require.NoError(t, err)
+	require.Len(t, st.ensures, 1)
+	assert.True(t, st.ensures[0].Equal(c.Now().Add(benchRecheckEvery)))
+}
+
 func TestBenchOfAnUnknownAccountErrors(t *testing.T) {
 	r, _, _ := newTestRecorder(t)
-	_, err := r.Bench(context.Background(), "u1", "ghost", time.Time{}, "")
+	_, err := r.Bench(context.Background(), core.UserAccountOwner("u1"), "ghost", time.Time{}, "")
 	assert.Error(t, err)
 }
 
@@ -258,7 +291,7 @@ func TestRecorderCloseFlushesWhatIsPending(t *testing.T) {
 	st.addAccount("a1", "u1", "claude")
 	st.ensureRow("a1")
 	r := NewRecorder(st, c.Now)
-	r.For("u1", "a1").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.3, 0.2))
+	r.For(core.UserAccountOwner("u1"), "a1").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.3, 0.2))
 	r.Close()
 	r.Close() // idempotent
 	require.NotNil(t, st.limit("a1"))
@@ -267,7 +300,7 @@ func TestRecorderCloseFlushesWhatIsPending(t *testing.T) {
 
 func TestSnapshotHeadersMarkTrafficAndASchedule(t *testing.T) {
 	r, st, c := newTestRecorder(t)
-	r.For("u1", "a1").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.3, 0.2))
+	r.For(core.UserAccountOwner("u1"), "a1").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusAllowed, 0.3, 0.2))
 	r.flush(context.Background(), false)
 	l := st.limit("a1")
 	assert.True(t, l.LastTrafficAt.Equal(c.Now()))
@@ -277,7 +310,7 @@ func TestSnapshotHeadersMarkTrafficAndASchedule(t *testing.T) {
 
 func TestRecorderTreatsDriftingRelativeResetsAsTheSameWindow(t *testing.T) {
 	r, st, c := newTestRecorder(t)
-	obs := r.For("u1", "a1")
+	obs := r.For(core.UserAccountOwner("u1"), "a1")
 	mk := func() ratelimit.Snapshot { // an API-key account: "reset in 6s" becomes a new absolute time every call
 		return ratelimit.Snapshot{Status: ratelimit.StatusAllowed, ObservedAt: c.Now(), Windows: []ratelimit.Window{
 			{Name: "requests", UsedFraction: f64(0.5), ResetsAt: c.Now().Add(6 * time.Second)}}}

@@ -227,11 +227,15 @@ func TestGreenfieldProbeGivesUpOnASilentDaemon(t *testing.T) {
 	run := newGreenfieldRun(t, false)
 	silent := &silentDaemon{}
 
+	// The bound is what is under test, not its 2s production value.
+	activity := NewGreenfieldProbeActivity(run.repo, silent)
+	activity.probeTimeout = 200 * time.Millisecond
+
 	started := time.Now()
-	out, err := NewGreenfieldProbeActivity(run.repo, silent).Execute(run.ctx, run.input)
+	out, err := activity.Execute(run.ctx, run.input)
 	require.NoError(t, err)
 	assert.Equal(t, GreenfieldOutcomeProbeFailed, out.Outcome)
-	assert.Less(t, time.Since(started), greenfieldProbeTimeout+time.Second)
+	assert.Less(t, time.Since(started), activity.probeTimeout+time.Second)
 	assert.Len(t, run.messages(t), 1)
 }
 

@@ -95,7 +95,9 @@ type LooseInterceptor = (next: (req: any) => Promise<unknown>) => (req: unknown)
 async function loadUnauthInterceptor(): Promise<LooseInterceptor> {
   const { buildInterceptors } = await import('../transport')
   const chain = buildInterceptors({ withAuth: true })
-  return chain[chain.length - 1] as unknown as LooseInterceptor
+  // unauthInterceptor sits just outside writeOwnerInterceptor; only that and
+  // the request-sent observer run inside it.
+  return chain[chain.length - 3] as unknown as LooseInterceptor
 }
 
 describe('unauthInterceptor — 401 sign-out discrimination', () => {

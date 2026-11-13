@@ -314,6 +314,35 @@ enum ActingIdentity {
   ACTING_IDENTITY_APP = 2;
 }
 
+// UnattendedFunding is which AI accounts the runs a trigger fires may spend
+// (control-plane docs/design/org-provider-accounts.md §11.3). A trigger's run
+// has nobody behind it to ask, so in an organization each trigger is stamped
+// when it is created: ORG_ONLY when the org has two or more live members, ANY
+// otherwise (and ANY when the member count is unknown).
+//
+// On a read (Trigger.unattended_funding) a server that knows the stamp always
+// sets ANY or ORG_ONLY, the stored value. A trigger stored before the stamp
+// existed, or one with no org, reads ANY: that is how it runs. So
+// UNSPECIFIED on a read means only that the server predates the field; show
+// it as ANY.
+//
+// On a write (TriggerDefinition, EnableWorkflowRequest) UNSPECIFIED means the
+// default rule: a new trigger is stamped from the org's shape as above, and
+// an existing one keeps its stored value, so a client that predates the field
+// never changes it.
+enum UnattendedFunding {
+  // Read: the server predates the field. Write: the default rule.
+  UNATTENDED_FUNDING_UNSPECIFIED = 0;
+  // ANY: every source the owner's own runs may use, as before the stamp.
+  // Loosening an ORG_ONLY trigger to this is refused, with reason
+  // "org_only_automation", in an org with two or more live members.
+  UNATTENDED_FUNDING_ANY = 1;
+  // ORG_ONLY: only the org's own sources (its API keys granted to the owner,
+  // and its Reliant credits), never the owner's personal accounts or a seat.
+  // The owner can always tighten a trigger to this.
+  UNATTENDED_FUNDING_ORG_ONLY = 2;
+}
+
 // TriggerOverlapPolicy decides what a scheduled fire does when this trigger's
 // previous run has not finished.
 enum TriggerOverlapPolicy {
@@ -758,6 +787,25 @@ message Trigger {
   // comes from, as resolved now. Unset when it does not resolve (Health says
   // why) or for an ad hoc trigger.
   TriggerDefinitionSource definition_source = 32;
+  // The organization the trigger belongs to, fixed at creation: its
+  // project's when the project has one. Every chat it launches belongs to
+  // it, so its runs bill this org. Unset for a trigger created before orgs.
+  optional string org_id = 35;
+  // Read-only: why Reliant paused the trigger itself, while `enabled` is
+  // false. "creator_left_org": a firing was refused because the trigger's
+  // creator, whose identity its runs execute as, is no longer a member of
+  // its organization; it fires again once they rejoin and resume it.
+  // "org_policy": one of its organization's admin policies refused its run
+  // (a model the org does not allow, a spend cap reached); it fires again
+  // once its owner resumes it. Empty
+  // when the trigger is enabled or a person paused it. Clients show an
+  // unknown value as a plain pause.
+  string paused_reason = 36;
+  // Which AI accounts the trigger's runs may spend: always ANY or ORG_ONLY,
+  // the stored value (ANY for a trigger with no org or one stored before the
+  // stamp). UNSPECIFIED only from a server that predates the field: show it
+  // as ANY.
+  UnattendedFunding unattended_funding = 37;
 }
 
 // TriggerDefinitionSource is where an activation's workflow definition is
@@ -1036,6 +1084,12 @@ message TriggerDefinition {
   // for a trigger whose owner cannot push to a repository it writes to the
   // write fails when it happens (never silently as the owner).
   ActingIdentity acting_identity = 25;
+
+  // Which AI accounts the trigger's runs may spend. UNSPECIFIED is the default
+  // rule: stamped from the org's shape on create, the stored value kept on
+  // update, so a client that predates the field never changes it. A server
+  // that predates the field ignores it.
+  UnattendedFunding unattended_funding = 27;
 }
 
 // WebhookCredential is a webhook trigger's token, returned exactly once.
@@ -1052,6 +1106,14 @@ message WebhookCredential {
 message CreateTriggerRequest {
   // The trigger to create. Its source arm determines the kind.
   TriggerDefinition trigger = 1;
+
+  // The organization to act in (control-plane organizations.id); the web
+  // fills it with the active org. It must be one the caller is a live member
+  // of (PERMISSION_DENIED otherwise), and a machine credential may name only
+  // its own org. Unset is the caller's default org.
+  // A trigger in a project that belongs to an org belongs to that org:
+  // naming another is FAILED_PRECONDITION.
+  optional string org_id = 2;
 }
 
 // CreateTriggerResponse is the response for CreateTrigger.
@@ -1096,6 +1158,12 @@ message ListTriggersRequest {
   // Narrow to one project. Unset lists the caller's triggers across every
   // project.
   optional string project_id = 1;
+
+  // List only this organization's triggers. It must be one the caller is a
+  // live member of (PERMISSION_DENIED otherwise). Triggers created before orgs
+  // list under the caller's default org. Unset lists every one the caller
+  // owns, in any org, as before this field existed.
+  optional string org_id = 2;
 }
 
 // ListTriggersResponse is the response for ListTriggers.
@@ -1206,6 +1274,11 @@ message EnableWorkflowRequest {
   // within the selection; the others are left as they are. A name the
   // workflow does not declare refuses the request.
   repeated string triggers = 14;
+
+  // Which AI accounts the activations' runs may spend, as
+  // TriggerDefinition.unattended_funding: UNSPECIFIED stamps each new
+  // activation from the org's shape and keeps an existing activation's.
+  UnattendedFunding unattended_funding = 16;
 }
 
 // WorkflowTriggerOverride changes one declared trigger's activation away from

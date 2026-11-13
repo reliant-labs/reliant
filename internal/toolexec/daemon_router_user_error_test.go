@@ -10,6 +10,8 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,6 +38,9 @@ func TestDaemonResolutionErrorsAreUserErrors(t *testing.T) {
 	assert.True(t, IsNoDaemon(fmt.Errorf("x: %w", ErrNoDaemon)))
 	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(notConnected))
 	assert.Equal(t, "unavailable: no daemon connected for user", notConnected.Error())
+	var wire *connect.Error
+	require.ErrorAs(t, notConnected, &wire)
+	assert.Equal(t, errreason.DaemonNotConnected, wire.Meta().Get(svcerr.ReasonHeader), "the reason rides the *connect.Error itself")
 	assert.True(t, daemonoffline.IsError(notConnected), "the daemon-offline marker must survive")
 	assert.Contains(t, ErrDaemonPending.Error(), daemonoffline.ErrorSubstring)
 
@@ -58,4 +63,18 @@ func TestDaemonResolutionErrorsAreUserErrors(t *testing.T) {
 	closed := daemonRequestError("daemon command fs.get_tree", nats.ErrConnectionClosed)
 	assert.False(t, IsDaemonTimeout(closed))
 	assert.Equal(t, connect.CodeInternal, svcerr.Code(closed))
+}
+
+// The daemon refusing a credential store is its policy working, not a server
+// fault: a user error at every layer that logs it (prod issue 1e396220 logged
+// it as ERROR from machinewake.AfterFailure). Any other daemon failure text
+// keeps no opinion.
+func TestDaemonCredentialRefusalIsAUserError(t *testing.T) {
+	for name, text := range map[string]string{
+		"credential file": daemonpolicy.ErrCredentialFile.Error() + "; the daemon's file tools never read or write it",
+		"viewer":          daemonpolicy.ErrViewerCredential.Error() + ": /home/u/.ssh/id_ed25519",
+	} {
+		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(fmt.Errorf("daemon command fs.read: %w", daemonReportedFailure(text))), name)
+	}
+	assert.Equal(t, svcerr.ClassNone, daemonReportedFailure("permission denied: /etc/shadow").ErrorClass())
 }

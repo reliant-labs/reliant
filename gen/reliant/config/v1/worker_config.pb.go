@@ -80,8 +80,31 @@ type WorkerConfig struct {
 	EgressUserMaxConcurrent int32 `protobuf:"varint,27,opt,name=egress_user_max_concurrent,json=egressUserMaxConcurrent,proto3" json:"egress_user_max_concurrent,omitempty"`
 	EgressHostMaxConcurrent int32 `protobuf:"varint,28,opt,name=egress_host_max_concurrent,json=egressHostMaxConcurrent,proto3" json:"egress_host_max_concurrent,omitempty"`
 	EgressTurnMaxParallel   int32 `protobuf:"varint,29,opt,name=egress_turn_max_parallel,json=egressTurnMaxParallel,proto3" json:"egress_turn_max_parallel,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Ledger retention (internal/db/ledger_retention.go): every replica's
+	// hourly pass. A chat's updates older than chat_update_retention are
+	// compacted to what a snapshot reads (each entity's newest update), and a
+	// client reconnecting from before that gets a fresh snapshot instead of a
+	// replay. The internal steps (CallLLM, ExecuteTools, SaveMessage, …) of a
+	// run that completed or was cancelled more than step_execution_retention ago
+	// are deleted; the steps the chat timeline renders are kept.
+	//
+	// Both are OFF (0) by default: retention deletes data, so an environment
+	// turns it on deliberately, and turns chat compaction on only once every
+	// api-server it runs reads the compaction watermark (a release that has it
+	// fully rolled out). Recommended: 168h and 720h. Rolling an api-server back
+	// to a release without the watermark after compaction has run lets a stale
+	// reconnect replay past compacted rows; set chat_update_retention to 0 and
+	// keep the api-servers on a watermark-aware release instead.
+	ChatUpdateRetention    *durationpb.Duration `protobuf:"bytes,32,opt,name=chat_update_retention,json=chatUpdateRetention,proto3" json:"chat_update_retention,omitempty"`
+	StepExecutionRetention *durationpb.Duration `protobuf:"bytes,33,opt,name=step_execution_retention,json=stepExecutionRetention,proto3" json:"step_execution_retention,omitempty"`
+	// How long after the worker starts its first retention pass waits. An
+	// api-server of a release before the compaction watermark does not read it,
+	// and would replay a reconnect straight through compacted rows; waiting
+	// past a rollout means the api-servers are all on a release that reads it
+	// before anything is deleted. 0 runs the first pass at once.
+	LedgerRetentionStartDelay *durationpb.Duration `protobuf:"bytes,34,opt,name=ledger_retention_start_delay,json=ledgerRetentionStartDelay,proto3" json:"ledger_retention_start_delay,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *WorkerConfig) Reset() {
@@ -226,11 +249,32 @@ func (x *WorkerConfig) GetEgressTurnMaxParallel() int32 {
 	return 0
 }
 
+func (x *WorkerConfig) GetChatUpdateRetention() *durationpb.Duration {
+	if x != nil {
+		return x.ChatUpdateRetention
+	}
+	return nil
+}
+
+func (x *WorkerConfig) GetStepExecutionRetention() *durationpb.Duration {
+	if x != nil {
+		return x.StepExecutionRetention
+	}
+	return nil
+}
+
+func (x *WorkerConfig) GetLedgerRetentionStartDelay() *durationpb.Duration {
+	if x != nil {
+		return x.LedgerRetentionStartDelay
+	}
+	return nil
+}
+
 var File_reliant_config_v1_worker_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_worker_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/worker_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xdf\x15\n" +
+	"%reliant/config/v1/worker_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xfc\x1b\n" +
 	"\fWorkerConfig\x12\x9d\x01\n" +
 	"\x12hosted_actions_url\x18\x1e \x01(\tBo\x82\xce\x18k\n" +
 	"!RELIANT_WORKER_HOSTED_ACTIONS_URL*DPrivate HTTPS workspace-controller endpoint for fixed hosted actionsP\x01R\x10hostedActionsUrl\x12\xbd\x01\n" +
@@ -267,7 +311,13 @@ const file_reliant_config_v1_worker_config_proto_rawDesc = "" +
 	"\x1aegress_host_max_concurrent\x18\x1c \x01(\x05Bw\xbaH\x04\x1a\x02(\x01\x82\xce\x18l\n" +
 	")RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT\x1a\x0216*;Egress calls in flight to one destination host, per replicaR\x17egressHostMaxConcurrent\x12\xc1\x01\n" +
 	"\x18egress_turn_max_parallel\x18\x1d \x01(\x05B\x87\x01\xbaH\x04\x1a\x02(\x01\x82\xce\x18|\n" +
-	"'RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL\x1a\x014*NEgress calls of one conversation turn run at once, per replica (the rest wait)R\x15egressTurnMaxParallel:\x1d\xca\xc1\x18\x19\n" +
+	"'RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL\x1a\x014*NEgress calls of one conversation turn run at once, per replica (the rest wait)R\x15egressTurnMaxParallel\x12\xa2\x02\n" +
+	"\x15chat_update_retention\x18  \x01(\v2\x19.google.protobuf.DurationB\xd2\x01\x82\xce\x18\xcd\x01\n" +
+	"$RELIANT_WORKER_CHAT_UPDATE_RETENTION\x1a\x020s*\xa0\x01Age past which a chat's update log is compacted to each entity's newest update (0: never; recommended 168h once every api-server reads the compaction watermark)R\x13chatUpdateRetention\x12\xe8\x01\n" +
+	"\x18step_execution_retention\x18! \x01(\v2\x19.google.protobuf.DurationB\x92\x01\x82\xce\x18\x8d\x01\n" +
+	"'RELIANT_WORKER_STEP_EXECUTION_RETENTION\x1a\x020s*^Age past which a finished run's internal step records are deleted (0: never; recommended 720h)R\x16stepExecutionRetention\x12\x8a\x02\n" +
+	"\x1cledger_retention_start_delay\x18\" \x01(\v2\x19.google.protobuf.DurationB\xad\x01\x82\xce\x18\xa8\x01\n" +
+	"+RELIANT_WORKER_LEDGER_RETENTION_START_DELAY\x1a\x021h*uWait after worker start before the first ledger retention pass, so an api-server rollout completes first (0: at once)R\x19ledgerRetentionStartDelay:\x1d\xca\xc1\x18\x19\n" +
 	"\areliant\x12\x06server\x12\x06workerJ\x04\b\x01\x10\x02J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x10\x10\x11J\x04\b\x11\x10\x12J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreviewB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
@@ -291,11 +341,14 @@ var file_reliant_config_v1_worker_config_proto_goTypes = []any{
 var file_reliant_config_v1_worker_config_proto_depIdxs = []int32{
 	1, // 0: reliant.config.v1.WorkerConfig.pre_stop_delay:type_name -> google.protobuf.Duration
 	1, // 1: reliant.config.v1.WorkerConfig.shutdown_timeout:type_name -> google.protobuf.Duration
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	1, // 2: reliant.config.v1.WorkerConfig.chat_update_retention:type_name -> google.protobuf.Duration
+	1, // 3: reliant.config.v1.WorkerConfig.step_execution_retention:type_name -> google.protobuf.Duration
+	1, // 4: reliant.config.v1.WorkerConfig.ledger_retention_start_delay:type_name -> google.protobuf.Duration
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_worker_config_proto_init() }

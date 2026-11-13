@@ -197,6 +197,33 @@ message ApiServerConfig {
     (buf.validate.field).duration.gte = {}
   ];
 
+  // Reclaim in two phases (worktreesweep mark.go): a worktree whose work has
+  // landed, or that is complete, clean and idle, is first MARKED once nothing
+  // has happened in it for worktree_reclaim_quiet: its machine places a
+  // tombstone in it (.reliant/RECLAIM_PENDING and a line in the workspace's
+  // reliant.md) and nothing is archived. It is reclaimed no sooner than
+  // worktree_reclaim_grace after the mark, only if the tombstone still stands
+  // and nothing has happened in it since; any use, or deleting the
+  // tombstone, cancels the mark. Both are floored at 24h: a shorter value is
+  // raised to it. Follows worktree_auto_archive (dry-run marks, never
+  // reclaims).
+  google.protobuf.Duration worktree_reclaim_quiet = 83 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKTREE_RECLAIM_QUIET"
+      default_value: "24h"
+      description: "How long a worktree must be quiet before it is marked for reclaim (floor 24h)"
+    },
+    (buf.validate.field).duration.gte = {}
+  ];
+  google.protobuf.Duration worktree_reclaim_grace = 84 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKTREE_RECLAIM_GRACE"
+      default_value: "24h"
+      description: "How long a reclaim mark stands before the worktree is reclaimed (floor 24h)"
+    },
+    (buf.validate.field).duration.gte = {}
+  ];
+
   // Idle floor for whole recoverable-worktree retirement. Requires clean
   // pushed/merged work, no live chat/thread execution, no process use and no
   // fresh files (including caches). Dirty/unique/uncertain trees retain every
@@ -270,5 +297,79 @@ message ApiServerConfig {
     env_var: "READINESS_PATHS"
     default_value: "/ready,/readyz"
     description: "Readiness probe paths on the health port (comma-separated)"
+  }];
+
+  // Organization features the API server gates while they roll out.
+  OrgsConfig orgs = 85;
+}
+
+// OrgsConfig gates organization features that need every replica (and the
+// release a rollback would return to) to understand them before anything
+// writes them. The rules every config here follows are in config.proto's
+// header.
+message OrgsConfig {
+  // Lets an org's owners and admins create and reconnect org-owned
+  // connections (control-plane docs/design/org-sharing.md §7, D13). Off by
+  // default: turn it on only once every API server and worker, and the
+  // release a rollback would return to, read org connections; an older
+  // replica routes no event through one. Using, listing, renaming and
+  // deleting an org connection that exists are not gated.
+  bool connections_enabled = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_CONNECTIONS_ENABLED"
+    description: "Let org owners and admins create org-owned integration connections"
+  }];
+
+  // Lets a GitHub trigger of an org listen through one of the org's linked
+  // GitHub App installations (control-plane docs/design/org-sharing.md §7.1):
+  // only that installation's events reach it. Off by default: a release
+  // before this one routes such a trigger on its owner's access alone (every
+  // installation) and rewrites its config without the binding, so turn it on
+  // only once every API server and worker, and the release a rollback would
+  // return to, honour it. Off, naming an installation on a trigger is refused
+  // and no trigger is ever bound.
+  bool github_installation_triggers_enabled = 2 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED"
+    description: "Let an org's GitHub triggers listen through one of the org's linked GitHub App installations"
+  }];
+
+  // Lets an org's owners and admins add org-owned AI provider accounts (API
+  // keys) and bind a provider workspace whose members' seats the org pays for
+  // (control-plane docs/design/org-provider-accounts.md §3.5, §14 P4). Off by
+  // default. A release before this one is blind to org accounts (no person's
+  // id is an org's owner key), so a rollback narrows what serves, never
+  // widens it; turn it on once the routing that serves them (P5) is in every
+  // API server and worker. Listing, editing, pausing, rotating and deleting an
+  // org account, unbinding a workspace and releasing a seat are never gated,
+  // so an admin can always stop the org's spend.
+  bool provider_accounts_enabled = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED"
+    description: "Let org owners and admins add org-owned AI provider accounts and bind provider workspaces"
+  }];
+
+  // Lets a project's owner move it, with its chats, runs and triggers, to
+  // another org (control-plane docs/design/org-project-move.md). Off by
+  // default: turn it on only once control-plane's ProjectOrgMoveInternalService
+  // is in prod and in the release a rollback would return to, and every
+  // worker runs the ProjectOrgMove workflow. Off, MoveProjectToOrg is refused;
+  // previewing a move, and reading the moves already made, are not gated.
+  bool project_moves_enabled = 4 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_PROJECT_MOVES_ENABLED"
+    description: "Let a project's owner move it to another org they belong to"
+  }];
+
+  // Lets an org pay for its members' own sign-ins: binding a provider
+  // workspace, and the matcher that makes a member's sign-in in a bound
+  // workspace one of the org's seats (control-plane
+  // docs/design/org-provider-accounts.md §3.4, §14 "Rollout gates"). Off by
+  // default. A release before org-provider-accounts P5 ignores a seat's org,
+  // so after a rollback to it a seat would serve its holder's other orgs and
+  // personal chats too: turn it on only once P5 is in every API server and
+  // worker AND in the release a rollback would return to. Binding a workspace
+  // needs provider_accounts_enabled as well. Off, a binding is refused and
+  // nothing is attributed; unbinding a workspace, releasing a seat and
+  // clearing a seat no binding covers are never gated.
+  bool provider_workspace_seats_enabled = 5 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED"
+    description: "Let orgs bind provider workspaces and pay for members' sign-ins in them as seats"
   }];
 }

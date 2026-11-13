@@ -35,7 +35,7 @@ function getLogPaths() {
   
   // RELIANT_LOG_DIR wins everywhere it is set. `forge env up` points it at
   // control-plane/.forge/logs/<env>/ so the desktop app's main-process log
-  // lands beside admin-server, reliant-api-server and the temporal worker —
+  // lands beside platform-api, reliant-api-server and the temporal worker —
   // one directory to grep instead of four scattered ones.
   //
   // Honoured in packaged builds too: a packaged app run against a dev stack is

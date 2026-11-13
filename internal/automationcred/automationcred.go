@@ -4,10 +4,9 @@ package automationcred
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"strings"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 )
 
@@ -39,7 +38,7 @@ func (r *resolver) BearerFor(ctx context.Context, userID, daemonID string) (stri
 		return "", nil
 	}
 	token, err := r.keys.GetAutomationToken(ctx, userID, daemonID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		return "", nil
 	}
 	if err != nil {

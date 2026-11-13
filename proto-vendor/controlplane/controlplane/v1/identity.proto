@@ -89,6 +89,25 @@ enum IdentityMailDelivery {
   IDENTITY_MAIL_DELIVERY_NONE = 1;
   // The environment's own SMTP server (forge.ManagedIdentity smtp).
   IDENTITY_MAIL_DELIVERY_SMTP = 2;
+  // The platform's identity mail relay renders and sends invitations,
+  // verification, reset and sign-in links.
+  IDENTITY_MAIL_DELIVERY_PLATFORM = 3;
+  // The relay, for an unclaimed organization: mail is captured for the
+  // organization's admins to read and never sent.
+  IDENTITY_MAIL_DELIVERY_SANDBOX = 4;
+}
+
+// IdentitySocialStatus is one declared social sign-in provider.
+message IdentitySocialStatus {
+  // google | github
+  string type = 1;
+  // applied: the provider exists with the current client secret and is in
+  // the login policy. pending: not applied yet. secret_missing: the
+  // environment's managed secret holding its client id or secret is unset.
+  string state = 2;
+  // When the provider was last written (created, or updated with a rotated
+  // secret), or first found current by the running reconciler.
+  google.protobuf.Timestamp applied_at = 3;
 }
 
 // IdentityPasswordCode is a one-time code that sets a user's password, handed

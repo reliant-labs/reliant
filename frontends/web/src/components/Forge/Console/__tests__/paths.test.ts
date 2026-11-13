@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Copyright (c) 2025 Reliant Labs
 
 /**
@@ -42,6 +43,9 @@ const PAGES: ConsolePage[] = [
   { kind: "obs-view", view: "dashboards" },
   { kind: "dashboard", dashKind: "release", key: "service-api" },
   { kind: "dashboard", dashKind: "workspace", key: "checkout latency/2" },
+  { kind: "storage" },
+  { kind: "data" },
+  { kind: "users" },
   { kind: "environments" },
   { kind: "environment", env: "prod" },
   { kind: "environment", env: "pr 12/x" },
@@ -57,6 +61,9 @@ describe("console paths", () => {
     expect(consolePath("control-plane", { kind: "environment", env: "prod" })).toBe("/forge/p/control-plane/environments/prod");
     expect(consolePath("control-plane", { kind: "release", version: "v1.8.2" })).toBe("/forge/p/control-plane/releases/v1.8.2");
     expect(consolePath("control-plane", { kind: "workload", env: "prod", name: "admin-server" })).toBe("/forge/p/control-plane/workloads/prod/admin-server");
+    expect(consolePath("control-plane", { kind: "storage" })).toBe("/forge/p/control-plane/storage");
+    expect(consolePath("control-plane", { kind: "data" })).toBe("/forge/p/control-plane/data");
+    expect(consolePath("control-plane", { kind: "users" })).toBe("/forge/p/control-plane/users");
   });
 
   it("pins a workload's page to its environment, as an environment's page is", () => {

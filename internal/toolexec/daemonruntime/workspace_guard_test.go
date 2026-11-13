@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon/rootwatch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 )
 
 // guardSpy records what a guard did to the daemon around it.
@@ -299,13 +300,24 @@ func TestStart_ManagedDaemonExitsWhenItsHomeVolumeIsLost(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	dataDir := t.TempDir()
 	done := make(chan error, 1)
 	go func() {
-		done <- Start(ctx, StartOptions{BootstrapConfig: testBootstrapConfig(t.TempDir()), Host: Host{DaemonType: daemonTypeManaged}})
+		done <- Start(ctx, StartOptions{BootstrapConfig: testBootstrapConfig(dataDir), Host: Host{DaemonType: daemonTypeManaged}})
 	}()
 
-	// Let the runtime come up and record $HOME before pulling it away.
-	time.Sleep(200 * time.Millisecond)
+	// Let the runtime come up and record $HOME before pulling it away: it
+	// arms the guard before it publishes its runtime record.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if _, err := daemonstate.Read(dataDir); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the runtime never published its record")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	ws.detach(t)
 
 	select {

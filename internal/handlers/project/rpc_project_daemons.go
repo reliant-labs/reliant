@@ -14,12 +14,12 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
@@ -118,6 +118,10 @@ func (s *Service) StartDaemonEventConsumer(ctx context.Context, nc *nats.Conn) e
 			}
 		}
 		_ = msg.Ack()
+		// A machine that is back may hold checkouts of workspace creates
+		// whose answer was lost; they are removed now rather than when a
+		// retry trips over one (reliant #2413).
+		s.startFailedCreateCleanup(evt.UserID, evt.DaemonID)
 	})
 	if err != nil {
 		return fmt.Errorf("start consuming %s: %w", daemonevents.SubjectConnected, err)
@@ -169,6 +173,9 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 		logging.Warn("project-dir-heal: failed to list user projects", "error", err, "userID", userID, "daemonID", daemonID)
 		return nil
 	}
+	// A project of an org the user has left is not theirs to put on a
+	// machine any more.
+	projects = authz.Visible(ctx, userID, projects, authz.CanWriteProject)
 	if len(projects) == 0 {
 		return nil
 	}
@@ -177,11 +184,25 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 	// skipped both — they were repositories, whose directories only a clone
 	// may create — and the log was the first place anyone looked for why the
 	// new machine had no houndersclub directory.
-	var healed, skippedRepository, skippedElsewhere int
+	// A project the user detached from this machine stays off it: its folder
+	// is still there or deliberately gone, and either way not the heal's to
+	// make. Unreadable, nothing is healed — creating a directory is the
+	// irreversible direction.
+	detachments, err := s.deps.Repo.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
+	if err != nil {
+		logging.Warn("project-dir-heal: failed to read the machine's detached projects", "error", err, "userID", userID, "daemonID", daemonID)
+		return nil
+	}
+	detached := make(map[string]bool, len(detachments))
+	for _, d := range detachments {
+		detached[d.ProjectID] = true
+	}
+	var healed, skippedRepository, skippedElsewhere, skippedDetached int
 	defer func() {
 		logging.Info("project-dir-heal: done",
 			"userID", userID, "daemonID", daemonID, "projects", len(projects),
-			"mkdir", healed, "skipped_repository", skippedRepository, "skipped_elsewhere", skippedElsewhere)
+			"mkdir", healed, "skipped_repository", skippedRepository, "skipped_elsewhere", skippedElsewhere,
+			"skipped_detached", skippedDetached)
 	}()
 	for _, project := range projects {
 		// Judged with ospath because the mkdir runs on the daemon, not here.
@@ -189,6 +210,10 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 		// belonging to a Windows daemon, so their directories were never
 		// created and the skip left no trace.
 		if project == nil {
+			continue
+		}
+		if detached[project.ID] {
+			skippedDetached++
 			continue
 		}
 		if !projectDirIsHealable(project) {
@@ -223,7 +248,8 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 		// probed before the mkdir landed — the outcome no longer depends on
 		// which finishes first. Neither ever removes a row, and both write the
 		// same (project, machine, path).
-		if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch); err != nil {
+		// Never over a detach that committed while the mkdir ran.
+		if _, err := s.deps.Repo.RecordObservedProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch); err != nil {
 			logging.Warn("project-dir-heal: made the folder but could not record it; the next connect's reconcile records it",
 				"error", err, "userID", userID, "daemonID", daemonID, "projectID", project.ID)
 		}
@@ -294,6 +320,33 @@ func projectDaemonToProto(pd *db.ProjectDaemon) *reliantv1.ProjectDaemon {
 	if pd.DefaultBranch != nil {
 		out.DefaultBranch = pd.DefaultBranch
 	}
+	if pd.VerifiedAt != nil {
+		verified := pd.VerifiedAt.UTC().Format(time.RFC3339)
+		out.VerifiedAt = &verified
+	}
+	return out
+}
+
+// machineNames names each machine once per response: a project list names
+// the same few machines over and over.
+type machineNames struct {
+	s     *Service
+	names map[string]string
+}
+
+func (s *Service) newMachineNames() *machineNames {
+	return &machineNames{s: s, names: map[string]string{}}
+}
+
+// proto is row as the wire carries it, its machine named.
+func (m *machineNames) proto(ctx context.Context, row *core.ProjectDaemon) *reliantv1.ProjectDaemon {
+	name, ok := m.names[row.DaemonID]
+	if !ok {
+		name = strings.Trim(m.s.machineName(ctx, row.DaemonID), `"`)
+		m.names[row.DaemonID] = name
+	}
+	out := projectDaemonToProto(row)
+	out.DaemonName = name
 	return out
 }
 
@@ -331,11 +384,12 @@ func (s *Service) ListProjectDaemonsForDaemon(
 	// Filter by ownership: a project_daemons row is only visible to a user
 	// if the underlying project belongs to them.
 	out := make([]*reliantv1.ProjectDaemon, 0, len(rows))
+	names := s.newMachineNames()
 	for _, pd := range rows {
 		if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, pd.ProjectID, userID); err != nil {
 			continue
 		}
-		out = append(out, projectDaemonToProto(pd))
+		out = append(out, names.proto(ctx, pd))
 	}
 
 	return connect.NewResponse(&reliantv1.ListProjectDaemonsForDaemonResponse{
@@ -359,15 +413,19 @@ func (s *Service) ListProjectDaemons(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list project_daemons"))
 	}
+	// Checkouts of a project the caller may no longer read (an org they
+	// left, a credential's other org) are not listed.
+	projects = authz.Visible(ctx, userID, projects, authz.CanReadProject)
 
 	out := make([]*reliantv1.ProjectDaemon, 0)
+	names := s.newMachineNames()
 	for _, p := range projects {
 		rows, err := s.deps.Repo.ListProjectDaemonsForProject(ctx, p.ID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list project_daemons"))
 		}
 		for _, pd := range rows {
-			out = append(out, projectDaemonToProto(pd))
+			out = append(out, names.proto(ctx, pd))
 		}
 	}
 
@@ -379,7 +437,10 @@ func (s *Service) ListProjectDaemons(
 // MarkProjectInstalled records that a project has a clone on a daemon. The
 // project must belong to the calling user; the daemon_id is trusted because
 // the user-facing flow that calls this just successfully cloned through the
-// gateway, which already authenticated the daemon binding.
+// gateway, which already authenticated the daemon binding. It checks nothing
+// on the machine and is kept that way for the released clients that call it
+// right after a clone; attaching a folder the user names is
+// AttachProjectToDaemon, which does check.
 func (s *Service) MarkProjectInstalled(
 	ctx context.Context,
 	req *connect.Request[reliantv1.MarkProjectInstalledRequest],
@@ -547,7 +608,7 @@ func (s *Service) RemoveProjectFromDaemon(
 	req *connect.Request[reliantv1.RemoveProjectFromDaemonRequest],
 ) (*connect.Response[reliantv1.RemoveProjectFromDaemonResponse], error) {
 	userID := auth.MustGetUserID(ctx)
-	_, pd, err := s.resolveProjectDaemonRow(ctx, req.Msg.ProjectId, req.Msg.DaemonId, userID)
+	project, pd, err := s.resolveProjectDaemonRow(ctx, req.Msg.ProjectId, req.Msg.DaemonId, userID)
 	if err != nil {
 		// NotFound is treated as success — the row's already gone and
 		// there's nothing on disk to delete from our perspective. Anything
@@ -557,37 +618,30 @@ func (s *Service) RemoveProjectFromDaemon(
 		}
 		return nil, err
 	}
-	var removeResp struct {
-		Success bool   `json:"success"`
-		Removed bool   `json:"removed"`
-		Error   string `json:"error"`
+	machine := s.machineName(ctx, req.Msg.DaemonId)
+	// Recorded before it is sent, and holding back workspace creation on the
+	// checkout until the machine says how it ended (checkout_teardown.go).
+	op, done, err := s.beginTeardown(ctx, userID, project, pd, req.Msg.DaemonId, db.CheckoutTeardownRemove, machine)
+	if err != nil {
+		return nil, err
 	}
-	payload := map[string]string{"path": pd.Path}
-	// The row goes only once the machine has removed the checkout. It is the
-	// only record of a checkout on that machine: dropped while the clone is
-	// still on disk (the machine was offline, the remove failed), the machine
-	// is refused the project while its files sit there unrecorded, and the
-	// user is told to clone what they already have. The remove is retried
-	// from here; a machine that is gone for good releases its rows when it
-	// is removed (db.Repo.RemoveDaemon).
-	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.remove", payload, &removeResp); err != nil {
-		if daemonerr.Unreachable(err) {
-			// Refused, with the two ways out: nothing else ever drops the
-			// row of a machine that never comes back.
-			return nil, svcerr.WithReason(svcerr.WithCause(svcerr.WithClass(
-				svcerr.Unavailable(removeFromOfflineMachine), svcerr.ClassUser), err), errreason.DaemonNotConnected)
-		}
-		return nil, daemonerr.Error("remove the project from the machine", err)
+	if done {
+		// A retry of a remove the machine has since finished.
+		return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
 	}
-	if !removeResp.Success {
-		reason := strings.TrimSpace(removeResp.Error)
-		if reason == "" {
-			reason = "the machine did not report the checkout removed"
-		}
-		return nil, svcerr.FailedPrecondition(fmt.Sprintf("could not remove the project from the machine: %s", reason))
-	}
-	if err := s.deps.Repo.DeleteProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project_daemons row"))
+	// The row goes only once the machine has removed the checkout, in the
+	// same step that records the op done (db.Repo.SettleCheckoutTeardown). It
+	// is the only record of a checkout on that machine: dropped while the
+	// clone is still on disk (the machine was offline, the remove failed),
+	// the machine is refused the project while its files sit there
+	// unrecorded, and the user is told to clone what they already have. The
+	// remove is retried from here; a machine that is gone for good releases
+	// its rows when it is removed (db.Repo.RemoveDaemon).
+	var reply teardownReply
+	payload := map[string]string{"path": pd.Path, "op_id": op.ID}
+	sendErr := teardownMachine{s: s, userID: userID, daemonID: req.Msg.DaemonId}.Send(ctx, "git.remove", payload, &reply, teardownTimeoutMs)
+	if err := s.settleTeardown(ctx, userID, op, project, machine, reply, sendErr); err != nil {
+		return nil, err
 	}
 	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
 }
@@ -619,18 +673,25 @@ func (s *Service) RecloneProjectOnDaemon(
 	} else if project.DefaultBranch != nil {
 		branch = *project.DefaultBranch
 	}
-	var recloneResp struct {
-		Success bool   `json:"success"`
-		Path    string `json:"path"`
-		Error   string `json:"error"`
+	machine := s.machineName(ctx, req.Msg.DaemonId)
+	op, done, err := s.beginTeardown(ctx, userID, project, pd, req.Msg.DaemonId, db.CheckoutTeardownReclone, machine)
+	if err != nil {
+		return nil, err
 	}
+	if done {
+		// A retry of a reclone the machine has since finished.
+		return connect.NewResponse(&reliantv1.RecloneProjectOnDaemonResponse{Path: pd.Path}), nil
+	}
+	var reply teardownReply
 	payload := map[string]string{
 		"path":   pd.Path,
 		"repo":   *project.RemoteURL,
 		"branch": branch,
+		"op_id":  op.ID,
 	}
-	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.reclone", payload, &recloneResp); err != nil {
-		return nil, daemonerr.Error("git reclone", err)
+	sendErr := teardownMachine{s: s, userID: userID, daemonID: req.Msg.DaemonId}.Send(ctx, "git.reclone", payload, &reply, teardownTimeoutMs)
+	if err := s.settleTeardown(ctx, userID, op, project, machine, reply, sendErr); err != nil {
+		return nil, err
 	}
 	// Refresh cloned_at — the row's path/branch are unchanged but the
 	// "Last cloned/pulled" column should now show "just now".
@@ -638,6 +699,6 @@ func (s *Service) RecloneProjectOnDaemon(
 		logging.WarnContext(ctx, "RecloneProjectOnDaemon: failed to refresh cloned_at", "error", err, "project_id", req.Msg.ProjectId, "daemon_id", req.Msg.DaemonId)
 	}
 	return connect.NewResponse(&reliantv1.RecloneProjectOnDaemonResponse{
-		Path: recloneResp.Path,
+		Path: pd.Path,
 	}), nil
 }

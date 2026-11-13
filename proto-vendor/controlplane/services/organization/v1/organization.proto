@@ -15,6 +15,7 @@ syntax = "proto3";
 // no orgs to list or choose between, and every rpc here refuses it.
 package controlplane.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -42,6 +43,507 @@ service OrganizationService {
       activity: {none: "a personal preference about which org requests default to; it changes nothing in any org"}
     };
   }
+
+  // --- Members (docs/design/orgs-and-members.md, phase 1) -------------------
+  //
+  // Every rpc below is for HUMAN callers: a machine credential is
+  // PermissionDenied, reason "human_only". Every rpc that acts on an existing
+  // org carries a REQUIRED org_id, so a destructive call can never fall back
+  // to the default org by omission. Membership administration is gated on the
+  // caller's ROLE in the org (admin or owner), never on a token scope: it is
+  // never token-callable. Errors carry a stable x-forge-error-reason; the
+  // table is in the design doc, §2.14.
+
+  // CreateOrganization creates an org owned by the caller, with them as its
+  // owner member. It becomes their default only when they have none. Anyone
+  // with a verified email may create one (reason "email_unverified"
+  // otherwise), up to a per-person cap (ResourceExhausted, "owned_org_limit").
+  // A taken slug is AlreadyExists, "slug_taken".
+  //
+  // forge:custom — not the generic CRUD of the shared Organization message:
+  // it creates the owner membership and grant preset in the same transaction.
+  rpc CreateOrganization(CreateOrganizationRequest) returns (CreateOrganizationResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "create_org"
+        target: {
+          kind: "member"
+          id: "response.organization.id"
+          label: "response.organization.name"
+        }
+        scope: "response.organization.id"
+        detail: ["response.organization.slug"]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // ListMembers lists the org's members (roster fields only) and its seat
+  // usage. Any member may call it. Which permissions each member holds stays
+  // on AccessTokenService.ListOrgMemberGrants.
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // InviteMember invites an email address into the org with a role. Admin or
+  // owner; only an owner may invite an owner. Idempotent per (org, email): a
+  // second invite of an address with a pending invitation rotates its token,
+  // extends its expiry, re-sends it and answers resent=true (that is the
+  // "resend" action). accept_url is returned to the inviter as a copy-link
+  // fallback; it is useless to anyone whose verified email does not match.
+  rpc InviteMember(InviteMemberRequest) returns (InviteMemberResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "invite"
+        target: {
+          kind: "member"
+          id: "response.invitation.id"
+        }
+        scope: "org_id"
+        detail: [
+          "role",
+          "response.resent"
+        ]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // ListInvitations lists the org's invitations, pending ones by default.
+  // Admin or owner: they are other people's email addresses.
+  rpc ListInvitations(ListInvitationsRequest) returns (ListInvitationsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // RevokeInvitation revokes a pending invitation. Admin or owner; only an
+  // owner may revoke an owner invitation.
+  rpc RevokeInvitation(RevokeInvitationRequest) returns (RevokeInvitationResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "revoke_invite"
+        target: {
+          kind: "member"
+          id: "invitation_id"
+        }
+        scope: "org_id"
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // GetInvitation previews an invitation from its token, for the accept page.
+  // It discloses little: the org's name, the role, the inviter, a masked
+  // address and whether it matches the caller's verified email. An unknown
+  // token is NotFound.
+  rpc GetInvitation(GetInvitationRequest) returns (GetInvitationResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // AcceptInvitation joins the caller to the invitation's org with its role.
+  // The caller's VERIFIED email must equal the invitation's
+  // (PermissionDenied, "invite_email_mismatch", and the invitation stays
+  // pending). The seat limit is enforced here, under the org's membership
+  // lock (ResourceExhausted, "seat_limit_reached").
+  rpc AcceptInvitation(AcceptInvitationRequest) returns (AcceptInvitationResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "join"
+        target: {
+          kind: "member"
+          id: "response.user_id"
+        }
+        scope: "response.organization.id"
+        detail: [
+          "response.organization.role",
+          "response.invitation_id"
+        ]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // RemoveMember removes another member. Admin or owner; only an owner may
+  // remove an owner; not yourself (FailedPrecondition, "cannot_remove_self":
+  // use LeaveOrganization). The last owner cannot be removed ("last_owner").
+  // Removal deletes their grants, revokes their tokens in this org (the
+  // daemon-bound tokens of machines they operate here included: the machine
+  // is the org's and stops) and the org-automation tokens they minted, and
+  // retires their LLM gateway keys in this org.
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "remove"
+        target: {
+          kind: "member"
+          id: "user_id"
+        }
+        scope: "org_id"
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // LeaveOrganization removes the caller from the org, with the same cleanup
+  // as RemoveMember. The last owner cannot leave ("last_owner"). Returns the
+  // caller's default org afterwards ("" when they belong to none).
+  rpc LeaveOrganization(LeaveOrganizationRequest) returns (LeaveOrganizationResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "leave"
+        target: {
+          kind: "member"
+          id: "response.user_id"
+        }
+        scope: "org_id"
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // UpdateMemberRole changes a member's role. Admin or owner; only an owner
+  // may promote to or demote from owner. The current role is a no-op that
+  // leaves grants alone; a real change resets the member's grants to the new
+  // role's preset, and scopes says what they hold now. Demoting the last
+  // owner is refused ("last_owner").
+  rpc UpdateMemberRole(UpdateMemberRoleRequest) returns (UpdateMemberRoleResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "set_role"
+        target: {
+          kind: "member"
+          id: "user_id"
+        }
+        scope: "org_id"
+        detail: ["role"]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // --- The org's GitHub App installations (docs/design/org-sharing.md §7.1) ---
+  //
+  // An org admin links a Reliant GitHub App installation to the org, so the
+  // org's runs may write to its repositories as the App's bot
+  // (GitCredentialInternalService.MintInstallationToken with org_id). Linking
+  // grants nobody new access: every mint still requires the acting member's
+  // OWN push access to the repository. An installation is linked to at most
+  // one org. Human callers only (reason "human_only"); admin or owner, read
+  // fresh, to link or unlink; any member to list.
+
+  // StartGitHubAppInstall returns the GitHub URL that installs the App (or
+  // lets the caller pick an existing installation) carrying a signed state
+  // that names this org and the caller. GitHub sends the browser back to the
+  // App's setup URL with installation_id and that state, which the client
+  // passes to LinkGitHubAppInstallation. FAILED_PRECONDITION
+  // "github_app_not_configured" when the deployment has no App.
+  rpc StartGitHubAppInstall(StartGitHubAppInstallRequest) returns (StartGitHubAppInstallResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "returns a signed link and changes nothing; LinkGitHubAppInstallation records the link"}
+    };
+  }
+
+  // LinkGitHubAppInstallation links installation_id to the org the signed
+  // state names. The caller must be the person the state was issued to, and
+  // STILL an admin or owner of that org (read now, not when the link was
+  // issued); the installation must be one the caller's own GitHub account can
+  // reach. Errors: INVALID_ARGUMENT "github_install_state_invalid" (a
+  // tampered, expired or someone else's state); PERMISSION_DENIED
+  // "admin_required" / "not_org_member"; FAILED_PRECONDITION
+  // "github_installation_not_visible" (the caller's GitHub account cannot see
+  // it), "github_installation_linked_elsewhere" (another org has it), or the
+  // git credential reasons when the caller has not connected GitHub.
+  rpc LinkGitHubAppInstallation(LinkGitHubAppInstallationRequest) returns (LinkGitHubAppInstallationResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "link_github_app"
+        target: {
+          kind: "github_installation"
+          id: "response.installation.installation_id"
+          label: "response.installation.account_login"
+        }
+        scope: "response.installation.org_id"
+      }
+    };
+  }
+
+  // ListGitHubAppInstallations lists the installations linked to the org. Any
+  // member may call it.
+  rpc ListGitHubAppInstallations(ListGitHubAppInstallationsRequest) returns (ListGitHubAppInstallationsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // UnlinkGitHubAppInstallation removes the link: the org's runs can no
+  // longer mint bot tokens through it. The installation itself stays on
+  // GitHub. Admin or owner. Unlinking one that is not linked to the org is
+  // NOT_FOUND.
+  rpc UnlinkGitHubAppInstallation(UnlinkGitHubAppInstallationRequest) returns (UnlinkGitHubAppInstallationResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "unlink_github_app"
+        target: {
+          kind: "github_installation"
+          id: "installation_id"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+}
+
+// GitHubAppInstallation is a GitHub App installation linked to an org.
+message GitHubAppInstallation {
+  // GitHub's installation id.
+  int64 installation_id = 1;
+  string org_id = 2;
+  // The GitHub account the App is installed on, and its kind
+  // ("Organization" or "User").
+  string account_login = 3;
+  string account_type = 4;
+  // Who linked it (users.id).
+  string linked_by_user_id = 5;
+  google.protobuf.Timestamp linked_at = 6;
+  // Set while GitHub reports the installation suspended; no token is minted
+  // through it then.
+  google.protobuf.Timestamp suspended_at = 7;
+}
+
+message StartGitHubAppInstallRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+}
+message StartGitHubAppInstallResponse {
+  // github.com/apps/<slug>/installations/new?state=...
+  string install_url = 1;
+}
+
+message LinkGitHubAppInstallationRequest {
+  // installation_id and state, as GitHub passed them to the setup URL.
+  int64 installation_id = 1 [(buf.validate.field).int64.gt = 0];
+  string state = 2 [
+    (buf.validate.field).string.min_len = 1,
+    debug_redact = true
+  ];
+  // Optional: when set it must be the org the state names.
+  optional string org_id = 3;
+}
+message LinkGitHubAppInstallationResponse {
+  GitHubAppInstallation installation = 1;
+}
+
+message ListGitHubAppInstallationsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+}
+message ListGitHubAppInstallationsResponse {
+  repeated GitHubAppInstallation installations = 1;
+}
+
+message UnlinkGitHubAppInstallationRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  int64 installation_id = 2 [(buf.validate.field).int64.gt = 0];
+}
+message UnlinkGitHubAppInstallationResponse {}
+
+// OrgMember is one member of an org, as its roster shows them.
+message OrgMember {
+  string user_id = 1;
+  string email = 2;
+  // "" when the person set none.
+  string name = 3;
+  string avatar_url = 4;
+  // "owner", "admin" or "member".
+  string role = 5;
+  google.protobuf.Timestamp joined_at = 6;
+  // True for the org's founding, accountable owner (organizations.owner_id).
+  // It confers no authority; role does.
+  bool is_founder = 7;
+  // The member's sign-in subject (the identity provider's `sub`): the id
+  // reliant keys a person's chats and projects by, where user_id is this
+  // service's own. It identifies; it authorizes nothing.
+  string external_id = 8;
+}
+
+// SeatUsage is how many of the org's seats are taken.
+message SeatUsage {
+  // Live members (deleted accounts excluded).
+  int32 members = 1;
+  // Pending, unexpired invitations.
+  int32 pending_invitations = 2;
+  // The seat limit; -1 = unlimited.
+  int32 limit = 3;
+}
+
+// OrgInvitation is one invitation, as an org admin sees it.
+message OrgInvitation {
+  string id = 1;
+  string email = 2;
+  string role = 3;
+  string invited_by_user_id = 4;
+  string invited_by_email = 5;
+  // "pending", "accepted", "revoked" or "expired" (pending past expires_at).
+  string status = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp expires_at = 8;
+  google.protobuf.Timestamp last_sent_at = 9;
+}
+
+message CreateOrganizationRequest {
+  // 1-80 characters after trimming.
+  string name = 1;
+  // ^[a-z][a-z0-9-]{1,48}[a-z0-9]$. Unset: derived from the name plus a short
+  // random suffix.
+  optional string slug = 2;
+}
+
+message CreateOrganizationResponse {
+  MyOrganization organization = 1;
+}
+
+message ListMembersRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  // Unset or 0 = 50; max 200.
+  int32 page_size = 2;
+  // next_page_token from the previous page.
+  string page_token = 3;
+}
+
+message ListMembersResponse {
+  // Oldest member first.
+  repeated OrgMember members = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+  SeatUsage seats = 3;
+}
+
+message InviteMemberRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string email = 2;
+  // Required: "member", "admin" or "owner".
+  string role = 3;
+}
+
+message InviteMemberResponse {
+  OrgInvitation invitation = 1;
+  // False when mail is not configured on this deployment or the send failed;
+  // accept_url is then the delivery.
+  bool email_sent = 2;
+  // The link the invitee opens. Returned only here, never listed again.
+  string accept_url = 3;
+  // True when this re-sent an existing pending invitation.
+  bool resent = 4;
+}
+
+message ListInvitationsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  // Also list accepted, revoked and expired invitations.
+  optional bool include_resolved = 2;
+  // Unset or 0 = 50; max 200.
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListInvitationsResponse {
+  // Newest first.
+  repeated OrgInvitation invitations = 1;
+  string next_page_token = 2;
+}
+
+message RevokeInvitationRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string invitation_id = 2;
+}
+
+message RevokeInvitationResponse {}
+
+message GetInvitationRequest {
+  // The rinv_ token from the accept link.
+  string token = 1;
+}
+
+message GetInvitationResponse {
+  string org_name = 1;
+  string role = 2;
+  // The inviter's name, else their email.
+  string invited_by_name = 3;
+  // The invited address, masked: "a***@example.com".
+  string invitee_email_hint = 4;
+  // "pending", "accepted", "revoked" or "expired".
+  string status = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  // True when the caller's verified email is the invited one.
+  bool email_matches = 7;
+  // True when the caller is already a member of the org.
+  bool already_member = 8;
+}
+
+message AcceptInvitationRequest {
+  string token = 1;
+}
+
+message AcceptInvitationResponse {
+  // The org the caller joined.
+  MyOrganization organization = 1;
+  // The caller, who is the member that joined.
+  string user_id = 2;
+  // The invitation that was accepted.
+  string invitation_id = 3;
+}
+
+message RemoveMemberRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string user_id = 2;
+}
+
+message RemoveMemberResponse {
+  // Access tokens revoked: the member's own in this org (daemon-bound ones
+  // included) and the org-automation tokens they minted.
+  int32 revoked_token_count = 1;
+}
+
+message LeaveOrganizationRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+}
+
+message LeaveOrganizationResponse {
+  // The caller's default org now; "" when they belong to no org.
+  string default_org_id = 1;
+  // The caller, who is the member that left.
+  string user_id = 2;
+  // Access tokens revoked, as RemoveMemberResponse.revoked_token_count.
+  int32 revoked_token_count = 3;
+}
+
+message UpdateMemberRoleRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string user_id = 2;
+  // "member", "admin" or "owner".
+  string role = 3;
+}
+
+message UpdateMemberRoleResponse {
+  OrgMember member = 1;
+  // The org permissions the member holds after the change.
+  repeated string scopes = 2;
 }
 
 // MyOrganization is one org the caller belongs to, as they see it. It
@@ -55,8 +557,10 @@ message MyOrganization {
   string role = 4;
   // True for the org requests that name none act in.
   bool is_default = 5;
-  // True when the caller is the org's owner (organizations.owner_id). An org
-  // has exactly one owner. Their membership role is normally "owner" too.
+  // True when the caller's role in this org is "owner". An org may have
+  // several owners; this is the same fact as role == "owner", kept for old
+  // clients. (Before several owners existed it meant
+  // organizations.owner_id == caller, which was the same for every org.)
   bool is_owner = 6;
   google.protobuf.Timestamp created_at = 7;
   // When the caller joined the org.
@@ -70,6 +574,10 @@ message ListMyOrganizationsResponse {
   repeated MyOrganization organizations = 1;
   // The org requests that name none act in. "" when organizations is empty.
   string default_org_id = 2;
+  // 3 and 4 carried a per-person billing org (#2397); the owner dropped that
+  // design (2026-11-09) and approved removing them (breaking:approved).
+  reserved 3, 4;
+  reserved "billing_org_id", "billing_org_explicit";
 }
 
 message SetDefaultOrganizationRequest {

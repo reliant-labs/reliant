@@ -59,7 +59,13 @@ type terminalCreateResponse struct {
 }
 
 func handleTerminalCreate(_ context.Context, payload []byte) ([]byte, error) {
-	releaseRecovery, err := beginRecoveryWork()
+	var req terminalCreateRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	// Held until the session is in the terminal registry, which then holds
+	// the worktree it was started in while it is open (managedRecoveryUse).
+	releaseRecovery, err := beginRecoveryWorkIn(req.WorkingDir)
 	if err != nil {
 		return nil, err
 	}
@@ -67,11 +73,6 @@ func handleTerminalCreate(_ context.Context, payload []byte) ([]byte, error) {
 	tm := terminalManager()
 	if tm == nil {
 		return nil, fmt.Errorf("terminal manager not initialized")
-	}
-
-	var req terminalCreateRequest
-	if err := json.Unmarshal(payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
 	// DaemonCommand handlers are already scoped per-user: each tools-daemon

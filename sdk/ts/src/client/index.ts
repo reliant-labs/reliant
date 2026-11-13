@@ -37,9 +37,11 @@ export {
 export {
   ChatStream,
   traceIdFromTraceresponse,
+  type ChatCaughtUpInfo,
   type ChatStreamCallbacks,
   type ChatStreamHooks,
   type ChatStreamOptions,
+  type ChatSyncKind,
   type SnapshotTiming,
 } from "./chat-stream.js";
 export {
@@ -52,7 +54,22 @@ export {
 
 export * from "./events.js";
 export { decodeChatUpdate, decodeUserUpdate, latestMainThreadContextUsage } from "./decode.js";
-export type { Attachment, ContentBlock, Message, ToolCallState, ToolExecutionStateUpdate } from "./types.js";
+export type {
+  Attachment,
+  ContentBlock,
+  ContentBlockBody,
+  Message,
+  ToolBodies,
+  ToolCallState,
+  ToolExecutionStateUpdate,
+} from "./types.js";
+export {
+  fetchContentBlockBodies,
+  MAX_CONTENT_BLOCK_BODY_IDS,
+  type ContentBlockBodies,
+  type ContentBlockBodiesClient,
+  type FetchContentBlockBodiesOptions,
+} from "./content-block-bodies.js";
 
 export { createChatState, reduceChat } from "./chat-reducer.js";
 export type { ChatAction, ChatState, ReduceEnv } from "./chat-state.js";

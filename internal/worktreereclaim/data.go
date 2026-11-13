@@ -36,6 +36,17 @@ var defaultRebuildable = []string{
 	".forge/logs", ".forge/workspace-base.tag",
 	// forge's own scratch and its generate fixed-point cache.
 	".forge/tmp", ".forge/generate-cache.json",
+	// What every `forge generate` writes beside its output and the next one
+	// rewrites: each generate hook's log, the frontend fixture markers, the
+	// go-tool memo, the failed run's preserved snapshot (removed by the next
+	// successful run) and the proto descriptor. Holding them held nearly
+	// every forge checkout that had ever run generate (2026-11-07: 85 of 470
+	// live worktrees on one machine).
+	".forge/generate-hooks", ".forge/fixtures", ".forge/generate-memo.json",
+	".forge/failed-generate", "/gen/forge_descriptor",
+	// A frontend's dev runtime document, which `forge env up` writes per
+	// machine (forge's commitpolicy: never committed).
+	"/frontends/*/public/config.js",
 	// forge's build/push state records (one JSON file per env or service) and
 	// the temp files its atomic writes leave behind when interrupted.
 	".forge/state", ".forge/.forge-tmp-*",
@@ -115,7 +126,9 @@ func (d *dataWalk) visit(rel string) {
 		return
 	}
 	d.seen[key] = true
-	if rebuildablePath(rel) {
+	// The reclaim tombstone is the daemon's own, and goes with the
+	// checkout it marks (tombstone.go).
+	if rebuildablePath(rel) || key == tombstoneRel {
 		return
 	}
 	full := filepath.Join(d.checkout, filepath.FromSlash(rel))

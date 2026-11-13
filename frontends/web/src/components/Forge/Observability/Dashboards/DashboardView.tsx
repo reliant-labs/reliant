@@ -4,15 +4,26 @@
  * ONE DASHBOARD: its panels over the console's
  * scope, with the controls the mockup draws.
  *
- *   header       title, star, source tag; one meta line (where it came from,
- *                version and editor, panels, the environments it is about);
- *                actions — release: History, Save as copy; workspace:
+ *   header       title (the hub's, when the dashboard is one of a hub's
+ *                tabs; the project prefix dropped), star, and a small
+ *                "generated · v1.8.3" — why it is read-only, where it runs and
+ *                its panels are that word's tooltip, not a banner. A
+ *                workspace dashboard adds one line: version, editor, scope.
+ *                Actions — release: History, Save as copy; built-in: Save
+ *                as copy (the platform defines it, so it has no history); workspace:
  *                History, Promote to code, Edit layout, Add panel, More
  *                (save a copy, archive).
- *   variables    env (the console's own scope: changing it here changes it
- *                everywhere), service, time; Compare (previous period or
- *                previous release); auto-refresh; Share (a link carrying all
- *                of it); full screen for a wall display.
+ *   hub          a hub's tabs (Users · Product · Acquisition), or its picker
+ *                when there are too many (sixteen services): each tab is its
+ *                own dashboard and URL, opened with the page's time,
+ *                comparison and refresh (dashboardHubs.ts).
+ *   toolbar      ONE row: process, time, Compare (previous period or
+ *                previous release), the dashboard's own filters in the
+ *                console's words (ViewerControls.tsx), then View options
+ *                (breakdown, markers, bands, sections, panels), auto-refresh,
+ *                Share (a link carrying all of it), full screen. The
+ *                environment is the console's own scope (the top bar); only
+ *                full screen, which hides the top bar, offers it here.
  *   grid         four columns; each panel is its forge width in quarters.
  *                Line panels carry release markers (when the dashboard
  *                declares the `releases` annotation) and alert-firing bands;
@@ -37,14 +48,15 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { ArrowLeft, ArrowRight, GripVertical, History, LayoutDashboard, LayoutGrid, Maximize2, MoreHorizontal, Plus, RefreshCw, Share2, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, GripVertical, History, LayoutDashboard, LayoutGrid, Lock, Maximize2, MoreHorizontal, Plus, RefreshCw, Share2, Trash2, X } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 import EmptyState from "@/components/forge-ui/empty_state";
 import Link from "@/components/forge-ui/link";
-import Mono from "@/components/forge-ui/mono";
+import Tabs from "@/components/forge-ui/tabs";
 import Tag from "@/components/forge-ui/tag";
+import Tooltip from "@/components/forge-ui/tooltip";
 import {
   dashboardKeys,
   useDashboard,
@@ -56,7 +68,7 @@ import { useAlertHistory, useObservabilityOrg, usePanelQuery, useReleases, useSe
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
-import type { Dashboard, ObsScope, Panel } from "@/services/controlPlane/observability/types";
+import type { Dashboard, DashboardSection, ObsScope, Panel } from "@/services/controlPlane/observability/types";
 import { bucketLabel, dashboardDefaultRange, RANGE_LABELS, RANGE_PRESETS, rangeForBucket, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
@@ -68,13 +80,14 @@ import type { ObsEnvironment } from "../obsPlace";
 import { ObsAsOf, ObsError } from "../ObsStates";
 import { useReleaseMarkers } from "../releaseMarkers";
 import { DashboardHeader } from "./DashboardHeader";
-import { ViewerControls } from "./ViewerControls";
+import { ViewerFilters, ViewOptions } from "./ViewerControls";
+import { displayTitle, isTabOf, type DashboardHub, type HubTab } from "./dashboardHubs";
 import { OrganizationCostsView } from "./OrganizationCostsView";
 import { OrganizationUsageView } from "./OrganizationUsageView";
 import { OrganizationBillingView } from "./OrganizationBillingView";
 import { LLMUsageView } from "./LLMUsageView";
 import { useNearViewport } from "./useNearViewport";
-import { visiblePanel, viewerQuery } from "./viewerModel";
+import { drawsSqlFigures, panelGroups, sqlTrendPanel, toggledHidden, visiblePanel, viewerQuery } from "./viewerModel";
 import {
   alertBands,
   COMPARE_LABELS,
@@ -84,10 +97,13 @@ import {
   resizePanel,
   COMPARE_MODES,
   compareTarget,
+  dashboardDefaultCompare,
   marksReleases,
   rangeMs,
   refreshMs,
   REFRESH_INTERVALS,
+  SOURCE_LABELS,
+  isStandardBuiltinRef,
   spanOf,
   type CompareMode,
   type CompareTarget,
@@ -107,12 +123,18 @@ import { OrgEnvPicker } from "./OrgEnvPicker";
 import { orgDashboardHrefs, orgExploreHref, orgQueryScope, orgScopeLabel, orgSelection } from "./orgScope";
 import { PanelDrawer, type DrawerMode } from "./PanelDrawer";
 import { PanelErrorBoundary } from "./PanelErrorBoundary";
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, StarButton, VariableSelect, type MenuEntry } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
+import { DataPanelBody, type PanelDataContext } from "./DataPanel";
+import { isDeliveryKind, type DeliveryPanelContext } from "./DeliveryPanels";
+import { browseParams } from "./dataPanelModel";
+import type { DataSearch } from "../../Data/dataUrl-model";
 
 export interface DashboardHrefs extends ExploreHrefs {
+  data?: (search: DataSearch) => string;
   list: string;
-  release: (version: string) => string;
+  /** A release's page; `extra` is its search (`{ tab: "health", in: "prod" }`). */
+  release: (version: string, extra?: Record<string, unknown>) => string;
   trace: (traceId: string) => string;
   /** One browser session (a sessions panel's row). Absent: rows are not links. */
   session?: (sessionId: string) => string;
@@ -136,6 +158,12 @@ export interface DashboardViewProps {
   onEnvChange: (env: string) => void;
   hrefs: DashboardHrefs;
   navigateTo: (href: string) => void;
+  /**
+   * The hub this dashboard is a tab of (dashboardHubs.ts): the page is titled
+   * by the hub, and its tabs (or picker) open the hub's other dashboards with
+   * the same time, comparison and refresh.
+   */
+  hub?: DashboardHub | null;
 }
 
 const NO_MARKERS: readonly ChartMarker[] = [];
@@ -148,24 +176,39 @@ const PLATFORM_NO_RELEASE: CompareTarget = {
 
 const NO_ORG_ENVS: readonly ObsEnvironment[] = [];
 
-export function DashboardView({ project, dashRef, env: consoleEnv, environments: projectEnvironments, orgEnvironments = NO_ORG_ENVS, orgEnvironmentsLoading = false, orgEnvironmentsError = null, onRetryOrgEnvironments, search, onSearch, onEnvChange, hrefs: consoleHrefs, navigateTo }: DashboardViewProps) {
+export function DashboardView({ project, dashRef, env: consoleEnv, environments: projectEnvironments, orgEnvironments = NO_ORG_ENVS, orgEnvironmentsLoading = false, orgEnvironmentsError = null, onRetryOrgEnvironments, search, onSearch, onEnvChange, hrefs: consoleHrefs, navigateTo, hub = null }: DashboardViewProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
   const api = useObservabilityApi();
   const queryClient = useQueryClient();
-  const compare: CompareMode = search.compare ?? "off";
   const refresh: RefreshInterval = search.refresh ?? "off";
   const consoleExplore = useExploreHref();
 
   const doc = useDashboard(orgId, dashRef, dashRef.kind === "builtin" ? undefined : search.version, dashRef.kind === "builtin" ? undefined : search.release);
+  // An organization view is a typed view with no panels to run; a project's
+  // standard built-in is a spec over its data, read like a release dashboard.
+  const orgView = dashRef.kind === "builtin" && !isStandardBuiltinRef(dashRef);
   // The demo's reason first (obsReadOnly.tsx): there, nobody can, admin or not.
-  const readOnlyReason = useObsReadOnly().reason;
+  const obsLock = useObsReadOnly();
+  const readOnlyReason = obsLock.reason;
+  // Whether this reader may change the dashboard: the server's answer, and never on the demo console.
+  const docCanWrite = !!doc.data?.canWrite && !obsLock.readOnly;
   const spec = doc.data?.spec;
   const summary = doc.data?.summary;
   // The dashboard's own default when the URL names no range: a day-grained one
   // declares "7d" and so never opens on a window that holds a single bucket.
   const defaultRange = dashboardDefaultRange(spec?.defaultRange);
   const range: RangePreset = search.range ?? defaultRange;
+  // Its own comparison when the URL names none: a dashboard of headline
+  // figures declares "period", so each opens beside its change.
+  const defaultCompare = dashboardDefaultCompare(spec?.defaultCompare);
+  const compare: CompareMode = search.compare ?? defaultCompare;
+  // Data reads never poll implicitly. Keep bound time stable through telemetry
+  // polling/re-renders; changing the range creates a new structured question.
+  const browseWindow = useMemo(() => {
+    const endMs = Date.now();
+    return { startMs: endMs - rangeMs(range), endMs };
+  }, [range]);
 
   // A platform dashboard's signals belong to no environment: it reads them
   // platform-wide whatever environment the top bar names.
@@ -186,10 +229,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const hrefs = useMemo(() => (orgScoped ? orgDashboardHrefs(consoleHrefs, orgPick) : consoleHrefs), [orgScoped, consoleHrefs, orgPick]);
   const exploreLink = useMemo(() => (orgScoped ? orgExploreHref(orgPick) : consoleExplore), [orgScoped, orgPick, consoleExplore]);
   const scope = useMemo<ObsScope | null>(() => {
-    if (!orgId || unrecorded || orgRosterBlocked || dashRef.kind === "builtin") return null;
+    if (!orgId || unrecorded || orgRosterBlocked || orgView) return null;
     if (platform) return { orgId, envIds: [], filters: [], platformScope: true };
     return orgScoped ? orgQueryScope(orgId, orgPick) : { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] };
-  }, [orgId, project, envId, unrecorded, orgRosterBlocked, platform, orgScoped, orgPick, dashRef.kind]);
+  }, [orgId, project, envId, unrecorded, orgRosterBlocked, platform, orgScoped, orgPick, orgView]);
 
   // Recently viewed: once per dashboard opened, and quietly — a view that
   // could not be recorded changes nothing the reader can see.
@@ -215,9 +258,9 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   // A platform dashboard belongs to no environment: the environment the top
   // bar names (hidden for it) must not lend it that environment's alert bands
   // or its last release to compare with. Previous-period comparison stays.
-  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!spec && !!envId && !platform && !orgRosterBlocked && dashRef.kind !== "builtin" });
+  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!spec && !!envId && !platform && !orgRosterBlocked && !orgView });
   // Both wait for the document: until it loads, a platform dashboard is not yet known to be one.
-  const history = useAlertHistory(dashRef.kind === "builtin" || !spec || platform || orgRosterBlocked ? null : orgId, range, envId ?? undefined);
+  const history = useAlertHistory(orgView || !spec || platform || orgRosterBlocked ? null : orgId, range, envId ?? undefined);
   const scopeEnvIds = useMemo(
     () => (envId ? [envId] : orgScoped && orgPick.ids.length ? orgPick.ids : environments.map((candidate) => candidate.id)),
     [envId, environments, orgScoped, orgPick.ids]
@@ -228,7 +271,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   );
   const now = Date.now();
   const releaseCompare = platform ? PLATFORM_NO_RELEASE : compareTarget("release", range, promotions.data?.promotions ?? [], envId, now);
-  const target = platform && compare === "release" ? PLATFORM_NO_RELEASE : compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
+  const asked = platform && compare === "release" ? PLATFORM_NO_RELEASE : compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
+  // A default the scope cannot honour (a release comparison over every
+  // environment) opens without one, quietly: the viewer asked for nothing.
+  const target: CompareTarget = asked.mode === "unavailable" && search.compare === undefined ? { mode: "off" } : asked;
 
   // ── Drill-down ──
   const [drill, setDrill] = useState<{ target: DrillTarget; panel: Panel; at: { x: number; y: number } } | null>(null);
@@ -297,7 +343,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
 
   const currentVersion = summary.workspace?.version ?? 0;
   const viewingOld = !!search.version && search.version !== currentVersion;
-  const editable = !summary.readOnly && !!doc.data?.canWrite && !search.version && !search.release;
+  const editable = !summary.readOnly && docCanWrite && !search.version && !search.release;
   const writeVersion = (next: Dashboard, message: string, done?: () => void) =>
     save.mutate({ spec: next, base: currentVersion, message }, { onSuccess: () => done?.() });
   const shown = layout ?? spec;
@@ -321,10 +367,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
     },
   };
 
-  const grid = (
-    <ObsChartMarkersProvider markers={marks ? releases.markers : NO_MARKERS}>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="dashboard-grid" data-editing={layout ? "true" : undefined}>
-        {shown.panels.filter((panel) => !!layout || visiblePanel(panel, search)).map((panel, index) => (
+  const card = (panel: Panel, index: number) => (
           // One panel's bad definition stops at its own cell (PanelErrorBoundary).
           <PanelErrorBoundary
             key={panel.id}
@@ -334,6 +377,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
           {() => (
           <DashboardPanelCard
             panel={panel}
+            dashboardId={spec.id}
             queryPanel={viewerQuery(spec, panel, search).panel}
             layout={
               layout
@@ -364,8 +408,14 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
               ...(exploreHref(panel)
                 ? [{ label: "Explore in Metrics", detail: "this query, editable", href: exploreHref(panel)!, testId: `dashboard-panel-explore-${panel.id}` }]
                 : []),
-              { label: panel.signal === "logs" ? "Explore in Logs" : "Explore in Traces", detail: "with this panel's service", href: links.searchHref(panel) },
-              { label: CREATE_ALERT_LABEL, detail: "as KCL", onSelect: () => setAlertPanel(panel), separated: true, testId: `dashboard-panel-alert-${panel.id}` },
+              // A delivery panel (release health, promotions, DORA) reads the release ledger, not telemetry:
+              // there are no spans to explore and no query to alert on.
+              ...(isDeliveryKind(panel.kind)
+                ? []
+                : [
+                    { label: panel.signal === "logs" ? "Explore in Logs" : "Explore in Traces", detail: "with this panel's service", href: links.searchHref(panel) },
+                    { label: CREATE_ALERT_LABEL, detail: "as KCL", onSelect: () => setAlertPanel(panel), separated: true, testId: `dashboard-panel-alert-${panel.id}` },
+                  ]),
               {
                 label: "Ask Reliant",
                 detail: "in a new chat",
@@ -377,6 +427,11 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                 : []),
             ]}
             scope={scope}
+            dataContext={!platform && !orgScoped && envId && hrefs.data && scope ? {
+              env: { id: envId, name: env }, href: hrefs.data,
+              params: browseParams(spec, search, browseWindow),
+            } : undefined}
+            delivery={{ scope: platform || orgScoped ? null : delivery, environments, range, releaseHref: hrefs.release }}
             range={range}
             services={viewerQuery(spec, panel, search).services}
             refreshEvery={refreshEvery}
@@ -386,7 +441,30 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
           />
           )}
           </PanelErrorBoundary>
-        ))}
+  );
+
+  // Viewing a dashboard with sections draws each under its heading (forge
+  // dashspec Section); editing the layout moves panels in their saved order,
+  // so it lays them out flat.
+  const sectioned = !layout && !!shown.sections?.length;
+  const grid = (
+    <ObsChartMarkersProvider markers={marks ? releases.markers : NO_MARKERS}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="dashboard-grid" data-editing={layout ? "true" : undefined}>
+        {sectioned
+          ? panelGroups(shown, search).flatMap((group) => [
+              ...(group.section
+                ? [
+                    <SectionHeading
+                      key={`section:${group.section.id}`}
+                      section={group.section}
+                      hidden={group.hidden}
+                      onToggle={() => onSearch({ hiddenSections: toggledHidden(search.hiddenSections, group.section!.id) })}
+                    />,
+                  ]
+                : []),
+              ...group.panels.map((panel, index) => card(panel, index)),
+            ])
+          : shown.panels.filter((panel) => !!layout || visiblePanel(panel, search)).map((panel, index) => card(panel, index))}
       </div>
       {!layout && shown.panels.every((panel) => !visiblePanel(panel, search)) && (
         <p className="rounded-lg border border-dashed border-border bg-surface-sunken p-4 text-sm text-ink-muted" role="status">
@@ -405,7 +483,8 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
       defaultRange={defaultRange}
       service={search.service}
       hasProcessFilter={spec.filters.some((filter) => filter.field === "service.name")}
-      compare={compare}
+      compare={target.mode === "off" ? "off" : compare}
+      defaultCompare={defaultCompare}
       target={target}
       releaseCompare={releaseCompare}
       refresh={refresh}
@@ -413,8 +492,14 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
       onSearch={onSearch}
       tv={tv}
       orgPicker={orgScoped ? <OrgEnvPicker environments={orgEnvironments} selection={orgPick} onChange={(names) => onSearch({ orgEnvs: names.length ? names : undefined })} /> : undefined}
+      filters={<ViewerFilters dashboard={spec} scope={scope} range={range} search={search} onSearch={onSearch} oneEnv={!orgScoped && !platform && env !== ENV_ALL} />}
+      viewOptions={layout ? undefined : <ViewOptions dashboard={spec} search={search} onSearch={onSearch} />}
     />
   );
+  // A hub's tabs carry what the reader set for the page, not this dashboard's own variables.
+  const hubHref = (ref: DashboardRef) => hrefs.dashboard(ref, { range: search.range, compare: search.compare, refresh: search.refresh });
+  const activeTab = hub?.tabs.find((tab) => isTabOf(tab, dashRef));
+  const title = hub && hub.tabs.length > 1 ? hub.title : displayTitle(summary.title, project);
 
   if (tv) {
     return (
@@ -447,7 +532,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
     <div className="space-y-4" data-testid="dashboard-view" data-kind={dashRef.kind}>
       <DashboardHeader
         testId="dashboard-header"
-        title={summary.title}
+        title={title}
         titleAccessory={
           <>
             <StarButton
@@ -459,21 +544,21 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
               }}
               testId="dashboard-star"
             />
-            <SourceTag source={summary.source} />
+            <SourceMeta summary={summary} standard={isStandardBuiltinRef(dashRef)} panels={spec.panels.length} environments={environments} hrefs={hrefs} />
             {viewingOld && <Tag tone="warning">v{search.version}</Tag>}
           </>
         }
-        meta={<DashboardMeta summary={summary} panels={spec.panels.length} environments={environments} hrefs={hrefs} marks={marks} hasBands={bands.length > 0} />}
+        meta={summary.workspace ? <WorkspaceMeta summary={summary} environments={environments} /> : undefined}
         actions={
           <>
-            <HistoryMenu orgId={orgId} dashRef={dashRef} summary={summary} hrefs={hrefs} search={search} />
+            {dashRef.kind !== "builtin" && <HistoryMenu orgId={orgId} dashRef={dashRef} summary={summary} hrefs={hrefs} search={search} />}
             {summary.readOnly ? (
               <button
                 type="button"
-                className={BUTTON_PRIMARY}
+                className={BUTTON_SECONDARY}
                 onClick={() => setDialog("copy")}
-                disabled={!doc.data?.canWrite}
-                title={doc.data?.canWrite ? undefined : readOnlyReason ?? "Only organization admins can create dashboards."}
+                disabled={!docCanWrite}
+                title={docCanWrite ? readOnlyNote(summary) : readOnlyReason ?? "Only organization admins can create dashboards."}
                 data-testid="dashboard-save-copy"
               >
                 Save as copy
@@ -487,8 +572,8 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                     setDialog("promote");
                     promote.mutate(search.version);
                   }}
-                  disabled={!doc.data?.canWrite}
-                  title={doc.data?.canWrite ? undefined : readOnlyReason ?? "Only organization admins can promote dashboards."}
+                  disabled={!docCanWrite}
+                  title={docCanWrite ? undefined : readOnlyReason ?? "Only organization admins can promote dashboards."}
                   data-testid="dashboard-promote-open"
                 >
                   Promote to code
@@ -517,12 +602,12 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                   triggerClassName={cn(ICON_BUTTON, "h-8 w-8 border border-border bg-surface")}
                   testId="dashboard-more"
                   entries={[
-                    { label: "Save as copy", onSelect: () => setDialog("copy"), disabled: !doc.data?.canWrite, testId: "dashboard-more-copy" },
+                    { label: "Save as copy", onSelect: () => setDialog("copy"), disabled: !docCanWrite, testId: "dashboard-more-copy" },
                     {
                       label: "Archive dashboard",
                       detail: "versions are kept",
                       onSelect: () => setDialog("archive"),
-                      disabled: !doc.data?.canWrite,
+                      disabled: !docCanWrite,
                       separated: true,
                       testId: "dashboard-more-archive",
                     },
@@ -534,31 +619,14 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
         }
       />
 
-      {summary.readOnly && (
-        <p className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink-muted" data-testid="dashboard-readonly-note">
-          {summary.source === "repo" ? (
-            <>
-              Declared in your repo
-              {summary.release?.filePath && (
-                <>
-                  {" "}
-                  at <Mono value={summary.release.filePath} copy={false} />
-                </>
-              )}
-              : edit it there, or save a copy to change it here.
-            </>
-          ) : (
-            <>Generated by forge from your services on every release: save a copy to change it.</>
-          )}
-        </p>
-      )}
+      {hub && hub.tabs.length > 1 && <HubTabs hub={hub} active={activeTab} href={hubHref} navigateTo={navigateTo} />}
 
       {viewingOld && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm" role="status" data-testid="dashboard-old-version">
           <span className="text-ink-muted">
             You are looking at <span className="font-medium text-ink">v{search.version}</span>. The current version is v{currentVersion}.
           </span>
-          {doc.data?.canWrite && (
+          {docCanWrite && (
             <button
               type="button"
               className={BUTTON_SMALL}
@@ -593,7 +661,6 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
       )}
 
       {variables}
-      {!layout && <ViewerControls dashboard={spec} scope={scope} range={range} search={search} onSearch={onSearch} />}
 
       {layout && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm" role="status" data-testid="dashboard-layout-bar">
@@ -689,7 +756,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
       {dialog === "copy" && (
         <SaveCopyDialog
           sourceTitle={summary.title}
-          what={summary.readOnly ? (summary.source === "repo" ? "repo dashboard" : "generated dashboard") : "dashboard"}
+          what={!summary.readOnly ? "dashboard" : summary.source === "repo" ? "repo dashboard" : summary.source === "builtin" ? "built-in dashboard" : "generated dashboard"}
           env={env}
           pending={copy.isPending}
           error={copy.error}
@@ -742,38 +809,73 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
 
 // ── Header pieces ───────────────────────────────────────────────────────────
 
-function DashboardMeta({
+/** Why a read-only dashboard cannot be changed here, and how to change it. */
+function readOnlyNote(summary: DashboardSummary): string {
+  if (summary.source === "repo") return `Declared in your repo${summary.release?.filePath ? ` at ${summary.release.filePath}` : ""}: edit it there, or save a copy to change it here.`;
+  if (summary.source === "builtin") return "Built in for every project, over this project's data: save a copy to change it.";
+  return "Generated by forge from your services on every release: save a copy to change it.";
+}
+
+/**
+ * Where the dashboard came from, said small beside its title: "generated ·
+ * v1.8.3" (the release a link). Why it is read-only, where it runs and how
+ * many panels it has are the tooltip (the word's accessible description),
+ * not a banner over the page.
+ */
+function SourceMeta({
   summary,
+  standard,
   panels,
   environments,
   hrefs,
-  marks,
-  hasBands,
 }: {
   summary: DashboardSummary;
+  standard: boolean;
   panels: number;
   environments: readonly ObsEnvironment[];
   hrefs: DashboardHrefs;
-  marks: boolean;
-  hasBands: boolean;
 }) {
   const nameOf = (id: string) => environments.find((candidate) => candidate.id === id)?.name ?? id;
+  const version = summary.release?.releaseVersion;
+  const where = summary.release?.envIds.length ? `Running in ${summary.release.envIds.map(nameOf).join(", ")}. ` : "";
+  const about = (
+    <>
+      {summary.readOnly && <span data-testid="dashboard-readonly-note">{readOnlyNote(summary)} </span>}
+      {where}
+      {panels === 1 ? "1 panel" : `${panels} panels`}.
+    </>
+  );
+  return (
+    <span className="inline-flex items-center gap-1.5 text-sm text-ink-muted" data-testid="dashboard-source">
+      <Tooltip content={about} tooltipClassName="max-w-xs">
+        <span className="inline-flex items-center gap-1">
+          {summary.readOnly && <Lock className="h-3 w-3" aria-hidden="true" />}
+          {summary.source === "builtin" && standard ? "built-in" : SOURCE_LABELS[summary.source]}
+        </span>
+      </Tooltip>
+      {summary.release && (
+        <>
+          <span aria-hidden="true">·</span>
+          <span>
+            <span className="sr-only">Shipped in </span>
+            {version ? (
+              <Link href={hrefs.release(version)} className={INK_LINK}>
+                {version}
+              </Link>
+            ) : (
+              "a release"
+            )}
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
+/** A workspace dashboard's line: its version, who last edited it, and the environments it is for. */
+function WorkspaceMeta({ summary, environments }: { summary: DashboardSummary; environments: readonly ObsEnvironment[] }) {
+  const nameOf = (id: string) => environments.find((candidate) => candidate.id === id)?.name ?? id;
   const parts: ReactNode[] = [];
-  if (summary.release) {
-    parts.push(
-      <span key="shipped">
-        Shipped in{" "}
-        {summary.release.releaseVersion ? (
-          <Link href={hrefs.release(summary.release.releaseVersion)} className={INK_LINK}>
-            {summary.release.releaseVersion}
-          </Link>
-        ) : (
-          "a release"
-        )}
-      </span>
-    );
-    if (summary.release.envIds.length) parts.push(<span key="where">running in {summary.release.envIds.map(nameOf).join(", ")}</span>);
-  }
   if (summary.workspace) {
     const editor = summary.workspace.updatedBy ?? summary.workspace.createdBy;
     parts.push(
@@ -789,15 +891,39 @@ function DashboardMeta({
       </Tag>
     );
   }
-  parts.push(<span key="panels">{panels === 1 ? "1 panel" : `${panels} panels`}</span>);
-  if (marks || hasBands) {
-    parts.push(
-      <span key="legend">
-        {[marks ? "dashed lines are releases" : "", hasBands ? "red bands are alerts firing" : ""].filter(Boolean).join("; ").replace(/^./, (c) => c.toUpperCase())}
-      </span>
+  return <>{parts}</>;
+}
+
+/**
+ * A hub's tabs: each opens the hub's next dashboard, at its own URL, with the
+ * page's time, comparison and refresh. Too many for a row (a project with
+ * sixteen services) and it is a picker instead.
+ */
+function HubTabs({ hub, active, href, navigateTo }: { hub: DashboardHub; active: HubTab | undefined; href: (ref: DashboardRef) => string; navigateTo: (href: string) => void }) {
+  const idOf = (tab: HubTab) => `${tab.ref.kind}/${tab.ref.key}`;
+  const open = (id: string) => {
+    const tab = hub.tabs.find((candidate) => idOf(candidate) === id);
+    if (tab) navigateTo(href(tab.ref));
+  };
+  if (hub.picker) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3" data-testid="dashboard-hub-picker">
+        <VariableSelect
+          id="dashboard-hub-tab"
+          label={hub.id === "services" ? "Service" : "Dashboard"}
+          value={active ? idOf(active) : ""}
+          options={hub.tabs.map((tab) => ({ value: idOf(tab), label: tab.label }))}
+          onChange={open}
+        />
+        <span className="text-xs text-ink-muted">{hub.tabs.length} dashboards</span>
+      </div>
     );
   }
-  return <>{parts}</>;
+  return (
+    <div className="-mt-1 overflow-x-auto" data-testid="dashboard-hub-tabs">
+      <Tabs ariaLabel={hub.title} tabs={hub.tabs.map((tab) => ({ id: idOf(tab), label: tab.label }))} activeTab={active ? idOf(active) : ""} onChange={open} />
+    </div>
+  );
 }
 
 function HistoryMenu({
@@ -856,6 +982,9 @@ function HistoryMenu({
 
 // ── Variables bar ───────────────────────────────────────────────────────────
 
+/** The toolbar's buttons stand beside its selects: the same 32px height. */
+const TOOLBAR_BUTTON = cn(BUTTON_SMALL, "h-8 text-sm");
+
 function VariablesBar({
   scope,
   env,
@@ -865,6 +994,7 @@ function VariablesBar({
   service,
   hasProcessFilter,
   compare,
+  defaultCompare,
   target,
   releaseCompare,
   refresh,
@@ -872,7 +1002,13 @@ function VariablesBar({
   onSearch,
   tv,
   orgPicker,
+  filters,
+  viewOptions,
 }: {
+  /** The dashboard's own filters (ViewerFilters), after the time and comparison. */
+  filters?: ReactNode;
+  /** The View options popover, beside refresh and share. Absent while the layout is edited. */
+  viewOptions?: ReactNode;
   scope: ObsScope | null;
   env: string;
   environments: readonly ObsEnvironment[];
@@ -881,6 +1017,8 @@ function VariablesBar({
   service: string | undefined;
   hasProcessFilter: boolean;
   compare: CompareMode;
+  /** The dashboard's own comparison: choosing it clears the URL's. */
+  defaultCompare: CompareMode;
   target: CompareTarget;
   releaseCompare: CompareTarget;
   refresh: RefreshInterval;
@@ -911,14 +1049,17 @@ function VariablesBar({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2" data-testid="dashboard-variables">
+    // One row: what the panels read (environment, service, time, comparison,
+    // the dashboard's filters), then how the page behaves (view options,
+    // refresh, share, full screen). It wraps on a narrow screen.
+    <div className="flex flex-wrap items-center gap-2" data-testid="dashboard-variables">
       {/* The console's top bar is the one environment selector. Full screen
           hides the top bar, so only there does the dashboard offer its own. */}
       {orgPicker}
       {tv && !orgPicker && (
         <VariableSelect
           id="dashboard-var-env"
-          label="env"
+          label="Environment"
           value={env}
           options={[...environments.map((candidate) => ({ value: candidate.name, label: candidate.name })), { value: ENV_ALL, label: "All" }]}
           onChange={onEnvChange}
@@ -926,14 +1067,15 @@ function VariablesBar({
       )}
       {hasProcessFilter && <VariableSelect
         id="dashboard-var-service"
-        label="process"
+        // The deployed process (service.name): "Service" is the hub's picker of dashboards.
+        label="Process"
         value={service ?? ""}
-        options={[{ value: "", label: "all" }, ...names.map((name) => ({ value: name, label: name }))]}
+        options={[{ value: "", label: "All" }, ...names.map((name) => ({ value: name, label: name }))]}
         onChange={(value) => onSearch({ service: value || undefined })}
       />}
       <VariableSelect
         id="dashboard-var-range"
-        label="time"
+        label="Time"
         value={range}
         options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
         onChange={(value) => onSearch({ range: value === defaultRange ? undefined : (value as RangePreset) })}
@@ -942,7 +1084,7 @@ function VariablesBar({
         label="Compare"
         value={compare}
         options={COMPARE_MODES.map((mode) => ({ value: mode, label: COMPARE_LABELS[mode] }))}
-        onChange={(mode) => onSearch({ compare: mode === "off" ? undefined : mode })}
+        onChange={(mode) => onSearch({ compare: mode === defaultCompare ? undefined : mode })}
         disabledReason={releaseCompare.mode === "unavailable" ? { release: releaseCompare.reason } : undefined}
         testId="dashboard-compare"
       />
@@ -956,7 +1098,9 @@ function VariablesBar({
           dashed: the {formatSpan(rangeMs(range))} before {target.promotion.version || "the release"} reached {target.promotion.envName}
         </span>
       )}
+      {filters}
       <span className="flex-1" />
+      {viewOptions}
       <Menu
         label="Auto-refresh"
         trigger={
@@ -965,7 +1109,7 @@ function VariablesBar({
             {refresh === "off" ? "Off" : refresh}
           </>
         }
-        triggerClassName={BUTTON_SMALL}
+        triggerClassName={TOOLBAR_BUTTON}
         heading="Auto-refresh"
         entries={REFRESH_INTERVALS.map((interval) => ({
           label: interval === "off" ? "Off" : `Every ${interval}`,
@@ -976,13 +1120,13 @@ function VariablesBar({
       />
       {!tv && (
         <>
-          <button type="button" className={BUTTON_SMALL} onClick={share} title="Copy a link with the env, service, time, compare and refresh" data-testid="dashboard-share">
+          <button type="button" className={TOOLBAR_BUTTON} onClick={share} title="Copy a link with the env, service, time, compare and refresh" data-testid="dashboard-share">
             <Share2 className="h-3 w-3" aria-hidden="true" />
             {copied ? "Link copied" : "Share"}
           </button>
           <button
             type="button"
-            className={BUTTON_SMALL}
+            className={TOOLBAR_BUTTON}
             onClick={() => onSearch({ tv: true })}
             aria-label="Full screen"
             title="Full screen, for a wall display"
@@ -1005,6 +1149,30 @@ function formatSpan(ms: number): string {
 
 // ── Panels ──────────────────────────────────────────────────────────────────
 
+/** A section's heading across the grid: its title, its description, and the toggle that hides or shows its panels. */
+function SectionHeading({ section, hidden, onToggle }: { section: DashboardSection; hidden: boolean; onToggle: () => void }) {
+  const Chevron = hidden ? ChevronRight : ChevronDown;
+  return (
+    <div className="col-span-full flex items-end justify-between gap-3 border-b border-border pb-1.5 pt-2 first:pt-0" data-testid={`dashboard-section-${section.id}`} data-hidden={hidden ? "true" : undefined}>
+      <div className="min-w-0">
+        <h2 className="text-base font-semibold tracking-tight text-ink">{section.title}</h2>
+        {section.description && <p className="text-xs text-ink-muted">{section.description}</p>}
+      </div>
+      <button
+        type="button"
+        className={cn(BUTTON_SMALL, "shrink-0")}
+        onClick={onToggle}
+        aria-expanded={!hidden}
+        aria-label={`${hidden ? "Show" : "Hide"} ${section.title}`}
+        data-testid={`dashboard-section-toggle-${section.id}`}
+      >
+        <Chevron className="h-3 w-3" aria-hidden="true" />
+        {hidden ? "Show" : "Hide"}
+      </button>
+    </div>
+  );
+}
+
 interface PanelLayoutControls {
   index: number;
   count: number;
@@ -1019,8 +1187,11 @@ interface PanelLayoutControls {
 
 function DashboardPanelCard({
   panel,
+  dashboardId,
   queryPanel,
   scope,
+  dataContext,
+  delivery,
   range: rangeOfCard,
   services,
   refreshEvery,
@@ -1031,8 +1202,13 @@ function DashboardPanelCard({
   layout,
 }: {
   panel: Panel;
+  /** Names the panel's reads in control-plane's query_log (Forge-Panel). */
+  dashboardId: string;
   queryPanel: Panel;
   scope: ObsScope | null;
+  dataContext?: PanelDataContext;
+  /** What a delivery-kind panel (release_health, promotions, delivery) reads. */
+  delivery?: DeliveryPanelContext;
   range: RangePreset;
   services: string[];
   refreshEvery: number | false;
@@ -1051,10 +1227,15 @@ function DashboardPanelCard({
   const range = widening?.range ?? rangeOfCard;
   // A panel reads only once it is near the viewport: twenty panels do not all queue at mount.
   const [bodyRef, near] = useNearViewport();
-  const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near });
+  const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near, dashboardId });
   // Not yet near is "not loaded yet", not "no data".
   const query = near || !panelRunsQuery(queryPanel.kind) ? rawQuery : { ...rawQuery, isLoading: true };
-  const comparable = (panel.kind === "line" || panel.kind === "number") && (target.mode === "period" || target.mode === "release");
+  // A sql panel compares only the figures it draws: its statement's windows
+  // (cohorts, rolling days) need not shift with the range the way a series'
+  // buckets do, so its charts are not overlaid. It asks once the figures came.
+  const comparable =
+    (panel.kind === "line" || panel.kind === "number" || (panel.kind === "sql" && drawsSqlFigures(queryPanel, rawQuery.data))) &&
+    (target.mode === "period" || target.mode === "release");
   const offsetKey = target.mode === "release" ? `release:${target.promotion.promotionId}` : target.mode === "period" ? `period:${range}` : "";
   const compareQuery = usePanelQuery(scope, range, queryPanel, services, [], {
     offsetKey,
@@ -1062,6 +1243,15 @@ function DashboardPanelCard({
       target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : target.mode === "period" ? () => rangeMs(range) : undefined,
     refetchInterval: refreshEvery,
     enabled: comparable && near,
+    dashboardId,
+  });
+  // A sql figure's sparkline: its trendSql, over the same window.
+  const trendPanel = useMemo(() => sqlTrendPanel(queryPanel), [queryPanel]);
+  const trendQuery = usePanelQuery(scope, range, trendPanel ?? queryPanel, services, [], {
+    refetchInterval: refreshEvery,
+    enabled: !!trendPanel && near && drawsSqlFigures(queryPanel, rawQuery.data),
+    // Labelled like the figure's own read (Forge-Panel: <dashboard>/<panel>.trend), so query_log names the sparkline's statement too.
+    dashboardId,
   });
   const span = spanOf(panel);
   const offsetSec = target.mode === "release" || target.mode === "period" ? Math.round(target.offsetMs / 1000) : 0;
@@ -1140,10 +1330,13 @@ function DashboardPanelCard({
         )}
       </div>
       <div ref={bodyRef} className="px-4 pb-4 pt-2">
-        <PanelBody
+        <DataPanelBody
+          context={near ? dataContext : undefined}
+          delivery={near ? delivery : undefined}
           panel={queryPanel}
           query={query}
           compare={comparable && offsetSec ? { query: compareQuery, label: target.mode === "release" ? target.label : "previous period", offsetSec } : undefined}
+          trend={trendPanel ? trendQuery : undefined}
           bands={panel.kind === "line" ? bands : undefined}
           links={links}
         />

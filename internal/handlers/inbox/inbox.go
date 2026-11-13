@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -25,8 +26,10 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
@@ -53,12 +56,22 @@ const (
 	// file, content hash): another firing of it is the same item, a new
 	// broken version is a new one.
 	inboxDefinitionBrokenPrefix = "automation_definition_broken:"
+	// A worktree-reclaim id names the machine and the set of proposals it
+	// asks about (reclaimItemID).
+	inboxWorktreeReclaimPrefix = "worktree_reclaim:"
+	// A marked worktree's id names the worktree and the mark: a new mark
+	// after a cancel is a new item (markedItemID).
+	inboxWorktreeMarkedPrefix = "worktree_marked:"
+	// A chat asking before it uses the person's own AI account in place of
+	// its org's: the chat and when it asked.
+	inboxPersonalFundingPrefix = "personal_funding:"
 )
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
 	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxStoragePrefix,
 	inboxNeedsSetupPrefix, inboxRecoveryPrefix, inboxRunPausedPrefix, inboxDefinitionBrokenPrefix,
+	inboxWorktreeReclaimPrefix, inboxWorktreeMarkedPrefix, inboxPersonalFundingPrefix, inboxOrgKeyRejectedPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -90,8 +103,12 @@ func (s *Service) ListInbox(
 	}
 
 	projectID := strings.TrimSpace(req.Msg.GetProjectId())
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 
-	read, err := s.sharedRead(ctx, userID)
+	read, err := s.sharedRead(withCallerJWT(ctx, auth.BearerToken(req.Header().Get("Authorization"))), userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
@@ -101,7 +118,7 @@ func (s *Service) ListInbox(
 	}
 	// The read may be shared with concurrent calls (sharedRead): this
 	// response gets its own copies.
-	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.declarations, read.recovery} {
+	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.declarations, read.recovery, read.orgKeys} {
 		for _, it := range shared {
 			items = append(items, proto.CloneOf(it))
 		}
@@ -113,12 +130,16 @@ func (s *Service) ListInbox(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
 
+	items = read.inScope(items, scope)
+
 	resp := &reliantv1.ListInboxResponse{}
 	if projectID != "" {
 		scoped := items[:0]
 		for _, it := range items {
-			// A machine's storage is not any project's: it shows in every scope.
-			if it.ProjectId == projectID || it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE {
+			// A machine's storage, and its worktrees, are not any project's:
+			// they show in every scope.
+			if it.ProjectId == projectID || it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE ||
+				it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM {
 				scoped = append(scoped, it)
 			} else {
 				resp.OtherProjectsCount++
@@ -171,6 +192,12 @@ type inboxReads struct {
 	// declaration: needs-setup and broken (declarationItems).
 	declarations []*reliantv1.InboxItem
 	recovery     []*reliantv1.InboxItem
+	// orgKeys are the rejected API keys of the orgs the caller administers.
+	orgKeys []*reliantv1.InboxItem
+	// orgs is the org of each chat, project ("chat:<id>", "project:<id>")
+	// and trigger ("trigger:<id>") the items are about, nil for one with no
+	// org yet: what ListInbox's org scope decides an item by (itemOrg).
+	orgs map[string]*string
 }
 
 // inboxReadTimeout bounds a shared read (sharedRead), which runs detached
@@ -184,8 +211,12 @@ const inboxReadTimeout = 15 * time.Second
 // slice of the pool, not N. The read runs on a context detached from the
 // first caller's cancellation (so one caller giving up does not fail the
 // others) with its own deadline. Callers only read the result.
+//
+// The read is shared only within one authorization class (sharedReadKey): what
+// it returns depends on the credential as well as the user, so a session's
+// read is never handed to an access token's call, nor the reverse.
 func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, error) {
-	v, err, _ := s.inboxReads.Do(userID, func() (any, error) {
+	v, err, _ := s.inboxReads.Do(sharedReadKey(ctx, userID), func() (any, error) {
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), inboxReadTimeout)
 		defer cancel()
 		return s.readInbox(rctx, userID)
@@ -194,6 +225,16 @@ func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, e
 		return nil, err
 	}
 	return v.(*inboxReads), nil
+}
+
+// sharedReadKey is the class of callers whose reads are interchangeable: the
+// same user, through the same kind of credential (only a person hears of an
+// org's rejected keys, orgKeyItems) bound to the same org (a credential bound
+// to an org reads only that org's rows, authz.WithCredentialOrg). Anything
+// readInbox decides by beyond the user belongs here.
+func sharedReadKey(ctx context.Context, userID string) string {
+	bound, _, _ := authz.CredentialRefusal(ctx)
+	return userID + "\x00" + strconv.Itoa(int(auth.CredentialFromContext(ctx))) + "\x00" + bound
 }
 
 // readLimiter hands out inboxReadConcurrency tokens, one per read holding a
@@ -217,6 +258,10 @@ func (l readLimiter) do(ctx context.Context, read func() error) error {
 func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, error) {
 	lim := make(readLimiter, inboxReadConcurrency)
 	var out inboxReads
+	// One authz reader for the pending and recovery sections, so each chat
+	// and project is read once, and its org kept for the org scope.
+	reads := s.readableItem()
+	var triggerOrgs map[string]*string
 	g, gctx := errgroup.WithContext(ctx)
 	// advisory logs an advisory read's failure, unless the read only failed
 	// because a required one already had and cancelled it.
@@ -229,6 +274,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 	g.Go(func() error {
 		return lim.do(gctx, func() (err error) {
 			out.pending, err = s.deps.Repo.ListInboxPending(gctx, userID)
+			out.pending = authz.Visible(gctx, userID, out.pending, reads.pending)
 			return err
 		})
 	})
@@ -238,9 +284,16 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 		var stored []*core.Trigger
 		if err := lim.do(gctx, func() (err error) {
 			stored, err = s.deps.Repo.ListTriggers(gctx, core.TriggerFilters{UserID: userID})
+			// Automation health is the triggers the caller may read: none of
+			// an org they have left.
+			stored = authz.Visible(gctx, userID, stored, authz.CanReadTrigger)
 			return err
 		}); err != nil {
 			return err
+		}
+		triggerOrgs = make(map[string]*string, len(stored))
+		for _, t := range stored {
+			triggerOrgs["trigger:"+t.ID] = t.OrgID
 		}
 		tg, tctx := errgroup.WithContext(gctx)
 		tg.Go(func() (err error) {
@@ -265,6 +318,15 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 		advisory("Failed to compute storage inbox items", err)
 		return nil
 	})
+	g.Go(func() error {
+		err := lim.do(gctx, func() (err error) {
+			out.orgKeys, err = s.orgKeyItems(gctx, userID)
+			return err
+		})
+		// Advisory: an admin also sees a key's state in the org's settings.
+		advisory("Failed to list the rejected keys of the caller's orgs for inbox", err)
+		return nil
+	})
 	// Recoveries are durable catalog entries, NOT machine storage observations.
 	// A missing source row or disconnected/deleted daemon cannot hide them.
 	g.Go(func() error {
@@ -273,6 +335,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 			if err != nil {
 				return err
 			}
+			rows = authz.Visible(gctx, userID, rows, reads.recovery)
 			for _, row := range rows {
 				if row.Phase == "refs_deleted" {
 					continue
@@ -287,6 +350,22 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
+	for k, v := range triggerOrgs {
+		reads.orgs[k] = v
+	}
+	// Read the org of every item the sections built without an authz read
+	// of their own (automation health, broken definitions), so ListInbox's
+	// org scope decides each one by what it is about, never by a key nobody
+	// read. Before the read is returned: it may be shared (sharedRead).
+	// Storage carries the person's marked worktrees (markedItems), each about
+	// a project: its org is read here too, so an org scope lists only its own.
+	// A machine's own storage items name nothing and stay in every org.
+	for _, section := range [][]*reliantv1.InboxItem{out.failing, out.declarations, out.recovery, out.storage} {
+		for _, it := range section {
+			reads.resolveOrg(ctx, userID, it)
+		}
+	}
+	out.orgs = reads.orgs
 	return &out, nil
 }
 
@@ -310,7 +389,8 @@ func recoveryInboxItem(row *core.WorktreeRecovery) *reliantv1.InboxItem {
 func inboxItemBlocks(it *reliantv1.InboxItem) bool {
 	switch it.Kind {
 	case reliantv1.InboxItemKind_INBOX_ITEM_KIND_APPROVAL,
-		reliantv1.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE:
+		reliantv1.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE,
+		reliantv1.InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING:
 		return true
 	case reliantv1.InboxItemKind_INBOX_ITEM_KIND_QUESTION:
 		return !it.GetQuestion().GetAsync()
@@ -501,7 +581,8 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userI
 // server does not know) reaches the owner on their next look, not on the
 // activation's next fire, which for a weekly schedule or a rare webhook may
 // be days away or never. Either item leaves the list the moment its cause is
-// gone. A paused automation is the person's choice and not nagged about.
+// gone. A paused automation is the person's choice and not nagged about; one
+// a project move paused is listed until it is set up again (movePausedItem).
 //
 // Resolving a declaration may read the workflow store, one workflow after
 // another, so the whole loop holds one of lim's tokens.
@@ -523,10 +604,19 @@ func (s *Service) declarationAutomations(ctx context.Context, lim readLimiter, s
 }
 
 func (s *Service) declarationItems(ctx context.Context, stored []*core.Trigger) []*reliantv1.InboxItem {
-	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.deps.Repo})
+	// Every activation resolves its workflow, its children and presets, mostly
+	// against the same machine catalogs and account drafts: read each once
+	// for the whole list (launch.NewRequestResolver), as ListTriggers does.
+	// Prod ListInbox (2026-11-05, 22 activations): 13 catalog and 24 draft
+	// reads a call, p50 516ms, the most-called slow rpc of the web.
+	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: launch.NewRequestResolver(s.deps.Repo)})
 	var out []*reliantv1.InboxItem
 	broken := &brokenDefinitions{byKey: map[string]*reliantv1.InboxItem{}}
 	for _, t := range stored {
+		if item := movePausedItem(t); item != nil {
+			out = append(out, item)
+			continue
+		}
 		if !t.Enabled {
 			continue
 		}
@@ -724,6 +814,9 @@ func inboxItemFromPending(p *core.InboxPending) *reliantv1.InboxItem {
 		item.Payload = &reliantv1.InboxItem_AutomationLaunchFailed{AutomationLaunchFailed: &reliantv1.InboxAutomationLaunchFailed{
 			Reason: p.Text1, EventId: p.ItemKey, ConsecutiveFailures: p.Int1,
 		}}
+	case core.InboxPendingPersonalFunding:
+		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING
+		item.ItemId = inboxPersonalFundingPrefix + p.ItemKey
 	case core.InboxPendingRunPaused:
 		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED
 		item.ItemId = inboxRunPausedPrefix + p.ItemKey
@@ -758,7 +851,21 @@ func firstQuestionPrompt(metadata string) string {
 // storageItems returns one item per machine with a volume under disk pressure
 // or archived worktrees it declined to remove. Storage items are not tied to a
 // project, so they appear in every project scope.
+// storageItems is every machine's storage items, and the user's marked
+// worktrees (markedItems).
 func (s *Service) storageItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
+	out, err := s.machineStorageItems(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	marked, err := s.markedItems(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, marked...), nil
+}
+
+func (s *Service) machineStorageItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
 	machines, err := s.storageView(ctx, userID)
 	if err != nil || len(machines) == 0 {
 		return nil, err
@@ -777,6 +884,9 @@ func (s *Service) storageItems(ctx context.Context, userID string) ([]*reliantv1
 	for _, m := range machines {
 		if m.Processes != nil {
 			out = append(out, s.processesItem(ctx, userID, m, names[m.DaemonID]))
+		}
+		if it := reclaimItem(m, names[m.DaemonID]); it != nil {
+			out = append(out, it)
 		}
 		if !m.StorageItem() {
 			continue
@@ -830,7 +940,7 @@ func (s *Service) processesItem(ctx context.Context, userID string, m *worktrees
 		}
 		// Only the caller's own chats are named: the id came from a machine,
 		// and a title is not the machine's to reveal.
-		if c, err := s.deps.Repo.GetChat(ctx, t.ChatId); err == nil && c != nil && c.UserID == userID {
+		if c, err := s.deps.Repo.GetChat(ctx, t.ChatId); err == nil && authz.CanReadChat(ctx, userID, c) {
 			t.ChatTitle = c.Title
 		}
 	}
@@ -853,6 +963,65 @@ func (s *Service) processesItem(ctx context.Context, userID string, m *worktrees
 		WaitingSince: time.UnixMilli(since).UTC().Format(time.RFC3339Nano),
 		Payload:      &reliantv1.InboxItem_Storage{Storage: payload},
 	}
+}
+
+// reclaimItem is a machine's worktree-reclaim item: the proposals its daemon
+// last reported that nobody has decided yet, with any already approved
+// (shown as such until the machine reports them removed; one it refused to
+// remove is undecided again, with why). Declined ones are not asked about again; a
+// declined worktree that changes is a new proposal. nil when nothing is
+// undecided.
+func reclaimItem(m *worktreesweep.MachineStorage, name string) *reliantv1.InboxItem {
+	wr := m.Reclaim
+	if wr == nil || m.DaemonID == "" {
+		return nil
+	}
+	payload := &reliantv1.InboxWorktreeReclaim{DaemonId: m.DaemonID, DaemonName: name, Online: m.Online, Mode: wr.Mode, Total: wr.Total}
+	if m.Disk != nil {
+		payload.ReportedAt = time.UnixMilli(m.Disk.ReportedAtMs).UTC().Format(time.RFC3339)
+	}
+	var undecided []*reliantv1.WorktreeReclaimProposal
+	var since int64
+	for _, p := range wr.Proposals {
+		switch p.Decision {
+		case "":
+			undecided = append(undecided, p)
+			if since == 0 || (p.ProposedAtMs > 0 && p.ProposedAtMs < since) {
+				since = p.ProposedAtMs
+			}
+		case "approve":
+		default:
+			continue
+		}
+		payload.Proposals = append(payload.Proposals, proto.CloneOf(p))
+	}
+	if len(undecided) == 0 {
+		return nil
+	}
+	if since == 0 {
+		since = wr.PassFinishedAtMs
+	}
+	return &reliantv1.InboxItem{
+		Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM,
+		ItemId:       reclaimItemID(m.DaemonID, undecided),
+		WaitingSince: time.UnixMilli(since).UTC().Format(time.RFC3339Nano),
+		Payload:      &reliantv1.InboxItem_WorktreeReclaim{WorktreeReclaim: payload},
+	}
+}
+
+// reclaimItemID names a machine's worktree-reclaim item by the proposals it
+// asks about, worktree_reclaim:<daemon>:<digest of their keys and
+// fingerprints>. The same undecided set is one item however often the
+// machine reports it, so a dismissal holds for it; a new proposal, or a
+// worktree whose state changed, is a new set and a new item.
+func reclaimItemID(daemonID string, undecided []*reliantv1.WorktreeReclaimProposal) string {
+	keys := make([]string, 0, len(undecided))
+	for _, p := range undecided {
+		keys = append(keys, p.Key+"\x00"+p.Fingerprint)
+	}
+	sort.Strings(keys)
+	sum := sha256.Sum256([]byte(strings.Join(keys, "\n")))
+	return inboxWorktreeReclaimPrefix + daemonID + ":" + hex.EncodeToString(sum[:8])
 }
 
 // storageItemID names a machine's storage item by what the user is told, so a
@@ -983,7 +1152,7 @@ func (s *Service) CleanupStorage(
 	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get machine"))
 	}
-	if err != nil || daemon == nil || daemon.UserID != userID {
+	if err != nil || !authz.CanWriteMachine(ctx, userID, daemon) {
 		return nil, svcerr.NotFound("machine")
 	}
 
@@ -1011,4 +1180,78 @@ func (s *Service) CleanupStorage(
 		activity.Skip(ctx) // every worktree was skipped: nothing is being cleaned up
 	}
 	return connect.NewResponse(resp), nil
+}
+
+// itemReads decides inbox items through authz, reading each chat and project
+// once per inbox read: an item about a chat or project the caller may no
+// longer read (an org they have left, a credential's other org) is not
+// listed. An item of no org (its project is gone: a recovery outlives its
+// source by design; or it names none) is decided as authz decides a row of
+// no org: the owner's, reached by a credential only through its owner's
+// default org.
+type itemReads struct {
+	s        *Service
+	mu       sync.Mutex
+	chats    map[string]bool
+	projects map[string]bool
+	// orgs is the org of each chat and project read ("chat:<id>",
+	// "project:<id>"), nil for one with no org yet or a project that is gone.
+	orgs map[string]*string
+}
+
+func (s *Service) readableItem() *itemReads {
+	return &itemReads{s: s, chats: map[string]bool{}, projects: map[string]bool{}, orgs: map[string]*string{}}
+}
+
+func (r *itemReads) chat(ctx context.Context, userID, id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ok, seen := r.chats[id]
+	if !seen {
+		chat, err := r.s.deps.Repo.GetChat(ctx, id)
+		ok = err == nil && authz.CanReadChat(ctx, userID, chat)
+		r.chats[id] = ok
+		if err == nil {
+			r.orgs["chat:"+id] = chat.OrgID
+		}
+	}
+	return ok
+}
+
+func (r *itemReads) project(ctx context.Context, userID, id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ok, seen := r.projects[id]
+	if !seen {
+		project, err := r.s.deps.Repo.GetProject(ctx, id)
+		switch {
+		case svcerr.IsNotFound(err):
+			ok = authz.CanReadOwn(ctx, userID, nil)
+			r.orgs["project:"+id] = nil
+		default:
+			ok = err == nil && authz.CanReadProject(ctx, userID, project)
+			if err == nil {
+				r.orgs["project:"+id] = project.OrgID
+			}
+		}
+		r.projects[id] = ok
+	}
+	return ok
+}
+
+func (r *itemReads) pending(ctx context.Context, userID string, p *core.InboxPending) bool {
+	switch {
+	case p.ChatID != "":
+		return r.chat(ctx, userID, p.ChatID)
+	case p.ProjectID != "":
+		return r.project(ctx, userID, p.ProjectID)
+	}
+	return authz.CanReadOwn(ctx, userID, nil)
+}
+
+func (r *itemReads) recovery(ctx context.Context, userID string, row *core.WorktreeRecovery) bool {
+	if row.ProjectID == "" {
+		return authz.CanReadOwn(ctx, userID, nil)
+	}
+	return r.project(ctx, userID, row.ProjectID)
 }

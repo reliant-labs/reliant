@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -75,19 +76,45 @@ func TestTerminalOutputQueue_SlowConsumerGetsEveryByteInOrder(t *testing.T) {
 
 // Close releases a producer waiting on a full queue, and is safe to repeat.
 func TestTerminalOutputQueue_CloseReleasesWaitingSend(t *testing.T) {
-	q := NewTerminalOutputQueue("s1", 1, time.Minute)
+	synctest.Test(t, func(t *testing.T) {
+		q := NewTerminalOutputQueue("s1", 1, time.Minute)
+		require.NoError(t, q.Send(&TerminalOutputEvent{Data: []byte("a")}))
+		done := make(chan error, 1)
+		go func() { done <- q.Send(&TerminalOutputEvent{Data: []byte("b")}) }()
+		synctest.Wait() // the second Send is waiting on the full queue
+		q.Close()
+		q.Close()
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, ErrTerminalOutputClosed)
+		case <-time.After(5 * time.Second):
+			t.Fatal("Close did not release the waiting Send")
+		}
+	})
+}
+
+// A consumer that takes nothing past the timeout ends the stream loudly: the
+// producer is told, and the consumer gets what was queued, then the overflow
+// error, then the end of the channel. A Send after the overflow returns at
+// once, before the consumer has read anything: the overflow's delivery waits
+// for the consumer without holding the queue's lock (reliant #2228, #2230).
+func TestTerminalOutputQueue_OverflowEndsWithError(t *testing.T) {
+	q := NewTerminalOutputQueue("s1", 2, 20*time.Millisecond)
 	require.NoError(t, q.Send(&TerminalOutputEvent{Data: []byte("a")}))
-	done := make(chan error, 1)
-	go func() { done <- q.Send(&TerminalOutputEvent{Data: []byte("b")}) }()
-	time.Sleep(10 * time.Millisecond)
-	q.Close()
-	q.Close()
-	select {
-	case err := <-done:
-		require.ErrorIs(t, err, ErrTerminalOutputClosed)
-	case <-time.After(5 * time.Second):
-		t.Fatal("Close did not release the waiting Send")
-	}
+	require.NoError(t, q.Send(&TerminalOutputEvent{Data: []byte("b")}))
+
+	start := time.Now()
+	require.ErrorIs(t, q.Send(&TerminalOutputEvent{Data: []byte("c")}), ErrTerminalOutputOverflow)
+	require.GreaterOrEqual(t, time.Since(start), 20*time.Millisecond, "the producer waited before giving up")
+	require.ErrorIs(t, q.Send(&TerminalOutputEvent{Data: []byte("d")}), ErrTerminalOutputClosed,
+		"a failed queue takes nothing more")
+
+	got, last := readTerminalOutput(t, q.C(), 0)
+	require.Equal(t, "ab", string(got))
+	require.NotNil(t, last)
+	require.True(t, last.Overflow)
+	require.Equal(t, TerminalOutputOverflowMessage, last.Error)
+	require.Equal(t, "s1", last.SessionID)
 }
 
 // startTerminalOutputRouter returns a router whose user-1 resolves to

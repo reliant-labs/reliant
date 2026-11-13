@@ -2,7 +2,7 @@ import { useState } from "react";
 import { AlertCircle, Check, Eye, EyeOff, Plus, TestTube } from "lucide-react";
 import Button from "@/components/forge-ui/button";
 import { cn } from "../../../lib/utils";
-import { api } from "../../../api/client";
+import { useValidateProviderAPIKey } from "../../../hooks/settings-service-hooks_gen";
 import type { ProviderAccount } from "../../../types/providerAccount";
 import {
   useAntigravityOAuth,
@@ -23,6 +23,7 @@ import { OAuthHelperPanel } from "../../OAuthHelperPanel";
 import { CopilotDevicePanel } from "../../CopilotDevicePanel";
 import { addAnotherLabel, parseErrorMessage, providerConfig } from "./providerCatalog";
 import { ProviderMark } from "./ProviderMark";
+import { SetupHelp } from "../../SetupHelp";
 
 type Feedback = { ok: boolean; message: string } | null;
 
@@ -138,6 +139,7 @@ export function ConnectPanel({
   const oauthAvailability = useOAuthAvailability({ enabled: isRedirectOAuthProvider(kind) });
 
   const [busy, setBusy] = useState(false);
+  const { mutateAsync: validateProviderAPIKey } = useValidateProviderAPIKey();
   const [testing, setTesting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [apiKey, setApiKey] = useState("");
@@ -196,7 +198,7 @@ export function ConnectPanel({
     setTesting(true);
     setFeedback(null);
     try {
-      const result = await api.settings.validateProviderAPIKey(provider, apiKey.trim());
+      const result = await validateProviderAPIKey({ provider, apiKey: apiKey.trim() });
       setFeedback(
         result.valid
           ? { ok: true, message: "The key works." }
@@ -356,7 +358,7 @@ export function ConnectPanel({
           Cancel
         </Button>
       </div>
-      {hint && <p className="mb-3 text-xs text-muted-foreground">{hint}</p>}
+      {hint && <SetupHelp label="Account help"><p>{hint}</p></SetupHelp>}
       {body}
       {feedback && (
         <div

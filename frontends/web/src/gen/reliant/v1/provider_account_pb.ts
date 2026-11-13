@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/provider_account.proto.
  */
 export const file_reliant_v1_provider_account: GenFile = /*@__PURE__*/
-  fileDesc("CiFyZWxpYW50L3YxL3Byb3ZpZGVyX2FjY291bnQucHJvdG8SCnJlbGlhbnQudjEilgEKC1VzYWdlV2luZG93EgwKBG5hbWUYASABKAkSDQoFbGFiZWwYAiABKAkSGgoNdXNlZF9mcmFjdGlvbhgDIAEoAUgAiAEBEhYKCXJlc2V0c19hdBgEIAEoCUgBiAEBEhYKDmxlbmd0aF9zZWNvbmRzGAUgASgDQhAKDl91c2VkX2ZyYWN0aW9uQgwKCl9yZXNldHNfYXQi/gUKD1Byb3ZpZGVyQWNjb3VudBIKCgJpZBgBIAEoCRIQCghwcm92aWRlchgCIAEoCRIdChVwcm92aWRlcl9kaXNwbGF5X25hbWUYAyABKAkSLwoJYXV0aF9raW5kGAQgASgOMhwucmVsaWFudC52MS5Qcm92aWRlckF1dGhLaW5kEg0KBWxhYmVsGAUgASgJEhIKBWVtYWlsGAYgASgJSACIAQESHgoRb3JnYW5pemF0aW9uX25hbWUYByABKAlIAYgBARIRCgRwbGFuGAggASgJSAKIAQESGQoMcGxhbl9kaXNwbGF5GAkgASgJSAOIAQESFwoKbWFza2VkX2tleRgKIAEoCUgEiAEBEhAKCHByaW9yaXR5GAsgASgFEjEKBnN0YXR1cxgMIAEoDjIhLnJlbGlhbnQudjEuUHJvdmlkZXJBY2NvdW50U3RhdHVzEhoKDWxpbWl0ZWRfdW50aWwYDSABKAlIBYgBARIbCg5saW1pdGVkX3dpbmRvdxgOIAEoCUgGiAEBEiEKFG5lZWRzX3NpZ25faW5fcmVhc29uGA8gASgJSAeIAQESKAoHd2luZG93cxgQIAMoCzIXLnJlbGlhbnQudjEuVXNhZ2VXaW5kb3cSHgoRdXNhZ2Vfb2JzZXJ2ZWRfYXQYESABKAlICIgBARItCgx1c2FnZV9zb3VyY2UYEiABKA4yFy5yZWxpYW50LnYxLlVzYWdlU291cmNlEhgKC3VzYWdlX2Vycm9yGBMgASgJSAmIAQESEgoKY3JlYXRlZF9hdBgUIAEoCUIICgZfZW1haWxCFAoSX29yZ2FuaXphdGlvbl9uYW1lQgcKBV9wbGFuQg8KDV9wbGFuX2Rpc3BsYXlCDQoLX21hc2tlZF9rZXlCEAoOX2xpbWl0ZWRfdW50aWxCEQoPX2xpbWl0ZWRfd2luZG93QhcKFV9uZWVkc19zaWduX2luX3JlYXNvbkIUChJfdXNhZ2Vfb2JzZXJ2ZWRfYXRCDgoMX3VzYWdlX2Vycm9yIh0KG0xpc3RQcm92aWRlckFjY291bnRzUmVxdWVzdCJNChxMaXN0UHJvdmlkZXJBY2NvdW50c1Jlc3BvbnNlEi0KCGFjY291bnRzGAEgAygLMhsucmVsaWFudC52MS5Qcm92aWRlckFjY291bnQicAocVXBkYXRlUHJvdmlkZXJBY2NvdW50UmVxdWVzdBISCgphY2NvdW50X2lkGAEgASgJEhIKBWxhYmVsGAIgASgJSACIAQESEwoGcGF1c2VkGAMgASgISAGIAQFCCAoGX2xhYmVsQgkKB19wYXVzZWQiTQodVXBkYXRlUHJvdmlkZXJBY2NvdW50UmVzcG9uc2USLAoHYWNjb3VudBgBIAEoCzIbLnJlbGlhbnQudjEuUHJvdmlkZXJBY2NvdW50IkcKHlJlb3JkZXJQcm92aWRlckFjY291bnRzUmVxdWVzdBIQCghwcm92aWRlchgBIAEoCRITCgthY2NvdW50X2lkcxgCIAMoCSJQCh9SZW9yZGVyUHJvdmlkZXJBY2NvdW50c1Jlc3BvbnNlEi0KCGFjY291bnRzGAEgAygLMhsucmVsaWFudC52MS5Qcm92aWRlckFjY291bnQiMgocRGVsZXRlUHJvdmlkZXJBY2NvdW50UmVxdWVzdBISCgphY2NvdW50X2lkGAEgASgJIh8KHURlbGV0ZVByb3ZpZGVyQWNjb3VudFJlc3BvbnNlIlsKGEFkZFByb3ZpZGVyQVBJS2V5UmVxdWVzdBIQCghwcm92aWRlchgBIAEoCRIPCgdhcGlfa2V5GAIgASgJEhIKBWxhYmVsGAMgASgJSACIAQFCCAoGX2xhYmVsIloKGUFkZFByb3ZpZGVyQVBJS2V5UmVzcG9uc2USLAoHYWNjb3VudBgBIAEoCzIbLnJlbGlhbnQudjEuUHJvdmlkZXJBY2NvdW50Eg8KB2NyZWF0ZWQYAiABKAgiOAoiUmVmcmVzaFByb3ZpZGVyQWNjb3VudFVzYWdlUmVxdWVzdBISCgphY2NvdW50X2lkGAEgASgJImYKI1JlZnJlc2hQcm92aWRlckFjY291bnRVc2FnZVJlc3BvbnNlEiwKB2FjY291bnQYASABKAsyGy5yZWxpYW50LnYxLlByb3ZpZGVyQWNjb3VudBIRCgl0aHJvdHRsZWQYAiABKAgiMAodR2V0Q2hhdFByb3ZpZGVyQWNjb3VudFJlcXVlc3QSDwoHY2hhdF9pZBgBIAEoCSJfCh5HZXRDaGF0UHJvdmlkZXJBY2NvdW50UmVzcG9uc2USMQoHYWNjb3VudBgBIAEoCzIbLnJlbGlhbnQudjEuUHJvdmlkZXJBY2NvdW50SACIAQFCCgoIX2FjY291bnQq2wEKFVByb3ZpZGVyQWNjb3VudFN0YXR1cxInCiNQUk9WSURFUl9BQ0NPVU5UX1NUQVRVU19VTlNQRUNJRklFRBAAEiUKIVBST1ZJREVSX0FDQ09VTlRfU1RBVFVTX0FWQUlMQUJMRRABEiMKH1BST1ZJREVSX0FDQ09VTlRfU1RBVFVTX0xJTUlURUQQAhIiCh5QUk9WSURFUl9BQ0NPVU5UX1NUQVRVU19QQVVTRUQQAxIpCiVQUk9WSURFUl9BQ0NPVU5UX1NUQVRVU19ORUVEU19TSUdOX0lOEAQqswEKEFByb3ZpZGVyQXV0aEtpbmQSIgoeUFJPVklERVJfQVVUSF9LSU5EX1VOU1BFQ0lGSUVEEAASHAoYUFJPVklERVJfQVVUSF9LSU5EX09BVVRIEAESHgoaUFJPVklERVJfQVVUSF9LSU5EX0FQSV9LRVkQAhIdChlQUk9WSURFUl9BVVRIX0tJTkRfREVWSUNFEAMSHgoaUFJPVklERVJfQVVUSF9LSU5EX01BTkFHRUQQBCp/CgtVc2FnZVNvdXJjZRIcChhVU0FHRV9TT1VSQ0VfVU5TUEVDSUZJRUQQABIYChRVU0FHRV9TT1VSQ0VfSEVBREVSUxABEhoKFlVTQUdFX1NPVVJDRV9VU0FHRV9BUEkQAhIcChhVU0FHRV9TT1VSQ0VfTElNSVRfRVJST1IQAzLbCQoWUHJvdmlkZXJBY2NvdW50U2VydmljZRJrChRMaXN0UHJvdmlkZXJBY2NvdW50cxInLnJlbGlhbnQudjEuTGlzdFByb3ZpZGVyQWNjb3VudHNSZXF1ZXN0GigucmVsaWFudC52MS5MaXN0UHJvdmlkZXJBY2NvdW50c1Jlc3BvbnNlIgASvAEKFVVwZGF0ZVByb3ZpZGVyQWNjb3VudBIoLnJlbGlhbnQudjEuVXBkYXRlUHJvdmlkZXJBY2NvdW50UmVxdWVzdBopLnJlbGlhbnQudjEuVXBkYXRlUHJvdmlkZXJBY2NvdW50UmVzcG9uc2UiTqK7GEo6SAoGdXBkYXRlEjYKEHByb3ZpZGVyX2FjY291bnQSCmFjY291bnRfaWQaFnJlc3BvbnNlLmFjY291bnQubGFiZWwqBnBhdXNlZBLpAQoXUmVvcmRlclByb3ZpZGVyQWNjb3VudHMSKi5yZWxpYW50LnYxLlJlb3JkZXJQcm92aWRlckFjY291bnRzUmVxdWVzdBorLnJlbGlhbnQudjEuUmVvcmRlclByb3ZpZGVyQWNjb3VudHNSZXNwb25zZSJ1orsYcTpvOm1yb3V0aW5nIHByZWZlcmVuY2U6IHRoZSBwcmlvcml0eSBvcmRlciBhbW9uZyBvbmUgcHJvdmlkZXIncyBhY2NvdW50cywgd2hpY2ggdGhlIFByb3ZpZGVycyBsaXN0IHNob3dzIGRpcmVjdGx5EpwBChVEZWxldGVQcm92aWRlckFjY291bnQSKC5yZWxpYW50LnYxLkRlbGV0ZVByb3ZpZGVyQWNjb3VudFJlcXVlc3QaKS5yZWxpYW50LnYxLkRlbGV0ZVByb3ZpZGVyQWNjb3VudFJlc3BvbnNlIi6iuxgqOigKBmRlbGV0ZRIeChBwcm92aWRlcl9hY2NvdW50EgphY2NvdW50X2lkErgBChFBZGRQcm92aWRlckFQSUtleRIkLnJlbGlhbnQudjEuQWRkUHJvdmlkZXJBUElLZXlSZXF1ZXN0GiUucmVsaWFudC52MS5BZGRQcm92aWRlckFQSUtleVJlc3BvbnNlIlaiuxhSOlAKA2FkZBI/ChBwcm92aWRlcl9hY2NvdW50EhNyZXNwb25zZS5hY2NvdW50LmlkGhZyZXNwb25zZS5hY2NvdW50LmxhYmVsKghwcm92aWRlchLbAQobUmVmcmVzaFByb3ZpZGVyQWNjb3VudFVzYWdlEi4ucmVsaWFudC52MS5SZWZyZXNoUHJvdmlkZXJBY2NvdW50VXNhZ2VSZXF1ZXN0Gi8ucmVsaWFudC52MS5SZWZyZXNoUHJvdmlkZXJBY2NvdW50VXNhZ2VSZXNwb25zZSJborsYVzpVOlNyZS1yZWFkcyB1c2FnZSBmcm9tIHRoZSBwcm92aWRlciAodGhyb3R0bGVkKTsgY2hhbmdlcyBvbmx5IHRoZSBjYWNoZWQgdXNhZ2Ugd2luZG93cxJxChZHZXRDaGF0UHJvdmlkZXJBY2NvdW50EikucmVsaWFudC52MS5HZXRDaGF0UHJvdmlkZXJBY2NvdW50UmVxdWVzdBoqLnJlbGlhbnQudjEuR2V0Q2hhdFByb3ZpZGVyQWNjb3VudFJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge]);
+  fileDesc("CiFyZWxpYW50L3YxL3Byb3ZpZGVyX2FjY291bnQucHJvdG8SCnJlbGlhbnQudjEilgEKC1VzYWdlV2luZG93EgwKBG5hbWUYASABKAkSDQoFbGFiZWwYAiABKAkSGgoNdXNlZF9mcmFjdGlvbhgDIAEoAUgAiAEBEhYKCXJlc2V0c19hdBgEIAEoCUgBiAEBEhYKDmxlbmd0aF9zZWNvbmRzGAUgASgDQhAKDl91c2VkX2ZyYWN0aW9uQgwKCl9yZXNldHNfYXQilQYKD1Byb3ZpZGVyQWNjb3VudBIKCgJpZBgBIAEoCRIQCghwcm92aWRlchgCIAEoCRIdChVwcm92aWRlcl9kaXNwbGF5X25hbWUYAyABKAkSLwoJYXV0aF9raW5kGAQgASgOMhwucmVsaWFudC52MS5Qcm92aWRlckF1dGhLaW5kEg0KBWxhYmVsGAUgASgJEhIKBWVtYWlsGAYgASgJSACIAQESHgoRb3JnYW5pemF0aW9uX25hbWUYByABKAlIAYgBARIRCgRwbGFuGAggASgJSAKIAQESGQoMcGxhbl9kaXNwbGF5GAkgASgJSAOIAQESFwoKbWFza2VkX2tleRgKIAEoCUgEiAEBEhAKCHByaW9yaXR5GAsgASgFEjEKBnN0YXR1cxgMIAEoDjIhLnJlbGlhbnQudjEuUHJvdmlkZXJBY2NvdW50U3RhdHVzEhoKDWxpbWl0ZWRfdW50aWwYDSABKAlIBYgBARIbCg5saW1pdGVkX3dpbmRvdxgOIAEoCUgGiAEBEiEKFG5lZWRzX3NpZ25faW5fcmVhc29uGA8gASgJSAeIAQESKAoHd2luZG93cxgQIAMoCzIXLnJlbGlhbnQudjEuVXNhZ2VXaW5kb3cSHgoRdXNhZ2Vfb2JzZXJ2ZWRfYXQYESABKAlICIgBARItCgx1c2FnZV9zb3VyY2UYEiABKA4yFy5yZWxpYW50LnYxLlVzYWdlU291cmNlEhgKC3VzYWdlX2Vycm9yGBMgASgJSAmIAQESEgoKY3JlYXRlZF9hdBgUIAEoCRIVCg11c2luZ19jcmVkaXRzGBUgASgIQggKBl9lbWFpbEIUChJfb3JnYW5pemF0aW9uX25hbWVCBwoFX3BsYW5CDwoNX3BsYW5fZGlzcGxheUINCgtfbWFza2VkX2tleUIQCg5fbGltaXRlZF91bnRpbEIRCg9fbGltaXRlZF93aW5kb3dCFwoVX25lZWRzX3NpZ25faW5fcmVhc29uQhQKEl91c2FnZV9vYnNlcnZlZF9hdEIOCgxfdXNhZ2VfZXJyb3IiHQobTGlzdFByb3ZpZGVyQWNjb3VudHNSZXF1ZXN0Ik0KHExpc3RQcm92aWRlckFjY291bnRzUmVzcG9uc2USLQoIYWNjb3VudHMYASADKAsyGy5yZWxpYW50LnYxLlByb3ZpZGVyQWNjb3VudCJwChxVcGRhdGVQcm92aWRlckFjY291bnRSZXF1ZXN0EhIKCmFjY291bnRfaWQYASABKAkSEgoFbGFiZWwYAiABKAlIAIgBARITCgZwYXVzZWQYAyABKAhIAYgBAUIICgZfbGFiZWxCCQoHX3BhdXNlZCJNCh1VcGRhdGVQcm92aWRlckFjY291bnRSZXNwb25zZRIsCgdhY2NvdW50GAEgASgLMhsucmVsaWFudC52MS5Qcm92aWRlckFjY291bnQiRwoeUmVvcmRlclByb3ZpZGVyQWNjb3VudHNSZXF1ZXN0EhAKCHByb3ZpZGVyGAEgASgJEhMKC2FjY291bnRfaWRzGAIgAygJIlAKH1Jlb3JkZXJQcm92aWRlckFjY291bnRzUmVzcG9uc2USLQoIYWNjb3VudHMYASADKAsyGy5yZWxpYW50LnYxLlByb3ZpZGVyQWNjb3VudCIyChxEZWxldGVQcm92aWRlckFjY291bnRSZXF1ZXN0EhIKCmFjY291bnRfaWQYASABKAkiHwodRGVsZXRlUHJvdmlkZXJBY2NvdW50UmVzcG9uc2UiWwoYQWRkUHJvdmlkZXJBUElLZXlSZXF1ZXN0EhAKCHByb3ZpZGVyGAEgASgJEg8KB2FwaV9rZXkYAiABKAkSEgoFbGFiZWwYAyABKAlIAIgBAUIICgZfbGFiZWwiWgoZQWRkUHJvdmlkZXJBUElLZXlSZXNwb25zZRIsCgdhY2NvdW50GAEgASgLMhsucmVsaWFudC52MS5Qcm92aWRlckFjY291bnQSDwoHY3JlYXRlZBgCIAEoCCI4CiJSZWZyZXNoUHJvdmlkZXJBY2NvdW50VXNhZ2VSZXF1ZXN0EhIKCmFjY291bnRfaWQYASABKAkiZgojUmVmcmVzaFByb3ZpZGVyQWNjb3VudFVzYWdlUmVzcG9uc2USLAoHYWNjb3VudBgBIAEoCzIbLnJlbGlhbnQudjEuUHJvdmlkZXJBY2NvdW50EhEKCXRocm90dGxlZBgCIAEoCCIwCh1HZXRDaGF0UHJvdmlkZXJBY2NvdW50UmVxdWVzdBIPCgdjaGF0X2lkGAEgASgJIl8KHkdldENoYXRQcm92aWRlckFjY291bnRSZXNwb25zZRIxCgdhY2NvdW50GAEgASgLMhsucmVsaWFudC52MS5Qcm92aWRlckFjY291bnRIAIgBAUIKCghfYWNjb3VudCL5AwoXUGVyc29uYWxGdW5kaW5nUXVlc3Rpb24SDwoHY2hhdF9pZBgBIAEoCRIOCgZvcmdfaWQYAiABKAkSOgoGcmVhc29uGAMgASgOMioucmVsaWFudC52MS5QZXJzb25hbEZ1bmRpbmdRdWVzdGlvbi5SZWFzb24SOAoFc3RhdGUYBCABKA4yKS5yZWxpYW50LnYxLlBlcnNvbmFsRnVuZGluZ1F1ZXN0aW9uLlN0YXRlEg0KBW1vZGVsGAUgASgJEhkKEXBlcnNvbmFsX3Byb3ZpZGVyGAYgASgJEh4KFnBlcnNvbmFsX2FjY291bnRfbGFiZWwYByABKAkSGQoMb3JnX3Jlc2V0X2F0GAggASgJSACIAQESEAoIYXNrZWRfYXQYCSABKAkiXgoGUmVhc29uEhYKElJFQVNPTl9VTlNQRUNJRklFRBAAEhIKDlJFQVNPTl9MSU1JVEVEEAESEwoPUkVBU09OX1VOVVNBQkxFEAISEwoPUkVBU09OX1VOU0VSVkVEEAMiXwoFU3RhdGUSFQoRU1RBVEVfVU5TUEVDSUZJRUQQABIPCgtTVEFURV9BU0tFRBABEhYKElNUQVRFX1VTRV9QRVJTT05BTBACEhYKElNUQVRFX0tFRVBfV0FJVElORxADQg8KDV9vcmdfcmVzZXRfYXQiNAohR2V0UGVyc29uYWxGdW5kaW5nUXVlc3Rpb25SZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkibQoiR2V0UGVyc29uYWxGdW5kaW5nUXVlc3Rpb25SZXNwb25zZRI6CghxdWVzdGlvbhgBIAEoCzIjLnJlbGlhbnQudjEuUGVyc29uYWxGdW5kaW5nUXVlc3Rpb25IAIgBAUILCglfcXVlc3Rpb24i5AEKI1Jlc29sdmVQZXJzb25hbEZ1bmRpbmdDaG9pY2VSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkSRgoGY2hvaWNlGAIgASgOMjYucmVsaWFudC52MS5SZXNvbHZlUGVyc29uYWxGdW5kaW5nQ2hvaWNlUmVxdWVzdC5DaG9pY2USEAoIcmVtZW1iZXIYAyABKAgiUgoGQ2hvaWNlEhYKEkNIT0lDRV9VTlNQRUNJRklFRBAAEhcKE0NIT0lDRV9VU0VfUEVSU09OQUwQARIXChNDSE9JQ0VfS0VFUF9XQUlUSU5HEAIiXQokUmVzb2x2ZVBlcnNvbmFsRnVuZGluZ0Nob2ljZVJlc3BvbnNlEjUKCHF1ZXN0aW9uGAEgASgLMiMucmVsaWFudC52MS5QZXJzb25hbEZ1bmRpbmdRdWVzdGlvbirbAQoVUHJvdmlkZXJBY2NvdW50U3RhdHVzEicKI1BST1ZJREVSX0FDQ09VTlRfU1RBVFVTX1VOU1BFQ0lGSUVEEAASJQohUFJPVklERVJfQUNDT1VOVF9TVEFUVVNfQVZBSUxBQkxFEAESIwofUFJPVklERVJfQUNDT1VOVF9TVEFUVVNfTElNSVRFRBACEiIKHlBST1ZJREVSX0FDQ09VTlRfU1RBVFVTX1BBVVNFRBADEikKJVBST1ZJREVSX0FDQ09VTlRfU1RBVFVTX05FRURTX1NJR05fSU4QBCqzAQoQUHJvdmlkZXJBdXRoS2luZBIiCh5QUk9WSURFUl9BVVRIX0tJTkRfVU5TUEVDSUZJRUQQABIcChhQUk9WSURFUl9BVVRIX0tJTkRfT0FVVEgQARIeChpQUk9WSURFUl9BVVRIX0tJTkRfQVBJX0tFWRACEh0KGVBST1ZJREVSX0FVVEhfS0lORF9ERVZJQ0UQAxIeChpQUk9WSURFUl9BVVRIX0tJTkRfTUFOQUdFRBAEKn8KC1VzYWdlU291cmNlEhwKGFVTQUdFX1NPVVJDRV9VTlNQRUNJRklFRBAAEhgKFFVTQUdFX1NPVVJDRV9IRUFERVJTEAESGgoWVVNBR0VfU09VUkNFX1VTQUdFX0FQSRACEhwKGFVTQUdFX1NPVVJDRV9MSU1JVF9FUlJPUhADMuQMChZQcm92aWRlckFjY291bnRTZXJ2aWNlEmsKFExpc3RQcm92aWRlckFjY291bnRzEicucmVsaWFudC52MS5MaXN0UHJvdmlkZXJBY2NvdW50c1JlcXVlc3QaKC5yZWxpYW50LnYxLkxpc3RQcm92aWRlckFjY291bnRzUmVzcG9uc2UiABK8AQoVVXBkYXRlUHJvdmlkZXJBY2NvdW50EigucmVsaWFudC52MS5VcGRhdGVQcm92aWRlckFjY291bnRSZXF1ZXN0GikucmVsaWFudC52MS5VcGRhdGVQcm92aWRlckFjY291bnRSZXNwb25zZSJOorsYSjpICgZ1cGRhdGUSNgoQcHJvdmlkZXJfYWNjb3VudBIKYWNjb3VudF9pZBoWcmVzcG9uc2UuYWNjb3VudC5sYWJlbCoGcGF1c2VkEukBChdSZW9yZGVyUHJvdmlkZXJBY2NvdW50cxIqLnJlbGlhbnQudjEuUmVvcmRlclByb3ZpZGVyQWNjb3VudHNSZXF1ZXN0GisucmVsaWFudC52MS5SZW9yZGVyUHJvdmlkZXJBY2NvdW50c1Jlc3BvbnNlInWiuxhxOm86bXJvdXRpbmcgcHJlZmVyZW5jZTogdGhlIHByaW9yaXR5IG9yZGVyIGFtb25nIG9uZSBwcm92aWRlcidzIGFjY291bnRzLCB3aGljaCB0aGUgUHJvdmlkZXJzIGxpc3Qgc2hvd3MgZGlyZWN0bHkSnAEKFURlbGV0ZVByb3ZpZGVyQWNjb3VudBIoLnJlbGlhbnQudjEuRGVsZXRlUHJvdmlkZXJBY2NvdW50UmVxdWVzdBopLnJlbGlhbnQudjEuRGVsZXRlUHJvdmlkZXJBY2NvdW50UmVzcG9uc2UiLqK7GCo6KAoGZGVsZXRlEh4KEHByb3ZpZGVyX2FjY291bnQSCmFjY291bnRfaWQSuAEKEUFkZFByb3ZpZGVyQVBJS2V5EiQucmVsaWFudC52MS5BZGRQcm92aWRlckFQSUtleVJlcXVlc3QaJS5yZWxpYW50LnYxLkFkZFByb3ZpZGVyQVBJS2V5UmVzcG9uc2UiVqK7GFI6UAoDYWRkEj8KEHByb3ZpZGVyX2FjY291bnQSE3Jlc3BvbnNlLmFjY291bnQuaWQaFnJlc3BvbnNlLmFjY291bnQubGFiZWwqCHByb3ZpZGVyEtsBChtSZWZyZXNoUHJvdmlkZXJBY2NvdW50VXNhZ2USLi5yZWxpYW50LnYxLlJlZnJlc2hQcm92aWRlckFjY291bnRVc2FnZVJlcXVlc3QaLy5yZWxpYW50LnYxLlJlZnJlc2hQcm92aWRlckFjY291bnRVc2FnZVJlc3BvbnNlIluiuxhXOlU6U3JlLXJlYWRzIHVzYWdlIGZyb20gdGhlIHByb3ZpZGVyICh0aHJvdHRsZWQpOyBjaGFuZ2VzIG9ubHkgdGhlIGNhY2hlZCB1c2FnZSB3aW5kb3dzEnEKFkdldENoYXRQcm92aWRlckFjY291bnQSKS5yZWxpYW50LnYxLkdldENoYXRQcm92aWRlckFjY291bnRSZXF1ZXN0GioucmVsaWFudC52MS5HZXRDaGF0UHJvdmlkZXJBY2NvdW50UmVzcG9uc2UiABKqAQoaR2V0UGVyc29uYWxGdW5kaW5nUXVlc3Rpb24SLS5yZWxpYW50LnYxLkdldFBlcnNvbmFsRnVuZGluZ1F1ZXN0aW9uUmVxdWVzdBouLnJlbGlhbnQudjEuR2V0UGVyc29uYWxGdW5kaW5nUXVlc3Rpb25SZXNwb25zZSItorsYKTonOiVyZWFkcyB0aGUgY2hhdCdzIG93biBwZW5kaW5nIHF1ZXN0aW9uEtkBChxSZXNvbHZlUGVyc29uYWxGdW5kaW5nQ2hvaWNlEi8ucmVsaWFudC52MS5SZXNvbHZlUGVyc29uYWxGdW5kaW5nQ2hvaWNlUmVxdWVzdBowLnJlbGlhbnQudjEuUmVzb2x2ZVBlcnNvbmFsRnVuZGluZ0Nob2ljZVJlc3BvbnNlIlaiuxhSOlA6TmFuc3dlcnMgdGhlIGNoYXQncyBvd24gcXVlc3Rpb247IHRoZSBjaGF0J3MgdHJhbnNjcmlwdCBub3RpY2UgcmVjb3JkcyB0aGUgbW92ZUI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_forge_v1_forge]);
 
 /**
  * @generated from message reliant.v1.UsageWindow
@@ -187,6 +187,15 @@ export type ProviderAccount = Message<"reliant.v1.ProviderAccount"> & {
    * @generated from field: string created_at = 20;
    */
   createdAt: string;
+
+  /**
+   * True while one of the plan's usage windows is used up but the provider
+   * keeps serving the account, paid from credits (a ChatGPT workspace's or
+   * purchased Codex credits). The account is not limited.
+   *
+   * @generated from field: bool using_credits = 21;
+   */
+  usingCredits: boolean;
 };
 
 /**
@@ -464,6 +473,259 @@ export const GetChatProviderAccountResponseSchema: GenMessage<GetChatProviderAcc
   messageDesc(file_reliant_v1_provider_account, 15);
 
 /**
+ * PersonalFundingQuestion is a chat's question before it would move from its
+ * org's accounts to the person's own (org-provider-accounts §10).
+ *
+ * @generated from message reliant.v1.PersonalFundingQuestion
+ */
+export type PersonalFundingQuestion = Message<"reliant.v1.PersonalFundingQuestion"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+
+  /**
+   * @generated from field: string org_id = 2;
+   */
+  orgId: string;
+
+  /**
+   * @generated from field: reliant.v1.PersonalFundingQuestion.Reason reason = 3;
+   */
+  reason: PersonalFundingQuestion_Reason;
+
+  /**
+   * @generated from field: reliant.v1.PersonalFundingQuestion.State state = 4;
+   */
+  state: PersonalFundingQuestion_State;
+
+  /**
+   * model is the model the chat's turn resolved to ("<model>" registry id).
+   *
+   * @generated from field: string model = 5;
+   */
+  model: string;
+
+  /**
+   * personal_provider and personal_account_label name the person's own
+   * account that would serve.
+   *
+   * @generated from field: string personal_provider = 6;
+   */
+  personalProvider: string;
+
+  /**
+   * @generated from field: string personal_account_label = 7;
+   */
+  personalAccountLabel: string;
+
+  /**
+   * org_reset_at is when the org's accounts reset (REASON_LIMITED), RFC 3339.
+   *
+   * @generated from field: optional string org_reset_at = 8;
+   */
+  orgResetAt?: string | undefined;
+
+  /**
+   * asked_at is when the chat asked, RFC 3339.
+   *
+   * @generated from field: string asked_at = 9;
+   */
+  askedAt: string;
+};
+
+/**
+ * Describes the message reliant.v1.PersonalFundingQuestion.
+ * Use `create(PersonalFundingQuestionSchema)` to create a new message.
+ */
+export const PersonalFundingQuestionSchema: GenMessage<PersonalFundingQuestion> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_provider_account, 16);
+
+/**
+ * @generated from enum reliant.v1.PersonalFundingQuestion.Reason
+ */
+export enum PersonalFundingQuestion_Reason {
+  /**
+   * @generated from enum value: REASON_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * The org's accounts are rate-limited until org_reset_at.
+   *
+   * @generated from enum value: REASON_LIMITED = 1;
+   */
+  LIMITED = 1,
+
+  /**
+   * No org account is usable and none will be at a known time: a key
+   * revoked, rejected or paused, a grant withdrawn, the org's credit spent.
+   *
+   * @generated from enum value: REASON_UNUSABLE = 2;
+   */
+  UNUSABLE = 2,
+
+  /**
+   * None of the org's accounts serves the chat's model.
+   *
+   * @generated from enum value: REASON_UNSERVED = 3;
+   */
+  UNSERVED = 3,
+}
+
+/**
+ * Describes the enum reliant.v1.PersonalFundingQuestion.Reason.
+ */
+export const PersonalFundingQuestion_ReasonSchema: GenEnum<PersonalFundingQuestion_Reason> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_provider_account, 16, 0);
+
+/**
+ * @generated from enum reliant.v1.PersonalFundingQuestion.State
+ */
+export enum PersonalFundingQuestion_State {
+  /**
+   * @generated from enum value: STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Asked, not answered: the chat waits.
+   *
+   * @generated from enum value: STATE_ASKED = 1;
+   */
+  ASKED = 1,
+
+  /**
+   * Continue on the person's own account while the answer lasts.
+   *
+   * @generated from enum value: STATE_USE_PERSONAL = 2;
+   */
+  USE_PERSONAL = 2,
+
+  /**
+   * Keep waiting for the org's accounts.
+   *
+   * @generated from enum value: STATE_KEEP_WAITING = 3;
+   */
+  KEEP_WAITING = 3,
+}
+
+/**
+ * Describes the enum reliant.v1.PersonalFundingQuestion.State.
+ */
+export const PersonalFundingQuestion_StateSchema: GenEnum<PersonalFundingQuestion_State> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_provider_account, 16, 1);
+
+/**
+ * @generated from message reliant.v1.GetPersonalFundingQuestionRequest
+ */
+export type GetPersonalFundingQuestionRequest = Message<"reliant.v1.GetPersonalFundingQuestionRequest"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+};
+
+/**
+ * Describes the message reliant.v1.GetPersonalFundingQuestionRequest.
+ * Use `create(GetPersonalFundingQuestionRequestSchema)` to create a new message.
+ */
+export const GetPersonalFundingQuestionRequestSchema: GenMessage<GetPersonalFundingQuestionRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_provider_account, 17);
+
+/**
+ * @generated from message reliant.v1.GetPersonalFundingQuestionResponse
+ */
+export type GetPersonalFundingQuestionResponse = Message<"reliant.v1.GetPersonalFundingQuestionResponse"> & {
+  /**
+   * Unset when the chat has no question.
+   *
+   * @generated from field: optional reliant.v1.PersonalFundingQuestion question = 1;
+   */
+  question?: PersonalFundingQuestion | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.GetPersonalFundingQuestionResponse.
+ * Use `create(GetPersonalFundingQuestionResponseSchema)` to create a new message.
+ */
+export const GetPersonalFundingQuestionResponseSchema: GenMessage<GetPersonalFundingQuestionResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_provider_account, 18);
+
+/**
+ * @generated from message reliant.v1.ResolvePersonalFundingChoiceRequest
+ */
+export type ResolvePersonalFundingChoiceRequest = Message<"reliant.v1.ResolvePersonalFundingChoiceRequest"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+
+  /**
+   * @generated from field: reliant.v1.ResolvePersonalFundingChoiceRequest.Choice choice = 2;
+   */
+  choice: ResolvePersonalFundingChoiceRequest_Choice;
+
+  /**
+   * remember also sets the person's preference for the chat's org:
+   * use_personal with CHOICE_USE_PERSONAL, wait with CHOICE_KEEP_WAITING.
+   *
+   * @generated from field: bool remember = 3;
+   */
+  remember: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.ResolvePersonalFundingChoiceRequest.
+ * Use `create(ResolvePersonalFundingChoiceRequestSchema)` to create a new message.
+ */
+export const ResolvePersonalFundingChoiceRequestSchema: GenMessage<ResolvePersonalFundingChoiceRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_provider_account, 19);
+
+/**
+ * @generated from enum reliant.v1.ResolvePersonalFundingChoiceRequest.Choice
+ */
+export enum ResolvePersonalFundingChoiceRequest_Choice {
+  /**
+   * @generated from enum value: CHOICE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: CHOICE_USE_PERSONAL = 1;
+   */
+  USE_PERSONAL = 1,
+
+  /**
+   * @generated from enum value: CHOICE_KEEP_WAITING = 2;
+   */
+  KEEP_WAITING = 2,
+}
+
+/**
+ * Describes the enum reliant.v1.ResolvePersonalFundingChoiceRequest.Choice.
+ */
+export const ResolvePersonalFundingChoiceRequest_ChoiceSchema: GenEnum<ResolvePersonalFundingChoiceRequest_Choice> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_provider_account, 19, 0);
+
+/**
+ * @generated from message reliant.v1.ResolvePersonalFundingChoiceResponse
+ */
+export type ResolvePersonalFundingChoiceResponse = Message<"reliant.v1.ResolvePersonalFundingChoiceResponse"> & {
+  /**
+   * @generated from field: reliant.v1.PersonalFundingQuestion question = 1;
+   */
+  question?: PersonalFundingQuestion | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.ResolvePersonalFundingChoiceResponse.
+ * Use `create(ResolvePersonalFundingChoiceResponseSchema)` to create a new message.
+ */
+export const ResolvePersonalFundingChoiceResponseSchema: GenMessage<ResolvePersonalFundingChoiceResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_provider_account, 20);
+
+/**
  * ProviderAccountStatus is derived, never stored. Precedence:
  * NEEDS_SIGN_IN > PAUSED > LIMITED > AVAILABLE.
  *
@@ -676,6 +938,39 @@ export const ProviderAccountService: GenService<{
     methodKind: "unary";
     input: typeof GetChatProviderAccountRequestSchema;
     output: typeof GetChatProviderAccountResponseSchema;
+  },
+  /**
+   * GetPersonalFundingQuestion returns the chat's open question "continue on
+   * your own account?" (control-plane docs/design/org-provider-accounts.md
+   * §10), if any. Before a chat in an org moves from the org's accounts to
+   * the person's own, it parks and asks once, for every thread of the chat.
+   * The chat's owner only.
+   * forge:custom
+   *
+   * @generated from rpc reliant.v1.ProviderAccountService.GetPersonalFundingQuestion
+   */
+  getPersonalFundingQuestion: {
+    methodKind: "unary";
+    input: typeof GetPersonalFundingQuestionRequestSchema;
+    output: typeof GetPersonalFundingQuestionResponseSchema;
+  },
+  /**
+   * ResolvePersonalFundingChoice answers the chat's question. USE_PERSONAL
+   * lets every waiting thread of the chat, sub-agents included, continue on
+   * the person's own account for as long as the answer lasts: until the
+   * org's accounts reset (LIMITED), until a turn start finds them usable
+   * again (UNUSABLE), or while the chat keeps its model (UNSERVED).
+   * KEEP_WAITING keeps waiting. remember also sets the person's preference
+   * for the org (provider.org_funding: use_personal or wait). Person-only, and
+   * the chat's owner only: nothing else can spend the person's own account in
+   * place of the org's.
+   *
+   * @generated from rpc reliant.v1.ProviderAccountService.ResolvePersonalFundingChoice
+   */
+  resolvePersonalFundingChoice: {
+    methodKind: "unary";
+    input: typeof ResolvePersonalFundingChoiceRequestSchema;
+    output: typeof ResolvePersonalFundingChoiceResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_provider_account, 0);

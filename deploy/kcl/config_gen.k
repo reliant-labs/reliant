@@ -9,8 +9,23 @@ schema ConfigSecretRef:
     name: str
     key: str
 
+# forge:section schema ApiServerConfigOrgs
+# forge:hash=58c44f64ca017c0f4b149b0a0e21a8a0a250f726987aef933c3879d779523a29
+# ApiServerConfigOrgs is the orgs block (OrgsConfig) — author its values in config.k as `orgs.<field> = ...`.
+schema ApiServerConfigOrgs:
+    # Let org owners and admins create org-owned integration connections
+    connections_enabled: bool = False
+    # Let an org's GitHub triggers listen through one of the org's linked GitHub App installations
+    github_installation_triggers_enabled: bool = False
+    # Let org owners and admins add org-owned AI provider accounts and bind provider workspaces
+    provider_accounts_enabled: bool = False
+    # Let a project's owner move it to another org they belong to
+    project_moves_enabled: bool = False
+    # Let orgs bind provider workspaces and pay for members' sign-ins in them as seats
+    provider_workspace_seats_enabled: bool = False
+
 # forge:section schema ApiServerConfig
-# forge:hash=9624671cfa714925d7d63c75b1d234b55fa07f4699f873ef3afab1aba92f2f0e
+# forge:hash=3fe7bbed5a330312c3edb9dae8a7466d704d62a5845ddbdc1bcfa86addb4a001
 schema ApiServerConfig:
     # JWT public key PEM for token validation
     jwt_public_key: str = ""
@@ -48,6 +63,10 @@ schema ApiServerConfig:
     worktree_auto_archive: str = "dry-run"
     # How long a landed worktree's chats must be quiet before it is archived (0 = off)
     worktree_landed_idle: str = "3h"
+    # How long a worktree must be quiet before it is marked for reclaim (floor 24h)
+    worktree_reclaim_quiet: str = "24h"
+    # How long a reclaim mark stands before the worktree is reclaimed (floor 24h)
+    worktree_reclaim_grace: str = "24h"
     # Idle floor for whole recoverable-worktree retirement; auto-archive on required (0 = off)
     worktree_live_shed_idle: str = "24h"
     # OAuth provider origin for the desktop sign-in
@@ -64,6 +83,8 @@ schema ApiServerConfig:
     liveness_paths: str = "/health,/healthz"
     # Readiness probe paths on the health port (comma-separated)
     readiness_paths: str = "/ready,/readyz"
+    # orgs config block (OrgsConfig). Set its fields as `orgs.<field> = ...`.
+    orgs: ApiServerConfigOrgs = ApiServerConfigOrgs {}
 
     check:
         bind_address != "", "bind_address = \"\" cannot reach the process: an empty BIND_ADDRESS counts as unset, so it would load the default \"0.0.0.0\" — set a value, or pass --bind-address= in the workload's args to make it empty"
@@ -71,6 +92,8 @@ schema ApiServerConfig:
         auth_mode != "", "auth_mode = \"\" cannot reach the process: an empty AUTH_MODE counts as unset, so it would load the default \"supabase\" — set a value, or change its default in the proto"
         worktree_auto_archive != "", "worktree_auto_archive = \"\" cannot reach the process: an empty RELIANT_WORKTREE_AUTO_ARCHIVE counts as unset, so it would load the default \"dry-run\" — set a value, or change its default in the proto"
         worktree_landed_idle != "", "worktree_landed_idle = \"\" cannot reach the process: an empty RELIANT_WORKTREE_LANDED_IDLE counts as unset, so it would load the default \"3h\" — set a value"
+        worktree_reclaim_quiet != "", "worktree_reclaim_quiet = \"\" cannot reach the process: an empty RELIANT_WORKTREE_RECLAIM_QUIET counts as unset, so it would load the default \"24h\" — set a value"
+        worktree_reclaim_grace != "", "worktree_reclaim_grace = \"\" cannot reach the process: an empty RELIANT_WORKTREE_RECLAIM_GRACE counts as unset, so it would load the default \"24h\" — set a value"
         worktree_live_shed_idle != "", "worktree_live_shed_idle = \"\" cannot reach the process: an empty RELIANT_WORKTREE_LIVE_SHED_IDLE counts as unset, so it would load the default \"24h\" — set a value"
         auth_provider_url != "", "auth_provider_url = \"\" cannot reach the process: an empty RELIANT_AUTH_URL counts as unset, so it would load the default \"https://dash.reliantlabs.io\" — set a value, or change its default in the proto"
         auth_provider_key != "", "auth_provider_key = \"\" cannot reach the process: an empty RELIANT_AUTH_KEY counts as unset, so it would load the default \"sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod\" — set a value, or change its default in the proto"
@@ -137,7 +160,7 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "apiServerConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of ApiServerConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
     {
         # forge:section apiServerConfigEnvMap values (root)
-        # forge:hash=ca2e9f06a466c9b7900c70055e7576a449c13cc935938fbc2a09eb1f1e2376a3
+        # forge:hash=5b68fc97998230eb69a4757f6bde28f28c37e8cadecf243541b3445dee7100ed
         "JWT_PUBLIC_KEY" = c.jwt_public_key
         "JWT_PUBLIC_KEY_FILE" = c.jwt_public_key_file
         "RELIANT_JWKS_URL" = c.jwks_url
@@ -155,6 +178,8 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "MAX_UPLOAD_SIZE" = str(c.max_upload_size)
         "RELIANT_WORKTREE_AUTO_ARCHIVE" = c.worktree_auto_archive
         "RELIANT_WORKTREE_LANDED_IDLE" = c.worktree_landed_idle
+        "RELIANT_WORKTREE_RECLAIM_QUIET" = c.worktree_reclaim_quiet
+        "RELIANT_WORKTREE_RECLAIM_GRACE" = c.worktree_reclaim_grace
         "RELIANT_WORKTREE_LIVE_SHED_IDLE" = c.worktree_live_shed_idle
         "RELIANT_AUTH_URL" = c.auth_provider_url
         "RELIANT_AUTH_KEY" = c.auth_provider_key
@@ -163,6 +188,14 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "SHUTDOWN_TIMEOUT" = c.shutdown_timeout
         "LIVENESS_PATHS" = c.liveness_paths
         "READINESS_PATHS" = c.readiness_paths
+
+        # forge:section apiServerConfigEnvMap values orgs
+        # forge:hash=f4cb3b393d13fc18076bed900d2f02e288f6f020e7ef5fa9b5ce8b7929a9513f
+        "RELIANT_ORGS_CONNECTIONS_ENABLED" = "true" if c.orgs.connections_enabled else "false"
+        "RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED" = "true" if c.orgs.github_installation_triggers_enabled else "false"
+        "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED" = "true" if c.orgs.provider_accounts_enabled else "false"
+        "RELIANT_ORGS_PROJECT_MOVES_ENABLED" = "true" if c.orgs.project_moves_enabled else "false"
+        "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED" = "true" if c.orgs.provider_workspace_seats_enabled else "false"
 
         # forge:section apiServerConfigEnvMap values (end)
         # forge:hash=32b348156db484a6bfc9026984d82fa5308a88b0f1b77cb5e31845597dd30b46
@@ -331,8 +364,36 @@ schema ReliantConfigStorageReaper:
         pressure_interval != "", "pressure_interval = \"\" cannot reach the process: an empty RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL counts as unset, so it would load the default \"10m\" — set a value, or change its default in the proto"
         gocache_interval != "", "gocache_interval = \"\" cannot reach the process: an empty RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL counts as unset, so it would load the default \"10m\" — set a value, or change its default in the proto"
 
+# forge:section schema ReliantConfigTranscript
+# forge:hash=5787c6d05645b89b60a6f1dd93fc6adacef7868d23d6e8229017ca1bb7d4295c
+# ReliantConfigTranscript is the transcript block (TranscriptConfig) — author its values in config.k as `transcript.<field> = ...`.
+schema ReliantConfigTranscript:
+    # Transcript reads may leave finished tool calls' bodies out when a client asks (on) or always send them whole (off)
+    tool_body_stubs: str = "on"
+
+    check:
+        tool_body_stubs != "", "tool_body_stubs = \"\" cannot reach the process: an empty RELIANT_TRANSCRIPT_TOOL_BODY_STUBS counts as unset, so it would load the default \"on\" — set a value, or change its default in the proto"
+
+# forge:section schema ReliantConfigWorktreeReclaim
+# forge:hash=4d20036b5c2354db4a78368ef30fb336364e1cce46f5bfaf60d3da43aa99383c
+# ReliantConfigWorktreeReclaim is the worktree_reclaim block (WorktreeReclaimConfig) — author its values in config.k as `worktree_reclaim.<field> = ...`.
+schema ReliantConfigWorktreeReclaim:
+    # Machine-wide worktree reclaim: off, dry-run (report only) or on (capture, then reclaim)
+    mode: str = "dry-run"
+    # Directories the worktree reclaim walks for repositories, comma-separated path[:depth] (default: worktree root, temp, cache and home dirs)
+    roots: str = ""
+    # Idle time before a clean, pushed worktree is reclaimed (Go duration, minimum 1h)
+    clean_idle: str = "24h"
+    # Idle time before a worktree with unsaved work is proposed for approval (Go duration, minimum 24h)
+    approval_idle: str = "120h"
+
+    check:
+        mode != "", "mode = \"\" cannot reach the process: an empty RELIANT_WORKTREE_RECLAIM counts as unset, so it would load the default \"dry-run\" — set a value, or change its default in the proto"
+        clean_idle != "", "clean_idle = \"\" cannot reach the process: an empty RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE counts as unset, so it would load the default \"24h\" — set a value, or change its default in the proto"
+        approval_idle != "", "approval_idle = \"\" cannot reach the process: an empty RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE counts as unset, so it would load the default \"120h\" — set a value, or change its default in the proto"
+
 # forge:section schema ReliantConfig
-# forge:hash=5c96513f68e099653458c57b858dec75348e8a463ec0fbb2d10bfdbc80e83d2b
+# forge:hash=a77e37066aac36506f0f92bd1d23f56cf34877db2583d8a31b7bac1038b968a9
 schema ReliantConfig:
     # log config block (LogConfig). Set its fields as `log.<field> = ...`.
     log: ReliantConfigLog = ReliantConfigLog {}
@@ -340,6 +401,10 @@ schema ReliantConfig:
     runtime: ReliantConfigRuntime = ReliantConfigRuntime {}
     # storage_reaper config block (StorageReaperConfig). Set its fields as `storage_reaper.<field> = ...`.
     storage_reaper: ReliantConfigStorageReaper = ReliantConfigStorageReaper {}
+    # transcript config block (TranscriptConfig). Set its fields as `transcript.<field> = ...`.
+    transcript: ReliantConfigTranscript = ReliantConfigTranscript {}
+    # worktree_reclaim config block (WorktreeReclaimConfig). Set its fields as `worktree_reclaim.<field> = ...`.
+    worktree_reclaim: ReliantConfigWorktreeReclaim = ReliantConfigWorktreeReclaim {}
 
 # forge:section env-map reliantConfigEnvMap
 # forge:hash=b6d59175cfbe3674b1beacb0e82b712699f93bd21c82d21648a5b68b7da62db8
@@ -402,6 +467,17 @@ reliantConfigEnvMap = lambda c: ReliantConfig, config_secrets: [str] -> {str: st
         "FORGE_STORAGE_POLICY" = c.storage_reaper.policy_path
         "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL" = c.storage_reaper.gocache_interval
 
+        # forge:section reliantConfigEnvMap values transcript
+        # forge:hash=1c523bb9fc3b7d9c468308f7d723d4ff0b7d3fc8488c2db0b26a69f33c9462f8
+        "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS" = c.transcript.tool_body_stubs
+
+        # forge:section reliantConfigEnvMap values worktree_reclaim
+        # forge:hash=b27579c5214e2cb2f9e46e48a7d535423aea21489423f05857938a52991cea84
+        "RELIANT_WORKTREE_RECLAIM" = c.worktree_reclaim.mode
+        "RELIANT_WORKTREE_RECLAIM_ROOTS" = c.worktree_reclaim.roots
+        "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE" = c.worktree_reclaim.clean_idle
+        "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE" = c.worktree_reclaim.approval_idle
+
         # forge:section reliantConfigEnvMap values (end)
         # forge:hash=e1769827ac16f2cb38e2dd9a87b234861e5af33f295889268d5884a88256e96c
     } | {_k: _sensitive[_k] for _k in _sensitive if _k in config_secrets}
@@ -419,7 +495,7 @@ schema DaemonConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonConfig
-# forge:hash=1761f6db8979a535906c5f20e6a84a8eb34222f40f64782343f1078fe61f5e20
+# forge:hash=a8e402cf901d34cf3dc88e8cd884f7d33b756ade4fb794220b4103d6f08f51a6
 schema DaemonConfig:
     # Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)
     gateway_url: str = ""
@@ -453,7 +529,7 @@ schema DaemonConfig:
     worktree_dir: str = ""
     # DevTools URL of an already-running browser for the chrome-devtools MCP
     chrome_browser_url: str = ""
-    # Disk use (percent, or off) past which the daemon reclaims space (default 90)
+    # Disk use (percent, or off) past which the daemon reclaims space (default 80)
     disk_reclaim_at: str = ""
     # Disk use (percent, or off) past which the daemon refuses heavy commands (default 95)
     disk_refuse_at: str = ""
@@ -844,7 +920,7 @@ daemonRegisterConfigEnvMap = lambda c: DaemonRegisterConfig, config_secrets: [st
 }
 
 # forge:section schema DatabaseConfig
-# forge:hash=0b18e3231319a69f74e91e8918d150168330001d6afdb56f14bf6532d6faa124
+# forge:hash=b80c6cb6b3980082dbcb5a35eaa72e1ae9ab2bab2e54860b260c381ed38bd768
 schema DatabaseConfig:
     # Postgres connection URL
     database_url: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "database_url" }
@@ -855,7 +931,7 @@ schema DatabaseConfig:
     # Most open database connections
     db_max_open_conns: int = 25
     # Most idle database connections kept open
-    db_max_idle_conns: int = 10
+    db_max_idle_conns: int = 20
     # How long the startup ping retries a database that is not up yet
     db_connect_timeout: str = ""
     # Seconds to wait for the schema to be migrated
@@ -1497,7 +1573,7 @@ vaultMaintenanceConfigEnvMap = lambda c: VaultMaintenanceConfig, config_secrets:
 }
 
 # forge:section schema WorkerConfig
-# forge:hash=7e46c8b44ab64f3973378f9c398f58d2d8c9f3a61020cca5efe5c9a3003a48c1
+# forge:hash=19c9837fa805f7ade03a50abad415e4177942517cc7203b45570d3069910740f
 schema WorkerConfig:
     # Private HTTPS workspace-controller endpoint for fixed hosted actions
     hosted_actions_url: str = ""
@@ -1531,12 +1607,21 @@ schema WorkerConfig:
     egress_host_max_concurrent: int = 16
     # Egress calls of one conversation turn run at once, per replica (the rest wait)
     egress_turn_max_parallel: int = 4
+    # Age past which a chat's update log is compacted to each entity's newest update (0: never; recommended 168h once every api-server reads the compaction watermark)
+    chat_update_retention: str = "0s"
+    # Age past which a finished run's internal step records are deleted (0: never; recommended 720h)
+    step_execution_retention: str = "0s"
+    # Wait after worker start before the first ledger retention pass, so an api-server rollout completes first (0: at once)
+    ledger_retention_start_delay: str = "1h"
 
     check:
         pre_stop_delay != "", "pre_stop_delay = \"\" cannot reach the process: an empty PRE_STOP_DELAY counts as unset, so it would load the default \"5s\" — set a value"
         shutdown_timeout != "", "shutdown_timeout = \"\" cannot reach the process: an empty SHUTDOWN_TIMEOUT counts as unset, so it would load the default \"30s\" — set a value"
         liveness_paths != "", "liveness_paths = \"\" cannot reach the process: an empty LIVENESS_PATHS counts as unset, so it would load the default \"/health,/healthz\" — set a value, or change its default in the proto"
         readiness_paths != "", "readiness_paths = \"\" cannot reach the process: an empty READINESS_PATHS counts as unset, so it would load the default \"/ready,/readyz\" — set a value, or change its default in the proto"
+        chat_update_retention != "", "chat_update_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_CHAT_UPDATE_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
+        step_execution_retention != "", "step_execution_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_STEP_EXECUTION_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
+        ledger_retention_start_delay != "", "ledger_retention_start_delay = \"\" cannot reach the process: an empty RELIANT_WORKER_LEDGER_RETENTION_START_DELAY counts as unset, so it would load the default \"1h\" — set a value"
 
 # forge:section env-map workerConfigEnvMap
 # forge:hash=73c8553dedb9f5b3bcefc972bda5c8ae27cb0bf15a6e1addcc5f36ef1a92c4d7
@@ -1583,7 +1668,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
         "workerConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of WorkerConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
     {
         # forge:section workerConfigEnvMap values (root)
-        # forge:hash=3e9a9bbca41fd3e630b137a25a1af1b08675b1451588c2c3d6abae719f23988b
+        # forge:hash=dd30d3a5fea347b0bc051e9c5a037bcde4685d3aee23340bed4ffd6f2ab21445
         if c.hosted_actions_url != "":
             "RELIANT_WORKER_HOSTED_ACTIONS_URL" = c.hosted_actions_url
         if c.hosted_actions_ca_file != "":
@@ -1602,6 +1687,9 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
         "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT" = str(c.egress_user_max_concurrent)
         "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT" = str(c.egress_host_max_concurrent)
         "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL" = str(c.egress_turn_max_parallel)
+        "RELIANT_WORKER_CHAT_UPDATE_RETENTION" = c.chat_update_retention
+        "RELIANT_WORKER_STEP_EXECUTION_RETENTION" = c.step_execution_retention
+        "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY" = c.ledger_retention_start_delay
 
         # forge:section workerConfigEnvMap values (end)
         # forge:hash=fa178fe4044cdbd75d3e720bd63a7af32e878a5551d581a0f83e855bb2cb706b
@@ -1609,7 +1697,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=814eeca93b13ced5f2c083e1ee8d5a32859e9f6e4f5f2c2e533da4bb9316c906
+# forge:hash=9365d8549a5330069969c4331e2ea36f614c8668243223666afcb475cae103b0
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -1728,20 +1816,20 @@ schema RootFamily:
 ROOTS: {str: Root} = {
     "api" = Root {
         args = ["server", "api"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "ALLOWED_EMAIL_DOMAINS", "RELIANT_DISABLE_FORGE_API", "GRPC_PORT", "HEALTH_PORT", "PPROF_PORT", "BIND_ADDRESS", "CORS_ALLOWED_ORIGINS", "AUTH_MODE", "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "RELIANT_AUTHORIZATION_SERVER", "MCP_OAUTH_ISSUERS", "MAX_UPLOAD_SIZE", "RELIANT_WORKTREE_AUTO_ARCHIVE", "RELIANT_WORKTREE_LANDED_IDLE", "RELIANT_WORKTREE_LIVE_SHED_IDLE", "RELIANT_AUTH_URL", "RELIANT_AUTH_KEY", "RELIANT_PAYLOAD_BLOB_GC_HORIZON", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS"]
+        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "ALLOWED_EMAIL_DOMAINS", "RELIANT_DISABLE_FORGE_API", "GRPC_PORT", "HEALTH_PORT", "PPROF_PORT", "BIND_ADDRESS", "CORS_ALLOWED_ORIGINS", "AUTH_MODE", "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "RELIANT_AUTHORIZATION_SERVER", "MCP_OAUTH_ISSUERS", "MAX_UPLOAD_SIZE", "RELIANT_WORKTREE_AUTO_ARCHIVE", "RELIANT_WORKTREE_LANDED_IDLE", "RELIANT_WORKTREE_RECLAIM_QUIET", "RELIANT_WORKTREE_RECLAIM_GRACE", "RELIANT_WORKTREE_LIVE_SHED_IDLE", "RELIANT_AUTH_URL", "RELIANT_AUTH_KEY", "RELIANT_PAYLOAD_BLOB_GC_HORIZON", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_ORGS_CONNECTIONS_ENABLED", "RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED", "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED", "RELIANT_ORGS_PROJECT_MOVES_ENABLED", "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS"]
         secrets = ["AUTH_API_KEY", "DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"]
         required_secrets = ["DATABASE_URL", "NATS_URL"]
         families = [RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_ID"}, RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_SECRET", sensitive = True}]
     }
     "gateway" = Root {
         args = ["server", "gateway"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "TOOLS_DAEMON_PORT", "HEALTH_PORT", "BIND_ADDRESS", "PPROF_ADDR", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_CONTROL_PLANE_URL", "NATS_USER", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT"]
+        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "TOOLS_DAEMON_PORT", "HEALTH_PORT", "BIND_ADDRESS", "PPROF_ADDR", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_CONTROL_PLANE_URL", "NATS_USER", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT"]
         secrets = ["DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD"]
         required_secrets = ["DATABASE_URL", "NATS_URL"]
     }
     "worker" = Root {
         args = ["server", "worker"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_WORKER_HOSTED_ACTIONS_URL", "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE", "HEALTH_PORT", "PPROF_PORT", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS", "RELIANT_WORKER_WORKFLOW_TASK_POLLERS", "RELIANT_WORKER_EGRESS_REPLICAS", "RELIANT_WORKER_EGRESS_USER_PER_MINUTE", "RELIANT_WORKER_EGRESS_USER_BURST", "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL"]
+        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_WORKER_HOSTED_ACTIONS_URL", "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE", "HEALTH_PORT", "PPROF_PORT", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS", "RELIANT_WORKER_WORKFLOW_TASK_POLLERS", "RELIANT_WORKER_EGRESS_REPLICAS", "RELIANT_WORKER_EGRESS_USER_PER_MINUTE", "RELIANT_WORKER_EGRESS_USER_BURST", "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL", "RELIANT_WORKER_CHAT_UPDATE_RETENTION", "RELIANT_WORKER_STEP_EXECUTION_RETENTION", "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY"]
         secrets = ["DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"]
         required_secrets = ["DATABASE_URL", "NATS_URL"]
         families = [RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_ID"}, RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_SECRET", sensitive = True}]

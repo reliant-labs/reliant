@@ -110,6 +110,7 @@ import { MachineDiskCard } from "./MachineDiskCard";
 import { RenameMachineButton, RenameMachineField } from "./RenameMachine";
 import { machineBuildLabel } from "@/lib/machineBuild";
 import { machineCrashSummary } from "@/lib/machineMemory";
+import { degradedReason } from "@/lib/machineHealth";
 import { DiskGrowNotice, GrowDiskModal, type GrowStage } from "./GrowDiskModal";
 import { diskGrowStatus, isStorageDenied } from "./diskGrow";
 import { DaemonDiskState } from "@/gen/controlplane/controlplane/v1/shared_pb";
@@ -118,6 +119,7 @@ import { toast } from "@/lib/toast-manager";
 import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
 import { MachineAccess, activeGrantCounts, appCountLabel, useConnectors } from "./machineAccess";
 import { useMakeDefaultMachine } from "@/hooks/useMakeDefaultMachine";
+import { useMachineOrgs } from "@/hooks/useMachineOrgs";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
 
@@ -489,6 +491,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
     staleTime: 10_000,
     refetchInterval: 15_000,
   }));
+  const machineOrgs = useMachineOrgs();
 
   // Add machine is always offered: the sheet itself shows which sizes the
   // plan runs and takes payment in place for the rest. Eligibility here only
@@ -523,7 +526,8 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
   // dropdown per group) — a user picking "Suspended" wants every suspended
   // machine, cloud or self-hosted, and a second dropdown for a section that's
   // often empty would be clutter without a real use case.
-  const daemons = (daemonsQ.data ?? []).filter(
+  // With several orgs, the active org's machines (useMachineOrgs).
+  const daemons = machineOrgs.inActiveOrg(daemonsQ.data ?? []).filter(
     (d) => statusFilter === DaemonStatus.UNSPECIFIED || d.status === statusFilter,
   );
   const managedDaemons = daemons.filter((d) => !isExternalDaemon(d));
@@ -711,12 +715,20 @@ function ManagedMachinesTable({
         const status = daemonStatus(d);
         const presentation = presentMachineStatus(status, d.lastStatusMessage, waking.get(d.daemonId));
         const failureReason = presentation.label ? null : daemonFailureReason(d);
+        // Connected but unable to start processes (lib/machineHealth): the
+        // status alone would say it is fine while every command fails.
+        const degraded = presentation.label ? null : degradedReason(d);
         return (
           <>
             <StatusDot
-              variant={presentedDotVariant(status, presentation)}
-              label={presentation.label ?? statusBadge[status].label}
+              variant={degraded ? "error" : presentedDotVariant(status, presentation)}
+              label={degraded ? "Degraded" : (presentation.label ?? statusBadge[status].label)}
             />
+            {degraded && (
+              <p className="mt-1 max-w-xs text-xs text-destructive-ink" data-testid="machine-degraded-reason">
+                {degraded}
+              </p>
+            )}
             {presentation.progress && <p className="mt-1 max-w-xs text-xs text-muted-foreground">{presentation.progress}</p>}
             {failureReason && (
               // Destructive red for a machine that BROKE; muted for one that
@@ -848,11 +860,18 @@ function MakeDefaultButton({ daemon }: { daemon: Daemon }) {
  */
 function MachineName({ daemon, appCount }: { daemon: Daemon; appCount: number }) {
   const build = machineBuildLabel(daemon);
+  const machineOrgs = useMachineOrgs();
+  const org = machineOrgs.multiOrg ? machineOrgs.orgOf(daemon.daemonId) : undefined;
   return (
-    <span className="block">
-      <span className="font-medium text-foreground">{daemonDisplayName(daemon)}</span>
-      {daemon.isDefault && <Badge label="Default" variant="neutral" size="sm" className="ml-2 align-middle" />}
-      <AppAccessIndicator count={appCount} />
+    // DataTable rows have a minimum height, not vertical padding. Reserve room
+    // around both lines so a badge plus build cannot press against the border.
+    <span className="block py-2">
+      <span className="flex items-center">
+        <span className="font-medium text-foreground">{daemonDisplayName(daemon)}</span>
+        {daemon.isDefault && <Badge label="Default" variant="neutral" size="sm" className="ml-2" />}
+        {org && <Badge label={org.name} variant="neutral" size="sm" className="ml-2" />}
+        <AppAccessIndicator count={appCount} />
+      </span>
       {build && <span className="mt-0.5 block text-xs text-muted-foreground">{build}</span>}
     </span>
   );
@@ -1328,6 +1347,9 @@ function EnvironmentDetail({
   const [error, setError] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [restartOpen, setRestartOpen] = useState(false);
+  // The org that owns the machine, shown when there are several to tell apart.
+  const machineOrgs = useMachineOrgs();
+  const machineOrg = machineOrgs.multiOrg ? machineOrgs.orgOf(daemonId) : undefined;
   // Non-null only while THIS client is driving a restart. It gates every
   // lifecycle button (see lifecyclePlan) and drives the progress copy, since
   // a restart is two RPCs with a wait between them and the daemon's own
@@ -1359,6 +1381,10 @@ function EnvironmentDetail({
     refetchInterval: restartStage ? 2_000 : 15_000,
   }));
   const daemon = listQ.data?.find((d) => d.daemonId === daemonId);
+  // A self-hosted registry entry need not have a cloud provisioning record.
+  // Wait for its type before fetching that record; missing cloud metadata must
+  // never prevent opening a personal machine's settings.
+  const needsCloudSpec = cloud && !!daemon && !isExternalDaemon(daemon);
 
   const daemonQ = useQuery({
     queryKey: QK.daemon(daemonId),
@@ -1369,7 +1395,7 @@ function EnvironmentDetail({
     // to look alive. 5s while the disk grows, which takes about a minute.
     refetchInterval: (query) =>
       restartStage ? 2_000 : query.state.data?.daemon?.disk?.state === DaemonDiskState.EXPANDING ? 5_000 : 15_000,
-    enabled: cloud,
+    enabled: needsCloudSpec,
   });
   const spec = daemonQ.data?.daemon;
   const workspaceBaseDomain = daemonQ.data?.workspaceBaseDomain ?? "";
@@ -1581,8 +1607,8 @@ function EnvironmentDetail({
   const growNotice = disk ? diskGrowStatus(disk, daemon ? daemon.status !== DaemonStatus.SUSPENDED : false) : null;
   // The registry list is what proves the machine exists; the control-plane
   // spec is an extra half that only a cloud build has.
-  const loading = listQ.isLoading || (cloud && daemonQ.isLoading);
-  const loadError = cloud ? daemonQ.error : listQ.error;
+  const loading = listQ.isLoading || (needsCloudSpec && daemonQ.isLoading);
+  const loadError = listQ.error ?? (needsCloudSpec ? daemonQ.error : null);
   // A managed pod's projects live under the clone root; a personal machine
   // has no safe default, so the user names one (or picks a reported project).
   const suggestedRoots = Array.from(
@@ -1724,6 +1750,8 @@ function EnvironmentDetail({
             ) : (
               <ErrorNote message={daemonFailureReason(daemon) ?? undefined} />
             ))}
+          {/* Connected, but it cannot start processes: every command fails. */}
+          {degradedReason(daemon) && <ErrorNote message={degradedReason(daemon) ?? undefined} />}
           {lifecyclePlan(daemon, null).recoveryHint && (
             <p className="mb-4 text-sm text-muted-foreground" data-testid="machine-recovery-hint">
               {lifecyclePlan(daemon, null).recoveryHint}
@@ -1774,6 +1802,7 @@ function EnvironmentDetail({
                       />
                     </>
                   )}
+                  {machineOrg && <InfoRow label="Organization" value={machineOrg.name} />}
                   <InfoRow label="Created" value={fmtTimestamp(daemon.createdAt)} />
                   <InfoRow label="Updated" value={fmtTimestamp(spec?.updatedAt)} />
                 </dl>
@@ -1784,6 +1813,18 @@ function EnvironmentDetail({
               <CardContent>
                 <dl>
                   <InfoRow label="Connection" value={<Badge label={connected ? "Connected" : "Disconnected"} variant={connected ? "success" : "neutral"} />} />
+                  {connected && (
+                    <InfoRow
+                      label="Health"
+                      value={
+                        degradedReason(daemon) ? (
+                          <Badge label="Can't start processes" variant="error" />
+                        ) : (
+                          <Badge label="Healthy" variant="success" />
+                        )
+                      }
+                    />
+                  )}
                   {/*
                     The label tracks the state. "Connected at <timestamp>"
                     beside a DISCONNECTED machine describes a connection that

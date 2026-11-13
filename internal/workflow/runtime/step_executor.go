@@ -368,7 +368,10 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		e.execContext,
 	)
 	if err != nil {
-		e.logger.Error("Failed to evaluate step config", "error", err, "stepID", node.GetId())
+		// The workflow's own expression failed (a missing key, a CEL cost
+		// limit): the author's to fix, reported on the run through FailStep,
+		// not an operator's alert.
+		e.logger.Warn("Failed to evaluate step config", "error", err, "stepID", node.GetId())
 		return e.startFailedStep(node, event, err)
 	}
 
@@ -398,6 +401,12 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	threadInterruptEpoch := int64(0)
 	if interrupt := resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, e.GetThread()); interrupt != nil {
 		threadInterruptEpoch = interrupt.Epoch()
+	}
+
+	// A run that gave its workflow-capacity slot back while it waited on a
+	// provider takes it again before it runs anything (capacity_slot.go).
+	if e.pauseCtrl != nil {
+		e.pauseCtrl.CapacitySlot.beforeStep(e.ctx)
 	}
 
 	// A machine step that follows a hold first makes sure the machine is
@@ -449,7 +458,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	}
 
 	// Use StepID as canonical identifier - ActivityID kept for logging/backwards compat
-	return &RunningStep{
+	running := &RunningStep{
 		ActivityID:            node.GetId(), // Set to StepID for backwards compat
 		StepID:                node.GetId(),
 		ActivityName:          activityName,
@@ -462,6 +471,10 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		SaveDelegated:         saveDelegated,
 		ProviderPinsKey:       e.providerPinsKey(),
 	}
+	if e.pauseCtrl != nil {
+		e.pauseCtrl.CapacitySlot.trackStep(running)
+	}
+	return running
 }
 
 // HandleCompletion processes a completed step and returns the resulting event.
@@ -473,6 +486,9 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// Use StepID for event ID - it's unique within an iteration
 	eventID := fmt.Sprintf("event-%s", running.StepID)
+	if e.pauseCtrl != nil {
+		e.pauseCtrl.CapacitySlot.untrackStep(running)
+	}
 	stepEvent := e.handleActivityCompletion(running, eventID)
 	if machine, _, _ := machineStepTools(running.Node.GetType(), nil); machine {
 		e.pauseCtrl.MachineStepDone(e.ctx)
@@ -506,11 +522,12 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	if IsUnattended(e.workflowInputs) && stepEvent != nil && stepEvent.Error == nil {
 		if err := e.pauseCtrl.ObserveRepeatedToolErrors(e.GetThread(), running.ActivityName, stepEvent); err != nil &&
 			workflow.GetVersion(e.ctx, repeatedToolErrorChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
-			// Reported here, once: the loop, the inline workflow and the run
-			// pass it up and log it at DEBUG (markReported).
-			e.logger.Error("[StepExecutor] Ending the agent: its tool calls keep failing identically",
+			// Reported here, once, at WARN: the guard working as designed is
+			// an outcome, not a fault. The loop, the inline workflow and the
+			// run pass it up and log it at DEBUG (markReported).
+			stepEvent.Error = reportExpectedStop(e.logger, err,
+				"[StepExecutor] Ending the agent: its tool calls keep failing identically",
 				"stepID", running.StepID, "thread", e.GetThread(), "error", err)
-			stepEvent.Error = markReported(err)
 		}
 	}
 
@@ -573,11 +590,32 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 			}
 		}
 
+		// A step whose own config cannot run fails the same way on every
+		// retry and resume: it ends the run (endsRunInsteadOfPausing), so the
+		// run's on_failure handler runs and an automation's slot is freed.
+		if configErr := stepConfigFailure(e.ctx, running.ActivityName, running.StepID, err); configErr != nil {
+			e.logger.Warn("[StepExecutor] Step config cannot run; ending the run",
+				"stepID", running.StepID,
+				"error", configErr,
+			)
+			return &StepEvent{
+				ID:             eventID,
+				WorkflowID:     e.workflowID,
+				ChatID:         e.chatID,
+				WorkflowName:   e.workflowName,
+				StepID:         running.StepID,
+				Error:          configErr,
+				RetryExhausted: true,
+			}
+		}
+
 		// All other errors after retry exhaustion (e.g., ApplicationError from
 		// rate limits, transient failures). These are retryable errors that
 		// exhausted Temporal's retry budget — mark as RetryExhausted so the
-		// workflow can auto-pause and retry on user resume.
-		e.logger.Error("[StepExecutor] Activity failed after retry exhaustion",
+		// workflow can auto-pause and retry on user resume. A warning: the
+		// activity reported its own failure (wrapActivity), and the run
+		// tells its owner it paused (WorkflowError, the Inbox).
+		e.logger.Warn("[StepExecutor] Activity failed after retry exhaustion",
 			"activityID", running.ActivityID,
 			"stepID", running.StepID,
 			"error", err,
@@ -1246,6 +1284,16 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	// Thread from execution context
 	if e.execContext != nil {
 		rtx.Thread = e.execContext.Thread
+		rtx.ExcludeAmbientMemory = e.execContext.ExcludeAmbientMemory
+	}
+	// A call's opt-out also caps any descendants it subsequently spawns on
+	// this thread. Never clear a previously recorded exclusion.
+	rtx.ExcludeAmbientMemory = rtx.ExcludeAmbientMemory || excludesAmbientMemory(e.workflowInputs) || e.childTracker.excludesAmbientMemory(rtx.Thread)
+	if node.GetCallLlm().GetExcludeAmbientMemory() {
+		rtx.ExcludeAmbientMemory = true
+	}
+	if rtx.ExcludeAmbientMemory {
+		e.childTracker.excludeAmbientMemory(rtx.Thread)
 	}
 
 	// Who this run's integration writes speak as (see InputKeyActingIdentity).
@@ -1291,6 +1339,9 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		// Whether the loop took this turn on a hint (see
 		// RuntimeContext.SpeculativeTurn).
 		rtx.SpeculativeTurn = e.childTracker.isSpeculativeTurn(rtx.Thread)
+		// Whether this is the first turn of a loop resumed mid-work (see
+		// RuntimeContext.ResumeTurn). Consumed here, so it marks one turn.
+		rtx.ResumeTurn = e.childTracker.takeResumeTurn(rtx.Thread)
 		// The catalog the run started with: the spawn tool describes its
 		// presets from it (catalog_pin.go).
 		rtx.CatalogPin = catalogPinFrom(e.ctx)

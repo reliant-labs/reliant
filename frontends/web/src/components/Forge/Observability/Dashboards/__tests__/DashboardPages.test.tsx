@@ -44,9 +44,8 @@ describe("organization dashboard routes without deployments", () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
     renderWithApi(api, <DashboardsPage />);
-    // The Overview hub lands first; the built-in is in its Platform group.
-    expect(await screen.findByTestId("hub-group-platform")).toHaveTextContent("Organization costs");
-    expect(screen.getByTestId("hub-health-undeployed")).toBeInTheDocument();
+    // The list lands, with the built-in's card.
+    expect(await screen.findByTestId("dashboards-hubs")).toHaveTextContent("Organization costs");
     expect(screen.getByTestId("observability-no-envs")).toBeInTheDocument();
   });
 
@@ -58,12 +57,26 @@ describe("organization dashboard routes without deployments", () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
     renderWithApi(api, <DashboardsPage />);
-    expect(await screen.findByTestId("hub-health-unread")).toHaveTextContent("once shop's environments load");
+    expect(await screen.findByTestId("dashboards-hubs")).toHaveTextContent("Organization costs");
     expect(screen.queryByTestId("observability-no-envs")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("hub-health-undeployed")).not.toBeInTheDocument();
     expect(screen.getByTestId("forge-cloud-unreachable")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("obs-environments-retry"));
     expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  // A project's standard built-in reads its environments: unlike an
+  // organization view, it waits behind the roster like a release dashboard.
+  it("opens a project's standard built-in in the project, behind the roster", async () => {
+    route.params = { kind: "builtin", key: "usage" };
+    try {
+      const api = createFixtureApi();
+      api.getDashboard = vi.fn().mockRejectedValue(new Error("not reached"));
+      renderWithApi(api, <DashboardPage />);
+      expect(await screen.findByTestId("observability-no-envs")).toBeInTheDocument();
+      expect(api.getDashboard).not.toHaveBeenCalled();
+    } finally {
+      route.params = { kind: "builtin", key: "org-costs" };
+    }
   });
 
   it("claims nothing about environments while the roster is still loading", async () => {
@@ -71,7 +84,7 @@ describe("organization dashboard routes without deployments", () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
     renderWithApi(api, <DashboardsPage />);
-    expect(await screen.findByTestId("hub-group-platform")).toBeInTheDocument();
+    expect(await screen.findByTestId("dashboards-hubs")).toBeInTheDocument();
     expect(screen.queryByTestId("observability-no-envs")).not.toBeInTheDocument();
   });
 });

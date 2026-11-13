@@ -96,6 +96,18 @@ type ApiServerConfig struct {
 	// and get the worktree back, recreated from its branch, the next time they
 	// run a tool. Zero turns reclaim-on-merge off.
 	WorktreeLandedIdle *durationpb.Duration `protobuf:"bytes,81,opt,name=worktree_landed_idle,json=worktreeLandedIdle,proto3" json:"worktree_landed_idle,omitempty"`
+	// Reclaim in two phases (worktreesweep mark.go): a worktree whose work has
+	// landed, or that is complete, clean and idle, is first MARKED once nothing
+	// has happened in it for worktree_reclaim_quiet: its machine places a
+	// tombstone in it (.reliant/RECLAIM_PENDING and a line in the workspace's
+	// reliant.md) and nothing is archived. It is reclaimed no sooner than
+	// worktree_reclaim_grace after the mark, only if the tombstone still stands
+	// and nothing has happened in it since; any use, or deleting the
+	// tombstone, cancels the mark. Both are floored at 24h: a shorter value is
+	// raised to it. Follows worktree_auto_archive (dry-run marks, never
+	// reclaims).
+	WorktreeReclaimQuiet *durationpb.Duration `protobuf:"bytes,83,opt,name=worktree_reclaim_quiet,json=worktreeReclaimQuiet,proto3" json:"worktree_reclaim_quiet,omitempty"`
+	WorktreeReclaimGrace *durationpb.Duration `protobuf:"bytes,84,opt,name=worktree_reclaim_grace,json=worktreeReclaimGrace,proto3" json:"worktree_reclaim_grace,omitempty"`
 	// Idle floor for whole recoverable-worktree retirement. Requires clean
 	// pushed/merged work, no live chat/thread execution, no process use and no
 	// fresh files (including caches). Dirty/unique/uncertain trees retain every
@@ -129,8 +141,10 @@ type ApiServerConfig struct {
 	// is the API port's, not these.
 	LivenessPaths  string `protobuf:"bytes,24,opt,name=liveness_paths,json=livenessPaths,proto3" json:"liveness_paths,omitempty"`
 	ReadinessPaths string `protobuf:"bytes,25,opt,name=readiness_paths,json=readinessPaths,proto3" json:"readiness_paths,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Organization features the API server gates while they roll out.
+	Orgs          *OrgsConfig `protobuf:"bytes,85,opt,name=orgs,proto3" json:"orgs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ApiServerConfig) Reset() {
@@ -289,6 +303,20 @@ func (x *ApiServerConfig) GetWorktreeLandedIdle() *durationpb.Duration {
 	return nil
 }
 
+func (x *ApiServerConfig) GetWorktreeReclaimQuiet() *durationpb.Duration {
+	if x != nil {
+		return x.WorktreeReclaimQuiet
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetWorktreeReclaimGrace() *durationpb.Duration {
+	if x != nil {
+		return x.WorktreeReclaimGrace
+	}
+	return nil
+}
+
 func (x *ApiServerConfig) GetWorktreeLiveShedIdle() *durationpb.Duration {
 	if x != nil {
 		return x.WorktreeLiveShedIdle
@@ -345,11 +373,138 @@ func (x *ApiServerConfig) GetReadinessPaths() string {
 	return ""
 }
 
+func (x *ApiServerConfig) GetOrgs() *OrgsConfig {
+	if x != nil {
+		return x.Orgs
+	}
+	return nil
+}
+
+// OrgsConfig gates organization features that need every replica (and the
+// release a rollback would return to) to understand them before anything
+// writes them. The rules every config here follows are in config.proto's
+// header.
+type OrgsConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Lets an org's owners and admins create and reconnect org-owned
+	// connections (control-plane docs/design/org-sharing.md §7, D13). Off by
+	// default: turn it on only once every API server and worker, and the
+	// release a rollback would return to, read org connections; an older
+	// replica routes no event through one. Using, listing, renaming and
+	// deleting an org connection that exists are not gated.
+	ConnectionsEnabled bool `protobuf:"varint,1,opt,name=connections_enabled,json=connectionsEnabled,proto3" json:"connections_enabled,omitempty"`
+	// Lets a GitHub trigger of an org listen through one of the org's linked
+	// GitHub App installations (control-plane docs/design/org-sharing.md §7.1):
+	// only that installation's events reach it. Off by default: a release
+	// before this one routes such a trigger on its owner's access alone (every
+	// installation) and rewrites its config without the binding, so turn it on
+	// only once every API server and worker, and the release a rollback would
+	// return to, honour it. Off, naming an installation on a trigger is refused
+	// and no trigger is ever bound.
+	GithubInstallationTriggersEnabled bool `protobuf:"varint,2,opt,name=github_installation_triggers_enabled,json=githubInstallationTriggersEnabled,proto3" json:"github_installation_triggers_enabled,omitempty"`
+	// Lets an org's owners and admins add org-owned AI provider accounts (API
+	// keys) and bind a provider workspace whose members' seats the org pays for
+	// (control-plane docs/design/org-provider-accounts.md §3.5, §14 P4). Off by
+	// default. A release before this one is blind to org accounts (no person's
+	// id is an org's owner key), so a rollback narrows what serves, never
+	// widens it; turn it on once the routing that serves them (P5) is in every
+	// API server and worker. Listing, editing, pausing, rotating and deleting an
+	// org account, unbinding a workspace and releasing a seat are never gated,
+	// so an admin can always stop the org's spend.
+	ProviderAccountsEnabled bool `protobuf:"varint,3,opt,name=provider_accounts_enabled,json=providerAccountsEnabled,proto3" json:"provider_accounts_enabled,omitempty"`
+	// Lets a project's owner move it, with its chats, runs and triggers, to
+	// another org (control-plane docs/design/org-project-move.md). Off by
+	// default: turn it on only once control-plane's ProjectOrgMoveInternalService
+	// is in prod and in the release a rollback would return to, and every
+	// worker runs the ProjectOrgMove workflow. Off, MoveProjectToOrg is refused;
+	// previewing a move, and reading the moves already made, are not gated.
+	ProjectMovesEnabled bool `protobuf:"varint,4,opt,name=project_moves_enabled,json=projectMovesEnabled,proto3" json:"project_moves_enabled,omitempty"`
+	// Lets an org pay for its members' own sign-ins: binding a provider
+	// workspace, and the matcher that makes a member's sign-in in a bound
+	// workspace one of the org's seats (control-plane
+	// docs/design/org-provider-accounts.md §3.4, §14 "Rollout gates"). Off by
+	// default. A release before org-provider-accounts P5 ignores a seat's org,
+	// so after a rollback to it a seat would serve its holder's other orgs and
+	// personal chats too: turn it on only once P5 is in every API server and
+	// worker AND in the release a rollback would return to. Binding a workspace
+	// needs provider_accounts_enabled as well. Off, a binding is refused and
+	// nothing is attributed; unbinding a workspace, releasing a seat and
+	// clearing a seat no binding covers are never gated.
+	ProviderWorkspaceSeatsEnabled bool `protobuf:"varint,5,opt,name=provider_workspace_seats_enabled,json=providerWorkspaceSeatsEnabled,proto3" json:"provider_workspace_seats_enabled,omitempty"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
+}
+
+func (x *OrgsConfig) Reset() {
+	*x = OrgsConfig{}
+	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrgsConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrgsConfig) ProtoMessage() {}
+
+func (x *OrgsConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrgsConfig.ProtoReflect.Descriptor instead.
+func (*OrgsConfig) Descriptor() ([]byte, []int) {
+	return file_reliant_config_v1_api_server_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *OrgsConfig) GetConnectionsEnabled() bool {
+	if x != nil {
+		return x.ConnectionsEnabled
+	}
+	return false
+}
+
+func (x *OrgsConfig) GetGithubInstallationTriggersEnabled() bool {
+	if x != nil {
+		return x.GithubInstallationTriggersEnabled
+	}
+	return false
+}
+
+func (x *OrgsConfig) GetProviderAccountsEnabled() bool {
+	if x != nil {
+		return x.ProviderAccountsEnabled
+	}
+	return false
+}
+
+func (x *OrgsConfig) GetProjectMovesEnabled() bool {
+	if x != nil {
+		return x.ProjectMovesEnabled
+	}
+	return false
+}
+
+func (x *OrgsConfig) GetProviderWorkspaceSeatsEnabled() bool {
+	if x != nil {
+		return x.ProviderWorkspaceSeatsEnabled
+	}
+	return false
+}
+
 var File_reliant_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xec \n" +
+	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xc6$\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -391,7 +546,11 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x15worktree_auto_archive\x18$ \x01(\tBi\x82\xce\x18e\n" +
 	"\x1dRELIANT_WORKTREE_AUTO_ARCHIVE\x1a\adry-run*)Worktree auto-archive: dry-run, on or offJ\adry-runJ\x02onJ\x03offR\x13worktreeAutoArchive\x12\xce\x01\n" +
 	"\x14worktree_landed_idle\x18Q \x01(\v2\x19.google.protobuf.DurationB\x80\x01\xbaH\x05\xaa\x01\x022\x00\x82\xce\x18t\n" +
-	"\x1cRELIANT_WORKTREE_LANDED_IDLE\x1a\x023h*PHow long a landed worktree's chats must be quiet before it is archived (0 = off)R\x12worktreeLandedIdle\x12\xe0\x01\n" +
+	"\x1cRELIANT_WORKTREE_LANDED_IDLE\x1a\x023h*PHow long a landed worktree's chats must be quiet before it is archived (0 = off)R\x12worktreeLandedIdle\x12\xd2\x01\n" +
+	"\x16worktree_reclaim_quiet\x18S \x01(\v2\x19.google.protobuf.DurationB\x80\x01\xbaH\x05\xaa\x01\x022\x00\x82\xce\x18t\n" +
+	"\x1eRELIANT_WORKTREE_RECLAIM_QUIET\x1a\x0324h*MHow long a worktree must be quiet before it is marked for reclaim (floor 24h)R\x14worktreeReclaimQuiet\x12\xcf\x01\n" +
+	"\x16worktree_reclaim_grace\x18T \x01(\v2\x19.google.protobuf.DurationB~\xbaH\x05\xaa\x01\x022\x00\x82\xce\x18r\n" +
+	"\x1eRELIANT_WORKTREE_RECLAIM_GRACE\x1a\x0324h*KHow long a reclaim mark stands before the worktree is reclaimed (floor 24h)R\x14worktreeReclaimGrace\x12\xe0\x01\n" +
 	"\x17worktree_live_shed_idle\x18R \x01(\v2\x19.google.protobuf.DurationB\x8d\x01\xbaH\x05\xaa\x01\x022\x00\x82\xce\x18\x80\x01\n" +
 	"\x1fRELIANT_WORKTREE_LIVE_SHED_IDLE\x1a\x0324h*XIdle floor for whole recoverable-worktree retirement; auto-archive on required (0 = off)R\x14worktreeLiveShedIdle\x12\x8e\x01\n" +
 	"\x11auth_provider_url\x18% \x01(\tBb\x82\xce\x18^\n" +
@@ -407,10 +566,23 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x0eliveness_paths\x18\x18 \x01(\tBa\x82\xce\x18]\n" +
 	"\x0eLIVENESS_PATHS\x1a\x10/health,/healthz*9Liveness probe paths on the health port (comma-separated)R\rlivenessPaths\x12\x8a\x01\n" +
 	"\x0freadiness_paths\x18\x19 \x01(\tBa\x82\xce\x18]\n" +
-	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths:\x95\x01\xbaHx\x1av\n" +
+	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths\x121\n" +
+	"\x04orgs\x18U \x01(\v2\x1d.reliant.config.v1.OrgsConfigR\x04orgs:\x95\x01\xbaHx\x1av\n" +
 	"\x15auth_api_key_required\x12&AUTH_MODE=apikey requires AUTH_API_KEY\x1a5this.auth_mode != 'apikey' || this.auth_api_key != ''\xca\xc1\x18\x16\n" +
 	"\areliant\x12\x06server\x12\x03apiJ\x04\b\x05\x10\x06J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreviewB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreview\"\xcc\a\n" +
+	"\n" +
+	"OrgsConfig\x12\x9b\x01\n" +
+	"\x13connections_enabled\x18\x01 \x01(\bBj\x82\xce\x18f\n" +
+	" RELIANT_ORGS_CONNECTIONS_ENABLED*BLet org owners and admins create org-owned integration connectionsR\x12connectionsEnabled\x12\xe8\x01\n" +
+	"$github_installation_triggers_enabled\x18\x02 \x01(\bB\x96\x01\x82\xce\x18\x91\x01\n" +
+	"1RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED*\\Let an org's GitHub triggers listen through one of the org's linked GitHub App installationsR!githubInstallationTriggersEnabled\x12\xc5\x01\n" +
+	"\x19provider_accounts_enabled\x18\x03 \x01(\bB\x88\x01\x82\xce\x18\x83\x01\n" +
+	"&RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED*YLet org owners and admins add org-owned AI provider accounts and bind provider workspacesR\x17providerAccountsEnabled\x12\x99\x01\n" +
+	"\x15project_moves_enabled\x18\x04 \x01(\bBe\x82\xce\x18a\n" +
+	"\"RELIANT_ORGS_PROJECT_MOVES_ENABLED*;Let a project's owner move it to another org they belong toR\x13projectMovesEnabled\x12\xd0\x01\n" +
+	" provider_workspace_seats_enabled\x18\x05 \x01(\bB\x86\x01\x82\xce\x18\x81\x01\n" +
+	"-RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED*PLet orgs bind provider workspaces and pay for members' sign-ins in them as seatsR\x1dproviderWorkspaceSeatsEnabledB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_api_server_config_proto_rawDescOnce sync.Once
@@ -424,22 +596,26 @@ func file_reliant_config_v1_api_server_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_api_server_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_api_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_reliant_config_v1_api_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_reliant_config_v1_api_server_config_proto_goTypes = []any{
 	(*ApiServerConfig)(nil),     // 0: reliant.config.v1.ApiServerConfig
-	(*durationpb.Duration)(nil), // 1: google.protobuf.Duration
+	(*OrgsConfig)(nil),          // 1: reliant.config.v1.OrgsConfig
+	(*durationpb.Duration)(nil), // 2: google.protobuf.Duration
 }
 var file_reliant_config_v1_api_server_config_proto_depIdxs = []int32{
-	1, // 0: reliant.config.v1.ApiServerConfig.worktree_landed_idle:type_name -> google.protobuf.Duration
-	1, // 1: reliant.config.v1.ApiServerConfig.worktree_live_shed_idle:type_name -> google.protobuf.Duration
-	1, // 2: reliant.config.v1.ApiServerConfig.payload_blob_gc_horizon:type_name -> google.protobuf.Duration
-	1, // 3: reliant.config.v1.ApiServerConfig.pre_stop_delay:type_name -> google.protobuf.Duration
-	1, // 4: reliant.config.v1.ApiServerConfig.shutdown_timeout:type_name -> google.protobuf.Duration
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	2, // 0: reliant.config.v1.ApiServerConfig.worktree_landed_idle:type_name -> google.protobuf.Duration
+	2, // 1: reliant.config.v1.ApiServerConfig.worktree_reclaim_quiet:type_name -> google.protobuf.Duration
+	2, // 2: reliant.config.v1.ApiServerConfig.worktree_reclaim_grace:type_name -> google.protobuf.Duration
+	2, // 3: reliant.config.v1.ApiServerConfig.worktree_live_shed_idle:type_name -> google.protobuf.Duration
+	2, // 4: reliant.config.v1.ApiServerConfig.payload_blob_gc_horizon:type_name -> google.protobuf.Duration
+	2, // 5: reliant.config.v1.ApiServerConfig.pre_stop_delay:type_name -> google.protobuf.Duration
+	2, // 6: reliant.config.v1.ApiServerConfig.shutdown_timeout:type_name -> google.protobuf.Duration
+	1, // 7: reliant.config.v1.ApiServerConfig.orgs:type_name -> reliant.config.v1.OrgsConfig
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_api_server_config_proto_init() }
@@ -453,7 +629,7 @@ func file_reliant_config_v1_api_server_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_api_server_config_proto_rawDesc), len(file_reliant_config_v1_api_server_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

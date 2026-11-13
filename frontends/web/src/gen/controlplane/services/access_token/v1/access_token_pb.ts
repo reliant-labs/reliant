@@ -30,7 +30,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/access_token/v1/access_token.proto.
  */
 export const file_services_access_token_v1_access_token: GenFile = /*@__PURE__*/
-  fileDesc("CitzZXJ2aWNlcy9hY2Nlc3NfdG9rZW4vdjEvYWNjZXNzX3Rva2VuLnByb3RvEg9jb250cm9scGxhbmUudjEiTwoPT3JnTWVtYmVyR3JhbnRzEg8KB3VzZXJfaWQYASABKAkSDQoFZW1haWwYAiABKAkSDAoEcm9sZRgDIAEoCRIOCgZzY29wZXMYBCADKAkiPAoaTGlzdE9yZ01lbWJlckdyYW50c1JlcXVlc3QSEwoGb3JnX2lkGAEgASgJSACIAQFCCQoHX29yZ19pZCJjChtMaXN0T3JnTWVtYmVyR3JhbnRzUmVzcG9uc2USMQoHbWVtYmVycxgBIAMoCzIgLmNvbnRyb2xwbGFuZS52MS5PcmdNZW1iZXJHcmFudHMSEQoJZ3JhbnRhYmxlGAIgAygJIl8KHFVwZGF0ZU9yZ01lbWJlckdyYW50c1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIOCgZzY29wZXMYAiADKAkSEwoGb3JnX2lkGAMgASgJSACIAQFCCQoHX29yZ19pZCJRCh1VcGRhdGVPcmdNZW1iZXJHcmFudHNSZXNwb25zZRIwCgZtZW1iZXIYASABKAsyIC5jb250cm9scGxhbmUudjEuT3JnTWVtYmVyR3JhbnRzIisKD1Jlc291cmNlQmluZGluZxIMCgRraW5kGAEgASgJEgoKAmlkGAIgASgJIrADCgtBY2Nlc3NUb2tlbhIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhYKDmRpc3BsYXlfcHJlZml4GAMgASgJEg4KBnNjb3BlcxgEIAMoCRIaChJjcmVhdGVkX2J5X3VzZXJfaWQYBSABKAkSLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF91c2VkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpyZXZva2VkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgZvcmdfaWQYCiABKAkSFgoOYWN0aW5nX3VzZXJfaWQYCyABKAkSMgoIcmVzb3VyY2UYDCABKAsyIC5jb250cm9scGxhbmUudjEuUmVzb3VyY2VCaW5kaW5nEhEKCWVwaGVtZXJhbBgNIAEoCBISCgphbGxfc2NvcGVzGA4gASgIIoIBChJDcmVhdGVUb2tlblJlcXVlc3QSDAoEbmFtZRgBIAEoCRIOCgZzY29wZXMYAiADKAkSLgoKZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoGb3JnX2lkGAQgASgJSACIAQFCCQoHX29yZ19pZCJSChNDcmVhdGVUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuEg4KBnNlY3JldBgCIAEoCSJlChFMaXN0VG9rZW5zUmVxdWVzdBIcCg9pbmNsdWRlX3Jldm9rZWQYASABKAhIAIgBARITCgZvcmdfaWQYAiABKAlIAYgBAUISChBfaW5jbHVkZV9yZXZva2VkQgkKB19vcmdfaWQiQgoSTGlzdFRva2Vuc1Jlc3BvbnNlEiwKBnRva2VucxgBIAMoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbiJAChJSZXZva2VUb2tlblJlcXVlc3QSCgoCaWQYASABKAkSEwoGb3JnX2lkGAIgASgJSACIAQFCCQoHX29yZ19pZCJCChNSZXZva2VUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuItsBChRDcmVhdGVNeVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEg4KBnNjb3BlcxgCIAMoCRIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIyCghyZXNvdXJjZRgEIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5SZXNvdXJjZUJpbmRpbmcSEQoJZXBoZW1lcmFsGAUgASgIEg4KBnJvdGF0ZRgGIAEoCBITCgZvcmdfaWQYByABKAlIAIgBAUIJCgdfb3JnX2lkImUKFUNyZWF0ZU15VG9rZW5SZXNwb25zZRIrCgV0b2tlbhgBIAEoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbhIOCgZzZWNyZXQYAiABKAkSDwoHcm90YXRlZBgDIAEoCCKFAQoTTGlzdE15VG9rZW5zUmVxdWVzdBIcCg9pbmNsdWRlX3Jldm9rZWQYASABKAhIAIgBARISCgVzY29wZRgCIAEoCUgBiAEBEhMKBm9yZ19pZBgDIAEoCUgCiAEBQhIKEF9pbmNsdWRlX3Jldm9rZWRCCAoGX3Njb3BlQgkKB19vcmdfaWQiRAoUTGlzdE15VG9rZW5zUmVzcG9uc2USLAoGdG9rZW5zGAEgAygLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuIkIKFFJldm9rZU15VG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJEhMKBm9yZ19pZBgCIAEoCUgAiAEBQgkKB19vcmdfaWQiFwoVUmV2b2tlTXlUb2tlblJlc3BvbnNlIlIKHVJlc2V0RGFlbW9uU2NvcGVQb2xpY3lSZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRITCgZvcmdfaWQYAiABKAlIAIgBAUIJCgdfb3JnX2lkIiAKHlJlc2V0RGFlbW9uU2NvcGVQb2xpY3lSZXNwb25zZSKFAQoUVXBkYXRlTXlUb2tlblJlcXVlc3QSCgoCaWQYASABKAkSEQoEbmFtZRgCIAEoCUgAiAEBEg4KBnNjb3BlcxgDIAMoCRIVCg11cGRhdGVfc2NvcGVzGAQgASgIEhMKBm9yZ19pZBgFIAEoCUgBiAEBQgcKBV9uYW1lQgkKB19vcmdfaWQiRAoVVXBkYXRlTXlUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuIiYKFEV4Y2hhbmdlVG9rZW5SZXF1ZXN0Eg4KBnNjb3BlcxgBIAMoCSJUChVFeGNoYW5nZVRva2VuUmVzcG9uc2USKwoFdG9rZW4YASABKAsyHC5jb250cm9scGxhbmUudjEuQWNjZXNzVG9rZW4SDgoGc2VjcmV0GAIgASgJMusMChJBY2Nlc3NUb2tlblNlcnZpY2USogEKC0NyZWF0ZVRva2VuEiMuY29udHJvbHBsYW5lLnYxLkNyZWF0ZVRva2VuUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVUb2tlblJlc3BvbnNlIkiiuxhECAE6QAoGY3JlYXRlEjYKDGFjY2Vzc190b2tlbhIRcmVzcG9uc2UudG9rZW4uaWQaE3Jlc3BvbnNlLnRva2VuLm5hbWUSXQoKTGlzdFRva2VucxIiLmNvbnRyb2xwbGFuZS52MS5MaXN0VG9rZW5zUmVxdWVzdBojLmNvbnRyb2xwbGFuZS52MS5MaXN0VG9rZW5zUmVzcG9uc2UiBqK7GAIIARKVAQoLUmV2b2tlVG9rZW4SIy5jb250cm9scGxhbmUudjEuUmV2b2tlVG9rZW5SZXF1ZXN0GiQuY29udHJvbHBsYW5lLnYxLlJldm9rZVRva2VuUmVzcG9uc2UiO6K7GDcIARgBOjEKBnJldm9rZRInCgxhY2Nlc3NfdG9rZW4SAmlkGhNyZXNwb25zZS50b2tlbi5uYW1lErMBCg1DcmVhdGVNeVRva2VuEiUuY29udHJvbHBsYW5lLnYxLkNyZWF0ZU15VG9rZW5SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkNyZWF0ZU15VG9rZW5SZXNwb25zZSJTorsYTwgBOksKBmNyZWF0ZRI2CgxhY2Nlc3NfdG9rZW4SEXJlc3BvbnNlLnRva2VuLmlkGhNyZXNwb25zZS50b2tlbi5uYW1lKgllcGhlbWVyYWwSYwoMTGlzdE15VG9rZW5zEiQuY29udHJvbHBsYW5lLnYxLkxpc3RNeVRva2Vuc1JlcXVlc3QaJS5jb250cm9scGxhbmUudjEuTGlzdE15VG9rZW5zUmVzcG9uc2UiBqK7GAIIARKGAQoNUmV2b2tlTXlUb2tlbhIlLmNvbnRyb2xwbGFuZS52MS5SZXZva2VNeVRva2VuUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5SZXZva2VNeVRva2VuUmVzcG9uc2UiJqK7GCIIARgBOhwKBnJldm9rZRISCgxhY2Nlc3NfdG9rZW4SAmlkEpkBCg1VcGRhdGVNeVRva2VuEiUuY29udHJvbHBsYW5lLnYxLlVwZGF0ZU15VG9rZW5SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLlVwZGF0ZU15VG9rZW5SZXNwb25zZSI5orsYNQgBOjEKBnVwZGF0ZRInCgxhY2Nlc3NfdG9rZW4SAmlkGhNyZXNwb25zZS50b2tlbi5uYW1lEqwBChZSZXNldERhZW1vblNjb3BlUG9saWN5Ei4uY29udHJvbHBsYW5lLnYxLlJlc2V0RGFlbW9uU2NvcGVQb2xpY3lSZXF1ZXN0Gi8uY29udHJvbHBsYW5lLnYxLlJlc2V0RGFlbW9uU2NvcGVQb2xpY3lSZXNwb25zZSIxorsYLQgBOikKBXJlc2V0EiAKE2RhZW1vbl9zY29wZV9wb2xpY3kSCWRhZW1vbl9pZBKtAQoNRXhjaGFuZ2VUb2tlbhIlLmNvbnRyb2xwbGFuZS52MS5FeGNoYW5nZVRva2VuUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5FeGNoYW5nZVRva2VuUmVzcG9uc2UiTaK7GEkIATpFOkNtaW50cyBhIHNob3J0LWxpdmVkIHNlc3Npb24gdG9rZW4gZm9yIHRoZSBDTEk7IGF1ZGl0X2xvZyByZWNvcmRzIGl0EngKE0xpc3RPcmdNZW1iZXJHcmFudHMSKy5jb250cm9scGxhbmUudjEuTGlzdE9yZ01lbWJlckdyYW50c1JlcXVlc3QaLC5jb250cm9scGxhbmUudjEuTGlzdE9yZ01lbWJlckdyYW50c1Jlc3BvbnNlIgaiuxgCCAESnwEKFVVwZGF0ZU9yZ01lbWJlckdyYW50cxItLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVPcmdNZW1iZXJHcmFudHNSZXF1ZXN0Gi4uY29udHJvbHBsYW5lLnYxLlVwZGF0ZU9yZ01lbWJlckdyYW50c1Jlc3BvbnNlIieiuxgjCAE6HwoKc2V0X2dyYW50cxIRCgZtZW1iZXISB3VzZXJfaWRC3gEKE2NvbS5jb250cm9scGxhbmUudjFCEEFjY2Vzc1Rva2VuUHJvdG9QAVpYZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2FjY2Vzc190b2tlbi92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CitzZXJ2aWNlcy9hY2Nlc3NfdG9rZW4vdjEvYWNjZXNzX3Rva2VuLnByb3RvEg9jb250cm9scGxhbmUudjEijwEKD09yZ01lbWJlckdyYW50cxIPCgd1c2VyX2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEgwKBHJvbGUYAyABKAkSDgoGc2NvcGVzGAQgAygJEj4KEmVudmlyb25tZW50X2dyYW50cxgFIAMoCzIiLmNvbnRyb2xwbGFuZS52MS5FbnZpcm9ubWVudEdyYW50cyI7ChFFbnZpcm9ubWVudEdyYW50cxIWCg5lbnZpcm9ubWVudF9pZBgBIAEoCRIOCgZzY29wZXMYAiADKAkiUgoQR3JhbnRFbnZpcm9ubWVudBIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhEKCXByb3RlY3RlZBgDIAEoCBIRCglncmFudGFibGUYBCADKAkiTwoTRW52aXJvbm1lbnRHcmFudFNldBI4CgxlbnZpcm9ubWVudHMYASADKAsyIi5jb250cm9scGxhbmUudjEuRW52aXJvbm1lbnRHcmFudHMiPAoaTGlzdE9yZ01lbWJlckdyYW50c1JlcXVlc3QSEwoGb3JnX2lkGAEgASgJSACIAQFCCQoHX29yZ19pZCK4AQobTGlzdE9yZ01lbWJlckdyYW50c1Jlc3BvbnNlEjEKB21lbWJlcnMYASADKAsyIC5jb250cm9scGxhbmUudjEuT3JnTWVtYmVyR3JhbnRzEhEKCWdyYW50YWJsZRgCIAMoCRI3CgxlbnZpcm9ubWVudHMYAyADKAsyIS5jb250cm9scGxhbmUudjEuR3JhbnRFbnZpcm9ubWVudBIaChJlbnZpcm9ubWVudF9zY29wZXMYBCADKAkioQEKHFVwZGF0ZU9yZ01lbWJlckdyYW50c1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIOCgZzY29wZXMYAiADKAkSEwoGb3JnX2lkGAMgASgJSACIAQESQAoSZW52aXJvbm1lbnRfZ3JhbnRzGAQgASgLMiQuY29udHJvbHBsYW5lLnYxLkVudmlyb25tZW50R3JhbnRTZXRCCQoHX29yZ19pZCJRCh1VcGRhdGVPcmdNZW1iZXJHcmFudHNSZXNwb25zZRIwCgZtZW1iZXIYASABKAsyIC5jb250cm9scGxhbmUudjEuT3JnTWVtYmVyR3JhbnRzIisKD1Jlc291cmNlQmluZGluZxIMCgRraW5kGAEgASgJEgoKAmlkGAIgASgJIrADCgtBY2Nlc3NUb2tlbhIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhYKDmRpc3BsYXlfcHJlZml4GAMgASgJEg4KBnNjb3BlcxgEIAMoCRIaChJjcmVhdGVkX2J5X3VzZXJfaWQYBSABKAkSLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF91c2VkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpyZXZva2VkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgZvcmdfaWQYCiABKAkSFgoOYWN0aW5nX3VzZXJfaWQYCyABKAkSMgoIcmVzb3VyY2UYDCABKAsyIC5jb250cm9scGxhbmUudjEuUmVzb3VyY2VCaW5kaW5nEhEKCWVwaGVtZXJhbBgNIAEoCBISCgphbGxfc2NvcGVzGA4gASgIIoIBChJDcmVhdGVUb2tlblJlcXVlc3QSDAoEbmFtZRgBIAEoCRIOCgZzY29wZXMYAiADKAkSLgoKZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoGb3JnX2lkGAQgASgJSACIAQFCCQoHX29yZ19pZCJSChNDcmVhdGVUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuEg4KBnNlY3JldBgCIAEoCSJlChFMaXN0VG9rZW5zUmVxdWVzdBIcCg9pbmNsdWRlX3Jldm9rZWQYASABKAhIAIgBARITCgZvcmdfaWQYAiABKAlIAYgBAUISChBfaW5jbHVkZV9yZXZva2VkQgkKB19vcmdfaWQiQgoSTGlzdFRva2Vuc1Jlc3BvbnNlEiwKBnRva2VucxgBIAMoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbiJAChJSZXZva2VUb2tlblJlcXVlc3QSCgoCaWQYASABKAkSEwoGb3JnX2lkGAIgASgJSACIAQFCCQoHX29yZ19pZCJCChNSZXZva2VUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuItsBChRDcmVhdGVNeVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEg4KBnNjb3BlcxgCIAMoCRIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIyCghyZXNvdXJjZRgEIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5SZXNvdXJjZUJpbmRpbmcSEQoJZXBoZW1lcmFsGAUgASgIEg4KBnJvdGF0ZRgGIAEoCBITCgZvcmdfaWQYByABKAlIAIgBAUIJCgdfb3JnX2lkImUKFUNyZWF0ZU15VG9rZW5SZXNwb25zZRIrCgV0b2tlbhgBIAEoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbhIOCgZzZWNyZXQYAiABKAkSDwoHcm90YXRlZBgDIAEoCCKFAQoTTGlzdE15VG9rZW5zUmVxdWVzdBIcCg9pbmNsdWRlX3Jldm9rZWQYASABKAhIAIgBARISCgVzY29wZRgCIAEoCUgBiAEBEhMKBm9yZ19pZBgDIAEoCUgCiAEBQhIKEF9pbmNsdWRlX3Jldm9rZWRCCAoGX3Njb3BlQgkKB19vcmdfaWQiRAoUTGlzdE15VG9rZW5zUmVzcG9uc2USLAoGdG9rZW5zGAEgAygLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuIkIKFFJldm9rZU15VG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJEhMKBm9yZ19pZBgCIAEoCUgAiAEBQgkKB19vcmdfaWQiFwoVUmV2b2tlTXlUb2tlblJlc3BvbnNlIlIKHVJlc2V0RGFlbW9uU2NvcGVQb2xpY3lSZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRITCgZvcmdfaWQYAiABKAlIAIgBAUIJCgdfb3JnX2lkIiAKHlJlc2V0RGFlbW9uU2NvcGVQb2xpY3lSZXNwb25zZSKAAgoIQ0xJTG9naW4SCgoCaWQYASABKAkSEQoJY2xpZW50X2lkGAIgASgJEhMKC2RldmljZV9uYW1lGAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3RfdXNlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcmV2b2tlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiRgoWTGlzdE15Q0xJTG9naW5zUmVxdWVzdBIaCg1pbmNsdWRlX2VuZGVkGAEgASgISACIAQFCEAoOX2luY2x1ZGVfZW5kZWQiRAoXTGlzdE15Q0xJTG9naW5zUmVzcG9uc2USKQoGbG9naW5zGAEgAygLMhkuY29udHJvbHBsYW5lLnYxLkNMSUxvZ2luIiUKF1Jldm9rZU15Q0xJTG9naW5SZXF1ZXN0EgoKAmlkGAEgASgJIhoKGFJldm9rZU15Q0xJTG9naW5SZXNwb25zZSKFAQoUVXBkYXRlTXlUb2tlblJlcXVlc3QSCgoCaWQYASABKAkSEQoEbmFtZRgCIAEoCUgAiAEBEg4KBnNjb3BlcxgDIAMoCRIVCg11cGRhdGVfc2NvcGVzGAQgASgIEhMKBm9yZ19pZBgFIAEoCUgBiAEBQgcKBV9uYW1lQgkKB19vcmdfaWQiRAoVVXBkYXRlTXlUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuIiYKFEV4Y2hhbmdlVG9rZW5SZXF1ZXN0Eg4KBnNjb3BlcxgBIAMoCSJUChVFeGNoYW5nZVRva2VuUmVzcG9uc2USKwoFdG9rZW4YASABKAsyHC5jb250cm9scGxhbmUudjEuQWNjZXNzVG9rZW4SDgoGc2VjcmV0GAIgASgJMqsPChJBY2Nlc3NUb2tlblNlcnZpY2USogEKC0NyZWF0ZVRva2VuEiMuY29udHJvbHBsYW5lLnYxLkNyZWF0ZVRva2VuUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVUb2tlblJlc3BvbnNlIkiiuxhECAE6QAoGY3JlYXRlEjYKDGFjY2Vzc190b2tlbhIRcmVzcG9uc2UudG9rZW4uaWQaE3Jlc3BvbnNlLnRva2VuLm5hbWUSXQoKTGlzdFRva2VucxIiLmNvbnRyb2xwbGFuZS52MS5MaXN0VG9rZW5zUmVxdWVzdBojLmNvbnRyb2xwbGFuZS52MS5MaXN0VG9rZW5zUmVzcG9uc2UiBqK7GAIIARKVAQoLUmV2b2tlVG9rZW4SIy5jb250cm9scGxhbmUudjEuUmV2b2tlVG9rZW5SZXF1ZXN0GiQuY29udHJvbHBsYW5lLnYxLlJldm9rZVRva2VuUmVzcG9uc2UiO6K7GDcIARgBOjEKBnJldm9rZRInCgxhY2Nlc3NfdG9rZW4SAmlkGhNyZXNwb25zZS50b2tlbi5uYW1lErMBCg1DcmVhdGVNeVRva2VuEiUuY29udHJvbHBsYW5lLnYxLkNyZWF0ZU15VG9rZW5SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkNyZWF0ZU15VG9rZW5SZXNwb25zZSJTorsYTwgBOksKBmNyZWF0ZRI2CgxhY2Nlc3NfdG9rZW4SEXJlc3BvbnNlLnRva2VuLmlkGhNyZXNwb25zZS50b2tlbi5uYW1lKgllcGhlbWVyYWwSYwoMTGlzdE15VG9rZW5zEiQuY29udHJvbHBsYW5lLnYxLkxpc3RNeVRva2Vuc1JlcXVlc3QaJS5jb250cm9scGxhbmUudjEuTGlzdE15VG9rZW5zUmVzcG9uc2UiBqK7GAIIARKGAQoNUmV2b2tlTXlUb2tlbhIlLmNvbnRyb2xwbGFuZS52MS5SZXZva2VNeVRva2VuUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5SZXZva2VNeVRva2VuUmVzcG9uc2UiJqK7GCIIARgBOhwKBnJldm9rZRISCgxhY2Nlc3NfdG9rZW4SAmlkEpkBCg1VcGRhdGVNeVRva2VuEiUuY29udHJvbHBsYW5lLnYxLlVwZGF0ZU15VG9rZW5SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLlVwZGF0ZU15VG9rZW5SZXNwb25zZSI5orsYNQgBOjEKBnVwZGF0ZRInCgxhY2Nlc3NfdG9rZW4SAmlkGhNyZXNwb25zZS50b2tlbi5uYW1lEqwBChZSZXNldERhZW1vblNjb3BlUG9saWN5Ei4uY29udHJvbHBsYW5lLnYxLlJlc2V0RGFlbW9uU2NvcGVQb2xpY3lSZXF1ZXN0Gi8uY29udHJvbHBsYW5lLnYxLlJlc2V0RGFlbW9uU2NvcGVQb2xpY3lSZXNwb25zZSIxorsYLQgBOikKBXJlc2V0EiAKE2RhZW1vbl9zY29wZV9wb2xpY3kSCWRhZW1vbl9pZBKuAQoPTGlzdE15Q0xJTG9naW5zEicuY29udHJvbHBsYW5lLnYxLkxpc3RNeUNMSUxvZ2luc1JlcXVlc3QaKC5jb250cm9scGxhbmUudjEuTGlzdE15Q0xJTG9naW5zUmVzcG9uc2UiSKK7GEQIATpAOj5yZWFkcyBvbmx5OiBsaXN0cyB0aGUgY2FsbGVyJ3Mgb3duIENMSSBsb2dpbnMsIGNoYW5nZXMgbm90aGluZxKMAQoQUmV2b2tlTXlDTElMb2dpbhIoLmNvbnRyb2xwbGFuZS52MS5SZXZva2VNeUNMSUxvZ2luUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5SZXZva2VNeUNMSUxvZ2luUmVzcG9uc2UiI6K7GB8IARgBOhkKBnJldm9rZRIPCgljbGlfbG9naW4SAmlkEq0BCg1FeGNoYW5nZVRva2VuEiUuY29udHJvbHBsYW5lLnYxLkV4Y2hhbmdlVG9rZW5SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkV4Y2hhbmdlVG9rZW5SZXNwb25zZSJNorsYSQgBOkU6Q21pbnRzIGEgc2hvcnQtbGl2ZWQgc2Vzc2lvbiB0b2tlbiBmb3IgdGhlIENMSTsgYXVkaXRfbG9nIHJlY29yZHMgaXQSeAoTTGlzdE9yZ01lbWJlckdyYW50cxIrLmNvbnRyb2xwbGFuZS52MS5MaXN0T3JnTWVtYmVyR3JhbnRzUmVxdWVzdBosLmNvbnRyb2xwbGFuZS52MS5MaXN0T3JnTWVtYmVyR3JhbnRzUmVzcG9uc2UiBqK7GAIIARKfAQoVVXBkYXRlT3JnTWVtYmVyR3JhbnRzEi0uY29udHJvbHBsYW5lLnYxLlVwZGF0ZU9yZ01lbWJlckdyYW50c1JlcXVlc3QaLi5jb250cm9scGxhbmUudjEuVXBkYXRlT3JnTWVtYmVyR3JhbnRzUmVzcG9uc2UiJ6K7GCMIATofCgpzZXRfZ3JhbnRzEhEKBm1lbWJlchIHdXNlcl9pZELeAQoTY29tLmNvbnRyb2xwbGFuZS52MUIQQWNjZXNzVG9rZW5Qcm90b1ABWlhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvYWNjZXNzX3Rva2VuL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * OrgMemberGrants is one member and the org permissions they hold.
@@ -57,12 +57,23 @@ export type OrgMemberGrants = Message<"controlplane.v1.OrgMemberGrants"> & {
   role: string;
 
   /**
-   * scopes are the permissions held, from the same vocabulary as a token's
-   * (forge/pkg/accesstoken).
+   * scopes are the permissions held ORG-WIDE, from the same vocabulary as a
+   * token's (forge/pkg/accesstoken).
    *
    * @generated from field: repeated string scopes = 4;
    */
   scopes: string[];
+
+  /**
+   * environment_grants are the permissions held for ONE environment only
+   * (docs/design/orgs-and-members.md §4), one entry per environment with any.
+   * What the member may do on an environment is scopes ∪ that environment's
+   * entry. Empty for a member with no environment-bound grant, and always
+   * empty from a server older than per-environment grants.
+   *
+   * @generated from field: repeated controlplane.v1.EnvironmentGrants environment_grants = 5;
+   */
+  environmentGrants: EnvironmentGrants[];
 };
 
 /**
@@ -71,6 +82,100 @@ export type OrgMemberGrants = Message<"controlplane.v1.OrgMemberGrants"> & {
  */
 export const OrgMemberGrantsSchema: GenMessage<OrgMemberGrants> = /*@__PURE__*/
   messageDesc(file_services_access_token_v1_access_token, 0);
+
+/**
+ * EnvironmentGrants is a set of permissions bound to one environment.
+ *
+ * @generated from message controlplane.v1.EnvironmentGrants
+ */
+export type EnvironmentGrants = Message<"controlplane.v1.EnvironmentGrants"> & {
+  /**
+   * environment_id is a deploy environment of the org (DeployService).
+   *
+   * @generated from field: string environment_id = 1;
+   */
+  environmentId: string;
+
+  /**
+   * scopes may name only the permissions that can be bound to an
+   * environment: ListOrgMemberGrantsResponse.environment_scopes.
+   *
+   * @generated from field: repeated string scopes = 2;
+   */
+  scopes: string[];
+};
+
+/**
+ * Describes the message controlplane.v1.EnvironmentGrants.
+ * Use `create(EnvironmentGrantsSchema)` to create a new message.
+ */
+export const EnvironmentGrantsSchema: GenMessage<EnvironmentGrants> = /*@__PURE__*/
+  messageDesc(file_services_access_token_v1_access_token, 1);
+
+/**
+ * GrantEnvironment is one environment a permission may be bound to: a column
+ * of the people × environments matrix.
+ *
+ * @generated from message controlplane.v1.GrantEnvironment
+ */
+export type GrantEnvironment = Message<"controlplane.v1.GrantEnvironment"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * protected mirrors the environment's protection flag (secret writes need
+   * a step-up), for display.
+   *
+   * @generated from field: bool protected = 3;
+   */
+  protected: boolean;
+
+  /**
+   * grantable is what the CALLER may grant on this environment: what they
+   * hold org-wide or bound to it, limited to environment_scopes.
+   *
+   * @generated from field: repeated string grantable = 4;
+   */
+  grantable: string[];
+};
+
+/**
+ * Describes the message controlplane.v1.GrantEnvironment.
+ * Use `create(GrantEnvironmentSchema)` to create a new message.
+ */
+export const GrantEnvironmentSchema: GenMessage<GrantEnvironment> = /*@__PURE__*/
+  messageDesc(file_services_access_token_v1_access_token, 2);
+
+/**
+ * EnvironmentGrantSet is the COMPLETE set of a member's environment-bound
+ * grants. Its presence on an update is what says "replace them"; see
+ * UpdateOrgMemberGrantsRequest.environment_grants.
+ *
+ * @generated from message controlplane.v1.EnvironmentGrantSet
+ */
+export type EnvironmentGrantSet = Message<"controlplane.v1.EnvironmentGrantSet"> & {
+  /**
+   * One entry per environment; an environment absent here holds no bound
+   * grant afterwards. An environment may appear at most once.
+   *
+   * @generated from field: repeated controlplane.v1.EnvironmentGrants environments = 1;
+   */
+  environments: EnvironmentGrants[];
+};
+
+/**
+ * Describes the message controlplane.v1.EnvironmentGrantSet.
+ * Use `create(EnvironmentGrantSetSchema)` to create a new message.
+ */
+export const EnvironmentGrantSetSchema: GenMessage<EnvironmentGrantSet> = /*@__PURE__*/
+  messageDesc(file_services_access_token_v1_access_token, 3);
 
 /**
  * @generated from message controlplane.v1.ListOrgMemberGrantsRequest
@@ -91,7 +196,7 @@ export type ListOrgMemberGrantsRequest = Message<"controlplane.v1.ListOrgMemberG
  * Use `create(ListOrgMemberGrantsRequestSchema)` to create a new message.
  */
 export const ListOrgMemberGrantsRequestSchema: GenMessage<ListOrgMemberGrantsRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 1);
+  messageDesc(file_services_access_token_v1_access_token, 4);
 
 /**
  * @generated from message controlplane.v1.ListOrgMemberGrantsResponse
@@ -105,11 +210,27 @@ export type ListOrgMemberGrantsResponse = Message<"controlplane.v1.ListOrgMember
   /**
    * grantable is what the CALLER may hand out — their own permission set. The
    * UI renders anything outside it as disabled rather than letting a member
-   * attempt an edit the server will refuse.
+   * attempt an edit the server will refuse. These are ORG-WIDE grants.
    *
    * @generated from field: repeated string grantable = 2;
    */
   grantable: string[];
+
+  /**
+   * environments are the org's live environments, by name, each with what
+   * the caller may grant on it.
+   *
+   * @generated from field: repeated controlplane.v1.GrantEnvironment environments = 3;
+   */
+  environments: GrantEnvironment[];
+
+  /**
+   * environment_scopes are the permissions that may be bound to one
+   * environment (orggrants.EnvScopes); any other permission is org-wide only.
+   *
+   * @generated from field: repeated string environment_scopes = 4;
+   */
+  environmentScopes: string[];
 };
 
 /**
@@ -117,7 +238,7 @@ export type ListOrgMemberGrantsResponse = Message<"controlplane.v1.ListOrgMember
  * Use `create(ListOrgMemberGrantsResponseSchema)` to create a new message.
  */
 export const ListOrgMemberGrantsResponseSchema: GenMessage<ListOrgMemberGrantsResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 2);
+  messageDesc(file_services_access_token_v1_access_token, 5);
 
 /**
  * @generated from message controlplane.v1.UpdateOrgMemberGrantsRequest
@@ -145,6 +266,20 @@ export type UpdateOrgMemberGrantsRequest = Message<"controlplane.v1.UpdateOrgMem
    * @generated from field: optional string org_id = 3;
    */
   orgId?: string | undefined;
+
+  /**
+   * environment_grants, when SET, replaces the member's environment-bound
+   * grants with exactly this set, in the same transaction as scopes. When
+   * UNSET (every client older than per-environment grants), environment-bound
+   * grants are left exactly as they are, so an old client editing org-wide
+   * permissions never erases them.
+   *
+   * CLIPPED TO THE CALLER per environment: a permission bound to environment
+   * E may be granted only by someone holding it org-wide or bound to E.
+   *
+   * @generated from field: controlplane.v1.EnvironmentGrantSet environment_grants = 4;
+   */
+  environmentGrants?: EnvironmentGrantSet | undefined;
 };
 
 /**
@@ -152,7 +287,7 @@ export type UpdateOrgMemberGrantsRequest = Message<"controlplane.v1.UpdateOrgMem
  * Use `create(UpdateOrgMemberGrantsRequestSchema)` to create a new message.
  */
 export const UpdateOrgMemberGrantsRequestSchema: GenMessage<UpdateOrgMemberGrantsRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 3);
+  messageDesc(file_services_access_token_v1_access_token, 6);
 
 /**
  * @generated from message controlplane.v1.UpdateOrgMemberGrantsResponse
@@ -169,7 +304,7 @@ export type UpdateOrgMemberGrantsResponse = Message<"controlplane.v1.UpdateOrgMe
  * Use `create(UpdateOrgMemberGrantsResponseSchema)` to create a new message.
  */
 export const UpdateOrgMemberGrantsResponseSchema: GenMessage<UpdateOrgMemberGrantsResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 4);
+  messageDesc(file_services_access_token_v1_access_token, 7);
 
 /**
  * ResourceBinding confines a token to one resource. kind is one of
@@ -194,7 +329,7 @@ export type ResourceBinding = Message<"controlplane.v1.ResourceBinding"> & {
  * Use `create(ResourceBindingSchema)` to create a new message.
  */
 export const ResourceBindingSchema: GenMessage<ResourceBinding> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 5);
+  messageDesc(file_services_access_token_v1_access_token, 8);
 
 /**
  * @generated from message controlplane.v1.AccessToken
@@ -292,7 +427,7 @@ export type AccessToken = Message<"controlplane.v1.AccessToken"> & {
  * Use `create(AccessTokenSchema)` to create a new message.
  */
 export const AccessTokenSchema: GenMessage<AccessToken> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 6);
+  messageDesc(file_services_access_token_v1_access_token, 9);
 
 /**
  * @generated from message controlplane.v1.CreateTokenRequest
@@ -328,7 +463,7 @@ export type CreateTokenRequest = Message<"controlplane.v1.CreateTokenRequest"> &
  * Use `create(CreateTokenRequestSchema)` to create a new message.
  */
 export const CreateTokenRequestSchema: GenMessage<CreateTokenRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 7);
+  messageDesc(file_services_access_token_v1_access_token, 10);
 
 /**
  * @generated from message controlplane.v1.CreateTokenResponse
@@ -352,7 +487,7 @@ export type CreateTokenResponse = Message<"controlplane.v1.CreateTokenResponse">
  * Use `create(CreateTokenResponseSchema)` to create a new message.
  */
 export const CreateTokenResponseSchema: GenMessage<CreateTokenResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 8);
+  messageDesc(file_services_access_token_v1_access_token, 11);
 
 /**
  * @generated from message controlplane.v1.ListTokensRequest
@@ -378,7 +513,7 @@ export type ListTokensRequest = Message<"controlplane.v1.ListTokensRequest"> & {
  * Use `create(ListTokensRequestSchema)` to create a new message.
  */
 export const ListTokensRequestSchema: GenMessage<ListTokensRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 9);
+  messageDesc(file_services_access_token_v1_access_token, 12);
 
 /**
  * @generated from message controlplane.v1.ListTokensResponse
@@ -395,7 +530,7 @@ export type ListTokensResponse = Message<"controlplane.v1.ListTokensResponse"> &
  * Use `create(ListTokensResponseSchema)` to create a new message.
  */
 export const ListTokensResponseSchema: GenMessage<ListTokensResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 10);
+  messageDesc(file_services_access_token_v1_access_token, 13);
 
 /**
  * @generated from message controlplane.v1.RevokeTokenRequest
@@ -421,7 +556,7 @@ export type RevokeTokenRequest = Message<"controlplane.v1.RevokeTokenRequest"> &
  * Use `create(RevokeTokenRequestSchema)` to create a new message.
  */
 export const RevokeTokenRequestSchema: GenMessage<RevokeTokenRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 11);
+  messageDesc(file_services_access_token_v1_access_token, 14);
 
 /**
  * @generated from message controlplane.v1.RevokeTokenResponse
@@ -438,7 +573,7 @@ export type RevokeTokenResponse = Message<"controlplane.v1.RevokeTokenResponse">
  * Use `create(RevokeTokenResponseSchema)` to create a new message.
  */
 export const RevokeTokenResponseSchema: GenMessage<RevokeTokenResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 12);
+  messageDesc(file_services_access_token_v1_access_token, 15);
 
 /**
  * @generated from message controlplane.v1.CreateMyTokenRequest
@@ -495,7 +630,7 @@ export type CreateMyTokenRequest = Message<"controlplane.v1.CreateMyTokenRequest
  * Use `create(CreateMyTokenRequestSchema)` to create a new message.
  */
 export const CreateMyTokenRequestSchema: GenMessage<CreateMyTokenRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 13);
+  messageDesc(file_services_access_token_v1_access_token, 16);
 
 /**
  * @generated from message controlplane.v1.CreateMyTokenResponse
@@ -525,7 +660,7 @@ export type CreateMyTokenResponse = Message<"controlplane.v1.CreateMyTokenRespon
  * Use `create(CreateMyTokenResponseSchema)` to create a new message.
  */
 export const CreateMyTokenResponseSchema: GenMessage<CreateMyTokenResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 14);
+  messageDesc(file_services_access_token_v1_access_token, 17);
 
 /**
  * @generated from message controlplane.v1.ListMyTokensRequest
@@ -560,7 +695,7 @@ export type ListMyTokensRequest = Message<"controlplane.v1.ListMyTokensRequest">
  * Use `create(ListMyTokensRequestSchema)` to create a new message.
  */
 export const ListMyTokensRequestSchema: GenMessage<ListMyTokensRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 15);
+  messageDesc(file_services_access_token_v1_access_token, 18);
 
 /**
  * @generated from message controlplane.v1.ListMyTokensResponse
@@ -577,7 +712,7 @@ export type ListMyTokensResponse = Message<"controlplane.v1.ListMyTokensResponse
  * Use `create(ListMyTokensResponseSchema)` to create a new message.
  */
 export const ListMyTokensResponseSchema: GenMessage<ListMyTokensResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 16);
+  messageDesc(file_services_access_token_v1_access_token, 19);
 
 /**
  * @generated from message controlplane.v1.RevokeMyTokenRequest
@@ -603,7 +738,7 @@ export type RevokeMyTokenRequest = Message<"controlplane.v1.RevokeMyTokenRequest
  * Use `create(RevokeMyTokenRequestSchema)` to create a new message.
  */
 export const RevokeMyTokenRequestSchema: GenMessage<RevokeMyTokenRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 17);
+  messageDesc(file_services_access_token_v1_access_token, 20);
 
 /**
  * @generated from message controlplane.v1.RevokeMyTokenResponse
@@ -616,7 +751,7 @@ export type RevokeMyTokenResponse = Message<"controlplane.v1.RevokeMyTokenRespon
  * Use `create(RevokeMyTokenResponseSchema)` to create a new message.
  */
 export const RevokeMyTokenResponseSchema: GenMessage<RevokeMyTokenResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 18);
+  messageDesc(file_services_access_token_v1_access_token, 21);
 
 /**
  * @generated from message controlplane.v1.ResetDaemonScopePolicyRequest
@@ -642,7 +777,7 @@ export type ResetDaemonScopePolicyRequest = Message<"controlplane.v1.ResetDaemon
  * Use `create(ResetDaemonScopePolicyRequestSchema)` to create a new message.
  */
 export const ResetDaemonScopePolicyRequestSchema: GenMessage<ResetDaemonScopePolicyRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 19);
+  messageDesc(file_services_access_token_v1_access_token, 22);
 
 /**
  * @generated from message controlplane.v1.ResetDaemonScopePolicyResponse
@@ -655,7 +790,131 @@ export type ResetDaemonScopePolicyResponse = Message<"controlplane.v1.ResetDaemo
  * Use `create(ResetDaemonScopePolicyResponseSchema)` to create a new message.
  */
 export const ResetDaemonScopePolicyResponseSchema: GenMessage<ResetDaemonScopePolicyResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 20);
+  messageDesc(file_services_access_token_v1_access_token, 23);
+
+/**
+ * CLILogin is one of a person's human CLI logins (an rlci_ identity). The
+ * secret is never returned: it exists only on the device that logged in.
+ *
+ * @generated from message controlplane.v1.CLILogin
+ */
+export type CLILogin = Message<"controlplane.v1.CLILogin"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * client_id is the CLI that logged in (forge-cli).
+   *
+   * @generated from field: string client_id = 2;
+   */
+  clientId: string;
+
+  /**
+   * device_name is the device label the CLI sent at login.
+   *
+   * @generated from field: string device_name = 3;
+   */
+  deviceName: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 4;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 5;
+   */
+  expiresAt?: Timestamp | undefined;
+
+  /**
+   * last_used_at is when it last authenticated, to the minute; unset if never.
+   *
+   * @generated from field: google.protobuf.Timestamp last_used_at = 6;
+   */
+  lastUsedAt?: Timestamp | undefined;
+
+  /**
+   * revoked_at is set once the login was signed out or revoked.
+   *
+   * @generated from field: google.protobuf.Timestamp revoked_at = 7;
+   */
+  revokedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.CLILogin.
+ * Use `create(CLILoginSchema)` to create a new message.
+ */
+export const CLILoginSchema: GenMessage<CLILogin> = /*@__PURE__*/
+  messageDesc(file_services_access_token_v1_access_token, 24);
+
+/**
+ * @generated from message controlplane.v1.ListMyCLILoginsRequest
+ */
+export type ListMyCLILoginsRequest = Message<"controlplane.v1.ListMyCLILoginsRequest"> & {
+  /**
+   * include_ended also lists revoked and expired logins: the newest 100.
+   *
+   * @generated from field: optional bool include_ended = 1;
+   */
+  includeEnded?: boolean | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.ListMyCLILoginsRequest.
+ * Use `create(ListMyCLILoginsRequestSchema)` to create a new message.
+ */
+export const ListMyCLILoginsRequestSchema: GenMessage<ListMyCLILoginsRequest> = /*@__PURE__*/
+  messageDesc(file_services_access_token_v1_access_token, 25);
+
+/**
+ * @generated from message controlplane.v1.ListMyCLILoginsResponse
+ */
+export type ListMyCLILoginsResponse = Message<"controlplane.v1.ListMyCLILoginsResponse"> & {
+  /**
+   * @generated from field: repeated controlplane.v1.CLILogin logins = 1;
+   */
+  logins: CLILogin[];
+};
+
+/**
+ * Describes the message controlplane.v1.ListMyCLILoginsResponse.
+ * Use `create(ListMyCLILoginsResponseSchema)` to create a new message.
+ */
+export const ListMyCLILoginsResponseSchema: GenMessage<ListMyCLILoginsResponse> = /*@__PURE__*/
+  messageDesc(file_services_access_token_v1_access_token, 26);
+
+/**
+ * @generated from message controlplane.v1.RevokeMyCLILoginRequest
+ */
+export type RevokeMyCLILoginRequest = Message<"controlplane.v1.RevokeMyCLILoginRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+};
+
+/**
+ * Describes the message controlplane.v1.RevokeMyCLILoginRequest.
+ * Use `create(RevokeMyCLILoginRequestSchema)` to create a new message.
+ */
+export const RevokeMyCLILoginRequestSchema: GenMessage<RevokeMyCLILoginRequest> = /*@__PURE__*/
+  messageDesc(file_services_access_token_v1_access_token, 27);
+
+/**
+ * @generated from message controlplane.v1.RevokeMyCLILoginResponse
+ */
+export type RevokeMyCLILoginResponse = Message<"controlplane.v1.RevokeMyCLILoginResponse"> & {
+};
+
+/**
+ * Describes the message controlplane.v1.RevokeMyCLILoginResponse.
+ * Use `create(RevokeMyCLILoginResponseSchema)` to create a new message.
+ */
+export const RevokeMyCLILoginResponseSchema: GenMessage<RevokeMyCLILoginResponse> = /*@__PURE__*/
+  messageDesc(file_services_access_token_v1_access_token, 28);
 
 /**
  * @generated from message controlplane.v1.UpdateMyTokenRequest
@@ -715,7 +974,7 @@ export type UpdateMyTokenRequest = Message<"controlplane.v1.UpdateMyTokenRequest
  * Use `create(UpdateMyTokenRequestSchema)` to create a new message.
  */
 export const UpdateMyTokenRequestSchema: GenMessage<UpdateMyTokenRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 21);
+  messageDesc(file_services_access_token_v1_access_token, 29);
 
 /**
  * @generated from message controlplane.v1.UpdateMyTokenResponse
@@ -732,7 +991,7 @@ export type UpdateMyTokenResponse = Message<"controlplane.v1.UpdateMyTokenRespon
  * Use `create(UpdateMyTokenResponseSchema)` to create a new message.
  */
 export const UpdateMyTokenResponseSchema: GenMessage<UpdateMyTokenResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 22);
+  messageDesc(file_services_access_token_v1_access_token, 30);
 
 /**
  * @generated from message controlplane.v1.ExchangeTokenRequest
@@ -753,7 +1012,7 @@ export type ExchangeTokenRequest = Message<"controlplane.v1.ExchangeTokenRequest
  * Use `create(ExchangeTokenRequestSchema)` to create a new message.
  */
 export const ExchangeTokenRequestSchema: GenMessage<ExchangeTokenRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 23);
+  messageDesc(file_services_access_token_v1_access_token, 31);
 
 /**
  * @generated from message controlplane.v1.ExchangeTokenResponse
@@ -777,7 +1036,7 @@ export type ExchangeTokenResponse = Message<"controlplane.v1.ExchangeTokenRespon
  * Use `create(ExchangeTokenResponseSchema)` to create a new message.
  */
 export const ExchangeTokenResponseSchema: GenMessage<ExchangeTokenResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 24);
+  messageDesc(file_services_access_token_v1_access_token, 32);
 
 /**
  * @generated from service controlplane.v1.AccessTokenService
@@ -878,6 +1137,30 @@ export const AccessTokenService: GenService<{
     methodKind: "unary";
     input: typeof ResetDaemonScopePolicyRequestSchema;
     output: typeof ResetDaemonScopePolicyResponseSchema;
+  },
+  /**
+   * ListMyCLILogins lists the caller's human CLI logins (`forge login`): the
+   * device, when each was issued and last used, and when it ends. Browser
+   * session only: a CLI login is refused, like every rpc of this service.
+   *
+   * @generated from rpc controlplane.v1.AccessTokenService.ListMyCLILogins
+   */
+  listMyCLILogins: {
+    methodKind: "unary";
+    input: typeof ListMyCLILoginsRequestSchema;
+    output: typeof ListMyCLILoginsResponseSchema;
+  },
+  /**
+   * RevokeMyCLILogin ends one of the caller's own CLI logins at once: its
+   * next request is refused. Idempotent: revoking a revoked login succeeds.
+   * Another person's login, or none, is NotFound. Browser session only.
+   *
+   * @generated from rpc controlplane.v1.AccessTokenService.RevokeMyCLILogin
+   */
+  revokeMyCLILogin: {
+    methodKind: "unary";
+    input: typeof RevokeMyCLILoginRequestSchema;
+    output: typeof RevokeMyCLILoginResponseSchema;
   },
   /**
    * ExchangeToken attenuates a machine credential acting as a person to a

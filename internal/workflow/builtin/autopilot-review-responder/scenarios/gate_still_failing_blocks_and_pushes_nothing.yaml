@@ -48,7 +48,7 @@ events:
     black_box: true
     output: {"recheck_found": 0, "other_live_lease": false}
 expect:
-  outcome: completed
+  outcome: failed
   completed: [rounds.gate_retry, rounds.pick, rounds.blocked_label, rounds.release, ended_failed]
   not_reached: [rounds.publish]
   node_outputs:

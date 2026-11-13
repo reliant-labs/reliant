@@ -1,6 +1,9 @@
 import { reportError, reportFailure } from '@/lib/errorReporting'
-import { settingsGrpc } from '@/api/settings-grpc'
-import { PollCopilotDeviceAuthResponse_Status } from '@/gen/reliant/v1/settings_pb'
+import { pollCopilotDeviceAuth, startCopilotDeviceAuth } from '@/hooks/settings-queries'
+import {
+  PollCopilotDeviceAuthResponse_Status,
+  type StartCopilotDeviceAuthResponse,
+} from '@/gen/reliant/v1/settings_pb'
 
 /**
  * GitHub Copilot uses the OAuth 2.0 device-authorization flow rather than the
@@ -99,9 +102,9 @@ export async function runCopilotDeviceFlow(
 ): Promise<CopilotOAuthResult> {
   const { signal, onDeviceCode, onPolling, accountId } = options
 
-  let start: Awaited<ReturnType<typeof settingsGrpc.startCopilotDeviceAuth>>
+  let start: StartCopilotDeviceAuthResponse
   try {
-    start = await settingsGrpc.startCopilotDeviceAuth()
+    start = await startCopilotDeviceAuth()
   } catch (error: any) {
     if (signal?.aborted) {
       return errorResult('cancelled', 'Sign-in cancelled.')
@@ -142,10 +145,10 @@ export async function runCopilotDeviceFlow(
 
       await sleep(intervalMs, signal)
 
-      const { status, errorMessage, ...outcome } = await settingsGrpc.pollCopilotDeviceAuth(
-        start.deviceCode,
+      const { status, errorMessage, ...outcome } = await pollCopilotDeviceAuth({
+        deviceCode: start.deviceCode,
         accountId,
-      )
+      })
 
       switch (status) {
         case PollCopilotDeviceAuthResponse_Status.AUTHORIZED:

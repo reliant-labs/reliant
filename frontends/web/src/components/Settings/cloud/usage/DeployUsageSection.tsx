@@ -26,7 +26,7 @@
 // TOLD live in ./usageModel; this file is composition and the state ladder,
 // and it decides nothing about billing.
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Lock } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -165,6 +165,36 @@ export function DeployUsageSection({
         invoice is produced when the period closes and may differ.
       </p>
 
+      {/*
+        COSTS WITHHELD. The caller lacks billing:read, so ListUsage sent the
+        quantities with every dollar as 0 meaning "not shown". Rendering those
+        zeros would tell a member the org's hosting is free; say instead that
+        the costs exist and who can see them. Stated once here, and each cost
+        figure below reads "Hidden" rather than repeating it.
+      */}
+      {summary.costsWithheld ? (
+        <div
+          role="note"
+          className="rounded-md border border-border/60 bg-background p-4"
+        >
+          <div className="flex items-start gap-3">
+            <Lock
+              aria-hidden
+              className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+            />
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Costs hidden — ask a billing admin
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Dollar amounts need billing access, which organization owners
+                and admins have. Usage quantities below are complete.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <p className="text-sm text-muted-foreground">
         Pay-as-you-go app hosting has no included CPU, memory or storage allowance.
         Machine subscriptions are separate. Authorizing hosting does not bill historical unpaid usage.
@@ -190,12 +220,26 @@ export function DeployUsageSection({
         <Card>
           <CardContent className="flex flex-col gap-1">
             <StatCaption>Accrued this period</StatCaption>
-            <p className="text-2xl font-semibold tabular-nums text-foreground">
-              {formatCents(summary.accruedCents)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Estimated retail cost of the attribution rows shown below, not a complete monthly charge.
-            </p>
+            {summary.accruedCents === null ? (
+              <>
+                <p className="text-2xl font-semibold text-muted-foreground">
+                  Hidden
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Ask a billing admin (an organization owner or admin) for this
+                  period&apos;s cost.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-2xl font-semibold tabular-nums text-foreground">
+                  {formatCents(summary.accruedCents)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Estimated retail cost of the attribution rows shown below, not a complete monthly charge.
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -237,6 +281,7 @@ export function DeployUsageSection({
       <Panel title="Where it is going">
         <AttributionTable
           rows={summary.attribution}
+          costsWithheld={summary.costsWithheld}
           deploymentNames={deploymentNames}
           environmentNames={environmentNames}
         />

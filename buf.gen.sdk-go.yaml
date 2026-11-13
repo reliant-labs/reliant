@@ -1,5 +1,6 @@
 # buf.gen.sdk-go.yaml - the Go SDK's generated protobuf code (sdk/go/gen), run
-# by the `sdk-go-gen` generate hook in forge.yaml.
+# by the `sdk-go-gen` generate hook in forge.yaml (scripts/sdk-go-gen.sh, which
+# also strips the forgepb import so the SDK module needs no forge).
 #
 # The SDK (sdk/go) is its own Go module, and the published copy of the PUBLIC
 # protos: the files proto/public-api.txt exports from, plus the reliant files
@@ -75,9 +76,14 @@ plugins:
       - reliant.v1.TriggerService.GetLaunchEvent
       - reliant.v1.ChatService.GetChatUpdates
       - reliant.v1.ChatService.GetWorkflowExecutions
+      - reliant.v1.ChatService.GetContentBlockBodies
       - reliant.v1.QuestionService.ListPendingQuestions
       - reliant.v1.QuestionService.ResolveQuestion
       - reliant.v1.ApprovalService.ListApprovalsByChat
+      - reliant.v1.ApprovalService.Approve
+      - reliant.v1.ApprovalService.Deny
+      - reliant.v1.ApprovalService.BatchApprove
+      - reliant.v1.ApprovalService.BatchDeny
       - reliant.v1.InboxService.ListInbox
       - reliant.v1.InboxService.DismissInboxItem
       - reliant.v1.InboxService.RestoreInboxItem

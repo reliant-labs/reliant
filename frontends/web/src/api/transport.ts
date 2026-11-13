@@ -11,7 +11,7 @@
  * The chain composes forge's web runtime (`@reliantlabs/forge-web-runtime`)
  * with reliant's own interceptors. The order is:
  *   error-normalize → org-snapshot → timeout → auth → missing-token → daemon-last-seen → trace
- *     → error-logging → upgrade-modal → machine-wake → 401-signout
+ *     → error-logging → upgrade-modal → machine-wake → 401-signout → write-owner
  * (error-normalize and auth are the runtime's; daemon-last-seen only on reliant
  * api-server transports — see TransportBackend; trace is the runtime's).
  *
@@ -22,7 +22,12 @@
  *     ConnectError subclass with the numeric `.code`, metadata and details
  *     intact, so the `instanceof ConnectError` call sites keep working; it adds
  *     `.reason` / `.codeName` / `.status` / `.retryable` / `.traceId`, and its
- *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged);
+ *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged).
+ *     Being a runtime interceptor, it also records the open interaction (or
+ *     the caller's span) at call entry, before auth's await, so a call held
+ *     there while the user opens something else stays in the interaction it
+ *     started under (lib/chatOpenInteraction). An app interceptor that awaits
+ *     must never go above it without `interactionContextInterceptor()` first;
  *   - org snapshots synchronously before any auth await or timeout replacement:
  *     an operation started in A cannot become a write in B after a switch.
  *     Explicit caller orgs win; no selection stays unset across retries.
@@ -43,27 +48,33 @@
  *     propagates;
  *   - unauthInterceptor (401 → one refresh, else one sign-out) lives innermost so it doesn't gobble
  *     the timeout's DeadlineExceeded or the upgrade's ResourceExhausted.
+ *   - writeOwnerInterceptor (writeOwner.ts) is innermost of all, so a write
+ *     bound to an account is checked against the credential on the request
+ *     that actually leaves, including unauthInterceptor's re-sends.
  *
- * Setting `withAuth: false` skips the auth stages AND
- * `unauthInterceptor` (a 401 with no session would loop). All other
+ * Setting `withAuth: false` skips the auth stages, `unauthInterceptor`
+ * (a 401 with no session would loop) and the write-owner check. All other
  * interceptors stay on so the unauth transport still gets timeouts, tracing,
  * error reporting, and the upgrade modal — drift gone.
  */
 
-import { ConnectError, Code } from "@connectrpc/connect";
-import type { Interceptor } from "@connectrpc/connect";
+import { ConnectError, Code, createContextKey, createContextValues } from "@connectrpc/connect";
+import type { ContextValues, Interceptor } from "@connectrpc/connect";
 import {
   authInterceptor as runtimeAuthInterceptor,
   errorNormalizeInterceptor,
   traceInterceptor,
 } from "@reliantlabs/forge-web-runtime/interceptors";
 import { reportError, reportFailure } from "../lib/errorReporting";
+import { noteRpcFailureDecided } from "../lib/handledRpcFailures";
 import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
 import { upgradeInterceptor } from "./upgradeInterceptor";
 import { orgInterceptor } from "./orgInterceptor";
+import { signupAttributionInterceptor } from "./signupAttribution";
 import { machineWakeInterceptor } from "./machineWakeInterceptor";
 import { createDeadlineInterceptor } from "./rpcDeadline";
+import { writeOwnerInterceptor } from "./writeOwner";
 import { isReadSlotProcedure } from "../services/controlPlane/observability/readSlots";
 import { classifyRpcFailure } from "./rpcErrorPolicy";
 import { noteVersionSkew } from "./versionSkew";
@@ -114,7 +125,7 @@ const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
 // Forge-Via names this client to the control plane's activity stream
 // (forge/pkg/activity): a change made here reads "sean promoted v1.7.44 via
 // Console", where the same change from `reliant forge` reads "via CLI". The
-// control-plane admin-server admits it cross-origin (forge's default CORS
+// control-plane platform-api admits it cross-origin (forge's default CORS
 // allow list, forge >= #966); the reliant api-server does not read it, so it
 // is never sent there.
 export const FORGE_VIA_HEADER = "Forge-Via";
@@ -216,6 +227,7 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   StreamUserUpdates: 0,
   StreamChatUpdates: 0,
   StreamProcessOutput: 0,
+  StreamOrgUpdates: 0,
 };
 
 /**
@@ -263,7 +275,7 @@ const PROCEDURE_TIMEOUTS: Record<string, number> = {
  * one run up to the gateway's 15s (the prod route has no timeout policy, so
  * Envoy's default ends it at 15.0s), and the 10s default threw away reads
  * that were about to answer: on 2026-11-03 the Overview's ListWorkloads was
- * cut at 10.0s while admin-server finished in 9.4-11.0s, so Services, Jobs
+ * cut at 10.0s while platform-api finished in 9.4-11.0s, so Services, Jobs
  * and "Needs attention" never loaded. Just under the gateway, so a read that
  * cannot answer in time ends here, as a timeout the page explains and does not
  * retry, rather than as a dropped connection that is retried once.
@@ -383,9 +395,13 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     }
     return result;
   } catch (error) {
+    // Decided here, once: whatever a caller logs about it later is a log line
+    // (lib/handledRpcFailures.ts), not a second report.
+    noteRpcFailureDecided(error);
     const duration = Date.now() - startTime;
     const kind = classifyRpcFailure(error, {
       serviceTypeName: req.service.typeName,
+      methodName: req.method.name,
       signalAborted: req.signal.aborted,
     });
     const context = {
@@ -407,14 +423,37 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
       logger.info("[gRPC Client] Account required", context);
       throw error;
     }
+    if (kind === "already-absent") {
+      // An idempotent delete found nothing to delete: the caller's goal
+      // holds. Still thrown, so a caller that cares can tell.
+      logger.debug("[gRPC Client] Delete target already absent", context);
+      throw error;
+    }
     if (kind === "machine-wait") {
       logger.info("[gRPC Client] Machine not serving yet", context);
+      throw error;
+    }
+    if (kind === "network") {
+      // No server answered; the SDK's fetch span records the failed request.
+      logger.warn("[gRPC Client] Network failure", context);
       throw error;
     }
     if (kind === "deadline") {
       // Retryable, and the server already logged it at WARN. Visible here
       // too, but not an exception: the caller's retry is the remedy.
       logger.warn("[gRPC Client] Server deadline exceeded", context);
+      throw error;
+    }
+
+    if (
+      error instanceof ConnectError &&
+      error.code === Code.Unauthenticated &&
+      !req.header.has(AUTH_HEADER)
+    ) {
+      // Sent with no credentials (a signed-out page): the 401 is the answer,
+      // and missingTokenInterceptor already warned. A 401 that carried a
+      // token still falls through to the error log below.
+      logger.debug("[gRPC Client] Unauthenticated request without a token", context);
       throw error;
     }
 
@@ -715,7 +754,7 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
  * activity stream reads. In a production build the web app calls both
  * servers CROSS-ORIGIN (api.reliantapi.com and admin.reliantapi.com), so every
  * header it sends must be in that server's CORS preflight allow-list or the
- * browser refuses to send the RPC at all. The control-plane admin-server does
+ * browser refuses to send the RPC at all. The control-plane platform-api does
  * not read this header and does not allow it, so sending it there blocked
  * every controlplane.v1 RPC once a machine heartbeated.
  */
@@ -754,7 +793,43 @@ export function buildInterceptors(
     errorInterceptor,
     upgradeInterceptor,
     machineWakeInterceptor,
-    ...(withAuth ? [unauthInterceptor] : []),
+    ...(withAuth ? [unauthInterceptor, writeOwnerInterceptor] : []),
+    // The landing handoff on signed-in control-plane requests until one
+    // succeeds: the request that creates the account stores it (signupAttribution.ts).
+    ...(withAuth && backend === "control-plane" ? [signupAttributionInterceptor] : []),
+    // Innermost: everything above (the token above all) is settled.
+    requestSentInterceptor,
   ];
   return chain;
 }
+
+// ─── Request sent ────────────────────────────────────────────────────
+
+/**
+ * A callback a caller attaches to one RPC (`contextValues`) to learn when its
+ * request is handed to the network: after every interceptor above has run,
+ * the bearer token's lookup included, and right before the transport calls
+ * fetch. The chat stream marks its open's `stream_requested` phase with it
+ * (api/chat-streaming-grpc.ts), which separates time spent before the
+ * request left the browser from time waiting on the server.
+ */
+export const requestSentKey = createContextKey<(() => void) | undefined>(undefined, {
+  description: "called when the request is handed to fetch",
+});
+
+/** Attach `onSent` to an RPC's context values (see requestSentKey). */
+export function withRequestSent(values: ContextValues | undefined, onSent: () => void): ContextValues {
+  const next = values ?? createContextValues();
+  next.set(requestSentKey, onSent);
+  return next;
+}
+
+// Not async, so it adds no promise hop before fetch.
+const requestSentInterceptor: Interceptor = (next) => (req) => {
+  try {
+    req.contextValues.get(requestSentKey)?.();
+  } catch {
+    // An observer never fails the request it observes.
+  }
+  return next(req);
+};

@@ -38,10 +38,13 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -75,6 +78,16 @@ type Spec struct {
 	OwnerUserID string
 	ProjectID   string
 	WorktreeID  *string // nil → the project's main worktree
+
+	// OrgID is the organization the request acts in by name, already
+	// verified (orgs.Named): a new chat belongs to it. A project that has
+	// an org decides instead, and naming another org is FailedPrecondition:
+	// a chat and its project are in one org. Ignored for an existing chat.
+	OrgID string
+	// DefaultOrgID is the creator's default org: a new chat's org when the
+	// request named none and its project has none. Empty stores no org
+	// (see core.Chat.OrgID), as every chat before orgs.
+	DefaultOrgID string
 
 	// ChatID names an existing PENDING chat to start (a branched chat's first
 	// send). Empty creates a new chat.
@@ -196,6 +209,10 @@ type Result struct {
 	WorkflowID string
 	RunID      string
 	EventID    string
+	// UserMessageID is the stored id of the user message this call saved
+	// (the client's id when it named one); empty when it saved none, as a
+	// replay or a retry of an earlier start does.
+	UserMessageID string
 }
 
 // ErrAlreadyLaunched reports that the (Kind, DedupeKey) — or the NewChatID —
@@ -327,6 +344,22 @@ func (e *NotFoundError) Unwrap() error {
 // Is makes errors.Is(err, ErrNotFound) match.
 func (e *NotFoundError) Is(target error) bool { return target == ErrNotFound }
 
+// OwnerLeftOrg reports whether a launch was refused because its owner is no
+// longer a live member of the org the launch acts in: the project lookup's
+// authz.ErrNotOrgMember, or a refusal carrying the not_org_member reason. It
+// is an answer, so an unattended launch may act on it for good (a trigger
+// pauses). A membership check that failed is never this: the launch returns
+// ErrInternal, retryably.
+func OwnerLeftOrg(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, authz.ErrNotOrgMember) {
+		return true
+	}
+	return svcerr.IsPermissionDenied(err) && svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader) == orgs.ReasonNotOrgMember
+}
+
 // ErrInternal reports that the launch failed for a reason the caller cannot
 // act on — a failed transaction, a Temporal start that was refused, a chat that
 // committed but could not be read back.
@@ -359,6 +392,10 @@ func (e *InternalError) Is(target error) bool { return target == ErrInternal }
 
 // ChatWriter creates and updates the chat a launch materializes.
 type ChatWriter interface {
+	// LockUserOrgs takes the owner's org lock for the launch's transaction,
+	// before any row lock, and re-checks the orgs a new chat's org was
+	// decided from (db.ErrOrgChanged when a backfill changed one).
+	LockUserOrgs(ctx context.Context, userID string, reads ...db.OrgRead) error
 	CreateChat(ctx context.Context, chat *db.Chat) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error
@@ -399,6 +436,20 @@ type WorkflowStore interface {
 type PinnedWorkflowResolver interface {
 	WorkflowResolver
 	GetPinnedProjectCatalog(ctx context.Context, pin string) (*db.PinnedCatalog, bool, error)
+}
+
+// WorkflowProvenanceReader and MachineNamer are the reads a trigger's
+// definition is attributed with (triggers.describeDefinition asks its store
+// for them by assertion): which machine synced the file, and that machine's
+// name. The per-request resolver (requestResolver) serves both, memoized,
+// when the store it wraps does (#2283).
+type WorkflowProvenanceReader interface {
+	ProjectWorkflowProvenance(ctx context.Context, projectID string) ([]config.WorkflowProvenance, error)
+}
+
+// MachineNamer names a machine for display: see WorkflowProvenanceReader.
+type MachineNamer interface {
+	MachineDisplayName(ctx context.Context, daemonID string) string
 }
 
 // WorkflowResolver looks up the workflow definition and presets a spec names.

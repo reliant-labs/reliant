@@ -2,10 +2,9 @@ package threads
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -37,7 +36,7 @@ func (s *Service) Compact(ctx context.Context, threadID string, summaryMessageID
 
 	// Get current context window to link as parent
 	currentCW, err := s.repo.GetLatestContextWindow(ctx, threadID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, fmt.Errorf("failed to get latest context window: %w", err)
 	}
 
@@ -84,7 +83,7 @@ func (s *Service) Compact(ctx context.Context, threadID string, summaryMessageID
 		}
 		return existingCW, nil
 	}
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, fmt.Errorf("failed to check existing context window: %w", err)
 	}
 

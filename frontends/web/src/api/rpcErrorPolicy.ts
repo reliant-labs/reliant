@@ -36,6 +36,14 @@
  *    "HTTP 404". That is an app older than the server (desktop 1.7.16 calling
  *    the retired ChatService/CreateChat) — the fix is an update prompt.
  *
+ *  - NETWORK (reliant-web "TypeError: Failed to fetch", 2026-11-02..06, 64
+ *    events across three issues). fetch itself rejected — the device went
+ *    offline or to sleep, DNS failed, the connection dropped — so no server
+ *    answered at all. That is the user's network, not a defect in the app,
+ *    and the SDK's own fetch span already records the failed request. Matched
+ *    by the browsers' fetch-rejection messages, not by TypeError alone: a
+ *    TypeError an interceptor's own bug throws is still a report.
+ *
  * Classification is by code AND reason, never by message alone, so a real
  * Unavailable (server down) or a real Unimplemented sent by a handler still
  * reports.
@@ -53,12 +61,16 @@ export type RpcFailureKind =
   | "account-required"
   /** A code that describes the caller's input or state, not a defect. */
   | "expected"
+  /** A delete whose target was already gone: the state the caller asked for. */
+  | "already-absent"
   /** The user's machine is not serving yet; the UI waits on it. */
   | "machine-wait"
   /** The server's deadline passed (a busy machine); retryable, not a defect. */
   | "deadline"
   /** This app calls an RPC the server does not route: the app is out of date. */
   | "version-skew"
+  /** fetch rejected before any server answered: the user's network. */
+  | "network"
   /** Anything else: worth a report. */
   | "report";
 
@@ -87,11 +99,27 @@ const EXPECTED_CODES: ReadonlySet<Code> = new Set([
  */
 const PROBED_SERVICES: ReadonlySet<string> = new Set(["reliant.v1.ProviderAccountService"]);
 
+/**
+ * Deletes for which NotFound means "already gone" — the state the caller asked
+ * for, so a success in all but status code. Every startup deleted a retired
+ * tour key (`onboarding.current_step`) that most users no longer had, and each
+ * NotFound was logged as "[gRPC Client] Request failed" at error level.
+ *
+ * Listed per procedure, never as a blanket rule for NotFound: a missing row on
+ * a read or an update is still news to whoever asked. The error is still
+ * thrown — a caller that wants to know the row was absent still can.
+ */
+const IDEMPOTENT_DELETES: ReadonlySet<string> = new Set([
+  "reliant.v1.SettingsService/DeleteSetting",
+]);
+
 /** The services this app's own API serves. Other backends version separately. */
 const RELIANT_API_SERVICE_PREFIX = "reliant.v1.";
 
 export interface RpcFailureContext {
   serviceTypeName: string;
+  /** The rpc's method name (`DeleteSetting`); per-procedure rules need it. */
+  methodName?: string;
   /** Whether the request's own abort signal had fired when it failed. */
   signalAborted: boolean;
 }
@@ -109,13 +137,42 @@ export function isUnroutedProcedure(error: unknown): boolean {
   );
 }
 
+/**
+ * What each browser's fetch rejects with when the request never got an
+ * answer: Chromium, Firefox, Safari. fetch rejects with a TypeError for these
+ * and for nothing a server can say. Newer Chromium names the host after the
+ * message ("Failed to fetch (dash.reliantlabs.io)").
+ */
+const FETCH_NETWORK_FAILURE_MESSAGES: readonly string[] = [
+  "Failed to fetch",
+  "NetworkError when attempting to fetch resource.",
+  "Load failed",
+  "Network request failed",
+];
+
+/** True when fetch rejected because the network did not deliver the request. */
+export function isFetchNetworkFailure(error: unknown): boolean {
+  if (!(error instanceof TypeError)) return false;
+  const { message } = error;
+  return FETCH_NETWORK_FAILURE_MESSAGES.some(
+    (known) => message === known || message.startsWith(`${known} (`),
+  );
+}
+
 export function classifyRpcFailure(error: unknown, ctx: RpcFailureContext): RpcFailureKind {
   if (ctx.signalAborted) return "aborted";
+  if (isFetchNetworkFailure(error)) return "network";
   if (!(error instanceof ConnectError)) return "report";
   // By reason, whatever the code: it is a state the UI renders (the identity
   // modal), and must not depend on the server's choice of status code.
   if (hasErrorReason(error, ACCOUNT_REQUIRED_REASON)) {
     return "account-required";
+  }
+  if (
+    error.code === Code.NotFound &&
+    IDEMPOTENT_DELETES.has(`${ctx.serviceTypeName}/${ctx.methodName ?? ""}`)
+  ) {
+    return "already-absent";
   }
   if (EXPECTED_CODES.has(error.code)) return "expected";
   if (error.code === Code.Unimplemented && PROBED_SERVICES.has(ctx.serviceTypeName)) {

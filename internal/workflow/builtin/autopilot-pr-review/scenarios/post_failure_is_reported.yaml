@@ -42,6 +42,6 @@ events:
   - node: post
     output: {is_error: true, content: "GitHub validation failed: Unprocessable Entity."}
 expect:
-  outcome: completed
+  outcome: failed
   completed: [review, decide, post, post_failed]
   not_reached: [posted, reset_label, labels]

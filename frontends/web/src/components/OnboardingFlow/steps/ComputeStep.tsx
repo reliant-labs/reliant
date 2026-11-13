@@ -17,7 +17,7 @@ import {
   isPurchasableComputePlan,
   sortPlansForDisplay,
 } from "@/components/Settings/cloud/billingUtils";
-import { deriveMachineOptions } from "@/components/Billing/machineOptions";
+import { deriveMachineOptions, oneRowPerPlan } from "@/components/Billing/machineOptions";
 import { usePlans } from "@/hooks/useCloudBillingQueries";
 import { getForcedEligibility } from "../forcedEligibility";
 import { MACHINE_BURST } from "@/components/Billing/machineSpecs";
@@ -27,6 +27,7 @@ import {
 } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useCloudEligibility } from "@/hooks/useOnboardingQueries";
+import { ConnectWait } from "../ConnectWait";
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
 import { RedeemedCouponKind } from "@/services/controlPlane/reliantAI";
 import { useBundledDaemonPending } from "@/hooks/useBundledDaemonPending";
@@ -104,7 +105,16 @@ export function ComputeStep({
   // the connect instructions sit right under the list. This is only the user's
   // wish to look at them again; it is meaningless (and ignored) otherwise.
   const [cloudExpanded, setCloudExpanded] = useState(false);
-  const { activeDaemon, daemons, loading: daemonLoading } = useDaemonStatus();
+  const {
+    activeDaemon,
+    daemons,
+    loading: daemonLoading,
+    unreachable: registryUnreachable,
+    refresh: refreshDaemons,
+  } = useDaemonStatus();
+  // The user chose to stop waiting for the first machine list. Only offered
+  // once the wait is slow (ConnectWait), so it never races detection.
+  const [gaveUpWaiting, setGaveUpWaiting] = useState(false);
   // A packaged desktop build ships its own daemon, but it does not REGISTER
   // until after sign-in — measured at ~1.2s post-restart on prod, though the
   // renderer only learns of it when the daemon-connected event lands. Until
@@ -173,8 +183,11 @@ export function ComputeStep({
   // a different way — a plan-name grid behind a size filter — which is the
   // divergence that produced two unlike surfaces for one choice. One
   // declaration, two callers that differ only in what a row DOES.
+  //
+  // One row per plan (oneRowPerPlan): the rows select by `planId`, and two
+  // sizes sharing a cheapest plan rendered as two rows that selected together.
   const planOptions = useMemo<ComputePlanOption[]>(
-    () => deriveMachineOptions(computePlans, plansQ.data?.daemonPricing),
+    () => oneRowPerPlan(deriveMachineOptions(computePlans, plansQ.data?.daemonPricing)),
     [computePlans, plansQ.data?.daemonPricing],
   );
 
@@ -421,7 +434,7 @@ export function ComputeStep({
   // Visual pattern mirrors DaemonConnectingGate's "connecting" phase
   // (centered spinner in a tinted circle + headline) so the two onboarding
   // wait states feel consistent.
-  if (daemonLoading || awaitingBundledDaemon) {
+  if ((daemonLoading || awaitingBundledDaemon) && !gaveUpWaiting) {
     return (
       <div
         className="space-y-5 py-6 text-center"
@@ -443,6 +456,15 @@ export function ComputeStep({
               ? "The desktop app brings its own. Almost done."
               : "Looking for a machine you already connected."}
           </p>
+        </div>
+        <div className="mx-auto max-w-[420px] text-left">
+          <ConnectWait
+            label={awaitingBundledDaemon ? "Waiting for the app's machine" : "Looking for your machines"}
+            onRetry={() => refreshDaemons?.()}
+            daemons={daemons}
+            unreachable={registryUnreachable}
+            skip={{ label: "Choose a machine myself", onClick: () => setGaveUpWaiting(true) }}
+          />
         </div>
       </div>
     );
@@ -757,7 +779,15 @@ export function ComputeStep({
           above. No inline error slot: choosing cannot fail, and provisioning
           failures surface at the commit point, where the retry lives. */}
       {showLocal && !activeDaemon && (
-        <PairMachinePanel mode="bootstrap" onConnected={handleLocalContinue} />
+        <>
+          <PairMachinePanel mode="bootstrap" onConnected={handleLocalContinue} />
+          <ConnectWait
+            label="Looking for your computer"
+            onRetry={() => refreshDaemons?.()}
+            daemons={daemons}
+            unreachable={registryUnreachable}
+          />
+        </>
       )}
 
       {/* The way forward, rendered into the card footer. One slot, four

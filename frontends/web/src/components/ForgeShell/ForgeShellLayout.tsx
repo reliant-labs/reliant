@@ -86,7 +86,7 @@ export function ForgeShellLayout({ children }: { children?: ReactNode }) {
   };
 
   return (
-    <div className="forge-ui h-dvh w-full" data-testid="forge-shell-layout">
+    <div className="forge-ui forge-console h-dvh w-full" data-testid="forge-shell-layout">
       <SidebarLayout
         navLabel="Forge"
         brand={

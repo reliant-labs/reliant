@@ -22,7 +22,7 @@ import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_tabl
 import Mono from "@/components/forge-ui/mono";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { useSessions, type SessionFilters } from "@/hooks/observability-session-queries";
+import { REPLAY_EVIDENCE_RANGE, useFrontendReplay, useReplayEvidence, useSessions, type SessionFilters } from "@/hooks/observability-session-queries";
 import { rumErrorKind } from "@/services/controlPlane/observability/errors";
 import type { RumScope, SessionSummary } from "@/services/controlPlane/observability/rumTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
@@ -37,9 +37,11 @@ import { Place } from "../Place";
 import type { ReplayerCtor } from "./ReplayPlayer";
 import { SessionDetail } from "./SessionDetail";
 import { isReplayKnownUnplayable, rumScopeOf, sessionTitle } from "./sessionModel";
-import { SessionsNotConfigured } from "./SessionStates";
+import { SessionsNotConfigured, SessionsReplayOff } from "./SessionStates";
+import { offEnvIds, replayStatus } from "./replayStatus";
 import { ClientName, DeviceSummary } from "../Client";
 import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "../ClientFilters";
+import { CONTROL_FIELD, SEGMENTED, segmentTone } from "../../controlStyles";
 
 export interface SessionsViewProps {
   scope: ObsScope;
@@ -61,6 +63,8 @@ export interface SessionsViewProps {
   navigate: ObsNavigate;
   /** Test seam: the Replayer the player constructs. */
   loadReplayer?: () => Promise<ReplayerCtor>;
+  /** The place's environments: names an environment the replay-state read could not reach. */
+  environments?: readonly { id: string; name: string }[];
 }
 
 /** What a filter change also resets: the page (its token belongs to the old filters). */
@@ -87,7 +91,7 @@ export function SessionsView(props: SessionsViewProps) {
   return <SessionList {...props} rumScope={rumScope} service={service} />;
 }
 
-function SessionList({ scope, rumScope, subject, range, service, text, hasError, user, client = NO_FILTER_VALUES, cursor, navigate }: SessionsViewProps & { rumScope: RumScope }) {
+function SessionList({ scope, rumScope, subject, range, service, text, hasError, user, client = NO_FILTER_VALUES, cursor, navigate, environments }: SessionsViewProps & { rumScope: RumScope }) {
   const pageToken = cursor.length ? cursor[cursor.length - 1] : undefined;
   const { browser, os, fe } = client;
   const filters: SessionFilters = useMemo(
@@ -130,6 +134,8 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
         ) : (
           <ObsError error={sessions.error} subject={subject} onRetry={() => void sessions.refetch()} retrying={sessions.isFetching} />
         )
+      ) : rows.length === 0 && page === 1 && !filtered ? (
+        <SessionsNoReplays rumScope={rumScope} range={range} environments={environments} onWiden={() => navigate({ range: "7d", ...FIRST_PAGE })} />
       ) : rows.length === 0 && page === 1 ? (
         <ObsNoData
           what="browser sessions"
@@ -173,8 +179,40 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
   );
 }
 
+/**
+ * The empty, unfiltered first page: no replay in the window. It reads each
+ * frontend's replay switch (ListFrontendReplay) and, for one whose config
+ * reads "off", whether replays arrived anyway over the last 7 days — the
+ * deprecated build flag, which the server cannot see. Until both answer, or
+ * when either fails, the note stays the generic one: it never says "off" on a
+ * guess. A 7-day window needs no second read: this empty page is the evidence.
+ */
+function SessionsNoReplays({
+  rumScope,
+  range,
+  environments,
+  onWiden,
+}: {
+  rumScope: RumScope;
+  range: RangePreset;
+  environments?: readonly { id: string; name: string }[];
+  onWiden: () => void;
+}) {
+  const replay = useFrontendReplay(rumScope);
+  const list = replay.data;
+  const offEnvs = useMemo(() => (list ? offEnvIds(list) : []), [list]);
+  const needEvidence = offEnvs.length > 0 && range !== REPLAY_EVIDENCE_RANGE;
+  const evidence = useReplayEvidence(rumScope, offEnvs, needEvidence);
+  const status = useMemo(() => {
+    if (!list || (needEvidence && evidence.isLoading)) return null;
+    const observed = !needEvidence ? { sessions: [], complete: true } : (evidence.data ?? null);
+    return replayStatus(list, observed, (id) => environments?.find((env) => env.id === id)?.name);
+  }, [list, needEvidence, evidence.isLoading, evidence.data, environments]);
+  return <SessionsReplayOff range={range} onWiden={onWiden} status={status} />;
+}
+
 const INPUT =
-  "h-8 w-full rounded-md border border-border bg-surface-sunken px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  `${CONTROL_FIELD} h-8 w-full px-2.5 text-sm`;
 
 function SessionToolbar({
   scope,
@@ -204,7 +242,7 @@ function SessionToolbar({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <div role="group" aria-label="Only sessions" className="inline-flex rounded-lg border border-border bg-surface-sunken p-0.5">
+        <div role="group" aria-label="Only sessions" className={SEGMENTED}>
           <button
             type="button"
             aria-pressed={hasError}
@@ -222,7 +260,7 @@ function SessionToolbar({
           <label htmlFor="obs-sessions-path" className="sr-only">
             Entry path contains
           </label>
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
           <input
             id="obs-sessions-path"
             type="search"
@@ -258,7 +296,7 @@ function SessionToolbar({
 function chip(active: boolean) {
   return cn(
     "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    active ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+    segmentTone(active)
   );
 }
 
@@ -323,7 +361,8 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
     {
       key: "entry",
       header: "Entry",
-      className: "max-w-[16rem] truncate",
+      // 12rem: the table fits a 1440px laptop beside the nav without a sideways scrollbar.
+      className: "max-w-[12rem] truncate",
       render: (_, { session: s }) => (
         <span className="font-mono text-xs" title={s.entryPath}>
           {s.entryPath || "/"}

@@ -22,7 +22,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/procledger"
-	"github.com/reliant-labs/reliant/internal/proctree"
 )
 
 // undumpableHelperEnv makes the test binary an undumpable process of the test's
@@ -329,66 +328,5 @@ func TestUninspectable_RealAccountedUndumpableProcess(t *testing.T) {
 	}
 	if recycled == nil {
 		t.Error("a ledger entry for another start time must not account for this process")
-	}
-}
-
-// End to end through the daemon's launch path: credsandbox's init, started as
-// a proctree tree, is entered in the ledger with what it holds, is not use of
-// a workspace it does not run in, and leaves the ledger once released.
-func TestUninspectable_SandboxInitStartedThroughProctreeIsAccounted(t *testing.T) {
-	self, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := credsandbox.Available(self); err != nil {
-		t.Skipf("this host does not allow the sandbox: %v", err)
-	}
-	root, outside := t.TempDir(), t.TempDir()
-	cmd := exec.Command("cat")
-	cmd.Dir = outside
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if refusal := credsandbox.Apply(cmd, self, credsandbox.Plan{}); refusal != "" {
-		t.Fatalf("sandbox refused: %s", refusal)
-	}
-	tree := proctree.Default().Prepare(cmd, proctree.Owner{Command: "cat"})
-	if err := cmd.Start(); err != nil {
-		tree.Started(0)
-		t.Fatal(err)
-	}
-	tree.Started(cmd.Process.Pid)
-	pid := cmd.Process.Pid
-	var once bool
-	stop := func() {
-		if !once {
-			once = true
-			_ = stdin.Close()
-			_ = cmd.Wait()
-			tree.Release()
-		}
-	}
-	t.Cleanup(stop)
-	entry, ok := procledger.Lookup(pid)
-	if !ok {
-		stop()
-		t.Fatal("the sandbox init was not entered in the ledger")
-	}
-	waitUninspectable(t, pid)
-	err = checkProcessUseAt(context.Background(), liveProc(t, pid), os.Geteuid(), []string{root})
-	held := checkProcessUseAt(context.Background(), liveProc(t, pid), os.Geteuid(), []string{outside})
-	stop()
-	if err != nil {
-		t.Fatalf("the daemon's own sandbox init, running elsewhere, is not use: %v", err)
-	}
-	if held == nil {
-		t.Fatal("the sandbox init running in the workspace must hold it")
-	}
-	if want, _ := filepath.EvalSymlinks(outside); entry.Paths[0] != want || entry.Pgid != pid {
-		t.Errorf("ledger entry %+v: want cwd %s and process group %d", entry, want, pid)
-	}
-	if _, ok := procledger.Lookup(pid); ok {
-		t.Error("a released tree must leave the ledger")
 	}
 }

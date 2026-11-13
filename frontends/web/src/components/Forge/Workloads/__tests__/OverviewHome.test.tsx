@@ -55,17 +55,24 @@ describe("the Overview", () => {
     expect(worker).toHaveTextContent("Crash-looping");
     expect(worker).toHaveTextContent("StatefulSet");
     expect(worker).toHaveTextContent("0/2");
-    expect(worker).toHaveTextContent(/14\s*· Ran out of memory/);
+    expect(worker).toHaveTextContent(/14 restarts · Ran out of memory/);
     expect(worker).not.toHaveTextContent("OOMKilled");
     // A workload with restarts that the server calls degraded reads Degraded (not Crash-looping).
     expect(within(table).getByTestId("overview-service-litellm")).toHaveTextContent("Degraded");
     // The whole row opens the workload, in its environment.
     expect(within(worker).getByRole("link", { name: /^reliant-temporal-worker\b/ })).toHaveAttribute("href", "/w/prod/reliant-temporal-worker");
-    // Only prod's: one card per service, no other env's.
+    // Only prod's, in ONE list: its 6 services, its 1 job and the 3 processes that send telemetry with no workload.
     expect(within(table).queryByText("Environment")).toBeNull();
-    expect(within(table).getAllByRole("listitem")).toHaveLength(6);
+    const rows = within(table).getAllByRole("listitem");
+    expect(rows).toHaveLength(10);
+    expect(rows.filter((row) => !["job", "process"].includes(row.dataset.kind!))).toHaveLength(6);
+    expect(rows.filter((row) => row.dataset.kind === "job")).toHaveLength(1);
+    expect(rows.filter((row) => row.dataset.kind === "process")).toHaveLength(3);
+    // Worst first: the crash loop, then the degraded one.
+    expect(rows[0]).toBe(worker);
     expect(screen.getByTestId("overview-counts")).toHaveTextContent("6 services and 1 job in prod");
-    expect(within(worker).getByText("Restarts 24h")).toBeInTheDocument();
+    // CPU and memory are the workload page's (the row opens it), not the list's.
+    expect(within(worker).queryByTestId("usage-meter")).toBeNull();
   });
 
   it("says when a release is declared by the promotion rather than verified by digest", async () => {
@@ -74,8 +81,8 @@ describe("the Overview", () => {
     const web = screen.getByTestId("overview-service-web");
     expect(web).toHaveTextContent("declared");
     expect(screen.getByTestId("overview-service-admin-server")).not.toHaveTextContent("declared");
-    // No limit set: there is nothing to draw a meter against, and it says so.
-    expect(within(web).getAllByTestId("usage-meter")[0]).toHaveTextContent("no limit");
+    // Its CPU and memory meters are on the workload page, not in the list.
+    expect(within(web).queryByTestId("usage-meter")).toBeNull();
   });
 
   it("says a hosted workload runs the wrong version when its digest is not the published one, instead of 'declared'", async () => {
@@ -148,9 +155,42 @@ describe("the Overview", () => {
     await ready();
     await userEvent.click(screen.getByTestId("overview-chip-status"));
     expect(harness.current().status).toBe("attention");
-    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("listitem")).toHaveLength(2);
+    // The crash loop, the degraded service, and the process whose alerts are firing.
+    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("listitem").map((row) => row.dataset.testid)).toEqual([
+      "overview-service-reliant-temporal-worker",
+      "overview-service-litellm",
+      "overview-service-process-api",
+    ]);
     await userEvent.type(screen.getByTestId("overview-filter"), "nope");
-    expect(screen.getByTestId("overview-services-empty")).toHaveTextContent("No service matches these filters");
+    expect(screen.getByTestId("overview-services-empty")).toHaveTextContent("Nothing matches these filters");
+  });
+
+  it("lists jobs and telemetry-only processes in the same list, each with its kind and status", async () => {
+    renderOverview({ env: "e2e" });
+    await ready();
+    const job = screen.getByTestId("overview-service-job-control-plane-migrate");
+    expect(job).toHaveAttribute("data-kind", "job");
+    expect(within(job).getByTestId("overview-row-kind")).toHaveTextContent("Job");
+    // A failed latest run is the row's status and its reason, as it is in Needs attention.
+    expect(job).toHaveAttribute("data-tone", "danger");
+    expect(job).toHaveTextContent("Failed");
+    expect(within(job).getByTestId("overview-row-why")).toHaveTextContent("Failed after exhausting its retries");
+    expect(within(job).getByRole("link", { name: "control-plane-migrate" })).toHaveAttribute("href", "/w/e2e/control-plane-migrate");
+    expect(screen.getByTestId("attention-job/e2e/control-plane-migrate")).toBeInTheDocument();
+  });
+
+  it("keeps what the Processes table alone showed: telemetry-only processes, error logs and firing alerts", async () => {
+    renderOverview();
+    await ready();
+    // There is no separate Processes table on the Overview.
+    expect(screen.queryByTestId("observability-services")).toBeNull();
+    const api = await screen.findByTestId("overview-service-process-api");
+    expect(within(api).getByTestId("overview-row-kind")).toHaveTextContent("Process");
+    expect(within(api).getByTestId("overview-row-alerts")).toHaveTextContent("2 firing");
+    const logs = within(api).getByTitle("Error logs from api");
+    expect(logs.tagName).toBe("A");
+    expect(logs.getAttribute("href")).toMatch(/logs.*service=api/);
+    expect(within(api).getByTestId("service-card-red")).toHaveTextContent("req/s");
   });
 
   it("names what is missing for an environment Reliant has no record of", async () => {
@@ -196,7 +236,11 @@ describe("its states", () => {
   it("explains an empty environment without calling it healthy", async () => {
     renderOverview({ obs: createWorkloadsFixtureApi("empty") });
     await ready();
-    expect(screen.getByTestId("overview-services-empty")).toHaveTextContent("No service has reported from prod");
+    // No workload reported, so the list holds only what sends telemetry, each saying it has no workload behind it.
+    const listed = within(screen.getByTestId("overview-services-table")).getAllByRole("listitem");
+    expect(listed.length).toBeGreaterThan(0);
+    expect(listed.every((row) => row.dataset.kind === "process" && row.dataset.tone === "neutral")).toBe(true);
+    expect(screen.getByTestId("overview-services-table")).not.toHaveTextContent("Healthy");
     expect(screen.getByTestId("overview-jobs-empty")).toHaveTextContent("No job has run in prod");
     expect(screen.getByTestId("overview-env-prod")).toHaveTextContent("No data");
     // The alerts still firing are all that needs attention: no workload is listed as failing.

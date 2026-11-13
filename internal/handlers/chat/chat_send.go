@@ -75,12 +75,15 @@ func (s *Service) notifyHistoryLimitRestart(ctx context.Context, chatID, workflo
 }
 
 // saveIncomingMessages atomically persists the system and user messages a send
-// contributes to a thread. It deliberately does not inspect or drain the agent
+// contributes to a thread, and, in the same transaction, the person's turn in
+// a launched chat (recordPersonTurn): a send that is not saved makes nothing
+// attended. It deliberately does not inspect or drain the agent
 // mailbox: call_llm is the sole mailbox deliverer, immediately before reading
 // thread history, regardless of whether this send starts or resumes the run.
 func (s *Service) saveIncomingMessages(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SendMessageRequest],
+	chat *db.Chat,
 	thread, workflowID string,
 	systemMessages []*reliantv1.InputMessage,
 	userContent string,
@@ -95,6 +98,11 @@ func (s *Service) saveIncomingMessages(
 	var savedMessageID string
 	err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		savedMessageID = ""
+		if sender, ok := auth.GetUserIDFromContext(ctx); ok && hasMessage {
+			if err := s.recordPersonTurn(txCtx, sender, chat); err != nil {
+				return err
+			}
+		}
 		if clientID != "" && hasMessage {
 			existingID, err := s.savedSendID(txCtx, req.Msg.ChatId, clientID)
 			if err != nil {
@@ -407,6 +415,13 @@ func (s *Service) SendMessage(
 				return nil, svcerr.WithReason(svcerr.FailedPrecondition("chat has not started; call StartChat"), errreason.ChatNotStarted)
 
 			case db.Paused():
+				// Which of the run's threads the message is for, decided
+				// before anything is written (run_recipient.go).
+				recipient, err := s.resolveRunRecipient(ctx, chat, workflowID, existingWorkflow.Thread, req.Msg.GetTargetThread())
+				if err != nil {
+					return nil, err
+				}
+
 				// Refuse bad params before anything is written; see
 				// liveRunStateUpdate.
 				newPresets := changedPresets(chat.SelectedPresets, req.Msg.SelectedPresets)
@@ -419,12 +434,7 @@ func (s *Service) SendMessage(
 					s.persistChatPresets(ctx, chat)
 				}
 
-				// Determine target thread - use workflow's thread from DB (not root workflow ID)
-				// to handle forked/child threads correctly.
-				targetThread := existingWorkflow.Thread
-				if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
-					targetThread = *req.Msg.TargetThread
-				}
+				targetThread := recipient.thread
 
 				// Save the messages in one transaction. The mailbox is not
 				// touched: a paused run delivers anything queued for the thread
@@ -453,7 +463,7 @@ func (s *Service) SendMessage(
 				var savedMessageID string
 				err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 					var saveErr error
-					savedMessageID, saveErr = s.saveIncomingMessages(txCtx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+					savedMessageID, saveErr = s.saveIncomingMessages(txCtx, req, chat, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					return saveErr
 				})
 				if err != nil {
@@ -525,6 +535,13 @@ func (s *Service) SendMessage(
 					return replayResponse(chat, prior), nil
 				}
 
+				// Which of the run's threads the message is for, decided
+				// before anything is written or queued (run_recipient.go).
+				recipient, err := s.resolveRunRecipient(ctx, chat, workflowID, existingWorkflow.Thread, req.Msg.GetTargetThread())
+				if err != nil {
+					return nil, err
+				}
+
 				// Refuse bad params before anything is written or queued; see
 				// liveRunStateUpdate.
 				newPresets := changedPresets(chat.SelectedPresets, req.Msg.SelectedPresets)
@@ -537,12 +554,7 @@ func (s *Service) SendMessage(
 					s.persistChatPresets(ctx, chat)
 				}
 
-				// Use workflow's thread from DB (not root workflow ID) to handle
-				// forked/child threads correctly.
-				targetThread := existingWorkflow.Thread
-				if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
-					targetThread = *req.Msg.TargetThread
-				}
+				targetThread := recipient.thread
 
 				// Save system messages first
 				for _, sysMsg := range systemMessages {
@@ -590,7 +602,17 @@ func (s *Service) SendMessage(
 					// Queued once: an attempt of this send that already queued
 					// the message left its row, and this one finishes around it
 					// (the wake below is what the first may not have reached).
-					queued, _, err := s.enqueueHumanMessage(ctx, queuedMsg, clientID != "")
+					// Queued in one transaction with the person's turn in a
+					// launched chat (recordPersonTurn), before the run is woken.
+					var queued *db.AgentMessage
+					err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+						if err := s.recordPersonTurn(txCtx, userID, chat); err != nil {
+							return err
+						}
+						var err error
+						queued, _, err = s.enqueueHumanMessage(txCtx, queuedMsg, clientID != "")
+						return err
+					})
 					if err != nil {
 						return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save message"))
 					}
@@ -647,6 +669,20 @@ func (s *Service) SendMessage(
 				// wake that reaches no run starts one for the message — so it
 				// is never left for the user's next send to discover.
 				if queuedMsg != nil && s.wakeLiveRun(ctx, chat, targetThread, threadwake.ReasonMailbox) {
+					// A pending message never restarts a workflow. Starting a
+					// run for it is a new turn of an agent chat; for a graph
+					// run (no agent on its root) it re-ran the whole workflow
+					// at graph entry (reliant #2394). Withdraw the row and say
+					// it was not delivered, so the composer keeps the text.
+					if recipient.routed && !recipient.rootReads {
+						if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, queuedMsg.ID, chat.ID); err != nil {
+							logging.WarnContext(ctx, "Could not withdraw a message whose run ended before it was read",
+								"error", err, "chatID", req.Msg.ChatId, "messageID", queuedMsg.ID)
+						}
+						return nil, svcerr.WithReason(svcerr.WithCause(svcerr.FailedPrecondition(
+							"not delivered: the run ended before its agent read the message"),
+							core.ErrRunNoListeningAgent), errreason.RunNoListeningAgent)
+					}
 					logging.InfoContext(ctx, "Run finished before a message to it could wake it; starting a run for the message",
 						"chatID", req.Msg.ChatId, "workflowID", workflowID, "threadID", targetThread)
 					resumeMessagesSaved = true
@@ -729,6 +765,12 @@ func (s *Service) SendMessage(
 					}
 					inputUpdate, modelNotices, modelMoves = s.resumeInputUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, workflowID,
 						s.underSelection(ctx, chat.ID, activeWorkflowNameForResume(chat, existingWorkflow), stateUpdate), recorded)
+					if inputUpdate == nil {
+						inputUpdate = make(map[string]interface{})
+					}
+					if err := s.reconcileResumeMode(ctx, userID, chat, activeWorkflowNameForResume(chat, existingWorkflow), inputUpdate, stateUpdate); err != nil {
+						return nil, svcerr.Wrap(err)
+					}
 					inputUpdate = s.withProviderPolicy(ctx, userID, chat, recorded, inputUpdate)
 					inputUpdate = s.refreshLiveChatProvider(ctx, userID, chat, existingWorkflow.WorkflowName, inputUpdate)
 				}
@@ -791,7 +833,7 @@ func (s *Service) SendMessage(
 					// them, mailbox first: the interrupted run never reached
 					// another drain boundary, so whatever was queued for this
 					// thread still belongs ahead of the new message.
-					presavedID, saveErr := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+					presavedID, saveErr := s.saveIncomingMessages(ctx, req, chat, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					if saveErr != nil {
 						return nil, svcerr.WrapOr(saveErr, svcerr.Internal("failed to save messages"))
 					}
@@ -968,7 +1010,7 @@ func (s *Service) SendMessage(
 		// A resume continues a conversation, so it never is one.
 		greenfieldProbe = resumeInput == nil && s.launcher().WantsGreenfieldProbe(ctx, chat)
 
-		saved, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+		saved, err := s.saveIncomingMessages(ctx, req, chat, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 		}
@@ -1029,4 +1071,31 @@ func (s *Service) SendMessage(
 		// row is still queued, and this run's first turn drains it.
 		Queued: lateRunThread != "",
 	}), nil
+}
+
+// recordPersonTurn marks a chat a stored trigger or an agent launched as
+// attended from this send on (org-provider-accounts §11.1, I2): the person who
+// sent it is there to be asked, so its calls follow the chat rules rather than
+// an unattended run's org-funded-only sources. A chat a person started needs
+// no mark.
+//
+// Only the chat's owner, signed in as a person, takes a turn: a credential an
+// agent or a script can hold (the CLI login, an agent's access token) never
+// makes a run attended, since attended calls may spend on the owner's own
+// accounts. It runs in the transaction that saves or queues the message, so
+// a send that is refused or rolled back records nothing, and a failed write
+// fails the send (retryable) rather than accepting it unattended.
+func (s *Service) recordPersonTurn(ctx context.Context, userID string, chat *db.Chat) error {
+	kind := core.TriggerEventKind(chat.LaunchKind)
+	launched := (chat.TriggerID != nil && kind.Unattended()) || kind == core.TriggerEventKindAgentStartRun
+	if !launched {
+		return nil
+	}
+	if userID != chat.UserID || auth.RequirePerson(ctx, "take a turn in the chat") != nil {
+		return nil
+	}
+	if err := s.deps.Repo.RecordChatPersonTurn(ctx, chat.ID, userID); err != nil {
+		return fmt.Errorf("record the person's turn in the chat: %w", err)
+	}
+	return nil
 }

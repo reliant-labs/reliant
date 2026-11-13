@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Identity-stability regression for mergeActiveThreads.
  *

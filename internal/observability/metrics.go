@@ -90,6 +90,20 @@ var (
 		},
 		[]string{"outcome"},
 	)
+	// DaemonRecoveryAdmissionRefusedTotal counts work a daemon refused while
+	// it finalized a worktree's recovery (toolexec.ErrRecoveryFinalizing), by
+	// kind: command (a daemon command) or tool_call. Callers retry, so the
+	// refusal is logged below ERROR; a rate that does not fall back to zero
+	// is a finalization that is stuck.
+	DaemonRecoveryAdmissionRefusedTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "daemon",
+			Name:      "recovery_admission_refused_total",
+			Help:      "Daemon work refused while a worktree recovery was finalizing, by kind (command, tool_call).",
+		},
+		[]string{"kind"},
+	)
 )
 
 // ─── Terminal output ────────────────────────────────────────────────────────
@@ -227,6 +241,32 @@ var (
 			Help:      "Total NATS operation errors by subject and error type.",
 		},
 		[]string{"subject", "error_type"},
+	)
+	// NATSSubscriptionsRefused is how many subscriptions the NATS server has
+	// refused and this process is still re-subscribing (natsutil.
+	// SubscribeWithRecovery), by subject pattern. A permissions roll that
+	// lands after the process started holds it above zero for a few seconds;
+	// minutes means a grant is missing from control-plane
+	// deploy/nats/permissions.yaml.
+	NATSSubscriptionsRefused = newGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "reliant",
+			Subsystem: "nats",
+			Name:      "subscriptions_refused",
+			Help:      "Subscriptions the NATS server refused that are not active yet and are being retried, by subject pattern.",
+		},
+		[]string{"subject"},
+	)
+	// NATSSubscriptionRefusalsTotal counts the server's refusals of those
+	// subscriptions, one per attempt.
+	NATSSubscriptionRefusalsTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "nats",
+			Name:      "subscription_refusals_total",
+			Help:      "NATS subscription attempts the server refused (permissions violation), by subject pattern.",
+		},
+		[]string{"subject"},
 	)
 )
 
@@ -515,6 +555,8 @@ func initMetrics() {
 		NATSReceiveTotal,
 		NATSRequestDuration,
 		NATSErrorsTotal,
+		NATSSubscriptionsRefused,
+		NATSSubscriptionRefusalsTotal,
 		// Egress
 		EgressLimitedTotal,
 		// Daemon link liveness
@@ -522,6 +564,7 @@ func initMetrics() {
 		DaemonReconnectLatencySeconds,
 		DaemonConnectWorkDeferredTotal,
 		DaemonCommandsHeldTotal,
+		DaemonRecoveryAdmissionRefusedTotal,
 		// Terminal output
 		TerminalOutputOverflowTotal,
 		// DB

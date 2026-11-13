@@ -2218,6 +2218,13 @@ blocking: true — the exception: stop and wait for the answer. Use it only when
 
 Before asking, call list_pending_questions if you may have asked already: do not ask a question that is still pending. Before finishing, withdraw questions your default made moot.
 
+Make each question stand on its own. Include enough context for users, as sometimes they may only see the question in isolation in their feed. Someone who has not read this chat must be able to answer it:
+- Say what the decision is about: name the issue, PR, file or system, not just an id ("PR #123, retrying on daemon reconnect", not "#123").
+- Say why you are asking now: what you found, or what is blocked on the answer.
+- In each option's description, say what choosing it means in practice and its main trade-off; do not restate the label.
+- Say what you will do by default if nobody answers.
+- Avoid internal shorthand, ids with no description, and references to "above", "earlier" or other messages the user may not see.
+
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.
 - If you recommend a specific option, list it first and add "(Recommended)" to the label.
@@ -2267,7 +2274,7 @@ Pause, resume or cancel another top-level run the user owns.
 
 - pause: park the run at its next step boundary. It stays alive and resumable.
 - resume: continue a paused (or interrupted) run from where it stopped.
-- cancel: hard-stop the run. This is terminal — a cancelled run is not resumed; sending it a message starts a fresh run in the same chat.
+- cancel: stop the run for good. Its in-flight steps are cancelled (a running command is stopped on its machine), then its workflow's finally: handler runs, so it releases what it holds. This is terminal — a cancelled run is not resumed; sending it a message starts a fresh run in the same chat.
 
 THE RECEIPT IS HONEST: pause and cancel REQUEST the stop. A run in the middle of a long tool call stops when that call returns. Confirm with get_run.
 
@@ -2753,6 +2760,8 @@ A PAUSED run is resumed by the message, exactly as if the user had typed into th
 
 THE RECEIPT IS HONEST: delivered means the message was saved to the run's thread and the run was nudged to look. It does NOT mean the run has read it or acted on it. Check with get_run.
 
+WHO READS IT: the message goes to the agent of the run that is running now (an agent chat's own agent, or a workflow's one running agent step). If several agents of the run are running in parallel, say which with thread (a thread id, or the node name of the agent, as get_run or the refusal lists them); the run never guesses. If no agent is running in it right now (a workflow between its agent steps), nothing is delivered and it says so.
+
 You cannot message the run you are executing in, and you can only message runs the user owns. To message a sub-agent you spawned, use spawn_send.
 
 ---
@@ -2937,13 +2946,17 @@ WORKSPACE SCOPING:
   wait on, message, or stop them.
 
 TWO MODES:
-1. LISTING (omit agent_id): returns every sub-agent you spawned — agent_id,
+1. LISTING (omit agent_id): returns the sub-agents you spawned — agent_id,
    title, preset, status, elapsed time, last activity time, turn count, and
    whether it appears gated on a question or approval (best-effort — this
-   signal can be unavailable and is never a hard guarantee).
+   signal can be unavailable and is never a hard guarantee). Running agents
+   come first, newest first, then the most recent finished ones; each agent
+   is listed once however often it was resumed. status: "running" or
+   "finished" narrows the list.
 2. SINGLE AGENT (agent_id set): returns that agent's status and its LAST
    ASSISTANT MESSAGE — "is it done, and what did it say?" without cancelling
-   it.
+   it. An unambiguous prefix of the agent_id (at least 4 characters) works
+   here and in spawn_send and spawn_stop.
 
 WAITING:
 Set wait: true with agent_id to block server-side until that agent reaches a
@@ -3066,8 +3079,10 @@ If it reports that the machine was removed, or that it failed to start and staye
 RETURNS EARLY WHEN A MESSAGE ARRIVES:
 If a message arrives for you while you wait — from the user, your parent, or a sub-agent — the wait ends early so you can read it. Nothing is lost; call wait_for_machine again if you still need the machine.
 
+If it reports that the machine is connected but degraded (it cannot start processes), retrying will fail the same way and waiting will not help: free the machine (shell_list, shell_kill) or tell the user.
+
 RETURNS:
-- connected: true once the machine is attached — retry the call that failed
+- connected: true once the machine is attached — retry the call that failed, unless it also says degraded
 - otherwise its last known state (disconnected, starting, suspended, failed, removed) with what to do about it
 
 ---

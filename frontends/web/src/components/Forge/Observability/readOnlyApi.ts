@@ -64,6 +64,7 @@ export const READ_METHODS = [
   "getSession",
   "getSessionTimeline",
   "getSessionReplay",
+  "listFrontendReplay",
   "listDashboards",
   "listDashboardTemplates",
   "getDashboard",

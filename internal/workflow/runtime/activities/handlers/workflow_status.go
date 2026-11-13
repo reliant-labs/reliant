@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -161,6 +161,7 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 			a.ensureAutomationFailureMessage(ctx, input)
 		}
 		a.recordLaunchRunStatus(ctx, input)
+		a.pauseTriggerRefusedByPolicy(ctx, input)
 		reason := ""
 		switch {
 		case input.Status == "failed", input.Status == "completed" && input.Outcome == model.OutcomeFailure:
@@ -242,7 +243,7 @@ func terminalWriteMustRetry(status string, err error) bool {
 	default:
 		return false
 	}
-	return !svcerr.IsNotFound(err) && !errors.Is(err, sql.ErrNoRows)
+	return !svcerr.IsNotFound(err)
 }
 
 // completionNotifies reports whether a ROOT completion should mark the chat
@@ -347,6 +348,51 @@ func (a *WorkflowStatusActivity) recordLaunchRunStatus(ctx context.Context, inpu
 	}
 	if err := a.repo.SetLaunchEventRunStatus(ctx, input.ChatID, status); err != nil {
 		logging.WarnContext(ctx, "[WorkflowStatus] Failed to record the launch run's status", "chat_id", input.ChatID, "status", status, "error", err)
+	}
+}
+
+// policyTriggerPauser pauses a trigger with a system reason; paused is false
+// when it was already paused. *db.Repo satisfies it.
+type policyTriggerPauser interface {
+	PauseTrigger(ctx context.Context, id, reason string) (paused bool, err error)
+}
+
+// pauseTriggerRefusedByPolicy pauses, once, the trigger whose unattended
+// launch run an org policy ended (control-plane docs/design/org-policies.md
+// §5.1): every later fire would meet the same verdict, and without the pause
+// each schedule tick would record another failed run. The trigger keeps
+// core.TriggerPausedOrgPolicy until its owner resumes it. A fire of the
+// trigger after that skips on the row; a concurrent second refusal finds it
+// already paused and changes nothing. Best-effort: a failed pause is logged,
+// and the next refused run pauses it.
+func (a *WorkflowStatusActivity) pauseTriggerRefusedByPolicy(ctx context.Context, input WorkflowStatusInput) {
+	if !input.LaunchRun || input.Status != "failed" {
+		return
+	}
+	refusal, ok := orgpolicy.RefusalOf(errors.New(input.Error))
+	if !ok {
+		return
+	}
+	pauser, ok := a.repo.(policyTriggerPauser)
+	if !ok {
+		return
+	}
+	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	if err != nil || chat == nil {
+		return
+	}
+	triggerID := automationTrigger(chat)
+	if triggerID == "" {
+		return
+	}
+	paused, err := pauser.PauseTrigger(ctx, triggerID, core.TriggerPausedOrgPolicy)
+	switch {
+	case err != nil:
+		logging.WarnContext(ctx, "[WorkflowStatus] Could not pause a trigger an org policy refused; its next refused run pauses it",
+			"trigger_id", triggerID, "chat_id", input.ChatID, "reason", refusal.Reason, "error", err)
+	case paused:
+		logging.InfoContext(ctx, "[WorkflowStatus] Paused a trigger whose run an org policy refused",
+			"trigger_id", triggerID, "chat_id", input.ChatID, "reason", refusal.Reason)
 	}
 }
 

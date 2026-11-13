@@ -106,6 +106,12 @@ export interface TourState {
   /** Reset all per-step progress so the tour can be restarted from scratch. */
   resetTourProgress: () => Promise<void>;
   saveTourState: () => Promise<void>;
+  /**
+   * Forget this user's tour in memory, WITHOUT persisting: cancel the queued
+   * save, clear progress and contexts, and make in-flight loads and saves
+   * started before it drop their result. Called on an identity change.
+   */
+  reset: () => void;
   detectProjectCode: () => Promise<void>;
 }
 
@@ -132,6 +138,11 @@ function cancelPendingSave(): void {
     _saveTimer = null;
   }
 }
+
+// Bumped by reset() (an identity change: authStore): a load started for the
+// previous user drops its answer instead of installing it, and a save or
+// terminal transition started for them writes nothing under the next one.
+let generation = 0;
 
 /** Test-only: drop any scheduled save so state can't leak across cases. */
 export function __resetTourSaveScheduler(): void {
@@ -167,6 +178,7 @@ export const useTourStore = create<TourState>((set, get) => ({
   loadState: async () => {
     if (get().isLoading) return;
     set({ isLoading: true });
+    const startedIn = generation;
 
     // Versions come from the journey content. Imported lazily so this store
     // never pulls journey content (and whatever it imports) into its static
@@ -187,6 +199,7 @@ export const useTourStore = create<TourState>((set, get) => ({
       lastJourneySetting,
       resumeSetting,
       contextSetting,
+      legacyCurrentStepSetting,
       ...versionSettings
     ] = await Promise.all([
       getTourStorage().get(TOUR_SETTINGS_KEYS.COMPLETED),
@@ -195,6 +208,7 @@ export const useTourStore = create<TourState>((set, get) => ({
       getTourStorage().get(TOUR_SETTINGS_KEYS.LAST_JOURNEY),
       getTourStorage().get(TOUR_SETTINGS_KEYS.RESUME),
       getTourStorage().get(TOUR_SETTINGS_KEYS.JOURNEY_CONTEXT),
+      getTourStorage().get(TOUR_SETTINGS_KEYS.CURRENT_STEP),
       ...versionKeys.map(({ key }) => getTourStorage().get(key)),
     ]);
 
@@ -227,6 +241,10 @@ export const useTourStore = create<TourState>((set, get) => ({
       try { contexts = JSON.parse(contextSetting) as typeof contexts; } catch { /* ignore */ }
     }
 
+    // The identity changed while the settings were in flight: they are the
+    // previous user's. reset() already cleared isLoading for the next load.
+    if (startedIn !== generation) return;
+
     set({
       hasCompletedOnboarding,
       completedSteps,
@@ -241,11 +259,16 @@ export const useTourStore = create<TourState>((set, get) => ({
 
     // Backwards-compat: a previous version of this store persisted the
     // current step under TOUR_SETTINGS_KEYS.CURRENT_STEP. That value is no
-    // longer the source of truth (the URL is). Delete it on first load so
-    // the row doesn't linger forever — best-effort, swallow failures.
-    void getTourStorage().delete(TOUR_SETTINGS_KEYS.CURRENT_STEP).catch(() => {
-      /* ignore */
-    });
+    // longer the source of truth (the URL is). Delete it when it is still
+    // there so the row doesn't linger forever — best-effort, swallow
+    // failures. Only when it is there: the read above is served from the
+    // settings cache, while an unconditional delete was an RPC on every
+    // startup that answered NotFound for every user who no longer had it.
+    if (legacyCurrentStepSetting !== undefined) {
+      void getTourStorage().delete(TOUR_SETTINGS_KEYS.CURRENT_STEP).catch(() => {
+        /* ignore */
+      });
+    }
   },
 
   // Per-step progress persists optimistically: the in-memory set is the
@@ -303,13 +326,18 @@ export const useTourStore = create<TourState>((set, get) => ({
     // tour (wizard hook or external) gets consistent side effects.
     // The checklist is Reliant's (settings-backed); a shell with its own
     // storage (the forge shell) has none to update.
+    const startedIn = generation;
     if (getTourStorage().kind === "settings") try {
       const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
+      if (startedIn !== generation) return;
       void useOnboardingChecklistStore.getState().markComplete("take-product-tour");
       void useOnboardingChecklistStore.getState().markWelcomeShown();
     } catch {
       /* ignore */
     }
+    // The identity changed while the import was pending: the store now holds
+    // nobody's tour, and saving it would overwrite the next user's.
+    if (startedIn !== generation) return;
     await get().saveTourState();
   },
 
@@ -355,12 +383,14 @@ export const useTourStore = create<TourState>((set, get) => ({
 
   resetTourProgress: async () => {
     trackEvent('tour_restarted');
+    const startedIn = generation;
 
     try {
       await getTourStorage().delete(TOUR_SETTINGS_KEYS.SKIPPED_ALL);
     } catch {
       /* ignore */
     }
+    if (startedIn !== generation) return;
 
     set({
       completedSteps: new Set(),
@@ -383,16 +413,30 @@ export const useTourStore = create<TourState>((set, get) => ({
     // in-memory write left the store saying "expanded" while the settings row
     // still said "dismissed", so the guide reappeared now and then vanished on
     // the next reload.
+    //
+    // Every await is followed by the generation check before anything that
+    // touches the checklist or settings: a restart begun for user A must not
+    // clear user B's checklist, or persist B's panel, once B is adopted while
+    // A's import or revive is still pending.
+    let checklist: typeof import("./onboardingChecklistStore").useOnboardingChecklistStore | undefined;
     try {
-      const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
-      useOnboardingChecklistStore.setState({
-        completedItems: new Set(),
-        welcomeShown: false,
-      });
-      await useOnboardingChecklistStore.getState().revive();
+      ({ useOnboardingChecklistStore: checklist } = await import("./onboardingChecklistStore"));
     } catch {
       /* ignore */
     }
+    if (startedIn !== generation) return;
+    if (checklist) {
+      checklist.setState({
+        completedItems: new Set(),
+        welcomeShown: false,
+      });
+      try {
+        await checklist.getState().revive();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (startedIn !== generation) return;
     localStorage.removeItem("reliant.checklist.welcomeShown");
     localStorage.removeItem("reliant.checklist.completedItems");
 
@@ -429,7 +473,26 @@ export const useTourStore = create<TourState>((set, get) => ({
   },
 
   detectProjectCode: async () => {
+    const startedIn = generation;
     const hasCode = await detectHasCode();
+    if (startedIn !== generation) return;
     set({ projectHasCode: hasCode });
+  },
+
+  reset: () => {
+    generation++;
+    cancelPendingSave();
+    set({
+      completedSteps: new Set(),
+      skippedSteps: new Set(),
+      hasCompletedOnboarding: false,
+      journeys: emptyRecords(),
+      lastJourney: null,
+      resumeStep: null,
+      contexts: {},
+      projectHasCode: null,
+      isInitialized: false,
+      isLoading: false,
+    });
   },
 }));

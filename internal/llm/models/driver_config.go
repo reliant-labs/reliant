@@ -31,6 +31,14 @@ type DriverConfig struct {
 
 	AccountID    string // provider_accounts.id; "" only for local / test drivers
 	AccountLabel string // the account's display label, for notices and logs (never a secret)
+	// AccountOrgID is the Reliant org that owns the account; "" for a person's own.
+	// Writes about the account (limits, bench, needs-sign-in) go to its owner.
+	AccountOrgID string
+	// AttributedOrgID is the org that pays for a person's account (an org-paid
+	// seat, or the managed key minted in that org); "" for an unattributed one.
+	// The driver build refuses an account owned by, or attributed to, an org
+	// other than the run's (drivers.CheckAccountScope).
+	AttributedOrgID string
 }
 
 // ProviderRef names a driver, optionally one instance of it: "claude",
@@ -83,6 +91,50 @@ type AccountConfig struct {
 	// Serves reports whether this account's own catalog includes the model
 	// (Codex plus vs pro). Nil means everything the driver serves.
 	Serves func(modelID string) bool
+	// Tier is the account's routing tier in the run's org: TierFirst for the
+	// org-paid accounts under the default order, TierSecond for the rest. The
+	// zero value is TierSecond, so an AccountConfig built without one routes
+	// exactly as every account did before org accounts.
+	Tier AccountTier
+	// Funding is who pays for a call this account serves (Funding*), recorded
+	// on its usage row. "" when unknown.
+	Funding string
+}
+
+// AccountTier orders the accounts of one run: the router places a thread on
+// the best tier that has an account serving the model, and never mixes tiers
+// (control-plane docs/design/org-provider-accounts.md §4.2-§4.3). Lower is
+// preferred.
+type AccountTier int
+
+const (
+	// TierFirst is the tier a run uses first: the org-paid accounts under
+	// the default order (org_first), the person's own under personal_first.
+	TierFirst AccountTier = -1
+	// TierSecond is the other tier, and the zero value: every account is on
+	// it when the run's org gave the person nothing, so routing is exactly
+	// as before org accounts.
+	TierSecond AccountTier = 0
+)
+
+// Funding classes (§2): who pays for a call. The values are
+// llm_call_usage.funding's closed set.
+const (
+	FundingOrgKey    = "org_key"    // an API key the org owns
+	FundingOrgSeat   = "org_seat"   // the person's sign-in the org pays for
+	FundingOrgWallet = "org_wallet" // the managed Reliant key, billed to an org's wallet
+	FundingPersonal  = "personal"   // the person's own subscription or key
+	FundingLocal     = "local"      // a model on the person's own hardware
+)
+
+// OrgFunded reports whether funding is paid by an org: an org key, a seat or
+// the Reliant wallet.
+func OrgFunded(funding string) bool {
+	switch funding {
+	case FundingOrgKey, FundingOrgSeat, FundingOrgWallet:
+		return true
+	}
+	return false
 }
 
 // IsConfigured returns true if the driver has the required configuration.
@@ -124,6 +176,41 @@ type AvailableDrivers struct {
 	// traffic until the user reconnects it. Resolution errors read this to
 	// say WHY a pinned provider cannot serve, not just that it cannot.
 	Unavailable map[DriverID]string
+
+	// DriverRank is each driver's best account tier (AccountConfig.Tier) over
+	// all its accounts. Nil when no account is on TierFirst, which is every
+	// run whose org gave the person no account: then nothing is tiered and
+	// resolution is exactly as before. The registry's tie-break is TierFor,
+	// per model.
+	DriverRank map[DriverID]AccountTier
+
+	// StickyDriver, when set, is the provider a thread is already on between
+	// the tool steps of one turn: TierFor ranks it above every tier for a
+	// model it serves, so a better tier is taken up at the next turn start,
+	// never mid-turn (org-provider-accounts §4.5, D6).
+	StickyDriver DriverID
+}
+
+// TierFor is driver's best tier among its accounts that serve modelID
+// (AccountConfig.Serves): the tie-break the registry uses among the drivers
+// serving the model it already chose (ModelRegistry.WithDriverRank). A
+// driver's account that cannot serve the model does not lift the driver for
+// it. TierSecond when the driver has no account serving it.
+func (a AvailableDrivers) TierFor(driver DriverID, modelID string) AccountTier {
+	best, serves := TierSecond, false
+	for _, acct := range a.Accounts[driver] {
+		if acct.Serves != nil && !acct.Serves(modelID) {
+			continue
+		}
+		serves = true
+		if acct.Tier < best {
+			best = acct.Tier
+		}
+	}
+	if serves && driver == a.StickyDriver {
+		return TierFirst - 1
+	}
+	return best
 }
 
 // GetAvailableDriversForModel returns the list of drivers that support a model AND are properly configured.
@@ -198,9 +285,13 @@ func SelectBestDriver(modelID ModelID, availableDrivers AvailableDrivers) (Drive
 		return DriverConfig{}, false
 	}
 
+	// The run's driver rank decides first (who pays), then the system
+	// priority, as in ModelRegistry.findBestProvider.
 	bestConfig := availableConfigs[0]
 	for _, config := range availableConfigs[1:] {
-		if preferDriver(config.DriverID, bestConfig.DriverID) {
+		tier := availableDrivers.TierFor(config.DriverID, string(modelID))
+		bestTier := availableDrivers.TierFor(bestConfig.DriverID, string(modelID))
+		if tier < bestTier || (tier == bestTier && preferDriver(config.DriverID, bestConfig.DriverID)) {
 			bestConfig = config
 		}
 	}

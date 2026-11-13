@@ -12,6 +12,7 @@ package trigger
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -19,10 +20,23 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/orgs"
 )
 
 // Repository is everything the trigger handlers read and write.
+// OrgResolver answers the org questions of these rpcs. *orgs.Resolver is
+// one; nil (or a nil *orgs.Resolver) is a deployment with no orgs.
+type OrgResolver interface {
+	Named(ctx context.Context, userID, requested string) (string, error)
+	DefaultOrg(ctx context.Context, userID string) (string, error)
+	ActingOrg(ctx context.Context, userID, requested string) (string, error)
+	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
+}
+
 type Repository interface {
+	// AssignUnassignedOrg stamps the caller's rows that have no org with
+	// their default org (the lazy backfill, orgs.ListScope).
+	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	RunTx(context.Context, orm.TxPolicy, func(context.Context) error) error
 	LockActivationDependencies(context.Context, string, string) error
 	ListSettingsByKey(context.Context, string, string) ([]*db.Setting, error)
@@ -32,8 +46,19 @@ type Repository interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error)
 	UpdateTrigger(ctx context.Context, t *core.Trigger) error
+	// CreateTriggerInOrg and UpdateTriggerInOrg write under the owner's org
+	// lock, only while every org the handler's decision read still holds.
+	CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
+	UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
+	// AdoptTrigger re-owns an orphaned trigger in place (AdoptAs), only
+	// while previousOwner still owns it; with offerID it accepts that offer.
+	AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner, offerID string, reads ...db.OrgRead) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
+	// ResumeTriggerPausedBy turns a trigger on only while the system's pause
+	// for reason still stands and the row is the version checked (seen, its
+	// updated_at): a project move's, ResumeAfterOrgMove.
+	ResumeTriggerPausedBy(ctx context.Context, id, reason string, seen time.Time) (bool, error)
 	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
 	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
 	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)

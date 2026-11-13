@@ -4,6 +4,7 @@ package cmd
 import (
 	"os"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -281,18 +282,22 @@ func TestNegativeDrainBudgetIsNone(t *testing.T) {
 	t.Setenv("PRE_STOP_DELAY", "-1s")
 	t.Setenv("SHUTDOWN_TIMEOUT", "-1s")
 	preStop, shutdown := drainOf(t, serverRoles[0])
-	d := &serverkit.Drainer{PreStopDelay: preStop, ShutdownTimeout: shutdown}
-	start := time.Now()
-	d.Begin()
-	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Errorf("Begin paused %s for PRE_STOP_DELAY=-1s", elapsed)
-	}
-	ctx, cancel := d.ShutdownContext()
-	defer cancel()
-	deadline, ok := ctx.Deadline()
-	if !ok || time.Until(deadline) > 0 {
-		t.Errorf("SHUTDOWN_TIMEOUT=-1s left a shutdown window open")
-	}
+	// In a bubble the clock moves only when Begin sleeps, so any pause it
+	// takes shows in full, however busy the machine is.
+	synctest.Test(t, func(t *testing.T) {
+		d := &serverkit.Drainer{PreStopDelay: preStop, ShutdownTimeout: shutdown}
+		start := time.Now()
+		d.Begin()
+		if elapsed := time.Since(start); elapsed > 0 {
+			t.Errorf("Begin paused %s for PRE_STOP_DELAY=-1s", elapsed)
+		}
+		ctx, cancel := d.ShutdownContext()
+		defer cancel()
+		deadline, ok := ctx.Deadline()
+		if !ok || time.Until(deadline) > 0 {
+			t.Errorf("SHUTDOWN_TIMEOUT=-1s left a shutdown window open")
+		}
+	})
 }
 
 // drainOf loads role and returns the drain budget it hands its package.
@@ -322,7 +327,7 @@ func TestServerRoleDatabasePool(t *testing.T) {
 		require.NoError(t, os.Unsetenv(name))
 	}
 	api := loadServerAPIOptions(t)
-	assert.Equal(t, db.Pool{MaxOpenConns: 25, MaxIdleConns: 10, SchemaWait: 300 * time.Second, KeepIdleWarm: true}, api.DatabasePool)
+	assert.Equal(t, db.Pool{MaxOpenConns: 25, MaxIdleConns: 20, SchemaWait: 300 * time.Second, KeepIdleWarm: true}, api.DatabasePool)
 
 	t.Setenv("RELIANT_DB_MAX_OPEN_CONNS", "8")
 	t.Setenv("RELIANT_DB_MAX_IDLE_CONNS", "2")

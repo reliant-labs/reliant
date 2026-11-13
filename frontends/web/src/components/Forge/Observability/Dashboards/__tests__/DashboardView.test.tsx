@@ -84,7 +84,7 @@ describe("a release dashboard", () => {
     const { onCall, navigateTo } = renderDashboard(ref("release", "checkout"));
     expect(await screen.findByRole("heading", { level: 1, name: "Checkout funnel" })).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-readonly-note")).toHaveTextContent("Declared in your repo at deploy/observability/dashboards/checkout.json");
-    expect(screen.getByTestId("dashboard-header")).toHaveTextContent("Shipped in v1.8.2");
+    expect(screen.getByTestId("dashboard-source")).toHaveTextContent("Shipped in v1.8.2");
     expect(screen.queryByTestId("dashboard-promote-open")).not.toBeInTheDocument();
     await waitFor(() => expect(calls(onCall, "RecordDashboardView")).toHaveLength(1));
 
@@ -294,11 +294,11 @@ describe("variables, compare, refresh, share, full screen", () => {
     const user = userEvent.setup();
     const { onCall, current } = renderDashboard(ref("workspace", "checkout-latency"));
     await screen.findByTestId("dashboard-grid");
-    await user.click(screen.getByRole("checkbox", { name: "Release markers" }));
-    await user.click(screen.getByRole("checkbox", { name: "Alert bands" }));
+    await user.click(screen.getByTestId("dashboard-view-options"));
+    await user.click(screen.getByRole("checkbox", { name: /Release markers/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Alert bands/ }));
     expect(current()).toMatchObject({ releases: false, alerts: false });
-    await user.click(screen.getByTestId("dashboard-metrics"));
-    await user.click(screen.getByRole("menuitemcheckbox", { name: /p95 latency by route/ }));
+    await user.click(within(screen.getByTestId("dashboard-metrics")).getByRole("checkbox", { name: /p95 latency by route/ }));
     expect(current().hiddenPanels).toContain("latency-by-route");
     expect(screen.queryByTestId("dashboard-panel-latency-by-route")).not.toBeInTheDocument();
     expect(calls(onCall, "SaveDashboard")).toHaveLength(0);
@@ -338,6 +338,24 @@ describe("a day-grained dashboard (the empty-dashboards audit)", () => {
     await waitFor(() => expect(within(panel).getByTestId("chart-bucket-note")).toHaveTextContent("1-day buckets: UTC calendar dates"));
   });
 
+  it("captions a weekly panel's buckets from its minStep, not from the Date column the server reads as a day", async () => {
+    renderDashboard(usage(), {}, grained);
+    const panel = await screen.findByTestId("dashboard-panel-signups-weekly");
+    await waitFor(() => expect(within(panel).getByTestId("chart-bucket-note")).toHaveTextContent("7-day buckets: UTC calendar dates"));
+  });
+
+  it("offers no Explore or Create alert on a delivery panel, which has no spans or query", async () => {
+    const user = userEvent.setup();
+    renderDashboard(usage(), {}, grained);
+    await user.click(await screen.findByTestId("dashboard-panel-menu-promotions"));
+    expect(await screen.findByRole("menuitem", { name: /Ask Reliant/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Explore in/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("dashboard-panel-alert-promotions")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(await screen.findByTestId("dashboard-panel-menu-workflows-by-outcome"));
+    expect(await screen.findByTestId("dashboard-panel-alert-workflows-by-outcome")).toBeInTheDocument();
+  });
+
   it("widens a day panel opened on a shorter range to hold two buckets, and says so, while a step panel keeps the range", async () => {
     const { onCall } = renderDashboard(usage(), { range: "1h" }, grained);
     const note = await screen.findByTestId("dashboard-panel-widened-workflows-by-outcome");
@@ -367,6 +385,80 @@ describe("a day-grained dashboard (the empty-dashboards audit)", () => {
     expect(current().range).toBe("24h");
     await user.selectOptions(time, "7d");
     expect(current().range).toBeUndefined();
+  });
+});
+
+describe("a dashboard of headline figures, sections and a heatmap (forge's Product usage)", () => {
+  const usage = () => ref("release", "usage");
+  const headline: FixtureOptions = { dashboardsHeadline: true };
+  const queried = (onCall: ReturnType<typeof vi.fn>, id: string) => calls(onCall, "QueryPanel").filter((req) => req.panel.id === id);
+
+  it("draws each section under its heading, in the declared order, with its description", async () => {
+    renderDashboard(usage(), {}, headline);
+    const glance = await screen.findByTestId("dashboard-section-glance");
+    expect(within(glance).getByRole("heading", { level: 2, name: "At a glance" })).toBeInTheDocument();
+    expect(glance).toHaveTextContent("each beside its change against the previous period");
+    const grid = screen.getByTestId("dashboard-grid");
+    const order = Array.from(grid.children).map((child) => child.getAttribute("data-testid"));
+    // The figures' section is declared first, so it draws first, whatever the panel order.
+    expect(order).toEqual([
+      "dashboard-section-glance",
+      "dashboard-panel-dau",
+      "dashboard-panel-wau",
+      "dashboard-section-retention",
+      "dashboard-panel-weekly-retention",
+    ]);
+  });
+
+  it("hides a section from its heading and keeps the heading to show it again", async () => {
+    const user = userEvent.setup();
+    const { current } = renderDashboard(usage(), {}, headline);
+    await user.click(await screen.findByTestId("dashboard-section-toggle-retention"));
+    expect(current().hiddenSections).toEqual(["retention"]);
+    expect(screen.queryByTestId("dashboard-panel-weekly-retention")).not.toBeInTheDocument();
+    const toggle = screen.getByTestId("dashboard-section-toggle-retention");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(current().hiddenSections).toBeUndefined();
+    expect(await screen.findByTestId("dashboard-panel-weekly-retention")).toBeInTheDocument();
+  });
+
+  it("opens comparing with the previous period, each figure beside its change and over its trend", async () => {
+    const { onCall } = renderDashboard(usage(), {}, headline);
+    const pressed = await screen.findByRole("button", { name: "Previous period", pressed: true });
+    expect(pressed).toBeInTheDocument();
+    const dau = await screen.findByTestId("dashboard-panel-dau");
+    await waitFor(() => expect(within(dau).getByTestId("obs-panel-change")).toHaveTextContent("▲ 17% vs previous period"));
+    expect(within(dau).getByTestId("obs-panel-sparkline")).toBeInTheDocument();
+    // The trend is the panel's trendSql, run over the same window.
+    await waitFor(() => expect(queried(onCall, "dau.trend").length).toBeGreaterThan(0));
+    expect(queried(onCall, "dau.trend")[0].panel.sql).toMatch(/^SELECT toDate\(Timestamp\) AS day/);
+    // A heatmap draws no figure: no comparison or trend is asked for it.
+    await screen.findByTestId("obs-panel-sql-heatmap");
+    const reads = queried(onCall, "weekly-retention");
+    expect(reads.every((req) => Date.now() - req.window.endMs < 60_000)).toBe(true);
+  });
+
+  it("turns the default comparison off in the URL, and choosing it again clears the URL", async () => {
+    const user = userEvent.setup();
+    const { current } = renderDashboard(usage(), {}, headline);
+    const compare = await screen.findByTestId("dashboard-compare");
+    await user.click(within(compare).getByRole("button", { name: "Off" }));
+    expect(current().compare).toBe("off");
+    expect(within(compare).getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(screen.queryByTestId("obs-panel-change")).not.toBeInTheDocument());
+    await user.click(within(compare).getByRole("button", { name: "Previous period" }));
+    expect(current().compare).toBeUndefined();
+  });
+
+  it("draws the retention table as a heatmap: cohorts down, weeks across, an unfinished week empty", async () => {
+    renderDashboard(usage(), {}, headline);
+    const heatmap = await screen.findByTestId("obs-panel-sql-heatmap");
+    const table = within(heatmap).getByRole("table");
+    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Cohort (week of)", "W1", "W2", "W3"]);
+    expect(within(table).getAllByRole("rowheader").map((cell) => cell.textContent)).toEqual(["2026-10-05 · 40 users", "2026-10-12 · 32 users", "2026-10-19 · 12 users"]);
+    const last = within(table).getAllByRole("row")[3];
+    expect(within(last).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["30%", "·", "·"]);
   });
 });
 

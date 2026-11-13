@@ -46,8 +46,9 @@
  * one machine against one origin used to overwrite each other's PAT. The
  * daemon's stable id is NOT in this file — it moved to a `daemon-id` file in
  * the instance's data directory, because identity is per INSTANCE (origin,
- * account, workspace) while a PAT is per ACCOUNT. That file is the daemon's;
- * Electron neither writes nor reads it.
+ * account, workspace) while a PAT is per ACCOUNT. That file is the daemon's
+ * to write; BackendManager reads only its current instance's id for the
+ * renderer's local-folder chooser.
  *
  * No Electron imports
  * -------------------
@@ -847,8 +848,8 @@ const NOOP_LOGGER = { debug() {}, info() {}, warn() {}, error() {} };
  * `apiUrl` is the daemon's --server origin: it KEYS daemon.json and must
  * match what the Go daemon looks up. `mintApiUrl` is where TokenService is
  * served — reliant's api-server. The two are the same host in a packaged
- * build, but distinct in cloud-dev, where --server is admin-server and
- * admin-server does not serve reliant.v1.TokenService. Defaults to `apiUrl`.
+ * build, but distinct in cloud-dev, where --server is platform-api and
+ * platform-api does not serve reliant.v1.TokenService. Defaults to `apiUrl`.
  *
  * `authUrl` + `authAnonKey` identify the GoTrue provider for the refresh.
  * When either is missing the refresh is disabled and behavior degrades to

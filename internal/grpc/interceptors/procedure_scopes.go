@@ -5,6 +5,7 @@ import (
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 )
 
 // procedureScopes is the scope a narrow access token must hold to call a
@@ -24,9 +25,12 @@ import (
 // The inbox slice (forge pkg/accesstoken/inbox.go) is mapped the same way:
 // ListInbox (which is also the counts call, limit 0) needs inbox:read,
 // Dismiss and Restore need inbox:manage, ResolveQuestion needs
-// questions:answer. Approve, Deny, BatchApprove and BatchDeny are NOT mapped:
-// approvals:decide is pending an owner decision, so they need reliant:api, as
-// do CleanupStorage and ForgetStorageWorktree (they manage a machine).
+// questions:answer. Approve, Deny, BatchApprove and BatchDeny need
+// approvals:decide (owner decision 2026-11-06), EXPLICITLY: reliant:api does not
+// satisfy them here (explicitScopeProcedures), though Set.Permits implies it
+// elsewhere. The approval handler repeats the check and also refuses machine-bound
+// tokens (auth.RequireApprovalDecider). CleanupStorage and ForgetStorageWorktree
+// (they manage a machine) need reliant:api.
 var procedureScopes = map[string]fat.Scope{
 	reliantv1connect.RunServiceStartRunProcedure:           fat.ScopeRunsStart,
 	reliantv1connect.RunServiceGetRunProcedure:             fat.ScopeRunsRead,
@@ -52,6 +56,21 @@ var procedureScopes = map[string]fat.Scope{
 	reliantv1connect.InboxServiceDismissInboxItemProcedure:   fat.ScopeInboxManage,
 	reliantv1connect.InboxServiceRestoreInboxItemProcedure:   fat.ScopeInboxManage,
 	reliantv1connect.QuestionServiceResolveQuestionProcedure: fat.ScopeQuestionsAnswer,
+
+	reliantv1connect.ApprovalServiceApproveProcedure:      fat.ScopeApprovalsDecide,
+	reliantv1connect.ApprovalServiceDenyProcedure:         fat.ScopeApprovalsDecide,
+	reliantv1connect.ApprovalServiceBatchApproveProcedure: fat.ScopeApprovalsDecide,
+	reliantv1connect.ApprovalServiceBatchDenyProcedure:    fat.ScopeApprovalsDecide,
+}
+
+// explicitScopeProcedures are the procedures whose scope must be GRANTED on the
+// token: reliant:api, which Set.Permits lets stand in for the inbox scopes,
+// does not satisfy them. A token that predates the scope stays refused.
+var explicitScopeProcedures = map[string]bool{
+	reliantv1connect.ApprovalServiceApproveProcedure:      true,
+	reliantv1connect.ApprovalServiceDenyProcedure:         true,
+	reliantv1connect.ApprovalServiceBatchApproveProcedure: true,
+	reliantv1connect.ApprovalServiceBatchDenyProcedure:    true,
 }
 
 // ScopeForProcedure is the scope a machine credential needs for procedure:
@@ -67,5 +86,15 @@ func ScopeForProcedure(procedure string) fat.Scope {
 // procedure needs: PermissionDenied with reason scope_missing and the scope
 // named in the error metadata.
 func requireProcedureScope(procedure string, p *fat.Principal) error {
-	return p.Require(ScopeForProcedure(procedure))
+	scope := ScopeForProcedure(procedure)
+	if explicitScopeProcedures[procedure] {
+		if auth.MachineBound(p) {
+			return auth.MachineCredentialRefusal()
+		}
+		if p == nil || !p.Scopes.Has(scope) {
+			return auth.ScopeMissing(scope)
+		}
+		return nil
+	}
+	return p.Require(scope)
 }

@@ -50,7 +50,9 @@ type Daemon struct {
 
 	// IsDefault: the owner chose this machine as their default
 	// (SetDefaultDaemon). Work that names no machine runs here first; at most
-	// one of a user's daemons carries it.
+	// one of a user's daemons carries it. It is remembered per user
+	// (user_default_daemons), so it holds when the registry deletes and
+	// recreates this machine's row.
 	IsDefault bool
 
 	// RequiresBoundToken reserves the id for daemon-bound credentials: once
@@ -113,6 +115,32 @@ type DaemonAttachment struct {
 	// Build is the build the daemon reported when its stream registered.
 	// The zero value is "unknown build".
 	Build DaemonBuild
+	// Health is whether the machine can do work, as its heartbeat last
+	// reported. The zero value is "not reported".
+	Health MachineHealth
+}
+
+// MachineHealthState is MachineHealth's verdict, as stored.
+type MachineHealthState string
+
+const (
+	// MachineHealthUnreported: no heartbeat of this session reported health.
+	MachineHealthUnreported MachineHealthState = ""
+	MachineHealthOK         MachineHealthState = "ok"
+	MachineHealthDegraded   MachineHealthState = "degraded"
+)
+
+// MachineHealth is a machine's health as its daemon last reported it
+// (reliantv1.MachineHealth): whether it can start processes, and if not, why.
+type MachineHealth struct {
+	State MachineHealthState
+	// Code is the machine-readable cause while degraded; Reason the same in
+	// words. Both empty otherwise.
+	Code   string
+	Reason string
+	// Since is when the machine entered State, by the gateway's clock; zero
+	// when not reported.
+	Since time.Time
 }
 
 // DaemonBuild is the build a daemon reported in DaemonRegister. Every field is

@@ -113,8 +113,8 @@ func TestPlanQueries(t *testing.T) {
 	if err != nil || newest.ID != "plan-newer" {
 		t.Fatalf("GetPlanByThreadID = %v, %v; want plan-newer", newest, err)
 	}
-	if _, err := store.GetPlanByThreadID(ctx, env.ORM, "thread-none"); !errors.Is(err, core.ErrPlanNotFound) || !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("GetPlanByThreadID(none) err = %v, want core.ErrPlanNotFound (sql.ErrNoRows)", err)
+	if _, err := store.GetPlanByThreadID(ctx, env.ORM, "thread-none"); !errors.Is(err, core.ErrPlanNotFound) {
+		t.Fatalf("GetPlanByThreadID(none) err = %v, want core.ErrPlanNotFound", err)
 	}
 	byChat, err := store.ListPlansByChatID(ctx, env.ORM, "chat-plans")
 	if err != nil {

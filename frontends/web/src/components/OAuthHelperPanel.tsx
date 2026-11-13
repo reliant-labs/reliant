@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Check, Loader2, Terminal } from "lucide-react";
+import { Loader2, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { OAuthHelperProblemReason } from "@/lib/oauth-local";
 import { authServeCommand } from "@/lib/cli-commands";
 import { CommandBlock } from "@/components/CommandBlock";
+import { SetupHelp } from "@/components/SetupHelp";
 import {
   describeTerminal,
   ReliantDownloadOptions,
@@ -18,6 +20,24 @@ export interface OAuthHelperPanelProps {
   loading: boolean;
   /** Re-check helper availability on demand. */
   onRetry: () => void;
+  /** Why the helper is unavailable, when the availability check knows. */
+  problem?: OAuthHelperProblemReason | null;
+  /** The availability check gave up polling; only Retry asks again. */
+  stopped?: boolean;
+  /**
+   * A way out that works without the helper (an API key, Reliant credit).
+   * Offered beside the instructions so a user without a computer to run them
+   * on is never left with only a Retry button.
+   */
+  alternative?: { label: string; onClick: () => void };
+  /** A smaller second way out (Reliant credit), shown after `alternative`. */
+  secondaryAlternative?: { label: string; onClick: () => void };
+  /**
+   * Choose this provider now and finish the sign-in later, once the helper is
+   * running. Shown while the helper is unavailable so nobody is stuck on a
+   * panel that cannot succeed yet.
+   */
+  later?: { label: string; onClick: () => void; busy?: boolean };
   /** Start the OAuth flow for this provider. */
   onConnect: () => void;
   /** True while the OAuth flow is in progress. */
@@ -55,6 +75,22 @@ export interface OAuthHelperPanelProps {
   framed?: boolean;
 }
 
+function helperProblemCopy(
+  problem: OAuthHelperProblemReason | null,
+  providerName: string,
+): string {
+  switch (problem) {
+    case "no_machine":
+      return `No machine is connected to your account yet. Signing in with ${providerName} needs the Reliant desktop app or CLI on your computer.`;
+    case "machine_offline":
+      return "Your machine is not answering right now. Check that the Reliant desktop app or CLI is still running on your computer.";
+    case "not_colocated":
+      return `Your connected machine is not this computer, so ${providerName} sign-in cannot reach it. Run the helper below on this computer.`;
+    default:
+      return "The sign-in helper is not running on this computer.";
+  }
+}
+
 /**
  * Renders the "Authenticate via X" panel shared across the API key setup modal,
  * settings, and onboarding. Handles the "OAuth helper not running" state with a
@@ -70,6 +106,11 @@ export function OAuthHelperPanel({
   available,
   loading,
   onRetry,
+  problem = null,
+  stopped = false,
+  alternative,
+  secondaryAlternative,
+  later,
   onConnect,
   connecting,
   onCancel,
@@ -92,8 +133,7 @@ export function OAuthHelperPanel({
   // Mirrors the pattern in SelfHostedDaemonConnect.tsx.
   // ──────────────────────────────────────────────────────────────────────────
   const isElectron = typeof window !== "undefined" && !!window.electronAPI;
-  const { name: terminalName, howToOpen: terminalHowToOpen } =
-    describeTerminal(useDetectedOS());
+  const { howToOpen: terminalHowToOpen } = describeTerminal(useDetectedOS());
   const [cliInstalled, setCliInstalled] = useState<boolean | null>(null);
   const [cliPath, setCliPath] = useState<string | null>(null);
   const [installingCli, setInstallingCli] = useState(false);
@@ -155,7 +195,7 @@ export function OAuthHelperPanel({
       onClick={onConnect}
       disabled={connecting || loading || !available}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         buttonAlign === "stretch" && "w-full",
         loginButtonClass,
       )}
@@ -173,7 +213,7 @@ export function OAuthHelperPanel({
       type="button"
       onClick={onCancel}
       className={cn(
-        "rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-foreground/5",
+        "min-h-[44px] rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-foreground/5",
         buttonAlign === "stretch" && "w-full",
       )}
     >
@@ -187,7 +227,7 @@ export function OAuthHelperPanel({
       onClick={onRetry}
       disabled={loading}
       className={cn(
-        "rounded-lg border border-border bg-background px-4 py-2 text-sm transition-colors hover:bg-foreground/5 disabled:opacity-50",
+        "min-h-[44px] rounded-lg border border-border bg-background px-4 py-2 text-sm transition-colors hover:bg-foreground/5 disabled:opacity-50",
         buttonAlign === "stretch" && "w-full",
       )}
     >
@@ -220,11 +260,58 @@ export function OAuthHelperPanel({
             ? // Names what the app is waiting on. A bare spinner is
               // indistinguishable from a hung app, which is what made users
               // quit and reopen rather than finish or cancel.
-              `Waiting for you to finish signing in to ${providerName} in your browser. If you closed the tab or want to start over, cancel and try again.`
+              `Finish signing in to ${providerName} in your browser, or cancel to start over.`
             : available
               ? `Sign in with ${providerName} to connect your account.`
-              : `Reliant's sign-in helper isn't running on this computer. It finishes connecting your account. To start it:`}
+              : "Start the sign-in helper on your computer."}
         </p>
+        {!available && !loading && !connecting && (problem || stopped) && (
+          <div
+            role="status"
+            data-testid="oauth-helper-problem"
+            className={cn(
+              "space-y-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-warning-ink",
+              bodyText,
+            )}
+          >
+            <p>{helperProblemCopy(problem, providerName)}</p>
+            {stopped && (
+              <p>We stopped checking automatically. Press Retry once it is running.</p>
+            )}
+            {later && (
+              <button
+                type="button"
+                onClick={later.onClick}
+                disabled={later.busy}
+                className="block w-full rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              >
+                {later.label}
+              </button>
+            )}
+            {(alternative || secondaryAlternative) && (
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {alternative && (
+                  <button
+                    type="button"
+                    onClick={alternative.onClick}
+                    className="font-medium underline underline-offset-2 hover:no-underline"
+                  >
+                    {alternative.label}
+                  </button>
+                )}
+                {secondaryAlternative && (
+                  <button
+                    type="button"
+                    onClick={secondaryAlternative.onClick}
+                    className="text-xs underline underline-offset-2 opacity-80 hover:no-underline hover:opacity-100"
+                  >
+                    {secondaryAlternative.label}
+                  </button>
+                )}
+              </p>
+            )}
+          </div>
+        )}
         {!available && !loading && (
           <div className="space-y-3">
             {/* ── STEP 1: install ────────────────────────────────────────
@@ -236,9 +323,9 @@ export function OAuthHelperPanel({
                 tinted container so the boundary is a surface change, and both
                 halves are numbered — "Install it:" followed by "Then run:"
                 described a sequence without ever presenting one. */}
-            <div className="space-y-2 rounded-lg border border-info/30 bg-info/5 p-3">
+            <div className="space-y-2 rounded-lg border border-border/60 bg-background p-3">
               <p className={cn(bodyText, "font-medium text-foreground")}>
-                1. Install the Reliant CLI
+                1. Download / install
               </p>
 
               {isElectron && cliInstalled === false && (
@@ -262,20 +349,7 @@ export function OAuthHelperPanel({
                 </button>
               )}
 
-              {isElectron && cliInstalled === true && (
-                <p className="flex items-center gap-1.5 text-xs text-success-ink">
-                  <Check className="h-3.5 w-3.5" />
-                  <span>
-                    <code className="font-mono">reliant</code> CLI installed
-                    {cliPath && (
-                      <>
-                        {" "}
-                        at <code className="font-mono">{cliPath}</code>
-                      </>
-                    )}
-                  </span>
-                </p>
-              )}
+              {isElectron && cliInstalled === true && <p className="text-xs text-success-ink">CLI installed</p>}
 
               {/* The full download story — platform-detected build, every
                   other platform, and Homebrew. Previously this rendered the
@@ -290,11 +364,7 @@ export function OAuthHelperPanel({
                   // command that actually unblocks the user. Folded, not
                   // removed: the helper may be needed on another machine.
                   defaultCollapsed={isElectron}
-                  collapsedNote={
-                    isElectron
-                      ? "You are running the Reliant desktop app, so it is already installed here."
-                      : undefined
-                  }
+                  hideHelp
                 />
               )}
 
@@ -306,10 +376,7 @@ export function OAuthHelperPanel({
             {/* ── STEP 2: run the helper ─────────────────────────────────── */}
             <div className="space-y-1.5 rounded-lg border border-border/60 bg-background p-3">
               <p className={cn(bodyText, "font-medium text-foreground")}>
-                2. Run this in {terminalName}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {terminalHowToOpen}
+                2. Run the command
               </p>
               <CommandBlock
                 command={authServeCommand()}
@@ -317,6 +384,12 @@ export function OAuthHelperPanel({
                 codeClassName={codeText}
               />
             </div>
+            <SetupHelp>
+              <p>The installer includes the CLI and adds it to your PATH when you first open the app. If you already use the desktop app, skip the download.</p>
+              {cliPath && <p>CLI location: <code>{cliPath}</code></p>}
+              <p>{terminalHowToOpen} Paste the command and press Enter, then retry here.</p>
+              <p>Keep the terminal open while signing in. If sign-in stalls or you close the browser tab, cancel and try again.</p>
+            </SetupHelp>
           </div>
         )}
       </div>

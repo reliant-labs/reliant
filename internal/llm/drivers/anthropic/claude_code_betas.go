@@ -42,6 +42,12 @@ const (
 	// consistent with the capture sending no `fallbacks` field at all.
 	betaOpus55 = "claude-code-20250219,oauth-2025-04-20,context-1m-2025-08-07,interleaved-thinking-2025-05-14,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,mid-conversation-system-2026-04-07,per-turn-control-2026-07-01,mid-conversation-tool-changes-2026-07-01,advisor-tool-2026-03-01,advanced-tool-use-2025-11-20,mid-conversation-system-clear-at-2026-08-21,effort-2025-11-24,thinking-binding-controls-2026-08-01,thinking-display-updates-2026-08-18,extended-cache-ttl-2025-04-11,cache-diagnosis-2026-04-07"
 
+	// fable-5.2 (api_model: claude-fable-5-2) — sends the 2.1.280 header
+	// verbatim under its 2.1.321 metadata (see profileFable52); the 2.1.321
+	// binary still carries every one of these betas. context-1m-2025-08-07 is
+	// included: fable-5.2 is served at its 1M window.
+	betaFable52 = betaOpus55
+
 	// betaDefault is retained for OLDER models not present in the captures
 	// (opus-4.5/4.6, sonnet-4.5/4.6). They still work with this set.
 	betaDefault = "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advanced-tool-use-2025-11-20,effort-2025-11-24"
@@ -58,7 +64,7 @@ func claudeCodeMaxTokens(apiModel string) int64 {
 		return 32000
 	case "claude-sonnet-5", "claude-opus-4-8", "claude-opus-5", "claude-fable-5", apiModelFable51:
 		return 64000
-	case apiModelOpus55:
+	case apiModelOpus55, apiModelFable52:
 		return 128000
 	default:
 		return 0
@@ -83,6 +89,8 @@ func claudeCodeBetaHeader(apiModel string) string {
 		return betaFable51
 	case apiModelOpus55:
 		return betaOpus55
+	case apiModelFable52:
+		return betaFable52
 	default:
 		return betaDefault
 	}

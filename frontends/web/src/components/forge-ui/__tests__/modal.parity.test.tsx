@@ -15,7 +15,7 @@
  * dispatcher owns Escape, and not only on a bare page.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
 
 import ForgeModal from "../modal";
@@ -91,7 +91,18 @@ function press(key: string, init: KeyboardEventInit = {}) {
   });
 }
 
-beforeEach(() => fallback.mockReset());
+beforeEach(() => {
+  fallback.mockReset();
+  // jsdom does not load Tailwind. Model the actual app's stacking utilities:
+  // the legacy image preview is z-[9999], above Modal's z-50. Its portal
+  // mounts before the enclosing Modal, so DOM order alone says the opposite.
+  const styles = document.createElement("style");
+  styles.textContent = `.fixed { position: fixed; }
+    [class~="z-[9999]"] { z-index: 9999; }
+    .z-50 { z-index: 50; }`;
+  document.head.append(styles);
+  teardown.push(() => styles.remove());
+});
 
 afterEach(() => {
   while (teardown.length) teardown.pop()!();
@@ -304,6 +315,9 @@ describe.each(IMPLS)("$name", ({ Dialog, gaps }) => {
       </Dialog>,
     );
     const close = screen.getByRole("button", { name: "Close (ESC)" });
+    const preview = screen.getByRole("dialog", { name: "shot.png" });
+    expect(getComputedStyle(preview).position).toBe("fixed");
+    expect(getComputedStyle(preview).zIndex).toBe("9999");
     close.focus();
     press("Tab");
     expect(screen.getByRole("dialog", { name: "shot.png" })).toContainElement(document.activeElement as HTMLElement);
@@ -336,6 +350,23 @@ describe.each(IMPLS)("$name", ({ Dialog, gaps }) => {
     rerender(<Host preview />);
     rerender(<Host preview={false} />);
     expect(document.body.style.overflow).toBe("hidden");
+  });
+
+  check("restores page scroll when the dialog and its image-preview subtree close together", async () => {
+    function Host({ open, preview }: { open: boolean; preview: boolean }) {
+      return (
+        <Dialog open={open} onClose={() => undefined} title="Attachments">
+          <ImagePreviewModal isOpen={preview} onClose={() => undefined} imageUrl="blob:x" filename="shot.png" />
+        </Dialog>
+      );
+    }
+    document.body.style.overflow = "auto";
+    const { rerender } = render(<Host open preview={false} />);
+    rerender(<Host open preview />);
+    expect(screen.getByRole("button", { name: "Close (ESC)" })).toBeVisible();
+    rerender(<Host open={false} preview />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(document.body.style.overflow).toBe("auto"));
   });
 
   check("closes on Escape with the app's keyboard dispatcher live", () => {

@@ -218,12 +218,29 @@ func (i ActingIdentity) OrOwner() ActingIdentity {
 	return i
 }
 
+// TriggerPausedCreatorLeftOrg is Trigger.PausedReason of a trigger the system
+// paused because a launch was refused: its creator, whose identity every run
+// it launches executes as, is no longer a live member of the trigger's org.
+// It stays paused until the creator, a member again, resumes it.
+const TriggerPausedCreatorLeftOrg = "creator_left_org"
+
+// TriggerPausedOrgPolicy is Trigger.PausedReason of a trigger the system
+// paused because one of its org's admin policies refused its unattended run
+// (a model the org does not allow, a spend cap reached): every later fire
+// would meet the same verdict. It stays paused until its owner resumes it
+// (control-plane docs/design/org-policies.md §5.1).
+const TriggerPausedOrgPolicy = "org_policy"
+
 // Trigger is a stored trigger definition. UserID is the owner, and the
 // identity every run it launches executes as.
 type Trigger struct {
-	ID         string
-	UserID     string
-	ProjectID  string
+	ID        string
+	UserID    string
+	ProjectID string
+	// OrgID is the organization the trigger belongs to, fixed at creation
+	// (its project's when the project has one). Every chat it launches
+	// belongs to it, so its runs bill it. nil: written before orgs.
+	OrgID      *string
 	WorktreeID *string // nil → the project's main worktree
 	Name       string
 	Kind       TriggerKind
@@ -279,8 +296,12 @@ type Trigger struct {
 	// per-repository installation token control-plane mints only when the
 	// owner can push). Never empty on a stored row.
 	ActingIdentity ActingIdentity
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// PausedReason is why the system paused the trigger
+	// (TriggerPausedCreatorLeftOrg); empty when it is enabled or a person
+	// paused it. Meaningful only while Enabled is false: enabling clears it.
+	PausedReason string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 
 	// ProjectName and DaemonName are read-only display names joined in by
 	// GetTrigger and ListTriggers. Empty when the project or daemon row is
@@ -335,6 +356,47 @@ type IntegrationConfig struct {
 	// PollInterval is a Go duration for polled integrations; empty means the
 	// integration's default.
 	PollInterval string `json:"poll_interval,omitempty"`
+	// Installation, when set, is the GitHub App installation (its id, in
+	// decimal) of the trigger's org that the trigger listens through
+	// (org-sharing.md §7.1): only an event from that installation reaches it,
+	// and still only while its owner can see the event's repository. Empty
+	// listens on every installation the owner's own access covers.
+	Installation string `json:"installation,omitempty"`
+}
+
+// ActivationInstallationKey is the one activation-owned key of an integration
+// trigger's config (IntegrationConfig.Installation): the org GitHub App
+// installation the activation is bound to. A declaration never states it, so
+// re-projecting a declared activation keeps the row's value
+// (CarryActivationConfig here, store.SetTriggerProjection in SQL).
+const ActivationInstallationKey = "installation"
+
+// CarryActivationConfig returns next, a config rebuilt from a workflow's
+// declaration, with what the ACTIVATION owns in prev carried over: today the
+// org GitHub App installation it was bound to (IntegrationConfig.Installation),
+// which no declaration states. Re-projecting an activation must never drop
+// it: that would silently widen the trigger to every installation its owner
+// can see. next is returned unchanged when prev binds nothing or either does
+// not parse as an integration config.
+func CarryActivationConfig(prev, next json.RawMessage) json.RawMessage {
+	var was map[string]any
+	if json.Unmarshal(prev, &was) != nil {
+		return next
+	}
+	installation, _ := was[ActivationInstallationKey].(string)
+	if installation == "" {
+		return next
+	}
+	var cfg map[string]any
+	if json.Unmarshal(next, &cfg) != nil || cfg == nil {
+		return next
+	}
+	cfg[ActivationInstallationKey] = installation
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return next
+	}
+	return raw
 }
 
 // WorkflowEventConfig is Trigger.Config for TriggerKindWorkflowEvent.
@@ -661,6 +723,9 @@ type TriggerProjection struct {
 type TriggerFilters struct {
 	UserID    string
 	ProjectID *string
+	// Org narrows the list to one organization; nil lists every trigger
+	// UserID owns (every client before orgs).
+	Org *OrgScope
 }
 
 // OriginConfidence is how sure Reliant is that it caused an event.

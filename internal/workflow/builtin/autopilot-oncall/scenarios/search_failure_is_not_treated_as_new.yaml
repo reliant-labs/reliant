@@ -6,7 +6,7 @@ events:
   - node: classify.search
     output: {"is_error": true, "content": "rate limited"}
 expect:
-  outcome: completed
+  outcome: failed
   completed: [classify, fresh, problems, ended_failed]
   not_reached: [file.created, file.agent]
   node_outputs:

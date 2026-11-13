@@ -32,6 +32,7 @@ import type { WorktreeSummary } from "../gen/reliant/v1/worktree_pb";
 import { ToolCallService } from "../gen/reliant/v1/tool_call_pb";
 import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
+import { TRANSCRIPT_TOOL_BODY_MODE } from "../lib/toolBodies";
 import type { Chat, Message } from "../types/chat";
 import type { BranchChatRequest, StartChatRequest, UpdateChatRequest } from "../types/api";
 import {
@@ -285,6 +286,27 @@ export async function setChatDaemon(chatId: string, daemonId: string): Promise<C
 }
 
 /**
+ * Move an idle chat to another project. Its next turn runs in that project's
+ * main checkout, on a machine that has it (the server picks one when
+ * `daemonId` is unset). A chat in a branch workspace needs `leaveWorkspace`:
+ * the workspace stays with the old project.
+ */
+export async function moveChatToProject(
+  chatId: string,
+  projectId: string,
+  options: { daemonId?: string; leaveWorkspace?: boolean } = {},
+): Promise<Chat> {
+  return chatOf(
+    await client.moveChatToProject({
+      chatId,
+      projectId,
+      daemonId: options.daemonId,
+      leaveWorkspace: options.leaveWorkspace ?? false,
+    }),
+  );
+}
+
+/**
  * Edit a chat's params. The server stores them as the chat's selection (the
  * choice every later run starts from) whether or not a run is live, and
  * signals a live run. `expectedVersion` is the selection version the edit was
@@ -386,6 +408,8 @@ export async function listMessages(
     recent: options?.recent,
     beforeSeq: options?.beforeSeq ? BigInt(options.beforeSeq) : undefined,
     threadId: options?.threadId,
+    // Finished calls' bodies are fetched when shown (hooks/content-block-bodies.ts).
+    toolBodies: TRANSCRIPT_TOOL_BODY_MODE,
   });
   return {
     messages: response.messages.map(convertProtoMessage),

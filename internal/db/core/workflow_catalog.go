@@ -1,7 +1,6 @@
 package core
 
 import (
-	"database/sql"
 	"fmt"
 	"time"
 )
@@ -13,8 +12,11 @@ import (
 // when Status is WorkflowDraftStatusComplete and IsHidden=false. Validity is never
 // stored — it is computed on read and re-checked at run start.
 type WorkflowDraft struct {
-	ID          string              `json:"id"`
-	UserID      string              `json:"user_id"`
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+	// OrgID is the organization the saved workflow belongs to, fixed at
+	// creation. nil: written before orgs, or no org could be resolved.
+	OrgID       *string             `json:"org_id,omitempty"`
 	Name        string              `json:"name"` // Display name (can have spaces, caps)
 	Slug        string              `json:"slug"` // Runtime reference name (lowercase, hyphenated)
 	Description *string             `json:"description,omitempty"`
@@ -26,6 +28,11 @@ type WorkflowDraft struct {
 	UpdatedAt   time.Time           `json:"updated_at"`
 	IsHidden    bool                `json:"is_hidden"`
 	Version     int64               `json:"version"` // OCC version number
+	// Visibility is who besides UserID may read the saved workflow;
+	// SharedAt when it was shared (nil while private). Read by
+	// internal/authz only.
+	Visibility Visibility `json:"visibility,omitempty"`
+	SharedAt   *time.Time `json:"shared_at,omitempty"`
 }
 
 // WorkflowDraftStatus is a stored workflow's lifecycle state.
@@ -59,19 +66,19 @@ func (e *WorkflowDraftNotRunnableError) Error() string {
 
 // WorkflowScenario represents a test scenario for a workflow.
 type WorkflowScenario struct {
-	ID              string         `json:"id"`
-	WorkflowDraftID sql.NullString `json:"workflow_draft_id,omitempty"` // FK to workflow_drafts (NULL if testing raw YAML)
-	UserID          string         `json:"user_id"`
-	Name            string         `json:"name"`
-	Description     sql.NullString `json:"description,omitempty"`
-	Events          string         `json:"events"`           // JSON array of event objects
-	Expect          sql.NullString `json:"expect,omitempty"` // JSON object with expected outcome
-	LastRunAt       sql.NullTime   `json:"last_run_at,omitempty"`
-	LastRunStatus   sql.NullString `json:"last_run_status,omitempty"` // passed, failed, error
-	LastRunResult   sql.NullString `json:"last_run_result,omitempty"` // JSON object with execution details
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
-	Version         int64          `json:"version"` // OCC version number
+	ID              string     `json:"id"`
+	WorkflowDraftID *string    `json:"workflow_draft_id,omitempty"` // FK to workflow_drafts (NULL if testing raw YAML)
+	UserID          string     `json:"user_id"`
+	Name            string     `json:"name"`
+	Description     *string    `json:"description,omitempty"`
+	Events          string     `json:"events"`           // JSON array of event objects
+	Expect          *string    `json:"expect,omitempty"` // JSON object with expected outcome
+	LastRunAt       *time.Time `json:"last_run_at,omitempty"`
+	LastRunStatus   *string    `json:"last_run_status,omitempty"` // passed, failed, error
+	LastRunResult   *string    `json:"last_run_result,omitempty"` // JSON object with execution details
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	Version         int64      `json:"version"` // OCC version number
 }
 
 // Preset represents a user-created preset stored in the database.

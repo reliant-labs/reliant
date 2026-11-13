@@ -14,17 +14,26 @@
 // What it does, per volume work writes to (every volume diskwatch watches
 // except the system one):
 //
-//   - past ReclaimAt (default 90% used) the volume is RECLAIMING: the guard
+//   - past ReclaimAt (default 80% used) the volume is RECLAIMING: the guard
 //     runs its Reclaimers at once and again every ReclaimEvery while it stays
 //     there, and the heartbeat says so — which makes the server's worktree
 //     sweep re-check this machine's kept workspaces now instead of after their
-//     back-off (internal/worktreesweep).
+//     back-off (internal/worktreesweep). It stays RECLAIMING until the volume
+//     is back under ReclaimTarget (default 70%): reclaiming only to a hair
+//     under the trigger left a shared machine refilling past it within the
+//     hour, so the guard works down to a target with room under it.
 //   - past RefuseAt (default 95% used, with under RefuseFreeCeiling free) it is
 //     REFUSING_HEAVY: HeavyRefusal returns the message the daemon answers a
 //     new heavy command with (internal/heavyjob). Light commands, and work
 //     already running, are never touched.
 //
-// Each state clears ClearMargin below its threshold, so a cache filling and
+// Why 80/70 and not 90: on 2026-11-06 a 629 GB cloud machine sat at 86% with
+// nothing acting (every trigger was at 90% or above), the next build burst
+// away from a full disk. Acting at 80% leaves the reclaimers ~125 GB of
+// headroom on that disk to work in, and at most a few minutes of extra
+// reclaim passes on a machine that is merely busy.
+//
+// REFUSING_HEAVY clears ClearMargin below its threshold, so a cache filling and
 // trimming around a line does not flap. The state, and what the last pass
 // reclaimed, go out on the heartbeat on each volume (Annotate), where the
 // chat's disk banner and the Inbox's storage item show them.
@@ -51,15 +60,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// Defaults. ReclaimAt is where cleaning up is cheap and still in time;
-// RefuseAt is where the next few build bursts may not fit. The free ceiling
-// keeps a big, mostly-free disk from refusing on percentage alone — 5% of a
-// 1 TB laptop disk is 50 GB, room for any build — and matches the ceiling
-// diskwatch's own pressure bit uses.
+// Defaults. ReclaimAt is where cleaning up is cheap and still in time, and
+// ReclaimTarget where a reclaim may stop; RefuseAt is where the next few
+// build bursts may not fit. The free ceiling keeps a big, mostly-free disk
+// from refusing on percentage alone — 5% of a 1 TB laptop disk is 50 GB, room
+// for any build.
 const (
-	DefaultReclaimAt         = 0.90
+	DefaultReclaimAt         = 0.80
+	DefaultReclaimTarget     = 0.70
 	DefaultRefuseAt          = 0.95
-	DefaultRefuseFreeCeiling = diskwatch.PressureFreeCeiling
+	DefaultRefuseFreeCeiling = 20 * diskwatch.GiB
 	DefaultClearMargin       = 0.02
 	DefaultInterval          = diskwatch.DefaultPollInterval
 	DefaultReclaimEvery      = 15 * time.Minute
@@ -73,6 +83,10 @@ type Config struct {
 	// switches that action off.
 	ReclaimAt float64
 	RefuseAt  float64
+	// ReclaimTarget is the fraction used a RECLAIMING volume must get back
+	// under before the state clears. It is capped at ReclaimAt-ClearMargin,
+	// so a ReclaimAt configured below it still clears ClearMargin under.
+	ReclaimTarget float64
 	// RefuseFreeCeiling: a volume with at least this many bytes free is never
 	// refused, whatever its percentage.
 	RefuseFreeCeiling uint64
@@ -100,6 +114,10 @@ func (c Config) withDefaults() Config {
 	if c.ClearMargin <= 0 {
 		c.ClearMargin = DefaultClearMargin
 	}
+	if c.ReclaimTarget <= 0 {
+		c.ReclaimTarget = DefaultReclaimTarget
+	}
+	c.ReclaimTarget = min(c.ReclaimTarget, c.ReclaimAt-c.ClearMargin)
 	if c.Interval <= 0 {
 		c.Interval = DefaultInterval
 	}
@@ -336,8 +354,10 @@ func (g *Guard) reclaim(ctx context.Context, startedAt time.Time, reclaimers []R
 
 // Next is the pure state step for one volume: REFUSING_HEAVY at or past
 // RefuseAt with under RefuseFreeCeiling free, RECLAIMING at or past
-// ReclaimAt, and each state held until the volume is ClearMargin below its
-// threshold (and, for a refusal, has a fifth more than the ceiling free).
+// ReclaimAt. A refusal holds until the volume is ClearMargin below RefuseAt
+// and has a fifth more than the ceiling free; a reclaim (or a refusal that
+// cleared) holds until the volume is under ReclaimTarget. With reclaiming
+// off (ReclaimAt above 1) nothing holds RECLAIMING.
 func Next(cur reliantv1.DiskGuardState, u diskwatch.Usage, cfg Config) reliantv1.DiskGuardState {
 	cfg = cfg.withDefaults()
 	if u.TotalBytes == 0 {
@@ -350,7 +370,7 @@ func Next(cur reliantv1.DiskGuardState, u diskwatch.Usage, cfg Config) reliantv1
 		refusing && used >= cfg.RefuseAt-cfg.ClearMargin && u.FreeBytes < cfg.RefuseFreeCeiling*6/5:
 		return reliantv1.DiskGuardState_DISK_GUARD_STATE_REFUSING_HEAVY
 	case used >= cfg.ReclaimAt,
-		cur != reliantv1.DiskGuardState_DISK_GUARD_STATE_UNSPECIFIED && used >= cfg.ReclaimAt-cfg.ClearMargin:
+		cfg.ReclaimAt <= 1 && cur != reliantv1.DiskGuardState_DISK_GUARD_STATE_UNSPECIFIED && used >= cfg.ReclaimTarget:
 		return reliantv1.DiskGuardState_DISK_GUARD_STATE_RECLAIMING
 	default:
 		return reliantv1.DiskGuardState_DISK_GUARD_STATE_UNSPECIFIED

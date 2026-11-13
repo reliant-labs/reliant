@@ -433,3 +433,65 @@ func TestFollowLogReceivesPollDiagnosticsAndNilIsSilent(t *testing.T) {
 		t.Fatalf("result = %+v after %d polls", res, polls.Load())
 	}
 }
+
+// A session whose feed was compacted (ledger retention) refuses a poll from
+// below the watermark with OutOfRange and the watermark in
+// Reliant-Chat-Compacted-Through. Follow says so on Log and follows from the
+// watermark: the transitions after it stream as usual and the run's verdict
+// still arrives.
+func TestFollowResumesFromTheCompactionWatermark(t *testing.T) {
+	fd := &feed{}
+	fd.workflowStatus("started", "")
+	fd.node(1, "plan", nil, nil)
+	fd.node(3, "plan", nil, nil)
+	fd.node(1, "build", nil, nil)
+	fd.node(3, "build", nil, nil)
+	fd.workflowStatus("completed", "")
+	fd.setRoot(completed, reasonOK, "")
+	f := &fake{}
+	fd.install(f)
+	const through = 3
+	var refused atomic.Int32
+	inner := f.getChatUpdates
+	f.getChatUpdates = func(r *reliantv1.GetChatUpdatesRequest) (*reliantv1.GetChatUpdatesResponse, error) {
+		if r.GetSinceSeq() < through {
+			refused.Add(1)
+			cerr := connect.NewError(connect.CodeOutOfRange, errors.New("chat updates through sequence 3 were compacted"))
+			cerr.Meta().Set(chatCompactedThroughHeader, fmt.Sprint(through))
+			return nil, cerr
+		}
+		return inner(r)
+	}
+	c, _ := f.start(t)
+
+	var log bytes.Buffer
+	evs, res := runFollow(t, c, FollowOptions{Log: &log})
+	want := []string{EventNodeStarted, EventNodeCompleted, EventWorkflowCompleted}
+	if got := kinds(evs); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("events = %v, want %v", got, want)
+	}
+	if evs[0].NodeID != "build" {
+		t.Fatalf("first event = %+v, want the build node, the first transition after the watermark", evs[0])
+	}
+	if !res.Succeeded || res.ExitCode != 0 {
+		t.Fatalf("result = %+v", res)
+	}
+	if refused.Load() == 0 {
+		t.Fatal("follow never polled from below the watermark")
+	}
+	if !strings.Contains(log.String(), "compacted") {
+		t.Fatalf("Log = %q, want it to say the history was compacted", log.String())
+	}
+}
+
+// Any other OutOfRange (no watermark header) is an ordinary failed poll.
+func TestHistoryCompactedThroughNeedsTheWatermark(t *testing.T) {
+	if _, ok := historyCompactedThrough(connect.NewError(connect.CodeOutOfRange, errors.New("x"))); ok {
+		t.Fatal("an OutOfRange without the header read as compaction")
+	}
+	cerr := connect.NewError(connect.CodeUnavailable, errors.New("x"))
+	cerr.Meta().Set(chatCompactedThroughHeader, "5")
+	if _, ok := historyCompactedThrough(cerr); ok {
+		t.Fatal("a non-OutOfRange error read as compaction")
+	}
+}

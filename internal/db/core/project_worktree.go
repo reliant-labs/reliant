@@ -48,10 +48,19 @@ type Project struct {
 	// deploy environments under. Nil when never read (not a forge project, a
 	// forge.yaml without a name, or no daemon has reported it yet). Written at
 	// create from repo.discover and refreshed by ForgeService.GetTopology.
-	ForgeProjectName *string   `json:"forge_project_name,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
-	LastActive       time.Time `json:"last_active"`
+	ForgeProjectName *string `json:"forge_project_name,omitempty"`
+	// OrgID is the organization (control-plane organizations.id) the
+	// project belongs to, fixed at creation. nil: written before orgs, or no
+	// org could be resolved; such a project is its UserID's alone, and the
+	// first org-scoped list stamps it with their default org (internal/orgs).
+	OrgID      *string   `json:"org_id,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	LastActive time.Time `json:"last_active"`
+	// Visibility is who besides UserID may read the project; SharedAt when
+	// it was shared (nil while private). Read by internal/authz only.
+	Visibility Visibility `json:"visibility,omitempty"`
+	SharedAt   *time.Time `json:"shared_at,omitempty"`
 }
 
 // ProjectDaemon records that a daemon has a local clone of a project. A
@@ -81,6 +90,23 @@ type ProjectDaemon struct {
 	// from ClonedAt (the queue time): a clone queued to a sleeping machine
 	// only starts when the machine wakes.
 	CloneStartedAt *time.Time `json:"clone_started_at,omitempty"`
+	// VerifiedAt is when the machine last showed the checkout on its disk: a
+	// completed clone, an attach, or a connect that found it. Nil when it
+	// never has.
+	VerifiedAt *time.Time `json:"verified_at,omitempty"`
+}
+
+// ProjectDaemonDetachment records that the user detached a project from a
+// machine (DetachProjectFromDaemon): the folder stays on its disk, and
+// nothing automatic records it there again — not the connect reconcile, the
+// plain-folder heal, the checkout restore nor the machine's config watcher.
+// Recording a checkout on the machine (attach, create, clone) deletes it.
+type ProjectDaemonDetachment struct {
+	ProjectID string `json:"project_id"`
+	DaemonID  string `json:"daemon_id"`
+	// Path is the checkout path the machine had when it was detached.
+	Path       string    `json:"path"`
+	DetachedAt time.Time `json:"detached_at"`
 }
 
 // ProjectInstallState is how far a project's checkout has got on one daemon.
@@ -164,7 +190,30 @@ type CleanupMetadata struct {
 	// machine was on record for and none connected had: DirectoryDeleted is
 	// set so nothing tracks it any more, but nothing was deleted.
 	Forgotten bool `json:"forgotten,omitempty"`
+	// ReclaimMarkID, ReclaimMarkedAt, ReclaimMarkUse and ReclaimMarkReason
+	// are a live worktree's reclaim mark (worktreesweep mark.go): the sweep
+	// found it quiet for the reclaim quiet period, had its daemon place the
+	// tombstone carrying ReclaimMarkID, and archives it no sooner than the
+	// grace period after ReclaimMarkedAt (the database's clock), only if the
+	// tombstone still stands and nothing has happened in it since.
+	// ReclaimMarkUse is the daemon's own last-use stamp right after it placed
+	// the tombstone (its clock), the baseline later stamps are compared with;
+	// ReclaimMarkReason is the ArchivedBecause the reclaim will record. An
+	// archive under a mark keeps ReclaimMarkID, so the removal is sent with it
+	// (worktreereclaim.Worktree.ReclaimMark). Cleared when the mark is
+	// cancelled.
+	ReclaimMarkID     string     `json:"reclaim_mark_id,omitempty"`
+	ReclaimMarkedAt   *time.Time `json:"reclaim_marked_at,omitempty"`
+	ReclaimMarkUse    *time.Time `json:"reclaim_mark_use,omitempty"`
+	ReclaimMarkReason string     `json:"reclaim_mark_reason,omitempty"`
+	// ReclaimApprovedAt is when the person chose "Reclaim now" for this mark
+	// in the Inbox: the grace wait is skipped, and every other check of the
+	// reclaim still applies (worktreesweep mark.go). Cleared with the mark.
+	ReclaimApprovedAt *time.Time `json:"reclaim_approved_at,omitempty"`
 }
+
+// Marked reports whether the worktree carries a reclaim mark.
+func (m *CleanupMetadata) Marked() bool { return m != nil && m.ReclaimMarkID != "" }
 
 // ArchivedBecauseLanded marks a worktree the sweep archived because its work
 // had landed and its chats had gone quiet. Its chats stay live; the first
@@ -292,8 +341,33 @@ type Repo struct {
 // ProjectFilters contains options for filtering projects.
 type ProjectFilters struct {
 	UserID string
+	// Org narrows the list to one organization; nil lists every project
+	// UserID owns, in any org or none (every client before orgs).
+	Org    *OrgScope
 	Limit  int
 	Offset int
+}
+
+// OrgScope narrows a list to one organization's rows.
+type OrgScope struct {
+	OrgID string
+	// IncludeUnassigned also lists rows with no org yet: those written
+	// before orgs, which belong to their owner's default org. Set only when
+	// OrgID is the caller's default org.
+	IncludeUnassigned bool
+}
+
+// Includes reports whether a row of org orgID (nil: none yet) is in the
+// scope. A nil scope includes everything. For a list filtered in memory; a
+// store query applies the same rule in SQL.
+func (s *OrgScope) Includes(orgID *string) bool {
+	if s == nil {
+		return true
+	}
+	if orgID == nil {
+		return s.IncludeUnassigned
+	}
+	return *orgID == s.OrgID
 }
 
 // WorktreeFilters contains options for filtering worktrees.
@@ -301,6 +375,8 @@ type WorktreeFilters struct {
 	ProjectID *string
 	ChatID    *string
 	Status    *int32
+	// DaemonID narrows to the workspaces owned by that machine.
+	DaemonID *string
 	// IncludeArchived adds archived rows after the live ones.
 	IncludeArchived bool
 	// ArchivedOnly lists only archived rows, most recently archived first.

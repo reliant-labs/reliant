@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -144,41 +145,43 @@ func rotateTo(access, refresh string) ProviderRefresh {
 // N concurrent callers of ONE account hold the same expired access token and the same
 // single-use refresh token. Exactly one exchange happens and everyone shares its result.
 func TestAccountRefresh_SingleFlightCollapsesConcurrentCallersOfOneAccount(t *testing.T) {
-	acct := claudeAcct("a1", "old", "rt-1", expired())
-	store := newFakeStore(acct)
-	var calls atomic.Int32
-	release := make(chan struct{})
-	refresh := func(rt string) (core.AccountTokens, error) {
-		calls.Add(1)
-		<-release
-		if rt != "rt-1" {
-			return core.AccountTokens{}, errors.New("claude session expired: please reconnect Claude")
+	synctest.Test(t, func(t *testing.T) {
+		acct := claudeAcct("a1", "old", "rt-1", expired())
+		store := newFakeStore(acct)
+		var calls atomic.Int32
+		release := make(chan struct{})
+		refresh := func(rt string) (core.AccountTokens, error) {
+			calls.Add(1)
+			<-release
+			if rt != "rt-1" {
+				return core.AccountTokens{}, errors.New("claude session expired: please reconnect Claude")
+			}
+			return core.AccountTokens{Secret: "new", Refresh: "rt-2", ExpiresAt: live()}, nil
 		}
-		return core.AccountTokens{Secret: "new", Refresh: "rt-2", ExpiresAt: live()}, nil
-	}
 
-	const n = 8
-	var wg sync.WaitGroup
-	results := make([]llm.OAuthTokens, n)
-	errs := make([]error, n)
-	for i := range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			results[i], errs[i] = CoordinatedAccountRefresh(context.Background(), store, "u1", "a1", held(acct), refresh)
-		}()
-	}
-	time.Sleep(50 * time.Millisecond)
-	close(release)
-	wg.Wait()
+		const n = 8
+		var wg sync.WaitGroup
+		results := make([]llm.OAuthTokens, n)
+		errs := make([]error, n)
+		for i := range n {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				results[i], errs[i] = CoordinatedAccountRefresh(context.Background(), store, "u1", "a1", held(acct), refresh)
+			}()
+		}
+		synctest.Wait() // every caller is parked: one in the exchange, the rest behind it
+		close(release)
+		wg.Wait()
 
-	assert.EqualValues(t, 1, calls.Load(), "one account, one upstream exchange")
-	for i := range n {
-		require.NoError(t, errs[i])
-		assert.Equal(t, "new", results[i].AccessToken)
-		assert.Equal(t, "rt-2", results[i].RefreshToken)
-	}
-	assert.Equal(t, "rt-2", store.accounts["a1"].Secrets.Refresh, "the rotation is persisted")
+		assert.EqualValues(t, 1, calls.Load(), "one account, one upstream exchange")
+		for i := range n {
+			require.NoError(t, errs[i])
+			assert.Equal(t, "new", results[i].AccessToken)
+			assert.Equal(t, "rt-2", results[i].RefreshToken)
+		}
+		assert.Equal(t, "rt-2", store.accounts["a1"].Secrets.Refresh, "the rotation is persisted")
+	})
 }
 
 // Two accounts of the same provider refresh at the same time without waiting on each other.
@@ -214,7 +217,7 @@ func TestAccountRefresh_DifferentAccountsRefreshConcurrently(t *testing.T) {
 			got[i], _ = CoordinatedAccountRefresh(context.Background(), store, "u1", a.ID, held(a), refresh)
 		}()
 	}
-	require.Eventually(t, func() bool { return peak.Load() == 2 }, 3*time.Second, 5*time.Millisecond,
+	require.Eventually(t, func() bool { return peak.Load() == 2 }, 30*time.Second, 5*time.Millisecond,
 		"both accounts must be inside their exchange at the same time")
 	close(gate)
 	wg.Wait()

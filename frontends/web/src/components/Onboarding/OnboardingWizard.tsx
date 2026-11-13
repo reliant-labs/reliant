@@ -18,6 +18,7 @@
 import { useEffect } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { isClaimPath } from "../../lib/claimLink";
+import { isAcceptInvitePath } from "../../lib/inviteLink";
 import { trackEvent } from "../../lib/analytics";
 import { useAuthStore } from "../../store/authStore";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
@@ -29,6 +30,7 @@ import { isWorkflowSurfacePath } from "../../lib/workflowsArea";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import { JourneyTour } from "./JourneyTour";
 import { JOURNEYS, firstStepId, isJourneyAvailable } from "./journeys/registry";
+import "./journeys/catalog";
 import { journeyToReshow } from "./journeys/reshow";
 import { useTourNavigation } from "./useTourNavigation";
 
@@ -68,9 +70,12 @@ export function OnboardingWizard() {
   // The dedicated /onboarding route IS the onboarding experience — showing
   // the post-onboarding "Setup Guide" floating panel on top of it is a
   // bad-UX dupe of the same information. /claim owns the screen for the same
-  // reason: someone is mid-way through taking over a site.
+  // reason: someone is mid-way through taking over a site; /accept-invite,
+  // mid-way through joining an org.
   const isOnboardingRoute =
-    location.pathname.startsWith("/onboarding") || isClaimPath(location.pathname);
+    location.pathname.startsWith("/onboarding") ||
+    isClaimPath(location.pathname) ||
+    isAcceptInvitePath(location.pathname);
 
   // Onboarding is per-USER state, so none of it may render to a signed-out
   // visitor (a forced sign-out drops the user on the sign-in screen without
@@ -118,7 +123,13 @@ export function OnboardingWizard() {
     goToStep(journey, first);
   }, [tourInitialized, user, isDesktopSurface, isOnboardingRoute, tourOpen, goToStep]);
 
-  if (!isDesktopSurface) return null;
+  // The mobile surface shows a tour only as its journey's own phone presentation (Journey.phone).
+  // It needs the tour state alone: the checklist never shows there, so its
+  // store loading (or failing to) must not hide an open phone tour.
+  if (!isDesktopSurface) {
+    const phoneTour = nav.tour?.kind === "step" && !!JOURNEYS[nav.tour.journey].phone;
+    return phoneTour && user && tourInitialized ? <JourneyTour /> : null;
+  }
 
   // Signed out — neither the tour nor the checklist belongs on screen.
   if (!user) return null;

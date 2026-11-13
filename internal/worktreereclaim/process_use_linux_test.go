@@ -84,6 +84,27 @@ func TestRecoveryProcessUseUnreadableAndUnsupportedStateHold(t *testing.T) {
 	}
 }
 
+// A /proc that cannot be listed proves nothing about who uses a worktree: the
+// check fails, and the worktree is kept.
+func TestRecoveryProcessUseUnreadableProcHolds(t *testing.T) {
+	root := t.TempDir()
+	missing := filepath.Join(t.TempDir(), "no-proc")
+	if err := checkProcessUseAt(context.Background(), missing, os.Geteuid(), []string{root}); err == nil {
+		t.Fatal("an absent /proc must hold, not report the worktree unused")
+	}
+	if os.Geteuid() == 0 {
+		return // root reads a mode-000 directory anyway
+	}
+	proc, _ := procUseFixture(t)
+	if err := os.Chmod(proc, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(proc, 0700) })
+	if err := checkProcessUseAt(context.Background(), proc, os.Geteuid(), []string{root}); err == nil {
+		t.Fatal("an unreadable /proc must hold, not report the worktree unused")
+	}
+}
+
 // A process inside exit has dropped its mm (exe) before it is a zombie, so its
 // links read ENOENT while it is still listed. That is proof only for a
 // single-threaded task flagged PF_EXITING; anything short of it holds.

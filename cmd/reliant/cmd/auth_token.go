@@ -4,11 +4,15 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"runtime"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"connectrpc.com/connect"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/spf13/cobra"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -24,7 +28,8 @@ func newAuthTokenCmd() *cobra.Command {
 login. 'reliant auth login' already stores one for this CLI; 'create' mints an
 additional, separately named token to hand to a script or CI (RELIANT_TOKEN).
 
-Creating a token is a consented browser login: a token never mints a token.
+Creating a token is a consented login (browser or device code): a token never
+mints a token.
 Listing and revoking use the resolved credential (RELIANT_TOKEN or your login).`,
 	}
 
@@ -41,38 +46,165 @@ func tokenServiceClient(conn *connection, bearer string) reliantv1connect.TokenS
 	return reliantv1connect.NewTokenServiceClient(conn.httpClientWithBearer(bearer), conn.ServerURL)
 }
 
+// mintableTokenScopes are the scopes an API token can carry, narrowest first:
+// reliant:api, forge's runs/triggers slices of it and its inbox slices. Every
+// other scope in forge's catalog is an org capability or a daemon's, which a
+// token for the Reliant API is not for.
+func mintableTokenScopes() []fat.Scope {
+	out := []fat.Scope{fat.ScopeReliantAPI}
+	out = append(out, fat.RunsAndTriggersScopes...)
+	return append(out, fat.InboxScopes...)
+}
+
+func tokenScopeChoices() string {
+	names := make([]string, 0, 10)
+	for _, sc := range mintableTokenScopes() {
+		names = append(names, string(sc))
+	}
+	return strings.Join(names, ", ")
+}
+
+// tokenScopesFromFlags resolves the --scope values (repeated, or comma or
+// space separated) to the scopes to request. No flag keeps the token
+// reliant:api. A value that is not a scope forge knows, or is one an API token
+// cannot carry, is refused here, naming the valid ones, rather than left for
+// the login to clip silently.
+func tokenScopesFromFlags(flags []string) ([]string, error) {
+	if len(flags) == 0 {
+		return []string{cliauth.ScopeAPI}, nil
+	}
+	mintable := mintableTokenScopes()
+	var out []string
+	for _, raw := range flags {
+		for _, part := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ' ' }) {
+			sc, known := fat.ParseScope(part)
+			switch {
+			case !known:
+				return nil, fmt.Errorf("--scope %q is not a known scope; valid scopes: %s", part, tokenScopeChoices())
+			case !slices.Contains(mintable, sc):
+				return nil, fmt.Errorf("--scope %q cannot be carried by an API token; valid scopes: %s", part, tokenScopeChoices())
+			case !slices.Contains(out, part):
+				out = append(out, part)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("--scope needs a value; valid scopes: %s", tokenScopeChoices())
+	}
+	return out, nil
+}
+
+// scopeDifference compares the scopes a login granted with those requested.
+// missing are requested scopes it did not grant; extra are granted scopes
+// nobody asked for. A control plane may grant less than asked (RFC 6749 3.3),
+// and a token that came back with less, or with more, is not the token asked
+// for: more would hand automation access the person did not mean to give.
+func scopeDifference(requested, granted []string) (missing, extra []string) {
+	for _, r := range requested {
+		if !slices.Contains(granted, r) {
+			missing = append(missing, r)
+		}
+	}
+	for _, g := range granted {
+		if !slices.Contains(requested, g) && !slices.Contains(extra, g) {
+			extra = append(extra, g)
+		}
+	}
+	return missing, extra
+}
+
+// grantMismatch refuses a grant that is not exactly the requested scopes,
+// naming what is missing and what is extra; the token is not printed.
+func grantMismatch(requested, granted []string, tokenName string) error {
+	missing, extra := scopeDifference(requested, granted)
+	if len(missing) == 0 && len(extra) == 0 {
+		return nil
+	}
+	var why []string
+	if len(missing) > 0 {
+		why = append(why, "did not grant "+strings.Join(missing, ", "))
+	}
+	if len(extra) > 0 {
+		why = append(why, "also granted "+strings.Join(extra, ", ")+", which was not asked for")
+	}
+	return fmt.Errorf("the login %s (requested: %s; granted: %s); the token was not printed, revoke it with 'reliant auth token revoke %s'",
+		strings.Join(why, " and "), strings.Join(requested, ", "), strings.Join(granted, ", "), tokenName)
+}
+
 func newAuthTokenCreateCmd() *cobra.Command {
 	var name string
+	var scopeFlags []string
+	var forceDevice, forceBrowser bool
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new API token",
 		Long: `Mints an API token (reliant:api, 90 days) named reliant-cli@<name> through a
-browser login you approve, and prints it once. It is NOT stored: this CLI
-keeps using its own login. Hand the printed token to automation as
-RELIANT_TOKEN.
+login you approve, and prints it once. It is NOT stored: this CLI keeps using
+its own login. Hand the printed token to automation as RELIANT_TOKEN.
 
-Re-running with the same --name replaces that token.`,
+Re-running with the same --name replaces that token.
+
+You approve it the way you approve 'reliant auth login': in a browser that
+calls back to a loopback port of THIS machine, or with a device code (RFC 8628)
+you approve on any device. The browser is the default, except where its
+callback cannot reach your browser: a Reliant cloud machine, an ssh session, a
+Linux host with no display, or a Reliant agent's shell. There the device code
+is used. --device or --browser chooses explicitly.
+
+--scope narrows the token to part of the API instead of all of it. Repeat it, or
+give a comma-separated list. Without it the token is reliant:api, the whole
+API. A narrow token reaches only the rpcs its scopes cover and gets
+PermissionDenied (scope_missing) on the rest. Valid scopes:
+` + tokenScopeChoices() + `.`,
+		Example: `  reliant auth token create --name ci --scope runs:read --scope triggers:fire
+  reliant auth token create --name inbox-bot --scope inbox:read,inbox:manage
+  reliant auth token create --name ci --device`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if strings.TrimSpace(name) == "" {
 				return fmt.Errorf("--name is required")
+			}
+			scopes, err := tokenScopesFromFlags(scopeFlags)
+			if err != nil {
+				return err
 			}
 			conn, err := resolveServer(cmd)
 			if err != nil {
 				return err
 			}
-			cred, err := cliauth.Login{
-				Server:  conn.ServerURL,
-				Scopes:  []string{cliauth.ScopeAPI},
-				Name:    name,
-				Out:     cmd.ErrOrStderr(),
-				OpenURL: loginOpener,
-			}.Run(cmd.Context())
+			// The same choice as `reliant auth login`: the browser flow's
+			// callback needs a browser on this machine, the device flow does
+			// not. Prompts go to stderr so stdout carries only the token.
+			flow := chooseLoginFlow(forceDevice, forceBrowser,
+				os.Getenv, //nolint:forbidigo // SSH_*, DISPLAY, RELIANT_DAEMON_TYPE and the agent-shell marker describe the host this process runs on, not configuration of it
+				runtime.GOOS)
+			prompts := cmd.ErrOrStderr()
+			if flow.Device {
+				// The control plane prompts for every device request that is
+				// not a machine pairing as a CLI sign-in; say what approving
+				// this one does.
+				fmt.Fprintf(prompts, "Approving the code below mints the API token %q (%s); it does not sign this CLI in.\n",
+					cliauth.ClientID+"@"+name, strings.Join(scopes, " "))
+			}
+			cred, err := runLogin(cmd.Context(), prompts, loginRequest{
+				Server: conn.ServerURL,
+				Scopes: scopes,
+				Name:   name,
+			}, flow)
 			if err != nil {
 				return fmt.Errorf("minting token: %w", err)
 			}
+			// RFC 6749 3.3: a reply with no scope field means "as requested".
+			if len(cred.Scopes) > 0 {
+				if err := grantMismatch(scopes, cred.Scopes, cliauth.ClientID+"@"+name); err != nil {
+					return err
+				}
+			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "Token %q created\n", cliauth.ClientID+"@"+name)
+			if len(cred.Scopes) > 0 {
+				fmt.Fprintf(out, "  Scopes: %s\n", strings.Join(cred.Scopes, " "))
+			}
 			if cred.ExpiresAt != nil {
 				fmt.Fprintf(out, "  Expires: %s\n", cred.ExpiresAt.Format(time.RFC3339))
 			}
@@ -85,6 +217,10 @@ Re-running with the same --name replaces that token.`,
 	}
 
 	cmd.Flags().StringVar(&name, "name", "", "Label for the token, e.g. ci-deploy (required)")
+	cmd.Flags().StringSliceVar(&scopeFlags, "scope", nil, "Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api)")
+	cmd.Flags().BoolVar(&forceDevice, "device", false, "Approve with a device code on any device (the default where a browser cannot reach this machine)")
+	cmd.Flags().BoolVar(&forceBrowser, "browser", false, "Approve in a browser that calls back to this machine (the default on a desktop)")
+	cmd.MarkFlagsMutuallyExclusive("device", "browser")
 	return cmd
 }
 

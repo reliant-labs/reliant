@@ -15,6 +15,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -98,6 +99,32 @@ type Deps struct {
 	// it DraftAutomation answers Unavailable and the dialog is filled by hand.
 	// forge:optional-dep
 	Drafter AutomationDrafter
+	// Orgs says which organization a create acts in and verifies the org a
+	// list names (internal/orgs). Nil, or a nil *orgs.Resolver, is a
+	// deployment with no orgs: rows are created with none and lists ignore
+	// org_id.
+	// forge:optional-dep
+	Orgs OrgResolver
+	// OrgGitHubApps lists the GitHub App installations an org has linked at
+	// control-plane: a GitHub trigger of the org may listen through one of
+	// them (trigger_org_github.go). Nil (self-hosted) refuses such a binding.
+	// forge:optional-dep
+	OrgGitHubApps OrgGitHubApps
+
+	// OrgRollout holds the org rollout gates (ApiServerConfig orgs); its
+	// github_installation_triggers_enabled lets a GitHub trigger of an org be
+	// bound to one of the org's linked GitHub App installations. Unset or
+	// off, the default, binding is refused, so no trigger carries a binding
+	// a previous release would ignore or erase.
+	//
+	// forge:optional-dep
+	OrgRollout *configv1.OrgsConfig
+}
+
+// OrgGitHubApps names an org's linked GitHub App installations.
+// gitcredentialclient's client satisfies it.
+type OrgGitHubApps interface {
+	ListOrgGitHubInstallations(ctx context.Context, orgID string) ([]gitcredentialclient.OrgInstallation, error)
 }
 
 // Syncer is the schedule backend the handlers converge onto. Declared here,

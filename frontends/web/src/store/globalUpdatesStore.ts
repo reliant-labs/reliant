@@ -21,12 +21,13 @@ import { BackgroundProcessStatus } from "../gen/reliant/v1/common_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 
 import { useProjectStore } from "./projectStore";
-import { openChat } from "./openChat";
+import { leaveSharedChat, openChat } from "./openChat";
 import { beginWorkspaceOpen } from "../lib/openChatInWorkspace";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { patchBackgroundProcessPorts, upsertBackgroundProcess, type BackgroundProcess } from "../hooks/background-queries";
 import { upsertPackageProcess } from "../hooks/package-queries";
 import { logger } from "../lib/logger";
+import { failChatOpen } from "../lib/chatOpenInteraction";
 import { heartbeatOomKills, type ProcessOomKills } from "../lib/machineMemory";
 import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
@@ -48,6 +49,9 @@ import { createCoalescedInvalidator } from "../lib/coalescedInvalidation";
 import { setDaemonLastSeen } from "../api/transport";
 import { toast } from "../lib/toast-manager";
 import { publishDraftUpdate } from "./workflowDraftUpdates";
+import { getActiveOrgId } from "./activeOrgStore";
+import { isOtherOrgUpdate, type OrgLookup } from "./orgUpdateFilter";
+import { getCachedProjects } from "../hooks/project-queries";
 
 const LOG_PREFIX = "[🌐 GlobalUpdates]";
 
@@ -224,7 +228,9 @@ interface GlobalUpdatesState {
   setLastSequence: (seq: number) => void;
   connect: () => void;
   disconnect: () => void;
-  subscribeToChatDetails: (chatId: string) => void;
+  // retryRefused: ask again for a chat the server refused before (only for
+  // an explicit open by the person; the self-healing reconcile never does).
+  subscribeToChatDetails: (chatId: string, options?: { retryRefused?: boolean }) => void;
   // Pass the chat the caller subscribed to. The call is ignored unless that
   // chat is still the subscribed one, so a late effect cleanup cannot tear
   // down a subscription that now belongs to a different chat.
@@ -322,8 +328,9 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     }
   },
 
-  subscribeToChatDetails: (chatId: string) => {
+  subscribeToChatDetails: (chatId: string, options?: { retryRefused?: boolean }) => {
     const state = get();
+    if (options?.retryRefused) state.chatStream?.forgetRefusal(chatId);
     // Trust the service, not this store's flag. subscribedChatId is set
     // optimistically below, before the connection is known to have
     // succeeded, so on its own it cannot distinguish "subscribed" from
@@ -567,7 +574,10 @@ function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
       onChatContextUsage: (chatId, contextUsage) => get().handleChatContextUsage(chatId, contextUsage),
       onUserUpdates: (updates) => get().handleChatStreamUserUpdates(updates),
       onStatusChange: (status) => get().handleChatStreamStatusChange(status),
-      onError: (error) => logger.warn(`${LOG_PREFIX} Chat stream error: ${error}`),
+      onError: (error) => {
+        logger.warn(`${LOG_PREFIX} Chat stream error: ${error}`);
+        failChatOpen(get().chatStream?.getChatId(), "stream_error");
+      },
       // Delta resume: chatStore owns each chat's cached state, so it owns the
       // cursor describing it and decides whether a reopen may replay.
       onChatCursorRelease: (chatId, sequence) =>
@@ -577,7 +587,12 @@ function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
       onChatSyncPending: (chatId) =>
         useChatStore.getState().setChatSyncPending(chatId),
       onChatSubscriptionRejected: (chatId) => {
+        failChatOpen(chatId, "rejected");
         if (get().subscribedChatId === chatId) set({ subscribedChatId: null });
+        // A viewer who lost a shared chat (made private, deleted, removed
+        // from the org) learns it here: the server re-checks the open stream
+        // on an interval and refuses the resubscribe.
+        leaveSharedChat(chatId);
       },
     },
     // The global user stream includes every project.
@@ -585,13 +600,27 @@ function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
   );
 }
 
+// What the app holds of an update's chat and project, for the org filter.
+const cachedOrgs: OrgLookup = {
+  chatOrg: (chatId) => getChatFromCache(chatId)?.orgId || undefined,
+  projectOrg: (projectId) => getCachedProjects().find((p) => p.id === projectId)?.org_id,
+};
+
 // Route user updates to the stores and caches they patch. Shared by the user
 // stream and the chat stream's forwarded updates.
 function routeUserUpdates(
   updates: UserUpdate[],
   set: StoreSet,
 ): void {
+  const activeOrgId = getActiveOrgId();
+  const openChatId = useChatStore.getState().activeChatId;
   for (const update of updates) {
+    // The app shows one org at a time; the stream carries every org the
+    // person is in. Another org's update reaches nothing: its chats are not
+    // in the lists, and it raises no notification. The cursor still moves
+    // past it (handleUpdate), and a switch re-reads the lists.
+    if (isOtherOrgUpdate(update, activeOrgId, cachedOrgs, openChatId)) continue;
+
     // The Runs list holds chats the sidebar's cache patches never reach
     // (automation and agent-started runs), so a change to any run marks it
     // stale. Only observed lists refetch; an unopened Runs page costs nothing.
@@ -680,7 +709,7 @@ function routeUserUpdates(
           noteDaemonHeartbeat(data.daemon_id as string);
           // Proof the daemon is attached right now: a cached list that
           // says otherwise is re-read (throttled).
-          reconcileDaemonHeartbeat(queryClient, data.daemon_id as string);
+          reconcileDaemonHeartbeat(queryClient, data.daemon_id as string, Date.now(), data.health_state);
         }
         // detected_ports is present (possibly empty) on real heartbeats and
         // absent on synthetic connection events — only update when carried,
@@ -983,6 +1012,9 @@ function handleChatConfigChanged(update: UserUpdate) {
     active_daemon_id?: string;
     no_machine?: boolean;
     selection?: SelectionPayload;
+    // MoveChatToProject: the chat moved to project_id, onto its main checkout.
+    project_id?: string;
+    worktree_id?: string;
     updated_at: string;
   };
 
@@ -1019,9 +1051,23 @@ function handleChatConfigChanged(update: UserUpdate) {
   if (data.active_daemon_id !== undefined) {
     patch.activeDaemonId = data.active_daemon_id || undefined;
   }
+  const moved = !!data.project_id;
+  if (data.project_id) {
+    patch.projectId = data.project_id;
+  }
+  if (data.worktree_id) {
+    patch.worktreeId = data.worktree_id;
+    // The workspace summary named the old project's workspace; the refetch
+    // below brings the new one.
+    patch.worktree = undefined;
+  }
   // applyChatPatch also updates the Zustand map — ChatInput preset restore
   // reads workflowName/selectedPresets from the Zustand map, not React Query.
   applyChatPatch(projectId, chat_id, patch);
+  // A moved chat leaves one project's list and joins another's.
+  if (moved) {
+    streamInvalidation.invalidate(chatKeys.lists());
+  }
 }
 
 function handleChatCreated(update: UserUpdate) {
@@ -1367,6 +1413,16 @@ function handleRefetch(update: UserUpdate) {
     // reads it from the daemon list, and the picker lists the models.
     invalidateDaemonList(queryClient);
     void useGlobalDataStore.getState().refetchModels();
+    return;
+  }
+  if (rawType === "project_org_moved") {
+    // A project moved to another org with its chats, runs and triggers: every
+    // list that follows the active org is stale, in both orgs.
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.projects);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.chats);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.runs);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.triggers);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.inbox);
     return;
   }
   const refetchType = rawType as RefetchType | undefined;

@@ -30,6 +30,7 @@ import {
 import { sectionMachines, type PlacementState, type ProjectPlacement } from "@/lib/projectPlacement";
 import Tooltip from "../forge-ui/tooltip";
 import { machineDisplayName } from "@/lib/machineName";
+import { useMachineOrgs } from "@/hooks/useMachineOrgs";
 
 /** The new chat's project, and how to put it on a machine that lacks it. */
 export interface MachinePickerProject {
@@ -40,6 +41,7 @@ export interface MachinePickerProject {
    * be: a plain folder has nothing to clone from.
    */
   onSetUp?: (daemonId: string) => Promise<void>;
+  onUseFolder?: (daemonId: string) => void;
   /** A failed set-up, in words; the caller owns the copy (describeCloneError). */
   describeError?: (err: unknown, machineName: string) => string;
 }
@@ -100,7 +102,13 @@ export function MachinePicker({
     }
   }, [isOpen]);
 
-  const options = chatMachineOptions(daemons);
+  // With several orgs, the active org's machines (and the current choice),
+  // each labelled with its org.
+  const machineOrgs = useMachineOrgs();
+  const options = chatMachineOptions(
+    machineOrgs.inActiveOrg(daemons, [value, defaultDaemon?.daemonId]),
+  );
+  const orgName = (daemonId: string) => (machineOrgs.multiOrg ? machineOrgs.orgOf(daemonId)?.name : undefined);
   const userDefaultId = daemons.find((d) => d.isDefault)?.daemonId;
   const noMachine = value === NO_MACHINE;
   const selectedLabel = noMachine
@@ -177,6 +185,12 @@ export function MachinePicker({
                 )}
                 {state && <span aria-hidden="true">·</span>}
                 <span>{option.statusLabel}</span>
+                {orgName(option.value) && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span data-testid={`machine-org-${option.value}`}>{orgName(option.value)}</span>
+                  </>
+                )}
               </div>
             </div>
             {selected && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}
@@ -229,6 +243,12 @@ export function MachinePicker({
               <Download className="h-3 w-3 shrink-0" aria-hidden="true" />
             )}
             <span className="truncate">{action}</span>
+          </button>
+        )}
+        {project?.onUseFolder && (
+          <button type="button" className="mt-1.5 block rounded-md px-2 py-1 text-primary-ink hover:bg-muted"
+            onClick={() => { setIsOpen(false); project.onUseFolder?.(option.value); }}>
+            Use a folder on {option.label}…
           </button>
         )}
         {error && (

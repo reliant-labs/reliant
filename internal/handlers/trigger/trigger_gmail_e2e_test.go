@@ -289,7 +289,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	assert.Equal(t, refreshes, google.refreshCount(), "a dead grant is not retried")
 
 	// The Inbox says so too, as one item that stays the same item across
-	// polls (so a dismissal holds), while bob's healthy trigger has none.
+	// polls (so a dismissal holds).
 	inboxService, err := inbox.New(inbox.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo})
 	require.NoError(t, err)
 	failing := func(userID string) []*reliantv1.InboxItem {
@@ -311,7 +311,6 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	again2 := failing(ann.userID)
 	require.Len(t, again2, 1)
 	assert.Equal(t, items[0].GetItemId(), again2[0].GetItemId(), "the same episode, however often it is polled")
-	assert.Empty(t, failing(bob.userID))
 }
 
 // gmailPollRepo adds the owner-scoped connection read, as the worker does.

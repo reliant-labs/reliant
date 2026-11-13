@@ -15,6 +15,7 @@ import { ArrowRight, Clock, Rocket } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useCloudEnvironments, useCloudEnvStatus } from "@/hooks/forge-queries";
+import { isShellTool } from "@/lib/toolFormatters";
 import { cn } from "@/lib/utils";
 import { appLinksOf, deployedEnvOf } from "@/services/forge/apps";
 import { useProjectStore } from "@/store/projectStore";
@@ -75,6 +76,16 @@ function exitCodeOf(content: string): number | null | "background" {
   }
 }
 
+/** The deploy a tool call made, or null: only a shell call deploys. */
+export function deployOfToolCall(
+  name: string,
+  input: Record<string, unknown> | string | undefined,
+  result: { content: string; is_error?: boolean } | undefined
+): ShellDeploy | null {
+  return isShellTool(name) ? deployOfShellCall(input, result) : null;
+}
+
+/** A deploy's outcome, drawn as the footer of its tool call's box. */
 export function DeployedAppCard({ deploy }: { deploy: ShellDeploy }) {
   const navigate = useNavigate();
   const app = useProjectStore((state) => (state.currentProject?.forge_project_name ?? "").trim());

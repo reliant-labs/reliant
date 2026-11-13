@@ -47,6 +47,12 @@ type Service interface {
 	// caller holds that is bound to daemonID.
 	RevokeDaemonResumeTokens(ctx context.Context, jwt, daemonID string) error
 
+	// ListMyOrganizations is every org the caller (jwt, a person's session)
+	// is a live member of, with their role in each, read live from the
+	// control plane (OrganizationService.ListMyOrganizations). A machine
+	// credential is refused there: it has no orgs to list.
+	ListMyOrganizations(ctx context.Context, jwt string) ([]MyOrganization, error)
+
 	// PreviewAccountDeletionWallet asks the control plane what deleting the
 	// caller's account would refund and forfeit. Changes nothing.
 	PreviewAccountDeletionWallet(ctx context.Context, jwt string) (*AccountDeletionWalletQuote, error)
@@ -145,6 +151,29 @@ type Service interface {
 	// receiver the control plane holds, across every organization, for the
 	// reconcile sweep.
 	ListAutopilotReceivers(ctx context.Context) ([]string, error)
+
+	// PrepareProjectOrgMove, AbortProjectOrgMove and RecordProjectOrgMove
+	// are control-plane's steps of moving a project to another org
+	// (ProjectOrgMoveInternalService; docs/design/org-project-move.md §3.1 in
+	// control-plane), signed with this process's internal-service identity
+	// (Deps.Sign). Prepare re-checks actorUserID's authority (admin or owner
+	// of the source, member of the target) and revokes the source org's
+	// secret access for the project, answering how many entries it revoked;
+	// Abort restores exactly those; Record writes the move to both orgs'
+	// activity streams. Each is idempotent by the move id. Errors:
+	// ErrProjectOrgMoveUnsupported when the control plane has no such service
+	// or this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
+	// control-plane's code and reason.
+	PrepareProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep, actorUserID string) (revoked int, err error)
+	AbortProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep) error
+	RecordProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep, projectName string, counts map[string]int64) error
+	// PreviewProjectOrgMove reads what control-plane holds that a move would
+	// touch, for the move preview: the source org's secret access, the
+	// hosted project the project deploys as, whether the target can pay and
+	// which machines are in it. It checks the actor as Prepare does and
+	// writes nothing. Errors as the steps above; a control plane that
+	// predates it is ErrProjectOrgMoveUnsupported.
+	PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
 }
 
 // Deps configures the adapter.
@@ -161,4 +190,10 @@ type Deps struct {
 	Sign func() (string, error)
 	// HTTPClient carries every call. Nil uses a client with a 30s timeout.
 	HTTPClient *http.Client
+}
+
+// MyOrganization is one org the caller belongs to and their role in it ("owner", "admin" or
+// "member").
+type MyOrganization struct {
+	ID, Role string
 }

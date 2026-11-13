@@ -195,3 +195,110 @@ describe("ELECTRON-74 end to end through connect-web", () => {
     expect(reporting.reportError).not.toHaveBeenCalled();
   });
 });
+
+describe("the network did not deliver the request (TypeError: Failed to fetch)", () => {
+  it("is logged, not reported", async () => {
+    const call = await chainFailingWith(() => new TypeError("Failed to fetch"));
+    await expect(call("reliant.v1.ChatService", "ListChats")).rejects.toMatchObject({
+      code: Code.Unavailable,
+    });
+    expect(reporting.reportError).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleting a setting that is already gone", () => {
+  // Every startup deleted the retired `onboarding.current_step` key and logged
+  // its NotFound as "[gRPC Client] Request failed" at error level.
+  it("is a debug line, not an error log, and still reaches the caller", async () => {
+    const call = await chainFailingWith(() => new ConnectError("setting not found", Code.NotFound));
+    const { logger } = await import("@/lib/logger");
+    await expect(call("reliant.v1.SettingsService", "DeleteSetting")).rejects.toMatchObject({
+      code: Code.NotFound,
+    });
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(
+      "[gRPC Client] Delete target already absent",
+      expect.objectContaining({ service: "reliant.v1.SettingsService", method: "DeleteSetting" }),
+    );
+    expect(reporting.reportError).not.toHaveBeenCalled();
+  });
+
+  it("leaves NotFound from any other rpc as it was", async () => {
+    const call = await chainFailingWith(() => new ConnectError("setting not found", Code.NotFound));
+    const { logger } = await import("@/lib/logger");
+    await expect(call("reliant.v1.SettingsService", "UpdateSetting")).rejects.toBeInstanceOf(ConnectError);
+    expect(logger.error).toHaveBeenCalledWith("[gRPC Client] Request failed:", expect.anything());
+  });
+});
+
+describe("a 401 on a request sent with no token (signed-out page)", () => {
+  it("is a debug line, not an error log, and still reaches the caller", async () => {
+    const call = await chainFailingWith(() => new ConnectError("unauthenticated", Code.Unauthenticated));
+    const { logger } = await import("@/lib/logger");
+    await expect(call("controlplane.v1.OrganizationService", "ListMyOrganizations")).rejects.toMatchObject({
+      code: Code.Unauthenticated,
+    });
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
+  });
+
+  it("is still an error log when the request carried a token", async () => {
+    const { buildInterceptors } = await import("../transport");
+    const wire = (async () => {
+      throw new ConnectError("token rejected", Code.Unauthenticated);
+    }) as unknown as Next;
+    const run = buildInterceptors({ withAuth: false }).reduceRight<Next>((next, i) => i(next), wire);
+    const header = new Headers({ Authorization: "Bearer abc" });
+    await expect(
+      run({
+        stream: false,
+        service: { typeName: "controlplane.v1.OrganizationService" },
+        method: { name: "ListMyOrganizations" },
+        header,
+        signal: new AbortController().signal,
+        message: {},
+      } as unknown as Req),
+    ).rejects.toBeInstanceOf(ConnectError);
+    const { logger } = await import("@/lib/logger");
+    expect(logger.error).toHaveBeenCalledWith("[gRPC Client] Request failed:", expect.anything());
+  });
+});
+
+describe("what a caller holds after the transport decided", () => {
+  // A caller's console.error of it must not be a second report
+  // (lib/handledRpcFailures.ts): reported or not, it was decided once.
+  it.each([
+    ["an expected failure it did not report", () => new ConnectError("file not found: /w/a.md", Code.NotFound)],
+    ["a failure it reported", () => new ConnectError("upstream connect error", Code.Unavailable)],
+  ])("is marked decided: %s", async (_name, failure) => {
+    const { isRpcFailureDecided } = await import("@/lib/handledRpcFailures");
+    const call = await chainFailingWith(failure);
+    const held = await call("reliant.v1.FileSystemService", "GetFilePreviewInfo").catch((e: unknown) => e);
+    expect(held).toBeInstanceOf(ConnectError);
+    expect(isRpcFailureDecided(held)).toBe(true);
+  });
+
+  // Prod d2ceb843 (reliant #2395): a preview on a machine without the
+  // project is a FailedPrecondition the viewer renders with its way out. Not
+  // a report, and the viewer's console.error of it stays out of the SDK.
+  it("does not report a project that is not checked out on the chat's machine", async () => {
+    const { isRpcFailureDecided } = await import("@/lib/handledRpcFailures");
+    const call = await chainFailingWith(
+      () =>
+        new ConnectError(
+          `"growth" isn't checked out on "cicd": switch to "default", which has it, or clone it onto "cicd" to browse its files`,
+          Code.FailedPrecondition,
+        ),
+    );
+    const held = await call("reliant.v1.FileSystemService", "GetFilePreviewInfo").catch((e: unknown) => e);
+    expect((held as ConnectError).code).toBe(Code.FailedPrecondition);
+    expect(reporting.reportError).not.toHaveBeenCalled();
+    expect(reporting.reportFailure).not.toHaveBeenCalled();
+    expect(isRpcFailureDecided(held)).toBe(true);
+  });
+
+  it("does not mark an Error the transport never saw", async () => {
+    const { isRpcFailureDecided } = await import("@/lib/handledRpcFailures");
+    expect(isRpcFailureDecided(new ConnectError("stream reset", Code.Internal))).toBe(false);
+  });
+});

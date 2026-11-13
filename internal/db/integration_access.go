@@ -82,7 +82,7 @@ func (r *Repo) FinishIntegrationAccessRefresh(ctx context.Context, userID, integ
 }
 
 // GetIntegrationAccessRefresh returns the refresh bookkeeping, or
-// sql.ErrNoRows when the pair was never refreshed.
+// svcerr.NotFound when the pair was never refreshed.
 func (r *Repo) GetIntegrationAccessRefresh(ctx context.Context, userID, integrationID string) (*core.IntegrationAccessRefresh, error) {
 	return store.GetIntegrationAccessRefresh(ctx, r.ORM(), userID, integrationID)
 }

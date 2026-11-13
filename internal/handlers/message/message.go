@@ -5,10 +5,12 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
@@ -23,6 +25,8 @@ func (s *Service) GetMessage(
 	if messageID == "" {
 		return nil, svcerr.InvalidArgument("message_id is required")
 	}
+	// Serves viewers of a shared chat, with every tool result left out.
+	ctx = authz.WithViewerReads(ctx)
 
 	// Get message from database
 	msg, err := s.deps.Repo.GetMessage(ctx, messageID)
@@ -42,7 +46,15 @@ func (s *Service) GetMessage(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get message"))
 	}
-	if chat == nil || chat.UserID != userID {
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
+		return nil, svcerr.NotFound("message")
+	}
+	// A hidden message (a compaction summary, a mailbox envelope, a
+	// sub-agent's result body) is not in the transcript (messageproto
+	// Assemble), so a viewer, who reads only the transcript, is refused it
+	// before any of it is loaded. Its owner can still read it by id.
+	if access.Viewer() && messageproto.IsHidden(msg) {
 		return nil, svcerr.NotFound("message")
 	}
 
@@ -91,10 +103,22 @@ func (s *Service) GetMessage(
 	// the caller has not said which thread it is reading as. Statuses are
 	// reported exactly as persisted; the branch-aware reinterpretation belongs
 	// to ListMessages, which knows the thread being displayed.
+	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoMessage := messageproto.FromDB(msg, blocks, attachments, &messageproto.Options{
 		ToolCallStatusByCallID: toolCallStatusByCallID,
 		SenderTitlesByThreadID: messageproto.SenderTitles(ctx, s.deps.Repo, []*db.Message{msg}),
+		ToolBodies:             toolBodies,
 	})
+
+	if access.Viewer() {
+		messageproto.ElideForViewer([]*reliantv1.Message{protoMessage})
+	}
+
+	// What this read sent, by block kind, on the RPC's span (after the stub
+	// policy).
+	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
+	sent.AddMessages(protoMessage)
+	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 
 	return connect.NewResponse(&reliantv1.GetMessageResponse{
 		Message: protoMessage,

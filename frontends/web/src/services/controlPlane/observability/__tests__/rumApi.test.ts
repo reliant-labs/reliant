@@ -180,7 +180,7 @@ describe("replay bytes", () => {
   const SNAPSHOT = { type: 2, timestamp: T + 10, data: { node: { type: 0, id: 1, childNodes: [] }, initialOffset: { left: 0, top: 0 } } };
 
   it("decodes Connect-JSON's base64 `data` back to the recorded event, byte for byte", async () => {
-    // What admin-server writes: protojson renders `bytes` as base64.
+    // What platform-api writes: protojson renders `bytes` as base64.
     const res = fromJson(GetSessionReplayResponseSchema, {
       events: [
         { time: new Date(T).toISOString(), index: 1, chunks: 1, data: b64(JSON.stringify(META)) },

@@ -1,16 +1,20 @@
-// MUST STAY FIRST. Imports are evaluated in order, and this one wraps console
+// Capture OAuth credentials before any logger, router or telemetry imports.
+import "./lib/oauthCallbackBoot";
+// First logging import. Imports are evaluated in order, and this one wraps console
 // before any other module can log. A call in the module body instead of an
 // import would run AFTER every import below (hoisting), missing all of
 // startup — see lib/browser-log-boot.ts.
 import "./lib/browser-log-boot";
-// SECOND, for the same reason: it checks the runtime config (config.js) before
+// Next, for the same reason: it checks the runtime config (config.js) before
 // any module that reads it evaluates, and on a document that cannot work it
 // shows what is wrong and stops the boot — see lib/configGuard.ts.
 import "./lib/configGuard";
-// THIRD: a claim link's token leaves the address bar before the router or any
+// Then a claim link's token leaves the address bar before the router or any
 // telemetry SDK can read it — see lib/claimLink.ts.
 import "./lib/claimLinkBoot";
-// FOURTH: the landing site's rid / utm_* handoff is held before the router or a
+// An org invitation link's token, likewise — see lib/inviteLink.ts.
+import "./lib/inviteLinkBoot";
+// Finally the landing site's rid / utm_* handoff is held before the router or a
 // sign-in redirect replaces the URL — see lib/landingAttribution.ts.
 import "./lib/attributionBoot";
 
@@ -30,6 +34,7 @@ import { STARTUP_SPINNER_MARKUP } from "./components/icons/StartupSpinnerMark";
 
 import { monacoManager } from "./lib/monacoManager";
 import { shouldPreloadMonaco } from "./lib/monacoPreload";
+import { isDemoShell } from "./lib/shell";
 import { waitForConfig, isConfigReady } from "./lib/configReady";
 // globalDataStore prefetch is now called from AuthGuard after authentication
 
@@ -89,7 +94,8 @@ if (!isConfigReady()) {
 // /oauth/consent — see lib/monacoPreload for why each is excluded. Reading the
 // pathname rather than the router is deliberate: this runs before React
 // mounts, and the predicate is pure.
-if (shouldPreloadMonaco(window.location.pathname)) {
+// The public demo host has no editor and must reach no other origin (the CDN).
+if (!isDemoShell() && shouldPreloadMonaco(window.location.pathname)) {
   logger.info('[Main] 🚀 Pre-initializing Monaco Editor (background)...');
   monacoManager.getMonaco().catch((error) => {
     logger.error('[Main] ❌ Monaco pre-initialization FAILED:', error);

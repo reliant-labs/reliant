@@ -65,6 +65,10 @@ func EffectiveProviderPolicy(
 			policy.OnLimit, policy.FallbackModel = string(def.OnLimit), def.FallbackModel
 		}
 	}
+	if chat.Funding != chatselection.FundingInherit {
+		// The chat's own funding order outranks a preset's.
+		policy.Funding = string(chat.Funding)
+	}
 	policy = types.RunProviderPolicyFromValue(policy)
 	if policy.OnLimit == types.OnLimitFallback && primaryDriver != "" && v2.FallbackDriver(policy.FallbackModel) == primaryDriver {
 		policy.OnLimit, policy.FallbackModel = types.OnLimitWait, ""
@@ -174,7 +178,7 @@ func (l *Launcher) primaryDriver(ctx context.Context, userID string, inputs map[
 	if !ok || selector == nil {
 		return ""
 	}
-	available, err := drivers.LookupAvailableDrivers(ctx, userID)
+	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
 	if err != nil {
 		return ""
 	}
@@ -211,7 +215,7 @@ func (l *Launcher) ResolvedModelAtDriver(ctx context.Context, userID string, sel
 	if selector == nil {
 		return ""
 	}
-	available, err := drivers.LookupAvailableDrivers(ctx, userID)
+	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
 	if err != nil {
 		return ""
 	}

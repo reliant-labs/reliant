@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -102,10 +101,10 @@ func forgeFrameworkMemoryFrom(projectPath string) ([]byte, string, bool) {
 }
 
 // pinnedProjectMemory is the guide the pinned forge pf renders for the
-// project at root. Besides the forge, the guide depends on forge.yaml (the
-// project's name) and on whether the root is a static site (go.mod absent, a
-// package.json and a frontend's config at the root), so those join the cache
-// key; nothing else in the tree changes it.
+// project at root. Besides the forge, the guide depends on the project as it
+// is — forge.yaml, its deploy envs, its own test commands, its unmanaged
+// services, its migration tool — so those join the cache key
+// (memoryFingerprint).
 func pinnedProjectMemory(pf forgecli.PinnedForge, root string) ([]byte, error) {
 	raw, err := pinnedForge.Output(pf, root, "memory-"+memoryFingerprint(root)+".json",
 		[]string{"project", "memory", "--json"})
@@ -119,21 +118,6 @@ func pinnedProjectMemory(pf forgecli.PinnedForge, root string) ([]byte, error) {
 		return nil, fmt.Errorf("%s: `project memory --json` printed no guide (%v)", pf.Want, err)
 	}
 	return []byte(doc.Memory), nil
-}
-
-// memoryFingerprint names what, besides the forge, the guide is rendered
-// from: forge.yaml, package.json, and the names at the project root.
-func memoryFingerprint(root string) string {
-	yaml, _ := os.ReadFile(filepath.Join(root, "forge.yaml"))
-	pkg, _ := os.ReadFile(filepath.Join(root, "package.json"))
-	var names []string
-	if entries, err := os.ReadDir(root); err == nil {
-		for _, e := range entries {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names)
-	return forgepin.Fingerprint(yaml, pkg, []byte(strings.Join(names, "\x00")))
 }
 
 // pinnedMemoryUnavailable is the framework block when the project's pinned

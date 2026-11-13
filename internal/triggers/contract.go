@@ -38,7 +38,7 @@ type Repo interface {
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 
-	// GetDaemon reports a missing row as sql.ErrNoRows.
+	// GetDaemon reports a missing row as svcerr.NotFound.
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 
 	GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error)
@@ -60,6 +60,15 @@ type EventRepo interface {
 	// fire resolved (nil keeps the recorded one), on a still-pending event.
 	SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (settled bool, err error)
 	ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error)
+}
+
+// TriggerPauser is how the system pauses a trigger that can no longer launch
+// (AutoPause). *db.Repo satisfies it.
+type TriggerPauser interface {
+	// PauseTrigger disables the trigger with reason (core.TriggerPaused*)
+	// and records the pause in its change history; paused is false when it
+	// was already paused, and nothing is written.
+	PauseTrigger(ctx context.Context, id, reason string) (paused bool, err error)
 }
 
 // Launcher is the one door that turns an event plus a spec into a running

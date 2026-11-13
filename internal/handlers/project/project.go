@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -20,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
+	"github.com/reliant-labs/reliant/internal/projectproto"
 )
 
 // gitCheckBudget bounds GetProject's live check of the project's git status
@@ -223,32 +225,9 @@ func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, us
 	return nil
 }
 
-// projectToProto converts a db.Project to proto Project
+// projectToProto is the project as its owner reads it (projectproto.Project).
 func projectToProto(p *db.Project) *reliantv1.Project {
-	proto := &reliantv1.Project{
-		Id:         p.ID,
-		UserId:     p.UserID,
-		Name:       p.Name,
-		Path:       p.Path,
-		IsGitRepo:  p.IsGitRepo,
-		IsForge:    p.IsForge,
-		CreatedAt:  p.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:  p.UpdatedAt.Format(time.RFC3339),
-		LastActive: p.LastActive.Format(time.RFC3339),
-	}
-	if p.Description != nil {
-		proto.Description = p.Description
-	}
-	if p.DefaultBranch != nil {
-		proto.DefaultBranch = p.DefaultBranch
-	}
-	if p.RemoteURL != nil {
-		proto.RemoteUrl = p.RemoteURL
-	}
-	if p.ForgeProjectName != nil {
-		proto.ForgeProjectName = p.ForgeProjectName
-	}
-	return proto
+	return projectproto.Project(p)
 }
 
 // ListProjects lists all projects for the current user
@@ -267,8 +246,13 @@ func (s *Service) ListProjects(
 		offset = 0
 	}
 
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{
 		UserID: userID,
+		Org:    scope,
 		Limit:  limit,
 		Offset: offset,
 	})
@@ -277,6 +261,9 @@ func (s *Service) ListProjects(
 		// server fault: only an unclassified store failure is Internal.
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list projects"))
 	}
+	// A project of an org the caller has left is not listed, named org or
+	// not: the list shows what GetProject would.
+	projects = authz.Visible(ctx, userID, projects, authz.CanReadProject)
 
 	protoProjects := make([]*reliantv1.Project, len(projects))
 	for i, p := range projects {
@@ -297,6 +284,17 @@ func (s *Service) GetProject(
 	userID := auth.MustGetUserID(ctx)
 
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		// A viewer of a shared project reads its card, in the viewer's shape
+		// (no path) and without the git check, which would reach the owner's
+		// machine.
+		viewing := authz.WithViewerReads(ctx)
+		if shared, getErr := s.deps.Repo.GetProject(viewing, req.Msg.ProjectId); getErr == nil {
+			// Not the owner here, so a readable answer is a viewer's: it is
+			// shaped for one whatever the decision says.
+			if _, denied := authz.ReadProjectAccess(viewing, userID, shared); denied == nil {
+				return connect.NewResponse(&reliantv1.GetProjectResponse{Project: projectproto.ForViewer(projectToProto(shared))}), nil
+			}
+		}
 		return nil, err
 	}
 

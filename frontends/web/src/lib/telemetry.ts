@@ -17,9 +17,13 @@
  * masked, media blocked, no canvas, no request/response bodies, no query
  * strings on fetch/XHR URLs. consoleCapture is off here because console output
  * can hold chat content.
+ *
+ * The SDK records any Error passed to console.error regardless. A
+ * console.error about an RPC failure the transport already reported, or
+ * decided not to, goes around it (keepHandledRpcFailuresOutOfSdk).
  */
 
-import { disableTelemetry, setTelemetryUser } from "@reliantlabs/forge-web-runtime";
+import { disableTelemetry, grantAnalyticsConsent, setTelemetryUser } from "@reliantlabs/forge-web-runtime";
 import {
   enableAttribution,
   initBrowserTelemetry,
@@ -36,6 +40,7 @@ import { isDev } from "./constants";
 import { reportFirstLaunch } from "./appFirstLaunch";
 import { dropLandingAttribution, readLandingAttribution } from "./landingAttribution";
 import { reportError } from "./errorReporting";
+import { isRpcFailureDecided } from "./handledRpcFailures";
 import { clickstackEnabled } from "./telemetryEndpoint";
 import { SERVICE_NAME } from "./otel_gen";
 import { getShell, type AppShell } from "./shell";
@@ -136,6 +141,8 @@ export interface TelemetryConfigInput {
   shell?: AppShell;
   /** In the demo shell: what it records (demoTelemetry.ts). Replay follows this, not OTEL_REPLAY. */
   demoTelemetry?: DemoTelemetry;
+  /** This bundle is the forge demo's own build (demo.html, `__WEB_TARGET__`), the `forge-demo` frontend. */
+  demoBuild?: boolean;
   replayRate: number;
   extraApiOrigins?: Array<string | undefined>;
 }
@@ -162,8 +169,17 @@ export const FORGE_SHELL_SERVICE_NAME = "forge-web";
  * The service.name the public demo reports (lib/shell.ts `demo`): its
  * anonymous visitors must not move forge-web's error rate or funnels, and
  * `product_events` is keyed by ServiceName, so no new column is needed.
+ * It is forge's derivation for the demo's own frontend (`<project>-<frontend>`,
+ * reliant's `forge-demo` in deploy/kcl/demo), the name its generated dashboard
+ * and alert defaults filter on (deploy/observability/).
  */
-export const DEMO_SHELL_SERVICE_NAME = "forge-demo";
+export const DEMO_SHELL_SERVICE_NAME = "reliant-forge-demo";
+
+/**
+ * The forge demo's own build (demo.html) is the `forge-demo` frontend of the
+ * `demo` env: its source maps are filed under that name, not reliant-web's.
+ */
+export const DEMO_FRONTEND = "forge-demo";
 export const DESKTOP_FRONTEND = "desktop";
 
 const SHELL_SERVICE_NAME: Record<AppShell, string> = {
@@ -184,7 +200,7 @@ export function buildTelemetryConfig(
     // (deploy/observability/). A literal here drifted from it once, and every
     // web alert matched nothing.
     serviceName: SHELL_SERVICE_NAME[input.shell ?? "reliant"],
-    frontend: input.desktop ? DESKTOP_FRONTEND : WEB_FRONTEND,
+    frontend: input.desktop ? DESKTOP_FRONTEND : input.demoBuild ? DEMO_FRONTEND : WEB_FRONTEND,
     serviceVersion: input.appVersion || input.buildVersion,
     environment: input.prerelease ? "prerelease" : "prod",
     endpoint: config.OTEL_ENDPOINT || undefined,
@@ -200,6 +216,12 @@ export function buildTelemetryConfig(
     appClient: input.desktop ? "electron" : "web",
     consoleCapture: false,
     advancedNetworkCapture: false,
+    // The demo runs forge's `full` analytics tier (a persistent visitor id,
+    // and replay when it records one), on the strength of its visible notice:
+    // start() grants the consent the tier needs. Owner decision, 2026-11-11.
+    // The app itself keeps forge's cookieless default (`identified`).
+    // GPC / DNT browsers never get here (demoTelemetry() is "off").
+    ...(demo && input.demoTelemetry && input.demoTelemetry !== "off" ? { analytics: "full" as const } : {}),
     // The demo records replays by its own switch (DEMO_TELEMETRY, owner
     // default on); the runtime masks all text and inputs whenever replay runs.
     replay: demo ? input.demoTelemetry === "replay" : config.OTEL_REPLAY === "true",
@@ -236,6 +258,35 @@ async function stampClientAttributes(
   client?.setGlobalAttributes(attributes);
 }
 
+/**
+ * Route a console.error that names an RPC failure the transport already
+ * decided on (lib/handledRpcFailures.ts) around the SDK, to `beneathSdk`, so
+ * it is logged but not recorded as an exception a second time. Every other
+ * call goes through the SDK as before, so an error nothing handled is still
+ * recorded — and so is an uncaught RPC failure, which reaches the SDK through
+ * "unhandledrejection", not console.error.
+ *
+ * Installed outermost, after the SDK and the runtime's own console tap.
+ * Returns the undo.
+ */
+export function keepHandledRpcFailuresOutOfSdk(
+  beneathSdk: (...args: unknown[]) => void,
+): () => void {
+  const throughSdk = console.error;
+  const filtered = function (this: unknown, ...args: unknown[]): void {
+    if (args.some(isRpcFailureDecided)) {
+      beneathSdk.apply(console, args);
+      return;
+    }
+    throughSdk.apply(this, args);
+  };
+  console.error = filtered;
+  return () => {
+    if (console.error === filtered) console.error = throughSdk;
+  };
+}
+
+let undoRpcConsoleFilter: (() => void) | null = null;
 let started: Promise<boolean> | null = null;
 let unsubscribeConsent: (() => void) | null = null;
 let withdrawing = false;
@@ -318,6 +369,7 @@ async function start(): Promise<boolean> {
     buildVersion,
     desktop,
     shell,
+    demoBuild: __WEB_TARGET__ === "demo",
     demoTelemetry: shell === "demo" ? demoTelemetry() : undefined,
     // The demo records every visit (a numeric override still wins); its
     // visitors have no sessions to count toward the new-user policy.
@@ -352,9 +404,17 @@ async function start(): Promise<boolean> {
     }
   }
 
+  // console.error as it is before the SDK wraps it (the logger's redirect):
+  // where a handled RPC failure's console line goes instead of the SDK.
+  const beneathSdk = console.error;
+  // The demo's notice is its consent (buildTelemetryConfig's `analytics`):
+  // granted before the SDK starts, so the first page view is in the full tier.
+  if (config.analytics === "full") grantAnalyticsConsent();
   const running = await initBrowserTelemetry(config);
   if (!running) return false;
   if (handoff) dropLandingAttribution();
+  undoRpcConsoleFilter?.();
+  undoRpcConsoleFilter = keepHandledRpcFailuresOutOfSdk(beneathSdk);
 
   unsubscribeConsent = subscribePrivacyConsent(onConsentChange);
   // The subscription does not replay the current consent, and initBrowserTelemetry
@@ -422,6 +482,8 @@ export function reportErrorToTelemetry(
 /** Test seam: forget that telemetry started. */
 export function resetTelemetryForTests(): void {
   started = null;
+  undoRpcConsoleFilter?.();
+  undoRpcConsoleFilter = null;
   unsubscribeConsent?.();
   unsubscribeConsent = null;
   withdrawing = false;

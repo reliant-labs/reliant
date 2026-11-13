@@ -7,7 +7,7 @@
  * Two things wrong with it, and the second is the expensive one:
  *
  * 1. It read as "hosted machines are unavailable here", a statement about the
- *    product. The real cause was a SERVER problem — a stale admin-server whose
+ *    product. The real cause was a SERVER problem — a stale platform-api whose
  *    `planToProto` did not project `price_cents`, so every plan arrived
  *    unpriced and `isPurchasableComputePlan` (priceCents > 0) filtered them
  *    all out. The catalog was fine; the projection was missing.

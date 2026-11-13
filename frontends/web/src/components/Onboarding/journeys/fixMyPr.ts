@@ -1,17 +1,15 @@
 /**
- * The workflows journey's seed: "Fix my PR", imported from YAML as the
- * user's own draft (journeys-spec.md §2.1). Import stores a definition that
- * fails validation as a draft with its findings (ImportWorkflow, the same
- * rule as SaveWorkflow), which is what this template needs: it leaves out
- * the edge the user draws in W2 and the Approval they add in W4.
+ * The workflows journey's example: "Fix my PR", imported from YAML as the
+ * user's own workflow (a draft), complete and wired, schedule included. The
+ * tour opens it on the canvas and explains it; the user builds nothing.
  *
- * Seeded from two places: New workflow's "Fix my PR (guided)" start, and
- * W1's "Create it for me". Both go through `seedFixMyPr`, which records the
- * slug in the journey context (later steps' routes read it) and emits
- * `workflow:draftCreated`.
+ * Seeded from two places: the tour's first step (`ensureFixMyPrExample`,
+ * once per project; the slug goes in the journey context as `exampleSlug`)
+ * and New workflow's "Fix my PR (example)" start. Both go through
+ * `seedFixMyPr`, which emits `workflow:draftCreated`.
  */
 
-import { importWorkflow } from "../../../hooks/workflow-queries";
+import { fetchWorkflow, importWorkflow } from "../../../hooks/workflow-queries";
 import { useTourStore } from "../../../store/tourStore";
 import { tourEvents } from "../tourEvents";
 import templateYaml from "./fixMyPrTemplate.yaml?raw";
@@ -53,12 +51,20 @@ export function fixMyPrName(n: number, title: string = FIX_MY_PR_TITLE): { slug:
   return n === 0 ? { slug, title: base } : { slug: `${slug}-${n + 1}`, title: `${base} ${n + 1}` };
 }
 
-/** The template with its `name:` and `title:` replaced. */
-export function fixMyPrYaml(slug: string, title: string = FIX_MY_PR_TITLE): string {
-  return FIX_MY_PR_TEMPLATE.replace(/^name: .*$/m, `name: ${slug}`).replace(
-    /^title: .*$/m,
-    `title: ${JSON.stringify(title.trim() || FIX_MY_PR_TITLE)}`,
-  );
+/** This browser's IANA timezone, for the example's weekday schedule; UTC when unknown. */
+export function localTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+/** The template with its `name:`, `title:` and the schedule's `timezone:` replaced. */
+export function fixMyPrYaml(slug: string, title: string = FIX_MY_PR_TITLE, timezone: string = localTimezone()): string {
+  return FIX_MY_PR_TEMPLATE.replace(/^name: .*$/m, `name: ${slug}`)
+    .replace(/^title: .*$/m, `title: ${JSON.stringify(title.trim() || FIX_MY_PR_TITLE)}`)
+    .replace(/^(\s+)timezone: UTC$/m, `$1timezone: ${/^[A-Za-z0-9_+\-/]+$/.test(timezone) ? timezone : "UTC"}`);
 }
 
 export interface SeededWorkflow {
@@ -85,4 +91,33 @@ export async function seedFixMyPr(projectId: string, title: string = FIX_MY_PR_T
   throw new Error(
     `Every name from ${fixMyPrName(0, title).slug} to ${fixMyPrName(MAX_SLUG_TRIES - 1, title).slug} is taken`,
   );
+}
+
+/** The journey context keys the example is recorded under. */
+export const EXAMPLE_SLUG = "exampleSlug";
+export const EXAMPLE_PROJECT = "exampleProjectId";
+
+async function exists(projectId: string, slug: string): Promise<boolean> {
+  try {
+    const { workflow } = await fetchWorkflow(projectId, { name: slug }, { fresh: true });
+    return !!workflow;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The example's slug in `projectId`: the one this tour made before, if it is
+ * still there, or a fresh import. Never reuses a "Fix my PR" the user made
+ * some other way (the previous tour left an unfinished one).
+ */
+export async function ensureFixMyPrExample(projectId: string): Promise<string> {
+  const context = useTourStore.getState().contexts?.workflows ?? {};
+  const known = context[EXAMPLE_SLUG];
+  if (typeof known === "string" && known && context[EXAMPLE_PROJECT] === projectId && (await exists(projectId, known))) {
+    return known;
+  }
+  const seeded = await seedFixMyPr(projectId);
+  useTourStore.getState().setJourneyContext("workflows", { [EXAMPLE_SLUG]: seeded.slug, [EXAMPLE_PROJECT]: projectId });
+  return seeded.slug;
 }
