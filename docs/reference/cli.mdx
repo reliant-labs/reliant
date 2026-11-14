@@ -21133,7 +21133,9 @@ project setup is needed. --project-id takes precedence when both are given.
 The run executes on the project's machine, by default the user's default
 machine. --daemon (an id or hostname from 'reliant daemon list') runs it on
 that machine instead; with --project-path the folder is looked up, attached
-or created on that machine, which is the one that holds it.
+or created on that machine, which is the one that holds it. With --project-id
+the project must already be checked out on that machine; otherwise the run
+is refused before it starts.
 
 Bare workflow names that match a builtin are normalized to builtin://`<name>`
 (like the web app); other names resolve as drafts / project workflows

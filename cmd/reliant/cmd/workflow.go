@@ -335,7 +335,9 @@ project setup is needed. --project-id takes precedence when both are given.
 The run executes on the project's machine, by default the user's default
 machine. --daemon (an id or hostname from 'reliant daemon list') runs it on
 that machine instead; with --project-path the folder is looked up, attached
-or created on that machine, which is the one that holds it.
+or created on that machine, which is the one that holds it. With --project-id
+the project must already be checked out on that machine; otherwise the run
+is refused before it starts.
 
 Bare workflow names that match a builtin are normalized to builtin://<name>
 (like the web app); other names resolve as drafts / project workflows
@@ -368,6 +370,12 @@ format, exit codes, and --hook).`,
 			if resolvedProjectID == "" && projectPath != "" {
 				resolvedProjectID, err = resolveProjectPathToIDOn(cmd.Context(), conn, projectPath, daemonID)
 				if err != nil {
+					return err
+				}
+			} else if resolvedProjectID != "" && daemonID != "" {
+				// --project-id wins over --project-path, so nothing looked
+				// the project up on the chosen machine: check it is there.
+				if err := checkProjectOnDaemon(cmd.Context(), newProjectServiceClient(conn), resolvedProjectID, daemonID); err != nil {
 					return err
 				}
 			}
