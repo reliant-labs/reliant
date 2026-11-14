@@ -42,6 +42,11 @@ export function AutomationsFundingBanner() {
         return (
           <AlertBanner
             key={item.itemId}
+            // forge's info variant draws its fill and text in `accent`, which
+            // means reliant's pale hover surface outside the forge-ui scope:
+            // the sentence was near-white on near-white. Inside the scope,
+            // accent is the brand primary and its ink is AA on its tint.
+            className="forge-ui"
             variant="info"
             role="status"
             message={

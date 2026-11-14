@@ -175,6 +175,10 @@ describe("AutomationsFundingBanner", () => {
 
     const banner = await screen.findByTestId("automations-funding-banner");
     expect(banner.textContent).toContain("New automations in Acme run on Acme's accounts. 2 of yours still use your own accounts.");
+    // Outside the forge-ui scope the info variant's accent is reliant's pale
+    // hover fill, and the sentence is unreadable (primaryInkContrast proves
+    // the scoped ink AA).
+    expect(screen.getByRole("status").closest(".forge-ui")).not.toBeNull();
     expect(screen.getByRole("link", { name: "Review" }).getAttribute("href")).toContain("trg-old");
 
     await act(async () => {
