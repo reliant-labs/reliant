@@ -1123,6 +1123,27 @@ message CreateTriggerResponse {
 
   // Webhook triggers only: the token, which is never shown again.
   WebhookCredential webhook = 2;
+
+  // Set when the trigger was stored but its runs cannot spend any account
+  // yet (see TriggerFundingWarning). Never a refusal.
+  TriggerFundingWarning funding_warning = 3;
+}
+
+// TriggerFundingWarning: an automation that may run only on its
+// organization's AI accounts (UNATTENDED_FUNDING_ORG_ONLY, or the org's
+// automations policy), none of which can run its model yet
+// (control-plane docs/design/org-provider-accounts.md §11.3). The write is
+// not refused, because accounts change: an admin can add an org API key or
+// enable Reliant credits. Until then each fire fails with no_org_account.
+message TriggerFundingWarning {
+  // The organization whose accounts cannot run it.
+  string org_id = 1;
+  // The model none of them can run, as a person names it ("claude-opus-4-6",
+  // "the flagship model").
+  string model = 2;
+  // One sentence for display: "No account of this organization can run
+  // claude-opus-4-6 yet. Ask an admin to add one."
+  string message = 3;
 }
 
 // RotateWebhookTokenRequest is the request for RotateWebhookToken.
@@ -1186,6 +1207,10 @@ message UpdateTriggerRequest {
 message UpdateTriggerResponse {
   // The stored trigger after the update.
   Trigger trigger = 1;
+
+  // Set when the trigger is enabled and its runs cannot spend any account
+  // yet (TriggerFundingWarning). Never a refusal.
+  TriggerFundingWarning funding_warning = 2;
 }
 
 // DeleteTriggerRequest is the request for DeleteTrigger.
@@ -1210,6 +1235,10 @@ message SetTriggerEnabledRequest {
 message SetTriggerEnabledResponse {
   // The trigger after the change, including its recomputed next fire time.
   Trigger trigger = 1;
+
+  // Set when the trigger was enabled and its runs cannot spend any account
+  // yet (TriggerFundingWarning). Never a refusal.
+  TriggerFundingWarning funding_warning = 2;
 }
 
 // EnableWorkflowRequest is the request for EnableWorkflow. The choices here
@@ -1354,6 +1383,11 @@ message WorkflowTriggerResult {
   // not be checked for reachability because the integration errored, or one
   // the acting identity cannot write to. Never set on a refusal.
   repeated string warnings = 6;
+
+  // For an enable that went through: set when the activation's runs cannot
+  // spend any account yet (TriggerFundingWarning). Its message is also one
+  // of warnings, for a client that predates this field.
+  TriggerFundingWarning funding_warning = 7;
 }
 
 // EnableWorkflowResponse is the response for EnableWorkflow.

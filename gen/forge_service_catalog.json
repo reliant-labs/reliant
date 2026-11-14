@@ -41835,6 +41835,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.WebhookCredential"
+            },
+            {
+              "Name": "funding_warning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "DeleteTriggerRequest": [
@@ -42226,6 +42232,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Trigger"
+            },
+            {
+              "Name": "funding_warning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "UpdateTriggerRequest": [
@@ -42247,6 +42259,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Trigger"
+            },
+            {
+              "Name": "funding_warning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerFundingWarning"
             }
           ]
         },
@@ -42290,6 +42308,11 @@
               "name": "webhook",
               "kind": "message",
               "type_name": "reliant.v1.WebhookCredential"
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "reliant.v1.DeleteTriggerRequest": [
@@ -42765,6 +42788,11 @@
               "name": "trigger",
               "kind": "message",
               "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "reliant.v1.Trigger": [
@@ -43283,6 +43311,20 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.TriggerFundingWarning": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "model",
+              "kind": "string"
+            },
+            {
+              "name": "message",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.TriggerHealth": [
             {
               "name": "status",
@@ -43352,6 +43394,11 @@
               "name": "trigger",
               "kind": "message",
               "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "reliant.v1.WebhookCredential": [
@@ -43476,6 +43523,11 @@
               "name": "warnings",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ]
         },
@@ -43524,6 +43576,7 @@
           "reliant.v1.TriggerEventDefinition": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerFailure": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerFundingWarning": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerSender": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto",
