@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -190,12 +191,12 @@ func (t *generateImageTool) Execute(tc *rctx.ToolContext, params GenerateImagePa
 	generator, err := t.resolve(tc.Context, userID, choice.Selector)
 	if err != nil {
 		var unavailable *models.MediaUnavailableError
-		if !errors.As(err, &unavailable) {
+		if !errors.As(err, &unavailable) && !orgpolicy.IsRefusal(err) {
 			if msg := t.tierUnavailable(tc, userID, choice, ""); msg != "" {
 				return NewTextErrorResponse(msg), nil
 			}
 		}
-		return NewTextErrorResponse(mediaResolveFailure("Could not select an image model", err)), nil
+		return NewTextErrorResponse(mediaResolveFailure("Could not select an image model", models.ModalityImage, err)), nil
 	}
 	if usedModel := generatorModelID(generator); usedModel != "" {
 		if msg := t.tierUnavailable(tc, userID, choice, usedModel); msg != "" {
@@ -211,6 +212,9 @@ func (t *generateImageTool) Execute(tc *rctx.ToolContext, params GenerateImagePa
 		Count:      1,
 	})
 	if err != nil {
+		if msg, refused := mediaPolicyRefused(models.ModalityImage, err); refused {
+			return NewTextErrorResponse(msg), nil
+		}
 		return NewTextErrorResponse(fmt.Sprintf("Image generation failed: %v", err)), nil
 	}
 	if response == nil || len(response.Images) == 0 {

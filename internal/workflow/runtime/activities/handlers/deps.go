@@ -301,6 +301,9 @@ type ExecuteToolsStore interface {
 	db.ToolCallStatusStore
 	// Installs is each machine's checkout of the project (resolveCallCheckout).
 	daemonplacement.Installs
+	// AttendanceStore decides who is behind a tool call's chat, for the run
+	// scope a tool that spends a provider resolves in (runScope).
+	AttendanceStore
 }
 
 // GenerateTitleStore is what GenerateTitleActivity reads and writes.

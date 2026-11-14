@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -808,6 +809,12 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 		ctx = tools.WithSkills(ctx, a.projectSkills(ctx, tec.project.ID, configMachine(ctx, a.machines, tec.project.UserID, tec.daemonSelector)))
 	}
 
+	// A tool that spends a provider (an image or a video generation)
+	// resolves in the run's scope, read from the chat row as call_llm reads
+	// it for the model's own calls: the chat's org, its accounts and policy,
+	// and who is behind the run (drivers.WithRunScope).
+	ctx = drivers.WithRunScope(ctx, a.runScope(ctx, tec.chat))
+
 	// The call is about to enter real execution -- record it durably as
 	// PENDING before dispatch so a reload mid-execution sees at least this
 	// much instead of nothing. Calls that never reach here (response tools,
@@ -826,6 +833,16 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 		result.Content = tools.WithShellSuggestion(result.Content, suggestion)
 	}
 	return result
+}
+
+// runScope resolves the scope of chat's run, as llmCallSpec.scope does for
+// its model calls: the chat row's org, attended or not (chatAttendance). It
+// reads the database only when a tool asks.
+func (a *ExecuteToolsActivity) runScope(ctx context.Context, chat *db.Chat) func() drivers.Scope {
+	return func() drivers.Scope {
+		who := chatAttendance(ctx, a.repo, chat)
+		return llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope()
+	}
 }
 
 // checkPriorTerminalResult is the fix for the interrupt livelock (chat

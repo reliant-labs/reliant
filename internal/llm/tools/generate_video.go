@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers/videogen"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/videojobs"
 )
@@ -232,12 +233,12 @@ func (t *generateVideoTool) Execute(tc *rctx.ToolContext, params GenerateVideoPa
 	generator, err := t.resolve(tc.Context, userID, choice.Selector)
 	if err != nil {
 		var unavailable *models.MediaUnavailableError
-		if !errors.As(err, &unavailable) {
+		if !errors.As(err, &unavailable) && !orgpolicy.IsRefusal(err) {
 			if msg := t.tierUnavailable(tc, userID, choice, ""); msg != "" {
 				return NewTextErrorResponse(msg), nil
 			}
 		}
-		return NewTextErrorResponse(mediaResolveFailure("Could not select a video model", err)), nil
+		return NewTextErrorResponse(mediaResolveFailure("Could not select a video model", models.ModalityVideo, err)), nil
 	}
 	info := generator.Info()
 	if edit != nil && !boundTo(generator, edit) {
@@ -361,6 +362,9 @@ func (t *generateVideoTool) resume(tc *rctx.ToolContext, userID string, prior *v
 
 	generator, err := t.resolve(tc.Context, userID, models.ModelSelector{ID: prior.ModelID, Providers: []string{prior.Driver}})
 	if err != nil {
+		if msg, refused := mediaPolicyRefused(models.ModalityVideo, err); refused {
+			return NewTextErrorResponse(msg), nil
+		}
 		return NewTextErrorResponse(fmt.Sprintf("Could not resume the video render: %v", err)), nil
 	}
 	if !boundTo(generator, prior) {
@@ -483,6 +487,12 @@ func (t *generateVideoTool) failure(tc *rctx.ToolContext, generator VideoGenerat
 	if errors.As(err, &classified) && classified.Kind == videogen.KindTimeout {
 		return NewTextErrorResponse(fmt.Sprintf("%s. Ask again to keep waiting for it (job %s).", classified.Message, providerJob.ID))
 	}
+	// The org's policy refused fetching a render it already accepted (a
+	// spend cap reached meanwhile): the job is kept, not failed, so asking
+	// again once the policy allows it resumes the same render.
+	if msg, refused := mediaPolicyRefused(models.ModalityVideo, err); refused {
+		return NewTextErrorResponse(fmt.Sprintf("%s The render (job %s) is kept: once the policy allows it, ask again to fetch it.", msg, providerJob.ID))
+	}
 	t.finish(tc, job, videojobs.StateFailed, err.Error())
 	return NewTextErrorResponse(videoErrorMessage("Video generation failed", err))
 }
@@ -497,6 +507,9 @@ func (t *generateVideoTool) finish(tc *rctx.ToolContext, job *videojobs.Job, sta
 }
 
 func videoErrorMessage(prefix string, err error) string {
+	if msg, refused := mediaPolicyRefused(models.ModalityVideo, err); refused {
+		return msg
+	}
 	return fmt.Sprintf("%s: %v", prefix, err)
 }
 

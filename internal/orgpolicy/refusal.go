@@ -4,6 +4,7 @@ package orgpolicy
 
 import (
 	"errors"
+	"net/http"
 	"strings"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -21,6 +22,23 @@ const (
 	ReasonOrgSpendCapReached    = "org_spend_cap_reached"
 	ReasonProviderNotAllowed    = "provider_not_allowed"
 )
+
+// GatewayRefusalReason is the org policy reason a gateway response names, or
+// "": the gateway refuses with 403 and the reason as x-forge-error-reason
+// (svcerr.ReasonHeader), or as the error envelope's code when a proxy in
+// between drops the header. Any other status is never a policy refusal.
+func GatewayRefusalReason(status int, header http.Header, code string) string {
+	if status != http.StatusForbidden {
+		return ""
+	}
+	if r := strings.TrimSpace(header.Get(svcerr.ReasonHeader)); IsRefusalReason(r) {
+		return r
+	}
+	if r := strings.TrimSpace(code); IsRefusalReason(r) {
+		return r
+	}
+	return ""
+}
 
 // IsRefusalReason reports whether reason is one an org policy refuses with.
 func IsRefusalReason(reason string) bool {
@@ -66,6 +84,37 @@ func (r *Refusal) Message() string {
 		msg += " (" + strings.TrimSuffix(d, ".") + ")"
 	}
 	return msg
+}
+
+// ToolResult is what a tool call the policy refused answers the model with
+// (an image or a video generation): what was refused and why, that it is a
+// verdict and not a fault, so the same call is not repeated, and what can
+// change the answer. A tool result, not a paused turn: the conversation goes
+// on, and the model can pick another model or tell the person. what names
+// the call ("Image generation").
+func (r *Refusal) ToolResult(what string) string {
+	msg := what + " was refused: " + chatmarkers.OrgPolicyRefusedLead + " " + toolRefusalSentence(r.Reason)
+	if d := strings.TrimSpace(r.Detail); d != "" {
+		msg += " (" + strings.TrimSuffix(d, ".") + ")"
+	}
+	return msg
+}
+
+// toolRefusalSentence is refusalSentence for a tool call: what the model can
+// do next instead of resuming a turn.
+func toolRefusalSentence(reason string) string {
+	const verdict = "This is the policy's decision, not an error: do not retry the same call."
+	switch reason {
+	case ReasonModelNotAllowed:
+		return "does not allow this model. " + verdict + " Use another model or tier the policy allows, or tell the user an org admin can allow it."
+	case ReasonProviderNotAllowed:
+		return "does not allow this provider. " + verdict + " Use another model or tier the policy allows, or tell the user an org admin can allow it."
+	case ReasonMemberSpendCapReached:
+		return "limits the user's AI spend, and their limit for this period is reached. " + verdict + " Tell the user an org admin can raise it."
+	case ReasonOrgSpendCapReached:
+		return "caps the organization's AI spend, and the cap for this period is reached. " + verdict + " Tell the user an org admin can raise it."
+	}
+	return "refused this request. " + verdict + " Tell the user to ask an org admin."
 }
 
 // ErrorClass: a policy the org's admins set, not a server fault. It logs at
