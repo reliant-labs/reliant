@@ -13,6 +13,8 @@ name: Reliant review
 # Red until pr-review passes the head, then green: the marker is a review
 # (pull_request_review), and a pass also labels the PR (labeled). A push makes
 # a new head with no marker, so it goes red again (synchronize).
+# `hold` or `needs:human` makes it red whatever the verdict (labeled), and taking
+# the last of them off makes it green again (unlabeled): the gate reads them live.
 #
 # Its own workflow, not a ci.yml job: ci.yml must not run on `labeled` (a label
 # run would replace the head's "CI result"). Seconds, no checkout: the gate is
@@ -20,7 +22,7 @@ name: Reliant review
 # request's copy) and fed GitHub's own data.
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review, labeled]
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
     branches: [main]
   pull_request_review:
     types: [submitted]
