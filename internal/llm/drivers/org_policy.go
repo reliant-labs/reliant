@@ -86,6 +86,27 @@ func orgPolicyFilterFor(ctx context.Context, scope Scope) (*orgPolicyFilter, err
 	return &orgPolicyFilter{doc: doc, unattended: unattended}, nil
 }
 
+// automationsDecide reports whether the org's automations section decides an
+// unattended run's sources by itself: it names sources and it is enforced.
+// Then it is total (org-provider-accounts.md §11.3: "an explicit policy is
+// total"): it replaces the automation's unattended-funding stamp, wider or
+// narrower, and accounts() admits exactly what it (and the providers
+// section) allows. Under audit it decides nothing, and the stamp stands.
+func (f *orgPolicyFilter) automationsDecide() bool {
+	return f != nil && f.unattended && orgpolicy.AutomationsDecide(f.doc)
+}
+
+// liftStamp is scope with the automation's stamp lifted when the automations
+// section decides its sources (automationsDecide): the loader then offers
+// every source, and accounts() keeps the ones the section admits. Any other
+// scope is returned unchanged.
+func (f *orgPolicyFilter) liftStamp(scope Scope) Scope {
+	if f.automationsDecide() {
+		scope.UnattendedAnySource = true
+	}
+	return scope
+}
+
 // refusesAccount reports whether the policy refuses a call from driver with
 // an account of funding.
 func (f *orgPolicyFilter) refusesAccount(driver models.DriverID, funding string) bool {
