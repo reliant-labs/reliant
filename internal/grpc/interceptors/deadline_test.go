@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -40,9 +41,11 @@ func TestReportSlowRPCCountsASlowHandler(t *testing.T) {
 	inFlightBefore, completedBefore := slowRPCCounters()
 
 	wrapped := watchedBy(20*time.Millisecond, func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
-		// Sleep well past SlowAfter so the in-flight tick fires while the
-		// handler is still running.
-		time.Sleep(120 * time.Millisecond)
+		// Stay in flight until the in-flight tick has fired.
+		testkit.Eventually(t, "the slow handler to be reported in flight", func() bool {
+			inFlight, _ := slowRPCCounters()
+			return inFlight > inFlightBefore
+		})
 		return nil, nil
 	})
 
@@ -68,6 +71,7 @@ func TestReportSlowRPCIgnoresAFastHandler(t *testing.T) {
 
 	// Give a would-be stray watchdog goroutine a chance to (incorrectly)
 	// fire before asserting nothing was counted.
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a stray watchdog would fire 50ms in, and there is no event to wait for when it correctly does not
 	time.Sleep(80 * time.Millisecond)
 
 	inFlightAfter, completedAfter := slowRPCCounters()

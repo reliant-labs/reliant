@@ -6,11 +6,17 @@
  * the composer clears on send, re-sending meant retyping. A refused send
  * leaves nothing on the server, so this bubble is the only copy of the text.
  * It now says so, and offers to send it again or to drop it.
+ *
+ * A message refused because several agents run in its run
+ * (run_recipient_ambiguous) would be refused again by a plain Retry, so it
+ * offers the agents the refusal listed instead: each sends the message to
+ * that agent's thread (reliant#2465).
  */
 
 import { useState } from "react";
 import { AlertCircle, Loader2, RotateCcw, X } from "lucide-react";
-import { canRetryFailedSend, useChatStore } from "../../store/chatStore";
+import { canRetryFailedSend, failedSendRecipients, useChatStore } from "../../store/chatStore";
+import { runRecipientLabel } from "../../lib/runRecipient";
 import { toast } from "../../lib/toast-manager";
 import { cn } from "../../lib/utils";
 
@@ -25,11 +31,15 @@ export function FailedSendStatus({ chatId, clientMessageId, className }: FailedS
   // After a reload the payload is gone: the text is still here to copy, but
   // there is nothing to resend from.
   const canRetry = canRetryFailedSend(clientMessageId);
+  const recipients = canRetry ? failedSendRecipients(clientMessageId) : [];
 
-  const retry = async () => {
+  const retry = async (targetThread?: string) => {
     setRetrying(true);
     try {
-      await useChatStore.getState().retryFailedSend(chatId, clientMessageId);
+      const store = useChatStore.getState();
+      await (targetThread
+        ? store.retryFailedSend(chatId, clientMessageId, targetThread)
+        : store.retryFailedSend(chatId, clientMessageId));
     } catch (error) {
       toast.error(error);
     } finally {
@@ -47,7 +57,24 @@ export function FailedSendStatus({ chatId, clientMessageId, className }: FailedS
         <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
         Not sent
       </span>
-      {canRetry && (
+      {recipients.length > 0 && (
+        <span role="group" aria-label="Send to" className="flex flex-wrap items-center justify-end gap-1">
+          <span className="text-muted-foreground">Send to</span>
+          {recipients.map((recipient) => (
+            <button
+              key={recipient.threadId}
+              type="button"
+              onClick={() => void retry(recipient.threadId)}
+              disabled={retrying}
+              title={recipient.node ? `${recipient.node} · thread ${recipient.threadId}` : `thread ${recipient.threadId}`}
+              className="max-w-[12rem] truncate rounded border border-border px-1.5 font-medium text-primary-ink hover:bg-foreground/5 disabled:cursor-default disabled:opacity-60"
+            >
+              {runRecipientLabel(recipient)}
+            </button>
+          ))}
+        </span>
+      )}
+      {canRetry && recipients.length === 0 && (
         <button
           type="button"
           onClick={() => void retry()}

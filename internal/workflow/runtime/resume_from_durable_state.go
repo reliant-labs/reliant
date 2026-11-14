@@ -62,6 +62,7 @@ func ResumeInputFromDurableState(ctx context.Context, repo durableResumeSource, 
 		resume.NodeID = checkpoint.NodeID
 		resume.LoopIteration = int(checkpoint.LoopIteration)
 		resume.CatalogPin = restorablePin(ctx, repo, checkpoint.CatalogPin, rootWorkflowID)
+		resume.RunID = checkpoint.RunID
 	}
 
 	spawns, err := ResumableSpawnsFromDurableState(ctx, repo, rootWorkflowID)
