@@ -145,6 +145,7 @@ func runConformance(t *testing.T, a Authority) {
 		m := mint(t, MintRequest{UserID: user, Name: "short", Scopes: []fat.Scope{fat.ScopeReliantAPI}, ExpiresAt: &soon})
 		_, err := a.Introspect(ctx, m.Plaintext)
 		require.NoError(t, err)
+		// forge:lint-disable-next-line forge-test-fixed-sleep: moves the real clock past the expiry, a lower bound load can only lengthen; LocalStore's expiry is Postgres's now(), which cannot be injected
 		time.Sleep(time.Until(soon) + 200*time.Millisecond)
 		_, err = a.Introspect(ctx, m.Plaintext)
 		require.ErrorIs(t, err, auth.ErrAccessTokenInactive)
