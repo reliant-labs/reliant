@@ -4,7 +4,15 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { getMyPolicyUsage, getOrgPolicy, isUsageUnavailable, listPolicyHistory, orgPolicyKeys } from "@/services/controlPlane/orgPolicy";
+import {
+  getMyPolicyUsage,
+  getOrgPolicy,
+  isRpcNotDeployed,
+  isUsageUnavailable,
+  listOrgPolicyDenials,
+  listPolicyHistory,
+  orgPolicyKeys,
+} from "@/services/controlPlane/orgPolicy";
 
 const FINAL_CODES = new Set([Code.PermissionDenied, Code.Unauthenticated, Code.InvalidArgument]);
 
@@ -41,5 +49,20 @@ export function usePolicyHistory(orgId: string) {
     initialPageParam: "",
     getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!orgId,
+  });
+}
+
+/**
+ * What the org's policies refused, and what audit-mode rules would have, over
+ * the last `days` days. Admin/owner: pass enabled=false otherwise. Refusals
+ * and an older control plane are final, never retried.
+ */
+export function useOrgPolicyDenials(orgId: string, days: number, enabled = true) {
+  return useQuery({
+    queryKey: orgPolicyKeys.denials(orgId, days),
+    queryFn: () => listOrgPolicyDenials(orgId, days),
+    enabled: !!orgId && enabled,
+    staleTime: 60_000,
+    retry: (count, err) => !isRpcNotDeployed(err) && !(err instanceof ConnectError && FINAL_CODES.has(err.code)) && count < 2,
   });
 }

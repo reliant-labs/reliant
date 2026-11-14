@@ -7,6 +7,8 @@
  *   Policies  one card per rule: its mode (audit or enforced), what it does
  *             in plain words, and, for an admin or owner, its editor
  *   History   who changed which rule, from what, to what (every member)
+ *   Denials   what the rules refused, and what audit-mode rules would have
+ *             refused (admins and owners; PolicyDenials)
  *
  * Members read the rules that bind them; admins and owners edit them. Editing
  * is a draft of the whole document: nothing applies until the admin reviews
@@ -48,6 +50,7 @@ import { ModelsCard } from "./cards/ModelsCard";
 import { ProvidersCard } from "./cards/ProvidersCard";
 import { SpendCard } from "./cards/SpendCard";
 import { listWords } from "./PolicyCard";
+import { PolicyDenials } from "./PolicyDenials";
 import { PolicyHistory } from "./PolicyHistory";
 import { PolicyReviewDialog } from "./PolicyReviewDialog";
 import { activeSections, changedSections, copyPolicy, emptyPolicy, SECTION_KEYS, SECTION_TITLES, type SectionKey } from "./policyDocument";
@@ -82,7 +85,7 @@ function versionLine(record: PolicyRecord): string {
   return `Version ${record.version} · saved${by}${when}`;
 }
 
-type TabId = "policies" | "history";
+type TabId = "policies" | "history" | "denials";
 
 function OrgPoliciesPage({ org }: { org: MyOrg }) {
   const editable = canEditPolicy(org.role);
@@ -190,6 +193,8 @@ function OrgPoliciesPage({ org }: { org: MyOrg }) {
         tabs={[
           { id: "policies", label: "Policies" },
           { id: "history", label: "History" },
+          // Admins and owners: the counts name members and what they tried.
+          ...(editable ? [{ id: "denials", label: "Denials" }] : []),
         ]}
         activeTab={tab}
         onChange={(id) => setTab(id as TabId)}
@@ -238,6 +243,7 @@ function OrgPoliciesPage({ org }: { org: MyOrg }) {
       )}
 
       {tab === "history" && <PolicyHistory orgId={org.id} nameOf={nameOf} />}
+      {tab === "denials" && editable && <PolicyDenials orgId={org.id} nameOf={nameOf} />}
 
       {editable && (
         <PolicyReviewDialog

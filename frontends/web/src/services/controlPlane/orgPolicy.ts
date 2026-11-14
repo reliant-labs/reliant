@@ -10,6 +10,8 @@
  *   UpdateOrgPolicy   admin/owner: replace the whole document, carrying the
  *                     version the editor read (optimistic concurrency)
  *   GetMyPolicyUsage  any member: their own spend against the caps (§6)
+ *   ListOrgPolicyDenials  admin/owner: daily counts of what the policies
+ *                     refused, and what audit-mode rules would have (§3.4)
  *
  * The history is the org's limit-change log (BillingService.ListOrgLimitChanges),
  * whose policy rows are the resources "policy.<section>.<field>".
@@ -44,6 +46,7 @@ export const orgPolicyKeys = {
   policy: (orgId: string) => ["org-policy", orgId, "document"] as const,
   history: (orgId: string) => ["org-policy", orgId, "history"] as const,
   usage: (orgId: string) => ["org-policy", orgId, "usage"] as const,
+  denials: (orgId: string, days: number) => ["org-policy", orgId, "denials", days] as const,
 };
 
 /** The org's policy as the page holds it. */
@@ -180,9 +183,57 @@ export async function getMyPolicyUsage(orgId: string): Promise<MyPolicyUsage> {
   };
 }
 
-/** The control plane does not have GetMyPolicyUsage yet: an older deployment, not a fault. */
-export function isUsageUnavailable(err: unknown): boolean {
+/** The control plane does not have this rpc yet: an older deployment, not a fault. */
+export function isRpcNotDeployed(err: unknown): boolean {
   return err instanceof ConnectError && err.code === Code.Unimplemented;
+}
+
+/** The control plane does not have GetMyPolicyUsage yet. */
+export const isUsageUnavailable = isRpcNotDeployed;
+
+/** One day's count of one policy's refusals for one reason, member and outcome. */
+export interface PolicyDenialCount {
+  /** The UTC day, YYYY-MM-DD. */
+  day: string;
+  /** The section: "models", "spend", ... */
+  policy: string;
+  /** The refusal reason, e.g. "model_not_allowed". */
+  reason: string;
+  /** The member the call acted as; "" for a hosted app's environment key. */
+  userId: string;
+  /** Refused by an enforced rule, or counted by a rule in audit (would have been refused). */
+  outcome: "refused" | "audited";
+  count: number;
+}
+
+export interface PolicyDenials {
+  counts: PolicyDenialCount[];
+  refusedTotal: number;
+  auditedTotal: number;
+}
+
+/**
+ * ListOrgPolicyDenials (admin/owner): what the org's policies refused, and
+ * what rules in audit would have refused, per UTC day over the last `days`
+ * days (today included). A control plane older than org-policies A1 answers
+ * Unimplemented (isRpcNotDeployed).
+ */
+export async function listOrgPolicyDenials(orgId: string, days: number): Promise<PolicyDenials> {
+  const res = await getControlPlaneClient(OrgPolicyService).listOrgPolicyDenials({ orgId, days });
+  return {
+    counts: res.counts
+      .filter((c) => c.outcome === "refused" || c.outcome === "audited")
+      .map((c) => ({
+        day: c.day,
+        policy: c.policy,
+        reason: c.reason,
+        userId: c.userId,
+        outcome: c.outcome as "refused" | "audited",
+        count: Number(c.count),
+      })),
+    refusedTotal: Number(res.refusedTotal),
+    auditedTotal: Number(res.auditedTotal),
+  };
 }
 
 /** One edit to one field of the policy, from the org's limit-change log. */
