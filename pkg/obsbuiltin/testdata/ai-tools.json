@@ -1,0 +1,85 @@
+{
+  "version": "forge.dashboards/v1",
+  "sections": [
+    {
+      "id": "tools",
+      "title": "Tools",
+      "description": "One row per tool (gen_ai.tool.name)."
+    },
+    {
+      "id": "runs",
+      "title": "In runs",
+      "description": "Tool calls inside workflow runs."
+    }
+  ],
+  "id": "ai-tools",
+  "title": "shop: AI tools",
+  "description": "Every tool call (an execute_tool span) by tool: calls, failures, latency and where it ran; how a run's time divides between tools and model calls; and the tools of failed runs. From the GenAI spans in the environment's traces, so the range is bounded by their retention.",
+  "group": "ai",
+  "tags": [
+    "ai"
+  ],
+  "filters": [
+    {
+      "id": "env",
+      "label": "deployment.environment.name",
+      "field": "deployment.environment.name"
+    }
+  ],
+  "defaultRange": "7d",
+  "panels": [
+    {
+      "section": "tools",
+      "id": "tools",
+      "title": "Tools",
+      "description": "Calls, failed calls, the error rate, latency (p50, p95) and where each tool ran (forge.ai.tool.location: local, daemon, remote).",
+      "kind": "sql",
+      "sql": "SELECT SpanAttributes['gen_ai.tool.name'] AS \"Tool\", count() AS \"Calls\", countIf((StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled')) AS \"Failed\",\n       round(\"Failed\" / count(), 4) AS \"Error rate\",\n       round(quantile(0.5)(Duration / 1e6)) AS \"p50 ms\", round(quantile(0.95)(Duration / 1e6)) AS \"p95 ms\",\n       arrayStringConcat(arraySort(groupUniqArrayIf(SpanAttributes['forge.ai.tool.location'], SpanAttributes['forge.ai.tool.location'] != '')), ', ') AS \"Ran in\"\nFROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] = 'execute_tool'\nGROUP BY \"Tool\" ORDER BY \"Calls\" DESC, \"Tool\" LIMIT 100",
+      "width": 24,
+      "height": 9
+    },
+    {
+      "section": "tools",
+      "id": "tool-calls-by-day",
+      "title": "Tool calls by tool",
+      "description": "Tool calls each UTC day: the ten tools called most in the range, the rest as Other.",
+      "kind": "sql",
+      "sql": "WITH calls AS (SELECT Timestamp AS ts, SpanAttributes['gen_ai.tool.name'] AS tool FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] = 'execute_tool'),\ntop AS (SELECT tool FROM calls GROUP BY tool ORDER BY count() DESC, tool LIMIT 10)\nSELECT toDate(ts) AS day, if(tool IN (SELECT tool FROM top), tool, 'Other') AS tool, count() AS \"Calls\"\nFROM calls GROUP BY day, tool ORDER BY day, tool",
+      "minStep": "1d",
+      "display": {
+        "style": "bars",
+        "stack": true
+      },
+      "width": 24,
+      "height": 8
+    },
+    {
+      "section": "runs",
+      "id": "time-split",
+      "title": "Where run time goes",
+      "description": "Time inside runs spent in tool calls against model calls, by workflow: the sum of each span's duration, so calls that overlap count twice.",
+      "kind": "sql",
+      "sql": "WITH ai AS (\n  SELECT Timestamp AS ts, TraceId, SpanName, StatusCode, StatusMessage, Duration,\n         SpanAttributes['gen_ai.operation.name'] AS op, SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AS is_call, SpanAttributes['gen_ai.operation.name'] = 'execute_tool' AS is_tool, (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled') AS failed,\n         if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS model, if(SpanAttributes['gen_ai.provider.name'] != '', SpanAttributes['gen_ai.provider.name'], SpanAttributes['gen_ai.system']) AS provider,\n         toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) AS in_tok, toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) AS out_tok, toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens'])) AS cache_read_tok,\n         toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd'])) AS cost, SpanAttributes['forge.ai.workflow.name'] AS workflow, SpanAttributes['forge.ai.run.id'] AS run_id,\n         SpanAttributes['error.type'] AS error_type, SpanAttributes['gen_ai.tool.name'] AS tool,\n         SpanAttributes['user.id'] AS user_id, SpanAttributes['org.id'] AS org_id\n  FROM otel_traces\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (SpanAttributes['gen_ai.operation.name'] != '' OR SpanAttributes['forge.ai.node.id'] != '' OR SpanAttributes['forge.ai.run.id'] != ''))\nSELECT if(workflow = '', '(none)', workflow) AS workflow,\n       round(sumIf(Duration, is_tool) / 1e9, 1) AS \"Tools (s)\", round(sumIf(Duration, is_call) / 1e9, 1) AS \"Model calls (s)\"\nFROM ai WHERE run_id != '' AND (is_tool OR is_call)\nGROUP BY workflow ORDER BY \"Tools (s)\" + \"Model calls (s)\" DESC LIMIT 15",
+      "display": {
+        "style": "bars",
+        "stack": true,
+        "colors": {
+          "Model calls (s)": "blue",
+          "Tools (s)": "amber"
+        }
+      },
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "runs",
+      "id": "tools-in-failed-runs",
+      "title": "Tools in failed runs",
+      "description": "The tools called most in the range's failed runs, with how many of those calls failed themselves.",
+      "kind": "sql",
+      "sql": "WITH ai AS (\n  SELECT Timestamp AS ts, TraceId, SpanName, StatusCode, StatusMessage, Duration,\n         SpanAttributes['gen_ai.operation.name'] AS op, SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AS is_call, SpanAttributes['gen_ai.operation.name'] = 'execute_tool' AS is_tool, (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled') AS failed,\n         if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS model, if(SpanAttributes['gen_ai.provider.name'] != '', SpanAttributes['gen_ai.provider.name'], SpanAttributes['gen_ai.system']) AS provider,\n         toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) AS in_tok, toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) AS out_tok, toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens'])) AS cache_read_tok,\n         toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd'])) AS cost, SpanAttributes['forge.ai.workflow.name'] AS workflow, SpanAttributes['forge.ai.run.id'] AS run_id,\n         SpanAttributes['error.type'] AS error_type, SpanAttributes['gen_ai.tool.name'] AS tool,\n         SpanAttributes['user.id'] AS user_id, SpanAttributes['org.id'] AS org_id\n  FROM otel_traces\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (SpanAttributes['gen_ai.operation.name'] != '' OR SpanAttributes['forge.ai.node.id'] != '' OR SpanAttributes['forge.ai.run.id'] != '')),\nruns AS (\n  SELECT run_id, anyIf(workflow, workflow != '') AS wf,\n         min(ts) AS started, max(addNanoseconds(ts, Duration)) AS ended,\n         (toUnixTimestamp64Nano(ended) - toUnixTimestamp64Nano(started)) / 1e9 AS seconds,\n         countIf(op = 'invoke_workflow') AS segments,\n         multiIf(segments = 0, 'In progress',\n                 argMaxIf(error_type, ts, op = 'invoke_workflow') = 'canceled', 'Cancelled',\n                 argMaxIf(failed, ts, op = 'invoke_workflow'), 'Failed', 'Succeeded') AS outcome,\n         countIf(is_call) AS calls, countIf(is_tool) AS tools,\n         sumIf(in_tok, is_call) AS run_in, sumIf(out_tok, is_call) AS run_out, sumIf(cost, is_call) AS run_cost\n  FROM ai WHERE run_id != '' GROUP BY run_id)\nSELECT tool AS \"Tool\", count() AS \"Calls\", countIf(failed) AS \"Failed\", uniqExact(run_id) AS \"Failed runs\"\nFROM ai WHERE is_tool AND run_id IN (SELECT run_id FROM runs WHERE outcome = 'Failed')\nGROUP BY tool ORDER BY \"Calls\" DESC, tool LIMIT 25",
+      "width": 12,
+      "height": 8
+    }
+  ]
+}

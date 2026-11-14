@@ -1,0 +1,8 @@
+{
+  "files": {
+    ".github/workflows/ci.yml": {
+      "reason": "migrated from legacy .forge/checksums.json (legacy fork-era entry; the fork state was removed)",
+      "disowned_at": "2026-06-24T16:14:00Z"
+    }
+  }
+}

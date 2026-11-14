@@ -1,0 +1,28 @@
+# pnpm settings for this frontend (package.json `packageManager` pins pnpm).
+# The frontend is its own pnpm workspace root, so these apply here and nowhere
+# else. pnpm reads its settings from this file, never from package.json or
+# .npmrc (which it consults for registries and auth only).
+
+# Installs are explicit (forge ensures deps before build/dev/lint). pnpm 12's
+# automatic pre-script install would replace a dev bridge's linked runtime
+# with the registry copy just before a build run inside this frontend.
+verifyDepsBeforeRun: false
+
+# Transitive-only pins. Each one exists because the PARENT has no patched
+# release yet; drop it once the parent's own range reaches the fixed version.
+#   fflate: GHSA-px8p-9vwx-vf98. @hyperdx/otel-web-session-recorder pins
+#     fflate 0.7.4 exactly, even in its latest release, and it ships in the
+#     production bundle through @hyperdx/browser. 0.7.5 is the patched release
+#     on the same line. Scoped to that parent so it can never force 0.7.x on a
+#     package that asks for a newer fflate.
+overrides:
+  "@hyperdx/otel-web-session-recorder>fflate": ^0.7.5
+
+# The dependencies whose install scripts may run. pnpm runs none it is not
+# told about, and an unlisted one fails the install (ERR_PNPM_IGNORED_BUILDS)
+# rather than being skipped silently, so a new dependency that needs its
+# script is a one-line decision here: true to run it, false to skip it.
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+  protobufjs: false
