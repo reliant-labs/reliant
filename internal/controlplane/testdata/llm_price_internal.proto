@@ -1,4 +1,4 @@
-// VENDORED from reliant-labs/control-plane PR #2789 at a988e76c5 (feat/p9-org-usage-cp; re-vendored from main once it merges):
+// VENDORED from reliant-labs/control-plane at 5f63f8142d0a81ea8df7a26e3763aeff6d5bf15d (main, #2789):
 // proto/services/llm_price_internal/v1/llm_price_internal.proto. Do not edit; re-vendor from control-plane main.
 // TestGetModelListPrices_SpeaksTheVendoredContract holds the client to it.
 syntax = "proto3";
