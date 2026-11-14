@@ -454,11 +454,14 @@ func TestPersonalFunding_LeaseReturnsAtReset(t *testing.T) {
 	env.store.rows["chat-1"] = &core.PersonalFunding{ChatID: "chat-1", UserID: "u1", OrgID: fundOrg,
 		State: core.PersonalFundingUsePersonal, Reason: core.PersonalFundingLimited, Model: routeModel, LeaseUntil: &until}
 
+	// The org's key is limited until the reset the answer leases to.
+	env.routing.Store.(*routerFake).bench("acme-key", time.Now().Add(time.Hour), "five_hour")
 	res, err := env.resolve(t, "root", routeModel)
 	require.NoError(t, err)
 	assert.Equal(t, "my-claude", res.Account.Config.AccountID, "during the lease")
 
 	now = until.Add(time.Second)
+	delete(env.routing.Store.(*routerFake).limits, "acme-key") // reset
 	res, err = env.resolve(t, "root-2", routeModel)
 	require.NoError(t, err)
 	assert.Equal(t, "acme-key", res.Account.Config.AccountID, "after the reset, the org's again")
@@ -1052,4 +1055,51 @@ func TestPersonalFunding_TheChatsQuestionOutlivesTheOrgsAccounts(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "my-claude", res.Account.Config.AccountID)
 	})
+}
+
+// §4.5: an org account usable again ends a live "Use my account" lease at the
+// next turn start, before the org's reset: the thread moves back to the org's
+// tier, says so, and the question is over. Between the tool steps of a turn the
+// thread stays where it is; a turn start whose org accounts are still all
+// limited keeps the lease and never asks again.
+func TestPersonalFunding_LiveLeaseEndsWhenTheOrgIsUsableAtATurnStart(t *testing.T) {
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), acmeKey("acme-backup"), personal(claudeAccount("my-claude", "me@me.com", 0))))
+	env := newFundingEnv(t, "", "")
+	router := env.routing.Store.(*routerFake)
+	reset := time.Now().Add(time.Hour)
+	router.bench("acme-key", reset, "five_hour")
+	router.bench("acme-backup", reset, "five_hour")
+	env.store.rows["chat-1"] = &core.PersonalFunding{ChatID: "chat-1", UserID: "u1", OrgID: fundOrg,
+		State: core.PersonalFundingUsePersonal, Reason: core.PersonalFundingLimited, Model: routeModel, LeaseUntil: &reset, Announced: true}
+
+	// A turn start, the org still limited: the lease holds, no new question.
+	res, err := env.resolve(t, "root", routeModel)
+	require.NoError(t, err)
+	assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+	assert.Zero(t, env.store.asks)
+	assert.Equal(t, core.PersonalFundingUsePersonal, env.store.row("chat-1").State)
+	env.store.serving["root"] = "my-claude"
+
+	// A new thread (a sub-agent's first call) under the lease, too.
+	res, err = env.resolve(t, "sub-agent", routeModel)
+	require.NoError(t, err)
+	assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+	assert.Zero(t, env.store.asks)
+
+	// The owner resumes a key well before the reset.
+	delete(router.limits, "acme-backup")
+
+	// Mid-turn, the thread stays on the person's account (§4.5, D6).
+	res, err = env.resolve(t, "root", routeModel, func(s *llmCallSpec) { s.TurnStart = false })
+	require.NoError(t, err)
+	assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+
+	// The next turn start moves back to the org, with the notice, and the
+	// lease is over.
+	res, err = env.resolve(t, "root", routeModel)
+	require.NoError(t, err)
+	assert.Equal(t, "acme-backup", res.Account.Config.AccountID)
+	assert.Equal(t, orgAccountsBackNotice(), res.FundingNotice)
+	assert.Nil(t, env.store.row("chat-1"))
+	assert.Zero(t, env.store.asks)
 }
