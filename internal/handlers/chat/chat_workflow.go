@@ -254,7 +254,7 @@ func (s *Service) UpdateWorkflowParams(
 			// continue on the switched-to one until that provider resets —
 			// switching providers is the user opting the chat in
 			// (CapacityWakeSignal.UseModel).
-			s.wakeChatBestEffort(ctx, chat, s.launcher().ResolvedModelAtDriver(ctx, userID, stateUpdate["model"]), "the chat's model changed")
+			s.wakeChatBestEffort(ctx, chat, s.launcher().ResolvedModelAtDriver(ctx, userID, chat, stateUpdate["model"]), "the chat's model changed")
 		}
 	}
 

@@ -170,11 +170,17 @@ const OrgKeyNoticeSweepInterval = 10 * time.Minute
 // orgKeyNoticeSweepBatch bounds one sweep's starts.
 const orgKeyNoticeSweepBatch = 100
 
-// sweepOrgKeyNotices starts every rejected org key's notice whose start was
-// never confirmed, and reports how many it started. The reason is not kept
+// orgKeyNoticeSweepLease is how long a sweep's claim on a mark holds: a start
+// that failed is retried about hourly, while every other due mark gets its turn
+// first (store.ClaimDueOrgKeyNotices).
+const orgKeyNoticeSweepLease = time.Hour
+
+// sweepOrgKeyNotices claims the due rejected org keys whose notice's start was
+// never confirmed (ClaimDueOrgKeyNotices) and starts each, and reports how many
+// it started. The reason is not kept
 // with the mark beyond needs_reauth_reason, which is what it sends.
 func sweepOrgKeyNotices(ctx context.Context, store OrgKeyNoticeStore, q orgKeyNoticeQueue) int {
-	pending, err := store.ListUnstartedOrgKeyNotices(ctx, orgKeyNoticeSweepBatch)
+	pending, err := store.ClaimDueOrgKeyNotices(ctx, orgKeyNoticeSweepBatch, orgKeyNoticeSweepLease)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not list the rejected org keys whose notice never started", "error", err)
 		return 0

@@ -115,6 +115,16 @@ message OrgPolicyEnforcementConfig {
     allowed_values: ["off", "audit", "enforce"]
     description: "How the org MCP server policy applies: off, audit (count, never refuse) or enforce"
   }];
+  // Providers and models at resolution (§4.1 point 3, §4.2): which accounts
+  // (by driver and by who pays) and which managed models may serve an org's
+  // runs, at every place a run's model and account are resolved (launch, the
+  // registry, the account router, failover, the driver build).
+  string providers = 5 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS"
+    default_value: "audit"
+    allowed_values: ["off", "audit", "enforce"]
+    description: "How the org provider and model policy applies where runs resolve their model and account: off, audit (count, never refuse) or enforce"
+  }];
 }
 
 // NetworkConfig is the network reach of the dials a user steers from a server

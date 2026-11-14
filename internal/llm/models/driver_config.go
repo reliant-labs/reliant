@@ -189,6 +189,25 @@ type AvailableDrivers struct {
 	// model it serves, so a better tier is taken up at the next turn start,
 	// never mid-turn (org-provider-accounts §4.5, D6).
 	StickyDriver DriverID
+
+	// PolicyRefused is what the run's org policy took out of this set, by
+	// driver (control-plane docs/design/org-policies.md §4.1, §4.2): a driver
+	// whose every account it refuses (provider_not_allowed; the driver is not
+	// in Drivers or Accounts), and the managed driver whose models it narrows
+	// (model_not_allowed; those models are Disabled in Availability). A
+	// resolution that fails reads it to say the org's policy is why, instead
+	// of "connect a provider". Nil when the policy took nothing, which is
+	// every scope of no org and every policy in audit.
+	PolicyRefused map[DriverID]PolicyRefusal
+}
+
+// PolicyRefusal is one driver the run's org policy took out of a set.
+type PolicyRefusal struct {
+	// Reason is the org policy's refusal reason (provider_not_allowed,
+	// model_not_allowed).
+	Reason string
+	// Funding is the class (Funding*) of an account the refusal applied to.
+	Funding string
 }
 
 // TierFor is driver's best tier among its accounts that serve modelID

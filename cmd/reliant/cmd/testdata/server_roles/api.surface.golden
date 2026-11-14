@@ -65,6 +65,7 @@ RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS kind=string flag="" default="audit" re
 RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
 RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
 RELIANT_ORGS_POLICY_ENFORCEMENT_MCP kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
+RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
 RELIANT_ORGS_PROJECT_MOVES_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]

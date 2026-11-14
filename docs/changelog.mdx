@@ -13,6 +13,30 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.20.0" description="November 14, 2026">
+### 3 new features, 2 fixes and 3 other changes
+
+Every pull request merged since v1.19.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **telemetry: workflow, agent and tool spans for AI monitoring** [#2732](https://github.com/reliant-labs/reliant/pull/2732)
+- **cli: reliant workflow run --daemon picks the machine a run executes on** [#2748](https://github.com/reliant-labs/reliant/pull/2748)
+- **orgs: the org provider and model policy where runs resolve their model and account, shipped in audit (org-policies R2)** [#2766](https://github.com/reliant-labs/reliant/pull/2766)
+
+#### Changed
+
+- **clear forge test-waits findings ahead of the v1.6.0 pin** [#2730](https://github.com/reliant-labs/reliant/pull/2730)
+- **merge-queue: check the vendored control-plane contract before the merge when a group changes it** [#2747](https://github.com/reliant-labs/reliant/pull/2747)
+- **pin: forge@7c169e587003 + @reliantlabs/forge-web-runtime@0.13.15, as promoted in v1.18.1-rc.1** [#2769](https://github.com/reliant-labs/reliant/pull/2769)
+
+#### Fixed
+
+- **prove_test: a C-family or Swift compile failure in the baseline is baseline_does_not_compile, not proven** [#2767](https://github.com/reliant-labs/reliant/pull/2767)
+- **workersetup: the org-key notice sweep claims due marks fairly, so a mark whose start keeps failing never starves a newer one** [#2768](https://github.com/reliant-labs/reliant/pull/2768)
+
+</Update>
+
 <Update label="v1.19.0" description="November 14, 2026">
 ### 8 new features, 9 fixes and 2 other changes
 

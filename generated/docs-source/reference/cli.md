@@ -21286,6 +21286,13 @@ A run executes against a project. Supply it by ID (--project-id) or by path
 reused if one already exists there, or created on the fly — so no manual
 project setup is needed. --project-id takes precedence when both are given.
 
+The run executes on the project's machine, by default the user's default
+machine. --daemon (an id or hostname from 'reliant daemon list') runs it on
+that machine instead; with --project-path the folder is looked up, attached
+or created on that machine, which is the one that holds it. With --project-id
+the project must already be checked out on that machine; otherwise the run
+is refused before it starts.
+
 Bare workflow names that match a builtin are normalized to builtin://<name>
 (like the web app); other names resolve as drafts / project workflows
 server-side. The first user message is taken from --message, then
@@ -21304,6 +21311,7 @@ reliant workflow run <workflow-name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--daemon` | `string` | - | Machine the run executes on, by daemon id or hostname (default: the project's machine); with --project-path, the machine that holds the folder |
 | `--exit-on-gate` | `bool` | - | Stop and exit 3 as soon as a question/approval gate opens (for scripted supervision) |
 | `--follow`, `-f` | `bool` | - | Follow the execution and stream NDJSON lifecycle events |
 | `--hook` | `stringArray` | `[]` | Exec hook 'on=<event> cmd=<shell>' (repeatable); event is one of node_started|node_completed|node_failed|workflow_completed|workflow_failed|question|approval|any |
