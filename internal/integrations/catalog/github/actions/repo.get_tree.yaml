@@ -9,8 +9,7 @@ description: >-
   directory, which a large repository needs: results longer than about
   30,000 characters are cut short. truncated is true when the tree is
   larger than GitHub returns at once (100,000 entries). Omit ref for the
-  default branch. A directory or ref that does not exist answers missing
-  true with no entries, not an error, as repo.get_content does.
+  default branch.
 keywords: [tree, files, list, paths, structure, layout, find file, ls]
 placement: server
 mutates: false
@@ -44,16 +43,13 @@ request:
   # GitHub serves up to 7 MB of tree before it truncates.
   max_response_bytes: 10485760
   errors:
-    # A directory or ref that is not there is an answer, not a failure, as it
-    # is for repo.get_content: an agent exploring a repository asks for paths
-    # that may not exist, and three such errors in a row (different paths,
-    # same text) tripped the repeated-tool-error breaker and ended the run.
-    # GitHub answers the same 404 for a repository this connection cannot
-    # see, so the note says which cases it can be (see output.select).
-    - status: 404
-      accept: true
-      when: >-
-        type(response) == map && response.?message.orValue('') == 'Not Found'
+    # GitHub answers 404 alike for a directory or ref that is not there and
+    # for a repository this connection cannot see, so a 404 stays an error:
+    # an empty tree would let a caller mistake an unreachable repository for
+    # an absent directory. The message names the path and ref, so an agent
+    # exploring paths that may not exist gets a different error for each one
+    # and does not trip the repeated-tool-error breaker (which ends a run on
+    # three identical failing batches in a row).
     - status: 401
       retryable: false
       message: "GitHub rejected the credential ({{ response.?message.orValue('bad credentials') }}): reconnect GitHub in Settings."
@@ -77,9 +73,12 @@ request:
     - status: 404
       retryable: false
       message: >-
-        GitHub returned not found: the resource does not exist, or this
-        connection cannot see it (is the Reliant GitHub App installed on the
-        repository?).
+        GitHub returned not found for {{ params.?path.hasValue() ? 'directory ' + params.path : 'the tree' }}
+        at {{ params.?ref.orValue('the default branch') }} of {{ params.owner }}/{{ params.repo }}:
+        the directory or ref does not exist, or this connection cannot see
+        the repository (is the Reliant GitHub App installed on it?).
+        {{ params.?path.hasValue() ? 'Omit path to tell a missing directory from a missing ref or repository.' :
+           params.?ref.hasValue() ? 'Omit ref to tell a missing ref from an unreachable repository.' : '' }}
     - status: 410
       retryable: false
       message: "GitHub returned gone: {{ response.?message.orValue('this feature is disabled for the repository') }}."
@@ -94,21 +93,7 @@ request:
              type(e.?code.orValue(null)) == string ? e.code : 'invalid')) : [] }}
 output:
   select: >-
-    status == 404 ?
-      {"missing": true,
-       "sha": null,
-       "truncated": false,
-       "entries": [],
-       "note": (params.?path.hasValue() ?
-         "No directory " + params.path : "No tree") +
-         (params.?ref.hasValue() ? " at " + params.ref : " on the default branch") +
-         ". GitHub answers the same when the ref does not exist or this connection cannot see " +
-         params.owner + "/" + params.repo +
-         (params.?path.hasValue() ? "; omit path to tell a missing directory from a missing ref." :
-          params.?ref.hasValue() ? "; omit ref to tell a missing ref from an unreachable repository." :
-          " (is the Reliant GitHub App installed on it?).")} :
-    {"missing": false,
-     "sha": response.sha,
+    {"sha": response.sha,
      "truncated": response.?truncated.orValue(false),
      "entries": response.tree.map(e, {
        "path": params.?path.hasValue() ? params.path + '/' + e.path : e.path,
@@ -117,9 +102,7 @@ output:
   schema:
     type: object
     properties:
-      missing: { type: boolean, description: "Nothing exists at path and ref (see note); entries is empty." }
-      note: { type: string, description: "For missing: what the absence can mean." }
-      sha: { type: [string, "null"], description: The tree's SHA; null when missing. }
+      sha: { type: string, description: The tree's SHA. }
       truncated: { type: boolean, description: GitHub returned only part of a very large tree. }
       entries:
         type: array

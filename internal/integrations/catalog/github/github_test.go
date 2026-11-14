@@ -933,37 +933,35 @@ func TestRepoGetTreeOfOneDirectoryOnTheDefaultBranch(t *testing.T) {
 	assert.Equal(t, []any{map[string]any{"path": "internal/llm/tools.go", "type": "blob", "size": 1200.0}}, out["entries"])
 }
 
-// A directory or ref that does not exist is an answer, not an error, as for
-// repo.get_content: three such errors in a row (different paths, same text)
-// ended a pr-review run through the repeated-tool-error breaker.
-func TestRepoGetTreeOfAMissingPathIsNotAnError(t *testing.T) {
+// A 404 from the tree endpoint stays an error: GitHub answers it alike for a
+// directory or ref that is not there and for a repository this connection
+// cannot see, and an empty tree would hide the second. The error names the
+// path and ref, so lookups of different absent paths fail with different
+// text and do not trip the repeated-tool-error breaker, which ended a
+// pr-review run that listed three absent directories in a row.
+func TestRepoGetTreeNotFoundIsAnErrorNamingThePath(t *testing.T) {
 	notFound := jsonReply(404, `{"message":"Not Found","documentation_url":"https://docs.github.com/rest","status":"404"}`)
 	f := newFake(t)
 	f.on("GET", "/repos/acme/app/git/trees/main:docs/design", notFound)
-	out := data(t, f.run("repo.get_tree", map[string]any{"owner": "acme", "repo": "app", "ref": "main", "path": "docs/design"}))
-	assert.Equal(t, true, out["missing"])
-	assert.Equal(t, []any{}, out["entries"])
-	assert.Nil(t, out["sha"])
-	assert.Contains(t, out["note"], "No directory docs/design at main")
-	assert.Contains(t, out["note"], "omit path to tell")
+	f.on("GET", "/repos/acme/app/git/trees/main:docs/adr", notFound)
+	design, err := f.try("repo.get_tree", map[string]any{"owner": "acme", "repo": "app", "ref": "main", "path": "docs/design"})
+	require.NoError(t, err)
+	assert.True(t, design.IsError, "a 404 is never an empty tree")
+	assert.Equal(t, 404, design.StatusCode)
+	assert.Contains(t, design.Content, "not found for directory docs/design at main of acme/app")
+	assert.Contains(t, design.Content, "Omit path to tell")
+	adr, err := f.try("repo.get_tree", map[string]any{"owner": "acme", "repo": "app", "ref": "main", "path": "docs/adr"})
+	require.NoError(t, err)
+	assert.True(t, adr.IsError)
+	assert.NotEqual(t, design.Content, adr.Content, "different paths fail with different text")
 
 	f = newFake(t)
 	f.on("GET", "/repos/acme/app/git/trees/HEAD", notFound)
-	out = data(t, f.run("repo.get_tree", map[string]any{"owner": "acme", "repo": "app"}))
-	assert.Equal(t, true, out["missing"])
-	assert.Contains(t, out["note"], "is the Reliant GitHub App installed on it?")
-
-	// A tree that exists says so.
-	f = newFake(t)
-	f.on("GET", "/repos/acme/app/git/trees/HEAD", jsonReply(200, treeJSON))
-	assert.Equal(t, false, data(t, f.run("repo.get_tree", map[string]any{"owner": "acme", "repo": "app"}))["missing"])
-
-	// Any other 404 is still an error.
-	f = newFake(t)
-	f.on("GET", "/repos/acme/app/git/trees/HEAD", jsonReply(404, `{"message":"Git Repository is empty.","status":"404"}`))
 	res, err := f.try("repo.get_tree", map[string]any{"owner": "acme", "repo": "app"})
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
+	assert.Contains(t, res.Content, "not found for the tree at the default branch of acme/app")
+	assert.Contains(t, res.Content, "is the Reliant GitHub App installed on it?")
 }
 
 func TestCodeSearchReturnsFilesAndMatchedFragments(t *testing.T) {
@@ -1190,8 +1188,8 @@ func TestErrorMappingForEveryAction(t *testing.T) {
 	testkit.Slow(t, "runs every action against every error case over an HTTP test server")
 	for id, params := range minimal {
 		for _, tc := range errorCases {
-			if (id == "repo.get_content" || id == "repo.get_tree") && tc.status == 404 {
-				continue // a missing path is an answer: TestRepoGetContentOfAMissingPathIsNotAnError, TestRepoGetTreeOfAMissingPathIsNotAnError
+			if id == "repo.get_content" && tc.status == 404 {
+				continue // a missing path is an answer: TestRepoGetContentOfAMissingPathIsNotAnError
 			}
 			t.Run(id+"/"+tc.name, func(t *testing.T) {
 				f := newFake(t)
