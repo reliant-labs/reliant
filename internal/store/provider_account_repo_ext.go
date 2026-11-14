@@ -702,15 +702,32 @@ func ListRejectedOrgKeysIn(ctx context.Context, db orm.Context, orgIDs []string)
 	return out, nil
 }
 
-// ListUnstartedOrgKeyNotices returns up to limit org-owned accounts whose rejection mark
-// (needs_reauth_at) has no confirmed notice to the org's owners and admins: reauth_notice_for is
-// not that mark. Metadata only, oldest mark first.
-func ListUnstartedOrgKeyNotices(ctx context.Context, db orm.Context, limit int) ([]core.ProviderAccount, error) {
+// ClaimDueOrgKeyNotices claims up to limit org-owned accounts whose rejection mark
+// (needs_reauth_at) has no confirmed notice to the org's owners and admins (reauth_notice_for is
+// not that mark) and is due: never claimed, its claim's lease passed, or claimed before this mark.
+// Each is claimed by moving reauth_notice_next_at to now + lease, so a mark whose start keeps
+// failing comes round again after lease and never holds the batch from a newer one. Metadata
+// only, oldest due first (never claimed first); SKIP LOCKED, so two workers claim different rows.
+func ClaimDueOrgKeyNotices(ctx context.Context, db orm.Context, limit int, lease time.Duration) ([]core.ProviderAccount, error) {
+	var ids []string
+	if err := db.Bun().NewRaw(`UPDATE provider_accounts SET reauth_notice_next_at = now() + make_interval(secs => ?0)
+		WHERE id IN (
+			SELECT id FROM provider_accounts
+			 WHERE owner_kind = ?1 AND needs_reauth_at IS NOT NULL
+			   AND reauth_notice_for IS DISTINCT FROM needs_reauth_at
+			   AND (reauth_notice_next_at IS NULL OR reauth_notice_next_at <= now()
+			        OR reauth_notice_next_at - make_interval(secs => ?0) < needs_reauth_at)
+			 ORDER BY reauth_notice_next_at NULLS FIRST, needs_reauth_at, id
+			 LIMIT ?2 FOR UPDATE SKIP LOCKED)
+		RETURNING id`, lease.Seconds(), core.AccountOwnerOrg, limit).Scan(ctx, &ids); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
 	var rows []*ProviderAccount
 	if err := db.Bun().NewSelect().Model(&rows).ExcludeColumn(providerAccountSealedColumns...).
-		Where("owner_kind = ?", core.AccountOwnerOrg).Where("needs_reauth_at IS NOT NULL").
-		Where("reauth_notice_for IS DISTINCT FROM needs_reauth_at").
-		Order("needs_reauth_at", "id").Limit(int64(limit)).Scan(ctx); err != nil {
+		Where("id IN (?)", bun.List(ids)).Order("needs_reauth_at", "id").Scan(ctx); err != nil {
 		return nil, err
 	}
 	out := make([]core.ProviderAccount, 0, len(rows))

@@ -55,11 +55,17 @@ type Refusal struct {
 // chatmarkers.KindOrgPolicyRefused marker (payload: the reason) so the
 // verdict survives Temporal's stringification of the activity error.
 func (r *Refusal) Error() string {
+	return chatmarkers.Wrap(chatmarkers.KindOrgPolicyRefused, r.Reason, r.Message())
+}
+
+// Message is what was refused and what the person can do, without the
+// marker: for an rpc's error, which a person reads as it is.
+func (r *Refusal) Message() string {
 	msg := chatmarkers.OrgPolicyRefusedLead + " " + refusalSentence(r.Reason)
 	if d := strings.TrimSpace(r.Detail); d != "" {
 		msg += " (" + strings.TrimSuffix(d, ".") + ")"
 	}
-	return chatmarkers.Wrap(chatmarkers.KindOrgPolicyRefused, r.Reason, msg)
+	return msg
 }
 
 // ErrorClass: a policy the org's admins set, not a server fault. It logs at

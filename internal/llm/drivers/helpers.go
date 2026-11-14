@@ -42,11 +42,25 @@ func buildAvailableDrivers(ctx context.Context, repo AvailabilityStore, scope Sc
 
 // buildAvailableDriversFor is buildAvailableDrivers with the membership resolver injected.
 func buildAvailableDriversFor(ctx context.Context, repo AvailabilityStore, members OrgMembership, scope Scope, build clientBuilder) (models.AvailableDrivers, error) {
+	// The run's org policy (org_policy.go), read first: an enforced
+	// automations section is total for an unattended run (§11.3, §11.6), so
+	// it replaces the automation's own stamp before the candidates are
+	// loaded, and narrows them below.
+	policy, err := orgPolicyFilterFor(ctx, scope)
+	if err != nil {
+		return models.AvailableDrivers{}, err
+	}
+	scope = policy.liftStamp(scope)
 	accounts, unavailable, err := configuredAccounts(ctx, repo, members, scope)
 	if err != nil {
 		return models.AvailableDrivers{}, err
 	}
+	// Before the availability reports, so a refused account is never even
+	// asked for its catalog.
+	accounts, refused := policy.accounts(accounts)
 	available := withAccountAvailability(ctx, accounts, build)
+	available.Availability = policy.availability(available.Availability)
+	available.PolicyRefused = refused
 	available.DriverRank = driverRank(available.Accounts)
 	for driverID, reason := range unavailable {
 		if _, ok := available.Accounts[driverID]; ok {

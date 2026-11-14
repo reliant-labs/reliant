@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase";
 import Button from "@/components/forge-ui/button";
 import { logger } from "../../lib/logger";
 import { ConnectorConsent } from "../Settings/ConnectorConsent";
+import { ForgeConnectorConsent } from "../Settings/ForgeConnectorConsent";
 
 /**
  * OAuth consent screen.
@@ -88,6 +89,10 @@ export function OAuthConsent() {
   const [submitting, setSubmitting] = useState<"approve" | "deny" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("identity");
+  // Which connector the application is linking: chosen on the connector step.
+  const [connectKind, setConnectKind] = useState<"workspace" | "forge">(
+    params.get("kind") === "forge" ? "forge" : "workspace"
+  );
 
   // Set when the OAuth approval succeeded but the browser did not follow the
   // redirect. The grant already exists at that point, so the user needs the
@@ -276,14 +281,47 @@ export function OAuthConsent() {
         )}
         {/* The client's stable id, not its display name — a binding keyed on
             something the client controls would follow a rename. */}
-        <ConnectorConsent
-          clientId={details.client.id}
-          clientName={details.client.name}
-          submitLabel={`Allow ${details.client.name}`}
-          busy={submitting === "approve"}
-          onCancel={() => finish("deny")}
-          onDone={() => finish("approve")}
-        />
+        {/* What the application connects to: a machine (the Reliant
+            Workspace connector, /mcp) or the account's forge monitoring and
+            releases (the Reliant Forge connector, /forge/mcp). The OAuth
+            request does not say which, so the person does; each records its
+            own binding, and either endpoint asks again if this was the
+            other. */}
+        <div className="max-w-2xl mx-auto mb-2 flex gap-2" role="radiogroup" aria-label="What to connect">
+          <Button
+            variant={connectKind === "workspace" ? "primary" : "outline"}
+            size="sm"
+            onClick={() => setConnectKind("workspace")}
+          >
+            A machine (Reliant Workspace)
+          </Button>
+          <Button
+            variant={connectKind === "forge" ? "primary" : "outline"}
+            size="sm"
+            onClick={() => setConnectKind("forge")}
+          >
+            Monitoring and releases (Reliant Forge)
+          </Button>
+        </div>
+        {connectKind === "forge" ? (
+          <ForgeConnectorConsent
+            clientId={details.client.id}
+            clientName={details.client.name}
+            submitLabel={`Allow ${details.client.name}`}
+            busy={submitting === "approve"}
+            onCancel={() => finish("deny")}
+            onDone={() => finish("approve")}
+          />
+        ) : (
+          <ConnectorConsent
+            clientId={details.client.id}
+            clientName={details.client.name}
+            submitLabel={`Allow ${details.client.name}`}
+            busy={submitting === "approve"}
+            onCancel={() => finish("deny")}
+            onDone={() => finish("approve")}
+          />
+        )}
       </div>
     );
   }

@@ -23,6 +23,7 @@ var orgPolicySwitchEnvs = map[orgpolicy.Point]string{
 	orgpolicy.PointApprovals:    "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS",
 	orgpolicy.PointMachines:     "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES",
 	orgpolicy.PointMCP:          "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP",
+	orgpolicy.PointProviders:    "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS",
 }
 
 // installedSwitches boots role's ServerProcessConfig from the environment as

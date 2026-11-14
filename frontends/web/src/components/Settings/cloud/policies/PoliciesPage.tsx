@@ -252,6 +252,8 @@ function OrgPoliciesPage({ org }: { org: MyOrg }) {
           onSaved={(record, changed) => {
             qc.setQueryData(orgPolicyKeys.policy(org.id), record);
             void qc.invalidateQueries({ queryKey: orgPolicyKeys.history(org.id) });
+            // The caps the usage is measured against may have changed.
+            void qc.invalidateQueries({ queryKey: orgPolicyKeys.usage(org.id) });
             load(record);
             setReviewing(false);
             toast.success(changed ? `Policies saved as version ${record.version}.` : "Nothing changed: these were the saved policies.");

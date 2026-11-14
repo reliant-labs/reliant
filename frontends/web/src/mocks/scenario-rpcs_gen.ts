@@ -255,6 +255,12 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ModelEndpointService/TestModelEndpoint"?: (req: import("@/gen/reliant/v1/model_endpoint_pb").TestModelEndpointRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/model_endpoint_pb").TestModelEndpointResponseSchema>>;
   }
 
+  // forge:section reliant.v1.OrgPolicyImpactService
+  // forge:hash=06ada6cb7220631ea45b913286c6d4bde076db65893427c6e4a6a00c96dab9b9
+  & {
+    "reliant.v1.OrgPolicyImpactService/GetPolicyImpact"?: (req: import("@/gen/reliant/v1/org_policy_impact_pb").GetPolicyImpactRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_policy_impact_pb").GetPolicyImpactResponseSchema>>;
+  }
+
   // forge:section reliant.v1.OrgProviderAccountService
   // forge:hash=b9cf7bde366109b7ecd93cf0a4f1605ccbc0e19b7bf2321351b1eed139105cc4
   & {

@@ -83,9 +83,13 @@ func EffectiveProviderPolicy(
 //
 // A read that fails leaves the policy at its default (wait): a settings hiccup
 // must not turn into a cross-provider spend.
-func (l *Launcher) injectProviderPolicy(ctx context.Context, userID, chatID string, inputs map[string]interface{}) {
+func (l *Launcher) injectProviderPolicy(ctx context.Context, userID string, forChat *db.Chat, inputs map[string]interface{}) {
 	if inputs == nil {
 		return
+	}
+	chatID := ""
+	if forChat != nil {
+		chatID = forChat.ID
 	}
 	var chat chatselection.ProviderPolicy
 	if chatID != "" {
@@ -109,7 +113,7 @@ func (l *Launcher) injectProviderPolicy(ctx context.Context, userID, chatID stri
 		defaults = ParseProviderPolicyDefaults(setting.Value)
 	}
 
-	policy := EffectiveProviderPolicy(inputs, chat, defaults, l.primaryDriver(ctx, userID, inputs))
+	policy := EffectiveProviderPolicy(inputs, chat, defaults, l.primaryDriver(ctx, AccountScope(userID, forChat), inputs))
 	if policy.IsZero() {
 		delete(inputs, v2.InputKeyProviderPolicy)
 		return
@@ -145,11 +149,7 @@ func (l *Launcher) ResolveProviderPolicy(ctx context.Context, userID string, cha
 			base[v2.InputKeyProviderPolicy] = value
 		}
 	}
-	chatID := ""
-	if chat != nil {
-		chatID = chat.ID
-	}
-	l.injectProviderPolicy(ctx, userID, chatID, base)
+	l.injectProviderPolicy(ctx, userID, chat, base)
 	return v2.ProviderPolicy(base)
 }
 
@@ -168,9 +168,9 @@ func (l *Launcher) RefreshProviderPolicy(ctx context.Context, userID string, cha
 }
 
 // primaryDriver is the provider a run starts on: the one its inputs prefer or
-// pin, else the one its model input resolves to for this user's providers. ""
-// when it cannot be told, in which case no Settings default applies.
-func (l *Launcher) primaryDriver(ctx context.Context, userID string, inputs map[string]interface{}) string {
+// pin, else the one its model input resolves to over accounts, the run's
+// scope. "" when it cannot be told, in which case no Settings default applies.
+func (l *Launcher) primaryDriver(ctx context.Context, accounts drivers.Scope, inputs map[string]interface{}) string {
 	if preferred := v2.ProviderPreference(inputs); len(preferred) > 0 {
 		return preferred[0]
 	}
@@ -178,7 +178,7 @@ func (l *Launcher) primaryDriver(ctx context.Context, userID string, inputs map[
 	if !ok || selector == nil {
 		return ""
 	}
-	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
+	available, err := drivers.LookupAvailableDrivers(ctx, accounts)
 	if err != nil {
 		return ""
 	}
@@ -209,13 +209,13 @@ func resolvedDriver(selector interface{}, available models.AvailableDrivers) str
 }
 
 // ResolvedModelAtDriver is the "<model>@<driver>" a model selector value
-// resolves to over the user's connected providers right now, "" when it
-// resolves to none (or the providers cannot be read).
-func (l *Launcher) ResolvedModelAtDriver(ctx context.Context, userID string, selector interface{}) string {
+// resolves to right now over the accounts chat's runs draw on, under its org's
+// policy, "" when it resolves to none (or the providers cannot be read).
+func (l *Launcher) ResolvedModelAtDriver(ctx context.Context, userID string, chat *db.Chat, selector interface{}) string {
 	if selector == nil {
 		return ""
 	}
-	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
+	available, err := drivers.LookupAvailableDrivers(ctx, AccountScope(userID, chat))
 	if err != nil {
 		return ""
 	}

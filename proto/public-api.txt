@@ -85,6 +85,7 @@ withhold MessageService           # not part of the first public surface
 withhold ModelEndpointService     # not part of the first public surface
 withhold OrgProviderAccountService # an org's AI accounts are administered by its admins as people (human_only)
 withhold OrgUsageService          # an org's admins read its usage in the app; not part of the first public surface
+withhold OrgPolicyImpactService  # a proposed org policy is previewed by its admins as people (human_only)
 withhold PackageCommandsService   # daemon-facing wiring
 withhold PlanService              # not part of the first public surface
 withhold PresetService            # not part of the first public surface

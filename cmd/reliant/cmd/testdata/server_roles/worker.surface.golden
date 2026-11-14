@@ -47,6 +47,7 @@ RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS kind=string flag="" default="audit" re
 RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
 RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
 RELIANT_ORGS_POLICY_ENFORCEMENT_MCP kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
+RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
 RELIANT_SLACK_SIGNING_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 RELIANT_STORAGE_REAPER kind=string flag="" default="auto" required=false optional=false sensitive=false allowed=[auto on off] aliases=[]
 RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL kind=string flag="" default="10m" required=false optional=false sensitive=false allowed=[] aliases=[]

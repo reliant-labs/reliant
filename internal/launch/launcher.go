@@ -396,7 +396,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	}
 
 	// Build and validate workflow inputs BEFORE creating chat
-	initialData, err := l.buildInputs(ctx, userID, chat, workflowName, spec.CatalogPin, spec.Presets, spec.Params)
+	initialData, err := l.buildInputs(ctx, userID, chat, launchAccountScope(spec, userID, chat), workflowName, spec.CatalogPin, spec.Presets, spec.Params)
 	if err != nil {
 		return nil, err
 	}
@@ -762,7 +762,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	}
 	{
 		_, presets, _ := effectiveStart(chat, spec)
-		inputs, err := l.buildInputs(ctx, userID, &checked, workflowName, spec.CatalogPin, presets, spec.Params)
+		inputs, err := l.buildInputs(ctx, userID, &checked, launchAccountScope(spec, userID, &checked), workflowName, spec.CatalogPin, presets, spec.Params)
 		if err != nil {
 			return nil, err
 		}
@@ -962,7 +962,7 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 	if l.pinner != nil {
 		l.pinner.Pin(ctx, chat)
 	}
-	initialData, err := l.buildInputs(ctx, spec.OwnerUserID, chat, workflowName, spec.CatalogPin, chat.SelectedPresets, params)
+	initialData, err := l.buildInputs(ctx, spec.OwnerUserID, chat, launchAccountScope(spec, spec.OwnerUserID, chat), workflowName, spec.CatalogPin, chat.SelectedPresets, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1206,10 +1206,13 @@ func newEventRow(ev Event, userID, chatID, workflowName string, worktreeID *stri
 //
 // pin is the catalog snapshot the launch was decided against (Spec.CatalogPin),
 // "" for the live catalog: the presets and the input schema are read from it.
+// accounts is the run's scope (launchAccountScope): model inputs are checked in
+// its accounts and under its org's policy.
 func (l *Launcher) buildInputs(
 	ctx context.Context,
 	userID string,
 	chat *db.Chat,
+	accounts drivers.Scope,
 	workflowName, pin string,
 	presets map[string]string,
 	params map[string]*structpb.Value,
@@ -1220,9 +1223,14 @@ func (l *Launcher) buildInputs(
 	}
 
 	// Validate resolved inputs (catches empty model after defaults resolution)
-	if validationErrors := l.validateChatWorkflowInputsAt(ctx, userID, chat, workflowName, pin, initialData); len(validationErrors) > 0 {
+	if validationErrors := l.validateChatWorkflowInputsAt(ctx, userID, chat, accounts, workflowName, pin, initialData, false); len(validationErrors) > 0 {
 		errMsgs := make([]string, len(validationErrors))
 		for i, e := range validationErrors {
+			if refused, ok := PolicyRefusal(e); ok {
+				// The org's policy refused a model input: its verdict, with
+				// its reason, not a malformed input.
+				return nil, refused
+			}
 			if errors.Is(e, drivers.ErrDriverLookupFailed) {
 				// Could not read the user's provider settings: a store
 				// problem, not a verdict on the inputs.

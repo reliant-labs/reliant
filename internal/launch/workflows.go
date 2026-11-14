@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
@@ -168,7 +169,7 @@ func (l *Launcher) buildChatWorkflowInputsAt(
 	if err != nil {
 		return nil, err
 	}
-	l.injectProviderPolicy(ctx, userID, chat.ID, inputs)
+	l.injectProviderPolicy(ctx, userID, chat, inputs)
 	applyChatModeFloor(ctx, chat, inputs)
 	return inputs, nil
 }
@@ -534,13 +535,21 @@ func (l *Launcher) loadWorkflowInputs(ctx context.Context, scope Scope, workflow
 // chat decides where the definition is read from and with which precedence
 // (chatScope): its machine's catalog, project first for an automation's run,
 // as its runs read it.
+//
+// It is a person's send: model inputs are checked in the chat's accounts and
+// org policy as a person's run uses them (AccountScope), and a model the
+// org's policy refuses where the send moves it onto an allowed provider
+// (SubstituteUnservableModels) is left to that move.
 func (l *Launcher) ValidateChatWorkflowInputs(ctx context.Context, userID string, chat *db.Chat, workflowName string, inputs map[string]interface{}) []error {
-	return l.validateChatWorkflowInputsAt(ctx, userID, chat, workflowName, "", inputs)
+	return l.validateChatWorkflowInputsAt(ctx, userID, chat, AccountScope(userID, chat), workflowName, "", inputs, true)
 }
 
 // validateChatWorkflowInputsAt is ValidateChatWorkflowInputs against the
-// catalog snapshot pin ("" for the live catalog).
-func (l *Launcher) validateChatWorkflowInputsAt(ctx context.Context, userID string, chat *db.Chat, workflowName, pin string, inputs map[string]interface{}) []error {
+// catalog snapshot pin ("" for the live catalog), with model inputs checked
+// in accounts, the scope of the run (AccountScope, launchAccountScope). A
+// model input the org's policy refuses is a *PolicyRefusedError, unless send
+// and the send moves it onto a provider the policy allows.
+func (l *Launcher) validateChatWorkflowInputsAt(ctx context.Context, userID string, chat *db.Chat, accounts drivers.Scope, workflowName, pin string, inputs map[string]interface{}, send bool) []error {
 	// Validate against the definition that will run: the one workflowsource
 	// resolves in the chat's scope.
 	//
@@ -613,10 +622,19 @@ func (l *Launcher) validateChatWorkflowInputsAt(ctx context.Context, userID stri
 	// explained error in the chat (models.ProviderUnavailableError.Explain).
 	modelSelectors := ExtractModelSelectors(finalInputs, wf.GetInputs(), "")
 	for inputPath, selector := range modelSelectors {
-		if err := drivers.ValidateModelSelector(ctx, drivers.PersonalScope(userID), selector); err != nil {
+		if err := drivers.ValidateModelSelector(ctx, accounts, selector); err != nil {
 			if errors.Is(err, drivererrors.ErrNoServableProvider) {
 				logging.InfoContext(ctx, "Model input has no servable provider now; leaving it to the run to explain",
 					"input", inputPath, "workflow", workflowName, "reason", err.Error())
+				continue
+			}
+			if refusal, ok := orgpolicy.RefusalOf(err); ok {
+				if send && l.policyAllowsSubstitute(ctx, accounts, selector) {
+					logging.InfoContext(ctx, "Model input is refused by the org's policy; the send moves it onto an allowed provider",
+						"input", inputPath, "workflow", workflowName, "orgID", accounts.OrgID, "reason", refusal.Reason)
+					continue
+				}
+				errs = append(errs, &PolicyRefusedError{Input: inputPath, Refusal: refusal})
 				continue
 			}
 			errs = append(errs, fmt.Errorf("input '%s': %w", inputPath, err))
@@ -653,7 +671,7 @@ func (l *Launcher) SubstituteUnservableModels(ctx context.Context, userID string
 	if err != nil {
 		return nil
 	}
-	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
+	available, err := drivers.LookupAvailableDrivers(ctx, AccountScope(userID, chat))
 	if err != nil {
 		// Validation reports the failed settings read.
 		return nil
