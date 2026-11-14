@@ -106,6 +106,22 @@ service OrgPolicyService {
       activity: {none: "reads only: the caller's spend against the org's caps"}
     };
   }
+
+  // ListOrgPolicyDenials returns what the org's policies refused, and what
+  // rules in audit mode would have refused, per UTC day (§3.4): "blocked 31
+  // calls this week by the model policy, 9 would have been blocked by the
+  // audit-mode rule". Admin or owner. Counts reach it within a minute; the
+  // last moments before a gateway process exits may be missing (best
+  // effort; the metric org_policy_denials_total is the exact count).
+  //
+  // forge:custom — an aggregate read, not the CRUD of a table.
+  rpc ListOrgPolicyDenials(ListOrgPolicyDenialsRequest) returns (ListOrgPolicyDenialsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      activity: {none: "reads only: the org's policy denial counts"}
+    };
+  }
 }
 
 // OrgPolicyRecord is one version of an org's policy document.
@@ -226,4 +242,38 @@ message GetMyPolicyUsageResponse {
   // org is the org's spend against the org cap, counted as applies_to says.
   PolicySpendUsage org = 5;
   SpendAppliesTo applies_to = 6;
+}
+
+message ListOrgPolicyDenialsRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // days is how many UTC days back to read, today included; 0 means 7.
+  int32 days = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 90
+  }];
+}
+
+// OrgPolicyDenialCount is one day's count of one policy's refusals for one
+// reason, caller and outcome.
+message OrgPolicyDenialCount {
+  // day is the UTC day, YYYY-MM-DD.
+  string day = 1;
+  // policy is the section: "models", "spend", ...
+  string policy = 2;
+  // reason is the refusal reason, e.g. "model_not_allowed".
+  string reason = 3;
+  // user_id is the member the call acted as; empty for a hosted app's
+  // environment key.
+  string user_id = 4;
+  // outcome is "refused" (an enforced rule) or "audited" (a rule in audit
+  // mode: counted, nothing refused).
+  string outcome = 5;
+  int64 count = 6;
+}
+
+message ListOrgPolicyDenialsResponse {
+  // counts are newest day first.
+  repeated OrgPolicyDenialCount counts = 1;
+  int64 refused_total = 2;
+  int64 audited_total = 3;
 }

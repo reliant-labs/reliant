@@ -37,7 +37,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/org_policy/v1/org_policy.proto.
  */
 export const file_services_org_policy_v1_org_policy: GenFile = /*@__PURE__*/
-  fileDesc("CidzZXJ2aWNlcy9vcmdfcG9saWN5L3YxL29yZ19wb2xpY3kucHJvdG8SD2NvbnRyb2xwbGFuZS52MSLEAQoPT3JnUG9saWN5UmVjb3JkEg4KBm9yZ19pZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgDEioKBnBvbGljeRgDIAEoCzIaLmNvbnRyb2xwbGFuZS52MS5PcmdQb2xpY3kSLgoKdXBkYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGgoSdXBkYXRlZF9ieV91c2VyX2lkGAUgASgJEhgKEHVwZGF0ZWRfYnlfZW1haWwYBiABKAkiLgoTR2V0T3JnUG9saWN5UmVxdWVzdBIXCgZvcmdfaWQYASABKAlCB7pIBHICEAEiSAoUR2V0T3JnUG9saWN5UmVzcG9uc2USMAoGcG9saWN5GAEgASgLMiAuY29udHJvbHBsYW5lLnYxLk9yZ1BvbGljeVJlY29yZCKAAQoWVXBkYXRlT3JnUG9saWN5UmVxdWVzdBIXCgZvcmdfaWQYASABKAlCB7pIBHICEAESKgoGcG9saWN5GAIgASgLMhouY29udHJvbHBsYW5lLnYxLk9yZ1BvbGljeRIhChBleHBlY3RlZF92ZXJzaW9uGAMgASgDQge6SAQiAigAIlwKF1VwZGF0ZU9yZ1BvbGljeVJlc3BvbnNlEjAKBnBvbGljeRgBIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5PcmdQb2xpY3lSZWNvcmQSDwoHY2hhbmdlZBgCIAEoCCJeChdQcmV2aWV3T3JnUG9saWN5UmVxdWVzdBIXCgZvcmdfaWQYASABKAlCB7pIBHICEAESKgoGcG9saWN5GAIgASgLMhouY29udHJvbHBsYW5lLnYxLk9yZ1BvbGljeSI0ChJPcmdQb2xpY3lWaW9sYXRpb24SDQoFZmllbGQYASABKAkSDwoHbWVzc2FnZRgCIAEoCSJdChRPcmdQb2xpY3lGaWVsZENoYW5nZRIQCghyZXNvdXJjZRgBIAEoCRINCgVmaWVsZBgCIAEoCRIRCglvbGRfdmFsdWUYAyABKAkSEQoJbmV3X3ZhbHVlGAQgASgJIsUBChhQcmV2aWV3T3JnUG9saWN5UmVzcG9uc2USFwoPY3VycmVudF92ZXJzaW9uGAEgASgDEg0KBXZhbGlkGAIgASgIEjcKCnZpb2xhdGlvbnMYAyADKAsyIy5jb250cm9scGxhbmUudjEuT3JnUG9saWN5VmlvbGF0aW9uEjYKB2NoYW5nZXMYBCADKAsyJS5jb250cm9scGxhbmUudjEuT3JnUG9saWN5RmllbGRDaGFuZ2USEAoId2FybmluZ3MYBSADKAkiMgoXR2V0TXlQb2xpY3lVc2FnZVJlcXVlc3QSFwoGb3JnX2lkGAEgASgJQge6SARyAhABIsgBChBQb2xpY3lTcGVuZFVzYWdlEiYKA2NhcBgBIAEoCzIZLmNvbnRyb2xwbGFuZS52MS5TcGVuZENhcBIRCgl1bmxpbWl0ZWQYAiABKAgSFwoPc3BlbnRfdXNkX25hbm9zGAMgASgDEjAKDHBlcmlvZF9zdGFydBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcGVyaW9kX2VuZBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiigIKGEdldE15UG9saWN5VXNhZ2VSZXNwb25zZRIWCg5wb2xpY3lfdmVyc2lvbhgBIAEoAxIsCgRtb2RlGAIgASgOMh4uY29udHJvbHBsYW5lLnYxLk9yZ1BvbGljeU1vZGUSEAoIZW5mb3JjZWQYAyABKAgSMQoGbWVtYmVyGAQgASgLMiEuY29udHJvbHBsYW5lLnYxLlBvbGljeVNwZW5kVXNhZ2USLgoDb3JnGAUgASgLMiEuY29udHJvbHBsYW5lLnYxLlBvbGljeVNwZW5kVXNhZ2USMwoKYXBwbGllc190bxgGIAEoDjIfLmNvbnRyb2xwbGFuZS52MS5TcGVuZEFwcGxpZXNUbzKfBgoQT3JnUG9saWN5U2VydmljZRJlCgxHZXRPcmdQb2xpY3kSJC5jb250cm9scGxhbmUudjEuR2V0T3JnUG9saWN5UmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5HZXRPcmdQb2xpY3lSZXNwb25zZSIIorsYBAgBGAESqwEKD1VwZGF0ZU9yZ1BvbGljeRInLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVPcmdQb2xpY3lSZXF1ZXN0GiguY29udHJvbHBsYW5lLnYxLlVwZGF0ZU9yZ1BvbGljeVJlc3BvbnNlIkWiuxhBCAE6PQoGdXBkYXRlEhAKBnBvbGljeRIGb3JnX2lkIgZvcmdfaWQqF3Jlc3BvbnNlLnBvbGljeS52ZXJzaW9uMAISuwEKEFByZXZpZXdPcmdQb2xpY3kSKC5jb250cm9scGxhbmUudjEuUHJldmlld09yZ1BvbGljeVJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuUHJldmlld09yZ1BvbGljeVJlc3BvbnNlIlKiuxhOCAEYATpIOkZyZWFkcyBvbmx5OiB2YWxpZGF0ZXMgYW5kIGNvbXBhcmVzIGEgcHJvcG9zZWQgZG9jdW1lbnQsIHdyaXRlcyBub3RoaW5nEqoBChBHZXRNeVBvbGljeVVzYWdlEiguY29udHJvbHBsYW5lLnYxLkdldE15UG9saWN5VXNhZ2VSZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLkdldE15UG9saWN5VXNhZ2VSZXNwb25zZSJBorsYPQgBGAE6Nzo1cmVhZHMgb25seTogdGhlIGNhbGxlcidzIHNwZW5kIGFnYWluc3QgdGhlIG9yZydzIGNhcHMaigGCtRiFAQoQT3JnUG9saWN5U2VydmljZRIFMS4wLjAaakFuIG9yZydzIGFkbWluIHBvbGljaWVzOiB0aGUgbGltaXRzIG9uIG1vZGVscywgcHJvdmlkZXJzLCBzcGVuZCwgaW50ZWdyYXRpb25zLCBNQ1AsIGFwcHJvdmFscyBhbmQgbWFjaGluZXNC2gEKE2NvbS5jb250cm9scGxhbmUudjFCDk9yZ1BvbGljeVByb3RvUAFaVmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9vcmdfcG9saWN5L3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_controlplane_v1_org_policy, file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CidzZXJ2aWNlcy9vcmdfcG9saWN5L3YxL29yZ19wb2xpY3kucHJvdG8SD2NvbnRyb2xwbGFuZS52MSLEAQoPT3JnUG9saWN5UmVjb3JkEg4KBm9yZ19pZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgDEioKBnBvbGljeRgDIAEoCzIaLmNvbnRyb2xwbGFuZS52MS5PcmdQb2xpY3kSLgoKdXBkYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGgoSdXBkYXRlZF9ieV91c2VyX2lkGAUgASgJEhgKEHVwZGF0ZWRfYnlfZW1haWwYBiABKAkiLgoTR2V0T3JnUG9saWN5UmVxdWVzdBIXCgZvcmdfaWQYASABKAlCB7pIBHICEAEiSAoUR2V0T3JnUG9saWN5UmVzcG9uc2USMAoGcG9saWN5GAEgASgLMiAuY29udHJvbHBsYW5lLnYxLk9yZ1BvbGljeVJlY29yZCKAAQoWVXBkYXRlT3JnUG9saWN5UmVxdWVzdBIXCgZvcmdfaWQYASABKAlCB7pIBHICEAESKgoGcG9saWN5GAIgASgLMhouY29udHJvbHBsYW5lLnYxLk9yZ1BvbGljeRIhChBleHBlY3RlZF92ZXJzaW9uGAMgASgDQge6SAQiAigAIlwKF1VwZGF0ZU9yZ1BvbGljeVJlc3BvbnNlEjAKBnBvbGljeRgBIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5PcmdQb2xpY3lSZWNvcmQSDwoHY2hhbmdlZBgCIAEoCCJeChdQcmV2aWV3T3JnUG9saWN5UmVxdWVzdBIXCgZvcmdfaWQYASABKAlCB7pIBHICEAESKgoGcG9saWN5GAIgASgLMhouY29udHJvbHBsYW5lLnYxLk9yZ1BvbGljeSI0ChJPcmdQb2xpY3lWaW9sYXRpb24SDQoFZmllbGQYASABKAkSDwoHbWVzc2FnZRgCIAEoCSJdChRPcmdQb2xpY3lGaWVsZENoYW5nZRIQCghyZXNvdXJjZRgBIAEoCRINCgVmaWVsZBgCIAEoCRIRCglvbGRfdmFsdWUYAyABKAkSEQoJbmV3X3ZhbHVlGAQgASgJIsUBChhQcmV2aWV3T3JnUG9saWN5UmVzcG9uc2USFwoPY3VycmVudF92ZXJzaW9uGAEgASgDEg0KBXZhbGlkGAIgASgIEjcKCnZpb2xhdGlvbnMYAyADKAsyIy5jb250cm9scGxhbmUudjEuT3JnUG9saWN5VmlvbGF0aW9uEjYKB2NoYW5nZXMYBCADKAsyJS5jb250cm9scGxhbmUudjEuT3JnUG9saWN5RmllbGRDaGFuZ2USEAoId2FybmluZ3MYBSADKAkiMgoXR2V0TXlQb2xpY3lVc2FnZVJlcXVlc3QSFwoGb3JnX2lkGAEgASgJQge6SARyAhABIsgBChBQb2xpY3lTcGVuZFVzYWdlEiYKA2NhcBgBIAEoCzIZLmNvbnRyb2xwbGFuZS52MS5TcGVuZENhcBIRCgl1bmxpbWl0ZWQYAiABKAgSFwoPc3BlbnRfdXNkX25hbm9zGAMgASgDEjAKDHBlcmlvZF9zdGFydBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcGVyaW9kX2VuZBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiigIKGEdldE15UG9saWN5VXNhZ2VSZXNwb25zZRIWCg5wb2xpY3lfdmVyc2lvbhgBIAEoAxIsCgRtb2RlGAIgASgOMh4uY29udHJvbHBsYW5lLnYxLk9yZ1BvbGljeU1vZGUSEAoIZW5mb3JjZWQYAyABKAgSMQoGbWVtYmVyGAQgASgLMiEuY29udHJvbHBsYW5lLnYxLlBvbGljeVNwZW5kVXNhZ2USLgoDb3JnGAUgASgLMiEuY29udHJvbHBsYW5lLnYxLlBvbGljeVNwZW5kVXNhZ2USMwoKYXBwbGllc190bxgGIAEoDjIfLmNvbnRyb2xwbGFuZS52MS5TcGVuZEFwcGxpZXNUbyJPChtMaXN0T3JnUG9saWN5RGVuaWFsc1JlcXVlc3QSFwoGb3JnX2lkGAEgASgJQge6SARyAhABEhcKBGRheXMYAiABKAVCCbpIBhoEGFooACJ0ChRPcmdQb2xpY3lEZW5pYWxDb3VudBILCgNkYXkYASABKAkSDgoGcG9saWN5GAIgASgJEg4KBnJlYXNvbhgDIAEoCRIPCgd1c2VyX2lkGAQgASgJEg8KB291dGNvbWUYBSABKAkSDQoFY291bnQYBiABKAMigwEKHExpc3RPcmdQb2xpY3lEZW5pYWxzUmVzcG9uc2USNQoGY291bnRzGAEgAygLMiUuY29udHJvbHBsYW5lLnYxLk9yZ1BvbGljeURlbmlhbENvdW50EhUKDXJlZnVzZWRfdG90YWwYAiABKAMSFQoNYXVkaXRlZF90b3RhbBgDIAEoAzLNBwoQT3JnUG9saWN5U2VydmljZRJlCgxHZXRPcmdQb2xpY3kSJC5jb250cm9scGxhbmUudjEuR2V0T3JnUG9saWN5UmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5HZXRPcmdQb2xpY3lSZXNwb25zZSIIorsYBAgBGAESqwEKD1VwZGF0ZU9yZ1BvbGljeRInLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVPcmdQb2xpY3lSZXF1ZXN0GiguY29udHJvbHBsYW5lLnYxLlVwZGF0ZU9yZ1BvbGljeVJlc3BvbnNlIkWiuxhBCAE6PQoGdXBkYXRlEhAKBnBvbGljeRIGb3JnX2lkIgZvcmdfaWQqF3Jlc3BvbnNlLnBvbGljeS52ZXJzaW9uMAISuwEKEFByZXZpZXdPcmdQb2xpY3kSKC5jb250cm9scGxhbmUudjEuUHJldmlld09yZ1BvbGljeVJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuUHJldmlld09yZ1BvbGljeVJlc3BvbnNlIlKiuxhOCAEYATpIOkZyZWFkcyBvbmx5OiB2YWxpZGF0ZXMgYW5kIGNvbXBhcmVzIGEgcHJvcG9zZWQgZG9jdW1lbnQsIHdyaXRlcyBub3RoaW5nEqoBChBHZXRNeVBvbGljeVVzYWdlEiguY29udHJvbHBsYW5lLnYxLkdldE15UG9saWN5VXNhZ2VSZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLkdldE15UG9saWN5VXNhZ2VSZXNwb25zZSJBorsYPQgBGAE6Nzo1cmVhZHMgb25seTogdGhlIGNhbGxlcidzIHNwZW5kIGFnYWluc3QgdGhlIG9yZydzIGNhcHMSqwEKFExpc3RPcmdQb2xpY3lEZW5pYWxzEiwuY29udHJvbHBsYW5lLnYxLkxpc3RPcmdQb2xpY3lEZW5pYWxzUmVxdWVzdBotLmNvbnRyb2xwbGFuZS52MS5MaXN0T3JnUG9saWN5RGVuaWFsc1Jlc3BvbnNlIjaiuxgyCAEYATosOipyZWFkcyBvbmx5OiB0aGUgb3JnJ3MgcG9saWN5IGRlbmlhbCBjb3VudHMaigGCtRiFAQoQT3JnUG9saWN5U2VydmljZRIFMS4wLjAaakFuIG9yZydzIGFkbWluIHBvbGljaWVzOiB0aGUgbGltaXRzIG9uIG1vZGVscywgcHJvdmlkZXJzLCBzcGVuZCwgaW50ZWdyYXRpb25zLCBNQ1AsIGFwcHJvdmFscyBhbmQgbWFjaGluZXNC2gEKE2NvbS5jb250cm9scGxhbmUudjFCDk9yZ1BvbGljeVByb3RvUAFaVmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9vcmdfcG9saWN5L3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_controlplane_v1_org_policy, file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * OrgPolicyRecord is one version of an org's policy document.
@@ -446,6 +446,116 @@ export const GetMyPolicyUsageResponseSchema: GenMessage<GetMyPolicyUsageResponse
   messageDesc(file_services_org_policy_v1_org_policy, 11);
 
 /**
+ * @generated from message controlplane.v1.ListOrgPolicyDenialsRequest
+ */
+export type ListOrgPolicyDenialsRequest = Message<"controlplane.v1.ListOrgPolicyDenialsRequest"> & {
+  /**
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+
+  /**
+   * days is how many UTC days back to read, today included; 0 means 7.
+   *
+   * @generated from field: int32 days = 2;
+   */
+  days: number;
+};
+
+/**
+ * Describes the message controlplane.v1.ListOrgPolicyDenialsRequest.
+ * Use `create(ListOrgPolicyDenialsRequestSchema)` to create a new message.
+ */
+export const ListOrgPolicyDenialsRequestSchema: GenMessage<ListOrgPolicyDenialsRequest> = /*@__PURE__*/
+  messageDesc(file_services_org_policy_v1_org_policy, 12);
+
+/**
+ * OrgPolicyDenialCount is one day's count of one policy's refusals for one
+ * reason, caller and outcome.
+ *
+ * @generated from message controlplane.v1.OrgPolicyDenialCount
+ */
+export type OrgPolicyDenialCount = Message<"controlplane.v1.OrgPolicyDenialCount"> & {
+  /**
+   * day is the UTC day, YYYY-MM-DD.
+   *
+   * @generated from field: string day = 1;
+   */
+  day: string;
+
+  /**
+   * policy is the section: "models", "spend", ...
+   *
+   * @generated from field: string policy = 2;
+   */
+  policy: string;
+
+  /**
+   * reason is the refusal reason, e.g. "model_not_allowed".
+   *
+   * @generated from field: string reason = 3;
+   */
+  reason: string;
+
+  /**
+   * user_id is the member the call acted as; empty for a hosted app's
+   * environment key.
+   *
+   * @generated from field: string user_id = 4;
+   */
+  userId: string;
+
+  /**
+   * outcome is "refused" (an enforced rule) or "audited" (a rule in audit
+   * mode: counted, nothing refused).
+   *
+   * @generated from field: string outcome = 5;
+   */
+  outcome: string;
+
+  /**
+   * @generated from field: int64 count = 6;
+   */
+  count: bigint;
+};
+
+/**
+ * Describes the message controlplane.v1.OrgPolicyDenialCount.
+ * Use `create(OrgPolicyDenialCountSchema)` to create a new message.
+ */
+export const OrgPolicyDenialCountSchema: GenMessage<OrgPolicyDenialCount> = /*@__PURE__*/
+  messageDesc(file_services_org_policy_v1_org_policy, 13);
+
+/**
+ * @generated from message controlplane.v1.ListOrgPolicyDenialsResponse
+ */
+export type ListOrgPolicyDenialsResponse = Message<"controlplane.v1.ListOrgPolicyDenialsResponse"> & {
+  /**
+   * counts are newest day first.
+   *
+   * @generated from field: repeated controlplane.v1.OrgPolicyDenialCount counts = 1;
+   */
+  counts: OrgPolicyDenialCount[];
+
+  /**
+   * @generated from field: int64 refused_total = 2;
+   */
+  refusedTotal: bigint;
+
+  /**
+   * @generated from field: int64 audited_total = 3;
+   */
+  auditedTotal: bigint;
+};
+
+/**
+ * Describes the message controlplane.v1.ListOrgPolicyDenialsResponse.
+ * Use `create(ListOrgPolicyDenialsResponseSchema)` to create a new message.
+ */
+export const ListOrgPolicyDenialsResponseSchema: GenMessage<ListOrgPolicyDenialsResponse> = /*@__PURE__*/
+  messageDesc(file_services_org_policy_v1_org_policy, 14);
+
+/**
  * OrgPolicyService reads, previews and edits an org's policy document.
  *
  * @generated from service controlplane.v1.OrgPolicyService
@@ -518,6 +628,23 @@ export const OrgPolicyService: GenService<{
     methodKind: "unary";
     input: typeof GetMyPolicyUsageRequestSchema;
     output: typeof GetMyPolicyUsageResponseSchema;
+  },
+  /**
+   * ListOrgPolicyDenials returns what the org's policies refused, and what
+   * rules in audit mode would have refused, per UTC day (§3.4): "blocked 31
+   * calls this week by the model policy, 9 would have been blocked by the
+   * audit-mode rule". Admin or owner. Counts reach it within a minute; the
+   * last moments before a gateway process exits may be missing (best
+   * effort; the metric org_policy_denials_total is the exact count).
+   *
+   * forge:custom — an aggregate read, not the CRUD of a table.
+   *
+   * @generated from rpc controlplane.v1.OrgPolicyService.ListOrgPolicyDenials
+   */
+  listOrgPolicyDenials: {
+    methodKind: "unary";
+    input: typeof ListOrgPolicyDenialsRequestSchema;
+    output: typeof ListOrgPolicyDenialsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_services_org_policy_v1_org_policy, 0);
