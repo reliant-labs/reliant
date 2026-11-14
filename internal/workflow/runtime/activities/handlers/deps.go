@@ -301,6 +301,22 @@ type ExecuteToolsStore interface {
 	db.ToolCallStatusStore
 	// Installs is each machine's checkout of the project (resolveCallCheckout).
 	daemonplacement.Installs
+	// AttendanceStore decides who is behind a tool call's chat, for the run
+	// scope a tool that spends a provider resolves in (runScope).
+	AttendanceStore
+	// RunFundingStore is what its person said about spending their own
+	// accounts in the chat's org (runFunding).
+	RunFundingStore
+}
+
+// RunFundingStore is what reading who may pay for a tool call of a chat in
+// an org needs (runFunding): the person's per-org setting and the chat's own
+// order. *db.Repo satisfies it.
+type RunFundingStore interface {
+	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
+	// ChatFundingOrder is the order a person chose for the chat; "" when it
+	// inherits.
+	ChatFundingOrder(ctx context.Context, chatID string) (string, error)
 }
 
 // GenerateTitleStore is what GenerateTitleActivity reads and writes.

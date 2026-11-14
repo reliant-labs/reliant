@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/observe"
+
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 const managedDriverID = "reliant"
@@ -156,7 +158,7 @@ func (c *ManagedClient) do(ctx context.Context, method, path string, body []byte
 }
 
 // managedHTTPError classifies a non-2xx response.
-func managedHTTPError(status int, raw []byte) *Error {
+func managedHTTPError(status int, header http.Header, raw []byte) *Error {
 	var parsed managedErrorBody
 	_ = json.Unmarshal(raw, &parsed)
 	message := strings.TrimSpace(parsed.Error.Message)
@@ -164,6 +166,13 @@ func managedHTTPError(status int, raw []byte) *Error {
 		message = strings.TrimSpace(string(raw))
 	}
 	code := fmt.Sprint(parsed.Error.Code)
+	// An org policy's refusal (403 with x-forge-error-reason, org-policies
+	// §5.1) is checked first: it is a verdict, never retried and never read
+	// as a dead key or an empty wallet.
+	if reason := orgpolicy.GatewayRefusalReason(status, header, code); reason != "" {
+		refusal := &orgpolicy.Refusal{Reason: reason, Detail: strings.TrimSpace(parsed.Error.Message)}
+		return &Error{Kind: KindPolicyRefused, Message: refusal.Message(), Refusal: refusal}
+	}
 	if parsed.Error.Type == "insufficient_quota" || code == "insufficient_quota" || status == http.StatusPaymentRequired {
 		return &Error{Kind: KindQuota, Message: creditExhaustedMessage}
 	}
@@ -198,10 +207,10 @@ func (c *ManagedClient) Submit(ctx context.Context, request Request) (Job, error
 		defer resp.Body.Close()
 		raw, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode/100 != 2 {
-			classified := managedHTTPError(resp.StatusCode, raw)
+			classified := managedHTTPError(resp.StatusCode, resp.Header, raw)
 			status := resp.StatusCode
-			if classified.Message == creditExhaustedMessage {
-				status = 0 // terminal: never retry an empty wallet
+			if classified.Message == creditExhaustedMessage || classified.Kind == KindPolicyRefused {
+				status = 0 // terminal: never retry an empty wallet or a policy's refusal
 			}
 			return Job{}, status, classified
 		}
@@ -226,6 +235,13 @@ func (c *ManagedClient) Poll(ctx context.Context, job Job) (*Response, bool, err
 		return nil, false, &Error{Kind: KindExpired, Message: fmt.Sprintf("video job %s is no longer available at the gateway", job.ID), Job: job}
 	}
 	if resp.StatusCode/100 != 2 {
+		// A policy's refusal (a spend cap reached mid-render) is final for
+		// this wait, and keeps the job: the render may still be fetched once
+		// the policy allows it.
+		if classified := managedHTTPError(resp.StatusCode, resp.Header, raw); classified.Kind == KindPolicyRefused {
+			classified.Job = job
+			return nil, false, classified
+		}
 		// Deliberately unclassified: Wait tolerates a few transient failures.
 		return nil, false, fmt.Errorf("polling video job: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}

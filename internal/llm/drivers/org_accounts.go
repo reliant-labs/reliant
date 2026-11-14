@@ -72,6 +72,9 @@ type memberFacts struct {
 	m      accesstokenclient.OrgMembership
 	// src is who answered, for the one follow-up question (DefaultOrg).
 	src OrgMembership
+	// undecided is an outage: nobody could say whether the person is a
+	// member, so what the org gives them is unknown (not "nothing").
+	undecided bool
 }
 
 // orgMemberFacts asks whether scope's person is a live member of scope's org.
@@ -85,7 +88,7 @@ func orgMemberFacts(ctx context.Context, src OrgMembership, scope Scope) memberF
 		// seats are left out; their own accounts still serve.
 		logging.WarnContext(ctx, "Could not read org membership; leaving the org's accounts and seats out of this resolution",
 			"user_id", scope.UserID, "org_id", scope.OrgID, "error", err)
-		return memberFacts{}
+		return memberFacts{undecided: true}
 	}
 	if !ok || !m.Member || m.OrgID != scope.OrgID {
 		return memberFacts{src: src}
@@ -148,21 +151,23 @@ func personalCandidate(ctx context.Context, scope Scope, facts memberFacts, acct
 // orgAccountCandidates loads the scope org's own accounts the person may use
 // (§3.3): live member, and the account's audience admits them. The SQL names
 // the org (core.OrgAccountOwner), so no other org's account can come back.
-func orgAccountCandidates(ctx context.Context, repo OrgAccountStore, scope Scope, facts memberFacts) []candidate {
+// undecided reports that a read failed (the org's accounts, or the person's
+// grants), so the accounts the org gives them are unknown, not none.
+func orgAccountCandidates(ctx context.Context, repo OrgAccountStore, scope Scope, facts memberFacts) (cands []candidate, undecided bool) {
 	if scope.Personal() || !facts.member {
-		return nil
+		return nil, false
 	}
 	owner := core.OrgAccountOwner(scope.OrgID)
 	rows, err := repo.ListOwnedProviderAccountsWithSecrets(ctx, owner)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not read the org's provider accounts; resolving without them",
 			"user_id", scope.UserID, "org_id", scope.OrgID, "error", err)
-		return nil
+		return nil, true
 	}
 	if len(rows) == 0 {
-		return nil
+		return nil, false
 	}
-	var grants map[string]bool
+	var grants grantRead
 	limits, err := repo.ListOwnedAccountLimits(ctx, owner)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not read the org accounts' limit state; treating them as unlimited",
@@ -184,23 +189,32 @@ func orgAccountCandidates(ctx context.Context, repo OrgAccountStore, scope Scope
 		}
 		out = append(out, c)
 	}
-	return out
+	return out, grants.failed
+}
+
+// grantRead is the person's grants of the org's accounts, read once, on the
+// first selected-access account: ids, and whether the read failed.
+type grantRead struct {
+	read   bool
+	failed bool
+	ids    map[string]bool
 }
 
 // admits applies an org account's audience (§3.3) to a live member: everyone,
 // owners and admins, or the members it is granted to in their current
 // membership. grants is read once, on the first selected-access account.
-func admits(ctx context.Context, repo MemberGrantStore, scope Scope, facts memberFacts, accountID, access string, grants *map[string]bool) bool {
+func admits(ctx context.Context, repo MemberGrantStore, scope Scope, facts memberFacts, accountID, access string, grants *grantRead) bool {
 	switch access {
 	case core.OrgAccessMembers:
 		return true
 	case core.OrgAccessAdmins:
 		return facts.m.Role == "owner" || facts.m.Role == "admin"
 	case core.OrgAccessSelected:
-		if *grants == nil {
-			*grants = memberGrants(ctx, repo, scope, facts)
+		if !grants.read {
+			grants.ids, grants.failed = memberGrants(ctx, repo, scope, facts)
+			grants.read = true
 		}
-		return (*grants)[accountID]
+		return grants.ids[accountID]
 	}
 	return false
 }
@@ -223,7 +237,7 @@ func UsableOrgAccounts(ctx context.Context, grants MemberGrantStore, userID, org
 	if !facts.member || len(accounts) == 0 {
 		return nil
 	}
-	var granted map[string]bool
+	var granted grantRead
 	out := make([]core.ProviderAccount, 0, len(accounts))
 	for _, a := range accounts {
 		if a.OwnerKind != core.AccountOwnerOrg || a.OrgID != orgID {
@@ -240,23 +254,24 @@ func UsableOrgAccounts(ctx context.Context, grants MemberGrantStore, userID, org
 // CURRENT membership: a grant counts only when made at or after member_since,
 // so a person who left and rejoined starts with none, and with no
 // member_since (an older control plane) none counts (§3.3, fail closed).
-func memberGrants(ctx context.Context, repo MemberGrantStore, scope Scope, facts memberFacts) map[string]bool {
+// failed reports that the grants could not be read.
+func memberGrants(ctx context.Context, repo MemberGrantStore, scope Scope, facts memberFacts) (granted map[string]bool, failed bool) {
 	out := map[string]bool{}
 	if facts.m.MemberSince.IsZero() {
-		return out
+		return out, false
 	}
 	rows, err := repo.ListMemberAccountGrants(ctx, scope.OrgID, scope.UserID)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not read the member's account grants; leaving selected-access accounts out",
 			"user_id", scope.UserID, "org_id", scope.OrgID, "error", err)
-		return out
+		return out, true
 	}
 	for id, grantedAt := range rows {
 		if !grantedAt.Before(facts.m.MemberSince) {
 			out[id] = true
 		}
 	}
-	return out
+	return out, false
 }
 
 // driverRank is each driver's best tier over all its accounts, or nil when no

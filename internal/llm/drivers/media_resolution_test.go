@@ -83,7 +83,7 @@ func TestResolveVideo_TierSelectsModelAndPreferenceOnlyAppliesToDefault(t *testi
 	db.SeedProviderAccount(t, repo, userID, "gemini", "AIza-test")
 
 	resolve := func(tags ...string) string {
-		resolved, _, err := resolveMediaModel(ctx, userID, models.ModelSelector{Tags: tags}, models.ModalityVideo)
+		resolved, _, _, err := resolveMediaModel(ctx, userID, models.ModelSelector{Tags: tags}, models.ModalityVideo)
 		require.NoError(t, err)
 		return resolved.Definition.ID
 	}
@@ -109,7 +109,7 @@ func TestResolveVideo_TierSelectsModelAndPreferenceOnlyAppliesToDefault(t *testi
 	// ...but never an explicit tier or model: those are specific requests.
 	assert.Equal(t, "veo-3.1-generate", resolve("video-gen", "cinematic"))
 	assert.Equal(t, "veo-3.1-lite-generate", resolve("video-gen", "cheap"))
-	explicit, _, err := resolveMediaModel(ctx, userID, models.ModelSelector{ID: "gemini-omni-1.1-flash"}, models.ModalityVideo)
+	explicit, _, _, err := resolveMediaModel(ctx, userID, models.ModelSelector{ID: "gemini-omni-1.1-flash"}, models.ModalityVideo)
 	require.NoError(t, err)
 	assert.Equal(t, "gemini-omni-1.1-flash", explicit.Definition.ID, "explicit model beats the preference")
 }
@@ -123,7 +123,7 @@ func TestResolveImage_FastTierAndPreference(t *testing.T) {
 	db.SeedProviderAccount(t, repo, userID, "gemini", "AIza-test")
 
 	resolve := func(tags ...string) string {
-		resolved, _, err := resolveMediaModel(ctx, userID, models.ModelSelector{Tags: tags}, models.ModalityImage)
+		resolved, _, _, err := resolveMediaModel(ctx, userID, models.ModelSelector{Tags: tags}, models.ModalityImage)
 		require.NoError(t, err)
 		return resolved.Definition.ID
 	}

@@ -51,7 +51,7 @@ func buildAvailableDriversFor(ctx context.Context, repo AvailabilityStore, membe
 		return models.AvailableDrivers{}, err
 	}
 	scope = policy.liftStamp(scope)
-	accounts, unavailable, err := configuredAccounts(ctx, repo, members, scope)
+	accounts, unavailable, orgGave, err := configuredAccounts(ctx, repo, members, scope)
 	if err != nil {
 		return models.AvailableDrivers{}, err
 	}
@@ -62,6 +62,7 @@ func buildAvailableDriversFor(ctx context.Context, repo AvailabilityStore, membe
 	available.Availability = policy.availability(available.Availability)
 	available.PolicyRefused = refused
 	available.DriverRank = driverRank(available.Accounts)
+	available.OrgGave = orgGave
 	for driverID, reason := range unavailable {
 		if _, ok := available.Accounts[driverID]; ok {
 			continue
@@ -96,15 +97,19 @@ func usableAPIKey(key string) bool {
 // unattributed accounts, u's accounts attributed to X, and X's own accounts u may use, never an
 // account owned by or attributed to another org. With no org account and no attribution it
 // returns exactly the person's accounts, on one tier, as before orgs.
-func configuredAccounts(ctx context.Context, repo AvailabilityStore, members OrgMembership, scope Scope) (map[models.DriverID][]models.AccountConfig, map[models.DriverID]string, error) {
+//
+// orgGave reports that the org gives the person a first-tier account it pays
+// for, decided before any is left out for its status, or that it could not be
+// told (models.AvailableDrivers.OrgGave).
+func configuredAccounts(ctx context.Context, repo AvailabilityStore, members OrgMembership, scope Scope) (accounts map[models.DriverID][]models.AccountConfig, unavailable map[models.DriverID]string, orgGave bool, err error) {
 	userID := scope.UserID
 	if userID == "" {
 		// Per reliant.md: no fallback paths, error out when things aren't set properly
-		return nil, nil, fmt.Errorf("userID is required to fetch provider accounts from database")
+		return nil, nil, false, fmt.Errorf("userID is required to fetch provider accounts from database")
 	}
 	stored, err := repo.ListProviderAccountsWithSecrets(ctx, userID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get provider API keys and sign-ins: %w", err)
+		return nil, nil, false, fmt.Errorf("failed to get provider API keys and sign-ins: %w", err)
 	}
 	limits, err := repo.ListAccountLimits(ctx, userID)
 	if err != nil {
@@ -131,7 +136,8 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, members Org
 		}
 		cands = append(cands, c)
 	}
-	cands = append(cands, orgAccountCandidates(ctx, repo, scope, facts)...)
+	orgCands, undecided := orgAccountCandidates(ctx, repo, scope, facts)
+	cands = append(cands, orgCands...)
 	// Stable: within a tier and group, the owner's priority order the reads returned.
 	slices.SortStableFunc(cands, func(a, b candidate) int {
 		if a.tier != b.tier {
@@ -139,8 +145,15 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, members Org
 		}
 		return a.group - b.group
 	})
+	// What the org gives the person, before any account is left out: an
+	// answer nobody could give (a membership, org-account or grant read that
+	// failed) is not "nothing", so it counts as given.
+	orgGave = facts.undecided || undecided
+	for _, c := range cands {
+		orgGave = orgGave || (c.tier == models.TierFirst && models.OrgFunded(c.funding))
+	}
 
-	accounts := make(map[models.DriverID][]models.AccountConfig)
+	accounts = make(map[models.DriverID][]models.AccountConfig)
 	needsSignIn := make(map[models.DriverID]bool)
 	for _, c := range cands {
 		acct := c.acct
@@ -180,13 +193,13 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, members Org
 		accounts[driverID] = append(accounts[driverID], ac)
 	}
 
-	unavailable := make(map[models.DriverID]string)
+	unavailable = make(map[models.DriverID]string)
 	for driverID := range needsSignIn {
 		if len(accounts[driverID]) == 0 {
 			unavailable[driverID] = fmt.Sprintf("%s needs you to sign in again", models.ProviderDisplayName(string(driverID)))
 		}
 	}
-	return accounts, unavailable, nil
+	return accounts, unavailable, orgGave, nil
 }
 
 // withOrgManagedKey is stored with the managed key minted in scope's org, when

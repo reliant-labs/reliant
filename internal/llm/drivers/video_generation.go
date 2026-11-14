@@ -45,7 +45,7 @@ func ResolveVideoGenerator(ctx context.Context, userID string, selector models.M
 		selector.Tags = []string{DefaultVideoGenTag}
 	}
 
-	resolved, availableDrivers, err := resolveMediaModel(ctx, userID, selector, models.ModalityVideo)
+	resolved, availableDrivers, scope, err := resolveMediaModel(ctx, userID, selector, models.ModalityVideo)
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +54,9 @@ func ResolveVideoGenerator(ctx context.Context, userID string, selector models.M
 	driverConfig, ok := availableDrivers.Drivers[models.DriverID(driverID)]
 	if !ok || !driverConfig.IsConfigured() {
 		return nil, fmt.Errorf("model %s resolved to provider %s, which is not configured", resolved.Definition.ID, driverID)
+	}
+	if err := checkMediaPolicy(ctx, scope, availableDrivers, resolved); err != nil {
+		return nil, err
 	}
 
 	config := videoGenConfig(resolved, driverConfig)

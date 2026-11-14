@@ -3155,7 +3155,7 @@ func (m *MockExecuteRunStepStore) ListProjectDaemonsForProject(ctx context.Conte
 var _ ExecuteRunStepStore = (*MockExecuteRunStepStore)(nil)
 
 // forge:section MockExecuteToolsStore
-// forge:hash=31b0d91c3412392106acd61f65fda04739ca3b7a3b9de49b21f4f4de392a1452
+// forge:hash=09c9fc7f7e6726b637ff14789676bc7c626e091a4035e4be4abd73dac16c7245
 
 // MockExecuteToolsStore is a test mock for the ExecuteToolsStore interface.
 //
@@ -3188,6 +3188,11 @@ type MockExecuteToolsStore struct {
 	GetDaemonFunc                         func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc      func(context.Context, string) ([]*core.ProjectDaemon, error)
 	GetThreadFunc                         func(context.Context, string) (*db.Thread, error)
+	GetTriggerEventByChatFunc             func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
+	ChatPersonTurnAtFunc                  func(context.Context, string) (*time.Time, error)
+	GetTriggerFunc                        func(context.Context, string) (*core.Trigger, error)
+	GetSettingValueFunc                   func(context.Context, string, string) (string, bool)
+	ChatFundingOrderFunc                  func(context.Context, string) (string, error)
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -3397,8 +3402,89 @@ func (m *MockExecuteToolsStore) GetThread(ctx context.Context, id string) (*db.T
 	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetThread")
 }
 
+// GetTriggerEventByChat records the call and delegates to GetTriggerEventByChatFunc when set.
+func (m *MockExecuteToolsStore) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
+	m.Recorder.Record("GetTriggerEventByChat", ctx, kind, chatID)
+	if m.GetTriggerEventByChatFunc != nil {
+		return m.GetTriggerEventByChatFunc(ctx, kind, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetTriggerEventByChat")
+}
+
+// ChatPersonTurnAt records the call and delegates to ChatPersonTurnAtFunc when set.
+func (m *MockExecuteToolsStore) ChatPersonTurnAt(ctx context.Context, chatID string) (*time.Time, error) {
+	m.Recorder.Record("ChatPersonTurnAt", ctx, chatID)
+	if m.ChatPersonTurnAtFunc != nil {
+		return m.ChatPersonTurnAtFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "ChatPersonTurnAt")
+}
+
+// GetTrigger records the call and delegates to GetTriggerFunc when set.
+func (m *MockExecuteToolsStore) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
+	m.Recorder.Record("GetTrigger", ctx, id)
+	if m.GetTriggerFunc != nil {
+		return m.GetTriggerFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetTrigger")
+}
+
+// GetSettingValue records the call and delegates to GetSettingValueFunc when set.
+func (m *MockExecuteToolsStore) GetSettingValue(ctx context.Context, userID string, key string) (string, bool) {
+	m.Recorder.Record("GetSettingValue", ctx, userID, key)
+	if m.GetSettingValueFunc != nil {
+		return m.GetSettingValueFunc(ctx, userID, key)
+	}
+	return "", false
+}
+
+// ChatFundingOrder records the call and delegates to ChatFundingOrderFunc when set.
+func (m *MockExecuteToolsStore) ChatFundingOrder(ctx context.Context, chatID string) (string, error) {
+	m.Recorder.Record("ChatFundingOrder", ctx, chatID)
+	if m.ChatFundingOrderFunc != nil {
+		return m.ChatFundingOrderFunc(ctx, chatID)
+	}
+	return "", contractkit.MockNotSet("MockExecuteToolsStore", "ChatFundingOrder")
+}
+
 // Compile-time check.
 var _ ExecuteToolsStore = (*MockExecuteToolsStore)(nil)
+
+// forge:section MockRunFundingStore
+// forge:hash=d68c4c0dd75f4321735bf8ef5fe9cfc6813975e0b04f3f224ef51ab5f8d3d1e5
+
+// MockRunFundingStore is a test mock for the RunFundingStore interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockRunFundingStore.<Method>Func not set" error.
+type MockRunFundingStore struct {
+	contractkit.Recorder
+	GetSettingValueFunc  func(context.Context, string, string) (string, bool)
+	ChatFundingOrderFunc func(context.Context, string) (string, error)
+}
+
+// GetSettingValue records the call and delegates to GetSettingValueFunc when set.
+func (m *MockRunFundingStore) GetSettingValue(ctx context.Context, userID string, key string) (string, bool) {
+	m.Recorder.Record("GetSettingValue", ctx, userID, key)
+	if m.GetSettingValueFunc != nil {
+		return m.GetSettingValueFunc(ctx, userID, key)
+	}
+	return "", false
+}
+
+// ChatFundingOrder records the call and delegates to ChatFundingOrderFunc when set.
+func (m *MockRunFundingStore) ChatFundingOrder(ctx context.Context, chatID string) (string, error) {
+	m.Recorder.Record("ChatFundingOrder", ctx, chatID)
+	if m.ChatFundingOrderFunc != nil {
+		return m.ChatFundingOrderFunc(ctx, chatID)
+	}
+	return "", contractkit.MockNotSet("MockRunFundingStore", "ChatFundingOrder")
+}
+
+// Compile-time check.
+var _ RunFundingStore = (*MockRunFundingStore)(nil)
 
 // forge:section MockGenerateTitleStore
 // forge:hash=f5b2e587dbfed3b015fd146dcd22ab7102f5a4c418100f3e5704afef17111b01
