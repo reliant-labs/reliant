@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/pflag"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
 // Which AI accounts an automation's runs may spend (control-plane
@@ -62,45 +63,6 @@ func onlyFundingChanged(cmd *cobra.Command) bool {
 	return !others
 }
 
-// storedDefinition is the definition t has now, to send back unchanged in an
-// update that changes only its funding: UpdateTrigger replaces the whole row.
-// Enabled is left unset (unchanged), an activation names its declaration
-// rather than a source, and its filter is the declaration's, not the row's.
-// The write-only webhook secret is left unset, which keeps the stored one.
-func storedDefinition(t *reliantv1.Trigger) *reliantv1.TriggerDefinition {
-	def := &reliantv1.TriggerDefinition{
-		Name:             t.GetName(),
-		ProjectId:        t.GetProjectId(),
-		WorktreeId:       t.WorktreeId,
-		Workflow:         t.GetWorkflow(),
-		Presets:          t.GetPresets(),
-		Params:           t.GetParams(),
-		Message:          t.GetMessage(),
-		DaemonId:         t.GetDaemonId(),
-		NoMachine:        t.GetNoMachine(),
-		MachinePoolId:    t.GetMachinePoolId(),
-		NotifyOnComplete: t.GetNotifyOnComplete(),
-		ConnectionId:     t.ConnectionId,
-		ActingIdentity:   t.GetActingIdentity(),
-	}
-	if name := t.GetWorkflowTrigger(); name != "" {
-		def.Source = &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: name}
-		return def
-	}
-	def.Filter = t.GetFilter()
-	switch src := t.GetSource().(type) {
-	case *reliantv1.Trigger_Schedule:
-		def.Source = &reliantv1.TriggerDefinition_Schedule{Schedule: src.Schedule}
-	case *reliantv1.Trigger_Webhook:
-		def.Source = &reliantv1.TriggerDefinition_Webhook{Webhook: src.Webhook}
-	case *reliantv1.Trigger_Integration:
-		def.Source = &reliantv1.TriggerDefinition_Integration{Integration: src.Integration}
-	case *reliantv1.Trigger_WorkflowEvent:
-		def.Source = &reliantv1.TriggerDefinition_WorkflowEvent{WorkflowEvent: src.WorkflowEvent}
-	}
-	return def
-}
-
 // updateDefinition is what `trigger update` sends: the stored definition when
 // --org-accounts-only is the only flag, else the full replacement from flags
 // (fromFlags), with the stamp set to ORG_ONLY whenever the flag was given.
@@ -116,7 +78,7 @@ func updateDefinition(
 	}
 	var def *reliantv1.TriggerDefinition
 	if onlyFundingChanged(cmd) {
-		def = storedDefinition(existing)
+		def = triggers.StoredDefinition(existing)
 	} else {
 		var err error
 		if def, err = fromFlags(); err != nil {
