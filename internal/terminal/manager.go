@@ -62,6 +62,23 @@ func NewManager() *Manager {
 // rather than starting the shell somewhere else; see resolveWorkingDir. The
 // session's WorkingDir is where the shell actually started.
 func (m *Manager) CreateSession(workingDir string, userID string) (*Session, error) {
+	return m.CreateSessionWith(workingDir, userID, SessionOptions{})
+}
+
+// SessionOptions are how a session's shell is started.
+type SessionOptions struct {
+	// CredentialsNone starts the shell with no GitHub, git, ssh or cloud
+	// credentials: the environment WithoutCredentials leaves, and on Linux
+	// the credential sandbox (credsandbox.WrapTerminal), as a
+	// `credentials: none` command gets. An org that forces `credentials:
+	// none` on its machines stamps the terminals opened for its work with it
+	// (control-plane docs/design/org-policies.md §5.4).
+	CredentialsNone bool
+}
+
+// CreateSessionWith is CreateSession with opts. A credentials-none shell the
+// sandbox refuses to start is an error, never a shell with credentials.
+func (m *Manager) CreateSessionWith(workingDir string, userID string, opts SessionOptions) (*Session, error) {
 	// Before anything else: a request that is going to be refused must not
 	// evict a live session to make room for itself.
 	workingDir, err := resolveWorkingDir(workingDir)
@@ -95,35 +112,33 @@ func (m *Manager) CreateSession(workingDir string, userID string) (*Session, err
 		logging.Warn("[Terminal] Failed to set initial terminal size", "error", err)
 	}
 
-	// Create command
-	cmd := ptty.Command(shell, args...)
-	cmd.Dir = workingDir
-	cmd.Env = GetShellEnv(workingDir)
+	env := GetShellEnv(workingDir)
+	if opts.CredentialsNone {
+		env = credentialsNoneShellEnv(env)
+	}
 
-	// Start the command
-	if err := cmd.Start(); err != nil {
+	// Start the shell
+	session := &Session{
+		ID:         sessionID,
+		UserID:     userID,
+		PTY:        ptty,
+		WorkingDir: workingDir,
+		CreatedAt:  time.Now(),
+		LastActive: time.Now(),
+		done:       make(chan struct{}),
+	}
+	if err := startShell(session, shell, args, workingDir, env, opts); err != nil {
 		ptty.Close()
-		return nil, fmt.Errorf("failed to start command: %w", err)
+		return nil, err
 	}
 
 	// Steer the kernel OOM killer toward the terminal's shell (and, via
 	// inheritance, everything the user runs in it) rather than the daemon.
 	// No-op outside Linux; best-effort everywhere.
-	if cmd.Process != nil {
-		if err := osutil.AdjustChildOOMScore(cmd.Process.Pid); err != nil {
-			logging.Debug("[Terminal] Failed to adjust shell oom_score_adj", "pid", cmd.Process.Pid, "error", err)
+	if p := session.Process(); p != nil {
+		if err := osutil.AdjustChildOOMScore(p.Pid); err != nil {
+			logging.Debug("[Terminal] Failed to adjust shell oom_score_adj", "pid", p.Pid, "error", err)
 		}
-	}
-
-	session := &Session{
-		ID:         sessionID,
-		UserID:     userID,
-		PTY:        ptty,
-		CMD:        cmd,
-		WorkingDir: workingDir,
-		CreatedAt:  time.Now(),
-		LastActive: time.Now(),
-		done:       make(chan struct{}),
 	}
 
 	// Store session
@@ -239,8 +254,8 @@ func (m *Manager) cleanupSession(session *Session) error {
 	}
 
 	// Kill process if still running
-	if session.CMD != nil && session.CMD.Process != nil {
-		if err := session.CMD.Process.Kill(); err != nil && err.Error() != "os: process already finished" {
+	if p := session.Process(); p != nil {
+		if err := p.Kill(); err != nil && err.Error() != "os: process already finished" {
 			errs = append(errs, fmt.Errorf("kill process: %w", err))
 		}
 	}
@@ -253,11 +268,11 @@ func (m *Manager) cleanupSession(session *Session) error {
 
 // monitorProcess monitors the shell process and cleans up on exit
 func (m *Manager) monitorProcess(session *Session) {
-	if session.CMD == nil {
+	if session.Process() == nil {
 		return
 	}
 
-	_ = session.CMD.Wait() // Wait for process to exit
+	_ = session.wait() // Wait for process to exit
 
 	// Clean up session
 	m.mu.Lock()

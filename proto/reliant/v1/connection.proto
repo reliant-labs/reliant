@@ -200,6 +200,26 @@ message Integration {
   repeated IntegrationAuthMethod methods = 6;
   // ConnectionParams are the non-secret settings a new connection asks for.
   repeated IntegrationConnectionParam connection_params = 7;
+  // OrgPolicy is how the organization the request names treats this
+  // integration in its runs (control-plane docs/design/org-policies.md §4.3).
+  // Unset when the request names no org, or the org's policy does not govern
+  // integrations: every integration may be used, as before this field.
+  IntegrationOrgPolicy org_policy = 8;
+}
+
+// IntegrationOrgPolicy is an org's policy on one integration. It governs USE
+// in the org's runs, never connecting: a person's own connection stays usable
+// in their other orgs, so a picker marks a disallowed integration "not
+// allowed in <org>" rather than hiding it.
+message IntegrationOrgPolicy {
+  // Allowed is false when the org's policy does not admit the integration.
+  bool allowed = 1;
+  // Enforced is true when a use the policy does not admit is refused. False
+  // while the rule only counts what it would refuse (audit): the use still
+  // works.
+  bool enforced = 2;
+  // PolicyVersion is the version of the org's policy this answer comes from.
+  int64 policy_version = 3;
 }
 
 message IntegrationAuthMethod {
@@ -224,7 +244,12 @@ message IntegrationConnectionParam {
   bool required = 6;
 }
 
-message ListIntegrationsRequest {}
+message ListIntegrationsRequest {
+  // OrgId fills each integration's org_policy with that organization's
+  // policy, for a caller who is a live member of it (PERMISSION_DENIED
+  // otherwise). Unset lists the integrations exactly as before this field.
+  optional string org_id = 1;
+}
 message ListIntegrationsResponse {
   repeated Integration integrations = 1;
 }

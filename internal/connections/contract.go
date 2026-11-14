@@ -28,6 +28,7 @@ import (
 	"net/http"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -73,6 +74,11 @@ const ReasonHumanOnly = orgs.ReasonHumanOnly
 // org connections (ApiServerConfig orgs.connections_enabled): the client
 // shows the org's connections read-only and says why it cannot add one.
 const ReasonOrgConnectionsDisabled = "org_connections_disabled"
+
+// ReasonIntegrationNotAllowed is the error reason of a use of an integration
+// the run's org's policy does not allow (IntegrationNotAllowed;
+// control-plane docs/design/org-policies.md §4.3).
+const ReasonIntegrationNotAllowed = orgpolicy.ReasonIntegrationNotAllowed
 
 // HumanOnly is the refusal of an org connection's administration to a
 // credential an agent can hold: a CLI login, an access token, a daemon's.

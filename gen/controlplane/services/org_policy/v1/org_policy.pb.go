@@ -602,6 +602,229 @@ func (x *PreviewOrgPolicyResponse) GetWarnings() []string {
 	return nil
 }
 
+type GetMyPolicyUsageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMyPolicyUsageRequest) Reset() {
+	*x = GetMyPolicyUsageRequest{}
+	mi := &file_services_org_policy_v1_org_policy_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMyPolicyUsageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMyPolicyUsageRequest) ProtoMessage() {}
+
+func (x *GetMyPolicyUsageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_org_policy_v1_org_policy_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMyPolicyUsageRequest.ProtoReflect.Descriptor instead.
+func (*GetMyPolicyUsageRequest) Descriptor() ([]byte, []int) {
+	return file_services_org_policy_v1_org_policy_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetMyPolicyUsageRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+// PolicySpendUsage is spend against one cap in its current period.
+type PolicySpendUsage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// cap is the cap that applies; unset when none does (no cap, or the
+	// member's override is unlimited).
+	Cap *v1.SpendCap `protobuf:"bytes,1,opt,name=cap,proto3" json:"cap,omitempty"`
+	// unlimited is a member override that exempts the caller from the member
+	// cap. Only on GetMyPolicyUsageResponse.member.
+	Unlimited bool `protobuf:"varint,2,opt,name=unlimited,proto3" json:"unlimited,omitempty"`
+	// spent_usd_nanos is the spend the cap counts in the current period: the
+	// cap's own period, or the calendar month when no cap applies.
+	SpentUsdNanos int64 `protobuf:"varint,3,opt,name=spent_usd_nanos,json=spentUsdNanos,proto3" json:"spent_usd_nanos,omitempty"`
+	// period_start and period_end bound the current UTC period (end
+	// exclusive).
+	PeriodStart   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"`
+	PeriodEnd     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicySpendUsage) Reset() {
+	*x = PolicySpendUsage{}
+	mi := &file_services_org_policy_v1_org_policy_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicySpendUsage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicySpendUsage) ProtoMessage() {}
+
+func (x *PolicySpendUsage) ProtoReflect() protoreflect.Message {
+	mi := &file_services_org_policy_v1_org_policy_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicySpendUsage.ProtoReflect.Descriptor instead.
+func (*PolicySpendUsage) Descriptor() ([]byte, []int) {
+	return file_services_org_policy_v1_org_policy_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *PolicySpendUsage) GetCap() *v1.SpendCap {
+	if x != nil {
+		return x.Cap
+	}
+	return nil
+}
+
+func (x *PolicySpendUsage) GetUnlimited() bool {
+	if x != nil {
+		return x.Unlimited
+	}
+	return false
+}
+
+func (x *PolicySpendUsage) GetSpentUsdNanos() int64 {
+	if x != nil {
+		return x.SpentUsdNanos
+	}
+	return 0
+}
+
+func (x *PolicySpendUsage) GetPeriodStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodStart
+	}
+	return nil
+}
+
+func (x *PolicySpendUsage) GetPeriodEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodEnd
+	}
+	return nil
+}
+
+type GetMyPolicyUsageResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// policy_version is the version of the policy the caps came from (0: no
+	// policy).
+	PolicyVersion int64 `protobuf:"varint,1,opt,name=policy_version,json=policyVersion,proto3" json:"policy_version,omitempty"`
+	// mode is the spend section's mode; UNSPECIFIED when there is no spend
+	// section.
+	Mode v1.OrgPolicyMode `protobuf:"varint,2,opt,name=mode,proto3,enum=controlplane.v1.OrgPolicyMode" json:"mode,omitempty"`
+	// enforced reports whether the caps refuse calls today: the section is
+	// ENFORCE and the platform enforces spend caps. False while a cap is only
+	// being trialled (audit).
+	Enforced bool `protobuf:"varint,3,opt,name=enforced,proto3" json:"enforced,omitempty"`
+	// member is the caller's own spend against their cap (their override,
+	// else the member default).
+	Member *PolicySpendUsage `protobuf:"bytes,4,opt,name=member,proto3" json:"member,omitempty"`
+	// org is the org's spend against the org cap, counted as applies_to says.
+	Org           *PolicySpendUsage `protobuf:"bytes,5,opt,name=org,proto3" json:"org,omitempty"`
+	AppliesTo     v1.SpendAppliesTo `protobuf:"varint,6,opt,name=applies_to,json=appliesTo,proto3,enum=controlplane.v1.SpendAppliesTo" json:"applies_to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMyPolicyUsageResponse) Reset() {
+	*x = GetMyPolicyUsageResponse{}
+	mi := &file_services_org_policy_v1_org_policy_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMyPolicyUsageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMyPolicyUsageResponse) ProtoMessage() {}
+
+func (x *GetMyPolicyUsageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_org_policy_v1_org_policy_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMyPolicyUsageResponse.ProtoReflect.Descriptor instead.
+func (*GetMyPolicyUsageResponse) Descriptor() ([]byte, []int) {
+	return file_services_org_policy_v1_org_policy_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GetMyPolicyUsageResponse) GetPolicyVersion() int64 {
+	if x != nil {
+		return x.PolicyVersion
+	}
+	return 0
+}
+
+func (x *GetMyPolicyUsageResponse) GetMode() v1.OrgPolicyMode {
+	if x != nil {
+		return x.Mode
+	}
+	return v1.OrgPolicyMode(0)
+}
+
+func (x *GetMyPolicyUsageResponse) GetEnforced() bool {
+	if x != nil {
+		return x.Enforced
+	}
+	return false
+}
+
+func (x *GetMyPolicyUsageResponse) GetMember() *PolicySpendUsage {
+	if x != nil {
+		return x.Member
+	}
+	return nil
+}
+
+func (x *GetMyPolicyUsageResponse) GetOrg() *PolicySpendUsage {
+	if x != nil {
+		return x.Org
+	}
+	return nil
+}
+
+func (x *GetMyPolicyUsageResponse) GetAppliesTo() v1.SpendAppliesTo {
+	if x != nil {
+		return x.AppliesTo
+	}
+	return v1.SpendAppliesTo(0)
+}
+
 var File_services_org_policy_v1_org_policy_proto protoreflect.FileDescriptor
 
 const file_services_org_policy_v1_org_policy_proto_rawDesc = "" +
@@ -644,11 +867,29 @@ const file_services_org_policy_v1_org_policy_proto_rawDesc = "" +
 	"violations\x18\x03 \x03(\v2#.controlplane.v1.OrgPolicyViolationR\n" +
 	"violations\x12?\n" +
 	"\achanges\x18\x04 \x03(\v2%.controlplane.v1.OrgPolicyFieldChangeR\achanges\x12\x1a\n" +
-	"\bwarnings\x18\x05 \x03(\tR\bwarnings2\xbe\x02\n" +
+	"\bwarnings\x18\x05 \x03(\tR\bwarnings\"0\n" +
+	"\x17GetMyPolicyUsageRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\xff\x01\n" +
+	"\x10PolicySpendUsage\x12+\n" +
+	"\x03cap\x18\x01 \x01(\v2\x19.controlplane.v1.SpendCapR\x03cap\x12\x1c\n" +
+	"\tunlimited\x18\x02 \x01(\bR\tunlimited\x12&\n" +
+	"\x0fspent_usd_nanos\x18\x03 \x01(\x03R\rspentUsdNanos\x12=\n" +
+	"\fperiod_start\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
+	"\n" +
+	"period_end\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"\xc1\x02\n" +
+	"\x18GetMyPolicyUsageResponse\x12%\n" +
+	"\x0epolicy_version\x18\x01 \x01(\x03R\rpolicyVersion\x122\n" +
+	"\x04mode\x18\x02 \x01(\x0e2\x1e.controlplane.v1.OrgPolicyModeR\x04mode\x12\x1a\n" +
+	"\benforced\x18\x03 \x01(\bR\benforced\x129\n" +
+	"\x06member\x18\x04 \x01(\v2!.controlplane.v1.PolicySpendUsageR\x06member\x123\n" +
+	"\x03org\x18\x05 \x01(\v2!.controlplane.v1.PolicySpendUsageR\x03org\x12>\n" +
+	"\n" +
+	"applies_to\x18\x06 \x01(\x0e2\x1f.controlplane.v1.SpendAppliesToR\tappliesTo2\xa7\x03\n" +
 	"\x10OrgPolicyService\x12[\n" +
 	"\fGetOrgPolicy\x12$.controlplane.v1.GetOrgPolicyRequest\x1a%.controlplane.v1.GetOrgPolicyResponse\x12d\n" +
 	"\x0fUpdateOrgPolicy\x12'.controlplane.v1.UpdateOrgPolicyRequest\x1a(.controlplane.v1.UpdateOrgPolicyResponse\x12g\n" +
-	"\x10PreviewOrgPolicy\x12(.controlplane.v1.PreviewOrgPolicyRequest\x1a).controlplane.v1.PreviewOrgPolicyResponseB\xda\x01\n" +
+	"\x10PreviewOrgPolicy\x12(.controlplane.v1.PreviewOrgPolicyRequest\x1a).controlplane.v1.PreviewOrgPolicyResponse\x12g\n" +
+	"\x10GetMyPolicyUsage\x12(.controlplane.v1.GetMyPolicyUsageRequest\x1a).controlplane.v1.GetMyPolicyUsageResponseB\xda\x01\n" +
 	"\x13com.controlplane.v1B\x0eOrgPolicyProtoP\x01ZVgithub.com/reliant-labs/reliant/gen/controlplane/services/org_policy/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -663,7 +904,7 @@ func file_services_org_policy_v1_org_policy_proto_rawDescGZIP() []byte {
 	return file_services_org_policy_v1_org_policy_proto_rawDescData
 }
 
-var file_services_org_policy_v1_org_policy_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_services_org_policy_v1_org_policy_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_services_org_policy_v1_org_policy_proto_goTypes = []any{
 	(*OrgPolicyRecord)(nil),          // 0: controlplane.v1.OrgPolicyRecord
 	(*GetOrgPolicyRequest)(nil),      // 1: controlplane.v1.GetOrgPolicyRequest
@@ -674,29 +915,44 @@ var file_services_org_policy_v1_org_policy_proto_goTypes = []any{
 	(*OrgPolicyViolation)(nil),       // 6: controlplane.v1.OrgPolicyViolation
 	(*OrgPolicyFieldChange)(nil),     // 7: controlplane.v1.OrgPolicyFieldChange
 	(*PreviewOrgPolicyResponse)(nil), // 8: controlplane.v1.PreviewOrgPolicyResponse
-	(*v1.OrgPolicy)(nil),             // 9: controlplane.v1.OrgPolicy
-	(*timestamppb.Timestamp)(nil),    // 10: google.protobuf.Timestamp
+	(*GetMyPolicyUsageRequest)(nil),  // 9: controlplane.v1.GetMyPolicyUsageRequest
+	(*PolicySpendUsage)(nil),         // 10: controlplane.v1.PolicySpendUsage
+	(*GetMyPolicyUsageResponse)(nil), // 11: controlplane.v1.GetMyPolicyUsageResponse
+	(*v1.OrgPolicy)(nil),             // 12: controlplane.v1.OrgPolicy
+	(*timestamppb.Timestamp)(nil),    // 13: google.protobuf.Timestamp
+	(*v1.SpendCap)(nil),              // 14: controlplane.v1.SpendCap
+	(v1.OrgPolicyMode)(0),            // 15: controlplane.v1.OrgPolicyMode
+	(v1.SpendAppliesTo)(0),           // 16: controlplane.v1.SpendAppliesTo
 }
 var file_services_org_policy_v1_org_policy_proto_depIdxs = []int32{
-	9,  // 0: controlplane.v1.OrgPolicyRecord.policy:type_name -> controlplane.v1.OrgPolicy
-	10, // 1: controlplane.v1.OrgPolicyRecord.updated_at:type_name -> google.protobuf.Timestamp
+	12, // 0: controlplane.v1.OrgPolicyRecord.policy:type_name -> controlplane.v1.OrgPolicy
+	13, // 1: controlplane.v1.OrgPolicyRecord.updated_at:type_name -> google.protobuf.Timestamp
 	0,  // 2: controlplane.v1.GetOrgPolicyResponse.policy:type_name -> controlplane.v1.OrgPolicyRecord
-	9,  // 3: controlplane.v1.UpdateOrgPolicyRequest.policy:type_name -> controlplane.v1.OrgPolicy
+	12, // 3: controlplane.v1.UpdateOrgPolicyRequest.policy:type_name -> controlplane.v1.OrgPolicy
 	0,  // 4: controlplane.v1.UpdateOrgPolicyResponse.policy:type_name -> controlplane.v1.OrgPolicyRecord
-	9,  // 5: controlplane.v1.PreviewOrgPolicyRequest.policy:type_name -> controlplane.v1.OrgPolicy
+	12, // 5: controlplane.v1.PreviewOrgPolicyRequest.policy:type_name -> controlplane.v1.OrgPolicy
 	6,  // 6: controlplane.v1.PreviewOrgPolicyResponse.violations:type_name -> controlplane.v1.OrgPolicyViolation
 	7,  // 7: controlplane.v1.PreviewOrgPolicyResponse.changes:type_name -> controlplane.v1.OrgPolicyFieldChange
-	1,  // 8: controlplane.v1.OrgPolicyService.GetOrgPolicy:input_type -> controlplane.v1.GetOrgPolicyRequest
-	3,  // 9: controlplane.v1.OrgPolicyService.UpdateOrgPolicy:input_type -> controlplane.v1.UpdateOrgPolicyRequest
-	5,  // 10: controlplane.v1.OrgPolicyService.PreviewOrgPolicy:input_type -> controlplane.v1.PreviewOrgPolicyRequest
-	2,  // 11: controlplane.v1.OrgPolicyService.GetOrgPolicy:output_type -> controlplane.v1.GetOrgPolicyResponse
-	4,  // 12: controlplane.v1.OrgPolicyService.UpdateOrgPolicy:output_type -> controlplane.v1.UpdateOrgPolicyResponse
-	8,  // 13: controlplane.v1.OrgPolicyService.PreviewOrgPolicy:output_type -> controlplane.v1.PreviewOrgPolicyResponse
-	11, // [11:14] is the sub-list for method output_type
-	8,  // [8:11] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	14, // 8: controlplane.v1.PolicySpendUsage.cap:type_name -> controlplane.v1.SpendCap
+	13, // 9: controlplane.v1.PolicySpendUsage.period_start:type_name -> google.protobuf.Timestamp
+	13, // 10: controlplane.v1.PolicySpendUsage.period_end:type_name -> google.protobuf.Timestamp
+	15, // 11: controlplane.v1.GetMyPolicyUsageResponse.mode:type_name -> controlplane.v1.OrgPolicyMode
+	10, // 12: controlplane.v1.GetMyPolicyUsageResponse.member:type_name -> controlplane.v1.PolicySpendUsage
+	10, // 13: controlplane.v1.GetMyPolicyUsageResponse.org:type_name -> controlplane.v1.PolicySpendUsage
+	16, // 14: controlplane.v1.GetMyPolicyUsageResponse.applies_to:type_name -> controlplane.v1.SpendAppliesTo
+	1,  // 15: controlplane.v1.OrgPolicyService.GetOrgPolicy:input_type -> controlplane.v1.GetOrgPolicyRequest
+	3,  // 16: controlplane.v1.OrgPolicyService.UpdateOrgPolicy:input_type -> controlplane.v1.UpdateOrgPolicyRequest
+	5,  // 17: controlplane.v1.OrgPolicyService.PreviewOrgPolicy:input_type -> controlplane.v1.PreviewOrgPolicyRequest
+	9,  // 18: controlplane.v1.OrgPolicyService.GetMyPolicyUsage:input_type -> controlplane.v1.GetMyPolicyUsageRequest
+	2,  // 19: controlplane.v1.OrgPolicyService.GetOrgPolicy:output_type -> controlplane.v1.GetOrgPolicyResponse
+	4,  // 20: controlplane.v1.OrgPolicyService.UpdateOrgPolicy:output_type -> controlplane.v1.UpdateOrgPolicyResponse
+	8,  // 21: controlplane.v1.OrgPolicyService.PreviewOrgPolicy:output_type -> controlplane.v1.PreviewOrgPolicyResponse
+	11, // 22: controlplane.v1.OrgPolicyService.GetMyPolicyUsage:output_type -> controlplane.v1.GetMyPolicyUsageResponse
+	19, // [19:23] is the sub-list for method output_type
+	15, // [15:19] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_services_org_policy_v1_org_policy_proto_init() }
@@ -710,7 +966,7 @@ func file_services_org_policy_v1_org_policy_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_org_policy_v1_org_policy_proto_rawDesc), len(file_services_org_policy_v1_org_policy_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

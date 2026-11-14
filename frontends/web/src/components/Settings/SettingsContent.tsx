@@ -11,8 +11,10 @@ import { MCPSettings } from "./MCPSettings";
 import { BranchesSection } from "./BranchesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
+import { ForgeConnectorsSection } from "./ForgeConnectorsSection";
 import { MembersPage } from "./cloud/members/MembersPage";
 import { PoliciesPage } from "./cloud/policies/PoliciesPage";
+import { OrgAIAccountsPage } from "./cloud/aiAccounts/OrgAIAccountsPage";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
 import { IntegrationsSettings } from "./IntegrationsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
@@ -88,11 +90,18 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
       case "mcp":
         return <MCPSettings />;
       case "tokens":
-        return <TokenSettings />;
+        return (
+          <div className="space-y-6">
+            <TokenSettings />
+            <ForgeConnectorsSection />
+          </div>
+        );
       case "member-permissions":
         return <MembersPage />;
       case "policies":
         return <PoliciesPage />;
+      case "org-ai-accounts":
+        return <OrgAIAccountsPage />;
       case "git-connections":
         return <GitConnectionsSettings />;
       case "integrations":

@@ -73,7 +73,7 @@ func resolveForUser(
 		binding, err := bindings.GetBinding(ctx, userID, clientID)
 		if err == nil && binding != nil && binding.GrantID != "" {
 			grant, err := store.GetGrantByID(ctx, binding.GrantID)
-			if err == nil {
+			if err == nil && grant.KindOrDefault() == connectorgrant.KindWorkspace {
 				return sessionForGrant(grant), nil
 			}
 			// The bound grant is gone or revoked. Fall through to consent
@@ -89,7 +89,9 @@ func resolveForUser(
 
 	var live []*connectorgrant.Grant
 	for _, g := range grants {
-		if g.IsLive(time.Now()) == nil {
+		// Only workspace grants: a forge grant (the Reliant Forge
+		// connector's) reaches no daemon.
+		if g.KindOrDefault() == connectorgrant.KindWorkspace && g.IsLive(time.Now()) == nil {
 			live = append(live, g)
 		}
 	}

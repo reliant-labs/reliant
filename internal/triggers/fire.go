@@ -328,6 +328,23 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		// org, which a trigger written before orgs does not carry itself).
 		return f.refuseCreatorLeftOrg(ctx, rec, launchErr)
 	}
+	if errors.Is(launchErr, launch.ErrNoOrgAccount) {
+		detail, err := f.pause.RefuseNoOrgAccount(ctx, f.repo, trigger, launchErr)
+		if err != nil {
+			return nil, err
+		}
+		return f.failPermanently(ctx, rec, detail, launchErr)
+	}
+	if refused, ok := launch.PolicyRefusal(launchErr); ok {
+		// The org's policy refuses the run's model or its provider: every
+		// later fire would meet the same verdict, so the trigger is paused,
+		// once, and the firing recorded failed with the reason.
+		detail, err := f.pause.RefusePolicy(ctx, trigger, refused)
+		if err != nil {
+			return nil, err
+		}
+		return f.failPermanently(ctx, rec, detail, launchErr)
+	}
 	var validation *launch.ValidationError
 	if errors.As(launchErr, &validation) || errors.Is(launchErr, launch.ErrNotFound) {
 		// The spec can never launch as written — a workflow that no longer
@@ -506,9 +523,10 @@ func (f *Firer) buildSpec(ctx context.Context, trigger *core.Trigger, sched *Sch
 		Params:     params,
 		Messages:   messages,
 
-		Unattended:     true,
-		ActingIdentity: trigger.ActingIdentity,
-		Automation:     trigger.Name,
+		Unattended:      true,
+		ActingIdentity:  trigger.ActingIdentity,
+		Automation:      trigger.Name,
+		OrgAccountsOnly: trigger.UnattendedFunding.OrgOnly(),
 		// The title is already derived from the trigger's name and the
 		// scheduled time, which is more useful for an automation run than an
 		// LLM's summary of its own prompt — and it costs no model call.

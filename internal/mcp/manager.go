@@ -16,6 +16,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon/configloader"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -1220,6 +1221,17 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 		// start something that had nothing to do is not a failure. A server that
 		// declared nothing always passes, which is every server today.
 		if !m.projectMeetsPrecondition(name, serverCfg, normalizedProjectPath) {
+			continue
+		}
+
+		// The run's org does not allow this server (its policy stamp,
+		// daemonpolicy.OrgStamp, carried on ctx): it is never started for
+		// it. Skipped like a disabled server, neither loaded nor failed. One
+		// already running for another caller stays running; this run is
+		// only kept from it (the tool call itself is refused upstream).
+		if stamp := daemonpolicy.OrgStampFromContext(ctx); !stamp.MCPServerAllowed(name) {
+			logging.InfoContext(ctx, "Not starting an MCP server the run's organization does not allow",
+				"name", name, "org_id", stamp.OrgID, "policy_version", stamp.Version)
 			continue
 		}
 

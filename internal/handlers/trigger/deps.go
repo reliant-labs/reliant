@@ -31,6 +31,9 @@ type OrgResolver interface {
 	DefaultOrg(ctx context.Context, userID string) (string, error)
 	ActingOrg(ctx context.Context, userID, requested string) (string, error)
 	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
+	// LiveMembersFresh is how many live members orgID has, asked now; known
+	// is false when the control plane gives no count.
+	LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error)
 }
 
 type Repository interface {

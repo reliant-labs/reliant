@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // ValidateModelSelector validates that a model selector can be resolved with the user's configured API keys.
@@ -48,8 +49,17 @@ func ValidateModelSelector(ctx context.Context, scope Scope, selector interface{
 	// The run resolves it against the daemon inventory or the endpoint
 	// (llm_request.go) and fails with the explained local.UnavailableError
 	// when it cannot.
+	//
+	// The org's policy is still asked: a run of an org that allows no local
+	// model fails here with the reason (*orgpolicy.Refusal), at launch.
 	if local.IsSelector(ms) {
-		return nil
+		err := CheckOrgPolicy(ctx, scope, models.DriverID(local.Family), models.FundingLocal, "", false)
+		if _, refused := orgpolicy.RefusalOf(err); err != nil && !refused {
+			// The policy could not be read: a failed read, retried, never a
+			// verdict on the input.
+			return fmt.Errorf("%w: %w", ErrDriverLookupFailed, err)
+		}
+		return err
 	}
 
 	// Get available drivers/providers for the user. A failed settings read is
@@ -57,6 +67,15 @@ func ValidateModelSelector(ctx context.Context, scope Scope, selector interface{
 	availableDrivers, err := LookupAvailableDrivers(ctx, scope)
 	if err != nil {
 		return err
+	}
+	// A model only what the org's policy took could serve is refused with
+	// the policy's reason, not told to add a key (org-policies §4.1, §4.2).
+	if len(availableDrivers.PolicyRefused) > 0 {
+		if _, rerr := models.MustGetRegistry().WithAvailability(availableDrivers.Availability).Resolve(ms, configuredProviderIDs(availableDrivers)); rerr != nil {
+			if refusal := OrgPolicyRefusal(ctx, scope, availableDrivers, ms, false); refusal != nil {
+				return refusal
+			}
+		}
 	}
 
 	// Check if user has any API keys configured

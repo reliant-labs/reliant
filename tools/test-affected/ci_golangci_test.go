@@ -29,11 +29,14 @@ type mqWorkflow struct {
 		If             string            `yaml:"if"`
 		TimeoutMinutes int               `yaml:"timeout-minutes"`
 		Env            map[string]string `yaml:"env"`
-		Steps          []struct {
-			ciStep `yaml:",inline"`
-			Env    map[string]string `yaml:"env"`
-		} `yaml:"steps"`
+		Steps          []mqStep          `yaml:"steps"`
 	} `yaml:"jobs"`
+}
+
+// mqStep is one step of a merge-queue.yml job.
+type mqStep struct {
+	ciStep `yaml:",inline"`
+	Env    map[string]string `yaml:"env"`
 }
 
 func loadMergeQueue(t *testing.T) *mqWorkflow {

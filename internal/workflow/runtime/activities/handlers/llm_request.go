@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/modelprefs"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -166,6 +167,9 @@ type AttendanceStore interface {
 	// ChatPersonTurnAt is when a person last sent a message into the chat,
 	// nil when nobody has.
 	ChatPersonTurnAt(ctx context.Context, chatID string) (*time.Time, error)
+	// GetTrigger reads the trigger that launched an unattended run, for its
+	// unattended-funding stamp.
+	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 }
 
 // attendance is who is behind a call made for a chat (org-provider-accounts
@@ -209,64 +213,94 @@ const maxAttendanceLineage = 8
 //   - every other run (chat.start, manual.run, cli.run, builder.test, a chat
 //     that predates launch events), and a call with no chat, is attended.
 //
-// A resolved unattended run may draw on every source (anySource), as every
-// automation predates the unattended-funding stamp (I4: NULL reads as "any",
-// today's behaviour; P11 reads the stamp). A run whose attendance could not
-// be decided is unattended with anySource false: org-funded sources only,
-// never the person's own (fail closed).
+// A resolved unattended run draws on what its trigger's unattended-funding
+// stamp allows (§11.3, I4): every source for "any" and for a trigger that
+// predates the stamp (NULL, today's behaviour), the org's own for
+// "org_only". A run whose attendance could not be decided, or whose
+// trigger cannot be read, is unattended with anySource false: org-funded
+// sources only, never the person's own (fail closed).
 func chatAttendance(ctx context.Context, store AttendanceStore, chat *db.Chat) attendance {
-	switch chatAttended(ctx, store, chat) {
+	verdict, root := attendedFrom(ctx, store, chat)
+	switch verdict {
 	case verdictAttended:
 		return attendance{attended: true}
 	case verdictUnattended:
-		return attendance{anySource: true}
+		return attendance{anySource: triggerMaySpendAnySource(ctx, store, root)}
 	default:
 		return attendance{}
 	}
 }
 
+// triggerMaySpendAnySource reads the unattended-funding stamp of the trigger
+// that launched root, a resolved unattended run (§11.3, I4): any, or a trigger
+// that predates the stamp (NULL), may draw on every source; org_only may not.
+// A trigger that cannot be read, or one deleted since it fired (the launch
+// keeps its kind, not its trigger), gets the org's sources only (fail closed).
+func triggerMaySpendAnySource(ctx context.Context, store AttendanceStore, root *db.Chat) bool {
+	if root == nil || root.TriggerID == nil {
+		return false
+	}
+	t, err := store.GetTrigger(ctx, *root.TriggerID)
+	if err != nil || t == nil {
+		logging.WarnContext(ctx, "Could not read the trigger's unattended funding; using only the org's sources", "triggerID", *root.TriggerID, "error", err)
+		return false
+	}
+	return !t.UnattendedFunding.OrgOnly()
+}
+
 func chatAttended(ctx context.Context, store AttendanceStore, chat *db.Chat) attendanceVerdict {
+	verdict, _ := attendedFrom(ctx, store, chat)
+	return verdict
+}
+
+// attendedFrom is chatAttended, with the chat the verdict was read from: for
+// a resolved unattended run, the chat the stored trigger launched (the
+// lineage root of an agent-started run).
+func attendedFrom(ctx context.Context, store AttendanceStore, chat *db.Chat) (attendanceVerdict, *db.Chat) {
 	for range maxAttendanceLineage {
 		if chat == nil {
-			return verdictAttended
+			return verdictAttended, nil
 		}
 		launched := core.TriggerEventKind(chat.LaunchKind)
-		triggered := chat.TriggerID != nil && launched.Unattended()
+		// The launch's kind decides, never whether its trigger still
+		// exists: deleting a trigger clears its launch events' trigger_id,
+		// and must not turn its runs into attended ones.
+		triggered := launched.Unattended()
 		if !triggered && launched != core.TriggerEventKindAgentStartRun {
-			return verdictAttended
+			return verdictAttended, nil
 		}
 		if store == nil {
-			return verdictUnknown
+			return verdictUnknown, nil
 		}
 		at, err := store.ChatPersonTurnAt(ctx, chat.ID)
 		if err != nil {
 			logging.WarnContext(ctx, "Could not read whether a person took a turn in the chat; using only the org's sources", "chatID", chat.ID, "error", err)
-			return verdictUnknown
+			return verdictUnknown, nil
 		}
 		if at != nil {
-			return verdictAttended
+			return verdictAttended, nil
 		}
 		if triggered {
-			return verdictUnattended
+			return verdictUnattended, chat
 		}
 		// agent.start_run: the lineage root decides.
 		event, err := store.GetTriggerEventByChat(ctx, core.TriggerEventKindAgentStartRun, chat.ID)
 		if err != nil {
 			logging.WarnContext(ctx, "Could not read an agent-started run's launch; using only the org's sources", "chatID", chat.ID, "error", err)
-			return verdictUnknown
+			return verdictUnknown, nil
 		}
 		parent, _ := event.Payload["parent_chat_id"].(string)
 		if parent == "" {
 			logging.WarnContext(ctx, "An agent-started run names no parent; using only the org's sources", "chatID", chat.ID)
-			return verdictUnknown
+			return verdictUnknown, nil
 		}
 		if chat, err = store.GetChat(ctx, parent); err != nil {
 			logging.WarnContext(ctx, "Could not read an agent-started run's parent chat; using only the org's sources", "chatID", parent, "error", err)
-			return verdictUnknown
+			return verdictUnknown, nil
 		}
 	}
 	logging.WarnContext(ctx, "An agent-started run's lineage is too deep to walk; using only the org's sources")
-	return verdictUnknown
+	return verdictUnknown, nil
 }
 
 // LocalModelSpec is what resolving a local model needs beyond the selector.
@@ -510,8 +544,17 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 			var err error
 			resolved, err = resolve(selector, availableProviders)
 			if err != nil {
+				// What would have served it, the org's policy took: the call
+				// is refused with the policy's reason (the turn pauses), never
+				// told to connect a provider or held on the chat's provider.
+				if refusal := drivers.OrgPolicyRefusal(ctx, spec.scope(), availableDrivers, selector, true); refusal != nil {
+					return nil, orgPolicyRefused(ctx, spec, refusal)
+				}
 				if spec.ChatProvider != "" {
 					return nil, providerSwitchHold(spec.ChatProvider, ownSelector, err)
+				}
+				if spec.scope().OrgFundedOnly() {
+					return nil, noOrgAccountError(err, selector)
 				}
 				return nil, resolutionError(err, availableDrivers)
 			}
@@ -630,6 +673,20 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 			return nil, ferr
 		}
 	}
+	// The check at the driver build (org-policies §4.2): the account and
+	// model this call is served from, under the org's policy now. It is the
+	// floor for a chat begun before the policy, and the one counted use of
+	// the call under audit.
+	if resolver == nil && providerDriver != "" && !drivers.ReplayMode.Enabled {
+		if perr := drivers.CheckOrgPolicy(ctx, spec.scope(), models.DriverID(providerDriver), servingFunding(providerDriver, account, routingDrivers), modelIDForDriver, true); perr != nil {
+			if refusal, ok := orgpolicy.RefusalOf(perr); ok {
+				return nil, orgPolicyRefused(ctx, spec, refusal)
+			}
+			// The policy cannot be read while the point enforces: retryable,
+			// never an unconstrained call.
+			return nil, newTransientStoreError(ctx, fmt.Errorf("the organization's provider policy: %w", perr))
+		}
+	}
 	if localTransport != nil {
 		driverOpts = append(driverOpts,
 			llm.WithBaseURL(local.PlaceholderBaseURL),
@@ -709,6 +766,34 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 	}, nil
 }
 
+// servingFunding is who pays for a call served on providerDriver: a local
+// model's owner, else the routed account's funding, else that of the
+// provider's default account in the set the call resolved over.
+func servingFunding(providerDriver string, account *routedAccount, available models.AvailableDrivers) string {
+	switch {
+	case providerDriver == string(local.Family):
+		return models.FundingLocal
+	case account != nil:
+		return account.Config.Funding
+	}
+	if accts := available.Accounts[models.DriverID(providerDriver)]; len(accts) > 0 {
+		return accts[0].Funding
+	}
+	return ""
+}
+
+// orgPolicyRefused is an org policy's refusal of a call as resolution returns
+// it (org-policies §5.1): stamped with whether a person is behind the run,
+// which decides between pausing the turn and ending an unattended run, and
+// the org watched so its paused chats wake when the policy changes.
+func orgPolicyRefused(ctx context.Context, spec llmCallSpec, refusal *orgpolicy.Refusal) error {
+	refusal.Unattended = !spec.scope().Attended
+	orgpolicy.WatchRefused(ctx, spec.OrgID)
+	logging.InfoContext(ctx, "[OrgPolicy] The org's policy refused the call at resolution; the turn stops with the reason",
+		"userID", spec.UserID, "orgID", spec.OrgID, "reason", refusal.Reason, "unattended", refusal.Unattended)
+	return refusal
+}
+
 type pinnedLocalPref struct {
 	legacy        models.Model
 	definition    *models.ModelDefinition
@@ -729,6 +814,12 @@ type pinnedLocalSpec struct {
 func resolvePinnedLocalPref(ctx context.Context, spec llmCallSpec) (pinnedLocalPref, pinnedLocalSpec, bool) {
 	prefs := loadTagPrefs(ctx, spec, nil)
 	if !prefs.IsLocalModel() {
+		return pinnedLocalPref{}, pinnedLocalSpec{}, false
+	}
+	if drivers.OrgPolicyRefuses(ctx, spec.scope(), models.DriverID(local.Family), models.FundingLocal) {
+		// A preference the org's policy refuses gives way to the tier.
+		logging.InfoContext(ctx, "[LLMRequest] Ignoring tag preference model_id: the org's policy does not allow local models; using the tier",
+			"userID", spec.UserID, "orgID", spec.OrgID, "tag", modelprefs.TagFor(spec.Selector), "modelID", prefs.ModelID)
 		return pinnedLocalPref{}, pinnedLocalSpec{}, false
 	}
 	localSpec := spec
@@ -800,6 +891,30 @@ func resolutionError(err error, available models.AvailableDrivers) error {
 		msg += ". Connect a provider that serves this model in Settings → Providers"
 	}
 	return &resolveFailure{msg: msg, cause: err}
+}
+
+// noOrgAccountError is the resolution failure of an unattended run that may
+// spend only its org's own sources, when none of them serves its model
+// (control-plane docs/design/org-provider-accounts.md §11.4, I5). It is never
+// moved onto the owner's own accounts: the turn pauses with the reason, keeps
+// drivererrors.ErrNoServableProvider in its chain (failed once, not retried),
+// and goes on when an org account is added, resumed, re-keyed or granted,
+// which wakes the org's blocked chats, or when a person resumes it.
+func noOrgAccountError(err error, selector models.ModelSelector) error {
+	model := "its model"
+	switch {
+	case selector.ID != "":
+		id, _, _ := strings.Cut(selector.ID, "@")
+		model = id
+	case len(selector.Tags) > 0:
+		model = "the " + strings.Join(selector.Tags, ", ") + " model"
+	}
+	return &resolveFailure{
+		msg: "failed to resolve model: this automation runs only on its organization's AI accounts, and none of them can run " + model +
+			". An admin can add an org API key or enable Reliant credits, or you can change the automation's model; " +
+			"it goes on by itself once an organization account can run it",
+		cause: err,
+	}
 }
 
 // withRunProviders gives a model selector that names no provider the

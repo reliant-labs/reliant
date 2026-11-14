@@ -6,7 +6,9 @@
  *   Members      the roster (role, change role, remove), the seat count,
  *                inviting, the pending invitations, and leaving
  *   Permissions  the per-permission grant editor (MemberPermissions): roles
- *                are presets of grants, and a grant can be edited one at a time
+ *                are presets of grants, and a grant can be edited one at a time;
+ *                and who may use each of the org's AI keys open to selected
+ *                people (AIAccountGrants; admins and owners)
  *   Activity     who created, invited, joined, left, was removed or changed
  *                role (admins and owners)
  *   Automations  the automations and saved workflows of people who left, to
@@ -34,6 +36,7 @@ import { canAdministerMembers } from "@/services/controlPlane/members";
 
 import { SettingsPageHeader } from "../../SettingsPageHeader";
 import { MemberPermissions } from "../MemberPermissions";
+import { AIAccountGrants } from "./AIAccountGrants";
 import { InviteDialog } from "./InviteDialog";
 import { MemberRoster } from "./MemberRoster";
 import { MembershipActivity } from "./MembershipActivity";
@@ -100,7 +103,12 @@ function OrgMembersPage({ org }: { org: MyOrg }) {
           <LeaveOrganization org={org} />
         </div>
       )}
-      {tab === "permissions" && <MemberPermissions embedded />}
+      {tab === "permissions" && (
+        <div className="space-y-6">
+          <MemberPermissions embedded />
+          {isAdmin && <AIAccountGrants org={org} members={roster} />}
+        </div>
+      )}
       {tab === "activity" && isAdmin && <MembershipActivity org={org} members={roster} />}
       {tab === "automations" && isAdmin && <OrphanedAutomations org={org} members={roster} />}
 

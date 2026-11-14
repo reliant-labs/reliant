@@ -35,6 +35,7 @@ func ProtoAccount(a core.ProviderAccount, limits *core.LimitState, now time.Time
 	if a.AuthKind == core.AuthKindAPIKey && a.KeyHint != "" {
 		out.MaskedKey = optional("…" + a.KeyHint)
 	}
+	out.Funding, out.FundingOrgId = protoFunding(a)
 
 	switch a.Status(limits, now) {
 	case core.AccountNeedsSignIn:
@@ -190,6 +191,21 @@ func protoSource(source string, observed bool) pb.UsageSource {
 		return pb.UsageSource_USAGE_SOURCE_LIMIT_ERROR
 	}
 	return pb.UsageSource_USAGE_SOURCE_UNSPECIFIED
+}
+
+// protoFunding is who pays for a (org-provider-accounts §2): the org that owns it, the org a
+// person's seat or managed key is attributed to, or the person.
+func protoFunding(a core.ProviderAccount) (pb.ProviderAccountFunding, *string) {
+	switch {
+	case a.OwnerKind == core.AccountOwnerOrg:
+		return pb.ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_ORG_KEY, optional(a.OrgID)
+	case a.AttributedOrgID == "":
+		return pb.ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_PERSONAL, nil
+	case a.AttributionSource == core.AttributionManaged:
+		return pb.ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_ORG_WALLET, optional(a.AttributedOrgID)
+	default:
+		return pb.ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_ORG_SEAT, optional(a.AttributedOrgID)
+	}
 }
 
 func optional(s string) *string {

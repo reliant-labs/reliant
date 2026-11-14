@@ -1,8 +1,8 @@
 /**
  * Spend limits card: limits in words a member can act on, amounts typed in
  * dollars and kept in nanos, an exception per named member, hosted apps
- * counted only when the admin says so, and the member's own usage reported
- * as not available until the gateway counts it.
+ * counted only when the admin says so, and the member's own usage against
+ * the limits (MyPolicyUsage.test covers its states).
  */
 import { create } from "@bufbuild/protobuf";
 import { screen } from "@testing-library/react";
@@ -41,13 +41,21 @@ const policy = () =>
   });
 
 describe("SpendCard", () => {
-  it("tells a member the limits, who is excepted, and that their usage is not available yet", () => {
-    renderCard<SpendPolicy, { members: OrgMember[] }>(SpendCard, policy(), { editable: false, extra: { members: MEMBERS } });
+  it("tells a member the limits, who is excepted, and their own usage against them", async () => {
+    renderCard<SpendPolicy, { members: OrgMember[] }>(SpendCard, policy(), {
+      editable: false,
+      extra: { members: MEMBERS },
+      handlers: {
+        "OrgPolicyService.GetMyPolicyUsage": {
+          response: { enforced: true, mode: OrgPolicyMode.ENFORCE, member: { cap: { usdNanos: usd(50), period: SpendPeriod.MONTH }, spentUsdNanos: usd(12) } },
+        },
+      },
+    });
     expect(screen.getByTestId("policy-summary-spend")).toHaveTextContent(
       "the organization spends at most $400 a month; each member at most $50 a month; 1 member has their own limit",
     );
     expect(screen.getByTestId("policy-spend-overrides")).toHaveTextContent("Ada: No limit");
-    expect(screen.getByTestId("policy-my-usage")).toHaveTextContent("not available yet");
+    expect(await screen.findByTestId("policy-usage-member")).toHaveTextContent("You've used $12 of your $50 monthly limit.");
   });
 
   it("keeps a typed amount in nanos, and ignores what is not one", async () => {

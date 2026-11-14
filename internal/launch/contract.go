@@ -154,6 +154,13 @@ type Spec struct {
 	ActingIdentity core.ActingIdentity
 	// Automation names the trigger, for the footer on what the bot writes.
 	Automation string
+	// OrgAccountsOnly is an unattended launch whose trigger is stamped
+	// org_only (control-plane docs/design/org-provider-accounts.md §11.3):
+	// its run may spend only its org's own sources. Launch resolves the
+	// run's model over those sources first, and refuses with
+	// *NoOrgAccountError when none serves it, before anything is written.
+	// Ignored for an attended launch and for a chat with no org.
+	OrgAccountsOnly bool
 	// UserJWT is the caller's JWT, carried on the run's execution context so a
 	// cloud-daemon chat's first run resolves the control-plane daemon the same
 	// way its later runs do. Interactive callers fill it; scheduled fires have
@@ -358,6 +365,35 @@ func OwnerLeftOrg(err error) bool {
 		return true
 	}
 	return svcerr.IsPermissionDenied(err) && svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader) == orgs.ReasonNotOrgMember
+}
+
+// ReasonNoOrgAccount is the svcerr reason of a NoOrgAccountError.
+const ReasonNoOrgAccount = "no_org_account"
+
+// ErrNoOrgAccount reports that a Spec.OrgAccountsOnly launch was refused
+// because none of its org's own sources serves the run's model (§11.4, I5).
+// Nothing was written. It is an answer, not a fault: the caller records it,
+// and never retries the launch on a personal account. Match with errors.Is;
+// *NoOrgAccountError carries the model.
+var ErrNoOrgAccount = errors.New(ReasonNoOrgAccount)
+
+// NoOrgAccountError is the concrete ErrNoOrgAccount.
+type NoOrgAccountError struct {
+	// Model is the run's model as its inputs name it ("claude-opus-4-6",
+	// a tag), for the message.
+	Model string
+}
+
+func (e *NoOrgAccountError) Error() string {
+	return fmt.Sprintf("none of the organization's own AI accounts can run %s", e.Model)
+}
+
+// Is makes errors.Is(err, ErrNoOrgAccount) match.
+func (e *NoOrgAccountError) Is(target error) bool { return target == ErrNoOrgAccount }
+
+// Unwrap is a FailedPrecondition with the no_org_account reason.
+func (e *NoOrgAccountError) Unwrap() error {
+	return svcerr.WithReason(svcerr.FailedPrecondition(e.Error()), ReasonNoOrgAccount)
 }
 
 // ErrInternal reports that the launch failed for a reason the caller cannot

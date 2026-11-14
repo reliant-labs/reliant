@@ -49,6 +49,8 @@
         "ModelEndpoint",
         "NATSConn",
         "OrgCredentialSweep",
+        "OrgPolicyAttendance",
+        "OrgPolicyImpact",
         "OrgPolicyResolver",
         "OrgProviderAccount",
         "OrgResolver",
@@ -222,6 +224,13 @@
         {
           "component": "ModelEndpoint",
           "service": "reliant.v1.ModelEndpointService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "OrgPolicyImpact",
+          "service": "reliant.v1.OrgPolicyImpactService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -10497,7 +10506,13 @@
               "MessageType": "reliant.v1.Connection"
             }
           ],
-          "ListIntegrationsRequest": null,
+          "ListIntegrationsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
           "ListIntegrationsResponse": [
             {
               "Name": "integrations",
@@ -10860,6 +10875,11 @@
               "kind": "message",
               "type_name": "reliant.v1.IntegrationConnectionParam",
               "repeated": true
+            },
+            {
+              "name": "org_policy",
+              "kind": "message",
+              "type_name": "reliant.v1.IntegrationOrgPolicy"
             }
           ],
           "reliant.v1.IntegrationAuthMethod": [
@@ -10907,6 +10927,20 @@
             {
               "name": "required",
               "kind": "bool"
+            }
+          ],
+          "reliant.v1.IntegrationOrgPolicy": [
+            {
+              "name": "allowed",
+              "kind": "bool"
+            },
+            {
+              "name": "enforced",
+              "kind": "bool"
+            },
+            {
+              "name": "policy_version",
+              "kind": "int64"
             }
           ],
           "reliant.v1.ListConnectionEventsRequest": [
@@ -10960,7 +10994,13 @@
               "repeated": true
             }
           ],
-          "reliant.v1.ListIntegrationsRequest": [],
+          "reliant.v1.ListIntegrationsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListIntegrationsResponse": [
             {
               "name": "integrations",
@@ -11092,6 +11132,7 @@
           "reliant.v1.Integration": "reliant/v1/connection.proto",
           "reliant.v1.IntegrationAuthMethod": "reliant/v1/connection.proto",
           "reliant.v1.IntegrationConnectionParam": "reliant/v1/connection.proto",
+          "reliant.v1.IntegrationOrgPolicy": "reliant/v1/connection.proto",
           "reliant.v1.ListConnectionEventsRequest": "reliant/v1/connection.proto",
           "reliant.v1.ListConnectionEventsResponse": "reliant/v1/connection.proto",
           "reliant.v1.ListConnectionsRequest": "reliant/v1/connection.proto",
@@ -11498,6 +11539,21 @@
               "Name": "expires_at",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "project_names",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "CreateConnectorResponse": [
@@ -11527,7 +11583,13 @@
               "MessageType": "reliant.v1.AuthorizedClient"
             }
           ],
-          "ListAvailableToolsRequest": null,
+          "ListAvailableToolsRequest": [
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
           "ListAvailableToolsResponse": [
             {
               "Name": "tools",
@@ -11704,6 +11766,20 @@
             {
               "name": "created_at",
               "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectorKind"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_names",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ConnectorActivity": [
@@ -11802,6 +11878,20 @@
               "name": "expires_at",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectorKind"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_names",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.CreateConnectorResponse": [
@@ -11828,7 +11918,14 @@
               "repeated": true
             }
           ],
-          "reliant.v1.ListAvailableToolsRequest": [],
+          "reliant.v1.ListAvailableToolsRequest": [
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectorKind",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListAvailableToolsResponse": [
             {
               "name": "tools",
@@ -11919,6 +12016,11 @@
             "CONNECTOR_EXEC_MODE_DENY",
             "CONNECTOR_EXEC_MODE_ALLOWLIST",
             "CONNECTOR_EXEC_MODE_UNRESTRICTED"
+          ],
+          "reliant.v1.ConnectorKind": [
+            "CONNECTOR_KIND_UNSPECIFIED",
+            "CONNECTOR_KIND_WORKSPACE",
+            "CONNECTOR_KIND_FORGE"
           ]
         },
         "EnumNumbers": {
@@ -11927,12 +12029,21 @@
             1,
             2,
             3
+          ],
+          "reliant.v1.ConnectorKind": [
+            0,
+            1,
+            2
           ]
         },
         "EnumGoRefs": {
           "reliant.v1.ConnectorExecMode": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ConnectorExecMode"
+          },
+          "reliant.v1.ConnectorKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ConnectorKind"
           }
         }
       }
@@ -17253,6 +17364,22 @@
               "name": "last_run_chat_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "incident_key",
+              "kind": "string"
+            },
+            {
+              "name": "attention_state",
+              "kind": "string"
+            },
+            {
+              "name": "failure_class",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
             }
           ],
           "reliant.v1.InboxAutomationLaunchFailed": [
@@ -17277,10 +17404,39 @@
               "repeated": true
             }
           ],
+          "reliant.v1.InboxAutomationNoOrgAccount": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "owner_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.InboxAutomationRunPaused": [
             {
               "name": "reason",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.InboxAutomationsOnPersonalAccounts": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "count",
+              "kind": "int32"
+            },
+            {
+              "name": "trigger_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.InboxItem": [
@@ -17405,6 +17561,18 @@
               "name": "org_provider_key_rejected",
               "kind": "message",
               "type_name": "reliant.v1.InboxOrgProviderKeyRejected",
+              "oneof": "payload"
+            },
+            {
+              "name": "automation_no_org_account",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxAutomationNoOrgAccount",
+              "oneof": "payload"
+            },
+            {
+              "name": "automations_on_personal_accounts",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxAutomationsOnPersonalAccounts",
               "oneof": "payload"
             }
           ],
@@ -17937,7 +18105,9 @@
           "reliant.v1.InboxAutomationFailing": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationLaunchFailed": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationNeedsSetup": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxAutomationNoOrgAccount": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationRunPaused": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxAutomationsOnPersonalAccounts": "reliant/v1/inbox.proto",
           "reliant.v1.InboxItem": "reliant/v1/inbox.proto",
           "reliant.v1.InboxOrgProviderKeyRejected": "reliant/v1/inbox.proto",
           "reliant.v1.InboxQuestion": "reliant/v1/inbox.proto",
@@ -17993,7 +18163,9 @@
             "INBOX_ITEM_KIND_WORKTREE_RECLAIM",
             "INBOX_ITEM_KIND_WORKTREE_MARKED",
             "INBOX_ITEM_KIND_PERSONAL_FUNDING",
-            "INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED"
+            "INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED",
+            "INBOX_ITEM_KIND_AUTOMATION_NO_ORG_ACCOUNT",
+            "INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS"
           ],
           "reliant.v1.TriggerHealthStatus": [
             "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -18036,7 +18208,9 @@
             12,
             13,
             14,
-            15
+            15,
+            16,
+            17
           ],
           "reliant.v1.TriggerHealthStatus": [
             0,
@@ -20218,6 +20392,156 @@
       }
     },
     {
+      "name": "reliant.v1.OrgPolicyImpactService",
+      "proto_file": "reliant/v1/org_policy_impact.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.OrgPolicyImpactService/GetPolicyImpact",
+          "name": "GetPolicyImpact",
+          "input": "reliant.v1.GetPolicyImpactRequest",
+          "output": "reliant.v1.GetPolicyImpactResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "OrgPolicyImpactService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetPolicyImpact",
+            "InputType": "GetPolicyImpactRequest",
+            "OutputType": "GetPolicyImpactResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetPolicyImpactRequest",
+            "OutputTypeFQ": "reliant.v1.GetPolicyImpactResponse",
+            "InputProtoFile": "reliant/v1/org_policy_impact.proto",
+            "OutputProtoFile": "reliant/v1/org_policy_impact.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/org_policy_impact.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetPolicyImpactRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "policy_json",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetPolicyImpactResponse": [
+            {
+              "Name": "window_days",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "chats_considered",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "chats_refused",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "automations_refused",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "reasons",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PolicyImpactReason"
+            },
+            {
+              "Name": "truncated",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetPolicyImpactRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "policy_json",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.GetPolicyImpactResponse": [
+            {
+              "name": "window_days",
+              "kind": "int32"
+            },
+            {
+              "name": "chats_considered",
+              "kind": "int32"
+            },
+            {
+              "name": "chats_refused",
+              "kind": "int32"
+            },
+            {
+              "name": "automations_refused",
+              "kind": "int32"
+            },
+            {
+              "name": "reasons",
+              "kind": "message",
+              "type_name": "reliant.v1.PolicyImpactReason",
+              "repeated": true
+            },
+            {
+              "name": "truncated",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.PolicyImpactReason": [
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "chats",
+              "kind": "int32"
+            },
+            {
+              "name": "automations",
+              "kind": "int32"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetPolicyImpactRequest": "reliant/v1/org_policy_impact.proto",
+          "reliant.v1.GetPolicyImpactResponse": "reliant/v1/org_policy_impact.proto",
+          "reliant.v1.PolicyImpactReason": "reliant/v1/org_policy_impact.proto"
+        }
+      }
+    },
+    {
       "name": "reliant.v1.OrgProviderAccountService",
       "proto_file": "reliant/v1/org_provider_account.proto",
       "methods": [
@@ -21136,6 +21460,16 @@
             {
               "name": "using_credits",
               "kind": "bool"
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountFunding"
+            },
+            {
+              "name": "funding_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ReleaseOrgProviderSeatRequest": [
@@ -21325,6 +21659,13 @@
             "ORG_PROVIDER_ACCOUNT_ACCESS_ADMINS",
             "ORG_PROVIDER_ACCOUNT_ACCESS_SELECTED"
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET"
+          ],
           "reliant.v1.ProviderAccountStatus": [
             "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
             "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
@@ -21353,6 +21694,13 @@
             2,
             3
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.ProviderAccountStatus": [
             0,
             1,
@@ -21378,6 +21726,10 @@
           "reliant.v1.OrgProviderAccountAccess": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "OrgProviderAccountAccess"
+          },
+          "reliant.v1.ProviderAccountFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountFunding"
           },
           "reliant.v1.ProviderAccountStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -27671,6 +28023,16 @@
             {
               "name": "using_credits",
               "kind": "bool"
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountFunding"
+            },
+            {
+              "name": "funding_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.RefreshProviderAccountUsageRequest": [
@@ -27815,6 +28177,13 @@
             "STATE_USE_PERSONAL",
             "STATE_KEEP_WAITING"
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET"
+          ],
           "reliant.v1.ProviderAccountStatus": [
             "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
             "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
@@ -27854,6 +28223,13 @@
             2,
             3
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.ProviderAccountStatus": [
             0,
             1,
@@ -27888,6 +28264,10 @@
           "reliant.v1.PersonalFundingQuestion.State": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "PersonalFundingQuestion_State"
+          },
+          "reliant.v1.ProviderAccountFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountFunding"
           },
           "reliant.v1.ProviderAccountStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -33490,6 +33870,16 @@
             {
               "name": "using_credits",
               "kind": "bool"
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountFunding"
+            },
+            {
+              "name": "funding_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ProviderStatus": [
@@ -34206,6 +34596,13 @@
             "STATUS_DENIED",
             "STATUS_ERROR"
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET"
+          ],
           "reliant.v1.ProviderAccountStatus": [
             "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
             "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
@@ -34274,6 +34671,13 @@
             4,
             5
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.ProviderAccountStatus": [
             0,
             1,
@@ -34333,6 +34737,10 @@
           "reliant.v1.PollCopilotDeviceAuthResponse.Status": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "PollCopilotDeviceAuthResponse_Status"
+          },
+          "reliant.v1.ProviderAccountFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountFunding"
           },
           "reliant.v1.ProviderAccountStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -41586,6 +41994,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.WebhookCredential"
+            },
+            {
+              "Name": "funding_warning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "DeleteTriggerRequest": [
@@ -41977,6 +42391,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Trigger"
+            },
+            {
+              "Name": "funding_warning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "UpdateTriggerRequest": [
@@ -41998,6 +42418,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Trigger"
+            },
+            {
+              "Name": "funding_warning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerFundingWarning"
             }
           ]
         },
@@ -42041,6 +42467,11 @@
               "name": "webhook",
               "kind": "message",
               "type_name": "reliant.v1.WebhookCredential"
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "reliant.v1.DeleteTriggerRequest": [
@@ -42516,6 +42947,11 @@
               "name": "trigger",
               "kind": "message",
               "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "reliant.v1.Trigger": [
@@ -43034,6 +43470,20 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.TriggerFundingWarning": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "model",
+              "kind": "string"
+            },
+            {
+              "name": "message",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.TriggerHealth": [
             {
               "name": "status",
@@ -43103,6 +43553,11 @@
               "name": "trigger",
               "kind": "message",
               "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "reliant.v1.WebhookCredential": [
@@ -43227,6 +43682,11 @@
               "name": "warnings",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ]
         },
@@ -43275,6 +43735,7 @@
           "reliant.v1.TriggerEventDefinition": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerFailure": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerFundingWarning": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerSender": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto",
@@ -47453,6 +47914,33 @@
               "name": "permissions",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "attention",
+              "kind": "message",
+              "type_name": "reliant.v1.WorkflowAttention"
+            }
+          ],
+          "reliant.v1.WorkflowAttention": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "on_start",
+              "kind": "string"
+            },
+            {
+              "name": "recovery_timeout",
+              "kind": "string"
+            },
+            {
+              "name": "on_success",
+              "kind": "string"
+            },
+            {
+              "name": "on_failure",
+              "kind": "string"
             }
           ],
           "reliant.v1.WorkflowConcurrency": [
@@ -47789,6 +48277,7 @@
           "reliant.v1.WebhookHmac": "reliant/v1/trigger.proto",
           "reliant.v1.WebhookSource": "reliant/v1/trigger.proto",
           "reliant.v1.Workflow": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.WorkflowAttention": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowConcurrency": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
           "reliant.v1.WorkflowListItem": "reliant/v1/workflow.proto",
@@ -51653,6 +52142,30 @@
       "implementation_candidates": []
     },
     {
+      "id": "OrgPolicyAttendance",
+      "name": "OrgPolicyAttendance",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.ChatAttendance",
+      "source": {
+        "path": "internal/app/providers_api.go",
+        "symbol": "NewOrgPolicyAttendance"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "OrgPolicyImpact",
+      "name": "OrgPolicyImpact",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Service",
+      "source": {
+        "path": "internal/handlers/org_policy_impact/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "OrgPolicyResolver",
       "name": "OrgPolicyResolver",
       "kind": "provider",
@@ -53250,6 +53763,32 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "OrgPolicyImpact",
+      "field": "Attendance",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.ChatAttendance",
+      "methods": [],
+      "candidates": [
+        "OrgPolicyAttendance"
+      ],
+      "providers": [
+        "OrgPolicyAttendance"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "OrgPolicyResolver",
       "field": "Authority",
       "interface": "github.com/reliant-labs/reliant/internal/tokenauthority.Authority",
@@ -53259,6 +53798,18 @@
       ],
       "providers": [
         "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgProviderAccount",
+      "field": "ChatWaker",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.OrgChatWaker",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database",
+        "TemporalClient"
       ],
       "resolution": "composition_expression"
     },

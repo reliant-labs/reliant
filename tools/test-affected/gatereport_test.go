@@ -159,3 +159,34 @@ func TestMergeGateCoverageAndWiring(t *testing.T) {
 		t.Fatalf("missing obliged checks: %s", problems)
 	}
 }
+
+// A red typecheck printed only "typecheck | FAIL (2)": tsc's diagnostics match
+// no test-failure pattern and the log stayed on the runner (bug report
+// 7e9be182). They now lead the report; a failed phase whose log names nothing
+// gets its last lines instead.
+func TestGateReportNamesTypecheckErrorsAndTailsAnUnnamedFailure(t *testing.T) {
+	dir := t.TempDir()
+	tsc := strings.Repeat("noise\n", 50) + "src/a.ts(12,3): error TS2322: Type 'string' is not assignable to type 'number'.\n"
+	os.WriteFile(filepath.Join(dir, "typecheck.log"), []byte(tsc), 0600)
+	os.WriteFile(filepath.Join(dir, "typecheck.row"), []byte("typecheck 2 10 0\n"), 0600)
+	opaque := strings.Repeat("setup line\n", 60) + "\x1b[31mnpm ERR! missing script: lint\x1b[0m\n"
+	os.WriteFile(filepath.Join(dir, "lint.log"), []byte(opaque), 0600)
+	os.WriteFile(filepath.Join(dir, "lint.row"), []byte("lint 1 5 0\n"), 0600)
+	var out bytes.Buffer
+	if rc := runGateReport([]string{"-dir", dir, "-wall", "10", "-budgets", filepath.Join(repoRoot, "scripts/merge-gate-budgets.json")}, &out, &out); rc != 0 {
+		t.Fatalf("rc %d: %s", rc, &out)
+	}
+	s := out.String()
+	if !strings.HasPrefix(s, "src/a.ts(12,3): error TS2322: Type 'string' is not assignable to type 'number'.\n") {
+		t.Fatalf("tsc error must lead the report: %s", s)
+	}
+	if strings.Contains(s, "noise") {
+		t.Fatalf("a phase whose failure is named must not be tailed: %s", s)
+	}
+	if !strings.Contains(s, "last lines of lint.log") || !strings.Contains(s, "    npm ERR! missing script: lint\n") {
+		t.Fatalf("an unnamed failure must show its log's tail, ANSI-stripped: %s", s)
+	}
+	if n := strings.Count(s, "    setup line\n"); n != failedLogTail-1 {
+		t.Fatalf("tail must be %d lines, got %d setup lines: %s", failedLogTail, n, s)
+	}
+}

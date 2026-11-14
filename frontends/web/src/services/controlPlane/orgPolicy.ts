@@ -9,6 +9,7 @@
  *                     nothing (violations, field changes, warnings)
  *   UpdateOrgPolicy   admin/owner: replace the whole document, carrying the
  *                     version the editor read (optimistic concurrency)
+ *   GetMyPolicyUsage  any member: their own spend against the caps (§6)
  *
  * The history is the org's limit-change log (BillingService.ListOrgLimitChanges),
  * whose policy rows are the resources "policy.<section>.<field>".
@@ -21,10 +22,15 @@
  */
 
 import { timestampDate } from "@bufbuild/protobuf/wkt";
+import { Code, ConnectError } from "@connectrpc/connect";
 
-import type { OrgPolicy } from "@/gen/controlplane/controlplane/v1/org_policy_pb";
+import type { OrgPolicy, OrgPolicyMode, SpendAppliesTo, SpendCap } from "@/gen/controlplane/controlplane/v1/org_policy_pb";
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
-import { OrgPolicyService, type OrgPolicyRecord } from "@/gen/controlplane/services/org_policy/v1/org_policy_pb";
+import {
+  OrgPolicyService,
+  type OrgPolicyRecord,
+  type PolicySpendUsage,
+} from "@/gen/controlplane/services/org_policy/v1/org_policy_pb";
 import { errorReason, hasErrorReason } from "@/lib/errorReasons";
 
 import { getControlPlaneClient } from "./client";
@@ -37,6 +43,7 @@ export const orgPolicyKeys = {
   all: ["org-policy"] as const,
   policy: (orgId: string) => ["org-policy", orgId, "document"] as const,
   history: (orgId: string) => ["org-policy", orgId, "history"] as const,
+  usage: (orgId: string) => ["org-policy", orgId, "usage"] as const,
 };
 
 /** The org's policy as the page holds it. */
@@ -118,6 +125,64 @@ export async function updateOrgPolicy(
     expectedVersion: BigInt(expectedVersion),
   });
   return { record: mapRecord(orgId, res.policy), changed: res.changed };
+}
+
+/** Spend against one cap in its current UTC period. */
+export interface SpendUsage {
+  /** The cap that applies; null when none does (no cap, or an unlimited override). */
+  cap: SpendCap | null;
+  /** The caller's override exempts them from the member cap (member usage only). */
+  unlimited: boolean;
+  /** What the cap counts this period: its own period, or the calendar month without one. */
+  spentUsdNanos: bigint;
+  periodStart: Date | null;
+  /** Exclusive: the moment the count starts again. */
+  periodEnd: Date | null;
+}
+
+/** The caller's own spend in an org against the caps that bind them (GetMyPolicyUsage). */
+export interface MyPolicyUsage {
+  /** 0: the org has no policy. */
+  policyVersion: number;
+  mode: OrgPolicyMode;
+  /** The caps refuse calls today; false while they are only trialled (audit). */
+  enforced: boolean;
+  member: SpendUsage | null;
+  org: SpendUsage | null;
+  appliesTo: SpendAppliesTo;
+}
+
+function mapSpendUsage(u: PolicySpendUsage | undefined): SpendUsage | null {
+  if (!u) return null;
+  return {
+    cap: u.cap ?? null,
+    unlimited: u.unlimited,
+    spentUsdNanos: u.spentUsdNanos,
+    periodStart: u.periodStart ? timestampDate(u.periodStart) : null,
+    periodEnd: u.periodEnd ? timestampDate(u.periodEnd) : null,
+  };
+}
+
+/**
+ * GetMyPolicyUsage: any member's own spend against the org's caps. A control
+ * plane older than org-policies G2 answers Unimplemented; callers show that
+ * as "not available yet" (isUsageUnavailable).
+ */
+export async function getMyPolicyUsage(orgId: string): Promise<MyPolicyUsage> {
+  const res = await getControlPlaneClient(OrgPolicyService).getMyPolicyUsage({ orgId });
+  return {
+    policyVersion: Number(res.policyVersion),
+    mode: res.mode,
+    enforced: res.enforced,
+    member: mapSpendUsage(res.member),
+    org: mapSpendUsage(res.org),
+    appliesTo: res.appliesTo,
+  };
+}
+
+/** The control plane does not have GetMyPolicyUsage yet: an older deployment, not a fault. */
+export function isUsageUnavailable(err: unknown): boolean {
+  return err instanceof ConnectError && err.code === Code.Unimplemented;
 }
 
 /** One edit to one field of the policy, from the org's limit-change log. */

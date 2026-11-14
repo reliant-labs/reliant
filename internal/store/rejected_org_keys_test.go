@@ -3,7 +3,9 @@ package store_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -71,4 +73,80 @@ func TestRejectedOrgKeysIndex(t *testing.T) {
 	assert.Equal(t, "org_id", columns)
 	assert.Contains(t, predicate, "owner_kind = 'org'")
 	assert.Contains(t, predicate, "needs_reauth_at IS NOT NULL")
+}
+
+// The org-key notice sweep is fair (as the pause sweep): with 120 older
+// marks whose start keeps failing claimed by earlier sweeps, a newer mark is
+// the one the next sweep claims; a claimed mark is not claimed again within
+// its lease, but is at once when the key is marked anew.
+func TestClaimDueOrgKeyNotices_IsFairToANewerMark(t *testing.T) {
+	f := newCredFixture(t)
+	ctx := context.Background()
+	for i := 1; i <= 120; i++ {
+		id := fmt.Sprintf("k-old-%d", i)
+		f.orgKey(id, "acme")
+		f.exec(`UPDATE provider_accounts SET needs_reauth_at = now() - interval '1 day' + $2 * interval '1 second',
+			needs_reauth_reason = 'rejected', reauth_notice_next_at = now() + interval '1 hour' WHERE id = $1`, id, i)
+	}
+	f.orgKey("k-new", "acme")
+	f.exec(`UPDATE provider_accounts SET needs_reauth_at = now(), needs_reauth_reason = 'rejected' WHERE id = 'k-new'`)
+
+	claim := func() []string {
+		t.Helper()
+		got, err := store.ClaimDueOrgKeyNotices(ctx, f.env.ORM, 100, time.Hour)
+		require.NoError(t, err)
+		var out []string
+		for _, a := range got {
+			out = append(out, a.ID)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"k-new"}, claim(), "only the newer mark is due")
+	assert.Empty(t, claim(), "claimed: not due again within the lease")
+
+	// Marked anew after its claim: due at once.
+	f.exec(`UPDATE provider_accounts SET needs_reauth_at = now() + interval '1 second' WHERE id = 'k-old-7'`)
+	assert.Equal(t, []string{"k-old-7"}, claim())
+}
+
+// A rejected org key's mark is a notice still to start until it is confirmed
+// for exactly that mark: confirming lists it no more, a confirm for an older
+// mark changes nothing, and a new mark (after a rotation) is listed again.
+// Working keys and a person's own rejected key are never listed.
+func TestUnstartedOrgKeyNotices(t *testing.T) {
+	f := newCredFixture(t)
+	ctx := context.Background()
+	mark := func(id string, at time.Time) {
+		f.exec(`UPDATE provider_accounts SET needs_reauth_at = $2, needs_reauth_reason = 'rejected' WHERE id = $1`, id, at)
+	}
+	ids := func() []string {
+		t.Helper()
+		f.exec(`UPDATE provider_accounts SET reauth_notice_next_at = NULL`) // every mark due again
+		got, err := store.ClaimDueOrgKeyNotices(ctx, f.env.ORM, 10, time.Hour)
+		require.NoError(t, err)
+		var out []string
+		for _, a := range got {
+			out = append(out, a.ID)
+		}
+		return out
+	}
+	f.orgKey("k-acme", "acme")
+	f.orgKey("k-fine", "acme")
+	f.personal("own-dead", "member", "", "")
+	mark("own-dead", credT0)
+	mark("k-acme", credT0)
+	assert.Equal(t, []string{"k-acme"}, ids())
+
+	require.NoError(t, store.ConfirmOrgKeyNotice(ctx, f.env.ORM, "beta", "k-acme", credT0))
+	assert.Equal(t, []string{"k-acme"}, ids(), "another org's confirm reaches nothing")
+	require.NoError(t, store.ConfirmOrgKeyNotice(ctx, f.env.ORM, "acme", "k-acme", credT0))
+	assert.Empty(t, ids(), "confirmed for its mark")
+
+	later := credT0.Add(time.Hour)
+	mark("k-acme", later)
+	assert.Equal(t, []string{"k-acme"}, ids(), "a new mark is a new notice")
+	require.NoError(t, store.ConfirmOrgKeyNotice(ctx, f.env.ORM, "acme", "k-acme", credT0))
+	assert.Equal(t, []string{"k-acme"}, ids(), "a confirm of the old mark is not this one's")
+	require.NoError(t, store.ConfirmOrgKeyNotice(ctx, f.env.ORM, "acme", "k-acme", later))
+	assert.Empty(t, ids())
 }

@@ -260,9 +260,12 @@ func TestStreamChatUpdates_ChatUpdatePublishedDuringSnapshotIsNotLost(t *testing
 		},
 	})
 
-	// Give the publish time to land in the subscriber's buffer, then let the
-	// snapshot finish. The update must survive the snapshot completing.
-	time.Sleep(200 * time.Millisecond)
+	// Land the publish in the subscriber's buffer, then let the snapshot
+	// finish. The hub publishes and subscribes on nc, so once a flush
+	// round-trip returns the server has routed the message and the client has
+	// read it ahead of the PONG. The update must survive the snapshot
+	// completing.
+	require.NoError(t, nc.Flush())
 	close(repo.released)
 
 	select {

@@ -62,6 +62,9 @@ const (
 	// OrgPolicyServicePreviewOrgPolicyProcedure is the fully-qualified name of the OrgPolicyService's
 	// PreviewOrgPolicy RPC.
 	OrgPolicyServicePreviewOrgPolicyProcedure = "/controlplane.v1.OrgPolicyService/PreviewOrgPolicy"
+	// OrgPolicyServiceGetMyPolicyUsageProcedure is the fully-qualified name of the OrgPolicyService's
+	// GetMyPolicyUsage RPC.
+	OrgPolicyServiceGetMyPolicyUsageProcedure = "/controlplane.v1.OrgPolicyService/GetMyPolicyUsage"
 )
 
 // OrgPolicyServiceClient is a client for the controlplane.v1.OrgPolicyService service.
@@ -95,6 +98,13 @@ type OrgPolicyServiceClient interface {
 	// an answer here (violations), not an error, so an editor can show every
 	// problem at once.
 	PreviewOrgPolicy(context.Context, *connect.Request[v1.PreviewOrgPolicyRequest]) (*connect.Response[v1.PreviewOrgPolicyResponse], error)
+	// GetMyPolicyUsage returns the caller's own LLM spend in the org against
+	// the spend caps that bind them this period (§6), and the org's spend
+	// against the org cap as that cap counts it. Any member: a cap no one can
+	// see is a cap no one can comply with.
+	//
+	// forge:custom — the caller's usage, not the CRUD of a table.
+	GetMyPolicyUsage(context.Context, *connect.Request[v1.GetMyPolicyUsageRequest]) (*connect.Response[v1.GetMyPolicyUsageResponse], error)
 }
 
 // NewOrgPolicyServiceClient constructs a client for the controlplane.v1.OrgPolicyService service.
@@ -126,6 +136,12 @@ func NewOrgPolicyServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(orgPolicyServiceMethods.ByName("PreviewOrgPolicy")),
 			connect.WithClientOptions(opts...),
 		),
+		getMyPolicyUsage: connect.NewClient[v1.GetMyPolicyUsageRequest, v1.GetMyPolicyUsageResponse](
+			httpClient,
+			baseURL+OrgPolicyServiceGetMyPolicyUsageProcedure,
+			connect.WithSchema(orgPolicyServiceMethods.ByName("GetMyPolicyUsage")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -134,6 +150,7 @@ type orgPolicyServiceClient struct {
 	getOrgPolicy     *connect.Client[v1.GetOrgPolicyRequest, v1.GetOrgPolicyResponse]
 	updateOrgPolicy  *connect.Client[v1.UpdateOrgPolicyRequest, v1.UpdateOrgPolicyResponse]
 	previewOrgPolicy *connect.Client[v1.PreviewOrgPolicyRequest, v1.PreviewOrgPolicyResponse]
+	getMyPolicyUsage *connect.Client[v1.GetMyPolicyUsageRequest, v1.GetMyPolicyUsageResponse]
 }
 
 // GetOrgPolicy calls controlplane.v1.OrgPolicyService.GetOrgPolicy.
@@ -149,6 +166,11 @@ func (c *orgPolicyServiceClient) UpdateOrgPolicy(ctx context.Context, req *conne
 // PreviewOrgPolicy calls controlplane.v1.OrgPolicyService.PreviewOrgPolicy.
 func (c *orgPolicyServiceClient) PreviewOrgPolicy(ctx context.Context, req *connect.Request[v1.PreviewOrgPolicyRequest]) (*connect.Response[v1.PreviewOrgPolicyResponse], error) {
 	return c.previewOrgPolicy.CallUnary(ctx, req)
+}
+
+// GetMyPolicyUsage calls controlplane.v1.OrgPolicyService.GetMyPolicyUsage.
+func (c *orgPolicyServiceClient) GetMyPolicyUsage(ctx context.Context, req *connect.Request[v1.GetMyPolicyUsageRequest]) (*connect.Response[v1.GetMyPolicyUsageResponse], error) {
+	return c.getMyPolicyUsage.CallUnary(ctx, req)
 }
 
 // OrgPolicyServiceHandler is an implementation of the controlplane.v1.OrgPolicyService service.
@@ -182,6 +204,13 @@ type OrgPolicyServiceHandler interface {
 	// an answer here (violations), not an error, so an editor can show every
 	// problem at once.
 	PreviewOrgPolicy(context.Context, *connect.Request[v1.PreviewOrgPolicyRequest]) (*connect.Response[v1.PreviewOrgPolicyResponse], error)
+	// GetMyPolicyUsage returns the caller's own LLM spend in the org against
+	// the spend caps that bind them this period (§6), and the org's spend
+	// against the org cap as that cap counts it. Any member: a cap no one can
+	// see is a cap no one can comply with.
+	//
+	// forge:custom — the caller's usage, not the CRUD of a table.
+	GetMyPolicyUsage(context.Context, *connect.Request[v1.GetMyPolicyUsageRequest]) (*connect.Response[v1.GetMyPolicyUsageResponse], error)
 }
 
 // NewOrgPolicyServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -209,6 +238,12 @@ func NewOrgPolicyServiceHandler(svc OrgPolicyServiceHandler, opts ...connect.Han
 		connect.WithSchema(orgPolicyServiceMethods.ByName("PreviewOrgPolicy")),
 		connect.WithHandlerOptions(opts...),
 	)
+	orgPolicyServiceGetMyPolicyUsageHandler := connect.NewUnaryHandler(
+		OrgPolicyServiceGetMyPolicyUsageProcedure,
+		svc.GetMyPolicyUsage,
+		connect.WithSchema(orgPolicyServiceMethods.ByName("GetMyPolicyUsage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.OrgPolicyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case OrgPolicyServiceGetOrgPolicyProcedure:
@@ -217,6 +252,8 @@ func NewOrgPolicyServiceHandler(svc OrgPolicyServiceHandler, opts ...connect.Han
 			orgPolicyServiceUpdateOrgPolicyHandler.ServeHTTP(w, r)
 		case OrgPolicyServicePreviewOrgPolicyProcedure:
 			orgPolicyServicePreviewOrgPolicyHandler.ServeHTTP(w, r)
+		case OrgPolicyServiceGetMyPolicyUsageProcedure:
+			orgPolicyServiceGetMyPolicyUsageHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -236,4 +273,8 @@ func (UnimplementedOrgPolicyServiceHandler) UpdateOrgPolicy(context.Context, *co
 
 func (UnimplementedOrgPolicyServiceHandler) PreviewOrgPolicy(context.Context, *connect.Request[v1.PreviewOrgPolicyRequest]) (*connect.Response[v1.PreviewOrgPolicyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrgPolicyService.PreviewOrgPolicy is not implemented"))
+}
+
+func (UnimplementedOrgPolicyServiceHandler) GetMyPolicyUsage(context.Context, *connect.Request[v1.GetMyPolicyUsageRequest]) (*connect.Response[v1.GetMyPolicyUsageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrgPolicyService.GetMyPolicyUsage is not implemented"))
 }

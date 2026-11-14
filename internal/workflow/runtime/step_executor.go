@@ -730,7 +730,7 @@ func (e *StepExecutor) executeSaveMessage(running *RunningStep, output map[strin
 
 	workflowContext := buildSaveMessageWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.GetThread(), e.execContext)
 	saveOutput, err := executeSaveMessageInline(
-		e.ctx,
+		withRunTelemetry(e.ctx, e.runtimeTelemetry()),
 		node,
 		output,
 		workflowContext,
@@ -915,6 +915,11 @@ func (e *StepExecutor) startAction(
 		}
 
 		rtx := e.buildRuntimeContext(node)
+		// The turn that asked for these calls, so each call's span is opened
+		// under it, on whichever worker runs the batch (run_telemetry.go).
+		if rtx.Telemetry != nil {
+			rtx.Telemetry.TurnTraceParent = e.upstreamTurnTraceParent(node, evalResult.GetExecuteTools().GetResolvedToolCalls())
+		}
 		// A batch with spawn/ask_user calls is merged workflow-side, so the
 		// workflow is the executor of that output and saves it itself; any
 		// other batch's result IS the ExecuteTools activity's result.
@@ -1079,6 +1084,11 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 	runInputs["chat_id"] = e.chatID
 	runInputs["step_id"] = node.GetId()
 	runInputs["node_path"] = joinNodePath(e.nodePathPrefix, node.GetId())
+	// The run this step belongs to, for the worker's spans (run_telemetry.go).
+	if rt := e.runtimeTelemetry(); rt != nil {
+		runInputs["telemetry"] = rt
+	}
+	runInputs["node_type"] = model.NodeTypeRun
 	if e.loopNodeID != "" {
 		runInputs["loop_node_id"] = e.loopNodeID
 		runInputs["loop_iteration"] = e.loopIteration
@@ -1286,6 +1296,8 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		rtx.Thread = e.execContext.Thread
 		rtx.ExcludeAmbientMemory = e.execContext.ExcludeAmbientMemory
 	}
+	// The run this node belongs to, for the worker's spans (run_telemetry.go).
+	rtx.Telemetry = e.runtimeTelemetry()
 	// A call's opt-out also caps any descendants it subsequently spawns on
 	// this thread. Never clear a previously recorded exclusion.
 	rtx.ExcludeAmbientMemory = rtx.ExcludeAmbientMemory || excludesAmbientMemory(e.workflowInputs) || e.childTracker.excludesAmbientMemory(rtx.Thread)

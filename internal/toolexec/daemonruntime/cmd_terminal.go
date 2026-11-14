@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/terminal"
 )
@@ -48,6 +49,11 @@ func init() {
 
 type terminalCreateRequest struct {
 	WorkingDir string `json:"working_dir"`
+	// OrgPolicy is the org stamp of the work the terminal is opened for (the
+	// API server's; daemonpolicy.OrgStamp). One that forces `credentials:
+	// none` starts the shell without credentials (terminal.SessionOptions).
+	// Absent: today's terminal.
+	OrgPolicy *daemonpolicy.OrgStamp `json:"org_policy,omitempty"`
 }
 
 type terminalCreateResponse struct {
@@ -79,7 +85,7 @@ func handleTerminalCreate(_ context.Context, payload []byte) ([]byte, error) {
 	// bidi stream serves exactly one user, so the router only delivers commands
 	// to the correct daemon. We pass an empty userID here because access
 	// control is enforced at the stream/routing level, not inside the manager.
-	session, err := tm.CreateSession(req.WorkingDir, "")
+	session, err := tm.CreateSessionWith(req.WorkingDir, "", terminal.SessionOptions{CredentialsNone: req.OrgPolicy.CredentialsForced()})
 	if err != nil {
 		logging.Warn("[Terminal] Session not created",
 			"requested_working_dir", req.WorkingDir, "error", err)
@@ -87,12 +93,13 @@ func handleTerminalCreate(_ context.Context, payload []byte) ([]byte, error) {
 	}
 
 	var pid int
-	if session.CMD != nil && session.CMD.Process != nil {
-		pid = session.CMD.Process.Pid
+	if p := session.Process(); p != nil {
+		pid = p.Pid
 	}
 	logging.Info("[Terminal] Session created",
 		"session_id", session.ID,
 		"pid", pid,
+		"credentials_none", req.OrgPolicy.CredentialsForced(),
 		"requested_working_dir", req.WorkingDir,
 		"working_dir", session.WorkingDir,
 	)
@@ -134,8 +141,8 @@ func handleTerminalList(_ context.Context, _ []byte) ([]byte, error) {
 
 	for _, s := range sessions {
 		var pid int
-		if s.CMD != nil && s.CMD.Process != nil {
-			pid = s.CMD.Process.Pid
+		if p := s.Process(); p != nil {
+			pid = p.Pid
 		}
 		infos = append(infos, terminalSessionInfo{
 			ID:         s.ID,

@@ -208,7 +208,7 @@ func (b *CELContextBuilder) evalSingleCEL(expr string, config wfcel.CELEnvConfig
 	}
 	out, _, err := compiled.Program.Eval(evalCtx)
 	if err != nil {
-		return nil, fmt.Errorf("CEL evaluation error: %w", wfcel.ExplainEvalError(err))
+		return nil, &wfcel.EvalError{Phase: wfcel.PhaseEval, Expr: expr, Err: wfcel.ExplainEvalError(err)}
 	}
 
 	// convertCELToNative (wfcel.ConvertToNative) maps CEL null — the
@@ -229,7 +229,7 @@ func (b *CELContextBuilder) EvalBool(expr string) (bool, error) {
 	}
 	out, _, err := compiled.Program.Eval(evalCtx)
 	if err != nil {
-		return false, fmt.Errorf("CEL evaluation error: %w", wfcel.ExplainEvalError(err))
+		return false, &wfcel.EvalError{Phase: wfcel.PhaseEval, Expr: expr, Err: wfcel.ExplainEvalError(err)}
 	}
 
 	boolVal, ok := out.Value().(bool)
@@ -246,7 +246,9 @@ func compileCEL(config wfcel.CELEnvConfig, expr string) (*wfcel.CompiledExpr, er
 		return nil, fmt.Errorf("failed to create CEL program: %w", err)
 	}
 	if issues != nil {
-		return nil, fmt.Errorf("CEL compilation error: %w", issues.Err())
+		// Typed, with the same text, so the failure is classed as the
+		// workflow author's (wfcel.EvalError.ErrorClass).
+		return nil, &wfcel.EvalError{Phase: wfcel.PhaseCompile, Expr: expr, Err: issues.Err()}
 	}
 	return compiled, nil
 }
