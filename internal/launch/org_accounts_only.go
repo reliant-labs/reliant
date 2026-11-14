@@ -30,22 +30,39 @@ func (l *Launcher) checkOrgAccountsOnly(ctx context.Context, spec Spec, chat *db
 	if !spec.OrgAccountsOnly || !spec.Unattended || chat == nil || chat.OrgID == nil || *chat.OrgID == "" {
 		return nil
 	}
-	selector, ok := inputs["model"]
-	if !ok || selector == nil || isLocalSelector(selector) {
-		return nil
-	}
 	lookup := l.sources
 	if lookup == nil {
 		lookup = drivers.LookupAvailableDrivers
 	}
-	available, err := lookup(ctx, drivers.Scope{UserID: chat.UserID, OrgID: *chat.OrgID})
+	model, unserved, err := UnservedModel(ctx, lookup, drivers.Scope{UserID: chat.UserID, OrgID: *chat.OrgID}, inputs["model"])
 	if err != nil {
 		return &InternalError{Reason: "failed to read the organization's AI accounts", Err: err}
 	}
-	if resolveSelector(selector, available) != nil {
+	if !unserved {
 		return nil
 	}
-	return &NoOrgAccountError{Model: selectorLabel(selector)}
+	return &NoOrgAccountError{Model: model}
+}
+
+// UnservedModel reports whether no source of scope serves selector, a model
+// input value, resolved exactly as a run's first call resolves it, and names
+// the model for a person ("claude-opus-4-6", "the flagship model"). No
+// selector, and a local model (the owner's machine or endpoint, which no
+// account pays for), are never unserved, and scope's sources are not read
+// for them. lookup reads scope's sources: drivers.LookupAvailableDrivers in
+// production. Its error is returned as is.
+func UnservedModel(ctx context.Context, lookup func(context.Context, drivers.Scope) (models.AvailableDrivers, error), scope drivers.Scope, selector interface{}) (string, bool, error) {
+	if selector == nil || isLocalSelector(selector) {
+		return "", false, nil
+	}
+	available, err := lookup(ctx, scope)
+	if err != nil {
+		return "", false, err
+	}
+	if resolveSelector(selector, available) != nil {
+		return "", false, nil
+	}
+	return selectorLabel(selector), true, nil
 }
 
 // selectorLabel names a model selector for a person: its model id, else its
