@@ -3,7 +3,9 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -112,5 +114,47 @@ func TestRunScopeInterceptor_OpensANodeSpanForANodesActivity(t *testing.T) {
 			assert.Equal(t, "org-1", a[telemetry.AttrOrgID])
 			assert.Equal(t, "chat-1", a[telemetry.AttrChatID])
 		})
+	}
+}
+
+// Node spans of different chats, run one after another on one worker, each
+// carry only their own chat's user and org; a chat whose owner cannot be read
+// carries neither, never the previous chat's.
+func TestRunScopeInterceptor_NodeSpansCarryOnlyTheirChatsOwner(t *testing.T) {
+	rec := tracetest.NewSpanRecorder()
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(rec)))
+	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+
+	byChat := map[string]telemetry.ChatOwner{
+		"chat-a": {UserID: "user-a", OrgID: "org-a"},
+		"chat-b": {UserID: "user-b", OrgID: "org-b"},
+	}
+	owners := telemetry.NewChatOwnerOrgCache(func(_ context.Context, chat string) (telemetry.ChatOwner, error) {
+		if o, ok := byChat[chat]; ok {
+			return o, nil
+		}
+		return telemetry.ChatOwner{}, errors.New("no such chat")
+	}, time.Hour, 10)
+	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
+	env.SetWorkerOptions(temporaltest.WorkerOptions(worker.Options{
+		Interceptors: []interceptor.WorkerInterceptor{NewRunScopeWorkerInterceptor(owners)},
+	}))
+	work := func(context.Context, map[string]any) error { return nil }
+	env.RegisterActivity(work)
+
+	for _, chat := range []string{"chat-a", "chat-b", "chat-gone", "chat-a", "chat-b"} {
+		rec.Reset()
+		_, err := env.ExecuteActivity(work, map[string]any{"chat_id": chat, "workflow_id": "wf-" + chat, "step_id": "build", "node_type": "run",
+			"telemetry": map[string]any{"workflow_name": "agent", "run_id": "run-" + chat}})
+		require.NoError(t, err)
+		require.Len(t, rec.Ended(), 1, chat)
+		a := map[attribute.Key]string{}
+		for _, kv := range rec.Ended()[0].Attributes() {
+			a[kv.Key] = kv.Value.Emit()
+		}
+		assert.Equal(t, chat, a[telemetry.AttrChatID])
+		assert.Equal(t, byChat[chat].UserID, a[telemetry.AttrUserID], "%s's node span user", chat)
+		assert.Equal(t, byChat[chat].OrgID, a[telemetry.AttrOrgID], "%s's node span org", chat)
 	}
 }
