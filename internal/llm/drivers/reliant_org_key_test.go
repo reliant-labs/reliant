@@ -20,11 +20,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// orgMinter records every mint and answers each with a fresh rlat_ token, or err.
+// orgMinter is control-plane's token store for one person: it records every
+// mint, answers each with a fresh rlat_ token (or err), and lists and revokes
+// the live tokens as AccessTokenInternalService does.
 type orgMinter struct {
-	mu   sync.Mutex
-	reqs []accesstokenclient.MintRequest
-	err  error
+	mu      sync.Mutex
+	reqs    []accesstokenclient.MintRequest
+	err     error
+	live    map[string]accesstokenclient.TokenInfo // by id
+	revoked []string
+	created time.Time
 }
 
 func (m *orgMinter) MintForUser(_ context.Context, req accesstokenclient.MintRequest) (accesstokenclient.Minted, error) {
@@ -35,7 +40,43 @@ func (m *orgMinter) MintForUser(_ context.Context, req accesstokenclient.MintReq
 		return accesstokenclient.Minted{}, m.err
 	}
 	n := string(rune('a' + len(m.reqs)))
-	return accesstokenclient.Minted{Plaintext: fat.Prefix + strings.Repeat(n, fat.TokenLen-len(fat.Prefix)), Rotated: req.Rotate}, nil
+	plain := fat.Prefix + strings.Repeat(n, fat.TokenLen-len(fat.Prefix))
+	id := "tok-" + n
+	if m.live == nil {
+		m.live = map[string]accesstokenclient.TokenInfo{}
+	}
+	m.live[id] = accesstokenclient.TokenInfo{ID: id, Name: req.Name, DisplayPrefix: plain[:len(fat.Prefix)+fat.DisplayPrefixLen], CreatedAt: m.created}
+	return accesstokenclient.Minted{TokenID: id, Plaintext: plain, Rotated: req.Rotate}, nil
+}
+
+func (m *orgMinter) ListForUser(context.Context, string, fat.Scope) ([]accesstokenclient.TokenInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]accesstokenclient.TokenInfo, 0, len(m.live))
+	for _, t := range m.live {
+		out = append(out, t)
+	}
+	return out, nil
+}
+
+func (m *orgMinter) RevokeForUser(_ context.Context, _ string, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.live, id)
+	m.revoked = append(m.revoked, id)
+	return nil
+}
+
+// isLive reports whether the token whose plaintext is key is live.
+func (m *orgMinter) isLive(key string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, t := range m.live {
+		if strings.HasPrefix(key, t.DisplayPrefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *orgMinter) mints() []accesstokenclient.MintRequest {
@@ -89,7 +130,7 @@ func TestEnsureOrgKey_MintsOneKeyPerOrgInThatOrg(t *testing.T) {
 	require.Len(t, mints, 2)
 	for i, org := range []string{"org-a", "org-b"} {
 		assert.Equal(t, accesstokenclient.MintRequest{
-			UserID: "u1", Name: controlplane.ReliantOrgProviderKeyName, Scopes: []fat.Scope{fat.ScopeLLMInvoke}, Rotate: true, OrgID: org,
+			UserID: "u1", Name: controlplane.ReliantOrgProviderKeyName, Scopes: []fat.Scope{fat.ScopeLLMInvoke}, OrgID: org,
 		}, mints[i])
 	}
 	assert.NotEqual(t, controlplane.ReliantProviderKeyName, controlplane.ReliantOrgProviderKeyName,
@@ -183,6 +224,8 @@ func TestRotateOrgKeys_RotatesEachOrgsKeyInItsOrg(t *testing.T) {
 		k := core.ManagedOrgIdentityKey(org)
 		assert.NotEqual(t, before[k].Secrets.Secret, after[k].Secrets.Secret, org)
 		assert.Equal(t, before[k].ID, after[k].ID, org)
+		assert.False(t, minter.isLive(before[k].Secrets.Secret), "%s: the replaced key is revoked once the new one is stored", org)
+		assert.True(t, minter.isLive(after[k].Secrets.Secret), org)
 	}
 	assert.Equal(t, validRlat, after[core.ManagedIdentityKey].Secrets.Secret)
 }
@@ -214,4 +257,138 @@ func TestUpsertProviderAccount_ManagedKeyShapes(t *testing.T) {
 		_, _, err := repo.UpsertProviderAccount(ctx, u)
 		assert.Error(t, err, name)
 	}
+}
+
+// failingUpserts is the repository with UpsertProviderAccount failing while fail is set.
+type failingUpserts struct {
+	*db.Repo
+	fail bool
+}
+
+func (f *failingUpserts) UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error) {
+	if f.fail {
+		return core.ProviderAccount{}, false, errors.New("database unavailable")
+	}
+	return f.Repo.UpsertProviderAccount(ctx, u)
+}
+
+// B2: a rotation mints the new key, stores it, and only then revokes the old
+// one. When the write fails the stored key is not revoked, so it keeps
+// serving and the next resolution uses it; the sweep then revokes the token
+// the failed write orphaned.
+func TestRotateOrgKeys_AFailedWriteLeavesTheStoredKeyServing(t *testing.T) {
+	minter := &orgMinter{created: time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)}
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	store := &failingUpserts{Repo: repo}
+	h := NewReliantKeyHealer(store, minter).WithPerOrgKeys(true)
+	now := minter.created
+	h.now = func() time.Time { return now }
+	ctx := context.Background()
+	db.SeedProviderAccount(t, repo, "u1", "reliant", validRlat)
+	stored, _, err := h.EnsureOrgKey(ctx, "u1", "org-a")
+	require.NoError(t, err)
+
+	store.fail = true
+	require.Error(t, h.RotateOrgKeys(ctx, "u1"))
+	store.fail = false
+	assert.True(t, minter.isLive(stored), "the stored key was not revoked")
+	assert.Equal(t, stored, reliantRows(t, repo, "u1")[core.ManagedOrgIdentityKey("org-a")].Secrets.Secret)
+
+	key, minted, err := h.EnsureOrgKey(ctx, "u1", "org-a")
+	require.NoError(t, err)
+	assert.False(t, minted)
+	assert.Equal(t, stored, key, "the next resolution recovers on the stored key")
+
+	mints := minter.mints()
+	orphan := mints[len(mints)-1]
+	require.Equal(t, "org-a", orphan.OrgID)
+	_, err = h.healOrgKeys(ctx, "u1")
+	require.NoError(t, err)
+	assert.Len(t, minter.revoked, 0, "an orphan younger than orphanAge may be another replica's unstored mint")
+	now = now.Add(orphanAge)
+	_, err = h.healOrgKeys(ctx, "u1")
+	require.NoError(t, err)
+	assert.Len(t, minter.revoked, 1, "the orphaned token is revoked")
+	assert.True(t, minter.isLive(stored))
+}
+
+// A key the gateway rejected (marked needs-sign-in by the credential
+// rejection path) is minted again, by the next resolution and by the sweep,
+// and the rejected token is revoked.
+func TestEnsureOrgKey_MintsARejectedKeyAgain(t *testing.T) {
+	for name, heal := range map[string]func(h *ReliantKeyHealer) error{
+		"resolution": func(h *ReliantKeyHealer) error {
+			_, _, err := h.EnsureOrgKey(context.Background(), "u1", "org-a")
+			return err
+		},
+		"sweep": func(h *ReliantKeyHealer) error { _, _, err := h.Sweep(context.Background()); return err },
+	} {
+		t.Run(name, func(t *testing.T) {
+			minter := &orgMinter{}
+			repo, h := newOrgKeyFixture(t, minter)
+			ctx := context.Background()
+			db.SeedProviderAccount(t, repo, "u1", "reliant", validRlat)
+			old, _, err := h.EnsureOrgKey(ctx, "u1", "org-a")
+			require.NoError(t, err)
+			row := reliantRows(t, repo, "u1")[core.ManagedOrgIdentityKey("org-a")]
+			reason := "the gateway rejected the org's managed Reliant key"
+			_, err = repo.PatchProviderAccount(ctx, "u1", row.ID, core.AccountPatch{NeedsReauth: &reason})
+			require.NoError(t, err)
+			accounts, err := repo.ListProviderAccountsWithSecrets(ctx, "u1")
+			require.NoError(t, err)
+			require.Nil(t, usableOrgReliantKey(accounts, "org-a"), "a rejected key is not usable")
+
+			require.NoError(t, heal(h))
+			fresh := reliantRows(t, repo, "u1")[core.ManagedOrgIdentityKey("org-a")]
+			assert.NotEqual(t, old, fresh.Secrets.Secret)
+			assert.Nil(t, fresh.NeedsReauthAt, "the new key clears the mark")
+			assert.Equal(t, row.ID, fresh.ID)
+			assert.False(t, minter.isLive(old), "the rejected token is revoked")
+		})
+	}
+}
+
+// B1: a resolution that finds the org's key missing, but another resolution
+// mints it first, spends the key the other one stored. Both select it.
+func TestLoader_ResolutionsRacingTheMintBothSpendTheOrgsKey(t *testing.T) {
+	minter := &orgMinter{}
+	repo, h := newOrgKeyFixture(t, minter)
+	SetReliantKeyHealer(h)
+	t.Cleanup(func() { SetReliantKeyHealer(nil) })
+	ctx := context.Background()
+	db.SeedProviderAccount(t, repo, "u1", "reliant", validRlat)
+	members := &fakeMembers{ok: true, answer: map[string]accesstokenclient.OrgMembership{
+		"org-a": {OrgID: "org-a", Member: true, Role: "member", MemberSince: memberSince},
+	}}
+	before, err := repo.ListProviderAccountsWithSecrets(ctx, "u1")
+	require.NoError(t, err)
+
+	// Two resolutions read the accounts before either mints.
+	first := &staleOnce{Repo: repo, snapshot: before}
+	second := &staleOnce{Repo: repo, snapshot: before}
+	scope := Scope{UserID: "u1", OrgID: "org-a", Attended: true}
+	for i, r := range []*staleOnce{first, second} {
+		avail, err := buildAvailableDriversFor(ctx, r, members, scope, noReportClients)
+		require.NoError(t, err)
+		require.Len(t, avail.Accounts["reliant"], 1, "resolution %d", i+1)
+		assert.Equal(t, "org-a", avail.Accounts["reliant"][0].AttributedOrgID, "resolution %d spends the org's key", i+1)
+	}
+	assert.Len(t, minter.mints(), 1, "minted once")
+}
+
+// staleOnce is the repository whose first read of the person's accounts is the
+// snapshot taken before a mint: a resolution that read before another won.
+type staleOnce struct {
+	*db.Repo
+	snapshot []core.AccountWithSecrets
+	read     bool
+}
+
+func (s *staleOnce) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
+	if !s.read {
+		s.read = true
+		return s.snapshot, nil
+	}
+	return s.Repo.ListProviderAccountsWithSecrets(ctx, userID)
 }

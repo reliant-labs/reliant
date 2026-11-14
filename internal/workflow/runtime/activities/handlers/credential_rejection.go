@@ -39,6 +39,17 @@ func (r *AccountRouting) credentialRejection(ctx context.Context, err error, uc 
 		return nil
 	}
 	cfg := uc.Account.Config
+	if cfg.DriverID == "reliant" && cfg.AttributedOrgID != "" && drivers.CredentialRejected(err) {
+		// The managed key minted in an org (P10): marked needs-sign-in, the
+		// next resolution mints it again (drivers.EnsureOrgReliantKey) and the
+		// org-less key serves until then. The org-less key is its healer's.
+		if merr := r.Credentials.MarkNeedsSignIn(ctx, core.UserAccountOwner(uc.Scope.UserID), cfg.AccountID,
+			"the gateway rejected the org's managed Reliant key; it is minted again"); merr != nil {
+			logging.WarnContext(ctx, "[Failover] Could not mark a rejected org managed key for re-minting",
+				"userID", uc.Scope.UserID, "accountID", cfg.AccountID, "error", merr)
+		}
+		return nil
+	}
 	if cfg.RefreshToken != "" || cfg.DriverID == "reliant" || cfg.DriverID == "local" || !drivers.CredentialRejected(err) {
 		return nil
 	}

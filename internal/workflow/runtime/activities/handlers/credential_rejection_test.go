@@ -140,3 +140,28 @@ func TestCredentialRejection_LeavesOtherFailuresAlone(t *testing.T) {
 
 	assert.Empty(t, marker.marked)
 }
+
+// The gateway rejecting the managed key minted in an org (P10) marks that row
+// needs-sign-in on the person, so the next resolution mints it again; the turn
+// is left as it was. The org-less managed key stays its healer's.
+func TestCredentialRejection_MarksARejectedOrgManagedKeyForReminting(t *testing.T) {
+	withAvailableDrivers(t, driversWith(apiKeyAccount("a", "alice@acme.com", 0)))
+	env := newRoutingEnv(t)
+	marker := &markerFake{store: env.store}
+	env.routing.Credentials = marker
+	first := resolveOnAnthropic(t, env, "t")
+	ctx := context.Background()
+
+	managed := *first.Account
+	managed.Config.DriverID, managed.Config.AccountID, managed.Config.AttributedOrgID = "reliant", "managed-org-1", "org-1"
+	uc := usageLimitContext{Scope: drivers.Scope{UserID: "u1", OrgID: "org-1", Attended: true}, ThreadID: "t", Driver: "reliant", ModelID: routeModel, Account: &managed}
+	assert.NoError(t, env.routing.credentialRejection(ctx, rejectedKey(), uc))
+	assert.Equal(t, []string{"managed-org-1"}, marker.marked)
+	assert.Equal(t, []core.AccountOwner{core.UserAccountOwner("u1")}, marker.owners, "the person's row, not the org's")
+
+	orgless := managed
+	orgless.Config.AccountID, orgless.Config.AttributedOrgID = "managed", ""
+	uc.Account = &orgless
+	assert.NoError(t, env.routing.credentialRejection(ctx, rejectedKey(), uc))
+	assert.Equal(t, []string{"managed-org-1"}, marker.marked, "the org-less key is its healer's")
+}

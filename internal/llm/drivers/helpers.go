@@ -114,7 +114,7 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, members Org
 
 	facts := orgMemberFacts(ctx, members, scope)
 	stored = withOrgManagedKey(ctx, repo, scope, facts, stored)
-	orgManaged := orgReliantKey(stored, scope.OrgID) != nil
+	orgManaged := usableOrgReliantKey(stored, scope.OrgID) != nil
 	cands := make([]candidate, 0, len(stored))
 	for i := range stored {
 		// In an org whose own managed key the person holds, the org-less one
@@ -191,20 +191,21 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, members Org
 
 // withOrgManagedKey is stored with the managed key minted in scope's org, when
 // per-org keys are on, the person is a live member of that org, uses Reliant
-// credits (holds the org-less managed key) and does not hold that org's key
-// yet: it is minted (EnsureOrgReliantKey) and the accounts read again. A failed
-// mint leaves stored as it was, so the org-less key serves as before.
+// credits (holds the org-less managed key) and holds no usable key of that org
+// in stored: it is minted, or found minted by another resolution that won the
+// race (EnsureOrgReliantKey), and the accounts are read again either way. A
+// failed mint leaves stored as it was, so the org-less key serves as before.
 func withOrgManagedKey(ctx context.Context, repo AvailabilityStore, scope Scope, facts memberFacts, stored []core.AccountWithSecrets) []core.AccountWithSecrets {
-	if scope.Personal() || !facts.member || orglessReliantKey(stored) == nil || orgReliantKey(stored, scope.OrgID) != nil {
+	if scope.Personal() || !facts.member || orglessReliantKey(stored) == nil || usableOrgReliantKey(stored, scope.OrgID) != nil {
 		return stored
 	}
-	minted, err := ensureOrgReliantKey(ctx, scope.UserID, scope.OrgID)
+	available, err := ensureOrgReliantKey(ctx, scope.UserID, scope.OrgID)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not mint the managed Reliant key in this org; the org-less key serves",
 			"user_id", scope.UserID, "org_id", scope.OrgID, "error", err)
 		return stored
 	}
-	if !minted {
+	if !available {
 		return stored
 	}
 	again, err := repo.ListProviderAccountsWithSecrets(ctx, scope.UserID)
