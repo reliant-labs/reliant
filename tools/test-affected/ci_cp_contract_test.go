@@ -20,11 +20,6 @@ import (
 
 const cpContractGated = "${{ !cancelled() && steps.cp_contract.outputs.changed == 'true' }}"
 
-type mqStep = struct {
-	ciStep `yaml:",inline"`
-	Env    map[string]string `yaml:"env"`
-}
-
 // cpContractSteps finds the detection step, the control-plane checkout and
 // the contract check in `CI result`, by what they do rather than their names.
 func cpContractSteps(t *testing.T) (steps []mqStep, detect, checkout, check, golangciWait int) {
