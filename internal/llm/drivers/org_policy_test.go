@@ -332,3 +332,33 @@ func TestProviderSource(t *testing.T) {
 		assert.Equal(t, tc.want, ProviderSource(tc.driver, tc.funding), "%s/%s", tc.driver, tc.funding)
 	}
 }
+
+// A driver that keeps an account the policy allows still serves: an org key
+// beside a refused personal key of the same provider. It is not recorded as
+// refused, so neither a fallback onto it nor a resolution failing on it is
+// blamed on the policy; only the refused account leaves the set.
+func TestOrgPolicy_AnAllowedAccountKeepsItsDriver(t *testing.T) {
+	withProvidersSwitch(t, orgpolicy.EnforcementEnforce)
+	ctx := policyCtx(&controlplanev1.OrgPolicy{Providers: &controlplanev1.ProvidersPolicy{Mode: enforced,
+		AllowedSources: []controlplanev1.ProviderSource{controlplanev1.ProviderSource_PROVIDER_SOURCE_ORG_ACCOUNTS}}})
+	f, err := orgPolicyFilterFor(ctx, orgScope(true))
+	require.NoError(t, err)
+	require.NotNil(t, f)
+
+	acct := func(driver models.DriverID, id, funding string) models.AccountConfig {
+		return models.AccountConfig{DriverConfig: models.DriverConfig{DriverID: driver, AccountID: id, Enabled: true, APIKey: "k-" + id}, Funding: funding}
+	}
+	kept, refused := f.accounts(map[models.DriverID][]models.AccountConfig{
+		"anthropic": {acct("anthropic", "mine", models.FundingPersonal), acct("anthropic", "acme", models.FundingOrgKey)},
+		"claude":    {acct("claude", "sub", models.FundingPersonal)},
+	})
+	require.Len(t, kept["anthropic"], 1)
+	assert.Equal(t, "acme", kept["anthropic"][0].AccountID, "the org's key serves; the person's own is gone")
+	assert.NotContains(t, kept, models.DriverID("claude"))
+	assert.NotContains(t, refused, models.DriverID("anthropic"), "a driver that still serves is not the policy's refusal")
+	assert.Equal(t, models.PolicyRefusal{Reason: orgpolicy.ReasonProviderNotAllowed, Funding: models.FundingPersonal}, refused["claude"])
+
+	avail := models.AvailableDrivers{Accounts: kept, PolicyRefused: refused}
+	assert.Nil(t, OrgPolicyRefusal(ctx, orgScope(true), avail, models.ModelSelector{ID: policyModel + "@anthropic"}, false),
+		"a model the org's key serves is not refused by the policy")
+}

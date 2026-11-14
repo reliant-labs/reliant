@@ -108,11 +108,13 @@ func (f *orgPolicyFilter) refusesModel(driver, modelID string) bool {
 	return !orgpolicy.ModelAdmission(f.doc, managedAPIModel(modelID)).Admitted
 }
 
-// accounts is in without the accounts the policy refuses, and what it took:
-// per driver, the refusal reason and the funding of an account it applied to
-// (models.PolicyRefusal). A driver whose every account is refused leaves the
-// set; the managed driver whose models are narrowed stays, with
-// model_not_allowed.
+// accounts is in without the accounts the policy refuses, and what it took
+// (models.PolicyRefusal): a driver whose every account is refused leaves the
+// set, with provider_not_allowed and the funding of one of its accounts; the
+// managed driver whose models are narrowed stays, with model_not_allowed. A
+// driver that keeps an account the policy allows (an org key beside a
+// refused personal key) is not recorded: it still serves, so the policy is
+// not why a resolution on it fails.
 func (f *orgPolicyFilter) accounts(in map[models.DriverID][]models.AccountConfig) (map[models.DriverID][]models.AccountConfig, map[models.DriverID]models.PolicyRefusal) {
 	if f == nil {
 		return in, nil
@@ -121,17 +123,21 @@ func (f *orgPolicyFilter) accounts(in map[models.DriverID][]models.AccountConfig
 	refused := map[models.DriverID]models.PolicyRefusal{}
 	for driver, list := range in {
 		kept := make([]models.AccountConfig, 0, len(list))
-		for _, acct := range list {
+		var first *models.AccountConfig
+		for i, acct := range list {
 			if f.refusesAccount(driver, acct.Funding) {
-				if _, ok := refused[driver]; !ok {
-					refused[driver] = models.PolicyRefusal{Reason: orgpolicy.ReasonProviderNotAllowed, Funding: acct.Funding}
+				if first == nil {
+					first = &list[i]
 				}
 				continue
 			}
 			kept = append(kept, acct)
 		}
-		if len(kept) > 0 {
+		switch {
+		case len(kept) > 0:
 			out[driver] = kept
+		case first != nil:
+			refused[driver] = models.PolicyRefusal{Reason: orgpolicy.ReasonProviderNotAllowed, Funding: first.Funding}
 		}
 	}
 	if kept := out[models.ManagedDriverID]; len(kept) > 0 && f.narrowsModels() {
