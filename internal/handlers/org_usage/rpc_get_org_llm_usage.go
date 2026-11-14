@@ -347,11 +347,12 @@ func priceTokens(byModel map[modelKey]*tokens, prices map[modelKey]controlplane.
 	var nanos int64
 	for mk, t := range byModel {
 		p, ok := prices[mk]
-		if !ok || !p.Priced {
+		cost, valid := listCost(p, t)
+		if !ok || !p.Priced || !valid {
 			out.UnpricedCalls += t.calls
 			continue
 		}
-		nanos += listCost(p, t)
+		nanos += cost
 		out.PricedCalls += t.calls
 	}
 	if out.PricedCalls > 0 {
@@ -361,13 +362,22 @@ func priceTokens(byModel map[modelKey]*tokens, prices map[modelKey]controlplane.
 }
 
 // listCost is control-plane's formula (LLMModelListPrice): each token class
-// at its rate per million tokens, rounded to the nearest nano.
-func listCost(p controlplane.ModelListPrice, t *tokens) int64 {
+// at its rate per million tokens, rounded to the nearest nano. ok is false
+// for a negative rate or a cost too large for int64 nanos: the cost is then
+// unknown, never zero and never a wrapped figure.
+func listCost(p controlplane.ModelListPrice, t *tokens) (nanos int64, ok bool) {
+	if p.InputNanosPerMTok < 0 || p.OutputNanosPerMTok < 0 || p.CacheReadNanosPerMTok < 0 || p.CacheWriteNanosPerMTok < 0 {
+		return 0, false
+	}
 	total := float64(t.input)*float64(p.InputNanosPerMTok) +
 		float64(t.output)*float64(p.OutputNanosPerMTok) +
 		float64(t.cacheRead)*float64(p.CacheReadNanosPerMTok) +
 		float64(t.cacheWrite)*float64(p.CacheWriteNanosPerMTok)
-	return int64(math.Round(total / 1e6))
+	rounded := math.Round(total / 1e6)
+	if math.IsNaN(rounded) || rounded < 0 || rounded >= float64(math.MaxInt64) {
+		return 0, false
+	}
+	return int64(rounded), true
 }
 
 // labelAccounts names each account bucket by the account's label (or its

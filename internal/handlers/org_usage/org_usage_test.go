@@ -371,3 +371,28 @@ func TestGetOrgLLMUsage_Credentials(t *testing.T) {
 	_, err = e.read(billing, "org-b", pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_DAY)
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 }
+
+// A rate the price source should never send (negative) leaves that model
+// unpriced: its cost is unknown, never zero or negative.
+func TestGetOrgLLMUsage_InvalidRateIsUnpriced(t *testing.T) {
+	e := newEnv(t)
+	e.record(call{user: "ada", org: "org-a", provider: "anthropic", model: "claude-sonnet-4-5", funding: "org_key", fundingOrg: "org-a", account: "acct-acme-key", in: 1000, out: 10})
+	e.svc = org_usage.NewTestOrgUsage(t, org_usage.WithOrgUsageDeps(org_usage.Deps{
+		Store: e.repo, Now: func() time.Time { return now },
+		Prices: negativePrices{},
+	}))
+	got, err := e.read(e.asPerson("ada"), "org-a", pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_DAY)
+	require.NoError(t, err)
+	assert.Nil(t, got.GetTotals().GetEstimatedListCost().UsdNanos)
+	assert.Equal(t, int64(1), got.GetTotals().GetEstimatedListCost().GetUnpricedCalls())
+}
+
+type negativePrices struct{}
+
+func (negativePrices) GetModelListPrices(_ context.Context, refs []controlplane.ModelRef) ([]controlplane.ModelListPrice, time.Time, error) {
+	out := make([]controlplane.ModelListPrice, len(refs))
+	for i, r := range refs {
+		out[i] = controlplane.ModelListPrice{Ref: r, Priced: true, InputNanosPerMTok: -3e9, OutputNanosPerMTok: 15e9}
+	}
+	return out, now, nil
+}
