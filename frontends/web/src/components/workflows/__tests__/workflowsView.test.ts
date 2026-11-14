@@ -39,6 +39,7 @@ function trigger(id: string, workflow: string, status: TriggerHealthStatusKey = 
     updatedAt: "",
     source: { kind: "unknown" } as Trigger["source"],
     webhookManaged: false,
+    unattendedFunding: "any",
   };
 }
 
