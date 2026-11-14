@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/modelprefs"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -543,6 +544,12 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 			var err error
 			resolved, err = resolve(selector, availableProviders)
 			if err != nil {
+				// What would have served it, the org's policy took: the call
+				// is refused with the policy's reason (the turn pauses), never
+				// told to connect a provider or held on the chat's provider.
+				if refusal := drivers.OrgPolicyRefusal(ctx, spec.scope(), availableDrivers, selector, true); refusal != nil {
+					return nil, orgPolicyRefused(ctx, spec, refusal)
+				}
 				if spec.ChatProvider != "" {
 					return nil, providerSwitchHold(spec.ChatProvider, ownSelector, err)
 				}
@@ -666,6 +673,20 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 			return nil, ferr
 		}
 	}
+	// The check at the driver build (org-policies §4.2): the account and
+	// model this call is served from, under the org's policy now. It is the
+	// floor for a chat begun before the policy, and the one counted use of
+	// the call under audit.
+	if resolver == nil && providerDriver != "" && !drivers.ReplayMode.Enabled {
+		if perr := drivers.CheckOrgPolicy(ctx, spec.scope(), models.DriverID(providerDriver), servingFunding(providerDriver, account, routingDrivers), modelIDForDriver, true); perr != nil {
+			if refusal, ok := orgpolicy.RefusalOf(perr); ok {
+				return nil, orgPolicyRefused(ctx, spec, refusal)
+			}
+			// The policy cannot be read while the point enforces: retryable,
+			// never an unconstrained call.
+			return nil, newTransientStoreError(ctx, fmt.Errorf("the organization's provider policy: %w", perr))
+		}
+	}
 	if localTransport != nil {
 		driverOpts = append(driverOpts,
 			llm.WithBaseURL(local.PlaceholderBaseURL),
@@ -745,6 +766,34 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 	}, nil
 }
 
+// servingFunding is who pays for a call served on providerDriver: a local
+// model's owner, else the routed account's funding, else that of the
+// provider's default account in the set the call resolved over.
+func servingFunding(providerDriver string, account *routedAccount, available models.AvailableDrivers) string {
+	switch {
+	case providerDriver == string(local.Family):
+		return models.FundingLocal
+	case account != nil:
+		return account.Config.Funding
+	}
+	if accts := available.Accounts[models.DriverID(providerDriver)]; len(accts) > 0 {
+		return accts[0].Funding
+	}
+	return ""
+}
+
+// orgPolicyRefused is an org policy's refusal of a call as resolution returns
+// it (org-policies §5.1): stamped with whether a person is behind the run,
+// which decides between pausing the turn and ending an unattended run, and
+// the org watched so its paused chats wake when the policy changes.
+func orgPolicyRefused(ctx context.Context, spec llmCallSpec, refusal *orgpolicy.Refusal) error {
+	refusal.Unattended = !spec.scope().Attended
+	orgpolicy.WatchRefused(ctx, spec.OrgID)
+	logging.InfoContext(ctx, "[OrgPolicy] The org's policy refused the call at resolution; the turn stops with the reason",
+		"userID", spec.UserID, "orgID", spec.OrgID, "reason", refusal.Reason, "unattended", refusal.Unattended)
+	return refusal
+}
+
 type pinnedLocalPref struct {
 	legacy        models.Model
 	definition    *models.ModelDefinition
@@ -765,6 +814,12 @@ type pinnedLocalSpec struct {
 func resolvePinnedLocalPref(ctx context.Context, spec llmCallSpec) (pinnedLocalPref, pinnedLocalSpec, bool) {
 	prefs := loadTagPrefs(ctx, spec, nil)
 	if !prefs.IsLocalModel() {
+		return pinnedLocalPref{}, pinnedLocalSpec{}, false
+	}
+	if drivers.OrgPolicyRefuses(ctx, spec.scope(), models.DriverID(local.Family), models.FundingLocal) {
+		// A preference the org's policy refuses gives way to the tier.
+		logging.InfoContext(ctx, "[LLMRequest] Ignoring tag preference model_id: the org's policy does not allow local models; using the tier",
+			"userID", spec.UserID, "orgID", spec.OrgID, "tag", modelprefs.TagFor(spec.Selector), "modelID", prefs.ModelID)
 		return pinnedLocalPref{}, pinnedLocalSpec{}, false
 	}
 	localSpec := spec

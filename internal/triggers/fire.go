@@ -335,6 +335,16 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		}
 		return f.failPermanently(ctx, rec, detail, launchErr)
 	}
+	if refused, ok := launch.PolicyRefusal(launchErr); ok {
+		// The org's policy refuses the run's model or its provider: every
+		// later fire would meet the same verdict, so the trigger is paused,
+		// once, and the firing recorded failed with the reason.
+		detail, err := f.pause.RefusePolicy(ctx, trigger, refused)
+		if err != nil {
+			return nil, err
+		}
+		return f.failPermanently(ctx, rec, detail, launchErr)
+	}
 	var validation *launch.ValidationError
 	if errors.As(launchErr, &validation) || errors.Is(launchErr, launch.ErrNotFound) {
 		// The spec can never launch as written — a workflow that no longer

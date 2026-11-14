@@ -52,6 +52,10 @@ var scopeOrigins = []scopeOrigin{
 	{"internal/workflow/runtime/activities/handlers/llm_request.go: llmCallSpec.scope: PersonalScope", "a call with no org: no chat, or a chat that predates orgs (§4.1)"},
 	{"internal/workflow/runtime/activities/handlers/llm_request.go: llmCallSpec.scope: Scope{}", "the run's scope, from OrgID/Attended the activity read off the chat row"},
 	{"internal/launch/org_accounts_only.go: (*Launcher).checkOrgAccountsOnly: Scope{}", "an org_only automation's launch: the unattended, org-funded-only scope of the run it would start, from the new chat row's owner and org (§11.4)"},
+	{"internal/launch/org_policy.go: AccountScope: PersonalScope", "a person's act on a chat of no org (or no chat): their own accounts"},
+	{"internal/launch/org_policy.go: AccountScope: Scope{}", "a person's act on a chat (a send, a pick, a launch, a wait answered): the chat row's org, attended; launch, send-time substitution, the provider default and usableFallbackModel all take it (org-policies R2)"},
+	{"internal/launch/selected_model.go: SelectionCheck.scope: PersonalScope", "a pick in a chat of no org: the person's own accounts"},
+	{"internal/launch/selected_model.go: SelectionCheck.scope: Scope{}", "a pick in a chat: its org, read from the chat row by the handler (selectionCheck), attended"},
 	{"internal/workflow/runtime/activities/handlers/draft_automation.go: (*DraftAutomationActivity).Execute: llmCallSpec{no OrgID}", "a builder draft belongs to no chat or run; a person is drafting (P5: the automation's org)"},
 	{"internal/workflow/runtime/activities/handlers/llm_probe.go: ProbeLLMCall: llmCallSpec{no OrgID}", "the dev probe belongs to no run"},
 
@@ -61,12 +65,6 @@ var scopeOrigins = []scopeOrigin{
 	{"internal/handlers/catalog/catalog.go: (*Service).ListModels: PersonalScope", "the picker reads the person's accounts (P5/P6: the active org's)"},
 	{"internal/handlers/catalog/catalog.go: (*Service).ListModels: PersonalScope", "the picker's per-account availability (P5/P6: the active org's)"},
 	{"internal/handlers/catalog/catalog.go: (*Service).ListAvailableModels: PersonalScope", "the picker reads the person's accounts (P5/P6: the active org's)"},
-	{"internal/handlers/chat/chat_usage_limit.go: usableFallbackModel: PersonalScope", "a person answering a wait (P5: the chat's org)"},
-	{"internal/launch/provider_policy.go: (*Launcher).primaryDriver: PersonalScope", "send-time provider default (P5: the chat's org)"},
-	{"internal/launch/provider_policy.go: (*Launcher).ResolvedModelAtDriver: PersonalScope", "send-time model wake (P5: the chat's org)"},
-	{"internal/launch/selected_model.go: (*Launcher).ValidateSelectedModel: PersonalScope", "send-time model check (P5: the chat's org)"},
-	{"internal/launch/workflows.go: (*Launcher).validateChatWorkflowInputsAt: PersonalScope", "launch input validation (P5: the run's org)"},
-	{"internal/launch/workflows.go: (*Launcher).SubstituteUnservableModels: PersonalScope", "send-time substitution (P5: the chat's org)"},
 	{"tools/reliant-dev/models_probe_run.go: newModelsProbeCmd: PersonalScope", "the dev probe belongs to no run"},
 }
 
