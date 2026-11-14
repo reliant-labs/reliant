@@ -1,0 +1,114 @@
+{
+  "version": "forge.dashboards/v1",
+  "sections": [
+    {
+      "id": "calls",
+      "title": "Model calls",
+      "description": "Failed calls and retries."
+    },
+    {
+      "id": "runs",
+      "title": "Failed runs",
+      "description": "Runs whose last workflow segment failed. A trace id opens the trace."
+    }
+  ],
+  "id": "ai-errors",
+  "title": "shop: AI errors \u0026 retries",
+  "description": "Failed model calls by class (error.type), provider and model; retries and backoffs; and failed runs with the span that failed first. A cancellation is never a failure. From the GenAI spans in the environment's traces, so the range is bounded by their retention.",
+  "group": "ai",
+  "tags": [
+    "ai"
+  ],
+  "filters": [
+    {
+      "id": "env",
+      "label": "deployment.environment.name",
+      "field": "deployment.environment.name"
+    }
+  ],
+  "defaultRange": "7d",
+  "defaultCompare": "period",
+  "panels": [
+    {
+      "section": "calls",
+      "id": "error-rate",
+      "title": "Call error rate",
+      "description": "Failed model calls over all model calls in the range. The trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "SELECT round(countIf((StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled')) / nullIf(count(), 0), 4) AS \"Error rate\" FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']",
+      "trendSql": "SELECT toDate(Timestamp) AS day, round(countIf((StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled')) / count(), 4) AS \"Error rate\" FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] GROUP BY day ORDER BY day",
+      "display": {
+        "color": "danger"
+      },
+      "unit": "percent",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "calls",
+      "id": "retries",
+      "title": "Retries",
+      "description": "Retries before the range's model calls returned (gen_ai.retries), summed. The trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "SELECT sum(toUInt64OrZero(SpanAttributes['gen_ai.retries'])) AS \"Retries\" FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']",
+      "trendSql": "SELECT toDate(Timestamp) AS day, sum(toUInt64OrZero(SpanAttributes['gen_ai.retries'])) AS \"Retries\" FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] GROUP BY day ORDER BY day",
+      "display": {
+        "color": "slate",
+        "exact": true
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "calls",
+      "id": "errors-by-type",
+      "title": "Failed calls by class",
+      "description": "Failed model calls each UTC day by error.type; a span that names none is unclassified.",
+      "kind": "sql",
+      "sql": "SELECT toDate(Timestamp) AS day, if(SpanAttributes['error.type'] = '', 'unclassified', SpanAttributes['error.type']) AS class, count() AS \"Failed calls\"\nFROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AND (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled')\nGROUP BY day, class ORDER BY day, class",
+      "minStep": "1d",
+      "display": {
+        "style": "bars",
+        "stack": true
+      },
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "calls",
+      "id": "backoffs",
+      "title": "Backoffs by status",
+      "description": "Backoff waits before a retry (gen_ai.retry_wait events on model calls) each UTC day, by the status that caused them.",
+      "kind": "sql",
+      "sql": "SELECT toDate(Timestamp) AS day, multiIf(attrs['http.response.status_code'] NOT IN ('', '0'), attrs['http.response.status_code'],\n              attrs['reason'] != '', attrs['reason'], 'unknown') AS status,\n       count() AS \"Backoffs\"\nFROM otel_traces ARRAY JOIN Events.Name AS ev, Events.Attributes AS attrs\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AND ev = 'gen_ai.retry_wait'\nGROUP BY day, status ORDER BY day, status",
+      "minStep": "1d",
+      "display": {
+        "style": "bars",
+        "stack": true
+      },
+      "width": 24,
+      "height": 7
+    },
+    {
+      "section": "calls",
+      "id": "errors-by-model",
+      "title": "Failures by provider and model",
+      "description": "Calls, failed calls, the error rate, the most frequent error class and the retries per call, by provider and model.",
+      "kind": "sql",
+      "sql": "SELECT if(SpanAttributes['gen_ai.provider.name'] != '', SpanAttributes['gen_ai.provider.name'], SpanAttributes['gen_ai.system']) AS \"Provider\", if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS \"Model\", count() AS \"Calls\", countIf((StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled')) AS \"Failed\",\n       round(\"Failed\" / count(), 4) AS \"Error rate\",\n       topKIf(1)(SpanAttributes['error.type'], (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled'))[1] AS \"Top class\",\n       round(avg(toUInt64OrZero(SpanAttributes['gen_ai.retries'])), 2) AS \"Retries / call\"\nFROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']\nGROUP BY \"Provider\", \"Model\" HAVING \"Failed\" \u003e 0 OR \"Retries / call\" \u003e 0\nORDER BY \"Failed\" DESC, \"Calls\" DESC LIMIT 50",
+      "width": 24,
+      "height": 8
+    },
+    {
+      "section": "runs",
+      "id": "failed-runs",
+      "title": "Failed runs",
+      "description": "The range's failed runs, newest first: the workflow, when it started, how long it ran, and the first model or tool call in it that failed (its span name and status message) with its trace.",
+      "kind": "sql",
+      "sql": "WITH ai AS (\n  SELECT Timestamp AS ts, TraceId, SpanName, StatusCode, StatusMessage, Duration,\n         SpanAttributes['gen_ai.operation.name'] AS op, SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AS is_call, SpanAttributes['gen_ai.operation.name'] = 'execute_tool' AS is_tool, (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled') AS failed,\n         if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS model, if(SpanAttributes['gen_ai.provider.name'] != '', SpanAttributes['gen_ai.provider.name'], SpanAttributes['gen_ai.system']) AS provider,\n         toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) AS in_tok, toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) AS out_tok, toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens'])) AS cache_read_tok,\n         toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd'])) AS cost, SpanAttributes['forge.ai.workflow.name'] AS workflow, SpanAttributes['forge.ai.run.id'] AS run_id,\n         SpanAttributes['error.type'] AS error_type, SpanAttributes['gen_ai.tool.name'] AS tool,\n         SpanAttributes['user.id'] AS user_id, SpanAttributes['org.id'] AS org_id\n  FROM otel_traces\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (SpanAttributes['gen_ai.operation.name'] != '' OR SpanAttributes['forge.ai.node.id'] != '' OR SpanAttributes['forge.ai.run.id'] != '')),\nruns AS (\n  SELECT run_id, anyIf(workflow, workflow != '') AS wf,\n         min(ts) AS started, max(addNanoseconds(ts, Duration)) AS ended,\n         (toUnixTimestamp64Nano(ended) - toUnixTimestamp64Nano(started)) / 1e9 AS seconds,\n         countIf(op = 'invoke_workflow') AS segments,\n         multiIf(segments = 0, 'In progress',\n                 argMaxIf(error_type, ts, op = 'invoke_workflow') = 'canceled', 'Cancelled',\n                 argMaxIf(failed, ts, op = 'invoke_workflow'), 'Failed', 'Succeeded') AS outcome,\n         countIf(is_call) AS calls, countIf(is_tool) AS tools,\n         sumIf(in_tok, is_call) AS run_in, sumIf(out_tok, is_call) AS run_out, sumIf(cost, is_call) AS run_cost\n  FROM ai WHERE run_id != '' GROUP BY run_id),\nfirst_failure AS (\n  SELECT run_id, argMin(SpanName, ts) AS failed_span, argMin(StatusMessage, ts) AS failed_message, argMin(TraceId, ts) AS failed_trace\n  FROM ai WHERE failed AND (is_call OR is_tool) AND run_id != '' GROUP BY run_id)\nSELECT r.started AS \"Started\", if(r.wf = '', '(none)', r.wf) AS \"Workflow\", r.run_id AS \"Run\",\n       round(r.seconds, 1) AS \"Seconds\", f.failed_span AS \"First failure\", f.failed_message AS \"Message\", f.failed_trace AS \"Trace\"\nFROM runs AS r LEFT JOIN first_failure AS f ON f.run_id = r.run_id\nWHERE r.outcome = 'Failed'\nORDER BY r.started DESC LIMIT 50",
+      "width": 24,
+      "height": 9
+    }
+  ]
+}

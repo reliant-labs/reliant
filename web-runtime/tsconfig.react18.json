@@ -1,0 +1,14 @@
+{
+  "// what this config is for": "The FLOOR of the react peer range. peerDependencies says this package supports \"^18.3.0 || ^19.0.0\"; devDependencies can only install one of them, so without this config that range is an aspiration — and the half that goes unchecked is React 18, which is exactly what Expo/React Native pins. `npm run typecheck` runs both.",
+
+  "// how it works": "@types/react-18 is an npm alias (see package.json devDependencies) for @types/react@~18.3.0, installed alongside the 19 line. Redirecting the two module specifiers TypeScript resolves for JSX — \"react\" and the \"react/jsx-runtime\" that jsx: react-jsx emits — compiles the whole package against the older types with no second install and no version juggling.",
+
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "react": ["./node_modules/@types/react-18"],
+      "react/jsx-runtime": ["./node_modules/@types/react-18/jsx-runtime"]
+    }
+  }
+}

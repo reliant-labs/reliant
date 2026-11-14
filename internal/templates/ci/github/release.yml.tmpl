@@ -1,0 +1,201 @@
+# Release — build ONCE, cut a release, deploy it through the hosted envs.
+#
+# Scaffolded by forge for a project with hosted environments. Yours from now
+# on: edit freely.
+#
+# EVERYTHING GOES THROUGH FORGE: no curl, no environment ids, no tokens in a
+# URL. EXIT CODES ARE THE CONTROL FLOW: a step fails on non-zero, and the job
+# summary prints the --json documents (`forge ci summarize`).
+#
+#   0 ok · 1 wrong · 2 could not determine · 3 conflict (someone else moved the
+#   env — stop, do not retry) · 4 refused (rollout in flight / pinned — wait and
+#   retry) · 5 still rolling out at the deadline (retry the WAIT) · 6 superseded
+#
+# THE SHAPE IS TWO VERBS (docs/adr/env-verbs.md). `forge env build <env>
+# --release vX` builds the env-agnostic images once, pushes them and records an
+# immutable release. `forge env deploy <env>` then RECORDS the promotion,
+# APPLIES it and WAITS for health in one command — so there is no separate
+# promote, no probe for who converges the env, and no trailing wait step to
+# forget.
+#
+# Two properties worth reading twice:
+#   - The approval gates the deploy, and the compare-and-set gates the
+#     approval's STALENESS: each job records the NEXT env's current promotion
+#     before that env's approval wait, and the next deploy asserts it
+#     (--expect-current). A hotfix landed while the approval waited turns the
+#     run red (exit 3) instead of being overwritten.
+#   - --from-promotion closes "the previous stage moved after QA": a later
+#     deploy to it makes this run's next deploy exit 3 (source_moved).
+#
+# Needs one repository secret: FORGE_CONTROL_PLANE_TOKEN, a token with
+# deploy:read,deploy:write. A person signed in to the web app mints it under
+# Settings → API tokens (Reliant cloud: https://forge.reliantlabs.io/settings/tokens),
+# then stores the secret it shows once:
+#   gh secret set FORGE_CONTROL_PLANE_TOKEN
+# (The control plane refuses token minting to a CLI login: `forge cloud token
+# create` under `forge login` exits 9 with reason person_session_required.)
+name: Release
+
+on:
+  push:
+    tags: ["v*"] # a tag names WHAT a release is …
+  workflow_dispatch: # … and a human may re-drive any stage
+    inputs:
+      version:
+        description: "Release version to cut and promote (e.g. v1.4.0)"
+        required: true
+
+concurrency:
+  group: release-${{"{{"}} github.ref {{"}}"}}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  FORGE_CONTROL_PLANE_TOKEN: ${{"{{"}} secrets.FORGE_CONTROL_PLANE_TOKEN {{"}}"}}
+  VERSION: ${{"{{"}} inputs.version || github.ref_name {{"}}"}}
+
+jobs:
+  checks:
+    # Evidence, produced ONCE per release and attached to every promote.
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install forge
+{{installForgeRun 8}}
+      - uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{"{{"}} secrets.GITHUB_TOKEN {{"}}"}}
+      - name: Lint
+        # Report-only because GitHub sets CI=true (forge lint writes nothing
+        # under CI and fails on any file a fixer would rewrite, printing the
+        # diff), so the release is cut from the commit that was reviewed, not
+        # from a checkout lint repaired on the way. No flag needed.
+        run: |
+          mkdir -p gates
+          forge lint --gate-json gates/lint.json
+      - name: Test
+        # Through the Taskfile, the one definition of the suite — never a
+        # second spelling of `go test` that could drift from it. `-json` is
+        # the record verify-test-run reads; it never re-runs anything.
+        run: |
+          set -o pipefail
+          task test -- -json ./... | tee test.json >/dev/null
+          forge ci verify-test-run --from test.json --gate-json gates/test.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gates
+          path: gates/
+
+  build-release:
+    # BUILD ONCE. Every later env runs these exact bytes, by reference.
+    name: Build & release ${{"{{"}} github.ref_name {{"}}"}}
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install forge
+{{installForgeRun 8}}
+      - name: Build, push and record the release
+        # ONE command: --release implies --push (a release pins registry
+        # digests, and a local tag cannot be promoted anywhere) and records the
+        # immutable release over what it just pushed. Re-running the same tag
+        # over the same artifacts is a no-op, exit 0 — so a re-run of this job
+        # is safe.
+        #
+        # NO REGISTRY LOGIN STEP, and that is the point of ADR-0003 F3. A
+        # hosted env's images go to the platform registry, which forge
+        # authenticates with FORGE_CONTROL_PLANE_TOKEN — already in this
+        # workflow's env, because the release ledger needs it — so the push
+        # logs itself in before its first byte. There is no second credential
+        # to mint, and a job that carried one would have two secrets to
+        # rotate and only one of them in anybody's memory.
+        #
+        # An env that ALSO pushes to a registry of your own needs that one's
+        # credential, and only that one's:
+        #   printf '%s' "$TOKEN" | forge registry login {{.BuildEnv}} \
+        #     --username <user> --password-stdin
+        run: forge env build {{.BuildEnv}} --release "$VERSION" --gate-json build.json
+      - name: Summary
+        if: always()
+        run: forge ci summarize build.json >> "$GITHUB_STEP_SUMMARY" || true
+{{- range .Stages}}
+
+  {{.Env.Name}}:
+    name: Deploy → {{.Env.Name}}
+    needs: {{if .Prev}}{{.Prev}}{{else}}build-release{{end}}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # A GitHub Environment.{{if .Env.Protection}} Give it REQUIRED REVIEWERS in the repository
+    # settings: that is the approval this job waits on.{{end}}
+    environment: {{.Env.Name}}
+    concurrency:
+      group: deploy-{{.Env.Name}}
+      cancel-in-progress: false
+    outputs:
+      promotion-id: ${{"{{"}} steps.deploy.outputs.promotion-id {{"}}"}}
+{{- if .Next}}
+      next-current: ${{"{{"}} steps.capture.outputs.current {{"}}"}}
+{{- end}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install forge
+{{installForgeRun 8}}
+      - uses: actions/download-artifact@v4
+        with:
+          name: gates
+          path: gates/
+{{- if .Mixed}}
+      - name: Set kubeconfig
+        # {{.Env.Name}} also runs a forge.OnCluster / compose part, which no
+        # control plane converges. `forge env deploy` applies that half from
+        # here itself (it reads the env's declaration, so CI passes no flag),
+        # and it binds the context the env DECLARES from this file.
+        env:
+          KUBECONFIG_CONTENTS: ${{"{{"}} secrets.KUBECONFIG {{"}}"}}
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBECONFIG_CONTENTS" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+{{- end}}
+{{- if .Next}}
+      - id: capture
+        # {{.Next}}'s current promotion, captured BEFORE its approval wait, so the
+        # {{.Next}} deploy can assert nobody moved it meanwhile (--expect-current).
+        run: echo "current=$(forge env status {{.Next}} --history --limit 1 --json | jq -r '.promotions[0].id // "unbound"')" >> "$GITHUB_OUTPUT"
+{{- end}}
+      - id: deploy
+        uses: ./.github/actions/forge-deploy
+        with:
+          env: {{.Env.Name}}
+{{- if .Prev}}
+          # Deploy what {{.Prev}} RAN — the exact promotion QA saw — not a version label.
+          from: {{.Prev}}
+          from-promotion: ${{"{{"}} needs.{{.Prev}}.outputs.promotion-id {{"}}"}}
+          expect-current: ${{"{{"}} needs.{{.Prev}}.outputs.next-current {{"}}"}}
+{{- else}}
+          version: ${{"{{"}} env.VERSION {{"}}"}}
+{{- end}}
+          gates: gates/lint.json gates/test.json
+      - name: Smoke
+        run: forge env smoke {{.Env.Name}} --json > smoke.json
+      - name: Record the smoke as evidence
+        if: always() && steps.deploy.outputs.promotion-id != ''
+        run: forge gate record {{.Env.Name}} --promotion "${{"{{"}} steps.deploy.outputs.promotion-id {{"}}"}}" --from smoke.json
+{{- end}}

@@ -1,0 +1,460 @@
+package codegen
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"golang.org/x/mod/module"
+
+	"github.com/reliant-labs/forge/internal/checksums"
+	"github.com/reliant-labs/forge/internal/config"
+	"github.com/reliant-labs/forge/pkg/dbgrants"
+)
+
+// GenerateMigrate writes db/embed.go — the project's embedded migration set —
+// and retires the pkg/app/migrate.go that used to sit beside it.
+//
+// WHAT MOVED, AND WHY. pkg/app/migrate.go was 86 lines of Tier-1 golang-migrate
+// ceremony: read the embedded dir, build a source driver, bind the pool, read
+// the version, refuse a dirty schema, fold ErrNoChange. Not one line of it was
+// derived from anything the user wrote — the ONLY project-specific value in
+// the whole file was the identifier `forgedb.MigrationsFS`. A file that is
+// byte-identical in every project except one symbol is library code parked in
+// the user's tree: regenerating it cannot keep it correct, because it was never
+// a function of the inputs.
+//
+// So the ceremony is now migratekit.AutoMigrate(fs, dir), and the project keeps
+// only the call site — a single expression in the serve.go it already owns,
+// naming its own embedded FS. Improvements to the migration logic now arrive
+// through a forge/pkg bump instead of a re-render.
+//
+// db/embed.go STAYS generated, and is the reason this function still exists:
+// the `//go:embed migrations/*.sql` directive can only live in the db/ package
+// beside the SQL, and whether it can be written at all is a fact re-read from
+// disk on every run (the directive does not compile against an empty match).
+// That is a genuine projection of user input, which is exactly what Tier-1 is
+// for.
+//
+// cs is the project's checksum tracker — db/embed.go is recorded so `forge
+// project audit` doesn't flag drift on it. A nil cs is tolerated.
+func GenerateMigrate(targetDir string, modulePath string, hasMigrations bool, cs *checksums.FileChecksums) error {
+	// Retire the pre-move pkg/app/migrate.go. Only a copy that still
+	// self-verifies as forge's own render is removed — a hand-edited or
+	// disowned one is the user's now, and deleting it would destroy work
+	// forge did not write. Such a project keeps a compiling (if redundant)
+	// AutoMigrate until the user removes it.
+	removeRetiredForgeFile(targetDir, filepath.Join("pkg", "app", "migrate.go"), cs)
+
+	db := config.DatabaseIn(targetDir)
+	layout := migrationEmbedLayoutOf(db.MigrationsPath())
+	if db.UsesMigrationHook() {
+		// The project's own tool applies its migrations (database.migrations
+		// .tool). Embedding them for forge's migrator would let the binary's
+		// `db migrate up` — or AUTO_MIGRATE at boot — apply another tool's
+		// files with golang-migrate, so the binary embeds nothing and says
+		// why. A package forge embedded the directory with before the switch
+		// is retired.
+		layout.hookTool = db.MigrationTool()
+		if layout.pkgDir != "" {
+			removeRetiredForgeFile(targetDir, filepath.Join(filepath.FromSlash(layout.pkgDir), "embed_gen.go"), cs)
+		}
+		hasMigrations = false
+	} else if layout.pkgDir != "" {
+		// Refuse a directory the go tool cannot build in now, not only once
+		// its first migration lands.
+		if err := checkEmbeddableMigrationsDir(modulePath, layout.dir); err != nil {
+			return err
+		}
+	}
+	// An embed package generated into a previous migrations_dir would keep
+	// embedding SQL that moved (or compile against none at all).
+	retireStaleMigrationsPackage(targetDir, modulePath, layout, hasMigrations, cs)
+	if !hasMigrations {
+		// No SQL yet, so `//go:embed migrations/*.sql` would not compile.
+		// Source() reports nil in this state and migratekit skips at boot —
+		// see migratekit.AutoMigrate on why boot tolerates that while an
+		// explicit `db migrate up` does not. An embed from an earlier run,
+		// when SQL existed, would now match nothing and fail the build.
+		RetireRenamedGenerated(targetDir, filepath.Join("db", "embed.go"), cs)
+		removeRetiredForgeFile(targetDir, filepath.Join("db", "embed_gen.go"), cs)
+		return writeMigrationSource(targetDir, layout, false, nil, cs)
+	}
+
+	// The read-only role's grants (pkg/dbgrants) ride in the same embed, beside
+	// the migrations, so the migrator applies them after every run. They exist
+	// only once `forge generate` has projected them, and `//go:embed` does not
+	// compile against an empty match, so the directive names them only then.
+	_, grantsErr := os.Stat(filepath.Join(targetDir, filepath.FromSlash(dbgrants.GrantsPath)))
+	hasGrants := grantsErr == nil
+
+	// Renamed to _gen so the name states the tier — the embed directive is
+	// re-derived from the migrations directory on every run.
+	RetireRenamedGenerated(targetDir, filepath.Join("db", "embed.go"), cs)
+
+	if layout.pkgDir != "" {
+		return generateMigrateOutsideDB(targetDir, modulePath, layout, hasGrants, cs)
+	}
+
+	embedPattern, embedDoc := layout.pattern, "every "+layout.dir+"/*.sql file"
+	if hasGrants {
+		// The whole directory: each role's script and its per-table rows
+		// (pkg/dbgrants.Files), whose subdirectories may be empty.
+		embedPattern, embedDoc = layout.pattern+" grants", "every "+layout.dir+"/*.sql file and the database roles' grants (db/grants/)"
+	}
+	embedContent := []byte(`// Code generated by forge. DO NOT EDIT.
+// forge-owned: regenerated every run — do not edit (forge project disown to take ownership)
+// Source: ` + layout.dir + `/*.sql — emitted once at least one exists.
+package db
+
+import "embed"
+
+// MigrationsFS holds ` + embedDoc + `, embedded into the
+// binary so "db migrate" needs nothing on disk but the binary itself.
+//
+//go:embed ` + embedPattern + `
+var MigrationsFS embed.FS
+`)
+	if err := writeForgeOwned(targetDir, filepath.Join("db", "embed_gen.go"), embedContent, cs); err != nil {
+		return fmt.Errorf("write db/embed_gen.go: %w", err)
+	}
+	return writeMigrationSource(targetDir, layout, true, nil, cs)
+}
+
+// migrationEmbedLayout is where the embedded migration set comes from, as a
+// function of database.migrations_dir.
+//
+// A go:embed directive reads only files at or below the directory of the package that
+// declares it, so the directive has to live ABOVE the SQL. Two shapes cover
+// every directory inside the project:
+//
+//   - The SQL sits in db/ or one level below it (db/migrations, the default,
+//     db/sql, or db itself). db/embed_gen.go embeds it directly, exactly as it
+//     always has, and the read-only grants in db/grants/ land beside it in the
+//     same filesystem — where migratekit looks for them (beside SourceDir).
+//   - Anywhere else (migrations/, sql/migrations, internal/db/migrations). A
+//     package of forge's is generated INTO the migrations directory
+//     (<dir>/embed_gen.go, `package migrations`) to embed its *.sql, and
+//     db.Source() mounts that set at SourceDir beside db's own embed of the
+//     grants, so the migrator reads the same layout as in the first shape.
+//
+// The default directory is the first shape with sub "migrations", so a project
+// that never set migrations_dir is generated byte-for-byte as before.
+type migrationEmbedLayout struct {
+	// dir is the project-relative migrations directory (slash-separated).
+	dir string
+	// sourceDir is db.SourceDir: the directory inside db.Source()'s
+	// filesystem that holds the SQL.
+	sourceDir string
+	// pattern is db/embed_gen.go's go:embed pattern for the SQL (first shape
+	// only).
+	pattern string
+	// pkgDir is the directory of the generated embed package (second shape
+	// only): dir itself.
+	pkgDir string
+	// hookTool is the migration tool that applies the migrations instead of
+	// forge's migrator (database.migrations.tool); empty for forge. With one,
+	// nothing is embedded.
+	hookTool string
+}
+
+func migrationEmbedLayoutOf(dir string) migrationEmbedLayout {
+	switch {
+	case dir == "db":
+		return migrationEmbedLayout{dir: dir, sourceDir: ".", pattern: "*.sql"}
+	case strings.HasPrefix(dir, "db/") && !strings.Contains(strings.TrimPrefix(dir, "db/"), "/"):
+		sub := strings.TrimPrefix(dir, "db/")
+		return migrationEmbedLayout{dir: dir, sourceDir: sub, pattern: sub + "/*.sql"}
+	default:
+		return migrationEmbedLayout{dir: dir, sourceDir: "migrations", pkgDir: dir}
+	}
+}
+
+// migrationMount is how db.Source() reaches SQL embedded outside db/.
+type migrationMount struct {
+	// importPath is the generated embed package's import path.
+	importPath string
+	// grants is whether db/embed_gen.go embeds the grants (GrantsFS).
+	grants bool
+}
+
+// migrationsEmbedPackage is the package name of the generated
+// <dir>/embed_gen.go, and the import alias db/source_gen.go gives it.
+const migrationsEmbedPackage = "migrations"
+
+// generateMigrateOutsideDB writes the second shape of migrationEmbedLayout:
+// <dir>/embed_gen.go embedding the SQL, db/embed_gen.go embedding only the
+// grants (or nothing — then it is retired), and the mounting db/source_gen.go.
+func generateMigrateOutsideDB(targetDir, modulePath string, layout migrationEmbedLayout, hasGrants bool, cs *checksums.FileChecksums) error {
+	if err := checkEmbeddableMigrationsDir(modulePath, layout.dir); err != nil {
+		return err
+	}
+	pkgContent := []byte(`// Code generated by forge. DO NOT EDIT.
+// forge-owned: regenerated every run — do not edit (forge project disown to take ownership)
+// Source: ` + layout.dir + `/*.sql (forge.yaml database.migrations_dir) — emitted once at least one exists.
+
+// Package ` + migrationsEmbedPackage + ` embeds this directory's SQL migrations into the binary, so
+// "db migrate" needs nothing on disk but the binary itself. go:embed reads
+// only below the package that declares it, so the directive lives here,
+// beside the SQL; db.Source() mounts it for the migrator.
+package ` + migrationsEmbedPackage + `
+
+import "embed"
+
+// FS holds every ` + layout.dir + `/*.sql file.
+//
+//go:embed *.sql
+var FS embed.FS
+`)
+	if err := writeForgeOwned(targetDir, filepath.Join(filepath.FromSlash(layout.pkgDir), "embed_gen.go"), pkgContent, cs); err != nil {
+		return fmt.Errorf("write %s/embed_gen.go: %w", layout.pkgDir, err)
+	}
+
+	if hasGrants {
+		embedContent := []byte(`// Code generated by forge. DO NOT EDIT.
+// forge-owned: regenerated every run — do not edit (forge project disown to take ownership)
+// Source: db/grants/ — emitted once forge generate has projected them.
+package db
+
+import "embed"
+
+// GrantsFS holds the database roles' grants (db/grants/), embedded into the
+// binary so the migrator applies them after every run. The migrations
+// themselves are embedded by ` + layout.dir + `/embed_gen.go (database.migrations_dir).
+//
+//go:embed grants
+var GrantsFS embed.FS
+`)
+		if err := writeForgeOwned(targetDir, filepath.Join("db", "embed_gen.go"), embedContent, cs); err != nil {
+			return fmt.Errorf("write db/embed_gen.go: %w", err)
+		}
+	} else {
+		// An embed of db/migrations from before migrations_dir moved would
+		// no longer compile; nothing in db/ needs embedding now.
+		removeRetiredForgeFile(targetDir, filepath.Join("db", "embed_gen.go"), cs)
+	}
+	return writeMigrationSource(targetDir, layout, true, &migrationMount{importPath: modulePath + "/" + layout.pkgDir, grants: hasGrants}, cs)
+}
+
+// retireStaleMigrationsPackage removes the <dir>/embed_gen.go generated into
+// an earlier migrations_dir (migrationEmbedLayout's second shape) once it is
+// no longer the one in use: the directory moved, moved under db/, or holds no
+// SQL now. The previous directory is read from the db/source_gen.go that
+// mounted it — the one record of where forge last generated the package.
+func retireStaleMigrationsPackage(targetDir, modulePath string, layout migrationEmbedLayout, hasMigrations bool, cs *checksums.FileChecksums) {
+	prev := previousMigrationsPackageDir(targetDir, modulePath)
+	if prev == "" || (hasMigrations && prev == layout.pkgDir) {
+		return
+	}
+	removeRetiredForgeFile(targetDir, filepath.Join(filepath.FromSlash(prev), "embed_gen.go"), cs)
+}
+
+// previousMigrationsPackageDir is the project-relative directory of the embed
+// package the existing db/source_gen.go imports, or "" when it imports none.
+func previousMigrationsPackageDir(targetDir, modulePath string) string {
+	if modulePath == "" {
+		return ""
+	}
+	body, err := os.ReadFile(filepath.Join(targetDir, "db", "source_gen.go"))
+	if err != nil {
+		return ""
+	}
+	prefix := migrationsEmbedPackage + ` "` + modulePath + "/"
+	for _, line := range strings.Split(string(body), "\n") {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(line), prefix)
+		if !ok {
+			continue
+		}
+		dir, ok := strings.CutSuffix(rest, `"`)
+		if !ok || dir == "" || strings.Contains(dir, "..") {
+			return ""
+		}
+		return dir
+	}
+	return ""
+}
+
+// checkEmbeddableMigrationsDir refuses a migrations directory the go tool
+// cannot build a package in, naming the directory and what to do, instead of
+// leaving a generated import that fails to compile.
+func checkEmbeddableMigrationsDir(modulePath, dir string) error {
+	if modulePath == "" {
+		return fmt.Errorf("embed the migrations in %s: the project has no module path", dir)
+	}
+	for _, elem := range strings.Split(dir, "/") {
+		if strings.HasPrefix(elem, ".") || strings.HasPrefix(elem, "_") || elem == "testdata" {
+			return fmt.Errorf("database.migrations_dir %q cannot be embedded into the binary: the go tool ignores a directory named %q — move the migrations, or put them under db/", dir, elem)
+		}
+	}
+	if err := module.CheckImportPath(modulePath + "/" + dir); err != nil {
+		return fmt.Errorf("database.migrations_dir %q cannot be embedded into the binary: %w", dir, err)
+	}
+	return nil
+}
+
+// writeMigrationSource emits db/source_gen.go: the accessor the command tree
+// calls to reach the embedded migration set.
+//
+// WHY THIS FILE EXISTS AT ALL. Whether `MigrationsFS` is a referenceable symbol
+// is a fact about what the user has written — db/embed_gen.go is emitted only
+// once db/migrations/ holds at least one .sql — so SOMETHING has to be
+// re-derived when the first migration lands. This is that something, and it is
+// the whole of it: two lines whose body flips between the embedded set and nil.
+//
+// WHY IN package db AND NOT THE COMMAND TREE. It is the embed's own accessor,
+// so it belongs beside the embed, in the only package that can name it without
+// an import. Keeping it here means the cmd/ tree has NO generated file: every
+// file under cmd/<bin>/cmd/ is now scaffold-once and yours, and the fact forge
+// keeps re-deriving lives in the generated package it is a fact about. The
+// callers (serve.go's AutoMigrate, db.go's openMigrator) name db.Source() and
+// db.SourceDir, which compile identically in both states — so writing your
+// first migration flips this file's body and rewrites nothing you own.
+// mount is set when the migrations live outside db/ (migrationEmbedLayout's
+// second shape): Source() then mounts the generated embed package.
+func writeMigrationSource(targetDir string, layout migrationEmbedLayout, hasMigrations bool, mount *migrationMount, cs *checksums.FileChecksums) error {
+	dir := layout.dir
+	// HasMigrations is the two-state fact stated as a CONSTANT, and callers
+	// branch on it rather than on `Source() == nil`.
+	//
+	// WHY NOT A NIL CHECK. It used to be one, and it was a real defect: with
+	// migrations present Source() returns MigrationsFS, and `var MigrationsFS
+	// embed.FS` is a concrete struct VALUE that is never nil. So
+	// `Source() == nil` is provably false in that state, and staticcheck says
+	// so — SA4023 — which made `forge lint` exit 1 on a freshly scaffolded
+	// project as soon as it had one migration. (It surfaced only when CI's
+	// deliberately-unpinned golangci-lint reached 2.13.1; the nil branch was
+	// dead long before anything could see it.)
+	//
+	// A bool cannot rot the same way. It says exactly what the generator
+	// knows, the compiler folds the dead branch without complaint, and a
+	// reader does not have to reason about when a non-nil interface can hold
+	// a nil value.
+	body := "// HasMigrations is false: " + dir + "/ held no .sql file when this was\n" +
+		"// generated, so embed_gen.go does not exist and naming the embedded set\n" +
+		"// would not compile.\n" +
+		"const HasMigrations = false\n" +
+		"\n" +
+		"// Source returns nil, because there is no embedded set to return.\n" +
+		"//\n" +
+		"// nil is not a silent no-op for the CLI — migratekit.Open REFUSES a nil\n" +
+		"// source with an error naming the missing embed, so `db migrate up` fails\n" +
+		"// loudly instead of exiting 0 against an unmigrated database. At BOOT it is\n" +
+		"// tolerated and skipped, because a project that has not written its first\n" +
+		"// migration must still be able to start. Write a migration\n" +
+		"// (`forge db migration new <name>`) and re-run `forge generate` to embed it.\n" +
+		"//\n" +
+		"// Test HasMigrations, not `Source() == nil`: in the embedded state Source\n" +
+		"// returns a concrete embed.FS value that is never nil, so that comparison\n" +
+		"// is dead code (staticcheck SA4023).\n" +
+		"func Source() fs.FS { return nil }\n"
+	if layout.hookTool != "" {
+		body = "// HasMigrations is false: " + dir + "/ is applied by " + layout.hookTool + "\n" +
+			"// (forge.yaml database.migrations.tool), not by forge's migrator, so\n" +
+			"// nothing is embedded for it to apply.\n" +
+			"const HasMigrations = false\n" +
+			"\n" +
+			"// Source returns nil, because the binary carries no migrations: run\n" +
+			"// `forge db migrate up` (which runs " + layout.hookTool + ") or the tool itself. The\n" +
+			"// binary's `db migrate up` refuses a nil source with an error naming the\n" +
+			"// missing embed, and AUTO_MIGRATE at boot skips it.\n" +
+			"func Source() fs.FS { return nil }\n"
+	}
+	if hasMigrations {
+		body = "// HasMigrations is true: " + dir + "/ holds at least one .sql file, so\n" +
+			"// embed_gen.go exists and the embedded set can be named.\n" +
+			"const HasMigrations = true\n" +
+			"\n" +
+			"// Source returns the embedded migration set — every " + dir + "/*.sql\n" +
+			"// compiled INTO this binary.\n" +
+			"//\n" +
+			"// It is embedded, never read off disk, because that is what lets the\n" +
+			"// production image migrate itself: the runtime stage copies the binary and\n" +
+			"// nothing else, so there is no " + dir + " directory in the container and\n" +
+			"// a filesystem-sourced migrator could only ever fail there.\n" +
+			"//\n" +
+			"// The returned value is a concrete embed.FS and is therefore NEVER nil —\n" +
+			"// branch on HasMigrations instead of comparing this against nil.\n" +
+			"func Source() fs.FS { return MigrationsFS }\n"
+	}
+
+	imports := `import "io/fs"`
+	sourceDirDoc := "// SourceDir is the directory INSIDE the embedded filesystem\n" +
+		"// (embed_gen.go's `//go:embed " + layout.pattern + "`) that holds the SQL.\n"
+	if mount != nil {
+		sourceDirDoc = "// SourceDir is the directory INSIDE Source()'s filesystem that holds the\n" +
+			"// SQL: " + dir + "/embed_gen.go's embed, mounted there by sourceFS.\n"
+		if hasMigrations {
+			imports = "import (\n\t\"io/fs\"\n\t\"strings\"\n\n\t" + migrationsEmbedPackage + " \"" + mount.importPath + "\"\n)"
+			body = strings.Replace(body, "func Source() fs.FS { return MigrationsFS }\n", "func Source() fs.FS { return sourceFS{} }\n", 1)
+			body = strings.Replace(body, "// The returned value is a concrete embed.FS and is therefore NEVER nil —\n", "// The returned value is a concrete sourceFS and is therefore NEVER nil —\n", 1)
+			body += mountedSourceFS(dir, layout.sourceDir, mount.grants)
+		}
+	}
+
+	content := []byte(`// Code generated by forge. DO NOT EDIT.
+// forge-owned: regenerated every run — do not edit (forge project disown to take ownership)
+// Source: ` + dir + `/*.sql — whether any exist.
+//
+// THE ONE DERIVED FACT of the migration wiring: does this project have an
+// embedded migration set yet? ` + embedFileOf(layout) + ` is emitted only when
+// ` + dir + `/ holds at least one .sql file, so whether the embedded set can
+// be NAMED at all is re-read from disk on every run.
+//
+// Everything that acts on it — the serve-time AutoMigrate call, the whole
+// ` + "`db migrate`" + ` command tree — is scaffold-once code you own, calling
+// Source() and SourceDir. Both compile in either state, so writing your first
+// migration flips this file's body and rewrites nothing of yours.
+//
+// go:embed re-reads at compile time, so ` + "`go run ./cmd/...`" + ` picks up a .sql you
+// just wrote; ` + "`forge generate`" + ` is needed only the FIRST time, to emit embed_gen.go.
+package db
+
+` + imports + `
+
+` + sourceDirDoc + `const SourceDir = "` + layout.sourceDir + `"
+
+` + body)
+
+	if err := writeForgeOwned(targetDir, filepath.Join("db", "source_gen.go"), content, cs); err != nil {
+		return fmt.Errorf("write db/source_gen.go: %w", err)
+	}
+	return nil
+}
+
+// embedFileOf names the file that embeds the SQL in this layout.
+func embedFileOf(layout migrationEmbedLayout) string {
+	if layout.pkgDir != "" {
+		return layout.pkgDir + "/embed_gen.go"
+	}
+	return "db/embed_gen.go"
+}
+
+// mountedSourceFS renders the fs.FS db.Source() returns when the migrations
+// live outside db/: the generated embed package's SQL at SourceDir, and every
+// other path — the grants beside it, which migratekit reads from
+// path.Dir(SourceDir) — from db's own embed. migratekit and golang-migrate's
+// iofs reach the tree only through Open, ReadDir (via the opened directory)
+// and ReadFile/Glob built on them, so Open is the whole interface.
+func mountedSourceFS(dir, sourceDir string, grants bool) string {
+	fallback := "\treturn nil, &fs.PathError{Op: \"open\", Path: name, Err: fs.ErrNotExist}\n"
+	if grants {
+		fallback = "\treturn GrantsFS.Open(name)\n"
+	}
+	return "\n// sourceFS mounts " + dir + "'s embedded SQL (package " + migrationsEmbedPackage + ") at\n" +
+		"// SourceDir and serves every other path — the read-only role's grants — from\n" +
+		"// db's own embed, so the migrator reads the layout it reads under db/:\n" +
+		"// " + sourceDir + "/ and grants/ side by side.\n" +
+		"type sourceFS struct{}\n" +
+		"\n" +
+		"// Open implements fs.FS.\n" +
+		"func (sourceFS) Open(name string) (fs.File, error) {\n" +
+		"\tif name == SourceDir {\n" +
+		"\t\treturn " + migrationsEmbedPackage + ".FS.Open(\".\")\n" +
+		"\t}\n" +
+		"\tif rest, ok := strings.CutPrefix(name, SourceDir+\"/\"); ok {\n" +
+		"\t\treturn " + migrationsEmbedPackage + ".FS.Open(rest)\n" +
+		"\t}\n" +
+		fallback +
+		"}\n"
+}
