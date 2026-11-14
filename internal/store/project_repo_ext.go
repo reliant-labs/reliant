@@ -209,16 +209,6 @@ func TouchProject(ctx context.Context, db orm.Context, id, userID string) error 
 	return err
 }
 
-// DeleteUserProject deletes the user's project. A project that is missing or
-// another user's is left alone, without an error.
-func DeleteUserProject(ctx context.Context, db orm.Context, id, userID string) error {
-	_, err := db.Bun().NewDelete().Model((*Project)(nil)).
-		Where("id = ?", id).
-		Where("user_id = ?", userID).
-		Exec(ctx)
-	return err
-}
-
 // firstProject returns the first project matching opts, or nil when none
 // does.
 func firstProject(ctx context.Context, db orm.Context, opts ...orm.QueryOption) (*core.Project, error) {
