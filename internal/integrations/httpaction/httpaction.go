@@ -360,13 +360,13 @@ func (r *Runner) request(ctx context.Context, env callEnv, req *reliantv1.HttpRe
 		// not a failure: its status and Location are what they wanted.
 		returnedRedirect := opts.redirects == manifest.RedirectsReturn && pgResp.status >= 300 && pgResp.status < 400
 		if (pgResp.status < 200 || pgResp.status >= 300) && !returnedRedirect && !acceptedError(req, pgResp) {
-			res, _ := errorResult(req, pgResp)
+			res, _ := errorResult(req, pgResp, vars["params"])
 			return &requestRun{result: res, last: pgResp}, nil
 		}
 		// A provider that reports failure in a 2xx body (Slack's ok:false)
 		// declares a guarded rule for it; any other 2xx is a success.
 		if rule := matchErrorRule(req, pgResp); rule != nil && !rule.GetAccept() {
-			return &requestRun{result: ruleResult(rule, pgResp), last: pgResp}, nil
+			return &requestRun{result: ruleResult(rule, pgResp, vars["params"]), last: pgResp}, nil
 		}
 		if opts.responseFormat == manifest.ResponseFormatJSON && pgResp.jsonErr != nil && !returnedRedirect {
 			return &requestRun{result: notJSONResult(pgResp), last: pgResp}, nil
@@ -839,9 +839,9 @@ func truncate(text string) string {
 
 // errorResult classifies a non-2xx response: the first matching rule, else
 // the defaults (429 and 5xx retryable, everything else permanent).
-func errorResult(req *reliantv1.HttpRequestSpec, p *page) (*Result, error) {
+func errorResult(req *reliantv1.HttpRequestSpec, p *page, params any) (*Result, error) {
 	if rule := matchErrorRule(req, p); rule != nil {
-		return ruleResult(rule, p), nil
+		return ruleResult(rule, p, params), nil
 	}
 	return &Result{Content: defaultErrorMessage(p), IsError: true,
 		Retryable: p.status == http.StatusTooManyRequests || p.status >= 500, StatusCode: p.status}, nil
@@ -880,10 +880,15 @@ func matchErrorRule(req *reliantv1.HttpRequestSpec, p *page) *reliantv1.ErrorRul
 	return nil
 }
 
-func ruleResult(rule *reliantv1.ErrorRule, p *page) *Result {
+// ruleResult renders rule's message over the response and the call's params,
+// so a message can name what was asked for (the path that was not found): two
+// failures of different requests then read differently, as they are.
+func ruleResult(rule *reliantv1.ErrorRule, p *page, params any) *Result {
 	message := defaultErrorMessage(p)
 	if rule.GetMessage() != "" {
-		if rendered, err := tmpl.RenderString(rule.GetMessage(), responseVars(p), tmpl.Options{}); err == nil {
+		vars := responseVars(p)
+		vars["params"] = params
+		if rendered, err := tmpl.RenderString(rule.GetMessage(), vars, tmpl.Options{}); err == nil {
 			message = rendered
 		}
 	}
