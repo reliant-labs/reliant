@@ -87,10 +87,18 @@ describe("MyPolicyUsage", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("shows any other failure with a retry", async () => {
-    renderUsage({ error: new ConnectError("prose", Code.PermissionDenied, { "x-forge-error-reason": "not_org_member" }) });
+  // The server's refusals (control-plane memberCaller): each is shown in its
+  // own words, never as "not available yet", and never as the server's prose.
+  it.each([
+    ["not_org_member", "You're not a member of this organization any more."],
+    ["human_only", "Sign in as yourself to do this: a machine token cannot read or change policies."],
+    ["", "Could not load your usage."],
+  ])("shows a PermissionDenied refusal (reason %j) in its own words, with a retry", async (reason, words) => {
+    renderUsage({ error: new ConnectError("server prose", Code.PermissionDenied, reason ? { "x-forge-error-reason": reason } : undefined) });
     const alert = await screen.findByRole("alert", undefined, { timeout: 5000 });
-    expect(alert).toHaveTextContent("You're not a member of this organization any more.");
+    expect(alert).toHaveTextContent(words);
+    expect(alert).not.toHaveTextContent("server prose");
+    expect(screen.queryByText(/not available yet/)).toBeNull();
     expect(within(alert).getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 });
