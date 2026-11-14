@@ -21,6 +21,7 @@ describe("SettingsNavigation order", () => {
       "member-permissions",
       "policies",
       "org-ai-accounts",
+      "org-ai-usage",
       "privacy",
       "ai",
       "integrations",
@@ -72,6 +73,7 @@ describe("SettingsNavigation order", () => {
     expect(mod.getVisibleSettingsSectionIds()).not.toContain("member-permissions");
     expect(mod.getVisibleSettingsSectionIds()).not.toContain("policies");
     expect(mod.getVisibleSettingsSectionIds()).not.toContain("org-ai-accounts");
+    expect(mod.getVisibleSettingsSectionIds()).not.toContain("org-ai-usage");
     expect(mod.getVisibleSettingsSectionIds()[0]).toBe("account");
     config.hasControlPlane = true;
   });

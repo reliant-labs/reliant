@@ -338,6 +338,11 @@ export const SETTINGS_SECTION_IDS = [
   // workspaces. Members read them, owners and admins manage them. Cloud-only,
   // beside Members.
   "org-ai-accounts",
+  // The AI usage the active org pays for (control-plane
+  // docs/design/org-provider-accounts.md §5): its keys, seats and credits by
+  // member, account and model, with estimated list costs. billing:read
+  // holders read it. Cloud-only, beside AI accounts.
+  "org-ai-usage",
   // Machines. Shown in every build: registered machines, and the outside AI
   // apps granted access to each, exist without a control plane too. Was
   // `environments`; /settings/environments redirects here.

@@ -76,6 +76,7 @@ func main() {
 	jobs := fs.Int("jobs", 2, "maximum concurrent test steps (1 serializes; prerequisites always run first)")
 	planFile := fs.String("plan", "", "with run: run this plan (the -json output of an earlier plan) instead of computing one; the merge gate's plan phase already wrote it")
 	budgetFlag := fs.String("test-budget", "", "with run: fail a Go test this change adds or edits that runs longer than this (a duration; \"auto\" is 10s scaled by the load per core; empty or 0 is off), and report every other test over it")
+	webFullFlag := fs.String("web-full", webFullAll, "with run: what a FULL web lane runs: all (the whole vitest suite) or reached (only the vitest files the diff's own web modules reach, at -reach's cut; the merge gate's choice, dev-docs/testing-affected.md)")
 	reachFlag := fs.String("reach", "", "Go and web lane fan-out: all (every package whose test binary, every vitest file whose import closure, contains a change; the default, also $TEST_REACH) or direct (changed packages + their direct importers; the vitest files that import a changed module or a module importing it: the merge tier)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
@@ -102,6 +103,13 @@ func main() {
 		os.Exit(2)
 	}
 
+	switch *webFullFlag {
+	case webFullAll, webFullReached:
+	default:
+		fmt.Fprintf(os.Stderr, "test-affected: -web-full must be %s or %s, not %q\n", webFullAll, webFullReached, *webFullFlag)
+		os.Exit(2)
+	}
+
 	ctx := context.Background()
 	var pl *Plan
 	var err error
@@ -124,7 +132,7 @@ func main() {
 		os.Exit(1)
 	}
 	if cmd == "run" {
-		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, jobs: *jobs,
+		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, jobs: *jobs, webFull: *webFullFlag,
 			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT"))}
 		if err := r.setBudget(ctx, *budgetFlag, pl.Base); err != nil {
 			fmt.Fprintln(os.Stderr, "test-affected:", err)
@@ -249,13 +257,13 @@ func readPlan(ctx context.Context, root, base, file string) (*Plan, error) {
 	if err := json.Unmarshal(b, &fields); err != nil {
 		return nil, err
 	}
-	for _, key := range []string{"schema", "input_digest", "base", "head", "files", "go", "web", "electron", "forge_generate", "docs_generate", "migration_order"} {
+	for _, key := range []string{"schema", "input_digest", "base", "head", "files", "go", "web", "electron", "forge_generate", "docs_generate", "migration_order", "web_demo"} {
 		value, ok := fields[key]
 		if !ok || (key != "files" && bytes.Equal(value, []byte("null"))) {
 			return nil, fmt.Errorf("%s: missing plan field %s", file, key)
 		}
 	}
-	for _, key := range []string{"go", "web", "electron", "forge_generate", "docs_generate", "migration_order"} {
+	for _, key := range []string{"go", "web", "electron", "forge_generate", "docs_generate", "migration_order", "web_demo"} {
 		var laneFields map[string]json.RawMessage
 		if err := json.Unmarshal(fields[key], &laneFields); err != nil {
 			return nil, err
@@ -318,7 +326,7 @@ func hookCommands(root string, names []string) (map[string][]string, error) {
 
 func failSafe(base, head, why string) *Plan {
 	lf := LaneFull{Full: true, Reasons: []string{why}}
-	return &Plan{Base: base, Head: head, Go: GoPlan{LaneFull: lf}, Web: WebPlan{LaneFull: lf}, Electron: ElectronPlan{LaneFull: lf}, ForgeGen: ForgeGenPlan{LaneFull: lf}, DocGen: DocGenPlan{LaneFull: lf}, MigOrder: MigOrderPlan{LaneFull: lf}}
+	return &Plan{Base: base, Head: head, Go: GoPlan{LaneFull: lf}, Web: WebPlan{LaneFull: lf}, Electron: ElectronPlan{LaneFull: lf}, ForgeGen: ForgeGenPlan{LaneFull: lf}, DocGen: DocGenPlan{LaneFull: lf}, MigOrder: MigOrderPlan{LaneFull: lf}, WebDemo: WebDemoPlan{LaneFull: lf}}
 }
 
 func firstLine(s string) string {
@@ -532,6 +540,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 		{laneForgeGen, pl.ForgeGen.LaneFull, "forge generate", nil, nil},
 		{laneDocGen, pl.DocGen.LaneFull, "docs generators", nil, nil},
 		{laneMigOrder, pl.MigOrder.LaneFull, "migration order", nil, nil},
+		{laneWebDemo, pl.WebDemo.LaneFull, "forge demo bundle build", nil, nil},
 	}
 	for _, lp := range lanePlans {
 		if !enabled[lp.l] {
@@ -547,7 +556,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 				}
 				p.f("  - %s\n", r)
 			}
-		case len(lp.list) == 0 && (lp.l == laneElectron || lp.l == laneForgeGen || lp.l == laneDocGen || lp.l == laneMigOrder):
+		case len(lp.list) == 0 && (lp.l == laneElectron || lp.l == laneForgeGen || lp.l == laneDocGen || lp.l == laneMigOrder || lp.l == laneWebDemo):
 			p.f("\n[%s] skip: nothing it reads changed\n", lp.l)
 		case len(lp.list) == 0:
 			p.f("\n[%s] skip: no test reaches a changed file\n", lp.l)
@@ -590,7 +599,16 @@ type runner struct {
 	// CPU from the jobs queued in one. A scoped run stays out of the queue: it
 	// is the inner loop. Empty runs everything directly.
 	slot []string
+	// webFull is what a FULL web lane runs (-web-full): webFullAll, the
+	// whole suite, or webFullReached, the files the plan's Tests list.
+	webFull string
 }
+
+// -web-full values.
+const (
+	webFullAll     = "all"
+	webFullReached = "reached"
+)
 
 // heavy is argv run inside a host heavy slot when there is one.
 func (r *runner) heavy(argv []string) []string {
@@ -683,8 +701,19 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 	if enabled[laneWeb] {
 		out = append(out, r.webSteps(pl)...)
 	}
+	// The forge demo bundle's build (WebDemoPlan): its guard plugin fails on a
+	// Reliant-only module in the bundle. Into dist-demo/, gitignored, as
+	// `npm run build:demo` writes it; tsc -b is the web type-check's, not this.
+	if enabled[laneWebDemo] && pl.WebDemo.Full {
+		out = append(out, step{name: "forge demo bundle builds", dir: filepath.Join(r.root, "frontends", "web"), env: []string{"WEB_BUILD_TARGET=demo"}, argv: r.heavy(demoBuildArgv())})
+	}
 	return out
 }
+
+// demoBuildArgv builds the forge demo bundle (frontends/web/vite.config.ts's
+// demo target, selected by WEB_BUILD_TARGET=demo as the forge-demo frontend's
+// deploy sets it). scripts/merge-gate.sh's demo phase runs the same build.
+func demoBuildArgv() []string { return []string{"npx", "vite", "build", "--logLevel", "warn"} }
 
 // sdkModuleDir is the SDK's own Go module: the root module's `./...` stops at
 // its go.mod, so its tests are a step of their own.
@@ -738,6 +767,15 @@ func (r *runner) rootGoSteps(pl *Plan) []step {
 func (r *runner) webSteps(pl *Plan) []step {
 	web := filepath.Join(r.root, "frontends", "web")
 	switch {
+	case pl.Web.Full && r.webFull == webFullReached:
+		// The merge gate's FULL fallback: the files the diff's own web
+		// modules reach (#2669's 13 failures were among them while a
+		// package.json change made the lane FULL); the whole suite runs in
+		// the release gate.
+		if len(pl.Web.Tests) == 0 {
+			return nil
+		}
+		return []step{{name: "web (FULL fallback: the reached files)", dir: web, argv: append([]string{"npx", "vitest", "run"}, pl.Web.Tests...)}}
 	case pl.Web.Full:
 		return []step{{name: "web (full)", dir: web, argv: r.heavy([]string{"npx", "vitest", "run"})}}
 	case len(pl.Web.Tests) == 0:

@@ -156,6 +156,14 @@ const (
 	LLMUsageGroupBy_LLM_USAGE_GROUP_BY_PROVIDER    LLMUsageGroupBy = 3
 	LLMUsageGroupBy_LLM_USAGE_GROUP_BY_AUTH_MODE   LLMUsageGroupBy = 4
 	LLMUsageGroupBy_LLM_USAGE_GROUP_BY_PURPOSE     LLMUsageGroupBy = 5
+	// Who paid for the call: "org_key" (an org's own API key), "org_seat" (a
+	// seat an org pays for), "org_wallet" (Reliant credits an org pays for),
+	// "personal" (the caller's own account), "local" (a local model), or ""
+	// when it was not recorded (see GetLLMUsageResponse.detail_available_from).
+	LLMUsageGroupBy_LLM_USAGE_GROUP_BY_FUNDING LLMUsageGroupBy = 6
+	// The provider account that served the call (provider_accounts id), with
+	// its label; "" when it was not recorded.
+	LLMUsageGroupBy_LLM_USAGE_GROUP_BY_ACCOUNT LLMUsageGroupBy = 7
 )
 
 // Enum value maps for LLMUsageGroupBy.
@@ -167,6 +175,8 @@ var (
 		3: "LLM_USAGE_GROUP_BY_PROVIDER",
 		4: "LLM_USAGE_GROUP_BY_AUTH_MODE",
 		5: "LLM_USAGE_GROUP_BY_PURPOSE",
+		6: "LLM_USAGE_GROUP_BY_FUNDING",
+		7: "LLM_USAGE_GROUP_BY_ACCOUNT",
 	}
 	LLMUsageGroupBy_value = map[string]int32{
 		"LLM_USAGE_GROUP_BY_UNSPECIFIED": 0,
@@ -175,6 +185,8 @@ var (
 		"LLM_USAGE_GROUP_BY_PROVIDER":    3,
 		"LLM_USAGE_GROUP_BY_AUTH_MODE":   4,
 		"LLM_USAGE_GROUP_BY_PURPOSE":     5,
+		"LLM_USAGE_GROUP_BY_FUNDING":     6,
+		"LLM_USAGE_GROUP_BY_ACCOUNT":     7,
 	}
 )
 
@@ -273,8 +285,11 @@ type GetLLMUsageRequest struct {
 	Provider *string      `protobuf:"bytes,4,opt,name=provider,proto3,oneof" json:"provider,omitempty"`
 	AuthMode *LLMAuthMode `protobuf:"varint,5,opt,name=auth_mode,json=authMode,proto3,enum=reliant.v1.LLMAuthMode,oneof" json:"auth_mode,omitempty"`
 	// Model id as recorded. Exact match.
-	Model         *string     `protobuf:"bytes,6,opt,name=model,proto3,oneof" json:"model,omitempty"`
-	Purpose       *LLMPurpose `protobuf:"varint,7,opt,name=purpose,proto3,enum=reliant.v1.LLMPurpose,oneof" json:"purpose,omitempty"`
+	Model   *string     `protobuf:"bytes,6,opt,name=model,proto3,oneof" json:"model,omitempty"`
+	Purpose *LLMPurpose `protobuf:"varint,7,opt,name=purpose,proto3,enum=reliant.v1.LLMPurpose,oneof" json:"purpose,omitempty"`
+	// Only calls made in chats and runs of this organization. Unset: every
+	// org, and calls in no org. The usage is still only the caller's own.
+	OrgId         *string `protobuf:"bytes,8,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -358,12 +373,25 @@ func (x *GetLLMUsageRequest) GetPurpose() LLMPurpose {
 	return LLMPurpose_LLM_PURPOSE_UNSPECIFIED
 }
 
+func (x *GetLLMUsageRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
 // LLMUsageBucket is the sum of every matching call in one group.
 type LLMUsageBucket struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The group: a UTC day "YYYY-MM-DD", a model id, a provider id, an auth mode
-	// name ("managed", "byok", "subscription", "local") or a purpose name
-	// ("chat", "compaction", "title", "draft_automation"), per group_by.
+	// name ("managed", "byok", "subscription", "local"), a purpose name
+	// ("chat", "compaction", "title", "draft_automation"), a funding name or a
+	// provider account id, per group_by.
+	//
+	// By funding and by account, calls are only broken down while their
+	// individual records are kept (detail_available_from on): older days are
+	// summed into the bucket with key "", as are calls made before funding and
+	// account were recorded.
 	Key   string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Calls int64  `protobuf:"varint,2,opt,name=calls,proto3" json:"calls,omitempty"`
 	// Calls that ended in an error. Cancelled calls count as calls only.
@@ -375,7 +403,11 @@ type LLMUsageBucket struct {
 	// Sum of every call's latency; latency_ms_total / calls is avg_latency_ms.
 	LatencyMsTotal int64 `protobuf:"varint,8,opt,name=latency_ms_total,json=latencyMsTotal,proto3" json:"latency_ms_total,omitempty"`
 	// 0 when calls is 0.
-	AvgLatencyMs  float64 `protobuf:"fixed64,9,opt,name=avg_latency_ms,json=avgLatencyMs,proto3" json:"avg_latency_ms,omitempty"`
+	AvgLatencyMs float64 `protobuf:"fixed64,9,opt,name=avg_latency_ms,json=avgLatencyMs,proto3" json:"avg_latency_ms,omitempty"`
+	// A name for key a person can read, where key is an id: the account's
+	// label when grouping by account ("" when the account no longer exists, or
+	// for the "" bucket). Empty for every other group_by.
+	Label         string `protobuf:"bytes,10,opt,name=label,proto3" json:"label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -471,6 +503,13 @@ func (x *LLMUsageBucket) GetAvgLatencyMs() float64 {
 		return x.AvgLatencyMs
 	}
 	return 0
+}
+
+func (x *LLMUsageBucket) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
 }
 
 type GetLLMUsageResponse struct {
@@ -578,7 +617,7 @@ var File_reliant_v1_usage_proto protoreflect.FileDescriptor
 const file_reliant_v1_usage_proto_rawDesc = "" +
 	"\n" +
 	"\x16reliant/v1/usage.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x9d\x03\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xc4\x03\n" +
 	"\x12GetLLMUsageRequest\x129\n" +
 	"\n" +
 	"start_date\x18\x01 \x01(\tB\x1a\xbaH\x17r\x152\x13^\\d{4}-\\d{2}-\\d{2}$R\tstartDate\x125\n" +
@@ -587,13 +626,15 @@ const file_reliant_v1_usage_proto_rawDesc = "" +
 	"\bprovider\x18\x04 \x01(\tH\x00R\bprovider\x88\x01\x01\x129\n" +
 	"\tauth_mode\x18\x05 \x01(\x0e2\x17.reliant.v1.LLMAuthModeH\x01R\bauthMode\x88\x01\x01\x12\x19\n" +
 	"\x05model\x18\x06 \x01(\tH\x02R\x05model\x88\x01\x01\x125\n" +
-	"\apurpose\x18\a \x01(\x0e2\x16.reliant.v1.LLMPurposeH\x03R\apurpose\x88\x01\x01B\v\n" +
+	"\apurpose\x18\a \x01(\x0e2\x16.reliant.v1.LLMPurposeH\x03R\apurpose\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\b \x01(\tH\x04R\x05orgId\x88\x01\x01B\v\n" +
 	"\t_providerB\f\n" +
 	"\n" +
 	"_auth_modeB\b\n" +
 	"\x06_modelB\n" +
 	"\n" +
-	"\b_purpose\"\xcb\x02\n" +
+	"\b_purposeB\t\n" +
+	"\a_org_id\"\xe1\x02\n" +
 	"\x0eLLMUsageBucket\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05calls\x18\x02 \x01(\x03R\x05calls\x12\x1f\n" +
@@ -604,7 +645,9 @@ const file_reliant_v1_usage_proto_rawDesc = "" +
 	"\x11cache_read_tokens\x18\x06 \x01(\x03R\x0fcacheReadTokens\x12,\n" +
 	"\x12cache_write_tokens\x18\a \x01(\x03R\x10cacheWriteTokens\x12(\n" +
 	"\x10latency_ms_total\x18\b \x01(\x03R\x0elatencyMsTotal\x12$\n" +
-	"\x0eavg_latency_ms\x18\t \x01(\x01R\favgLatencyMs\"\xda\x02\n" +
+	"\x0eavg_latency_ms\x18\t \x01(\x01R\favgLatencyMs\x12\x14\n" +
+	"\x05label\x18\n" +
+	" \x01(\tR\x05label\"\xda\x02\n" +
 	"\x13GetLLMUsageResponse\x126\n" +
 	"\bgroup_by\x18\x01 \x01(\x0e2\x1b.reliant.v1.LLMUsageGroupByR\agroupBy\x124\n" +
 	"\abuckets\x18\x02 \x03(\v2\x1a.reliant.v1.LLMUsageBucketR\abuckets\x122\n" +
@@ -625,14 +668,16 @@ const file_reliant_v1_usage_proto_rawDesc = "" +
 	"\x10LLM_PURPOSE_CHAT\x10\x01\x12\x1a\n" +
 	"\x16LLM_PURPOSE_COMPACTION\x10\x02\x12\x15\n" +
 	"\x11LLM_PURPOSE_TITLE\x10\x03\x12 \n" +
-	"\x1cLLM_PURPOSE_DRAFT_AUTOMATION\x10\x04*\xd2\x01\n" +
+	"\x1cLLM_PURPOSE_DRAFT_AUTOMATION\x10\x04*\x92\x02\n" +
 	"\x0fLLMUsageGroupBy\x12\"\n" +
 	"\x1eLLM_USAGE_GROUP_BY_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16LLM_USAGE_GROUP_BY_DAY\x10\x01\x12\x1c\n" +
 	"\x18LLM_USAGE_GROUP_BY_MODEL\x10\x02\x12\x1f\n" +
 	"\x1bLLM_USAGE_GROUP_BY_PROVIDER\x10\x03\x12 \n" +
 	"\x1cLLM_USAGE_GROUP_BY_AUTH_MODE\x10\x04\x12\x1e\n" +
-	"\x1aLLM_USAGE_GROUP_BY_PURPOSE\x10\x05*\x87\x01\n" +
+	"\x1aLLM_USAGE_GROUP_BY_PURPOSE\x10\x05\x12\x1e\n" +
+	"\x1aLLM_USAGE_GROUP_BY_FUNDING\x10\x06\x12\x1e\n" +
+	"\x1aLLM_USAGE_GROUP_BY_ACCOUNT\x10\a*\x87\x01\n" +
 	"\x14LLMUsageCompleteness\x12&\n" +
 	"\"LLM_USAGE_COMPLETENESS_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fLLM_USAGE_COMPLETENESS_COMPLETE\x10\x01\x12\"\n" +

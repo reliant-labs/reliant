@@ -162,3 +162,19 @@ func TestNotifyOrgKeyRejected_RefusalsAreTyped(t *testing.T) {
 		})
 	}
 }
+
+// A kind control-plane has switched off (orgs.admin_notice_kinds_off,
+// control-plane#2783) is answered as a success with nobody emailed and
+// `suppressed`, a field this client does not read: the call succeeds, not
+// deduplicated, so the caller settles the incident as it does any success.
+func TestNotifyOrgKeyRejected_ASuppressedAnswerIsASuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"recipients":0,"suppressed":true}`))
+	}))
+	defer srv.Close()
+	c := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL}, Sign: signWith("s")})
+
+	dedup, err := c.NotifyOrgKeyRejected(context.Background(), OrgKeyRejectedNotice{OrgID: "o", IncidentKey: "i", AccountID: "a", Provider: "p"})
+	require.NoError(t, err)
+	assert.False(t, dedup)
+}

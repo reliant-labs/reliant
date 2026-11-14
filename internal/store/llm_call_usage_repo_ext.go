@@ -276,6 +276,51 @@ func ListLLMUsageDaily(ctx context.Context, db orm.Context, userID string, from,
 	return rows, err
 }
 
+// LLMUsageDetail is the user's per-call rows summed per UTC day and every
+// recorded dimension, funding and account included: the breakdown the daily
+// rollup does not keep (its key predates them).
+type LLMUsageDetail struct {
+	Day              time.Time `bun:"day"`
+	OrgID            string    `bun:"org_id"`
+	Provider         string    `bun:"provider"`
+	Model            string    `bun:"model"`
+	AuthMode         string    `bun:"auth_mode"`
+	Purpose          string    `bun:"purpose"`
+	Funding          string    `bun:"funding"`
+	AccountID        string    `bun:"account_id"`
+	Calls            int64     `bun:"calls"`
+	ErrorCalls       int64     `bun:"error_calls"`
+	InputTokens      int64     `bun:"input_tokens"`
+	OutputTokens     int64     `bun:"output_tokens"`
+	CacheReadTokens  int64     `bun:"cache_read_tokens"`
+	CacheWriteTokens int64     `bun:"cache_write_tokens"`
+	LatencyMsTotal   int64     `bun:"latency_ms_total"`
+}
+
+// ListLLMUsageDetail sums the user's per-call rows created on the UTC days
+// from..to inclusive, per day and dimension, oldest first. Rows past the
+// retention period are gone, so a day before it is partly or wholly absent;
+// the caller reads such days from the rollup.
+func ListLLMUsageDetail(ctx context.Context, db orm.Context, userID string, from, to time.Time) ([]*LLMUsageDetail, error) {
+	if userID == "" {
+		return nil, errors.New("llm call usage: user id is required")
+	}
+	start := from.UTC().Truncate(24 * time.Hour)
+	end := to.UTC().Truncate(24*time.Hour).AddDate(0, 0, 1)
+	var rows []*LLMUsageDetail
+	err := db.Bun().NewRaw(`SELECT (created_at AT TIME ZONE 'UTC')::date AS day, org_id, provider, model, auth_mode, purpose, funding, account_id,
+		count(*)::bigint AS calls, count(*) FILTER (WHERE outcome = 'error')::bigint AS error_calls,
+		sum(input_tokens)::bigint AS input_tokens, sum(output_tokens)::bigint AS output_tokens,
+		sum(cache_read_tokens)::bigint AS cache_read_tokens, sum(cache_write_tokens)::bigint AS cache_write_tokens,
+		sum(latency_ms)::bigint AS latency_ms_total
+		FROM llm_call_usage
+		WHERE user_id = ? AND created_at >= ? AND created_at < ?
+		GROUP BY 1, org_id, provider, model, auth_mode, purpose, funding, account_id
+		ORDER BY 1, provider, model, auth_mode, purpose, org_id, funding, account_id`,
+		userID, start, end).Scan(ctx, &rows)
+	return rows, err
+}
+
 // DeleteLLMCallUsageForUser removes everything the ledger holds for a user, the
 // rollup included. Account deletion calls it.
 func DeleteLLMCallUsageForUser(ctx context.Context, db orm.Context, userID string) (int64, error) {
