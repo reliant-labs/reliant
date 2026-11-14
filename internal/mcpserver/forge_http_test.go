@@ -108,6 +108,7 @@ func TestForgeHandshakeListsOnlyGrantedTools(t *testing.T) {
 	store := newMemStore()
 	require.NoError(t, store.CreateGrant(context.Background(),
 		forgeGrant("g-forge", nil, []string{"obs_status", "envs_list", "obs_init", "skill_load"})))
+	bindForge(t, store, "client-a", "g-forge")
 	url, _ := newForgeTestServer(t, store, &stubClientTokenValidator{userID: "user-1", clientID: "client-a"})
 
 	sess := connectForge(t, url, "user-jwt")
@@ -183,6 +184,7 @@ func TestForgeRefusesWithoutTokenOrGrant(t *testing.T) {
 func TestForgeReadToolCallsControlPlaneAsTheCaller(t *testing.T) {
 	store := newMemStore()
 	require.NoError(t, store.CreateGrant(context.Background(), forgeGrant("g-forge", []string{"shop"}, []string{"envs_list"})))
+	bindForge(t, store, "client-a", "g-forge")
 	url, cp := newForgeTestServer(t, store, &stubClientTokenValidator{userID: "user-1", clientID: "client-a"})
 	sess := connectForge(t, url, "user-jwt")
 
@@ -214,6 +216,7 @@ func TestForgeGrantNarrowedMidSessionAppliesAtOnce(t *testing.T) {
 	store := newMemStore()
 	g := forgeGrant("g-forge", nil, []string{"envs_list"})
 	require.NoError(t, store.CreateGrant(context.Background(), g))
+	bindForge(t, store, "client-a", "g-forge")
 	url, _ := newForgeTestServer(t, store, &stubClientTokenValidator{userID: "user-1", clientID: "client-a"})
 	sess := connectForge(t, url, "user-jwt")
 
@@ -354,10 +357,29 @@ func TestForgeInvalidatedBindingRequiresConsent(t *testing.T) {
 			require.ErrorAs(t, err, &consent, "the client inherited %+v", sess)
 			assert.Contains(t, consent.ConsentURL, "client_id=client-a")
 
-			// A client that was never bound still resolves the one live grant.
-			sess, err = resolveForgeForUser(ctx, store, store, "user-1", "client-new", "https://app.example.com")
-			require.NoError(t, err)
-			assert.Equal(t, "g-other", sess.GrantID)
+			// A client that was never bound gets no grant by default either.
+			_, err = resolveForgeForUser(ctx, store, store, "user-1", "client-new", "https://app.example.com")
+			require.ErrorAs(t, err, &consent, "a never-bound client inherited the user's live grant")
 		})
 	}
+}
+
+// Disconnecting an application deletes its binding, and that leaves no
+// trace: its still-valid token must not then pick up the user's one live
+// forge grant.
+func TestForgeDisconnectedClientRequiresConsent(t *testing.T) {
+	ctx := context.Background()
+	store := newMemStore()
+	require.NoError(t, store.CreateGrant(ctx, forgeGrant("g-forge", []string{"shop"}, []string{"envs_list"})))
+	bindForge(t, store, "client-a", "g-forge")
+	sess, err := resolveForgeForUser(ctx, store, store, "user-1", "client-a", "https://app.example.com")
+	require.NoError(t, err)
+	require.Equal(t, "g-forge", sess.GrantID)
+
+	deleted, err := store.DeleteBinding(ctx, "user-1", connectorgrant.BindingClientID(connectorgrant.KindForge, "client-a"))
+	require.NoError(t, err)
+	require.True(t, deleted)
+	_, err = resolveForgeForUser(ctx, store, store, "user-1", "client-a", "https://app.example.com")
+	var consent *ConsentError
+	require.ErrorAs(t, err, &consent, "a disconnected client got the user's grant back")
 }

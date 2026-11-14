@@ -262,15 +262,18 @@ func validateOAuthClient(v OAuthTokenValidator, token string) (userID, clientID 
 }
 
 // resolveForgeForUser picks the forge grant an OAuth caller acts through:
+// the one the user bound this client to, while that grant is live. Every
+// other case requires consent:
 //
-//   - A token that names no OAuth client cannot be bound to a choice, so
-//     consent is required.
-//   - A client with a binding acts through its bound grant while that grant
-//     is live. Once it is revoked, expired or gone, the user's choice no longer
-//     exists and consent is required: the client never inherits another grant
-//     the user holds, which may be broader or in another organization.
-//   - A client that was never bound acts through the user's one live forge
-//     grant, else consent.
+//   - a token that names no OAuth client cannot be bound to a choice;
+//   - a client whose bound grant is revoked, expired or gone never inherits
+//     another grant the user holds, which may be broader or in another
+//     organization;
+//   - a client that was never bound, or whose binding the user deleted
+//     (disconnecting the application), gets no grant by default. Unlike the
+//     workspace connector there is no "the user's one connector" fallback:
+//     a deleted binding leaves no trace, so a fallback would hand a
+//     disconnected application the user's grant again on its next request.
 func resolveForgeForUser(
 	ctx context.Context,
 	store connectorgrant.Store,
@@ -285,25 +288,11 @@ func resolveForgeForUser(
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now()
-	if bound != nil {
-		if g, err := store.GetGrantByID(ctx, bound.GrantID); err == nil && isForgeGrantOf(g, userID) && g.IsLive(now) == nil {
-			return forgeSessionForGrant(g), nil
-		}
+	if bound == nil {
 		return nil, consent
 	}
-	grants, err := store.ListGrantsByUser(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	var live []*connectorgrant.Grant
-	for _, g := range grants {
-		if g.KindOrDefault() == connectorgrant.KindForge && g.IsLive(now) == nil {
-			live = append(live, g)
-		}
-	}
-	if len(live) == 1 {
-		return forgeSessionForGrant(live[0]), nil
+	if g, err := store.GetGrantByID(ctx, bound.GrantID); err == nil && isForgeGrantOf(g, userID) && g.IsLive(time.Now()) == nil {
+		return forgeSessionForGrant(g), nil
 	}
 	return nil, consent
 }
