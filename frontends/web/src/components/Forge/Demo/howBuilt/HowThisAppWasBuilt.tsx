@@ -41,7 +41,7 @@ export function HowThisAppWasBuilt({ cast, manifest, onBack, className, autoPlay
   return (
     <div className={cn("space-y-10", className)} data-testid="how-built">
       <section className="space-y-5 rounded-xl border border-border bg-surface p-4 sm:p-6" aria-label="The recorded build">
-        {/* The public entry's hero (DemoWelcome) already says what Forge does: no second pitch. */}
+        {/* The public entry's Home (sections/DemoHome) already says what Forge does: no second pitch. */}
         {(!leadWithRecording || onBack) && (
           <div className="flex flex-wrap items-start justify-between gap-4">
             {!leadWithRecording && <BuildSummary />}

@@ -37,6 +37,7 @@ function trigger(overrides: Partial<Trigger> & Pick<Trigger, "id">): Trigger {
     source: { kind: "schedule", schedule: { cron: ["0 9 * * *"], timezone: "Europe/London", overlap: "skip" } },
     nextFireAt: "2026-10-02T08:00:00Z",
     webhookManaged: false,
+    unattendedFunding: "any",
     ...overrides,
   };
 }

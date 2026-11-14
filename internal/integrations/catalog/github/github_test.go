@@ -933,6 +933,37 @@ func TestRepoGetTreeOfOneDirectoryOnTheDefaultBranch(t *testing.T) {
 	assert.Equal(t, []any{map[string]any{"path": "internal/llm/tools.go", "type": "blob", "size": 1200.0}}, out["entries"])
 }
 
+// A 404 from the tree endpoint stays an error: GitHub answers it alike for a
+// directory or ref that is not there and for a repository this connection
+// cannot see, and an empty tree would hide the second. The error names the
+// path and ref, so lookups of different absent paths fail with different
+// text and do not trip the repeated-tool-error breaker, which ended a
+// pr-review run that listed three absent directories in a row.
+func TestRepoGetTreeNotFoundIsAnErrorNamingThePath(t *testing.T) {
+	notFound := jsonReply(404, `{"message":"Not Found","documentation_url":"https://docs.github.com/rest","status":"404"}`)
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/git/trees/main:docs/design", notFound)
+	f.on("GET", "/repos/acme/app/git/trees/main:docs/adr", notFound)
+	design, err := f.try("repo.get_tree", map[string]any{"owner": "acme", "repo": "app", "ref": "main", "path": "docs/design"})
+	require.NoError(t, err)
+	assert.True(t, design.IsError, "a 404 is never an empty tree")
+	assert.Equal(t, 404, design.StatusCode)
+	assert.Contains(t, design.Content, "not found for directory docs/design at main of acme/app")
+	assert.Contains(t, design.Content, "Omit path to tell")
+	adr, err := f.try("repo.get_tree", map[string]any{"owner": "acme", "repo": "app", "ref": "main", "path": "docs/adr"})
+	require.NoError(t, err)
+	assert.True(t, adr.IsError)
+	assert.NotEqual(t, design.Content, adr.Content, "different paths fail with different text")
+
+	f = newFake(t)
+	f.on("GET", "/repos/acme/app/git/trees/HEAD", notFound)
+	res, err := f.try("repo.get_tree", map[string]any{"owner": "acme", "repo": "app"})
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	assert.Contains(t, res.Content, "not found for the tree at the default branch of acme/app")
+	assert.Contains(t, res.Content, "is the Reliant GitHub App installed on it?")
+}
+
 func TestCodeSearchReturnsFilesAndMatchedFragments(t *testing.T) {
 	f := newFake(t)
 	f.on("GET", "/search/code", jsonReply(200, `{

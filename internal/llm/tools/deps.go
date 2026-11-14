@@ -281,6 +281,9 @@ type workflowWriteStore interface {
 	workflowsource.Store
 	workflowDraftLookup
 	UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status db.WorkflowDraftStatus) error
+	// UpdateWorkflowDraftDefinitionAtVersion writes only while the draft is
+	// still at version; otherwise db.ErrWorkflowDraftVersionConflict.
+	UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status db.WorkflowDraftStatus) error
 }
 
 // --- scenario tools ---------------------------------------------------------

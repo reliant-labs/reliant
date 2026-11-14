@@ -24,6 +24,7 @@ var orgSensitiveStoreWrites = map[string]bool{
 	"InsertTrigger":              true,
 	"ReplaceTrigger":             true,
 	"MoveChatToProject":          true,
+	"MoveProjectOrg":             true,
 	"InsertWorkflowDraft":        true,
 	"UpsertWorkflowDraftBySlug":  true,
 	"RemoveWorkflowDraft":        true,
@@ -42,6 +43,15 @@ var orgWritingDecls = map[string]string{
 	"ReplaceTrigger":       "stamps a NULL org on a moved trigger (orgSensitiveStoreWrites)",
 	"moveChatToProjectSQL": "stamps the moved chat's org (MoveChatToProject, orgSensitiveStoreWrites)",
 	"orgBackfillSteps":     "the backfill: assignUnassignedOrg takes the org lock for every batch",
+	// A project move's statement set (MoveProjectOrg, orgSensitiveStoreWrites).
+	"moveProjectOrgProjectSQL":     "restamps the moved project's org (MoveProjectOrg, orgSensitiveStoreWrites)",
+	"moveProjectOrgSharedChatsSQL": "restamps the moved project's shared chats (MoveProjectOrg, orgSensitiveStoreWrites)",
+	"moveProjectOrgChatsSQL":       "restamps the moved project's chats (MoveProjectOrg, orgSensitiveStoreWrites)",
+	"moveProjectOrgRunsSQL":        "restamps the moved chats' runs (MoveProjectOrg, orgSensitiveStoreWrites)",
+	"moveProjectOrgTriggerSQL":     "restamps a moved trigger (MoveProjectOrg, orgSensitiveStoreWrites)",
+	// Provenance, not placement: the org of the run a thread's call was paid in. Nothing is
+	// scoped by it; a project move leaves it naming the old org, which only makes it not count.
+	"PutThreadFunding": "records the org a thread's call was paid in (thread_funding); no org lock: it scopes nothing",
 }
 
 var writesOrgID = regexp.MustCompile(`(?i)\bSET\s+org_id\b|\borg_id\s*=\s*COALESCE\(`)

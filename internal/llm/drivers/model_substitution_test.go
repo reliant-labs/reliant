@@ -207,7 +207,7 @@ func useProviderKeys(t *testing.T, keys map[string]string) {
 func TestValidateModelSelector_PinnedProviderUnavailableIsExplained(t *testing.T) {
 	useProviderKeys(t, map[string]string{"anthropic": "sk-ant-api03-test"})
 
-	err := ValidateModelSelector(context.Background(), "user-1", map[string]interface{}{"id": "gpt-5.6-sol@codex"})
+	err := ValidateModelSelector(context.Background(), PersonalScope("user-1"), map[string]interface{}{"id": "gpt-5.6-sol@codex"})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, drivererrors.ErrNoServableProvider, "callers tell availability from a bad input by this sentinel")
 	assert.Equal(t,

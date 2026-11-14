@@ -111,6 +111,7 @@ import {
 import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { sendWithDaemonWait } from "../lib/daemon-retry";
 import { sendOnExistingChat } from "../lib/chatSendRouting";
+import { runRecipientChoices, type RunRecipientChoice } from "../lib/runRecipient";
 import { applyApprovalUpdate, approvalsFromCache } from "../hooks/approval-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
@@ -321,6 +322,14 @@ function routeChatErrorMarker(
       // The prefix names the provider, the window and when it resets, so the
       // stripped message is complete. The error_summary the timeline prefers
       // carries the same sentence without the marker.
+      errorUpdate.error_message = stripChatMarker(errorUpdate.error_message);
+      return;
+    }
+    case CHAT_MARKER_KINDS.OrgPolicyRefused: {
+      // The prefix says which of the org's policies refused the request and
+      // what the person can do (switch model, ask an admin, resume); the
+      // chat is paused, resumable. The payload (the policy reason) adds
+      // nothing to display.
       errorUpdate.error_message = stripChatMarker(errorUpdate.error_message);
       return;
     }
@@ -945,7 +954,9 @@ interface ChatStoreState {
   // deferPersist skips recording the chat as the worktree's active chat: a
   // caller still resolving the chat's worktree context calls persistActiveChat
   // once that context is current (see selectChatWithWorktreeContext).
-  selectChat: (chat: Chat, options?: { deferPersist?: boolean; openEntry?: ChatOpenEntry }) => void;
+  // retryRefused asks the server again for a chat whose stream it refused
+  // before (a shared chat shared again; openSharedChat).
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean; openEntry?: ChatOpenEntry; retryRefused?: boolean }) => void;
   persistActiveChat: (chatId: string) => void;
   clearCurrentChat: (worktreeId?: string | null) => void;
 
@@ -970,8 +981,10 @@ interface ChatStoreState {
   // for a final error; a caller that gave up retrying a machine calls it too.
   markSendFailed: (chatId: string, clientMessageId: string) => void;
   // Send a failed message again, the way the composer sends. Rejects if this
-  // attempt fails too (its bubble is "Not sent" again).
-  retryFailedSend: (chatId: string, clientMessageId: string) => Promise<void>;
+  // attempt fails too (its bubble is "Not sent" again). targetThread sends it
+  // to that thread instead of where it first went: one of the agents a
+  // run_recipient_ambiguous refusal listed (failedSendRecipients).
+  retryFailedSend: (chatId: string, clientMessageId: string, targetThread?: string) => Promise<void>;
   // Drop a failed message from the transcript.
   discardFailedSend: (chatId: string, clientMessageId: string) => void;
   loadMessages: (chatId: string) => Promise<void>;
@@ -1171,12 +1184,24 @@ interface SendPayload {
     targetThread?: string | null;
     selectedPresets?: Record<string, string>;
   };
+  // Set when the send was refused because several agents run in its run
+  // (run_recipient_ambiguous): the agents the refusal listed.
+  recipientChoices?: RunRecipientChoice[];
 }
 const sendPayloads = new Map<string, SendPayload>();
 
 /** Whether a failed send can still be sent again from here. */
 export function canRetryFailedSend(clientMessageId: string): boolean {
   return sendPayloads.has(clientMessageId);
+}
+
+/**
+ * The agents a failed send can be sent to instead: those its
+ * run_recipient_ambiguous refusal listed. [] for any other failure, and once
+ * the payload is gone (a reload).
+ */
+export function failedSendRecipients(clientMessageId: string): RunRecipientChoice[] {
+  return sendPayloads.get(clientMessageId)?.recipientChoices ?? [];
 }
 
 /**
@@ -1486,7 +1511,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   // Select a chat (make it active and load its data)
-  selectChat: (chat: Chat, options?: { deferPersist?: boolean; openEntry?: ChatOpenEntry }) => {
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean; openEntry?: ChatOpenEntry; retryRefused?: boolean }) => {
     // Start profiler session here since this is the reliable entry point for tab switching
     tabSwitchProfiler.startSession(chat.id);
 
@@ -1628,7 +1653,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("subscribeToChatDetails-call");
     }
-    getGlobalUpdatesStore()?.subscribeToChatDetails(chat.id);
+    getGlobalUpdatesStore()?.subscribeToChatDetails(chat.id, { retryRefused: options?.retryRefused });
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("subscribeToChatDetails-end");
     }
@@ -1837,6 +1862,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // saying so — with a way to send it again — beats a dimmed bubble that
         // never resolves (a refused send leaves nothing on the server, #688).
         if (!isDaemonConnectingError(error)) {
+          const payload = sendPayloads.get(clientMessageId);
+          const choices = runRecipientChoices(error);
+          if (payload && choices.length > 0) payload.recipientChoices = choices;
           get().markSendFailed(chatId, clientMessageId);
         }
         throw error;
@@ -1945,7 +1973,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
   },
 
-  retryFailedSend: async (chatId: string, clientMessageId: string) => {
+  retryFailedSend: async (chatId: string, clientMessageId: string, targetThread?: string) => {
     const payload = sendPayloads.get(clientMessageId);
     if (!payload) {
       // A reload drops the payload, never the text on screen: leave the entry
@@ -1977,6 +2005,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             payload.attachmentIds,
             {
               ...payload.options,
+              ...(targetThread ? { targetThread } : {}),
               workflowParams,
               workflow: payload.options.workflow ?? null,
               clientMessageId: retryId,

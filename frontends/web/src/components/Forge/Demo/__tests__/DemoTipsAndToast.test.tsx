@@ -126,7 +126,7 @@ it("drawer hides the callout, then closing it reveals the new page without consu
   }finally{drawer.remove();trigger.remove();}
 });
 it("explicit guided tour links suppress the automatic page card", async () => {
-  renderDemo("/forge/demo?view=overview&tour=forge:fg-intro");
+  renderDemo("/forge/p/shop?tour=forge:fg-intro");
   expect(await screen.findByTestId("tour-card")).toHaveTextContent("What is Forge?");
   expect(screen.queryByTestId("tour-callout")).toBeNull();
   expect(screen.getByTestId("tour-next")).toHaveTextContent("Next");
@@ -155,18 +155,22 @@ it("only a trace-less link to a trace step is legacy; one that carries its trace
   expect(isLegacyDemoTourLink({ view: "logs", tour: "forge:fg-logs" })).toBe(false);
 });
 it("a logs tour link that carries its trace runs the guided step, not the page card", async () => {
-  renderDemo(`/forge/demo?view=traces&trace=${DEMO_TRACE_ID}&tour=forge:fg-logs`);
+  renderDemo(`/forge/p/shop/observability/traces?trace=${DEMO_TRACE_ID}&tour=forge:fg-logs`);
   const callout = await screen.findByTestId("tour-callout");
   expect(callout).toHaveTextContent("What that request logged");
   expect(callout).not.toHaveTextContent(DEMO_TIPS.logs.body);
 });
-it("the action row is Take the tour, Install Forge and Sign up, and survives navigation", async()=>{
+it("the action row is Take the tour, Install Forge, Sign up and the primary Deploy yours free, and survives navigation", async()=>{
   const {go}=renderDemo("/forge/p/shop");
   const row = await screen.findByTestId("demo-screen-actions");
   expect(row).toHaveTextContent("Sample app · read-only data");
   expect(row).toHaveTextContent("Take the tour");
   expect(row).toHaveTextContent("Install Forge");
   expect(row.querySelector('[data-testid="demo-cta-signup"]')).not.toBeNull();
+  expect(row.querySelector('[data-testid="demo-cta-deploy"]')).toHaveTextContent("Deploy yours free");
+  // On a phone the row keeps only Deploy yours free: Sign up hides below md.
+  expect(row.querySelector('[data-testid="demo-cta-signup"]')!.className).toMatch(/max-md:hidden/);
+  expect(row.querySelector('[data-testid="demo-cta-deploy"]')!.className).not.toMatch(/max-md:hidden/);
   expect(row).not.toHaveTextContent(/How Forge builds this|How it was built/);
   // No z-index of its own: a dialog or the tour's modal card always paints over it.
   expect(row.className).not.toMatch(/\bz-/);
@@ -182,7 +186,7 @@ it.each(["/forge/p/shop", "/forge/demo?view=overview&tour=forge:fg-intro", "/for
   expect(screen.queryByTestId("forge-demo-banner")).toBeNull();
 });
 it("hides Take the tour while a tour is open", async()=>{
-  renderDemo("/forge/demo?view=overview&tour=forge:fg-intro");
+  renderDemo("/forge/p/shop?tour=forge:fg-intro");
   const row = await screen.findByTestId("demo-screen-actions");
   expect(row).not.toHaveTextContent("Take the tour");
 });

@@ -58,15 +58,26 @@ func AppendConnectionEvent(ctx context.Context, db orm.Context, ev core.Connecti
 // first: limit of them (100 when unset or above 500), older than beforeID
 // when it is set.
 func ListConnectionEvents(ctx context.Context, db orm.Context, userID, id string, limit int, beforeID int64) ([]core.ConnectionEvent, error) {
+	return listConnectionEvents(ctx, db, id, limit, beforeID, orm.WhereEq(ConnectionEventFieldUserID, userID))
+}
+
+// ListAllConnectionEvents is ListConnectionEvents across every user who acted
+// on the connection: an org connection's audit trail, which its admins read.
+// The caller has already established that the connection is one they may
+// audit.
+func ListAllConnectionEvents(ctx context.Context, db orm.Context, id string, limit int, beforeID int64) ([]core.ConnectionEvent, error) {
+	return listConnectionEvents(ctx, db, id, limit, beforeID)
+}
+
+func listConnectionEvents(ctx context.Context, db orm.Context, id string, limit int, beforeID int64, filters ...orm.QueryOption) ([]core.ConnectionEvent, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	opts := []orm.QueryOption{
+	opts := append([]orm.QueryOption{
 		orm.WhereEq(ConnectionEventFieldConnectionID, id),
-		orm.WhereEq(ConnectionEventFieldUserID, userID),
 		orm.WithOrderBy(ConnectionEventFieldID, orm.Desc),
 		orm.WithLimit(limit),
-	}
+	}, filters...)
 	if beforeID != 0 {
 		opts = append(opts, orm.WhereLt(ConnectionEventFieldID, beforeID))
 	}

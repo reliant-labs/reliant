@@ -19,6 +19,17 @@ type gateBudgets struct {
 
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
+// tscError is one TypeScript compiler diagnostic: "src/a.ts(12,3): error
+// TS2322: ...". tsc prints nothing the test-failure patterns match, so a red
+// typecheck phase used to name no failure at all (reliant bug report 7e9be182).
+var tscError = regexp.MustCompile(`^\S+\(\d+,\d+\): error TS\d+: `)
+
+// failedLogTail is how many trailing lines of a failed phase's log the report
+// prints when that log names no failure the patterns recognise, so the job log
+// and step summary always say why the phase failed: the full log stays on the
+// runner, where nobody can read it once the job ends.
+const failedLogTail = 40
+
 // failures are extracted from the entire log, never a tail. Go's event filter
 // attaches package identity at the fail event, before parallel logs interleave.
 func gateFailures(text string) []string {
@@ -28,7 +39,8 @@ func gateFailures(text string) []string {
 		if strings.HasPrefix(line, "FAIL ") {
 			line = "FAIL " + strings.TrimSpace(strings.TrimPrefix(line, "FAIL"))
 		}
-		if strings.HasPrefix(line, "--- FAIL:") && strings.Contains(line, "(package ") || strings.HasPrefix(line, "FAIL ") && strings.Contains(line, "> ") {
+		if strings.HasPrefix(line, "--- FAIL:") && strings.Contains(line, "(package ") || strings.HasPrefix(line, "FAIL ") && strings.Contains(line, "> ") ||
+			tscError.MatchString(line) {
 			out[line] = true
 		}
 	}
@@ -98,8 +110,37 @@ func runGateReport(args []string, out, errOut io.Writer) int {
 			fmt.Fprintf(out, "!! GATE-HEALTH: %s %ds exceeds %ds (not PR blame).\n", name, seconds, limit)
 		}
 		if rc != 0 {
-			fmt.Fprintf(out, "failed phase: %s (rc %d); complete log: %s\n", name, rc, filepath.Join(*dir, name+".log"))
+			logPath := filepath.Join(*dir, name+".log")
+			fmt.Fprintf(out, "failed phase: %s (rc %d); complete log: %s\n", name, rc, logPath)
+			if tail := unnamedFailureTail(logPath); tail != "" {
+				fmt.Fprintf(out, "last lines of %s.log (it names no failure):\n%s", name, tail)
+			}
 		}
 	}
 	return 0
+}
+
+// unnamedFailureTail is the last failedLogTail non-empty lines of a failed
+// phase's log, indented, when that log names no failure gateFailures
+// recognises; "" when it does (those lines already lead the report) or when
+// the log cannot be read.
+func unnamedFailureTail(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil || len(gateFailures(string(b))) > 0 {
+		return ""
+	}
+	var lines []string
+	for _, line := range strings.Split(ansiEscape.ReplaceAllString(string(b), ""), "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
+	if len(lines) > failedLogTail {
+		lines = lines[len(lines)-failedLogTail:]
+	}
+	var sb strings.Builder
+	for _, line := range lines {
+		sb.WriteString("    " + line + "\n")
+	}
+	return sb.String()
 }

@@ -22,12 +22,62 @@ var allTestProviders = []string{
 // resolution priority, so this pins which model a bare [powerful] selector
 // picks — inserting a model earlier in the tag's list would otherwise repoint
 // it silently.
+//
+// allTestProviders has no claude subscription driver, the only one that serves
+// claude-5.2-fable, so here the tier lands on its 5.1 fallback.
+// TestResolve_PowerfulPrefersFable52OnClaudeSubscription pins the claude case.
 func TestResolve_PowerfulTagTargetIsPinned(t *testing.T) {
 	reg := MustGetRegistry()
 
 	resolved, err := reg.Resolve(ModelSelector{Tags: []string{TagPowerful}}, allTestProviders)
 	require.NoError(t, err)
 	assert.Equal(t, "claude-5.1-fable", resolved.Definition.ID)
+}
+
+// Claude 5.2 Fable leads [powerful], but only the claude subscription driver
+// serves it. A provider set with that driver gets 5.2. One without it, or an
+// account the driver does not serve 5.2 to, falls back to 5.1 at the same
+// xhigh effort, never further down the list.
+func TestResolve_PowerfulPrefersFable52OnClaudeSubscription(t *testing.T) {
+	reg := MustGetRegistry()
+	powerful := ModelSelector{Tags: []string{TagPowerful}}
+
+	for _, providers := range [][]string{
+		{"claude"},
+		append([]string{"claude"}, allTestProviders...),
+	} {
+		resolved, err := reg.Resolve(powerful, providers)
+		require.NoError(t, err)
+		assert.Equal(t, "claude-5.2-fable", resolved.Definition.ID, "providers %v", providers)
+		assert.Equal(t, "claude", resolved.Provider.Driver)
+		assert.Equal(t, "claude-fable-5-2", resolved.Provider.APIModel)
+		assert.Equal(t, "xhigh", resolved.ThinkingLevel)
+	}
+
+	// No provider but the claude subscription maps 5.2, so each of the other
+	// Claude providers falls back to 5.1.
+	for _, provider := range []string{"anthropic", "openrouter", "reliant", "vertexai"} {
+		resolved, err := reg.Resolve(powerful, []string{provider})
+		require.NoError(t, err)
+		assert.Equal(t, "claude-5.1-fable", resolved.Definition.ID, "provider %s", provider)
+		assert.Equal(t, provider, resolved.Provider.Driver)
+		assert.Equal(t, "xhigh", resolved.ThinkingLevel)
+	}
+
+	// A subscription account that is not served 5.2 yet stays on the
+	// subscription, at 5.1.
+	no52 := reg.WithAvailability(func(driver, modelID string) ModelAvailability {
+		if driver == "claude" && modelID == "claude-5.2-fable" {
+			return ModelAvailability{Disabled: true, Reason: "not on this plan"}
+		}
+		return ModelAvailability{}
+	})
+	resolved, err := no52.Resolve(powerful, []string{"claude"})
+	require.NoError(t, err)
+	assert.Equal(t, "claude-5.1-fable", resolved.Definition.ID)
+	assert.Equal(t, "claude", resolved.Provider.Driver)
+	assert.Equal(t, "claude-fable-5-1", resolved.Provider.APIModel)
+	assert.Equal(t, "xhigh", resolved.ThinkingLevel)
 }
 
 // Every powerful entry runs its model at a top-tier effort — that is what
@@ -75,7 +125,10 @@ func TestPowerfulTagMembership(t *testing.T) {
 	// [powerful] fails outright for a user who has only that provider. They sit
 	// at the END, so they are reached only when every real frontier model is
 	// unservable — see TestEveryProviderImplementsEveryCoreTag.
+	// claude-5.2-fable leads, with claude-5.1-fable right after it as the
+	// fallback for every provider but the claude subscription.
 	assert.Equal(t, []string{
+		"claude-5.2-fable",
 		"claude-5.1-fable",
 		"gpt-6.1-astra",
 		"gpt-6-astra",
@@ -228,6 +281,10 @@ func TestNewModelDefinitionsParseWithExpectedCapabilities(t *testing.T) {
 	}{
 		// 128,000 is Anthropic's published max output; the subscription driver
 		// still requests claude-cli's 64,000 (claudeCodeMaxTokens).
+		// claude-5.2-fable is powerful ONLY: it stays out of [flagship], which
+		// is a distinct tier.
+		{"claude-5.2-fable", []string{TagPowerful},
+			[]string{"low", "medium", "high", "xhigh"}, TagPowerful, "xhigh", 1000000, 128000},
 		{"claude-5.1-fable", []string{TagFlagship, TagPowerful, TagReasoning},
 			[]string{"low", "medium", "high", "xhigh"}, TagPowerful, "xhigh", 1000000, 128000},
 		{"vertex-claude-5.1-fable", []string{TagFlagship, TagPowerful, TagReasoning},

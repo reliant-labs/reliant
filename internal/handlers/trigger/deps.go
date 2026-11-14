@@ -12,6 +12,7 @@ package trigger
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -30,6 +31,9 @@ type OrgResolver interface {
 	DefaultOrg(ctx context.Context, userID string) (string, error)
 	ActingOrg(ctx context.Context, userID, requested string) (string, error)
 	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
+	// LiveMembersFresh is how many live members orgID has, asked now; known
+	// is false when the control plane gives no count.
+	LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error)
 }
 
 type Repository interface {
@@ -49,8 +53,15 @@ type Repository interface {
 	// lock, only while every org the handler's decision read still holds.
 	CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
 	UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
+	// AdoptTrigger re-owns an orphaned trigger in place (AdoptAs), only
+	// while previousOwner still owns it; with offerID it accepts that offer.
+	AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner, offerID string, reads ...db.OrgRead) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
+	// ResumeTriggerPausedBy turns a trigger on only while the system's pause
+	// for reason still stands and the row is the version checked (seen, its
+	// updated_at): a project move's, ResumeAfterOrgMove.
+	ResumeTriggerPausedBy(ctx context.Context, id, reason string, seen time.Time) (bool, error)
 	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
 	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
 	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)
@@ -96,13 +107,19 @@ type TriggerLister interface {
 // AutomationDrafter writes an automation draft from a description
 // (DraftAutomation). The model call runs on the worker — the api-server has no
 // LLM drivers — so internal/app implements it over Temporal.
+//
+// A draft only the caller's own account could make, in an org whose accounts
+// cannot, with no consent to it on record, fails with ErrDraftNeedsConsent.
 type AutomationDrafter interface {
 	DraftAutomation(ctx context.Context, in DraftRequest) (*reliantv1.AutomationDraft, error)
 }
 
 // DraftRequest is a validated DraftAutomationRequest and its caller.
 type DraftRequest struct {
-	UserID      string
+	UserID string
+	// OrgID is the org of the project the draft is for, from the project row
+	// ("" for a project in no org): whose accounts may draft it (§10).
+	OrgID       string
 	Description string
 	Workflow    string
 	Timezone    string

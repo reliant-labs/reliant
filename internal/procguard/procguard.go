@@ -221,6 +221,22 @@ func (g *Guard) Report() *reliantv1.ProcessReport {
 	return rep
 }
 
+// LargestTrees names up to n of the largest process trees of the last count,
+// for a report made elsewhere (the fork watchdog's degraded reason). "" before
+// the first count, or where processes cannot be counted. Reading it forks
+// nothing, so it still answers on a machine that cannot start a process.
+func (g *Guard) LargestTrees(n int) string {
+	if g == nil {
+		return ""
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.sampled {
+		return ""
+	}
+	return describeTop(g.last.Top, n)
+}
+
 // describeTop names up to n trees: "1,840 tasks: `bash scripts/ci-gate.sh all`
 // (agent 2ee014da)".
 func describeTop(top []Tree, n int) string {

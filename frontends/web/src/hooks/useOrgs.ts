@@ -12,6 +12,7 @@ import {
   type MyOrgs,
 } from "@/services/controlPlane/orgs";
 import { chooseActiveOrg, useActiveOrgStore } from "@/store/activeOrgStore";
+import { useAuthStore } from "@/store/authStore";
 
 /**
  * Every org the caller belongs to (human sessions; a machine credential gets
@@ -19,10 +20,12 @@ import { chooseActiveOrg, useActiveOrgStore } from "@/store/activeOrgStore";
  * a QueryClientProvider (useMachineOrgs).
  */
 export function useMyOrgs(client?: QueryClient) {
+  // ListMyOrganizations is authenticated: signed out it can only answer 401.
+  const signedIn = useAuthStore((s) => s.user !== null);
   return useQuery<MyOrgs>({
     queryKey: orgKeys.mine,
     queryFn: listMyOrganizations,
-    enabled: hasControlPlane,
+    enabled: hasControlPlane && signedIn,
     staleTime: 60_000,
     // Leaving an org elsewhere must show up when the person comes back.
     refetchOnWindowFocus: true,

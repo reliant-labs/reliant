@@ -1,0 +1,7 @@
+{
+  "version": "forge.dashboard-parts/v2",
+  "alert": {
+    "name": "org_usage",
+    "rpc_service": "reliant.v1.OrgUsageService"
+  }
+}

@@ -22,6 +22,10 @@ const (
 	// chat activity change announces — an async question, which is no gate,
 	// so the chat's activity does not move when one is asked or answered.
 	RefetchInbox RefetchType = "inbox"
+	// RefetchProjectOrgMoved is project-scoped: the project, its chats, runs
+	// and triggers moved to another org (MoveProjectOrg), so every list that
+	// follows the active org is stale.
+	RefetchProjectOrgMoved RefetchType = "project_org_moved"
 )
 
 // RefetchData is the JSON payload for refetch events.

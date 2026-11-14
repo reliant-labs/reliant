@@ -136,7 +136,7 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 		require.NoError(t, err)
 
 		catalog := NewTestCatalog(t, WithCatalogDeps(Deps{LocalModels: local.NewRepoDirectory(repo)}))
-		infos := catalog.localModelInfos(ctxFor("svc-user-a"), "svc-user-a")
+		infos := localModelInfos(catalog.listLocalModels(ctxFor("svc-user-a"), "svc-user-a"))
 		require.Len(t, infos, 1)
 		got := infos[0]
 		assert.Equal(t, "llama@local", got.GetId())
@@ -146,7 +146,7 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 		assert.Empty(t, got.GetLocal().GetDaemonId(), "a direct endpoint has no daemon")
 		assert.True(t, got.GetLocal().GetOnline())
 
-		other := catalog.localModelInfos(ctxFor("svc-user-b"), "svc-user-b")
+		other := localModelInfos(catalog.listLocalModels(ctxFor("svc-user-b"), "svc-user-b"))
 		assert.Empty(t, other, "another user never sees it")
 	})
 

@@ -34,8 +34,11 @@ const (
 	// #nosec G101 -- analytics event identifier, not a credential
 	EventAPIKeyConfigured EventType = "api_key_configured"
 
-	// First message milestone
+	// First message milestones. first_message_sent is PER CHAT (the first
+	// message of each chat, tagged first_for_user); user_first_message is the
+	// user's first message ever, exactly once per user: the activation signal.
 	EventFirstMessageSent EventType = "first_message_sent"
+	EventUserFirstMessage EventType = "user_first_message"
 
 	// Onboarding events
 	EventOnboardingStarted       EventType = "onboarding_started"
@@ -75,13 +78,26 @@ type APIKeyConfiguredMetrics struct {
 	TotalProviders int    `json:"totalProviders"` // count after this config
 }
 
-// FirstMessageSentMetrics tracks when a user sends their very first message
+// FirstMessageSentMetrics tracks the first message of a chat (per chat, not per
+// user: a user with many chats emits many).
 type FirstMessageSentMetrics struct {
 	ChatID       string `json:"chatId"`
 	ProjectID    string `json:"projectId"`
 	WorkflowName string `json:"workflowName"`
 	WorkflowType string `json:"workflowType"` // builtin, custom
 	Provider     string `json:"provider,omitempty"`
+	// FirstForUser is true on the one chat whose first message is also the
+	// user's first message ever (the same message user_first_message is for).
+	FirstForUser bool `json:"firstForUser"`
+}
+
+// UserFirstMessageMetrics tracks a user's first message ever. Opaque ids and
+// enums only: a custom workflow's name is user-chosen text and stays off it.
+type UserFirstMessageMetrics struct {
+	MessageID    string `json:"messageId"`
+	ChatID       string `json:"chatId"`
+	ProjectID    string `json:"projectId"`
+	WorkflowType string `json:"workflowType,omitempty"` // builtin, custom
 }
 
 // OnboardingMetrics tracks onboarding flow progress

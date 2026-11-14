@@ -141,7 +141,7 @@ func (c *workflowDeadlockPausingConverter) ToStrings(payloads *commonpb.Payloads
 	return c.paused.ToStrings(payloads)
 }
 
-func (c *workflowDeadlockPausingConverter) WithWorkflowContext(ctx converter.WorkflowContext) converter.DataConverter {
+func (c *workflowDeadlockPausingConverter) WithWorkflowContext(ctx workflow.Context) converter.DataConverter {
 	return &workflowDeadlockPausingConverter{
 		paused: withWorkflowContext(c.paused, ctx),
 		base:   withWorkflowContext(c.base, ctx),
@@ -164,7 +164,7 @@ func (c *workflowDeadlockPausingConverter) WithSerializationContext(sc converter
 	}
 }
 
-func withWorkflowContext(dc converter.DataConverter, ctx converter.WorkflowContext) converter.DataConverter {
+func withWorkflowContext(dc converter.DataConverter, ctx workflow.Context) converter.DataConverter {
 	if ca, ok := dc.(converter.ContextAware); ok {
 		return ca.WithWorkflowContext(ctx)
 	}

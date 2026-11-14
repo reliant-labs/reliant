@@ -83,9 +83,11 @@ export type StatusSlotItemId =
   | "recovery"
   | "no-machine"
   | "wake"
+  | "machine-health"
   | "oom"
   | "disk"
   | "resume"
+  | "org-moved"
   | "queued"
   | "background";
 
@@ -94,11 +96,14 @@ export const STATUS_SLOT_PRIORITY: Record<StatusSlotItemId, number> = {
   recovery: 1,
   "no-machine": 2,
   wake: 3,
-  oom: 4,
-  disk: 5,
-  resume: 6,
-  queued: 7,
-  background: 8,
+  // A connected machine that cannot start processes: every command fails.
+  "machine-health": 4,
+  oom: 5,
+  disk: 6,
+  resume: 7,
+  "org-moved": 8,
+  queued: 9,
+  background: 10,
 };
 
 /** Ambient items: what is going on, not what went wrong. */

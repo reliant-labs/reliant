@@ -34,6 +34,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/diskguard"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
+	"github.com/reliant-labs/reliant/internal/forkwatch"
 	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/instanceid"
@@ -159,6 +160,12 @@ type daemonClient struct {
 	// new background heavy commands near it (internal/procguard). Its count
 	// and the largest process trees ride on the heartbeat's disk report.
 	procGuard *procguard.Guard
+
+	// forkWatch starts a process every 30s the way an agent's command
+	// starts, and reports the machine degraded once starts are refused
+	// (internal/forkwatch; reliant#1919). Its verdict rides on the
+	// heartbeat's health.
+	forkWatch *forkwatch.Watchdog
 
 	// portWatcher scans /proc/net/tcp{,6} for loopback/wildcard LISTEN
 	// sockets so heartbeats can carry the detected ports (the preview
@@ -410,6 +417,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	}
 	go client.diskGuard.Run(ctx)
 	go client.procGuard.Run(ctx)
+	go client.forkWatch.Run(ctx)
 	// A managed machine logs a load/pressure/disk/heavy-slot sample a minute,
 	// which control-plane's machine-health dashboard and alerts read from
 	// tenant zero's logs (internal/machinehealth). A person's own machine
@@ -580,6 +588,11 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// machine passes 70% of its process limit (2026-10-30: a machine ran out
 	// of processes and every agent's work died with it).
 	procGuard := procguard.New(procguard.Config{})
+	// The fork watchdog tells a machine that cannot start processes at all
+	// (a full process table) from a working one, which the guard above
+	// cannot: by then nothing new starts to be refused. It names the trees
+	// the guard counted, which reading /proc does without a fork.
+	forkWatch := forkwatch.New(forkwatch.Config{Trees: procGuard.LargestTrees})
 
 	heavyGate, err := heavyjob.New(heavyjob.Config{
 		Commands: guards.HeavyCommands,
@@ -690,6 +703,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		diskWatcher:       diskWatcher,
 		diskGuard:         diskGuard,
 		procGuard:         procGuard,
+		forkWatch:         forkWatch,
 	}
 	client.restoreResultOutbox()
 	return client, nil
@@ -1905,6 +1919,9 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 			hb.Disk = rep
 		}
 		hb.ToolCallsInFlight = uint32(d.results.runningCount())
+		// Whether this machine can start processes (nil before the first
+		// probe, which the gateway reads as healthy).
+		hb.Health = d.forkWatch.Health()
 		if err := s.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: hb},
 		}); err != nil {
@@ -1944,6 +1961,14 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 			// commands, or finished a reclaim pass.
 			if err := sendHeartbeat(time.Now()); err != nil {
 				logSendFailure(logPrefix+" Failed to send disk-guard heartbeat", err)
+				return
+			}
+		case <-d.forkWatch.Changed():
+			// The machine stopped being able to start processes, or can
+			// again: the registry, the UI and wait_for_machine should know
+			// now, not up to a heartbeat later.
+			if err := sendHeartbeat(time.Now()); err != nil {
+				logSendFailure(logPrefix+" Failed to send machine-health heartbeat", err)
 				return
 			}
 		case <-d.procGuard.Changed():

@@ -380,3 +380,97 @@ func TestInProject(t *testing.T) {
 		})
 	}
 }
+
+// Membership is the whole answer for one org, cached like IsMember; a nil
+// resolver has no orgs, and an outage is an error, never a negative.
+func TestMembership(t *testing.T) {
+	src := newFake()
+	src.roles = map[string]map[string]string{"alice": {"acme": RoleAdmin}}
+	r, _ := newResolver(src)
+	ctx := context.Background()
+
+	m, ok, err := r.Membership(ctx, "alice", "acme")
+	if err != nil || !ok || !m.Member || m.Role != RoleAdmin || m.OrgID != "acme" {
+		t.Fatalf("member: %+v ok=%v err=%v", m, ok, err)
+	}
+	calls := src.calls
+	if _, _, _ = r.Membership(ctx, "alice", "acme"); src.calls != calls {
+		t.Fatalf("a second ask within the TTL went to control-plane")
+	}
+	if m, ok, err = r.Membership(ctx, "alice", "globex"); err != nil || !ok || m.Member {
+		t.Fatalf("non-member: %+v ok=%v err=%v", m, ok, err)
+	}
+	var none *Resolver
+	if _, ok, err = none.Membership(ctx, "alice", "acme"); ok || err != nil {
+		t.Fatalf("no orgs: ok=%v err=%v", ok, err)
+	}
+	down := newFake()
+	down.err = errors.New("control plane down")
+	rd, _ := newResolver(down)
+	if _, _, err = rd.Membership(ctx, "alice", "acme"); err == nil {
+		t.Fatal("an outage must be an error")
+	}
+}
+
+// liveCount is a Source answering a member with a live-member count, or none
+// (a control plane that predates the field), or a refusal.
+type liveCount struct {
+	member bool
+	count  *int32
+	err    error
+	calls  int
+}
+
+func (l *liveCount) ResolveOrgMembership(_ context.Context, _, orgID string) (accesstokenclient.OrgMembership, error) {
+	l.calls++
+	if l.err != nil {
+		return accesstokenclient.OrgMembership{}, l.err
+	}
+	m := accesstokenclient.OrgMembership{OrgID: orgID, Member: l.member}
+	if l.member && l.count != nil {
+		m.OrgLiveMembers, m.OrgLiveMembersKnown = *l.count, true
+	}
+	return m, nil
+}
+
+// LiveMembersFresh maps control-plane's answer onto (count, known): a member's
+// count when it has one; unknown for a non-member, an old control plane, a
+// deployment that does not support the rpc and no org; an outage is an error.
+// It always asks (never a cached answer).
+func TestLiveMembersFresh(t *testing.T) {
+	two := int32(2)
+	for _, tc := range []struct {
+		name      string
+		src       *liveCount
+		orgID     string
+		n         int
+		known, ok bool
+	}{
+		{name: "a member's count", src: &liveCount{member: true, count: &two}, orgID: "acme", n: 2, known: true, ok: true},
+		{name: "an old control plane gives no count", src: &liveCount{member: true}, orgID: "acme", ok: true},
+		{name: "not a member is told nothing", src: &liveCount{member: false, count: &two}, orgID: "acme", ok: true},
+		{name: "a control plane without the rpc", src: &liveCount{err: fmt.Errorf("x: %w", accesstokenclient.ErrUnsupported)}, orgID: "acme", ok: true},
+		{name: "no org asks nothing", src: &liveCount{member: true, count: &two}, ok: true},
+		{name: "an outage is an error", src: &liveCount{err: errors.New("down")}, orgID: "acme"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := New(tc.src)
+			n, known, err := r.LiveMembersFresh(context.Background(), "alice", tc.orgID)
+			if tc.ok != (err == nil) {
+				t.Fatalf("err = %v", err)
+			}
+			if n != tc.n || known != tc.known {
+				t.Fatalf("got (%d, %v), want (%d, %v)", n, known, tc.n, tc.known)
+			}
+			calls := tc.src.calls
+			_, _, _ = r.LiveMembersFresh(context.Background(), "alice", tc.orgID)
+			if tc.orgID != "" && tc.src.calls != calls+1 {
+				t.Fatal("LiveMembersFresh asks every time")
+			}
+		})
+	}
+	var nilResolver *Resolver
+	if n, known, err := nilResolver.LiveMembersFresh(context.Background(), "alice", "acme"); n != 0 || known || err != nil {
+		t.Fatal("a deployment with no orgs knows no count")
+	}
+}

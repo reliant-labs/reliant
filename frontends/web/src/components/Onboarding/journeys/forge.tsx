@@ -70,6 +70,32 @@ function demo(search: Record<string, unknown>): JourneyRoute {
   return { path: FORGE_DEMO_PATH, open, label: "Open the demo console", message: "This step is on the Forge demo console." };
 }
 
+/**
+ * The sample app's console on the demo host ("shop", the fixtures'
+ * FIXTURE_PROJECT): there the tour walks the console's own pages, the ones a
+ * visitor explores, instead of the /forge/demo panel the other shells keep.
+ */
+const SHOP_CONSOLE = "/forge/p/shop";
+type StopView = "overview" | "traces" | "errors" | "graph" | "alerts";
+
+/**
+ * A step's page: on the demo host, the sample app's console page for `view`
+ * (an Observability view's path covers the views a step moves on to, logs and
+ * profiles); elsewhere the demo console's (`demo`). Read when the step is, so
+ * the shell is known by then.
+ */
+function stop({ view, ...search }: { view: StopView } & Record<string, unknown>): JourneyRoute {
+  if (!isDemoShell()) return demo({ view, ...search });
+  const label = "Open the sample app";
+  const message = "This step is on the sample app's console.";
+  if (view === "overview") return { path: SHOP_CONSOLE, open: { to: SHOP_CONSOLE, search }, label, message };
+  return { path: `${SHOP_CONSOLE}/observability`, open: { to: `${SHOP_CONSOLE}/observability/${view}`, search }, label, message };
+}
+
+/** On a page of `view`: the demo console's `?view=`, or the console's own path. */
+const onView = (location: { pathname: string; search: Record<string, unknown> }, view: string) =>
+  location.search.view === view || location.pathname.endsWith(`/observability/${view}`);
+
 // The panel's keys a step clears, so arriving at it (Back included) starts from its list, not an open item.
 const CLOSED = { trace: undefined, span: undefined, issue: undefined };
 
@@ -202,8 +228,8 @@ function Issue({ cli }: { cli: string }) {
 
 export const forgeJourney: Journey = {
   id: "forge",
-  // v3: the short, optional tour with compact controls and the "What is forge?" intro (v2 was the 9-step console tour).
-  version: 3,
+  // v4: on the demo host, the tour walks the sample app's own console pages (v3: the short tour with the "What is forge?" intro).
+  version: 4,
   title: "Explore a Forge app",
   description:
     "Walk through a running app's console: one request across three services, its logs and its error, and how an agent gets the problem.",
@@ -218,7 +244,9 @@ export const forgeJourney: Journey = {
       id: "fg-intro",
       title: "What is Forge?",
       description: <WhatIsForge />,
-      route: demo({ view: "overview", ...CLOSED }),
+      get route() {
+        return stop({ view: "overview", ...CLOSED });
+      },
     },
     {
       id: "fg-console",
@@ -228,7 +256,9 @@ export const forgeJourney: Journey = {
       // The console's sidebar: forge-ui SidebarLayout's one <aside>, inside ConsoleShell (its id is generated).
       target: "[data-tour='forge-console'] aside",
       tooltipPosition: "right",
-      route: demo({ view: "overview", ...CLOSED }),
+      get route() {
+        return stop({ view: "overview", ...CLOSED });
+      },
       // The demo host's short tour leaves it out: the console is there to explore, with a tip per view.
       isAvailable: notOnShortDemo,
     },
@@ -237,8 +267,11 @@ export const forgeJourney: Journey = {
       title: "Monitoring from the start",
       description:
         "Forge gives your app monitoring from the start, so you can find problems without adding it by hand. Follow a slow or failed request to its logs and the code doing the work; your agent can read the same evidence.",
-      target: "[data-testid='obs-overview']",
-      route: demo({ view: "overview", ...CLOSED }),
+      // The demo console's health strip; on the console's Overview, its services with their requests, errors and latency.
+      target: "[data-testid='obs-overview'], [data-testid='overview-services']",
+      get route() {
+        return stop({ view: "overview", ...CLOSED });
+      },
       // No isAvailable on purpose: in every cut, the demo's included (owner, 2026-11-06). fg-built, at the end,
       // does not replace it; the short demo makes room by leaving out fg-agent.
     },
@@ -247,10 +280,13 @@ export const forgeJourney: Journey = {
       showNext: true,
       title: "One request, end to end",
       description: "Find exactly where an error happens or time is spent in a user’s journey—even when the request crosses several services. Open the failed CreateOrder request to see its timeline; your agent reads the same evidence.",
-      target: `[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}']`,
-      route: demo({ view: "traces", ...CLOSED }),
+      // The console's list row, or the led Traces page's (Observability/Leads).
+      target: `[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}'], [data-testid='lead-trace-row'][data-trace-id='${DEMO_TRACE_ID}']`,
+      get route() {
+        return stop({ view: "traces", ...CLOSED });
+      },
       advanceOn: { kind: "when", test: ({ location }) => location.search.trace === DEMO_TRACE_ID },
-      actionHint: "Open the CreateOrder trace at the top",
+      actionHint: "Open the CreateOrder trace",
       autoAdvance: true,
       signal: "trace_opened",
     },
@@ -261,7 +297,9 @@ export const forgeJourney: Journey = {
       description: <Hops cli="reliant forge" />,
       copyByShell: { forge: { description: <Hops cli="forge" /> } },
       target: `[data-testid='trace-span-row'][data-span-id='${DEMO_INVENTORY_SPAN_ID}']`,
-      route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
+      get route() {
+        return stop({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined });
+      },
       advanceOn: { kind: "when", test: ({ location }) => location.search.span === DEMO_INVENTORY_SPAN_ID },
       actionHint: "Click Reserve on inventory, near the bottom",
       autoAdvance: true,
@@ -286,7 +324,9 @@ export const forgeJourney: Journey = {
       // The demo host only: the instrumentation forge writes WITHIN a service.
       isAvailable: onDemo,
       target: `[data-testid='trace-span-row'][data-span-id='${DEMO_INSIDE_SPAN_IDS.method}']`,
-      route: demo({ view: "traces", trace: DEMO_TRACE_ID, issue: undefined }),
+      get route() {
+        return stop({ view: "traces", trace: DEMO_TRACE_ID, issue: undefined });
+      },
     },
     {
       id: "fg-logs",
@@ -295,7 +335,9 @@ export const forgeJourney: Journey = {
       description: <Logs cli="reliant forge" />,
       copyByShell: { forge: { description: <Logs cli="forge" /> } },
       target: "[data-testid='trace-logs']",
-      route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
+      get route() {
+        return stop({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined });
+      },
       phases: [
         {},
         {
@@ -307,7 +349,7 @@ export const forgeJourney: Journey = {
       ],
       advanceOn: {
         kind: "when",
-        test: ({ location }) => location.search.view === "logs" && location.search.trace === DEMO_TRACE_ID,
+        test: ({ location }) => onView(location, "logs") && location.search.trace === DEMO_TRACE_ID,
       },
       // Held: the next step is on another page, and the logs this opens are the point.
       autoAdvance: false,
@@ -322,8 +364,10 @@ export const forgeJourney: Journey = {
         "Profiles are linked to traces, so the flamegraph shows the CPU the api spent inside this request: each bar is a function, and wider means more time.",
       target: "[data-testid='trace-flamegraph']",
       // Back to the trace: the flamegraph button is on it.
-      route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
-      advanceOn: { kind: "when", test: ({ location }) => location.search.view === "profiles" },
+      get route() {
+        return stop({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined });
+      },
+      advanceOn: { kind: "when", test: ({ location }) => onView(location, "profiles") },
       actionHint: "Click Flamegraph",
       autoAdvance: true,
       signal: "flamegraph_opened",
@@ -338,7 +382,9 @@ export const forgeJourney: Journey = {
       // The demo host's full tour only (DEMO_TOUR=full).
       isAvailable: onDemoFull,
       target: "[data-testid='graph-view']",
-      route: demo({ view: "graph", ...CLOSED }),
+      get route() {
+        return stop({ view: "graph", ...CLOSED });
+      },
     },
     {
       id: "fg-issue",
@@ -346,10 +392,13 @@ export const forgeJourney: Journey = {
       title: "Errors, grouped by release",
       description: <Issue cli="reliant forge" />,
       copyByShell: { forge: { description: <Issue cli="forge" /> } },
-      target: `[data-testid='obs-issue-${DEMO_ISSUE_ID}']`,
-      route: demo({ view: "errors", ...CLOSED }),
+      // The console's inbox row, or the led Errors page's newest-issue card and rows (Observability/Leads).
+      target: `[data-testid='obs-issue-${DEMO_ISSUE_ID}'], [data-testid='lead-featured-issue'][data-issue-id='${DEMO_ISSUE_ID}'], [data-testid='lead-issue-row'][data-issue-id='${DEMO_ISSUE_ID}']`,
+      get route() {
+        return stop({ view: "errors", ...CLOSED });
+      },
       advanceOn: { kind: "when", test: ({ location }) => location.search.issue === DEMO_ISSUE_ID },
-      actionHint: "Open CreateOrder: context deadline exceeded",
+      actionHint: "Open the newest issue",
       autoAdvance: true,
       signal: "issue_opened",
     },
@@ -388,7 +437,9 @@ export const forgeJourney: Journey = {
         },
       },
       target: "[data-testid='obs-alerts-firing']",
-      route: demo({ view: "alerts", ...CLOSED }),
+      get route() {
+        return stop({ view: "alerts", ...CLOSED });
+      },
       // The demo host's short tour leaves it out (DEMO_TOUR); the Alerts tip covers it.
       isAvailable: notOnShortDemo,
     },
@@ -413,7 +464,9 @@ export const forgeJourney: Journey = {
             "This issue is a good one to hand to your own agent: Claude Code, Codex or Cursor. The prompt holds ids and Forge commands, not log text, so your agent fetches the details with its own login.",
         },
       },
-      route: demo({ view: "errors", issue: DEMO_ISSUE_ID, trace: undefined, span: undefined }),
+      get route() {
+        return stop({ view: "errors", issue: DEMO_ISSUE_ID, trace: undefined, span: undefined });
+      },
       phases: [
         { target: "[data-testid='ask-reliant-actions']" },
         {
@@ -442,7 +495,9 @@ export const forgeJourney: Journey = {
       card: { wide: true, modal: true },
       // The demo host only: the last thing before the end card.
       isAvailable: onDemo,
-      route: demo({ view: "overview", ...CLOSED }),
+      get route() {
+        return stop({ view: "overview", ...CLOSED });
+      },
     },
     {
       id: "fg-done",

@@ -350,3 +350,25 @@ you need it (rule 8). The rules every query follows:
    the Repo hands out (`Connections()`, `IntegrationWrites()`) are concrete
    too (`db.ConnectionStore`, `db.IntegrationWriteLedger`); their consumers
    declare their own slice of them as well.
+
+9. **`provider_accounts.user_id` is an owner key, not always a person.** An
+   org-owned provider account (an API key an org admin added) holds
+   `'org:<org_id>'` there, with `owner_kind = 'org'` and `org_id` saying so
+   (control-plane `docs/design/org-provider-accounts.md` §3.1). CHECKs make the
+   shape exact: an org row's `user_id` is exactly `'org:' || org_id`, a person's
+   never starts with `org:`, and an org owns only `api_key` accounts, never a
+   sign-in. `provider_account_limits.user_id` holds the same key, so an org
+   key's limits are shared by every member. This keeps both unique keys and
+   the priority sequence as they are (an org has its own identity space and
+   order), and makes every reader that filters by a person's id blind to org
+   rows by construction: an older release, an account purge, a per-user list.
+   So never read the column raw outside the store: take a
+   `core.AccountOwner` (`UserAccountOwner` / `OrgAccountOwner`;
+   `ProviderAccount.Owner()` from a row). The store scopes every account
+   read by the owner's key AND `owner_kind`, `AccountOwner.Key()` is `""`
+   (matching nothing) for an invalid owner such as `UserAccountOwner("org:x")`,
+   and the vault tenant is chosen from the owner's kind
+   (`vault.OrgTenant(org_id)` for an org's account), never from `user_id`: an
+   org's key does not open under any person's tenant. A writer about an
+   account (limits, bench, needs-sign-in) uses the account's owner, not the
+   person whose request it served.

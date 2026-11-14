@@ -54,12 +54,39 @@ const (
 	ExecUnrestricted ExecMode = "unrestricted"
 )
 
+// Kind is what a grant reaches.
+type Kind string
+
+// Kind values, matching the connector_grants kind CHECK constraint.
+const (
+	// KindWorkspace is a daemon-bound connector: MCP tools inside one
+	// workspace (internal/mcpserver at /mcp). Every grant before kinds.
+	KindWorkspace Kind = "workspace"
+
+	// KindForge is an account-scoped connector: forge's hosted MCP tools
+	// (monitoring, releases, environments) in one organization, optionally
+	// confined to some projects (internal/mcpserver at /forge/mcp). It names
+	// no daemon and no path.
+	KindForge Kind = "forge"
+)
+
 // Grant is one connector's stored access.
 type Grant struct {
 	ID       string
 	UserID   string
 	DaemonID string
 	Name     string
+
+	// Kind is what the grant reaches; "" (a row read before kinds) is
+	// KindWorkspace. KindOrDefault reads it.
+	Kind Kind
+
+	// OrgID is the organization a forge grant may read and act in.
+	OrgID string
+
+	// ProjectNames confines a forge grant to these forge projects of OrgID;
+	// empty means every project of it.
+	ProjectNames []string
 
 	// TokenPrefix is the display prefix of the grant's credential. The
 	// credential itself is an `rlat_` access token (mcp:connector, bound to
@@ -79,6 +106,45 @@ type Grant struct {
 	RevokedAt  *time.Time
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+// KindOrDefault is the grant's kind, KindWorkspace when unset.
+func (g *Grant) KindOrDefault() Kind {
+	if g == nil || g.Kind == "" {
+		return KindWorkspace
+	}
+	return g.Kind
+}
+
+// AllowsProject reports whether a forge grant covers project: every project
+// of its org when it names none, else only those it names.
+func (g *Grant) AllowsProject(project string) bool {
+	if g == nil {
+		return false
+	}
+	if len(g.ProjectNames) == 0 {
+		return true
+	}
+	for _, p := range g.ProjectNames {
+		if p == project {
+			return true
+		}
+	}
+	return false
+}
+
+// BindingClientID is the client id a binding of kind is stored under.
+//
+// One OAuth client (claude.ai, say) can act through a workspace connector AND
+// a forge connector at once, while connector_client_bindings keeps one row
+// per (user_id, client_id). A forge binding is therefore stored under a
+// namespaced id ("forge:<client>"): the two never collide, and a release
+// that predates kinds never looks a forge binding up.
+func BindingClientID(kind Kind, clientID string) string {
+	if kind == KindForge {
+		return string(KindForge) + ":" + clientID
+	}
+	return clientID
 }
 
 // IsLive reports whether the grant may currently be used.

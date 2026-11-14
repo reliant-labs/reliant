@@ -98,7 +98,7 @@ type systemBlock struct {
 // the actual wire shape rather than the param structs.
 func marshalSystemBlocks(t *testing.T, apiModel string, disableCache bool) []systemBlock {
 	t.Helper()
-	raw, err := json.Marshal(claudeCodeBaseSystemBlocks(apiModel, disableCache))
+	raw, err := json.Marshal(claudeCodeBaseSystemBlocks(apiModel, disableCache, ""))
 	if err != nil {
 		t.Fatalf("marshal system blocks: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestClaudeCodeBillingHeader_PerProfile(t *testing.T) {
 				t.Errorf("billingVersion %q is not on cli release %s", profile.billingVersion, tc.wantCLI)
 			}
 
-			header := claudeCodeBillingHeader(profile)
+			header := claudeCodeBillingHeader(profile, "")
 			if !strings.Contains(header, tc.wantVersion) {
 				t.Errorf("header %q does not contain %q", header, tc.wantVersion)
 			}
@@ -263,7 +263,7 @@ func TestClaudeCodeBillingHeader_PerProfile(t *testing.T) {
 
 			// cc_prompt_id must be a FRESH uuid per request.
 			if tc.wantPromptID {
-				second := claudeCodeBillingHeader(profile)
+				second := claudeCodeBillingHeader(profile, "")
 				if promptID(t, header) == promptID(t, second) {
 					t.Errorf("cc_prompt_id repeated across requests: %q", header)
 				}

@@ -21,7 +21,7 @@ func TestCompleteOAuth_Generated(t *testing.T) {
 
 	// No flow was started with this state.
 	svc := connection.NewTestConnection(t, connection.WithConnectionDeps(connection.Deps{Connections: &connection.StubConnections{
-		CompleteOAuthFunc: func(context.Context, string, string, string) (*connections.Completion, error) {
+		CompleteOAuthFlowFunc: func(context.Context, connections.CompleteParams) (*connections.Completion, error) {
 			return nil, &connections.Error{Code: connections.CodeNotFound, Message: "oauth flow not found"}
 		},
 	}}))

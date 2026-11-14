@@ -209,7 +209,10 @@ const githubGetContentToolName = "github__repo_get_content"
 // back down.
 func outputCeilingFor(toolName string) int {
 	switch toolName {
-	case ViewToolName, githubGetContentToolName:
+	case ViewToolName, githubGetContentToolName, GetWorkflowToolName:
+		// get_workflow returns one workflow's YAML, the artifact edit_workflow
+		// matches old_string against; it pages larger ones itself
+		// (writeWorkflowYAML).
 		return MaxReadSize
 	case ToolSkill:
 		return ForgeStartHereSkillBodySize

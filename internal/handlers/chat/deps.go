@@ -51,6 +51,8 @@ type Repository interface {
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error)
+	// RecordChatPersonTurn marks a launched chat attended from a person's send on.
+	RecordChatPersonTurn(ctx context.Context, chatID, userID string) error
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
@@ -68,6 +70,10 @@ type Repository interface {
 	ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error)
 	IsLatestTurnInThread(ctx context.Context, threadID, messageID string) (bool, error)
 	CountMessagesInThread(ctx context.Context, threadID string) (int, error)
+	// ClaimUserActivation records a message as the user's activation (their
+	// first typed message ever) once, durably, and reports whether this call
+	// did (user_first_message).
+	ClaimUserActivation(ctx context.Context, userID, chatID, messageID string) (bool, error)
 	CountMessagesInChatOutsideThread(ctx context.Context, chatID, threadID string) (int, error)
 	ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64, limit int) ([]*db.Message, error)
 	GetWorkflowByThread(ctx context.Context, chatID, thread string) (*db.Workflow, error)

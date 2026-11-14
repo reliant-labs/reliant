@@ -107,16 +107,70 @@ func (s *Service) bindOrgGitHubApp(ctx context.Context, ownerID string, def *rel
 // installation as its connection, the id its definition was written with.
 func renderTrigger(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration) (*reliantv1.Trigger, error) {
 	out, err := triggers.ToProto(t, nextFireAt, firings, reg)
-	if err != nil || out.ConnectionId != nil || t.Kind != core.TriggerKindIntegration {
+	if err != nil || out.ConnectionId != nil {
 		return out, err
+	}
+	out.ConnectionId = effectiveConnectionID(t)
+	return out, nil
+}
+
+// effectiveConnectionID is the connection a trigger row listens through, as
+// a definition names it: its saved connection, else the org GitHub App
+// installation it is bound to (ghdelegated.OrgAppConnectionID), else nil. A
+// path that carries a row's connection into a new definition must carry
+// this, never ConnectionID alone: an installation binding has no
+// ConnectionID, so dropping it would silently widen the trigger to every
+// installation its owner can see.
+func effectiveConnectionID(t *core.Trigger) *string {
+	if t == nil {
+		return nil
+	}
+	if t.ConnectionID != nil {
+		id := *t.ConnectionID
+		return &id
+	}
+	if t.Kind != core.TriggerKindIntegration {
+		return nil
 	}
 	var cfg core.IntegrationConfig
 	if json.Unmarshal(t.Config, &cfg) != nil || cfg.Installation == "" {
-		return out, nil
+		return nil
 	}
 	if id, err := strconv.ParseInt(cfg.Installation, 10, 64); err == nil && id > 0 {
 		conn := ghdelegated.OrgAppConnectionID(id)
-		out.ConnectionId = &conn
+		return &conn
 	}
-	return out, nil
+	return nil
+}
+
+// activationRow is the trigger row a definition makes, validated as its write
+// will be, for a path that previews or checks one before writing it through
+// CreateTrigger or UpdateTrigger (EnableWorkflow's first phase, an agent's
+// activation). Like every path from a definition to a row, it binds the
+// definition's org GitHub App installation (bindOrgGitHubApp), so a refusal
+// is reported before anything is written and the row carries the binding
+// the write will record. The org is the one that write decides: existing's
+// for an existing trigger, else its project's (triggerOrg).
+func (s *Service) activationRow(ctx context.Context, userID string, def *reliantv1.TriggerDefinition, existing *core.Trigger) (*core.Trigger, error) {
+	row, err := s.triggerFromDefinition(ctx, userID, def, existing)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		row.OrgID = existing.OrgID
+	} else if def.ConnectionId != nil && ghdelegated.IsOrgAppConnectionID(*def.ConnectionId) {
+		// Only a binding needs the org this early; the write decides it for
+		// everything else.
+		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, userID)
+		if err != nil {
+			return nil, triggerDBError("get project", err)
+		}
+		if row.OrgID, err = s.triggerOrg(ctx, userID, "", project); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.bindOrgGitHubApp(ctx, userID, def, row); err != nil {
+		return nil, err
+	}
+	return row, nil
 }

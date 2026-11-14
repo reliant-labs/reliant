@@ -19,11 +19,21 @@
  * So the boot (attributionBoot.ts, imported before the router) HOLDS the handoff,
  * and initTelemetry READS it and gives it to the runtime (enableAttribution's
  * `search`). Held in localStorage, not sessionStorage: a magic link opens a new tab.
- * Only what the runtime itself would capture is kept (a well-formed `rid` and the
- * `utm_*` values, bounded), for at most HOLD_MS, and dropped once telemetry has
- * started with it (a failed start keeps it for the next attempt). Nothing is sent
- * from here: the runtime still applies the app's own consent when telemetry starts,
- * and telemetry.ts drops the held handoff when analytics consent is off.
+ * Only what the runtime itself would capture is kept (a well-formed `rid`, the
+ * `utm_*` values, bounded, and the landing visit's referrer host `ref` and entry
+ * page `lp`), for at most HOLD_MS, and dropped once telemetry has started with it
+ * (a failed start keeps it for the next attempt). Nothing is sent from here: the
+ * runtime still applies the app's own consent when telemetry starts, and
+ * telemetry.ts drops the held handoff when analytics consent is off.
+ *
+ * SIGNUP ATTRIBUTION. The same handoff is held a second time, under its own key,
+ * for the control plane: api/signupAttribution.ts sends it in the
+ * X-Reliant-Attribution header on control-plane requests until one succeeds
+ * signed in, and the request that creates the account stores it as the account's
+ * first-touch attribution (control-plane internal/signupattr) and puts it on
+ * user_signed_up. That copy is not the runtime's, so telemetry starting (or
+ * consent being off) does not drop it: it is the landing site's own handoff to
+ * its own product, counted server-side.
  */
 
 import { isJourneyId, type JourneyId } from "../components/Onboarding/tourParam";
@@ -42,6 +52,15 @@ const RID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 
 /** The runtime's longest captured value. */
 const MAX_VALUE_CHARS = 128;
+
+/** A referrer host (`ref`): a hostname, never a URL. */
+const REF_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+/** An entry page (`lp`): a path, no query or fragment. */
+const LP_RE = /^\/[A-Za-z0-9/_.~-]{0,127}$/;
+
+/** localStorage key of the signup copy of the handoff (see SIGNUP ATTRIBUTION). */
+export const SIGNUP_ATTRIBUTION_KEY = "reliant.signup_attribution";
 
 interface Held {
   /** The handoff as a query string the runtime parses ("?rid=…&utm_source=…"). */
@@ -74,6 +93,10 @@ export function handoffQuery(search: string): string {
     const v = params.get(key)?.replace(/[\u0000-\u001f\u007f]/g, "").trim();
     if (v) out.set(key, v.slice(0, MAX_VALUE_CHARS));
   }
+  const ref = params.get("ref")?.trim().toLowerCase();
+  if (ref && ref.length <= 253 && REF_RE.test(ref)) out.set("ref", ref);
+  const lp = params.get("lp")?.trim();
+  if (lp && LP_RE.test(lp)) out.set("lp", lp);
   const q = out.toString();
   return q ? `?${q}` : "";
 }
@@ -89,8 +112,46 @@ export function holdLandingAttribution(search: string = currentSearch(), now: nu
   if (!q) return;
   try {
     storage()?.setItem(LANDING_ATTRIBUTION_KEY, JSON.stringify({ search: q, at: now } satisfies Held));
+    storage()?.setItem(SIGNUP_ATTRIBUTION_KEY, JSON.stringify({ search: q, at: now } satisfies Held));
   } catch {
     // Storage blocked or full: the handoff is lost, as it was before.
+  }
+}
+
+/**
+ * The signup copy of the handoff, without its "?", for the X-Reliant-Attribution
+ * header; undefined when none is held or it is older than HOLD_MS (then removed).
+ */
+export function readSignupAttribution(now: number = Date.now()): string | undefined {
+  let raw: string | null = null;
+  try {
+    raw = storage()?.getItem(SIGNUP_ATTRIBUTION_KEY) ?? null;
+  } catch {
+    return undefined;
+  }
+  if (!raw) return undefined;
+  let q = "";
+  try {
+    const held = JSON.parse(raw) as Partial<Held>;
+    if (typeof held.search === "string" && typeof held.at === "number" && now - held.at <= HOLD_MS && now >= held.at) {
+      q = handoffQuery(held.search);
+    }
+  } catch {
+    q = "";
+  }
+  if (!q) {
+    dropSignupAttribution();
+    return undefined;
+  }
+  return q.slice(1);
+}
+
+/** Forget the signup copy: a signed-in control-plane request carrying it succeeded. */
+export function dropSignupAttribution(): void {
+  try {
+    storage()?.removeItem(SIGNUP_ATTRIBUTION_KEY);
+  } catch {
+    // Best-effort.
   }
 }
 

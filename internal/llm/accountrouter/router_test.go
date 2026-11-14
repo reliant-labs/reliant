@@ -26,6 +26,7 @@ type fakeStore struct {
 	assignments map[string]Assignment // threadID|provider
 	history     []Assignment
 	limits      map[string]LimitState
+	orgLimits   map[string]LimitState // an org's accounts' state, under its owner key
 	getErr      error
 	setErr      error
 	limitsErr   error
@@ -831,4 +832,14 @@ func TestAssign_AllLimitedFlagsAProbeReset(t *testing.T) {
 	_, err = r.Assign(context.Background(), req("th", acct("a", 0)))
 	require.ErrorAs(t, err, &all)
 	assert.False(t, all.ResetIsProbe, "a bench with a reset behind it is a reset")
+}
+
+func (s *fakeStore) ListOrgAccountLimits(context.Context, string) (map[string]LimitState, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := map[string]LimitState{}
+	for k, v := range s.orgLimits {
+		out[k] = v
+	}
+	return out, nil
 }

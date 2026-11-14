@@ -385,7 +385,7 @@ environment. Cost is a handful of tiny prompts per cell.`,
 			}
 			reg := models.MustGetRegistry()
 
-			avail := drivers.GetAvailableDrivers(ctx, userID)
+			avail := drivers.GetAvailableDrivers(ctx, drivers.PersonalScope(userID))
 			providers := map[string]bool{}
 			var providerList []string
 			for id, cfg := range avail.Drivers {

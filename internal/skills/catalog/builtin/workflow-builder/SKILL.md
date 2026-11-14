@@ -833,6 +833,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `requires` | WorkflowRequirements | No | - |
 | `secrets` | map[string]SecretDeclaration | No | - |
 | `permissions` | string[] | No | - |
+| `attention` | WorkflowAttention | No | - |
 
 ## Edge
 

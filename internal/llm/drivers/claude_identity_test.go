@@ -17,7 +17,7 @@ import (
 
 // subscriptionAndKeyRepo is a user with BOTH a Claude subscription (OAuth) and
 // an Anthropic API key connected.
-type subscriptionAndKeyRepo struct{}
+type subscriptionAndKeyRepo struct{ noOrgAccounts }
 
 var _ AvailabilityStore = subscriptionAndKeyRepo{}
 
@@ -41,7 +41,7 @@ func (subscriptionAndKeyRepo) ListAccountLimits(context.Context, string) (map[st
 
 func bothConnected(t *testing.T) models.AvailableDrivers {
 	t.Helper()
-	available, err := buildAvailableDrivers(context.Background(), subscriptionAndKeyRepo{}, "user-1", noReportClients)
+	available, err := buildAvailableDrivers(context.Background(), subscriptionAndKeyRepo{}, PersonalScope("user-1"), noReportClients)
 	require.NoError(t, err)
 	return available
 }

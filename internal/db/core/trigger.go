@@ -224,6 +224,41 @@ func (i ActingIdentity) OrOwner() ActingIdentity {
 // It stays paused until the creator, a member again, resumes it.
 const TriggerPausedCreatorLeftOrg = "creator_left_org"
 
+// TriggerPausedOrgPolicy is Trigger.PausedReason of a trigger the system
+// paused because one of its org's admin policies refused its unattended run
+// (a model the org does not allow, a spend cap reached): every later fire
+// would meet the same verdict. It stays paused until its owner resumes it
+// (control-plane docs/design/org-policies.md §5.1).
+const TriggerPausedOrgPolicy = "org_policy"
+
+// TriggerPausedNoOrgAccount is Trigger.PausedReason of a trigger stamped
+// org_only that the system paused because two firings in a row found none
+// of its org's own AI accounts able to run its model (control-plane
+// docs/design/org-provider-accounts.md §11.4, I5). It stays paused until its
+// owner resumes it. A release that predates the reason reads it as any
+// paused trigger: enabled is false.
+const TriggerPausedNoOrgAccount = "no_org_account"
+
+// UnattendedFunding is which AI accounts the runs a trigger fires may spend
+// (control-plane docs/design/org-provider-accounts.md §11.3, I4).
+type UnattendedFunding string
+
+const (
+	// UnattendedFundingOrgOnly: only the org's own sources (its keys granted
+	// to the owner, its Reliant credits), never the owner's personal
+	// accounts or seat. The stamp of a trigger created in an org with two or
+	// more live members.
+	UnattendedFundingOrgOnly UnattendedFunding = "org_only"
+	// UnattendedFundingAny: every source the owner's own runs may use. The
+	// stamp in a solo org, and when the member count is unknown.
+	UnattendedFundingAny UnattendedFunding = "any"
+)
+
+// OrgOnly reports whether f restricts the trigger's runs to the org's own
+// sources. The zero value is a trigger that predates the stamp (NULL), which
+// reads as any: how every trigger ran before it.
+func (f UnattendedFunding) OrgOnly() bool { return f == UnattendedFundingOrgOnly }
+
 // Trigger is a stored trigger definition. UserID is the owner, and the
 // identity every run it launches executes as.
 type Trigger struct {
@@ -233,15 +268,18 @@ type Trigger struct {
 	// OrgID is the organization the trigger belongs to, fixed at creation
 	// (its project's when the project has one). Every chat it launches
 	// belongs to it, so its runs bill it. nil: written before orgs.
-	OrgID      *string
-	WorktreeID *string // nil → the project's main worktree
-	Name       string
-	Kind       TriggerKind
-	Enabled    bool
-	Workflow   string
-	Presets    map[string]string
-	Params     map[string]any
-	Message    string // seed prompt for each launched run
+	OrgID *string
+	// UnattendedFunding is which AI accounts its runs may spend; "" (NULL)
+	// for a trigger that predates the stamp or has no org, read as any.
+	UnattendedFunding UnattendedFunding
+	WorktreeID        *string // nil → the project's main worktree
+	Name              string
+	Kind              TriggerKind
+	Enabled           bool
+	Workflow          string
+	Presets           map[string]string
+	Params            map[string]any
+	Message           string // seed prompt for each launched run
 	// DaemonID is the daemon every tool call in each launched run executes
 	// on, validated at write time (there is no FK because the daemons table is
 	// a cache of the control plane's). Empty exactly when NoMachine is set.
@@ -293,8 +331,15 @@ type Trigger struct {
 	// (TriggerPausedCreatorLeftOrg); empty when it is enabled or a person
 	// paused it. Meaningful only while Enabled is false: enabling clears it.
 	PausedReason string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// PausedAt is when the system last paused it (with PausedReason), nil
+	// when it is enabled, a person paused it, or a release before the column
+	// paused it. Read-only: only PauseTrigger writes it.
+	PausedAt *time.Time
+	// PauseNoticeFor is the PausedAt whose email to the org's owners and
+	// admins was started (TriggerPausedNoOrgAccount pauses only). Read-only.
+	PauseNoticeFor *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 
 	// ProjectName and DaemonName are read-only display names joined in by
 	// GetTrigger and ListTriggers. Empty when the project or daemon row is

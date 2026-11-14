@@ -25,6 +25,7 @@ type fakeProjectClient struct {
 	createdID    string
 	createCalls  int
 	lastCreateOf string // path passed to the last CreateProject call
+	lastDaemonID *string
 }
 
 func (f *fakeProjectClient) ListProjects(_ context.Context, _ *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error) {
@@ -43,6 +44,7 @@ func (f *fakeProjectClient) ListProjects(_ context.Context, _ *connect.Request[r
 func (f *fakeProjectClient) CreateProject(_ context.Context, req *connect.Request[reliantv1.CreateProjectRequest]) (*connect.Response[reliantv1.CreateProjectResponse], error) {
 	f.createCalls++
 	f.lastCreateOf = req.Msg.GetPath()
+	f.lastDaemonID = req.Msg.DaemonId
 	if f.createErr != nil {
 		return nil, f.createErr
 	}
@@ -158,4 +160,26 @@ func TestResolveProjectID(t *testing.T) {
 			t.Fatal("expected error, got nil")
 		}
 	})
+}
+
+// `workflow run --project-path --daemon` resolves the folder on the named
+// machine: without it a run from a managed machine created a project on the
+// user's DEFAULT machine, which does not hold the folder, and failed at once.
+func TestResolveProjectIDOnAMachineNamesItsDaemon(t *testing.T) {
+	client := &fakeProjectClient{createdID: "new-id"}
+	id, err := resolveProjectIDOn(context.Background(), client, "/abs/work/shop", "daemon-1")
+	if err != nil || id != "new-id" {
+		t.Fatalf("resolveProjectIDOn = %q, %v", id, err)
+	}
+	if client.lastDaemonID == nil || *client.lastDaemonID != "daemon-1" {
+		t.Fatalf("CreateProject daemon_id = %v, want daemon-1", client.lastDaemonID)
+	}
+
+	// No machine named keeps the default machine, as before.
+	if _, err := resolveProjectID(context.Background(), client, "/abs/work/shop"); err != nil {
+		t.Fatal(err)
+	}
+	if client.lastDaemonID != nil {
+		t.Fatalf("daemon_id = %q, want unset", *client.lastDaemonID)
+	}
 }

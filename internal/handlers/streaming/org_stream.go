@@ -118,6 +118,11 @@ func (s *Service) StreamOrgUpdates(
 // answer the resolver does not have (ok false) and an outage (an error) all
 // refuse it, at the open and on every re-check, which ends an open feed.
 func (s *Service) orgFeedMember(ctx context.Context, userID, orgID string) error {
+	// No resolver means no org feed (orgFeedOrg names no org then); refuse
+	// rather than dereference it, so the check fails closed.
+	if s.deps.Orgs == nil {
+		return orgs.NotMember(orgID)
+	}
 	member, ok, err := s.deps.Orgs.IsMember(ctx, userID, orgID)
 	switch {
 	case err != nil:

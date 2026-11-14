@@ -30,7 +30,7 @@ func TestLocalModelInfosListsOnlineAndOfflineChatModels(t *testing.T) {
 		{DaemonID: "d-off", Machine: "Sean's MacBook", Online: false, Inventory: endpoint(qwen, vision)},
 	}}}))
 
-	got := svc.localModelInfos(context.Background(), "u1")
+	got := localModelInfos(svc.listLocalModels(context.Background(), "u1"))
 	require.Len(t, got, 3, "embedding model is not a chat model")
 
 	byKey := map[string]*reliantv1.ModelInfo{}
@@ -58,5 +58,5 @@ func TestLocalModelInfosListsOnlineAndOfflineChatModels(t *testing.T) {
 }
 
 func TestLocalModelInfosEmptyWithoutDirectory(t *testing.T) {
-	assert.Empty(t, NewTestCatalog(t).localModelInfos(context.Background(), "u1"))
+	assert.Empty(t, localModelInfos(NewTestCatalog(t).listLocalModels(context.Background(), "u1")))
 }

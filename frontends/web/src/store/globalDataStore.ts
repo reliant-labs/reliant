@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { fetchModelList } from "../hooks/catalog-models";
 import { logger } from "../lib/logger";
 import { waitForConfig } from "../lib/configReady";
+import { getActiveOrgId, useActiveOrgStore } from "./activeOrgStore";
 
 // Type definitions
 interface Model {
@@ -42,6 +43,12 @@ interface GlobalDataState {
   // Data
   models: Model[];
   tiers: Record<string, TierResolution>;
+  /**
+   * The org the models were listed for (null: none named, the person's own
+   * accounts). A chat of an org runs on that org's accounts under its policy,
+   * so the picker lists the active org's.
+   */
+  modelsOrgId: string | null;
 
   // Loading states
   modelsLoading: boolean;
@@ -58,6 +65,12 @@ interface GlobalDataState {
   refetchModels: () => Promise<void>;
   /** Forget the signed-in user's models (an identity change: authStore). */
   reset: () => void;
+  /**
+   * The active org changed: drop another org's models and list this one's.
+   * A no-op before anything was loaded (the first load reads the org) and
+   * when the models are already this org's.
+   */
+  followActiveOrg: (orgId: string | null) => void;
 }
 
 // Bumped by reset(): a fetch started for the previous user drops its answer
@@ -65,10 +78,20 @@ interface GlobalDataState {
 // endpoints) for the next one.
 let generation = 0;
 
+/**
+ * Whether a fetch started in `startedIn` for `orgId` may install its answer:
+ * no reset or org switch replaced it since (each bumps `generation` and
+ * starts its own fetch), and requests still name the org it asked for.
+ */
+function stillCurrent(startedIn: number, orgId: string | null): boolean {
+  return startedIn === generation && getActiveOrgId() === orgId;
+}
+
 export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   // Initial state
   models: [],
   tiers: {},
+  modelsOrgId: null,
 
   modelsLoading: false,
 
@@ -97,13 +120,19 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
       } catch {
         // Continue anyway - the API calls will fail gracefully if backend isn't ready
       }
+      // A reset or an org switch meanwhile started its own fetch, which owns
+      // the loading flags now.
+      if (startedIn !== generation) return;
+      // The org is read once the config is ready, so it is the one the
+      // requests below name.
+      const orgId = getActiveOrgId();
 
       // Set all loading states
       set({ modelsLoading: true });
 
       const [modelsResult] =
         await Promise.allSettled([
-        fetchModelList().catch((error) => {
+        fetchModelList(orgId).catch((error) => {
           logger.error("[GlobalDataStore] Failed to fetch models:", error);
           throw error;
         }),
@@ -119,6 +148,7 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
         modelsResult.status === "fulfilled"
           ? modelsResult.value.tiers || {}
           : {},
+      modelsOrgId: orgId,
       modelsLoading: false,
     
       modelsError:
@@ -130,7 +160,15 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
       isPrefetching: false,
     };
 
-    if (startedIn !== generation) return;
+    if (!stillCurrent(startedIn, orgId)) {
+      // Another org's answer: never shown. A switch already started the
+      // current org's fetch; anything else is re-listed here.
+      if (startedIn === generation) {
+        set({ isPrefetching: false, modelsLoading: false });
+        void get().refetchModels();
+      }
+      return;
+    }
     set(newState);
     } catch (error) {
       if (startedIn !== generation) return;
@@ -147,12 +185,17 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   refetchModels: async () => {
     set({ modelsLoading: true, modelsError: null });
     const startedIn = generation;
+    const orgId = getActiveOrgId();
     try {
-      const response = await fetchModelList();
-      if (startedIn !== generation) return;
+      const response = await fetchModelList(orgId);
+      if (!stillCurrent(startedIn, orgId)) {
+        if (startedIn === generation) void get().refetchModels();
+        return;
+      }
       set({
         models: response.models || [],
         tiers: response.tiers || {},
+        modelsOrgId: orgId,
         modelsLoading: false,
       });
     } catch (error) {
@@ -169,13 +212,30 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
     set({
       models: [],
       tiers: {},
+      modelsOrgId: null,
       modelsLoading: false,
       modelsError: null,
       isInitialized: false,
       isPrefetching: false,
     });
   },
+
+  followActiveOrg: (orgId) => {
+    const state = get();
+    const loaded = state.isInitialized || state.isPrefetching || state.modelsLoading || state.models.length > 0;
+    if (!loaded || (state.modelsOrgId === orgId && !state.isPrefetching && !state.modelsLoading)) return;
+    // A fetch in flight was for the org being left: drop its answer.
+    generation++;
+    set({ models: [], tiers: {}, modelsOrgId: orgId, modelsError: null, isPrefetching: false, isInitialized: true });
+    void get().refetchModels();
+  },
 }));
+
+// The org requests name (the switcher, a reconcile onto the default org,
+// another tab) decides which accounts the picker lists, so a change re-lists.
+useActiveOrgStore.subscribe((state, prev) => {
+  if (state.effectiveId !== prev.effectiveId) useGlobalDataStore.getState().followActiveOrg(state.effectiveId);
+});
 
 // React context for preloading - NOT CURRENTLY USED but keeping for future optimization
 export const GlobalDataContext = React.createContext<boolean>(false);

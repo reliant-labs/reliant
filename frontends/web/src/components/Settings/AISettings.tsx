@@ -9,6 +9,7 @@ import { ModelPreferences } from "./ModelPreferences";
 import { ToolPreferences } from "./ToolPreferences";
 import { LocalModelsSection } from "./LocalModelsSection";
 import { ProvidersSection } from "./providers/ProvidersSection";
+import { OrgFundingSection } from "./providers/OrgFundingSection";
 import { SettingsTabPanel, SettingsTabs, type SettingsTabItem } from "./SettingsTabs";
 
 const TABS: ReadonlyArray<SettingsTabItem<AISettingsTab>> = [
@@ -87,7 +88,10 @@ export function AISettings() {
 
       <SettingsTabPanel idPrefix="ai-settings" tab={tab} data-onboarding="ai-providers-settings">
         {tab === "providers" ? (
-          <ProvidersSection pickerOpen={pickerOpen} onPickerOpenChange={setPickerOpen} />
+          <div className="space-y-4">
+            <OrgFundingSection />
+            <ProvidersSection pickerOpen={pickerOpen} onPickerOpenChange={setPickerOpen} />
+          </div>
         ) : tab === "models" ? (
           <div className="space-y-4">
             <section aria-label="Default models" className="rounded-lg border border-border bg-card p-4">

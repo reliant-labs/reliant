@@ -1,0 +1,14 @@
+Yours
+  claude     alice@example.com    Max 20×  available
+  anthropic  anthropic key …a1b2  -        paused
+
+Paid by organization org-acme
+  claude   alice@acme.com  team seat        limited until 2026-11-13T15:40:00Z
+  reliant  Reliant         Reliant credits  available
+
+In organization org-acme
+  Use:  the organization's accounts first
+  When its accounts can't serve a chat:  wait
+  Change these in the Reliant app: Settings → AI providers. Only a person signed in to the app can.
+
+Its own API keys are listed only to a person signed in to the app: see Settings → Organization → AI accounts.

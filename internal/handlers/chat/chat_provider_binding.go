@@ -72,6 +72,9 @@ func (s *Service) selectionCheck(chat *db.Chat, bound string) launch.SelectionCh
 	if chat != nil && chat.ActiveDaemonID != nil {
 		check.PreferDaemonID = *chat.ActiveDaemonID
 	}
+	if chat != nil && chat.OrgID != nil {
+		check.OrgID = *chat.OrgID
+	}
 	return check
 }
 

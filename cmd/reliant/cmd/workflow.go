@@ -53,6 +53,7 @@ func newWorkflowCmd() *cobra.Command {
 	cmd.AddCommand(newWorkflowListCmd())
 	cmd.AddCommand(newWorkflowRunCmd())
 	cmd.AddCommand(newWorkflowFollowCmd())
+	cmd.AddCommand(newWorkflowFundingCmd())
 	cmd.AddCommand(newWorkflowScenarioCmd())
 
 	// Live supervision surface (Connect RPCs + context credential; no DB).
@@ -305,6 +306,7 @@ func newWorkflowRunCmd() *cobra.Command {
 		follow      bool
 		projectID   string
 		projectPath string
+		daemon      string
 		followFlags followFlags
 	)
 
@@ -330,6 +332,13 @@ A run executes against a project. Supply it by ID (--project-id) or by path
 reused if one already exists there, or created on the fly — so no manual
 project setup is needed. --project-id takes precedence when both are given.
 
+The run executes on the project's machine, by default the user's default
+machine. --daemon (an id or hostname from 'reliant daemon list') runs it on
+that machine instead; with --project-path the folder is looked up, attached
+or created on that machine, which is the one that holds it. With --project-id
+the project must already be checked out on that machine; otherwise the run
+is refused before it starts.
+
 Bare workflow names that match a builtin are normalized to builtin://<name>
 (like the web app); other names resolve as drafts / project workflows
 server-side. The first user message is taken from --message, then
@@ -351,10 +360,22 @@ format, exit codes, and --hook).`,
 			// Resolve the project. --project-id wins; otherwise --project-path
 			// finds-or-creates a project by path so no manual CreateProject is
 			// needed.
+			daemonID := ""
+			if daemon != "" {
+				if daemonID, err = resolveTriggerDaemon(cmd.Context(), newDaemonRegistryClient(conn), daemon); err != nil {
+					return err
+				}
+			}
 			resolvedProjectID := projectID
 			if resolvedProjectID == "" && projectPath != "" {
-				resolvedProjectID, err = resolveProjectPathToID(cmd.Context(), conn, projectPath)
+				resolvedProjectID, err = resolveProjectPathToIDOn(cmd.Context(), conn, projectPath, daemonID)
 				if err != nil {
+					return err
+				}
+			} else if resolvedProjectID != "" && daemonID != "" {
+				// --project-id wins over --project-path, so nothing looked
+				// the project up on the chosen machine: check it is there.
+				if err := checkProjectOnDaemon(cmd.Context(), newProjectServiceClient(conn), resolvedProjectID, daemonID); err != nil {
 					return err
 				}
 			}
@@ -404,6 +425,9 @@ format, exit codes, and --hook).`,
 				}},
 				WorkflowParams: params,
 				CliRun:         proto.Bool(true),
+			}
+			if daemonID != "" {
+				createReq.DaemonId = proto.String(daemonID)
 			}
 			switch {
 			case title != "":
@@ -457,6 +481,7 @@ format, exit codes, and --hook).`,
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Follow the execution and stream NDJSON lifecycle events")
 	cmd.Flags().StringVar(&projectID, "project-id", "", "Project ID (takes precedence over --project-path)")
 	cmd.Flags().StringVar(&projectPath, "project-path", "", "Project directory path; resolves (find-or-create) to a project ID when --project-id is absent")
+	cmd.Flags().StringVar(&daemon, "daemon", "", "Machine the run executes on, by daemon id or hostname (default: the project's machine); with --project-path, the machine that holds the folder")
 	followFlags.register(cmd)
 
 	return cmd

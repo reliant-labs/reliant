@@ -195,6 +195,7 @@ nodes:
 	sc := mustScenario(t, "name: spins\nevents: []\n")
 
 	_ = r.Run(sc) // warm up lazily-started background goroutines
+	// forge:lint-disable-next-line forge-test-fixed-sleep: settling time before the baseline count; cut short by load it only raises the baseline, which loosens the assertion and never fails it
 	time.Sleep(200 * time.Millisecond)
 	before := goruntime.NumGoroutine()
 	for i := 0; i < 5; i++ {

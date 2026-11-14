@@ -54,7 +54,7 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 | `claude-5-opus` | Claude 5 Opus | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | claude, anthropic, openrouter, reliant |
 | `claude-5-sonnet` | Claude 5 Sonnet | flagship, moderate, powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | claude, anthropic, openrouter, copilot |
 | `claude-5.1-fable` | Claude 5.1 Fable | flagship, powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | claude, anthropic, openrouter, reliant, vertexai |
-| `claude-5.2-fable` | Claude 5.2 Fable | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | claude |
+| `claude-5.2-fable` | Claude 5.2 Fable | powerful | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | claude |
 | `claude-5.5-opus` | Claude 5.5 Opus | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | claude, anthropic, openrouter, reliant, vertexai |
 | `claude-5.5-sonnet` | Claude 5.5 Sonnet | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | claude, anthropic, openrouter, reliant, copilot |
 
@@ -123,6 +123,7 @@ _Maximum capability for the hardest, longest-horizon work_
 
 | Model | Provider | Effort | Context | Capabilities |
 |-------|----------|--------|---------|-------------|
+| `claude-5.2-fable` | Anthropic | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `claude-5.1-fable` | Anthropic | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-6.1-astra` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-6-astra` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |

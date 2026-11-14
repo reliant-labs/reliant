@@ -49,6 +49,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -247,6 +248,44 @@ func NewOrgResolver(d OrgResolverDeps) (*orgs.Resolver, error) {
 	}
 	resolver := orgs.New(src)
 	authz.SetProcessMembership(resolver)
+	// The account loader asks the same resolver which of an org's accounts,
+	// and which of a person's org-paid seats, a run of that org may use
+	// (org-provider-accounts §4.1). Without it no org account is a candidate.
+	drivers.InitializeOrgMembership(resolver)
+	return resolver, nil
+}
+
+// OrgPolicyResolverDeps is the token authority whose store may answer org
+// policies.
+type OrgPolicyResolverDeps struct {
+	Authority tokenauthority.Authority
+	// Enforcement is the platform's switch per enforcement point
+	// (ServerProcessConfig org_policy_enforcement: off, audit or enforce);
+	// nil is every point's default, audit.
+	Enforcement *configv1.OrgPolicyEnforcementConfig
+}
+
+// NewOrgPolicyResolver is the deployment's org policy resolver
+// (internal/orgpolicy): control-plane's ResolveOrgPolicy, cached, when the
+// token authority is control-plane's AccessTokenInternalService. A
+// self-hosted store has no orgs and so no policies: the resolver is nil, which
+// answers "no policy" for every org. It is also the process's (the background
+// of loops no listener or activity wraps).
+func NewOrgPolicyResolver(d OrgPolicyResolverDeps) (*orgpolicy.Resolver, error) {
+	// The switches are the process's whether or not it has policies: with
+	// none, every point admits everything anyway.
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointIntegrations, orgpolicy.ParseEnforcement(d.Enforcement.GetIntegrations()))
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointMCP, orgpolicy.ParseEnforcement(d.Enforcement.GetMcp()))
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointApprovals, orgpolicy.ParseEnforcement(d.Enforcement.GetApprovals()))
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointMachines, orgpolicy.ParseEnforcement(d.Enforcement.GetMachines()))
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointProviders, orgpolicy.ParseEnforcement(d.Enforcement.GetProviders()))
+	src, hosted := d.Authority.(orgpolicy.Source)
+	if !hosted {
+		orgpolicy.SetProcessResolver(nil)
+		return nil, nil
+	}
+	resolver := orgpolicy.New(src)
+	orgpolicy.SetProcessResolver(resolver)
 	return resolver, nil
 }
 
@@ -417,7 +456,7 @@ func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
 	repo := d.DB
 	// LLM drivers resolve per-user keys from the database.
 	drivers.InitializeAPIKeyProvider(repo)
-	healer := drivers.InstallReliantKeyHealer(repo, cp.URL, cp.InternalServiceSecret)
+	healer := drivers.InstallReliantKeyHealer(repo, cp.URL, cp.InternalServiceSecret, d.ControlPlane.GetManagedKeysPerOrg())
 	analytics.Start(AnalyticsSettings(d.Analytics), repo, repo)
 	return &ProcessRuntime{KeyHealer: healer}, nil
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
+	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/preset"
@@ -52,7 +53,10 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		return nil, svcerr.Wrap(err)
 	}
 	snap.ToolBindings = bindings
-	if def.GetConnectionId() != "" {
+	// An org GitHub App installation is no saved connection: bindOrgGitHubApp
+	// checked it is the org's, and the definition (in the approval hash)
+	// names it.
+	if def.GetConnectionId() != "" && !ghdelegated.IsOrgAppConnectionID(def.GetConnectionId()) {
 		if source := s.connections(); source != nil {
 			c, err := source.GetConnection(ctx, user, def.GetConnectionId())
 			if err != nil {

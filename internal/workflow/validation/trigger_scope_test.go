@@ -123,6 +123,14 @@ func TestTriggerScopeValidation(t *testing.T) {
 			severity: SeverityWarning,
 			want:     []string{"integration.match.repository", `input "repos" is optional`, "matches nothing", "required: true"},
 		},
+		{
+			// An activation with no repos param is scoped to the default
+			// list (Declaration.ProjectedConfig applies defaults), so there
+			// is nothing to warn about.
+			name:    "an optional input with a non-empty default is scoped to that default",
+			inputs:  "  repos: {type: github.repository, multi: true, default: [acme/api, acme/web]}\n",
+			trigger: pr + "      match: {repository: {input: repos}}\n",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

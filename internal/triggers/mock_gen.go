@@ -136,7 +136,7 @@ func (m *MockRepo) AbandonFailedWorkflowStart(ctx context.Context, id string) (b
 var _ Repo = (*MockRepo)(nil)
 
 // forge:section MockEventRepo
-// forge:hash=d99c691d2cbb73f3cf08cc0ca62afe71c41a7daf25225cb291e977f0de4f26cc
+// forge:hash=0906e5666d1d9e0618e5a94f0134af95107f34f888e15ab882dd1cb399edf05c
 
 // MockEventRepo is a test mock for the EventRepo interface.
 //
@@ -150,6 +150,7 @@ type MockEventRepo struct {
 	GetDaemonFunc                     func(context.Context, string) (*db.Daemon, error)
 	CreateTriggerEventFunc            func(context.Context, *core.TriggerEvent) (bool, error)
 	GetTriggerEventByDedupeFunc       func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
+	GetLatestTriggerEventFunc         func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 	SettlePendingTriggerEventFunc     func(context.Context, string, core.TriggerEventOutcome, string, *core.TriggerEventDefinition) (bool, error)
 	ListStalePendingTriggerEventsFunc func(context.Context, time.Time, int) ([]*core.TriggerEvent, error)
 }
@@ -188,6 +189,15 @@ func (m *MockEventRepo) GetTriggerEventByDedupe(ctx context.Context, kind core.T
 		return m.GetTriggerEventByDedupeFunc(ctx, kind, dedupeKey)
 	}
 	return nil, contractkit.MockNotSet("MockEventRepo", "GetTriggerEventByDedupe")
+}
+
+// GetLatestTriggerEvent records the call and delegates to GetLatestTriggerEventFunc when set.
+func (m *MockEventRepo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
+	m.Recorder.Record("GetLatestTriggerEvent", ctx, triggerID, outcome)
+	if m.GetLatestTriggerEventFunc != nil {
+		return m.GetLatestTriggerEventFunc(ctx, triggerID, outcome)
+	}
+	return nil, contractkit.MockNotSet("MockEventRepo", "GetLatestTriggerEvent")
 }
 
 // SettlePendingTriggerEvent records the call and delegates to SettlePendingTriggerEventFunc when set.
@@ -336,7 +346,7 @@ func (m *MockWorkflowStarter) ExecuteWorkflow(ctx context.Context, options clien
 var _ WorkflowStarter = (*MockWorkflowStarter)(nil)
 
 // forge:section MockPollRepo
-// forge:hash=931e9e6449ba505c2a22d83b24e564d664fd6175aa58981e69fdbdea0aa30006
+// forge:hash=4700bbda71e251edd03f27248858e5341b074d4b737bde8ce8f39172f7ba9852
 
 // MockPollRepo is a test mock for the PollRepo interface.
 //
@@ -353,6 +363,7 @@ type MockPollRepo struct {
 	GetDaemonFunc                     func(context.Context, string) (*db.Daemon, error)
 	CreateTriggerEventFunc            func(context.Context, *core.TriggerEvent) (bool, error)
 	GetTriggerEventByDedupeFunc       func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
+	GetLatestTriggerEventFunc         func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 	SettlePendingTriggerEventFunc     func(context.Context, string, core.TriggerEventOutcome, string, *core.TriggerEventDefinition) (bool, error)
 	ListStalePendingTriggerEventsFunc func(context.Context, time.Time, int) ([]*core.TriggerEvent, error)
 }
@@ -418,6 +429,15 @@ func (m *MockPollRepo) GetTriggerEventByDedupe(ctx context.Context, kind core.Tr
 		return m.GetTriggerEventByDedupeFunc(ctx, kind, dedupeKey)
 	}
 	return nil, contractkit.MockNotSet("MockPollRepo", "GetTriggerEventByDedupe")
+}
+
+// GetLatestTriggerEvent records the call and delegates to GetLatestTriggerEventFunc when set.
+func (m *MockPollRepo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
+	m.Recorder.Record("GetLatestTriggerEvent", ctx, triggerID, outcome)
+	if m.GetLatestTriggerEventFunc != nil {
+		return m.GetLatestTriggerEventFunc(ctx, triggerID, outcome)
+	}
+	return nil, contractkit.MockNotSet("MockPollRepo", "GetLatestTriggerEvent")
 }
 
 // SettlePendingTriggerEvent records the call and delegates to SettlePendingTriggerEventFunc when set.

@@ -298,6 +298,36 @@ SELECT * FROM (
       AND c.display_state = 4
       AND c.user_id = $1::text
       AND c.state IS DISTINCT FROM 3
+
+    UNION ALL
+
+    -- A chat in an org asking before it moves from the org's AI accounts to
+    -- the person's own (org-provider-accounts §10): one row per chat and
+    -- question, keyed by the chat and when it asked, so a later question is a
+    -- new item. a_text is the reason, b_text the model.
+    SELECT
+        14,
+        c.id || '@' || to_char(f.asked_at AT TIME ZONE 'UTC', 'YYYYMMDD"T"HH24MISS.US'),
+        c.id,
+        COALESCE(c.workflow_id, c.id),
+        COALESCE(c.trigger_id, ''),
+        c.project_id,
+        COALESCE(p.name, ''),
+        COALESCE(c.workflow_name, ''),
+        c.title,
+        COALESCE(t.name, ''),
+        f.asked_at,
+        f.reason,
+        f.model,
+        0
+    FROM chat_personal_funding f
+    JOIN chats_with_activity c ON c.id = f.chat_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
+    LEFT JOIN triggers t ON t.id = c.trigger_id
+    WHERE f.state = 'asked'
+      AND f.user_id = $1::text
+      AND c.user_id = $1::text
+      AND c.state IS DISTINCT FROM 3
 ) inbox
 ORDER BY kind, waiting_since, item_key`
 

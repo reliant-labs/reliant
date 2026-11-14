@@ -39,8 +39,21 @@ type ControlPlaneConfig struct {
 	// The HMAC secret reliant signs internal-service tokens to the control plane
 	// with. Optional: a self-hosted deployment has none.
 	InternalServiceSecret string `protobuf:"bytes,2,opt,name=internal_service_secret,json=internalServiceSecret,proto3" json:"internal_service_secret,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Mints the managed Reliant key once per (person, org): a person's chats in
+	// an org they belong to spend a key minted in that org (identity
+	// managed:<org_id>, attributed to it), so the gateway bills that org's
+	// wallet rather than their default org's (control-plane
+	// docs/design/org-provider-accounts.md §3.2, P10; org-policies §2, G0). The
+	// key is minted the first time it is needed, and in a chat of an org that
+	// has one the org-less managed key is not used. Off by default. A release
+	// before org-provider-accounts P5 ignores a managed key's org and would
+	// balance one person's calls across every org's key, so turn it on only once
+	// P5 is in every server AND in the release a rollback would return to, and a
+	// query in prod shows no live person holds more than one managed row. Off,
+	// nothing new is minted; keys already minted keep serving their orgs.
+	ManagedKeysPerOrg bool `protobuf:"varint,3,opt,name=managed_keys_per_org,json=managedKeysPerOrg,proto3" json:"managed_keys_per_org,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ControlPlaneConfig) Reset() {
@@ -87,18 +100,27 @@ func (x *ControlPlaneConfig) GetInternalServiceSecret() string {
 	return ""
 }
 
+func (x *ControlPlaneConfig) GetManagedKeysPerOrg() bool {
+	if x != nil {
+		return x.ManagedKeysPerOrg
+	}
+	return false
+}
+
 var File_reliant_config_v1_control_plane_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_control_plane_config_proto_rawDesc = "" +
 	"\n" +
-	",reliant/config/v1/control_plane_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xe1\x02\n" +
+	",reliant/config/v1/control_plane_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\x99\x04\n" +
 	"\x12ControlPlaneConfig\x12\x9b\x01\n" +
 	"\x03url\x18\x01 \x01(\tB\x88\x01\x82\xce\x18\x83\x01\n" +
 	"\x19RELIANT_CONTROL_PLANE_URL*/Control-plane base URL; unset means self-hostedZ\x19\n" +
 	"\x15CONTROL_PLANE_API_URL\x10\x01Z\x1a\n" +
 	"\x16CONTROL_PLANE_BASE_URL\x10\x01R\x03url\x12\xac\x01\n" +
 	"\x17internal_service_secret\x18\x02 \x01(\tBt\x82\xce\x18p\n" +
-	"\x17INTERNAL_SERVICE_SECRET*QSecret for internal-service calls to the control plane (required when url is set)0\x01P\x01R\x15internalServiceSecretB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"\x17INTERNAL_SERVICE_SECRET*QSecret for internal-service calls to the control plane (required when url is set)0\x01P\x01R\x15internalServiceSecret\x12\xb5\x01\n" +
+	"\x14managed_keys_per_org\x18\x03 \x01(\bB\x83\x01\x82\xce\x18\x7f\n" +
+	"*RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG*QMint the managed Reliant key per (person, org), so each org's chats bill that orgR\x11managedKeysPerOrgB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_control_plane_config_proto_rawDescOnce sync.Once

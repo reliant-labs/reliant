@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -19,15 +21,17 @@ import (
 type markerFake struct {
 	store  *routerFake
 	marked []string
+	owners []core.AccountOwner // the owner each mark named, in order
 	err    error
 }
 
 // MarkNeedsSignIn mirrors the real store: the account stops being offered.
-func (m *markerFake) MarkNeedsSignIn(_ context.Context, _, accountID, _ string) error {
+func (m *markerFake) MarkNeedsSignIn(_ context.Context, owner core.AccountOwner, accountID, _ string) error {
 	if m.err != nil {
 		return m.err
 	}
 	m.marked = append(m.marked, accountID)
+	m.owners = append(m.owners, owner)
 	return nil
 }
 
@@ -44,8 +48,9 @@ func apiKeyAccount(id, email string, priority int) models.AccountConfig {
 
 func resolveOnAnthropic(t *testing.T, env *routingEnv, thread string) *resolvedLLMCall {
 	t.Helper()
+	// A run of org-1, whose keys some of these tests route to.
 	res, err := resolveLLMCall(context.Background(), nil, llmCallSpec{
-		UserID: "u1", SessionID: "s", ThreadID: thread,
+		UserID: "u1", OrgID: "org-1", Attended: true, SessionID: "s", ThreadID: thread,
 		Selector: models.ModelSelector{ID: routeModel + "@anthropic"}, Routing: env.routing,
 	})
 	require.NoError(t, err)
@@ -64,7 +69,7 @@ func TestCredentialRejection_MovesToTheNextAccount(t *testing.T) {
 	require.Equal(t, "a", first.Account.Config.AccountID)
 
 	got := env.routing.credentialRejection(context.Background(), rejectedKey(), usageLimitContext{
-		UserID: "u1", ThreadID: "t", Driver: "anthropic", ModelID: routeModel, Account: first.Account})
+		Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: "anthropic", ModelID: routeModel, Account: first.Account})
 	var failure *types.UsageLimitFailure
 	require.ErrorAs(t, got, &failure, "reported as a failover so the workflow retries at once")
 	assert.Equal(t, []string{"a"}, marker.marked)
@@ -90,7 +95,7 @@ func TestCredentialRejection_NoAccountLeft(t *testing.T) {
 	marker := &markerFake{store: env.store}
 	env.routing.Credentials = marker
 	first := resolveOnAnthropic(t, env, "t")
-	uc := usageLimitContext{UserID: "u1", ThreadID: "t", Driver: "anthropic", ModelID: routeModel, Account: first.Account}
+	uc := usageLimitContext{Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: "anthropic", ModelID: routeModel, Account: first.Account}
 
 	t.Run("fallback opted in", func(t *testing.T) {
 		uc := uc
@@ -112,7 +117,7 @@ func TestCredentialRejection_LeavesOtherFailuresAlone(t *testing.T) {
 	marker := &markerFake{store: env.store}
 	env.routing.Credentials = marker
 	first := resolveOnAnthropic(t, env, "t")
-	uc := usageLimitContext{UserID: "u1", ThreadID: "t", Driver: "anthropic", ModelID: routeModel, Account: first.Account}
+	uc := usageLimitContext{Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: "anthropic", ModelID: routeModel, Account: first.Account}
 	ctx := context.Background()
 
 	assert.NoError(t, env.routing.credentialRejection(ctx, errors.New("dial tcp: connection refused"), uc), "not a credential verdict")
@@ -134,4 +139,29 @@ func TestCredentialRejection_LeavesOtherFailuresAlone(t *testing.T) {
 	assert.NoError(t, env.routing.credentialRejection(ctx, rejectedKey(), uc), "an account that could not be marked is not reported as handled")
 
 	assert.Empty(t, marker.marked)
+}
+
+// The gateway rejecting the managed key minted in an org (P10) marks that row
+// needs-sign-in on the person, so the next resolution mints it again; the turn
+// is left as it was. The org-less managed key stays its healer's.
+func TestCredentialRejection_MarksARejectedOrgManagedKeyForReminting(t *testing.T) {
+	withAvailableDrivers(t, driversWith(apiKeyAccount("a", "alice@acme.com", 0)))
+	env := newRoutingEnv(t)
+	marker := &markerFake{store: env.store}
+	env.routing.Credentials = marker
+	first := resolveOnAnthropic(t, env, "t")
+	ctx := context.Background()
+
+	managed := *first.Account
+	managed.Config.DriverID, managed.Config.AccountID, managed.Config.AttributedOrgID = "reliant", "managed-org-1", "org-1"
+	uc := usageLimitContext{Scope: drivers.Scope{UserID: "u1", OrgID: "org-1", Attended: true}, ThreadID: "t", Driver: "reliant", ModelID: routeModel, Account: &managed}
+	assert.NoError(t, env.routing.credentialRejection(ctx, rejectedKey(), uc))
+	assert.Equal(t, []string{"managed-org-1"}, marker.marked)
+	assert.Equal(t, []core.AccountOwner{core.UserAccountOwner("u1")}, marker.owners, "the person's row, not the org's")
+
+	orgless := managed
+	orgless.Config.AccountID, orgless.Config.AttributedOrgID = "managed", ""
+	uc.Account = &orgless
+	assert.NoError(t, env.routing.credentialRejection(ctx, rejectedKey(), uc))
+	assert.Equal(t, []string{"managed-org-1"}, marker.marked, "the org-less key is its healer's")
 }

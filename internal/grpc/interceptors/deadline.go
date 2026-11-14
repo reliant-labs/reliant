@@ -47,8 +47,10 @@ func ProcedureTimeouts(owned ...map[string]time.Duration) map[string]time.Durati
 		"/reliant.v1.ChatService/StartChat":   30 * time.Second,
 		"/reliant.v1.ChatService/SendMessage": 30 * time.Second,
 		// Provider API key validation - Gemini requires minimum 10s deadline
-		"/reliant.v1.SettingsService/ValidateProviderAPIKey":   20 * time.Second,
-		"/reliant.v1.ProviderAccountService/AddProviderAPIKey": 20 * time.Second,
+		"/reliant.v1.SettingsService/ValidateProviderAPIKey":            20 * time.Second,
+		"/reliant.v1.ProviderAccountService/AddProviderAPIKey":          20 * time.Second,
+		"/reliant.v1.OrgProviderAccountService/AddOrgProviderAPIKey":    20 * time.Second,
+		"/reliant.v1.OrgProviderAccountService/RotateOrgProviderAPIKey": 20 * time.Second,
 		// Worktree operations can involve git worktree add/remove, diffing, and file copying.
 		"/reliant.v1.WorktreeService/CreateWorktree":           worktreeOperationTimeout,
 		"/reliant.v1.WorktreeService/DeleteWorktree":           worktreeOperationTimeout,

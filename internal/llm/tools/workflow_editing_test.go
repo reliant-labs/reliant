@@ -4,6 +4,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -580,4 +581,86 @@ func TestCreateWorkflow_WithInvalidContent(t *testing.T) {
 	existing, err := repo.GetWorkflowDraftBySlug(context.Background(), "test-user", "broken")
 	require.NoError(t, err)
 	assert.Nil(t, existing)
+}
+
+// racingDraftStore runs another write just before the first versioned save,
+// as a second edit_workflow call issued in the same turn does.
+type racingDraftStore struct {
+	*db.Repo
+	race func()
+}
+
+func (s *racingDraftStore) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name, slug, definition string, status db.WorkflowDraftStatus) error {
+	if race := s.race; race != nil {
+		s.race = nil
+		race()
+	}
+	return s.Repo.UpdateWorkflowDraftDefinitionAtVersion(ctx, id, version, name, slug, definition, status)
+}
+
+// Two edits of non-overlapping regions that both read one version must both
+// land: the second is re-applied to the content the first saved. Before, both
+// reported success and only one persisted.
+func TestEditWorkflow_ConcurrentEditsBothApply(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := createTestContext(t, "")
+
+	const content = "name: race-test\ndescription: one\nentry: [agent]\nnodes:\n  - id: agent\n    type: call_llm\n    args:\n      model: mock\nedges: []\n"
+	now := time.Now()
+	draft := &db.WorkflowDraft{
+		ID: uuid.New().String(), UserID: "test-user", Name: "race-test", Slug: "race-test-" + uuid.NewString()[:8],
+		Definition: content, Status: db.WorkflowDraftStatusDraft, CreatedAt: now, UpdatedAt: now,
+	}
+	require.NoError(t, repo.CreateWorkflowDraft(context.Background(), draft))
+
+	edit := func(store workflowWriteStore, oldS, newS string) ToolResponse {
+		in, _ := json.Marshal(EditWorkflowParams{ID: draft.ID, OldString: oldS, NewString: newS})
+		resp, err := NewEditWorkflowTool(store).Run(ctx, ToolCall{ID: "e", Name: EditWorkflowToolName, Input: string(in)})
+		require.NoError(t, err)
+		return resp
+	}
+	store := &racingDraftStore{Repo: repo}
+	store.race = func() {
+		resp := edit(repo, "description: one", "description: two")
+		require.False(t, resp.IsError, resp.Content)
+	}
+	resp := edit(store, "model: mock", "model: other")
+	require.False(t, resp.IsError, resp.Content)
+
+	got, err := repo.GetWorkflowDraft(context.Background(), draft.ID)
+	require.NoError(t, err)
+	assert.Contains(t, got.Definition, "description: two", "the racing edit is kept")
+	assert.Contains(t, got.Definition, "model: other", "the edit saved second is re-applied, not dropped")
+}
+
+// A caller that pinned expected_version gets the conflict instead of a retry.
+func TestEditWorkflow_PinnedVersionConflictsInsteadOfRetrying(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := createTestContext(t, "")
+
+	now := time.Now()
+	draft := &db.WorkflowDraft{
+		ID: uuid.New().String(), UserID: "test-user", Name: "race-pinned", Slug: "race-pinned-" + uuid.NewString()[:8],
+		Definition: validWorkflowYAML, Status: db.WorkflowDraftStatusDraft, CreatedAt: now, UpdatedAt: now,
+	}
+	require.NoError(t, repo.CreateWorkflowDraft(context.Background(), draft))
+	read, err := repo.GetWorkflowDraft(context.Background(), draft.ID)
+	require.NoError(t, err)
+
+	store := &racingDraftStore{Repo: repo, race: func() {
+		require.NoError(t, repo.UpdateWorkflowDraftDefinition(context.Background(), draft.ID, read.Name, read.Slug, strings.Replace(validWorkflowYAML, "edges: []", "edges: []\n", 1), db.WorkflowDraftStatusDraft))
+	}}
+	in, _ := json.Marshal(EditWorkflowParams{ID: draft.ID, OldString: "model: mock", NewString: "model: other", ExpectedVersion: &read.Version})
+	resp, err := NewEditWorkflowTool(store).Run(ctx, ToolCall{ID: "e", Name: EditWorkflowToolName, Input: string(in)})
+	require.NoError(t, err)
+	assert.True(t, resp.IsError, resp.Content)
+	assert.Contains(t, resp.Content, "was not applied")
+
+	got, err := repo.GetWorkflowDraft(context.Background(), draft.ID)
+	require.NoError(t, err)
+	assert.Contains(t, got.Definition, "model: mock")
 }

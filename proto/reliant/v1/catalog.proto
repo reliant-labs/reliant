@@ -124,7 +124,14 @@ message LocalModelSource {
 }
 
 // ListModelsRequest is the request for ListModels
-message ListModelsRequest {}
+message ListModelsRequest {
+  // The organization whose work the picker is choosing a model for: the
+  // list is what a chat of that org may run on (its org accounts and seats,
+  // filtered by its policy). The caller must be a live member of it
+  // (PermissionDenied otherwise); a machine credential may name only its own
+  // org. Unset lists the caller's own accounts, as before orgs.
+  optional string org_id = 1;
+}
 
 // ListModelsResponse is the response for ListModels
 message ListModelsResponse {
@@ -193,7 +200,14 @@ message AvailableModelInfo {
 }
 
 // ListAvailableModelsRequest is the request for ListAvailableModels
-message ListAvailableModelsRequest {}
+message ListAvailableModelsRequest {
+  // The organization whose work the picker is choosing a model for: the
+  // list is what a chat of that org may run on (its org accounts and seats,
+  // filtered by its policy). The caller must be a live member of it
+  // (PermissionDenied otherwise); a machine credential may name only its own
+  // org. Unset lists the caller's own accounts, as before orgs.
+  optional string org_id = 1;
+}
 
 // ListAvailableModelsResponse is the response for ListAvailableModels
 message ListAvailableModelsResponse {

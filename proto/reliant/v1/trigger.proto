@@ -314,6 +314,35 @@ enum ActingIdentity {
   ACTING_IDENTITY_APP = 2;
 }
 
+// UnattendedFunding is which AI accounts the runs a trigger fires may spend
+// (control-plane docs/design/org-provider-accounts.md §11.3). A trigger's run
+// has nobody behind it to ask, so in an organization each trigger is stamped
+// when it is created: ORG_ONLY when the org has two or more live members, ANY
+// otherwise (and ANY when the member count is unknown).
+//
+// On a read (Trigger.unattended_funding) a server that knows the stamp always
+// sets ANY or ORG_ONLY, the stored value. A trigger stored before the stamp
+// existed, or one with no org, reads ANY: that is how it runs. So
+// UNSPECIFIED on a read means only that the server predates the field; show
+// it as ANY.
+//
+// On a write (TriggerDefinition, EnableWorkflowRequest) UNSPECIFIED means the
+// default rule: a new trigger is stamped from the org's shape as above, and
+// an existing one keeps its stored value, so a client that predates the field
+// never changes it.
+enum UnattendedFunding {
+  // Read: the server predates the field. Write: the default rule.
+  UNATTENDED_FUNDING_UNSPECIFIED = 0;
+  // ANY: every source the owner's own runs may use, as before the stamp.
+  // Loosening an ORG_ONLY trigger to this is refused, with reason
+  // "org_only_automation", in an org with two or more live members.
+  UNATTENDED_FUNDING_ANY = 1;
+  // ORG_ONLY: only the org's own sources (its API keys granted to the owner,
+  // and its Reliant credits), never the owner's personal accounts or a seat.
+  // The owner can always tighten a trigger to this.
+  UNATTENDED_FUNDING_ORG_ONLY = 2;
+}
+
 // TriggerOverlapPolicy decides what a scheduled fire does when this trigger's
 // previous run has not finished.
 enum TriggerOverlapPolicy {
@@ -765,10 +794,18 @@ message Trigger {
   // Read-only: why Reliant paused the trigger itself, while `enabled` is
   // false. "creator_left_org": a firing was refused because the trigger's
   // creator, whose identity its runs execute as, is no longer a member of
-  // its organization; it fires again once they rejoin and resume it. Empty
+  // its organization; it fires again once they rejoin and resume it.
+  // "org_policy": one of its organization's admin policies refused its run
+  // (a model the org does not allow, a spend cap reached); it fires again
+  // once its owner resumes it. Empty
   // when the trigger is enabled or a person paused it. Clients show an
   // unknown value as a plain pause.
   string paused_reason = 36;
+  // Which AI accounts the trigger's runs may spend: always ANY or ORG_ONLY,
+  // the stored value (ANY for a trigger with no org or one stored before the
+  // stamp). UNSPECIFIED only from a server that predates the field: show it
+  // as ANY.
+  UnattendedFunding unattended_funding = 37;
 }
 
 // TriggerDefinitionSource is where an activation's workflow definition is
@@ -1047,6 +1084,12 @@ message TriggerDefinition {
   // for a trigger whose owner cannot push to a repository it writes to the
   // write fails when it happens (never silently as the owner).
   ActingIdentity acting_identity = 25;
+
+  // Which AI accounts the trigger's runs may spend. UNSPECIFIED is the default
+  // rule: stamped from the org's shape on create, the stored value kept on
+  // update, so a client that predates the field never changes it. A server
+  // that predates the field ignores it.
+  UnattendedFunding unattended_funding = 27;
 }
 
 // WebhookCredential is a webhook trigger's token, returned exactly once.
@@ -1080,6 +1123,27 @@ message CreateTriggerResponse {
 
   // Webhook triggers only: the token, which is never shown again.
   WebhookCredential webhook = 2;
+
+  // Set when the trigger was stored but its runs cannot spend any account
+  // yet (see TriggerFundingWarning). Never a refusal.
+  TriggerFundingWarning funding_warning = 3;
+}
+
+// TriggerFundingWarning: an automation that may run only on its
+// organization's AI accounts (UNATTENDED_FUNDING_ORG_ONLY, or the org's
+// automations policy), none of which can run its model yet
+// (control-plane docs/design/org-provider-accounts.md §11.3). The write is
+// not refused, because accounts change: an admin can add an org API key or
+// enable Reliant credits. Until then each fire fails with no_org_account.
+message TriggerFundingWarning {
+  // The organization whose accounts cannot run it.
+  string org_id = 1;
+  // The model none of them can run, as a person names it ("claude-opus-4-6",
+  // "the flagship model").
+  string model = 2;
+  // One sentence for display: "No account of this organization can run
+  // claude-opus-4-6 yet. Ask an admin to add one."
+  string message = 3;
 }
 
 // RotateWebhookTokenRequest is the request for RotateWebhookToken.
@@ -1143,6 +1207,10 @@ message UpdateTriggerRequest {
 message UpdateTriggerResponse {
   // The stored trigger after the update.
   Trigger trigger = 1;
+
+  // Set when the trigger is enabled and its runs cannot spend any account
+  // yet (TriggerFundingWarning). Never a refusal.
+  TriggerFundingWarning funding_warning = 2;
 }
 
 // DeleteTriggerRequest is the request for DeleteTrigger.
@@ -1167,6 +1235,10 @@ message SetTriggerEnabledRequest {
 message SetTriggerEnabledResponse {
   // The trigger after the change, including its recomputed next fire time.
   Trigger trigger = 1;
+
+  // Set when the trigger was enabled and its runs cannot spend any account
+  // yet (TriggerFundingWarning). Never a refusal.
+  TriggerFundingWarning funding_warning = 2;
 }
 
 // EnableWorkflowRequest is the request for EnableWorkflow. The choices here
@@ -1231,6 +1303,11 @@ message EnableWorkflowRequest {
   // within the selection; the others are left as they are. A name the
   // workflow does not declare refuses the request.
   repeated string triggers = 14;
+
+  // Which AI accounts the activations' runs may spend, as
+  // TriggerDefinition.unattended_funding: UNSPECIFIED stamps each new
+  // activation from the org's shape and keeps an existing activation's.
+  UnattendedFunding unattended_funding = 16;
 }
 
 // WorkflowTriggerOverride changes one declared trigger's activation away from
@@ -1306,6 +1383,11 @@ message WorkflowTriggerResult {
   // not be checked for reachability because the integration errored, or one
   // the acting identity cannot write to. Never set on a refusal.
   repeated string warnings = 6;
+
+  // For an enable that went through: set when the activation's runs cannot
+  // spend any account yet (TriggerFundingWarning). Its message is also one
+  // of warnings, for a client that predates this field.
+  TriggerFundingWarning funding_warning = 7;
 }
 
 // EnableWorkflowResponse is the response for EnableWorkflow.

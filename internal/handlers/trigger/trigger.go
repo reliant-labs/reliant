@@ -98,6 +98,9 @@ func (s *Service) CreateTrigger(
 	if trigger.OrgID, err = s.triggerOrg(ctx, userID, req.Msg.GetOrgId(), project); err != nil {
 		return nil, err
 	}
+	if trigger.UnattendedFunding, err = s.unattendedFundingFor(ctx, userID, trigger.OrgID, def.UnattendedFunding, nil); err != nil {
+		return nil, err
+	}
 	if err := s.bindOrgGitHubApp(ctx, userID, def, trigger); err != nil {
 		return nil, err
 	}
@@ -162,8 +165,9 @@ func (s *Service) CreateTrigger(
 	}
 
 	return connect.NewResponse(&reliantv1.CreateTriggerResponse{
-		Trigger: s.render(ctx, trigger),
-		Webhook: cred,
+		Trigger:        s.render(ctx, trigger),
+		Webhook:        cred,
+		FundingWarning: s.fundingWarning(ctx, trigger),
 	}), nil
 }
 
@@ -296,6 +300,9 @@ func (s *Service) UpdateTrigger(
 	if updated.OrgID, err = s.updatedTriggerOrg(ctx, existing.UserID, existing, source, target); err != nil {
 		return nil, err
 	}
+	if updated.UnattendedFunding, err = s.unattendedFundingFor(ctx, existing.UserID, updated.OrgID, def.UnattendedFunding, existing); err != nil {
+		return nil, err
+	}
 	if err := s.bindOrgGitHubApp(ctx, existing.UserID, def, updated); err != nil {
 		return nil, err
 	}
@@ -355,7 +362,8 @@ func (s *Service) UpdateTrigger(
 		s.grants.releaseIfUnused(ctx, existing.UserID, existing.DaemonID)
 	}
 	return connect.NewResponse(&reliantv1.UpdateTriggerResponse{
-		Trigger: s.render(ctx, updated),
+		Trigger:        s.render(ctx, updated),
+		FundingWarning: s.fundingWarning(ctx, updated),
 	}), nil
 }
 
@@ -450,7 +458,8 @@ func (s *Service) SetTriggerEnabled(
 		s.grants.releaseIfUnused(ctx, trigger.UserID, trigger.DaemonID)
 	}
 	return connect.NewResponse(&reliantv1.SetTriggerEnabledResponse{
-		Trigger: s.render(ctx, trigger),
+		Trigger:        s.render(ctx, trigger),
+		FundingWarning: s.fundingWarning(ctx, trigger),
 	}), nil
 }
 

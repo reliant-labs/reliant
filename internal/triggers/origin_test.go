@@ -294,3 +294,46 @@ func launchEventWithLineage(l lineage.Lineage) *core.TriggerEvent {
 		Payload: map[string]any{lineage.PayloadKey: l.ToPayload()},
 	}
 }
+
+// A workflow's own issue.labels.add on a pull request echoes as
+// pull_request.labeled, whose object is the pull request, while the write's is
+// the issue. They must still match, or every label echo reads as the bare app
+// and an origin_filter on same_workflow never drops it (control-plane
+// pr-review's queued trigger launched 370 runs in 24h on its own labels).
+func TestALabelWriteOnAPullRequestMatchesItsPullRequestEcho(t *testing.T) {
+	w := &core.IntegrationWrite{
+		ID: "w1", UserID: "user-1", ChatID: "chat-9", WorkflowName: "pr-review", TriggerName: "queued",
+		Integration: "github", Action: "issue.labels.add", Actor: core.IntegrationActorApp,
+		Scope: "github:acme/app", Target: "github:acme/app#7",
+		Correlation: provenance.Correlation{
+			ObjectKind: provenance.KindIssue, Label: "merge:queue",
+			Events: []string{"issues.labeled", "pull_request.labeled"},
+		}.Map(),
+		Status: core.IntegrationWriteDone, CreatedAt: originNow.Add(-time.Minute),
+	}
+	e := newEnricher(&fakeLedger{writes: []*core.IntegrationWrite{w}}, fakeRuns{}, "reliant-labs")
+	labeled := func(label string) InboundEvent {
+		return InboundEvent{
+			Kind:    core.TriggerEventKindIntegration,
+			Payload: map[string]any{"integration": "github", "event": "pull_request.labeled"},
+			Echo: &provenance.Echo{
+				EventType: "pull_request.labeled", Scope: "github:acme/app", Target: "github:acme/app#7",
+				Correlation: provenance.Correlation{ObjectKind: provenance.KindPullRequest, Label: label},
+				ObjectID:    "7", SenderType: "Bot", SenderLogin: "reliant-labs[bot]",
+			},
+		}
+	}
+
+	o := enrich(t, e, ownTrigger("pr-review"), labeled("merge:queue"))
+	require.NotNil(t, o)
+	assert.Equal(t, core.OriginIntent, o.Confidence)
+	assert.Equal(t, "pr-review", o.Workflow)
+	assert.Equal(t, "chat-9", o.RunID)
+	assert.True(t, o.SameWorkflow)
+
+	// Another label on the same pull request is not this write's echo.
+	assert.NotEqual(t, core.OriginIntent, enrich(t, e, ownTrigger("pr-review"), labeled("review:passed")).Confidence)
+
+	// The kinds are one-way: a pull request write does not explain an issue event.
+	assert.False(t, sameObjectKind(provenance.KindPullRequest, provenance.KindIssue))
+}

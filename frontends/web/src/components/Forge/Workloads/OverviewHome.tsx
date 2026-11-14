@@ -63,7 +63,10 @@ import { RANGE_LABELS, RANGE_PRESETS, resolveWindow, type RangePreset } from "@/
 import { cn } from "@/lib/utils";
 
 import { DeployStatusUnread, type DeployStatusUnreadState } from "../Console/DeployStatusUnread";
+import { SummaryLine } from "../Observability/Leads/leadParts";
+import { overviewSummary } from "../Observability/Leads/leadStory";
 import { ENV_ALL } from "../Console/envScope";
+import { useConsoleNavExtras } from "../Console/consoleNavExtras";
 import { consolePath, withSearch } from "../Console/paths";
 import { AskReliantMenu, DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import type { AskSubject } from "../Observability/AskReliant/askReliantPrompt";
@@ -266,6 +269,10 @@ export function OverviewHome({
   const empty = !envsLoading && envs.length === 0;
   // An empty list from a failed read says nothing about what is deployed.
   const unread = empty && !!envsUnread;
+  const extras = useConsoleNavExtras();
+  const overviewSubtitle = extras.subtitle?.("overview");
+  // The led console's one sentence: what "Needs attention" holds, once it is known.
+  const ledSummary = extras.led && !empty && !unrecorded ? overviewSummary(loading || workloadsFailed ? null : attention, all ? null : env) : null;
   const rangeControl = (
     <VariableSelect
       id="overview-range"
@@ -277,9 +284,11 @@ export function OverviewHome({
   );
   // One compact row: the title, its counts inline, the window on the right.
   const header = (
+    <>
     <PageHeader
       density="compact"
       title="Overview"
+      subtitle={overviewSubtitle ?? undefined}
       meta={
         unread ? undefined : empty ? (
           <span data-testid="overview-counts">Not deployed</span>
@@ -298,6 +307,9 @@ export function OverviewHome({
       controls={empty ? undefined : rangeControl}
       className="mb-0"
     />
+    {ledSummary && <SummaryLine tone={ledSummary.tone}>{ledSummary.text}</SummaryLine>}
+    {extras.intro?.("overview")}
+    </>
   );
 
   if (empty) {
@@ -369,7 +381,7 @@ export function OverviewHome({
         {/* What changed, then who uses the app. */}
         <aside className="min-w-0 space-y-4" aria-label="Recent changes" data-testid="overview-rail">
           <RecentReleases project={project} envs={envs} hrefs={hrefs} />
-          {!unrecorded && <UsersCard scope={kpiScope} project={project} range={range} usersHref={hrefs.users} dashboardHref={hrefs.dashboard} />}
+          {!unrecorded && !extras.led && <UsersCard scope={kpiScope} project={project} range={range} usersHref={hrefs.users} dashboardHref={hrefs.dashboard} />}
         </aside>
       </div>
 

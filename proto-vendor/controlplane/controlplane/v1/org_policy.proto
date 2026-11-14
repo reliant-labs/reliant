@@ -1,0 +1,269 @@
+syntax = "proto3";
+
+// OrgPolicy is an org's admin policy document (docs/design/org-policies.md
+// §3.2): the limits an org's admins set on how its members and its runs spend
+// the org's money and reach its integrations and machines.
+//
+// It lives here, beside the other shared types, because two services carry it:
+// OrgPolicyService (the people who read and edit it) and
+// AccessTokenInternalService.ResolveOrgPolicy (reliant's worker, which
+// enforces the reliant-side sections). Neither imports the other.
+//
+// THE DOCUMENT IS VERSIONED AS A WHOLE. Each accepted edit is one new version
+// of the whole document, and that version is stamped on every decision an
+// enforcement point makes with it.
+//
+// EVERY SECTION IS OPTIONAL. An absent section is no rule: today's behaviour
+// for that concern exactly. An org with no document at all has no policy.
+// Every section that is present carries a mode, so an admin can trial a rule
+// (AUDIT: counted, refusing nothing) before it refuses anything (ENFORCE).
+//
+// Evolution: fields and sections are only ever added. A reader that does not
+// know a section ignores it, which is the pre-policy behaviour.
+package controlplane.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/controlplane/v1;controlplanev1";
+
+// OrgPolicyMode says whether a section refuses anything.
+enum OrgPolicyMode {
+  // Never valid in a stored document: a section names its mode. A reader that
+  // meets it treats the section as AUDIT, the mode that refuses nothing.
+  ORG_POLICY_MODE_UNSPECIFIED = 0;
+  // The rule refuses what it does not admit.
+  ORG_POLICY_MODE_ENFORCE = 1;
+  // The rule refuses nothing; what it would have refused is counted.
+  ORG_POLICY_MODE_AUDIT = 2;
+}
+
+// ProviderSource is the kind of account that serves a model call, by who
+// pays for it (docs/design/org-provider-accounts.md §9).
+enum ProviderSource {
+  PROVIDER_SOURCE_UNSPECIFIED = 0;
+  // The org's own provider accounts (API keys the org owns).
+  PROVIDER_SOURCE_ORG_ACCOUNTS = 1;
+  // Members' subscription seats attributed to, and paid by, this org.
+  PROVIDER_SOURCE_ORG_SEATS = 2;
+  // The Reliant gateway, billed to this org.
+  PROVIDER_SOURCE_RELIANT = 3;
+  // Members' own subscriptions and keys.
+  PROVIDER_SOURCE_PERSONAL = 4;
+  // Models on members' own hardware.
+  PROVIDER_SOURCE_LOCAL = 5;
+}
+
+// SpendPeriod is the UTC calendar window a spend cap counts over.
+enum SpendPeriod {
+  SPEND_PERIOD_UNSPECIFIED = 0;
+  SPEND_PERIOD_DAY = 1;
+  SPEND_PERIOD_MONTH = 2;
+}
+
+// SpendAppliesTo says whose calls the org cap counts and refuses.
+enum SpendAppliesTo {
+  // Read as MEMBERS, the default; a stored document always names one.
+  SPEND_APPLIES_TO_UNSPECIFIED = 0;
+  // People's calls only: a hosted app's environment key is never throttled.
+  SPEND_APPLIES_TO_MEMBERS = 1;
+  // People's calls and the org's hosted apps' environment keys.
+  SPEND_APPLIES_TO_MEMBERS_AND_APPS = 2;
+}
+
+// AutomationApprovalFloor is the least strict automation-approval setting a
+// member's or project's own `automation.approvals` may resolve to.
+enum AutomationApprovalFloor {
+  // No floor: the member's own setting stands.
+  AUTOMATION_APPROVAL_FLOOR_UNSPECIFIED = 0;
+  // Every agent change to a trigger needs the owner's approval.
+  AUTOMATION_APPROVAL_FLOOR_ALWAYS = 1;
+  // A change that widens what a trigger can do needs the owner's approval.
+  AUTOMATION_APPROVAL_FLOOR_ON_CAPABILITY_CHANGE = 2;
+}
+
+// ChatModeFloor limits the execution modes of the org's chats.
+enum ChatModeFloor {
+  // No floor: any mode.
+  CHAT_MODE_FLOOR_UNSPECIFIED = 0;
+  // Any mode (the same as no floor, said explicitly).
+  CHAT_MODE_FLOOR_ANY = 1;
+  // `auto` runs as `manual`: every tool call asks first. `plan` is unaffected.
+  CHAT_MODE_FLOOR_NO_AUTO = 2;
+}
+
+// OrgPolicy is the whole document. See the file header.
+message OrgPolicy {
+  ModelsPolicy models = 1;
+  ProvidersPolicy providers = 2;
+  // automations is providers' source list for runs nobody is present for:
+  // trigger runs and their agent lineage (org-provider-accounts.md §11.6).
+  AutomationsPolicy automations = 3;
+  SpendPolicy spend = 4;
+  IntegrationsPolicy integrations = 5;
+  McpPolicy mcp = 6;
+  ApprovalsPolicy approvals = 7;
+  MachinesPolicy machines = 8;
+}
+
+// ModelsPolicy limits which managed models the org's calls may use.
+message ModelsPolicy {
+  OrgPolicyMode mode = 1;
+  // allow_all admits every model the plan admits; allowed must then be empty.
+  bool allow_all = 2;
+  // allowed are api_model ids (the spelling the gateway sends upstream, never
+  // a catalog id), each one a model the gateway serves. Required, and
+  // non-empty, unless allow_all: an empty allow-list would admit nothing.
+  repeated string allowed = 3 [(buf.validate.field).repeated = {
+    max_items: 200
+    items: {
+      string: {
+        min_len: 1
+        max_len: 128
+      }
+    }
+  }];
+}
+
+// ProvidersPolicy limits which credentials may serve the org's chats.
+message ProvidersPolicy {
+  OrgPolicyMode mode = 1;
+  // allowed are reliant driver ids ("reliant", "anthropic", "openai",
+  // "openrouter", "claude", "codex", "local", ...). Empty admits every driver;
+  // allowed_sources may still narrow the kinds of account.
+  repeated string allowed = 2 [(buf.validate.field).repeated = {
+    max_items: 64
+    items: {
+      string: {
+        min_len: 1
+        max_len: 64
+      }
+    }
+  }];
+  // allowed_sources are the kinds of account, by who pays, that may serve:
+  // a Team seat and a personal Claude subscription are the same driver.
+  // Empty admits every source.
+  repeated ProviderSource allowed_sources = 3 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+}
+
+// AutomationsPolicy is ProvidersPolicy.allowed_sources for unattended runs.
+// Field numbers follow org-provider-accounts.md §11.6.
+message AutomationsPolicy {
+  // allowed_sources may name only sources providers.allowed_sources admits,
+  // when that is set. Empty adds no restriction beyond providers.
+  repeated ProviderSource allowed_sources = 1 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  OrgPolicyMode mode = 2;
+}
+
+// SpendCap is an amount of LLM spend per UTC calendar period.
+message SpendCap {
+  // usd_nanos is the cap in billionths of a US dollar.
+  int64 usd_nanos = 1 [(buf.validate.field).int64.gte = 0];
+  SpendPeriod period = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+// MemberSpendCap is one member's override of the default member cap.
+message MemberSpendCap {
+  oneof cap {
+    option (buf.validate.oneof).required = true;
+    // cap is this member's own cap.
+    SpendCap limit = 1;
+    // unlimited exempts this member from the member cap (the org cap still
+    // counts their spend). Only true is meaningful.
+    bool unlimited = 2;
+  }
+}
+
+// SpendPolicy caps the org's LLM spend through the Reliant gateway.
+message SpendPolicy {
+  OrgPolicyMode mode = 1;
+  // org_cap caps every member's spend (and, with MEMBERS_AND_APPS, the org's
+  // hosted apps') together. Unset: no org cap.
+  SpendCap org_cap = 2;
+  // member_default_cap caps each member's own spend unless they have an
+  // override. Unset: no member cap.
+  SpendCap member_default_cap = 3;
+  // member_overrides are keyed by the member's user id (OrgMember.user_id).
+  map<string, MemberSpendCap> member_overrides = 4 [(buf.validate.field).map = {
+    max_pairs: 1000
+    keys: {
+      string: {
+        min_len: 1
+        max_len: 128
+      }
+    }
+  }];
+  SpendAppliesTo applies_to = 5 [(buf.validate.field).enum.defined_only = true];
+}
+
+// IntegrationsPolicy limits which integrations the org's runs may use. It
+// governs USE in this org's runs, never connecting: a person's own connection
+// stays usable in their other orgs.
+message IntegrationsPolicy {
+  OrgPolicyMode mode = 1;
+  // allow_all admits every integration; allowed must then be empty.
+  bool allow_all = 2;
+  // allowed are integration ids as in the catalog ("github", "slack", ...).
+  // Empty (without allow_all) admits none.
+  repeated string allowed = 3 [(buf.validate.field).repeated = {
+    max_items: 200
+    items: {
+      string: {
+        min_len: 1
+        max_len: 64
+      }
+    }
+  }];
+}
+
+// McpPolicy limits which MCP servers' tools the org's agents may see and call.
+message McpPolicy {
+  OrgPolicyMode mode = 1;
+  // allow_all admits every server; allowed_servers must then be empty.
+  bool allow_all = 2;
+  // allowed_servers are server names as in mcp__<server>__<tool>. Empty
+  // (without allow_all) admits none.
+  repeated string allowed_servers = 3 [(buf.validate.field).repeated = {
+    max_items: 200
+    items: {
+      string: {
+        min_len: 1
+        max_len: 128
+      }
+    }
+  }];
+}
+
+// ApprovalsPolicy raises, never lowers, how often approvals are asked for.
+// Approvals stay the machine owner's to decide.
+message ApprovalsPolicy {
+  OrgPolicyMode mode = 1;
+  AutomationApprovalFloor automation_floor = 2 [(buf.validate.field).enum.defined_only = true];
+  ChatModeFloor chat_mode_floor = 3 [(buf.validate.field).enum.defined_only = true];
+}
+
+// MachinesPolicy governs commands the org's runs execute on machines.
+message MachinesPolicy {
+  OrgPolicyMode mode = 1;
+  // force_credentials_none runs every command of the org's runs with
+  // `credentials: none`, whatever the step or the model asked for.
+  bool force_credentials_none = 2;
+}

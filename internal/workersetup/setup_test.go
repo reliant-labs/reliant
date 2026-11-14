@@ -6,8 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/version"
 )
 
@@ -146,3 +148,25 @@ func TestWorkerOptionsCarryMembershipToActivities(t *testing.T) {
 		t.Fatal("with no membership configured the worker has no orgs: owner-only")
 	}
 }
+
+// Every activity's context carries the worker's org policy resolver beside
+// its membership, so a tool, a launch or a trigger fire reads the run's org
+// policy where it reads membership.
+func TestWorkerOptionsCarryTheOrgPolicyResolverToActivities(t *testing.T) {
+	r := orgpolicy.New(policySource{})
+	ctx := workerOptions(&Config{Membership: membershipOnlyAcme{}, Policies: r}, nil, 3).BackgroundActivityContext
+	if orgpolicy.ResolverFrom(ctx) != r {
+		t.Fatal("the activity context does not carry the worker's org policy resolver")
+	}
+	if !authz.CanWriteChat(ctx, "u", &core.Chat{UserID: "u", OrgID: ptr("acme")}) {
+		t.Fatal("membership is no longer on the activity context")
+	}
+}
+
+type policySource struct{}
+
+func (policySource) ResolveOrgPolicy(context.Context, string) (accesstokenclient.OrgPolicy, error) {
+	return accesstokenclient.OrgPolicy{}, nil
+}
+
+func ptr(s string) *string { return &s }

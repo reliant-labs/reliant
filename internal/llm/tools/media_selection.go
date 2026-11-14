@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // Media tools (generate_video, generate_image) let the LLM choose a model by
@@ -302,19 +303,64 @@ func mediaToolUnavailable(ctx context.Context, name string) (message string, mod
 		return "", modality
 	}
 	var unavailable *models.MediaUnavailableError
-	if err := check(ctx, userID, modality); errors.As(err, &unavailable) {
+	var funding *models.MediaPersonalFundingError
+	err := check(ctx, userID, modality)
+	if errors.As(err, &unavailable) {
 		return unavailable.Message, modality
+	}
+	if errors.As(err, &funding) {
+		return funding.Message, modality
+	}
+	if refusal, ok := orgpolicy.RefusalOf(err); ok {
+		return refusal.ToolResult(mediaGenerationLabel(modality)), modality
 	}
 	return "", modality
 }
 
 // mediaResolveFailure renders a resolver error. The shared unavailable error
-// is shown verbatim so the message is identical to load_tool's; anything else
-// keeps the tool's own prefix.
-func mediaResolveFailure(prefix string, err error) string {
+// is shown verbatim so the message is identical to load_tool's, and an org
+// policy's refusal says it is the policy's verdict; anything else keeps the
+// tool's own prefix.
+func mediaResolveFailure(prefix string, modality models.Modality, err error) string {
 	var unavailable *models.MediaUnavailableError
 	if errors.As(err, &unavailable) {
 		return unavailable.Message
 	}
+	var funding *models.MediaPersonalFundingError
+	if errors.As(err, &funding) {
+		return funding.Message
+	}
+	if msg, ok := mediaPolicyRefused(modality, err); ok {
+		return msg
+	}
 	return fmt.Sprintf("%s: %v", prefix, err)
+}
+
+// mediaVerdict reports whether a resolver error is a decision about who may
+// pay (an org policy's refusal, or spending the person's own accounts
+// without their say) rather than a tier the providers lack: no other tier
+// is offered for it.
+func mediaVerdict(err error) bool {
+	var funding *models.MediaPersonalFundingError
+	return orgpolicy.IsRefusal(err) || errors.As(err, &funding)
+}
+
+// mediaPolicyRefused is the tool result for a generation the org's policy
+// refused, at resolution or at the gateway (control-plane
+// docs/design/org-policies.md §5.1): a verdict, answered as a result the
+// conversation goes on from. The tool does not retry it, and nothing reads
+// it as a rejected credential.
+func mediaPolicyRefused(modality models.Modality, err error) (string, bool) {
+	refusal, ok := orgpolicy.RefusalOf(err)
+	if !ok {
+		return "", false
+	}
+	return refusal.ToolResult(mediaGenerationLabel(modality)), true
+}
+
+func mediaGenerationLabel(modality models.Modality) string {
+	if modality == models.ModalityVideo {
+		return "Video generation"
+	}
+	return "Image generation"
 }

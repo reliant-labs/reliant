@@ -109,6 +109,15 @@ type MigOrderPlan struct {
 	LaneFull
 }
 
+// WebDemoPlan is the forge demo bundle's build lane (all or nothing):
+// frontends/web's `vite build --mode demo` must succeed, which is where
+// vite-plugin-demo-bundle.ts fails on a Reliant-only module in the bundle.
+// Selected when a changed file is in the bundle's import graph
+// (WebGraph.Demo), is one of demoBuildInputs, or the web lane is FULL.
+type WebDemoPlan struct {
+	LaneFull
+}
+
 // Plan is the whole decision.
 type Plan struct {
 	Schema      int          `json:"schema"`
@@ -122,6 +131,7 @@ type Plan struct {
 	ForgeGen    ForgeGenPlan `json:"forge_generate"`
 	DocGen      DocGenPlan   `json:"docs_generate"`
 	MigOrder    MigOrderPlan `json:"migration_order"`
+	WebDemo     WebDemoPlan  `json:"web_demo"`
 	// Lockfiles are the npm projects whose manifest or lockfile changed: the
 	// runner checks each still installs from its lockfile (`npm ci`, or pnpm's
 	// --frozen-lockfile) before any test runs.
@@ -286,7 +296,59 @@ func ClassifyReach(changes []Change, g *Graph, reachMode string) *Plan {
 	}
 	c.pl.DocGen.LaneFull = laneFull(c.full[laneDocGen])
 	c.pl.MigOrder.LaneFull = laneFull(c.full[laneMigOrder])
+	c.selectWebDemo()
 	return c.pl
+}
+
+// selectWebDemo decides the forge demo bundle's build. A FULL web lane (its
+// dependencies or build config changed, or a path no rule claims) builds it
+// too, for the same reasons: a new dependency can carry a module the guard
+// refuses. Otherwise the reasons attributeToDemo collected decide.
+func (c *classifier) selectWebDemo() {
+	if c.pl.Web.Full {
+		c.full[laneWebDemo] = append(c.full[laneWebDemo], c.pl.Web.Reasons...)
+	}
+	c.pl.WebDemo.LaneFull = laneFull(c.full[laneWebDemo])
+}
+
+// attributeToDemo records why a changed file selects the demo build: it is in
+// the bundle's import graph (directly, or as the TypeScript a .proto
+// regenerates), or the build reads it. Without the bundle's entry the graph
+// is unknown, so any web change selects it (fail-safe).
+func (c *classifier) attributeToDemo(ch Change) {
+	if !strings.HasPrefix(ch.Path, "frontends/web/") && !strings.HasSuffix(ch.Path, ".proto") {
+		return
+	}
+	for _, pat := range demoBuildInputs {
+		if matchGlob(pat, ch.Path) {
+			c.full[laneWebDemo] = append(c.full[laneWebDemo], ch.Path+": the forge demo build reads it")
+			return
+		}
+	}
+	w := c.g.Web
+	if w == nil {
+		return
+	}
+	if w.Demo == nil {
+		if strings.HasPrefix(ch.Path, "frontends/web/") {
+			c.full[laneWebDemo] = append(c.full[laneWebDemo], ch.Path+": "+demoEntry+" is missing, so the demo bundle's graph is unknown (fail-safe)")
+		}
+		return
+	}
+	f := ch.Path
+	if strings.HasSuffix(f, ".proto") {
+		if !strings.HasPrefix(f, "proto/") && !strings.HasPrefix(f, "proto-vendor/controlplane/") {
+			return
+		}
+		f = "frontends/web/" + webGenPath(f)
+	}
+	if w.Demo[f] {
+		why := "in the forge demo bundle's import graph"
+		if f != ch.Path {
+			why = "regenerates " + path.Base(f) + ", " + why
+		}
+		c.full[laneWebDemo] = append(c.full[laneWebDemo], ch.Path+": "+why)
+	}
 }
 
 func (c *classifier) attribute(ch Change) {
@@ -317,6 +379,7 @@ func (c *classifier) attribute(ch Change) {
 		}
 	}
 	c.attributeToReaders(ch)
+	c.attributeToDemo(ch)
 	if why, hook, ok := c.forgeGenInput(ch); ok {
 		rep.Rules = append(rep.Rules, "forge-input")
 		c.full[laneForgeGen] = append(c.full[laneForgeGen], ch.Path+": "+why)

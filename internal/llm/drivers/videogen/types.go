@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // Image is an input image, already loaded into memory.
@@ -73,6 +74,10 @@ const (
 	KindExpired ErrorKind = "expired"
 	// KindTimeout: the poll deadline passed; the job may still be running.
 	KindTimeout ErrorKind = "timeout"
+	// KindPolicyRefused: the org's policy refused the call at the gateway
+	// (Error.Refusal says why). A verdict, not a fault: never retried. When
+	// it refused a poll, the job may still be running.
+	KindPolicyRefused ErrorKind = "policy_refused"
 )
 
 // Error is a classified provider failure.
@@ -82,9 +87,19 @@ type Error struct {
 	// Job is set when the failure happened after the provider accepted the
 	// job, so the caller can keep it for a later resume.
 	Job Job
+	// Refusal is the org policy's refusal of a KindPolicyRefused error.
+	Refusal *orgpolicy.Refusal
 }
 
 func (e *Error) Error() string { return e.Message }
+
+// Unwrap is the policy's refusal, so orgpolicy.RefusalOf finds it.
+func (e *Error) Unwrap() error {
+	if e.Refusal == nil {
+		return nil
+	}
+	return e.Refusal
+}
 
 // WaitOptions bounds the poll loop.
 type WaitOptions struct {

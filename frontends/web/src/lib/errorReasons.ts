@@ -102,6 +102,21 @@ export const ERROR_REASONS = [
   "observability_not_configured",
   /** The caller is not a member of the organization asked about. */
   "not_org_member",
+  // ── reliant: moving a project to another org (handlers/project rpc_move_project_to_org.go) ──
+  /** Running work in the project refuses the move; the preview names it. FailedPrecondition. */
+  "project_busy",
+  /** The project left the organization the dialog saw it in. FailedPrecondition. */
+  "org_changed",
+  // ── reliant: an org's AI usage (handlers/org_usage; org-provider-accounts §5) ──
+  /** A member of the org without the org grant the read needs (billing:read). PermissionDenied. */
+  "missing_scope",
+  // ── reliant: an org's AI accounts (handlers/org_provider_account; org-provider-accounts §3.5) ──
+  /** Only an owner or admin of the org may do this (role read fresh). PermissionDenied. */
+  "org_admin_required",
+  /** Adding an org account is not enabled on this deployment (orgs.provider_accounts_enabled). FailedPrecondition. */
+  "org_provider_accounts_disabled",
+  /** Binding a team workspace is not enabled on this deployment (orgs.provider_workspace_seats_enabled). FailedPrecondition. */
+  "org_provider_seats_disabled",
   /** The org's hourly observability query quota is spent; the QueryQuotaExhausted detail says when it resets. */
   "obs_query_quota",
   /** A background poll refused early, to keep the last of the quota for a person's own query. */
@@ -175,6 +190,11 @@ export const ERROR_REASONS = [
   "invite_rate_limited",
   /** CreateOrganization: the slug is taken. */
   "slug_taken",
+  // ── control-plane: org policies (OrgPolicyService; docs/design/org-policies.md §3.2) ──
+  /** UpdateOrgPolicy (InvalidArgument): validation refused the document; PreviewOrgPolicy lists why. */
+  "policy_invalid",
+  /** UpdateOrgPolicy (FailedPrecondition): someone saved a newer version since the editor read theirs. */
+  "policy_version_conflict",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

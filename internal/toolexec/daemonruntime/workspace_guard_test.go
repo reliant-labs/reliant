@@ -246,6 +246,7 @@ func TestWorkspaceGuard_DesktopHomeFault_KeepsRunning(t *testing.T) {
 	assert.Contains(t, refused.Content, "restart the Reliant daemon")
 	assert.NotContains(t, refused.Content, "machine is restarting")
 
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a desktop daemon correctly staying up leaves no event to wait for
 	time.Sleep(20 * time.Millisecond)
 	stopped, codes := spy.snapshot()
 	assert.False(t, stopped, "a desktop daemon never stops itself")

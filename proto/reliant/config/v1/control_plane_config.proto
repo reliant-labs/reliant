@@ -35,4 +35,21 @@ message ControlPlaneConfig {
     optional: true
     description: "Secret for internal-service calls to the control plane (required when url is set)"
   }];
+
+  // Mints the managed Reliant key once per (person, org): a person's chats in
+  // an org they belong to spend a key minted in that org (identity
+  // managed:<org_id>, attributed to it), so the gateway bills that org's
+  // wallet rather than their default org's (control-plane
+  // docs/design/org-provider-accounts.md §3.2, P10; org-policies §2, G0). The
+  // key is minted the first time it is needed, and in a chat of an org that
+  // has one the org-less managed key is not used. Off by default. A release
+  // before org-provider-accounts P5 ignores a managed key's org and would
+  // balance one person's calls across every org's key, so turn it on only once
+  // P5 is in every server AND in the release a rollback would return to, and a
+  // query in prod shows no live person holds more than one managed row. Off,
+  // nothing new is minted; keys already minted keep serving their orgs.
+  bool managed_keys_per_org = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG"
+    description: "Mint the managed Reliant key per (person, org), so each org's chats bill that org"
+  }];
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -21,6 +22,10 @@ import (
 type Store interface {
 	ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error)
 	ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error)
+	// An org's own accounts, for the account a chat of that org is using (GetChatProviderAccount).
+	ListOwnedProviderAccounts(ctx context.Context, owner core.AccountOwner) ([]core.ProviderAccount, error)
+	ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error)
+	ListMemberAccountGrants(ctx context.Context, orgID, userID string) (map[string]time.Time, error)
 	UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error)
 	PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
 	ReorderProviderAccounts(ctx context.Context, userID, provider string, orderedIDs []string) error
@@ -30,6 +35,12 @@ type Store interface {
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
 	LatestServingAccount(ctx context.Context, threadID string) (string, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
+	// A chat's question before it moves from its org's accounts to the
+	// person's own, and the person's per-org preference (org-provider-accounts §10).
+	GetChatPersonalFunding(ctx context.Context, chatID string) (*core.PersonalFunding, error)
+	AnswerPersonalFunding(ctx context.Context, chatID, userID, state string, now time.Time) (*core.PersonalFunding, error)
+	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
+	SetString(ctx context.Context, userID string, projectID *string, key, value string) error
 }
 
 // Deps holds dependencies for the provider_account service. The rpc methods on *Service are

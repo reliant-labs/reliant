@@ -36,6 +36,12 @@ describe("chat marker kind literals (cross-process drift guard)", () => {
     );
   });
 
+  it("RELIANT_ORG_POLICY_REFUSED string matches Go mirror", () => {
+    expect(CHAT_MARKER_KINDS.OrgPolicyRefused).toBe(
+      "RELIANT_ORG_POLICY_REFUSED",
+    );
+  });
+
   it("RELIANT_PROVIDER_USAGE_LIMIT string matches Go mirror", () => {
     expect(CHAT_MARKER_KINDS.ProviderUsageLimit).toBe(
       "RELIANT_PROVIDER_USAGE_LIMIT",

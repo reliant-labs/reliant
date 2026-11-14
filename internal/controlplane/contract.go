@@ -27,6 +27,7 @@ package controlplane
 import (
 	"context"
 	"net/http"
+	"time"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 )
@@ -46,6 +47,12 @@ type Service interface {
 	// RevokeDaemonResumeTokens revokes every live `daemon:resume` token the
 	// caller holds that is bound to daemonID.
 	RevokeDaemonResumeTokens(ctx context.Context, jwt, daemonID string) error
+
+	// ListMyOrganizations is every org the caller (jwt, a person's session)
+	// is a live member of, with their role in each, read live from the
+	// control plane (OrganizationService.ListMyOrganizations). A machine
+	// credential is refused there: it has no orgs to list.
+	ListMyOrganizations(ctx context.Context, jwt string) ([]MyOrganization, error)
 
 	// PreviewAccountDeletionWallet asks the control plane what deleting the
 	// caller's account would refund and forfeit. Changes nothing.
@@ -145,6 +152,58 @@ type Service interface {
 	// receiver the control plane holds, across every organization, for the
 	// reconcile sweep.
 	ListAutopilotReceivers(ctx context.Context) ([]string, error)
+
+	// PrepareProjectOrgMove, AbortProjectOrgMove and RecordProjectOrgMove
+	// are control-plane's steps of moving a project to another org
+	// (ProjectOrgMoveInternalService; docs/design/org-project-move.md §3.1 in
+	// control-plane), signed with this process's internal-service identity
+	// (Deps.Sign). Prepare re-checks actorUserID's authority (admin or owner
+	// of the source, member of the target) and revokes the source org's
+	// secret access for the project, answering how many entries it revoked;
+	// Abort restores exactly those; Record writes the move to both orgs'
+	// activity streams. Each is idempotent by the move id. Errors:
+	// ErrProjectOrgMoveUnsupported when the control plane has no such service
+	// or this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
+	// control-plane's code and reason.
+	PrepareProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep, actorUserID string) (revoked int, err error)
+	AbortProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep) error
+	RecordProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep, projectName string, counts map[string]int64) error
+	// PreviewProjectOrgMove reads what control-plane holds that a move would
+	// touch, for the move preview: the source org's secret access, the
+	// hosted project the project deploys as, whether the target can pay and
+	// which machines are in it. It checks the actor as Prepare does and
+	// writes nothing. Errors as the steps above; a control plane that
+	// predates it is ErrProjectOrgMoveUnsupported.
+	PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
+
+	// NotifyOrgKeyRejected emails orgID's owners and admins that a provider
+	// rejected one of the org's own API keys (OrgNotifyInternalService
+	// .NotifyOrgAdmins; control-plane docs/design/org-provider-accounts.md
+	// §4.7), signed with this process's internal-service identity. The
+	// control plane renders a fixed template, resolves the recipients and
+	// sends once per incident; deduplicated reports a repeat. Errors:
+	// ErrOrgNotifyUnsupported when the control plane has no such service or
+	// this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
+	// control-plane's code and reason.
+	NotifyOrgKeyRejected(ctx context.Context, n OrgKeyRejectedNotice) (deduplicated bool, err error)
+
+	// NotifyOrgAutomationNoOrgAccount emails orgID's owners and admins that an
+	// automation which may run only on the org's own AI accounts was paused
+	// because none of them could run its model (NotifyOrgAdmins'
+	// org_automation_no_org_account; org-provider-accounts §11.4). Errors as
+	// NotifyOrgKeyRejected; a control plane that predates the notice kind
+	// answers invalid_argument, a permanent refusal.
+	NotifyOrgAutomationNoOrgAccount(ctx context.Context, n OrgAutomationNoOrgAccountNotice) (deduplicated bool, err error)
+
+	// GetModelListPrices reads the list price of each model from
+	// control-plane's LLMPriceInternalService (LiteLLM's model catalog;
+	// docs/design/org-provider-accounts.md §5, P9), one per ref in order, and
+	// when the catalog was read. Signed with this process's internal-service
+	// identity. A model with no list price has Priced false. Errors:
+	// ErrListPricesUnsupported when the control plane has no such service or
+	// this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
+	// control-plane's code (unavailable: no catalog could be read).
+	GetModelListPrices(ctx context.Context, refs []ModelRef) ([]ModelListPrice, time.Time, error)
 }
 
 // Deps configures the adapter.
@@ -161,4 +220,10 @@ type Deps struct {
 	Sign func() (string, error)
 	// HTTPClient carries every call. Nil uses a client with a 30s timeout.
 	HTTPClient *http.Client
+}
+
+// MyOrganization is one org the caller belongs to and their role in it ("owner", "admin" or
+// "member").
+type MyOrganization struct {
+	ID, Role string
 }

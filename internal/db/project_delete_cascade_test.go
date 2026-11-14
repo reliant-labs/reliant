@@ -19,7 +19,7 @@ func TestDeleteProjectLeavesNoOrphanedChatsOrWorktrees(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	now := time.Now()
+	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC) // fixture data, not a clock
 
 	for _, id := range []string{"doomed", "survivor"} {
 		require.NoError(t, repo.CreateProject(ctx, &Project{
@@ -61,7 +61,7 @@ func TestCreateChatRejectsMissingProject(t *testing.T) {
 
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-	now := time.Now()
+	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC) // fixture data, not a clock
 	err := repo.CreateChat(context.Background(), &Chat{
 		ID: "ghost", Title: "ghost", ProjectID: "no-such-project", UserID: "owner",
 		State: 2, CreatedAt: now, UpdatedAt: now, LastActive: now,
@@ -81,7 +81,7 @@ func TestDeleteProjectRemovesChatContentInBatches(t *testing.T) {
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC) // fixture data, not a clock
 
 	exec := func(query string, args ...any) {
 		t.Helper()

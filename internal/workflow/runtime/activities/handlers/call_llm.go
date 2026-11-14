@@ -358,7 +358,7 @@ func explicitSamplingOverrides(args *reliantv1.CallLLMArgs) (*float64, string) {
 }
 
 // executeCore contains PURE BUSINESS LOGIC only
-func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, args *reliantv1.CallLLMArgs) (*reliantv1.CallLLMOutput, error) {
+func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, args *reliantv1.CallLLMArgs) (out *reliantv1.CallLLMOutput, retErr error) {
 	logger := activity.GetLogger(ctx)
 
 	// Thread path must be provided - no more "0" default
@@ -382,6 +382,17 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chat: %w", err)
 	}
+
+	// The agent turn's span (invoke_agent): this turn's provider calls are
+	// its children, and its tool calls are opened under it by execute_tools,
+	// which reads where it is from the output (trace_parent).
+	ctx, turn := startAgentTurn(ctx, rtx, chat)
+	defer func() {
+		if out != nil {
+			out.TraceParent = turn.TraceParent()
+		}
+		turn.End(retErr)
+	}()
 
 	// A running workflow may predate launch-time pinning. Its inputs are a
 	// snapshot, but the chat's durable pin must still keep this turn on disk.
@@ -621,6 +632,18 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 // user sees is unchanged.
 const resumeContinueText = "Your previous turn was cut off before it finished, and the run has now resumed. " +
 	"Continue where you left off."
+
+// historyStartsTurn reports whether a call over history begins a turn: the
+// newest message past any trailing system framing is a person's or an agent's
+// (new input), not a tool result inside a turn. A turn start is the only point
+// a thread moves up to a better account tier (org-provider-accounts §4.5).
+func historyStartsTurn(history []message.Message) bool {
+	tail := len(history) - 1
+	for tail >= 0 && history[tail].Role == message.System {
+		tail--
+	}
+	return tail >= 0 && (history[tail].Role == message.User || history[tail].Role == message.Agent)
+}
 
 // endsWithCutOffAssistantTurn reports whether history, past any trailing
 // system framing, ends with an assistant message that requested no tools:
@@ -1311,26 +1334,32 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// Resolve model and driver through the shared request-construction path.
 	// When a custom driver resolver is injected (e.g., in tests), it skips
 	// registry resolution and probes the resolver for its model.
+	who := chatAttendance(ctx, a.repo, chat)
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, llmCallSpec{
-		UserID:            chat.UserID,
-		SessionID:         chat.ID,
-		Selector:          modelSelector,
-		RunProviders:      rtx.ProviderPreference,
-		ChatProvider:      rtx.ChatProvider,
-		ClearProviderPins: rtx.ClearProviderPins,
-		Descendant:        rtx.Descendant,
-		PresetModelTags:   rtx.PresetModelTags,
-		ChatModel:         chatModelSelector(rtx.ChatModel),
-		ThreadModelChosen: rtx.ThreadModelChosen,
-		ThreadID:          thread,
-		Routing:           a.routing,
-		Failover:          rtx.Failover,
-		Temperature:       explicitTemperature,
-		ThinkingLevel:     explicitThinkingLevel,
-		MaxTokens:         explicitMaxTokens,
-		WorkingDir:        workingDir,
-		TagPrefsReader:    a.repo,
-		Local:             a.localModelSpec(worktreeDaemonID, chat.NoMachine),
+		UserID:              chat.UserID,
+		OrgID:               chatOrgID(chat),
+		Attended:            who.attended,
+		UnattendedAnySource: who.anySource,
+		SessionID:           chat.ID,
+		ChatID:              chat.ID,
+		TurnStart:           historyStartsTurn(history),
+		Selector:            modelSelector,
+		RunProviders:        rtx.ProviderPreference,
+		ChatProvider:        rtx.ChatProvider,
+		ClearProviderPins:   rtx.ClearProviderPins,
+		Descendant:          rtx.Descendant,
+		PresetModelTags:     rtx.PresetModelTags,
+		ChatModel:           chatModelSelector(rtx.ChatModel),
+		ThreadModelChosen:   rtx.ThreadModelChosen,
+		ThreadID:            thread,
+		Routing:             a.routing,
+		Failover:            rtx.Failover,
+		Temperature:         explicitTemperature,
+		ThinkingLevel:       explicitThinkingLevel,
+		MaxTokens:           explicitMaxTokens,
+		WorkingDir:          workingDir,
+		TagPrefsReader:      a.repo,
+		Local:               a.localModelSpec(worktreeDaemonID, chat.NoMachine),
 	})
 	if err != nil {
 		return nil, err
@@ -2099,7 +2128,7 @@ streamLoop:
 	if streamInterrupted {
 		usageErr = nil
 	}
-	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
+	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, resolved, llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
 	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
 	a.trackLLMCallCompleted(ctx, chat, driver, rtx.WorkflowID, rtx.StepID, llmLatencyMs, streamState.usage, usageErr)
 
@@ -2142,8 +2171,9 @@ streamLoop:
 			return nil, stalled
 		}
 		failedCall := usageLimitContext{
-			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
+			Scope: llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope(), ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: rtx.Failover,
+			ChatID: chat.ID, Plan: resolved.plan,
 		}
 		return nil, a.routing.providerFailure(ctx, streamErr, failedCall)
 	}
@@ -2559,7 +2589,11 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 	if projectScopedToolsFactory != nil {
 		mcpToolSet = projectScopedToolsFactory.GetMCPToolSet(toolRuntime)
 	}
-	mcpTools := mcpToolSet.Tools
+	// An org's agents are offered only the MCP servers its policy allows
+	// (org-policies §4.5), before access is resolved: a disallowed server's
+	// tools are never in the model's context, never load_tool-able and never
+	// in a tag:mcp expansion.
+	mcpTools := mcpToolsAllowedByOrg(ctx, chatOrgID(chat), mcpToolSet.Tools)
 	mcpToolNames := toolNames(mcpTools)
 
 	// The node's declaration: what it is handed, and what load_tool may

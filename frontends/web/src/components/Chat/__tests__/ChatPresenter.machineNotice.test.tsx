@@ -70,6 +70,7 @@ vi.mock("../ChatHeader", () => ({ ChatHeader: () => null }));
 vi.mock("../ResumeDaemonPill", () => ({ ResumeDaemonPill: () => null }));
 vi.mock("../OomKillBanner", () => ({ OomKillBanner: () => null }));
 vi.mock("../DiskPressureBanner", () => ({ DiskPressureBanner: () => null }));
+vi.mock("../MachineHealthBanner", () => ({ MachineHealthBanner: () => null }));
 vi.mock("../BackgroundWorkPill", () => ({ BackgroundWorkPill: () => null }));
 
 // ChatPresenter reads the chat's pending questions to tell whether the thread

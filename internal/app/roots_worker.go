@@ -57,12 +57,15 @@ import (
 type Worker struct {
 	TemporalWorker *workersetup.Worker
 	Relay          *workflowevent.Relay
-	UsagePoller    *accountlimits.Poller
-	LedgerPrune    *WriteLedgerPrune
-	Retention      *LedgerRetention
-	Recorder       *AccountRecorder
-	Streaming      *StreamingHub
-	Temporal       *TemporalClient
+	// PolicyWatcher wakes the chats an org policy paused once the org's
+	// policy changes (orgpolicy.Watcher); nil with no policies.
+	PolicyWatcher *OrgPolicyWatcher
+	UsagePoller   *accountlimits.Poller
+	LedgerPrune   *WriteLedgerPrune
+	Retention     *LedgerRetention
+	Recorder      *AccountRecorder
+	Streaming     *StreamingHub
+	Temporal      *TemporalClient
 	// Feed publishes the repository's user and chat updates; it has no
 	// lifecycle, and orders the hubs after the Temporal client. NATS starts
 	// before the client, which publishes stop nudges on it (stopnudge).

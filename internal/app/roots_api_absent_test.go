@@ -11,6 +11,7 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -37,6 +38,10 @@ func TestAPIAbsentLoopsBuildNothing(t *testing.T) {
 	alerting, err := NewTriggerAlerting(TriggerAlertingDeps{Integrations: &IntegrationSettings{}})
 	require.NoError(t, err)
 	require.Nil(t, alerting, "no control plane, plain webhooks")
+
+	creds, err := NewOrgCredentialSweep(OrgCredentialSweepDeps{Authority: tokenauthority.NewLocalStore(nil)})
+	require.NoError(t, err)
+	require.Nil(t, creds, "no control plane, no orgs to sweep")
 }
 
 // What a built api graph supervises: without a control plane and a webhook
@@ -79,6 +84,7 @@ func TestAPIOmitsAbsentLoops(t *testing.T) {
 			require.NoError(t, graphkit.Catch(func() {
 				g.ReliantKeySweep()
 				g.GitHubAccessLoop()
+				g.OrgCredentialSweep()
 			}))
 			t.Cleanup(func() { _ = g.Database().Close() })
 
@@ -90,9 +96,11 @@ func TestAPIOmitsAbsentLoops(t *testing.T) {
 			if tc.want {
 				require.Contains(t, supervised, "reliant_key_sweep")
 				require.Contains(t, supervised, "github_access_loop")
+				require.Contains(t, supervised, "org_credential_sweep")
 			} else {
 				require.NotContains(t, supervised, "reliant_key_sweep")
 				require.NotContains(t, supervised, "github_access_loop")
+				require.NotContains(t, supervised, "org_credential_sweep")
 			}
 		})
 	}

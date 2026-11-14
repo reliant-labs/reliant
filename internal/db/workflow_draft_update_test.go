@@ -167,3 +167,26 @@ func TestWorkflowDraftWrites_RenameCollisionIsDomainError(t *testing.T) {
 	_, err := repo.UpsertWorkflowDraft(ctx, &WorkflowDraft{ID: uuid.NewString(), UserID: userID, Name: "n", Slug: a.Slug, Definition: "x", Status: WorkflowDraftStatusDraft})
 	require.NoError(t, err) // upsert resolves the conflict by updating, never erroring
 }
+
+// Two edits computed from one read must not both report success while one is
+// lost: the write at a version the draft has moved past is refused and
+// changes nothing (agent bug report: parallel edit_workflow calls).
+func TestUpdateWorkflowDraftDefinitionAtVersion_RefusesAStaleVersion(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	draft := newDraftForTest("user-draft-cas-" + uuid.NewString()[:8])
+	require.NoError(t, repo.CreateWorkflowDraft(ctx, draft))
+	read, err := repo.GetWorkflowDraft(ctx, draft.ID)
+	require.NoError(t, err)
+
+	require.NoError(t, repo.UpdateWorkflowDraftDefinitionAtVersion(ctx, draft.ID, read.Version, draft.Name, draft.Slug, "name: a\n", WorkflowDraftStatusDraft))
+	err = repo.UpdateWorkflowDraftDefinitionAtVersion(ctx, draft.ID, read.Version, draft.Name, draft.Slug, "name: b\n", WorkflowDraftStatusDraft)
+	require.ErrorIs(t, err, ErrWorkflowDraftVersionConflict)
+
+	got, err := repo.GetWorkflowDraft(ctx, draft.ID)
+	require.NoError(t, err)
+	require.Equal(t, "name: a\n", got.Definition)
+	require.Equal(t, read.Version+1, got.Version)
+}

@@ -102,23 +102,51 @@ func (c OAuthConfig) Enabled() bool {
 	return strings.TrimSpace(c.PublicURL) != "" && len(c.AuthorizationServers) > 0
 }
 
+// protectedResource is one MCP endpoint this server protects: where it is
+// mounted, what a client shows it as, and the realm its 401s name. The
+// workspace connector is the origin's default resource; the forge connector
+// (forge_http.go) is a second one at its own path.
+type protectedResource struct {
+	mountPath string
+	name      string
+	realm     string
+	// pathScopedMetadata serves this resource's RFC 9728 document only at
+	// /.well-known/oauth-protected-resource<mountPath>: the root document
+	// belongs to the origin's default resource.
+	pathScopedMetadata bool
+}
+
+// workspaceResource is the Reliant Workspace connector at MountPath.
+var workspaceResource = protectedResource{mountPath: MountPath, name: "Reliant Workspace", realm: "reliant-workspace"}
+
+func (c OAuthConfig) base() string { return strings.TrimSuffix(strings.TrimSpace(c.PublicURL), "/") }
+
 // resourceURI is the canonical identifier of this MCP endpoint.
 //
 // It must match what a client sends as the RFC 8707 `resource` parameter, so
 // it is built from one place: base URL plus the mount path, no trailing slash.
-func (c OAuthConfig) resourceURI() string {
-	return strings.TrimSuffix(strings.TrimSpace(c.PublicURL), "/") + MountPath
-}
+func (c OAuthConfig) resourceURI() string { return c.resourceURIFor(workspaceResource) }
+
+func (c OAuthConfig) resourceURIFor(r protectedResource) string { return c.base() + r.mountPath }
 
 // metadataURL is where the discovery document lives.
-func (c OAuthConfig) metadataURL() string {
-	return strings.TrimSuffix(strings.TrimSpace(c.PublicURL), "/") + WellKnownProtectedResourcePath
+func (c OAuthConfig) metadataURL() string { return c.metadataURLFor(workspaceResource) }
+
+func (c OAuthConfig) metadataURLFor(r protectedResource) string {
+	if r.pathScopedMetadata {
+		return c.base() + WellKnownProtectedResourcePath + r.mountPath
+	}
+	return c.base() + WellKnownProtectedResourcePath
 }
 
 // NewProtectedResourceMetadataHandler serves the RFC 9728 document.
 func NewProtectedResourceMetadataHandler(cfg OAuthConfig) http.Handler {
+	return newProtectedResourceMetadataHandler(cfg, workspaceResource)
+}
+
+func newProtectedResourceMetadataHandler(cfg OAuthConfig, res protectedResource) http.Handler {
 	doc := protectedResourceMetadata{
-		Resource:             cfg.resourceURI(),
+		Resource:             cfg.resourceURIFor(res),
 		AuthorizationServers: cfg.AuthorizationServers,
 		// Scopes come from the AUTHORIZATION SERVER's vocabulary, not ours.
 		//
@@ -137,7 +165,7 @@ func NewProtectedResourceMetadataHandler(cfg OAuthConfig) http.Handler {
 		// WHO is calling; the grant establishes what they may touch.
 		ScopesSupported:        cfg.scopes(),
 		BearerMethodsSupported: []string{"header"},
-		ResourceName:           "Reliant Workspace",
+		ResourceName:           res.name,
 		ResourceDocumentation:  cfg.DocumentationURL,
 	}
 
@@ -183,11 +211,13 @@ func NewProtectedResourceMetadataHandler(cfg OAuthConfig) http.Handler {
 // The resource_metadata pointer is what turns a rejection into a usable
 // discovery step: a client that receives it knows where to look, instead of
 // probing well-known paths and hoping.
-func (c OAuthConfig) challengeHeader() string {
+func (c OAuthConfig) challengeHeader() string { return c.challengeHeaderFor(workspaceResource) }
+
+func (c OAuthConfig) challengeHeaderFor(r protectedResource) string {
 	if !c.Enabled() {
-		return `Bearer realm="reliant-workspace"`
+		return `Bearer realm="` + r.realm + `"`
 	}
-	return `Bearer realm="reliant-workspace", resource_metadata="` + c.metadataURL() +
+	return `Bearer realm="` + r.realm + `", resource_metadata="` + c.metadataURLFor(r) +
 		`", scope="` + strings.Join(c.scopes(), " ") + `"`
 }
 

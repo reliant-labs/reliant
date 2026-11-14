@@ -2,7 +2,10 @@
 package anthropic
 
 import (
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
+	"unicode/utf16"
 )
 
 // Byte-exact Claude Code system-prompt blocks, extracted verbatim from real
@@ -13,7 +16,9 @@ import (
 //
 // Three CLI releases are represented: 2.1.204 (most models), 2.1.261 (fable-5.1)
 // and 2.1.280 (opus-5.5). A model must never mix blocks across releases — see
-// claudeCodeProfile below.
+// claudeCodeProfile below. The one exception is fable-5.2, which sends 2.1.280's
+// blocks under 2.1.321's metadata because the API refuses it below 2.1.290 and
+// no 2.1.290+ prompt capture exists (profileFable52).
 
 //go:embed ccprompts/identity.txt
 var ccIdentityPrompt string // identity block, identical across all models and releases
@@ -79,8 +84,9 @@ type claudeCodeProfile struct {
 	cliVersion string
 
 	// billingVersion is the billing header's cc_version. It is the cliVersion
-	// plus a build suffix and is NOT derivable from it, so it is captured
-	// verbatim.
+	// plus a 3-hex suffix, captured verbatim from one request. Empty means the
+	// profile has no capture to take it from: the suffix is then derived per
+	// conversation the way the CLI derives it (see claudeCodeFingerprint).
 	billingVersion string
 
 	// stainlessVersion is X-Stainless-Package-Version, the version of the JS
@@ -162,7 +168,72 @@ var (
 		dispatchID:        "v2d",
 		requestClass:      "main",
 	}
+
+	// profileFable52 is a VERSION-FLOOR COMPATIBILITY OVERRIDE, not a capture.
+	// The API refuses claude-fable-5-2 from any claude-cli below 2.1.290, so the
+	// 2.1.280 fingerprint fable-5.2 used to ride is rejected outright. Its only
+	// capture (.dev/claude/fable-5.2.*) is a claude-desktop 2.1.321 thread
+	// continuation with no identity/agent/output blocks and no tools, so no
+	// complete 2.1.290+ fingerprint exists to copy.
+	//
+	// So the release-identifying metadata is 2.1.321's, read from the published
+	// @anthropic-ai/claude-code-linux-x64@2.1.321 binary (VERSION "2.1.321", its
+	// bundled SDK's X-Stainless-Package-Version "0.128.0"), and the prompt bodies
+	// stay the newest captured ones, 2.1.280's. That one mix is deliberate and
+	// confined to this profile: every header and the billing cc_version agree on
+	// 2.1.321, and no prompt text is invented. There is no captured 2.1.321
+	// billing suffix, so billingVersion is empty and the suffix is derived with
+	// 2.1.321's own algorithm. The beta set, dispatch id, request class and
+	// billing segments are 2.1.280's; the 2.1.321 binary still carries each of
+	// them. Replace this with a real profile once a claude-cli capture of a fresh
+	// fable-5.2 conversation exists.
+	profileFable52 = claudeCodeProfile{
+		agent:             ccAgentOpus55,
+		output:            ccOutputOpus55,
+		cliVersion:        "2.1.321",
+		stainlessVersion:  "0.128.0",
+		billingPromptID:   true,
+		billingTurnOrigin: true,
+		thinkingDisplay:   true,
+		dispatchID:        "v2d",
+		requestClass:      "main",
+	}
 )
+
+// claudeCodeFingerprintSalt is the constant claude-cli mixes into the billing
+// suffix (2.1.321 bundle: `var aO="59cf53e54c78"`).
+const claudeCodeFingerprintSalt = "59cf53e54c78"
+
+// claudeCodeFingerprint is claude-cli 2.1.321's billing suffix, ported from its
+// bundle (`function td(e,n)`): sha256 of the salt, the UTF-16 code units at
+// indices 4, 7 and 20 of the first user message's text ("0" past the end), and
+// the cli version, as hex, first three characters. JavaScript indexes strings by
+// UTF-16 code unit and Node encodes a lone surrogate as U+FFFD, so this does too.
+func claudeCodeFingerprint(firstUserText, cliVersion string) string {
+	units := utf16.Encode([]rune(firstUserText))
+	var picked []uint16
+	for _, i := range [...]int{4, 7, 20} {
+		if i >= len(units) {
+			picked = append(picked, '0')
+		} else {
+			picked = append(picked, units[i])
+		}
+	}
+	// Decode after concatenation: selected surrogate halves can form a pair
+	// even when they came from separate characters in the original message.
+	sum := sha256.Sum256([]byte(claudeCodeFingerprintSalt + string(utf16.Decode(picked)) + cliVersion))
+	return hex.EncodeToString(sum[:])[:3]
+}
+
+// ccVersion is the billing header's cc_version for a conversation whose first
+// user message reads firstUserText: the captured literal when the profile has
+// one, else the cli version plus the derived suffix.
+func (p claudeCodeProfile) ccVersion(firstUserText string) string {
+	if p.billingVersion != "" {
+		return p.billingVersion
+	}
+	return p.cliVersion + "." + claudeCodeFingerprint(firstUserText, p.cliVersion)
+}
 
 // claudeCodeProfiles maps api_model to its fingerprint. Models absent from the
 // map fall back to the verbose 2.1.204 profile, which older opus/sonnet releases
@@ -176,11 +247,8 @@ var claudeCodeProfiles = map[string]claudeCodeProfile{
 	"claude-opus-5": profileLean204,
 	apiModelFable51: profileFable51,
 	apiModelOpus55:  profileOpus55,
-	// fable-5.2's only capture (.dev/claude/fable-5.2.*) is a claude-desktop
-	// 2.1.321 thread continuation: it carries no identity/agent/output blocks
-	// and no tools, so it cannot supply a 2.1.321 profile. fable-5.2 rides the
-	// newest complete fingerprint, 2.1.280, the same way opus-5 rides 2.1.204.
-	apiModelFable52: profileOpus55,
+	// fable-5.2 needs claude-cli >= 2.1.290; see profileFable52.
+	apiModelFable52: profileFable52,
 }
 
 // claudeCodeProfileFor returns the fingerprint for the given api_model.

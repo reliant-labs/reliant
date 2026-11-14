@@ -462,3 +462,42 @@ func TestGetGrantByIDReturnsLiveGrantsOnly(t *testing.T) {
 	require.ErrorIs(t, err, connectorgrant.ErrNotFound,
 		"a revoked grant must not re-resolve for an open session")
 }
+
+// A forge grant (the Reliant Forge connector's) names an org and projects,
+// no daemon and no path, and round-trips through the store.
+func TestForgeGrantRoundTrip(t *testing.T) {
+	store, _, daemonID := setupStore(t)
+	ctx := context.Background()
+
+	g := &connectorgrant.Grant{
+		ID: uuid.New().String(), UserID: "user-1", Name: "Claude (Forge)", Kind: connectorgrant.KindForge,
+		OrgID: "org-1", ProjectNames: []string{"shop"}, AllowedTools: []string{"obs_status", "envs_list"},
+	}
+	require.NoError(t, store.CreateGrant(ctx, g))
+	got, err := store.GetGrantByID(ctx, g.ID)
+	require.NoError(t, err)
+	require.Equal(t, connectorgrant.KindForge, got.Kind)
+	require.Equal(t, "org-1", got.OrgID)
+	require.Equal(t, []string{"shop"}, got.ProjectNames)
+	require.Empty(t, got.DaemonID)
+	require.True(t, got.AllowsProject("shop"))
+	require.False(t, got.AllowsProject("other"))
+
+	// A workspace grant still reads back as one, with no org.
+	ws := newGrant(daemonID)
+	require.NoError(t, store.CreateGrant(ctx, ws))
+	gotWS, err := store.GetGrantByID(ctx, ws.ID)
+	require.NoError(t, err)
+	require.Equal(t, connectorgrant.KindWorkspace, gotWS.KindOrDefault())
+	require.Empty(t, gotWS.OrgID)
+
+	// Each kind refuses the other's fields.
+	bad := []*connectorgrant.Grant{
+		{ID: uuid.New().String(), UserID: "user-1", Kind: connectorgrant.KindForge, AllowedTools: []string{"obs_status"}},
+		{ID: uuid.New().String(), UserID: "user-1", Kind: connectorgrant.KindForge, OrgID: "org-1", DaemonID: daemonID, AllowedTools: []string{"obs_status"}},
+		{ID: uuid.New().String(), UserID: "user-1", DaemonID: daemonID, PathRoot: "/", OrgID: "org-1", AllowedTools: []string{"read_file"}},
+	}
+	for _, b := range bad {
+		require.Error(t, store.CreateGrant(ctx, b), "%+v", b)
+	}
+}

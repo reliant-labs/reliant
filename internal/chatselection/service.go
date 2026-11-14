@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+
+	"github.com/reliant-labs/reliant/internal/auth"
 )
 
 type service struct {
@@ -56,6 +58,10 @@ func (s *service) SetPolicy(ctx context.Context, chatID, userID, workflowName st
 		if err := checkVersion(cur, expectedVersion); err != nil {
 			return nil, err
 		}
+		policy, err := fundingByPerson(ctx, cur, policy)
+		if err != nil {
+			return nil, err
+		}
 		if cur != nil && cur.Policy == policy {
 			return cur, nil
 		}
@@ -66,6 +72,33 @@ func (s *service) SetPolicy(ctx context.Context, chatID, userID, workflowName st
 		next.Policy = policy
 		return next, nil
 	})
+}
+
+// fundingByPerson keeps the chat's funding order a person's decision: it is
+// consent to spend their own AI accounts in the chat's org (org-provider-accounts
+// §4.4, §10). It runs inside the locked mutation, against the current row, so no
+// write that raced this one can be undone. A caller that is not a person (an
+// agent's or a script's credential, auth.RequirePerson's rule) never changes the
+// field: a policy that leaves it unspecified keeps the current order (an older
+// client, or a change to another field), and one that names another order is
+// refused.
+func fundingByPerson(ctx context.Context, cur *Selection, policy ProviderPolicy) (ProviderPolicy, error) {
+	current := FundingInherit
+	if cur != nil {
+		current = cur.Policy.Funding
+	}
+	if policy.Funding == current {
+		return policy, nil
+	}
+	err := auth.RequirePerson(ctx, "change whose AI accounts pay for this chat")
+	if err == nil {
+		return policy, nil
+	}
+	if policy.Funding == FundingInherit {
+		policy.Funding = current
+		return policy, nil
+	}
+	return policy, err
 }
 
 func (s *service) Copy(ctx context.Context, fromChatID, toChatID, userID string) error {

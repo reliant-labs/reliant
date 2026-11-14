@@ -70,6 +70,16 @@ func itemOrgKeys(it *reliantv1.InboxItem) []string {
 // project that is gone); placedEveryOrg for an item about a machine; and
 // placedUnknown when it names something but no org of it was read.
 func (r *inboxReads) itemOrg(it *reliantv1.InboxItem) (*string, itemPlacement) {
+	if it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED {
+		// About the org itself: listed in that org's scope.
+		org := orgKeyItemOrg(it)
+		return &org, placedInOrg
+	}
+	if org, ok := automationNoticeOrg(it); ok {
+		// Named by its org (an admin's item is about an automation not
+		// theirs, whose org this read never looked up).
+		return &org, placedInOrg
+	}
 	keys := itemOrgKeys(it)
 	if len(keys) == 0 {
 		return nil, placedEveryOrg

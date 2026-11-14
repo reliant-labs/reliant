@@ -21,7 +21,69 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/workflow.proto.
  */
 export const file_reliant_v1_workflow: GenFile = /*@__PURE__*/
-  fileDesc("ChlyZWxpYW50L3YxL3dvcmtmbG93LnByb3RvEgpyZWxpYW50LnYxIvsFChBXb3JrZmxvd0xpc3RJdGVtEgwKBG5hbWUYASABKAkSEAoIZmlsZW5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSEgoKc3RlcF9jb3VudBgEIAEoBRIOCgZzb3VyY2UYBSABKAkSHwoFbm9kZXMYByADKAsyEC5yZWxpYW50LnYxLk5vZGUSHwoFZWRnZXMYCCADKAsyEC5yZWxpYW50LnYxLkVkZ2USOAoGaW5wdXRzGAkgAygLMigucmVsaWFudC52MS5Xb3JrZmxvd0xpc3RJdGVtLklucHV0c0VudHJ5EjoKB291dHB1dHMYCiADKAsyKS5yZWxpYW50LnYxLldvcmtmbG93TGlzdEl0ZW0uT3V0cHV0c0VudHJ5EhcKCnVwZGF0ZWRfYXQYCyABKAlIAIgBARIRCglpc19oaWRkZW4YDCABKAgSGQoRaGFzX3ByZXNldF9ncm91cHMYDiABKAgSFQoIZHJhZnRfaWQYECABKAlIAYgBARIvCgZzdGF0dXMYESABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMSNgoRdmFsaWRhdGlvbl9lcnJvcnMYEiADKAsyGy5yZWxpYW50LnYxLlZhbGlkYXRpb25FcnJvchINCgV0aXRsZRgTIAEoCRIVCg1uZWVkc19tYWNoaW5lGBQgAygJEhcKD2F1dG9tYXRpb25fb25seRgVIAEoCBItCgh0cmlnZ2VycxgWIAMoCzIbLnJlbGlhbnQudjEuV29ya2Zsb3dUcmlnZ2VyEhMKC3Blcm1pc3Npb25zGBcgAygJGkAKC0lucHV0c0VudHJ5EgsKA2tleRgBIAEoCRIgCgV2YWx1ZRgCIAEoCzIRLnJlbGlhbnQudjEuSW5wdXQ6AjgBGi4KDE91dHB1dHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBQg0KC191cGRhdGVkX2F0QgsKCV9kcmFmdF9pZCI7Cg1IaWdobGlnaHRTcGFuEg0KBXN0YXJ0GAEgASgFEgsKA2VuZBgCIAEoBRIOCgZyZWFzb24YAyABKAki/AEKD1ZhbGlkYXRpb25FcnJvchIMCgR0eXBlGAEgASgJEg8KB21lc3NhZ2UYAiABKAkSEgoKc3VnZ2VzdGlvbhgDIAEoCRISCgplZGdlX2luZGV4GAQgASgFEhEKCWVkZ2VfZnJvbRgFIAEoCRIPCgdjYXNlX3RvGAYgASgJEhEKCWNvbmRpdGlvbhgHIAEoCRItCgpoaWdobGlnaHRzGAggAygLMhkucmVsaWFudC52MS5IaWdobGlnaHRTcGFuEg8KB25vZGVfaWQYCSABKAkSDQoFZmllbGQYCiABKAkSDgoGZGV0YWlsGAsgASgJEgwKBHBhdGgYDCABKAkirAEKFExpc3RXb3JrZmxvd3NSZXF1ZXN0EhoKCnByb2plY3RfaWQYASABKAlCBrpIA8gBARIYCgt3b3JrdHJlZV9pZBgCIAEoCUgAiAEBEhsKDmluY2x1ZGVfaGlkZGVuGAMgASgISAGIAQESEwoGb3JnX2lkGAQgASgJSAKIAQFCDgoMX3dvcmt0cmVlX2lkQhEKD19pbmNsdWRlX2hpZGRlbkIJCgdfb3JnX2lkIo8BChVMaXN0V29ya2Zsb3dzUmVzcG9uc2USLwoJd29ya2Zsb3dzGAEgAygLMhwucmVsaWFudC52MS5Xb3JrZmxvd0xpc3RJdGVtEg0KBXRvdGFsGAIgASgFEjYKEWludmFsaWRfd29ya2Zsb3dzGAMgAygLMhsucmVsaWFudC52MS5JbnZhbGlkV29ya2Zsb3ciTQoPSW52YWxpZFdvcmtmbG93EgwKBG5hbWUYASABKAkSDgoGc291cmNlGAIgASgJEgwKBHBhdGgYAyABKAkSDgoGZXJyb3JzGAQgAygJIoQBChJHZXRXb3JrZmxvd1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFQoIZHJhZnRfaWQYBCABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCwoJX2RyYWZ0X2lkIogDChNHZXRXb3JrZmxvd1Jlc3BvbnNlEiYKCHdvcmtmbG93GAEgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdxIOCgZzb3VyY2UYAiABKAkSFQoIZHJhZnRfaWQYAyABKAlIAIgBARIYCgtwYXJzZV9lcnJvchgGIAEoCUgBiAEBEhsKDnJhd19kZWZpbml0aW9uGAcgASgJSAKIAQESDwoHdmVyc2lvbhgIIAEoAxIYCgtzb3VyY2VfcGF0aBgJIAEoCUgDiAEBEhcKD3lhbWxfZGVmaW5pdGlvbhgKIAEoCRIvCgZzdGF0dXMYCyABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMSNgoRdmFsaWRhdGlvbl9lcnJvcnMYDCADKAsyGy5yZWxpYW50LnYxLlZhbGlkYXRpb25FcnJvckILCglfZHJhZnRfaWRCDgoMX3BhcnNlX2Vycm9yQhEKD19yYXdfZGVmaW5pdGlvbkIOCgxfc291cmNlX3BhdGgiYwoVRGVsZXRlV29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgAiAEBQg4KDF93b3JrdHJlZV9pZCJIChZEZWxldGVXb3JrZmxvd1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCRIMCgRzbHVnGAMgASgJIlUKF1ZhbGlkYXRlV29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSJgoId29ya2Zsb3cYAiABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93IlYKGFZhbGlkYXRlV29ya2Zsb3dSZXNwb25zZRINCgV2YWxpZBgBIAEoCBIrCgZlcnJvcnMYAiADKAsyGy5yZWxpYW50LnYxLlZhbGlkYXRpb25FcnJvciL2AgoTU2F2ZVdvcmtmbG93UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEiYKCHdvcmtmbG93GAIgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdxImCgVzY29wZRgEIAEoDjIXLnJlbGlhbnQudjEuQ29uZmlnU2NvcGUSGAoLd29ya3RyZWVfaWQYBSABKAlIAIgBARIdChBleHBlY3RlZF92ZXJzaW9uGAggASgDSAGIAQESGAoLc291cmNlX3BhdGgYCSABKAlIAogBARIVCghkcmFmdF9pZBgKIAEoCUgDiAEBEi8KBnN0YXR1cxgLIAEoDjIfLnJlbGlhbnQudjEuV29ya2Zsb3dEcmFmdFN0YXR1cxITCgZvcmdfaWQYDCABKAlIBIgBAUIOCgxfd29ya3RyZWVfaWRCEwoRX2V4cGVjdGVkX3ZlcnNpb25CDgoMX3NvdXJjZV9wYXRoQgsKCV9kcmFmdF9pZEIJCgdfb3JnX2lkIp8CChRTYXZlV29ya2Zsb3dSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSJgoId29ya2Zsb3cYAyABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93EhAKCGlzX3ZhbGlkGAUgASgIEjYKEXZhbGlkYXRpb25fZXJyb3JzGAYgAygLMhsucmVsaWFudC52MS5WYWxpZGF0aW9uRXJyb3ISCgoCaWQYByABKAkSDAoEc2x1ZxgIIAEoCRIPCgd2ZXJzaW9uGAsgASgDEhcKD3lhbWxfZGVmaW5pdGlvbhgMIAEoCRIvCgZzdGF0dXMYDSABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMi1wEKFUltcG9ydFdvcmtmbG93UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhQKDHlhbWxfY29udGVudBgCIAEoDBImCgVzY29wZRgDIAEoDjIXLnJlbGlhbnQudjEuQ29uZmlnU2NvcGUSGAoLd29ya3RyZWVfaWQYBCABKAlIAIgBARIRCglvdmVyd3JpdGUYBSABKAgSLwoGc3RhdHVzGAYgASgOMh8ucmVsaWFudC52MS5Xb3JrZmxvd0RyYWZ0U3RhdHVzQg4KDF93b3JrdHJlZV9pZCKeAgoWSW1wb3J0V29ya2Zsb3dSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSJgoId29ya2Zsb3cYAyABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93EgoKAmlkGAQgASgJEgwKBHNsdWcYBSABKAkSEAoIaXNfdmFsaWQYBiABKAgSNgoRdmFsaWRhdGlvbl9lcnJvcnMYByADKAsyGy5yZWxpYW50LnYxLlZhbGlkYXRpb25FcnJvchIQCghjb25mbGljdBgIIAEoCBITCgtleGlzdGluZ19pZBgJIAEoCRIvCgZzdGF0dXMYCiABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMiYwoVRXhwb3J0V29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgAiAEBQg4KDF93b3JrdHJlZV9pZCJ5ChZFeHBvcnRXb3JrZmxvd1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFAoMeWFtbF9jb250ZW50GAIgASgMEhAKCGZpbGVuYW1lGAMgASgJEiYKCHdvcmtmbG93GAQgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdyJTChxTZXRXb3JrZmxvd1Zpc2liaWxpdHlSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIRCglpc19oaWRkZW4YAyABKAgicQodU2V0V29ya2Zsb3dWaXNpYmlsaXR5UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJEi4KCHdvcmtmbG93GAMgASgLMhwucmVsaWFudC52MS5Xb3JrZmxvd0xpc3RJdGVtIowBChNDb3B5V29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEwoLc291cmNlX3NsdWcYAiABKAkSFQoIbmV3X25hbWUYAyABKAlIAIgBARIYCgt3b3JrdHJlZV9pZBgEIAEoCUgBiAEBQgsKCV9uZXdfbmFtZUIOCgxfd29ya3RyZWVfaWQiegoUQ29weVdvcmtmbG93UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJEiYKCHdvcmtmbG93GAMgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdxIMCgRzbHVnGAQgASgJEgoKAmlkGAUgASgJIqIBChpDcmVhdGVXb3JrZmxvd0RyYWZ0UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEi8KBnN0YXR1cxgCIAEoDjIfLnJlbGlhbnQudjEuV29ya2Zsb3dEcmFmdFN0YXR1cxINCgV0aXRsZRgDIAEoCRIQCgh0ZW1wbGF0ZRgEIAEoCRITCgZvcmdfaWQYBSABKAlIAIgBAUIJCgdfb3JnX2lkIosBChtDcmVhdGVXb3JrZmxvd0RyYWZ0UmVzcG9uc2USEAoIZHJhZnRfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIMCgRuYW1lGAMgASgJEi8KBnN0YXR1cxgEIAEoDjIfLnJlbGlhbnQudjEuV29ya2Zsb3dEcmFmdFN0YXR1cxINCgV0aXRsZRgFIAEoCSKlAQoYU2V0V29ya2Zsb3dTdGF0dXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEAoIZHJhZnRfaWQYAiABKAkSLwoGc3RhdHVzGAMgASgOMh8ucmVsaWFudC52MS5Xb3JrZmxvd0RyYWZ0U3RhdHVzEh0KEGV4cGVjdGVkX3ZlcnNpb24YBCABKANIAIgBAUITChFfZXhwZWN0ZWRfdmVyc2lvbiLFAQoZU2V0V29ya2Zsb3dTdGF0dXNSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSLwoGc3RhdHVzGAMgASgOMh8ucmVsaWFudC52MS5Xb3JrZmxvd0RyYWZ0U3RhdHVzEjYKEXZhbGlkYXRpb25fZXJyb3JzGAQgAygLMhsucmVsaWFudC52MS5WYWxpZGF0aW9uRXJyb3ISDwoHdmVyc2lvbhgFIAEoAxIMCgRzbHVnGAYgASgJKoEBChNXb3JrZmxvd0RyYWZ0U3RhdHVzEiUKIVdPUktGTE9XX0RSQUZUX1NUQVRVU19VTlNQRUNJRklFRBAAEh8KG1dPUktGTE9XX0RSQUZUX1NUQVRVU19EUkFGVBABEiIKHldPUktGTE9XX0RSQUZUX1NUQVRVU19DT01QTEVURRACMoUMCg9Xb3JrZmxvd1NlcnZpY2USVgoNTGlzdFdvcmtmbG93cxIgLnJlbGlhbnQudjEuTGlzdFdvcmtmbG93c1JlcXVlc3QaIS5yZWxpYW50LnYxLkxpc3RXb3JrZmxvd3NSZXNwb25zZSIAErUBCgxTYXZlV29ya2Zsb3cSHy5yZWxpYW50LnYxLlNhdmVXb3JrZmxvd1JlcXVlc3QaIC5yZWxpYW50LnYxLlNhdmVXb3JrZmxvd1Jlc3BvbnNlImKiuxheOlwKBHNhdmUSMQoId29ya2Zsb3cSDXJlc3BvbnNlLnNsdWcaFnJlc3BvbnNlLndvcmtmbG93Lm5hbWUqD3Jlc3BvbnNlLnN0YXR1cyoQcmVzcG9uc2UudmVyc2lvbhJQCgtHZXRXb3JrZmxvdxIeLnJlbGlhbnQudjEuR2V0V29ya2Zsb3dSZXF1ZXN0Gh8ucmVsaWFudC52MS5HZXRXb3JrZmxvd1Jlc3BvbnNlIgASiAEKDkRlbGV0ZVdvcmtmbG93EiEucmVsaWFudC52MS5EZWxldGVXb3JrZmxvd1JlcXVlc3QaIi5yZWxpYW50LnYxLkRlbGV0ZVdvcmtmbG93UmVzcG9uc2UiL6K7GCs6KQoGZGVsZXRlEh8KCHdvcmtmbG93Eg1yZXNwb25zZS5zbHVnGgRuYW1lEmIKEFZhbGlkYXRlV29ya2Zsb3cSIy5yZWxpYW50LnYxLlZhbGlkYXRlV29ya2Zsb3dSZXF1ZXN0GiQucmVsaWFudC52MS5WYWxpZGF0ZVdvcmtmbG93UmVzcG9uc2UiA5ACARKrAQoOSW1wb3J0V29ya2Zsb3cSIS5yZWxpYW50LnYxLkltcG9ydFdvcmtmbG93UmVxdWVzdBoiLnJlbGlhbnQudjEuSW1wb3J0V29ya2Zsb3dSZXNwb25zZSJSorsYTjpMCgZpbXBvcnQSMQoId29ya2Zsb3cSDXJlc3BvbnNlLnNsdWcaFnJlc3BvbnNlLndvcmtmbG93Lm5hbWUqD3Jlc3BvbnNlLnN0YXR1cxJcCg5FeHBvcnRXb3JrZmxvdxIhLnJlbGlhbnQudjEuRXhwb3J0V29ya2Zsb3dSZXF1ZXN0GiIucmVsaWFudC52MS5FeHBvcnRXb3JrZmxvd1Jlc3BvbnNlIgOQAgESuQEKFVNldFdvcmtmbG93VmlzaWJpbGl0eRIoLnJlbGlhbnQudjEuU2V0V29ya2Zsb3dWaXNpYmlsaXR5UmVxdWVzdBopLnJlbGlhbnQudjEuU2V0V29ya2Zsb3dWaXNpYmlsaXR5UmVzcG9uc2UiS6K7GEc6RQoOc2V0X3Zpc2liaWxpdHkSKAoId29ya2Zsb3cSBHNsdWcaFnJlc3BvbnNlLndvcmtmbG93Lm5hbWUqCWlzX2hpZGRlbhKRAQoMQ29weVdvcmtmbG93Eh8ucmVsaWFudC52MS5Db3B5V29ya2Zsb3dSZXF1ZXN0GiAucmVsaWFudC52MS5Db3B5V29ya2Zsb3dSZXNwb25zZSI+orsYOjo4CgRjb3B5EiMKCHdvcmtmbG93Eg1yZXNwb25zZS5zbHVnGghuZXdfbmFtZSoLc291cmNlX3NsdWcSqgEKE0NyZWF0ZVdvcmtmbG93RHJhZnQSJi5yZWxpYW50LnYxLkNyZWF0ZVdvcmtmbG93RHJhZnRSZXF1ZXN0GicucmVsaWFudC52MS5DcmVhdGVXb3JrZmxvd0RyYWZ0UmVzcG9uc2UiQqK7GD46PAoGY3JlYXRlEigKCHdvcmtmbG93Eg1yZXNwb25zZS5zbHVnGg1yZXNwb25zZS5uYW1lKgh0ZW1wbGF0ZRKXAQoRU2V0V29ya2Zsb3dTdGF0dXMSJC5yZWxpYW50LnYxLlNldFdvcmtmbG93U3RhdHVzUmVxdWVzdBolLnJlbGlhbnQudjEuU2V0V29ya2Zsb3dTdGF0dXNSZXNwb25zZSI1orsYMTovCgpzZXRfc3RhdHVzEhkKCHdvcmtmbG93Eg1yZXNwb25zZS5zbHVnKgZzdGF0dXNCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge, file_reliant_v1_common, file_reliant_v1_trigger, file_reliant_v1_workflow_v2]);
+  fileDesc("ChlyZWxpYW50L3YxL3dvcmtmbG93LnByb3RvEgpyZWxpYW50LnYxInwKG0ZvcmtPcnBoYW5lZFdvcmtmbG93UmVxdWVzdBIcCgt3b3JrZmxvd19pZBgBIAEoCUIHukgEcgIQARIbCgpwcm9qZWN0X2lkGAIgASgJQge6SARyAhABEhUKCG5ld19uYW1lGAMgASgJSACIAQFCCwoJX25ld19uYW1lIkYKHEZvcmtPcnBoYW5lZFdvcmtmbG93UmVzcG9uc2USCgoCaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIMCgRuYW1lGAMgASgJIvsFChBXb3JrZmxvd0xpc3RJdGVtEgwKBG5hbWUYASABKAkSEAoIZmlsZW5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSEgoKc3RlcF9jb3VudBgEIAEoBRIOCgZzb3VyY2UYBSABKAkSHwoFbm9kZXMYByADKAsyEC5yZWxpYW50LnYxLk5vZGUSHwoFZWRnZXMYCCADKAsyEC5yZWxpYW50LnYxLkVkZ2USOAoGaW5wdXRzGAkgAygLMigucmVsaWFudC52MS5Xb3JrZmxvd0xpc3RJdGVtLklucHV0c0VudHJ5EjoKB291dHB1dHMYCiADKAsyKS5yZWxpYW50LnYxLldvcmtmbG93TGlzdEl0ZW0uT3V0cHV0c0VudHJ5EhcKCnVwZGF0ZWRfYXQYCyABKAlIAIgBARIRCglpc19oaWRkZW4YDCABKAgSGQoRaGFzX3ByZXNldF9ncm91cHMYDiABKAgSFQoIZHJhZnRfaWQYECABKAlIAYgBARIvCgZzdGF0dXMYESABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMSNgoRdmFsaWRhdGlvbl9lcnJvcnMYEiADKAsyGy5yZWxpYW50LnYxLlZhbGlkYXRpb25FcnJvchINCgV0aXRsZRgTIAEoCRIVCg1uZWVkc19tYWNoaW5lGBQgAygJEhcKD2F1dG9tYXRpb25fb25seRgVIAEoCBItCgh0cmlnZ2VycxgWIAMoCzIbLnJlbGlhbnQudjEuV29ya2Zsb3dUcmlnZ2VyEhMKC3Blcm1pc3Npb25zGBcgAygJGkAKC0lucHV0c0VudHJ5EgsKA2tleRgBIAEoCRIgCgV2YWx1ZRgCIAEoCzIRLnJlbGlhbnQudjEuSW5wdXQ6AjgBGi4KDE91dHB1dHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBQg0KC191cGRhdGVkX2F0QgsKCV9kcmFmdF9pZCI7Cg1IaWdobGlnaHRTcGFuEg0KBXN0YXJ0GAEgASgFEgsKA2VuZBgCIAEoBRIOCgZyZWFzb24YAyABKAki/AEKD1ZhbGlkYXRpb25FcnJvchIMCgR0eXBlGAEgASgJEg8KB21lc3NhZ2UYAiABKAkSEgoKc3VnZ2VzdGlvbhgDIAEoCRISCgplZGdlX2luZGV4GAQgASgFEhEKCWVkZ2VfZnJvbRgFIAEoCRIPCgdjYXNlX3RvGAYgASgJEhEKCWNvbmRpdGlvbhgHIAEoCRItCgpoaWdobGlnaHRzGAggAygLMhkucmVsaWFudC52MS5IaWdobGlnaHRTcGFuEg8KB25vZGVfaWQYCSABKAkSDQoFZmllbGQYCiABKAkSDgoGZGV0YWlsGAsgASgJEgwKBHBhdGgYDCABKAkirAEKFExpc3RXb3JrZmxvd3NSZXF1ZXN0EhoKCnByb2plY3RfaWQYASABKAlCBrpIA8gBARIYCgt3b3JrdHJlZV9pZBgCIAEoCUgAiAEBEhsKDmluY2x1ZGVfaGlkZGVuGAMgASgISAGIAQESEwoGb3JnX2lkGAQgASgJSAKIAQFCDgoMX3dvcmt0cmVlX2lkQhEKD19pbmNsdWRlX2hpZGRlbkIJCgdfb3JnX2lkIo8BChVMaXN0V29ya2Zsb3dzUmVzcG9uc2USLwoJd29ya2Zsb3dzGAEgAygLMhwucmVsaWFudC52MS5Xb3JrZmxvd0xpc3RJdGVtEg0KBXRvdGFsGAIgASgFEjYKEWludmFsaWRfd29ya2Zsb3dzGAMgAygLMhsucmVsaWFudC52MS5JbnZhbGlkV29ya2Zsb3ciTQoPSW52YWxpZFdvcmtmbG93EgwKBG5hbWUYASABKAkSDgoGc291cmNlGAIgASgJEgwKBHBhdGgYAyABKAkSDgoGZXJyb3JzGAQgAygJIoQBChJHZXRXb3JrZmxvd1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFQoIZHJhZnRfaWQYBCABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCwoJX2RyYWZ0X2lkIogDChNHZXRXb3JrZmxvd1Jlc3BvbnNlEiYKCHdvcmtmbG93GAEgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdxIOCgZzb3VyY2UYAiABKAkSFQoIZHJhZnRfaWQYAyABKAlIAIgBARIYCgtwYXJzZV9lcnJvchgGIAEoCUgBiAEBEhsKDnJhd19kZWZpbml0aW9uGAcgASgJSAKIAQESDwoHdmVyc2lvbhgIIAEoAxIYCgtzb3VyY2VfcGF0aBgJIAEoCUgDiAEBEhcKD3lhbWxfZGVmaW5pdGlvbhgKIAEoCRIvCgZzdGF0dXMYCyABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMSNgoRdmFsaWRhdGlvbl9lcnJvcnMYDCADKAsyGy5yZWxpYW50LnYxLlZhbGlkYXRpb25FcnJvckILCglfZHJhZnRfaWRCDgoMX3BhcnNlX2Vycm9yQhEKD19yYXdfZGVmaW5pdGlvbkIOCgxfc291cmNlX3BhdGgiYwoVRGVsZXRlV29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgAiAEBQg4KDF93b3JrdHJlZV9pZCJIChZEZWxldGVXb3JrZmxvd1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCRIMCgRzbHVnGAMgASgJIlUKF1ZhbGlkYXRlV29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSJgoId29ya2Zsb3cYAiABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93IlYKGFZhbGlkYXRlV29ya2Zsb3dSZXNwb25zZRINCgV2YWxpZBgBIAEoCBIrCgZlcnJvcnMYAiADKAsyGy5yZWxpYW50LnYxLlZhbGlkYXRpb25FcnJvciL2AgoTU2F2ZVdvcmtmbG93UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEiYKCHdvcmtmbG93GAIgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdxImCgVzY29wZRgEIAEoDjIXLnJlbGlhbnQudjEuQ29uZmlnU2NvcGUSGAoLd29ya3RyZWVfaWQYBSABKAlIAIgBARIdChBleHBlY3RlZF92ZXJzaW9uGAggASgDSAGIAQESGAoLc291cmNlX3BhdGgYCSABKAlIAogBARIVCghkcmFmdF9pZBgKIAEoCUgDiAEBEi8KBnN0YXR1cxgLIAEoDjIfLnJlbGlhbnQudjEuV29ya2Zsb3dEcmFmdFN0YXR1cxITCgZvcmdfaWQYDCABKAlIBIgBAUIOCgxfd29ya3RyZWVfaWRCEwoRX2V4cGVjdGVkX3ZlcnNpb25CDgoMX3NvdXJjZV9wYXRoQgsKCV9kcmFmdF9pZEIJCgdfb3JnX2lkIp8CChRTYXZlV29ya2Zsb3dSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSJgoId29ya2Zsb3cYAyABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93EhAKCGlzX3ZhbGlkGAUgASgIEjYKEXZhbGlkYXRpb25fZXJyb3JzGAYgAygLMhsucmVsaWFudC52MS5WYWxpZGF0aW9uRXJyb3ISCgoCaWQYByABKAkSDAoEc2x1ZxgIIAEoCRIPCgd2ZXJzaW9uGAsgASgDEhcKD3lhbWxfZGVmaW5pdGlvbhgMIAEoCRIvCgZzdGF0dXMYDSABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMi1wEKFUltcG9ydFdvcmtmbG93UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhQKDHlhbWxfY29udGVudBgCIAEoDBImCgVzY29wZRgDIAEoDjIXLnJlbGlhbnQudjEuQ29uZmlnU2NvcGUSGAoLd29ya3RyZWVfaWQYBCABKAlIAIgBARIRCglvdmVyd3JpdGUYBSABKAgSLwoGc3RhdHVzGAYgASgOMh8ucmVsaWFudC52MS5Xb3JrZmxvd0RyYWZ0U3RhdHVzQg4KDF93b3JrdHJlZV9pZCKeAgoWSW1wb3J0V29ya2Zsb3dSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSJgoId29ya2Zsb3cYAyABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93EgoKAmlkGAQgASgJEgwKBHNsdWcYBSABKAkSEAoIaXNfdmFsaWQYBiABKAgSNgoRdmFsaWRhdGlvbl9lcnJvcnMYByADKAsyGy5yZWxpYW50LnYxLlZhbGlkYXRpb25FcnJvchIQCghjb25mbGljdBgIIAEoCBITCgtleGlzdGluZ19pZBgJIAEoCRIvCgZzdGF0dXMYCiABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMiYwoVRXhwb3J0V29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgAiAEBQg4KDF93b3JrdHJlZV9pZCJ5ChZFeHBvcnRXb3JrZmxvd1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFAoMeWFtbF9jb250ZW50GAIgASgMEhAKCGZpbGVuYW1lGAMgASgJEiYKCHdvcmtmbG93GAQgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdyJTChxTZXRXb3JrZmxvd1Zpc2liaWxpdHlSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIRCglpc19oaWRkZW4YAyABKAgicQodU2V0V29ya2Zsb3dWaXNpYmlsaXR5UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJEi4KCHdvcmtmbG93GAMgASgLMhwucmVsaWFudC52MS5Xb3JrZmxvd0xpc3RJdGVtIowBChNDb3B5V29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEwoLc291cmNlX3NsdWcYAiABKAkSFQoIbmV3X25hbWUYAyABKAlIAIgBARIYCgt3b3JrdHJlZV9pZBgEIAEoCUgBiAEBQgsKCV9uZXdfbmFtZUIOCgxfd29ya3RyZWVfaWQiegoUQ29weVdvcmtmbG93UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJEiYKCHdvcmtmbG93GAMgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdxIMCgRzbHVnGAQgASgJEgoKAmlkGAUgASgJIqIBChpDcmVhdGVXb3JrZmxvd0RyYWZ0UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEi8KBnN0YXR1cxgCIAEoDjIfLnJlbGlhbnQudjEuV29ya2Zsb3dEcmFmdFN0YXR1cxINCgV0aXRsZRgDIAEoCRIQCgh0ZW1wbGF0ZRgEIAEoCRITCgZvcmdfaWQYBSABKAlIAIgBAUIJCgdfb3JnX2lkIosBChtDcmVhdGVXb3JrZmxvd0RyYWZ0UmVzcG9uc2USEAoIZHJhZnRfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIMCgRuYW1lGAMgASgJEi8KBnN0YXR1cxgEIAEoDjIfLnJlbGlhbnQudjEuV29ya2Zsb3dEcmFmdFN0YXR1cxINCgV0aXRsZRgFIAEoCSKlAQoYU2V0V29ya2Zsb3dTdGF0dXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEAoIZHJhZnRfaWQYAiABKAkSLwoGc3RhdHVzGAMgASgOMh8ucmVsaWFudC52MS5Xb3JrZmxvd0RyYWZ0U3RhdHVzEh0KEGV4cGVjdGVkX3ZlcnNpb24YBCABKANIAIgBAUITChFfZXhwZWN0ZWRfdmVyc2lvbiLFAQoZU2V0V29ya2Zsb3dTdGF0dXNSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSLwoGc3RhdHVzGAMgASgOMh8ucmVsaWFudC52MS5Xb3JrZmxvd0RyYWZ0U3RhdHVzEjYKEXZhbGlkYXRpb25fZXJyb3JzGAQgAygLMhsucmVsaWFudC52MS5WYWxpZGF0aW9uRXJyb3ISDwoHdmVyc2lvbhgFIAEoAxIMCgRzbHVnGAYgASgJKoEBChNXb3JrZmxvd0RyYWZ0U3RhdHVzEiUKIVdPUktGTE9XX0RSQUZUX1NUQVRVU19VTlNQRUNJRklFRBAAEh8KG1dPUktGTE9XX0RSQUZUX1NUQVRVU19EUkFGVBABEiIKHldPUktGTE9XX0RSQUZUX1NUQVRVU19DT01QTEVURRACMq4NCg9Xb3JrZmxvd1NlcnZpY2USVgoNTGlzdFdvcmtmbG93cxIgLnJlbGlhbnQudjEuTGlzdFdvcmtmbG93c1JlcXVlc3QaIS5yZWxpYW50LnYxLkxpc3RXb3JrZmxvd3NSZXNwb25zZSIAErUBCgxTYXZlV29ya2Zsb3cSHy5yZWxpYW50LnYxLlNhdmVXb3JrZmxvd1JlcXVlc3QaIC5yZWxpYW50LnYxLlNhdmVXb3JrZmxvd1Jlc3BvbnNlImKiuxheOlwKBHNhdmUSMQoId29ya2Zsb3cSDXJlc3BvbnNlLnNsdWcaFnJlc3BvbnNlLndvcmtmbG93Lm5hbWUqD3Jlc3BvbnNlLnN0YXR1cyoQcmVzcG9uc2UudmVyc2lvbhJQCgtHZXRXb3JrZmxvdxIeLnJlbGlhbnQudjEuR2V0V29ya2Zsb3dSZXF1ZXN0Gh8ucmVsaWFudC52MS5HZXRXb3JrZmxvd1Jlc3BvbnNlIgASiAEKDkRlbGV0ZVdvcmtmbG93EiEucmVsaWFudC52MS5EZWxldGVXb3JrZmxvd1JlcXVlc3QaIi5yZWxpYW50LnYxLkRlbGV0ZVdvcmtmbG93UmVzcG9uc2UiL6K7GCs6KQoGZGVsZXRlEh8KCHdvcmtmbG93Eg1yZXNwb25zZS5zbHVnGgRuYW1lEmIKEFZhbGlkYXRlV29ya2Zsb3cSIy5yZWxpYW50LnYxLlZhbGlkYXRlV29ya2Zsb3dSZXF1ZXN0GiQucmVsaWFudC52MS5WYWxpZGF0ZVdvcmtmbG93UmVzcG9uc2UiA5ACARKrAQoOSW1wb3J0V29ya2Zsb3cSIS5yZWxpYW50LnYxLkltcG9ydFdvcmtmbG93UmVxdWVzdBoiLnJlbGlhbnQudjEuSW1wb3J0V29ya2Zsb3dSZXNwb25zZSJSorsYTjpMCgZpbXBvcnQSMQoId29ya2Zsb3cSDXJlc3BvbnNlLnNsdWcaFnJlc3BvbnNlLndvcmtmbG93Lm5hbWUqD3Jlc3BvbnNlLnN0YXR1cxJcCg5FeHBvcnRXb3JrZmxvdxIhLnJlbGlhbnQudjEuRXhwb3J0V29ya2Zsb3dSZXF1ZXN0GiIucmVsaWFudC52MS5FeHBvcnRXb3JrZmxvd1Jlc3BvbnNlIgOQAgESuQEKFVNldFdvcmtmbG93VmlzaWJpbGl0eRIoLnJlbGlhbnQudjEuU2V0V29ya2Zsb3dWaXNpYmlsaXR5UmVxdWVzdBopLnJlbGlhbnQudjEuU2V0V29ya2Zsb3dWaXNpYmlsaXR5UmVzcG9uc2UiS6K7GEc6RQoOc2V0X3Zpc2liaWxpdHkSKAoId29ya2Zsb3cSBHNsdWcaFnJlc3BvbnNlLndvcmtmbG93Lm5hbWUqCWlzX2hpZGRlbhKRAQoMQ29weVdvcmtmbG93Eh8ucmVsaWFudC52MS5Db3B5V29ya2Zsb3dSZXF1ZXN0GiAucmVsaWFudC52MS5Db3B5V29ya2Zsb3dSZXNwb25zZSI+orsYOjo4CgRjb3B5EiMKCHdvcmtmbG93Eg1yZXNwb25zZS5zbHVnGghuZXdfbmFtZSoLc291cmNlX3NsdWcSqgEKE0NyZWF0ZVdvcmtmbG93RHJhZnQSJi5yZWxpYW50LnYxLkNyZWF0ZVdvcmtmbG93RHJhZnRSZXF1ZXN0GicucmVsaWFudC52MS5DcmVhdGVXb3JrZmxvd0RyYWZ0UmVzcG9uc2UiQqK7GD46PAoGY3JlYXRlEigKCHdvcmtmbG93Eg1yZXNwb25zZS5zbHVnGg1yZXNwb25zZS5uYW1lKgh0ZW1wbGF0ZRKXAQoRU2V0V29ya2Zsb3dTdGF0dXMSJC5yZWxpYW50LnYxLlNldFdvcmtmbG93U3RhdHVzUmVxdWVzdBolLnJlbGlhbnQudjEuU2V0V29ya2Zsb3dTdGF0dXNSZXNwb25zZSI1orsYMTovCgpzZXRfc3RhdHVzEhkKCHdvcmtmbG93Eg1yZXNwb25zZS5zbHVnKgZzdGF0dXMSpgEKFEZvcmtPcnBoYW5lZFdvcmtmbG93EicucmVsaWFudC52MS5Gb3JrT3JwaGFuZWRXb3JrZmxvd1JlcXVlc3QaKC5yZWxpYW50LnYxLkZvcmtPcnBoYW5lZFdvcmtmbG93UmVzcG9uc2UiO6K7GDc6NQoLZm9ya19vcnBoYW4SGQoId29ya2Zsb3cSDXJlc3BvbnNlLnNsdWcqC3dvcmtmbG93X2lkQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge, file_reliant_v1_common, file_reliant_v1_trigger, file_reliant_v1_workflow_v2]);
+
+/**
+ * @generated from message reliant.v1.ForkOrphanedWorkflowRequest
+ */
+export type ForkOrphanedWorkflowRequest = Message<"reliant.v1.ForkOrphanedWorkflowRequest"> & {
+  /**
+   * The orphaned saved workflow's id (OrphanedWorkflow.id).
+   *
+   * @generated from field: string workflow_id = 1;
+   */
+  workflowId: string;
+
+  /**
+   * One of the caller's projects, for the new slug's uniqueness.
+   *
+   * @generated from field: string project_id = 2;
+   */
+  projectId: string;
+
+  /**
+   * A name for the fork. Unset keeps the original's, made unique.
+   *
+   * @generated from field: optional string new_name = 3;
+   */
+  newName?: string | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.ForkOrphanedWorkflowRequest.
+ * Use `create(ForkOrphanedWorkflowRequestSchema)` to create a new message.
+ */
+export const ForkOrphanedWorkflowRequestSchema: GenMessage<ForkOrphanedWorkflowRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_workflow, 0);
+
+/**
+ * @generated from message reliant.v1.ForkOrphanedWorkflowResponse
+ */
+export type ForkOrphanedWorkflowResponse = Message<"reliant.v1.ForkOrphanedWorkflowResponse"> & {
+  /**
+   * The fork's id and slug (what a trigger's workflow names).
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string slug = 2;
+   */
+  slug: string;
+
+  /**
+   * @generated from field: string name = 3;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message reliant.v1.ForkOrphanedWorkflowResponse.
+ * Use `create(ForkOrphanedWorkflowResponseSchema)` to create a new message.
+ */
+export const ForkOrphanedWorkflowResponseSchema: GenMessage<ForkOrphanedWorkflowResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_workflow, 1);
 
 /**
  * WorkflowListItem represents a workflow in list responses with additional metadata
@@ -176,7 +238,7 @@ export type WorkflowListItem = Message<"reliant.v1.WorkflowListItem"> & {
  * Use `create(WorkflowListItemSchema)` to create a new message.
  */
 export const WorkflowListItemSchema: GenMessage<WorkflowListItem> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 0);
+  messageDesc(file_reliant_v1_workflow, 2);
 
 /**
  * HighlightSpan represents a character range to highlight in the condition
@@ -211,7 +273,7 @@ export type HighlightSpan = Message<"reliant.v1.HighlightSpan"> & {
  * Use `create(HighlightSpanSchema)` to create a new message.
  */
 export const HighlightSpanSchema: GenMessage<HighlightSpan> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 1);
+  messageDesc(file_reliant_v1_workflow, 3);
 
 /**
  * ValidationError represents a structured validation error
@@ -318,7 +380,7 @@ export type ValidationError = Message<"reliant.v1.ValidationError"> & {
  * Use `create(ValidationErrorSchema)` to create a new message.
  */
 export const ValidationErrorSchema: GenMessage<ValidationError> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 2);
+  messageDesc(file_reliant_v1_workflow, 4);
 
 /**
  * @generated from message reliant.v1.ListWorkflowsRequest
@@ -362,7 +424,7 @@ export type ListWorkflowsRequest = Message<"reliant.v1.ListWorkflowsRequest"> & 
  * Use `create(ListWorkflowsRequestSchema)` to create a new message.
  */
 export const ListWorkflowsRequestSchema: GenMessage<ListWorkflowsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 3);
+  messageDesc(file_reliant_v1_workflow, 5);
 
 /**
  * @generated from message reliant.v1.ListWorkflowsResponse
@@ -391,7 +453,7 @@ export type ListWorkflowsResponse = Message<"reliant.v1.ListWorkflowsResponse"> 
  * Use `create(ListWorkflowsResponseSchema)` to create a new message.
  */
 export const ListWorkflowsResponseSchema: GenMessage<ListWorkflowsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 4);
+  messageDesc(file_reliant_v1_workflow, 6);
 
 /**
  * InvalidWorkflow represents a workflow that failed to load or validate.
@@ -433,7 +495,7 @@ export type InvalidWorkflow = Message<"reliant.v1.InvalidWorkflow"> & {
  * Use `create(InvalidWorkflowSchema)` to create a new message.
  */
 export const InvalidWorkflowSchema: GenMessage<InvalidWorkflow> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 5);
+  messageDesc(file_reliant_v1_workflow, 7);
 
 /**
  * @generated from message reliant.v1.GetWorkflowRequest
@@ -473,7 +535,7 @@ export type GetWorkflowRequest = Message<"reliant.v1.GetWorkflowRequest"> & {
  * Use `create(GetWorkflowRequestSchema)` to create a new message.
  */
 export const GetWorkflowRequestSchema: GenMessage<GetWorkflowRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 6);
+  messageDesc(file_reliant_v1_workflow, 8);
 
 /**
  * @generated from message reliant.v1.GetWorkflowResponse
@@ -554,7 +616,7 @@ export type GetWorkflowResponse = Message<"reliant.v1.GetWorkflowResponse"> & {
  * Use `create(GetWorkflowResponseSchema)` to create a new message.
  */
 export const GetWorkflowResponseSchema: GenMessage<GetWorkflowResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 7);
+  messageDesc(file_reliant_v1_workflow, 9);
 
 /**
  * @generated from message reliant.v1.DeleteWorkflowRequest
@@ -587,7 +649,7 @@ export type DeleteWorkflowRequest = Message<"reliant.v1.DeleteWorkflowRequest"> 
  * Use `create(DeleteWorkflowRequestSchema)` to create a new message.
  */
 export const DeleteWorkflowRequestSchema: GenMessage<DeleteWorkflowRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 8);
+  messageDesc(file_reliant_v1_workflow, 10);
 
 /**
  * @generated from message reliant.v1.DeleteWorkflowResponse
@@ -616,7 +678,7 @@ export type DeleteWorkflowResponse = Message<"reliant.v1.DeleteWorkflowResponse"
  * Use `create(DeleteWorkflowResponseSchema)` to create a new message.
  */
 export const DeleteWorkflowResponseSchema: GenMessage<DeleteWorkflowResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 9);
+  messageDesc(file_reliant_v1_workflow, 11);
 
 /**
  * @generated from message reliant.v1.ValidateWorkflowRequest
@@ -640,7 +702,7 @@ export type ValidateWorkflowRequest = Message<"reliant.v1.ValidateWorkflowReques
  * Use `create(ValidateWorkflowRequestSchema)` to create a new message.
  */
 export const ValidateWorkflowRequestSchema: GenMessage<ValidateWorkflowRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 10);
+  messageDesc(file_reliant_v1_workflow, 12);
 
 /**
  * @generated from message reliant.v1.ValidateWorkflowResponse
@@ -662,7 +724,7 @@ export type ValidateWorkflowResponse = Message<"reliant.v1.ValidateWorkflowRespo
  * Use `create(ValidateWorkflowResponseSchema)` to create a new message.
  */
 export const ValidateWorkflowResponseSchema: GenMessage<ValidateWorkflowResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 11);
+  messageDesc(file_reliant_v1_workflow, 13);
 
 /**
  * @generated from message reliant.v1.SaveWorkflowRequest
@@ -746,7 +808,7 @@ export type SaveWorkflowRequest = Message<"reliant.v1.SaveWorkflowRequest"> & {
  * Use `create(SaveWorkflowRequestSchema)` to create a new message.
  */
 export const SaveWorkflowRequestSchema: GenMessage<SaveWorkflowRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 12);
+  messageDesc(file_reliant_v1_workflow, 14);
 
 /**
  * @generated from message reliant.v1.SaveWorkflowResponse
@@ -830,7 +892,7 @@ export type SaveWorkflowResponse = Message<"reliant.v1.SaveWorkflowResponse"> & 
  * Use `create(SaveWorkflowResponseSchema)` to create a new message.
  */
 export const SaveWorkflowResponseSchema: GenMessage<SaveWorkflowResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 13);
+  messageDesc(file_reliant_v1_workflow, 15);
 
 /**
  * @generated from message reliant.v1.ImportWorkflowRequest
@@ -884,7 +946,7 @@ export type ImportWorkflowRequest = Message<"reliant.v1.ImportWorkflowRequest"> 
  * Use `create(ImportWorkflowRequestSchema)` to create a new message.
  */
 export const ImportWorkflowRequestSchema: GenMessage<ImportWorkflowRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 14);
+  messageDesc(file_reliant_v1_workflow, 16);
 
 /**
  * @generated from message reliant.v1.ImportWorkflowResponse
@@ -960,7 +1022,7 @@ export type ImportWorkflowResponse = Message<"reliant.v1.ImportWorkflowResponse"
  * Use `create(ImportWorkflowResponseSchema)` to create a new message.
  */
 export const ImportWorkflowResponseSchema: GenMessage<ImportWorkflowResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 15);
+  messageDesc(file_reliant_v1_workflow, 17);
 
 /**
  * @generated from message reliant.v1.ExportWorkflowRequest
@@ -993,7 +1055,7 @@ export type ExportWorkflowRequest = Message<"reliant.v1.ExportWorkflowRequest"> 
  * Use `create(ExportWorkflowRequestSchema)` to create a new message.
  */
 export const ExportWorkflowRequestSchema: GenMessage<ExportWorkflowRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 16);
+  messageDesc(file_reliant_v1_workflow, 18);
 
 /**
  * @generated from message reliant.v1.ExportWorkflowResponse
@@ -1031,7 +1093,7 @@ export type ExportWorkflowResponse = Message<"reliant.v1.ExportWorkflowResponse"
  * Use `create(ExportWorkflowResponseSchema)` to create a new message.
  */
 export const ExportWorkflowResponseSchema: GenMessage<ExportWorkflowResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 17);
+  messageDesc(file_reliant_v1_workflow, 19);
 
 /**
  * @generated from message reliant.v1.SetWorkflowVisibilityRequest
@@ -1064,7 +1126,7 @@ export type SetWorkflowVisibilityRequest = Message<"reliant.v1.SetWorkflowVisibi
  * Use `create(SetWorkflowVisibilityRequestSchema)` to create a new message.
  */
 export const SetWorkflowVisibilityRequestSchema: GenMessage<SetWorkflowVisibilityRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 18);
+  messageDesc(file_reliant_v1_workflow, 20);
 
 /**
  * @generated from message reliant.v1.SetWorkflowVisibilityResponse
@@ -1093,7 +1155,7 @@ export type SetWorkflowVisibilityResponse = Message<"reliant.v1.SetWorkflowVisib
  * Use `create(SetWorkflowVisibilityResponseSchema)` to create a new message.
  */
 export const SetWorkflowVisibilityResponseSchema: GenMessage<SetWorkflowVisibilityResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 19);
+  messageDesc(file_reliant_v1_workflow, 21);
 
 /**
  * @generated from message reliant.v1.CopyWorkflowRequest
@@ -1133,7 +1195,7 @@ export type CopyWorkflowRequest = Message<"reliant.v1.CopyWorkflowRequest"> & {
  * Use `create(CopyWorkflowRequestSchema)` to create a new message.
  */
 export const CopyWorkflowRequestSchema: GenMessage<CopyWorkflowRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 20);
+  messageDesc(file_reliant_v1_workflow, 22);
 
 /**
  * @generated from message reliant.v1.CopyWorkflowResponse
@@ -1176,7 +1238,7 @@ export type CopyWorkflowResponse = Message<"reliant.v1.CopyWorkflowResponse"> & 
  * Use `create(CopyWorkflowResponseSchema)` to create a new message.
  */
 export const CopyWorkflowResponseSchema: GenMessage<CopyWorkflowResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 21);
+  messageDesc(file_reliant_v1_workflow, 23);
 
 /**
  * CreateWorkflowDraftRequest creates an empty draft for the workflow builder.
@@ -1234,7 +1296,7 @@ export type CreateWorkflowDraftRequest = Message<"reliant.v1.CreateWorkflowDraft
  * Use `create(CreateWorkflowDraftRequestSchema)` to create a new message.
  */
 export const CreateWorkflowDraftRequestSchema: GenMessage<CreateWorkflowDraftRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 22);
+  messageDesc(file_reliant_v1_workflow, 24);
 
 /**
  * @generated from message reliant.v1.CreateWorkflowDraftResponse
@@ -1281,7 +1343,7 @@ export type CreateWorkflowDraftResponse = Message<"reliant.v1.CreateWorkflowDraf
  * Use `create(CreateWorkflowDraftResponseSchema)` to create a new message.
  */
 export const CreateWorkflowDraftResponseSchema: GenMessage<CreateWorkflowDraftResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 23);
+  messageDesc(file_reliant_v1_workflow, 25);
 
 /**
  * @generated from message reliant.v1.SetWorkflowStatusRequest
@@ -1321,7 +1383,7 @@ export type SetWorkflowStatusRequest = Message<"reliant.v1.SetWorkflowStatusRequ
  * Use `create(SetWorkflowStatusRequestSchema)` to create a new message.
  */
 export const SetWorkflowStatusRequestSchema: GenMessage<SetWorkflowStatusRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 24);
+  messageDesc(file_reliant_v1_workflow, 26);
 
 /**
  * @generated from message reliant.v1.SetWorkflowStatusResponse
@@ -1373,7 +1435,7 @@ export type SetWorkflowStatusResponse = Message<"reliant.v1.SetWorkflowStatusRes
  * Use `create(SetWorkflowStatusResponseSchema)` to create a new message.
  */
 export const SetWorkflowStatusResponseSchema: GenMessage<SetWorkflowStatusResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 25);
+  messageDesc(file_reliant_v1_workflow, 27);
 
 /**
  * WorkflowDraftStatus is a stored workflow's lifecycle.
@@ -1542,6 +1604,23 @@ export const WorkflowService: GenService<{
     methodKind: "unary";
     input: typeof SetWorkflowStatusRequestSchema;
     output: typeof SetWorkflowStatusResponseSchema;
+  },
+  /**
+   * ForkOrphanedWorkflow copies a saved workflow whose creator left its
+   * organization into one of the caller's own, in the same org, with
+   * forked_from naming the original (TriggerService.ListOrphanedAutomations
+   * lists them). The original is never re-owned: a saved workflow executes
+   * nothing, so no identity changes hands. Org admins only (the org role
+   * admin or owner, read fresh, signed in as a person); the fork keeps the
+   * original's status when its definition validates for the caller, else it
+   * is a draft. control-plane docs/design/org-sharing.md §8.3.
+   *
+   * @generated from rpc reliant.v1.WorkflowService.ForkOrphanedWorkflow
+   */
+  forkOrphanedWorkflow: {
+    methodKind: "unary";
+    input: typeof ForkOrphanedWorkflowRequestSchema;
+    output: typeof ForkOrphanedWorkflowResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_workflow, 0);

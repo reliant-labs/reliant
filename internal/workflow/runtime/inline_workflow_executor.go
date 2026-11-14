@@ -294,7 +294,24 @@ func (e *InlineWorkflowExecutor) loadAndMergePresets(subInputs map[string]interf
 		Workflow: workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.execContext)),
 		Iter:     e.enclosingIter(),
 	}
-	return applyPresets(presets, subInputs, evalCtx, e.loadPresetParams, e.logger, e.nodeID)
+	// The presets the child runs as name its agent on its spans
+	// (run_telemetry.go). Recorded as they load, so the names are the
+	// resolved ones, in applyPresets' sorted group order.
+	var loaded []string
+	load := func(name string) (map[string]interface{}, error) {
+		params, err := e.loadPresetParams(name)
+		if err == nil {
+			loaded = append(loaded, name)
+		}
+		return params, err
+	}
+	if err := applyPresets(presets, subInputs, evalCtx, load, e.logger, e.nodeID); err != nil {
+		return err
+	}
+	if e.execContext != nil {
+		e.execContext.Telemetry = withPreset(e.execContext.Telemetry, strings.Join(loaded, ","))
+	}
+	return nil
 }
 
 // presetLoaderFunc loads a preset's params by name. Extracted for testability.

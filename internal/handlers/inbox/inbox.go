@@ -62,13 +62,17 @@ const (
 	// A marked worktree's id names the worktree and the mark: a new mark
 	// after a cancel is a new item (markedItemID).
 	inboxWorktreeMarkedPrefix = "worktree_marked:"
+	// A chat asking before it uses the person's own AI account in place of
+	// its org's: the chat and when it asked.
+	inboxPersonalFundingPrefix = "personal_funding:"
 )
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
 	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxStoragePrefix,
 	inboxNeedsSetupPrefix, inboxRecoveryPrefix, inboxRunPausedPrefix, inboxDefinitionBrokenPrefix,
-	inboxWorktreeReclaimPrefix, inboxWorktreeMarkedPrefix,
+	inboxWorktreeReclaimPrefix, inboxWorktreeMarkedPrefix, inboxPersonalFundingPrefix, inboxOrgKeyRejectedPrefix,
+	inboxNoOrgAccountPrefix, inboxOnPersonalAccountsPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -105,7 +109,7 @@ func (s *Service) ListInbox(
 		return nil, err
 	}
 
-	read, err := s.sharedRead(ctx, userID)
+	read, err := s.sharedRead(withCallerJWT(ctx, auth.BearerToken(req.Header().Get("Authorization"))), userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
@@ -115,7 +119,7 @@ func (s *Service) ListInbox(
 	}
 	// The read may be shared with concurrent calls (sharedRead): this
 	// response gets its own copies.
-	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.declarations, read.recovery} {
+	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.declarations, read.recovery, read.orgKeys, read.automationNotices} {
 		for _, it := range shared {
 			items = append(items, proto.CloneOf(it))
 		}
@@ -189,6 +193,12 @@ type inboxReads struct {
 	// declaration: needs-setup and broken (declarationItems).
 	declarations []*reliantv1.InboxItem
 	recovery     []*reliantv1.InboxItem
+	// orgKeys are the rejected API keys of the orgs the caller administers.
+	orgKeys []*reliantv1.InboxItem
+	// automationNotices are the org-provider-accounts §11 notices: automations
+	// paused for want of an org account, and the caller's automations still
+	// on their own accounts in a team org.
+	automationNotices []*reliantv1.InboxItem
 	// orgs is the org of each chat, project ("chat:<id>", "project:<id>")
 	// and trigger ("trigger:<id>") the items are about, nil for one with no
 	// org yet: what ListInbox's org scope decides an item by (itemOrg).
@@ -206,8 +216,12 @@ const inboxReadTimeout = 15 * time.Second
 // slice of the pool, not N. The read runs on a context detached from the
 // first caller's cancellation (so one caller giving up does not fail the
 // others) with its own deadline. Callers only read the result.
+//
+// The read is shared only within one authorization class (sharedReadKey): what
+// it returns depends on the credential as well as the user, so a session's
+// read is never handed to an access token's call, nor the reverse.
 func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, error) {
-	v, err, _ := s.inboxReads.Do(userID, func() (any, error) {
+	v, err, _ := s.inboxReads.Do(sharedReadKey(ctx, userID), func() (any, error) {
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), inboxReadTimeout)
 		defer cancel()
 		return s.readInbox(rctx, userID)
@@ -216,6 +230,16 @@ func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, e
 		return nil, err
 	}
 	return v.(*inboxReads), nil
+}
+
+// sharedReadKey is the class of callers whose reads are interchangeable: the
+// same user, through the same kind of credential (only a person hears of an
+// org's rejected keys, orgKeyItems) bound to the same org (a credential bound
+// to an org reads only that org's rows, authz.WithCredentialOrg). Anything
+// readInbox decides by beyond the user belongs here.
+func sharedReadKey(ctx context.Context, userID string) string {
+	bound, _, _ := authz.CredentialRefusal(ctx)
+	return userID + "\x00" + strconv.Itoa(int(auth.CredentialFromContext(ctx))) + "\x00" + bound
 }
 
 // readLimiter hands out inboxReadConcurrency tokens, one per read holding a
@@ -299,6 +323,24 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 		advisory("Failed to compute storage inbox items", err)
 		return nil
 	})
+	g.Go(func() error {
+		err := lim.do(gctx, func() (err error) {
+			out.orgKeys, err = s.orgKeyItems(gctx, userID)
+			return err
+		})
+		// Advisory: an admin also sees a key's state in the org's settings.
+		advisory("Failed to list the rejected keys of the caller's orgs for inbox", err)
+		return nil
+	})
+	g.Go(func() error {
+		err := lim.do(gctx, func() (err error) {
+			out.automationNotices, err = s.automationNoticeItems(gctx, userID)
+			return err
+		})
+		// Advisory: each automation shows its own pause and funding.
+		advisory("Failed to list the org account notices of the caller's automations for inbox", err)
+		return nil
+	})
 	// Recoveries are durable catalog entries, NOT machine storage observations.
 	// A missing source row or disconnected/deleted daemon cannot hide them.
 	g.Go(func() error {
@@ -361,7 +403,8 @@ func recoveryInboxItem(row *core.WorktreeRecovery) *reliantv1.InboxItem {
 func inboxItemBlocks(it *reliantv1.InboxItem) bool {
 	switch it.Kind {
 	case reliantv1.InboxItemKind_INBOX_ITEM_KIND_APPROVAL,
-		reliantv1.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE:
+		reliantv1.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE,
+		reliantv1.InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING:
 		return true
 	case reliantv1.InboxItemKind_INBOX_ITEM_KIND_QUESTION:
 		return !it.GetQuestion().GetAsync()
@@ -552,7 +595,8 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userI
 // server does not know) reaches the owner on their next look, not on the
 // activation's next fire, which for a weekly schedule or a rare webhook may
 // be days away or never. Either item leaves the list the moment its cause is
-// gone. A paused automation is the person's choice and not nagged about.
+// gone. A paused automation is the person's choice and not nagged about; one
+// a project move paused is listed until it is set up again (movePausedItem).
 //
 // Resolving a declaration may read the workflow store, one workflow after
 // another, so the whole loop holds one of lim's tokens.
@@ -583,6 +627,10 @@ func (s *Service) declarationItems(ctx context.Context, stored []*core.Trigger) 
 	var out []*reliantv1.InboxItem
 	broken := &brokenDefinitions{byKey: map[string]*reliantv1.InboxItem{}}
 	for _, t := range stored {
+		if item := movePausedItem(t); item != nil {
+			out = append(out, item)
+			continue
+		}
 		if !t.Enabled {
 			continue
 		}
@@ -780,6 +828,9 @@ func inboxItemFromPending(p *core.InboxPending) *reliantv1.InboxItem {
 		item.Payload = &reliantv1.InboxItem_AutomationLaunchFailed{AutomationLaunchFailed: &reliantv1.InboxAutomationLaunchFailed{
 			Reason: p.Text1, EventId: p.ItemKey, ConsecutiveFailures: p.Int1,
 		}}
+	case core.InboxPendingPersonalFunding:
+		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING
+		item.ItemId = inboxPersonalFundingPrefix + p.ItemKey
 	case core.InboxPendingRunPaused:
 		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED
 		item.ItemId = inboxRunPausedPrefix + p.ItemKey

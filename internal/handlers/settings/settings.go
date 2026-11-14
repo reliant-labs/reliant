@@ -18,6 +18,8 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgfunding"
+	"github.com/reliant-labs/reliant/internal/orgs"
 )
 
 // ============================================================================
@@ -51,6 +53,18 @@ func validateSettingValue(key, value string) error {
 		}
 	}
 	return nil
+}
+
+// guardSettingWrite refuses a write of a setting only a person may change. The
+// person's org funding choice (orgfunding.SettingKey) says whether a chat in an
+// org may spend their own AI accounts: it is the same consent as answering the
+// chat's question (ProviderAccountService.ResolvePersonalFundingChoice), so an
+// agent's or a script's credential may not set it, nor clear it, on any path.
+func guardSettingWrite(ctx context.Context, key string) error {
+	if key != orgfunding.SettingKey {
+		return nil
+	}
+	return orgs.RequirePerson(ctx, "change who pays for your AI in an organization")
 }
 
 // upsertSetting creates or updates a setting
@@ -95,6 +109,9 @@ func (s *Service) CreateSetting(ctx context.Context, req *connect.Request[relian
 	}
 	if req.Msg.Value == "" {
 		return nil, svcerr.InvalidArgument("value is required")
+	}
+	if err := guardSettingWrite(ctx, req.Msg.Key); err != nil {
+		return nil, err
 	}
 	if err := validateSettingValue(req.Msg.Key, req.Msg.Value); err != nil {
 		return nil, err
@@ -195,6 +212,9 @@ func (s *Service) UpdateSetting(ctx context.Context, req *connect.Request[relian
 	if req.Msg.Key == "" {
 		return nil, svcerr.InvalidArgument("key is required")
 	}
+	if err := guardSettingWrite(ctx, req.Msg.Key); err != nil {
+		return nil, err
+	}
 
 	var projectID *string
 	if req.Msg.ProjectId != nil {
@@ -249,6 +269,9 @@ func (s *Service) BatchUpsertSettings(ctx context.Context, req *connect.Request[
 		if write.GetKey() == "" {
 			return nil, svcerr.InvalidArgument("key is required for every setting in a batch")
 		}
+		if err := guardSettingWrite(ctx, write.GetKey()); err != nil {
+			return nil, err
+		}
 		if err := validateSettingValue(write.GetKey(), write.GetValue()); err != nil {
 			return nil, err
 		}
@@ -298,6 +321,9 @@ func (s *Service) DeleteSetting(ctx context.Context, req *connect.Request[relian
 
 	if req.Msg.Key == "" {
 		return nil, svcerr.InvalidArgument("key is required")
+	}
+	if err := guardSettingWrite(ctx, req.Msg.Key); err != nil {
+		return nil, err
 	}
 
 	var projectID *string

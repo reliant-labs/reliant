@@ -151,6 +151,42 @@ service WorkflowService {
     };
   }
 
+  // ForkOrphanedWorkflow copies a saved workflow whose creator left its
+  // organization into one of the caller's own, in the same org, with
+  // forked_from naming the original (TriggerService.ListOrphanedAutomations
+  // lists them). The original is never re-owned: a saved workflow executes
+  // nothing, so no identity changes hands. Org admins only (the org role
+  // admin or owner, read fresh, signed in as a person); the fork keeps the
+  // original's status when its definition validates for the caller, else it
+  // is a draft. control-plane docs/design/org-sharing.md §8.3.
+  rpc ForkOrphanedWorkflow(ForkOrphanedWorkflowRequest) returns (ForkOrphanedWorkflowResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "fork_orphan"
+        target: {
+          kind: "workflow"
+          id: "response.slug"
+        }
+        detail: ["workflow_id"]
+      }
+    };
+  }
+}
+
+message ForkOrphanedWorkflowRequest {
+  // The orphaned saved workflow's id (OrphanedWorkflow.id).
+  string workflow_id = 1 [(buf.validate.field).string.min_len = 1];
+  // One of the caller's projects, for the new slug's uniqueness.
+  string project_id = 2 [(buf.validate.field).string.min_len = 1];
+  // A name for the fork. Unset keeps the original's, made unique.
+  optional string new_name = 3;
+}
+
+message ForkOrphanedWorkflowResponse {
+  // The fork's id and slug (what a trigger's workflow names).
+  string id = 1;
+  string slug = 2;
+  string name = 3;
 }
 
 // ============================================

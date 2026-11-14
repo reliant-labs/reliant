@@ -5,8 +5,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
 
@@ -36,6 +38,19 @@ func (s accountRouterStore) ListAccountLimits(ctx context.Context, userID string
 	if err != nil {
 		return nil, err
 	}
+	return routerLimits(limits), nil
+}
+
+func (s accountRouterStore) ListOrgAccountLimits(ctx context.Context, orgID string) (map[string]accountrouter.LimitState, error) {
+	limits, err := s.repo.ListOwnedAccountLimits(ctx, core.OrgAccountOwner(orgID))
+	if err != nil {
+		return nil, err
+	}
+	return routerLimits(limits), nil
+}
+
+// routerLimits translates the store's limit rows for the router.
+func routerLimits(limits map[string]core.LimitState) map[string]accountrouter.LimitState {
 	out := make(map[string]accountrouter.LimitState, len(limits))
 	for id, l := range limits {
 		ls := accountrouter.LimitState{
@@ -49,7 +64,7 @@ func (s accountRouterStore) ListAccountLimits(ctx context.Context, userID string
 		}
 		out[id] = ls
 	}
-	return out, nil
+	return out
 }
 
 func (s accountRouterStore) RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error) {
@@ -60,7 +75,11 @@ func (s accountRouterStore) RecentAssignmentCounts(ctx context.Context, accountI
 // activities share. It is inactive until a per-account driver builder is wired
 // (see handlers.AccountRouting.DriverFor): accounts are never assigned that
 // cannot then be used.
-func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitRecorder) *handlers.AccountRouting {
+func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitRecorder, notices ...orgKeyNoticeQueue) *handlers.AccountRouting {
+	marker := credentialMarker{repo: repo}
+	if len(notices) > 0 {
+		marker.notices = notices[0]
+	}
 	store := accountRouterStore{repo: repo}
 	return &handlers.AccountRouting{
 		Router:                accountrouter.NewInstrumented(accountrouter.Deps{Store: store}),
@@ -69,15 +88,62 @@ func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitReco
 		Settings:              repo,
 		DriverFor:             accountDriverFor,
 		Recorder:              recorder,
-		Credentials:           credentialMarker{repo: repo},
+		Credentials:           marker,
+		Funding:               repo,
 	}
+}
+
+// OrgAdminNotifier emails an org's owners and admins that a provider rejected
+// one of the org's own API keys. controlplane.Service is one.
+type OrgAdminNotifier interface {
+	NotifyOrgKeyRejected(ctx context.Context, n controlplane.OrgKeyRejectedNotice) (deduplicated bool, err error)
+	// NotifyOrgAutomationNoOrgAccount emails them that an automation was
+	// paused for want of an org account (pause_notice.go).
+	NotifyOrgAutomationNoOrgAccount(ctx context.Context, n controlplane.OrgAutomationNoOrgAccountNotice) (deduplicated bool, err error)
+}
+
+// orgKeyNoticeQueue is where a rejected org key's notice is started: the
+// Temporal client and the task queue its workflow runs on.
+type orgKeyNoticeQueue struct {
+	starter   noticeStarter
+	taskQueue string
 }
 
 // credentialMarker retires an account whose API key the provider rejected, the
 // way the token refresh coordinator retires one whose refresh token it did.
-type credentialMarker struct{ repo AccountCredentialStore }
+// For an org's own key it also has the org's owners and admins emailed, who
+// alone can rotate it (org-provider-accounts §4.7; the inbox item is listed
+// from the mark itself).
+type credentialMarker struct {
+	repo AccountCredentialStore
+	// notices is unset without Temporal: the inbox item is the only notice.
+	notices orgKeyNoticeQueue
+}
 
-func (m credentialMarker) MarkNeedsSignIn(ctx context.Context, userID, accountID, reason string) error {
-	_, err := m.repo.PatchProviderAccount(ctx, userID, accountID, core.AccountPatch{NeedsReauth: &reason})
-	return err
+// MarkNeedsSignIn marks the account on its owner's row: a person's own, or the
+// org's for an org key.
+func (m credentialMarker) MarkNeedsSignIn(ctx context.Context, owner core.AccountOwner, accountID, reason string) error {
+	acct, err := m.repo.PatchOwnedProviderAccount(ctx, owner, accountID, core.AccountPatch{NeedsReauth: &reason})
+	if err != nil {
+		return err
+	}
+	if owner.IsOrg() && m.notices.starter != nil && acct.NeedsReauthAt != nil {
+		m.notifyOrgAdmins(context.WithoutCancel(ctx), owner.ID, acct, reason)
+	}
+	return nil
+}
+
+// notifyOrgAdmins starts the notice of the rejected key (OrgKeyRejectedNoticeWorkflow).
+// The mark is the durable intent: the account's needs_reauth_at, kept until the
+// key is rotated, names the incident, and reauth_notice_for records once
+// Temporal accepted its workflow. Every rejection of a marked org key starts
+// it again (the same workflow id, so a duplicate is a no-op) and confirms it;
+// a start that fails leaves it unconfirmed for the next rejection or the
+// worker's sweep (sweepOrgKeyNotices). The mark stands, and the inbox lists
+// it, whatever happens here.
+func (m credentialMarker) notifyOrgAdmins(ctx context.Context, orgID string, acct core.ProviderAccount, reason string) {
+	if err := startAndConfirmOrgKeyNotice(ctx, m.repo, m.notices, orgKeyNotice(orgID, acct, reason)); err != nil {
+		logging.WarnContext(ctx, "Could not start emailing the org's admins about a rejected key; the sweep retries it",
+			"orgID", orgID, "accountID", acct.ID, "error", err)
+	}
 }

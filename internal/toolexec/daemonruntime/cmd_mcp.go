@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/gitutil"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"golang.org/x/sync/singleflight"
@@ -509,6 +510,9 @@ func handleMCPCallTool(_ context.Context, payload []byte) ([]byte, error) {
 
 type mcpEnsureLoadedRequest struct {
 	ProjectPath string `json:"project_path"`
+	// OrgPolicy is the run's org stamp: a server it does not allow is not
+	// started for this load (mcp.Manager). Absent: today's behaviour.
+	OrgPolicy *daemonpolicy.OrgStamp `json:"org_policy,omitempty"`
 }
 
 type mcpEnsureLoadedResponse struct {
@@ -543,11 +547,19 @@ func handleMCPEnsureLoaded(ctx context.Context, payload []byte) ([]byte, error) 
 	// servers; on a busy machine concurrent loads of the same project piled up
 	// behind one another until none answered inside the caller's timeout.
 	// Later callers share the load already running.
-	ch := ensureLoadedFlights.DoChan(req.ProjectPath, func() (interface{}, error) {
+	// A load under an org's MCP allowlist starts only what it allows, so it
+	// is shared only with loads under the same allowlist.
+	flight := req.ProjectPath
+	if req.OrgPolicy != nil && req.OrgPolicy.MCP != nil {
+		raw, _ := json.Marshal(req.OrgPolicy.MCP)
+		flight += "\x00org_policy=" + string(raw)
+	}
+	ch := ensureLoadedFlights.DoChan(flight, func() (interface{}, error) {
 		// Detached from the first caller, who may give up before it ends,
 		// and bounded on its own.
 		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ensureLoadedMaxDuration)
 		defer cancel()
+		loadCtx = daemonpolicy.WithOrgStamp(loadCtx, req.OrgPolicy)
 		return mgr.EnsureProjectServersLoaded(loadCtx, req.ProjectPath), nil
 	})
 	var result *mcp.ProjectServerLoadResult

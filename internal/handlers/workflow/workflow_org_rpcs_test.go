@@ -102,6 +102,14 @@ func TestEveryWorkflowMutationActsInItsOrg(t *testing.T) {
 			}))
 			return err
 		},
+		// The caller's own saved workflow is no orphan of acme's; what this
+		// case pins is that a caller outside acme cannot reach it at all.
+		"ForkOrphanedWorkflow": func(ctx context.Context) error {
+			_, err := svc.ForkOrphanedWorkflow(ctx, connect.NewRequest(&reliantv1.ForkOrphanedWorkflowRequest{
+				WorkflowId: draft.ID, ProjectId: projectID,
+			}))
+			return err
+		},
 		"SetWorkflowStatus": func(ctx context.Context) error {
 			_, err := svc.SetWorkflowStatus(ctx, connect.NewRequest(&reliantv1.SetWorkflowStatusRequest{
 				ProjectId: projectID, DraftId: draft.ID, Status: reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT,

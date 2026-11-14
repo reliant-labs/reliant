@@ -45,7 +45,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
-	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -61,34 +60,23 @@ func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID st
 	return id, err
 }
 
-// ListWorktreeIDsWithRunningChat conservatively excludes both chat and
-// spawned-thread workspace bindings while their chat has a pending, active or
-// paused/resumable run, or a thread parked on a provider wait that has not
-// reached its resume time (providerWaitSQL). A thread can override its
-// chat's workspace.
+// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
+// in them: a run of a chat bound to the worktree, or of a thread bound to it
+// (a sub-agent spawned into it) and that thread's own descendants, including
+// paused/resumable runs and provider waits that have not reached their resume
+// time. It is WorktreeRunActivities' Running, read from the one definition
+// (worktreeRunActivitySQL), so the sweep's pre-filter and the row-locked
+// archive check can never disagree about what "running" means.
 func ListWorktreeIDsWithRunningChat(ctx context.Context, db orm.Context, worktreeIDs []string) (map[string]bool, error) {
 	out := make(map[string]bool)
-	if len(worktreeIDs) == 0 {
-		return out, nil
-	}
-	var ids []string
-	err := db.Bun().NewRaw(`WITH bindings AS (
- SELECT id AS chat_id, worktree_id FROM chats WHERE worktree_id = ANY(?0::text[])
- UNION
- SELECT chat_id, worktree_id FROM threads WHERE worktree_id = ANY(?0::text[])
-)
-SELECT DISTINCT b.worktree_id FROM bindings b JOIN workflows w ON w.chat_id = b.chat_id
-WHERE w.state IN (?1, ?2) OR (w.state = ?3 AND w.stop_reason = ?4)
-UNION
-SELECT b.worktree_id FROM bindings b JOIN provider_backoff pb ON pb.chat_id = b.chat_id
-WHERE `+providerWaitSQL+` AND pb.resume_at >= NOW()`,
-		pgdialect.Array(worktreeIDs), core.WorkflowStatePending, core.WorkflowStateActive,
-		core.WorkflowStateStopped, core.StopReasonPaused).Scan(ctx, &ids)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	acts, err := WorktreeRunActivities(ctx, db, worktreeIDs)
+	if err != nil {
 		return nil, err
 	}
-	for _, id := range ids {
-		out[id] = true
+	for id, a := range acts {
+		if a.Running {
+			out[id] = true
+		}
 	}
 	return out, nil
 }
@@ -769,4 +757,29 @@ func chatPresetsToColumn(m map[string]string) *string {
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type ChatExtra struct {
+}
+
+// RecordChatPersonTurn records that userID, a person, sent a message into chatID now
+// (chat_person_turns): from this turn on its calls are attended (org-provider-accounts §11.1).
+func RecordChatPersonTurn(ctx context.Context, db orm.Context, chatID, userID string, at time.Time) error {
+	_, err := db.Bun().NewRaw(`INSERT INTO chat_person_turns (chat_id, user_id, at) VALUES (?0, ?1, ?2)
+		ON CONFLICT (chat_id) DO UPDATE SET user_id = EXCLUDED.user_id, at = EXCLUDED.at`,
+		chatID, userID, at.UTC()).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("record a person's turn in the chat: %w", err)
+	}
+	return nil
+}
+
+// ChatPersonTurnAt returns when a person last sent a message into chatID, nil when nobody has.
+func ChatPersonTurnAt(ctx context.Context, db orm.Context, chatID string) (*time.Time, error) {
+	var at []time.Time
+	if err := db.Bun().NewRaw(`SELECT at FROM chat_person_turns WHERE chat_id = ?`, chatID).Scan(ctx, &at); err != nil {
+		return nil, fmt.Errorf("read a person's turn in the chat: %w", err)
+	}
+	if len(at) == 0 {
+		return nil, nil
+	}
+	t := at[0].UTC()
+	return &t, nil
 }

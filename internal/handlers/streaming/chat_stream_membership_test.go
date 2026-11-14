@@ -227,3 +227,61 @@ func TestStreamChatUpdates_ForwardsNoUpdateOfALeftOrg(t *testing.T) {
 	}
 	require.Equal(t, []string{"last"}, forwarded, "nothing of acme, which the caller has left")
 }
+
+// An owner's chat stream, opened through a credential bound to the chat's org,
+// ends within one re-authorization interval once the chat's project moves to
+// another org (control-plane docs/design/org-project-move.md §4.3): the row is
+// re-read on every tick, owner or viewer, not trusted from the open.
+func TestStreamChatUpdates_AnOwnerStreamEndsWhenTheChatMovesOrg(t *testing.T) {
+	repo := &stampableChatRepo{catchupChatRepo: newCatchupChatRepo(42)}
+	acme := "acme"
+	repo.org.Store(&acme)
+	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}}))
+	svc.heartbeatInterval = time.Hour // only the re-authorization ticks
+	svc.reauthorizeInterval = 10 * time.Millisecond
+	// A member of both orgs: only the credential's binding refuses the move.
+	membership := &orgMembers{orgs: map[string]bool{"acme": true, "globex": true}, def: "acme"}
+
+	mux := http.NewServeMux()
+	path, handler := reliantv1connect.NewStreamingServiceHandler(svc, connect.WithInterceptors(svcerr.Interceptor()))
+	mux.Handle(path, authInjector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler.ServeHTTP(w, r.WithContext(authz.WithCredentialOrg(authz.WithMembership(r.Context(), membership), "acme")))
+	})))
+	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
+	srv.EnableHTTP2 = true
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	stream, err := reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL).
+		StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{ChatId: raceTestChatID}))
+	require.NoError(t, err)
+	events := receiveAll(t, stream)
+	for caughtUp := false; !caughtUp; {
+		event, open := <-events
+		if !open { // stream.Err() only once receiveAll has stopped: it races Receive
+			t.Fatalf("the stream ended before its initial sync: %v", stream.Err())
+		}
+		caughtUp = event.GetCaughtUp() != nil
+	}
+	// In acme, the owner's row is re-read on each tick and passes.
+	require.Eventually(t, func() bool { return repo.reads.Load() >= 4 }, 10*time.Second, time.Millisecond,
+		"the open stream never re-read its owner's chat")
+	select {
+	case event, open := <-events:
+		if !open {
+			t.Fatalf("the stream ended while the chat was in the credential's org: %v", stream.Err())
+		}
+		t.Fatalf("unexpected frame while idle: %v", event)
+	default:
+	}
+
+	globex := "globex"
+	repo.org.Store(&globex)
+	for event := range events {
+		t.Fatalf("a frame after the move: %v", event)
+	}
+	require.Equal(t, connect.CodeNotFound, connect.CodeOf(stream.Err()),
+		"moved to globex, the acme-bound stream ends as an open would refuse it: %v", stream.Err())
+}

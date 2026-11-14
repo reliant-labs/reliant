@@ -32,6 +32,7 @@ import {
   connectionErrorMessage,
   createdConnection,
   invalidateConnectionQueries,
+  isOrgConnectionsDisabled,
   useCreateApiKeyConnection,
   type AuthMethod,
   type Connection,
@@ -58,6 +59,10 @@ export interface ConnectIntegrationDialogProps {
   onConnected?: (connection: Connection) => void;
   /** Where OAuth lands afterwards; defaults to the current page. */
   redirectAfter?: string;
+  /** Connect it for this organization (its admins only), named in the title. */
+  owner?: { orgId: string; orgName: string };
+  /** The deployment refused because it has not enabled org connections. */
+  onOrgConnectionsDisabled?: () => void;
 }
 
 const METHOD_LABEL: Record<AuthMethod["kind"], string> = {
@@ -90,9 +95,18 @@ function currentPath(): string {
   return `${window.location.pathname}${window.location.search}`;
 }
 
-export function ConnectIntegrationDialog({ target, onClose, onConnected, redirectAfter }: ConnectIntegrationDialogProps) {
+export function ConnectIntegrationDialog({ target, onClose, onConnected, redirectAfter, owner, onOrgConnectionsDisabled }: ConnectIntegrationDialogProps) {
   if (!target) return null;
-  return <ConnectBody target={target} onClose={onClose} onConnected={onConnected} redirectAfter={redirectAfter} />;
+  return (
+    <ConnectBody
+      target={target}
+      onClose={onClose}
+      onConnected={onConnected}
+      redirectAfter={redirectAfter}
+      owner={owner}
+      onOrgConnectionsDisabled={onOrgConnectionsDisabled}
+    />
+  );
 }
 
 function ConnectBody({
@@ -100,6 +114,8 @@ function ConnectBody({
   onClose,
   onConnected,
   redirectAfter,
+  owner,
+  onOrgConnectionsDisabled,
 }: Omit<ConnectIntegrationDialogProps, "target"> & { target: ConnectIntegrationTarget }) {
   const entryQuery = useCatalogEntry(target.connection ? undefined : target.ref);
   const connectionInfo = target.connection ?? entryQuery.data?.connection;
@@ -131,6 +147,7 @@ function ConnectBody({
           name: name.trim() || undefined,
           redirectAfter: redirectAfter ?? currentPath(),
           params: paramValues,
+          ownerOrgId: owner?.orgId,
         },
         controller.signal,
       );
@@ -142,7 +159,12 @@ function ConnectBody({
     } catch (err) {
       if (err instanceof ConnectionOAuthCancelled) return;
       setRedirecting(false);
-      setError(connectionErrorMessage(err));
+      if (isOrgConnectionsDisabled(err)) {
+        onOrgConnectionsDisabled?.();
+        setError(`Adding connections for ${owner?.orgName ?? "an organization"} isn't enabled on this deployment yet.`);
+      } else {
+        setError(connectionErrorMessage(err));
+      }
     } finally {
       if (pendingOAuth.current === controller) pendingOAuth.current = null;
     }
@@ -167,13 +189,19 @@ function ConnectBody({
             kind: active.kind === "basic" ? "basic" : "api_key",
             fields,
             params: paramValues,
+            ownerOrgId: owner?.orgId,
           }),
         ),
       );
       onConnected?.(connection);
       onClose();
     } catch (err) {
-      setError(connectionErrorMessage(err));
+      if (isOrgConnectionsDisabled(err)) {
+        onOrgConnectionsDisabled?.();
+        setError(`Adding connections for ${owner?.orgName ?? "an organization"} isn't enabled on this deployment yet.`);
+      } else {
+        setError(connectionErrorMessage(err));
+      }
     }
   };
 
@@ -193,7 +221,7 @@ function ConnectBody({
       title={
         <span className="flex items-center gap-3">
           <IntegrationIcon hint={target.icon ?? target.integrationId} />
-          {`Connect ${target.displayName}`}
+          {owner ? `Connect ${target.displayName} for ${owner.orgName}` : `Connect ${target.displayName}`}
         </span>
       }
     >

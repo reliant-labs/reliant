@@ -331,10 +331,15 @@ func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection,
 		// re-attach, matching the empty initial cache key here.
 		if hb := m.Heartbeat; hb != nil {
 			if conn.leaseRecreated.Swap(false) {
-				// The renewer re-created the row with the column default:
-				// whatever this cache says was written is gone.
+				// The renewer re-created the row with the column defaults:
+				// whatever these caches say was written is gone.
 				conn.lastDetectedPortsKey = ""
+				conn.healthWritten = false
 			}
+			// Whether the machine can do work (the daemon's fork
+			// watchdog), on the attachment record where the registry,
+			// the UI and wait_for_machine read it.
+			s.recordMachineHealth(ctx, conn, hb.Health, time.Now().UTC())
 			portsKey := fmt.Sprint(hb.DetectedPorts)
 			if portsKey != conn.lastDetectedPortsKey {
 				if err := s.deps.Repo.UpdateDaemonAttachmentPorts(ctx, conn.daemonID, hb.DetectedPorts); err != nil {

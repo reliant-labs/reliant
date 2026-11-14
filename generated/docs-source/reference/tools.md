@@ -1636,6 +1636,10 @@ PARAMETERS:
 - id: (required) Workflow UUID, slug, or name — including a builtin or project
   workflow name straight out of list_workflows, or the id from create_workflow.
 
+- start_line, line_count: (optional) a window of the YAML's lines. A workflow
+  that fits arrives whole; a larger one arrives as its first lines that fit,
+  with the exact start_line that continues it.
+
 RETURNS:
 The complete workflow YAML with validation status. For editable drafts it also
 returns the version and timestamp; pass that version as expected_version to
@@ -3079,8 +3083,10 @@ If it reports that the machine was removed, or that it failed to start and staye
 RETURNS EARLY WHEN A MESSAGE ARRIVES:
 If a message arrives for you while you wait — from the user, your parent, or a sub-agent — the wait ends early so you can read it. Nothing is lost; call wait_for_machine again if you still need the machine.
 
+If it reports that the machine is connected but degraded (it cannot start processes), retrying will fail the same way and waiting will not help: free the machine (shell_list, shell_kill) or tell the user.
+
 RETURNS:
-- connected: true once the machine is attached — retry the call that failed
+- connected: true once the machine is attached — retry the call that failed, unless it also says degraded
 - otherwise its last known state (disconnected, starting, suspended, failed, removed) with what to do about it
 
 ---

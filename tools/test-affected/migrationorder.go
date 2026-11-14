@@ -35,7 +35,7 @@ import (
 // judging a stale ref.
 
 // defaultLanes is every lane `task test:affected` considers.
-const defaultLanes = "go,web,electron,forge-generate,docs-generate,migration-order"
+const defaultLanes = "go,web,electron,forge-generate,docs-generate,migration-order,web-demo"
 
 // migrationVersionRe matches a migration filename: <digits>_<stem>.up.sql.
 var migrationVersionRe = regexp.MustCompile(`^(\d+)_(.+)\.up\.sql$`)

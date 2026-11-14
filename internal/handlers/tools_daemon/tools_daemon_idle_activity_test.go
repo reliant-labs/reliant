@@ -65,6 +65,7 @@ func newActivityRecorder(t *testing.T, daemonID string) *activityRecorder {
 func (r *activityRecorder) recorded(t *testing.T, quiet time.Duration) []daemonwire.Event {
 	t.Helper()
 	require.NoError(t, r.nc.Flush())
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — every caller asserts no activity was published, which leaves no event to wait for
 	time.Sleep(quiet)
 	r.mu.Lock()
 	defer r.mu.Unlock()

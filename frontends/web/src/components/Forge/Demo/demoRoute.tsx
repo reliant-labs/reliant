@@ -16,7 +16,7 @@ import { retainTourParam } from "@/components/Onboarding/tourParam";
 import { lazyRoute } from "@/lib/lazyRoute";
 import { obsSearchShape, forgeConsoleDataSearchSchema, forgeConsoleStorageSearchSchema } from "@/routeSchemas";
 
-import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
+import { DEMO_SECTIONS, FORGE_DEMO_PATH } from "./demoPath";
 
 export { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 
@@ -27,7 +27,7 @@ export const forgeDemoSearchSchema = z.object({
   ...forgeConsoleStorageSearchSchema.omit({ env: true }).shape,
   browser: z.enum(["data", "storage"]).optional().catch(undefined),
   tour: z.string().optional().catch(undefined),
-  section: z.enum([DEMO_SECTION_BUILT]).optional().catch(undefined),
+  section: z.enum(DEMO_SECTIONS).optional().catch(undefined),
 });
 
 /** The demo page, loaded on first visit. */

@@ -15,6 +15,7 @@ import { FolderGit2 } from "lucide-react";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { openAddProject } from "../../store/addProjectDialogStore";
 import { AddProjectOptions } from "./AddProjectOptions";
+import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
 import { NoActiveMachinePanel } from "./picker/MachineStatus";
 import { NO_PROJECTS_COPY, PROJECT_DEFINITION } from "./projectCopy";
 import { useAddProject } from "./useAddProject";
@@ -53,6 +54,11 @@ export function NoProjectsState() {
           </div>
           <AddProjectOptions actions={actions} />
         </section>
+
+        {/* A member who joined only to follow others' work has no project of
+            their own; what the org shared is still theirs to open. Nothing
+            when none is shared. */}
+        <SharedWithOrgSection activeChatId={null} />
       </div>
     </div>
   );

@@ -219,10 +219,16 @@ func DefaultUserConnection(ctx context.Context, db orm.Context, userID, integrat
 		whereConnection(ConnectionFieldIntegrationID, integrationID), whereConnection(ConnectionFieldIsDefault, true))
 }
 
-// FindConnectionByExternalAccount returns the user's oldest live connection
-// to that provider account, or core.ErrConnectionNotFound.
+// FindConnectionByExternalAccount returns the user's oldest live personal
+// connection to that provider account, or core.ErrConnectionNotFound.
 func FindConnectionByExternalAccount(ctx context.Context, db orm.Context, userID, integrationID, externalAccountID string) (*core.Connection, error) {
-	return selectConnection(ctx, db, false, whereUserOwned(userID),
+	return FindOwnedConnectionByExternalAccount(ctx, db, core.UserConnectionOwner(userID), integrationID, externalAccountID)
+}
+
+// FindOwnedConnectionByExternalAccount returns owner's oldest live
+// connection to that provider account, or core.ErrConnectionNotFound.
+func FindOwnedConnectionByExternalAccount(ctx context.Context, db orm.Context, owner core.ConnectionOwner, integrationID, externalAccountID string) (*core.Connection, error) {
+	return selectConnection(ctx, db, false, whereOwned(owner),
 		whereConnection(ConnectionFieldIntegrationID, integrationID),
 		whereConnection(ConnectionFieldExternalAccountID, externalAccountID),
 		func(q *bun.SelectQuery) { q.OrderExpr("?", bun.Ident(ConnectionFieldCreatedAt)) })
@@ -402,12 +408,11 @@ func ownerPredicate(owner core.ConnectionOwner) (string, []any) {
 }
 
 // isConnectionNameTaken reports whether err is a write that lost to a live
-// connection of the same name: a person's (connections_name, and its
-// owner_kind-scoped successor connections_user_name) or an org's
-// (connections_org_name).
+// connection of the same name: a person's (connections_user_name) or an
+// org's (connections_org_name).
 func isConnectionNameTaken(err error) bool {
 	switch orm.ConstraintName(err) {
-	case ConnectionConstraintName, ConnectionConstraintUserName, ConnectionConstraintOrgName:
+	case ConnectionConstraintUserName, ConnectionConstraintOrgName:
 		return true
 	}
 	return false

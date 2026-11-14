@@ -179,3 +179,28 @@ func TestProbeDelay(t *testing.T) {
 	}
 	assert.Equal(t, 5*time.Minute, ProbeDelay(-3))
 }
+
+// Who pays is derived from the row: the org that owns it, the org a person's seat or managed key
+// is attributed to, or the person (org-provider-accounts §2).
+func TestProtoAccountSaysWhoPays(t *testing.T) {
+	cases := []struct {
+		name    string
+		acct    core.ProviderAccount
+		funding pb.ProviderAccountFunding
+		org     string
+	}{
+		{"a person's own", core.ProviderAccount{UserID: "u1", OwnerKind: core.AccountOwnerUser}, pb.ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_PERSONAL, ""},
+		{"a row predating owner_kind", core.ProviderAccount{UserID: "u1"}, pb.ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_PERSONAL, ""},
+		{"an org's key", core.ProviderAccount{UserID: "org:acme", OwnerKind: core.AccountOwnerOrg, OrgID: "acme"}, pb.ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_ORG_KEY, "acme"},
+		{"a seat", core.ProviderAccount{UserID: "u1", AttributedOrgID: "acme", AttributionSource: core.AttributionWorkspace}, pb.ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_ORG_SEAT, "acme"},
+		{"an approved seat", core.ProviderAccount{UserID: "u1", AttributedOrgID: "acme", AttributionSource: core.AttributionApproved}, pb.ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_ORG_SEAT, "acme"},
+		{"the managed key minted in an org", core.ProviderAccount{UserID: "u1", AttributedOrgID: "acme", AttributionSource: core.AttributionManaged}, pb.ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_ORG_WALLET, "acme"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ProtoAccount(tc.acct, nil, t0)
+			assert.Equal(t, tc.funding, got.Funding)
+			assert.Equal(t, tc.org, got.GetFundingOrgId())
+		})
+	}
+}

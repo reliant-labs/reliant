@@ -6,21 +6,32 @@
 //
 // Two passes, and it FAILS (exit 1) on any problem in either.
 //
-// 1. PAGES: loads `/` and every forge console page by URL. Problems:
+// 1. PAGES: loads `/`, the build story and every forge console page by URL. Problems:
 //    - a request to any origin but the site's own (the demo reaches no backend);
 //    - a 4xx/5xx response from the site itself (other than /_otel);
 //    - an uncaught page error, or a console error naming CORS;
-//    - `/` not landing on the visual build story (/forge/demo?section=built);
+//    - `/` not landing on the Home (/forge/demo?section=home, sections/DemoHome.tsx),
+//      or the Home missing any of: its one hero heading; its "Open the console",
+//      "Take the tour" and "How this shop was built" actions (each the right
+//      role, and the links to the right place); its four numbered stories, each
+//      with a title and a link; its agent workflow list, each row with its
+//      button. Then on the Home it opens the first workflow's sheet and closes
+//      it with Escape, and "Take the tour" must start the tour on the console;
+//    - the build story (/forge/demo?section=built) showing no recorded build;
 //    - a page with no `[data-shell=demo]` root.
 //    Per page it also prints how often "Sample data isn't available" showed (an
 //    RPC the demo has no sample data for): a content gap, not a failure.
 //
-// 2. NAV: starts at `/`, clicks Explore the running app, then every console nav item, at
-//    desktop 1440×900 and phone 390×844 (where the nav is a drawer behind
-//    "Open navigation"). Sections that fold (Observability, Environments) are
-//    unfolded first, so their sub-items are clicked too. An item is dead, and
-//    the run fails, when the click does not move the URL to the item's href,
-//    or the page's heading and content do not change.
+// 2. NAV: starts at `/`, clicks the Home's "Open the console", then every nav
+//    item, at desktop 1440×900 and phone 390×844 (where the nav is a drawer
+//    behind "Open navigation"). The nav is grouped (Console/groupedNav.tsx and
+//    the demo's DemoNavExtras.tsx): Issues, Performance and More tools are
+//    buttons that fold, and must hold their pages (navGroups below); every
+//    other row (navRows: Home, Overview, Sessions, … How it was built) is a
+//    link of its own. Groups are unfolded, and a row with sub-pages
+//    (Environments) is opened, so every sub-item is clicked too. An item is
+//    dead, and the run fails, when the click does not move the URL to the
+//    item's href, or the page's heading and content do not change.
 //
 // AUDITED READS: Data and Storage read an audited environment only after the
 // reader gives a reason, in a dialog naming the environment (AccessReasonDialog),
@@ -57,8 +68,11 @@ const audited = [
   { path: `${home}/data`, subject: "data", root: "data-browser", read: (page) => page.getByRole("navigation", { name: "Tables" }).getByRole("link").first() },
   { path: `${home}/storage`, subject: "files", root: "storage-browser", read: (page) => page.getByRole("main").getByRole("table").getByRole("row").nth(1) },
 ];
+// The demo's own pages, `?section=` of the demo console (demoPath.ts).
+const demoSection = (section) => `/forge/demo?section=${section}`;
 const pages = [
   "/",
+  demoSection("built"),
   home,
   `${home}/releases`,
   `${home}/environments`,
@@ -77,6 +91,49 @@ const viewports = [
   { name: "desktop", width: 1440, height: 900, mobile: false },
   { name: "phone", width: 390, height: 844, mobile: true },
 ];
+
+// The Home `/` lands on (sections/DemoHome.tsx), found by the test ids it sets.
+const homeHeading = "Ship your app safely, see what breaks, and let an agent fix it.";
+const homeActions = [
+  { id: "home-primary", role: "link", name: "Open the console", to: (url) => url.pathname === home },
+  { id: "home-take-tour", role: "button", name: "Take the tour" },
+  { id: "home-how-built", role: "link", name: "How this shop was built", to: (url) => url.pathname === "/forge/demo" && url.searchParams.get("section") === "built" },
+];
+const homeStories = ["slow", "checkout", "release", "people"];
+// AGENT_WORKFLOW_ORDER (sections/agentWorkflows.ts).
+const agentWorkflows = ["fix-errors", "watch-alerts", "slow-pages", "weekly-digest", "release-guard"];
+// The tour "Take the tour" starts (TOUR_START, DemoScreenActions.tsx).
+const tourStart = "forge:fg-intro";
+
+// The grouped nav. A group is a button with no page of its own; it must hold
+// these pages. A row is a link of its own: its label and where it goes.
+const navGroups = {
+  Issues: [`${home}/observability/errors`, `${home}/observability/alerts`],
+  Performance: [`${home}/observability/traces`, `${home}/observability/rpc`],
+  "More tools": [`${home}/observability/dashboards`, `${home}/observability/logs`, `${home}/observability/metrics`, `${home}/observability/graph`, `${home}/storage`],
+};
+const navRows = [
+  { label: "Home", to: (key) => key === demoSection("home") },
+  { label: "Overview", to: (key) => key === home },
+  { label: "Sessions", to: (key) => key === `${home}/observability/sessions` },
+  { label: "Product analytics", to: (key) => key.startsWith(`${home}/observability/dashboards/`) },
+  { label: "Releases", to: (key) => key === `${home}/releases` },
+  { label: "Data", to: (key) => key === `${home}/data` },
+  { label: "Users", to: (key) => key === `${home}/users` },
+  { label: "Environments", to: (key) => key === `${home}/environments` },
+  { label: "Secrets", to: (key) => key === `${home}/secrets` },
+  { label: "Domains", to: (key) => key === `${home}/domains` },
+  { label: "Activity", to: (key) => key === `${home}/activity` },
+  { label: "How it was built", to: (key) => key === demoSection("built") },
+];
+/** Where an href goes, as the nav pass compares it: the path, plus a demo page's `?section=`. */
+const navKey = (href) => {
+  const url = new URL(href, base);
+  const section = url.pathname === "/forge/demo" ? url.searchParams.get("section") : null;
+  return section ? demoSection(section) : url.pathname;
+};
+/** A nav item the nav pass clicks: a project page, or a demo page of its own. */
+const inScope = (key) => key.startsWith(home) || key.startsWith("/forge/demo?section=");
 
 const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? "/usr/bin/google-chrome", args: ["--no-sandbox"] });
 const failures = [];
@@ -114,7 +171,7 @@ function report(label, problems, detail = "") {
 
 /** What a nav click must change: the main heading and the page's text. */
 async function pageState(page) {
-  return page.evaluate(() => {
+  const state = await page.evaluate(() => {
     const main = document.querySelector("main") ?? document.querySelector("[data-testid='forge-shell']") ?? document.body;
     const heading = main.querySelector("h1")?.textContent?.trim() ?? "";
     const nav = document.querySelector("[data-smoke-nav]");
@@ -123,8 +180,129 @@ async function pageState(page) {
       .map((el) => el.textContent.trim())
       .filter(Boolean)
       .join("\n");
-    return { path: location.pathname, heading, text };
+    return { href: location.href, heading, text };
   });
+  return { path: navKey(state.href), heading: state.heading, text: state.text };
+}
+
+/**
+ * The Home's hero, actions, stories and agent workflows, as it renders. Returns
+ * problems.
+ */
+async function checkHome(page) {
+  const landing = page.getByTestId("demo-home");
+  try {
+    await landing.waitFor({ timeout: 15000 });
+  } catch {
+    return ["no visible Home ([data-testid=demo-home])"];
+  }
+  const problems = [];
+  const headings = (await landing.getByRole("heading", { level: 1 }).allTextContents()).map((h) => h.trim());
+  if (headings.length !== 1 || headings[0] !== homeHeading) problems.push(`the Home's hero heading is ${JSON.stringify(headings)}, want one h1 ${JSON.stringify(homeHeading)}`);
+  for (const action of homeActions) {
+    const el = landing.getByTestId(action.id);
+    if (!(await el.isVisible())) {
+      problems.push(`the Home has no visible "${action.name}" ([data-testid=${action.id}])`);
+      continue;
+    }
+    if ((await landing.getByRole(action.role, { name: action.name, exact: true }).and(el).count()) !== 1) {
+      problems.push(`the Home's [data-testid=${action.id}] is not a ${action.role} named "${action.name}" (it reads "${(await el.innerText()).trim()}")`);
+    }
+    if (action.to) {
+      const href = await el.getAttribute("href");
+      if (!href || !action.to(new URL(href, base))) problems.push(`the Home's "${action.name}" goes to ${href}`);
+    }
+  }
+  const stories = await landing.locator("[data-testid^='home-story-']").evaluateAll((els) =>
+    els.map((el) => ({
+      id: el.getAttribute("data-testid").replace(/^home-story-/, ""),
+      tag: el.tagName,
+      // All four in one ordered list.
+      list: el.parentElement?.tagName === "OL" && el.parentElement === els[0].parentElement,
+      number: el.querySelector("p")?.textContent.trim() ?? "",
+      title: el.querySelector("h3")?.textContent.trim() ?? "",
+      link: el.querySelector("a[href]")?.getAttribute("href") ?? "",
+      shown: !!el.offsetParent,
+    }))
+  );
+  if (stories.map((s) => s.id).join() !== homeStories.join()) problems.push(`the Home's stories are [${stories.map((s) => s.id)}], want [${homeStories}]`);
+  stories.forEach((story, i) => {
+    const want = String(i + 1).padStart(2, "0");
+    const why = [];
+    if (story.tag !== "LI" || !story.list) why.push("not an item of the one numbered list");
+    if (!story.number.startsWith(want)) why.push(`numbered "${story.number}", want ${want}`);
+    if (!story.title) why.push("no title");
+    if (!story.link || new URL(story.link, base).origin !== origin) why.push(`link ${JSON.stringify(story.link)}`);
+    if (!story.shown) why.push("not shown");
+    if (why.length) problems.push(`the Home's story ${story.id}: ${why.join("; ")}`);
+  });
+  const list = landing.getByTestId("agent-workflow-list");
+  if (!(await list.isVisible())) return [...problems, "the Home has no visible agent workflow list ([data-testid=agent-workflow-list])"];
+  const rows = await list.locator(":scope > li").evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
+  const want = agentWorkflows.map((id) => `agent-card-${id}`);
+  if (rows.join() !== want.join()) problems.push(`the Home's agent workflows are [${rows}], want [${want}]`);
+  for (const id of agentWorkflows) {
+    const open = list.getByTestId(`agent-card-open-${id}`);
+    if (!(await open.isVisible()) || (await list.getByRole("button").and(open).count()) !== 1) problems.push(`the Home's agent workflow ${id} has no visible button`);
+  }
+  return problems;
+}
+
+/** On the Home: a workflow's sheet opens and closes, and "Take the tour" starts the tour. Returns problems. */
+async function exerciseHome(page) {
+  const problems = [];
+  const id = agentWorkflows[0];
+  await page.getByTestId(`agent-card-open-${id}`).click();
+  const sheet = page.getByRole("dialog").filter({ has: page.getByTestId(`agent-sheet-${id}`) });
+  try {
+    await sheet.waitFor({ timeout: 5000 });
+    await page.keyboard.press("Escape");
+    await sheet.waitFor({ state: "hidden", timeout: 5000 });
+  } catch {
+    problems.push(`the Home's ${id} workflow sheet did not open as a dialog, or did not close on Escape`);
+  }
+  await page.getByTestId("home-take-tour").click();
+  try {
+    await page.waitForURL((url) => url.pathname === home && url.searchParams.get("tour") === tourStart, { timeout: 10000 });
+  } catch {
+    problems.push(`"Take the tour" went to ${page.url()}, want ${home}?tour=${tourStart}`);
+  }
+  return problems;
+}
+
+/** The grouped nav's groups and rows, checked against navGroups and navRows. Unfold the groups first. Returns problems. */
+async function checkGroupedNav(page) {
+  const { groups, rows } = await page.evaluate(() => {
+    const nav = document.querySelector("[data-smoke-nav]");
+    const href = (a) => new URL(a.getAttribute("href"), location.href).href;
+    // A group is a row that is a button; its pages are the links in its list.
+    const groups = [...nav.querySelectorAll("li > button[aria-expanded]")].map((button) => ({
+      label: button.textContent.trim(),
+      items: [...(button.parentElement.querySelector(":scope > ul")?.querySelectorAll("a[href]") ?? [])].map(href),
+    }));
+    // A row is a link that is not inside another row's list.
+    const rows = [...nav.querySelectorAll("a[href]")]
+      .filter((a) => !a.closest("li")?.parentElement?.closest("li"))
+      .map((a) => ({ label: a.textContent.trim(), href: href(a) }));
+    return { groups, rows };
+  });
+  const problems = [];
+  for (const [label, want] of Object.entries(navGroups)) {
+    const group = groups.find((g) => g.label === label);
+    if (!group) {
+      problems.push(`no "${label}" group in the nav (groups: ${groups.map((g) => g.label).join(", ") || "none"})`);
+      continue;
+    }
+    const keys = group.items.map(navKey);
+    const missing = want.filter((key) => !keys.includes(key));
+    if (missing.length) problems.push(`the "${label}" group lacks ${missing.join(", ")} (it holds ${keys.join(", ")})`);
+  }
+  for (const row of navRows) {
+    const found = rows.filter((r) => r.label === row.label);
+    if (!found.length) problems.push(`no "${row.label}" row in the nav`);
+    else if (!found.some((r) => row.to(navKey(r.href)))) problems.push(`the nav's "${row.label}" row goes to ${found.map((r) => navKey(r.href)).join(", ")}`);
+  }
+  return problems;
 }
 
 /** Marks the console's left nav (the <nav> holding "Overview") and returns whether it was found. */
@@ -209,9 +387,8 @@ async function answerAudit(page, answered, reached = new Map()) {
 async function navItems(page) {
   const folded = page.locator("[data-smoke-nav] button[aria-expanded='false']");
   for (let i = await folded.count(); i > 0; i--) await folded.nth(0).click().catch(() => {});
-  return page.locator("[data-smoke-nav] a[href]").evaluateAll((els) =>
-    [...new Map(els.map((a) => [a.getAttribute("href").split("?")[0], a.textContent.trim()])).entries()].map(([href, label]) => ({ href, label })),
-  );
+  const links = await page.locator("[data-smoke-nav] a[href]").evaluateAll((els) => els.map((a) => [a.getAttribute("href"), a.textContent.trim()]));
+  return [...new Map(links.map(([href, label]) => [navKey(href), label])).entries()].map(([href, label]) => ({ href, label }));
 }
 
 try {
@@ -224,13 +401,15 @@ try {
     const text = await page.locator("body").innerText().catch(() => "");
     const unavailable = (text.match(/Sample data isn't available/g) ?? []).length;
     if (path === "/") {
-      if (landed.pathname !== "/forge/demo" || landed.searchParams.get("section") !== "built") problems.push(`/ did not land on /forge/demo?section=built: ${landed.pathname}${landed.search}`);
-      if (!(await page.getByTestId("demo-welcome").isVisible())) problems.push("build story has no visible summary and explore/tour choice");
-      if (!(await page.getByTestId("how-built").isVisible())) problems.push("build story has no recorded build");
+      if (navKey(landed.href) !== demoSection("home")) problems.push(`/ did not land on the Home, ${demoSection("home")}: ${landed.pathname}${landed.search}`);
+      problems.push(...(await checkHome(page)));
     }
     const want = new URL(path, base);
     if (path !== "/" && landed.pathname !== want.pathname) problems.push(`${path} landed on ${landed.pathname}`);
-    if (want.searchParams.has("env") && landed.searchParams.get("env") !== want.searchParams.get("env")) problems.push(`${path} landed on env ${landed.searchParams.get("env")}`);
+    for (const param of ["env", "section"]) {
+      if (want.searchParams.has(param) && landed.searchParams.get(param) !== want.searchParams.get(param)) problems.push(`${path} landed on ${param} ${landed.searchParams.get(param)}`);
+    }
+    if (want.searchParams.get("section") === "built" && !(await page.getByTestId("how-built").isVisible())) problems.push("build story has no recorded build");
     if (!(await page.locator("[data-shell='demo']").count())) problems.push("no [data-shell=demo] root");
     problems.push(...(await answerAudit(page, new Set())));
     if (process.env.SCREENSHOT_DIR) {
@@ -238,6 +417,8 @@ try {
       const name = path === "/" ? "root" : path.replace(/^\//, "").replace(/\//g, "_");
       await page.screenshot({ path: nodePath.join(process.env.SCREENSHOT_DIR, `${name}.png`) });
     }
+    // After the screenshot: these leave the Home as it landed.
+    if (path === "/" && (await page.getByTestId("demo-home").isVisible())) problems.push(...(await exerciseHome(page)));
     report(`page ${path}`, problems, ` → ${landed.pathname}${landed.search}${unavailable ? `  (${unavailable}× sample data unavailable)` : ""}`);
     await context.close();
   }
@@ -246,8 +427,15 @@ try {
   for (const viewport of viewports) {
     const { context, page, problems } = await openPage(viewport);
     await page.goto(`${base}/`, { waitUntil: "load" });
-    await page.getByRole("button", { name: "Explore the running app", exact: true }).click();
-    await page.waitForURL((url) => url.pathname === home);
+    // A visitor's way in: the Home's primary action.
+    try {
+      await page.getByRole("link", { name: "Open the console", exact: true }).and(page.getByTestId("home-primary")).click({ timeout: 30000 });
+      await page.waitForURL((url) => url.pathname === home, { timeout: 15000 });
+    } catch (err) {
+      report(`nav ${viewport.name}`, [`the Home's "Open the console" did not open ${home}: ${String(err.message).split("\n")[0]}`]);
+      await context.close();
+      continue;
+    }
     await page.waitForTimeout(settle);
     const reveal = await revealNav(page, viewport);
     if (reveal || !(await markNav(page))) {
@@ -255,10 +443,12 @@ try {
       await context.close();
       continue;
     }
-    // Breadth-first over what the nav shows: opening a section (Observability,
-    // Environments) shows its sub-items, which join the queue.
-    const inProject = (list) => list.filter((item) => item.href.startsWith(home));
+    // Breadth-first over what the nav shows: unfolding a group (Issues, More
+    // tools) or opening a row with sub-pages (Environments) shows its
+    // sub-items, which join the queue.
+    const inProject = (list) => list.filter((item) => inScope(item.href));
     const queue = inProject(await navItems(page)).filter((i) => i.href !== home);
+    problems.push(...(await checkGroupedNav(page)).map((p) => `${viewport.name}: ${p}`));
     const seen = new Set([home, ...queue.map((i) => i.href)]);
     let prev = await pageState(page);
     const dead = [];

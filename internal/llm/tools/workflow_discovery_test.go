@@ -4,6 +4,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -192,4 +193,49 @@ func TestListWorkflowsShowsStatusAndComputedValidity(t *testing.T) {
 		"a complete workflow that fails validation now must be marked invalid")
 	assert.Regexp(t, "`"+draft.Slug+"`"+`[^\n]*\| draft \| ✓ \|`, out,
 		"a draft is listed with its status and computed validity")
+}
+
+// A workflow too large for one response arrived cut mid-YAML by the generic
+// truncation, with no way to read the rest (agent bug report: 39 KB
+// wave4-send). It now arrives as whole lines plus the exact call that
+// continues, and a window can be asked for directly.
+func TestWorkflowYAMLIsPagedInWholeLines(t *testing.T) {
+	t.Parallel()
+	var content strings.Builder
+	for i := 1; i <= 10; i++ {
+		fmt.Fprintf(&content, "line%02d: xxxxxxxx\n", i) // 17 bytes a line
+	}
+	render := func(w yamlWindowRequest, budget int) string {
+		var sb strings.Builder
+		writeWorkflowYAMLWithin(&sb, "wf-1", content.String(), w, budget)
+		return sb.String()
+	}
+
+	whole := render(yamlWindowRequest{start: 1}, 1000)
+	assert.Contains(t, whole, "line01")
+	assert.Contains(t, whole, "line10")
+	assert.NotContains(t, whole, "Lines ", "a workflow that fits arrives whole, with no window note")
+
+	first := render(yamlWindowRequest{start: 1}, 60)
+	assert.Contains(t, first, "line03: xxxxxxxx\n```")
+	assert.NotContains(t, first, "line04")
+	assert.Contains(t, first, "Lines 1-3 of 10 shown.")
+	assert.Contains(t, first, "id `wf-1` and start_line=4")
+
+	last := render(yamlWindowRequest{start: 9}, 60)
+	assert.Contains(t, last, "line09")
+	assert.Contains(t, last, "line10")
+	assert.Contains(t, last, "Lines 9-10 of 10 shown.")
+	assert.NotContains(t, last, "start_line=", "nothing follows the last window")
+
+	counted := render(yamlWindowRequest{start: 2, count: 2}, 1000)
+	assert.Contains(t, counted, "Lines 2-3 of 10 shown.")
+	assert.NotContains(t, counted, "line04")
+
+	past := render(yamlWindowRequest{start: 50}, 1000)
+	assert.Contains(t, past, "past the end: the YAML has 10 lines")
+
+	// One line longer than the budget is still delivered whole.
+	long := render(yamlWindowRequest{start: 1}, 5)
+	assert.Contains(t, long, "line01: xxxxxxxx\n```")
 }

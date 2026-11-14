@@ -8,6 +8,7 @@ import (
 
 	"go.temporal.io/sdk/activity"
 
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
@@ -24,8 +25,8 @@ var providerStoreReadBackoff = []time.Duration{250 * time.Millisecond, time.Seco
 // lookupAvailableDriversWithRetry reads the user's providers, re-reading a few
 // times on a store failure. A persistent failure comes back as a retryable
 // transientStoreError.
-func lookupAvailableDriversWithRetry(ctx context.Context, userID string) (models.AvailableDrivers, error) {
-	avail, err := lookupAvailableDrivers(ctx, userID)
+func lookupAvailableDriversWithRetry(ctx context.Context, scope drivers.Scope) (models.AvailableDrivers, error) {
+	avail, err := lookupAvailableDrivers(ctx, scope)
 	for _, wait := range providerStoreReadBackoff {
 		if err == nil {
 			break
@@ -35,7 +36,7 @@ func lookupAvailableDriversWithRetry(ctx context.Context, userID string) (models
 			return models.AvailableDrivers{}, ctx.Err()
 		case <-time.After(wait):
 		}
-		avail, err = lookupAvailableDrivers(ctx, userID)
+		avail, err = lookupAvailableDrivers(ctx, scope)
 	}
 	if err != nil {
 		return models.AvailableDrivers{}, newTransientStoreError(ctx, err)

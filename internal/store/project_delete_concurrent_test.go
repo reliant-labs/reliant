@@ -22,7 +22,7 @@ import (
 func TestDeleteUserProjectPurgesAChatThatArrivesAfterTheLoops(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC) // fixture data, not a clock
 	const project = "proj-late-chat"
 
 	exec := func(query string, args ...any) {
@@ -91,7 +91,7 @@ func TestDeleteUserProjectPurgesAChatThatArrivesAfterTheLoops(t *testing.T) {
 func TestDeleteUserProjectGivesUpWhenChatsKeepArriving(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC) // fixture data, not a clock
 	const project = "proj-busy"
 
 	if err := store.InsertProject(ctx, env.ORM, &core.Project{

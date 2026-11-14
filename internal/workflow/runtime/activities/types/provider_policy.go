@@ -23,12 +23,32 @@ type RunProviderPolicy struct {
 	// PreferredAccount maps a driver id to the account (id, email or label)
 	// the run prefers on it.
 	PreferredAccount map[string]string `json:"preferred_account,omitempty"`
+	// Funding is whose accounts a chat in an org uses first: FundingOrgFirst,
+	// FundingPersonalFirst or FundingOrgOnly; "" inherits the person's per-org
+	// setting (org-provider-accounts §4.4). Sub-agents inherit it with the rest.
+	Funding string `json:"funding,omitempty"`
+}
+
+// The chat's funding orders (RunProviderPolicy.Funding).
+const (
+	FundingOrgFirst      = "org_first"
+	FundingPersonalFirst = "personal_first"
+	FundingOrgOnly       = "org_only"
+)
+
+// validFunding is funding when it is one of the three orders, else "".
+func validFunding(funding string) string {
+	switch funding {
+	case FundingOrgFirst, FundingPersonalFirst, FundingOrgOnly:
+		return funding
+	}
+	return ""
 }
 
 // IsZero reports whether the policy says nothing: no on-limit choice and no
 // preferred account.
 func (p RunProviderPolicy) IsZero() bool {
-	return p.OnLimit == "" && len(p.PreferredAccount) == 0
+	return p.OnLimit == "" && len(p.PreferredAccount) == 0 && p.Funding == ""
 }
 
 // Value is the policy as a run input: plain maps and slices only, so it
@@ -49,6 +69,9 @@ func (p RunProviderPolicy) Value() map[string]interface{} {
 		}
 		out["preferred_account"] = accounts
 	}
+	if p.Funding != "" {
+		out["funding"] = p.Funding
+	}
 	return out
 }
 
@@ -68,6 +91,7 @@ func RunProviderPolicyFromValue(value interface{}) RunProviderPolicy {
 	case map[string]interface{}:
 		p.OnLimit, _ = v["on_limit"].(string)
 		p.FallbackModel, _ = v["fallback_model"].(string)
+		p.Funding, _ = v["funding"].(string)
 		switch accounts := v["preferred_account"].(type) {
 		case map[string]interface{}:
 			for driver, account := range accounts {
@@ -85,6 +109,7 @@ func RunProviderPolicyFromValue(value interface{}) RunProviderPolicy {
 	default:
 		return RunProviderPolicy{}
 	}
+	p.Funding = validFunding(p.Funding)
 	switch p.OnLimit {
 	case OnLimitWait:
 		p.FallbackModel = ""

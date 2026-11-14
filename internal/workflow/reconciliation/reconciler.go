@@ -810,7 +810,7 @@ func (r *Reconciler) queryPollers(ctx context.Context, taskQueueType enums.TaskQ
 // Returns state with Exists=false if workflow not found.
 // Also detects stuck activities that have been in "Scheduled" state too long.
 func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID string) (*TemporalWorkflowState, error) {
-	descResp, err := r.tempClient.DescribeWorkflowExecution(ctx, workflowID, "")
+	descResp, err := r.tempClient.DescribeWorkflowExecution(ctx, workflowID, "") //nolint:staticcheck // SA1019 (sdk v1.51): DescribeWorkflow routes through the client interceptors and decodes memo/search attributes with the data converter; this path needs only the raw response, unchanged (migration: reliant#2780)
 	if err != nil {
 		// Check if it's a "not found" error
 		errStr := err.Error()
@@ -2260,7 +2260,7 @@ func (r *Reconciler) runCloseStatus(ctx context.Context, workflowID string) enum
 	if r.tempClient == nil {
 		return enums.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED
 	}
-	resp, err := r.tempClient.DescribeWorkflowExecution(ctx, workflowID, "")
+	resp, err := r.tempClient.DescribeWorkflowExecution(ctx, workflowID, "") //nolint:staticcheck // SA1019 (sdk v1.51): DescribeWorkflow routes through the client interceptors and decodes memo/search attributes with the data converter; this path needs only the raw response, unchanged (migration: reliant#2780)
 	if err != nil || resp.GetWorkflowExecutionInfo() == nil {
 		return enums.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED
 	}
@@ -2640,7 +2640,7 @@ func (r *Reconciler) stoppedSpawnStillReporting(ctx context.Context, call *db.St
 	if chat, err := r.repo.GetChat(ctx, call.ChatID); err == nil && chat != nil && chat.MainThreadID() != "" {
 		executionID = chat.MainThreadID()
 	}
-	desc, err := r.tempClient.DescribeWorkflowExecution(ctx, executionID, "")
+	desc, err := r.tempClient.DescribeWorkflowExecution(ctx, executionID, "") //nolint:staticcheck // SA1019 (sdk v1.51): DescribeWorkflow routes through the client interceptors and decodes memo/search attributes with the data converter; this path needs only the raw response, unchanged (migration: reliant#2780)
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) || strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
@@ -2854,7 +2854,7 @@ func (r *Reconciler) mailboxMayStillBeDelivered(ctx context.Context, threadID st
 			"threadID", threadID, "chatID", thread.ChatID)
 		return true
 	}
-	desc, err := r.tempClient.DescribeWorkflowExecution(ctx, ownerID, "")
+	desc, err := r.tempClient.DescribeWorkflowExecution(ctx, ownerID, "") //nolint:staticcheck // SA1019 (sdk v1.51): DescribeWorkflow routes through the client interceptors and decodes memo/search attributes with the data converter; this path needs only the raw response, unchanged (migration: reliant#2780)
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) || strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {

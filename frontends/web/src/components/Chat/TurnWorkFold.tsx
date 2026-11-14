@@ -3,7 +3,8 @@ import { AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useCapability, useSurface } from "../../lib/surfaceContext";
 import { getProcessedMessage } from "../../lib/messageProcessor";
-import { useToolCallStates, useToolResultsByCallId } from "../../store/chatStoreHooks";
+import { useChat, useToolCallStates, useToolResultsByCallId } from "../../store/chatStoreHooks";
+import { viewerSafeMessage } from "../../lib/viewerResults";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { findWorkflowById } from "../../lib/workflowTree";
 import { workflowLifecycleToDisplayStatus } from "./ToolExecution";
@@ -69,6 +70,9 @@ function TurnWorkFoldComponent({
   const live = isStreaming;
 
   const toolResultsByCallId = useToolResultsByCallId(chatId || "");
+  // A viewer of another member's shared chat never sees a tool's result
+  // (viewerSafeMessage), however it reached this client.
+  const isViewer = !!useChat(chatId || "")?.viewerAccess;
   const toolCallStates = useToolCallStates(chatId || "");
   const { allWorkflows } = useWorkflowExecutions(chatId || null);
 
@@ -79,7 +83,7 @@ function TurnWorkFoldComponent({
     }
     const out: FoldExecution[] = [];
     for (const part of work.parts) {
-      const { segments } = getProcessedMessage(part.message, toolResultsByCallId, approvals);
+      const { segments } = viewerSafeMessage(getProcessedMessage(part.message, toolResultsByCallId, approvals), isViewer);
       const held = part.callIds ? new Set(part.callIds) : null;
       for (const index of part.segmentIndexes) {
         const segment = segments[index];
@@ -105,7 +109,7 @@ function TurnWorkFoldComponent({
       }
     }
     return out;
-  }, [work.parts, toolResultsByCallId, toolCallStates, approvals]);
+  }, [work.parts, toolResultsByCallId, toolCallStates, approvals, isViewer]);
 
   const summary = useMemo(
     () =>

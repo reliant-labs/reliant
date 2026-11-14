@@ -34,6 +34,12 @@ type WaitForMachineResponseMetadata struct {
 	TimedOut bool `json:"timed_out"`
 	// StoppedEarly: cut short — preempted by a message, or interrupted.
 	StoppedEarly bool `json:"stopped_early,omitempty"`
+	// Degraded: connected, but the machine's daemon reports it cannot do
+	// work (its process table is full). State stays "connected", so a
+	// reader that predates this field sees what it saw before.
+	Degraded bool `json:"degraded,omitempty"`
+	// HealthReason is the daemon's reason while Degraded.
+	HealthReason string `json:"health_reason,omitempty"`
 }
 
 const (
@@ -60,8 +66,10 @@ If it reports that the machine was removed, or that it failed to start and staye
 RETURNS EARLY WHEN A MESSAGE ARRIVES:
 If a message arrives for you while you wait — from the user, your parent, or a sub-agent — the wait ends early so you can read it. Nothing is lost; call wait_for_machine again if you still need the machine.
 
+If it reports that the machine is connected but degraded (it cannot start processes), retrying will fail the same way and waiting will not help: free the machine (shell_list, shell_kill) or tell the user.
+
 RETURNS:
-- connected: true once the machine is attached — retry the call that failed
+- connected: true once the machine is attached — retry the call that failed, unless it also says degraded
 - otherwise its last known state (disconnected, starting, suspended, failed, removed) with what to do about it`
 )
 
@@ -162,6 +170,16 @@ func (t *waitForMachineTool) Execute(rc *rctx.ToolContext, params WaitForMachine
 // recovers from by itself.
 func (t *waitForMachineTool) terminalResponse(status MachineStatus, waited time.Duration, failedSince time.Time) (ToolResponse, bool) {
 	switch {
+	case status.Connected && status.Degraded:
+		// Connected is not the same as able to work: on 2026-10-30 a machine
+		// whose process table was full stayed attached, and agents looped
+		// fail -> wait -> "connected again" -> retry 44 times (reliant#1919).
+		return waitResponse(withReason(
+			"The machine is connected, but it is degraded: it cannot start new processes, so a retried command will fail the same way, and waiting for the machine will not fix it. "+
+				"If your own background processes may be the cause, stop the ones you no longer need (shell_list, shell_kill), then retry once. "+
+				"Otherwise tell the user the machine cannot start processes and needs its processes stopped or the machine restarted; then stop.",
+			status.HealthReason),
+			WaitForMachineResponseMetadata{Connected: true, State: "connected", WaitedMs: waited.Milliseconds(), Degraded: true, HealthReason: status.HealthReason}), true
 	case status.Connected:
 		return waitResponse(fmt.Sprintf(
 			"The machine is connected again (waited %s). Retry the call that failed.",

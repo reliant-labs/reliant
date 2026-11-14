@@ -36,6 +36,8 @@ import {
   failingItem,
   launchFailedItem,
   needsSetupItem,
+  noOrgAccountItem,
+  onPersonalAccountsItem,
   questionItem,
   renderInboxAt,
   runPausedItem,
@@ -266,6 +268,27 @@ describe("InboxPage item kinds", () => {
     expect(within(row).queryByText(/in a row/)).toBeNull();
     // Until the trigger is known, the link resolves through the automation redirect.
     expect(within(row).getByRole("link", { name: "Open trigger" })).toHaveAttribute("href", "/workflows/automations/trg-2");
+  });
+
+  it("an automation paused for want of an org account tells its owner to open it, and an admin to add an org account", async () => {
+    respond([noOrgAccountItem(), noOrgAccountItem("u-mia", { itemId: "automation_no_org_account:trg-8@20261113T220000.000000", triggerId: "trg-8" })]);
+    renderInboxAt(<InboxPage />);
+    const mine = await screen.findByTestId("inbox-item-automation_no_org_account:trg-7@20261113T220000.000000");
+    expect(within(mine).getByLabelText("Automation paused: no organization AI account")).toBeInTheDocument();
+    expect(within(mine).getByText("Paused: no organization AI account can run your automation")).toBeInTheDocument();
+    expect(within(mine).getByRole("link", { name: "Open trigger" })).toHaveAttribute("href", "/workflows/automations/trg-7");
+    const theirs = screen.getByTestId("inbox-item-automation_no_org_account:trg-8@20261113T220000.000000");
+    expect(within(theirs).getByRole("link", { name: "Add org account" })).toHaveAttribute("href", "/settings/org-ai-accounts");
+    expect(screen.getByText("Automations paused: no organization AI account")).toBeInTheDocument();
+  });
+
+  it("automations still on personal accounts say how many and open the first to review", async () => {
+    respond([onPersonalAccountsItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-automations_on_personal_accounts:acme@0011223344556677");
+    expect(within(row).getAllByText("Automations on your own AI accounts").length).toBeGreaterThan(0);
+    expect(within(row).getByText(/3 automations still run on your own AI accounts/)).toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: "Review" })).toHaveAttribute("href", "/workflows/automations/trg-1");
   });
 
   it("an automation that needs setup names what is missing and links to Finish setup on its workflow page", async () => {

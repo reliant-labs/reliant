@@ -37,6 +37,7 @@ func TestAPIStopsTakingCallsFirst(t *testing.T) {
 		"reliant_key_sweep",
 		"payload_gc",
 		"llm_usage_retention",
+		"org_credential_sweep",
 		"chat_update_heads_backfill",
 		"api_daemon_router",
 		"chat_update_hub",

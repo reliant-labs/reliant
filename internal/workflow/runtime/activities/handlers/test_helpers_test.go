@@ -43,6 +43,9 @@ type ExecuteToolsInput struct {
 	RefusedToolCalls map[string]string `json:"-"`
 	// DaemonSelector is the node/workflow's explicit machine selector.
 	DaemonSelector *activitytypes.DaemonSelector `json:"-"`
+	// Telemetry is the run's telemetry the runtime hands the batch (with the
+	// asking turn's traceparent).
+	Telemetry *activitytypes.RunTelemetry `json:"-"`
 }
 
 // V3 returns the ActivityInput for Temporal's test framework.
@@ -71,6 +74,7 @@ func (t ExecuteToolsInput) V3() ActivityInput {
 			LoopIteration:  t.LoopIteration,
 			ProjectPath:    t.ProjectPath,
 			DaemonSelector: t.DaemonSelector,
+			Telemetry:      t.Telemetry,
 		},
 		Node: &reliantv1.Node{
 			Type: "execute_tools",

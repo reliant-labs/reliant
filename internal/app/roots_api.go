@@ -66,6 +66,9 @@ type API struct {
 	PayloadGC *PayloadGC
 	// LLMUsageRetention prunes per-call LLM usage past its retention period.
 	LLMUsageRetention *LLMUsageRetention
+	// OrgCredentials deletes stale org-account grants and purges gone orgs'
+	// credentials; nil without a control plane.
+	OrgCredentials *OrgCredentialSweep
 	// ChatUpdateHeadsBackfill brings chats' materialized snapshot heads up to
 	// their logs.
 	ChatUpdateHeadsBackfill *ChatUpdateHeadsBackfill

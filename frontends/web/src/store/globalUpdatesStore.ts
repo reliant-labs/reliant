@@ -21,7 +21,7 @@ import { BackgroundProcessStatus } from "../gen/reliant/v1/common_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 
 import { useProjectStore } from "./projectStore";
-import { openChat } from "./openChat";
+import { leaveSharedChat, openChat } from "./openChat";
 import { beginWorkspaceOpen } from "../lib/openChatInWorkspace";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { patchBackgroundProcessPorts, upsertBackgroundProcess, type BackgroundProcess } from "../hooks/background-queries";
@@ -228,7 +228,9 @@ interface GlobalUpdatesState {
   setLastSequence: (seq: number) => void;
   connect: () => void;
   disconnect: () => void;
-  subscribeToChatDetails: (chatId: string) => void;
+  // retryRefused: ask again for a chat the server refused before (only for
+  // an explicit open by the person; the self-healing reconcile never does).
+  subscribeToChatDetails: (chatId: string, options?: { retryRefused?: boolean }) => void;
   // Pass the chat the caller subscribed to. The call is ignored unless that
   // chat is still the subscribed one, so a late effect cleanup cannot tear
   // down a subscription that now belongs to a different chat.
@@ -326,8 +328,9 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     }
   },
 
-  subscribeToChatDetails: (chatId: string) => {
+  subscribeToChatDetails: (chatId: string, options?: { retryRefused?: boolean }) => {
     const state = get();
+    if (options?.retryRefused) state.chatStream?.forgetRefusal(chatId);
     // Trust the service, not this store's flag. subscribedChatId is set
     // optimistically below, before the connection is known to have
     // succeeded, so on its own it cannot distinguish "subscribed" from
@@ -586,6 +589,10 @@ function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
       onChatSubscriptionRejected: (chatId) => {
         failChatOpen(chatId, "rejected");
         if (get().subscribedChatId === chatId) set({ subscribedChatId: null });
+        // A viewer who lost a shared chat (made private, deleted, removed
+        // from the org) learns it here: the server re-checks the open stream
+        // on an interval and refuses the resubscribe.
+        leaveSharedChat(chatId);
       },
     },
     // The global user stream includes every project.
@@ -702,7 +709,7 @@ function routeUserUpdates(
           noteDaemonHeartbeat(data.daemon_id as string);
           // Proof the daemon is attached right now: a cached list that
           // says otherwise is re-read (throttled).
-          reconcileDaemonHeartbeat(queryClient, data.daemon_id as string);
+          reconcileDaemonHeartbeat(queryClient, data.daemon_id as string, Date.now(), data.health_state);
         }
         // detected_ports is present (possibly empty) on real heartbeats and
         // absent on synthetic connection events — only update when carried,
@@ -1406,6 +1413,16 @@ function handleRefetch(update: UserUpdate) {
     // reads it from the daemon list, and the picker lists the models.
     invalidateDaemonList(queryClient);
     void useGlobalDataStore.getState().refetchModels();
+    return;
+  }
+  if (rawType === "project_org_moved") {
+    // A project moved to another org with its chats, runs and triggers: every
+    // list that follows the active org is stale, in both orgs.
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.projects);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.chats);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.runs);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.triggers);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.inbox);
     return;
   }
   const refetchType = rawType as RefetchType | undefined;

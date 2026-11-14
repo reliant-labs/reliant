@@ -36,6 +36,7 @@ func TestWholeRetirementHoldsAWorktreeUsedAfterItWasArchived(t *testing.T) {
 			// starts in a later second than it. This orders nothing
 			// concurrent (every step is sequential); it only keeps the
 			// change and the archive out of one reflog second.
+			// forge:lint-disable-next-line forge-test-fixed-sleep: moves the real clock into a later reflog second than the archive, a lower bound load can only lengthen; git stamps the reflog from the real clock
 			time.Sleep(time.Until(archived.Truncate(time.Second).Add(2 * time.Second)))
 			switch kind {
 			case "file":

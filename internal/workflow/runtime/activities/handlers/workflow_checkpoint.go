@@ -51,6 +51,7 @@ func (a *WorkflowCheckpointActivity) Execute(ctx context.Context, input Workflow
 		NodeID:        input.NodeID,
 		LoopIteration: input.LoopIteration,
 		CatalogPin:    input.CatalogPin,
+		RunID:         input.RunID,
 	}); err != nil {
 		return WorkflowCheckpointOutput{Success: false}, err
 	}

@@ -93,6 +93,7 @@ vi.mock("../ChatHeader", () => ({ ChatHeader: () => <div data-testid="chat-heade
 vi.mock("../ResumeDaemonPill", () => ({ ResumeDaemonPill: () => null }));
 vi.mock("../OomKillBanner", () => ({ OomKillBanner: () => null }));
 vi.mock("../DiskPressureBanner", () => ({ DiskPressureBanner: () => null }));
+vi.mock("../MachineHealthBanner", () => ({ MachineHealthBanner: () => null }));
 vi.mock("../thread-views", () => ({
   InterleavedTimeline: () => <div data-testid="timeline" />,
 }));

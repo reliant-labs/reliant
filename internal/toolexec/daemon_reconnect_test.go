@@ -364,6 +364,7 @@ func TestToolRequest_GivesUpWhenTheDaemonOutstaysTheGrace(t *testing.T) {
 	// The daemon comes back after the bound. Nothing was queued for it: a
 	// command the caller gave up on must never run late.
 	daemon.connect()
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a request correctly never queued leaves no event to wait for
 	time.Sleep(200 * time.Millisecond)
 	assert.Empty(t, daemon.toolRequests(), "nothing reaches a daemon that came back after the call gave up")
 	started, ended := waits.snapshot()
@@ -471,6 +472,7 @@ func TestToolRequest_InterruptedCommandIsNotSentAgain(t *testing.T) {
 			assert.Equal(t, ErrorCodeDaemonInterrupted, resp.ErrorCode)
 			assert.Contains(t, resp.ErrorMessage, "outcome is unknown")
 			assert.True(t, IsTransportErrorCode(resp.ErrorCode))
+			// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a resend correctly withheld leaves no event to wait for
 			time.Sleep(300 * time.Millisecond)
 			assert.Len(t, daemon.toolRequests(), 1, "sent exactly once")
 		})
@@ -578,6 +580,7 @@ func TestDaemonCommand_OnlyInterruptedReadsAreAskedAgain(t *testing.T) {
 		_, err := router.SendDaemonCommand(ctx, reconnectUser, "fs.write_file", []byte(`{"path":"/w/main.go"}`), 5000)
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, ErrDaemonConnectionInterrupted), "typed across NATS: %v", err)
+		// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a resend correctly withheld leaves no event to wait for
 		time.Sleep(300 * time.Millisecond)
 		assert.Len(t, daemon.commandRequests(), 1, "a write is sent exactly once")
 	})

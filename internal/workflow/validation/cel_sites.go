@@ -118,6 +118,24 @@ type workflowScope struct {
 	// run is set for a finally handler and the bodies nested in it, where the
 	// runtime injects the `run` namespace.
 	run bool
+	// enclosingNodeIDs are the nodes of the graphs this inline body is nested
+	// in. None of them is in the body's own nodes namespace at run time.
+	enclosingNodeIDs map[string]bool
+}
+
+// inlineChild is the scope of an inline sub-workflow or loop body of s.
+func (s *workflowScope) inlineChild(inline *reliantv1.Workflow, path []string, loop *loopFrame) *workflowScope {
+	child := newWorkflowScope(inline, path, inlineTypeContext(inline, s.typeCtx.valueTypes()), loop)
+	child.failure = s.failure
+	child.run = s.run
+	child.enclosingNodeIDs = make(map[string]bool, len(s.enclosingNodeIDs)+len(s.nodeIDs))
+	for id := range s.enclosingNodeIDs {
+		child.enclosingNodeIDs[id] = true
+	}
+	for _, id := range s.nodeIDs {
+		child.enclosingNodeIDs[id] = true
+	}
+	return child
 }
 
 func newWorkflowScope(wf *reliantv1.Workflow, basePath []string, typeCtx *WorkflowTypeContext, loop *loopFrame) *workflowScope {
@@ -339,10 +357,7 @@ func (s *workflowScope) validateNodeFields(node *reliantv1.Node, basePath []stri
 		if inline := args.GetInline(); inline != nil {
 			// An inline sub-workflow runs in the same loop iteration (if any)
 			// as its parent node, with its own node namespace.
-			child := newWorkflowScope(inline, at("inline"), inlineTypeContext(inline, s.typeCtx.valueTypes()), s.loop)
-			child.failure = s.failure
-			child.run = s.run
-			validateWorkflowScope(child, result)
+			validateWorkflowScope(s.inlineChild(inline, at("inline"), s.loop), result)
 		}
 
 	case node.GetLoop() != nil:
@@ -369,10 +384,17 @@ func (s *workflowScope) validateNodeFields(node *reliantv1.Node, basePath []stri
 			}
 		}
 		if inline := args.GetInline(); inline != nil {
-			child := newWorkflowScope(inline, at("inline"), inlineTypeContext(inline, s.typeCtx.valueTypes()), frame)
-			child.failure = s.failure
-			child.run = s.run
-			validateWorkflowScope(child, result)
+			validateWorkflowScope(s.inlineChild(inline, at("inline"), frame), result)
+		}
+
+	case node.GetAction() != nil:
+		// An action's params resolve in the graph it sits in: inside a loop
+		// or inline body only that body's nodes exist, so a read of a parent
+		// node is refused here rather than failing "no such key" on every
+		// iteration of a real run.
+		args := node.GetAction()
+		for _, name := range sortedValueKeys(args.GetWith()) {
+			s.rejectActionParamEnclosingRefs(args.GetWith()[name], at("with", name), result)
 		}
 
 	case node.GetCompute() != nil:
@@ -425,6 +447,9 @@ func (s *workflowScope) validateTemplate(input string, path []string, site celSi
 
 // validateExpression runs every per-expression check on one raw CEL string.
 func (s *workflowScope) validateExpression(expr string, path []string, env *cel.Env, typeCtx *WorkflowTypeContext, scope *nodeOrderScope, result *Result) {
+	if s.rejectEnclosingNodeRefs(expr, path, result) {
+		return
+	}
 	validateInputPropertyAccess(expr, path, typeCtx, result)
 	validateResponseDataAccessFromExpr(expr, path, typeCtx, result)
 	if scope != nil && scope.outputNode != "" {
@@ -677,6 +702,36 @@ func rejectBodyNodeRefs(expr string, path []string, inline *reliantv1.Workflow, 
 			}
 		}
 	}
+}
+
+// rejectEnclosingNodeRefs reports an inline body's read of a node of a graph
+// it is nested in. The body runs with its own nodes namespace, so the read
+// compiles nowhere and fails "no such key" at run time on every iteration. It
+// reports true when it found one, so the generic "undefined field" compile
+// error is not reported for the same expression too.
+func (s *workflowScope) rejectEnclosingNodeRefs(expr string, path []string, result *Result) bool {
+	if len(s.enclosingNodeIDs) == 0 {
+		return false
+	}
+	own := make(map[string]bool, len(s.nodeIDs))
+	for _, id := range s.nodeIDs {
+		own[id] = true
+	}
+	for _, m := range nodeFieldRegex.FindAllStringSubmatch(expr, -1) {
+		id := m[1]
+		if own[id] || !s.enclosingNodeIDs[id] {
+			continue
+		}
+		result.Add(&Error{
+			Severity:   SeverityError,
+			Category:   CategoryCELSemantic,
+			Path:       append([]string{}, path...),
+			Message:    fmt.Sprintf("reads nodes.%s, a node outside this inline body; a loop or inline body sees only its own nodes, so this fails with \"no such key: %s\" at run time", id, id),
+			Suggestion: fmt.Sprintf("pass the value in: set it in the loop or workflow node's args (read it here as inputs.<name>) or carry it in items, instead of reading nodes.%s", id),
+		})
+		return true
+	}
+	return false
 }
 
 func sortedStringKeys(m map[string]string) []string {

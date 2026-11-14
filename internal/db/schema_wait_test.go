@@ -62,11 +62,15 @@ func TestWaitForSchema_ReturnsImmediatelyWhenCurrent(t *testing.T) {
 	_, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 
+	// Nothing migrates this DB while the waiter runs, so a waiter that does
+	// not accept it on its first read never will: it would poll (1s apart)
+	// until the minute is up. Returning within 5s, far inside that, is the
+	// proof it did not poll; the bound is not a measure of the machine's speed.
 	start := time.Now()
-	if err := WaitForSchema(rawDB, 5*time.Second); err != nil {
+	if err := WaitForSchema(rawDB, time.Minute); err != nil {
 		t.Fatalf("WaitForSchema on a migrated DB: %v", err)
 	}
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
 		t.Fatalf("WaitForSchema polled instead of returning immediately (took %s)", elapsed)
 	}
 }

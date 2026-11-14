@@ -9,10 +9,12 @@ import { useRef, useState, memo, useMemo, useEffect, useCallback } from "react";
 import { useCurrentMachineStore } from "../../store/currentMachineStore";
 import { GripHorizontal, GripVertical } from "lucide-react";
 import { ChatInputWrapper } from "./ChatInputWrapper";
+import { ViewerNotice } from "../Sharing/ViewerNotice";
 import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
 import { ChatMachineNoticeLine } from "./ChatMachineNotice";
 import { QueuedForMachineNote } from "./QueuedForMachineNote";
 import { UsageLimitWaitNote } from "./UsageLimitWaitNote";
+import { PersonalFundingPrompt } from "./PersonalFundingPrompt";
 import { usageLimitWaitOf } from "@/lib/usageLimitWait";
 import { ChatMessagesContainer } from "./ChatMessagesContainer";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
@@ -32,6 +34,8 @@ import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { ComposerStatusSlot, RecoveryBanner, StatusSlotItem } from "./ComposerStatusSlot";
 import { OomKillBanner } from "./OomKillBanner";
 import { DiskPressureBanner } from "./DiskPressureBanner";
+import { MachineHealthBanner } from "./MachineHealthBanner";
+import { OrgMovedBanner } from "./OrgMovedBanner";
 import { ComposerWakeStatus } from "./ComposerWakeStatus";
 import { ContinueWithoutMachineButton, NoMachineComposerHint } from "./NoMachine";
 import { continueBranchPoint } from "../../lib/chatMachine";
@@ -480,6 +484,10 @@ export const ChatPresenter = memo(function ChatPresenter({
   // machine surfaces apply, and the composer says what the chat can do.
   const currentChat = chatForQueue?.id === chatId ? chatForQueue : undefined;
   const noMachine = !!currentChat?.noMachine;
+  // A viewer of a chat another member shared: read-only. Nothing between the
+  // transcript and the composer is theirs (queued messages, background work,
+  // approvals, the machine), and the composer is replaced by ViewerNotice.
+  const isViewer = !!currentChat?.viewerAccess;
 
   // The run is parked until a provider's usage limit resets (server-side timer;
   // it retries by itself). The reset time rides on the chat, the activity says
@@ -853,6 +861,10 @@ export const ChatPresenter = memo(function ChatPresenter({
               the status slot: in full on desktop and on a wide phone column,
               one line (three at medium width) plus a sheet on a narrow phone
               column. Approvals are never collapsed. */}
+          {isViewer && currentChat ? (
+            <ViewerNotice chat={currentChat} />
+          ) : (
+          <>
           <ComposerStatusSlot
             upper={
               <>
@@ -909,11 +921,25 @@ export const ChatPresenter = memo(function ChatPresenter({
                     <OomKillBanner />
                   </StatusSlotItem>
                 )}
+                {/* Health banner — the chat's machine is connected but cannot start processes */}
+                {!noMachine && (
+                  <StatusSlotItem id="machine-health">
+                    <MachineHealthBanner daemonId={currentChat?.activeDaemonId} />
+                  </StatusSlotItem>
+                )}
                 {/* Disk banner — a volume on the chat's machine is (nearly) full */}
                 {!noMachine && (
                   <StatusSlotItem id="disk">
                     <DiskPressureBanner daemonId={currentChat?.activeDaemonId} />
                   </StatusSlotItem>
+                )}
+                {/* The chat is in another org than the app acts in (its project moved) */}
+                <StatusSlotItem id="org-moved">
+                  <OrgMovedBanner chatOrgId={currentChat?.orgId} chatUserId={currentChat?.userId} />
+                </StatusSlotItem>
+                {/* "Continue on your own account?": a chat of an org asks before it spends the person's money */}
+                {chatId && currentChat?.orgId && !isViewer && (
+                  <PersonalFundingPrompt chatId={chatId} waiting={usageLimitWait !== undefined} focused={isFocused} />
                 )}
                 {noMachine && chatId ? (
                   <StatusSlotItem id="no-machine">
@@ -985,6 +1011,8 @@ export const ChatPresenter = memo(function ChatPresenter({
               Click to focus and type a message
             </div>
           ) : null}
+          </>
+          )}
         </div>
       </div>
       

@@ -285,7 +285,7 @@ func TestRecordedConsentResolvesTheAmbiguity(t *testing.T) {
 		Credentials:    store.creds,
 		Sender:         &fakeSender{},
 		OAuth:          testOAuthConfig(),
-		TokenValidator: &stubTokenValidator{userID: "user-1"},
+		TokenValidator: &stubClientTokenValidator{userID: "user-1", clientID: "chatgpt"},
 		Bindings:       store,
 	})
 	require.NoError(t, err)
@@ -294,7 +294,7 @@ func TestRecordedConsentResolvesTheAmbiguity(t *testing.T) {
 	defer srv.Close()
 
 	// Without a recorded choice, consent is required.
-	resp := postWithClient(t, srv.URL, "an-oauth-access-token", "chatgpt")
+	resp := postWithToken(t, srv.URL, "an-oauth-access-token")
 	require.Equal(t, http.StatusForbidden, resp.StatusCode)
 	_ = resp.Body.Close()
 
@@ -306,7 +306,7 @@ func TestRecordedConsentResolvesTheAmbiguity(t *testing.T) {
 		GrantID:  chosen.ID,
 	}))
 
-	resp = postWithClient(t, srv.URL, "an-oauth-access-token", "chatgpt")
+	resp = postWithToken(t, srv.URL, "an-oauth-access-token")
 	defer func() { _ = resp.Body.Close() }()
 	require.NotEqual(t, http.StatusForbidden, resp.StatusCode,
 		"a recorded consent choice must resolve the ambiguity")
@@ -325,7 +325,7 @@ func TestConsentIsPerClient(t *testing.T) {
 		Credentials:    store.creds,
 		Sender:         &fakeSender{},
 		OAuth:          testOAuthConfig(),
-		TokenValidator: &stubTokenValidator{userID: "user-1"},
+		TokenValidator: &stubClientTokenValidator{userID: "user-1", clientID: "some-other-app"},
 		Bindings:       store,
 	})
 	require.NoError(t, err)
@@ -336,22 +336,10 @@ func TestConsentIsPerClient(t *testing.T) {
 		ID: "binding-1", UserID: "user-1", ClientID: "chatgpt", GrantID: chosen.ID,
 	}))
 
-	resp := postWithClient(t, srv.URL, "an-oauth-access-token", "some-other-app")
+	resp := postWithToken(t, srv.URL, "an-oauth-access-token")
 	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusForbidden, resp.StatusCode,
 		"a different application must obtain its own consent")
-}
-
-// postWithClient sends a request identifying the calling application.
-func postWithClient(t *testing.T, url, token, clientID string) *http.Response {
-	t.Helper()
-	req, err := http.NewRequest(http.MethodPost, url+MountPath, nil)
-	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-MCP-Client-Id", clientID)
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	return resp
 }
 
 func TestInvalidOAuthTokenIsRejected(t *testing.T) {

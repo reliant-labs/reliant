@@ -63,3 +63,39 @@ func TestChatOwnerCacheIsSafeWhenAbsent(t *testing.T) {
 	assert.Empty(t, NewChatOwnerCache(nil, time.Hour, 1).Owner(context.Background(), "a"))
 	assert.Empty(t, NewChatOwnerCache(func(context.Context, string) (string, error) { return "u", nil }, time.Hour, 1).Owner(context.Background(), ""))
 }
+
+// Each chat keeps its own complete identity, however lookups for different
+// chats interleave, and a failed or empty lookup answers nothing rather than
+// another chat's identity.
+func TestChatOwnerOrgCacheKeepsEachChatsIdentity(t *testing.T) {
+	owners := map[string]ChatOwner{
+		"chat-a": {UserID: "user-a", OrgID: "org-a"},
+		"chat-b": {UserID: "user-b", OrgID: "org-b"},
+		"chat-p": {UserID: "user-p"}, // a personal chat: no org
+		"chat-e": {OrgID: "org-e"},   // an org but no user: unknown
+	}
+	calls := map[string]int{}
+	c := NewChatOwnerOrgCache(func(_ context.Context, chat string) (ChatOwner, error) {
+		calls[chat]++
+		if chat == "chat-x" {
+			return ChatOwner{UserID: "leaked", OrgID: "leaked"}, errors.New("connection refused")
+		}
+		return owners[chat], nil
+	}, time.Hour, 10)
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		for _, chat := range []string{"chat-a", "chat-x", "chat-b", "chat-e", "chat-p"} {
+			got := c.ChatOf(ctx, chat)
+			switch chat {
+			case "chat-x", "chat-e":
+				assert.Equal(t, ChatOwner{}, got, "%s: a failed or user-less lookup stamps nothing", chat)
+			default:
+				assert.Equal(t, owners[chat], got, "%s, round %d", chat, i)
+			}
+			assert.Equal(t, owners[chat].UserID, c.Owner(ctx, chat), "Owner agrees with ChatOf for %s", chat)
+		}
+	}
+	for chat, n := range calls {
+		assert.Equal(t, 1, n, "%s is asked once while its answer is kept", chat)
+	}
+}

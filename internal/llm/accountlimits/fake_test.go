@@ -154,7 +154,7 @@ func (s *fakeStore) UpsertAccountLimitSnapshot(_ context.Context, st core.LimitS
 	return nil
 }
 
-func (s *fakeStore) BenchAccount(_ context.Context, userID, id string, until time.Time, window string, probe bool) error {
+func (s *fakeStore) BenchAccount(_ context.Context, _ core.AccountOwner, id string, until time.Time, window string, probe bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.accounts[id] == nil {

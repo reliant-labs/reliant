@@ -99,6 +99,11 @@ type ResumeInput struct {
 	// iteration so max-iteration guards keep counting from where they were;
 	// thread history carries the actual content.
 	LoopIteration int `json:"loop_iteration,omitempty"`
+	// RunID is the interrupted run's AI-monitoring id (forge.ai.run.id), read
+	// from its checkpoint: the resumed run's spans carry it, so they group with
+	// the run they continue (runTelemetryFor). Empty when the checkpoint
+	// recorded none; the run then starts an id of its own.
+	RunID string `json:"run_id,omitempty"`
 	// Spawns are the background spawns that were live when the predecessor
 	// ended. The successor relaunches each one on its SAME tool call, thread
 	// and child workflow id — no new thread, no seed message — before
@@ -991,6 +996,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	execCtx.WorkflowID = workflowID
 	// workflow.run_id. Read from workflow info, so replay sees the same value.
 	execCtx.RunID = info.WorkflowExecution.RunID
+	// The run's identity on its spans (run_telemetry.go): which run — kept
+	// across continue-as-new and a resume — and which workflow. Every
+	// activity carries it from here.
+	ctx = startRunTelemetry(ctx, input, execCtx)
 
 	thread := execCtx.Thread
 	forkedFromThread := execCtx.ForkedFrom
@@ -1809,7 +1818,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 		workflowContext := buildWorkflowContext(workflowID, input.WorkflowName, input.ChatID, input.Inputs, execCtx)
 		_, err := executeSaveMessageInline(
-			ctx,
+			withRunTelemetry(ctx, execCtx.Telemetry),
 			node,
 			output,
 			workflowContext,
@@ -3985,6 +3994,8 @@ func prepareSpawnInline(
 		SpawnDepth:           parentSpawnDepth + 1,
 		ParentPermission:     parentPermission,
 		ExcludeAmbientMemory: excludesAmbientMemory(childInputs),
+		// A sub-agent is a run of its own on the parent's trace (run_telemetry.go).
+		Telemetry: spawnRunTelemetry(ctx, config.childWorkflowID, parentWorkflowID, targetWorkflow, config.presetName),
 		Parent: &ParentContext{
 			WorkflowID: parentWorkflowID,
 			StepPath:   "spawn_tool",
@@ -4590,6 +4601,7 @@ func relaunchCarriedSpawns(
 			config.childWorkflowID = DeterministicWorkflowID(handoff.ParentWorkflowID, handoff.ToolCallID)
 		}
 		prep := prepareSpawnRelaunch(config, handoff, chatID, projectPath, workflowInputs, makeThreadPauseCtrl)
+		prep.childExecContext.Telemetry = spawnRunTelemetry(ctx, config.childWorkflowID, handoff.ParentWorkflowID, prep.targetWorkflow, config.presetName)
 
 		rec := &detachedSpawnRecord{
 			ToolCallID:   handoff.ToolCallID,
@@ -5605,6 +5617,9 @@ func notifyWorkflowCheckpoint(ctx workflow.Context, chatID, workflowID, nodeID s
 		// checkpoint loads the definitions the run started with
 		// (ResumeInput.CatalogPin).
 		CatalogPin: catalogPinFrom(ctx),
+		// So does its AI-monitoring run id: a restart from here continues
+		// the same run (ResumeInput.RunID).
+		RunID: rootRunIDFrom(ctx),
 	}
 
 	var result map[string]interface{}

@@ -23,8 +23,8 @@ import (
 // It fails OPEN per provider: if a provider's client cannot be constructed or its
 // availability lookup errors, that provider falls back to its static registry
 // list rather than being dropped, so one flaky provider never blanks the picker.
-func ListAvailableModels(ctx context.Context, userID string) ([]models.ModelInfo, error) {
-	available := GetAvailableDrivers(ctx, userID)
+func ListAvailableModels(ctx context.Context, scope Scope) ([]models.ModelInfo, error) {
+	available := GetAvailableDrivers(ctx, scope)
 	return aggregateAvailableModels(ctx, available, AccountAvailabilityClient)
 }
 
@@ -76,8 +76,8 @@ func aggregateAvailableModels(ctx context.Context, available models.AvailableDri
 // ListAvailableModels: on a top-level error it logs and returns nil rather than
 // propagating, for callers (e.g. the model catalog) that only use the result to
 // gate/annotate and must never fail wholesale because availability lookup did.
-func ListAvailableModelsOrEmpty(ctx context.Context, userID string) []models.ModelInfo {
-	infos, err := ListAvailableModels(ctx, userID)
+func ListAvailableModelsOrEmpty(ctx context.Context, scope Scope) []models.ModelInfo {
+	infos, err := ListAvailableModels(ctx, scope)
 	if err != nil {
 		logging.WarnContext(ctx, "[ListAvailableModels] failed; proceeding with no availability info", "error", err)
 		return nil

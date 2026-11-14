@@ -24,7 +24,7 @@ const (
 // snapshotStore is the slice of the account store the Recorder writes through.
 type snapshotStore interface {
 	UpsertAccountLimitSnapshot(ctx context.Context, s core.LimitState) error
-	BenchAccount(ctx context.Context, userID, accountID string, until time.Time, window string, probe bool) error
+	BenchAccount(ctx context.Context, owner core.AccountOwner, accountID string, until time.Time, window string, probe bool) error
 	GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error)
 	EnsureUsagePollScheduled(ctx context.Context, accountID string, next time.Time, providers []string) error
 }
@@ -55,7 +55,7 @@ type Recorder struct {
 
 // recorded is the in-memory state of one account.
 type recorded struct {
-	userID string
+	owner core.AccountOwner
 	// latest is the newest snapshot observed; pending says it is not written.
 	latest  core.LimitState
 	pending bool
@@ -91,31 +91,32 @@ func newRecorder(store snapshotStore, clock func() time.Time, flushEvery time.Du
 }
 
 // For returns the Observer to install (ratelimit.WithObserver) on a request
-// served by the account.
-func (r *Recorder) For(userID, accountID string) ratelimit.Observer {
-	return accountObserver{r: r, userID: userID, accountID: accountID}
+// served by the account. owner is the ACCOUNT's owner, not the person whose
+// request it served: an org's key keeps one limit state, shared by every member.
+func (r *Recorder) For(owner core.AccountOwner, accountID string) ratelimit.Observer {
+	return accountObserver{r: r, owner: owner, accountID: accountID}
 }
 
 type accountObserver struct {
 	r         *Recorder
-	userID    string
+	owner     core.AccountOwner
 	accountID string
 }
 
 func (o accountObserver) ObserveRateLimits(_ context.Context, s ratelimit.Snapshot) {
-	o.r.observe(o.userID, o.accountID, s)
+	o.r.observe(o.owner, o.accountID, s)
 }
 
-func (r *Recorder) observe(userID, accountID string, s ratelimit.Snapshot) {
-	if accountID == "" || userID == "" {
+func (r *Recorder) observe(owner core.AccountOwner, accountID string, s ratelimit.Snapshot) {
+	if accountID == "" || !owner.Valid() {
 		return
 	}
-	st := LimitStateFromSnapshot(userID, accountID, SourceHeaders, s, r.clock())
+	st := LimitStateFromSnapshot(owner.Key(), accountID, SourceHeaders, s, r.clock())
 
 	r.mu.Lock()
 	e := r.accounts[accountID]
 	if e == nil {
-		e = &recorded{userID: userID}
+		e = &recorded{owner: owner}
 		r.accounts[accountID] = e
 	}
 	// Responses finish out of order; the newest observation wins.
@@ -147,8 +148,8 @@ func (r *Recorder) observe(userID, accountID string, s ratelimit.Snapshot) {
 //
 // A poll is scheduled at benchRecheckAt: within benchRecheckEvery, or 30 s
 // after the bench ends if that is sooner.
-func (r *Recorder) Bench(ctx context.Context, userID, accountID string, until time.Time, window string) (time.Time, error) {
-	eff, err := bench(ctx, r.store, r.clock(), userID, accountID, until, window)
+func (r *Recorder) Bench(ctx context.Context, owner core.AccountOwner, accountID string, until time.Time, window string) (time.Time, error) {
+	eff, err := bench(ctx, r.store, r.clock(), owner, accountID, until, window)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -180,7 +181,7 @@ func (r *Recorder) run() {
 
 type flushItem struct {
 	accountID string
-	userID    string
+	owner     core.AccountOwner
 	state     core.LimitState
 }
 
@@ -193,7 +194,7 @@ func (r *Recorder) flush(ctx context.Context, force bool) {
 	for id, e := range r.accounts {
 		switch {
 		case e.pending && (force || e.urgent || !e.hasWritten || now.Sub(e.wroteAt) >= heartbeat):
-			due = append(due, flushItem{accountID: id, userID: e.userID, state: e.latest})
+			due = append(due, flushItem{accountID: id, owner: e.owner, state: e.latest})
 			e.pending, e.urgent = false, false
 		case !e.pending && e.hasWritten && now.Sub(e.wroteAt) >= forgetIdleAfter:
 			delete(r.accounts, id)
@@ -232,7 +233,7 @@ func (r *Recorder) write(ctx context.Context, it flushItem, now time.Time) error
 	}
 	// A refused request with a known reset benches the account for it.
 	if ex := exhausted(it.state.Windows, it.state.RepresentativeWindow, it.state.Status, now); ex.Exhausted && !ex.Until.IsZero() {
-		if eff, err := bench(ctx, r.store, now, it.userID, it.accountID, ex.Until, ex.Window); err != nil {
+		if eff, err := bench(ctx, r.store, now, it.owner, it.accountID, ex.Until, ex.Window); err != nil {
 			logging.WarnContext(ctx, "benching account from its rate-limit snapshot failed", "account_id", it.accountID, "error", err)
 		} else {
 			r.schedulePoll(ctx, it.accountID, benchRecheckAt(eff, now))

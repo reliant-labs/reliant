@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -14,9 +15,11 @@ import (
 )
 
 // CredentialMarker takes an account whose credential the provider rejected out
-// of rotation (needs-sign-in), until the user reconnects it.
+// of rotation (needs-sign-in), until its owner reconnects it. owner is the
+// account's (accountOwner): for an org's key the mark is on the org's row, so it
+// leaves every member's candidates at once.
 type CredentialMarker interface {
-	MarkNeedsSignIn(ctx context.Context, userID, accountID, reason string) error
+	MarkNeedsSignIn(ctx context.Context, owner core.AccountOwner, accountID, reason string) error
 }
 
 // credentialRejection handles a provider refusing a routed account's own API
@@ -36,22 +39,33 @@ func (r *AccountRouting) credentialRejection(ctx context.Context, err error, uc 
 		return nil
 	}
 	cfg := uc.Account.Config
+	if cfg.DriverID == "reliant" && cfg.AttributedOrgID != "" && drivers.CredentialRejected(err) {
+		// The managed key minted in an org (P10): marked needs-sign-in, the
+		// next resolution mints it again (drivers.EnsureOrgReliantKey) and the
+		// org-less key serves until then. The org-less key is its healer's.
+		if merr := r.Credentials.MarkNeedsSignIn(ctx, core.UserAccountOwner(uc.Scope.UserID), cfg.AccountID,
+			"the gateway rejected the org's managed Reliant key; it is minted again"); merr != nil {
+			logging.WarnContext(ctx, "[Failover] Could not mark a rejected org managed key for re-minting",
+				"userID", uc.Scope.UserID, "accountID", cfg.AccountID, "error", merr)
+		}
+		return nil
+	}
 	if cfg.RefreshToken != "" || cfg.DriverID == "reliant" || cfg.DriverID == "local" || !drivers.CredentialRejected(err) {
 		return nil
 	}
 	reason := "the provider rejected the saved API key: " + err.Error()
-	if merr := r.Credentials.MarkNeedsSignIn(ctx, uc.UserID, cfg.AccountID, reason); merr != nil {
+	if merr := r.Credentials.MarkNeedsSignIn(ctx, accountOwner(uc.Scope.UserID, cfg.DriverConfig), cfg.AccountID, reason); merr != nil {
 		logging.WarnContext(ctx, "[Failover] Could not take a rejected API key out of rotation",
-			"userID", uc.UserID, "provider", string(uc.Driver), "accountID", cfg.AccountID, "error", merr)
+			"userID", uc.Scope.UserID, "provider", string(uc.Driver), "accountID", cfg.AccountID, "error", merr)
 		return nil
 	}
 	logging.WarnContext(ctx, "[Failover] The provider rejected an account's API key; account needs sign-in",
-		"userID", uc.UserID, "provider", string(uc.Driver), "accountID", cfg.AccountID)
+		"userID", uc.Scope.UserID, "provider", string(uc.Driver), "accountID", cfg.AccountID)
 
 	facts := types.UsageLimitFacts{Provider: string(uc.Driver), AccountID: cfg.AccountID, AccountLabel: accountName(cfg)}
 	// exclude marks the account unusable even though uc.Account.Accounts still lists it.
 	usable, _, aerr := r.Router.Alternatives(ctx, accountrouter.Request{
-		UserID: uc.UserID, ThreadID: uc.ThreadID, Driver: uc.Driver,
+		UserID: uc.Scope.UserID, ThreadID: uc.ThreadID, Driver: uc.Driver,
 		ModelID: uc.ModelID, Accounts: uc.Account.Accounts,
 	}, cfg.AccountID)
 	switch {

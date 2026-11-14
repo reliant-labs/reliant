@@ -48,6 +48,9 @@ var chatUpdatesWriters = map[string][]string{
 	"internal/store/save_message_atomic.go": {"CreateChatUpdate"},
 	// The account purge deletes the user's chat_update_heads beside it.
 	"internal/accountpurge/accountpurge.go": {"DELETE FROM chat_updates"},
+	// The project delete removes a chat's chat_update_heads beside its
+	// chat_updates, in the batch that deletes the chat.
+	"internal/store/project_delete.go": {"DELETE FROM chat_updates"},
 }
 
 // chatUpdateMutators are the generated functions and store methods that

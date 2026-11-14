@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/connection.proto.
  */
 export const file_reliant_v1_connection: GenFile = /*@__PURE__*/
-  fileDesc("ChtyZWxpYW50L3YxL2Nvbm5lY3Rpb24ucHJvdG8SCnJlbGlhbnQudjEiogQKCkNvbm5lY3Rpb24SCgoCaWQYASABKAkSFgoOaW50ZWdyYXRpb25faWQYAiABKAkSMQoJYXV0aF9raW5kGAMgASgOMh4ucmVsaWFudC52MS5Db25uZWN0aW9uQXV0aEtpbmQSDAoEbmFtZRgEIAEoCRIVCg1hY2NvdW50X2xhYmVsGAUgASgJEhsKE2V4dGVybmFsX2FjY291bnRfaWQYBiABKAkSDgoGc2NvcGVzGAcgAygJEiwKBnN0YXR1cxgIIAEoDjIcLnJlbGlhbnQudjEuQ29ubmVjdGlvblN0YXR1cxIVCg1zdGF0dXNfcmVhc29uGAkgASgJEhIKCmlzX2RlZmF1bHQYCiABKAgSGQoRYWNjZXNzX2V4cGlyZXNfYXQYCyABKAkSFAoMbGFzdF91c2VkX2F0GAwgASgJEhIKCmNyZWF0ZWRfYXQYDSABKAkSEgoKdXBkYXRlZF9hdBgOIAEoCRIyCgZwYXJhbXMYDyADKAsyIi5yZWxpYW50LnYxLkNvbm5lY3Rpb24uUGFyYW1zRW50cnkSEQoJc2VuZGVyX2lkGBAgASgJEjMKCm93bmVyX2tpbmQYESABKA4yHy5yZWxpYW50LnYxLkNvbm5lY3Rpb25Pd25lcktpbmQSDgoGb3JnX2lkGBIgASgJGi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEipgEKC0ludGVncmF0aW9uEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIyCgdtZXRob2RzGAYgAygLMiEucmVsaWFudC52MS5JbnRlZ3JhdGlvbkF1dGhNZXRob2QSQQoRY29ubmVjdGlvbl9wYXJhbXMYByADKAsyJi5yZWxpYW50LnYxLkludGVncmF0aW9uQ29ubmVjdGlvblBhcmFtIvIBChVJbnRlZ3JhdGlvbkF1dGhNZXRob2QSLAoEa2luZBgBIAEoDjIeLnJlbGlhbnQudjEuQ29ubmVjdGlvbkF1dGhLaW5kEhEKCWF2YWlsYWJsZRgCIAEoCBIaChJ1bmF2YWlsYWJsZV9yZWFzb24YAyABKAkSSAoMZmllbGRfbGFiZWxzGAQgAygLMjIucmVsaWFudC52MS5JbnRlZ3JhdGlvbkF1dGhNZXRob2QuRmllbGRMYWJlbHNFbnRyeRoyChBGaWVsZExhYmVsc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEijwEKGkludGVncmF0aW9uQ29ubmVjdGlvblBhcmFtEgwKBG5hbWUYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEg8KB3BhdHRlcm4YBCABKAkSFQoNZGVmYXVsdF92YWx1ZRgFIAEoCRIQCghyZXF1aXJlZBgGIAEoCCIZChdMaXN0SW50ZWdyYXRpb25zUmVxdWVzdCJJChhMaXN0SW50ZWdyYXRpb25zUmVzcG9uc2USLQoMaW50ZWdyYXRpb25zGAEgAygLMhcucmVsaWFudC52MS5JbnRlZ3JhdGlvbiJoChZMaXN0Q29ubmVjdGlvbnNSZXF1ZXN0EhsKDmludGVncmF0aW9uX2lkGAEgASgJSACIAQESEwoGb3JnX2lkGAIgASgJSAGIAQFCEQoPX2ludGVncmF0aW9uX2lkQgkKB19vcmdfaWQiRgoXTGlzdENvbm5lY3Rpb25zUmVzcG9uc2USKwoLY29ubmVjdGlvbnMYASADKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24iIgoUR2V0Q29ubmVjdGlvblJlcXVlc3QSCgoCaWQYASABKAkiQwoVR2V0Q29ubmVjdGlvblJlc3BvbnNlEioKCmNvbm5lY3Rpb24YASABKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24i5gIKHUNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXF1ZXN0EhYKDmludGVncmF0aW9uX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSLgoEa2luZBgDIAEoDjIgLnJlbGlhbnQudjEuQXBpS2V5Q29ubmVjdGlvbktpbmQSSgoGZmllbGRzGAQgAygLMjUucmVsaWFudC52MS5DcmVhdGVBcGlLZXlDb25uZWN0aW9uUmVxdWVzdC5GaWVsZHNFbnRyeUIDgAEBEkUKBnBhcmFtcxgFIAMoCzI1LnJlbGlhbnQudjEuQ3JlYXRlQXBpS2V5Q29ubmVjdGlvblJlcXVlc3QuUGFyYW1zRW50cnkaLQoLRmllbGRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIkwKHkNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXNwb25zZRIqCgpjb25uZWN0aW9uGAEgASgLMhYucmVsaWFudC52MS5Db25uZWN0aW9uIuwBChFTdGFydE9BdXRoUmVxdWVzdBIWCg5pbnRlZ3JhdGlvbl9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhQKDHJlY29ubmVjdF9pZBgDIAEoCRIWCg5yZWRpcmVjdF9hZnRlchgEIAEoCRI5CgZwYXJhbXMYBSADKAsyKS5yZWxpYW50LnYxLlN0YXJ0T0F1dGhSZXF1ZXN0LlBhcmFtc0VudHJ5EhkKEWxvb3BiYWNrX3JlZGlyZWN0GAYgASgJGi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiKwoSU3RhcnRPQXV0aFJlc3BvbnNlEhUKDWF1dGhvcml6ZV91cmwYASABKAkiPQoUQ29tcGxldGVPQXV0aFJlcXVlc3QSEgoFc3RhdGUYASABKAlCA4ABARIRCgRjb2RlGAIgASgJQgOAAQEiWwoVQ29tcGxldGVPQXV0aFJlc3BvbnNlEioKCmNvbm5lY3Rpb24YASABKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24SFgoOcmVkaXJlY3RfYWZ0ZXIYAiABKAkiIwoVVGVzdENvbm5lY3Rpb25SZXF1ZXN0EgoKAmlkGAEgASgJImAKFlRlc3RDb25uZWN0aW9uUmVzcG9uc2USCgoCb2sYASABKAgSDgoGcHJvYmVkGAIgASgIEhUKDWFjY291bnRfbGFiZWwYAyABKAkSEwoLZXJyb3JfY2xhc3MYBCABKAkiMwoXUmVuYW1lQ29ubmVjdGlvblJlcXVlc3QSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCSJGChhSZW5hbWVDb25uZWN0aW9uUmVzcG9uc2USKgoKY29ubmVjdGlvbhgBIAEoCzIWLnJlbGlhbnQudjEuQ29ubmVjdGlvbiIpChtTZXREZWZhdWx0Q29ubmVjdGlvblJlcXVlc3QSCgoCaWQYASABKAkiSgocU2V0RGVmYXVsdENvbm5lY3Rpb25SZXNwb25zZRIqCgpjb25uZWN0aW9uGAEgASgLMhYucmVsaWFudC52MS5Db25uZWN0aW9uIiUKF0RlbGV0ZUNvbm5lY3Rpb25SZXF1ZXN0EgoKAmlkGAEgASgJIhoKGERlbGV0ZUNvbm5lY3Rpb25SZXNwb25zZSKUAQoPQ29ubmVjdGlvbkV2ZW50EgoKAmlkGAEgASgDEhUKDWNvbm5lY3Rpb25faWQYAiABKAkSDAoEa2luZBgDIAEoCRIOCgZydW5faWQYBCABKAkSDwoHbm9kZV9pZBgFIAEoCRIUCgx0b29sX2NhbGxfaWQYBiABKAkSDQoFYWN0b3IYByABKAkSCgoCYXQYCCABKAkiZgobTGlzdENvbm5lY3Rpb25FdmVudHNSZXF1ZXN0EhIKAmlkGAEgASgJQga6SAPIAQESDQoFbGltaXQYAiABKAUSFgoJYmVmb3JlX2lkGAMgASgDSACIAQFCDAoKX2JlZm9yZV9pZCJLChxMaXN0Q29ubmVjdGlvbkV2ZW50c1Jlc3BvbnNlEisKBmV2ZW50cxgBIAMoCzIbLnJlbGlhbnQudjEuQ29ubmVjdGlvbkV2ZW50KuABChJDb25uZWN0aW9uQXV0aEtpbmQSJAogQ09OTkVDVElPTl9BVVRIX0tJTkRfVU5TUEVDSUZJRUQQABIfChtDT05ORUNUSU9OX0FVVEhfS0lORF9PQVVUSDIQARIgChxDT05ORUNUSU9OX0FVVEhfS0lORF9BUElfS0VZEAMSHgoaQ09OTkVDVElPTl9BVVRIX0tJTkRfQkFTSUMQBBIdChlDT05ORUNUSU9OX0FVVEhfS0lORF9OT05FEAUSIgoeQ09OTkVDVElPTl9BVVRIX0tJTkRfREVMRUdBVEVEEAYqlgEKEENvbm5lY3Rpb25TdGF0dXMSIQodQ09OTkVDVElPTl9TVEFUVVNfVU5TUEVDSUZJRUQQABIcChhDT05ORUNUSU9OX1NUQVRVU19BQ1RJVkUQARIiCh5DT05ORUNUSU9OX1NUQVRVU19ORUVEU19SRUFVVEgQAhIdChlDT05ORUNUSU9OX1NUQVRVU19SRVZPS0VEEAMqewoTQ29ubmVjdGlvbk93bmVyS2luZBIlCiFDT05ORUNUSU9OX09XTkVSX0tJTkRfVU5TUEVDSUZJRUQQABIeChpDT05ORUNUSU9OX09XTkVSX0tJTkRfVVNFUhABEh0KGUNPTk5FQ1RJT05fT1dORVJfS0lORF9PUkcQAiqHAQoUQXBpS2V5Q29ubmVjdGlvbktpbmQSJwojQVBJX0tFWV9DT05ORUNUSU9OX0tJTkRfVU5TUEVDSUZJRUQQABIjCh9BUElfS0VZX0NPTk5FQ1RJT05fS0lORF9BUElfS0VZEAESIQodQVBJX0tFWV9DT05ORUNUSU9OX0tJTkRfQkFTSUMQAjLwDAoRQ29ubmVjdGlvblNlcnZpY2USXwoQTGlzdEludGVncmF0aW9ucxIjLnJlbGlhbnQudjEuTGlzdEludGVncmF0aW9uc1JlcXVlc3QaJC5yZWxpYW50LnYxLkxpc3RJbnRlZ3JhdGlvbnNSZXNwb25zZSIAElwKD0xpc3RDb25uZWN0aW9ucxIiLnJlbGlhbnQudjEuTGlzdENvbm5lY3Rpb25zUmVxdWVzdBojLnJlbGlhbnQudjEuTGlzdENvbm5lY3Rpb25zUmVzcG9uc2UiABJWCg1HZXRDb25uZWN0aW9uEiAucmVsaWFudC52MS5HZXRDb25uZWN0aW9uUmVxdWVzdBohLnJlbGlhbnQudjEuR2V0Q29ubmVjdGlvblJlc3BvbnNlIgASzwEKFkNyZWF0ZUFwaUtleUNvbm5lY3Rpb24SKS5yZWxpYW50LnYxLkNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXF1ZXN0GioucmVsaWFudC52MS5DcmVhdGVBcGlLZXlDb25uZWN0aW9uUmVzcG9uc2UiXqK7GFo6WAoGY3JlYXRlEj4KCmNvbm5lY3Rpb24SFnJlc3BvbnNlLmNvbm5lY3Rpb24uaWQaGHJlc3BvbnNlLmNvbm5lY3Rpb24ubmFtZSoOaW50ZWdyYXRpb25faWQSrAEKClN0YXJ0T0F1dGgSHS5yZWxpYW50LnYxLlN0YXJ0T0F1dGhSZXF1ZXN0Gh4ucmVsaWFudC52MS5TdGFydE9BdXRoUmVzcG9uc2UiX6K7GFs6WTpXT0F1dGggaGFuZHNoYWtlIGluIGZsaWdodDogbm90aGluZyBpcyBzdG9yZWQgdW50aWwgQ29tcGxldGVPQXV0aCByZWNvcmRzIHRoZSBjb25uZWN0aW9uEskBCg1Db21wbGV0ZU9BdXRoEiAucmVsaWFudC52MS5Db21wbGV0ZU9BdXRoUmVxdWVzdBohLnJlbGlhbnQudjEuQ29tcGxldGVPQXV0aFJlc3BvbnNlInOiuxhvOm0KB2Nvbm5lY3QSPgoKY29ubmVjdGlvbhIWcmVzcG9uc2UuY29ubmVjdGlvbi5pZBoYcmVzcG9uc2UuY29ubmVjdGlvbi5uYW1lKiJyZXNwb25zZS5jb25uZWN0aW9uLmludGVncmF0aW9uX2lkEs8BCg5UZXN0Q29ubmVjdGlvbhIhLnJlbGlhbnQudjEuVGVzdENvbm5lY3Rpb25SZXF1ZXN0GiIucmVsaWFudC52MS5UZXN0Q29ubmVjdGlvblJlc3BvbnNlInaiuxhyOnA6bnByb2JlcyB0aGUgbGl2ZSBjcmVkZW50aWFsOyByZWZyZXNoaW5nIHRoZSBhY2NvdW50IGxhYmVsIGl0IGRldGVjdHMgaXMgYm9va2tlZXBpbmcsIG5vdCBhIGNoYW5nZSBhIHBlcnNvbiBtYWRlEoUBChBSZW5hbWVDb25uZWN0aW9uEiMucmVsaWFudC52MS5SZW5hbWVDb25uZWN0aW9uUmVxdWVzdBokLnJlbGlhbnQudjEuUmVuYW1lQ29ubmVjdGlvblJlc3BvbnNlIiaiuxgiOiAKBnJlbmFtZRIWCgpjb25uZWN0aW9uEgJpZBoEbmFtZRLOAQoUU2V0RGVmYXVsdENvbm5lY3Rpb24SJy5yZWxpYW50LnYxLlNldERlZmF1bHRDb25uZWN0aW9uUmVxdWVzdBooLnJlbGlhbnQudjEuU2V0RGVmYXVsdENvbm5lY3Rpb25SZXNwb25zZSJjorsYXzpdCgtzZXRfZGVmYXVsdBIqCgpjb25uZWN0aW9uEgJpZBoYcmVzcG9uc2UuY29ubmVjdGlvbi5uYW1lKiJyZXNwb25zZS5jb25uZWN0aW9uLmludGVncmF0aW9uX2lkEl8KEERlbGV0ZUNvbm5lY3Rpb24SIy5yZWxpYW50LnYxLkRlbGV0ZUNvbm5lY3Rpb25SZXF1ZXN0GiQucmVsaWFudC52MS5EZWxldGVDb25uZWN0aW9uUmVzcG9uc2UiABJrChRMaXN0Q29ubmVjdGlvbkV2ZW50cxInLnJlbGlhbnQudjEuTGlzdENvbm5lY3Rpb25FdmVudHNSZXF1ZXN0GigucmVsaWFudC52MS5MaXN0Q29ubmVjdGlvbkV2ZW50c1Jlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge]);
+  fileDesc("ChtyZWxpYW50L3YxL2Nvbm5lY3Rpb24ucHJvdG8SCnJlbGlhbnQudjEiogQKCkNvbm5lY3Rpb24SCgoCaWQYASABKAkSFgoOaW50ZWdyYXRpb25faWQYAiABKAkSMQoJYXV0aF9raW5kGAMgASgOMh4ucmVsaWFudC52MS5Db25uZWN0aW9uQXV0aEtpbmQSDAoEbmFtZRgEIAEoCRIVCg1hY2NvdW50X2xhYmVsGAUgASgJEhsKE2V4dGVybmFsX2FjY291bnRfaWQYBiABKAkSDgoGc2NvcGVzGAcgAygJEiwKBnN0YXR1cxgIIAEoDjIcLnJlbGlhbnQudjEuQ29ubmVjdGlvblN0YXR1cxIVCg1zdGF0dXNfcmVhc29uGAkgASgJEhIKCmlzX2RlZmF1bHQYCiABKAgSGQoRYWNjZXNzX2V4cGlyZXNfYXQYCyABKAkSFAoMbGFzdF91c2VkX2F0GAwgASgJEhIKCmNyZWF0ZWRfYXQYDSABKAkSEgoKdXBkYXRlZF9hdBgOIAEoCRIyCgZwYXJhbXMYDyADKAsyIi5yZWxpYW50LnYxLkNvbm5lY3Rpb24uUGFyYW1zRW50cnkSEQoJc2VuZGVyX2lkGBAgASgJEjMKCm93bmVyX2tpbmQYESABKA4yHy5yZWxpYW50LnYxLkNvbm5lY3Rpb25Pd25lcktpbmQSDgoGb3JnX2lkGBIgASgJGi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEi3AEKC0ludGVncmF0aW9uEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIyCgdtZXRob2RzGAYgAygLMiEucmVsaWFudC52MS5JbnRlZ3JhdGlvbkF1dGhNZXRob2QSQQoRY29ubmVjdGlvbl9wYXJhbXMYByADKAsyJi5yZWxpYW50LnYxLkludGVncmF0aW9uQ29ubmVjdGlvblBhcmFtEjQKCm9yZ19wb2xpY3kYCCABKAsyIC5yZWxpYW50LnYxLkludGVncmF0aW9uT3JnUG9saWN5IlEKFEludGVncmF0aW9uT3JnUG9saWN5Eg8KB2FsbG93ZWQYASABKAgSEAoIZW5mb3JjZWQYAiABKAgSFgoOcG9saWN5X3ZlcnNpb24YAyABKAMi8gEKFUludGVncmF0aW9uQXV0aE1ldGhvZBIsCgRraW5kGAEgASgOMh4ucmVsaWFudC52MS5Db25uZWN0aW9uQXV0aEtpbmQSEQoJYXZhaWxhYmxlGAIgASgIEhoKEnVuYXZhaWxhYmxlX3JlYXNvbhgDIAEoCRJICgxmaWVsZF9sYWJlbHMYBCADKAsyMi5yZWxpYW50LnYxLkludGVncmF0aW9uQXV0aE1ldGhvZC5GaWVsZExhYmVsc0VudHJ5GjIKEEZpZWxkTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKPAQoaSW50ZWdyYXRpb25Db25uZWN0aW9uUGFyYW0SDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSDwoHcGF0dGVybhgEIAEoCRIVCg1kZWZhdWx0X3ZhbHVlGAUgASgJEhAKCHJlcXVpcmVkGAYgASgIIjkKF0xpc3RJbnRlZ3JhdGlvbnNSZXF1ZXN0EhMKBm9yZ19pZBgBIAEoCUgAiAEBQgkKB19vcmdfaWQiSQoYTGlzdEludGVncmF0aW9uc1Jlc3BvbnNlEi0KDGludGVncmF0aW9ucxgBIAMoCzIXLnJlbGlhbnQudjEuSW50ZWdyYXRpb24iaAoWTGlzdENvbm5lY3Rpb25zUmVxdWVzdBIbCg5pbnRlZ3JhdGlvbl9pZBgBIAEoCUgAiAEBEhMKBm9yZ19pZBgCIAEoCUgBiAEBQhEKD19pbnRlZ3JhdGlvbl9pZEIJCgdfb3JnX2lkIkYKF0xpc3RDb25uZWN0aW9uc1Jlc3BvbnNlEisKC2Nvbm5lY3Rpb25zGAEgAygLMhYucmVsaWFudC52MS5Db25uZWN0aW9uIk4KFEdldENvbm5lY3Rpb25SZXF1ZXN0EgoKAmlkGAEgASgJEhkKDG93bmVyX29yZ19pZBgCIAEoCUgAiAEBQg8KDV9vd25lcl9vcmdfaWQiQwoVR2V0Q29ubmVjdGlvblJlc3BvbnNlEioKCmNvbm5lY3Rpb24YASABKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24ikgMKHUNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXF1ZXN0EhYKDmludGVncmF0aW9uX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSLgoEa2luZBgDIAEoDjIgLnJlbGlhbnQudjEuQXBpS2V5Q29ubmVjdGlvbktpbmQSSgoGZmllbGRzGAQgAygLMjUucmVsaWFudC52MS5DcmVhdGVBcGlLZXlDb25uZWN0aW9uUmVxdWVzdC5GaWVsZHNFbnRyeUIDgAEBEkUKBnBhcmFtcxgFIAMoCzI1LnJlbGlhbnQudjEuQ3JlYXRlQXBpS2V5Q29ubmVjdGlvblJlcXVlc3QuUGFyYW1zRW50cnkSGQoMb3duZXJfb3JnX2lkGAYgASgJSACIAQEaLQoLRmllbGRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBQg8KDV9vd25lcl9vcmdfaWQiTAoeQ3JlYXRlQXBpS2V5Q29ubmVjdGlvblJlc3BvbnNlEioKCmNvbm5lY3Rpb24YASABKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24imAIKEVN0YXJ0T0F1dGhSZXF1ZXN0EhYKDmludGVncmF0aW9uX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMcmVjb25uZWN0X2lkGAMgASgJEhYKDnJlZGlyZWN0X2FmdGVyGAQgASgJEjkKBnBhcmFtcxgFIAMoCzIpLnJlbGlhbnQudjEuU3RhcnRPQXV0aFJlcXVlc3QuUGFyYW1zRW50cnkSGQoRbG9vcGJhY2tfcmVkaXJlY3QYBiABKAkSGQoMb3duZXJfb3JnX2lkGAcgASgJSACIAQEaLQoLUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUIPCg1fb3duZXJfb3JnX2lkIisKElN0YXJ0T0F1dGhSZXNwb25zZRIVCg1hdXRob3JpemVfdXJsGAEgASgJIj0KFENvbXBsZXRlT0F1dGhSZXF1ZXN0EhIKBXN0YXRlGAEgASgJQgOAAQESEQoEY29kZRgCIAEoCUIDgAEBIlsKFUNvbXBsZXRlT0F1dGhSZXNwb25zZRIqCgpjb25uZWN0aW9uGAEgASgLMhYucmVsaWFudC52MS5Db25uZWN0aW9uEhYKDnJlZGlyZWN0X2FmdGVyGAIgASgJIk8KFVRlc3RDb25uZWN0aW9uUmVxdWVzdBIKCgJpZBgBIAEoCRIZCgxvd25lcl9vcmdfaWQYAiABKAlIAIgBAUIPCg1fb3duZXJfb3JnX2lkImAKFlRlc3RDb25uZWN0aW9uUmVzcG9uc2USCgoCb2sYASABKAgSDgoGcHJvYmVkGAIgASgIEhUKDWFjY291bnRfbGFiZWwYAyABKAkSEwoLZXJyb3JfY2xhc3MYBCABKAkiXwoXUmVuYW1lQ29ubmVjdGlvblJlcXVlc3QSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIZCgxvd25lcl9vcmdfaWQYAyABKAlIAIgBAUIPCg1fb3duZXJfb3JnX2lkIkYKGFJlbmFtZUNvbm5lY3Rpb25SZXNwb25zZRIqCgpjb25uZWN0aW9uGAEgASgLMhYucmVsaWFudC52MS5Db25uZWN0aW9uIlUKG1NldERlZmF1bHRDb25uZWN0aW9uUmVxdWVzdBIKCgJpZBgBIAEoCRIZCgxvd25lcl9vcmdfaWQYAiABKAlIAIgBAUIPCg1fb3duZXJfb3JnX2lkIkoKHFNldERlZmF1bHRDb25uZWN0aW9uUmVzcG9uc2USKgoKY29ubmVjdGlvbhgBIAEoCzIWLnJlbGlhbnQudjEuQ29ubmVjdGlvbiJRChdEZWxldGVDb25uZWN0aW9uUmVxdWVzdBIKCgJpZBgBIAEoCRIZCgxvd25lcl9vcmdfaWQYAiABKAlIAIgBAUIPCg1fb3duZXJfb3JnX2lkIhoKGERlbGV0ZUNvbm5lY3Rpb25SZXNwb25zZSKlAQoPQ29ubmVjdGlvbkV2ZW50EgoKAmlkGAEgASgDEhUKDWNvbm5lY3Rpb25faWQYAiABKAkSDAoEa2luZBgDIAEoCRIOCgZydW5faWQYBCABKAkSDwoHbm9kZV9pZBgFIAEoCRIUCgx0b29sX2NhbGxfaWQYBiABKAkSDQoFYWN0b3IYByABKAkSCgoCYXQYCCABKAkSDwoHdXNlcl9pZBgJIAEoCSKSAQobTGlzdENvbm5lY3Rpb25FdmVudHNSZXF1ZXN0EhIKAmlkGAEgASgJQga6SAPIAQESDQoFbGltaXQYAiABKAUSFgoJYmVmb3JlX2lkGAMgASgDSACIAQESGQoMb3duZXJfb3JnX2lkGAQgASgJSAGIAQFCDAoKX2JlZm9yZV9pZEIPCg1fb3duZXJfb3JnX2lkIksKHExpc3RDb25uZWN0aW9uRXZlbnRzUmVzcG9uc2USKwoGZXZlbnRzGAEgAygLMhsucmVsaWFudC52MS5Db25uZWN0aW9uRXZlbnQq4AEKEkNvbm5lY3Rpb25BdXRoS2luZBIkCiBDT05ORUNUSU9OX0FVVEhfS0lORF9VTlNQRUNJRklFRBAAEh8KG0NPTk5FQ1RJT05fQVVUSF9LSU5EX09BVVRIMhABEiAKHENPTk5FQ1RJT05fQVVUSF9LSU5EX0FQSV9LRVkQAxIeChpDT05ORUNUSU9OX0FVVEhfS0lORF9CQVNJQxAEEh0KGUNPTk5FQ1RJT05fQVVUSF9LSU5EX05PTkUQBRIiCh5DT05ORUNUSU9OX0FVVEhfS0lORF9ERUxFR0FURUQQBiqWAQoQQ29ubmVjdGlvblN0YXR1cxIhCh1DT05ORUNUSU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEhwKGENPTk5FQ1RJT05fU1RBVFVTX0FDVElWRRABEiIKHkNPTk5FQ1RJT05fU1RBVFVTX05FRURTX1JFQVVUSBACEh0KGUNPTk5FQ1RJT05fU1RBVFVTX1JFVk9LRUQQAyp7ChNDb25uZWN0aW9uT3duZXJLaW5kEiUKIUNPTk5FQ1RJT05fT1dORVJfS0lORF9VTlNQRUNJRklFRBAAEh4KGkNPTk5FQ1RJT05fT1dORVJfS0lORF9VU0VSEAESHQoZQ09OTkVDVElPTl9PV05FUl9LSU5EX09SRxACKocBChRBcGlLZXlDb25uZWN0aW9uS2luZBInCiNBUElfS0VZX0NPTk5FQ1RJT05fS0lORF9VTlNQRUNJRklFRBAAEiMKH0FQSV9LRVlfQ09OTkVDVElPTl9LSU5EX0FQSV9LRVkQARIhCh1BUElfS0VZX0NPTk5FQ1RJT05fS0lORF9CQVNJQxACMvAMChFDb25uZWN0aW9uU2VydmljZRJfChBMaXN0SW50ZWdyYXRpb25zEiMucmVsaWFudC52MS5MaXN0SW50ZWdyYXRpb25zUmVxdWVzdBokLnJlbGlhbnQudjEuTGlzdEludGVncmF0aW9uc1Jlc3BvbnNlIgASXAoPTGlzdENvbm5lY3Rpb25zEiIucmVsaWFudC52MS5MaXN0Q29ubmVjdGlvbnNSZXF1ZXN0GiMucmVsaWFudC52MS5MaXN0Q29ubmVjdGlvbnNSZXNwb25zZSIAElYKDUdldENvbm5lY3Rpb24SIC5yZWxpYW50LnYxLkdldENvbm5lY3Rpb25SZXF1ZXN0GiEucmVsaWFudC52MS5HZXRDb25uZWN0aW9uUmVzcG9uc2UiABLPAQoWQ3JlYXRlQXBpS2V5Q29ubmVjdGlvbhIpLnJlbGlhbnQudjEuQ3JlYXRlQXBpS2V5Q29ubmVjdGlvblJlcXVlc3QaKi5yZWxpYW50LnYxLkNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXNwb25zZSJeorsYWjpYCgZjcmVhdGUSPgoKY29ubmVjdGlvbhIWcmVzcG9uc2UuY29ubmVjdGlvbi5pZBoYcmVzcG9uc2UuY29ubmVjdGlvbi5uYW1lKg5pbnRlZ3JhdGlvbl9pZBKsAQoKU3RhcnRPQXV0aBIdLnJlbGlhbnQudjEuU3RhcnRPQXV0aFJlcXVlc3QaHi5yZWxpYW50LnYxLlN0YXJ0T0F1dGhSZXNwb25zZSJforsYWzpZOldPQXV0aCBoYW5kc2hha2UgaW4gZmxpZ2h0OiBub3RoaW5nIGlzIHN0b3JlZCB1bnRpbCBDb21wbGV0ZU9BdXRoIHJlY29yZHMgdGhlIGNvbm5lY3Rpb24SyQEKDUNvbXBsZXRlT0F1dGgSIC5yZWxpYW50LnYxLkNvbXBsZXRlT0F1dGhSZXF1ZXN0GiEucmVsaWFudC52MS5Db21wbGV0ZU9BdXRoUmVzcG9uc2Uic6K7GG86bQoHY29ubmVjdBI+Cgpjb25uZWN0aW9uEhZyZXNwb25zZS5jb25uZWN0aW9uLmlkGhhyZXNwb25zZS5jb25uZWN0aW9uLm5hbWUqInJlc3BvbnNlLmNvbm5lY3Rpb24uaW50ZWdyYXRpb25faWQSzwEKDlRlc3RDb25uZWN0aW9uEiEucmVsaWFudC52MS5UZXN0Q29ubmVjdGlvblJlcXVlc3QaIi5yZWxpYW50LnYxLlRlc3RDb25uZWN0aW9uUmVzcG9uc2UidqK7GHI6cDpucHJvYmVzIHRoZSBsaXZlIGNyZWRlbnRpYWw7IHJlZnJlc2hpbmcgdGhlIGFjY291bnQgbGFiZWwgaXQgZGV0ZWN0cyBpcyBib29ra2VlcGluZywgbm90IGEgY2hhbmdlIGEgcGVyc29uIG1hZGUShQEKEFJlbmFtZUNvbm5lY3Rpb24SIy5yZWxpYW50LnYxLlJlbmFtZUNvbm5lY3Rpb25SZXF1ZXN0GiQucmVsaWFudC52MS5SZW5hbWVDb25uZWN0aW9uUmVzcG9uc2UiJqK7GCI6IAoGcmVuYW1lEhYKCmNvbm5lY3Rpb24SAmlkGgRuYW1lEs4BChRTZXREZWZhdWx0Q29ubmVjdGlvbhInLnJlbGlhbnQudjEuU2V0RGVmYXVsdENvbm5lY3Rpb25SZXF1ZXN0GigucmVsaWFudC52MS5TZXREZWZhdWx0Q29ubmVjdGlvblJlc3BvbnNlImOiuxhfOl0KC3NldF9kZWZhdWx0EioKCmNvbm5lY3Rpb24SAmlkGhhyZXNwb25zZS5jb25uZWN0aW9uLm5hbWUqInJlc3BvbnNlLmNvbm5lY3Rpb24uaW50ZWdyYXRpb25faWQSXwoQRGVsZXRlQ29ubmVjdGlvbhIjLnJlbGlhbnQudjEuRGVsZXRlQ29ubmVjdGlvblJlcXVlc3QaJC5yZWxpYW50LnYxLkRlbGV0ZUNvbm5lY3Rpb25SZXNwb25zZSIAEmsKFExpc3RDb25uZWN0aW9uRXZlbnRzEicucmVsaWFudC52MS5MaXN0Q29ubmVjdGlvbkV2ZW50c1JlcXVlc3QaKC5yZWxpYW50LnYxLkxpc3RDb25uZWN0aW9uRXZlbnRzUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge]);
 
 /**
  * Connection is metadata only. There is deliberately no field that could hold
@@ -171,6 +171,16 @@ export type Integration = Message<"reliant.v1.Integration"> & {
    * @generated from field: repeated reliant.v1.IntegrationConnectionParam connection_params = 7;
    */
   connectionParams: IntegrationConnectionParam[];
+
+  /**
+   * OrgPolicy is how the organization the request names treats this
+   * integration in its runs (control-plane docs/design/org-policies.md §4.3).
+   * Unset when the request names no org, or the org's policy does not govern
+   * integrations: every integration may be used, as before this field.
+   *
+   * @generated from field: reliant.v1.IntegrationOrgPolicy org_policy = 8;
+   */
+  orgPolicy?: IntegrationOrgPolicy | undefined;
 };
 
 /**
@@ -179,6 +189,46 @@ export type Integration = Message<"reliant.v1.Integration"> & {
  */
 export const IntegrationSchema: GenMessage<Integration> = /*@__PURE__*/
   messageDesc(file_reliant_v1_connection, 1);
+
+/**
+ * IntegrationOrgPolicy is an org's policy on one integration. It governs USE
+ * in the org's runs, never connecting: a person's own connection stays usable
+ * in their other orgs, so a picker marks a disallowed integration "not
+ * allowed in <org>" rather than hiding it.
+ *
+ * @generated from message reliant.v1.IntegrationOrgPolicy
+ */
+export type IntegrationOrgPolicy = Message<"reliant.v1.IntegrationOrgPolicy"> & {
+  /**
+   * Allowed is false when the org's policy does not admit the integration.
+   *
+   * @generated from field: bool allowed = 1;
+   */
+  allowed: boolean;
+
+  /**
+   * Enforced is true when a use the policy does not admit is refused. False
+   * while the rule only counts what it would refuse (audit): the use still
+   * works.
+   *
+   * @generated from field: bool enforced = 2;
+   */
+  enforced: boolean;
+
+  /**
+   * PolicyVersion is the version of the org's policy this answer comes from.
+   *
+   * @generated from field: int64 policy_version = 3;
+   */
+  policyVersion: bigint;
+};
+
+/**
+ * Describes the message reliant.v1.IntegrationOrgPolicy.
+ * Use `create(IntegrationOrgPolicySchema)` to create a new message.
+ */
+export const IntegrationOrgPolicySchema: GenMessage<IntegrationOrgPolicy> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_connection, 2);
 
 /**
  * @generated from message reliant.v1.IntegrationAuthMethod
@@ -218,7 +268,7 @@ export type IntegrationAuthMethod = Message<"reliant.v1.IntegrationAuthMethod"> 
  * Use `create(IntegrationAuthMethodSchema)` to create a new message.
  */
 export const IntegrationAuthMethodSchema: GenMessage<IntegrationAuthMethod> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 2);
+  messageDesc(file_reliant_v1_connection, 3);
 
 /**
  * @generated from message reliant.v1.IntegrationConnectionParam
@@ -262,12 +312,20 @@ export type IntegrationConnectionParam = Message<"reliant.v1.IntegrationConnecti
  * Use `create(IntegrationConnectionParamSchema)` to create a new message.
  */
 export const IntegrationConnectionParamSchema: GenMessage<IntegrationConnectionParam> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 3);
+  messageDesc(file_reliant_v1_connection, 4);
 
 /**
  * @generated from message reliant.v1.ListIntegrationsRequest
  */
 export type ListIntegrationsRequest = Message<"reliant.v1.ListIntegrationsRequest"> & {
+  /**
+   * OrgId fills each integration's org_policy with that organization's
+   * policy, for a caller who is a live member of it (PERMISSION_DENIED
+   * otherwise). Unset lists the integrations exactly as before this field.
+   *
+   * @generated from field: optional string org_id = 1;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -275,7 +333,7 @@ export type ListIntegrationsRequest = Message<"reliant.v1.ListIntegrationsReques
  * Use `create(ListIntegrationsRequestSchema)` to create a new message.
  */
 export const ListIntegrationsRequestSchema: GenMessage<ListIntegrationsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 4);
+  messageDesc(file_reliant_v1_connection, 5);
 
 /**
  * @generated from message reliant.v1.ListIntegrationsResponse
@@ -292,7 +350,7 @@ export type ListIntegrationsResponse = Message<"reliant.v1.ListIntegrationsRespo
  * Use `create(ListIntegrationsResponseSchema)` to create a new message.
  */
 export const ListIntegrationsResponseSchema: GenMessage<ListIntegrationsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 5);
+  messageDesc(file_reliant_v1_connection, 6);
 
 /**
  * @generated from message reliant.v1.ListConnectionsRequest
@@ -322,7 +380,7 @@ export type ListConnectionsRequest = Message<"reliant.v1.ListConnectionsRequest"
  * Use `create(ListConnectionsRequestSchema)` to create a new message.
  */
 export const ListConnectionsRequestSchema: GenMessage<ListConnectionsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 6);
+  messageDesc(file_reliant_v1_connection, 7);
 
 /**
  * @generated from message reliant.v1.ListConnectionsResponse
@@ -339,7 +397,7 @@ export type ListConnectionsResponse = Message<"reliant.v1.ListConnectionsRespons
  * Use `create(ListConnectionsResponseSchema)` to create a new message.
  */
 export const ListConnectionsResponseSchema: GenMessage<ListConnectionsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 7);
+  messageDesc(file_reliant_v1_connection, 8);
 
 /**
  * @generated from message reliant.v1.GetConnectionRequest
@@ -349,6 +407,16 @@ export type GetConnectionRequest = Message<"reliant.v1.GetConnectionRequest"> & 
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Any live member of it may read one.
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 2;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -356,7 +424,7 @@ export type GetConnectionRequest = Message<"reliant.v1.GetConnectionRequest"> & 
  * Use `create(GetConnectionRequestSchema)` to create a new message.
  */
 export const GetConnectionRequestSchema: GenMessage<GetConnectionRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 8);
+  messageDesc(file_reliant_v1_connection, 9);
 
 /**
  * @generated from message reliant.v1.GetConnectionResponse
@@ -373,7 +441,7 @@ export type GetConnectionResponse = Message<"reliant.v1.GetConnectionResponse"> 
  * Use `create(GetConnectionResponseSchema)` to create a new message.
  */
 export const GetConnectionResponseSchema: GenMessage<GetConnectionResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 9);
+  messageDesc(file_reliant_v1_connection, 10);
 
 /**
  * @generated from message reliant.v1.CreateApiKeyConnectionRequest
@@ -409,6 +477,17 @@ export type CreateApiKeyConnectionRequest = Message<"reliant.v1.CreateApiKeyConn
    * @generated from field: map<string, string> params = 5;
    */
   params: { [key: string]: string };
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+   * The deployment must enable org connections (orgs.connections_enabled).
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 6;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -416,7 +495,7 @@ export type CreateApiKeyConnectionRequest = Message<"reliant.v1.CreateApiKeyConn
  * Use `create(CreateApiKeyConnectionRequestSchema)` to create a new message.
  */
 export const CreateApiKeyConnectionRequestSchema: GenMessage<CreateApiKeyConnectionRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 10);
+  messageDesc(file_reliant_v1_connection, 11);
 
 /**
  * @generated from message reliant.v1.CreateApiKeyConnectionResponse
@@ -433,7 +512,7 @@ export type CreateApiKeyConnectionResponse = Message<"reliant.v1.CreateApiKeyCon
  * Use `create(CreateApiKeyConnectionResponseSchema)` to create a new message.
  */
 export const CreateApiKeyConnectionResponseSchema: GenMessage<CreateApiKeyConnectionResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 11);
+  messageDesc(file_reliant_v1_connection, 12);
 
 /**
  * @generated from message reliant.v1.StartOAuthRequest
@@ -481,6 +560,19 @@ export type StartOAuthRequest = Message<"reliant.v1.StartOAuthRequest"> & {
    * @generated from field: string loopback_redirect = 6;
    */
   loopbackRedirect: string;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. A new connection, or with reconnect_id a
+   * reconnect of one of the org's. Only an owner or admin of it, signed in to the app as a person, may. The same person must
+   * finish the flow, and must still be an owner or admin then. The
+   * deployment must enable org connections (orgs.connections_enabled).
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 7;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -488,7 +580,7 @@ export type StartOAuthRequest = Message<"reliant.v1.StartOAuthRequest"> & {
  * Use `create(StartOAuthRequestSchema)` to create a new message.
  */
 export const StartOAuthRequestSchema: GenMessage<StartOAuthRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 12);
+  messageDesc(file_reliant_v1_connection, 13);
 
 /**
  * @generated from message reliant.v1.StartOAuthResponse
@@ -505,7 +597,7 @@ export type StartOAuthResponse = Message<"reliant.v1.StartOAuthResponse"> & {
  * Use `create(StartOAuthResponseSchema)` to create a new message.
  */
 export const StartOAuthResponseSchema: GenMessage<StartOAuthResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 13);
+  messageDesc(file_reliant_v1_connection, 14);
 
 /**
  * @generated from message reliant.v1.CompleteOAuthRequest
@@ -527,7 +619,7 @@ export type CompleteOAuthRequest = Message<"reliant.v1.CompleteOAuthRequest"> & 
  * Use `create(CompleteOAuthRequestSchema)` to create a new message.
  */
 export const CompleteOAuthRequestSchema: GenMessage<CompleteOAuthRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 14);
+  messageDesc(file_reliant_v1_connection, 15);
 
 /**
  * @generated from message reliant.v1.CompleteOAuthResponse
@@ -549,7 +641,7 @@ export type CompleteOAuthResponse = Message<"reliant.v1.CompleteOAuthResponse"> 
  * Use `create(CompleteOAuthResponseSchema)` to create a new message.
  */
 export const CompleteOAuthResponseSchema: GenMessage<CompleteOAuthResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 15);
+  messageDesc(file_reliant_v1_connection, 16);
 
 /**
  * @generated from message reliant.v1.TestConnectionRequest
@@ -559,6 +651,16 @@ export type TestConnectionRequest = Message<"reliant.v1.TestConnectionRequest"> 
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 2;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -566,7 +668,7 @@ export type TestConnectionRequest = Message<"reliant.v1.TestConnectionRequest"> 
  * Use `create(TestConnectionRequestSchema)` to create a new message.
  */
 export const TestConnectionRequestSchema: GenMessage<TestConnectionRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 16);
+  messageDesc(file_reliant_v1_connection, 17);
 
 /**
  * @generated from message reliant.v1.TestConnectionResponse
@@ -603,7 +705,7 @@ export type TestConnectionResponse = Message<"reliant.v1.TestConnectionResponse"
  * Use `create(TestConnectionResponseSchema)` to create a new message.
  */
 export const TestConnectionResponseSchema: GenMessage<TestConnectionResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 17);
+  messageDesc(file_reliant_v1_connection, 18);
 
 /**
  * @generated from message reliant.v1.RenameConnectionRequest
@@ -618,6 +720,16 @@ export type RenameConnectionRequest = Message<"reliant.v1.RenameConnectionReques
    * @generated from field: string name = 2;
    */
   name: string;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 3;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -625,7 +737,7 @@ export type RenameConnectionRequest = Message<"reliant.v1.RenameConnectionReques
  * Use `create(RenameConnectionRequestSchema)` to create a new message.
  */
 export const RenameConnectionRequestSchema: GenMessage<RenameConnectionRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 18);
+  messageDesc(file_reliant_v1_connection, 19);
 
 /**
  * @generated from message reliant.v1.RenameConnectionResponse
@@ -642,7 +754,7 @@ export type RenameConnectionResponse = Message<"reliant.v1.RenameConnectionRespo
  * Use `create(RenameConnectionResponseSchema)` to create a new message.
  */
 export const RenameConnectionResponseSchema: GenMessage<RenameConnectionResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 19);
+  messageDesc(file_reliant_v1_connection, 20);
 
 /**
  * @generated from message reliant.v1.SetDefaultConnectionRequest
@@ -652,6 +764,17 @@ export type SetDefaultConnectionRequest = Message<"reliant.v1.SetDefaultConnecti
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may. The org's default is what a
+   * picker offers first; an unnamed reference never falls back to it.
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 2;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -659,7 +782,7 @@ export type SetDefaultConnectionRequest = Message<"reliant.v1.SetDefaultConnecti
  * Use `create(SetDefaultConnectionRequestSchema)` to create a new message.
  */
 export const SetDefaultConnectionRequestSchema: GenMessage<SetDefaultConnectionRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 20);
+  messageDesc(file_reliant_v1_connection, 21);
 
 /**
  * @generated from message reliant.v1.SetDefaultConnectionResponse
@@ -676,7 +799,7 @@ export type SetDefaultConnectionResponse = Message<"reliant.v1.SetDefaultConnect
  * Use `create(SetDefaultConnectionResponseSchema)` to create a new message.
  */
 export const SetDefaultConnectionResponseSchema: GenMessage<SetDefaultConnectionResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 21);
+  messageDesc(file_reliant_v1_connection, 22);
 
 /**
  * @generated from message reliant.v1.DeleteConnectionRequest
@@ -686,6 +809,16 @@ export type DeleteConnectionRequest = Message<"reliant.v1.DeleteConnectionReques
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 2;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -693,7 +826,7 @@ export type DeleteConnectionRequest = Message<"reliant.v1.DeleteConnectionReques
  * Use `create(DeleteConnectionRequestSchema)` to create a new message.
  */
 export const DeleteConnectionRequestSchema: GenMessage<DeleteConnectionRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 22);
+  messageDesc(file_reliant_v1_connection, 23);
 
 /**
  * @generated from message reliant.v1.DeleteConnectionResponse
@@ -706,7 +839,7 @@ export type DeleteConnectionResponse = Message<"reliant.v1.DeleteConnectionRespo
  * Use `create(DeleteConnectionResponseSchema)` to create a new message.
  */
 export const DeleteConnectionResponseSchema: GenMessage<DeleteConnectionResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 23);
+  messageDesc(file_reliant_v1_connection, 24);
 
 /**
  * @generated from message reliant.v1.ConnectionEvent
@@ -756,6 +889,15 @@ export type ConnectionEvent = Message<"reliant.v1.ConnectionEvent"> & {
    * @generated from field: string at = 8;
    */
   at: string;
+
+  /**
+   * The person the event is attributed to: who acted, also on an org's
+   * connection (the member whose run used it), so an org admin can tell who
+   * used the org's account.
+   *
+   * @generated from field: string user_id = 9;
+   */
+  userId: string;
 };
 
 /**
@@ -763,7 +905,7 @@ export type ConnectionEvent = Message<"reliant.v1.ConnectionEvent"> & {
  * Use `create(ConnectionEventSchema)` to create a new message.
  */
 export const ConnectionEventSchema: GenMessage<ConnectionEvent> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 24);
+  messageDesc(file_reliant_v1_connection, 25);
 
 /**
  * @generated from message reliant.v1.ListConnectionEventsRequest
@@ -785,6 +927,17 @@ export type ListConnectionEventsRequest = Message<"reliant.v1.ListConnectionEven
    * @generated from field: optional int64 before_id = 3;
    */
   beforeId?: bigint | undefined;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may. They see every member's use
+   * of it (ConnectionEvent.user_id).
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 4;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -792,7 +945,7 @@ export type ListConnectionEventsRequest = Message<"reliant.v1.ListConnectionEven
  * Use `create(ListConnectionEventsRequestSchema)` to create a new message.
  */
 export const ListConnectionEventsRequestSchema: GenMessage<ListConnectionEventsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 25);
+  messageDesc(file_reliant_v1_connection, 26);
 
 /**
  * @generated from message reliant.v1.ListConnectionEventsResponse
@@ -809,7 +962,7 @@ export type ListConnectionEventsResponse = Message<"reliant.v1.ListConnectionEve
  * Use `create(ListConnectionEventsResponseSchema)` to create a new message.
  */
 export const ListConnectionEventsResponseSchema: GenMessage<ListConnectionEventsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 26);
+  messageDesc(file_reliant_v1_connection, 27);
 
 /**
  * @generated from enum reliant.v1.ConnectionAuthKind

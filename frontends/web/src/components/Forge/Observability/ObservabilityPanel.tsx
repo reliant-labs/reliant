@@ -71,6 +71,7 @@ import {
   type ObsSearch,
   type ObsView,
 } from "./obsSearch";
+import { Foldable } from "./detailDensity";
 import { envIdsOf, orgPickerEnvironments, orgSelectionIsEmpty, placeEnvironments, type ObsPlace } from "./obsPlace";
 import { ObsScopeBar } from "./ObsScopeBar";
 import { ObsQuotaBanner, ObsError, ObsLoadingRows, ObsNoAppEnvironments, ObsNothingYet, ObsNotSetUp } from "./ObsStates";
@@ -256,6 +257,8 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       {/* Attribute filters and group-by mean nothing on Alerts. */}
       {/* Only the org place draws app and environment pickers: in an app's console the top bar is the scope. */}
       {scope && scopeBarShown && (
+        // On an open trace the scope bar is the list's: a host may fold it behind its title (detailDensity's "trace-toolbar").
+        <Foldable id={view === "traces" && search.trace ? "trace-toolbar" : ""} title="Filters and time range" hint="for the list of traces">
         <ObsScopeBar
           scope={scope}
           trailing={controls}
@@ -280,6 +283,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
           groupable={groupable && !noEnvironments}
           filterable={view !== "alerts" && view !== "errors" && view !== "sessions" && !noEnvironments}
         />
+        </Foldable>
       )}
 
       {marked && (

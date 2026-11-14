@@ -243,6 +243,7 @@ func TestIdleTimeout_RequestKeepsItAlive(t *testing.T) {
 	addr := srv.Addr()
 
 	// Poke it past the would-be deadline.
+	// forge:lint-disable-next-line forge-test-tight-deadline: not a poll that gives up — the span of real time the pokes must outlast, past the helper's real-clock idle deadline
 	deadline := time.Now().Add(2 * idle)
 	for time.Now().Before(deadline) {
 		resp, err := http.Get("http://" + addr + "/health")

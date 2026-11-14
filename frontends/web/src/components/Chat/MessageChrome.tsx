@@ -47,6 +47,12 @@ export function MessageTimestamp({ at, className }: { at: string; className?: st
 }
 
 export interface MessageBranching {
+  /**
+   * Whether this person may branch the chat at all: not a viewer of another
+   * member's shared chat (the server refuses them BranchChat; a branch would
+   * copy someone else's transcript into the viewer's own chats).
+   */
+  available: boolean;
   /** Opens the branch options menu under the clicked control. */
   openBranchMenu: (event: React.MouseEvent) => void;
   /** Branches the chat at the message, in the same worktree. */
@@ -61,7 +67,9 @@ export interface MessageBranching {
 export function useMessageBranching(chatId: string | undefined | null, messageId: string): MessageBranching {
   const effectiveChatId = useChatIdOrActive(chatId);
   const currentProject = useProjectStore((state) => state.currentProject);
-  const sourceWorktreeId = useChat(effectiveChatId || "")?.worktreeId;
+  const sourceChat = useChat(effectiveChatId || "");
+  const sourceWorktreeId = sourceChat?.worktreeId;
+  const available = !sourceChat?.viewerAccess;
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [showNewWorktree, setShowNewWorktree] = useState(false);
   const [showExistingWorktree, setShowExistingWorktree] = useState(false);
@@ -122,7 +130,7 @@ export function useMessageBranching(chatId: string | undefined | null, messageId
     </>
   );
 
-  return { openBranchMenu, branchInPlace, branchToExistingWorkspace, branchUi };
+  return { available, openBranchMenu, branchInPlace, branchToExistingWorkspace, branchUi };
 }
 
 /** The branch control ChatMessage's toolbar uses, as a standalone button. */
@@ -135,7 +143,8 @@ export function BranchFromMessageButton({
   messageId: string;
   className?: string;
 }) {
-  const { openBranchMenu, branchUi } = useMessageBranching(chatId, messageId);
+  const { available, openBranchMenu, branchUi } = useMessageBranching(chatId, messageId);
+  if (!available) return null;
   return (
     <>
       <Tooltip content="Branch from this message" side="top" delay={300} triggerClassName="inline-flex">

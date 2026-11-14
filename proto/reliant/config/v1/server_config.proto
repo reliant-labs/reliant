@@ -65,6 +65,66 @@ message ServerProcessConfig {
   LLMConfig llm = 11;
   PreviewConfig preview = 12;
   NetworkConfig network = 13;
+  // The org-policy enforcement switches every server role applies (the API
+  // server's own org rollout gates are ApiServerConfig's OrgsConfig).
+  OrgPolicyEnforcementConfig org_policy_enforcement = 14;
+}
+
+// OrgPolicyEnforcementConfig is the platform's switch per org-policy
+// enforcement point (control-plane docs/design/org-policies.md §7, D12):
+//
+//   off      the point never consults a policy: today's behaviour exactly;
+//   audit    it counts and logs what the org's policy would refuse, and
+//            refuses nothing, whatever the policy's own mode says;
+//   enforce  each policy section's own mode decides: ENFORCE refuses, AUDIT
+//            counts.
+//
+// A new point ships in audit and is flipped to enforce with the evidence its
+// audit counts give. Only these three values: a kill switch must not fail
+// open on a typo.
+message OrgPolicyEnforcementConfig {
+  // Allowed integrations (§4.3): a run's use of a connection, an
+  // integration trigger's routing and polling.
+  string integrations = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS"
+    default_value: "audit"
+    allowed_values: ["off", "audit", "enforce"]
+    description: "How the org integrations policy applies: off, audit (count, never refuse) or enforce"
+  }];
+  // Approval floors (§4.4): the automation-approval floor of an org's
+  // triggers and the chat mode floor (auto runs as manual).
+  string approvals = 2 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS"
+    default_value: "audit"
+    allowed_values: ["off", "audit", "enforce"]
+    description: "How the org approval floors apply: off, audit (count, change nothing) or enforce"
+  }];
+  // Machines (§4.6): `credentials: none` forced on the commands of an org's
+  // runs.
+  string machines = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES"
+    default_value: "audit"
+    allowed_values: ["off", "audit", "enforce"]
+    description: "How the org's forced credentials:none on agent commands applies: off, audit (count, change nothing) or enforce"
+  }];
+  // MCP servers (§4.5): which servers' tools an org's agents are offered
+  // (call_llm) and may call (the tool executor).
+  string mcp = 4 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP"
+    default_value: "audit"
+    allowed_values: ["off", "audit", "enforce"]
+    description: "How the org MCP server policy applies: off, audit (count, never refuse) or enforce"
+  }];
+  // Providers and models at resolution (§4.1 point 3, §4.2): which accounts
+  // (by driver and by who pays) and which managed models may serve an org's
+  // runs, at every place a run's model and account are resolved (launch, the
+  // registry, the account router, failover, the driver build).
+  string providers = 5 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS"
+    default_value: "audit"
+    allowed_values: ["off", "audit", "enforce"]
+    description: "How the org provider and model policy applies where runs resolve their model and account: off, audit (count, never refuse) or enforce"
+  }];
 }
 
 // NetworkConfig is the network reach of the dials a user steers from a server

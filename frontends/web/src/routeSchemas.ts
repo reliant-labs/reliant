@@ -330,6 +330,19 @@ export const SETTINGS_SECTION_IDS = [
   // organization to grant within, so SettingsNavigation gates the entry on
   // hasControlPlane. Route: /settings/member-permissions.
   "member-permissions",
+  // The org's admin policies (control-plane docs/design/org-policies.md §6):
+  // members read them, admins and owners edit them. Cloud-only, beside Members.
+  "policies",
+  // The AI accounts the active org pays for (control-plane
+  // docs/design/org-provider-accounts.md §7): its API keys and team
+  // workspaces. Members read them, owners and admins manage them. Cloud-only,
+  // beside Members.
+  "org-ai-accounts",
+  // The AI usage the active org pays for (control-plane
+  // docs/design/org-provider-accounts.md §5): its keys, seats and credits by
+  // member, account and model, with estimated list costs. billing:read
+  // holders read it. Cloud-only, beside AI accounts.
+  "org-ai-usage",
   // Machines. Shown in every build: registered machines, and the outside AI
   // apps granted access to each, exist without a control plane too. Was
   // `environments`; /settings/environments redirects here.

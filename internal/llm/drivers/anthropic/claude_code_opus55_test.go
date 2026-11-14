@@ -139,7 +139,7 @@ func TestClaudeCodeBillingHeader_Opus55(t *testing.T) {
 		t.Errorf("billingVersion %q is not on cli release 2.1.280", profile.billingVersion)
 	}
 
-	header := claudeCodeBillingHeader(profile)
+	header := claudeCodeBillingHeader(profile, "")
 	for _, want := range []string{
 		"cc_version=2.1.280.790;",
 		"cc_entrypoint=cli;",
@@ -154,13 +154,13 @@ func TestClaudeCodeBillingHeader_Opus55(t *testing.T) {
 	if strings.Contains(header, "cc_prev_req=") {
 		t.Errorf("header %q emits cc_prev_req, which is still deferred", header)
 	}
-	if promptID(t, header) == promptID(t, claudeCodeBillingHeader(profile)) {
+	if promptID(t, header) == promptID(t, claudeCodeBillingHeader(profile, "")) {
 		t.Errorf("cc_prompt_id repeated across requests: %q", header)
 	}
 
 	// cc_turn_origin is 2.1.280-only — no earlier profile may grow it.
 	for _, apiModel := range []string{"claude-fable-5-1", "claude-opus-5", "claude-sonnet-5"} {
-		if h := claudeCodeBillingHeader(claudeCodeProfileFor(apiModel)); strings.Contains(h, "cc_turn_origin") {
+		if h := claudeCodeBillingHeader(claudeCodeProfileFor(apiModel), ""); strings.Contains(h, "cc_turn_origin") {
 			t.Errorf("%s billing header emits cc_turn_origin: %q", apiModel, h)
 		}
 	}

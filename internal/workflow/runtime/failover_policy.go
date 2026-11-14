@@ -14,7 +14,7 @@ import (
 // Settings default, a preset's or a spawn call's `providers:`, or inherited).
 func failoverPolicy(inputs map[string]interface{}) types.FailoverPolicy {
 	policy := ProviderPolicy(inputs)
-	out := types.FailoverPolicy{PreferredAccount: policy.PreferredAccount}
+	out := types.FailoverPolicy{PreferredAccount: policy.PreferredAccount, Funding: policy.Funding}
 	if policy.OnLimit == types.OnLimitFallback {
 		out.FallbackModel = policy.FallbackModel
 	}

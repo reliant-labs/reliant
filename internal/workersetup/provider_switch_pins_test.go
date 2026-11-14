@@ -44,7 +44,7 @@ func TestProviderSwitchClearsOnlyIncompatibleThreadAccountPins(t *testing.T) {
 	}
 	old, chosen := add("claude"), add("codex")
 	until := time.Now().Add(time.Hour)
-	require.NoError(t, repo.BenchAccount(ctx, user, old.ID, until, "five_hour", false))
+	require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner(user), old.ID, until, "five_hour", false))
 	routing := accountRouting(repo, nil)
 	require.NotNil(t, routing.ClearOtherAssignments)
 	require.NoError(t, routing.ClearOtherAssignments(ctx, "someone-else", thread, "codex"))

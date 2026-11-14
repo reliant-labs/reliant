@@ -135,7 +135,16 @@ type TriggerPoller struct {
 	pollers Pollers
 	intake  *Intake
 	creds   PollCredentials
+	pause   *AutoPause
 	now     func() time.Time
+}
+
+// WithAutoPause lets the poller pause a trigger whose org's policy does not
+// allow its integration (AutoPause.IntegrationRefused). Without it, such a
+// trigger's polls are skipped without pausing it.
+func (p *TriggerPoller) WithAutoPause(a *AutoPause) *TriggerPoller {
+	p.pause = a
+	return p
 }
 
 // NewTriggerPoller builds the poll activity's receiver. creds may be nil (a
@@ -201,6 +210,19 @@ func (p *TriggerPoller) Poll(ctx context.Context, in PollInput) (*PollOutput, er
 
 	if p.creds == nil {
 		return &PollOutput{Skipped: true, Reason: "connections are not available on this worker"}, nil
+	}
+	// An integration the trigger's org does not allow is not polled, and the
+	// trigger is paused once instead of skipping on every tick (org-policies
+	// §4.3). A policy that cannot be read where the point enforces retries.
+	refused, err := p.pause.IntegrationRefused(ctx, trigger, cfg.Integration)
+	if refused {
+		if err != nil {
+			logging.WarnContext(ctx, "could not pause a polled trigger its organization's policy refuses", "trigger_id", trigger.ID, "error", err)
+		}
+		return &PollOutput{Skipped: true, Reason: orgPolicyPausedDetail}, nil
+	}
+	if err != nil {
+		return nil, err
 	}
 	// By trigger id alone: the source reads the owner and the connection from
 	// the trigger row again, so the checks above are not what keeps a poll on

@@ -66,6 +66,7 @@ function trigger(overrides: Partial<Trigger> & { id: string }): Trigger {
     updatedAt: "",
     source: { kind: "unknown" } as Trigger["source"],
     webhookManaged: false,
+    unattendedFunding: "any",
     ...overrides,
   };
 }

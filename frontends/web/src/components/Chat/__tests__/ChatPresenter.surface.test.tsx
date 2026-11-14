@@ -89,6 +89,7 @@ vi.mock("../OomKillBanner", () => ({
   OomKillBanner: () => null,
 }));
 vi.mock("../DiskPressureBanner", () => ({ DiskPressureBanner: () => null }));
+vi.mock("../MachineHealthBanner", () => ({ MachineHealthBanner: () => null }));
 vi.mock("../thread-views", () => ({
   InterleavedTimeline: () => <div data-testid="timeline" />,
 }));

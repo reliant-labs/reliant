@@ -42,6 +42,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // llm_call_usage (count-only per-call ledger) and llm_call_usage_daily (its rollup).
@@ -90,6 +92,19 @@ type LLMCallUsageRecord struct {
 	LatencyMs        int64
 	Attempt          int32
 	CreatedAt        time.Time
+	// AccountID is the provider account that served the call
+	// (provider_accounts.id); "" when the call was not routed to one.
+	AccountID string
+	// Funding is who paid for the call (llm_call_usage.funding: org_key,
+	// org_seat, org_wallet, personal, local); "" when unknown. An org-funded
+	// call also folds into llm_org_usage_daily, under FundingOrgID.
+	Funding string
+	// FundingOrgID is the org that paid: the org that owns the account, or
+	// the org the account is attributed to. "" when no org is known to have
+	// paid (a person's own account, or the org-less managed key, whose wallet
+	// is the person's default org rather than necessarily the chat's). Only
+	// what an org is known to have paid for reaches that org's rollup.
+	FundingOrgID string
 }
 
 // RecordLLMCallUsage writes one provider request and folds it into its day's
@@ -135,12 +150,13 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 	}
 
 	res, err := db.Bun().NewRaw(`INSERT INTO llm_call_usage (id, user_id, org_id, chat_id, run_id, provider, model, auth_mode, purpose,
-		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, outcome, error_class, latency_ms, attempt, created_at)
-		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, outcome, error_class, latency_ms, attempt, created_at,
+		account_id, funding)
+		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
 		ON CONFLICT (id, attempt) DO NOTHING`,
 		rec.ID, rec.UserID, rec.OrgID, rec.ChatID, rec.RunID, rec.Provider, rec.Model, rec.AuthMode, rec.Purpose,
 		rec.InputTokens, rec.OutputTokens, rec.CacheReadTokens, rec.CacheWriteTokens, rec.Outcome, rec.ErrorClass,
-		rec.LatencyMs, rec.Attempt, rec.CreatedAt).Exec(ctx)
+		rec.LatencyMs, rec.Attempt, rec.CreatedAt, rec.AccountID, rec.Funding).Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("insert llm call usage %s: %w", rec.ID, err)
 	}
@@ -152,7 +168,48 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 	if err := addLLMUsageDaily(ctx, db, rec); err != nil {
 		return false, err
 	}
+	if err := addLLMOrgUsageDaily(ctx, db, rec); err != nil {
+		return false, err
+	}
 	return true, nil
+}
+
+// orgFunded is the funding classes llm_org_usage_daily holds: what an org pays for.
+func orgFunded(funding string) bool {
+	switch funding {
+	case "org_key", "org_seat", "org_wallet":
+		return true
+	}
+	return false
+}
+
+// addLLMOrgUsageDaily folds an org-funded call into the rollup of the org that paid for it, the
+// only usage an org admin reads (org-provider-accounts §3.7, §5). A personal or unknown funding,
+// or a call no org is known to have paid for, writes nothing there: a member's own-account usage
+// never reaches it, and one org's spend never lands in another's.
+func addLLMOrgUsageDaily(ctx context.Context, db orm.Context, rec LLMCallUsageRecord) error {
+	if rec.FundingOrgID == "" || !orgFunded(rec.Funding) {
+		return nil
+	}
+	_, err := db.Bun().NewRaw(`INSERT INTO llm_org_usage_daily AS d (day, org_id, account_id, user_id, provider, model, funding, purpose,
+		calls, error_calls, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, latency_ms_total, updated_at)
+		VALUES ((?0::timestamptz AT TIME ZONE 'UTC')::date, ?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9, ?10, ?11, ?12, ?13, now())
+		ON CONFLICT (org_id, day, account_id, user_id, provider, model, funding, purpose) DO UPDATE SET
+		    calls = d.calls + EXCLUDED.calls,
+		    error_calls = d.error_calls + EXCLUDED.error_calls,
+		    input_tokens = d.input_tokens + EXCLUDED.input_tokens,
+		    output_tokens = d.output_tokens + EXCLUDED.output_tokens,
+		    cache_read_tokens = d.cache_read_tokens + EXCLUDED.cache_read_tokens,
+		    cache_write_tokens = d.cache_write_tokens + EXCLUDED.cache_write_tokens,
+		    latency_ms_total = d.latency_ms_total + EXCLUDED.latency_ms_total,
+		    updated_at = now()`,
+		rec.CreatedAt.UTC(), rec.FundingOrgID, rec.AccountID, rec.UserID, rec.Provider, rec.Model, rec.Funding, rec.Purpose,
+		llmErrorCalls(rec), rec.InputTokens, rec.OutputTokens, rec.CacheReadTokens,
+		rec.CacheWriteTokens, rec.LatencyMs).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("update org llm usage rollup: %w", err)
+	}
+	return nil
 }
 
 // LLMUsageUserLockKey is the advisory-lock key that serializes usage writes
@@ -219,6 +276,51 @@ func ListLLMUsageDaily(ctx context.Context, db orm.Context, userID string, from,
 	return rows, err
 }
 
+// LLMUsageDetail is the user's per-call rows summed per UTC day and every
+// recorded dimension, funding and account included: the breakdown the daily
+// rollup does not keep (its key predates them).
+type LLMUsageDetail struct {
+	Day              time.Time `bun:"day"`
+	OrgID            string    `bun:"org_id"`
+	Provider         string    `bun:"provider"`
+	Model            string    `bun:"model"`
+	AuthMode         string    `bun:"auth_mode"`
+	Purpose          string    `bun:"purpose"`
+	Funding          string    `bun:"funding"`
+	AccountID        string    `bun:"account_id"`
+	Calls            int64     `bun:"calls"`
+	ErrorCalls       int64     `bun:"error_calls"`
+	InputTokens      int64     `bun:"input_tokens"`
+	OutputTokens     int64     `bun:"output_tokens"`
+	CacheReadTokens  int64     `bun:"cache_read_tokens"`
+	CacheWriteTokens int64     `bun:"cache_write_tokens"`
+	LatencyMsTotal   int64     `bun:"latency_ms_total"`
+}
+
+// ListLLMUsageDetail sums the user's per-call rows created on the UTC days
+// from..to inclusive, per day and dimension, oldest first. Rows past the
+// retention period are gone, so a day before it is partly or wholly absent;
+// the caller reads such days from the rollup.
+func ListLLMUsageDetail(ctx context.Context, db orm.Context, userID string, from, to time.Time) ([]*LLMUsageDetail, error) {
+	if userID == "" {
+		return nil, errors.New("llm call usage: user id is required")
+	}
+	start := from.UTC().Truncate(24 * time.Hour)
+	end := to.UTC().Truncate(24*time.Hour).AddDate(0, 0, 1)
+	var rows []*LLMUsageDetail
+	err := db.Bun().NewRaw(`SELECT (created_at AT TIME ZONE 'UTC')::date AS day, org_id, provider, model, auth_mode, purpose, funding, account_id,
+		count(*)::bigint AS calls, count(*) FILTER (WHERE outcome = 'error')::bigint AS error_calls,
+		sum(input_tokens)::bigint AS input_tokens, sum(output_tokens)::bigint AS output_tokens,
+		sum(cache_read_tokens)::bigint AS cache_read_tokens, sum(cache_write_tokens)::bigint AS cache_write_tokens,
+		sum(latency_ms)::bigint AS latency_ms_total
+		FROM llm_call_usage
+		WHERE user_id = ? AND created_at >= ? AND created_at < ?
+		GROUP BY 1, org_id, provider, model, auth_mode, purpose, funding, account_id
+		ORDER BY 1, provider, model, auth_mode, purpose, org_id, funding, account_id`,
+		userID, start, end).Scan(ctx, &rows)
+	return rows, err
+}
+
 // DeleteLLMCallUsageForUser removes everything the ledger holds for a user, the
 // rollup included. Account deletion calls it.
 func DeleteLLMCallUsageForUser(ctx context.Context, db orm.Context, userID string) (int64, error) {
@@ -261,4 +363,36 @@ func PruneLLMUsagePurgeFences(ctx context.Context, db orm.Context, now time.Time
 		return 0, fmt.Errorf("prune llm usage purge fences: %w", err)
 	}
 	return res.RowsAffected()
+}
+
+// OrgChatCall is the latest chat-turn model call one of an org's live chats
+// made: what its next call would be judged on by a proposed org policy
+// (org-policies §6, GetPolicyImpact). Counts and metadata only, like
+// llm_call_usage itself.
+type OrgChatCall struct {
+	ChatID   string `bun:"chat_id"`
+	Provider string `bun:"provider"`
+	Model    string `bun:"model"`
+	Funding  string `bun:"funding"`
+}
+
+// LatestOrgChatCalls is, for each of orgID's chats that is not archived and
+// made a chat-turn call at or after since, its latest such call: the limit
+// chats whose latest call is the most recent. The window rides the
+// created_at index; the org and the chat's own org are both matched, so a
+// call billed to the org from a chat that has since moved is not counted.
+func LatestOrgChatCalls(ctx context.Context, db orm.Context, orgID string, since time.Time, limit int) ([]OrgChatCall, error) {
+	var rows []OrgChatCall
+	err := db.Bun().NewRaw(`SELECT chat_id, provider, model, funding FROM (
+		SELECT DISTINCT ON (u.chat_id) u.chat_id, u.provider, u.model, u.funding, u.created_at
+		FROM llm_call_usage u
+		JOIN chats c ON c.id = u.chat_id
+		WHERE u.created_at >= ?0 AND u.org_id = ?1 AND c.org_id = ?1 AND c.state <> ?2 AND u.purpose = ?3
+		ORDER BY u.chat_id, u.created_at DESC, u.attempt DESC
+	) latest ORDER BY created_at DESC, chat_id LIMIT ?4`,
+		since.UTC(), orgID, core.ChatStateArchived, LLMPurposeChat, limit).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("list the latest calls of org %s's chats: %w", orgID, err)
+	}
+	return rows, nil
 }

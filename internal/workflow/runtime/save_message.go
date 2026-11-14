@@ -660,6 +660,9 @@ func ExecuteSaveMessageForNode(
 			iterCtx = &model.IterContext{Iteration: loopIteration, Index: loopIteration}
 		}
 	}
+	if execContext != nil {
+		ctx = withRunTelemetry(ctx, execContext.Telemetry)
+	}
 	return executeSaveMessageInline(ctx, node, output,
 		buildSaveMessageWorkflowContext(workflowID, workflowName, chatID, inputs, thread, execContext),
 		chatID, workflowID, loopNodeID, loopIteration, iterCtx, "")
@@ -739,6 +742,7 @@ func executeSaveMessageInline(
 	)
 
 	v3Input := types.ActivityInput{Runtime: saveMessageRuntimeContext(saveInput), Node: buildSaveMessageNode(saveInput)}
+	v3Input.Runtime.Telemetry = runTelemetryFrom(ctx)
 
 	// Execute SaveMessage activity
 	// Let Temporal auto-generate ActivityID for deterministic replay.

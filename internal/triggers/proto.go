@@ -66,32 +66,34 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEven
 	}
 
 	out := &reliantv1.Trigger{
-		Id:               t.ID,
-		Name:             t.Name,
-		ProjectId:        t.ProjectID,
-		OrgId:            t.OrgID,
-		WorktreeId:       t.WorktreeID,
-		Enabled:          t.Enabled,
-		PausedReason:     pausedReason(t),
-		Workflow:         t.Workflow,
-		Presets:          t.Presets,
-		Params:           params,
-		Message:          t.Message,
-		DaemonId:         t.DaemonID,
-		NoMachine:        t.NoMachine,
-		MachinePoolId:    t.MachinePoolID,
-		MachinePoolName:  t.MachinePoolName,
-		ActingIdentity:   ActingIdentityToProto(t.ActingIdentity),
-		NotifyOnComplete: t.NotifyOnComplete,
-		ProjectName:      t.ProjectName,
-		DaemonName:       t.DaemonName,
-		MachineState:     t.MachineState,
-		Health:           WithSource(ComputeHealth(firings), reg, time.Now()),
-		Filter:           t.Filter,
-		ConnectionId:     t.ConnectionID,
-		WorkflowTrigger:  t.WorkflowTrigger,
-		CreatedAt:        t.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:        t.UpdatedAt.UTC().Format(time.RFC3339),
+		Id:              t.ID,
+		Name:            t.Name,
+		ProjectId:       t.ProjectID,
+		OrgId:           t.OrgID,
+		WorktreeId:      t.WorktreeID,
+		Enabled:         t.Enabled,
+		PausedReason:    pausedReason(t),
+		Workflow:        t.Workflow,
+		Presets:         t.Presets,
+		Params:          params,
+		Message:         t.Message,
+		DaemonId:        t.DaemonID,
+		NoMachine:       t.NoMachine,
+		MachinePoolId:   t.MachinePoolID,
+		MachinePoolName: t.MachinePoolName,
+		ActingIdentity:  ActingIdentityToProto(t.ActingIdentity),
+		// Always the stored value: a trigger with no stamp reads ANY.
+		UnattendedFunding: UnattendedFundingToProto(t.UnattendedFunding),
+		NotifyOnComplete:  t.NotifyOnComplete,
+		ProjectName:       t.ProjectName,
+		DaemonName:        t.DaemonName,
+		MachineState:      t.MachineState,
+		Health:            WithSource(ComputeHealth(firings), reg, time.Now()),
+		Filter:            t.Filter,
+		ConnectionId:      t.ConnectionID,
+		WorkflowTrigger:   t.WorkflowTrigger,
+		CreatedAt:         t.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:         t.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 
 	if err := sourceToProto(t, out); err != nil {
@@ -256,4 +258,71 @@ func ActingIdentityFromProto(i reliantv1.ActingIdentity) (core.ActingIdentity, b
 	default:
 		return "", false
 	}
+}
+
+// UnattendedFundingToProto maps a stored stamp onto the wire: always ANY or
+// ORG_ONLY, and ANY for a trigger that predates the stamp (NULL) or has no
+// org, which is how it runs (org-provider-accounts §11.3, I4).
+func UnattendedFundingToProto(f core.UnattendedFunding) reliantv1.UnattendedFunding {
+	if f.OrgOnly() {
+		return reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY
+	}
+	return reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ANY
+}
+
+// UnattendedFundingFromProto reads a requested stamp; chosen is false for
+// UNSPECIFIED, the default rule.
+func UnattendedFundingFromProto(f reliantv1.UnattendedFunding) (core.UnattendedFunding, bool) {
+	switch f {
+	case reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY:
+		return core.UnattendedFundingOrgOnly, true
+	case reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ANY:
+		return core.UnattendedFundingAny, true
+	default:
+		return "", false
+	}
+}
+
+// StoredDefinition is the definition t (a read of the trigger) has now, to
+// send back in an update that changes one field: UpdateTrigger replaces the
+// whole row. `reliant trigger update <t> --org-accounts-only` sends it with
+// only the funding stamp changed.
+// Enabled is left unset (unchanged), an activation names its declaration
+// rather than a source, and its filter is the declaration's, not the row's.
+// The write-only webhook secret is left unset, which keeps the stored one
+// (Service.writeWebhookCredentials changes it only when the definition sets
+// one, or turns signatures off), and an update never re-issues the webhook
+// token.
+func StoredDefinition(t *reliantv1.Trigger) *reliantv1.TriggerDefinition {
+	def := &reliantv1.TriggerDefinition{
+		Name:             t.GetName(),
+		ProjectId:        t.GetProjectId(),
+		WorktreeId:       t.WorktreeId,
+		Workflow:         t.GetWorkflow(),
+		Presets:          t.GetPresets(),
+		Params:           t.GetParams(),
+		Message:          t.GetMessage(),
+		DaemonId:         t.GetDaemonId(),
+		NoMachine:        t.GetNoMachine(),
+		MachinePoolId:    t.GetMachinePoolId(),
+		NotifyOnComplete: t.GetNotifyOnComplete(),
+		ConnectionId:     t.ConnectionId,
+		ActingIdentity:   t.GetActingIdentity(),
+	}
+	if name := t.GetWorkflowTrigger(); name != "" {
+		def.Source = &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: name}
+		return def
+	}
+	def.Filter = t.GetFilter()
+	switch src := t.GetSource().(type) {
+	case *reliantv1.Trigger_Schedule:
+		def.Source = &reliantv1.TriggerDefinition_Schedule{Schedule: src.Schedule}
+	case *reliantv1.Trigger_Webhook:
+		def.Source = &reliantv1.TriggerDefinition_Webhook{Webhook: src.Webhook}
+	case *reliantv1.Trigger_Integration:
+		def.Source = &reliantv1.TriggerDefinition_Integration{Integration: src.Integration}
+	case *reliantv1.Trigger_WorkflowEvent:
+		def.Source = &reliantv1.TriggerDefinition_WorkflowEvent{WorkflowEvent: src.WorkflowEvent}
+	}
+	return def
 }

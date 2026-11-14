@@ -1,0 +1,71 @@
+---
+title: "LLM calls from a Forge app"
+sidebarTitle: "LLM provider & recovery"
+description: "Recover blocked model calls safely: claim an unclaimed backend, keep provider keys server-side, and distinguish the hosted gateway from direct provider APIs."
+---
+
+## Why a model call fails before claiming
+
+An [unclaimed backend](/forge/deploy-without-an-account#limits) has **no outbound internet**. It can serve incoming requests and use its own Postgres, but cannot reach `api.openai.com`, `api.anthropic.com` or resolve public DNS names. A working homepage or healthy rollout does not prove a model call works. This is a platform restriction, not an SDK error: do not change networking, DNS or security policy to bypass it.
+
+A static site's requests come from the visitor's browser, not the hosted backend. **Never put a provider key in browser code**, a `VITE_*` or `NEXT_PUBLIC_*` variable, a public runtime config, or a built static asset. Use a backend for secret-bearing calls.
+
+## Hosted gateway is not a direct provider key
+
+Forge has a hosted LLM configuration contract:
+
+```kcl
+# In the deployed environment's forge.Bundle:
+llm = forge.LLM {runtime = forge.OnHosted {}}
+
+# In the hosted backend's fw.Workload:
+env = forge.llm_env()
+```
+
+This is Reliant's gateway, not a way to use your OpenAI or Anthropic account key. `forge.llm_env()` declares `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`, `RELIANT_LLM_BASE_URL` and `RELIANT_LLM_API_KEY`. The hosted render leaves them blank for the platform to fill; render success is **not** proof that credentials were provisioned or a model is reachable.
+
+<Warning>
+The Forge `deploy/llm` skill documents that an unclaimed pod's gateway variables stay blank until the platform's in-cluster gateway route is enabled. Do not promise gateway access on an unclaimed deploy. If credentials or a base URL are missing, disable the LLM feature and show an unavailable message; do not crash at startup, silently fall back to a public provider, or retry indefinitely.
+</Warning>
+
+On a claimed environment, gateway calls use the environment's platform-issued key and the org's credit and limits. A third-party API key and third-party billing do not fund that gateway. Load the installed version's contract with `forge skill load deploy/llm`; verify the populated variables without printing their values and make an actual server-side request before reporting it works. This guide does not claim a live gateway inference test.
+
+## Recovery: claim first, then use a server-side provider key
+
+This path does not depend on an unclaimed gateway route.
+
+1. Retrieve the private claim link with `forge env status prod --claimable`. Give it only to the owner: whoever opens it first owns the deploy. Do not paste it in an issue, PR, repository or public log.
+2. The owner opens that link and claims the deploy. Claiming lifts the backend egress restriction. A backend and managed Postgres need [paid app hosting](/forge/hosting#billing); free signup does not mean free ongoing backend compute. A static site alone cannot hold the key: add a backend under an account first.
+3. Sign in to the owning account with `forge login`. Use a funded provider API key with access to the model your app requests. Keep it in the [managed secret store](/forge/secrets), not git:
+
+   ```bash
+   forge secret set --env prod OPENAI_API_KEY
+   ```
+
+   The command reads the value from stdin. Do not put it in shell arguments, command history or agent transcripts.
+
+4. On the hosted backend workload in `deploy/kcl/workloads.k`, merge these fields into its existing environment map (keep its database and other settings):
+
+   ```kcl
+   env = {
+       OPENAI_BASE_URL = "https://api.openai.com/v1"
+       OPENAI_API_KEY = forge.ManagedSecret {name = "OPENAI_API_KEY"}
+   }
+   ```
+
+   This is a **direct OpenAI API** connection. Do not also merge `forge.llm_env()` into this workload: choose the gateway contract or direct provider configuration, not both. The server-side OpenAI SDK can read these variables. For Anthropic, use the server-side Anthropic SDK and `ANTHROPIC_API_KEY` as a managed secret with `ANTHROPIC_BASE_URL = "https://api.anthropic.com"`. Other clients must explicitly honor the configured endpoint and secret.
+
+5. If the environment declares `control_plane = forge.ControlPlane {claimable = True}`, remove the `claimable = True` field before a signed-in deploy; it deliberately refuses signed-in credentials. Deploy as the signed-in owner, **without** `--claimable`:
+
+   ```bash
+   forge env deploy prod
+   forge obs check prod --wait --json
+   ```
+
+   Only exit 0 proves the release check passed. Exit 1 means a regression to investigate, exit 2 is not proven good, and exit 8 needs more data. See [Forge obs](/forge/observability/forge-obs).
+
+6. Exercise your app's LLM feature through its backend with a small prompt. Confirm a successful model response, not just HTTP 200 for the homepage. Check server logs for missing credentials, DNS/connection failures, provider 401/403, quota errors or unsupported models, without logging secrets or prompt contents. Do not report model access as working until that request succeeds.
+
+## What is tested
+
+The Forge fixtures `kcl/tests/positive_llm_claimed_direct_key.k`, `positive_llm_endpoint.k` and `positive_llm_hosted.k` exercise managed-secret wiring, endpoint rendering and the hosted gateway's blank-variable contract. The MCP recovery unit test checks the claim-first advice and prevents the old unconditional gateway promise. These are configuration and guidance tests, **not** proof of a live claim, billing setup, provider connectivity or gateway inference. A real request in the owner's claimed environment remains the final verification.

@@ -42,6 +42,7 @@ import { traceExtent } from "./waterfall/traceTree";
 import { hasClient } from "@/services/controlPlane/observability/client";
 import { ClientSummary } from "./Client";
 import { traceBuildsOf, type TraceBuilds } from "./traceBuilds";
+import { Foldable } from "./detailDensity";
 
 export function TraceDetail({
   scope,
@@ -194,6 +195,7 @@ export function TraceDetail({
         </p>
       )}
 
+      <Foldable id="trace-related" title="Related traces" hint={(trace.data?.relatedTraces?.length ?? 0) > 0 ? `${trace.data?.relatedTraces?.length} linked` : "None linked to this one"}>
       <section aria-label="Related traces" className="space-y-2 rounded-lg border border-border bg-surface-sunken p-3 text-xs">
         <h4 className="font-semibold text-ink">Related traces</h4>
         <p className="text-ink-muted">Links preserve causality across trace boundaries; they are not parent/child spans. Results use the current environment and time range.</p>
@@ -210,6 +212,7 @@ export function TraceDetail({
         ) : <p className="text-ink-muted">No incoming links found. Related spans may be outside this range, sampled out, or past retention.</p>}
         {trace.data?.relatedTracesTruncated && <p role="status" className="text-ink-muted">Showing the first 100 related spans. Narrow the time range to find more.</p>}
       </section>
+      </Foldable>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(20rem,1fr)]">
         <Card padding="md">

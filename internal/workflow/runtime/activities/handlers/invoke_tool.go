@@ -11,6 +11,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -107,23 +108,29 @@ func (a *InvokeToolActivity) Execute(ctx context.Context, input ActivityInput) (
 	}
 
 	activityInfo := activity.GetInfo(ctx)
+	toolCallID := invokeToolCallID(rtx.WorkflowID, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration)
+
+	// The call's span (execute_tool), under this node's: no agent turn asked
+	// for it, the graph did.
+	callCtx, span := telemetry.StartToolCall(ctx, toolName, toolCallID, toolLocation(toolName), "")
 
 	// No capability set: the node's author wrote every parameter, and no
 	// model was offered a schema with some of them bound away.
 	result := a.executeTools.executeSingleTool(
-		ctx,
+		callCtx,
 		nil,
 		rtx.ChatID,
 		rtx.Thread,
 		toolName,
 		toolInput,
-		invokeToolCallID(rtx.WorkflowID, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration),
+		toolCallID,
 		activityInfo.ActivityID,
 		activityInfo.WorkflowExecution.RunID,
 		int(activityInfo.Attempt),
 		rtx.ProjectPath,
 		rtx.DaemonSelector,
 	)
+	span.End(result.IsError, nil)
 
 	output := &reliantv1.InvokeToolOutput{
 		Tool:          toolName,

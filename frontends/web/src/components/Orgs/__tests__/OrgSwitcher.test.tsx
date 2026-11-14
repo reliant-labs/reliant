@@ -241,7 +241,8 @@ describe("OrgSwitcher", () => {
     useAuthStore.setState({ user: null });
     listMyOrganizations.mockResolvedValue({ orgs: [ACME, SIDE], defaultOrgId: "org-a" });
     renderWithQuery(<Harness />);
-    await waitFor(() => expect(listMyOrganizations).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(listMyOrganizations).not.toHaveBeenCalled();
     expect(useActiveOrgStore.getState().userId).toBeNull();
   });
 });

@@ -45,6 +45,12 @@ import { setPendingProvider } from "@/lib/pendingProvider";
 import type { ModelProvider, StepProps } from "../types";
 import { getForcedEligibility } from "../forcedEligibility";
 import { formatPrice } from "@/components/Billing/priceFormat";
+import {
+  describeKeyError,
+  oauthErrorCode,
+  reportOnboardingError,
+  type OnboardingFailure,
+} from "../onboardingErrors";
 
 const PROVIDERS = [
   {
@@ -157,31 +163,6 @@ export function orderedProviderIds(localMachineConnected: boolean): ProviderId[]
     : [...API_KEY_IDS, ...SUBSCRIPTION_IDS, "reliant"];
 }
 
-function parseErrorMessage(errorText: string, provider: string): string {
-  const lowerError = (errorText || "").toLowerCase();
-
-  if (
-    provider === "openrouter" &&
-    lowerError.includes("no endpoints found matching your data policy")
-  ) {
-    return "No models available with your current data policy.";
-  }
-  if (
-    lowerError.includes("unauthorized") ||
-    lowerError.includes("401") ||
-    lowerError.includes("invalid")
-  ) {
-    return "Invalid API key. Please check your credentials.";
-  }
-  if (lowerError.includes("rate limit") || lowerError.includes("429")) {
-    return "Rate limit exceeded. Please wait and try again.";
-  }
-  if (lowerError.includes("quota") || lowerError.includes("billing")) {
-    return "Account issue. Check your billing or quota.";
-  }
-  return errorText || "Validation failed. Please check your API key.";
-}
-
 export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
@@ -237,7 +218,19 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   const [validationResult, setValidationResult] = useState<{
     valid: boolean;
     message: string;
+    /** Set on a failure; rendered as data-error-code (see onboardingErrors). */
+    code?: OnboardingFailure["code"];
   } | null>(null);
+
+  // Every failure this step shows goes through here, so the banner and the
+  // session timeline carry the same opaque code. Replay masks the message.
+  const showFailure = useCallback(
+    (failure: OnboardingFailure) => {
+      setValidationResult({ valid: false, ...failure });
+      reportOnboardingError("model", failure.code, selectedProvider);
+    },
+    [selectedProvider],
+  );
 
   const provider = useMemo(
     () => PROVIDERS.find((item) => item.id === selectedProvider)!,
@@ -324,6 +317,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     async (modelProvider: ModelProvider) => {
       if (!plan.compute) {
         setError("Choose where Reliant should run before finishing setup.");
+        reportOnboardingError("model", "compute_missing");
         return;
       }
 
@@ -388,7 +382,10 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
         // provider tab: in all three the user either already knows, or is
         // actively doing the thing that replaces it.
         if (result.errorCode !== "cancelled") {
-          setValidationResult({ valid: false, message: result.message });
+          showFailure({
+            code: oauthErrorCode(result.errorCode),
+            message: result.message,
+          });
         }
         return;
       }
@@ -404,12 +401,19 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       getEventBus().emit("api-key:saved", { provider: provider.modelProvider });
       await finishOnboarding(provider.modelProvider);
     } catch (err) {
-      setValidationResult({
-        valid: false,
+      showFailure({
+        code: "oauth_exception",
         message: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [claudeOAuth, codexOAuth, antigravityOAuth, finishOnboarding, provider]);
+  }, [
+    claudeOAuth,
+    codexOAuth,
+    antigravityOAuth,
+    finishOnboarding,
+    provider,
+    showFailure,
+  ]);
 
   // GitHub Copilot uses the device-authorization flow (device code → poll),
   // driven by the shared CopilotDevicePanel. The panel surfaces its own
@@ -469,13 +473,12 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
         apiKey: apiKey.trim(),
       });
       if (!validation.valid) {
-        setValidationResult({
-          valid: false,
-          message: parseErrorMessage(
+        showFailure(
+          describeKeyError(
             validation.message || "Invalid API key",
             selectedProvider,
           ),
-        });
+        );
         return;
       }
 
@@ -499,10 +502,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       await finishOnboarding(provider.modelProvider);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setValidationResult({
-        valid: false,
-        message: parseErrorMessage(message, selectedProvider),
-      });
+      showFailure(describeKeyError(message, selectedProvider));
     }
   }, [
     apiKey,
@@ -510,6 +510,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     provider,
     saveKeyMutation,
     selectedProvider,
+    showFailure,
     validateKeyMutation,
   ]);
 
@@ -791,6 +792,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
 
       {validationResult && (
         <div
+          data-error-code={validationResult.code}
           className={cn(
             "flex items-center gap-2 rounded-lg border p-3 text-sm",
             validationResult.valid

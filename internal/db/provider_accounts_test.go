@@ -212,7 +212,7 @@ func TestAccountsAreScopedToTheirUser(t *testing.T) {
 	ok, err := repo.CompareAndSwapAccountTokens(ctx, "u2", a.ID, "r", core.AccountTokens{Secret: "x", Refresh: "y"})
 	require.NoError(t, err)
 	assert.False(t, ok)
-	assert.ErrorIs(t, repo.BenchAccount(ctx, "u2", a.ID, time.Now().Add(time.Hour), "", false), core.ErrProviderAccountNotFound)
+	assert.ErrorIs(t, repo.BenchAccount(ctx, core.UserAccountOwner("u2"), a.ID, time.Now().Add(time.Hour), "", false), core.ErrProviderAccountNotFound)
 
 	still, err := repo.GetProviderAccountWithSecrets(ctx, "u1", a.ID)
 	require.NoError(t, err)
@@ -268,7 +268,7 @@ func TestDeleteProviderAccountDensifiesAndCascades(t *testing.T) {
 	ok, err := repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: "th-del", Provider: "claude", AccountID: b.ID, Reason: "initial"}, "")
 	require.NoError(t, err)
 	require.True(t, ok)
-	require.NoError(t, repo.BenchAccount(ctx, "u1", b.ID, time.Now().Add(time.Hour), "five_hour", false))
+	require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner("u1"), b.ID, time.Now().Add(time.Hour), "five_hour", false))
 
 	require.NoError(t, repo.DeleteProviderAccount(ctx, "u1", b.ID))
 	assert.Equal(t, []string{a.ID, c.ID}, priorities(t, repo, "u1", "claude"), "priorities re-densify")
@@ -465,8 +465,8 @@ func TestLimitSnapshotIsMonotonicAndBenchUsesGreatest(t *testing.T) {
 	t.Run("bench keeps the later reset", func(t *testing.T) {
 		later := t0.Add(5 * time.Hour)
 		sooner := t0.Add(2 * time.Hour)
-		require.NoError(t, repo.BenchAccount(ctx, "u1", a.ID, later, "seven_day", false))
-		require.NoError(t, repo.BenchAccount(ctx, "u1", a.ID, sooner, "five_hour", false))
+		require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner("u1"), a.ID, later, "seven_day", false))
+		require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner("u1"), a.ID, sooner, "five_hour", false))
 		got := read()
 		require.NotNil(t, got.LimitedUntil)
 		assert.True(t, got.LimitedUntil.Equal(later), "GREATEST(existing, until)")
@@ -478,10 +478,10 @@ func TestLimitSnapshotIsMonotonicAndBenchUsesGreatest(t *testing.T) {
 
 	t.Run("probe benches count up, a known reset resets the count", func(t *testing.T) {
 		for want := 1; want <= 3; want++ {
-			require.NoError(t, repo.BenchAccount(ctx, "u1", a.ID, t0.Add(time.Duration(want)*time.Minute), "", true))
+			require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner("u1"), a.ID, t0.Add(time.Duration(want)*time.Minute), "", true))
 			assert.Equal(t, want, read().LimitedProbes)
 		}
-		require.NoError(t, repo.BenchAccount(ctx, "u1", a.ID, t0.Add(6*time.Hour), "five_hour", false))
+		require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner("u1"), a.ID, t0.Add(6*time.Hour), "five_hour", false))
 		assert.Equal(t, 0, read().LimitedProbes)
 	})
 
@@ -500,7 +500,7 @@ func TestLimitSnapshotIsMonotonicAndBenchUsesGreatest(t *testing.T) {
 	})
 
 	t.Run("bench rejects a zero time", func(t *testing.T) {
-		assert.Error(t, repo.BenchAccount(ctx, "u1", a.ID, time.Time{}, "", false))
+		assert.Error(t, repo.BenchAccount(ctx, core.UserAccountOwner("u1"), a.ID, time.Time{}, "", false))
 	})
 }
 
@@ -512,7 +512,7 @@ func TestBenchBeforeAnySnapshotCreatesLimitState(t *testing.T) {
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "alice", "o", "t", "r"))
 	until := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
-	require.NoError(t, repo.BenchAccount(ctx, "u1", a.ID, until, "five_hour", false))
+	require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner("u1"), a.ID, until, "five_hour", false))
 
 	m, err := repo.ListAccountLimits(ctx, "u1")
 	require.NoError(t, err)
@@ -879,7 +879,7 @@ func TestIdentityMergeNeverDeletesTheAccountWithADistinctIdentity(t *testing.T) 
 		_, err := repo.PatchProviderAccount(ctx, "u1", real.ID, core.AccountPatch{Paused: &paused, Label: &label})
 		require.NoError(t, err)
 		until := time.Now().Add(time.Hour).UTC()
-		require.NoError(t, repo.BenchAccount(ctx, "u1", real.ID, until, "five_hour", false))
+		require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner("u1"), real.ID, until, "five_hour", false))
 		require.NoError(t, repo.ScheduleUsagePoll(ctx, real.ID, time.Now().Add(time.Minute), 0, ""))
 
 		time.Sleep(2 * time.Millisecond) // a clock tick: the placeholder's timestamps follow the real row's

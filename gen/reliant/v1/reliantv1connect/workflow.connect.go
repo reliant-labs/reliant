@@ -68,6 +68,9 @@ const (
 	// WorkflowServiceSetWorkflowStatusProcedure is the fully-qualified name of the WorkflowService's
 	// SetWorkflowStatus RPC.
 	WorkflowServiceSetWorkflowStatusProcedure = "/reliant.v1.WorkflowService/SetWorkflowStatus"
+	// WorkflowServiceForkOrphanedWorkflowProcedure is the fully-qualified name of the WorkflowService's
+	// ForkOrphanedWorkflow RPC.
+	WorkflowServiceForkOrphanedWorkflowProcedure = "/reliant.v1.WorkflowService/ForkOrphanedWorkflow"
 )
 
 // WorkflowServiceClient is a client for the reliant.v1.WorkflowService service.
@@ -106,6 +109,15 @@ type WorkflowServiceClient interface {
 	// Marking complete validates the current definition and is rejected (with
 	// the errors) when it is invalid; moving to draft always succeeds.
 	SetWorkflowStatus(context.Context, *connect.Request[v1.SetWorkflowStatusRequest]) (*connect.Response[v1.SetWorkflowStatusResponse], error)
+	// ForkOrphanedWorkflow copies a saved workflow whose creator left its
+	// organization into one of the caller's own, in the same org, with
+	// forked_from naming the original (TriggerService.ListOrphanedAutomations
+	// lists them). The original is never re-owned: a saved workflow executes
+	// nothing, so no identity changes hands. Org admins only (the org role
+	// admin or owner, read fresh, signed in as a person); the fork keeps the
+	// original's status when its definition validates for the caller, else it
+	// is a draft. control-plane docs/design/org-sharing.md §8.3.
+	ForkOrphanedWorkflow(context.Context, *connect.Request[v1.ForkOrphanedWorkflowRequest]) (*connect.Response[v1.ForkOrphanedWorkflowResponse], error)
 }
 
 // NewWorkflowServiceClient constructs a client for the reliant.v1.WorkflowService service. By
@@ -187,6 +199,12 @@ func NewWorkflowServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(workflowServiceMethods.ByName("SetWorkflowStatus")),
 			connect.WithClientOptions(opts...),
 		),
+		forkOrphanedWorkflow: connect.NewClient[v1.ForkOrphanedWorkflowRequest, v1.ForkOrphanedWorkflowResponse](
+			httpClient,
+			baseURL+WorkflowServiceForkOrphanedWorkflowProcedure,
+			connect.WithSchema(workflowServiceMethods.ByName("ForkOrphanedWorkflow")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -203,6 +221,7 @@ type workflowServiceClient struct {
 	copyWorkflow          *connect.Client[v1.CopyWorkflowRequest, v1.CopyWorkflowResponse]
 	createWorkflowDraft   *connect.Client[v1.CreateWorkflowDraftRequest, v1.CreateWorkflowDraftResponse]
 	setWorkflowStatus     *connect.Client[v1.SetWorkflowStatusRequest, v1.SetWorkflowStatusResponse]
+	forkOrphanedWorkflow  *connect.Client[v1.ForkOrphanedWorkflowRequest, v1.ForkOrphanedWorkflowResponse]
 }
 
 // ListWorkflows calls reliant.v1.WorkflowService.ListWorkflows.
@@ -260,6 +279,11 @@ func (c *workflowServiceClient) SetWorkflowStatus(ctx context.Context, req *conn
 	return c.setWorkflowStatus.CallUnary(ctx, req)
 }
 
+// ForkOrphanedWorkflow calls reliant.v1.WorkflowService.ForkOrphanedWorkflow.
+func (c *workflowServiceClient) ForkOrphanedWorkflow(ctx context.Context, req *connect.Request[v1.ForkOrphanedWorkflowRequest]) (*connect.Response[v1.ForkOrphanedWorkflowResponse], error) {
+	return c.forkOrphanedWorkflow.CallUnary(ctx, req)
+}
+
 // WorkflowServiceHandler is an implementation of the reliant.v1.WorkflowService service.
 type WorkflowServiceHandler interface {
 	// ListWorkflows returns all available workflows from DB + builtins
@@ -296,6 +320,15 @@ type WorkflowServiceHandler interface {
 	// Marking complete validates the current definition and is rejected (with
 	// the errors) when it is invalid; moving to draft always succeeds.
 	SetWorkflowStatus(context.Context, *connect.Request[v1.SetWorkflowStatusRequest]) (*connect.Response[v1.SetWorkflowStatusResponse], error)
+	// ForkOrphanedWorkflow copies a saved workflow whose creator left its
+	// organization into one of the caller's own, in the same org, with
+	// forked_from naming the original (TriggerService.ListOrphanedAutomations
+	// lists them). The original is never re-owned: a saved workflow executes
+	// nothing, so no identity changes hands. Org admins only (the org role
+	// admin or owner, read fresh, signed in as a person); the fork keeps the
+	// original's status when its definition validates for the caller, else it
+	// is a draft. control-plane docs/design/org-sharing.md §8.3.
+	ForkOrphanedWorkflow(context.Context, *connect.Request[v1.ForkOrphanedWorkflowRequest]) (*connect.Response[v1.ForkOrphanedWorkflowResponse], error)
 }
 
 // NewWorkflowServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -373,6 +406,12 @@ func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.Handl
 		connect.WithSchema(workflowServiceMethods.ByName("SetWorkflowStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	workflowServiceForkOrphanedWorkflowHandler := connect.NewUnaryHandler(
+		WorkflowServiceForkOrphanedWorkflowProcedure,
+		svc.ForkOrphanedWorkflow,
+		connect.WithSchema(workflowServiceMethods.ByName("ForkOrphanedWorkflow")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.WorkflowService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WorkflowServiceListWorkflowsProcedure:
@@ -397,6 +436,8 @@ func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.Handl
 			workflowServiceCreateWorkflowDraftHandler.ServeHTTP(w, r)
 		case WorkflowServiceSetWorkflowStatusProcedure:
 			workflowServiceSetWorkflowStatusHandler.ServeHTTP(w, r)
+		case WorkflowServiceForkOrphanedWorkflowProcedure:
+			workflowServiceForkOrphanedWorkflowHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -448,4 +489,8 @@ func (UnimplementedWorkflowServiceHandler) CreateWorkflowDraft(context.Context, 
 
 func (UnimplementedWorkflowServiceHandler) SetWorkflowStatus(context.Context, *connect.Request[v1.SetWorkflowStatusRequest]) (*connect.Response[v1.SetWorkflowStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.SetWorkflowStatus is not implemented"))
+}
+
+func (UnimplementedWorkflowServiceHandler) ForkOrphanedWorkflow(context.Context, *connect.Request[v1.ForkOrphanedWorkflowRequest]) (*connect.Response[v1.ForkOrphanedWorkflowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.ForkOrphanedWorkflow is not implemented"))
 }

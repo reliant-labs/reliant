@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -103,7 +104,14 @@ func (r *daemonMCPRuntime) EnsureProjectServersLoaded(ctx context.Context, proje
 		}
 		return result
 	}
-	return r.loads.ensure(ctx, r.MCPListIdentity(), projectPath, func(ctx context.Context) (*mcp.ProjectServerLoadResult, error) {
+	// A run whose org stamps an MCP allowlist loads only what it allows: its
+	// load is not shared with a run under another (or no) allowlist.
+	identity := r.MCPListIdentity()
+	if stamp := daemonpolicy.OrgStampFromContext(ctx); stamp != nil && stamp.MCP != nil {
+		raw, _ := json.Marshal(stamp.MCP)
+		identity += "|org_policy=" + string(raw)
+	}
+	return r.loads.ensure(ctx, identity, projectPath, func(ctx context.Context) (*mcp.ProjectServerLoadResult, error) {
 		return r.ensureLoaded(ctx, projectPath)
 	})
 }
@@ -113,7 +121,14 @@ func (r *daemonMCPRuntime) EnsureProjectServersLoaded(ctx context.Context, proje
 // and is distinct from servers the machine tried and failed to start, which
 // are in the result.
 func (r *daemonMCPRuntime) ensureLoaded(ctx context.Context, projectPath string) (*mcp.ProjectServerLoadResult, error) {
-	payload, err := json.Marshal(map[string]string{"project_path": projectPath})
+	// The run's org stamp rides along: a machine that reads it starts no
+	// server the org does not allow (mcp.Manager); one that predates it
+	// ignores the field.
+	req := map[string]interface{}{"project_path": projectPath}
+	if v := daemonpolicy.OrgStampFromContext(ctx).ContextValue(); v != nil {
+		req[daemonpolicy.OrgStampContextKey] = v
+	}
+	payload, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}

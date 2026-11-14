@@ -202,6 +202,11 @@ func ReplaceTrigger(ctx context.Context, db orm.Context, t *core.Trigger) error 
 		// definition that stays disabled keeps the reason it has.
 		columns = append(append([]string(nil), columns...), TriggerFieldPausedReason)
 	}
+	if t.UnattendedFunding != "" {
+		// Written only when the caller decided it: a write back that never
+		// read the stamp must not clear it (NULL reads as any, a loosening).
+		columns = append(append([]string(nil), columns...), TriggerFieldUnattendedFunding)
+	}
 	if err := writeTrigger(ctx, db, row, "definition", columns...); err != nil {
 		return err
 	}
@@ -234,7 +239,11 @@ func SetTriggerEnabled(ctx context.Context, db orm.Context, id string, enabled b
 // (core.TriggerPaused*), or returns core.ErrTriggerNotFound.
 func PauseTrigger(ctx context.Context, db orm.Context, id, reason string) error {
 	enabled := false
-	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled, PausedReason: &reason}, "paused", TriggerFieldEnabled, TriggerFieldPausedReason)
+	now := time.Now().UTC()
+	// A new pause owes its notice now: the previous pause's sweep claim
+	// (pause_notice_next_at) is not this one's.
+	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled, PausedReason: &reason, PausedAt: &now}, "paused",
+		TriggerFieldEnabled, TriggerFieldPausedReason, TriggerFieldPausedAt, TriggerFieldPauseNoticeNextAt)
 }
 
 // SetTriggerWebhookTokenHash rotates a webhook trigger's token hash. The hash
@@ -480,6 +489,10 @@ func triggerFromCore(t *core.Trigger) (*Trigger, error) {
 		reason := t.PausedReason
 		row.PausedReason = &reason
 	}
+	if t.UnattendedFunding != "" {
+		funding := string(t.UnattendedFunding)
+		row.UnattendedFunding = &funding
+	}
 	return row, nil
 }
 
@@ -525,10 +538,14 @@ func triggerToCore(row *Trigger) (*core.Trigger, error) {
 	if row.MachinePoolID != nil {
 		t.MachinePoolID = *row.MachinePoolID
 	}
+	if row.UnattendedFunding != nil {
+		t.UnattendedFunding = core.UnattendedFunding(*row.UnattendedFunding)
+	}
 	// A reason the previous release left on a trigger it re-enabled (it
 	// does not know the column) means nothing.
 	if row.PausedReason != nil && !t.Enabled {
 		t.PausedReason = *row.PausedReason
+		t.PausedAt, t.PauseNoticeFor = row.PausedAt, row.PauseNoticeFor
 	}
 	return t, nil
 }

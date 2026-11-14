@@ -167,6 +167,12 @@ func (s *Service) UpdateWorkflowParams(
 		}), nil
 	}
 
+	// An edit of other params still holds an auto run to its org's mode
+	// floor (withLiveModeFloor).
+	if stateUpdate, err = s.withLiveModeFloor(ctx, userID, chat, workflowName, stateUpdate); err != nil {
+		return nil, err
+	}
+
 	// The chat's own edit. Whether or not a run is live to receive it, it is
 	// the chat's choice from now on, so it is stored: the next send from any
 	// device, and the next run, start from it. A live run is moved off a
@@ -248,7 +254,7 @@ func (s *Service) UpdateWorkflowParams(
 			// continue on the switched-to one until that provider resets —
 			// switching providers is the user opting the chat in
 			// (CapacityWakeSignal.UseModel).
-			s.wakeChatBestEffort(ctx, chat, s.launcher().ResolvedModelAtDriver(ctx, userID, stateUpdate["model"]), "the chat's model changed")
+			s.wakeChatBestEffort(ctx, chat, s.launcher().ResolvedModelAtDriver(ctx, userID, chat, stateUpdate["model"]), "the chat's model changed")
 		}
 	}
 

@@ -27,8 +27,11 @@ import (
 
 // ErrVersionConflict reports a write that named a version other than the
 // record's current one. The caller refetches and decides again. It is an
-// Aborted, and its text is what the client reads.
-var ErrVersionConflict = svcerr.Aborted("the chat's selection changed since it was read; reload and try again")
+// Aborted, and its text is what the client reads. It is the user's to resolve
+// (another tab or client wrote first), so it is classed as a user error and
+// is not logged at ERROR (prod a9117392).
+var ErrVersionConflict = svcerr.WithClass(
+	svcerr.Aborted("the chat's selection changed since it was read; reload and try again"), svcerr.ClassUser)
 
 // OnLimit is what a chat does when its provider is rate-limited. The empty
 // value inherits the Settings default.
@@ -40,11 +43,24 @@ const (
 	OnLimitFallback OnLimit = "fallback"
 )
 
+// Funding is whose accounts a chat in an org uses first. The empty value
+// inherits the person's per-org setting.
+type Funding string
+
+const (
+	FundingInherit       Funding = ""
+	FundingOrgFirst      Funding = "org_first"
+	FundingPersonalFirst Funding = "personal_first"
+	FundingOrgOnly       Funding = "org_only"
+)
+
 // ProviderPolicy is stored and returned, never interpreted here.
 type ProviderPolicy struct {
 	OnLimit OnLimit `json:"on_limit,omitempty"`
 	// FallbackModel is "<model>@<driver>".
 	FallbackModel string `json:"fallback_model,omitempty"`
+	// Funding is the chat's funding order (org-provider-accounts §4.4).
+	Funding Funding `json:"funding,omitempty"`
 }
 
 // Selection is one chat's record.
@@ -110,6 +126,9 @@ type Service interface {
 	// that changes nothing stores nothing and keeps the version.
 	Merge(ctx context.Context, chatID, userID, workflowName string, patch map[string]any, expectedVersion int64) (*Selection, error)
 	// SetPolicy replaces the provider policy, with the same version rules.
+	// Only a person changes its Funding (auth.RequirePerson): for anyone else
+	// an unspecified Funding keeps the current one, and another is refused,
+	// decided under the record's lock.
 	SetPolicy(ctx context.Context, chatID, userID, workflowName string, policy ProviderPolicy, expectedVersion int64) (*Selection, error)
 	// Copy gives toChatID a copy of fromChatID's selection (BranchChat).
 	Copy(ctx context.Context, fromChatID, toChatID, userID string) error

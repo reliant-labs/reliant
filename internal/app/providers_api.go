@@ -15,6 +15,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/client"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -28,6 +31,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/inbox"
+	"github.com/reliant-labs/reliant/internal/handlers/org_policy_impact"
+	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
+	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -45,6 +52,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/orgmove"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/readguard"
@@ -58,6 +67,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/reconciliation"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -239,6 +249,7 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		AuthorizationServer: d.Settings.AuthorizationServer,
 		ControlPlaneURL:     cp.URL,
 		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
+		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(d.DB, cp.InternalServiceSecret),
 	})
 }
 
@@ -252,6 +263,8 @@ type APIListenerDeps struct {
 	Logger *slog.Logger
 	// Membership decides org resources (authz); the org resolver.
 	Membership *orgs.Resolver
+	// Policies is the org policy resolver every request carries (orgpolicy).
+	Policies *orgpolicy.Resolver
 }
 
 // NewAPIListener is the address browsers, the CLI and `rlat_` tokens call
@@ -270,6 +283,7 @@ func NewAPIListener(d APIListenerDeps) (*grpcserver.APIListener, error) {
 		CORSAllowedOrigins: d.API.GetCorsAllowedOrigins(),
 		Chain:              d.Chain,
 		Membership:         d.Membership,
+		Policies:           d.Policies,
 		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
 			services := d.Routes.Register(mux, opts...)
 			d.HTTP.Register(mux)
@@ -406,6 +420,9 @@ type APIConnectionsDeps struct {
 	Integrations *IntegrationSettings
 	AppOrigins   []string
 	ControlPlane *configv1.ControlPlaneConfig
+	// OrgConnections lets org owners and admins create org-owned connections
+	// (ApiServerConfig orgs.connections_enabled; off by default).
+	OrgConnections bool
 }
 
 // NewAPIConnections builds the connection service, the token source and the
@@ -426,7 +443,8 @@ func NewAPIConnections(d APIConnectionsDeps) (*APIConnections, error) {
 	tokens := connections.NewTokenSource(store, d.Vault, providers, nil)
 	broker := connections.NewBroker(store, d.Vault, providers, nil, d.Integrations.PublicURL).WithAppOrigins(d.AppOrigins)
 	svc := connections.NewService(store, d.Vault, providers, tokens, broker, nil).
-		WithDelegated(delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted()))
+		WithDelegated(delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted())).
+		WithOrgConnections(d.OrgConnections)
 	for _, in := range svc.ListIntegrations() {
 		for _, m := range in.Methods {
 			if !m.Available {
@@ -797,7 +815,11 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
 			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
-		WithConnectionSecrets(d.Connections.Tokens)
+		WithConnectionSecrets(d.Connections.Tokens).
+		// A trigger whose org's policy does not allow its integration is
+		// paused (org-policies §4.3). The API holds no schedule client, and an
+		// integration trigger's events have no schedule to pause.
+		WithAutoPause(triggers.NewAutoPause(repo, nil))
 	if d.GitHubAccess != nil {
 		in.Access = map[string]webhook.AccessRefresher{ghaccess.IntegrationID: gitHubAccess{d.GitHubAccess}}
 	}
@@ -1439,4 +1461,113 @@ func gitTokens(cfg *configv1.ControlPlaneConfig) (gitcredentialclient.Service, e
 // function, so the config-path test proves what newTrigger hands the handler.
 func TriggerOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
 	return api.GetOrgs()
+}
+
+// ProjectOrgRollout is the org rollout gates the project handler decides a
+// move with (project.MovesAllowed): ApiServerConfig orgs, off when unset. One
+// function, so the config-path test proves what newProject hands it.
+func ProjectOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
+	return api.GetOrgs()
+}
+
+// ProjectOrgMoveFacts is control-plane's half of the project-move preview
+// (ProjectOrgMoveInternalService.PreviewProjectOrgMove), signed as the
+// internal service. nil — the preview shows those facts as unknown — when
+// the control plane is not hosted or this process has no internal-service
+// secret.
+func ProjectOrgMoveFacts(cfg *configv1.ControlPlaneConfig) project.MoveFacts {
+	cp := ControlPlaneEndpoint(cfg)
+	if !cp.Hosted() || cp.InternalServiceSecret == "" {
+		return nil
+	}
+	secret := cp.InternalServiceSecret
+	return controlplane.NewInstrumented(controlplane.Deps{
+		ControlPlane: cfg,
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
+	})
+}
+
+// OrgUsageListPrices is where the org usage view reads list prices:
+// control-plane's LLMPriceInternalService, signed as the internal service.
+// nil — usage is shown without cost estimates — when the control plane is
+// not hosted or this process has no internal-service secret; never a typed
+// nil in the handler's interface.
+func OrgUsageListPrices(cfg *configv1.ControlPlaneConfig) org_usage.ListPrices {
+	cp := ControlPlaneEndpoint(cfg)
+	if !cp.Hosted() || cp.InternalServiceSecret == "" {
+		return nil
+	}
+	secret := cp.InternalServiceSecret
+	return controlplane.NewInstrumented(controlplane.Deps{
+		ControlPlane: cfg,
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
+	})
+}
+
+// projectOrgMoveStarter starts a project move's saga on the shared task
+// queue, keyed by the move id: a second start of a running or finished move
+// is not an error, so a retried request never starts a second saga.
+type projectOrgMoveStarter struct{ c client.Client }
+
+func (s projectOrgMoveStarter) StartProjectOrgMove(ctx context.Context, moveID string) error {
+	_, err := s.c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    orgmove.WorkflowID(moveID),
+		TaskQueue:             v2workflow.SharedTaskQueue,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+	}, orgmove.WorkflowName, moveID)
+	var started *serviceerror.WorkflowExecutionAlreadyStarted
+	if errors.As(err, &started) {
+		return nil
+	}
+	return err
+}
+
+// APIOrgConnections is whether the API server lets org owners and admins
+// create org-owned connections: ApiServerConfig orgs.connections_enabled, off
+// when unset. One function, so the config-path test proves what
+// newAPIConnections hands the connection service.
+func APIOrgConnections(api *configv1.ApiServerConfig) bool {
+	return api.GetOrgs().GetConnectionsEnabled()
+}
+
+// APIOrgProviderAccounts is whether the API server lets org owners and admins
+// add org-owned AI provider accounts and bind provider workspaces:
+// ApiServerConfig orgs.provider_accounts_enabled, off when unset. One
+// function, so the config-path test proves what newOrgProviderAccount hands
+// the service.
+func APIOrgProviderAccounts(api *configv1.ApiServerConfig) bool {
+	return api.GetOrgs().GetProviderAccountsEnabled()
+}
+
+// NewOrgProviderAccount builds the API server's OrgProviderAccountService
+// from d, with its rollout gates (Deps.OrgRollout) read from api: ApiServerConfig
+// orgs, whose provider_accounts_enabled is APIOrgProviderAccounts.
+// newOrgProviderAccount and the config-path test both build it here, so the
+// test proves the wiring production runs.
+func NewOrgProviderAccount(api *configv1.ApiServerConfig, d org_provider_account.Deps) (*org_provider_account.Service, error) {
+	d.OrgRollout = api.GetOrgs()
+	return org_provider_account.New(d)
+}
+
+// inboxMembers is the resolver as the inbox's member counter, nil for a
+// deployment with no orgs (a nil *orgs.Resolver would be a non-nil interface).
+func inboxMembers(r *orgs.Resolver) inbox.OrgMemberCounter {
+	if r == nil {
+		return nil
+	}
+	return r
+}
+
+// OrgPolicyAttendanceDeps is the store the attendance rule reads: chats,
+// their launch events and whether a person has taken a turn.
+type OrgPolicyAttendanceDeps struct {
+	Store *db.Repo
+}
+
+// NewOrgPolicyAttendance is the attendance rule GetPolicyImpact judges an
+// org's chats by: the activities' own (handlers.Attendance), the one every
+// call made for a chat is scoped with, so the preview of the automations
+// policy counts exactly the chats it will govern.
+func NewOrgPolicyAttendance(d OrgPolicyAttendanceDeps) (org_policy_impact.ChatAttendance, error) {
+	return handlers.Attendance{Store: d.Store}, nil
 }

@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
+
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 )
 
@@ -175,9 +177,32 @@ func TestExecDeadline(t *testing.T) {
 		d.Release()
 		cancel()
 		sleep(time.Hour)
-		time.Sleep(200 * time.Millisecond)
+		// Once the watcher has returned nothing can stop the command, so
+		// what its context says now is final.
+		testkit.Receive(t, "the deadline's watcher to return", d.watched)
 		if err := d.Context().Err(); err != nil {
 			t.Fatalf("released deadline's context is done (%v): an adopted command would be killed", err)
+		}
+		if d.Err() != nil {
+			t.Errorf("Err() = %v, want nil for a command that was never stopped", d.Err())
+		}
+	})
+
+	// reliant#2731: once Release has returned, a caller cancelling makes both
+	// of the watcher's released and parent.Done cases ready, and select picks
+	// one at random. When it picks parent.Done the watcher calls stop, so stop
+	// itself must refuse a released command. This drives that branch directly
+	// instead of hoping the scheduler picks it.
+	t.Run("stop after Release leaves the command running", func(t *testing.T) {
+		parent, cancel := context.WithCancel(context.Background())
+		d := StartExecDeadline(parent, time.Hour)
+		d.Release()
+		cancel()
+		d.stop(parent.Err())
+		d.stop(context.DeadlineExceeded)
+		d.stop(ErrWallClockDeadline)
+		if err := d.Context().Err(); err != nil {
+			t.Fatalf("released deadline's context is done (%v): a parent cancel that won the watcher's select killed an adopted command", err)
 		}
 		if d.Err() != nil {
 			t.Errorf("Err() = %v, want nil for a command that was never stopped", d.Err())

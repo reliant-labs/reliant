@@ -70,7 +70,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=b85774f0478f8e51cf5dd4b4533d11151de8c290a0569c6c2b6067c56b014489
+// forge:hash=8420d9228804641f3dca2a0e2f8f32c73e4d24cfcbafb6f64fd95064c8d5303a
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -91,6 +91,7 @@ type MockRepository struct {
 	UpdateChatStateFunc                                      func(context.Context, string, db.ChatState, string) error
 	UpdateChatUnreadFunc                                     func(context.Context, string, bool, string) error
 	SetChatAdoptedFunc                                       func(context.Context, string, string, bool) (bool, error)
+	RecordChatPersonTurnFunc                                 func(context.Context, string, string) error
 	SetChatDaemonBlockedFunc                                 func(context.Context, string, bool) error
 	SetChatPausedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	SetChatQueuedForMachineFunc                              func(context.Context, string, bool) (bool, error)
@@ -103,6 +104,7 @@ type MockRepository struct {
 	ThreadAwaitsReplyFunc                                    func(context.Context, string) (bool, error)
 	IsLatestTurnInThreadFunc                                 func(context.Context, string, string) (bool, error)
 	CountMessagesInThreadFunc                                func(context.Context, string) (int, error)
+	ClaimUserActivationFunc                                  func(context.Context, string, string, string) (bool, error)
 	CountMessagesInChatOutsideThreadFunc                     func(context.Context, string, string) (int, error)
 	ListTranscriptSiblingMessagesInRangeFunc                 func(context.Context, string, string, int64, *int64, int) ([]*db.Message, error)
 	GetWorkflowByThreadFunc                                  func(context.Context, string, string) (*db.Workflow, error)
@@ -337,6 +339,15 @@ func (m *MockRepository) SetChatAdopted(ctx context.Context, chatID string, user
 	return false, contractkit.MockNotSet("MockRepository", "SetChatAdopted")
 }
 
+// RecordChatPersonTurn records the call and delegates to RecordChatPersonTurnFunc when set.
+func (m *MockRepository) RecordChatPersonTurn(ctx context.Context, chatID string, userID string) error {
+	m.Recorder.Record("RecordChatPersonTurn", ctx, chatID, userID)
+	if m.RecordChatPersonTurnFunc != nil {
+		return m.RecordChatPersonTurnFunc(ctx, chatID, userID)
+	}
+	return contractkit.MockNotSet("MockRepository", "RecordChatPersonTurn")
+}
+
 // SetChatDaemonBlocked records the call and delegates to SetChatDaemonBlockedFunc when set.
 func (m *MockRepository) SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error {
 	m.Recorder.Record("SetChatDaemonBlocked", ctx, chatID, blocked)
@@ -443,6 +454,15 @@ func (m *MockRepository) CountMessagesInThread(ctx context.Context, threadID str
 		return m.CountMessagesInThreadFunc(ctx, threadID)
 	}
 	return 0, contractkit.MockNotSet("MockRepository", "CountMessagesInThread")
+}
+
+// ClaimUserActivation records the call and delegates to ClaimUserActivationFunc when set.
+func (m *MockRepository) ClaimUserActivation(ctx context.Context, userID string, chatID string, messageID string) (bool, error) {
+	m.Recorder.Record("ClaimUserActivation", ctx, userID, chatID, messageID)
+	if m.ClaimUserActivationFunc != nil {
+		return m.ClaimUserActivationFunc(ctx, userID, chatID, messageID)
+	}
+	return false, contractkit.MockNotSet("MockRepository", "ClaimUserActivation")
 }
 
 // CountMessagesInChatOutsideThread records the call and delegates to CountMessagesInChatOutsideThreadFunc when set.

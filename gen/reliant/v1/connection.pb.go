@@ -455,8 +455,13 @@ type Integration struct {
 	Methods []*IntegrationAuthMethod `protobuf:"bytes,6,rep,name=methods,proto3" json:"methods,omitempty"`
 	// ConnectionParams are the non-secret settings a new connection asks for.
 	ConnectionParams []*IntegrationConnectionParam `protobuf:"bytes,7,rep,name=connection_params,json=connectionParams,proto3" json:"connection_params,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// OrgPolicy is how the organization the request names treats this
+	// integration in its runs (control-plane docs/design/org-policies.md §4.3).
+	// Unset when the request names no org, or the org's policy does not govern
+	// integrations: every integration may be used, as before this field.
+	OrgPolicy     *IntegrationOrgPolicy `protobuf:"bytes,8,opt,name=org_policy,json=orgPolicy,proto3" json:"org_policy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Integration) Reset() {
@@ -517,6 +522,82 @@ func (x *Integration) GetConnectionParams() []*IntegrationConnectionParam {
 	return nil
 }
 
+func (x *Integration) GetOrgPolicy() *IntegrationOrgPolicy {
+	if x != nil {
+		return x.OrgPolicy
+	}
+	return nil
+}
+
+// IntegrationOrgPolicy is an org's policy on one integration. It governs USE
+// in the org's runs, never connecting: a person's own connection stays usable
+// in their other orgs, so a picker marks a disallowed integration "not
+// allowed in <org>" rather than hiding it.
+type IntegrationOrgPolicy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Allowed is false when the org's policy does not admit the integration.
+	Allowed bool `protobuf:"varint,1,opt,name=allowed,proto3" json:"allowed,omitempty"`
+	// Enforced is true when a use the policy does not admit is refused. False
+	// while the rule only counts what it would refuse (audit): the use still
+	// works.
+	Enforced bool `protobuf:"varint,2,opt,name=enforced,proto3" json:"enforced,omitempty"`
+	// PolicyVersion is the version of the org's policy this answer comes from.
+	PolicyVersion int64 `protobuf:"varint,3,opt,name=policy_version,json=policyVersion,proto3" json:"policy_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IntegrationOrgPolicy) Reset() {
+	*x = IntegrationOrgPolicy{}
+	mi := &file_reliant_v1_connection_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IntegrationOrgPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IntegrationOrgPolicy) ProtoMessage() {}
+
+func (x *IntegrationOrgPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_connection_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IntegrationOrgPolicy.ProtoReflect.Descriptor instead.
+func (*IntegrationOrgPolicy) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *IntegrationOrgPolicy) GetAllowed() bool {
+	if x != nil {
+		return x.Allowed
+	}
+	return false
+}
+
+func (x *IntegrationOrgPolicy) GetEnforced() bool {
+	if x != nil {
+		return x.Enforced
+	}
+	return false
+}
+
+func (x *IntegrationOrgPolicy) GetPolicyVersion() int64 {
+	if x != nil {
+		return x.PolicyVersion
+	}
+	return 0
+}
+
 type IntegrationAuthMethod struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Kind  ConnectionAuthKind     `protobuf:"varint,1,opt,name=kind,proto3,enum=reliant.v1.ConnectionAuthKind" json:"kind,omitempty"`
@@ -534,7 +615,7 @@ type IntegrationAuthMethod struct {
 
 func (x *IntegrationAuthMethod) Reset() {
 	*x = IntegrationAuthMethod{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[2]
+	mi := &file_reliant_v1_connection_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -546,7 +627,7 @@ func (x *IntegrationAuthMethod) String() string {
 func (*IntegrationAuthMethod) ProtoMessage() {}
 
 func (x *IntegrationAuthMethod) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[2]
+	mi := &file_reliant_v1_connection_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -559,7 +640,7 @@ func (x *IntegrationAuthMethod) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IntegrationAuthMethod.ProtoReflect.Descriptor instead.
 func (*IntegrationAuthMethod) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *IntegrationAuthMethod) GetKind() ConnectionAuthKind {
@@ -605,7 +686,7 @@ type IntegrationConnectionParam struct {
 
 func (x *IntegrationConnectionParam) Reset() {
 	*x = IntegrationConnectionParam{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[3]
+	mi := &file_reliant_v1_connection_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -617,7 +698,7 @@ func (x *IntegrationConnectionParam) String() string {
 func (*IntegrationConnectionParam) ProtoMessage() {}
 
 func (x *IntegrationConnectionParam) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[3]
+	mi := &file_reliant_v1_connection_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -630,7 +711,7 @@ func (x *IntegrationConnectionParam) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IntegrationConnectionParam.ProtoReflect.Descriptor instead.
 func (*IntegrationConnectionParam) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *IntegrationConnectionParam) GetName() string {
@@ -676,14 +757,18 @@ func (x *IntegrationConnectionParam) GetRequired() bool {
 }
 
 type ListIntegrationsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// OrgId fills each integration's org_policy with that organization's
+	// policy, for a caller who is a live member of it (PERMISSION_DENIED
+	// otherwise). Unset lists the integrations exactly as before this field.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListIntegrationsRequest) Reset() {
 	*x = ListIntegrationsRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[4]
+	mi := &file_reliant_v1_connection_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -695,7 +780,7 @@ func (x *ListIntegrationsRequest) String() string {
 func (*ListIntegrationsRequest) ProtoMessage() {}
 
 func (x *ListIntegrationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[4]
+	mi := &file_reliant_v1_connection_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -708,7 +793,14 @@ func (x *ListIntegrationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIntegrationsRequest.ProtoReflect.Descriptor instead.
 func (*ListIntegrationsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListIntegrationsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type ListIntegrationsResponse struct {
@@ -720,7 +812,7 @@ type ListIntegrationsResponse struct {
 
 func (x *ListIntegrationsResponse) Reset() {
 	*x = ListIntegrationsResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[5]
+	mi := &file_reliant_v1_connection_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -732,7 +824,7 @@ func (x *ListIntegrationsResponse) String() string {
 func (*ListIntegrationsResponse) ProtoMessage() {}
 
 func (x *ListIntegrationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[5]
+	mi := &file_reliant_v1_connection_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -745,7 +837,7 @@ func (x *ListIntegrationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIntegrationsResponse.ProtoReflect.Descriptor instead.
 func (*ListIntegrationsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListIntegrationsResponse) GetIntegrations() []*Integration {
@@ -771,7 +863,7 @@ type ListConnectionsRequest struct {
 
 func (x *ListConnectionsRequest) Reset() {
 	*x = ListConnectionsRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[6]
+	mi := &file_reliant_v1_connection_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -783,7 +875,7 @@ func (x *ListConnectionsRequest) String() string {
 func (*ListConnectionsRequest) ProtoMessage() {}
 
 func (x *ListConnectionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[6]
+	mi := &file_reliant_v1_connection_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -796,7 +888,7 @@ func (x *ListConnectionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConnectionsRequest.ProtoReflect.Descriptor instead.
 func (*ListConnectionsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListConnectionsRequest) GetIntegrationId() string {
@@ -822,7 +914,7 @@ type ListConnectionsResponse struct {
 
 func (x *ListConnectionsResponse) Reset() {
 	*x = ListConnectionsResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[7]
+	mi := &file_reliant_v1_connection_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -834,7 +926,7 @@ func (x *ListConnectionsResponse) String() string {
 func (*ListConnectionsResponse) ProtoMessage() {}
 
 func (x *ListConnectionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[7]
+	mi := &file_reliant_v1_connection_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -847,7 +939,7 @@ func (x *ListConnectionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConnectionsResponse.ProtoReflect.Descriptor instead.
 func (*ListConnectionsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListConnectionsResponse) GetConnections() []*Connection {
@@ -858,15 +950,20 @@ func (x *ListConnectionsResponse) GetConnections() []*Connection {
 }
 
 type GetConnectionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Any live member of it may read one.
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,2,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetConnectionRequest) Reset() {
 	*x = GetConnectionRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[8]
+	mi := &file_reliant_v1_connection_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -878,7 +975,7 @@ func (x *GetConnectionRequest) String() string {
 func (*GetConnectionRequest) ProtoMessage() {}
 
 func (x *GetConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[8]
+	mi := &file_reliant_v1_connection_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -891,12 +988,19 @@ func (x *GetConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConnectionRequest.ProtoReflect.Descriptor instead.
 func (*GetConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetConnectionRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *GetConnectionRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
 	}
 	return ""
 }
@@ -910,7 +1014,7 @@ type GetConnectionResponse struct {
 
 func (x *GetConnectionResponse) Reset() {
 	*x = GetConnectionResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[9]
+	mi := &file_reliant_v1_connection_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -922,7 +1026,7 @@ func (x *GetConnectionResponse) String() string {
 func (*GetConnectionResponse) ProtoMessage() {}
 
 func (x *GetConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[9]
+	mi := &file_reliant_v1_connection_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -935,7 +1039,7 @@ func (x *GetConnectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConnectionResponse.ProtoReflect.Descriptor instead.
 func (*GetConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetConnectionResponse) GetConnection() *Connection {
@@ -954,14 +1058,20 @@ type CreateApiKeyConnectionRequest struct {
 	// WRITE-ONLY. The only message in this API that carries a secret.
 	Fields map[string]string `protobuf:"bytes,4,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Values for the integration's connection_params. Not secret.
-	Params        map[string]string `protobuf:"bytes,5,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Params map[string]string `protobuf:"bytes,5,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+	// The deployment must enable org connections (orgs.connections_enabled).
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,6,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateApiKeyConnectionRequest) Reset() {
 	*x = CreateApiKeyConnectionRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[10]
+	mi := &file_reliant_v1_connection_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -973,7 +1083,7 @@ func (x *CreateApiKeyConnectionRequest) String() string {
 func (*CreateApiKeyConnectionRequest) ProtoMessage() {}
 
 func (x *CreateApiKeyConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[10]
+	mi := &file_reliant_v1_connection_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -986,7 +1096,7 @@ func (x *CreateApiKeyConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateApiKeyConnectionRequest.ProtoReflect.Descriptor instead.
 func (*CreateApiKeyConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateApiKeyConnectionRequest) GetIntegrationId() string {
@@ -1024,6 +1134,13 @@ func (x *CreateApiKeyConnectionRequest) GetParams() map[string]string {
 	return nil
 }
 
+func (x *CreateApiKeyConnectionRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
+	}
+	return ""
+}
+
 type CreateApiKeyConnectionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Connection    *Connection            `protobuf:"bytes,1,opt,name=connection,proto3" json:"connection,omitempty"`
@@ -1033,7 +1150,7 @@ type CreateApiKeyConnectionResponse struct {
 
 func (x *CreateApiKeyConnectionResponse) Reset() {
 	*x = CreateApiKeyConnectionResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[11]
+	mi := &file_reliant_v1_connection_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1045,7 +1162,7 @@ func (x *CreateApiKeyConnectionResponse) String() string {
 func (*CreateApiKeyConnectionResponse) ProtoMessage() {}
 
 func (x *CreateApiKeyConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[11]
+	mi := &file_reliant_v1_connection_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1058,7 +1175,7 @@ func (x *CreateApiKeyConnectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateApiKeyConnectionResponse.ProtoReflect.Descriptor instead.
 func (*CreateApiKeyConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CreateApiKeyConnectionResponse) GetConnection() *Connection {
@@ -1084,13 +1201,21 @@ type StartOAuthRequest struct {
 	// the callback relays the code because consent runs in the system browser.
 	// Empty for a web app, whose request Origin decides instead.
 	LoopbackRedirect string `protobuf:"bytes,6,opt,name=loopback_redirect,json=loopbackRedirect,proto3" json:"loopback_redirect,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. A new connection, or with reconnect_id a
+	// reconnect of one of the org's. Only an owner or admin of it, signed in to the app as a person, may. The same person must
+	// finish the flow, and must still be an owner or admin then. The
+	// deployment must enable org connections (orgs.connections_enabled).
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,7,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartOAuthRequest) Reset() {
 	*x = StartOAuthRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[12]
+	mi := &file_reliant_v1_connection_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1102,7 +1227,7 @@ func (x *StartOAuthRequest) String() string {
 func (*StartOAuthRequest) ProtoMessage() {}
 
 func (x *StartOAuthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[12]
+	mi := &file_reliant_v1_connection_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1115,7 +1240,7 @@ func (x *StartOAuthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartOAuthRequest.ProtoReflect.Descriptor instead.
 func (*StartOAuthRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *StartOAuthRequest) GetIntegrationId() string {
@@ -1160,6 +1285,13 @@ func (x *StartOAuthRequest) GetLoopbackRedirect() string {
 	return ""
 }
 
+func (x *StartOAuthRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
+	}
+	return ""
+}
+
 type StartOAuthResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AuthorizeUrl  string                 `protobuf:"bytes,1,opt,name=authorize_url,json=authorizeUrl,proto3" json:"authorize_url,omitempty"`
@@ -1169,7 +1301,7 @@ type StartOAuthResponse struct {
 
 func (x *StartOAuthResponse) Reset() {
 	*x = StartOAuthResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[13]
+	mi := &file_reliant_v1_connection_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1181,7 +1313,7 @@ func (x *StartOAuthResponse) String() string {
 func (*StartOAuthResponse) ProtoMessage() {}
 
 func (x *StartOAuthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[13]
+	mi := &file_reliant_v1_connection_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1194,7 +1326,7 @@ func (x *StartOAuthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartOAuthResponse.ProtoReflect.Descriptor instead.
 func (*StartOAuthResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *StartOAuthResponse) GetAuthorizeUrl() string {
@@ -1214,7 +1346,7 @@ type CompleteOAuthRequest struct {
 
 func (x *CompleteOAuthRequest) Reset() {
 	*x = CompleteOAuthRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[14]
+	mi := &file_reliant_v1_connection_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1226,7 +1358,7 @@ func (x *CompleteOAuthRequest) String() string {
 func (*CompleteOAuthRequest) ProtoMessage() {}
 
 func (x *CompleteOAuthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[14]
+	mi := &file_reliant_v1_connection_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1239,7 +1371,7 @@ func (x *CompleteOAuthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteOAuthRequest.ProtoReflect.Descriptor instead.
 func (*CompleteOAuthRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CompleteOAuthRequest) GetState() string {
@@ -1266,7 +1398,7 @@ type CompleteOAuthResponse struct {
 
 func (x *CompleteOAuthResponse) Reset() {
 	*x = CompleteOAuthResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[15]
+	mi := &file_reliant_v1_connection_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1278,7 +1410,7 @@ func (x *CompleteOAuthResponse) String() string {
 func (*CompleteOAuthResponse) ProtoMessage() {}
 
 func (x *CompleteOAuthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[15]
+	mi := &file_reliant_v1_connection_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1291,7 +1423,7 @@ func (x *CompleteOAuthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteOAuthResponse.ProtoReflect.Descriptor instead.
 func (*CompleteOAuthResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CompleteOAuthResponse) GetConnection() *Connection {
@@ -1309,15 +1441,20 @@ func (x *CompleteOAuthResponse) GetRedirectAfter() string {
 }
 
 type TestConnectionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,2,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TestConnectionRequest) Reset() {
 	*x = TestConnectionRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[16]
+	mi := &file_reliant_v1_connection_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1329,7 +1466,7 @@ func (x *TestConnectionRequest) String() string {
 func (*TestConnectionRequest) ProtoMessage() {}
 
 func (x *TestConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[16]
+	mi := &file_reliant_v1_connection_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1342,12 +1479,19 @@ func (x *TestConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestConnectionRequest.ProtoReflect.Descriptor instead.
 func (*TestConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *TestConnectionRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *TestConnectionRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
 	}
 	return ""
 }
@@ -1367,7 +1511,7 @@ type TestConnectionResponse struct {
 
 func (x *TestConnectionResponse) Reset() {
 	*x = TestConnectionResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[17]
+	mi := &file_reliant_v1_connection_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1379,7 +1523,7 @@ func (x *TestConnectionResponse) String() string {
 func (*TestConnectionResponse) ProtoMessage() {}
 
 func (x *TestConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[17]
+	mi := &file_reliant_v1_connection_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1392,7 +1536,7 @@ func (x *TestConnectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestConnectionResponse.ProtoReflect.Descriptor instead.
 func (*TestConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *TestConnectionResponse) GetOk() bool {
@@ -1424,16 +1568,21 @@ func (x *TestConnectionResponse) GetErrorClass() string {
 }
 
 type RenameConnectionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,3,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RenameConnectionRequest) Reset() {
 	*x = RenameConnectionRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[18]
+	mi := &file_reliant_v1_connection_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1445,7 +1594,7 @@ func (x *RenameConnectionRequest) String() string {
 func (*RenameConnectionRequest) ProtoMessage() {}
 
 func (x *RenameConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[18]
+	mi := &file_reliant_v1_connection_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1458,7 +1607,7 @@ func (x *RenameConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameConnectionRequest.ProtoReflect.Descriptor instead.
 func (*RenameConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RenameConnectionRequest) GetId() string {
@@ -1475,6 +1624,13 @@ func (x *RenameConnectionRequest) GetName() string {
 	return ""
 }
 
+func (x *RenameConnectionRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
+	}
+	return ""
+}
+
 type RenameConnectionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Connection    *Connection            `protobuf:"bytes,1,opt,name=connection,proto3" json:"connection,omitempty"`
@@ -1484,7 +1640,7 @@ type RenameConnectionResponse struct {
 
 func (x *RenameConnectionResponse) Reset() {
 	*x = RenameConnectionResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[19]
+	mi := &file_reliant_v1_connection_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1496,7 +1652,7 @@ func (x *RenameConnectionResponse) String() string {
 func (*RenameConnectionResponse) ProtoMessage() {}
 
 func (x *RenameConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[19]
+	mi := &file_reliant_v1_connection_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1509,7 +1665,7 @@ func (x *RenameConnectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameConnectionResponse.ProtoReflect.Descriptor instead.
 func (*RenameConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RenameConnectionResponse) GetConnection() *Connection {
@@ -1520,15 +1676,21 @@ func (x *RenameConnectionResponse) GetConnection() *Connection {
 }
 
 type SetDefaultConnectionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may. The org's default is what a
+	// picker offers first; an unnamed reference never falls back to it.
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,2,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SetDefaultConnectionRequest) Reset() {
 	*x = SetDefaultConnectionRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[20]
+	mi := &file_reliant_v1_connection_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1540,7 +1702,7 @@ func (x *SetDefaultConnectionRequest) String() string {
 func (*SetDefaultConnectionRequest) ProtoMessage() {}
 
 func (x *SetDefaultConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[20]
+	mi := &file_reliant_v1_connection_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1553,12 +1715,19 @@ func (x *SetDefaultConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDefaultConnectionRequest.ProtoReflect.Descriptor instead.
 func (*SetDefaultConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SetDefaultConnectionRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *SetDefaultConnectionRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
 	}
 	return ""
 }
@@ -1572,7 +1741,7 @@ type SetDefaultConnectionResponse struct {
 
 func (x *SetDefaultConnectionResponse) Reset() {
 	*x = SetDefaultConnectionResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[21]
+	mi := &file_reliant_v1_connection_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1584,7 +1753,7 @@ func (x *SetDefaultConnectionResponse) String() string {
 func (*SetDefaultConnectionResponse) ProtoMessage() {}
 
 func (x *SetDefaultConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[21]
+	mi := &file_reliant_v1_connection_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1597,7 +1766,7 @@ func (x *SetDefaultConnectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDefaultConnectionResponse.ProtoReflect.Descriptor instead.
 func (*SetDefaultConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SetDefaultConnectionResponse) GetConnection() *Connection {
@@ -1608,15 +1777,20 @@ func (x *SetDefaultConnectionResponse) GetConnection() *Connection {
 }
 
 type DeleteConnectionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,2,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteConnectionRequest) Reset() {
 	*x = DeleteConnectionRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[22]
+	mi := &file_reliant_v1_connection_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1628,7 +1802,7 @@ func (x *DeleteConnectionRequest) String() string {
 func (*DeleteConnectionRequest) ProtoMessage() {}
 
 func (x *DeleteConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[22]
+	mi := &file_reliant_v1_connection_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1641,12 +1815,19 @@ func (x *DeleteConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteConnectionRequest.ProtoReflect.Descriptor instead.
 func (*DeleteConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *DeleteConnectionRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *DeleteConnectionRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
 	}
 	return ""
 }
@@ -1659,7 +1840,7 @@ type DeleteConnectionResponse struct {
 
 func (x *DeleteConnectionResponse) Reset() {
 	*x = DeleteConnectionResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[23]
+	mi := &file_reliant_v1_connection_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1671,7 +1852,7 @@ func (x *DeleteConnectionResponse) String() string {
 func (*DeleteConnectionResponse) ProtoMessage() {}
 
 func (x *DeleteConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[23]
+	mi := &file_reliant_v1_connection_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1684,7 +1865,7 @@ func (x *DeleteConnectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteConnectionResponse.ProtoReflect.Descriptor instead.
 func (*DeleteConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{23}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{24}
 }
 
 type ConnectionEvent struct {
@@ -1698,15 +1879,19 @@ type ConnectionEvent struct {
 	NodeId     string `protobuf:"bytes,5,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	ToolCallId string `protobuf:"bytes,6,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
 	// "user:<id>", "worker", or "trigger:<id>".
-	Actor         string `protobuf:"bytes,7,opt,name=actor,proto3" json:"actor,omitempty"`
-	At            string `protobuf:"bytes,8,opt,name=at,proto3" json:"at,omitempty"`
+	Actor string `protobuf:"bytes,7,opt,name=actor,proto3" json:"actor,omitempty"`
+	At    string `protobuf:"bytes,8,opt,name=at,proto3" json:"at,omitempty"`
+	// The person the event is attributed to: who acted, also on an org's
+	// connection (the member whose run used it), so an org admin can tell who
+	// used the org's account.
+	UserId        string `protobuf:"bytes,9,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConnectionEvent) Reset() {
 	*x = ConnectionEvent{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[24]
+	mi := &file_reliant_v1_connection_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1718,7 +1903,7 @@ func (x *ConnectionEvent) String() string {
 func (*ConnectionEvent) ProtoMessage() {}
 
 func (x *ConnectionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[24]
+	mi := &file_reliant_v1_connection_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1731,7 +1916,7 @@ func (x *ConnectionEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectionEvent.ProtoReflect.Descriptor instead.
 func (*ConnectionEvent) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{24}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ConnectionEvent) GetId() int64 {
@@ -1790,19 +1975,32 @@ func (x *ConnectionEvent) GetAt() string {
 	return ""
 }
 
+func (x *ConnectionEvent) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
 type ListConnectionEventsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Limit int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	// Return events older than this id; unset (or 0) for the newest page.
-	BeforeId      *int64 `protobuf:"varint,3,opt,name=before_id,json=beforeId,proto3,oneof" json:"before_id,omitempty"`
+	BeforeId *int64 `protobuf:"varint,3,opt,name=before_id,json=beforeId,proto3,oneof" json:"before_id,omitempty"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may. They see every member's use
+	// of it (ConnectionEvent.user_id).
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,4,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListConnectionEventsRequest) Reset() {
 	*x = ListConnectionEventsRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[25]
+	mi := &file_reliant_v1_connection_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1814,7 +2012,7 @@ func (x *ListConnectionEventsRequest) String() string {
 func (*ListConnectionEventsRequest) ProtoMessage() {}
 
 func (x *ListConnectionEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[25]
+	mi := &file_reliant_v1_connection_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1827,7 +2025,7 @@ func (x *ListConnectionEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConnectionEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListConnectionEventsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{25}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListConnectionEventsRequest) GetId() string {
@@ -1851,6 +2049,13 @@ func (x *ListConnectionEventsRequest) GetBeforeId() int64 {
 	return 0
 }
 
+func (x *ListConnectionEventsRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
+	}
+	return ""
+}
+
 type ListConnectionEventsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Events        []*ConnectionEvent     `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
@@ -1860,7 +2065,7 @@ type ListConnectionEventsResponse struct {
 
 func (x *ListConnectionEventsResponse) Reset() {
 	*x = ListConnectionEventsResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[26]
+	mi := &file_reliant_v1_connection_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1872,7 +2077,7 @@ func (x *ListConnectionEventsResponse) String() string {
 func (*ListConnectionEventsResponse) ProtoMessage() {}
 
 func (x *ListConnectionEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[26]
+	mi := &file_reliant_v1_connection_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1885,7 +2090,7 @@ func (x *ListConnectionEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConnectionEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListConnectionEventsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{26}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListConnectionEventsResponse) GetEvents() []*ConnectionEvent {
@@ -1929,12 +2134,18 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\x06org_id\x18\x12 \x01(\tR\x05orgId\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd2\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x93\x02\n" +
 	"\vIntegration\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12;\n" +
 	"\amethods\x18\x06 \x03(\v2!.reliant.v1.IntegrationAuthMethodR\amethods\x12S\n" +
-	"\x11connection_params\x18\a \x03(\v2&.reliant.v1.IntegrationConnectionParamR\x10connectionParams\"\xaf\x02\n" +
+	"\x11connection_params\x18\a \x03(\v2&.reliant.v1.IntegrationConnectionParamR\x10connectionParams\x12?\n" +
+	"\n" +
+	"org_policy\x18\b \x01(\v2 .reliant.v1.IntegrationOrgPolicyR\torgPolicy\"s\n" +
+	"\x14IntegrationOrgPolicy\x12\x18\n" +
+	"\aallowed\x18\x01 \x01(\bR\aallowed\x12\x1a\n" +
+	"\benforced\x18\x02 \x01(\bR\benforced\x12%\n" +
+	"\x0epolicy_version\x18\x03 \x01(\x03R\rpolicyVersion\"\xaf\x02\n" +
 	"\x15IntegrationAuthMethod\x122\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1e.reliant.v1.ConnectionAuthKindR\x04kind\x12\x1c\n" +
 	"\tavailable\x18\x02 \x01(\bR\tavailable\x12-\n" +
@@ -1949,8 +2160,10 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
 	"\apattern\x18\x04 \x01(\tR\apattern\x12#\n" +
 	"\rdefault_value\x18\x05 \x01(\tR\fdefaultValue\x12\x1a\n" +
-	"\brequired\x18\x06 \x01(\bR\brequired\"\x19\n" +
-	"\x17ListIntegrationsRequest\"W\n" +
+	"\brequired\x18\x06 \x01(\bR\brequired\"@\n" +
+	"\x17ListIntegrationsRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"W\n" +
 	"\x18ListIntegrationsResponse\x12;\n" +
 	"\fintegrations\x18\x01 \x03(\v2\x17.reliant.v1.IntegrationR\fintegrations\"~\n" +
 	"\x16ListConnectionsRequest\x12*\n" +
@@ -1959,39 +2172,48 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\x0f_integration_idB\t\n" +
 	"\a_org_id\"S\n" +
 	"\x17ListConnectionsResponse\x128\n" +
-	"\vconnections\x18\x01 \x03(\v2\x16.reliant.v1.ConnectionR\vconnections\"&\n" +
+	"\vconnections\x18\x01 \x03(\v2\x16.reliant.v1.ConnectionR\vconnections\"^\n" +
 	"\x14GetConnectionRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"O\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
+	"\fowner_org_id\x18\x02 \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01B\x0f\n" +
+	"\r_owner_org_id\"O\n" +
 	"\x15GetConnectionResponse\x126\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
-	"connection\"\xa9\x03\n" +
+	"connection\"\xe1\x03\n" +
 	"\x1dCreateApiKeyConnectionRequest\x12%\n" +
 	"\x0eintegration_id\x18\x01 \x01(\tR\rintegrationId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x124\n" +
 	"\x04kind\x18\x03 \x01(\x0e2 .reliant.v1.ApiKeyConnectionKindR\x04kind\x12R\n" +
 	"\x06fields\x18\x04 \x03(\v25.reliant.v1.CreateApiKeyConnectionRequest.FieldsEntryB\x03\x80\x01\x01R\x06fields\x12M\n" +
-	"\x06params\x18\x05 \x03(\v25.reliant.v1.CreateApiKeyConnectionRequest.ParamsEntryR\x06params\x1a9\n" +
+	"\x06params\x18\x05 \x03(\v25.reliant.v1.CreateApiKeyConnectionRequest.ParamsEntryR\x06params\x12%\n" +
+	"\fowner_org_id\x18\x06 \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"X\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0f\n" +
+	"\r_owner_org_id\"X\n" +
 	"\x1eCreateApiKeyConnectionResponse\x126\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
-	"connection\"\xc3\x02\n" +
+	"connection\"\xfb\x02\n" +
 	"\x11StartOAuthRequest\x12%\n" +
 	"\x0eintegration_id\x18\x01 \x01(\tR\rintegrationId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
 	"\freconnect_id\x18\x03 \x01(\tR\vreconnectId\x12%\n" +
 	"\x0eredirect_after\x18\x04 \x01(\tR\rredirectAfter\x12A\n" +
 	"\x06params\x18\x05 \x03(\v2).reliant.v1.StartOAuthRequest.ParamsEntryR\x06params\x12+\n" +
-	"\x11loopback_redirect\x18\x06 \x01(\tR\x10loopbackRedirect\x1a9\n" +
+	"\x11loopback_redirect\x18\x06 \x01(\tR\x10loopbackRedirect\x12%\n" +
+	"\fowner_org_id\x18\a \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"9\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0f\n" +
+	"\r_owner_org_id\"9\n" +
 	"\x12StartOAuthResponse\x12#\n" +
 	"\rauthorize_url\x18\x01 \x01(\tR\fauthorizeUrl\"J\n" +
 	"\x14CompleteOAuthRequest\x12\x19\n" +
@@ -2001,31 +2223,43 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
 	"connection\x12%\n" +
-	"\x0eredirect_after\x18\x02 \x01(\tR\rredirectAfter\"'\n" +
+	"\x0eredirect_after\x18\x02 \x01(\tR\rredirectAfter\"_\n" +
 	"\x15TestConnectionRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x86\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
+	"\fowner_org_id\x18\x02 \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01B\x0f\n" +
+	"\r_owner_org_id\"\x86\x01\n" +
 	"\x16TestConnectionResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x16\n" +
 	"\x06probed\x18\x02 \x01(\bR\x06probed\x12#\n" +
 	"\raccount_label\x18\x03 \x01(\tR\faccountLabel\x12\x1f\n" +
 	"\verror_class\x18\x04 \x01(\tR\n" +
-	"errorClass\"=\n" +
+	"errorClass\"u\n" +
 	"\x17RenameConnectionRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"R\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
+	"\fowner_org_id\x18\x03 \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01B\x0f\n" +
+	"\r_owner_org_id\"R\n" +
 	"\x18RenameConnectionResponse\x126\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
-	"connection\"-\n" +
+	"connection\"e\n" +
 	"\x1bSetDefaultConnectionRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"V\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
+	"\fowner_org_id\x18\x02 \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01B\x0f\n" +
+	"\r_owner_org_id\"V\n" +
 	"\x1cSetDefaultConnectionResponse\x126\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
-	"connection\")\n" +
+	"connection\"a\n" +
 	"\x17DeleteConnectionRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x1a\n" +
-	"\x18DeleteConnectionResponse\"\xd2\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
+	"\fowner_org_id\x18\x02 \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01B\x0f\n" +
+	"\r_owner_org_id\"\x1a\n" +
+	"\x18DeleteConnectionResponse\"\xeb\x01\n" +
 	"\x0fConnectionEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12#\n" +
 	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x12\x12\n" +
@@ -2035,13 +2269,17 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\ftool_call_id\x18\x06 \x01(\tR\n" +
 	"toolCallId\x12\x14\n" +
 	"\x05actor\x18\a \x01(\tR\x05actor\x12\x0e\n" +
-	"\x02at\x18\b \x01(\tR\x02at\"{\n" +
+	"\x02at\x18\b \x01(\tR\x02at\x12\x17\n" +
+	"\auser_id\x18\t \x01(\tR\x06userId\"\xb3\x01\n" +
 	"\x1bListConnectionEventsRequest\x12\x16\n" +
 	"\x02id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12 \n" +
-	"\tbefore_id\x18\x03 \x01(\x03H\x00R\bbeforeId\x88\x01\x01B\f\n" +
+	"\tbefore_id\x18\x03 \x01(\x03H\x00R\bbeforeId\x88\x01\x01\x12%\n" +
+	"\fowner_org_id\x18\x04 \x01(\tH\x01R\n" +
+	"ownerOrgId\x88\x01\x01B\f\n" +
 	"\n" +
-	"_before_id\"S\n" +
+	"_before_idB\x0f\n" +
+	"\r_owner_org_id\"S\n" +
 	"\x1cListConnectionEventsResponse\x123\n" +
 	"\x06events\x18\x01 \x03(\v2\x1b.reliant.v1.ConnectionEventR\x06events*\xe0\x01\n" +
 	"\x12ConnectionAuthKind\x12$\n" +
@@ -2103,7 +2341,7 @@ func file_reliant_v1_connection_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_connection_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_reliant_v1_connection_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
+var file_reliant_v1_connection_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_reliant_v1_connection_proto_goTypes = []any{
 	(ConnectionAuthKind)(0),                // 0: reliant.v1.ConnectionAuthKind
 	(ConnectionStatus)(0),                  // 1: reliant.v1.ConnectionStatus
@@ -2111,85 +2349,87 @@ var file_reliant_v1_connection_proto_goTypes = []any{
 	(ApiKeyConnectionKind)(0),              // 3: reliant.v1.ApiKeyConnectionKind
 	(*Connection)(nil),                     // 4: reliant.v1.Connection
 	(*Integration)(nil),                    // 5: reliant.v1.Integration
-	(*IntegrationAuthMethod)(nil),          // 6: reliant.v1.IntegrationAuthMethod
-	(*IntegrationConnectionParam)(nil),     // 7: reliant.v1.IntegrationConnectionParam
-	(*ListIntegrationsRequest)(nil),        // 8: reliant.v1.ListIntegrationsRequest
-	(*ListIntegrationsResponse)(nil),       // 9: reliant.v1.ListIntegrationsResponse
-	(*ListConnectionsRequest)(nil),         // 10: reliant.v1.ListConnectionsRequest
-	(*ListConnectionsResponse)(nil),        // 11: reliant.v1.ListConnectionsResponse
-	(*GetConnectionRequest)(nil),           // 12: reliant.v1.GetConnectionRequest
-	(*GetConnectionResponse)(nil),          // 13: reliant.v1.GetConnectionResponse
-	(*CreateApiKeyConnectionRequest)(nil),  // 14: reliant.v1.CreateApiKeyConnectionRequest
-	(*CreateApiKeyConnectionResponse)(nil), // 15: reliant.v1.CreateApiKeyConnectionResponse
-	(*StartOAuthRequest)(nil),              // 16: reliant.v1.StartOAuthRequest
-	(*StartOAuthResponse)(nil),             // 17: reliant.v1.StartOAuthResponse
-	(*CompleteOAuthRequest)(nil),           // 18: reliant.v1.CompleteOAuthRequest
-	(*CompleteOAuthResponse)(nil),          // 19: reliant.v1.CompleteOAuthResponse
-	(*TestConnectionRequest)(nil),          // 20: reliant.v1.TestConnectionRequest
-	(*TestConnectionResponse)(nil),         // 21: reliant.v1.TestConnectionResponse
-	(*RenameConnectionRequest)(nil),        // 22: reliant.v1.RenameConnectionRequest
-	(*RenameConnectionResponse)(nil),       // 23: reliant.v1.RenameConnectionResponse
-	(*SetDefaultConnectionRequest)(nil),    // 24: reliant.v1.SetDefaultConnectionRequest
-	(*SetDefaultConnectionResponse)(nil),   // 25: reliant.v1.SetDefaultConnectionResponse
-	(*DeleteConnectionRequest)(nil),        // 26: reliant.v1.DeleteConnectionRequest
-	(*DeleteConnectionResponse)(nil),       // 27: reliant.v1.DeleteConnectionResponse
-	(*ConnectionEvent)(nil),                // 28: reliant.v1.ConnectionEvent
-	(*ListConnectionEventsRequest)(nil),    // 29: reliant.v1.ListConnectionEventsRequest
-	(*ListConnectionEventsResponse)(nil),   // 30: reliant.v1.ListConnectionEventsResponse
-	nil,                                    // 31: reliant.v1.Connection.ParamsEntry
-	nil,                                    // 32: reliant.v1.IntegrationAuthMethod.FieldLabelsEntry
-	nil,                                    // 33: reliant.v1.CreateApiKeyConnectionRequest.FieldsEntry
-	nil,                                    // 34: reliant.v1.CreateApiKeyConnectionRequest.ParamsEntry
-	nil,                                    // 35: reliant.v1.StartOAuthRequest.ParamsEntry
+	(*IntegrationOrgPolicy)(nil),           // 6: reliant.v1.IntegrationOrgPolicy
+	(*IntegrationAuthMethod)(nil),          // 7: reliant.v1.IntegrationAuthMethod
+	(*IntegrationConnectionParam)(nil),     // 8: reliant.v1.IntegrationConnectionParam
+	(*ListIntegrationsRequest)(nil),        // 9: reliant.v1.ListIntegrationsRequest
+	(*ListIntegrationsResponse)(nil),       // 10: reliant.v1.ListIntegrationsResponse
+	(*ListConnectionsRequest)(nil),         // 11: reliant.v1.ListConnectionsRequest
+	(*ListConnectionsResponse)(nil),        // 12: reliant.v1.ListConnectionsResponse
+	(*GetConnectionRequest)(nil),           // 13: reliant.v1.GetConnectionRequest
+	(*GetConnectionResponse)(nil),          // 14: reliant.v1.GetConnectionResponse
+	(*CreateApiKeyConnectionRequest)(nil),  // 15: reliant.v1.CreateApiKeyConnectionRequest
+	(*CreateApiKeyConnectionResponse)(nil), // 16: reliant.v1.CreateApiKeyConnectionResponse
+	(*StartOAuthRequest)(nil),              // 17: reliant.v1.StartOAuthRequest
+	(*StartOAuthResponse)(nil),             // 18: reliant.v1.StartOAuthResponse
+	(*CompleteOAuthRequest)(nil),           // 19: reliant.v1.CompleteOAuthRequest
+	(*CompleteOAuthResponse)(nil),          // 20: reliant.v1.CompleteOAuthResponse
+	(*TestConnectionRequest)(nil),          // 21: reliant.v1.TestConnectionRequest
+	(*TestConnectionResponse)(nil),         // 22: reliant.v1.TestConnectionResponse
+	(*RenameConnectionRequest)(nil),        // 23: reliant.v1.RenameConnectionRequest
+	(*RenameConnectionResponse)(nil),       // 24: reliant.v1.RenameConnectionResponse
+	(*SetDefaultConnectionRequest)(nil),    // 25: reliant.v1.SetDefaultConnectionRequest
+	(*SetDefaultConnectionResponse)(nil),   // 26: reliant.v1.SetDefaultConnectionResponse
+	(*DeleteConnectionRequest)(nil),        // 27: reliant.v1.DeleteConnectionRequest
+	(*DeleteConnectionResponse)(nil),       // 28: reliant.v1.DeleteConnectionResponse
+	(*ConnectionEvent)(nil),                // 29: reliant.v1.ConnectionEvent
+	(*ListConnectionEventsRequest)(nil),    // 30: reliant.v1.ListConnectionEventsRequest
+	(*ListConnectionEventsResponse)(nil),   // 31: reliant.v1.ListConnectionEventsResponse
+	nil,                                    // 32: reliant.v1.Connection.ParamsEntry
+	nil,                                    // 33: reliant.v1.IntegrationAuthMethod.FieldLabelsEntry
+	nil,                                    // 34: reliant.v1.CreateApiKeyConnectionRequest.FieldsEntry
+	nil,                                    // 35: reliant.v1.CreateApiKeyConnectionRequest.ParamsEntry
+	nil,                                    // 36: reliant.v1.StartOAuthRequest.ParamsEntry
 }
 var file_reliant_v1_connection_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.Connection.auth_kind:type_name -> reliant.v1.ConnectionAuthKind
 	1,  // 1: reliant.v1.Connection.status:type_name -> reliant.v1.ConnectionStatus
-	31, // 2: reliant.v1.Connection.params:type_name -> reliant.v1.Connection.ParamsEntry
+	32, // 2: reliant.v1.Connection.params:type_name -> reliant.v1.Connection.ParamsEntry
 	2,  // 3: reliant.v1.Connection.owner_kind:type_name -> reliant.v1.ConnectionOwnerKind
-	6,  // 4: reliant.v1.Integration.methods:type_name -> reliant.v1.IntegrationAuthMethod
-	7,  // 5: reliant.v1.Integration.connection_params:type_name -> reliant.v1.IntegrationConnectionParam
-	0,  // 6: reliant.v1.IntegrationAuthMethod.kind:type_name -> reliant.v1.ConnectionAuthKind
-	32, // 7: reliant.v1.IntegrationAuthMethod.field_labels:type_name -> reliant.v1.IntegrationAuthMethod.FieldLabelsEntry
-	5,  // 8: reliant.v1.ListIntegrationsResponse.integrations:type_name -> reliant.v1.Integration
-	4,  // 9: reliant.v1.ListConnectionsResponse.connections:type_name -> reliant.v1.Connection
-	4,  // 10: reliant.v1.GetConnectionResponse.connection:type_name -> reliant.v1.Connection
-	3,  // 11: reliant.v1.CreateApiKeyConnectionRequest.kind:type_name -> reliant.v1.ApiKeyConnectionKind
-	33, // 12: reliant.v1.CreateApiKeyConnectionRequest.fields:type_name -> reliant.v1.CreateApiKeyConnectionRequest.FieldsEntry
-	34, // 13: reliant.v1.CreateApiKeyConnectionRequest.params:type_name -> reliant.v1.CreateApiKeyConnectionRequest.ParamsEntry
-	4,  // 14: reliant.v1.CreateApiKeyConnectionResponse.connection:type_name -> reliant.v1.Connection
-	35, // 15: reliant.v1.StartOAuthRequest.params:type_name -> reliant.v1.StartOAuthRequest.ParamsEntry
-	4,  // 16: reliant.v1.CompleteOAuthResponse.connection:type_name -> reliant.v1.Connection
-	4,  // 17: reliant.v1.RenameConnectionResponse.connection:type_name -> reliant.v1.Connection
-	4,  // 18: reliant.v1.SetDefaultConnectionResponse.connection:type_name -> reliant.v1.Connection
-	28, // 19: reliant.v1.ListConnectionEventsResponse.events:type_name -> reliant.v1.ConnectionEvent
-	8,  // 20: reliant.v1.ConnectionService.ListIntegrations:input_type -> reliant.v1.ListIntegrationsRequest
-	10, // 21: reliant.v1.ConnectionService.ListConnections:input_type -> reliant.v1.ListConnectionsRequest
-	12, // 22: reliant.v1.ConnectionService.GetConnection:input_type -> reliant.v1.GetConnectionRequest
-	14, // 23: reliant.v1.ConnectionService.CreateApiKeyConnection:input_type -> reliant.v1.CreateApiKeyConnectionRequest
-	16, // 24: reliant.v1.ConnectionService.StartOAuth:input_type -> reliant.v1.StartOAuthRequest
-	18, // 25: reliant.v1.ConnectionService.CompleteOAuth:input_type -> reliant.v1.CompleteOAuthRequest
-	20, // 26: reliant.v1.ConnectionService.TestConnection:input_type -> reliant.v1.TestConnectionRequest
-	22, // 27: reliant.v1.ConnectionService.RenameConnection:input_type -> reliant.v1.RenameConnectionRequest
-	24, // 28: reliant.v1.ConnectionService.SetDefaultConnection:input_type -> reliant.v1.SetDefaultConnectionRequest
-	26, // 29: reliant.v1.ConnectionService.DeleteConnection:input_type -> reliant.v1.DeleteConnectionRequest
-	29, // 30: reliant.v1.ConnectionService.ListConnectionEvents:input_type -> reliant.v1.ListConnectionEventsRequest
-	9,  // 31: reliant.v1.ConnectionService.ListIntegrations:output_type -> reliant.v1.ListIntegrationsResponse
-	11, // 32: reliant.v1.ConnectionService.ListConnections:output_type -> reliant.v1.ListConnectionsResponse
-	13, // 33: reliant.v1.ConnectionService.GetConnection:output_type -> reliant.v1.GetConnectionResponse
-	15, // 34: reliant.v1.ConnectionService.CreateApiKeyConnection:output_type -> reliant.v1.CreateApiKeyConnectionResponse
-	17, // 35: reliant.v1.ConnectionService.StartOAuth:output_type -> reliant.v1.StartOAuthResponse
-	19, // 36: reliant.v1.ConnectionService.CompleteOAuth:output_type -> reliant.v1.CompleteOAuthResponse
-	21, // 37: reliant.v1.ConnectionService.TestConnection:output_type -> reliant.v1.TestConnectionResponse
-	23, // 38: reliant.v1.ConnectionService.RenameConnection:output_type -> reliant.v1.RenameConnectionResponse
-	25, // 39: reliant.v1.ConnectionService.SetDefaultConnection:output_type -> reliant.v1.SetDefaultConnectionResponse
-	27, // 40: reliant.v1.ConnectionService.DeleteConnection:output_type -> reliant.v1.DeleteConnectionResponse
-	30, // 41: reliant.v1.ConnectionService.ListConnectionEvents:output_type -> reliant.v1.ListConnectionEventsResponse
-	31, // [31:42] is the sub-list for method output_type
-	20, // [20:31] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	7,  // 4: reliant.v1.Integration.methods:type_name -> reliant.v1.IntegrationAuthMethod
+	8,  // 5: reliant.v1.Integration.connection_params:type_name -> reliant.v1.IntegrationConnectionParam
+	6,  // 6: reliant.v1.Integration.org_policy:type_name -> reliant.v1.IntegrationOrgPolicy
+	0,  // 7: reliant.v1.IntegrationAuthMethod.kind:type_name -> reliant.v1.ConnectionAuthKind
+	33, // 8: reliant.v1.IntegrationAuthMethod.field_labels:type_name -> reliant.v1.IntegrationAuthMethod.FieldLabelsEntry
+	5,  // 9: reliant.v1.ListIntegrationsResponse.integrations:type_name -> reliant.v1.Integration
+	4,  // 10: reliant.v1.ListConnectionsResponse.connections:type_name -> reliant.v1.Connection
+	4,  // 11: reliant.v1.GetConnectionResponse.connection:type_name -> reliant.v1.Connection
+	3,  // 12: reliant.v1.CreateApiKeyConnectionRequest.kind:type_name -> reliant.v1.ApiKeyConnectionKind
+	34, // 13: reliant.v1.CreateApiKeyConnectionRequest.fields:type_name -> reliant.v1.CreateApiKeyConnectionRequest.FieldsEntry
+	35, // 14: reliant.v1.CreateApiKeyConnectionRequest.params:type_name -> reliant.v1.CreateApiKeyConnectionRequest.ParamsEntry
+	4,  // 15: reliant.v1.CreateApiKeyConnectionResponse.connection:type_name -> reliant.v1.Connection
+	36, // 16: reliant.v1.StartOAuthRequest.params:type_name -> reliant.v1.StartOAuthRequest.ParamsEntry
+	4,  // 17: reliant.v1.CompleteOAuthResponse.connection:type_name -> reliant.v1.Connection
+	4,  // 18: reliant.v1.RenameConnectionResponse.connection:type_name -> reliant.v1.Connection
+	4,  // 19: reliant.v1.SetDefaultConnectionResponse.connection:type_name -> reliant.v1.Connection
+	29, // 20: reliant.v1.ListConnectionEventsResponse.events:type_name -> reliant.v1.ConnectionEvent
+	9,  // 21: reliant.v1.ConnectionService.ListIntegrations:input_type -> reliant.v1.ListIntegrationsRequest
+	11, // 22: reliant.v1.ConnectionService.ListConnections:input_type -> reliant.v1.ListConnectionsRequest
+	13, // 23: reliant.v1.ConnectionService.GetConnection:input_type -> reliant.v1.GetConnectionRequest
+	15, // 24: reliant.v1.ConnectionService.CreateApiKeyConnection:input_type -> reliant.v1.CreateApiKeyConnectionRequest
+	17, // 25: reliant.v1.ConnectionService.StartOAuth:input_type -> reliant.v1.StartOAuthRequest
+	19, // 26: reliant.v1.ConnectionService.CompleteOAuth:input_type -> reliant.v1.CompleteOAuthRequest
+	21, // 27: reliant.v1.ConnectionService.TestConnection:input_type -> reliant.v1.TestConnectionRequest
+	23, // 28: reliant.v1.ConnectionService.RenameConnection:input_type -> reliant.v1.RenameConnectionRequest
+	25, // 29: reliant.v1.ConnectionService.SetDefaultConnection:input_type -> reliant.v1.SetDefaultConnectionRequest
+	27, // 30: reliant.v1.ConnectionService.DeleteConnection:input_type -> reliant.v1.DeleteConnectionRequest
+	30, // 31: reliant.v1.ConnectionService.ListConnectionEvents:input_type -> reliant.v1.ListConnectionEventsRequest
+	10, // 32: reliant.v1.ConnectionService.ListIntegrations:output_type -> reliant.v1.ListIntegrationsResponse
+	12, // 33: reliant.v1.ConnectionService.ListConnections:output_type -> reliant.v1.ListConnectionsResponse
+	14, // 34: reliant.v1.ConnectionService.GetConnection:output_type -> reliant.v1.GetConnectionResponse
+	16, // 35: reliant.v1.ConnectionService.CreateApiKeyConnection:output_type -> reliant.v1.CreateApiKeyConnectionResponse
+	18, // 36: reliant.v1.ConnectionService.StartOAuth:output_type -> reliant.v1.StartOAuthResponse
+	20, // 37: reliant.v1.ConnectionService.CompleteOAuth:output_type -> reliant.v1.CompleteOAuthResponse
+	22, // 38: reliant.v1.ConnectionService.TestConnection:output_type -> reliant.v1.TestConnectionResponse
+	24, // 39: reliant.v1.ConnectionService.RenameConnection:output_type -> reliant.v1.RenameConnectionResponse
+	26, // 40: reliant.v1.ConnectionService.SetDefaultConnection:output_type -> reliant.v1.SetDefaultConnectionResponse
+	28, // 41: reliant.v1.ConnectionService.DeleteConnection:output_type -> reliant.v1.DeleteConnectionResponse
+	31, // 42: reliant.v1.ConnectionService.ListConnectionEvents:output_type -> reliant.v1.ListConnectionEventsResponse
+	32, // [32:43] is the sub-list for method output_type
+	21, // [21:32] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_connection_proto_init() }
@@ -2197,15 +2437,23 @@ func file_reliant_v1_connection_proto_init() {
 	if File_reliant_v1_connection_proto != nil {
 		return
 	}
-	file_reliant_v1_connection_proto_msgTypes[6].OneofWrappers = []any{}
-	file_reliant_v1_connection_proto_msgTypes[25].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[5].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[7].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[9].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[11].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[13].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[17].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[19].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[21].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[23].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[26].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_connection_proto_rawDesc), len(file_reliant_v1_connection_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   32,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

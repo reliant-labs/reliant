@@ -346,16 +346,29 @@ func (t Tracker) TrackAPIKeyConfigured(m APIKeyConfiguredMetrics) {
 		slog.Int("total_providers", m.TotalProviders))
 }
 
-// TrackFirstMessageSent records the user's first message ever.
+// TrackFirstMessageSent records the first message of a chat (per chat; see
+// first_for_user for the user's first ever).
 func (t Tracker) TrackFirstMessageSent(m FirstMessageSentMetrics) {
 	fields := []slog.Attr{
 		slog.String("chat_id", m.ChatID),
 		slog.String("project_id", m.ProjectID),
 		slog.String("workflow_name", m.WorkflowName),
 		slog.String("workflow_type", m.WorkflowType),
+		slog.Bool("first_for_user", m.FirstForUser),
 	}
 	fields = appendNonEmpty(fields, "provider", m.Provider)
 	t.emit(EventFirstMessageSent, "", fields...)
+}
+
+// TrackUserFirstMessage records the user's first message ever.
+func (t Tracker) TrackUserFirstMessage(m UserFirstMessageMetrics) {
+	fields := []slog.Attr{
+		slog.String("message_id", m.MessageID),
+		slog.String("chat_id", m.ChatID),
+		slog.String("project_id", m.ProjectID),
+	}
+	fields = appendNonEmpty(fields, "workflow_type", m.WorkflowType)
+	t.emit(EventUserFirstMessage, "", fields...)
 }
 
 // TrackOnboardingEvent records an onboarding step; eventType is one of the

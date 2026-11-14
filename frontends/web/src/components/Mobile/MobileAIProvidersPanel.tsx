@@ -22,6 +22,7 @@ import { SetupHelp } from "@/components/SetupHelp";
 import { authServeCommand } from "@/lib/cli-commands";
 import { usePreferences, useProviderStatuses, useUpdatePreferences } from "../../hooks/settings-queries";
 import { ProvidersSection } from "../Settings/providers/ProvidersSection";
+import { OrgFundingSection } from "../Settings/providers/OrgFundingSection";
 import { MobileModelPreferences } from "./MobileModelPreferences";
 import { MobileCardGroup } from "./MobileChrome";
 import { MobileToggleRow } from "./MobileSettingsRow";
@@ -65,7 +66,10 @@ export function MobileAIProvidersPanel() {
             Add provider
           </Button>
         </div>
-        <ProvidersSection variant="mobile" pickerOpen={pickerOpen} onPickerOpenChange={setPickerOpen} />
+        <div className="space-y-4">
+          <OrgFundingSection variant="mobile" />
+          <ProvidersSection variant="mobile" pickerOpen={pickerOpen} onPickerOpenChange={setPickerOpen} />
+        </div>
       </div>
 
       <div className="mt-4 px-4">

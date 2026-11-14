@@ -264,3 +264,64 @@ func TestCredentialsNone_KeepsTheAgentShellMarker(t *testing.T) {
 		t.Errorf("%s must never be classified as a credential", AgentShellEnv)
 	}
 }
+
+// A caller's env cannot hand a credentials-none command a credential, even on
+// a daemon that predates the field and applies env alone: credential names
+// and secret-shaped values are dropped before the neutral assignments.
+func TestNeutralizeEnvDropsCallerCredentials(t *testing.T) {
+	env := NeutralizeEnv(map[string]string{
+		"AWS_SECRET_ACCESS_KEY":          "fake-aws-secret-value",
+		"GOOGLE_APPLICATION_CREDENTIALS": "/home/u/.gcp/key.json",
+		"RELIANT_TOKEN":                  "fake-reliant-token",
+		"OPENAI_API_KEY":                 "fake-openai-key",
+		"PROXY":                          "https://user:hunter2@proxy.example:8080",
+		"GH_TOKEN":                       "ghp_from_caller",
+		"KEEP":                           "1",
+		"RELIANT_CHAT_ID":                "chat-1",
+	})
+	for _, gone := range []string{"AWS_SECRET_ACCESS_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "RELIANT_TOKEN", "OPENAI_API_KEY", "PROXY"} {
+		if v := env[gone]; v != "" {
+			t.Errorf("%s survived as %q", gone, v)
+		}
+	}
+	if env["GH_TOKEN"] != "" {
+		t.Errorf("GH_TOKEN = %q, want the neutral empty value", env["GH_TOKEN"])
+	}
+	if env["KEEP"] != "1" || env["RELIANT_CHAT_ID"] != "chat-1" {
+		t.Errorf("a plain variable was dropped: %v", env)
+	}
+}
+
+// A daemon that predates `credentials: none` (before 2026-10-14) builds a
+// command's environment as its own, inherited, with the request's env
+// appended (the later assignment wins). Under an org's forced
+// credentials:none the request's env is NeutralizeEnv's: the credentials
+// such a daemon commonly inherits come out empty or pointed at nothing.
+func TestNeutralEnvEmptiesInheritedCredentialsOnAnOldDaemon(t *testing.T) {
+	inherited := []string{
+		"PATH=/usr/bin", "HOME=/home/u",
+		"AWS_ACCESS_KEY_ID=fake-access-key-id", "AWS_SECRET_ACCESS_KEY=fake-aws-secret-value",
+		"AWS_SESSION_TOKEN=fake-session-token", "GOOGLE_APPLICATION_CREDENTIALS=/home/u/key.json",
+		"AZURE_CLIENT_SECRET=s3cr3t", "RELIANT_TOKEN=fake-reliant-token", "OPENAI_API_KEY=fake-openai-key",
+		"NPM_TOKEN=fake-npm-token", "DATABASE_URL=postgres://u:p@db/x", "GH_TOKEN=ghp_inherited",
+	}
+	// The old daemon: inherited, then the request's env (map order is
+	// irrelevant; each name is assigned once).
+	env := map[string]string{}
+	for _, kv := range inherited {
+		name, value, _ := strings.Cut(kv, "=")
+		env[name] = value
+	}
+	for name, value := range NeutralizeEnv(map[string]string{"KEEP": "1"}) {
+		env[name] = value
+	}
+	for _, name := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS",
+		"AZURE_CLIENT_SECRET", "RELIANT_TOKEN", "OPENAI_API_KEY", "NPM_TOKEN", "DATABASE_URL", "GH_TOKEN"} {
+		if env[name] != "" {
+			t.Errorf("%s = %q reaches the command on an old daemon", name, env[name])
+		}
+	}
+	if env["PATH"] != "/usr/bin" || env["KEEP"] != "1" {
+		t.Errorf("a plain variable was lost: %v", env)
+	}
+}

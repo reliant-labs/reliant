@@ -172,7 +172,7 @@ function wrapper() {
 function renderStep(updatePlan = vi.fn(async () => {})) {
   return render(
     <ComputeStep
-      plan={{ compute: "cloud_paid" } as Partial<LaunchPlan>}
+      plan={{} as Partial<LaunchPlan>}
       updatePlan={updatePlan}
       onNext={vi.fn()}
       onBack={vi.fn()}
@@ -292,12 +292,12 @@ describe("ComputeStep — every size says what it gives you", () => {
     renderStep();
 
     const local = screen.getByRole("button", {
-      name: /your own computer/i,
+      name: /use your own computer/i,
     });
-    expect(local).toHaveTextContent(/runs on your machine/i);
+    expect(local).toHaveTextContent(/your laptop or server/i);
     // Still on the same price axis as the paid rows — the property the
     // one-list layout exists to preserve.
-    expect(within(local).getByText("Free")).toBeInTheDocument();
+    expect(within(local).getByText(/free/i)).toBeInTheDocument();
   });
 
   /**
@@ -343,7 +343,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     const list = screen.getByRole("group", { name: /choose your machine/i });
 
     const rows = within(list);
-    const local = rows.getByRole("button", { name: /your own computer/i });
+    const local = rows.getByRole("button", { name: /use your own computer/i });
     const small = rows.getByRole("button", { name: /^M / });
 
     // Siblings in the same list — not one nested inside a block that holds
@@ -386,12 +386,12 @@ describe("ComputeStep — every size says what it gives you", () => {
     renderStep();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /your own computer/i }),
+      screen.getByRole("button", { name: /use your own computer/i }),
     );
     fireEvent.click(screen.getByTestId("compute-cloud-toggle"));
 
     expect(
-      screen.getByRole("button", { name: /your own computer/i }),
+      screen.getByRole("button", { name: /use your own computer/i }),
     ).toHaveAttribute("aria-pressed", "true");
     for (const size of ["M", "L", "XL", "2XL"]) {
       expect(
@@ -423,7 +423,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     // act() scope, so `showLocal` never re-renders and the instructions this
     // test is looking for are legitimately absent.
     fireEvent.click(
-      screen.getByRole("button", { name: /your own computer/i }),
+      screen.getByRole("button", { name: /use your own computer/i }),
     );
 
     const connect = screen.getByTestId("self-hosted-connect");
@@ -457,7 +457,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     ).toBeInTheDocument();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /your own computer/i }),
+      screen.getByRole("button", { name: /use your own computer/i }),
     );
 
     expect(
@@ -477,7 +477,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     renderStep();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /your own computer/i }),
+      screen.getByRole("button", { name: /use your own computer/i }),
     );
     fireEvent.click(screen.getByTestId("compute-cloud-toggle"));
     fireEvent.click(screen.getByRole("button", { name: /^L / }));
@@ -508,7 +508,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     expect(screen.getByTestId("redeem-coupon")).toBeInTheDocument();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /your own computer/i }),
+      screen.getByRole("button", { name: /use your own computer/i }),
     );
 
     expect(screen.queryByTestId("redeem-coupon")).toBeNull();
@@ -518,7 +518,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     renderStep();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /your own computer/i }),
+      screen.getByRole("button", { name: /use your own computer/i }),
     );
     fireEvent.click(screen.getByTestId("compute-cloud-toggle"));
     fireEvent.click(screen.getByRole("button", { name: /^L / }));

@@ -21,15 +21,24 @@ import (
 // that compares a UserID field must ask this package, so the rule (and, from
 // phase 4, the org) lives in one place.
 var rawComparisonAllowed = map[string]string{
-	"internal/triggers/origin.go:fromWrite":                                           "matches two rows' owners (an integration write and its trigger), no caller",
-	"internal/triggers/workflowevent/dispatch.go:Dispatch":                            "matches a run event to the triggers of the same user, no caller",
-	"internal/db/repository_impl.go:UpsertDaemon":                                     "re-registration consistency: the same user re-registering the same daemon",
-	"internal/handlers/streaming/org_stream.go:sendOrgUpdates":                        "leaves the caller's own rows out of the org feed they may already read in full; not an access decision",
-	"internal/tokenauthority/localstore.go:MintForUser":                               "self-hosted orgs: the only org a user has is their own id",
-	"internal/tokenauthority/memory.go:MintForUser":                                   "self-hosted orgs: the only org a user has is their own id",
-	"internal/workflow/workflowlisttest/workflowlisttest.go:GetProjectWithUserCheck":  "test fake of the store's owner-filtered read",
-	"internal/workflow/workflowlisttest/workflowlisttest.go:ListWorkflowDraftsByUser": "test fake of the store's owner-filtered list",
-	"internal/workflow/workflowlisttest/workflowlisttest.go:draftBySlug":              "test fake of the store's owner-filtered read",
+	"internal/triggers/origin.go:fromWrite":                                            "matches two rows' owners (an integration write and its trigger), no caller",
+	"internal/triggers/workflowevent/dispatch.go:Dispatch":                             "matches a run event to the triggers of the same user, no caller",
+	"internal/db/repository_impl.go:UpsertDaemon":                                      "re-registration consistency: the same user re-registering the same daemon",
+	"internal/db/personal_funding.go:AskPersonalFunding":                               "matches a stored funding question to the (user, org) it is asked of, so an open question is not re-asked; no caller",
+	"internal/workflow/runtime/activities/handlers/personal_funding.go:fundingPlanFor": "binds a stored funding answer to the (user, org) of the run it was given for; no caller",
+	"internal/handlers/chat/chat_selection.go:personPickContext":                       "consent, not access: only the owner's own pick may spend their own account; the write was already authorized",
+	"internal/launch/launcher.go:recordStartSelection":                                 "consent, not access: only the owner's own start picks the model that may spend their own account; the launch was already authorized",
+	"internal/handlers/chat/chat_send.go:recordPersonTurn":                             "attendance, not access: only the owner's own turn makes their launched chat spend as an attended run; the send was already authorized",
+	"internal/db/trigger_takeover.go:AdoptTrigger":                                     "compare-and-swap: the locked row still has the owner the adoption decided on, no caller",
+	"internal/db/trigger_takeover.go:CreateTriggerOffer":                               "compare-and-swap: the locked row still has the owner the offer was made for, no caller",
+	"internal/handlers/automation_takeover/takeover.go:offerState":                     "matches a trigger to the owner its offer was made for (adopted or not since), no caller",
+	"internal/handlers/org_usage/rpc_get_org_llm_usage.go:GetOrgLLMUsage":              "a request filter (only this member's calls) over the org rollup the caller was already authorized to read whole (billing:read); not an access decision",
+	"internal/handlers/streaming/org_stream.go:sendOrgUpdates":                         "leaves the caller's own rows out of the org feed they may already read in full; not an access decision",
+	"internal/tokenauthority/localstore.go:MintForUser":                                "self-hosted orgs: the only org a user has is their own id",
+	"internal/tokenauthority/memory.go:MintForUser":                                    "self-hosted orgs: the only org a user has is their own id",
+	"internal/workflow/workflowlisttest/workflowlisttest.go:GetProjectWithUserCheck":   "test fake of the store's owner-filtered read",
+	"internal/workflow/workflowlisttest/workflowlisttest.go:ListWorkflowDraftsByUser":  "test fake of the store's owner-filtered list",
+	"internal/workflow/workflowlisttest/workflowlisttest.go:draftBySlug":               "test fake of the store's owner-filtered read",
 }
 
 // rawComparisonAllowedDirs are whole layers below the decision: the store's
@@ -253,6 +262,8 @@ var shareGuard = struct {
 	visibilityWriters: map[string]string{
 		"internal/store/share_event_repo_ext.go": "ApplyShareChange, the one writer, and the shared lists' read predicates",
 		"internal/viewertest/viewertest.go":      "the viewer-matrix fixture seeds a shared row; imported by _test.go files only",
+		// control-plane docs/design/org-project-move.md §1.2, D7.
+		"internal/store/project_org_move_repo_ext.go": "MoveProjectOrg clears every share of a project moving to another org, with a share_events row (moved) each; it never shares",
 	},
 	applyCallers: []string{"internal/db/", "internal/store/", "internal/handlers/sharing/"},
 	viewerReadSites: map[string]string{

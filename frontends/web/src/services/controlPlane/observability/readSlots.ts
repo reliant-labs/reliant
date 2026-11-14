@@ -40,6 +40,9 @@ export const READ_SLOT_RPCS: ReadonlySet<string> = new Set([
   "getWorkload",
   "getDashboards",
   "getReleaseHealth",
+  // A ClickHouse read over the env's user events (control-plane
+  // rpc_get_user_activity.go opens a read slot); the web does not call it yet.
+  "getUserActivity",
   // IssuesService
   "listIssues",
   "getIssue",

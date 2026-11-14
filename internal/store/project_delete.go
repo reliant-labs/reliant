@@ -174,13 +174,22 @@ func purgeProjectContents(ctx context.Context, db orm.Context, id string, chatBa
 	for {
 		var n int
 		err := projectDeleteBatch(ctx, db, func(ctx context.Context) error {
+			// FOR UPDATE, then the tombstones, before anything is deleted:
+			// the protocol of chat_write_admission (migration
+			// 20261114221537_chat_purge_write_admission). A writer to one of
+			// these chats that is in flight holds a key share on it, so the
+			// lock waits for it and the DELETEs below then see its rows; one
+			// that comes later waits for this transaction and is refused.
 			var ids []string
-			if err := db.Bun().NewRaw(`SELECT id FROM chats WHERE project_id = ?0 ORDER BY id LIMIT ?1`, id, orm.Arg(chatBatch)).Scan(ctx, &ids); err != nil {
+			if err := db.Bun().NewRaw(`SELECT id FROM chats WHERE project_id = ?0 ORDER BY id LIMIT ?1 FOR UPDATE`, id, orm.Arg(chatBatch)).Scan(ctx, &ids); err != nil {
 				return fmt.Errorf("list chats: %w", err)
 			}
 			n = len(ids)
 			if n == 0 {
 				return nil
+			}
+			if _, err := db.Bun().NewRaw(`INSERT INTO purged_chats (chat_id) SELECT unnest(?0::text[]) ON CONFLICT DO NOTHING`, pgdialect.Array(ids)).Exec(ctx); err != nil {
+				return fmt.Errorf("tombstone chats: %w", err)
 			}
 			for _, step := range chatPurgeSteps {
 				if _, err := db.Bun().NewRaw(step.sql, pgdialect.Array(ids)).Exec(ctx); err != nil {

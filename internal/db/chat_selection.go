@@ -50,10 +50,17 @@ func (r *Repo) MutateChatSelection(ctx context.Context, chatID string, mutate fu
 		}
 		if next == nil || next == cur {
 			out = cur
-			return nil
+		} else if out, err = store.UpsertChatSelection(txCtx, r.ORM(), chatID, next, time.Now().UTC()); err != nil {
+			return err
 		}
-		out, err = store.UpsertChatSelection(txCtx, r.ORM(), chatID, next, time.Now().UTC())
-		return err
+		// A person's own pick is bound to the version this write leaves,
+		// under the same lock: any later write advances the version and so
+		// voids it (ChatPersonPickDriver).
+		if pick, ok := PersonPickFrom(ctx); ok && out != nil {
+			key, _ := RootModelPick(out.Params)
+			return store.PutChatPersonPick(txCtx, r.ORM(), chatID, pick.UserID, pick.OrgID, key, out.ChatProvider, out.Version, time.Now())
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err

@@ -707,6 +707,16 @@ message ProviderPolicy {
   }
   OnLimit on_limit = 1;
   optional string fallback_model = 2; // "<model>@<driver>"
+  // Funding is whose AI accounts a chat in an org uses first (control-plane
+  // docs/design/org-provider-accounts.md §4.4). Sub-agents, loops and
+  // sub-workflows inherit it. A server that predates it ignores it.
+  enum Funding {
+    FUNDING_UNSPECIFIED = 0;    // inherit the person's setting for the org
+    FUNDING_ORG_FIRST = 1;      // the org's accounts first, then the person's own
+    FUNDING_PERSONAL_FIRST = 2; // the person's own accounts first
+    FUNDING_ORG_ONLY = 3;       // never the person's own accounts in this chat
+  }
+  Funding funding = 3;
 }
 
 // ArchivedChat includes worktree information for archived chats

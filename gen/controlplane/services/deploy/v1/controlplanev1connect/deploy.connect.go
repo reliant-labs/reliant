@@ -89,6 +89,15 @@ const (
 	DeployServiceDeleteDeploymentProcedure = "/controlplane.v1.DeployService/DeleteDeployment"
 	// DeployServicePromoteProcedure is the fully-qualified name of the DeployService's Promote RPC.
 	DeployServicePromoteProcedure = "/controlplane.v1.DeployService/Promote"
+	// DeployServiceSetRollbackFloorProcedure is the fully-qualified name of the DeployService's
+	// SetRollbackFloor RPC.
+	DeployServiceSetRollbackFloorProcedure = "/controlplane.v1.DeployService/SetRollbackFloor"
+	// DeployServiceLiftRollbackFloorProcedure is the fully-qualified name of the DeployService's
+	// LiftRollbackFloor RPC.
+	DeployServiceLiftRollbackFloorProcedure = "/controlplane.v1.DeployService/LiftRollbackFloor"
+	// DeployServiceListRollbackFloorsProcedure is the fully-qualified name of the DeployService's
+	// ListRollbackFloors RPC.
+	DeployServiceListRollbackFloorsProcedure = "/controlplane.v1.DeployService/ListRollbackFloors"
 	// DeployServiceScaleProcedure is the fully-qualified name of the DeployService's Scale RPC.
 	DeployServiceScaleProcedure = "/controlplane.v1.DeployService/Scale"
 	// DeployServiceSetEnvironmentRunStateProcedure is the fully-qualified name of the DeployService's
@@ -164,6 +173,9 @@ const (
 	// DeployServiceGetEnvironmentShapeProcedure is the fully-qualified name of the DeployService's
 	// GetEnvironmentShape RPC.
 	DeployServiceGetEnvironmentShapeProcedure = "/controlplane.v1.DeployService/GetEnvironmentShape"
+	// DeployServiceGetProjectTopologyProcedure is the fully-qualified name of the DeployService's
+	// GetProjectTopology RPC.
+	DeployServiceGetProjectTopologyProcedure = "/controlplane.v1.DeployService/GetProjectTopology"
 	// DeployServicePlanDeployProcedure is the fully-qualified name of the DeployService's PlanDeploy
 	// RPC.
 	DeployServicePlanDeployProcedure = "/controlplane.v1.DeployService/PlanDeploy"
@@ -251,6 +263,22 @@ type DeployServiceClient interface {
 	// policy. A version that was never cut fails with FailedPrecondition; there
 	// is no path that responds by building it.
 	Promote(context.Context, *connect.Request[v1.PromoteReleaseRequest]) (*connect.Response[v1.PromoteReleaseResponse], error)
+	// SetRollbackFloor sets an ORDER floor: at a named release (source manual)
+	// or at the release the environment runs now (current; source
+	// roll_forward_only — "roll forward only from here"). A floor the
+	// environment's current release would fail is refused (InvalidArgument):
+	// the current binding always satisfies every active floor.
+	SetRollbackFloor(context.Context, *connect.Request[v1.SetRollbackFloorRequest]) (*connect.Response[v1.SetRollbackFloorResponse], error)
+	// LiftRollbackFloor lifts floors — named ones (`floor lift`), every order
+	// floor above a release followed by a manual floor at it (`floor lower`),
+	// or every order floor (`floor clear`) — as one transaction. A declared
+	// floor lifts only by id, and only with every declaration it requires
+	// acknowledged. Each lifted floor (and the floor `lower` sets) is its own
+	// activity event.
+	LiftRollbackFloor(context.Context, *connect.Request[v1.LiftRollbackFloorRequest]) (*connect.Response[v1.LiftRollbackFloorResponse], error)
+	// ListRollbackFloors returns an environment's floors, oldest first: the
+	// active ones, or every one with include_lifted.
+	ListRollbackFloors(context.Context, *connect.Request[v1.ListRollbackFloorsRequest]) (*connect.Response[v1.ListRollbackFloorsResponse], error)
 	// Scale changes the RUN STATE (running / suspended) and nothing else.
 	// Narrow on purpose: this is the button on a detail page, and a request
 	// shape that could also change reserved capacity would let a mis-wired
@@ -495,6 +523,24 @@ type DeployServiceClient interface {
 	// A NEVER-DECLARED ENVIRONMENT IS NOT AN ERROR: the response comes back
 	// with no shape, which is the "never built" state, never an empty shape.
 	GetEnvironmentShape(context.Context, *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error)
+	// GetProjectTopology returns one forge project's release/environment
+	// topology: forge's `env status --json` document, assembled from this
+	// control plane's records by forge's own pkg/topology. No daemon and no
+	// checkout are involved.
+	//
+	// WHAT IT READS: the environment rows (with their declared shapes), each
+	// environment's current promotion, the project's newest releases, the
+	// bundle each promotion names, the reconciler's observations, the hosted
+	// deployments' observed images, and the declared-environment catalog
+	// sealed into the project's newest RELEASED bundle — which is how an env
+	// declared in code but never recorded here (a file ledger, or an env never
+	// built) still appears, as `tracked: false`.
+	//
+	// MEMBER (machine: deploy:read), the same scoping as GetLiveView. Another
+	// org's project, an unknown project and a project nobody has deployed are
+	// the same answer: a report with no environments. It names no secret value
+	// and no machine path.
+	GetProjectTopology(context.Context, *connect.Request[v1.GetDeployProjectTopologyRequest]) (*connect.Response[v1.GetDeployProjectTopologyResponse], error)
 	// PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
 	//
 	// IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
@@ -708,6 +754,24 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("Promote")),
 			connect.WithClientOptions(opts...),
 		),
+		setRollbackFloor: connect.NewClient[v1.SetRollbackFloorRequest, v1.SetRollbackFloorResponse](
+			httpClient,
+			baseURL+DeployServiceSetRollbackFloorProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("SetRollbackFloor")),
+			connect.WithClientOptions(opts...),
+		),
+		liftRollbackFloor: connect.NewClient[v1.LiftRollbackFloorRequest, v1.LiftRollbackFloorResponse](
+			httpClient,
+			baseURL+DeployServiceLiftRollbackFloorProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("LiftRollbackFloor")),
+			connect.WithClientOptions(opts...),
+		),
+		listRollbackFloors: connect.NewClient[v1.ListRollbackFloorsRequest, v1.ListRollbackFloorsResponse](
+			httpClient,
+			baseURL+DeployServiceListRollbackFloorsProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ListRollbackFloors")),
+			connect.WithClientOptions(opts...),
+		),
 		scale: connect.NewClient[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse](
 			httpClient,
 			baseURL+DeployServiceScaleProcedure,
@@ -870,6 +934,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("GetEnvironmentShape")),
 			connect.WithClientOptions(opts...),
 		),
+		getProjectTopology: connect.NewClient[v1.GetDeployProjectTopologyRequest, v1.GetDeployProjectTopologyResponse](
+			httpClient,
+			baseURL+DeployServiceGetProjectTopologyProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetProjectTopology")),
+			connect.WithClientOptions(opts...),
+		),
 		planDeploy: connect.NewClient[v1.PlanDeployRequest, v1.PlanDeployResponse](
 			httpClient,
 			baseURL+DeployServicePlanDeployProcedure,
@@ -929,6 +999,9 @@ type deployServiceClient struct {
 	updateDeployment        *connect.Client[v1.UpdateDeploymentRequest, v1.UpdateDeploymentResponse]
 	deleteDeployment        *connect.Client[v1.DeleteDeploymentRequest, v1.DeleteDeploymentResponse]
 	promote                 *connect.Client[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse]
+	setRollbackFloor        *connect.Client[v1.SetRollbackFloorRequest, v1.SetRollbackFloorResponse]
+	liftRollbackFloor       *connect.Client[v1.LiftRollbackFloorRequest, v1.LiftRollbackFloorResponse]
+	listRollbackFloors      *connect.Client[v1.ListRollbackFloorsRequest, v1.ListRollbackFloorsResponse]
 	scale                   *connect.Client[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse]
 	setEnvironmentRunState  *connect.Client[v1.SetEnvironmentRunStateRequest, v1.SetEnvironmentRunStateResponse]
 	restartWorkload         *connect.Client[v1.RestartWorkloadRequest, v1.RestartWorkloadResponse]
@@ -956,6 +1029,7 @@ type deployServiceClient struct {
 	getDeployAttempt        *connect.Client[v1.GetDeployAttemptRequest, v1.GetDeployAttemptResponse]
 	getLiveView             *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
 	getEnvironmentShape     *connect.Client[v1.GetDeployEnvironmentShapeRequest, v1.GetDeployEnvironmentShapeResponse]
+	getProjectTopology      *connect.Client[v1.GetDeployProjectTopologyRequest, v1.GetDeployProjectTopologyResponse]
 	planDeploy              *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
 	checkDeployCapacity     *connect.Client[v1.CheckDeployCapacityRequest, v1.CheckDeployCapacityResponse]
 	reportLocalSession      *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
@@ -1052,6 +1126,21 @@ func (c *deployServiceClient) DeleteDeployment(ctx context.Context, req *connect
 // Promote calls controlplane.v1.DeployService.Promote.
 func (c *deployServiceClient) Promote(ctx context.Context, req *connect.Request[v1.PromoteReleaseRequest]) (*connect.Response[v1.PromoteReleaseResponse], error) {
 	return c.promote.CallUnary(ctx, req)
+}
+
+// SetRollbackFloor calls controlplane.v1.DeployService.SetRollbackFloor.
+func (c *deployServiceClient) SetRollbackFloor(ctx context.Context, req *connect.Request[v1.SetRollbackFloorRequest]) (*connect.Response[v1.SetRollbackFloorResponse], error) {
+	return c.setRollbackFloor.CallUnary(ctx, req)
+}
+
+// LiftRollbackFloor calls controlplane.v1.DeployService.LiftRollbackFloor.
+func (c *deployServiceClient) LiftRollbackFloor(ctx context.Context, req *connect.Request[v1.LiftRollbackFloorRequest]) (*connect.Response[v1.LiftRollbackFloorResponse], error) {
+	return c.liftRollbackFloor.CallUnary(ctx, req)
+}
+
+// ListRollbackFloors calls controlplane.v1.DeployService.ListRollbackFloors.
+func (c *deployServiceClient) ListRollbackFloors(ctx context.Context, req *connect.Request[v1.ListRollbackFloorsRequest]) (*connect.Response[v1.ListRollbackFloorsResponse], error) {
+	return c.listRollbackFloors.CallUnary(ctx, req)
 }
 
 // Scale calls controlplane.v1.DeployService.Scale.
@@ -1189,6 +1278,11 @@ func (c *deployServiceClient) GetEnvironmentShape(ctx context.Context, req *conn
 	return c.getEnvironmentShape.CallUnary(ctx, req)
 }
 
+// GetProjectTopology calls controlplane.v1.DeployService.GetProjectTopology.
+func (c *deployServiceClient) GetProjectTopology(ctx context.Context, req *connect.Request[v1.GetDeployProjectTopologyRequest]) (*connect.Response[v1.GetDeployProjectTopologyResponse], error) {
+	return c.getProjectTopology.CallUnary(ctx, req)
+}
+
 // PlanDeploy calls controlplane.v1.DeployService.PlanDeploy.
 func (c *deployServiceClient) PlanDeploy(ctx context.Context, req *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error) {
 	return c.planDeploy.CallUnary(ctx, req)
@@ -1287,6 +1381,22 @@ type DeployServiceHandler interface {
 	// policy. A version that was never cut fails with FailedPrecondition; there
 	// is no path that responds by building it.
 	Promote(context.Context, *connect.Request[v1.PromoteReleaseRequest]) (*connect.Response[v1.PromoteReleaseResponse], error)
+	// SetRollbackFloor sets an ORDER floor: at a named release (source manual)
+	// or at the release the environment runs now (current; source
+	// roll_forward_only — "roll forward only from here"). A floor the
+	// environment's current release would fail is refused (InvalidArgument):
+	// the current binding always satisfies every active floor.
+	SetRollbackFloor(context.Context, *connect.Request[v1.SetRollbackFloorRequest]) (*connect.Response[v1.SetRollbackFloorResponse], error)
+	// LiftRollbackFloor lifts floors — named ones (`floor lift`), every order
+	// floor above a release followed by a manual floor at it (`floor lower`),
+	// or every order floor (`floor clear`) — as one transaction. A declared
+	// floor lifts only by id, and only with every declaration it requires
+	// acknowledged. Each lifted floor (and the floor `lower` sets) is its own
+	// activity event.
+	LiftRollbackFloor(context.Context, *connect.Request[v1.LiftRollbackFloorRequest]) (*connect.Response[v1.LiftRollbackFloorResponse], error)
+	// ListRollbackFloors returns an environment's floors, oldest first: the
+	// active ones, or every one with include_lifted.
+	ListRollbackFloors(context.Context, *connect.Request[v1.ListRollbackFloorsRequest]) (*connect.Response[v1.ListRollbackFloorsResponse], error)
 	// Scale changes the RUN STATE (running / suspended) and nothing else.
 	// Narrow on purpose: this is the button on a detail page, and a request
 	// shape that could also change reserved capacity would let a mis-wired
@@ -1531,6 +1641,24 @@ type DeployServiceHandler interface {
 	// A NEVER-DECLARED ENVIRONMENT IS NOT AN ERROR: the response comes back
 	// with no shape, which is the "never built" state, never an empty shape.
 	GetEnvironmentShape(context.Context, *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error)
+	// GetProjectTopology returns one forge project's release/environment
+	// topology: forge's `env status --json` document, assembled from this
+	// control plane's records by forge's own pkg/topology. No daemon and no
+	// checkout are involved.
+	//
+	// WHAT IT READS: the environment rows (with their declared shapes), each
+	// environment's current promotion, the project's newest releases, the
+	// bundle each promotion names, the reconciler's observations, the hosted
+	// deployments' observed images, and the declared-environment catalog
+	// sealed into the project's newest RELEASED bundle — which is how an env
+	// declared in code but never recorded here (a file ledger, or an env never
+	// built) still appears, as `tracked: false`.
+	//
+	// MEMBER (machine: deploy:read), the same scoping as GetLiveView. Another
+	// org's project, an unknown project and a project nobody has deployed are
+	// the same answer: a report with no environments. It names no secret value
+	// and no machine path.
+	GetProjectTopology(context.Context, *connect.Request[v1.GetDeployProjectTopologyRequest]) (*connect.Response[v1.GetDeployProjectTopologyResponse], error)
 	// PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
 	//
 	// IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
@@ -1740,6 +1868,24 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("Promote")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceSetRollbackFloorHandler := connect.NewUnaryHandler(
+		DeployServiceSetRollbackFloorProcedure,
+		svc.SetRollbackFloor,
+		connect.WithSchema(deployServiceMethods.ByName("SetRollbackFloor")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceLiftRollbackFloorHandler := connect.NewUnaryHandler(
+		DeployServiceLiftRollbackFloorProcedure,
+		svc.LiftRollbackFloor,
+		connect.WithSchema(deployServiceMethods.ByName("LiftRollbackFloor")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceListRollbackFloorsHandler := connect.NewUnaryHandler(
+		DeployServiceListRollbackFloorsProcedure,
+		svc.ListRollbackFloors,
+		connect.WithSchema(deployServiceMethods.ByName("ListRollbackFloors")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceScaleHandler := connect.NewUnaryHandler(
 		DeployServiceScaleProcedure,
 		svc.Scale,
@@ -1902,6 +2048,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("GetEnvironmentShape")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceGetProjectTopologyHandler := connect.NewUnaryHandler(
+		DeployServiceGetProjectTopologyProcedure,
+		svc.GetProjectTopology,
+		connect.WithSchema(deployServiceMethods.ByName("GetProjectTopology")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServicePlanDeployHandler := connect.NewUnaryHandler(
 		DeployServicePlanDeployProcedure,
 		svc.PlanDeploy,
@@ -1976,6 +2128,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceDeleteDeploymentHandler.ServeHTTP(w, r)
 		case DeployServicePromoteProcedure:
 			deployServicePromoteHandler.ServeHTTP(w, r)
+		case DeployServiceSetRollbackFloorProcedure:
+			deployServiceSetRollbackFloorHandler.ServeHTTP(w, r)
+		case DeployServiceLiftRollbackFloorProcedure:
+			deployServiceLiftRollbackFloorHandler.ServeHTTP(w, r)
+		case DeployServiceListRollbackFloorsProcedure:
+			deployServiceListRollbackFloorsHandler.ServeHTTP(w, r)
 		case DeployServiceScaleProcedure:
 			deployServiceScaleHandler.ServeHTTP(w, r)
 		case DeployServiceSetEnvironmentRunStateProcedure:
@@ -2030,6 +2188,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetLiveViewHandler.ServeHTTP(w, r)
 		case DeployServiceGetEnvironmentShapeProcedure:
 			deployServiceGetEnvironmentShapeHandler.ServeHTTP(w, r)
+		case DeployServiceGetProjectTopologyProcedure:
+			deployServiceGetProjectTopologyHandler.ServeHTTP(w, r)
 		case DeployServicePlanDeployProcedure:
 			deployServicePlanDeployHandler.ServeHTTP(w, r)
 		case DeployServiceCheckDeployCapacityProcedure:
@@ -2121,6 +2281,18 @@ func (UnimplementedDeployServiceHandler) DeleteDeployment(context.Context, *conn
 
 func (UnimplementedDeployServiceHandler) Promote(context.Context, *connect.Request[v1.PromoteReleaseRequest]) (*connect.Response[v1.PromoteReleaseResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.Promote is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) SetRollbackFloor(context.Context, *connect.Request[v1.SetRollbackFloorRequest]) (*connect.Response[v1.SetRollbackFloorResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.SetRollbackFloor is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) LiftRollbackFloor(context.Context, *connect.Request[v1.LiftRollbackFloorRequest]) (*connect.Response[v1.LiftRollbackFloorResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.LiftRollbackFloor is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ListRollbackFloors(context.Context, *connect.Request[v1.ListRollbackFloorsRequest]) (*connect.Response[v1.ListRollbackFloorsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListRollbackFloors is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) Scale(context.Context, *connect.Request[v1.ScaleDeploymentRequest]) (*connect.Response[v1.ScaleDeploymentResponse], error) {
@@ -2229,6 +2401,10 @@ func (UnimplementedDeployServiceHandler) GetLiveView(context.Context, *connect.R
 
 func (UnimplementedDeployServiceHandler) GetEnvironmentShape(context.Context, *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetEnvironmentShape is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetProjectTopology(context.Context, *connect.Request[v1.GetDeployProjectTopologyRequest]) (*connect.Response[v1.GetDeployProjectTopologyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetProjectTopology is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) PlanDeploy(context.Context, *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error) {

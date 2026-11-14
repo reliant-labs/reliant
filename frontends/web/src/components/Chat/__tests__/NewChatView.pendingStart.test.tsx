@@ -104,6 +104,7 @@ vi.mock("../ChatInput", () => ({
 vi.mock("../ResumeDaemonPill", () => ({ ResumeDaemonPill: () => null }));
 vi.mock("../OomKillBanner", () => ({ OomKillBanner: () => null }));
 vi.mock("../DiskPressureBanner", () => ({ DiskPressureBanner: () => null }));
+vi.mock("../MachineHealthBanner", () => ({ MachineHealthBanner: () => null }));
 vi.mock("../../DaemonWaitState", () => ({ DaemonWaitState: () => null }));
 vi.mock("../../Machines/AddMachineSheet", () => ({ AddMachineSheet: () => null }));
 vi.mock("../../Worktrees/CreateWorktreeModal", () => ({ CreateWorktreeModal: () => null }));

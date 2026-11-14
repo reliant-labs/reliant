@@ -63,7 +63,8 @@ func (s *Service) GetLLMUsage(
 	if s.deps.Now != nil {
 		now = s.deps.Now().UTC()
 	}
-	rows, err := s.deps.Store.ListLLMUsageDaily(ctx, userID, start, end)
+	detailFrom := detailAvailableFrom(now)
+	rows, err := s.usageRows(ctx, userID, start, end, detailFrom, detailGroupBys[groupBy])
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -74,7 +75,8 @@ func (s *Service) GetLLMUsage(
 		if (msg.Provider != nil && row.Provider != msg.GetProvider()) ||
 			(msg.Model != nil && row.Model != msg.GetModel()) ||
 			(msg.AuthMode != nil && row.AuthMode != authMode) ||
-			(msg.Purpose != nil && row.Purpose != purpose) {
+			(msg.Purpose != nil && row.Purpose != purpose) ||
+			(msg.OrgId != nil && row.OrgID != msg.GetOrgId()) {
 			continue
 		}
 		key := keyOf(row)
@@ -93,15 +95,23 @@ func (s *Service) GetLLMUsage(
 	}
 	finish(totals)
 	sortBuckets(buckets, groupBy)
+	if groupBy == pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_ACCOUNT {
+		s.labelAccounts(ctx, buckets)
+	}
 
-	detailFrom := detailAvailableFrom(now)
 	completeness := pb.LLMUsageCompleteness_LLM_USAGE_COMPLETENESS_COMPLETE
 	note := "Every call in this range is counted. Today's figures are still accumulating."
 	if start.Before(detailFrom) {
 		completeness = pb.LLMUsageCompleteness_LLM_USAGE_COMPLETENESS_PARTIAL
+		retention := int(db.LLMCallUsageRetention / (24 * time.Hour))
 		note = fmt.Sprintf(
 			"Individual calls are kept for %d days; days before %s come from the daily totals, which are kept. Those totals are complete, but cannot be broken down further.",
-			int(db.LLMCallUsageRetention/(24*time.Hour)), detailFrom.Format(dateLayout))
+			retention, detailFrom.Format(dateLayout))
+		if detailGroupBys[groupBy] {
+			note = fmt.Sprintf(
+				"Individual calls are kept for %d days, and who paid for a call and which account served it are known only from them: calls before %s are counted under \"not recorded\". The totals are complete.",
+				retention, detailFrom.Format(dateLayout))
+		}
 	}
 
 	return connect.NewResponse(&pb.GetLLMUsageResponse{
@@ -143,12 +153,112 @@ func parseRange(startDate, endDate string) (start, end time.Time, err error) {
 	return start, end, nil
 }
 
-var groupKeys = map[pb.LLMUsageGroupBy]func(*db.LLMUsageDay) string{
-	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_DAY:       func(r *db.LLMUsageDay) string { return r.Day.Format(dateLayout) },
-	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_MODEL:     func(r *db.LLMUsageDay) string { return r.Model },
-	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_PROVIDER:  func(r *db.LLMUsageDay) string { return r.Provider },
-	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_AUTH_MODE: func(r *db.LLMUsageDay) string { return r.AuthMode },
-	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_PURPOSE:   func(r *db.LLMUsageDay) string { return r.Purpose },
+// usageRow is one summed row of either source: the daily rollup, which has
+// no funding or account, or the per-call breakdown, which has both.
+type usageRow struct {
+	Day                                               time.Time
+	OrgID, Provider, Model, AuthMode, Purpose         string
+	Funding, AccountID                                string
+	Calls, ErrorCalls, InputTokens, OutputTokens      int64
+	CacheReadTokens, CacheWriteTokens, LatencyMsTotal int64
+}
+
+// detailGroupBys are the dimensions only the per-call rows record.
+var detailGroupBys = map[pb.LLMUsageGroupBy]bool{
+	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_FUNDING: true,
+	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_ACCOUNT: true,
+}
+
+// usageRows reads the range. Without a detail dimension it is the rollup, as
+// it always was. With one, the days whose calls are still kept (from
+// detailFrom) come from the per-call rows, and older days from the rollup
+// with no funding or account (the "" bucket), so the totals never change
+// with the grouping.
+func (s *Service) usageRows(ctx context.Context, userID string, start, end, detailFrom time.Time, detail bool) ([]usageRow, error) {
+	if !detail {
+		daily, err := s.deps.Store.ListLLMUsageDaily(ctx, userID, start, end)
+		if err != nil {
+			return nil, err
+		}
+		return fromDaily(daily), nil
+	}
+	var rows []usageRow
+	if start.Before(detailFrom) {
+		last := detailFrom.AddDate(0, 0, -1)
+		if end.Before(last) {
+			last = end
+		}
+		daily, err := s.deps.Store.ListLLMUsageDaily(ctx, userID, start, last)
+		if err != nil {
+			return nil, err
+		}
+		rows = fromDaily(daily)
+	}
+	if first := maxTime(start, detailFrom); !end.Before(first) {
+		calls, err := s.deps.Store.ListLLMUsageDetail(ctx, userID, first, end)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range calls {
+			rows = append(rows, usageRow{Day: r.Day, OrgID: r.OrgID, Provider: r.Provider, Model: r.Model, AuthMode: r.AuthMode,
+				Purpose: r.Purpose, Funding: r.Funding, AccountID: r.AccountID, Calls: r.Calls, ErrorCalls: r.ErrorCalls,
+				InputTokens: r.InputTokens, OutputTokens: r.OutputTokens, CacheReadTokens: r.CacheReadTokens,
+				CacheWriteTokens: r.CacheWriteTokens, LatencyMsTotal: r.LatencyMsTotal})
+		}
+	}
+	return rows, nil
+}
+
+func fromDaily(daily []*db.LLMUsageDay) []usageRow {
+	rows := make([]usageRow, 0, len(daily))
+	for _, r := range daily {
+		rows = append(rows, usageRow{Day: r.Day, OrgID: r.OrgID, Provider: r.Provider, Model: r.Model, AuthMode: r.AuthMode,
+			Purpose: r.Purpose, Calls: r.Calls, ErrorCalls: r.ErrorCalls, InputTokens: r.InputTokens,
+			OutputTokens: r.OutputTokens, CacheReadTokens: r.CacheReadTokens, CacheWriteTokens: r.CacheWriteTokens,
+			LatencyMsTotal: r.LatencyMsTotal})
+	}
+	return rows
+}
+
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
+}
+
+// labelAccounts names each account bucket by the account's label (or its
+// provider when it has none). A deleted account keeps an empty label.
+func (s *Service) labelAccounts(ctx context.Context, buckets []*pb.LLMUsageBucket) {
+	ids := make([]string, 0, len(buckets))
+	for _, b := range buckets {
+		if b.Key != "" {
+			ids = append(ids, b.Key)
+		}
+	}
+	names, err := s.deps.Store.ProviderAccountNames(ctx, ids)
+	if err != nil {
+		s.deps.Logger.WarnContext(ctx, "usage: account names could not be read; showing ids", "error", err)
+		return
+	}
+	for _, b := range buckets {
+		if n, ok := names[b.Key]; ok {
+			b.Label = n.Label
+			if b.Label == "" {
+				b.Label = n.Provider
+			}
+		}
+	}
+}
+
+var groupKeys = map[pb.LLMUsageGroupBy]func(usageRow) string{
+	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_DAY:       func(r usageRow) string { return r.Day.UTC().Format(dateLayout) },
+	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_MODEL:     func(r usageRow) string { return r.Model },
+	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_PROVIDER:  func(r usageRow) string { return r.Provider },
+	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_AUTH_MODE: func(r usageRow) string { return r.AuthMode },
+	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_PURPOSE:   func(r usageRow) string { return r.Purpose },
+	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_FUNDING:   func(r usageRow) string { return r.Funding },
+	pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_ACCOUNT:   func(r usageRow) string { return r.AccountID },
 }
 
 var authModeNames = map[pb.LLMAuthMode]string{
@@ -165,7 +275,7 @@ var purposeNames = map[pb.LLMPurpose]string{
 	pb.LLMPurpose_LLM_PURPOSE_DRAFT_AUTOMATION: store.LLMPurposeDraftAutomation,
 }
 
-func addRow(b *pb.LLMUsageBucket, r *db.LLMUsageDay) {
+func addRow(b *pb.LLMUsageBucket, r usageRow) {
 	b.Calls += r.Calls
 	b.ErrorCalls += r.ErrorCalls
 	b.InputTokens += r.InputTokens

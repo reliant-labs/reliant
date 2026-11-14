@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const planSchema = 1
+const planSchema = 2
 
 // checkoutDigest identifies the inputs a plan was made from: HEAD names every
 // committed byte, so only what differs from it is read — the bytes of each

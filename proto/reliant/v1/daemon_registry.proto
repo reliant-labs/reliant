@@ -491,6 +491,13 @@ message DaemonInfo {
   map<string, string> labels = 29;
   // Names of the owner's machine pools this machine is a member of.
   repeated string pools = 30;
+  // Whether the attached machine can do work, as its daemon last reported
+  // (MachineHealth). Independent of `status`, which keeps its meaning: a
+  // machine whose process table is full is still ACTIVE, and DEGRADED here.
+  // From the attachment lease like the memory telemetry, so it is set only
+  // while the daemon is attached; an attached daemon that reports no health
+  // (one that predates the report) reads MACHINE_HEALTH_STATE_OK.
+  MachineHealth health = 31;
 }
 
 // DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.

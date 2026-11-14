@@ -218,6 +218,7 @@ Send a prompt to a language model and get a response
 | `finish_reason` | string | - |
 | `capabilities` | object | - |
 | `provider_account_id` | string | - |
+| `trace_parent` | string | - |
 
 ---
 

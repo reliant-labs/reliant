@@ -23,6 +23,7 @@ func TestKindLiterals_DriftGuard(t *testing.T) {
 		{"daemon offline halt", KindDaemonOfflineHalt, "RELIANT_DAEMON_OFFLINE_HALT"},
 		{"provider stream stalled", KindProviderStreamStalled, "RELIANT_PROVIDER_STREAM_STALLED"},
 		{"provider usage limit", KindProviderUsageLimit, "RELIANT_PROVIDER_USAGE_LIMIT"},
+		{"org policy refused", KindOrgPolicyRefused, "RELIANT_ORG_POLICY_REFUSED"},
 	}
 	for _, tc := range cases {
 		if string(tc.got) != tc.want {

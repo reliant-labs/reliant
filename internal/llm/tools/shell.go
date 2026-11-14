@@ -904,12 +904,5 @@ func withChatEnv(own map[string]string, chatID string) map[string]string {
 // caller's own variables, minus any that would carry a credential, then the
 // neutral assignments.
 func neutralCredentialEnv(own map[string]string) map[string]string {
-	env := daemonpolicy.NeutralEnv()
-	for k, v := range own {
-		if _, neutral := env[k]; neutral {
-			continue
-		}
-		env[k] = v
-	}
-	return env
+	return daemonpolicy.NeutralizeEnv(own)
 }

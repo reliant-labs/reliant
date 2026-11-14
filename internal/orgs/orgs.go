@@ -150,6 +150,29 @@ func (r *Resolver) IsMember(ctx context.Context, userID, orgID string) (member, 
 	return m.Member && m.OrgID == orgID, true, nil
 }
 
+// Membership is control-plane's whole answer about userID in orgID (member,
+// role, when the current membership began, the org's live member count),
+// cached like IsMember. ok is false when the deployment has no orgs; err is an
+// outage. A caller deciding access from it fails closed on both: a negative,
+// an unknown and an error all grant nothing.
+func (r *Resolver) Membership(ctx context.Context, userID, orgID string) (m accesstokenclient.OrgMembership, ok bool, err error) {
+	if r == nil || userID == "" || orgID == "" {
+		return accesstokenclient.OrgMembership{}, false, nil
+	}
+	m, err = r.resolve(ctx, userID, orgID)
+	if errors.Is(err, errUnsupported) {
+		return accesstokenclient.OrgMembership{}, false, nil
+	}
+	if err != nil {
+		return accesstokenclient.OrgMembership{}, true, err
+	}
+	if m.OrgID != orgID {
+		// An answer about another org says nothing about this one.
+		return accesstokenclient.OrgMembership{OrgID: orgID}, true, nil
+	}
+	return m, true, nil
+}
+
 // The roles control-plane answers (its org_memberships.role). Authority to
 // administer an org is RoleOwner or RoleAdmin (docs/design/org-sharing.md
 // §3.4 in control-plane).
@@ -192,6 +215,54 @@ func (r *Resolver) RoleFresh(ctx context.Context, userID, orgID string) (role st
 		r.remember(key{userID, orgID}, m)
 	}
 	return roleOf(m, orgID, err)
+}
+
+// ScopesFresh is the org-administration scopes userID is granted org-wide in
+// orgID ("billing:read", ...), asked of control-plane now, bypassing the
+// cache, so a revoked grant stops the next read. member is false for a
+// non-member and in a deployment with no orgs (a nil Resolver, or a control
+// plane without the rpc); a member of a control plane that predates the
+// scopes field holds none. err is an outage. A caller deciding access from it
+// fails closed on all three.
+func (r *Resolver) ScopesFresh(ctx context.Context, userID, orgID string) (scopes []string, member bool, err error) {
+	if r == nil || userID == "" || orgID == "" {
+		return nil, false, nil
+	}
+	m, err := r.src.ResolveOrgMembership(ctx, userID, orgID)
+	if errors.Is(err, errUnsupported) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	r.remember(key{userID, orgID}, m)
+	if !m.Member || m.OrgID != orgID {
+		return nil, false, nil
+	}
+	return m.OrgScopes.List(), true, nil
+}
+
+// LiveMembersFresh is how many live members orgID has, asked of control-plane
+// now as userID (only a member is told). known is false when the answer has
+// no count: userID is not a member, or the control plane predates the field
+// (an unsupported one included). It only ever chooses a default or refuses a
+// loosening, never grants anything (org-provider-accounts §11.3).
+func (r *Resolver) LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error) {
+	if r == nil || userID == "" || orgID == "" {
+		return 0, false, nil
+	}
+	m, err := r.src.ResolveOrgMembership(ctx, userID, orgID)
+	if errors.Is(err, errUnsupported) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	r.remember(key{userID, orgID}, m)
+	if !m.Member || m.OrgID != orgID || !m.OrgLiveMembersKnown {
+		return 0, false, nil
+	}
+	return int(m.OrgLiveMembers), true, nil
 }
 
 // roleOf reads Role's answer from one membership answer about orgID.

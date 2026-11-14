@@ -1851,6 +1851,13 @@ message CallLLMOutput {
   // request to a different account of the same provider can drop reasoning the
   // new account cannot verify.
   string provider_account_id = 20 [(reliant) = {visibility_contexts: "advanced"}];
+
+  // TraceParent is this turn's span (invoke_agent) as a W3C traceparent. It
+  // is recorded here — in workflow history — so the execute_tools that runs
+  // this turn's tool calls, on whichever worker it lands, opens each call's
+  // span under the turn that asked for it (internal/telemetry/ai_spans.go).
+  // Empty when the turn was not traced.
+  string trace_parent = 21 [(reliant) = {visibility_contexts: "advanced"}];
 }
 
 // ToolCapabilities is one agent turn's tool capability set: resolved once by
@@ -2261,6 +2268,28 @@ message Workflow {
   // workflow declares it, and enabling the automation always shows its owner a
   // card for it. Unknown values are a validation error.
   repeated string permissions = 23;
+  // Attention correlates human action independently of lifecycle and outcome.
+  // Only root unattended launch runs apply it. Absent preserves legacy behavior.
+  WorkflowAttention attention = 25;
+}
+
+// WorkflowAttention declares explicit transitions for one owner/project incident.
+// Failures remain failed and still emit failure events. No implicit resolution:
+// a key-only observer opens attention on failure but success does not clear it.
+message WorkflowAttention {
+  // Required literal or template over finalized inputs, evaluated exactly once
+  // before graph execution. Must render a nonempty string of at most 512 bytes.
+  string key = 1;
+  // Absent, recovering, or action_required. Recovering needs recovery_timeout.
+  string on_start = 2;
+  // Go duration in [1s, 24h], allowed only with on_start: recovering. A fixed
+  // lease from immutable run start, never extended by activity retry.
+  string recovery_timeout = 3;
+  // Absent, resolved, or action_required. Only explicit resolved closes an
+  // incident on successful completion; crashes/cancellation can never resolve.
+  string on_success = 4;
+  // Absent (defaults to action_required), or action_required.
+  string on_failure = 5;
 }
 
 // SecretDeclaration says where a secret lives.

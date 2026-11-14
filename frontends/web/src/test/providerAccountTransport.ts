@@ -11,6 +11,7 @@
 import { create } from "@bufbuild/protobuf";
 
 import {
+  ProviderAccountFunding,
   ProviderAccountSchema,
   ProviderAccountStatus,
   ProviderAuthKind,
@@ -20,6 +21,7 @@ import {
 import type { MockHandlers } from "@/lib/test-utils";
 import type {
   AccountAuthKind,
+  AccountFunding,
   AccountStatus,
   ProviderAccount,
   UsageSourceKind,
@@ -46,6 +48,13 @@ const USAGE_SOURCE: Record<UsageSourceKind, UsageSource> = {
   limit_error: UsageSource.LIMIT_ERROR,
 };
 
+const FUNDING: Record<AccountFunding, ProviderAccountFunding> = {
+  personal: ProviderAccountFunding.PERSONAL,
+  org_key: ProviderAccountFunding.ORG_KEY,
+  org_seat: ProviderAccountFunding.ORG_SEAT,
+  org_wallet: ProviderAccountFunding.ORG_WALLET,
+};
+
 /** The wire form of a frontend account — the inverse of `accountFromProto`. */
 export function accountToProto(a: ProviderAccount): ProtoProviderAccount {
   return create(ProviderAccountSchema, {
@@ -54,6 +63,7 @@ export function accountToProto(a: ProviderAccount): ProtoProviderAccount {
     status: STATUS[a.status],
     usageSource: USAGE_SOURCE[a.usageSource],
     windows: a.windows.map((w) => ({ ...w, lengthSeconds: BigInt(w.lengthSeconds) })),
+    funding: FUNDING[a.funding ?? "personal"],
   });
 }
 

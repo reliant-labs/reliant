@@ -70,6 +70,7 @@ import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
 import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
 import { consumerSummary, heavyRefused, pressuredVolume, reclaimSummary, volumeUsage } from "@/lib/machineDisk";
+import { driverDisplayName } from "@/hooks/catalog-models";
 import { isUnownedStorage, StorageAction, totalHeldBytes } from "./StorageAction";
 import { reclaimDetail, WorktreeReclaimAction } from "./WorktreeReclaimAction";
 import { MarkedWorktreeAction, markedDetail, markedTitle } from "./MarkedWorktreeAction";
@@ -479,6 +480,14 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <FolderX className={cn(className, "text-warning-ink")} aria-label="Worktrees proposed for removal" />;
     case InboxItemKind.WORKTREE_MARKED:
       return <FolderX className={className} aria-label="Worktree marked to be reclaimed" />;
+    case InboxItemKind.PERSONAL_FUNDING:
+      return <HelpCircle className={cn(className, "text-warning-ink")} aria-label="Asks to use your own AI account" />;
+    case InboxItemKind.ORG_PROVIDER_KEY_REJECTED:
+      return <AlertTriangle className={cn(className, "text-destructive-ink")} aria-label="Organization AI key rejected" />;
+    case InboxItemKind.AUTOMATION_NO_ORG_ACCOUNT:
+      return <PauseCircle className={cn(className, "text-warning-ink")} aria-label="Automation paused: no organization AI account" />;
+    case InboxItemKind.AUTOMATIONS_ON_PERSONAL_ACCOUNTS:
+      return <HelpCircle className={className} aria-label="Automations on your own AI accounts" />;
     default:
       return <CheckCircle2 className={className} aria-hidden="true" />;
   }
@@ -499,6 +508,8 @@ export function subjectName(item: InboxItemData): string {
     return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} worktrees`;
   }
   if (item.payload.case === "worktreeMarked") return item.payload.value.name || "Worktree";
+  if (item.payload.case === "orgProviderKeyRejected") return item.payload.value.label || "Organization AI key";
+  if (item.payload.case === "automationsOnPersonalAccounts") return "Automations on your own AI accounts";
   return item.chatTitle || item.triggerName || "Untitled run";
 }
 
@@ -671,6 +682,24 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
         .join(" · ");
       return text ? { node: text, title: text } : null;
     }
+    case "orgProviderKeyRejected": {
+      const { provider, keyHint, reason } = payload.value;
+      const text = [provider ? `${driverDisplayName(provider)} key` : "Key", keyHint ? `…${keyHint}` : "", reason ? `rejected: ${reason}` : "rejected by the provider"]
+        .filter(Boolean)
+        .join(" · ");
+      return { node: text, title: `${text}. Members' chats route around it until an owner or admin rotates or removes it.` };
+    }
+    case "automationNoOrgAccount": {
+      // What the pausing firing recorded names the model and who can fix it.
+      const { detail, ownerUserId } = payload.value;
+      const text = ownerUserId ? "Paused: no organization AI account can run it" : "Paused: no organization AI account can run your automation";
+      return { node: text, title: detail || `${text}. An admin can add an organization API key or enable Reliant credits; its owner then resumes it.` };
+    }
+    case "automationsOnPersonalAccounts": {
+      const n = payload.value.count;
+      const text = `${n} ${n === 1 ? "automation still runs" : "automations still run"} on your own AI accounts; new automations here run on the organization's`;
+      return { node: text, title: `${text}. Switch each to the organization's accounts in its settings.` };
+    }
     case "automationRunPaused": {
       // Why it paused; while it waits it holds its automation's slot.
       const reason = payload.value.reason;
@@ -780,6 +809,14 @@ interface InlineActionProps {
 function InlineAction({ item, expanded, onToggle }: InlineActionProps) {
   const { payload } = item;
   const mobile = useSurface() === "mobile";
+  if (item.kind === InboxItemKind.PERSONAL_FUNDING && item.chatId) {
+    // Opening the chat opens its question (Chat/PersonalFundingPrompt).
+    return (
+      <RunLink chatId={item.chatId} className={actionButtonClass}>
+        Review
+      </RunLink>
+    );
+  }
   switch (payload.case) {
     case "approval":
       // Approve and Deny are in the expansion, under what is approved.
@@ -849,6 +886,31 @@ function InlineAction({ item, expanded, onToggle }: InlineActionProps) {
       );
     case "worktreeMarked":
       return <MarkedWorktreeAction item={payload.value} />;
+    case "orgProviderKeyRejected":
+      return (
+        <a href="/settings/org-ai-accounts" className={actionButtonClass}>
+          Fix key
+        </a>
+      );
+    case "automationNoOrgAccount":
+      // An admin adds an org account; the owner opens their automation to
+      // change its model or resume it.
+      if (payload.value.ownerUserId) {
+        return (
+          <a href="/settings/org-ai-accounts" className={actionButtonClass}>
+            Add org account
+          </a>
+        );
+      }
+      return <LaunchFailedAction triggerId={item.triggerId} />;
+    case "automationsOnPersonalAccounts": {
+      const first = payload.value.triggerIds[0];
+      return first ? (
+        <a href={automationRedirectPath(first)} className={actionButtonClass}>
+          Review
+        </a>
+      ) : null;
+    }
     case "automationRunPaused":
       return item.chatId ? (
         <RunLink chatId={item.chatId} className={actionButtonClass}>

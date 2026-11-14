@@ -1,0 +1,10 @@
+{
+  "execution_id": "chat-1",
+  "state": "use_personal",
+  "reason": "limited",
+  "org_id": "org-acme",
+  "model": "claude-opus-4",
+  "personal_account": "claude alice@example.com",
+  "org_reset_at": "2026-11-13T15:40:00Z",
+  "asked_at": "2026-11-13T12:00:00Z"
+}

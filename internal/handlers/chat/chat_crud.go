@@ -246,7 +246,7 @@ func (s *Service) startChat(
 	}
 
 	if eventKind == core.TriggerEventKindChatStart {
-		s.trackStartedChatMessage(ctx, userID, result.Chat, clientID, msg)
+		s.trackStartedChatMessage(ctx, userID, result.Chat, result.UserMessageID, clientID, msg)
 	}
 
 	return connect.NewResponse(&reliantv1.StartChatResponse{

@@ -341,19 +341,20 @@ by ForgeShell/landingJourney.ts:
 
 The public demo host (`demo.reliantlabs.io`, the `demo` shell,
 `demoShellRoutes.tsx`) boots the tour as the forge shell does, but with
-`memoryTourStorage()`: nothing is remembered. It **opens on the console**,
-free to explore:
-- `Forge/Demo/DemoTourToast` offers the tour in the bottom-right corner (Take
-  the guided tour / Explore on my own). It never starts the tour itself. A
-  dismissed toast stays dismissed for the browser session
-  (`Forge/Demo/demoSession.ts`, sessionStorage), and an open tour (a deep
-  link, the banner's "Guided tour") counts as an answer.
-- `Forge/Demo/tips` shows a short tip the first time each console view is
-  opened (Overview, Traces, a trace, Logs, Profiles, Issues, Releases,
-  Environments, Secrets, Domains, Dashboards, Alerts). Each says what the view
-  is, how it connects to the rest of forge, and what an agent does with it
-  (the command). Once per view per session, with Got it and Exit tips. Tips
-  are off while the tour is open, and they wait for the toast to be answered.
+`memoryTourStorage()`: nothing is remembered. A bare entry **opens on the
+Home** (`/forge/demo?section=home`), free to explore:
+- The Home's hero and the action row under every page's header offer **Take
+  the tour** (`TOUR_START`, `Forge/Demo/DemoScreenActions.tsx`). Nothing starts
+  the tour by itself. (`DemoTourToast` has rendered nothing since #2334.)
+- On the demo host the tour walks the **sample app's own console pages**
+  (`/forge/p/shop/…`, the led console a visitor explores): each step's route is
+  built per shell in `journeys/forge.tsx` (`stop`). The root route keeps
+  `?tour=` across the console's links (`retainTourParam`), and an older
+  `/forge/demo?view=…&tour=…` link is redirected to the console page it names
+  (`consoleTourHref`). Reliant and the forge shell keep `/forge/demo`.
+- `Forge/Demo/tips` explains each page (below, "Page tours"). Its card opens by
+  itself on a section's first visit this session; tips are off while the tour
+  is open.
 
 The forge journey runs its own cut there, chosen with `isAvailable`
 (`lib/demoTour.ts`, runtime config `DEMO_TOUR`):
@@ -391,15 +392,16 @@ the visitor stays on the console.
 The public demo gives each page one compact, non-modal explanation: what it
 is, why it helps, and how to use it (2–3 sentences). Dismiss leaves an
 accessible `?` restore button. Secondary agent help is a click/tap/keyboard
-disclosure, not hover-only. Sign up stays primary, Install forge secondary.
+disclosure, not hover-only. Deploy yours free is primary (the only button on a phone), Install forge and Sign up free secondary.
 There is no global toast or automatic local multi-stop sequence.
 
-Every actual page entry automatically opens that page's explanation (including
-return visits, direct loads and refresh). `DemoTips` owns `PageEntryTour`, with
-Step 1 of 1, Dismiss and Done inside its callout. There is no full-site sequence
-or prerequisite action. Dismiss lasts for this visit; `?` replays it. Same-page
-filters, polling and rerenders do not restart it. No seen/session state suppresses
-an arrival. Legacy `/forge/demo?view=logs&tour=forge:fg-logs` explains Logs.
+A section's first visit this session opens that page's explanation by itself
+on a laptop; a reload, coming back, or a sub-page does not (a phone gets a
+closed "About this page" disclosure instead). `DemoTips` owns `PageEntryTour`,
+with Step 1 of 1, Dismiss and Done inside its callout. There is no full-site
+sequence or prerequisite action. `?` replays it. Same-page filters, polling and
+rerenders do not restart it. Legacy `/forge/demo?view=logs&tour=forge:fg-logs`
+explains Logs.
 Phone callouts use a bottom sheet after the drawer closes; their targets scroll
 into view above it. No auth or modal is required to explore.
 

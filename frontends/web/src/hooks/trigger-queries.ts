@@ -28,8 +28,10 @@ import {
   type ListTriggerEventsResponse,
   type ListTriggersResponse,
   type Trigger as ProtoTrigger,
+  type TriggerFundingWarning,
 } from "../gen/reliant/v1/trigger_pb";
 import { connectClient } from "../lib/connect";
+import { toast } from "../lib/toast-manager";
 import {
   automationDraftFromProto,
   definitionToProto,
@@ -267,10 +269,27 @@ function seedTrigger(queryClient: QueryClient, trigger: ProtoTrigger | undefined
   queryClient.setQueryData(triggerServiceKeys.getTrigger({ id: trigger.id }), create(GetTriggerResponseSchema, { trigger }));
 }
 
+/**
+ * Tell the person that the automation they just turned on may run only on its
+ * organization's AI accounts and none of them can run its model yet. The
+ * write went through: it is advice, not a refusal, and each fire fails until
+ * an admin adds an account. One toast per org and model, however many
+ * triggers an enable turned on.
+ */
+function showFundingWarning(warning: TriggerFundingWarning | undefined) {
+  if (!warning?.message) return;
+  toast.warning(warning.message, { id: `trigger-funding:${warning.orgId}:${warning.model}`, duration: 10_000 });
+}
+
 /** Create a trigger; resolves to it, with the webhook token when it is a webhook (shown once). */
 export function useCreateTrigger() {
   const queryClient = useQueryClient();
-  const mutation = useCreateTriggerRpc({ onSuccess: (response) => seedTrigger(queryClient, response.trigger) });
+  const mutation = useCreateTriggerRpc({
+    onSuccess: (response) => {
+      seedTrigger(queryClient, response.trigger);
+      showFundingWarning(response.fundingWarning);
+    },
+  });
   return {
     isPending: mutation.isPending,
     mutateAsync: async (input: TriggerDefinitionInput) =>
@@ -281,7 +300,12 @@ export function useCreateTrigger() {
 /** Replace a trigger's definition (a FULL replacement: start from definitionFromTrigger). */
 export function useUpdateTrigger() {
   const queryClient = useQueryClient();
-  const mutation = useUpdateTriggerRpc({ onSuccess: (response) => seedTrigger(queryClient, response.trigger) });
+  const mutation = useUpdateTriggerRpc({
+    onSuccess: (response) => {
+      seedTrigger(queryClient, response.trigger);
+      showFundingWarning(response.fundingWarning);
+    },
+  });
   return {
     isPending: mutation.isPending,
     mutateAsync: async ({ id, input }: { id: string; input: TriggerDefinitionInput }) =>
@@ -303,7 +327,9 @@ export function useRotateWebhookToken() {
  * normal result (`enabled: false`) naming the trigger that failed and why.
  */
 export function useEnableWorkflow() {
-  const mutation = useEnableWorkflowRpc();
+  const mutation = useEnableWorkflowRpc({
+    onSuccess: (response) => response.results.forEach((r) => showFundingWarning(r.fundingWarning)),
+  });
   return {
     isPending: mutation.isPending,
     mutateAsync: async (input: EnableWorkflowInput) =>
@@ -324,7 +350,10 @@ export function useSetTriggerEnabled() {
       return patchTriggerReads(queryClient, id ?? "", (t) => ({ ...t, enabled: enabled ?? t.enabled }));
     },
     onError: (_error, _request, snapshot) => restore(queryClient, snapshot),
-    onSuccess: (response) => seedTrigger(queryClient, response.trigger),
+    onSuccess: (response) => {
+      seedTrigger(queryClient, response.trigger);
+      showFundingWarning(response.fundingWarning);
+    },
   });
 }
 

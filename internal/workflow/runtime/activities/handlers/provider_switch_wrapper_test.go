@@ -134,7 +134,7 @@ func TestProviderSwitchHold_SurvivesTheRealActivityWrapper(t *testing.T) {
 
 	t.Run("a compaction hold goes through the same wrapper", func(t *testing.T) {
 		probe := &holdProbe{name: "HoldProbeCompact", run: func(ctx context.Context) error {
-			_, _, err := resolveCompactionModelForCall(ctx, "u",
+			_, _, err := resolveCompactionModelForCall(ctx,
 				&reliantv1.ModelSelector{Tags: []string{models.TagFast}}, compactSpec("codex", true))
 			return err
 		}}

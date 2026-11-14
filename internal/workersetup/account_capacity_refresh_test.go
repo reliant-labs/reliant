@@ -87,13 +87,13 @@ func TestUsageRefreshThatShowsCapacityUnbenchesTheAccountForTheRouterAndWakesThe
 	// The provider refused alice on its 5-hour window, and benched it until
 	// the reset. The agent's thread is pinned to alice.
 	reset := now.Add(3 * time.Hour).Truncate(time.Second)
-	require.NoError(t, repo.BenchAccount(ctx, user, alice.ID, reset, "five_hour", false))
+	require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner(user), alice.ID, reset, "five_hour", false))
 	_, err = repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: agentThread, Provider: "claude", AccountID: alice.ID, AssignedAt: now, Reason: accountrouter.ReasonInitial}, "")
 	require.NoError(t, err)
 
 	routing := accountRouting(repo, nil)
 	assign := func() (accountrouter.Result, error) {
-		avail := drivers.GetAvailableDrivers(ctx, user)
+		avail := drivers.GetAvailableDrivers(ctx, drivers.PersonalScope(user))
 		return routing.Router.Assign(ctx, accountrouter.Request{
 			UserID: user, ThreadID: agentThread, Driver: "claude", ModelID: "claude-5.5-opus",
 			Accounts: avail.Accounts["claude"],

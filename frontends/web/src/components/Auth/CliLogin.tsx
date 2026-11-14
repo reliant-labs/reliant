@@ -56,9 +56,16 @@ export function CliLogin() {
   const device = params.get("device") ?? "";
   const requested = (params.get("scope") ?? "").split(" ").filter(Boolean);
 
+  // `forge login` asks for a human identity (credential_kind=human): a
+  // person's session authorized per request against their current
+  // memberships, bound to no org. The control plane refuses an org on such an
+  // approval, so the page neither shows the picker nor sends one.
+  const humanLogin = params.get("credential_kind") === "human";
+
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   // `org` is forge's `login --org`: where the picker starts, never the answer.
   const authorizeOrg = useAuthorizeOrg(params.get("org"));
+  const orgReady = humanLogin || authorizeOrg.ready;
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +96,7 @@ export function CliLogin() {
 
   const decide = useCallback(
     async (decision: "approve" | "deny") => {
-      if (phase.kind !== "ready" || (decision === "approve" && !authorizeOrg.ready)) return;
+      if (phase.kind !== "ready" || (decision === "approve" && !orgReady)) return;
       setPhase({ kind: "submitting", email: phase.email, decision });
       const controlPlaneURL = getControlPlaneURL();
       if (!controlPlaneURL) {
@@ -110,10 +117,11 @@ export function CliLogin() {
           },
           // The confirmed org wins over the request's `org` (docs/orgs.md).
           // Approval is disabled until this choice can be shown and confirmed.
+          // A human login takes no org at all.
           body: JSON.stringify({
             query,
             approved: decision === "approve",
-            ...(authorizeOrg.orgId ? { org_id: authorizeOrg.orgId } : {}),
+            ...(!humanLogin && authorizeOrg.orgId ? { org_id: authorizeOrg.orgId } : {}),
           }),
         });
         const data = (await response.json().catch(() => ({}))) as {
@@ -136,7 +144,7 @@ export function CliLogin() {
         setPhase({ kind: "error", message: err instanceof Error ? err.message : "Login failed." });
       }
     },
-    [phase, query, authorizeOrg.orgId, authorizeOrg.ready]
+    [phase, query, humanLogin, orgReady, authorizeOrg.orgId]
   );
 
   if (phase.kind === "loading") {
@@ -201,15 +209,17 @@ export function CliLogin() {
             <span className="text-muted-foreground">Signing in as</span>
             <span className="font-medium truncate ml-3">{phase.email}</span>
           </div>
-          <AuthorizeOrgPicker
-            orgs={authorizeOrg.orgs}
-            error={authorizeOrg.failed}
-            onRetry={authorizeOrg.retry}
-            orgId={authorizeOrg.orgId}
-            onChoose={authorizeOrg.choose}
-            disabled={busy}
-            noun="this login"
-          />
+          {!humanLogin && (
+            <AuthorizeOrgPicker
+              orgs={authorizeOrg.orgs}
+              error={authorizeOrg.failed}
+              onRetry={authorizeOrg.retry}
+              orgId={authorizeOrg.orgId}
+              onChoose={authorizeOrg.choose}
+              disabled={busy}
+              noun="this login"
+            />
+          )}
           {requested.length > 0 && (
             <div className="space-y-2 pt-1">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">It asks to</p>
@@ -222,7 +232,9 @@ export function CliLogin() {
                 ))}
               </ul>
               <p className="text-xs text-muted-foreground">
-                You are granted only what your role in your organization allows.
+                {humanLogin
+                  ? "Each request is checked against your current role in the organization it acts in."
+                  : "You are granted only what your role in your organization allows."}
               </p>
             </div>
           )}
@@ -235,7 +247,7 @@ export function CliLogin() {
           <Button
             variant="primary"
             className="flex-1"
-            disabled={busy || !authorizeOrg.ready}
+            disabled={busy || !orgReady}
             onClick={() => void decide("approve")}
           >
             {busy && phase.decision === "approve" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Approve"}

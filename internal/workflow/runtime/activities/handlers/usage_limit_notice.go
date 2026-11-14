@@ -88,6 +88,10 @@ func accountMoveNotice(res accountrouter.Result, window string, resetAt time.Tim
 	}
 	to := accountName(res.Account)
 	provider := noticeProviderName(driver)
+	if res.Reason == accountrouter.ReasonOrgAvailable {
+		// A move up to the org's accounts (§4.5): who pays changed, not why.
+		return fmt.Sprintf("Using your organization's %s account **%s** for this chat from now on.", provider, to)
+	}
 
 	var why string
 	switch res.Reason {
@@ -205,6 +209,9 @@ func (a *CallLLMActivity) announceRouting(ctx context.Context, chat *db.Chat, th
 			postNotice(ctx, a.repo, chat.ID, thread, rtx.WorkflowID,
 				noticeStepKey(rtx)+"-account-"+resolved.Account.Config.AccountID, text)
 		}, chat.UserID, resolved.Account)
+	}
+	if resolved.FundingNotice != "" {
+		postNotice(ctx, a.repo, chat.ID, thread, rtx.WorkflowID, noticeStepKey(rtx)+"-funding", resolved.FundingNotice)
 	}
 }
 

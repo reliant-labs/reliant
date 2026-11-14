@@ -244,7 +244,9 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 // =============================================================================
 
 type GetWorkflowParams struct {
-	ID string `json:"id" jsonschema:"required,description=Workflow UUID, slug, or name (from create_workflow or list_workflows)."`
+	ID        string `json:"id" jsonschema:"required,description=Workflow UUID, slug, or name (from create_workflow or list_workflows)."`
+	StartLine *int   `json:"start_line,omitempty" jsonschema:"description=1-based first line of the YAML to return. Only needed for a workflow too large to arrive at once: the response names the start_line that continues."`
+	LineCount *int   `json:"line_count,omitempty" jsonschema:"description=How many YAML lines to return from start_line. Omit for as many as fit."`
 }
 
 type getWorkflowTool struct {
@@ -263,6 +265,10 @@ WHEN TO USE:
 PARAMETERS:
 - id: (required) Workflow UUID, slug, or name — including a builtin or project
   workflow name straight out of list_workflows, or the id from create_workflow.
+
+- start_line, line_count: (optional) a window of the YAML's lines. A workflow
+  that fits arrives whole; a larger one arrives as its first lines that fit,
+  with the exact start_line that continues it.
 
 RETURNS:
 The complete workflow YAML with validation status. For editable drafts it also
@@ -297,7 +303,7 @@ func (t *getWorkflowTool) Execute(ctx *rctx.ToolContext, args GetWorkflowParams)
 
 	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
 	if err == nil {
-		return formatWorkflowDraftResponse(draft, validateWorkflowForTool(ctx, t.repo, draft.Definition))
+		return formatWorkflowDraftResponse(draft, validateWorkflowForTool(ctx, t.repo, draft.Definition), args.window())
 	}
 
 	// list_workflows advertises builtin and project workflows alongside drafts,
@@ -306,7 +312,7 @@ func (t *getWorkflowTool) Execute(ctx *rctx.ToolContext, args GetWorkflowParams)
 	// nothing to edit and no version to pass back.
 	if args.ID != "" {
 		if yamlContent, source, found := t.findReadOnlyWorkflow(ctx, args.ID); found {
-			return formatReadOnlyWorkflowResponse(args.ID, source, yamlContent, validateWorkflowForTool(ctx, t.repo, yamlContent)), nil
+			return formatReadOnlyWorkflowResponse(args.ID, source, yamlContent, validateWorkflowForTool(ctx, t.repo, yamlContent), args.window()), nil
 		}
 	}
 
@@ -366,19 +372,14 @@ func (t *getWorkflowTool) findReadOnlyWorkflow(ctx *rctx.ToolContext, idOrName s
 // formatReadOnlyWorkflowResponse renders a builtin or project workflow. It
 // deliberately omits ID and version — there is no draft to edit and nothing to
 // pass to expected_version — and points at the one action that does work.
-func formatReadOnlyWorkflowResponse(name, source, yamlContent string, check workflowToolCheck) ToolResponse {
+func formatReadOnlyWorkflowResponse(name, source, yamlContent string, check workflowToolCheck, window yamlWindowRequest) ToolResponse {
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, "# Workflow: %s\n\n", name)
 	fmt.Fprintf(&sb, "**Source:** %s (read-only)\n", source)
 	writeValidationSection(&sb, check)
 
-	sb.WriteString("\n```yaml\n")
-	sb.WriteString(yamlContent)
-	if !strings.HasSuffix(yamlContent, "\n") {
-		sb.WriteString("\n")
-	}
-	sb.WriteString("```\n\n")
+	writeWorkflowYAML(&sb, name, yamlContent, window)
 	sb.WriteString("---\n")
 	sb.WriteString("This workflow is not an editable draft, so `edit_workflow` and `write_workflow` do not apply to it.\n" +
 		"Pass this YAML to `create_workflow` as `content` to start an editable copy.\n")
@@ -386,7 +387,7 @@ func formatReadOnlyWorkflowResponse(name, source, yamlContent string, check work
 	return NewTextResponse(sb.String())
 }
 
-func formatWorkflowDraftResponse(draft *db.WorkflowDraft, check workflowToolCheck) (ToolResponse, error) {
+func formatWorkflowDraftResponse(draft *db.WorkflowDraft, check workflowToolCheck, window yamlWindowRequest) (ToolResponse, error) {
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, "# Workflow: %s\n\n", draft.Name)
@@ -412,12 +413,7 @@ func formatWorkflowDraftResponse(draft *db.WorkflowDraft, check workflowToolChec
 
 	writeValidationSection(&sb, check)
 
-	sb.WriteString("\n```yaml\n")
-	sb.WriteString(draft.Definition)
-	if !strings.HasSuffix(draft.Definition, "\n") {
-		sb.WriteString("\n")
-	}
-	sb.WriteString("```\n\n")
+	writeWorkflowYAML(&sb, draft.ID, draft.Definition, window)
 	sb.WriteString("---\n")
 	// The version is the only way to obtain the value that edit_workflow and
 	// write_workflow take as expected_version, which is what stops an agent
@@ -428,6 +424,78 @@ func formatWorkflowDraftResponse(draft *db.WorkflowDraft, check workflowToolChec
 		"Pass `expected_version` with the version above to be told about conflicting edits instead of overwriting them.\n")
 
 	return NewTextResponse(sb.String()), nil
+}
+
+// yamlWindowRequest is the part of a workflow's YAML get_workflow was asked
+// for: start is 1-based, count 0 means as many lines as fit.
+type yamlWindowRequest struct{ start, count int }
+
+func (p GetWorkflowParams) window() yamlWindowRequest {
+	w := yamlWindowRequest{start: 1}
+	if p.StartLine != nil && *p.StartLine > 1 {
+		w.start = *p.StartLine
+	}
+	if p.LineCount != nil && *p.LineCount > 0 {
+		w.count = *p.LineCount
+	}
+	return w
+}
+
+// workflowYAMLBudget is how many bytes of YAML one get_workflow response
+// carries, under the read ceiling it is delivered with (outputCeilingFor)
+// with room for the header, the validation section and the footer. A larger
+// workflow arrives as whole lines plus the call that continues, never cut
+// mid-line by the generic truncation.
+const workflowYAMLBudget = MaxReadSize - 16_000
+
+// writeWorkflowYAML writes the requested window of content as a yaml block.
+// A window that is not the whole document says which lines it holds and how
+// to read on.
+func writeWorkflowYAML(sb *strings.Builder, id, content string, w yamlWindowRequest) {
+	writeWorkflowYAMLWithin(sb, id, content, w, workflowYAMLBudget)
+}
+
+func writeWorkflowYAMLWithin(sb *strings.Builder, id, content string, w yamlWindowRequest, budget int) {
+	lines := strings.SplitAfter(content, "\n")
+	if n := len(lines); n > 0 && lines[n-1] == "" {
+		lines = lines[:n-1]
+	}
+	total := len(lines)
+	first := w.start
+	if first > total {
+		first = total + 1
+	}
+	last, size := first-1, 0
+	for i := first - 1; i < total; i++ {
+		if w.count > 0 && last-first+1 >= w.count {
+			break
+		}
+		if size+len(lines[i]) > budget && last >= first {
+			break
+		}
+		size += len(lines[i])
+		last = i + 1
+	}
+
+	sb.WriteString("\n```yaml\n")
+	window := strings.Join(lines[first-1:last], "")
+	sb.WriteString(window)
+	if window != "" && !strings.HasSuffix(window, "\n") {
+		sb.WriteString("\n")
+	}
+	sb.WriteString("```\n\n")
+	if first == 1 && last == total {
+		return
+	}
+	if first > total {
+		fmt.Fprintf(sb, "**start_line %d is past the end: the YAML has %d lines.**\n\n", w.start, total)
+		return
+	}
+	fmt.Fprintf(sb, "**Lines %d-%d of %d shown.**", first, last, total)
+	if last < total {
+		fmt.Fprintf(sb, " To continue, call get_workflow again with id `%s` and start_line=%d.", id, last+1)
+	}
+	sb.WriteString("\n\n")
 }
 
 // =============================================================================

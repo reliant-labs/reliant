@@ -12,22 +12,34 @@ import (
 
 // The org lock, and the lock order every org-sensitive write follows.
 //
-// A row's org changes in one way only: the lazy backfill
-// (AssignUnassignedOrg) stamps a NULL org_id. Every other org_id is fixed
-// when the row is written. So a write that decided on an org (who may act on
-// these rows, which org a moved or new row takes) is only correct while no
-// backfill of the same user runs between its decision and its commit.
+// A row's org changes in two ways only, both under its owner's org lock:
 //
-// LockUserOrgs serializes them: the backfill takes it for each batch, and
-// every org-sensitive write takes it first in its transaction. Inside it, the
+//   - the lazy backfill (AssignUnassignedOrg) stamps a NULL org_id;
+//   - a project move (MoveProjectOrg, control-plane
+//     docs/design/org-project-move.md) restamps one project with its chats,
+//     their runs and its triggers, from the source org to the target, in one
+//     transaction.
+//
+// Every other org_id is fixed when the row is written. So a write that
+// decided on an org (who may act on these rows, which org a moved or new row
+// takes) is only correct while neither runs for the same user between its
+// decision and its commit.
+//
+// LockUserOrgs serializes them: the backfill takes it for each batch, a
+// project move takes it before any row lock of its transaction, and every
+// org-sensitive write takes it first in its transaction. Inside it, the
 // write re-reads the orgs its decision read (OrgRead), or reads its rows and
-// decides then, and writes. A NULL org is no special case: compared IS NOT
-// DISTINCT FROM, it is as fixed under the lock as any other.
+// decides then, and writes; a decision a move overtook refuses with
+// ErrOrgChanged rather than writing a source-org row into a moved project. A
+// NULL org is no special case: compared IS NOT DISTINCT FROM, it is as fixed
+// under the lock as any other.
 //
 // Lock order: the user's org lock, then row locks (FOR UPDATE / FOR NO KEY
 // UPDATE / FOR SHARE), never the reverse. The backfill takes the org lock
 // first too, and its row locks are SKIP LOCKED, so it never waits on a row
-// a write holds. TestOrgSensitiveWritesTakeTheOrgLock (internal/db) fails a
+// a write holds. A project move takes it, then its project_org_moves row, the
+// project, and the project's chats in id order, before it writes.
+// TestOrgSensitiveWritesTakeTheOrgLock (internal/db) fails a
 // write of the listed kinds that does not take it.
 
 // OrgRead is the org a decision read from one row: compared under the lock,

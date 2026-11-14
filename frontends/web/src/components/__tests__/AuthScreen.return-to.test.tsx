@@ -59,3 +59,17 @@ describe('AuthScreen provider sign-in return path', () => {
     await waitFor(() => expect(signInWithGithub).toHaveBeenCalledWith(undefined))
   })
 })
+
+describe('AuthScreen as the way in from a claim link', () => {
+  it('tells a claimant that a new address creates the account, and the claim returns to /claim', async () => {
+    search = { redirect: '/claim' }
+    render(<AuthScreen />)
+    expect(screen.getByText(/New here\? That creates your account/i)).toBeInTheDocument()
+  })
+
+  it('says nothing about a claim on an ordinary sign-in', () => {
+    render(<AuthScreen />)
+    expect(screen.queryByText(/New here\?/i)).toBeNull()
+  })
+})
+

@@ -51,7 +51,8 @@ function sessionsOf(now: number): DemoSession[] {
       pageViews: 1 + (n % 6),
       interactions: 3 + ((n * 5) % 27),
       errors: failing ? 1 : 0,
-      hasReplay: n % 7 !== 3,
+      // Every seventh has no replay, but never the incident's failed checkout (n = 3): it is the replay worth watching.
+      hasReplay: n % 7 !== 5,
       country: customer.country,
       region: "",
       city: customer.city,

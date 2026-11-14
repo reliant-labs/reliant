@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/go-chi/cors"
 	"github.com/reliant-labs/forge/pkg/oauth2"
@@ -86,6 +87,10 @@ type APIHTTPRoutesDeps struct {
 	// HostedHTTPRedeem is the internally authenticated controller ticket route.
 	// Optional on deployments without hosted execution; no public auth fallback.
 	HostedHTTPRedeem http.Handler
+	// OrgKeyUsage is control-plane's internally authenticated read of an
+	// org's org-key usage (OrgKeyUsagePath). Optional; no public auth
+	// fallback.
+	OrgKeyUsage http.Handler
 }
 
 // APIHTTPRoutesStore is what the routes read from the database. The routes
@@ -130,6 +135,9 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	if deps.HostedHTTPRedeem != nil {
 		handle("/internal/hosted-http/redeem", deps.HostedHTTPRedeem)
 	}
+	if deps.OrgKeyUsage != nil {
+		handle(OrgKeyUsagePath, deps.OrgKeyUsage)
+	}
 
 	// Connector MCP endpoint: third-party MCP clients (ChatGPT, Claude, and
 	// their mobile apps) driving a cloud daemon under a connector grant.
@@ -145,6 +153,14 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 		return nil, fmt.Errorf("connector MCP endpoint: %w", err)
 	}
 	r.routes = append(r.routes, mountMCP)
+
+	// The Reliant Forge connector: forge's account tools (monitoring,
+	// releases, environments) for a signed-in person, at /forge/mcp beside
+	// the workspace endpoint, under a forge connector grant.
+	if mountForge := forgeMCPRoutes(deps.Grants, deps.PublicURL, deps.OAuthIssuers,
+		connectorTokenValidator(settings), deps.ControlPlaneURL); mountForge != nil {
+		r.routes = append(r.routes, mountForge)
+	}
 
 	// CLI login discovery (RFC 8414): names the control plane that issues this
 	// deployment's rlat_ tokens, so `reliant auth login --server <this>` finds
@@ -375,6 +391,47 @@ func connectorMCPRoutes(
 	}, nil
 }
 
+// forgeMCPRoutes builds the Reliant Forge connector endpoint
+// (mcpserver.NewForgeHTTPHandler) and returns what mounts it, or nil when
+// this deployment cannot serve it: the tools act as the signed-in person
+// against the control plane, so they need both an OAuth authorization server
+// and a control plane (an OSS server has neither).
+func forgeMCPRoutes(
+	grants connectorgrant.Store,
+	publicURL string,
+	oauthIssuers []string,
+	tokenValidator mcpserver.OAuthTokenValidator,
+	controlPlaneURL string,
+) func(mux *http.ServeMux) {
+	oauthCfg := mcpserver.OAuthConfig{PublicURL: publicURL, AuthorizationServers: oauthIssuers}
+	if !oauthCfg.Enabled() || tokenValidator == nil || strings.TrimSpace(controlPlaneURL) == "" {
+		logging.Info("Reliant Forge MCP endpoint not mounted: it needs an OAuth authorization server and a control plane")
+		return nil
+	}
+	handler, err := mcpserver.NewForgeHTTPHandler(mcpserver.ForgeHTTPDeps{
+		Store:           grants,
+		TokenValidator:  tokenValidator,
+		Bindings:        grants,
+		OAuth:           oauthCfg,
+		ControlPlaneURL: controlPlaneURL,
+		ConsentBaseURL:  publicURL,
+		Logger:          slog.Default(),
+	})
+	if err != nil {
+		logging.Warn("Reliant Forge MCP endpoint not mounted", "error", err)
+		return nil
+	}
+	handler = bindEventStreams(handler)
+	return func(mux *http.ServeMux) {
+		mux.Handle(mcpserver.ForgeMountPath, handler)
+		mux.Handle(mcpserver.ForgeMountPath+"/", handler)
+		mux.Handle(mcpserver.ForgeSSEMountPath, handler)
+		mux.Handle(mcpserver.ForgeSSEMountPath+"/", handler)
+		mcpserver.MountForgeOAuthRoutes(mux, oauthCfg)
+		logging.Info("Reliant Forge MCP endpoint mounted", "path", mcpserver.ForgeMountPath)
+	}
+}
+
 // connectorTokenValidator adapts reliant's JWT validator to the connector
 // endpoint's OAuth token check.
 //
@@ -416,6 +473,16 @@ func (v *jwtConnectorValidator) ValidateToken(token string) (string, error) {
 		return "", err
 	}
 	return claims.Sub, nil
+}
+
+// ValidateTokenClient is ValidateToken plus the OAuth client the token was
+// issued to, from its verified client_id claim.
+func (v *jwtConnectorValidator) ValidateTokenClient(token string) (string, string, error) {
+	claims, err := v.validator.ValidateToken(token)
+	if err != nil {
+		return "", "", err
+	}
+	return claims.Sub, claims.ClientID, nil
 }
 
 // maxConcurrentStreams is the HTTP/2 stream cap per connection on both

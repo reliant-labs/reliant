@@ -175,6 +175,36 @@ type RuntimeContext struct {
 	// in-memory JWT map and resolve the Reliant LLM driver. Token persists into
 	// workflow history; rely on its natural expiry as the security boundary.
 	UserJWT string `json:"user_jwt,omitempty"`
+
+	// Telemetry names the run this activity works for, for AI monitoring: the
+	// worker's spans carry it (internal/telemetry/ai_attrs.go). Set by the
+	// runtime, never authored; nil from a workflow that predates it.
+	Telemetry *RunTelemetry `json:"telemetry,omitempty"`
+}
+
+// RunTelemetry is a run's identity on its spans (internal/telemetry): which
+// run, which workflow, which agent. It rides the execution context, so every
+// node of the run carries the same one; a spawned sub-agent is a run of its
+// own whose ids name the run that spawned it.
+type RunTelemetry struct {
+	// WorkflowName is the workflow the run executes; WorkflowRef is the
+	// reference it was started with ("builtin://agent", a project path).
+	WorkflowName string `json:"workflow_name,omitempty"`
+	WorkflowRef  string `json:"workflow_ref,omitempty"`
+	// Trigger is what started the run: a trigger's kind, "manual" for a
+	// person, "spawn" for a sub-agent.
+	Trigger string `json:"trigger,omitempty"`
+	// RunID is forge.ai.run.id: the root run's id survives continue-as-new
+	// and a resume of an interrupted run; a sub-agent's is its workflow id.
+	RunID string `json:"run_id,omitempty"`
+	// ParentRunID and RootRunID are set on a spawned sub-agent's run only.
+	ParentRunID string `json:"parent_run_id,omitempty"`
+	RootRunID   string `json:"root_run_id,omitempty"`
+	// Preset is the agent's preset, when the runtime resolved one.
+	Preset string `json:"preset,omitempty"`
+	// TurnTraceParent, on an execute_tools node only, is the traceparent of
+	// the call_llm turn whose tool calls it runs (CallLLMOutput.trace_parent).
+	TurnTraceParent string `json:"turn_traceparent,omitempty"`
 }
 
 // ModelChoice is a model selector as a workflow input holds it: an exact id

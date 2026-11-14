@@ -24,8 +24,8 @@ const step = (id: string): JourneyStep => {
   return found;
 };
 
-function fakeRouter(search: Record<string, unknown>) {
-  let location = { pathname: "/forge/demo", search };
+function fakeRouter(search: Record<string, unknown>, pathname = "/forge/demo") {
+  let location = { pathname, search };
   const listeners = new Set<() => void>();
   const env: AdvanceEnv = {
     getPathname: () => location.pathname,
@@ -42,16 +42,16 @@ function fakeRouter(search: Record<string, unknown>) {
   };
   return {
     env,
-    go(next: Record<string, unknown>) {
-      location = { pathname: "/forge/demo", search: next };
+    go(next: Record<string, unknown>, nextPathname = "/forge/demo") {
+      location = { pathname: nextPathname, search: next };
       listeners.forEach((fn) => fn());
     },
   };
 }
 
 /** Watch a step's advanceOn from `entry`; returns the spy and a way to move. */
-function watchStep(id: string, entry: Record<string, unknown>) {
-  const router = fakeRouter(entry);
+function watchStep(id: string, entry: Record<string, unknown>, pathname?: string) {
+  const router = fakeRouter(entry, pathname);
   const onFire = vi.fn();
   const watcher = watchAdvance(conditionsOf(step(id)), { target: step(id).target }, router.env, onFire);
   return { onFire, go: router.go, watcher };
@@ -81,8 +81,8 @@ const ELEVEN = [
 const active = () => activeJourneySteps("forge").map((s) => s.id);
 
 describe("the forge journey", () => {
-  it("is eleven steps in Reliant and the forge shell, with the compact controls (v3)", () => {
-    expect(forgeJourney.version).toBe(3);
+  it("is eleven steps in Reliant and the forge shell, with the compact controls (v4)", () => {
+    expect(forgeJourney.version).toBe(4);
     expect(forgeJourney.controls).toBe("callout");
     resetShellForTests("reliant");
     expect(active()).toEqual(ELEVEN);
@@ -205,6 +205,40 @@ describe("the forge journey", () => {
     for (const id of ["fg-intro", "fg-console", "fg-built", "fg-instrumented", "fg-inside", "fg-graph", "fg-oncall", "fg-agent", "fg-done"]) expect(conditionsOf(step(id)), id).toEqual([]);
   });
 
+  describe("on the demo host", () => {
+    afterEach(() => resetShellForTests());
+
+    it("walks the sample app's own console pages", () => {
+      resetShellForTests("demo");
+      for (const id of ["fg-intro", "fg-instrumented", "fg-built"]) {
+        expect(step(id).route?.path, id).toBe("/forge/p/shop");
+        expect((step(id).route?.open as RouteTarget).to, id).toBe("/forge/p/shop");
+      }
+      for (const [id, page] of [["fg-trace", "traces"], ["fg-hops", "traces"], ["fg-logs", "traces"], ["fg-issue", "errors"], ["fg-ask", "errors"], ["fg-graph", "graph"], ["fg-oncall", "alerts"]] as const) {
+        // An Observability page's prefix: the trace steps move on to the logs and the profiles pages.
+        expect(step(id).route?.path, id).toBe("/forge/p/shop/observability");
+        expect((step(id).route?.open as RouteTarget).to, id).toBe(`/forge/p/shop/observability/${page}`);
+      }
+      expect(openSearch("fg-logs")).toMatchObject({ trace: DEMO_TRACE_ID });
+      expect(openSearch("fg-logs")).not.toHaveProperty("view");
+      expect(openSearch("fg-ask")).toMatchObject({ issue: DEMO_ISSUE_ID });
+    });
+
+    it("fg-logs and fg-profile are done on the console's logs and profiles pages", () => {
+      resetShellForTests("demo");
+      const logs = watchStep("fg-logs", openSearch("fg-logs"), "/forge/p/shop/observability/traces");
+      logs.go({ trace: DEMO_TRACE_ID }, "/forge/p/shop/observability/traces");
+      expect(logs.onFire).not.toHaveBeenCalled();
+      logs.go({ trace: DEMO_TRACE_ID }, "/forge/p/shop/observability/logs");
+      expect(logs.onFire).toHaveBeenCalledTimes(1);
+      logs.watcher.dispose();
+      const profile = watchStep("fg-profile", openSearch("fg-profile"), "/forge/p/shop/observability/traces");
+      profile.go({ trace: DEMO_TRACE_ID, service: "api" }, "/forge/p/shop/observability/profiles");
+      expect(profile.onFire).toHaveBeenCalledTimes(1);
+      profile.watcher.dispose();
+    });
+  });
+
   describe("required actions", () => {
     it("fg-trace: the toured trace opened (?trace=)", () => {
       const { onFire, go, watcher } = watchStep("fg-trace", openSearch("fg-trace"));
@@ -293,7 +327,10 @@ describe("the forge journey", () => {
 
   it("spotlights the anchors the demo renders", () => {
     expect(step("fg-console").target).toBe("[data-tour='forge-console'] aside");
-    expect(step("fg-trace").target).toBe(`[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}']`);
+    // The console's own row, or the led Traces page's (the demo's console).
+    expect(step("fg-trace").target).toBe(`[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}'], [data-testid='lead-trace-row'][data-trace-id='${DEMO_TRACE_ID}']`);
+    expect(step("fg-issue").target).toContain(`[data-testid='lead-featured-issue'][data-issue-id='${DEMO_ISSUE_ID}']`);
+    expect(step("fg-instrumented").target).toBe("[data-testid='obs-overview'], [data-testid='overview-services']");
     expect(step("fg-ask").phases?.map((p) => p.target)).toEqual(["[data-testid='ask-reliant-actions']", "[data-testid='ask-agent-sheet']"]);
     expect(step("fg-inside").target).toBe(`[data-testid='trace-span-row'][data-span-id='${DEMO_INSIDE_SPAN_IDS.method}']`);
     expect(step("fg-graph").target).toBe("[data-testid='graph-view']");
@@ -313,7 +350,7 @@ describe("the forge journey", () => {
       expect(screen.queryByText(/reliant forge/)).toBeNull();
     });
 
-    it("tells the agent story with the shell's CLI, and ends the demo's tour on Sign up and Install", () => {
+    it("tells the agent story with the shell's CLI, and ends the demo's tour on Deploy yours free, Install and Sign up", () => {
       setTourShell("forge");
       const agent = render(<>{presentStep(step("fg-agent")).description}</>);
       expect(screen.getByText(`forge obs trace ${DEMO_TRACE_ID} prod`)).toBeInTheDocument();
@@ -324,6 +361,7 @@ describe("the forge journey", () => {
       // The public demo ends on its call to action, not a command list.
       expect(screen.queryByText("forge scaffold service inventory")).toBeNull();
       expect(screen.getByTestId("demo-cta-end_card")).toBeInTheDocument();
+      expect(screen.getByTestId("demo-cta-deploy")).toHaveTextContent("Deploy yours free");
       expect(screen.getByTestId("demo-cta-signup")).toHaveTextContent("Sign up free");
       expect(screen.getByTestId("demo-cta-install")).toHaveTextContent("Install Forge");
     });

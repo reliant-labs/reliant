@@ -161,6 +161,9 @@ type OAuthFlow struct {
 	// the client that started the flow can finish it.
 	ReturnTo  string
 	ExpiresAt time.Time
+	// OrgID is the organization the flow connects for (an org-owned
+	// connection), or "" for the user's own.
+	OrgID string
 }
 
 // ConnectionUpdate is what a successful (re)authorization writes onto an

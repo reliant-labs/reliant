@@ -7,6 +7,7 @@ import { ForgotPassword } from './ForgotPassword'
 import { EmailCodeForm } from './EmailCodeForm'
 import { PasswordInput } from './PasswordInput'
 import { isSafeReturnTo } from '@/lib/returnTo'
+import { isClaimReturnTo } from '@/lib/claimLink'
 import { describeAuthError } from '@/lib/authErrors'
 import { trackEvent } from '@/lib/analytics'
 import { AuthLayout, AuthHeader, AuthError, AuthDivider, AuthLegalLinks } from './AuthLayout'
@@ -99,6 +100,7 @@ export function AuthScreen() {
   // code or clicked the link. Only same-origin relative paths survive
   // isSafeReturnTo; an absolute `redirect` is handled by goToApp instead.
   const linkState = isSafeReturnTo(redirectParam) ? { returnTo: redirectParam } : undefined
+  const claiming = isClaimReturnTo(redirectParam)
 
   /**
    * Mail a code. Identical request for every address, so the screen that
@@ -251,7 +253,9 @@ export function AuthScreen() {
           description={
             usingPassword
               ? 'Enter the password for your account.'
-              : 'Enter your email and we’ll send you a 6-digit code.'
+              : claiming
+                ? 'Enter your email and we’ll send you a 6-digit code. New here? That creates your account, and the site you are claiming is added to it.'
+                : 'Enter your email and we’ll send you a 6-digit code.'
           }
         />
 

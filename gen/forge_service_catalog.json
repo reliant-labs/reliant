@@ -20,6 +20,7 @@
         "Account",
         "Approval",
         "Attachment",
+        "AutomationTakeover",
         "Background",
         "Catalog",
         "Chat",
@@ -47,7 +48,13 @@
         "Message",
         "ModelEndpoint",
         "NATSConn",
+        "OrgCredentialSweep",
+        "OrgPolicyAttendance",
+        "OrgPolicyImpact",
+        "OrgPolicyResolver",
+        "OrgProviderAccount",
         "OrgResolver",
+        "OrgUsage",
         "PackageCommands",
         "PauseService",
         "PayloadGC",
@@ -68,6 +75,7 @@
         "Run",
         "Scenario",
         "ScheduleSyncer",
+        "Seatmatch",
         "Settings",
         "Sharing",
         "Streaming",
@@ -119,6 +127,13 @@
         {
           "component": "Attachment",
           "service": "reliant.v1.AttachmentService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "AutomationTakeover",
+          "service": "reliant.v1.AutomationTakeoverService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -210,6 +225,27 @@
         {
           "component": "ModelEndpoint",
           "service": "reliant.v1.ModelEndpointService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "OrgPolicyImpact",
+          "service": "reliant.v1.OrgPolicyImpactService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "OrgProviderAccount",
+          "service": "reliant.v1.OrgProviderAccountService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "OrgUsage",
+          "service": "reliant.v1.OrgUsageService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -399,6 +435,7 @@
         "JetStream",
         "ManagedReconciler",
         "NATSConn",
+        "OrgPolicyResolver",
         "OrgResolver",
         "Pprof",
         "StateDerivation",
@@ -443,6 +480,8 @@
         "IntegrationSettings",
         "LedgerRetention",
         "NATSConn",
+        "OrgPolicyResolver",
+        "OrgPolicyWatcher",
         "OrgResolver",
         "PauseService",
         "PayloadStore",
@@ -1693,6 +1732,1341 @@
       }
     },
     {
+      "name": "reliant.v1.AutomationTakeoverService",
+      "proto_file": "reliant/v1/automation_takeover.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.AutomationTakeoverService/AcceptTriggerOffer",
+          "name": "AcceptTriggerOffer",
+          "input": "reliant.v1.AcceptTriggerOfferRequest",
+          "output": "reliant.v1.AcceptTriggerOfferResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.AutomationTakeoverService/AdoptTrigger",
+          "name": "AdoptTrigger",
+          "input": "reliant.v1.AdoptTriggerRequest",
+          "output": "reliant.v1.AdoptTriggerResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.AutomationTakeoverService/ListOrphanedAutomations",
+          "name": "ListOrphanedAutomations",
+          "input": "reliant.v1.ListOrphanedAutomationsRequest",
+          "output": "reliant.v1.ListOrphanedAutomationsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.AutomationTakeoverService/ListTriggerOffers",
+          "name": "ListTriggerOffers",
+          "input": "reliant.v1.ListTriggerOffersRequest",
+          "output": "reliant.v1.ListTriggerOffersResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.AutomationTakeoverService/RevokeTriggerOffer",
+          "name": "RevokeTriggerOffer",
+          "input": "reliant.v1.RevokeTriggerOfferRequest",
+          "output": "reliant.v1.RevokeTriggerOfferResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "AutomationTakeoverService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "ListOrphanedAutomations",
+            "InputType": "ListOrphanedAutomationsRequest",
+            "OutputType": "ListOrphanedAutomationsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListOrphanedAutomationsRequest",
+            "OutputTypeFQ": "reliant.v1.ListOrphanedAutomationsResponse",
+            "InputProtoFile": "reliant/v1/automation_takeover.proto",
+            "OutputProtoFile": "reliant/v1/automation_takeover.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "AdoptTrigger",
+            "InputType": "AdoptTriggerRequest",
+            "OutputType": "AdoptTriggerResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.AdoptTriggerRequest",
+            "OutputTypeFQ": "reliant.v1.AdoptTriggerResponse",
+            "InputProtoFile": "reliant/v1/automation_takeover.proto",
+            "OutputProtoFile": "reliant/v1/automation_takeover.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "adopt",
+              "TargetKind": "trigger",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "AcceptTriggerOffer",
+            "InputType": "AcceptTriggerOfferRequest",
+            "OutputType": "AcceptTriggerOfferResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.AcceptTriggerOfferRequest",
+            "OutputTypeFQ": "reliant.v1.AcceptTriggerOfferResponse",
+            "InputProtoFile": "reliant/v1/automation_takeover.proto",
+            "OutputProtoFile": "reliant/v1/automation_takeover.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "accept",
+              "TargetKind": "trigger_offer",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListTriggerOffers",
+            "InputType": "ListTriggerOffersRequest",
+            "OutputType": "ListTriggerOffersResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListTriggerOffersRequest",
+            "OutputTypeFQ": "reliant.v1.ListTriggerOffersResponse",
+            "InputProtoFile": "reliant/v1/automation_takeover.proto",
+            "OutputProtoFile": "reliant/v1/automation_takeover.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "RevokeTriggerOffer",
+            "InputType": "RevokeTriggerOfferRequest",
+            "OutputType": "RevokeTriggerOfferResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.RevokeTriggerOfferRequest",
+            "OutputTypeFQ": "reliant.v1.RevokeTriggerOfferResponse",
+            "InputProtoFile": "reliant/v1/automation_takeover.proto",
+            "OutputProtoFile": "reliant/v1/automation_takeover.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "revoke",
+              "TargetKind": "trigger_offer",
+              "Writer": "INTERCEPTOR"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/automation_takeover.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "AcceptTriggerOfferRequest": [
+            {
+              "Name": "offer_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "rebinding",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerRebinding"
+            }
+          ],
+          "AcceptTriggerOfferResponse": [
+            {
+              "Name": "trigger",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Trigger"
+            },
+            {
+              "Name": "webhook",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.WebhookCredential"
+            },
+            {
+              "Name": "notices",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            }
+          ],
+          "AdoptTriggerRequest": [
+            {
+              "Name": "trigger_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "new_owner_user_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "rebinding",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerRebinding"
+            }
+          ],
+          "AdoptTriggerResponse": [
+            {
+              "Name": "trigger",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Trigger"
+            },
+            {
+              "Name": "webhook",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.WebhookCredential"
+            },
+            {
+              "Name": "offer",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerOffer"
+            },
+            {
+              "Name": "notices",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            }
+          ],
+          "ListOrphanedAutomationsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "ListOrphanedAutomationsResponse": [
+            {
+              "Name": "triggers",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrphanedTrigger"
+            },
+            {
+              "Name": "workflows",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrphanedWorkflow"
+            }
+          ],
+          "ListTriggerOffersRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "ListTriggerOffersResponse": [
+            {
+              "Name": "offers",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerOffer"
+            }
+          ],
+          "RevokeTriggerOfferRequest": [
+            {
+              "Name": "offer_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "RevokeTriggerOfferResponse": [
+            {
+              "Name": "offer",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerOffer"
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.AcceptTriggerOfferRequest": [
+            {
+              "name": "offer_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "rebinding",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerRebinding"
+            }
+          ],
+          "reliant.v1.AcceptTriggerOfferResponse": [
+            {
+              "name": "trigger",
+              "kind": "message",
+              "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "webhook",
+              "kind": "message",
+              "type_name": "reliant.v1.WebhookCredential"
+            },
+            {
+              "name": "notices",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.AdoptTriggerRequest": [
+            {
+              "name": "trigger_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "new_owner_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "rebinding",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerRebinding"
+            }
+          ],
+          "reliant.v1.AdoptTriggerResponse": [
+            {
+              "name": "trigger",
+              "kind": "message",
+              "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "webhook",
+              "kind": "message",
+              "type_name": "reliant.v1.WebhookCredential"
+            },
+            {
+              "name": "offer",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerOffer"
+            },
+            {
+              "name": "notices",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.IntegrationSource": [
+            {
+              "name": "integration",
+              "kind": "string"
+            },
+            {
+              "name": "events",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "match",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "poll_interval",
+              "kind": "string"
+            },
+            {
+              "name": "match_input",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            }
+          ],
+          "reliant.v1.ListOrphanedAutomationsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ListOrphanedAutomationsResponse": [
+            {
+              "name": "triggers",
+              "kind": "message",
+              "type_name": "reliant.v1.OrphanedTrigger",
+              "repeated": true
+            },
+            {
+              "name": "workflows",
+              "kind": "message",
+              "type_name": "reliant.v1.OrphanedWorkflow",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ListTriggerOffersRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ListTriggerOffersResponse": [
+            {
+              "name": "offers",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerOffer",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.OrphanedTrigger": [
+            {
+              "name": "trigger",
+              "kind": "message",
+              "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "param_names",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "creator_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "pending_offer",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerOffer",
+              "optional": true
+            }
+          ],
+          "reliant.v1.OrphanedWorkflow": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "slug",
+              "kind": "string"
+            },
+            {
+              "name": "description",
+              "kind": "string"
+            },
+            {
+              "name": "definition",
+              "kind": "string"
+            },
+            {
+              "name": "creator_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "updated_at",
+              "kind": "string"
+            },
+            {
+              "name": "status",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.RevokeTriggerOfferRequest": [
+            {
+              "name": "offer_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.RevokeTriggerOfferResponse": [
+            {
+              "name": "offer",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerOffer"
+            }
+          ],
+          "reliant.v1.ScheduleSource": [
+            {
+              "name": "cron",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "interval",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "timezone",
+              "kind": "string"
+            },
+            {
+              "name": "overlap",
+              "kind": "enum",
+              "type_name": "reliant.v1.TriggerOverlapPolicy"
+            },
+            {
+              "name": "catchup_window",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.Trigger": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "enabled",
+              "kind": "bool"
+            },
+            {
+              "name": "workflow",
+              "kind": "string"
+            },
+            {
+              "name": "presets",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "params",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "message",
+              "map_value_type_name": "google.protobuf.Value"
+            },
+            {
+              "name": "message",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "updated_at",
+              "kind": "string"
+            },
+            {
+              "name": "next_fire_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "last_event",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerEvent",
+              "optional": true
+            },
+            {
+              "name": "changes",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerChange",
+              "repeated": true
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "no_machine",
+              "kind": "bool"
+            },
+            {
+              "name": "machine_pool_id",
+              "kind": "string"
+            },
+            {
+              "name": "machine_pool_name",
+              "kind": "string"
+            },
+            {
+              "name": "health",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerHealth"
+            },
+            {
+              "name": "project_name",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "machine_state",
+              "kind": "string"
+            },
+            {
+              "name": "notify_on_complete",
+              "kind": "bool"
+            },
+            {
+              "name": "filter",
+              "kind": "string"
+            },
+            {
+              "name": "schedule",
+              "kind": "message",
+              "type_name": "reliant.v1.ScheduleSource",
+              "oneof": "source"
+            },
+            {
+              "name": "webhook",
+              "kind": "message",
+              "type_name": "reliant.v1.WebhookSource",
+              "oneof": "source"
+            },
+            {
+              "name": "integration",
+              "kind": "message",
+              "type_name": "reliant.v1.IntegrationSource",
+              "oneof": "source"
+            },
+            {
+              "name": "workflow_event",
+              "kind": "message",
+              "type_name": "reliant.v1.WorkflowEventSource",
+              "oneof": "source"
+            },
+            {
+              "name": "connection_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "webhook_url",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "workflow_trigger",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "acting_identity",
+              "kind": "enum",
+              "type_name": "reliant.v1.ActingIdentity"
+            },
+            {
+              "name": "webhook_managed",
+              "kind": "bool"
+            },
+            {
+              "name": "definition_source",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerDefinitionSource"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "paused_reason",
+              "kind": "string"
+            },
+            {
+              "name": "unattended_funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.UnattendedFunding"
+            }
+          ],
+          "reliant.v1.TriggerChange": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "run_id",
+              "kind": "string"
+            },
+            {
+              "name": "tool_call_id",
+              "kind": "string"
+            },
+            {
+              "name": "operation",
+              "kind": "string"
+            },
+            {
+              "name": "before_state",
+              "kind": "string"
+            },
+            {
+              "name": "after_state",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "approval",
+              "kind": "string"
+            },
+            {
+              "name": "capabilities_added",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "capabilities_removed",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.TriggerDefinitionSource": [
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "summary",
+              "kind": "string"
+            },
+            {
+              "name": "warnings",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.TriggerEvent": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "trigger_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.TriggerEventKind"
+            },
+            {
+              "name": "occurred_at",
+              "kind": "string"
+            },
+            {
+              "name": "outcome",
+              "kind": "enum",
+              "type_name": "reliant.v1.TriggerEventOutcome"
+            },
+            {
+              "name": "outcome_detail",
+              "kind": "string"
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "payload",
+              "kind": "message",
+              "type_name": "google.protobuf.Struct"
+            },
+            {
+              "name": "run",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerEventRun",
+              "optional": true
+            },
+            {
+              "name": "sender",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerSender",
+              "optional": true
+            },
+            {
+              "name": "fire_workflow_id",
+              "kind": "string"
+            },
+            {
+              "name": "definition",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerEventDefinition",
+              "optional": true
+            }
+          ],
+          "reliant.v1.TriggerEventDefinition": [
+            {
+              "name": "workflow",
+              "kind": "string"
+            },
+            {
+              "name": "source",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "commit",
+              "kind": "string"
+            },
+            {
+              "name": "dirty",
+              "kind": "bool"
+            },
+            {
+              "name": "content_hash",
+              "kind": "string"
+            },
+            {
+              "name": "error",
+              "kind": "string"
+            },
+            {
+              "name": "summary",
+              "kind": "string"
+            },
+            {
+              "name": "catalog_pin",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.TriggerEventRun": [
+            {
+              "name": "display_state",
+              "kind": "enum",
+              "type_name": "reliant.v1.RunDisplayState"
+            },
+            {
+              "name": "title",
+              "kind": "string"
+            },
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.WorkflowState"
+            },
+            {
+              "name": "stop_reason",
+              "kind": "enum",
+              "type_name": "reliant.v1.WorkflowStopReason"
+            }
+          ],
+          "reliant.v1.TriggerHealth": [
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.TriggerHealthStatus"
+            },
+            {
+              "name": "consecutive_failures",
+              "kind": "int32"
+            },
+            {
+              "name": "consecutive_skips",
+              "kind": "int32"
+            },
+            {
+              "name": "last_failure_detail",
+              "kind": "string"
+            },
+            {
+              "name": "setup_issues",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerSetupIssue",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.TriggerOffer": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "trigger_id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "offered_by_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "offeree_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "status",
+              "kind": "string"
+            },
+            {
+              "name": "status_reason",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "expires_at",
+              "kind": "string"
+            },
+            {
+              "name": "trigger",
+              "kind": "message",
+              "type_name": "reliant.v1.Trigger",
+              "optional": true
+            },
+            {
+              "name": "param_names",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.TriggerRebinding": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "no_machine",
+              "kind": "bool"
+            },
+            {
+              "name": "machine_pool_id",
+              "kind": "string"
+            },
+            {
+              "name": "connection_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "presets",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "workflow",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "webhook_hmac_secret",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "params",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "message",
+              "map_value_type_name": "google.protobuf.Value"
+            }
+          ],
+          "reliant.v1.TriggerSender": [
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "display_name",
+              "kind": "string"
+            },
+            {
+              "name": "verified",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.TriggerSetupIssue": [
+            {
+              "name": "input",
+              "kind": "string"
+            },
+            {
+              "name": "message",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WebhookCredential": [
+            {
+              "name": "token",
+              "kind": "string"
+            },
+            {
+              "name": "url",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WebhookHmac": [
+            {
+              "name": "header",
+              "kind": "string"
+            },
+            {
+              "name": "algorithm",
+              "kind": "string"
+            },
+            {
+              "name": "prefix",
+              "kind": "string"
+            },
+            {
+              "name": "encoding",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WebhookSource": [
+            {
+              "name": "hmac",
+              "kind": "message",
+              "type_name": "reliant.v1.WebhookHmac"
+            },
+            {
+              "name": "source",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WorkflowEventSource": [
+            {
+              "name": "workflows",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "outcomes",
+              "kind": "string",
+              "repeated": true
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.AcceptTriggerOfferRequest": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.AcceptTriggerOfferResponse": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.AdoptTriggerRequest": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.AdoptTriggerResponse": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.IntegrationSource": "reliant/v1/trigger.proto",
+          "reliant.v1.ListOrphanedAutomationsRequest": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.ListOrphanedAutomationsResponse": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.ListTriggerOffersRequest": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.ListTriggerOffersResponse": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.OrphanedTrigger": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.OrphanedWorkflow": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.RevokeTriggerOfferRequest": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.RevokeTriggerOfferResponse": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.ScheduleSource": "reliant/v1/trigger.proto",
+          "reliant.v1.Trigger": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerChange": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerDefinitionSource": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerEvent": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerEventDefinition": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerOffer": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.TriggerRebinding": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.TriggerSender": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto",
+          "reliant.v1.WebhookCredential": "reliant/v1/trigger.proto",
+          "reliant.v1.WebhookHmac": "reliant/v1/trigger.proto",
+          "reliant.v1.WebhookSource": "reliant/v1/trigger.proto",
+          "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto"
+        },
+        "Enums": {
+          "reliant.v1.ActingIdentity": [
+            "ACTING_IDENTITY_UNSPECIFIED",
+            "ACTING_IDENTITY_OWNER",
+            "ACTING_IDENTITY_APP"
+          ],
+          "reliant.v1.RunDisplayState": [
+            "RUN_DISPLAY_STATE_UNSPECIFIED",
+            "RUN_DISPLAY_STATE_QUEUED",
+            "RUN_DISPLAY_STATE_RUNNING",
+            "RUN_DISPLAY_STATE_NEEDS_INPUT",
+            "RUN_DISPLAY_STATE_PAUSED",
+            "RUN_DISPLAY_STATE_COMPLETED",
+            "RUN_DISPLAY_STATE_FAILED",
+            "RUN_DISPLAY_STATE_CANCELLED",
+            "RUN_DISPLAY_STATE_WAITING_FOR_MACHINE"
+          ],
+          "reliant.v1.TriggerEventKind": [
+            "TRIGGER_EVENT_KIND_UNSPECIFIED",
+            "TRIGGER_EVENT_KIND_CHAT_START",
+            "TRIGGER_EVENT_KIND_SCHEDULE",
+            "TRIGGER_EVENT_KIND_AGENT_START_RUN",
+            "TRIGGER_EVENT_KIND_BUILDER_TEST",
+            "TRIGGER_EVENT_KIND_WEBHOOK",
+            "TRIGGER_EVENT_KIND_INTEGRATION",
+            "TRIGGER_EVENT_KIND_WORKFLOW_EVENT",
+            "TRIGGER_EVENT_KIND_MANUAL_RUN",
+            "TRIGGER_EVENT_KIND_CLI_RUN"
+          ],
+          "reliant.v1.TriggerEventOutcome": [
+            "TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
+            "TRIGGER_EVENT_OUTCOME_LAUNCHED",
+            "TRIGGER_EVENT_OUTCOME_SKIPPED",
+            "TRIGGER_EVENT_OUTCOME_FAILED",
+            "TRIGGER_EVENT_OUTCOME_PENDING"
+          ],
+          "reliant.v1.TriggerHealthStatus": [
+            "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
+            "TRIGGER_HEALTH_STATUS_HEALTHY",
+            "TRIGGER_HEALTH_STATUS_DEGRADED",
+            "TRIGGER_HEALTH_STATUS_FAILING",
+            "TRIGGER_HEALTH_STATUS_UNKNOWN",
+            "TRIGGER_HEALTH_STATUS_BROKEN",
+            "TRIGGER_HEALTH_STATUS_NEEDS_SETUP"
+          ],
+          "reliant.v1.TriggerOverlapPolicy": [
+            "TRIGGER_OVERLAP_POLICY_UNSPECIFIED",
+            "TRIGGER_OVERLAP_POLICY_SKIP",
+            "TRIGGER_OVERLAP_POLICY_ALLOW"
+          ],
+          "reliant.v1.UnattendedFunding": [
+            "UNATTENDED_FUNDING_UNSPECIFIED",
+            "UNATTENDED_FUNDING_ANY",
+            "UNATTENDED_FUNDING_ORG_ONLY"
+          ],
+          "reliant.v1.WorkflowState": [
+            "WORKFLOW_STATE_UNSPECIFIED",
+            "WORKFLOW_STATE_PENDING",
+            "WORKFLOW_STATE_ACTIVE",
+            "WORKFLOW_STATE_STOPPED"
+          ],
+          "reliant.v1.WorkflowStopReason": [
+            "WORKFLOW_STOP_REASON_UNSPECIFIED",
+            "WORKFLOW_STOP_REASON_COMPLETED",
+            "WORKFLOW_STOP_REASON_FAILED",
+            "WORKFLOW_STOP_REASON_PAUSED",
+            "WORKFLOW_STOP_REASON_CANCELLED"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.ActingIdentity": [
+            0,
+            1,
+            2
+          ],
+          "reliant.v1.RunDisplayState": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "reliant.v1.TriggerEventKind": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "reliant.v1.TriggerEventOutcome": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.TriggerHealthStatus": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "reliant.v1.TriggerOverlapPolicy": [
+            0,
+            1,
+            2
+          ],
+          "reliant.v1.UnattendedFunding": [
+            0,
+            1,
+            2
+          ],
+          "reliant.v1.WorkflowState": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.WorkflowStopReason": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.ActingIdentity": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ActingIdentity"
+          },
+          "reliant.v1.RunDisplayState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "RunDisplayState"
+          },
+          "reliant.v1.TriggerEventKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "TriggerEventKind"
+          },
+          "reliant.v1.TriggerEventOutcome": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "TriggerEventOutcome"
+          },
+          "reliant.v1.TriggerHealthStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "TriggerHealthStatus"
+          },
+          "reliant.v1.TriggerOverlapPolicy": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "TriggerOverlapPolicy"
+          },
+          "reliant.v1.UnattendedFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "UnattendedFunding"
+          },
+          "reliant.v1.WorkflowState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "WorkflowState"
+          },
+          "reliant.v1.WorkflowStopReason": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "WorkflowStopReason"
+          }
+        }
+      }
+    },
+    {
       "name": "reliant.v1.BackgroundService",
       "proto_file": "reliant/v1/background.proto",
       "methods": [
@@ -2520,7 +3894,13 @@
               "MessageType": "reliant.v1.CatalogEntry"
             }
           ],
-          "ListAvailableModelsRequest": null,
+          "ListAvailableModelsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
           "ListAvailableModelsResponse": [
             {
               "Name": "models",
@@ -2650,7 +4030,13 @@
               "MessageType": "reliant.v1.ModelInfo"
             }
           ],
-          "ListModelsRequest": null,
+          "ListModelsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
           "ListModelsResponse": [
             {
               "Name": "models",
@@ -3199,7 +4585,13 @@
               "kind": "bool"
             }
           ],
-          "reliant.v1.ListAvailableModelsRequest": [],
+          "reliant.v1.ListAvailableModelsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListAvailableModelsResponse": [
             {
               "name": "models",
@@ -3328,7 +4720,13 @@
               "repeated": true
             }
           ],
-          "reliant.v1.ListModelsRequest": [],
+          "reliant.v1.ListModelsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListModelsResponse": [
             {
               "name": "models",
@@ -7395,6 +8793,11 @@
               "name": "fallback_model",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderPolicy.Funding"
             }
           ],
           "reliant.v1.QueuedAgentMessage": [
@@ -8364,6 +9767,12 @@
             "PLAN_STATUS_COMPLETED",
             "PLAN_STATUS_CANCELLED"
           ],
+          "reliant.v1.ProviderPolicy.Funding": [
+            "FUNDING_UNSPECIFIED",
+            "FUNDING_ORG_FIRST",
+            "FUNDING_PERSONAL_FIRST",
+            "FUNDING_ORG_ONLY"
+          ],
           "reliant.v1.ProviderPolicy.OnLimit": [
             "ON_LIMIT_UNSPECIFIED",
             "ON_LIMIT_WAIT",
@@ -8492,6 +9901,12 @@
             3,
             4
           ],
+          "reliant.v1.ProviderPolicy.Funding": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.ProviderPolicy.OnLimit": [
             0,
             1,
@@ -8586,6 +10001,10 @@
           "reliant.v1.PlanStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "PlanStatus"
+          },
+          "reliant.v1.ProviderPolicy.Funding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderPolicy_Funding"
           },
           "reliant.v1.ProviderPolicy.OnLimit": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -9021,6 +10440,11 @@
               "Name": "params",
               "ProtoType": "message",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateApiKeyConnectionResponse": [
@@ -9036,6 +10460,11 @@
               "Name": "id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "DeleteConnectionResponse": null,
@@ -9044,6 +10473,11 @@
               "Name": "id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "GetConnectionResponse": [
@@ -9068,6 +10502,11 @@
             {
               "Name": "before_id",
               "ProtoType": "int64",
+              "IsOptional": true
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
               "IsOptional": true
             }
           ],
@@ -9099,7 +10538,13 @@
               "MessageType": "reliant.v1.Connection"
             }
           ],
-          "ListIntegrationsRequest": null,
+          "ListIntegrationsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
           "ListIntegrationsResponse": [
             {
               "Name": "integrations",
@@ -9118,6 +10563,11 @@
               "Name": "name",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "RenameConnectionResponse": [
@@ -9133,6 +10583,11 @@
               "Name": "id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "SetDefaultConnectionResponse": [
@@ -9173,6 +10628,11 @@
               "Name": "loopback_redirect",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "StartOAuthResponse": [
@@ -9187,6 +10647,11 @@
               "Name": "id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "TestConnectionResponse": [
@@ -9347,6 +10812,10 @@
             {
               "name": "at",
               "kind": "string"
+            },
+            {
+              "name": "user_id",
+              "kind": "string"
             }
           ],
           "reliant.v1.CreateApiKeyConnectionRequest": [
@@ -9374,6 +10843,11 @@
               "kind": "map",
               "map_key_kind": "string",
               "map_value_kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateApiKeyConnectionResponse": [
@@ -9387,6 +10861,11 @@
             {
               "name": "id",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.DeleteConnectionResponse": [],
@@ -9394,6 +10873,11 @@
             {
               "name": "id",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GetConnectionResponse": [
@@ -9423,6 +10907,11 @@
               "kind": "message",
               "type_name": "reliant.v1.IntegrationConnectionParam",
               "repeated": true
+            },
+            {
+              "name": "org_policy",
+              "kind": "message",
+              "type_name": "reliant.v1.IntegrationOrgPolicy"
             }
           ],
           "reliant.v1.IntegrationAuthMethod": [
@@ -9472,6 +10961,20 @@
               "kind": "bool"
             }
           ],
+          "reliant.v1.IntegrationOrgPolicy": [
+            {
+              "name": "allowed",
+              "kind": "bool"
+            },
+            {
+              "name": "enforced",
+              "kind": "bool"
+            },
+            {
+              "name": "policy_version",
+              "kind": "int64"
+            }
+          ],
           "reliant.v1.ListConnectionEventsRequest": [
             {
               "name": "id",
@@ -9487,6 +10990,11 @@
             {
               "name": "before_id",
               "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
               "optional": true
             }
           ],
@@ -9518,7 +11026,13 @@
               "repeated": true
             }
           ],
-          "reliant.v1.ListIntegrationsRequest": [],
+          "reliant.v1.ListIntegrationsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListIntegrationsResponse": [
             {
               "name": "integrations",
@@ -9535,6 +11049,11 @@
             {
               "name": "name",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.RenameConnectionResponse": [
@@ -9548,6 +11067,11 @@
             {
               "name": "id",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.SetDefaultConnectionResponse": [
@@ -9583,6 +11107,11 @@
             {
               "name": "loopback_redirect",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.StartOAuthResponse": [
@@ -9595,6 +11124,11 @@
             {
               "name": "id",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.TestConnectionResponse": [
@@ -9630,6 +11164,7 @@
           "reliant.v1.Integration": "reliant/v1/connection.proto",
           "reliant.v1.IntegrationAuthMethod": "reliant/v1/connection.proto",
           "reliant.v1.IntegrationConnectionParam": "reliant/v1/connection.proto",
+          "reliant.v1.IntegrationOrgPolicy": "reliant/v1/connection.proto",
           "reliant.v1.ListConnectionEventsRequest": "reliant/v1/connection.proto",
           "reliant.v1.ListConnectionEventsResponse": "reliant/v1/connection.proto",
           "reliant.v1.ListConnectionsRequest": "reliant/v1/connection.proto",
@@ -10036,6 +11571,21 @@
               "Name": "expires_at",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "project_names",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "CreateConnectorResponse": [
@@ -10065,7 +11615,13 @@
               "MessageType": "reliant.v1.AuthorizedClient"
             }
           ],
-          "ListAvailableToolsRequest": null,
+          "ListAvailableToolsRequest": [
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
           "ListAvailableToolsResponse": [
             {
               "Name": "tools",
@@ -10242,6 +11798,20 @@
             {
               "name": "created_at",
               "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectorKind"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_names",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ConnectorActivity": [
@@ -10340,6 +11910,20 @@
               "name": "expires_at",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectorKind"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_names",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.CreateConnectorResponse": [
@@ -10366,7 +11950,14 @@
               "repeated": true
             }
           ],
-          "reliant.v1.ListAvailableToolsRequest": [],
+          "reliant.v1.ListAvailableToolsRequest": [
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectorKind",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListAvailableToolsResponse": [
             {
               "name": "tools",
@@ -10457,6 +12048,11 @@
             "CONNECTOR_EXEC_MODE_DENY",
             "CONNECTOR_EXEC_MODE_ALLOWLIST",
             "CONNECTOR_EXEC_MODE_UNRESTRICTED"
+          ],
+          "reliant.v1.ConnectorKind": [
+            "CONNECTOR_KIND_UNSPECIFIED",
+            "CONNECTOR_KIND_WORKSPACE",
+            "CONNECTOR_KIND_FORGE"
           ]
         },
         "EnumNumbers": {
@@ -10465,12 +12061,21 @@
             1,
             2,
             3
+          ],
+          "reliant.v1.ConnectorKind": [
+            0,
+            1,
+            2
           ]
         },
         "EnumGoRefs": {
           "reliant.v1.ConnectorExecMode": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ConnectorExecMode"
+          },
+          "reliant.v1.ConnectorKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ConnectorKind"
           }
         }
       }
@@ -11268,6 +12873,11 @@
               "name": "pools",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "health",
+              "kind": "message",
+              "type_name": "reliant.v1.MachineHealth"
             }
           ],
           "reliant.v1.DeleteMachinePoolRequest": [
@@ -11529,6 +13139,25 @@
             {
               "name": "probed_at",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.MachineHealth": [
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.MachineHealthState"
+            },
+            {
+              "name": "code",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "since_ms",
+              "kind": "int64"
             }
           ],
           "reliant.v1.MachinePool": [
@@ -11913,6 +13542,7 @@
           "reliant.v1.LocalModelEndpoint": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInfo": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.MachineHealth": "reliant/v1/tools_daemon.proto",
           "reliant.v1.MachinePool": "reliant/v1/daemon_registry.proto",
           "reliant.v1.MachinePoolMember": "reliant/v1/daemon_registry.proto",
           "reliant.v1.MachinePoolSpec": "reliant/v1/daemon_registry.proto",
@@ -11960,6 +13590,11 @@
             "DISK_GUARD_STATE_UNSPECIFIED",
             "DISK_GUARD_STATE_RECLAIMING",
             "DISK_GUARD_STATE_REFUSING_HEAVY"
+          ],
+          "reliant.v1.MachineHealthState": [
+            "MACHINE_HEALTH_STATE_UNSPECIFIED",
+            "MACHINE_HEALTH_STATE_OK",
+            "MACHINE_HEALTH_STATE_DEGRADED"
           ]
         },
         "EnumNumbers": {
@@ -11985,6 +13620,11 @@
             0,
             1,
             2
+          ],
+          "reliant.v1.MachineHealthState": [
+            0,
+            1,
+            2
           ]
         },
         "EnumGoRefs": {
@@ -11999,6 +13639,10 @@
           "reliant.v1.DiskGuardState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "DiskGuardState"
+          },
+          "reliant.v1.MachineHealthState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "MachineHealthState"
           }
         }
       }
@@ -15752,6 +17396,22 @@
               "name": "last_run_chat_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "incident_key",
+              "kind": "string"
+            },
+            {
+              "name": "attention_state",
+              "kind": "string"
+            },
+            {
+              "name": "failure_class",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
             }
           ],
           "reliant.v1.InboxAutomationLaunchFailed": [
@@ -15776,10 +17436,39 @@
               "repeated": true
             }
           ],
+          "reliant.v1.InboxAutomationNoOrgAccount": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "owner_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.InboxAutomationRunPaused": [
             {
               "name": "reason",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.InboxAutomationsOnPersonalAccounts": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "count",
+              "kind": "int32"
+            },
+            {
+              "name": "trigger_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.InboxItem": [
@@ -15899,6 +17588,50 @@
               "kind": "message",
               "type_name": "reliant.v1.InboxWorktreeMarked",
               "oneof": "payload"
+            },
+            {
+              "name": "org_provider_key_rejected",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxOrgProviderKeyRejected",
+              "oneof": "payload"
+            },
+            {
+              "name": "automation_no_org_account",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxAutomationNoOrgAccount",
+              "oneof": "payload"
+            },
+            {
+              "name": "automations_on_personal_accounts",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxAutomationsOnPersonalAccounts",
+              "oneof": "payload"
+            }
+          ],
+          "reliant.v1.InboxOrgProviderKeyRejected": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "key_hint",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
             }
           ],
           "reliant.v1.InboxQuestion": [
@@ -16404,8 +18137,11 @@
           "reliant.v1.InboxAutomationFailing": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationLaunchFailed": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationNeedsSetup": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxAutomationNoOrgAccount": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationRunPaused": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxAutomationsOnPersonalAccounts": "reliant/v1/inbox.proto",
           "reliant.v1.InboxItem": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxOrgProviderKeyRejected": "reliant/v1/inbox.proto",
           "reliant.v1.InboxQuestion": "reliant/v1/inbox.proto",
           "reliant.v1.InboxRefusedAutomation": "reliant/v1/inbox.proto",
           "reliant.v1.InboxStorage": "reliant/v1/inbox.proto",
@@ -16457,7 +18193,11 @@
             "INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED",
             "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN",
             "INBOX_ITEM_KIND_WORKTREE_RECLAIM",
-            "INBOX_ITEM_KIND_WORKTREE_MARKED"
+            "INBOX_ITEM_KIND_WORKTREE_MARKED",
+            "INBOX_ITEM_KIND_PERSONAL_FUNDING",
+            "INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED",
+            "INBOX_ITEM_KIND_AUTOMATION_NO_ORG_ACCOUNT",
+            "INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS"
           ],
           "reliant.v1.TriggerHealthStatus": [
             "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -16498,7 +18238,11 @@
             10,
             11,
             12,
-            13
+            13,
+            14,
+            15,
+            16,
+            17
           ],
           "reliant.v1.TriggerHealthStatus": [
             0,
@@ -18675,6 +20419,1758 @@
           "reliant.v1.ModelEndpointRoute": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ModelEndpointRoute"
+          }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.OrgPolicyImpactService",
+      "proto_file": "reliant/v1/org_policy_impact.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.OrgPolicyImpactService/GetPolicyImpact",
+          "name": "GetPolicyImpact",
+          "input": "reliant.v1.GetPolicyImpactRequest",
+          "output": "reliant.v1.GetPolicyImpactResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "OrgPolicyImpactService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetPolicyImpact",
+            "InputType": "GetPolicyImpactRequest",
+            "OutputType": "GetPolicyImpactResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetPolicyImpactRequest",
+            "OutputTypeFQ": "reliant.v1.GetPolicyImpactResponse",
+            "InputProtoFile": "reliant/v1/org_policy_impact.proto",
+            "OutputProtoFile": "reliant/v1/org_policy_impact.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/org_policy_impact.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetPolicyImpactRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "policy_json",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetPolicyImpactResponse": [
+            {
+              "Name": "window_days",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "chats_considered",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "chats_refused",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "automations_refused",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "reasons",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PolicyImpactReason"
+            },
+            {
+              "Name": "truncated",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetPolicyImpactRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "policy_json",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.GetPolicyImpactResponse": [
+            {
+              "name": "window_days",
+              "kind": "int32"
+            },
+            {
+              "name": "chats_considered",
+              "kind": "int32"
+            },
+            {
+              "name": "chats_refused",
+              "kind": "int32"
+            },
+            {
+              "name": "automations_refused",
+              "kind": "int32"
+            },
+            {
+              "name": "reasons",
+              "kind": "message",
+              "type_name": "reliant.v1.PolicyImpactReason",
+              "repeated": true
+            },
+            {
+              "name": "truncated",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.PolicyImpactReason": [
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "chats",
+              "kind": "int32"
+            },
+            {
+              "name": "automations",
+              "kind": "int32"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetPolicyImpactRequest": "reliant/v1/org_policy_impact.proto",
+          "reliant.v1.GetPolicyImpactResponse": "reliant/v1/org_policy_impact.proto",
+          "reliant.v1.PolicyImpactReason": "reliant/v1/org_policy_impact.proto"
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.OrgProviderAccountService",
+      "proto_file": "reliant/v1/org_provider_account.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.OrgProviderAccountService/AddOrgProviderAPIKey",
+          "name": "AddOrgProviderAPIKey",
+          "input": "reliant.v1.AddOrgProviderAPIKeyRequest",
+          "output": "reliant.v1.AddOrgProviderAPIKeyResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/BindOrgProviderWorkspace",
+          "name": "BindOrgProviderWorkspace",
+          "input": "reliant.v1.BindOrgProviderWorkspaceRequest",
+          "output": "reliant.v1.BindOrgProviderWorkspaceResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/DeleteOrgProviderAccount",
+          "name": "DeleteOrgProviderAccount",
+          "input": "reliant.v1.DeleteOrgProviderAccountRequest",
+          "output": "reliant.v1.DeleteOrgProviderAccountResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/ListOrgProviderAccounts",
+          "name": "ListOrgProviderAccounts",
+          "input": "reliant.v1.ListOrgProviderAccountsRequest",
+          "output": "reliant.v1.ListOrgProviderAccountsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/ListOrgProviderWorkspaces",
+          "name": "ListOrgProviderWorkspaces",
+          "input": "reliant.v1.ListOrgProviderWorkspacesRequest",
+          "output": "reliant.v1.ListOrgProviderWorkspacesResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/ReleaseOrgProviderSeat",
+          "name": "ReleaseOrgProviderSeat",
+          "input": "reliant.v1.ReleaseOrgProviderSeatRequest",
+          "output": "reliant.v1.ReleaseOrgProviderSeatResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/ReorderOrgProviderAccounts",
+          "name": "ReorderOrgProviderAccounts",
+          "input": "reliant.v1.ReorderOrgProviderAccountsRequest",
+          "output": "reliant.v1.ReorderOrgProviderAccountsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/RotateOrgProviderAPIKey",
+          "name": "RotateOrgProviderAPIKey",
+          "input": "reliant.v1.RotateOrgProviderAPIKeyRequest",
+          "output": "reliant.v1.RotateOrgProviderAPIKeyResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/SetOrgProviderAccountGrants",
+          "name": "SetOrgProviderAccountGrants",
+          "input": "reliant.v1.SetOrgProviderAccountGrantsRequest",
+          "output": "reliant.v1.SetOrgProviderAccountGrantsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/UnbindOrgProviderWorkspace",
+          "name": "UnbindOrgProviderWorkspace",
+          "input": "reliant.v1.UnbindOrgProviderWorkspaceRequest",
+          "output": "reliant.v1.UnbindOrgProviderWorkspaceResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/UpdateOrgProviderAccount",
+          "name": "UpdateOrgProviderAccount",
+          "input": "reliant.v1.UpdateOrgProviderAccountRequest",
+          "output": "reliant.v1.UpdateOrgProviderAccountResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "OrgProviderAccountService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "ListOrgProviderAccounts",
+            "InputType": "ListOrgProviderAccountsRequest",
+            "OutputType": "ListOrgProviderAccountsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListOrgProviderAccountsRequest",
+            "OutputTypeFQ": "reliant.v1.ListOrgProviderAccountsResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "AddOrgProviderAPIKey",
+            "InputType": "AddOrgProviderAPIKeyRequest",
+            "OutputType": "AddOrgProviderAPIKeyResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.AddOrgProviderAPIKeyRequest",
+            "OutputTypeFQ": "reliant.v1.AddOrgProviderAPIKeyResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "add",
+              "TargetKind": "provider_account",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "RotateOrgProviderAPIKey",
+            "InputType": "RotateOrgProviderAPIKeyRequest",
+            "OutputType": "RotateOrgProviderAPIKeyResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.RotateOrgProviderAPIKeyRequest",
+            "OutputTypeFQ": "reliant.v1.RotateOrgProviderAPIKeyResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "rotate",
+              "TargetKind": "provider_account",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "UpdateOrgProviderAccount",
+            "InputType": "UpdateOrgProviderAccountRequest",
+            "OutputType": "UpdateOrgProviderAccountResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.UpdateOrgProviderAccountRequest",
+            "OutputTypeFQ": "reliant.v1.UpdateOrgProviderAccountResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "update",
+              "TargetKind": "provider_account",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ReorderOrgProviderAccounts",
+            "InputType": "ReorderOrgProviderAccountsRequest",
+            "OutputType": "ReorderOrgProviderAccountsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ReorderOrgProviderAccountsRequest",
+            "OutputTypeFQ": "reliant.v1.ReorderOrgProviderAccountsResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "reorder",
+              "TargetKind": "provider_account_order",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "SetOrgProviderAccountGrants",
+            "InputType": "SetOrgProviderAccountGrantsRequest",
+            "OutputType": "SetOrgProviderAccountGrantsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.SetOrgProviderAccountGrantsRequest",
+            "OutputTypeFQ": "reliant.v1.SetOrgProviderAccountGrantsResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_grants",
+              "TargetKind": "provider_account",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "DeleteOrgProviderAccount",
+            "InputType": "DeleteOrgProviderAccountRequest",
+            "OutputType": "DeleteOrgProviderAccountResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.DeleteOrgProviderAccountRequest",
+            "OutputTypeFQ": "reliant.v1.DeleteOrgProviderAccountResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "delete",
+              "TargetKind": "provider_account",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListOrgProviderWorkspaces",
+            "InputType": "ListOrgProviderWorkspacesRequest",
+            "OutputType": "ListOrgProviderWorkspacesResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListOrgProviderWorkspacesRequest",
+            "OutputTypeFQ": "reliant.v1.ListOrgProviderWorkspacesResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "BindOrgProviderWorkspace",
+            "InputType": "BindOrgProviderWorkspaceRequest",
+            "OutputType": "BindOrgProviderWorkspaceResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.BindOrgProviderWorkspaceRequest",
+            "OutputTypeFQ": "reliant.v1.BindOrgProviderWorkspaceResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "bind",
+              "TargetKind": "provider_workspace",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "UnbindOrgProviderWorkspace",
+            "InputType": "UnbindOrgProviderWorkspaceRequest",
+            "OutputType": "UnbindOrgProviderWorkspaceResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.UnbindOrgProviderWorkspaceRequest",
+            "OutputTypeFQ": "reliant.v1.UnbindOrgProviderWorkspaceResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "unbind",
+              "TargetKind": "provider_workspace",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ReleaseOrgProviderSeat",
+            "InputType": "ReleaseOrgProviderSeatRequest",
+            "OutputType": "ReleaseOrgProviderSeatResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ReleaseOrgProviderSeatRequest",
+            "OutputTypeFQ": "reliant.v1.ReleaseOrgProviderSeatResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "release",
+              "TargetKind": "provider_account",
+              "Writer": "INTERCEPTOR"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/org_provider_account.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "AddOrgProviderAPIKeyRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "provider",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "api_key",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "label",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "access",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
+          "AddOrgProviderAPIKeyResponse": [
+            {
+              "Name": "account",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderAccount"
+            },
+            {
+              "Name": "created",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "BindOrgProviderWorkspaceRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "BindOrgProviderWorkspaceResponse": [
+            {
+              "Name": "workspace",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderWorkspace"
+            },
+            {
+              "Name": "created",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "DeleteOrgProviderAccountRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "DeleteOrgProviderAccountResponse": null,
+          "ListOrgProviderAccountsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListOrgProviderAccountsResponse": [
+            {
+              "Name": "accounts",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderAccount"
+            },
+            {
+              "Name": "caller_is_admin",
+              "ProtoType": "bool",
+              "IsOptional": false
+            },
+            {
+              "Name": "adding_enabled",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "ListOrgProviderWorkspacesRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListOrgProviderWorkspacesResponse": [
+            {
+              "Name": "workspaces",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderWorkspace"
+            },
+            {
+              "Name": "seats",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderSeat"
+            }
+          ],
+          "ReleaseOrgProviderSeatRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ReleaseOrgProviderSeatResponse": null,
+          "ReorderOrgProviderAccountsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "provider",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            }
+          ],
+          "ReorderOrgProviderAccountsResponse": [
+            {
+              "Name": "accounts",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderAccount"
+            }
+          ],
+          "RotateOrgProviderAPIKeyRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "api_key",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "RotateOrgProviderAPIKeyResponse": [
+            {
+              "Name": "account",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderAccount"
+            }
+          ],
+          "SetOrgProviderAccountGrantsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "user_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            }
+          ],
+          "SetOrgProviderAccountGrantsResponse": [
+            {
+              "Name": "account",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderAccount"
+            }
+          ],
+          "UnbindOrgProviderWorkspaceRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "provider",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "external_org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "UnbindOrgProviderWorkspaceResponse": null,
+          "UpdateOrgProviderAccountRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "label",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "paused",
+              "ProtoType": "bool",
+              "IsOptional": true
+            },
+            {
+              "Name": "access",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
+          "UpdateOrgProviderAccountResponse": [
+            {
+              "Name": "account",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderAccount"
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.AddOrgProviderAPIKeyRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "api_key",
+              "kind": "string"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "access",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgProviderAccountAccess"
+            }
+          ],
+          "reliant.v1.AddOrgProviderAPIKeyResponse": [
+            {
+              "name": "account",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccount"
+            },
+            {
+              "name": "created",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.BindOrgProviderWorkspaceRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.BindOrgProviderWorkspaceResponse": [
+            {
+              "name": "workspace",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderWorkspace"
+            },
+            {
+              "name": "created",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.DeleteOrgProviderAccountRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.DeleteOrgProviderAccountResponse": [],
+          "reliant.v1.ListOrgProviderAccountsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListOrgProviderAccountsResponse": [
+            {
+              "name": "accounts",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccount",
+              "repeated": true
+            },
+            {
+              "name": "caller_is_admin",
+              "kind": "bool"
+            },
+            {
+              "name": "adding_enabled",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.ListOrgProviderWorkspacesRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListOrgProviderWorkspacesResponse": [
+            {
+              "name": "workspaces",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderWorkspace",
+              "repeated": true
+            },
+            {
+              "name": "seats",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderSeat",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.OrgProviderAccount": [
+            {
+              "name": "account",
+              "kind": "message",
+              "type_name": "reliant.v1.ProviderAccount"
+            },
+            {
+              "name": "access",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgProviderAccountAccess"
+            },
+            {
+              "name": "created_by_user_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "grants",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccountGrant",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.OrgProviderAccountGrant": [
+            {
+              "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "granted_by_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "granted_at",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.OrgProviderSeat": [
+            {
+              "name": "account_id",
+              "kind": "string"
+            },
+            {
+              "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "email",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "plan",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "attribution_source",
+              "kind": "string"
+            },
+            {
+              "name": "external_org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.OrgProviderWorkspace": [
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "external_org_id",
+              "kind": "string"
+            },
+            {
+              "name": "display_name",
+              "kind": "string"
+            },
+            {
+              "name": "bound_by_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "bound_at",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ProviderAccount": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "provider_display_name",
+              "kind": "string"
+            },
+            {
+              "name": "auth_kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAuthKind"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "email",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "organization_name",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "plan",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "plan_display",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "masked_key",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "priority",
+              "kind": "int32"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountStatus"
+            },
+            {
+              "name": "limited_until",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "limited_window",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "needs_sign_in_reason",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "windows",
+              "kind": "message",
+              "type_name": "reliant.v1.UsageWindow",
+              "repeated": true
+            },
+            {
+              "name": "usage_observed_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "usage_source",
+              "kind": "enum",
+              "type_name": "reliant.v1.UsageSource"
+            },
+            {
+              "name": "usage_error",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "using_credits",
+              "kind": "bool"
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountFunding"
+            },
+            {
+              "name": "funding_org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ReleaseOrgProviderSeatRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ReleaseOrgProviderSeatResponse": [],
+          "reliant.v1.ReorderOrgProviderAccountsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "account_ids",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ReorderOrgProviderAccountsResponse": [
+            {
+              "name": "accounts",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccount",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.RotateOrgProviderAPIKeyRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            },
+            {
+              "name": "api_key",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.RotateOrgProviderAPIKeyResponse": [
+            {
+              "name": "account",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccount"
+            }
+          ],
+          "reliant.v1.SetOrgProviderAccountGrantsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            },
+            {
+              "name": "user_ids",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.SetOrgProviderAccountGrantsResponse": [
+            {
+              "name": "account",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccount"
+            }
+          ],
+          "reliant.v1.UnbindOrgProviderWorkspaceRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "external_org_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.UnbindOrgProviderWorkspaceResponse": [],
+          "reliant.v1.UpdateOrgProviderAccountRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            },
+            {
+              "name": "label",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "paused",
+              "kind": "bool",
+              "optional": true
+            },
+            {
+              "name": "access",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgProviderAccountAccess",
+              "optional": true
+            }
+          ],
+          "reliant.v1.UpdateOrgProviderAccountResponse": [
+            {
+              "name": "account",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccount"
+            }
+          ],
+          "reliant.v1.UsageWindow": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "used_fraction",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "resets_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "length_seconds",
+              "kind": "int64"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.AddOrgProviderAPIKeyRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.AddOrgProviderAPIKeyResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.BindOrgProviderWorkspaceRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.BindOrgProviderWorkspaceResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.DeleteOrgProviderAccountRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.DeleteOrgProviderAccountResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ListOrgProviderAccountsRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ListOrgProviderAccountsResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ListOrgProviderWorkspacesRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ListOrgProviderWorkspacesResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.OrgProviderAccount": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.OrgProviderAccountGrant": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.OrgProviderSeat": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.OrgProviderWorkspace": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ProviderAccount": "reliant/v1/provider_account.proto",
+          "reliant.v1.ReleaseOrgProviderSeatRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ReleaseOrgProviderSeatResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ReorderOrgProviderAccountsRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ReorderOrgProviderAccountsResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.RotateOrgProviderAPIKeyRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.RotateOrgProviderAPIKeyResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.SetOrgProviderAccountGrantsRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.SetOrgProviderAccountGrantsResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.UnbindOrgProviderWorkspaceRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.UnbindOrgProviderWorkspaceResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.UpdateOrgProviderAccountRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.UpdateOrgProviderAccountResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.UsageWindow": "reliant/v1/provider_account.proto"
+        },
+        "Enums": {
+          "reliant.v1.OrgProviderAccountAccess": [
+            "ORG_PROVIDER_ACCOUNT_ACCESS_UNSPECIFIED",
+            "ORG_PROVIDER_ACCOUNT_ACCESS_MEMBERS",
+            "ORG_PROVIDER_ACCOUNT_ACCESS_ADMINS",
+            "ORG_PROVIDER_ACCOUNT_ACCESS_SELECTED"
+          ],
+          "reliant.v1.ProviderAccountFunding": [
+            "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET"
+          ],
+          "reliant.v1.ProviderAccountStatus": [
+            "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
+            "PROVIDER_ACCOUNT_STATUS_LIMITED",
+            "PROVIDER_ACCOUNT_STATUS_PAUSED",
+            "PROVIDER_ACCOUNT_STATUS_NEEDS_SIGN_IN"
+          ],
+          "reliant.v1.ProviderAuthKind": [
+            "PROVIDER_AUTH_KIND_UNSPECIFIED",
+            "PROVIDER_AUTH_KIND_OAUTH",
+            "PROVIDER_AUTH_KIND_API_KEY",
+            "PROVIDER_AUTH_KIND_DEVICE",
+            "PROVIDER_AUTH_KIND_MANAGED"
+          ],
+          "reliant.v1.UsageSource": [
+            "USAGE_SOURCE_UNSPECIFIED",
+            "USAGE_SOURCE_HEADERS",
+            "USAGE_SOURCE_USAGE_API",
+            "USAGE_SOURCE_LIMIT_ERROR"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.OrgProviderAccountAccess": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.ProviderAccountFunding": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.ProviderAccountStatus": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.ProviderAuthKind": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.UsageSource": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.OrgProviderAccountAccess": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "OrgProviderAccountAccess"
+          },
+          "reliant.v1.ProviderAccountFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountFunding"
+          },
+          "reliant.v1.ProviderAccountStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountStatus"
+          },
+          "reliant.v1.ProviderAuthKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAuthKind"
+          },
+          "reliant.v1.UsageSource": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "UsageSource"
+          }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.OrgUsageService",
+      "proto_file": "reliant/v1/org_usage.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.OrgUsageService/GetOrgLLMUsage",
+          "name": "GetOrgLLMUsage",
+          "input": "reliant.v1.GetOrgLLMUsageRequest",
+          "output": "reliant.v1.GetOrgLLMUsageResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "OrgUsageService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetOrgLLMUsage",
+            "InputType": "GetOrgLLMUsageRequest",
+            "OutputType": "GetOrgLLMUsageResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetOrgLLMUsageRequest",
+            "OutputTypeFQ": "reliant.v1.GetOrgLLMUsageResponse",
+            "InputProtoFile": "reliant/v1/org_usage.proto",
+            "OutputProtoFile": "reliant/v1/org_usage.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only: the org's usage totals; changes nothing"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/org_usage.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetOrgLLMUsageRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "start_date",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "end_date",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "group_by",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "user_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "model",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "funding",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
+          "GetOrgLLMUsageResponse": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "group_by",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "buckets",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgLLMUsageBucket"
+            },
+            {
+              "Name": "totals",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgLLMUsageBucket"
+            },
+            {
+              "Name": "completeness",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "as_of",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "note",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "estimate",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgLLMCostEstimate"
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetOrgLLMUsageRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "start_date",
+              "kind": "string",
+              "validate": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            {
+              "name": "end_date",
+              "kind": "string",
+              "validate": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            {
+              "name": "group_by",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgLLMUsageGroupBy"
+            },
+            {
+              "name": "user_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "account_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "model",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgLLMFunding",
+              "optional": true
+            }
+          ],
+          "reliant.v1.GetOrgLLMUsageResponse": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "group_by",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgLLMUsageGroupBy"
+            },
+            {
+              "name": "buckets",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgLLMUsageBucket",
+              "repeated": true
+            },
+            {
+              "name": "totals",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgLLMUsageBucket"
+            },
+            {
+              "name": "completeness",
+              "kind": "enum",
+              "type_name": "reliant.v1.LLMUsageCompleteness"
+            },
+            {
+              "name": "as_of",
+              "kind": "string"
+            },
+            {
+              "name": "note",
+              "kind": "string"
+            },
+            {
+              "name": "estimate",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgLLMCostEstimate"
+            }
+          ],
+          "reliant.v1.OrgLLMCostEstimate": [
+            {
+              "name": "is_estimate",
+              "kind": "bool"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgLLMCostEstimateStatus"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "price_source",
+              "kind": "string"
+            },
+            {
+              "name": "prices_as_of",
+              "kind": "string"
+            },
+            {
+              "name": "unpriced_models",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.OrgLLMListCostEstimate": [
+            {
+              "name": "usd_nanos",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "priced_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "unpriced_calls",
+              "kind": "int64"
+            }
+          ],
+          "reliant.v1.OrgLLMUsageBucket": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "calls",
+              "kind": "int64"
+            },
+            {
+              "name": "error_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "input_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "output_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "cache_read_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "cache_write_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "latency_ms_total",
+              "kind": "int64"
+            },
+            {
+              "name": "avg_latency_ms",
+              "kind": "double"
+            },
+            {
+              "name": "estimated_list_cost",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgLLMListCostEstimate"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetOrgLLMUsageRequest": "reliant/v1/org_usage.proto",
+          "reliant.v1.GetOrgLLMUsageResponse": "reliant/v1/org_usage.proto",
+          "reliant.v1.OrgLLMCostEstimate": "reliant/v1/org_usage.proto",
+          "reliant.v1.OrgLLMListCostEstimate": "reliant/v1/org_usage.proto",
+          "reliant.v1.OrgLLMUsageBucket": "reliant/v1/org_usage.proto"
+        },
+        "Enums": {
+          "reliant.v1.LLMUsageCompleteness": [
+            "LLM_USAGE_COMPLETENESS_UNSPECIFIED",
+            "LLM_USAGE_COMPLETENESS_COMPLETE",
+            "LLM_USAGE_COMPLETENESS_PARTIAL"
+          ],
+          "reliant.v1.OrgLLMCostEstimateStatus": [
+            "ORG_LLM_COST_ESTIMATE_STATUS_UNSPECIFIED",
+            "ORG_LLM_COST_ESTIMATE_STATUS_AVAILABLE",
+            "ORG_LLM_COST_ESTIMATE_STATUS_UNAVAILABLE",
+            "ORG_LLM_COST_ESTIMATE_STATUS_NONE"
+          ],
+          "reliant.v1.OrgLLMFunding": [
+            "ORG_LLM_FUNDING_UNSPECIFIED",
+            "ORG_LLM_FUNDING_ORG_KEY",
+            "ORG_LLM_FUNDING_ORG_SEAT",
+            "ORG_LLM_FUNDING_ORG_WALLET"
+          ],
+          "reliant.v1.OrgLLMUsageGroupBy": [
+            "ORG_LLM_USAGE_GROUP_BY_UNSPECIFIED",
+            "ORG_LLM_USAGE_GROUP_BY_DAY",
+            "ORG_LLM_USAGE_GROUP_BY_MEMBER",
+            "ORG_LLM_USAGE_GROUP_BY_ACCOUNT",
+            "ORG_LLM_USAGE_GROUP_BY_MODEL",
+            "ORG_LLM_USAGE_GROUP_BY_FUNDING",
+            "ORG_LLM_USAGE_GROUP_BY_PROVIDER"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.LLMUsageCompleteness": [
+            0,
+            1,
+            2
+          ],
+          "reliant.v1.OrgLLMCostEstimateStatus": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.OrgLLMFunding": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.OrgLLMUsageGroupBy": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.LLMUsageCompleteness": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "LLMUsageCompleteness"
+          },
+          "reliant.v1.OrgLLMCostEstimateStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "OrgLLMCostEstimateStatus"
+          },
+          "reliant.v1.OrgLLMFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "OrgLLMFunding"
+          },
+          "reliant.v1.OrgLLMUsageGroupBy": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "OrgLLMUsageGroupBy"
           }
         }
       }
@@ -21294,6 +24790,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ProjectService/GetProjectOrgMove",
+          "name": "GetProjectOrgMove",
+          "input": "reliant.v1.GetProjectOrgMoveRequest",
+          "output": "reliant.v1.GetProjectOrgMoveResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ProjectService/GetProjectPrompts",
           "name": "GetProjectPrompts",
           "input": "reliant.v1.GetProjectPromptsRequest",
@@ -21344,6 +24850,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ProjectService/ListProjectOrgMoves",
+          "name": "ListProjectOrgMoves",
+          "input": "reliant.v1.ListProjectOrgMovesRequest",
+          "output": "reliant.v1.ListProjectOrgMovesResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ProjectService/ListProjects",
           "name": "ListProjects",
           "input": "reliant.v1.ListProjectsRequest",
@@ -21371,6 +24887,26 @@
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.ProjectService/MoveProjectToOrg",
+          "name": "MoveProjectToOrg",
+          "input": "reliant.v1.MoveProjectToOrgRequest",
+          "output": "reliant.v1.MoveProjectToOrgResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.ProjectService/PreviewProjectOrgMove",
+          "name": "PreviewProjectOrgMove",
+          "input": "reliant.v1.PreviewProjectOrgMoveRequest",
+          "output": "reliant.v1.PreviewProjectOrgMoveResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -21951,6 +25487,83 @@
               "TargetKind": "project",
               "Writer": "INTERCEPTOR"
             }
+          },
+          {
+            "Name": "PreviewProjectOrgMove",
+            "InputType": "PreviewProjectOrgMoveRequest",
+            "OutputType": "PreviewProjectOrgMoveResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.PreviewProjectOrgMoveRequest",
+            "OutputTypeFQ": "reliant.v1.PreviewProjectOrgMoveResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "MoveProjectToOrg",
+            "InputType": "MoveProjectToOrgRequest",
+            "OutputType": "MoveProjectToOrgResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.MoveProjectToOrgRequest",
+            "OutputTypeFQ": "reliant.v1.MoveProjectToOrgResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "move_org",
+              "TargetKind": "project",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "GetProjectOrgMove",
+            "InputType": "GetProjectOrgMoveRequest",
+            "OutputType": "GetProjectOrgMoveResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.GetProjectOrgMoveRequest",
+            "OutputTypeFQ": "reliant.v1.GetProjectOrgMoveResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "ListProjectOrgMoves",
+            "InputType": "ListProjectOrgMovesRequest",
+            "OutputType": "ListProjectOrgMovesResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListProjectOrgMovesRequest",
+            "OutputTypeFQ": "reliant.v1.ListProjectOrgMovesResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": false
+            }
           }
         ],
         "ProtoFile": "reliant/v1/project.proto",
@@ -22332,6 +25945,21 @@
               "IsOptional": false
             }
           ],
+          "GetProjectOrgMoveRequest": [
+            {
+              "Name": "move_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetProjectOrgMoveResponse": [
+            {
+              "Name": "move",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectOrgMove"
+            }
+          ],
           "GetProjectPromptsRequest": [
             {
               "Name": "project_id",
@@ -22459,6 +26087,31 @@
               "MessageType": "reliant.v1.ProjectDaemon"
             }
           ],
+          "ListProjectOrgMovesRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "limit",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "offset",
+              "ProtoType": "int32",
+              "IsOptional": false
+            }
+          ],
+          "ListProjectOrgMovesResponse": [
+            {
+              "Name": "moves",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectOrgMove"
+            }
+          ],
           "ListProjectsRequest": [
             {
               "Name": "limit",
@@ -22532,6 +26185,72 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.ProjectDaemon"
+            }
+          ],
+          "MoveProjectToOrgRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "to_org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "expected_from_org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "request_key",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "MoveProjectToOrgResponse": [
+            {
+              "Name": "move",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectOrgMove"
+            }
+          ],
+          "PreviewProjectOrgMoveRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "to_org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "PreviewProjectOrgMoveResponse": [
+            {
+              "Name": "from_org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "to_org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "blockers",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectOrgMoveBlockers"
+            },
+            {
+              "Name": "effects",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectOrgMoveEffects"
             }
           ],
           "PullProjectOnDaemonRequest": [
@@ -23078,6 +26797,22 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.GetProjectOrgMoveRequest": [
+            {
+              "name": "move_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.GetProjectOrgMoveResponse": [
+            {
+              "name": "move",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectOrgMove"
+            }
+          ],
           "reliant.v1.GetProjectPromptsRequest": [
             {
               "name": "project_id",
@@ -23222,6 +26957,29 @@
               "repeated": true
             }
           ],
+          "reliant.v1.ListProjectOrgMovesRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "limit",
+              "kind": "int32"
+            },
+            {
+              "name": "offset",
+              "kind": "int32"
+            }
+          ],
+          "reliant.v1.ListProjectOrgMovesResponse": [
+            {
+              "name": "moves",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectOrgMove",
+              "repeated": true
+            }
+          ],
           "reliant.v1.ListProjectsRequest": [
             {
               "name": "limit",
@@ -23290,6 +27048,80 @@
               "name": "project_daemon",
               "kind": "message",
               "type_name": "reliant.v1.ProjectDaemon"
+            }
+          ],
+          "reliant.v1.MoveProjectToOrgRequest": [
+            {
+              "name": "project_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "to_org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "expected_from_org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "request_key",
+              "kind": "string",
+              "validate": {
+                "min_len": 1,
+                "max_len": 128
+              }
+            }
+          ],
+          "reliant.v1.MoveProjectToOrgResponse": [
+            {
+              "name": "move",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectOrgMove"
+            }
+          ],
+          "reliant.v1.PreviewProjectOrgMoveRequest": [
+            {
+              "name": "project_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "to_org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.PreviewProjectOrgMoveResponse": [
+            {
+              "name": "from_org_id",
+              "kind": "string"
+            },
+            {
+              "name": "to_org_id",
+              "kind": "string"
+            },
+            {
+              "name": "blockers",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectOrgMoveBlockers"
+            },
+            {
+              "name": "effects",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectOrgMoveEffects"
             }
           ],
           "reliant.v1.Project": [
@@ -23407,6 +27239,221 @@
             },
             {
               "name": "daemon_name",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ProjectOrgMove": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "owner_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "actor_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "from_org_id",
+              "kind": "string"
+            },
+            {
+              "name": "to_org_id",
+              "kind": "string"
+            },
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProjectOrgMoveState"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
+            },
+            {
+              "name": "counts",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectOrgMoveCounts"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "updated_at",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ProjectOrgMoveBlockedChat": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "title",
+              "kind": "string"
+            },
+            {
+              "name": "activity",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatActivity"
+            }
+          ],
+          "reliant.v1.ProjectOrgMoveBlockers": [
+            {
+              "name": "chats",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectOrgMoveBlockedChat",
+              "repeated": true
+            },
+            {
+              "name": "chats_total",
+              "kind": "int32"
+            },
+            {
+              "name": "live_runs",
+              "kind": "int32"
+            },
+            {
+              "name": "background_processes",
+              "kind": "int32"
+            }
+          ],
+          "reliant.v1.ProjectOrgMoveCounts": [
+            {
+              "name": "chats",
+              "kind": "int32"
+            },
+            {
+              "name": "runs",
+              "kind": "int32"
+            },
+            {
+              "name": "triggers",
+              "kind": "int32"
+            },
+            {
+              "name": "triggers_paused",
+              "kind": "int32"
+            },
+            {
+              "name": "triggers_reenabled",
+              "kind": "int32"
+            },
+            {
+              "name": "shares_cleared",
+              "kind": "int32"
+            },
+            {
+              "name": "bindings_cleared",
+              "kind": "int32"
+            },
+            {
+              "name": "secret_entries_revoked",
+              "kind": "int32"
+            }
+          ],
+          "reliant.v1.ProjectOrgMoveEffects": [
+            {
+              "name": "chats",
+              "kind": "int32"
+            },
+            {
+              "name": "runs",
+              "kind": "int32"
+            },
+            {
+              "name": "triggers",
+              "kind": "int32"
+            },
+            {
+              "name": "triggers_to_pause",
+              "kind": "int32"
+            },
+            {
+              "name": "triggers_needing_setup",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectOrgMoveTriggerSetup",
+              "repeated": true
+            },
+            {
+              "name": "shares_to_clear",
+              "kind": "int32"
+            },
+            {
+              "name": "org_bindings_to_clear",
+              "kind": "int32"
+            },
+            {
+              "name": "machines",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectOrgMoveMachine",
+              "repeated": true
+            },
+            {
+              "name": "forge_project_name",
+              "kind": "string"
+            },
+            {
+              "name": "control_plane_effects_known",
+              "kind": "bool"
+            },
+            {
+              "name": "secret_access_to_revoke",
+              "kind": "int32",
+              "optional": true
+            },
+            {
+              "name": "hosted_projects_staying",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "target_funded",
+              "kind": "bool",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ProjectOrgMoveMachine": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "attached",
+              "kind": "bool"
+            },
+            {
+              "name": "pinned_chats",
+              "kind": "int32"
+            },
+            {
+              "name": "in_target_org",
+              "kind": "bool",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ProjectOrgMoveTriggerSetup": [
+            {
+              "name": "trigger_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
               "kind": "string"
             }
           ],
@@ -23589,6 +27636,8 @@
           "reliant.v1.GetProjectInitStatusResponse": "reliant/v1/project.proto",
           "reliant.v1.GetProjectMetadataRequest": "reliant/v1/project.proto",
           "reliant.v1.GetProjectMetadataResponse": "reliant/v1/project.proto",
+          "reliant.v1.GetProjectOrgMoveRequest": "reliant/v1/project.proto",
+          "reliant.v1.GetProjectOrgMoveResponse": "reliant/v1/project.proto",
           "reliant.v1.GetProjectPromptsRequest": "reliant/v1/project.proto",
           "reliant.v1.GetProjectPromptsResponse": "reliant/v1/project.proto",
           "reliant.v1.GetProjectRequest": "reliant/v1/project.proto",
@@ -23602,14 +27651,27 @@
           "reliant.v1.ListProjectDaemonsForDaemonResponse": "reliant/v1/project.proto",
           "reliant.v1.ListProjectDaemonsRequest": "reliant/v1/project.proto",
           "reliant.v1.ListProjectDaemonsResponse": "reliant/v1/project.proto",
+          "reliant.v1.ListProjectOrgMovesRequest": "reliant/v1/project.proto",
+          "reliant.v1.ListProjectOrgMovesResponse": "reliant/v1/project.proto",
           "reliant.v1.ListProjectsRequest": "reliant/v1/project.proto",
           "reliant.v1.ListProjectsResponse": "reliant/v1/project.proto",
           "reliant.v1.ListRepositoriesForDaemonRequest": "reliant/v1/project.proto",
           "reliant.v1.ListRepositoriesForDaemonResponse": "reliant/v1/project.proto",
           "reliant.v1.MarkProjectInstalledRequest": "reliant/v1/project.proto",
           "reliant.v1.MarkProjectInstalledResponse": "reliant/v1/project.proto",
+          "reliant.v1.MoveProjectToOrgRequest": "reliant/v1/project.proto",
+          "reliant.v1.MoveProjectToOrgResponse": "reliant/v1/project.proto",
+          "reliant.v1.PreviewProjectOrgMoveRequest": "reliant/v1/project.proto",
+          "reliant.v1.PreviewProjectOrgMoveResponse": "reliant/v1/project.proto",
           "reliant.v1.Project": "reliant/v1/project.proto",
           "reliant.v1.ProjectDaemon": "reliant/v1/project.proto",
+          "reliant.v1.ProjectOrgMove": "reliant/v1/project.proto",
+          "reliant.v1.ProjectOrgMoveBlockedChat": "reliant/v1/project.proto",
+          "reliant.v1.ProjectOrgMoveBlockers": "reliant/v1/project.proto",
+          "reliant.v1.ProjectOrgMoveCounts": "reliant/v1/project.proto",
+          "reliant.v1.ProjectOrgMoveEffects": "reliant/v1/project.proto",
+          "reliant.v1.ProjectOrgMoveMachine": "reliant/v1/project.proto",
+          "reliant.v1.ProjectOrgMoveTriggerSetup": "reliant/v1/project.proto",
           "reliant.v1.Prompt": "reliant/v1/project.proto",
           "reliant.v1.PullProjectOnDaemonRequest": "reliant/v1/project.proto",
           "reliant.v1.PullProjectOnDaemonResponse": "reliant/v1/project.proto",
@@ -23627,6 +27689,16 @@
           "reliant.v1.UpdateProjectResponse": "reliant/v1/project.proto"
         },
         "Enums": {
+          "reliant.v1.ChatActivity": [
+            "CHAT_ACTIVITY_IDLE",
+            "CHAT_ACTIVITY_RUNNING",
+            "CHAT_ACTIVITY_AWAITING_INPUT",
+            "CHAT_ACTIVITY_ERROR",
+            "CHAT_ACTIVITY_PAUSED",
+            "CHAT_ACTIVITY_WAITING_FOR_DAEMON",
+            "CHAT_ACTIVITY_QUEUED_FOR_MACHINE",
+            "CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT"
+          ],
           "reliant.v1.FileChangeStatus": [
             "FILE_CHANGE_STATUS_UNSPECIFIED",
             "FILE_CHANGE_STATUS_MODIFIED",
@@ -23640,6 +27712,15 @@
             "PROJECT_INSTALL_STATE_INSTALLED",
             "PROJECT_INSTALL_STATE_FAILED"
           ],
+          "reliant.v1.ProjectOrgMoveState": [
+            "PROJECT_ORG_MOVE_STATE_UNSPECIFIED",
+            "PROJECT_ORG_MOVE_STATE_PREPARING",
+            "PROJECT_ORG_MOVE_STATE_PREPARED",
+            "PROJECT_ORG_MOVE_STATE_MOVED",
+            "PROJECT_ORG_MOVE_STATE_COMPLETED",
+            "PROJECT_ORG_MOVE_STATE_ABORTING",
+            "PROJECT_ORG_MOVE_STATE_ABORTED"
+          ],
           "reliant.v1.ResourceVisibility": [
             "RESOURCE_VISIBILITY_UNSPECIFIED",
             "RESOURCE_VISIBILITY_PRIVATE",
@@ -23647,6 +27728,16 @@
           ]
         },
         "EnumNumbers": {
+          "reliant.v1.ChatActivity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
           "reliant.v1.FileChangeStatus": [
             0,
             1,
@@ -23660,6 +27751,15 @@
             2,
             3
           ],
+          "reliant.v1.ProjectOrgMoveState": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
           "reliant.v1.ResourceVisibility": [
             0,
             1,
@@ -23667,6 +27767,10 @@
           ]
         },
         "EnumGoRefs": {
+          "reliant.v1.ChatActivity": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatActivity"
+          },
           "reliant.v1.FileChangeStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "FileChangeStatus"
@@ -23674,6 +27778,10 @@
           "reliant.v1.ProjectInstallState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ProjectInstallState"
+          },
+          "reliant.v1.ProjectOrgMoveState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProjectOrgMoveState"
           },
           "reliant.v1.ResourceVisibility": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -23717,6 +27825,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ProviderAccountService/GetPersonalFundingQuestion",
+          "name": "GetPersonalFundingQuestion",
+          "input": "reliant.v1.GetPersonalFundingQuestionRequest",
+          "output": "reliant.v1.GetPersonalFundingQuestionResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ProviderAccountService/ListProviderAccounts",
           "name": "ListProviderAccounts",
           "input": "reliant.v1.ListProviderAccountsRequest",
@@ -23741,6 +27859,16 @@
           "name": "ReorderProviderAccounts",
           "input": "reliant.v1.ReorderProviderAccountsRequest",
           "output": "reliant.v1.ReorderProviderAccountsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.ProviderAccountService/ResolvePersonalFundingChoice",
+          "name": "ResolvePersonalFundingChoice",
+          "input": "reliant.v1.ResolvePersonalFundingChoiceRequest",
+          "output": "reliant.v1.ResolvePersonalFundingChoiceResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -23900,6 +28028,45 @@
             "Activity": {
               "Mutating": false
             }
+          },
+          {
+            "Name": "GetPersonalFundingQuestion",
+            "InputType": "GetPersonalFundingQuestionRequest",
+            "OutputType": "GetPersonalFundingQuestionResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetPersonalFundingQuestionRequest",
+            "OutputTypeFQ": "reliant.v1.GetPersonalFundingQuestionResponse",
+            "InputProtoFile": "reliant/v1/provider_account.proto",
+            "OutputProtoFile": "reliant/v1/provider_account.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "reads the chat's own pending question"
+            }
+          },
+          {
+            "Name": "ResolvePersonalFundingChoice",
+            "InputType": "ResolvePersonalFundingChoiceRequest",
+            "OutputType": "ResolvePersonalFundingChoiceResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ResolvePersonalFundingChoiceRequest",
+            "OutputTypeFQ": "reliant.v1.ResolvePersonalFundingChoiceResponse",
+            "InputProtoFile": "reliant/v1/provider_account.proto",
+            "OutputProtoFile": "reliant/v1/provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "None": "answers the chat's own question; the chat's transcript notice records the move"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/provider_account.proto",
@@ -23958,6 +28125,21 @@
               "MessageType": "reliant.v1.ProviderAccount"
             }
           ],
+          "GetPersonalFundingQuestionRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetPersonalFundingQuestionResponse": [
+            {
+              "Name": "question",
+              "ProtoType": "message",
+              "IsOptional": true,
+              "MessageType": "reliant.v1.PersonalFundingQuestion"
+            }
+          ],
           "ListProviderAccountsRequest": null,
           "ListProviderAccountsResponse": [
             {
@@ -24005,6 +28187,31 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.ProviderAccount"
+            }
+          ],
+          "ResolvePersonalFundingChoiceRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "choice",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "remember",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "ResolvePersonalFundingChoiceResponse": [
+            {
+              "Name": "question",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PersonalFundingQuestion"
             }
           ],
           "UpdateProviderAccountRequest": [
@@ -24082,6 +28289,20 @@
               "optional": true
             }
           ],
+          "reliant.v1.GetPersonalFundingQuestionRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.GetPersonalFundingQuestionResponse": [
+            {
+              "name": "question",
+              "kind": "message",
+              "type_name": "reliant.v1.PersonalFundingQuestion",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListProviderAccountsRequest": [],
           "reliant.v1.ListProviderAccountsResponse": [
             {
@@ -24089,6 +28310,47 @@
               "kind": "message",
               "type_name": "reliant.v1.ProviderAccount",
               "repeated": true
+            }
+          ],
+          "reliant.v1.PersonalFundingQuestion": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "enum",
+              "type_name": "reliant.v1.PersonalFundingQuestion.Reason"
+            },
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.PersonalFundingQuestion.State"
+            },
+            {
+              "name": "model",
+              "kind": "string"
+            },
+            {
+              "name": "personal_provider",
+              "kind": "string"
+            },
+            {
+              "name": "personal_account_label",
+              "kind": "string"
+            },
+            {
+              "name": "org_reset_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "asked_at",
+              "kind": "string"
             }
           ],
           "reliant.v1.ProviderAccount": [
@@ -24190,6 +28452,16 @@
             {
               "name": "using_credits",
               "kind": "bool"
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountFunding"
+            },
+            {
+              "name": "funding_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.RefreshProviderAccountUsageRequest": [
@@ -24226,6 +28498,28 @@
               "kind": "message",
               "type_name": "reliant.v1.ProviderAccount",
               "repeated": true
+            }
+          ],
+          "reliant.v1.ResolvePersonalFundingChoiceRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "choice",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResolvePersonalFundingChoiceRequest.Choice"
+            },
+            {
+              "name": "remember",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.ResolvePersonalFundingChoiceResponse": [
+            {
+              "name": "question",
+              "kind": "message",
+              "type_name": "reliant.v1.PersonalFundingQuestion"
             }
           ],
           "reliant.v1.UpdateProviderAccountRequest": [
@@ -24283,18 +28577,42 @@
           "reliant.v1.DeleteProviderAccountResponse": "reliant/v1/provider_account.proto",
           "reliant.v1.GetChatProviderAccountRequest": "reliant/v1/provider_account.proto",
           "reliant.v1.GetChatProviderAccountResponse": "reliant/v1/provider_account.proto",
+          "reliant.v1.GetPersonalFundingQuestionRequest": "reliant/v1/provider_account.proto",
+          "reliant.v1.GetPersonalFundingQuestionResponse": "reliant/v1/provider_account.proto",
           "reliant.v1.ListProviderAccountsRequest": "reliant/v1/provider_account.proto",
           "reliant.v1.ListProviderAccountsResponse": "reliant/v1/provider_account.proto",
+          "reliant.v1.PersonalFundingQuestion": "reliant/v1/provider_account.proto",
           "reliant.v1.ProviderAccount": "reliant/v1/provider_account.proto",
           "reliant.v1.RefreshProviderAccountUsageRequest": "reliant/v1/provider_account.proto",
           "reliant.v1.RefreshProviderAccountUsageResponse": "reliant/v1/provider_account.proto",
           "reliant.v1.ReorderProviderAccountsRequest": "reliant/v1/provider_account.proto",
           "reliant.v1.ReorderProviderAccountsResponse": "reliant/v1/provider_account.proto",
+          "reliant.v1.ResolvePersonalFundingChoiceRequest": "reliant/v1/provider_account.proto",
+          "reliant.v1.ResolvePersonalFundingChoiceResponse": "reliant/v1/provider_account.proto",
           "reliant.v1.UpdateProviderAccountRequest": "reliant/v1/provider_account.proto",
           "reliant.v1.UpdateProviderAccountResponse": "reliant/v1/provider_account.proto",
           "reliant.v1.UsageWindow": "reliant/v1/provider_account.proto"
         },
         "Enums": {
+          "reliant.v1.PersonalFundingQuestion.Reason": [
+            "REASON_UNSPECIFIED",
+            "REASON_LIMITED",
+            "REASON_UNUSABLE",
+            "REASON_UNSERVED"
+          ],
+          "reliant.v1.PersonalFundingQuestion.State": [
+            "STATE_UNSPECIFIED",
+            "STATE_ASKED",
+            "STATE_USE_PERSONAL",
+            "STATE_KEEP_WAITING"
+          ],
+          "reliant.v1.ProviderAccountFunding": [
+            "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET"
+          ],
           "reliant.v1.ProviderAccountStatus": [
             "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
             "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
@@ -24309,6 +28627,11 @@
             "PROVIDER_AUTH_KIND_DEVICE",
             "PROVIDER_AUTH_KIND_MANAGED"
           ],
+          "reliant.v1.ResolvePersonalFundingChoiceRequest.Choice": [
+            "CHOICE_UNSPECIFIED",
+            "CHOICE_USE_PERSONAL",
+            "CHOICE_KEEP_WAITING"
+          ],
           "reliant.v1.UsageSource": [
             "USAGE_SOURCE_UNSPECIFIED",
             "USAGE_SOURCE_HEADERS",
@@ -24317,6 +28640,25 @@
           ]
         },
         "EnumNumbers": {
+          "reliant.v1.PersonalFundingQuestion.Reason": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.PersonalFundingQuestion.State": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.ProviderAccountFunding": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.ProviderAccountStatus": [
             0,
             1,
@@ -24331,6 +28673,11 @@
             3,
             4
           ],
+          "reliant.v1.ResolvePersonalFundingChoiceRequest.Choice": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.UsageSource": [
             0,
             1,
@@ -24339,6 +28686,18 @@
           ]
         },
         "EnumGoRefs": {
+          "reliant.v1.PersonalFundingQuestion.Reason": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "PersonalFundingQuestion_Reason"
+          },
+          "reliant.v1.PersonalFundingQuestion.State": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "PersonalFundingQuestion_State"
+          },
+          "reliant.v1.ProviderAccountFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountFunding"
+          },
           "reliant.v1.ProviderAccountStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ProviderAccountStatus"
@@ -24346,6 +28705,10 @@
           "reliant.v1.ProviderAuthKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ProviderAuthKind"
+          },
+          "reliant.v1.ResolvePersonalFundingChoiceRequest.Choice": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ResolvePersonalFundingChoiceRequest_Choice"
           },
           "reliant.v1.UsageSource": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -29936,6 +34299,16 @@
             {
               "name": "using_credits",
               "kind": "bool"
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountFunding"
+            },
+            {
+              "name": "funding_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ProviderStatus": [
@@ -30652,6 +35025,13 @@
             "STATUS_DENIED",
             "STATUS_ERROR"
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET"
+          ],
           "reliant.v1.ProviderAccountStatus": [
             "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
             "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
@@ -30720,6 +35100,13 @@
             4,
             5
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.ProviderAccountStatus": [
             0,
             1,
@@ -30779,6 +35166,10 @@
           "reliant.v1.PollCopilotDeviceAuthResponse.Status": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "PollCopilotDeviceAuthResponse_Status"
+          },
+          "reliant.v1.ProviderAccountFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountFunding"
           },
           "reliant.v1.ProviderAccountStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -31395,6 +35786,11 @@
               "name": "fallback_model",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderPolicy.Funding"
             }
           ],
           "reliant.v1.SetChatVisibilityRequest": [
@@ -31524,6 +35920,12 @@
             "CHAT_STATE_IDLE",
             "CHAT_STATE_ARCHIVED"
           ],
+          "reliant.v1.ProviderPolicy.Funding": [
+            "FUNDING_UNSPECIFIED",
+            "FUNDING_ORG_FIRST",
+            "FUNDING_PERSONAL_FIRST",
+            "FUNDING_ORG_ONLY"
+          ],
           "reliant.v1.ProviderPolicy.OnLimit": [
             "ON_LIMIT_UNSPECIFIED",
             "ON_LIMIT_WAIT",
@@ -31582,6 +35984,12 @@
             2,
             3
           ],
+          "reliant.v1.ProviderPolicy.Funding": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.ProviderPolicy.OnLimit": [
             0,
             1,
@@ -31627,6 +36035,10 @@
           "reliant.v1.ChatState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ChatState"
+          },
+          "reliant.v1.ProviderPolicy.Funding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderPolicy_Funding"
           },
           "reliant.v1.ProviderPolicy.OnLimit": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -38011,6 +42423,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.WebhookCredential"
+            },
+            {
+              "Name": "funding_warning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "DeleteTriggerRequest": [
@@ -38152,6 +42570,11 @@
             {
               "Name": "triggers",
               "ProtoType": "[]string",
+              "IsOptional": false
+            },
+            {
+              "Name": "unattended_funding",
+              "ProtoType": "enum",
               "IsOptional": false
             }
           ],
@@ -38397,6 +42820,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Trigger"
+            },
+            {
+              "Name": "funding_warning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "UpdateTriggerRequest": [
@@ -38418,6 +42847,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Trigger"
+            },
+            {
+              "Name": "funding_warning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerFundingWarning"
             }
           ]
         },
@@ -38461,6 +42896,11 @@
               "name": "webhook",
               "kind": "message",
               "type_name": "reliant.v1.WebhookCredential"
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "reliant.v1.DeleteTriggerRequest": [
@@ -38599,6 +43039,11 @@
               "name": "triggers",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "unattended_funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.UnattendedFunding"
             }
           ],
           "reliant.v1.EnableWorkflowResponse": [
@@ -38931,6 +43376,11 @@
               "name": "trigger",
               "kind": "message",
               "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "reliant.v1.Trigger": [
@@ -39103,6 +43553,11 @@
             {
               "name": "paused_reason",
               "kind": "string"
+            },
+            {
+              "name": "unattended_funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.UnattendedFunding"
             }
           ],
           "reliant.v1.TriggerChange": [
@@ -39260,6 +43715,11 @@
               "name": "acting_identity",
               "kind": "enum",
               "type_name": "reliant.v1.ActingIdentity"
+            },
+            {
+              "name": "unattended_funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.UnattendedFunding"
             }
           ],
           "reliant.v1.TriggerDefinitionSource": [
@@ -39439,6 +43899,20 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.TriggerFundingWarning": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "model",
+              "kind": "string"
+            },
+            {
+              "name": "message",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.TriggerHealth": [
             {
               "name": "status",
@@ -39508,6 +43982,11 @@
               "name": "trigger",
               "kind": "message",
               "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "reliant.v1.WebhookCredential": [
@@ -39632,6 +44111,11 @@
               "name": "warnings",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ]
         },
@@ -39680,6 +44164,7 @@
           "reliant.v1.TriggerEventDefinition": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerFailure": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerFundingWarning": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerSender": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto",
@@ -39741,6 +44226,11 @@
             "TRIGGER_OVERLAP_POLICY_UNSPECIFIED",
             "TRIGGER_OVERLAP_POLICY_SKIP",
             "TRIGGER_OVERLAP_POLICY_ALLOW"
+          ],
+          "reliant.v1.UnattendedFunding": [
+            "UNATTENDED_FUNDING_UNSPECIFIED",
+            "UNATTENDED_FUNDING_ANY",
+            "UNATTENDED_FUNDING_ORG_ONLY"
           ],
           "reliant.v1.WorkflowState": [
             "WORKFLOW_STATE_UNSPECIFIED",
@@ -39816,6 +44306,11 @@
             1,
             2
           ],
+          "reliant.v1.UnattendedFunding": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.WorkflowState": [
             0,
             1,
@@ -39864,6 +44359,10 @@
           "reliant.v1.TriggerOverlapPolicy": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "TriggerOverlapPolicy"
+          },
+          "reliant.v1.UnattendedFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "UnattendedFunding"
           },
           "reliant.v1.WorkflowState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -39959,6 +44458,11 @@
               "Name": "purpose",
               "ProtoType": "enum",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "GetLLMUsageResponse": [
@@ -40044,6 +44548,11 @@
               "kind": "enum",
               "type_name": "reliant.v1.LLMPurpose",
               "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GetLLMUsageResponse": [
@@ -40117,6 +44626,10 @@
             {
               "name": "avg_latency_ms",
               "kind": "double"
+            },
+            {
+              "name": "label",
+              "kind": "string"
             }
           ]
         },
@@ -40151,7 +44664,9 @@
             "LLM_USAGE_GROUP_BY_MODEL",
             "LLM_USAGE_GROUP_BY_PROVIDER",
             "LLM_USAGE_GROUP_BY_AUTH_MODE",
-            "LLM_USAGE_GROUP_BY_PURPOSE"
+            "LLM_USAGE_GROUP_BY_PURPOSE",
+            "LLM_USAGE_GROUP_BY_FUNDING",
+            "LLM_USAGE_GROUP_BY_ACCOUNT"
           ]
         },
         "EnumNumbers": {
@@ -40180,7 +44695,9 @@
             2,
             3,
             4,
-            5
+            5,
+            6,
+            7
           ]
         },
         "EnumGoRefs": {
@@ -40245,6 +44762,16 @@
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.WorkflowService/ForkOrphanedWorkflow",
+          "name": "ForkOrphanedWorkflow",
+          "input": "reliant.v1.ForkOrphanedWorkflowRequest",
+          "output": "reliant.v1.ForkOrphanedWorkflowResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
           "auth_required": true
         },
         {
@@ -40543,6 +45070,27 @@
               "TargetKind": "workflow",
               "Writer": "INTERCEPTOR"
             }
+          },
+          {
+            "Name": "ForkOrphanedWorkflow",
+            "InputType": "ForkOrphanedWorkflowRequest",
+            "OutputType": "ForkOrphanedWorkflowResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ForkOrphanedWorkflowRequest",
+            "OutputTypeFQ": "reliant.v1.ForkOrphanedWorkflowResponse",
+            "InputProtoFile": "reliant/v1/workflow.proto",
+            "OutputProtoFile": "reliant/v1/workflow.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "fork_orphan",
+              "TargetKind": "workflow",
+              "Writer": "INTERCEPTOR"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/workflow.proto",
@@ -40724,6 +45272,40 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Workflow"
+            }
+          ],
+          "ForkOrphanedWorkflowRequest": [
+            {
+              "Name": "workflow_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "new_name",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "ForkOrphanedWorkflowResponse": [
+            {
+              "Name": "id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "slug",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "name",
+              "ProtoType": "string",
+              "IsOptional": false
             }
           ],
           "GetWorkflowRequest": [
@@ -41804,6 +46386,41 @@
               "name": "workflow",
               "kind": "message",
               "type_name": "reliant.v1.Workflow"
+            }
+          ],
+          "reliant.v1.ForkOrphanedWorkflowRequest": [
+            {
+              "name": "workflow_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "project_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "new_name",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ForkOrphanedWorkflowResponse": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "slug",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
             }
           ],
           "reliant.v1.GetWorkflowRequest": [
@@ -43744,6 +48361,33 @@
               "name": "permissions",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "attention",
+              "kind": "message",
+              "type_name": "reliant.v1.WorkflowAttention"
+            }
+          ],
+          "reliant.v1.WorkflowAttention": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "on_start",
+              "kind": "string"
+            },
+            {
+              "name": "recovery_timeout",
+              "kind": "string"
+            },
+            {
+              "name": "on_success",
+              "kind": "string"
+            },
+            {
+              "name": "on_failure",
+              "kind": "string"
             }
           ],
           "reliant.v1.WorkflowConcurrency": [
@@ -44011,6 +48655,8 @@
           "reliant.v1.ExecuteToolsArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ExportWorkflowRequest": "reliant/v1/workflow.proto",
           "reliant.v1.ExportWorkflowResponse": "reliant/v1/workflow.proto",
+          "reliant.v1.ForkOrphanedWorkflowRequest": "reliant/v1/workflow.proto",
+          "reliant.v1.ForkOrphanedWorkflowResponse": "reliant/v1/workflow.proto",
           "reliant.v1.GetWorkflowRequest": "reliant/v1/workflow.proto",
           "reliant.v1.GetWorkflowResponse": "reliant/v1/workflow.proto",
           "reliant.v1.GitPublishArgs": "reliant/v1/workflow_v2.proto",
@@ -44078,6 +48724,7 @@
           "reliant.v1.WebhookHmac": "reliant/v1/trigger.proto",
           "reliant.v1.WebhookSource": "reliant/v1/trigger.proto",
           "reliant.v1.Workflow": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.WorkflowAttention": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowConcurrency": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
           "reliant.v1.WorkflowListItem": "reliant/v1/workflow.proto",
@@ -47438,6 +52085,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "AutomationTakeover",
+      "name": "AutomationTakeover",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/automation_takeover.Service",
+      "source": {
+        "path": "internal/handlers/automation_takeover/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Background",
       "name": "Background",
       "kind": "component",
@@ -47918,6 +52577,78 @@
       "implementation_candidates": []
     },
     {
+      "id": "OrgCredentialSweep",
+      "name": "OrgCredentialSweep",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.OrgCredentialSweep",
+      "source": {
+        "path": "internal/app/org_credentials_sweep.go",
+        "symbol": "NewOrgCredentialSweep"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "OrgPolicyAttendance",
+      "name": "OrgPolicyAttendance",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.ChatAttendance",
+      "source": {
+        "path": "internal/app/providers_api.go",
+        "symbol": "NewOrgPolicyAttendance"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "OrgPolicyImpact",
+      "name": "OrgPolicyImpact",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Service",
+      "source": {
+        "path": "internal/handlers/org_policy_impact/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "OrgPolicyResolver",
+      "name": "OrgPolicyResolver",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/orgpolicy.Resolver",
+      "source": {
+        "path": "internal/app/providers.go",
+        "symbol": "NewOrgPolicyResolver"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "OrgPolicyWatcher",
+      "name": "OrgPolicyWatcher",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.OrgPolicyWatcher",
+      "source": {
+        "path": "internal/app/org_policy_watcher.go",
+        "symbol": "NewOrgPolicyWatcher"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "OrgProviderAccount",
+      "name": "OrgProviderAccount",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/org_provider_account.Service",
+      "source": {
+        "path": "internal/handlers/org_provider_account/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "OrgResolver",
       "name": "OrgResolver",
       "kind": "provider",
@@ -47925,6 +52656,18 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewOrgResolver"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "OrgUsage",
+      "name": "OrgUsage",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/org_usage.Service",
+      "source": {
+        "path": "internal/handlers/org_usage/service.go",
+        "symbol": "New"
       },
       "methods": [],
       "implementation_candidates": []
@@ -48216,6 +52959,43 @@
       },
       "methods": [],
       "implementation_candidates": []
+    },
+    {
+      "id": "Seatmatch",
+      "name": "Seatmatch",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/seatmatch.Service",
+      "source": {
+        "path": "internal/seatmatch/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/seatmatch.MockService",
+          "source": {
+            "path": "internal/seatmatch/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/seatmatch.forgeMiddlewareService",
+          "source": {
+            "path": "internal/seatmatch/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/seatmatch.service",
+          "source": {
+            "path": "internal/seatmatch/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
     },
     {
       "id": "Settings",
@@ -48869,6 +53649,33 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "AutomationTakeover",
+      "field": "Repo",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.Repository",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "AutomationTakeover",
+      "field": "Triggers",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.TriggerAdopter",
+      "methods": [],
+      "candidates": [
+        "Trigger",
+        "WorkerTrigger"
+      ],
+      "providers": [
+        "Trigger"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Background",
       "field": "Router",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/background.ProcessRouter",
@@ -48903,6 +53710,19 @@
       "candidates": [],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Catalog",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/catalog.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
       ],
       "resolution": "composition_expression"
     },
@@ -49257,6 +54077,28 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Members",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgMemberCounter",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "MyOrgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgLister",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgResolver",
       "methods": [],
@@ -49393,6 +54235,96 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "OrgCredentialSweep",
+      "field": "Authority",
+      "interface": "github.com/reliant-labs/reliant/internal/tokenauthority.Authority",
+      "methods": [],
+      "candidates": [
+        "TokenAuthority"
+      ],
+      "providers": [
+        "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
+      "field": "Attendance",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.ChatAttendance",
+      "methods": [],
+      "candidates": [
+        "OrgPolicyAttendance"
+      ],
+      "providers": [
+        "OrgPolicyAttendance"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyResolver",
+      "field": "Authority",
+      "interface": "github.com/reliant-labs/reliant/internal/tokenauthority.Authority",
+      "methods": [],
+      "candidates": [
+        "TokenAuthority"
+      ],
+      "providers": [
+        "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgProviderAccount",
+      "field": "ChatWaker",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.OrgChatWaker",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database",
+        "TemporalClient"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgProviderAccount",
+      "field": "Seats",
+      "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Service",
+      "methods": [],
+      "candidates": [
+        "Seatmatch"
+      ],
+      "providers": [
+        "Seatmatch"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgProviderAccount",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "OrgResolver",
       "field": "Authority",
       "interface": "github.com/reliant-labs/reliant/internal/tokenauthority.Authority",
@@ -49402,6 +54334,28 @@
       ],
       "providers": [
         "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgUsage",
+      "field": "Prices",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.ListPrices",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "OrgUsage",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -49466,6 +54420,26 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
+      "field": "MoveFacts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveFacts",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
+      "field": "Moves",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveStarter",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "TemporalClient"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Project",
@@ -49694,6 +54668,41 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Seatmatch",
+      "field": "Members",
+      "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Members",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Seatmatch",
+      "field": "Rollout",
+      "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Rollout",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Seatmatch",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Settings",
       "field": "ChatWaker",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.ChatWaker",
@@ -49726,6 +54735,19 @@
       ],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Settings",
+      "field": "Seats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.SeatMatcher",
+      "methods": [],
+      "candidates": [
+        "Seatmatch"
+      ],
+      "providers": [
+        "Seatmatch"
       ],
       "resolution": "composition_expression"
     },
@@ -50478,6 +55500,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Inbox.MyOrgs",
+      "source": {
+        "path": "internal/handlers/inbox/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "ModelEndpoint.Credentials",
       "source": {
         "path": "internal/handlers/model_endpoint/service.go",
@@ -50494,9 +55524,33 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "OrgUsage.Prices",
+      "source": {
+        "path": "internal/handlers/org_usage/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Project.ControlPlane",
       "source": {
         "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.MoveFacts",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Seatmatch.Rollout",
+      "source": {
+        "path": "internal/seatmatch/service.go",
         "symbol": "New"
       }
     },

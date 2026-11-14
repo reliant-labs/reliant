@@ -34,7 +34,7 @@ vi.mock("@/hooks/observability-queries", () => ({
 vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("../startBuilding", () => ({ useStartBuildingApp: () => vi.fn() }));
 
-import { AppsPage } from "../AppsPage";
+import { AppsBody, AppsPage } from "../AppsPage";
 
 const env = (name: string, over: Partial<AppEnv> = {}): AppEnv => ({
   id: `${name}-id`,
@@ -155,5 +155,18 @@ describe("the Apps page", () => {
     render(<AppsPage />);
     expect(screen.getByTestId("app-row-storefront")).toHaveAttribute("data-highlighted", "true");
     expect(screen.getByTestId("apps-claimed")).toHaveTextContent("storefront is yours now");
+  });
+});
+
+describe("the forge shell's empty Apps page", () => {
+  it("shows the three-step start, not the old dead end", () => {
+    state.apps = [];
+    render(<AppsBody variant="forge" />);
+    const empty = screen.getByTestId("apps-empty");
+    expect(within(empty).getByText("Deploy your first app")).toBeInTheDocument();
+    expect(within(empty).getByTestId("forge-first-run-step-1")).toBeInTheDocument();
+    expect(within(empty).getByTestId("forge-first-run-step-2")).toBeInTheDocument();
+    expect(within(empty).getByTestId("forge-first-run-step-3")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing deployed yet")).toBeNull();
   });
 });

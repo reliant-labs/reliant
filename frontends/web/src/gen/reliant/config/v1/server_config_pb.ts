@@ -25,7 +25,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/server_config.proto.
  */
 export const file_reliant_config_v1_server_config: GenFile = /*@__PURE__*/
-  fileDesc("CiVyZWxpYW50L2NvbmZpZy92MS9zZXJ2ZXJfY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSKRBgoTU2VydmVyUHJvY2Vzc0NvbmZpZxI8Cg1jb250cm9sX3BsYW5lGAEgASgLMiUucmVsaWFudC5jb25maWcudjEuQ29udHJvbFBsYW5lQ29uZmlnEisKBG5hdHMYAiABKAsyHS5yZWxpYW50LmNvbmZpZy52MS5OYXRzQ29uZmlnEjMKCHRlbXBvcmFsGAMgASgLMiEucmVsaWFudC5jb25maWcudjEuVGVtcG9yYWxDb25maWcSLwoDdGxzGAQgASgLMiIucmVsaWFudC5jb25maWcudjEuU2VydmVyVExTQ29uZmlnElUKCGRhdGFfZGlyGAUgASgJQkOCzhg/CghEQVRBX0RJUhIIZGF0YS1kaXIaBi4vZGF0YSohRGF0YSBkaXJlY3RvcnkgZm9yIGxvZ3MgYW5kIGNlcnRzEmcKEHN0cmVhbWluZ19kcml2ZXIYBiABKAlCTYLOGEkKEFNUUkVBTUlOR19EUklWRVISEHN0cmVhbWluZy1kcml2ZXIaBG5hdHMqF1N0cmVhbWluZyBkcml2ZXIgKG5hdHMpSgRuYXRzEjsKDGludGVncmF0aW9ucxgHIAEoCzIlLnJlbGlhbnQuY29uZmlnLnYxLkludGVncmF0aW9uc0NvbmZpZxI9Cg1vYnNlcnZhYmlsaXR5GAggASgLMiYucmVsaWFudC5jb25maWcudjEuT2JzZXJ2YWJpbGl0eUNvbmZpZxI1CglhbmFseXRpY3MYCiABKAsyIi5yZWxpYW50LmNvbmZpZy52MS5BbmFseXRpY3NDb25maWcSKQoDbGxtGAsgASgLMhwucmVsaWFudC5jb25maWcudjEuTExNQ29uZmlnEjEKB3ByZXZpZXcYDCABKAsyIC5yZWxpYW50LmNvbmZpZy52MS5QcmV2aWV3Q29uZmlnEjEKB25ldHdvcmsYDSABKAsyIC5yZWxpYW50LmNvbmZpZy52MS5OZXR3b3JrQ29uZmlnOhfKwRgTCgdyZWxpYW50GggKBnNlcnZlckoECAkQClIGc2VudHJ5Iu8BCg1OZXR3b3JrQ29uZmlnEt0BChRhbGxvd19wcml2YXRlX2VncmVzcxgBIAEoCEK+AYLOGLkBChxSRUxJQU5UX0FMTE9XX1BSSVZBVEVfRUdSRVNTKpgBTGV0IHVzZXItc3RlZXJlZCBzZXJ2ZXItc2lkZSByZXF1ZXN0cyAoZmV0Y2gsIHdlYnNlYXJjaCwgbW9kZWwgZW5kcG9pbnRzKSByZWFjaCBwcml2YXRlLCBsb29wYmFjayBhbmQgbGluay1sb2NhbCBhZGRyZXNzZXM7IHNlbGYtaG9zdGVkIGRlcGxveW1lbnRzIG9ubHki1wEKCk5hdHNDb25maWcSMAoDdXJsGAEgASgJQiOCzhgfCghOQVRTX1VSTCABKg9OQVRTIHNlcnZlciBVUkwwARJHCgR1c2VyGAIgASgJQjmCzhg1CglOQVRTX1VTRVIqKE5BVFMgdXNlciBuYW1lICh1c2VkIHdpdGggTkFUU19QQVNTV09SRCkSTgoIcGFzc3dvcmQYAyABKAlCPILOGDgKDU5BVFNfUEFTU1dPUkQqI05BVFMgcGFzc3dvcmQgKHVzZWQgd2l0aCBOQVRTX1VTRVIpMAFQASKaAgoOVGVtcG9yYWxDb25maWcSUQoEaG9zdBgBIAEoCUJDgs4YPwoNVEVNUE9SQUxfSE9TVBINdGVtcG9yYWwtaG9zdBoJbG9jYWxob3N0KhRUZW1wb3JhbCBzZXJ2ZXIgaG9zdBJXCgRwb3J0GAIgASgFQkm6SAgaBhj//wMoAYLOGDoKDVRFTVBPUkFMX1BPUlQSDXRlbXBvcmFsLXBvcnQaBDcyMzMqFFRlbXBvcmFsIHNlcnZlciBwb3J0ElwKCW5hbWVzcGFjZRgDIAEoCUJJgs4YRQoSVEVNUE9SQUxfTkFNRVNQQUNFEhJ0ZW1wb3JhbC1uYW1lc3BhY2UaB3JlbGlhbnQqElRlbXBvcmFsIG5hbWVzcGFjZSLzAQoPU2VydmVyVExTQ29uZmlnEksKCWNlcnRfZmlsZRgBIAEoCUI4gs4YNAoNVExTX0NFUlRfRklMRRIIdGxzLWNlcnQqGVRMUyBjZXJ0aWZpY2F0ZSBmaWxlIHBhdGgSQAoIa2V5X2ZpbGUYAiABKAlCLoLOGCoKDFRMU19LRVlfRklMRRIHdGxzLWtleSoRVExTIGtleSBmaWxlIHBhdGgSUQoHZGlzYWJsZRgDIAEoCEJAgs4YPAoLRElTQUJMRV9UTFMSC2Rpc2FibGUtdGxzKiBEaXNhYmxlIFRMUyAodXNlIHBsYWludGV4dCBIVFRQKUJAWj5naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_reliant_config_v1_analytics_config, file_reliant_config_v1_control_plane_config, file_reliant_config_v1_integrations_config, file_reliant_config_v1_llm_config, file_reliant_config_v1_observability_config, file_reliant_config_v1_preview_config, file_buf_validate_validate, file_forge_v1_forge]);
+  fileDesc("CiVyZWxpYW50L2NvbmZpZy92MS9zZXJ2ZXJfY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSLgBgoTU2VydmVyUHJvY2Vzc0NvbmZpZxI8Cg1jb250cm9sX3BsYW5lGAEgASgLMiUucmVsaWFudC5jb25maWcudjEuQ29udHJvbFBsYW5lQ29uZmlnEisKBG5hdHMYAiABKAsyHS5yZWxpYW50LmNvbmZpZy52MS5OYXRzQ29uZmlnEjMKCHRlbXBvcmFsGAMgASgLMiEucmVsaWFudC5jb25maWcudjEuVGVtcG9yYWxDb25maWcSLwoDdGxzGAQgASgLMiIucmVsaWFudC5jb25maWcudjEuU2VydmVyVExTQ29uZmlnElUKCGRhdGFfZGlyGAUgASgJQkOCzhg/CghEQVRBX0RJUhIIZGF0YS1kaXIaBi4vZGF0YSohRGF0YSBkaXJlY3RvcnkgZm9yIGxvZ3MgYW5kIGNlcnRzEmcKEHN0cmVhbWluZ19kcml2ZXIYBiABKAlCTYLOGEkKEFNUUkVBTUlOR19EUklWRVISEHN0cmVhbWluZy1kcml2ZXIaBG5hdHMqF1N0cmVhbWluZyBkcml2ZXIgKG5hdHMpSgRuYXRzEjsKDGludGVncmF0aW9ucxgHIAEoCzIlLnJlbGlhbnQuY29uZmlnLnYxLkludGVncmF0aW9uc0NvbmZpZxI9Cg1vYnNlcnZhYmlsaXR5GAggASgLMiYucmVsaWFudC5jb25maWcudjEuT2JzZXJ2YWJpbGl0eUNvbmZpZxI1CglhbmFseXRpY3MYCiABKAsyIi5yZWxpYW50LmNvbmZpZy52MS5BbmFseXRpY3NDb25maWcSKQoDbGxtGAsgASgLMhwucmVsaWFudC5jb25maWcudjEuTExNQ29uZmlnEjEKB3ByZXZpZXcYDCABKAsyIC5yZWxpYW50LmNvbmZpZy52MS5QcmV2aWV3Q29uZmlnEjEKB25ldHdvcmsYDSABKAsyIC5yZWxpYW50LmNvbmZpZy52MS5OZXR3b3JrQ29uZmlnEk0KFm9yZ19wb2xpY3lfZW5mb3JjZW1lbnQYDiABKAsyLS5yZWxpYW50LmNvbmZpZy52MS5PcmdQb2xpY3lFbmZvcmNlbWVudENvbmZpZzoXysEYEwoHcmVsaWFudBoICgZzZXJ2ZXJKBAgJEApSBnNlbnRyeSL3BwoaT3JnUG9saWN5RW5mb3JjZW1lbnRDb25maWcSvAEKDGludGVncmF0aW9ucxgBIAEoCUKlAYLOGKABCixSRUxJQU5UX09SR1NfUE9MSUNZX0VORk9SQ0VNRU5UX0lOVEVHUkFUSU9OUxoFYXVkaXQqVEhvdyB0aGUgb3JnIGludGVncmF0aW9ucyBwb2xpY3kgYXBwbGllczogb2ZmLCBhdWRpdCAoY291bnQsIG5ldmVyIHJlZnVzZSkgb3IgZW5mb3JjZUoDb2ZmSgVhdWRpdEoHZW5mb3JjZRKyAQoJYXBwcm92YWxzGAIgASgJQp4Bgs4YmQEKKVJFTElBTlRfT1JHU19QT0xJQ1lfRU5GT1JDRU1FTlRfQVBQUk9WQUxTGgVhdWRpdCpQSG93IHRoZSBvcmcgYXBwcm92YWwgZmxvb3JzIGFwcGx5OiBvZmYsIGF1ZGl0IChjb3VudCwgY2hhbmdlIG5vdGhpbmcpIG9yIGVuZm9yY2VKA29mZkoFYXVkaXRKB2VuZm9yY2USzgEKCG1hY2hpbmVzGAMgASgJQrsBgs4YtgEKKFJFTElBTlRfT1JHU19QT0xJQ1lfRU5GT1JDRU1FTlRfTUFDSElORVMaBWF1ZGl0Km5Ib3cgdGhlIG9yZydzIGZvcmNlZCBjcmVkZW50aWFsczpub25lIG9uIGFnZW50IGNvbW1hbmRzIGFwcGxpZXM6IG9mZiwgYXVkaXQgKGNvdW50LCBjaGFuZ2Ugbm90aGluZykgb3IgZW5mb3JjZUoDb2ZmSgVhdWRpdEoHZW5mb3JjZRKoAQoDbWNwGAQgASgJQpoBgs4YlQEKI1JFTElBTlRfT1JHU19QT0xJQ1lfRU5GT1JDRU1FTlRfTUNQGgVhdWRpdCpSSG93IHRoZSBvcmcgTUNQIHNlcnZlciBwb2xpY3kgYXBwbGllczogb2ZmLCBhdWRpdCAoY291bnQsIG5ldmVyIHJlZnVzZSkgb3IgZW5mb3JjZUoDb2ZmSgVhdWRpdEoHZW5mb3JjZRLoAQoJcHJvdmlkZXJzGAUgASgJQtQBgs4YzwEKKVJFTElBTlRfT1JHU19QT0xJQ1lfRU5GT1JDRU1FTlRfUFJPVklERVJTGgVhdWRpdCqFAUhvdyB0aGUgb3JnIHByb3ZpZGVyIGFuZCBtb2RlbCBwb2xpY3kgYXBwbGllcyB3aGVyZSBydW5zIHJlc29sdmUgdGhlaXIgbW9kZWwgYW5kIGFjY291bnQ6IG9mZiwgYXVkaXQgKGNvdW50LCBuZXZlciByZWZ1c2UpIG9yIGVuZm9yY2VKA29mZkoFYXVkaXRKB2VuZm9yY2Ui7wEKDU5ldHdvcmtDb25maWcS3QEKFGFsbG93X3ByaXZhdGVfZWdyZXNzGAEgASgIQr4Bgs4YuQEKHFJFTElBTlRfQUxMT1dfUFJJVkFURV9FR1JFU1MqmAFMZXQgdXNlci1zdGVlcmVkIHNlcnZlci1zaWRlIHJlcXVlc3RzIChmZXRjaCwgd2Vic2VhcmNoLCBtb2RlbCBlbmRwb2ludHMpIHJlYWNoIHByaXZhdGUsIGxvb3BiYWNrIGFuZCBsaW5rLWxvY2FsIGFkZHJlc3Nlczsgc2VsZi1ob3N0ZWQgZGVwbG95bWVudHMgb25seSLXAQoKTmF0c0NvbmZpZxIwCgN1cmwYASABKAlCI4LOGB8KCE5BVFNfVVJMIAEqD05BVFMgc2VydmVyIFVSTDABEkcKBHVzZXIYAiABKAlCOYLOGDUKCU5BVFNfVVNFUiooTkFUUyB1c2VyIG5hbWUgKHVzZWQgd2l0aCBOQVRTX1BBU1NXT1JEKRJOCghwYXNzd29yZBgDIAEoCUI8gs4YOAoNTkFUU19QQVNTV09SRCojTkFUUyBwYXNzd29yZCAodXNlZCB3aXRoIE5BVFNfVVNFUikwAVABIpoCCg5UZW1wb3JhbENvbmZpZxJRCgRob3N0GAEgASgJQkOCzhg/Cg1URU1QT1JBTF9IT1NUEg10ZW1wb3JhbC1ob3N0Gglsb2NhbGhvc3QqFFRlbXBvcmFsIHNlcnZlciBob3N0ElcKBHBvcnQYAiABKAVCSbpICBoGGP//AygBgs4YOgoNVEVNUE9SQUxfUE9SVBINdGVtcG9yYWwtcG9ydBoENzIzMyoUVGVtcG9yYWwgc2VydmVyIHBvcnQSXAoJbmFtZXNwYWNlGAMgASgJQkmCzhhFChJURU1QT1JBTF9OQU1FU1BBQ0USEnRlbXBvcmFsLW5hbWVzcGFjZRoHcmVsaWFudCoSVGVtcG9yYWwgbmFtZXNwYWNlIvMBCg9TZXJ2ZXJUTFNDb25maWcSSwoJY2VydF9maWxlGAEgASgJQjiCzhg0Cg1UTFNfQ0VSVF9GSUxFEgh0bHMtY2VydCoZVExTIGNlcnRpZmljYXRlIGZpbGUgcGF0aBJACghrZXlfZmlsZRgCIAEoCUIugs4YKgoMVExTX0tFWV9GSUxFEgd0bHMta2V5KhFUTFMga2V5IGZpbGUgcGF0aBJRCgdkaXNhYmxlGAMgASgIQkCCzhg8CgtESVNBQkxFX1RMUxILZGlzYWJsZS10bHMqIERpc2FibGUgVExTICh1c2UgcGxhaW50ZXh0IEhUVFApQkBaPmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_reliant_config_v1_analytics_config, file_reliant_config_v1_control_plane_config, file_reliant_config_v1_integrations_config, file_reliant_config_v1_llm_config, file_reliant_config_v1_observability_config, file_reliant_config_v1_preview_config, file_buf_validate_validate, file_forge_v1_forge]);
 
 /**
  * ServerProcessConfig is what every server role (`reliant server
@@ -109,6 +109,14 @@ export type ServerProcessConfig = Message<"reliant.config.v1.ServerProcessConfig
    * @generated from field: reliant.config.v1.NetworkConfig network = 13;
    */
   network?: NetworkConfig | undefined;
+
+  /**
+   * The org-policy enforcement switches every server role applies (the API
+   * server's own org rollout gates are ApiServerConfig's OrgsConfig).
+   *
+   * @generated from field: reliant.config.v1.OrgPolicyEnforcementConfig org_policy_enforcement = 14;
+   */
+  orgPolicyEnforcement?: OrgPolicyEnforcementConfig | undefined;
 };
 
 /**
@@ -117,6 +125,73 @@ export type ServerProcessConfig = Message<"reliant.config.v1.ServerProcessConfig
  */
 export const ServerProcessConfigSchema: GenMessage<ServerProcessConfig> = /*@__PURE__*/
   messageDesc(file_reliant_config_v1_server_config, 0);
+
+/**
+ * OrgPolicyEnforcementConfig is the platform's switch per org-policy
+ * enforcement point (control-plane docs/design/org-policies.md §7, D12):
+ *
+ *   off      the point never consults a policy: today's behaviour exactly;
+ *   audit    it counts and logs what the org's policy would refuse, and
+ *            refuses nothing, whatever the policy's own mode says;
+ *   enforce  each policy section's own mode decides: ENFORCE refuses, AUDIT
+ *            counts.
+ *
+ * A new point ships in audit and is flipped to enforce with the evidence its
+ * audit counts give. Only these three values: a kill switch must not fail
+ * open on a typo.
+ *
+ * @generated from message reliant.config.v1.OrgPolicyEnforcementConfig
+ */
+export type OrgPolicyEnforcementConfig = Message<"reliant.config.v1.OrgPolicyEnforcementConfig"> & {
+  /**
+   * Allowed integrations (§4.3): a run's use of a connection, an
+   * integration trigger's routing and polling.
+   *
+   * @generated from field: string integrations = 1;
+   */
+  integrations: string;
+
+  /**
+   * Approval floors (§4.4): the automation-approval floor of an org's
+   * triggers and the chat mode floor (auto runs as manual).
+   *
+   * @generated from field: string approvals = 2;
+   */
+  approvals: string;
+
+  /**
+   * Machines (§4.6): `credentials: none` forced on the commands of an org's
+   * runs.
+   *
+   * @generated from field: string machines = 3;
+   */
+  machines: string;
+
+  /**
+   * MCP servers (§4.5): which servers' tools an org's agents are offered
+   * (call_llm) and may call (the tool executor).
+   *
+   * @generated from field: string mcp = 4;
+   */
+  mcp: string;
+
+  /**
+   * Providers and models at resolution (§4.1 point 3, §4.2): which accounts
+   * (by driver and by who pays) and which managed models may serve an org's
+   * runs, at every place a run's model and account are resolved (launch, the
+   * registry, the account router, failover, the driver build).
+   *
+   * @generated from field: string providers = 5;
+   */
+  providers: string;
+};
+
+/**
+ * Describes the message reliant.config.v1.OrgPolicyEnforcementConfig.
+ * Use `create(OrgPolicyEnforcementConfigSchema)` to create a new message.
+ */
+export const OrgPolicyEnforcementConfigSchema: GenMessage<OrgPolicyEnforcementConfig> = /*@__PURE__*/
+  messageDesc(file_reliant_config_v1_server_config, 1);
 
 /**
  * NetworkConfig is the network reach of the dials a user steers from a server
@@ -145,7 +220,7 @@ export type NetworkConfig = Message<"reliant.config.v1.NetworkConfig"> & {
  * Use `create(NetworkConfigSchema)` to create a new message.
  */
 export const NetworkConfigSchema: GenMessage<NetworkConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 1);
+  messageDesc(file_reliant_config_v1_server_config, 2);
 
 /**
  * NatsConfig is the NATS server a server role connects to: daemon routing,
@@ -180,7 +255,7 @@ export type NatsConfig = Message<"reliant.config.v1.NatsConfig"> & {
  * Use `create(NatsConfigSchema)` to create a new message.
  */
 export const NatsConfigSchema: GenMessage<NatsConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 2);
+  messageDesc(file_reliant_config_v1_server_config, 3);
 
 /**
  * TemporalConfig is the Temporal frontend the API server and worker use.
@@ -209,7 +284,7 @@ export type TemporalConfig = Message<"reliant.config.v1.TemporalConfig"> & {
  * Use `create(TemporalConfigSchema)` to create a new message.
  */
 export const TemporalConfigSchema: GenMessage<TemporalConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 3);
+  messageDesc(file_reliant_config_v1_server_config, 4);
 
 /**
  * ServerTLSConfig is how a server role that terminates TLS itself (the API
@@ -243,5 +318,5 @@ export type ServerTLSConfig = Message<"reliant.config.v1.ServerTLSConfig"> & {
  * Use `create(ServerTLSConfigSchema)` to create a new message.
  */
 export const ServerTLSConfigSchema: GenMessage<ServerTLSConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 4);
+  messageDesc(file_reliant_config_v1_server_config, 5);
 

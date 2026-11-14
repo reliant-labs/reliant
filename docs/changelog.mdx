@@ -13,6 +13,161 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.21.0" description="November 14, 2026">
+### 6 new features, 1 fix and 2 other changes
+
+Every pull request merged since v1.20.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **web: your own spend against the org's limits on the Policies page, with the G2 contract vendored (org-policies W1)** [#2763](https://github.com/reliant-labs/reliant/pull/2763)
+- **mcp: Reliant Forge connector at /forge/mcp — forge's account tools under a forge connector grant** [#2716](https://github.com/reliant-labs/reliant/pull/2716)
+- **sdk: a funding warning on creating or enabling an automation no organization account can run yet (protos)** [#2776](https://github.com/reliant-labs/reliant/pull/2776)
+- **orgs: GetPolicyImpact previews how many of the org's chats a proposed provider and model policy would refuse (org-policies R2)** [#2772](https://github.com/reliant-labs/reliant/pull/2772)
+- **orgs: an enforced automations policy replaces an automation's unattended-funding stamp (P11, §11.3)** [#2774](https://github.com/reliant-labs/reliant/pull/2774)
+- **orgs: org admins with billing:read see the AI usage the org pays for; GetLLMUsage gains org_id and funding/account breakdowns (org-provider-accounts P9)** [#2775](https://github.com/reliant-labs/reliant/pull/2775)
+
+#### Changed
+
+- **merge-gate: scoped forge lint in the merge queue, vitest on a FULL web fallback, and the forge demo build** [#2726](https://github.com/reliant-labs/reliant/pull/2726)
+- **org-notify: a suppressed NotifyOrgAdmins answer settles the incident and is never resent** [#2783](https://github.com/reliant-labs/reliant/pull/2783)
+
+#### Fixed
+
+- **temporal: the deadlock-pausing converter names workflow.Context, which temporal sdk v1.51 still exports** [#2777](https://github.com/reliant-labs/reliant/pull/2777)
+
+</Update>
+
+<Update label="v1.20.0" description="November 14, 2026">
+### 3 new features, 2 fixes and 3 other changes
+
+Every pull request merged since v1.19.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **telemetry: workflow, agent and tool spans for AI monitoring** [#2732](https://github.com/reliant-labs/reliant/pull/2732)
+- **cli: reliant workflow run --daemon picks the machine a run executes on** [#2748](https://github.com/reliant-labs/reliant/pull/2748)
+- **orgs: the org provider and model policy where runs resolve their model and account, shipped in audit (org-policies R2)** [#2766](https://github.com/reliant-labs/reliant/pull/2766)
+
+#### Changed
+
+- **clear forge test-waits findings ahead of the v1.6.0 pin** [#2730](https://github.com/reliant-labs/reliant/pull/2730)
+- **merge-queue: check the vendored control-plane contract before the merge when a group changes it** [#2747](https://github.com/reliant-labs/reliant/pull/2747)
+- **pin: forge@7c169e587003 + @reliantlabs/forge-web-runtime@0.13.15, as promoted in v1.18.1-rc.1** [#2769](https://github.com/reliant-labs/reliant/pull/2769)
+
+#### Fixed
+
+- **prove_test: a C-family or Swift compile failure in the baseline is baseline_does_not_compile, not proven** [#2767](https://github.com/reliant-labs/reliant/pull/2767)
+- **workersetup: the org-key notice sweep claims due marks fairly, so a mark whose start keeps failing never starves a newer one** [#2768](https://github.com/reliant-labs/reliant/pull/2768)
+
+</Update>
+
+<Update label="v1.19.0" description="November 14, 2026">
+### 8 new features, 9 fixes and 2 other changes
+
+Every pull request merged since v1.18.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **orgs: email an org's owners and admins, durably, when a provider rejects an org API key** [#2727](https://github.com/reliant-labs/reliant/pull/2727)
+- **cli: reliant trigger get shows the activation's acting identity** [#2734](https://github.com/reliant-labs/reliant/pull/2734)
+- **triggers: an org_only automation no org account can run fails at launch with no_org_account, and pauses on the second in a row** [#2740](https://github.com/reliant-labs/reliant/pull/2740)
+- **llm: an org_only run with no org account pauses with the reason, and an org account change wakes the org's blocked chats** [#2741](https://github.com/reliant-labs/reliant/pull/2741)
+- **chat: offer the running agents when a run refuses a message as ambiguous, and send to the one picked (#2465)** [#2743](https://github.com/reliant-labs/reliant/pull/2743)
+- **orgs: approval floors and forced credentials:none, shipped in audit (org-policies R5)** [#2714](https://github.com/reliant-labs/reliant/pull/2714)
+- **sdk: inbox items for an automation paused with no org account, and for automations still on personal accounts (protos)** [#2746](https://github.com/reliant-labs/reliant/pull/2746)
+- **orgs: a new daemon honours the org stamp — no disallowed MCP spawn, credentials:none terminals (org-policies D1)** [#2722](https://github.com/reliant-labs/reliant/pull/2722)
+
+#### Changed
+
+- **e2e: delete the flaky step-10 Next of the forge-shell journey walk (reliant main red, flake:removed #2749)** [#2750](https://github.com/reliant-labs/reliant/pull/2750)
+- **pin: forge@7c169e58 with graph reach and rollback fixes** [#2711](https://github.com/reliant-labs/reliant/pull/2711)
+
+#### Fixed
+
+- **web: a human forge login sends no org to /oauth/approve** [#2733](https://github.com/reliant-labs/reliant/pull/2733)
+- **workflow: validation refuses an inline body's read of an enclosing graph's node** [#2738](https://github.com/reliant-labs/reliant/pull/2738)
+- **daemon: pin that a released ExecDeadline survives a parent cancel that wins the watcher's select (#2731)** [#2735](https://github.com/reliant-labs/reliant/pull/2735)
+- **workflow: no 'matches nothing' warning for a scoped input with a non-empty default** [#2737](https://github.com/reliant-labs/reliant/pull/2737)
+- **workflow: parallel edit_workflow calls on one workflow both apply** [#2742](https://github.com/reliant-labs/reliant/pull/2742)
+- **workflow: get_workflow pages a large workflow in whole lines** [#2744](https://github.com/reliant-labs/reliant/pull/2744)
+- **triggers: trigger.origin attributes a workflow's own label echo on a pull request** [#2745](https://github.com/reliant-labs/reliant/pull/2745)
+- **workflow: a user's misconfigured workflow, refused prompt or stale selection is not an ERROR issue** [#2758](https://github.com/reliant-labs/reliant/pull/2758)
+- **merge-gate: name tsc errors and show a failed phase's log tail in the gate report** [#2760](https://github.com/reliant-labs/reliant/pull/2760)
+
+</Update>
+
+<Update label="v1.18.0" description="November 13, 2026">
+### 2 new features and 1 other change
+
+Every pull request merged since v1.17.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **orgs: tell an org's owners and admins when a provider rejects one of the org's API keys (org provider accounts §4.7)** [#2702](https://github.com/reliant-labs/reliant/pull/2702)
+- **web: org Policies page with preview, conflict recovery, history and member view (org-policies W1)** [#2717](https://github.com/reliant-labs/reliant/pull/2717)
+
+#### Changed
+
+- **pin: forge@685069ed7517 + @reliantlabs/forge-web-runtime@0.13.14, as promoted in v1.17.0-rc.6** [#2720](https://github.com/reliant-labs/reliant/pull/2720)
+
+</Update>
+
+<Update label="v1.17.0" description="November 13, 2026">
+### 19 new features, 11 fixes and 9 other changes
+
+Every pull request merged since v1.16.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **sharing: visibility columns, share_events and the shared-list store queries (org-sharing S1)** [#2631](https://github.com/reliant-labs/reliant/pull/2631)
+- **sdk: Chat.visibility, viewer_access and shared_at for read-only sharing (protos, PR A)** [#2636](https://github.com/reliant-labs/reliant/pull/2636)
+- **authz: a shared chat or project is readable by the org's live members, as a person (org-sharing S2)** [#2634](https://github.com/reliant-labs/reliant/pull/2634)
+- **tools: ask_user questions must stand on their own** [#2640](https://github.com/reliant-labs/reliant/pull/2640)
+- **connections: org-owned connections, readers first (vault org tenant, resolver, trigger routing, listing)** [#2630](https://github.com/reliant-labs/reliant/pull/2630)
+- **connections: an org's GitHub App installations as org connections, with installation-bound trigger routing** [#2652](https://github.com/reliant-labs/reliant/pull/2652)
+- **orgs: Resolver.Role/RoleFresh and authz.RequireOrgAdmin (org-sharing S0)** [#2629](https://github.com/reliant-labs/reliant/pull/2629)
+- **sdk: MachineHealth on the daemon heartbeat, whether a machine can start processes (protos, PR A)** [#2654](https://github.com/reliant-labs/reliant/pull/2654)
+- **web: label an expired unclaimed deploy "Expired (unclaimed)"** [#2659](https://github.com/reliant-labs/reliant/pull/2659)
+- **sharing: viewers follow a shared chat live, and an org feed of what its members share (org-sharing S4)** [#2645](https://github.com/reliant-labs/reliant/pull/2645)
+- **web: "Shared with the org", read-only viewing and the share toggle (org-sharing S5)** [#2650](https://github.com/reliant-labs/reliant/pull/2650)
+- **models: Claude 5.2 Fable leads the [powerful] tier** [#2673](https://github.com/reliant-labs/reliant/pull/2673)
+- **orgs: admin takeover of a departed member's automations (org-sharing S8)** [#2632](https://github.com/reliant-labs/reliant/pull/2632)
+- **llm: scope every provider-account read by person, org and attendance (org provider accounts P1)** [#2680](https://github.com/reliant-labs/reliant/pull/2680)
+- **connections: org owners and admins create org-owned connections, behind orgs.connections_enabled (default off)** [#2665](https://github.com/reliant-labs/reliant/pull/2665)
+- **web: adopt, offer and fork a departed member's automations under Settings › Members (org-sharing S9)** [#2664](https://github.com/reliant-labs/reliant/pull/2664)
+- **accounts: org-owned provider accounts and org-paid seats — schema and owner-aware store (org-provider-accounts P2)** [#2681](https://github.com/reliant-labs/reliant/pull/2681)
+- **orgs: store and schema for moving a project to another org (org-project-move M1)** [#2666](https://github.com/reliant-labs/reliant/pull/2666)
+- **console: dashboards as hubs — Product analytics and Services tabs, a short landing, a one-row dashboard header** [#2648](https://github.com/reliant-labs/reliant/pull/2648)
+
+#### Changed
+
+- **e2e: delete the flaky 'forge journey in Reliant' walk (reliant main red, #2637)** [#2638](https://github.com/reliant-labs/reliant/pull/2638)
+- **escape hatch link to the Forge console for forge-only signups** [#2641](https://github.com/reliant-labs/reliant/pull/2641)
+- **pin: forge@f389bc30 (obs monitoring for any app, migration-tool hook, adopt any app)** [#2643](https://github.com/reliant-labs/reliant/pull/2643)
+- **e2e: drop the flaky End-key assertions from the sidebar geometry spec (#2647)** [#2660](https://github.com/reliant-labs/reliant/pull/2660)
+- **forge: search-intent titles and descriptions, curated llms.txt with forge start, MCP and no-account deploy first** [#2663](https://github.com/reliant-labs/reliant/pull/2663)
+- **guidance: obs check exit 8 is the --wait timeout; low traffic is exit 2 and final** [#2675](https://github.com/reliant-labs/reliant/pull/2675)
+- **forge: first-run steps on empty /apps, claim from a second browser, demo CTA** [#2635](https://github.com/reliant-labs/reliant/pull/2635)
+- **forge: deploy without an account is one command; precise --plan-only wording** [#2682](https://github.com/reliant-labs/reliant/pull/2682)
+- **forge: publish LLM provider constraints and claim-first recovery** [#2683](https://github.com/reliant-labs/reliant/pull/2683)
+
+#### Fixed
+
+- **web: onboarding opens on what the user can finish, and lands in a chat** [#2639](https://github.com/reliant-labs/reliant/pull/2639)
+- **llm: an agent turn's tier selection resolves only to models that write text** [#2646](https://github.com/reliant-labs/reliant/pull/2646)
+- **web: polish settings and workspace controls** [#2651](https://github.com/reliant-labs/reliant/pull/2651)
+- **web: dedupe @reliantlabs/forge-web-runtime in the Vite dev optimizer** [#2655](https://github.com/reliant-labs/reliant/pull/2655)
+- **daemon: log the recovery-finalization admission refusal at INFO and count it** [#2656](https://github.com/reliant-labs/reliant/pull/2656)
+- **web: onboarding compute step leads with your own computer (free)** [#2657](https://github.com/reliant-labs/reliant/pull/2657)
+- **workflow: a hand-started run no longer renders concurrency.key at load** [#2658](https://github.com/reliant-labs/reliant/pull/2658)
+- **web: on a phone, show 'Your own computer (free)' first with laptop instructions** [#2661](https://github.com/reliant-labs/reliant/pull/2661)
+- **reliant main red — revert #2661+#2657 (onboarding e2e), StreamOrgUpdates deadline and Orgs nil-guard (#2645)** [#2671](https://github.com/reliant-labs/reliant/pull/2671)
+- **anthropic: clear Fable 5.2 minimum Claude Code version** [#2674](https://github.com/reliant-labs/reliant/pull/2674)
+- **triggers: every path from a definition to a trigger row binds its org GitHub App installation** [#2679](https://github.com/reliant-labs/reliant/pull/2679)
+
+</Update>
+
 <Update label="v1.16.0" description="November 11, 2026">
 ### 3 new features, 1 fix and 4 other changes
 

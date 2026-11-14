@@ -27,6 +27,7 @@ import { ConnectionAuthKind, IntegrationAuthMethodSchema, IntegrationSchema } fr
 import { renderWithQuery } from "@/test/renderWithQuery";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
+import { useActiveOrgStore } from "@/store/activeOrgStore";
 
 const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
@@ -462,6 +463,63 @@ describe("StepPalette: searching", () => {
 
     await user.click(within(row).getByText("Connect"));
     expect(handlers.onConnect).toHaveBeenCalledTimes(2);
+  });
+
+  it("marks an integration the org's policy refuses as not allowed, and only when enforced", async () => {
+    // The active org's policy refuses GitHub (enforced) and would refuse
+    // Slack only in audit, which still works; Gmail is not governed.
+    listIntegrations.mockResolvedValue({
+      integrations: [
+        create(IntegrationSchema, { id: "github", displayName: "GitHub", orgPolicy: { allowed: false, enforced: true, policyVersion: 3n } }),
+        create(IntegrationSchema, { id: "slack", displayName: "Slack", orgPolicy: { allowed: false, enforced: false, policyVersion: 3n } }),
+        create(IntegrationSchema, { id: "gmail", displayName: "Gmail" }),
+      ],
+    });
+    listCatalogIntegrations.mockResolvedValue(integrationsPage([listing("github"), listing("slack"), listing("gmail")]));
+    searchCatalog.mockResolvedValue(page([entry("github/issue.create@1", { name: "Create issue", integration: "github" })]));
+    const user = userEvent.setup();
+    renderPalette();
+
+    await waitFor(() => expect(within(optionNamed("GitHub")).getByText("Not allowed in your organization")).toBeInTheDocument());
+    expect(within(optionNamed("Slack")).queryByTestId("palette-not-allowed")).toBeNull();
+    expect(within(optionNamed("Gmail")).queryByTestId("palette-not-allowed")).toBeNull();
+
+    // Searching: the entry row is marked, and the footer says why.
+    await user.type(input(), "issue");
+    await screen.findByText("Create issue");
+    expect(within(optionNamed("Create issue")).getByText("Not allowed in your organization")).toBeInTheDocument();
+    expect(screen.getByText(/your organization's policy doesn't allow GitHub in its workflows/)).toBeInTheDocument();
+  });
+
+  it("shows the markers of the org it acts in, and the new org's after a switch", async () => {
+    // Org A refuses GitHub, org B refuses Slack: the request names the org,
+    // so neither org's answer is shown under the other's name.
+    listIntegrations.mockImplementation((req: { orgId?: string }) => {
+      const refuses = req.orgId === "org-a" ? "github" : req.orgId === "org-b" ? "slack" : "";
+      return Promise.resolve({
+        integrations: ["github", "slack"].map((id) =>
+          create(IntegrationSchema, {
+            id,
+            displayName: DISPLAY[id],
+            ...(refuses ? { orgPolicy: { allowed: id !== refuses, enforced: true, policyVersion: 1n } } : {}),
+          }),
+        ),
+      });
+    });
+    listCatalogIntegrations.mockResolvedValue(integrationsPage([listing("github"), listing("slack")]));
+    useActiveOrgStore.setState({ userId: "u1", chosenId: "org-a", effectiveId: "org-a" });
+    try {
+      renderPalette();
+      await waitFor(() => expect(within(optionNamed("GitHub")).queryByTestId("palette-not-allowed")).not.toBeNull());
+      expect(within(optionNamed("Slack")).queryByTestId("palette-not-allowed")).toBeNull();
+
+      act(() => useActiveOrgStore.setState({ chosenId: "org-b", effectiveId: "org-b" }));
+      await waitFor(() => expect(within(optionNamed("Slack")).queryByTestId("palette-not-allowed")).not.toBeNull());
+      expect(within(optionNamed("GitHub")).queryByTestId("palette-not-allowed")).toBeNull();
+      expect(listIntegrations).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-b" }));
+    } finally {
+      useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null });
+    }
   });
 
   it("says an integration no connection method serves here is not available, instead of offering Connect", async () => {

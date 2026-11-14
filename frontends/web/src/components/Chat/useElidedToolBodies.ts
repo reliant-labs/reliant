@@ -44,6 +44,12 @@ export interface ElidedToolBodiesArgs {
   shown: boolean;
   /** The row is expanded: an expand interaction still open when it closes ends as cancelled. */
   expanded: boolean;
+  /**
+   * The reader is a viewer of a chat shared with their org: an elided result
+   * is withheld from them (the server answers its body as not found), not
+   * waiting to be fetched. It is neither fetched nor reported as failed.
+   */
+  viewer?: boolean;
 }
 
 export interface ElidedToolBodies {
@@ -57,6 +63,8 @@ export interface ElidedToolBodies {
   ready: boolean;
   /** A body could not be fetched (or cannot be: no block id). */
   failed: boolean;
+  /** The result was withheld from this viewer: `result` is undefined and the row says so. */
+  withheld: boolean;
   /** Byte size of what is being fetched, for the placeholder's height. */
   bytes: number;
   retry: () => void;
@@ -80,9 +88,11 @@ export function useElidedToolBodies({
   result,
   shown,
   expanded,
+  viewer = false,
 }: ElidedToolBodiesArgs): ElidedToolBodies {
   const inputElided = !!call.inputElided;
-  const resultElided = !!result?.elided;
+  const withheld = viewer && !!result?.elided;
+  const resultElided = !!result?.elided && !withheld;
   const inputBlockId = inputElided ? call.content_block_id : undefined;
   const resultBlockId = resultElided ? result?.block_id : undefined;
   // Elided with no way to ask for the body: there is nothing to fetch, and
@@ -100,6 +110,7 @@ export function useElidedToolBodies({
 
   const resultBody = resultQuery.data?.body;
   const effectiveResult = useMemo<ToolResultData | undefined>(() => {
+    if (withheld) return undefined;
     if (!result || !resultElided) return result;
     if (!resultBody) return undefined;
     return {
@@ -111,7 +122,7 @@ export function useElidedToolBodies({
       original_size: resultBody.originalSize !== undefined ? Number(resultBody.originalSize) : undefined,
       elided: false,
     };
-  }, [result, resultElided, resultBody]);
+  }, [result, resultElided, resultBody, withheld]);
 
   const elided = inputElided || resultElided;
   const inputReady = !inputElided || !!inputQuery.data;
@@ -161,5 +172,5 @@ export function useElidedToolBodies({
     if (!expanded && expandOp && !expandOp.ended) expandOp.end({ outcome: "cancelled" });
   }, [expanded, expandOp]);
 
-  return { elided, input, result: effectiveResult, ready, failed, bytes, retry, noteUserExpand };
+  return { elided, input, result: effectiveResult, ready, failed, withheld, bytes, retry, noteUserExpand };
 }

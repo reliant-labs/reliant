@@ -197,11 +197,17 @@ type (
 	DaemonAttachmentSource = core.DaemonAttachmentSource
 	DaemonAttachment       = core.DaemonAttachment
 	DaemonBuild            = core.DaemonBuild
+	MachineHealth          = core.MachineHealth
+	MachineHealthState     = core.MachineHealthState
 )
 
 const (
 	DaemonAttachmentSourceInbound  = core.DaemonAttachmentSourceInbound
 	DaemonAttachmentSourceOutbound = core.DaemonAttachmentSourceOutbound
+
+	MachineHealthUnreported = core.MachineHealthUnreported
+	MachineHealthOK         = core.MachineHealthOK
+	MachineHealthDegraded   = core.MachineHealthDegraded
 )
 
 // DiscoveredProject represents a daemon-reported project on disk.

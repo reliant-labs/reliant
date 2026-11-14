@@ -104,12 +104,17 @@ describe('buildInterceptors factory', () => {
     expect(buildInterceptors({})).toHaveLength(13)
   })
 
-  it('swaps exactly one stage (daemon-last-seen for forge-via) in the control-plane chain', async () => {
+  it('swaps one stage (daemon-last-seen for forge-via) and adds signup attribution in the control-plane chain', async () => {
     const { buildInterceptors } = await import('../transport')
+    const { signupAttributionInterceptor } = await import('../signupAttribution')
     const reliantApi = buildInterceptors({ withAuth: true })
     const controlPlane = buildInterceptors({ withAuth: true, backend: 'control-plane' })
-    expect(controlPlane).toHaveLength(reliantApi.length)
-    expect(controlPlane.filter((entry) => !reliantApi.includes(entry))).toHaveLength(1)
+    expect(controlPlane).toHaveLength(reliantApi.length + 1)
+    expect(controlPlane.filter((entry) => !reliantApi.includes(entry))).toHaveLength(2)
+    expect(controlPlane).toContain(signupAttributionInterceptor)
+    expect(reliantApi).not.toContain(signupAttributionInterceptor)
+    // Only signed-in requests carry it.
+    expect(buildInterceptors({ withAuth: false, backend: 'control-plane' })).not.toContain(signupAttributionInterceptor)
   })
 })
 

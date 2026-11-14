@@ -247,6 +247,70 @@ nodes:
 	assert.NotNil(t, findingContaining(errs, "a node of the loop body"), "%v", messages(errs))
 }
 
+// A loop body has its own nodes namespace: an action param reading a
+// top-level node passed validation and failed "no such key: start" on every
+// iteration of a real run (agent bug report, first-run-canary).
+func TestLoopBodyCannotReadEnclosingNodes(t *testing.T) {
+	t.Parallel()
+	errs, _ := gapFindings(t, `
+name: probe
+entry: [start]
+nodes:
+  - {id: start, type: call_llm, args: {model: {tags: [fast]}}}
+  - id: fetch
+    type: loop
+    items: "{{ [1, 2] }}"
+    inline:
+      entry: [get]
+      nodes:
+        - id: get
+          type: action
+          uses: github/repo.get@1
+          with: {owner: "{{ nodes.start.response_text }}", repo: "{{ string(iter.item) }}"}
+edges:
+  - {from: start, to: fetch}
+`)
+	e := findingContaining(errs, "reads nodes.start, a node outside this inline body")
+	require.NotNil(t, e, "%v", messages(errs))
+	assert.Contains(t, strings.Join(e.Path, "."), "inline.nodes.[0](get).with.owner")
+	assert.Nil(t, findingContaining(errs, "undefined field 'start'"), "one finding per cause: %v", messages(errs))
+}
+
+// The same read at top level is legal, and a body's read of its own nodes is
+// too: only a read across the body boundary is refused.
+func TestActionParamsReadTheirOwnGraphsNodes(t *testing.T) {
+	t.Parallel()
+	errs, _ := gapFindings(t, `
+name: probe
+entry: [start]
+nodes:
+  - {id: start, type: call_llm, args: {model: {tags: [fast]}}}
+  - id: call
+    type: action
+    uses: http/request@1
+    with:
+      url: "{{ nodes.start.response_text }}/x"
+      headers: {Authorization: "Bearer {{ secrets.TRADER_KEY }}"}
+  - id: fetch
+    type: loop
+    items: "{{ [1, 2] }}"
+    inline:
+      entry: [first]
+      nodes:
+        - {id: first, type: call_llm, args: {model: {tags: [fast]}}}
+        - id: get
+          type: action
+          uses: http/request@1
+          with: {url: "{{ nodes.first.response_text }}"}
+      edges:
+        - {from: first, to: get}
+edges:
+  - {from: start, to: call}
+  - {from: call, to: fetch}
+`)
+	assert.Nil(t, findingContaining(errs, "a node outside this inline body"), "%v", messages(errs))
+}
+
 func TestG2_LoopOutputsInBodyNeedAFirstIterationGuard(t *testing.T) {
 	t.Parallel()
 	errs, _ := gapFindings(t, `

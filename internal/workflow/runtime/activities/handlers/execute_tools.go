@@ -17,11 +17,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/nomachine"
+	"github.com/reliant-labs/reliant/internal/orgfunding"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -207,10 +210,11 @@ func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 		ToolInput:        tec.dispatchInput,
 		ToolCallID:       tec.toolCallID,
 		ContentBlockID:   "", // Not required - tool calls can be ephemeral
-		UserID:           tec.project.UserID,
+		UserID:           tec.actingUserID(),
 		ChatID:           tec.chat.ID,
 		ProjectID:        tec.project.ID,
 		WorktreeID:       tec.worktree.ID,
+		OrgID:            chatOrgID(tec.chat),
 		WorktreeDaemonID: tec.worktree.DaemonID,
 		Thread:           tec.thread,
 		MessageID:        "",                     // Not required - tool calls can be ephemeral
@@ -225,6 +229,12 @@ func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 }
 
 // chatID returns the chat ID for status emissions
+// actingUserID is the person a tool call executes as: the user its request
+// carries (buildToolRequest), and the one its run scope is bound to.
+func (tec *toolExecutionContext) actingUserID() string {
+	return tec.project.UserID
+}
+
 func (tec *toolExecutionContext) getChatID() string {
 	return tec.chatID
 }
@@ -322,6 +332,9 @@ func (a *ExecuteToolsActivity) Category() schema.ActivityCategory {
 func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput) (*reliantv1.ExecuteToolsOutput, error) {
 	rtx := input.Runtime
 	ctx = automationpolicy.WithExecution(ctx, automationpolicy.Execution{Unattended: rtx.Unattended, Approvals: rtx.ActivationApprovals})
+	// The run's own funding order, which may only tighten what the person
+	// chose, for the run scope of its tool calls (runFunding).
+	ctx = context.WithValue(ctx, runFundingOrderKey{}, rtx.Failover.Funding)
 	protoArgs := model.GetExecuteToolsArgs(input.Node)
 	if protoArgs == nil {
 		return nil, fmt.Errorf("expected execute_tools node, got %s", model.NodeType(input.Node))
@@ -452,7 +465,6 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 
 					// Use tool info directly from message.ToolCall - no DB lookup required
 					toolName := toolCall.Name
-					toolInput := toolCall.Input
 					toolCallID := toolCall.ID
 
 					// Validate required fields
@@ -468,65 +480,17 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 						return
 					}
 
-					if reason := refusedByWorkflow[toolCallID]; reason != "" {
-						resultsChan <- toolCallResult{
-							index:  job.index,
-							result: a.refuseToolCall(ctx, rtx, toolCall, reason),
-						}
-						return
-					}
-
-					// The one capability check: was this tool offered in the
-					// request that produced this call? That set includes what
-					// load_tool granted on earlier turns, so a legitimately
-					// loaded tool (generate_image, deliberately outside every
-					// default bundle) passes, while a name the model was not
-					// shown — carried over from history, or hallucinated — is
-					// refused here instead of running. The tier is part of the
-					// set: a tool above it is never offered.
-					if reason := capabilityRefusal(caps, toolCall); reason != "" {
-						resultsChan <- toolCallResult{
-							index:  job.index,
-							result: a.refuseToolCall(ctx, rtx, toolCall, reason),
-						}
-						return
-					}
-
-					// Response tools: identified via expected_response_tools list from workflow config.
-					// Execute inline (return input as metadata); no external tool call.
+					// The call's span (execute_tool), under the turn that asked
+					// for it: refusals included, so a refused call is visible
+					// as one. The gateway's round trip to the daemon is its
+					// child (ctx carries it into the dispatch).
+					location := toolLocation(toolName)
 					if responseToolSet[toolName] {
-						var toolSchema map[string]interface{}
-						if responseToolSchemas != nil {
-							toolSchema = responseToolSchemas[toolName]
-						}
-						result := executeResponseToolInline(toolCallID, toolName, toolInput, toolSchema)
-						resultsChan <- toolCallResult{
-							index:  job.index,
-							result: result,
-						}
-						return
+						location = telemetry.ToolLocationLocal
 					}
-
-					if workspace.blocked != "" && tools.NeedsMachine(toolName) {
-						resultsChan <- toolCallResult{index: job.index, result: a.refuseToolCall(ctx, rtx, toolCall, workspace.blocked)}
-						return
-					}
-
-					// Execute the tool via normal toolexec path
-					result := a.executeSingleTool(
-						ctx,
-						caps,
-						rtx.ChatID,
-						rtx.Thread,
-						toolName,
-						toolInput,
-						toolCallID,
-						activityID,
-						workflowRunID,
-						attemptNumber,
-						workingPath,        // Working directory override: the run's, or where ensureBatchWorkspace moved it
-						rtx.DaemonSelector, // Pass daemon selector for targeted routing
-					)
+					callCtx, span := telemetry.StartToolCall(ctx, toolName, toolCallID, location, turnTraceParent(rtx))
+					result := a.runToolCall(callCtx, rtx, toolCall, caps, refusedByWorkflow[toolCallID], responseToolSet[toolName], responseToolSchemas[toolName], workspace.blocked, activityID, workflowRunID, attemptNumber, workingPath)
+					span.End(result.IsError, nil)
 
 					resultsChan <- toolCallResult{
 						index:  job.index,
@@ -637,6 +601,67 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 		"totalResultChars", totalResultChars)
 
 	return output, nil
+}
+
+// runToolCall runs one call of a batch, or answers it without running: a call
+// the workflow refused (refusal), one outside the turn's capabilities, a
+// response tool (answered inline from its input against responseSchema), or a
+// machine call while the batch's workspace is blocked (blocked).
+func (a *ExecuteToolsActivity) runToolCall(
+	ctx context.Context,
+	rtx RuntimeContext,
+	toolCall message.ToolCall,
+	caps *tools.Capabilities,
+	refusal string,
+	responseTool bool,
+	responseSchema map[string]interface{},
+	blocked string,
+	activityID string,
+	workflowRunID string,
+	attemptNumber int,
+	workingPath string,
+) message.ToolResult {
+	if refusal != "" {
+		return a.refuseToolCall(ctx, rtx, toolCall, refusal)
+	}
+
+	// The one capability check: was this tool offered in the
+	// request that produced this call? That set includes what
+	// load_tool granted on earlier turns, so a legitimately
+	// loaded tool (generate_image, deliberately outside every
+	// default bundle) passes, while a name the model was not
+	// shown — carried over from history, or hallucinated — is
+	// refused here instead of running. The tier is part of the
+	// set: a tool above it is never offered.
+	if reason := capabilityRefusal(caps, toolCall); reason != "" {
+		return a.refuseToolCall(ctx, rtx, toolCall, reason)
+	}
+
+	// Response tools: identified via expected_response_tools list from workflow config.
+	// Execute inline (return input as metadata); no external tool call.
+	if responseTool {
+		return executeResponseToolInline(toolCall.ID, toolCall.Name, toolCall.Input, responseSchema)
+	}
+
+	if blocked != "" && tools.NeedsMachine(toolCall.Name) {
+		return a.refuseToolCall(ctx, rtx, toolCall, blocked)
+	}
+
+	// Execute the tool via normal toolexec path
+	return a.executeSingleTool(
+		ctx,
+		caps,
+		rtx.ChatID,
+		rtx.Thread,
+		toolCall.Name,
+		toolCall.Input,
+		toolCall.ID,
+		activityID,
+		workflowRunID,
+		attemptNumber,
+		workingPath,        // Working directory override: the run's, or where ensureBatchWorkspace moved it
+		rtx.DaemonSelector, // Pass daemon selector for targeted routing
+	)
 }
 
 // ============================================================================
@@ -794,6 +819,13 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 		ctx = tools.WithSkills(ctx, a.projectSkills(ctx, tec.project.ID, configMachine(ctx, a.machines, tec.project.UserID, tec.daemonSelector)))
 	}
 
+	// A tool that spends a provider (an image or a video generation)
+	// resolves in the run's scope, read from the chat row as call_llm reads
+	// it for the model's own calls: the chat's org, its accounts and policy,
+	// and who is behind the run (drivers.WithRunScope). It is bound to the
+	// person the call executes as.
+	ctx = drivers.WithRunScope(ctx, tec.actingUserID(), a.runScope(ctx, tec.chat))
+
 	// The call is about to enter real execution -- record it durably as
 	// PENDING before dispatch so a reload mid-execution sees at least this
 	// much instead of nothing. Calls that never reach here (response tools,
@@ -812,6 +844,68 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 		result.Content = tools.WithShellSuggestion(result.Content, suggestion)
 	}
 	return result
+}
+
+// runScope resolves the scope of chat's run, as llmCallSpec.scope does for
+// its model calls: the chat row's org, attended or not (chatAttendance), and
+// what its person said about spending their own accounts there
+// (runFunding). It spends the chat owner's accounts, so drivers honours it
+// only for a call executing as that owner. It reads the database only when a
+// tool asks.
+func (a *ExecuteToolsActivity) runScope(ctx context.Context, chat *db.Chat) func() (drivers.Scope, drivers.RunFunding) {
+	return func() (drivers.Scope, drivers.RunFunding) {
+		who := chatAttendance(ctx, a.repo, chat)
+		scope := llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope()
+		if scope.Personal() {
+			return scope, drivers.RunFunding{}
+		}
+		runOrder, _ := ctx.Value(runFundingOrderKey{}).(string)
+		return scope, runFunding(ctx, a.repo, chat, who, runOrder)
+	}
+}
+
+// runFundingOrderKey carries the run's funding order (its failover policy)
+// from Execute to the run scope of each of its tool calls.
+type runFundingOrderKey struct{}
+
+// runFunding is what the person behind chat's run in its org said about
+// spending their own accounts there, read as fundingPlanFor reads it for the
+// run's model calls (org-provider-accounts §4.4, §10): their per-org setting,
+// outranked by the chat's own order, and tightened (never loosened) by the
+// run's. An automation stamped to spend any source has its stamp as consent
+// (§11.3). A store that cannot answer is org_only: the person's own accounts
+// are never spent without their say.
+func runFunding(ctx context.Context, store RunFundingStore, chat *db.Chat, who attendance, runOrder string) drivers.RunFunding {
+	if store == nil {
+		return drivers.RunFunding{OrgOnly: true}
+	}
+	orgID := chatOrgID(chat)
+	pref := orgfunding.Default()
+	if v, ok := store.GetSettingValue(ctx, chat.UserID, orgfunding.SettingKey); ok {
+		pref = orgfunding.Parse(v).For(orgID)
+	}
+	order, limit := pref.Order, pref.OnOrgLimit
+	if chatOrder, err := store.ChatFundingOrder(ctx, chat.ID); err != nil {
+		logging.WarnContext(ctx, "Could not read the chat's funding order; using only the org's accounts", "chatID", chat.ID, "error", err)
+		return drivers.RunFunding{OrgOnly: true}
+	} else if o := orgfunding.ParseOrder(chatOrder); o != "" {
+		order = o
+	}
+	switch orgfunding.ParseOrder(runOrder) {
+	case orgfunding.OrderOrgOnly:
+		order = orgfunding.OrderOrgOnly
+	case orgfunding.OrderOrgFirst:
+		if order == orgfunding.OrderPersonalFirst {
+			order = orgfunding.OrderOrgFirst
+		}
+	}
+	if order == orgfunding.OrderOrgOnly {
+		return drivers.RunFunding{OrgOnly: true}
+	}
+	return drivers.RunFunding{
+		PersonalFirst:         order == orgfunding.OrderPersonalFirst,
+		PersonalWhenOrgCannot: limit == orgfunding.OnOrgLimitUsePersonal || (!who.attended && who.anySource),
+	}
 }
 
 // checkPriorTerminalResult is the fix for the interrupt livelock (chat

@@ -211,6 +211,13 @@ func BackfillChatUpdateHeads(ctx context.Context, db orm.Context, chatID string)
 	}
 
 	if err := db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		// The head upserts below take a key share on the chat
+		// (chat_write_admission), so take it before the counter, the writers'
+		// order: a project delete locks the chat and then deletes the counter,
+		// and the other order deadlocks with it.
+		if _, err := db.Exec(ctx, `SELECT 1 FROM chats WHERE id = $1 FOR KEY SHARE`, chatID); err != nil {
+			return err
+		}
 		var l1, h1 int64
 		if err := db.QueryRow(ctx, lockChatStreamCounterSQL, chatID).Scan(&l1, &h1); err != nil {
 			return err

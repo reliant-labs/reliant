@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -17,6 +18,19 @@ import (
 // OrgResolver answers ListInbox's org question. *orgs.Resolver is one.
 type OrgResolver interface {
 	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
+}
+
+// OrgLister lists the caller's live org memberships with their role in each, from the
+// control plane (controlplane.Service.ListMyOrganizations), as the caller: jwt is their session.
+type OrgLister interface {
+	ListMyOrganizations(ctx context.Context, jwt string) ([]controlplane.MyOrganization, error)
+}
+
+// OrgMemberCounter is how many live members an org has, asked of the control
+// plane now as userID (orgs.Resolver.LiveMembersFresh); known is false when it
+// gives no count.
+type OrgMemberCounter interface {
+	LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error)
 }
 
 // Repository is the slice of *db.Repo the inbox handlers use. It
@@ -36,6 +50,19 @@ type Repository interface {
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 
 	ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error)
+	// HasRejectedOrgKeys and ListRejectedOrgKeysIn are the rejected org-owned API keys the
+	// inbox lists to their orgs' owners and admins.
+	HasRejectedOrgKeys(ctx context.Context) (bool, error)
+	ListRejectedOrgKeysIn(ctx context.Context, orgIDs []string) ([]core.ProviderAccount, error)
+	// ListNoOrgAccountPauses and ListPersonallyFundedTriggers are the
+	// automations of the org-provider-accounts §11 notices: paused for want
+	// of an org account, and still on their owner's own accounts.
+	HasNoOrgAccountPauses(ctx context.Context) (bool, error)
+	ListNoOrgAccountPauses(ctx context.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error)
+	ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error)
+	// GetLatestTriggerEvent is a trigger's newest event with outcome, nil
+	// when it has none.
+	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 	ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error)
 	DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error
 	RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error

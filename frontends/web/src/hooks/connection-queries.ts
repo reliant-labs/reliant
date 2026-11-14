@@ -23,6 +23,7 @@ import { ConnectError } from "@connectrpc/connect";
 import {
   ApiKeyConnectionKind,
   ConnectionAuthKind,
+  ConnectionOwnerKind,
   ConnectionStatus,
   type Connection as ProtoConnection,
   type CreateApiKeyConnectionResponse,
@@ -33,6 +34,7 @@ import {
   type ListIntegrationsResponse,
 } from "../gen/reliant/v1/connection_pb";
 import { unavailableIntegrationIds } from "../lib/integrationAvailability";
+import { useActiveOrgStore } from "../store/activeOrgStore";
 import { catalogServiceKeys } from "./catalog-service-hooks_gen";
 import {
   connectionServiceKeys,
@@ -73,6 +75,14 @@ export interface Connection {
   /** RFC 3339, "" when never used or made. */
   lastUsedAt: string;
   createdAt: string;
+  /**
+   * Who it belongs to: the caller ("user"), or an organization ("org", whose
+   * live members may use it in that org's runs and whose admins manage it).
+   * An org connection's account fields describe the org's account.
+   */
+  ownerKind: "user" | "org";
+  /** The organization of an org connection; "" for a personal one. */
+  orgId: string;
 }
 
 export interface AuthMethod {
@@ -98,6 +108,12 @@ export interface Integration {
   displayName: string;
   methods: AuthMethod[];
   params: ConnectionParam[];
+  /**
+   * How the active org's policy treats it in the org's runs; absent when the
+   * policy does not govern integrations. `enforced` false is audit: a use
+   * still works and is only counted.
+   */
+  orgPolicy?: { allowed: boolean; enforced: boolean };
 }
 
 // ── Proto mapping ───────────────────────────────────────────────────────────
@@ -165,6 +181,8 @@ export function connectionFromProto(proto: ProtoConnection): Connection {
     isDefault: proto.isDefault,
     lastUsedAt: proto.lastUsedAt,
     createdAt: proto.createdAt,
+    ownerKind: proto.ownerKind === ConnectionOwnerKind.ORG ? "org" : "user",
+    orgId: proto.orgId,
   };
 }
 
@@ -174,6 +192,26 @@ function integrationFromProto(proto: ProtoIntegration): Integration {
     displayName: proto.displayName || proto.id,
     methods: proto.methods.map(authMethodFromProto),
     params: proto.connectionParams.map(connectionParamFromProto),
+    ...(proto.orgPolicy ? { orgPolicy: { allowed: proto.orgPolicy.allowed, enforced: proto.orgPolicy.enforced } } : {}),
+  };
+}
+
+/**
+ * The reason a create or reconnect of an org's connection is refused while
+ * the deployment has not enabled org connections (orgs.connections_enabled).
+ */
+export const ORG_CONNECTIONS_DISABLED = "org_connections_disabled";
+
+/** Whether err is that refusal: branch on the reason, never the message. */
+export function isOrgConnectionsDisabled(err: unknown): boolean {
+  return err instanceof ConnectError && err.metadata.get("x-forge-error-reason") === ORG_CONNECTIONS_DISABLED;
+}
+
+/** Personal connections, and one org's, out of a list that may hold both. */
+export function splitByOwner(connections: readonly Connection[], orgId: string | undefined): { mine: Connection[]; org: Connection[] } {
+  return {
+    mine: connections.filter((c) => c.ownerKind === "user"),
+    org: orgId ? connections.filter((c) => c.ownerKind === "org" && c.orgId === orgId) : [],
   };
 }
 
@@ -201,14 +239,26 @@ export function useAllConnections() {
 
 const integrationsOf = (response: ListIntegrationsResponse) => response.integrations.map(integrationFromProto);
 
+/**
+ * ListIntegrations for the active org, named in the request itself: each
+ * integration's `orgPolicy` is that org's, so the org belongs in the query key
+ * (the request) — filled in on the wire alone, a switch would show the
+ * previous org's markers from the cache under the new org's name. Until the
+ * active org is known the request names none, and nothing is marked.
+ */
+function useActiveOrgListIntegrations<T = ListIntegrationsResponse>(select?: (r: ListIntegrationsResponse) => T) {
+  const orgId = useActiveOrgStore((s) => s.effectiveId);
+  return useListIntegrations(orgId ? { orgId } : {}, { staleTime: 5 * 60_000, ...(select ? { select } : {}) });
+}
+
 /** Every integration this deployment lists, with the ways to connect each (ListIntegrations). */
 export function useIntegrations() {
-  return useListIntegrations({}, { staleTime: 5 * 60_000, select: integrationsOf });
+  return useActiveOrgListIntegrations(integrationsOf);
 }
 
 /** Integration id → its display name ("github" → "GitHub"), from ListIntegrations. */
 export function useIntegrationNames(): ReadonlyMap<string, string> {
-  const query = useListIntegrations({}, { staleTime: 5 * 60_000 });
+  const query = useActiveOrgListIntegrations();
   const integrations = query.data?.integrations;
   return useMemo(() => new Map((integrations ?? []).map((i) => [i.id, i.displayName || i.id])), [integrations]);
 }
@@ -221,9 +271,26 @@ export function useIntegrationNames(): ReadonlyMap<string, string> {
  * and the connect dialog still explains.
  */
 export function useUnavailableIntegrations(): ReadonlySet<string> {
-  const query = useListIntegrations({}, { staleTime: 5 * 60_000 });
+  const query = useActiveOrgListIntegrations();
   const integrations = query.data?.integrations;
   return useMemo(() => unavailableIntegrationIds((integrations ?? []).map(integrationFromProto)), [integrations]);
+}
+
+/**
+ * The integrations the active org's policy refuses in its runs (control-plane
+ * docs/design/org-policies.md §4.3): ListIntegrations answers for the org
+ * the request names (the active org). Only an ENFORCED refusal
+ * is here: under audit the use works. Connecting is never refused — a
+ * person's own connection stays usable in their other orgs — so a picker
+ * marks these rather than hiding them.
+ */
+export function useOrgDisallowedIntegrations(): ReadonlySet<string> {
+  const query = useActiveOrgListIntegrations();
+  const integrations = query.data?.integrations;
+  return useMemo(
+    () => new Set((integrations ?? []).filter((i) => i.orgPolicy && !i.orgPolicy.allowed && i.orgPolicy.enforced).map((i) => i.id)),
+    [integrations],
+  );
 }
 
 // ── Writes ──────────────────────────────────────────────────────────────────
@@ -244,6 +311,8 @@ export interface ApiKeyConnectionInput {
   kind: "api_key" | "basic";
   fields: Record<string, string>;
   params: Record<string, string>;
+  /** Make it this organization's instead of the caller's (its admins only). */
+  ownerOrgId?: string;
 }
 
 /** The CreateApiKeyConnection request for a pasted credential. */
@@ -254,6 +323,7 @@ export function apiKeyConnectionRequest(input: ApiKeyConnectionInput) {
     kind: input.kind === "basic" ? ApiKeyConnectionKind.BASIC : ApiKeyConnectionKind.API_KEY,
     fields: input.fields,
     params: input.params,
+    ownerOrgId: input.ownerOrgId || undefined,
   };
 }
 

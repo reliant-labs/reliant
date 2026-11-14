@@ -94,6 +94,110 @@ describe("ForgeTokensSection", () => {
     expect(await screen.findByText(/pull the secret VALUES of local environments/i)).toBeTruthy();
   });
 
+  it("lists every scope group, including obs:read and sourcemaps:write", async () => {
+    setTransport(mockTransport({ "AccessTokenService.ListMyTokens": { response: { tokens: [] } } }));
+    renderSection();
+    await screen.findByText("No tokens yet.");
+
+    for (const group of ["deploy", "secrets", "domains", "observability", "data", "identity", "billing", "admin", "reliant", "machines", "sourcemaps"]) {
+      expect(screen.getByTestId(`forge-token-group-${group}`)).toBeTruthy();
+    }
+    for (const scope of ["obs:read", "obs:triage", "obs:write", "db:query", "sourcemaps:write", "runs:start", "billing:read"]) {
+      expect(screen.getByRole("checkbox", { name: scope })).toBeTruthy();
+    }
+    expect(screen.queryByRole("checkbox", { name: "proxy:port" })).toBeNull();
+  });
+
+  it("mints a personal token with obs:read alongside the chosen scopes", async () => {
+    const createSeen = vi.fn(() => ({ secret: "rlt_obs" }));
+    setTransport(
+      mockTransport({
+        "AccessTokenService.ListMyTokens": { response: { tokens: [] } },
+        "AccessTokenService.CreateMyToken": createSeen,
+      }),
+    );
+    renderSection();
+    await screen.findByText("No tokens yet.");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "obs:read" }));
+    createToken("ci-gate");
+
+    await screen.findByTestId("forge-token-secret");
+    expect(createSeen).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: ORG, name: "ci-gate", scopes: ["deploy:read", "deploy:write", "obs:read"] }),
+    );
+  });
+
+  it("sourcemaps:write stands alone and mints an org token through CreateToken", async () => {
+    const orgCreate = vi.fn(() => ({ secret: "rlat_maps" }));
+    const myCreate = vi.fn(() => ({ secret: "rlt_mine" }));
+    setTransport(
+      mockTransport({
+        "AccessTokenService.ListMyTokens": { response: { tokens: [] } },
+        "AccessTokenService.CreateToken": orgCreate,
+        "AccessTokenService.CreateMyToken": myCreate,
+      }),
+    );
+    renderSection();
+    await screen.findByText("No tokens yet.");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "sourcemaps:write" }));
+    expect((screen.getByRole("checkbox", { name: "deploy:write" }) as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByTestId("forge-token-org-note")).toBeTruthy();
+    createToken("desktop-maps");
+
+    expect((await screen.findByTestId("forge-token-secret")).textContent).toContain("rlat_maps");
+    expect(orgCreate).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, name: "desktop-maps", scopes: ["sourcemaps:write"] }));
+    expect(myCreate).not.toHaveBeenCalled();
+  });
+
+  it("picking another scope after sourcemaps:write clears it", async () => {
+    setTransport(mockTransport({ "AccessTokenService.ListMyTokens": { response: { tokens: [] } } }));
+    renderSection();
+    await screen.findByText("No tokens yet.");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "sourcemaps:write" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "obs:read" }));
+
+    expect((screen.getByRole("checkbox", { name: "sourcemaps:write" }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole("checkbox", { name: "obs:read" }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByTestId("forge-token-org-note")).toBeNull();
+  });
+
+  it("shows the org's automation tokens to an admin, and revokes them with RevokeToken", async () => {
+    const revokeSeen = vi.fn(() => ({}));
+    setTransport(
+      mockTransport({
+        "AccessTokenService.ListMyTokens": { response: { tokens: [] } },
+        "AccessTokenService.ListTokens": {
+          response: { tokens: [{ id: "t_maps", name: "desktop-maps", displayPrefix: "rlat_m", scopes: ["sourcemaps:write"] }] },
+        },
+        "AccessTokenService.RevokeToken": revokeSeen,
+      }),
+    );
+    renderSection();
+
+    const row = await screen.findByTestId("forge-org-token-t_maps");
+    fireEvent.click(row.querySelector("button") as HTMLButtonElement);
+
+    await waitFor(() => expect(revokeSeen).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, id: "t_maps" })));
+  });
+
+  it("hides the org tokens section from a member the server refuses", async () => {
+    setTransport(
+      mockTransport({
+        "AccessTokenService.ListMyTokens": { response: { tokens: [] } },
+        "AccessTokenService.ListTokens": () => {
+          throw new ConnectError("admin only", Code.PermissionDenied);
+        },
+      }),
+    );
+    renderSection();
+    await screen.findByText("No tokens yet.");
+
+    expect(screen.queryByTestId("forge-org-tokens")).toBeNull();
+  });
+
   it("lists only live tokens and revokes in the active org", async () => {
     const revokeSeen = vi.fn(() => ({}));
     setTransport(

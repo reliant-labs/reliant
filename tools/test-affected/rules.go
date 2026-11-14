@@ -23,9 +23,23 @@ const (
 	// this branch whose version is at or below origin/main's newest
 	// (migrationorder.go).
 	laneMigOrder lane = "migration-order"
+	// laneWebDemo is not a test runner either: it builds the forge demo
+	// bundle (frontends/web's `vite build --mode demo`), whose
+	// vite-plugin-demo-bundle.ts guard fails on a Reliant-only module in it.
+	// tsc -b cannot see that (#2669 passed it and failed the demo build).
+	laneWebDemo lane = "web-demo"
 )
 
-var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen, laneMigOrder}
+var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen, laneMigOrder, laneWebDemo}
+
+// demoBuildInputs are the files the forge demo build reads that are not
+// modules in its import graph (WebGraph.Demo): its vite config and plugins
+// and its HTML entry. A change to the web lane's dependencies or build config
+// (the web-config rule) runs the demo build as well, through the web lane's
+// FULL reasons.
+var demoBuildInputs = []string{
+	"frontends/web/vite.config.ts", "frontends/web/vite-plugin-*.ts", "frontends/web/demo.html",
+}
 
 // forgeInputs are the paths `forge generate` reads (protos, migrations,
 // contract.go interfaces, package directives in doc.go, handler packages, the

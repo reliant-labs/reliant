@@ -129,6 +129,8 @@ type ApprovalResolveStore interface {
 // to the local-model directory, threads.Service, the tool bindings, the mailbox
 // drain, history loading and the tool-call status writer.
 type CallLLMStore interface {
+	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
+	AttendanceStore
 	LLMUsageRecorder
 	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
@@ -180,6 +182,8 @@ type CleanupStore interface {
 // CompactStore is what CompactActivity reads and writes; the summary goes
 // through threads.Service and the history through LoadMessagesForLLM.
 type CompactStore interface {
+	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
+	AttendanceStore
 	LLMUsageRecorder
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
@@ -297,10 +301,28 @@ type ExecuteToolsStore interface {
 	db.ToolCallStatusStore
 	// Installs is each machine's checkout of the project (resolveCallCheckout).
 	daemonplacement.Installs
+	// AttendanceStore decides who is behind a tool call's chat, for the run
+	// scope a tool that spends a provider resolves in (runScope).
+	AttendanceStore
+	// RunFundingStore is what its person said about spending their own
+	// accounts in the chat's org (runFunding).
+	RunFundingStore
+}
+
+// RunFundingStore is what reading who may pay for a tool call of a chat in
+// an org needs (runFunding): the person's per-org setting and the chat's own
+// order. *db.Repo satisfies it.
+type RunFundingStore interface {
+	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
+	// ChatFundingOrder is the order a person chose for the chat; "" when it
+	// inherits.
+	ChatFundingOrder(ctx context.Context, chatID string) (string, error)
 }
 
 // GenerateTitleStore is what GenerateTitleActivity reads and writes.
 type GenerateTitleStore interface {
+	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
+	AttendanceStore
 	LLMUsageRecorder
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)

@@ -2,6 +2,9 @@
 package terminal
 
 import (
+	"errors"
+	"os"
+	"os/exec"
 	"sync"
 	"time"
 
@@ -11,16 +14,42 @@ import (
 
 // Session represents a terminal session with a PTY
 type Session struct {
-	ID         string
-	UserID     string // Owner of this session for access control
-	PTY        pty.Pty
-	CMD        *pty.Cmd
+	ID     string
+	UserID string // Owner of this session for access control
+	PTY    pty.Pty
+	CMD    *pty.Cmd
+	// sandboxed is the shell of a credentials-none session on Unix, started
+	// on the PTY in the credential sandbox (startShell); CMD is nil then.
+	sandboxed  *exec.Cmd
 	Conn       *websocket.Conn
 	WorkingDir string
 	CreatedAt  time.Time
 	LastActive time.Time
 	mu         sync.Mutex
 	done       chan struct{}
+}
+
+// Process is the session's shell process (the sandbox's init for a
+// credentials-none session), or nil before it started.
+func (s *Session) Process() *os.Process {
+	switch {
+	case s.CMD != nil:
+		return s.CMD.Process
+	case s.sandboxed != nil:
+		return s.sandboxed.Process
+	}
+	return nil
+}
+
+// wait waits for the session's shell to exit.
+func (s *Session) wait() error {
+	switch {
+	case s.CMD != nil:
+		return s.CMD.Wait()
+	case s.sandboxed != nil:
+		return s.sandboxed.Wait()
+	}
+	return errors.New("terminal: session has no process")
 }
 
 // ResizeMessage represents terminal resize event

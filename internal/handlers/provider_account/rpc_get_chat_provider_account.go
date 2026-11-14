@@ -8,6 +8,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 )
 
 // GetChatProviderAccount returns the account the chat's root thread is using now: the one that
@@ -27,7 +29,8 @@ func (s *Service) GetChatProviderAccount(
 	if chatID == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("chat_id is required"))
 	}
-	if _, err := s.deps.Store.GetChatRowWithUserCheck(ctx, chatID, userID); err != nil {
+	chat, err := s.deps.Store.GetChatRowWithUserCheck(ctx, chatID, userID)
+	if err != nil {
 		return nil, notFoundOr(err, "chat")
 	}
 	root, err := s.deps.Store.GetRootThread(ctx, chatID)
@@ -55,17 +58,63 @@ func (s *Service) GetChatProviderAccount(
 		return nil, svcerr.Wrap(err)
 	}
 	now := time.Now()
+	render := func(acct core.ProviderAccount) *pb.ProviderAccount { return proto(acct, limits, now) }
+	// A chat of an org may run on one of the org's own accounts: it is looked up there too, and
+	// shown as a member sees it (never its key hint). Only the accounts the caller may use in the
+	// org now count, by the rule routing applies (a live member the account's audience admits):
+	// a stale assignment to a key they lost, or of an org they left, names nothing.
+	if chat.OrgID != nil && *chat.OrgID != "" {
+		owner := core.OrgAccountOwner(*chat.OrgID)
+		orgAccounts, err := s.deps.Store.ListOwnedProviderAccounts(ctx, owner)
+		if err != nil {
+			return nil, svcerr.Wrap(err)
+		}
+		orgAccounts = drivers.UsableOrgAccounts(ctx, s.deps.Store, userID, *chat.OrgID, orgAccounts)
+		if len(orgAccounts) > 0 {
+			orgLimits, err := s.deps.Store.ListOwnedAccountLimits(ctx, owner)
+			if err != nil {
+				return nil, svcerr.Wrap(err)
+			}
+			personal := make(map[string]bool, len(accounts))
+			for _, a := range accounts {
+				personal[a.ID] = true
+			}
+			accounts = append(accounts, orgAccounts...)
+			render = func(acct core.ProviderAccount) *pb.ProviderAccount {
+				if personal[acct.ID] {
+					return proto(acct, limits, now)
+				}
+				return orgAccountForMember(proto(acct, orgLimits, now), acct)
+			}
+		}
+	}
 	for _, acct := range accounts {
 		if servingID != "" && acct.ID == servingID {
-			return connect.NewResponse(&pb.GetChatProviderAccountResponse{Account: proto(acct, limits, now)}), nil
+			return connect.NewResponse(&pb.GetChatProviderAccountResponse{Account: render(acct)}), nil
 		}
 	}
 	for _, a := range assignments {
 		for _, acct := range accounts {
 			if acct.ID == a.AccountID {
-				return connect.NewResponse(&pb.GetChatProviderAccountResponse{Account: proto(acct, limits, now)}), nil
+				return connect.NewResponse(&pb.GetChatProviderAccountResponse{Account: render(acct)}), nil
 			}
 		}
 	}
 	return connect.NewResponse(&pb.GetChatProviderAccountResponse{}), nil
+}
+
+// orgAccountForMember narrows an org's account to what any member of the org may see of it
+// (OrgProviderAccountService.ListOrgProviderAccounts): its provider, label, status and who pays,
+// never its key hint, usage windows or a needs-attention reason.
+func orgAccountForMember(full *pb.ProviderAccount, a core.ProviderAccount) *pb.ProviderAccount {
+	label := a.Label
+	if label == "" {
+		label = full.GetProviderDisplayName() + " key"
+	}
+	return &pb.ProviderAccount{
+		Id: full.Id, Provider: full.Provider, ProviderDisplayName: full.ProviderDisplayName,
+		AuthKind: full.AuthKind, Label: label, Priority: full.Priority, Status: full.Status,
+		LimitedUntil: full.LimitedUntil, CreatedAt: full.CreatedAt,
+		Funding: full.Funding, FundingOrgId: full.FundingOrgId,
+	}
 }

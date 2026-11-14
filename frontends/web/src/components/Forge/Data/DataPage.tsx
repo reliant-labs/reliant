@@ -26,6 +26,7 @@ import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 
 import { useForgeConsole } from "../Console/consoleContext";
+import { useConsoleNavExtras } from "../Console/consoleNavExtras";
 import { ENV_ALL } from "../Console/envScope";
 import { CloudNotice } from "../SourceNotices";
 import { DataBrowser } from "./DataBrowser";
@@ -40,9 +41,10 @@ function pickData(search: Record<string, unknown>): DataSearch {
 }
 
 function Frame({ children }: { children: ReactNode }) {
+  const { subtitle } = useConsoleNavExtras();
   return (
     <div className="space-y-4" data-testid="console-data">
-      <PageHeader density="compact" title="Data" className="mb-0" />
+      <PageHeader density="compact" title="Data" subtitle={subtitle?.("data") ?? undefined} className="mb-0" />
       {children}
     </div>
   );

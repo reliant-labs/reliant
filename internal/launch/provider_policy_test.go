@@ -73,3 +73,17 @@ func TestEffectiveProviderPolicy(t *testing.T) {
 		})
 	}
 }
+
+// The chat's funding order outranks a preset's, and inherit leaves it to the
+// person's per-org setting.
+func TestEffectiveProviderPolicy_Funding(t *testing.T) {
+	t.Parallel()
+	in := claudeRun()
+	in[v2.InputKeyProviderPolicy] = types.RunProviderPolicy{Funding: types.FundingPersonalFirst}.Value()
+	got := EffectiveProviderPolicy(in, chatselection.ProviderPolicy{Funding: chatselection.FundingOrgOnly}, nil, "claude")
+	assert.Equal(t, types.FundingOrgOnly, got.Funding)
+	got = EffectiveProviderPolicy(in, chatselection.ProviderPolicy{}, nil, "claude")
+	assert.Equal(t, types.FundingPersonalFirst, got.Funding, "the preset's when the chat inherits")
+	got = EffectiveProviderPolicy(claudeRun(), chatselection.ProviderPolicy{}, nil, "claude")
+	assert.Empty(t, got.Funding)
+}

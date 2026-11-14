@@ -7,6 +7,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // ExecutionContext is the single source of truth for workflow execution state.
@@ -82,6 +83,14 @@ type ExecutionContext struct {
 	// (a late wake) pins anew. Every load reads it from the workflow
 	// context (catalogPinFrom), not from here.
 	CatalogPin string `json:",omitempty"`
+
+	// Telemetry is the run's identity on its spans (run_telemetry.go): set
+	// for the root by DynamicWorkflow and for a spawned sub-agent at its
+	// spawn, inherited by every context derived from it. Shared, never
+	// mutated in place: a context that changes it sets a copy. It rides the
+	// root's context across continue-as-new, which is how the run id
+	// survives the boundary.
+	Telemetry *types.RunTelemetry `json:",omitempty"`
 }
 
 // DaemonSelectorValue holds a resolved daemon selector for runtime routing.
@@ -284,6 +293,7 @@ func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *Exec
 		Parent:               ctx.Parent,
 		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
 		UserJWT:              ctx.UserJWT, // Reliant provider is JWT-gated; dropping it here would exclude it from availableProviders inside the loop.
+		Telemetry:            ctx.Telemetry,
 	}
 
 	if reuseThread {
@@ -321,7 +331,8 @@ func (ctx *ExecutionContext) ForChild(stepID string, mode string, workflowName s
 		ParentPermission:     ctx.ParentPermission, // Inherit parent permission cap
 		Loop:                 ctx.Loop,             // Inherit loop context
 		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
-		UserJWT:              ctx.UserJWT, // Reliant provider is JWT-gated; child contexts must carry it.
+		UserJWT:              ctx.UserJWT,   // Reliant provider is JWT-gated; child contexts must carry it.
+		Telemetry:            ctx.Telemetry, // An inline child is part of the same run.
 		Parent: &ParentContext{
 			WorkflowID: ctx.WorkflowID,
 			StepPath:   stepID,
@@ -396,6 +407,7 @@ func (ctx *ExecutionContext) Clone() *ExecutionContext {
 		UserJWT:              ctx.UserJWT, // Reliant provider is JWT-gated; cloned contexts must carry it.
 		CatalogPin:           ctx.CatalogPin,
 		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
+		Telemetry:            ctx.Telemetry,
 	}
 
 	if ctx.Loop != nil {

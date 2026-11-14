@@ -67,6 +67,12 @@ export interface OrgMember {
   joinedAt: Date | null;
   /** The org's founding, accountable owner. It confers no authority. */
   isFounder: boolean;
+  /**
+   * Their sign-in subject: the id this app keys a person's chats and projects
+   * by (userId is control-plane's own). "" from a control plane that
+   * predates it.
+   */
+  externalId: string;
 }
 
 export interface SeatUsage {
@@ -130,6 +136,7 @@ function mapMember(m: WireMember): OrgMember {
     role: m.role,
     joinedAt: dateOf(m.joinedAt),
     isFounder: m.isFounder,
+    externalId: m.externalId,
   };
 }
 
@@ -256,6 +263,24 @@ export async function listMembershipActivity(orgId: string, pageToken = ""): Pro
   requireOrg(orgId);
   const res = await getControlPlaneClient(ActivityService).listMembershipActivity({ orgId, pageToken, pageSize: 50 });
   return { events: res.events.map(mapActivityEvent), nextPageToken: res.nextPageToken };
+}
+
+/**
+ * Display names by the id this app keys a person's records by: a chat's
+ * `userId` is their sign-in subject, which the roster carries as
+ * `externalId` (its `userId` is control-plane's own id, which matches
+ * nothing here). The name they set, else their email. A control plane that
+ * predates `externalId` names nobody, and the callers say "the person who
+ * shared it" instead.
+ */
+export function memberNamesBySubject(
+  members: Iterable<Pick<OrgMember, "externalId" | "name" | "email">>,
+): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const m of members) {
+    if (m.externalId) names.set(m.externalId, m.name || m.email);
+  }
+  return names;
 }
 
 /** Admin and owner administer membership; a member only reads the roster. */

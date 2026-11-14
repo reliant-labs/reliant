@@ -15,6 +15,8 @@ import (
 	daemonv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1/controlplanev1connect"
 	gitcredentialv1 "github.com/reliant-labs/reliant/gen/controlplane/services/git_credential/v1"
 	gitcredentialv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/git_credential/v1/controlplanev1connect"
+	organizationv1 "github.com/reliant-labs/reliant/gen/controlplane/services/organization/v1"
+	organizationv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/organization/v1/controlplanev1connect"
 	userv1 "github.com/reliant-labs/reliant/gen/controlplane/services/user/v1"
 	userv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/user/v1/controlplanev1connect"
 )
@@ -66,6 +68,14 @@ type AccountDeletionResult struct {
 // One holder per user, so one name: re-syncing rotates THIS key and leaves the
 // user's other devices' keys alone.
 const ReliantProviderKeyName = "reliant-provider"
+
+// ReliantOrgProviderKeyName is the name of the managed key minted in one org
+// (the per-(person, org) key, org-provider-accounts P10). control-plane rotates
+// a person's tokens per (org, name), so one name serves every org; it differs
+// from ReliantProviderKeyName so that minting in the person's default org never
+// revokes the org-less key, which a chat of no org (and an older release) still
+// spends.
+const ReliantOrgProviderKeyName = "reliant-provider-org"
 
 // LLMKey is a freshly minted LLM gateway key: an `rlat_` access token with
 // llm:invoke acting as the caller. Returned exactly once.
@@ -124,6 +134,7 @@ type client struct {
 	users          userv1connect.UserServiceClient
 	gitCredentials gitcredentialv1connect.GitCredentialServiceClient
 	daemons        daemonv1connect.DaemonServiceClient
+	organizations  organizationv1connect.OrganizationServiceClient
 }
 
 // New returns the adapter for the control plane deps.ControlPlane names.
@@ -155,6 +166,7 @@ func New(deps Deps) Service {
 		users:          userv1connect.NewUserServiceClient(rpcClient, baseURL, rpcOpts...),
 		gitCredentials: gitcredentialv1connect.NewGitCredentialServiceClient(rpcClient, baseURL, rpcOpts...),
 		daemons:        daemonv1connect.NewDaemonServiceClient(rpcClient, baseURL, rpcOpts...),
+		organizations:  organizationv1connect.NewOrganizationServiceClient(rpcClient, baseURL, rpcOpts...),
 	}
 }
 
@@ -203,6 +215,20 @@ func (c *client) CloneRepoOntoDaemon(ctx context.Context, jwt string, in CloneRe
 		Queued:     resp.Msg.GetQueued(),
 		DaemonName: resp.Msg.GetDaemonName(),
 	}, nil
+}
+
+func (c *client) ListMyOrganizations(ctx context.Context, jwt string) ([]MyOrganization, error) {
+	req := connect.NewRequest(&organizationv1.ListMyOrganizationsRequest{})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	resp, err := c.organizations.ListMyOrganizations(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]MyOrganization, 0, len(resp.Msg.GetOrganizations()))
+	for _, o := range resp.Msg.GetOrganizations() {
+		out = append(out, MyOrganization{ID: o.GetId(), Role: o.GetRole()})
+	}
+	return out, nil
 }
 
 func (c *client) PreviewAccountDeletionWallet(ctx context.Context, jwt string) (*AccountDeletionWalletQuote, error) {

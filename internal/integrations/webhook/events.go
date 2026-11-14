@@ -49,6 +49,10 @@ type EventsOptions struct {
 	// means such providers cannot be verified, and their deliveries are
 	// answered 503.
 	ConnectionSecrets ConnectionSecrets
+	// AutoPause pauses a trigger whose org's policy does not allow its
+	// integration (control-plane docs/design/org-policies.md §4.3); the
+	// event is not routed to it either way. Nil judges without pausing.
+	AutoPause *triggers.AutoPause
 }
 
 // ConnectionSecrets opens the stored secret of one connection, for its owner
@@ -317,6 +321,10 @@ func (e *EventsReceiver) route(ctx context.Context, providerID string, events []
 			if !routeMatches(r, ev) {
 				continue
 			}
+			if ok, err := e.policyAdmits(ctx, providerID, r.Trigger); !ok {
+				errs = append(errs, err)
+				continue
+			}
 			if _, err := e.opts.Intake.Accept(ctx, r.Trigger, toInbound(providerID, r.Trigger, ev), triggers.AcceptOptions{}); err != nil {
 				errs = append(errs, fmt.Errorf("trigger %s: %w", r.Trigger.ID, err))
 			}
@@ -339,11 +347,36 @@ func (e *EventsReceiver) routeByAccess(ctx context.Context, providerID string, e
 		if err != nil || !t.Enabled || !eventInScope(t, cfg, ev) {
 			continue
 		}
+		if ok, err := e.policyAdmits(ctx, providerID, t); !ok {
+			errs = append(errs, err)
+			continue
+		}
 		if _, err := e.opts.Intake.Accept(ctx, t, toInbound(providerID, t, ev), triggers.AcceptOptions{}); err != nil {
 			errs = append(errs, fmt.Errorf("trigger %s: %w", t.ID, err))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// policyAdmits applies t's org's integrations policy before an event reaches
+// t (org-policies §4.3, §5): a trigger whose integration the policy refuses
+// hears nothing, and is paused once (AutoPause.IntegrationRefused). The error
+// is a policy that cannot be read where the point enforces: the delivery is
+// answered 503 and the sender retries, the recorded half deduping. A pause
+// that could not be written still drops the event; the next one pauses it.
+func (e *EventsReceiver) policyAdmits(ctx context.Context, providerID string, t *core.Trigger) (bool, error) {
+	refused, err := e.opts.AutoPause.IntegrationRefused(ctx, t, providerID)
+	if refused {
+		if err != nil {
+			logging.WarnContext(ctx, "could not pause a trigger its organization's policy refuses; its event is dropped",
+				"provider", providerID, "trigger_id", t.ID, "error", err)
+		}
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("trigger %s: %w", t.ID, err)
+	}
+	return true, nil
 }
 
 // revoke applies a delivery's access revocations. An unscoped one (no account

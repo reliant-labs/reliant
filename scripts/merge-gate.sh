@@ -20,12 +20,17 @@
 #                 control-plane#2189).
 #   --queue       the merge queue's tier (.github/workflows/merge-queue.yml),
 #                 whose budget is five minutes of wall time (owner, 2026-11-01):
-#                 --skip-lint, plus queue-entry semantics: buf lint runs only
-#                 when a proto or buf config changed, and check-compat.sh
-#                 (CI_QUEUE_ENTRY=1) judges only the entry's own single-parent
-#                 squash against HEAD^, so never pass it on a PR branch. Build,
-#                 the affected tests, typecheck, generate, docs, migsafety and
-#                 migorder stay.
+#                 vet is left to the release gate (the queue's golangci
+#                 (changed) job runs beside this gate), plus queue-entry
+#                 semantics: buf lint runs only when a proto or buf config
+#                 changed, and check-compat.sh (CI_QUEUE_ENTRY=1) judges only
+#                 the entry's own single-parent squash against HEAD^, so never
+#                 pass it on a PR branch. Build, the affected tests, typecheck,
+#                 the scoped forge lint, the demo build, generate, docs,
+#                 migsafety and migorder stay. It used to imply --skip-lint, so
+#                 the queue ran no forge lint at all, and #2696 and #2662 turned
+#                 main red on findings the scoped lint names in about a minute
+#                 (/home/workspace/designs/reverse-walk-backtest-2026-11-13.md).
 #
 # Phases, each a row of the summary (slot wait vs run, seconds):
 #   plan       tools/test-affected plan: the ONE rule set (dev-docs/testing-affected.md)
@@ -43,8 +48,9 @@
 #              electron tests when electron/ changed; deeper dependents run in
 #              the release gate (MG_REACH=all for all). A change the rules cannot
 #              scope (go.mod, package.json, config) runs its whole Go and
-#              electron lane; a full web fallback runs tsc here and the whole
-#              vitest suite in the release gate. A Go
+#              electron lane; a full web fallback runs tsc here, the vitest
+#              files the diff's own web modules reach (-web-full reached), and
+#              the whole vitest suite in the release gate. A Go
 #              test this change adds or edits that runs over the per-test budget
 #              fails it (-test-budget auto)
 #   typecheck  scripts/web-typecheck.sh: frontends/web's `tsc -b` (app, tests,
@@ -52,11 +58,17 @@
 #              when the web lane is selected or anything under
 #              frontends/web/ changed; vitest strips types without checking
 #              them, so this is the only phase that sees a test's type error
-#   lint       forge lint's own lanes (named; no golangci-lint or buf lint, which
-#              the release gate runs) --scope <changed dirs>, a pin move included;
+#   lint       forge lint's own lanes (named, --optional-deps-guard among them;
+#              no golangci-lint or buf lint, which the release gate runs)
+#              --scope <changed dirs>, a pin move included, in every tier but
+#              --skip-lint;
 #              like build and test it starts after the generators in --amend
 #              mode, so it reads the amended tree (lint reads generated files
 #              such as gen/forge_descriptor.json)
+#   demo       the forge demo bundle's build (WEB_BUILD_TARGET=demo vite build),
+#              whose guard plugin fails on a Reliant-only module in the bundle,
+#              when the plan's web-demo lane is selected: a change in the
+#              bundle's import graph, its build config, or a FULL web lane
 #   migsafety  forge lint --migration-safety, only when a migration or forge.yaml changed
 #   migorder   every migration is versioned above origin/main's newest (fetched
 #              first, fail closed), only when a migration changed
@@ -86,13 +98,16 @@ while [ $# -gt 0 ]; do
     --amend) amend=1; shift ;;
     --regen) regen=1; shift ;;
     --skip-lint) skip_lint=1; shift ;;
-    # The queue tier IS --skip-lint plus the queue entry's semantics, so the
-    # two cannot drift apart.
-    --queue) queue=1; skip_lint=1; shift ;;
-    -h|--help) sed -n '2,76p' "$0"; exit 0 ;;
+    # The queue tier skips vet (below), never forge lint.
+    --queue) queue=1; shift ;;
+    -h|--help) awk 'NR > 1 && /^set -uo pipefail/ { exit } NR > 1' "$0"; exit 0 ;;
     *) echo "merge-gate: unknown argument $1" >&2; exit 2 ;;
   esac
 done
+
+# vet is the release gate's under --skip-lint and in the queue, where the
+# golangci (changed) job beside the gate runs the changed packages' linters.
+skip_vet=0; { [ "$skip_lint" = 1 ] || [ "$queue" = 1 ]; } && skip_vet=1
 
 export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}"
 # A gate must not rewrite the clone's git config (forge's merge driver).
@@ -152,9 +167,9 @@ base=$(git rev-parse "$base")
 L=${MG_LOGDIR:-${XDG_CACHE_HOME:-$HOME/.cache}/reliant-merge-gate/$(date -u +%Y%m%dT%H%M%SZ)-$$}
 mkdir -p "$L"
 echo "$slot_wait" >"$L/slot_wait"
-# gate-verify reads the tier: neither the queue's nor --skip-lint's is obliged
-# to vet or lint.
-if [ "$queue" = 1 ]; then echo queue >"$L/tier"; elif [ "$skip_lint" = 1 ]; then echo skip-lint >"$L/tier"; fi
+# gate-verify reads the tier: --skip-lint's is obliged to neither vet nor
+# lint, the queue's to lint but not vet.
+if [ "$skip_lint" = 1 ]; then echo skip-lint >"$L/tier"; elif [ "$queue" = 1 ]; then echo queue >"$L/tier"; fi
 pin=$(sed -n 's/^forge_version:[[:space:]]*//p' forge.yaml | head -1)
 if [ -n "${FORGE_BIN:-}" ]; then forge=("$FORGE_BIN"); else forge=(env GOFLAGS=-trimpath go run "github.com/reliant-labs/forge/cmd/forge@$pin"); fi
 # Paths generators write. A regenerate in --amend mode may change only these.
@@ -282,7 +297,7 @@ j() { jq -r "$1" "$run_plan"; }
 load_selection() {
   jq -e . "$run_plan" >/dev/null || return 1
   gofull=$(j .go.full) ngo=$(j '.go.packages|length') ndef=$(j '.go.deferred|length') webfull=$(j .web.full) nweb=$(j '.web.tests|length')
-  elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full)
+  elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full) webdemo=$(j '.web_demo.full // false')
   hooks_only=$(j '.forge_generate.hooks_only // false') hooks=$(j '(.forge_generate.hooks // []) | join(" ")')
   [ "$regen" = 1 ] && { fgen=true; hooks_only=false; }
   files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
@@ -291,7 +306,7 @@ load_selection() {
   if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || echo "$files" | grep -q '^frontends/web/'; then typecheck=true; fi
 }
 load_selection || exit 1
-notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo FULL || echo "$nweb file(s)"); typecheck $typecheck; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
+notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo "FULL ($nweb reached file(s))" || echo "$nweb file(s)"); typecheck $typecheck; demo-build $webdemo; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
 
 # ── npm installs a selected lane needs ────────────────────────────────────
 # npm_install <dir>: npm ci in <dir> unless its install is current; pnpm's
@@ -322,7 +337,7 @@ npm_install() {
 prepare_dependencies() {
   local d p
   local -a need=() npm_pids=()
-  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ]; then need+=(. frontends/web); fi
+  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ] || [ "$webdemo" = true ]; then need+=(. frontends/web); fi
   if [ "$elec" = true ]; then need+=(. electron); fi
   if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
   for d in $(printf '%s\n' ${need[@]+"${need[@]}"} | sort -u); do
@@ -453,31 +468,52 @@ build_check() {
 # 41s. A pin move no longer unscopes it: what a new forge or module version
 # breaks across the module is the release gate's to find; the regenerated
 # files a pin bump commits are in the diff, so they are in scope here.
+# --optional-deps-guard: forge.yaml makes forge-optional-deps-guard an error,
+# and #2696 reached main on one (an unguarded optional dep in
+# rpc_move_project_to_org.go); one more AST lane over the same scope.
 lint_lanes=(--contract --conventions --generated-drift --go-markers --proto-markers
   --create-nullability --computed-fields --read-only-fields --db-grants
-  --column-markers --closed-sets --tracing --guarded-fields)
+  --column-markers --closed-sets --tracing --guarded-fields --optional-deps-guard)
 # The whole vitest suite (1033 files, ~20 min on a loaded host) is a release
 # blocker, not a merge blocker (owner, 2026-10-28: slow suites gate releases;
-# the merge gate aims at five minutes). A full web fallback still type-checks
-# every web source here; its tests run in the release gate's `task test`.
+# the merge gate aims at five minutes). A full web fallback (a package.json or
+# build-config change) still type-checks every web source here, and runs the
+# vitest files the diff's own web modules reach, as a scoped web lane would
+# (-web-full reached): before, it ran none, and #2669's 13 failures merged
+# behind the queue entries of #2677 and #2693, whose proto-vendor/ and
+# package.json changes made the lane FULL. The rest run in the release gate's
+# `task test` (dev-docs/testing-affected.md, "A FULL web lane in the merge gate").
 test_lanes=go,web,electron
 if [ "$webfull" = true ]; then
-  test_lanes=go,electron
-  notes+=("web: FULL fallback; tsc -b runs here, the whole vitest suite in the release gate")
+  notes+=("web: FULL fallback; tsc -b and the $nweb vitest file(s) the diff's modules reach run here, the whole vitest suite in the release gate")
 fi
+# demo_build: the forge demo bundle (frontends/web/vite.config.ts's demo
+# target), as tools/test-affected's web-demo lane runs it but into the log
+# directory, removed after: its guard plugin is the check, not the output.
+# tsc -b is the typecheck phase's.
+demo_build() {
+  local out=$L/dist-demo rc
+  (cd frontends/web && WEB_BUILD_TARGET=demo npx vite build --logLevel warn --outDir "$out" --emptyOutDir); rc=$?
+  rm -rf "$out"
+  return "$rc"
+}
 if [ "$fail" = 0 ]; then
   phase build build_check & pids+=($!)
   phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
-    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes "$test_lanes" -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
+    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes "$test_lanes" -web-full reached -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)
+  fi
+  if [ "$webdemo" = true ]; then
+    phase demo demo_build & pids+=($!)
   fi
   # The changed files' directories, minus nested Go modules (sdk/go): see
   # scripts/lint-scope.sh and its self-test, scripts/test-lint-scope.sh.
   scope=$(echo "$files" | scripts/lint-scope.sh)
   if [ "$queue" = 1 ]; then
-    notes+=("queue tier: golangci-lint on the changed packages is the golangci (changed) job beside this one; vet and forge lint run in the release gate$(echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$' || echo '; buf lint too (no proto changed)')")
-  elif [ "$skip_lint" = 1 ]; then
+    notes+=("queue tier: golangci-lint on the changed packages is the golangci (changed) job beside this one; vet runs in the release gate$(echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$' || echo '; buf lint too (no proto changed)')")
+  fi
+  if [ "$skip_lint" = 1 ]; then
     notes+=("--skip-lint: vet and forge lint run in the release gate")
   elif [ -n "$scope" ]; then
     notes+=("lint: forge's own lanes over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s); golangci-lint and buf lint run in the release gate")
@@ -497,7 +533,7 @@ if [ "$fail" = 0 ]; then
   if [ "$gofull" = true ]; then vet_pkgs=(./...); else
     vet_pkgs=(); while IFS= read -r p; do vet_pkgs+=("$p"); done < <(jq -r '((.go.build // []) + (.go.packages // [])) | unique | .[]' "$run_plan")
   fi
-  if [ ${#vet_pkgs[@]} -gt 0 ] && [ "$skip_lint" != 1 ]; then
+  if [ ${#vet_pkgs[@]} -gt 0 ] && [ "$skip_vet" != 1 ]; then
     phase vet env GOMAXPROCS="$quarter" bash scripts/vet.sh "${vet_pkgs[@]}" & pids+=($!)
   fi
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
@@ -546,7 +582,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck lint proto vet migsafety migorder; do
+  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo lint proto vet migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"

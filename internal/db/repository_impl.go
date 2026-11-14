@@ -99,8 +99,8 @@ func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) 
 	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
 }
 
-// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a bound
-// chat whose run is pending or active.
+// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
+// in them: a bound chat's run, or a bound thread's own (store.WorktreeRunActivities).
 func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error) {
 	return store.ListWorktreeIDsWithRunningChat(ctx, r.ORM(), worktreeIDs)
 }
@@ -768,6 +768,16 @@ func (r *Repo) CountMessagesInThread(ctx context.Context, threadID string) (int,
 	}
 
 	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldThreadID, threadID))
+}
+
+// ClaimUserActivation records messageID as userID's activation when it is
+// their first typed message ever and no activation is recorded, reporting
+// whether this call recorded it (store.ClaimUserActivation).
+func (r *Repo) ClaimUserActivation(ctx context.Context, userID, chatID, messageID string) (bool, error) {
+	if userID == "" || chatID == "" || messageID == "" {
+		return false, fmt.Errorf("user, chat and message IDs are required")
+	}
+	return store.ClaimUserActivation(ctx, r.ORM(), userID, chatID, messageID)
 }
 
 // GetMessagesByContextWindow loads messages from a specific context window.
@@ -1493,6 +1503,20 @@ func (r *Repo) UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string,
 	}
 	if err := store.SetDaemonAttachmentPorts(ctx, r.ORM(), daemonID, ports); err != nil {
 		return fmt.Errorf("updating daemon attachment ports: %w", err)
+	}
+	return nil
+}
+
+// UpdateDaemonAttachmentHealth records the machine health a daemon heartbeat
+// reported on the attachment (liveness) record. Mirrors
+// UpdateDaemonAttachmentMemory: a no-op when the attachment row doesn't exist,
+// and it does NOT touch last_stream_activity.
+func (r *Repo) UpdateDaemonAttachmentHealth(ctx context.Context, daemonID string, health MachineHealth) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	if err := store.SetDaemonAttachmentHealth(ctx, r.ORM(), daemonID, health); err != nil {
+		return fmt.Errorf("updating daemon attachment health: %w", err)
 	}
 	return nil
 }
@@ -4188,9 +4212,31 @@ func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 }
 
 func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error {
+	return r.updateWorkflowDraftDefinition(ctx, id, nil, name, slug, definition, status)
+}
+
+// ErrWorkflowDraftVersionConflict reports that a draft was written since the
+// version the caller read: its write was computed from content that is no
+// longer current, so it was not applied.
+var ErrWorkflowDraftVersionConflict = svcerr.Aborted("workflow draft changed since it was read")
+
+// UpdateWorkflowDraftDefinitionAtVersion is UpdateWorkflowDraftDefinition
+// applied only while the draft is still at version: a compare-and-swap under
+// the draft's row lock. A draft written since returns
+// ErrWorkflowDraftVersionConflict and is left as it is, so two edits computed
+// from the same read cannot both report success while one is lost.
+func (r *Repo) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status WorkflowDraftStatus) error {
+	return r.updateWorkflowDraftDefinition(ctx, id, &version, name, slug, definition, status)
+}
+
+func (r *Repo) updateWorkflowDraftDefinition(ctx context.Context, id string, version *int64, name string, slug string, definition string, status WorkflowDraftStatus) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if _, err := r.lockWritableDraft(txCtx, id); err != nil {
+		row, err := r.lockWritableDraft(txCtx, id)
+		if err != nil {
 			return err
+		}
+		if version != nil && row.Version != *version {
+			return ErrWorkflowDraftVersionConflict
 		}
 		if err := store.SetWorkflowDraftDefinition(txCtx, r.ORM(), id, name, slug, definition, status); err != nil {
 			return mapWorkflowSlugConflict(err, slug)
@@ -4458,4 +4504,39 @@ func (r *Repo) validateAPIKeysSealedConstraint(ctx context.Context) error {
 // opening (decrypting) any of them.
 func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
 	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
+}
+
+// HasNoOrgAccountPauses reports whether any trigger is paused for want of an org account
+// (store.HasNoOrgAccountPauses).
+func (r *Repo) HasNoOrgAccountPauses(ctx context.Context) (bool, error) {
+	return store.HasNoOrgAccountPauses(ctx, r.ORM())
+}
+
+// ListNoOrgAccountPauses returns the triggers paused for want of an org account that userID owns
+// or that belong to one of adminOrgIDs (store.ListNoOrgAccountPauses).
+func (r *Repo) ListNoOrgAccountPauses(ctx context.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error) {
+	return store.ListNoOrgAccountPauses(ctx, r.ORM(), userID, adminOrgIDs)
+}
+
+// ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
+// moving each one's next attempt lease on (store.ClaimDuePauseNotices).
+func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {
+	return store.ClaimDuePauseNotices(ctx, r.ORM(), limit, lease)
+}
+
+// RefusePauseNotice records that a no-org-account pause's email was refused for good
+// (store.RefusePauseNotice).
+func (r *Repo) RefusePauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
+	return store.RefusePauseNotice(ctx, r.ORM(), triggerID, pausedAt)
+}
+
+// ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
+func (r *Repo) ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
+	return store.ConfirmPauseNotice(ctx, r.ORM(), triggerID, pausedAt)
+}
+
+// ListPersonallyFundedTriggers returns userID's org triggers whose runs may spend their own
+// accounts (store.ListPersonallyFundedTriggers).
+func (r *Repo) ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error) {
+	return store.ListPersonallyFundedTriggers(ctx, r.ORM(), userID)
 }

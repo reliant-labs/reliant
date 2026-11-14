@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -37,6 +38,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
@@ -88,6 +90,17 @@ type Config struct {
 	// API request does. nil is a deployment with no orgs: owner-only.
 	Membership authz.Membership
 
+	// Policies is on every activity's context beside Membership
+	// (orgpolicy.WithResolver), so an enforcement point in a tool, a launch
+	// or a trigger fire reads the run's org policy. nil is a deployment with
+	// no org policies.
+	Policies *orgpolicy.Resolver
+	// OrgMoves runs the steps of a project's move to another org
+	// (orgmove.ProjectOrgMoveWorkflow). The workflow is always registered;
+	// its activities only with this set, so a move's saga on a worker
+	// without them retries until one that has them takes it.
+	OrgMoves orgmove.Service
+
 	// TriggerPollers looks up a polled integration's poll function. nil
 	// registers the poll workflow without its activity: a poll that reaches
 	// this worker retries until one that has it picks it up.
@@ -127,6 +140,11 @@ type Config struct {
 	// requests and benches one the provider refused. Optional: nil records
 	// nothing and a refused account is waited out, not switched away from.
 	AccountLimits handlers.AccountLimitRecorder
+
+	// OrgAdmins emails an org's owners and admins when a provider rejects
+	// one of the org's own API keys (OrgKeyRejectedNoticeWorkflow). Optional:
+	// nil sends no email (the inbox item is the only notice).
+	OrgAdmins OrgAdminNotifier
 
 	// StopNudges tells running activities that a stop was just requested
 	// for their workflow, so they ask the server for the cancel at once
@@ -259,7 +277,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.SecretResolver = cfg.SecretResolver
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
-	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits)
+	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)
@@ -312,7 +330,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 				cfg.TriggerPollers,
 				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: repo}),
 				cfg.TriggerCredentials,
-			)
+			).WithAutoPause(triggerAutoPause(cfg))
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
 		}
 	}
@@ -335,6 +353,50 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
 	}
 
+	// A rejected org key's email to the org's owners and admins: always
+	// registered, so a notice started on any worker is delivered by any.
+	w.RegisterWorkflowWithOptions(OrgKeyRejectedNoticeWorkflow, workflow.RegisterOptions{
+		Name: OrgKeyRejectedNoticeWorkflowName,
+	})
+	w.RegisterActivityWithOptions(orgKeyNotices{admins: cfg.OrgAdmins}.Notify, activity.RegisterOptions{
+		Name: NotifyOrgKeyRejectedActivityName,
+	})
+	// An automation paused for want of an org account: the same, for its
+	// org's owners and admins.
+	w.RegisterWorkflowWithOptions(OrgAutomationNoOrgAccountNoticeWorkflow, workflow.RegisterOptions{
+		Name: OrgAutomationNoOrgAccountNoticeWorkflowName,
+	})
+	var pauseAdmins pauseNotifier
+	if cfg.OrgAdmins != nil {
+		pauseAdmins = cfg.OrgAdmins
+	}
+	pauses := pauseNotices{admins: pauseAdmins}
+	if cfg.Database != nil {
+		pauses.store = cfg.Database
+	}
+	w.RegisterActivityWithOptions(pauses.Notify, activity.RegisterOptions{
+		Name: NotifyOrgAutomationNoOrgAccountActivityName,
+	})
+	w.RegisterActivityWithOptions(pauses.Confirm, activity.RegisterOptions{
+		Name: ConfirmPauseNoticeActivityName,
+	})
+	w.RegisterActivityWithOptions(pauses.Refuse, activity.RegisterOptions{
+		Name: RefusePauseNoticeActivityName,
+	})
+
+	// Moving a project to another org: the saga is pure orchestration; its
+	// steps need the control plane and the trigger service.
+	w.RegisterWorkflowWithOptions(orgmove.ProjectOrgMoveWorkflow, workflow.RegisterOptions{
+		Name: orgmove.WorkflowName,
+	})
+	if m := cfg.OrgMoves; m != nil {
+		w.RegisterActivityWithOptions(m.Prepare, activity.RegisterOptions{Name: orgmove.PrepareActivityName})
+		w.RegisterActivityWithOptions(m.Commit, activity.RegisterOptions{Name: orgmove.CommitActivityName})
+		w.RegisterActivityWithOptions(m.Abort, activity.RegisterOptions{Name: orgmove.AbortActivityName})
+		w.RegisterActivityWithOptions(m.Record, activity.RegisterOptions{Name: orgmove.RecordActivityName})
+		w.RegisterActivityWithOptions(m.ResumeTriggers, activity.RegisterOptions{Name: orgmove.ResumeTriggersActivityName})
+	}
+
 	// Workflow-event triggers: same split as schedules. The dispatch workflow
 	// is always registered; its activity needs the launcher.
 	w.RegisterWorkflowWithOptions(workflowevent.RunEventDispatchWorkflow, workflow.RegisterOptions{
@@ -348,7 +410,18 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		)
 	}
 
-	return newWorker(w, fatal), registry, nil
+	out := newWorker(w, fatal)
+	// Rejected org keys whose notice never started (a Temporal outage at the
+	// rejection), and paused automations whose email was never delivered, are
+	// started here, where the notices' workflows run.
+	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
+		out.background = append(out.background, func(ctx context.Context) {
+			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval,
+				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.Database, q) },
+				func(ctx context.Context) { sweepPauseNotices(ctx, cfg.Database, q) })
+		})
+	}
+	return out, registry, nil
 }
 
 // workerOptions is the shared worker's worker.Options, gomaxprocs being the
@@ -361,7 +434,7 @@ func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker
 	return worker.Options{
 		// Every activity's context derives from it: authz reads membership
 		// there (Config.Membership).
-		BackgroundActivityContext: authz.WithMembership(context.Background(), membership),
+		BackgroundActivityContext: orgpolicy.WithResolver(authz.WithMembership(context.Background(), membership), cfg.Policies),
 		// How Worker.Run learns the worker died; see temporalWorker.
 		OnFatalError:                 onFatalError,
 		StickyScheduleToStartTimeout: 5 * time.Second,
@@ -445,12 +518,16 @@ func chatOwners(cfg *Config) *telemetry.ChatOwnerCache {
 		return nil
 	}
 	repo := cfg.Database
-	return telemetry.NewChatOwnerCache(func(ctx context.Context, chatID string) (string, error) {
+	return telemetry.NewChatOwnerOrgCache(func(ctx context.Context, chatID string) (telemetry.ChatOwner, error) {
 		chat, err := repo.GetChat(ctx, chatID)
 		if err != nil || chat == nil {
-			return "", err
+			return telemetry.ChatOwner{}, err
 		}
-		return chat.UserID, nil
+		owner := telemetry.ChatOwner{UserID: chat.UserID}
+		if chat.OrgID != nil {
+			owner.OrgID = *chat.OrgID
+		}
+		return owner, nil
 	}, time.Hour, 10000)
 }
 
@@ -464,7 +541,12 @@ func triggerAutoPause(cfg *Config) *triggers.AutoPause {
 	if cfg.TemporalClient != nil {
 		schedules = cfg.TemporalClient.ScheduleClient()
 	}
-	return triggers.NewAutoPause(cfg.Database, schedules)
+	pause := triggers.NewAutoPause(cfg.Database, schedules)
+	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil {
+		// A pause for want of an org account emails the org's admins.
+		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(cfg.Database, q))
+	}
+	return pause
 }
 
 // TaskQueueName returns the task queue name that would be used by a worker with the given config.

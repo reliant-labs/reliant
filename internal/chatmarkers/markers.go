@@ -99,7 +99,29 @@ const (
 	// codex and openai drivers on an explicit usage-window signal or a Retry-After
 	// past the in-request wait cap.
 	KindProviderUsageLimit Kind = "RELIANT_PROVIDER_USAGE_LIMIT"
+
+	// KindOrgPolicyRefused signals that one of the chat's org's admin
+	// policies refused the request (control-plane docs/design/org-policies.md
+	// §5.1): a verdict, not a fault. Retrying cannot help until the person
+	// changes what they asked for (another model) or an admin changes the
+	// policy, so the turn pauses with this error, resumable, and an unattended
+	// run ends with it. Payload is the policy reason (model_not_allowed,
+	// member_spend_cap_reached, org_spend_cap_reached, provider_not_allowed).
+	// The human-readable message starts with OrgPolicyRefusedLead.
+	// Producer: internal/orgpolicy (Refusal), raised by the managed Reliant
+	// driver on the gateway's refusal.
+	KindOrgPolicyRefused Kind = "RELIANT_ORG_POLICY_REFUSED"
 )
+
+// OrgPolicyRefusedLead opens the human-readable message of every
+// KindOrgPolicyRefused error.
+const OrgPolicyRefusedLead = "Your organization's policy"
+
+// OrgPolicyRefusedSummary returns the human-readable sentence of a
+// KindOrgPolicyRefused error message, or "" if msg carries none.
+func OrgPolicyRefusedSummary(msg string) string {
+	return leadSentence(msg, KindOrgPolicyRefused, OrgPolicyRefusedLead)
+}
 
 // ProviderUsageLimitLead opens the human-readable message of every
 // KindProviderUsageLimit error, so a consumer can recover that sentence from

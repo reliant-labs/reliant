@@ -34,8 +34,10 @@ type tokenStore interface {
 // org's for an org connection, never the creating admin's, so the org's
 // connection does not die with that admin's account (org-sharing.md §7.2);
 // the person's for their own.
-func tenantOf(conn *core.Connection) vault.Tenant {
-	owner := conn.Owner()
+func tenantOf(conn *core.Connection) vault.Tenant { return tenantFor(conn.Owner()) }
+
+// tenantFor is the vault tenant of owner's connections.
+func tenantFor(owner core.ConnectionOwner) vault.Tenant {
 	if owner.Kind == core.ConnectionOwnerOrg {
 		return vault.OrgTenant(owner.ID)
 	}

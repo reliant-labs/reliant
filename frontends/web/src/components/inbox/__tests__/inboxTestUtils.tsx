@@ -257,3 +257,32 @@ export function storageItem(
     ...overrides,
   });
 }
+
+/** An automation paused because no org AI account can run it (org-provider-accounts §11.4). */
+export function noOrgAccountItem(ownerUserId = "", overrides: Overrides<InboxItem> = {}): InboxItem {
+  return create(InboxItemSchema, {
+    kind: InboxItemKind.AUTOMATION_NO_ORG_ACCOUNT,
+    itemId: `automation_no_org_account:trg-7@20261113T220000.000000`,
+    triggerId: "trg-7",
+    triggerName: "Nightly audit",
+    projectId: "proj-1",
+    projectName: "reliant",
+    waitingSince: new Date(Date.now() - 30 * 60_000).toISOString(),
+    payload: {
+      case: "automationNoOrgAccount",
+      value: { orgId: "acme", ownerUserId, detail: "This automation runs only on its organization's AI accounts, and none of them can run claude-opus-4-6." },
+    },
+    ...overrides,
+  });
+}
+
+/** The caller's automations in a team org still on their own accounts (§11.3). */
+export function onPersonalAccountsItem(overrides: Overrides<InboxItem> = {}): InboxItem {
+  return create(InboxItemSchema, {
+    kind: InboxItemKind.AUTOMATIONS_ON_PERSONAL_ACCOUNTS,
+    itemId: "automations_on_personal_accounts:acme@0011223344556677",
+    waitingSince: new Date(Date.now() - 24 * 60 * 60_000).toISOString(),
+    payload: { case: "automationsOnPersonalAccounts", value: { orgId: "acme", count: 3, triggerIds: ["trg-1", "trg-2", "trg-3"] } },
+    ...overrides,
+  });
+}

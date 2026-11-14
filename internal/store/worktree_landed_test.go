@@ -42,10 +42,11 @@ func TestWorktreeRunActivities(t *testing.T) {
 	mustExecConv(t, env, `UPDATE workflows SET created_at = NOW() - interval '3 hours', completed_at = NOW() - interval '10 minutes' WHERE id = 'wf-done'`)
 
 	// A sub-agent's worktree: no chat is bound to it, a thread of a running
-	// chat is.
+	// chat is, and that thread's own run is active.
 	spawned := &core.Worktree{ID: "spawned", ProjectID: storetest.SeedProjectID, Name: "spawned", Path: "/tmp/spawned", Branch: "spawned"}
 	require.NoError(t, env.Repo.CreateWorktree(ctx, spawned))
 	mustExecConv(t, env, `INSERT INTO threads (id, chat_id, created_at, origin, status, worktree_id) VALUES ('t-sub', $1, NOW(), 'spawn', 2, 'spawned')`, running.ID)
+	mustExecConv(t, env, `INSERT INTO workflows (id, chat_id, workflow_name, thread, created_at, state, stop_reason) VALUES ('wf-sub', $1, 'wf', 't-sub', NOW(), 2, 0)`, running.ID)
 
 	acts, err := store.WorktreeRunActivities(ctx, env.ORM, []string{*quiet.WorktreeID, *running.WorktreeID, *paused.WorktreeID, *done.WorktreeID, "spawned", "missing"})
 	require.NoError(t, err)
@@ -56,7 +57,7 @@ func TestWorktreeRunActivities(t *testing.T) {
 	require.False(t, acts[*done.WorktreeID].Running, "a completed run is over")
 	require.WithinDuration(t, time.Now().Add(-10*time.Minute), acts[*done.WorktreeID].LastActive, 2*time.Minute,
 		"the run's stop is later than the chat's own last_active")
-	require.True(t, acts["spawned"].Running, "a thread working in a worktree counts")
+	require.True(t, acts["spawned"].Running, "a run of a thread bound to a worktree counts")
 	_, ok := acts["missing"]
 	require.False(t, ok)
 }

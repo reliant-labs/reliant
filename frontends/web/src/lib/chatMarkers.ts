@@ -53,6 +53,15 @@ export const CHAT_MARKER_KINDS = {
    * already states it for display.
    */
   ProviderUsageLimit: "RELIANT_PROVIDER_USAGE_LIMIT",
+  /**
+   * One of the chat's org's admin policies refused the request (a model the
+   * org does not allow, a spend cap reached). A verdict, not a fault: the
+   * chat is paused, and resumes after the person switches model or an admin
+   * changes the policy. Payload is the policy reason (`model_not_allowed`,
+   * `member_spend_cap_reached`, `org_spend_cap_reached`,
+   * `provider_not_allowed`); the message prefix already states it for display.
+   */
+  OrgPolicyRefused: "RELIANT_ORG_POLICY_REFUSED",
 } as const;
 
 /**

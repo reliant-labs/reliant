@@ -44,7 +44,7 @@ func (m *MockChatWorkflowReader) GetChat(ctx context.Context, id string) (*db.Ch
 var _ ChatWorkflowReader = (*MockChatWorkflowReader)(nil)
 
 // forge:section MockAccountAssignmentStore
-// forge:hash=f74dea44eb4d7454b5d9ad98ed344f6708b665c4b6e422d26176190e738c0e37
+// forge:hash=1e9d5fda7df782faedff734a1422447f60e6f9de263dd39bba229dac8d3c2d3c
 
 // MockAccountAssignmentStore is a test mock for the AccountAssignmentStore interface.
 //
@@ -57,6 +57,7 @@ type MockAccountAssignmentStore struct {
 	GetThreadAssignmentFunc    func(context.Context, string, string) (*core.Assignment, error)
 	SetThreadAssignmentFunc    func(context.Context, core.Assignment, string) (bool, error)
 	ListAccountLimitsFunc      func(context.Context, string) (map[string]core.LimitState, error)
+	ListOwnedAccountLimitsFunc func(context.Context, core.AccountOwner) (map[string]core.LimitState, error)
 	RecentAssignmentCountsFunc func(context.Context, []string, time.Time) (map[string]int, error)
 }
 
@@ -87,6 +88,15 @@ func (m *MockAccountAssignmentStore) ListAccountLimits(ctx context.Context, user
 	return nil, contractkit.MockNotSet("MockAccountAssignmentStore", "ListAccountLimits")
 }
 
+// ListOwnedAccountLimits records the call and delegates to ListOwnedAccountLimitsFunc when set.
+func (m *MockAccountAssignmentStore) ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error) {
+	m.Recorder.Record("ListOwnedAccountLimits", ctx, owner)
+	if m.ListOwnedAccountLimitsFunc != nil {
+		return m.ListOwnedAccountLimitsFunc(ctx, owner)
+	}
+	return nil, contractkit.MockNotSet("MockAccountAssignmentStore", "ListOwnedAccountLimits")
+}
+
 // RecentAssignmentCounts records the call and delegates to RecentAssignmentCountsFunc when set.
 func (m *MockAccountAssignmentStore) RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error) {
 	m.Recorder.Record("RecentAssignmentCounts", ctx, accountIDs, since)
@@ -100,7 +110,7 @@ func (m *MockAccountAssignmentStore) RecentAssignmentCounts(ctx context.Context,
 var _ AccountAssignmentStore = (*MockAccountAssignmentStore)(nil)
 
 // forge:section MockAccountCredentialStore
-// forge:hash=38e4f4c76c71836ed2a3cb71b9b46aac1ad39e38269062d8e6f678279b098f73
+// forge:hash=13a93d497c55edec8cc52cf2a1adf03cc08335c7b2040177802932f989e207ea
 
 // MockAccountCredentialStore is a test mock for the AccountCredentialStore interface.
 //
@@ -110,23 +120,69 @@ var _ AccountAssignmentStore = (*MockAccountAssignmentStore)(nil)
 // "MockAccountCredentialStore.<Method>Func not set" error.
 type MockAccountCredentialStore struct {
 	contractkit.Recorder
-	PatchProviderAccountFunc func(context.Context, string, string, core.AccountPatch) (core.ProviderAccount, error)
+	PatchOwnedProviderAccountFunc func(context.Context, core.AccountOwner, string, core.AccountPatch) (core.ProviderAccount, error)
+	ConfirmOrgKeyNoticeFunc       func(context.Context, string, string, time.Time) error
 }
 
-// PatchProviderAccount records the call and delegates to PatchProviderAccountFunc when set.
-func (m *MockAccountCredentialStore) PatchProviderAccount(ctx context.Context, userID string, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
-	m.Recorder.Record("PatchProviderAccount", ctx, userID, accountID, p)
-	if m.PatchProviderAccountFunc != nil {
-		return m.PatchProviderAccountFunc(ctx, userID, accountID, p)
+// PatchOwnedProviderAccount records the call and delegates to PatchOwnedProviderAccountFunc when set.
+func (m *MockAccountCredentialStore) PatchOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
+	m.Recorder.Record("PatchOwnedProviderAccount", ctx, owner, accountID, p)
+	if m.PatchOwnedProviderAccountFunc != nil {
+		return m.PatchOwnedProviderAccountFunc(ctx, owner, accountID, p)
 	}
-	return *new(core.ProviderAccount), contractkit.MockNotSet("MockAccountCredentialStore", "PatchProviderAccount")
+	return *new(core.ProviderAccount), contractkit.MockNotSet("MockAccountCredentialStore", "PatchOwnedProviderAccount")
+}
+
+// ConfirmOrgKeyNotice records the call and delegates to ConfirmOrgKeyNoticeFunc when set.
+func (m *MockAccountCredentialStore) ConfirmOrgKeyNotice(ctx context.Context, orgID string, accountID string, markedAt time.Time) error {
+	m.Recorder.Record("ConfirmOrgKeyNotice", ctx, orgID, accountID, markedAt)
+	if m.ConfirmOrgKeyNoticeFunc != nil {
+		return m.ConfirmOrgKeyNoticeFunc(ctx, orgID, accountID, markedAt)
+	}
+	return contractkit.MockNotSet("MockAccountCredentialStore", "ConfirmOrgKeyNotice")
 }
 
 // Compile-time check.
 var _ AccountCredentialStore = (*MockAccountCredentialStore)(nil)
 
+// forge:section MockOrgKeyNoticeStore
+// forge:hash=43cbb6fdda45f02290e5a7da9d9f17475457514aba7b94a5e4c204d61dba1658
+
+// MockOrgKeyNoticeStore is a test mock for the OrgKeyNoticeStore interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockOrgKeyNoticeStore.<Method>Func not set" error.
+type MockOrgKeyNoticeStore struct {
+	contractkit.Recorder
+	ClaimDueOrgKeyNoticesFunc func(context.Context, int, time.Duration) ([]core.ProviderAccount, error)
+	ConfirmOrgKeyNoticeFunc   func(context.Context, string, string, time.Time) error
+}
+
+// ClaimDueOrgKeyNotices records the call and delegates to ClaimDueOrgKeyNoticesFunc when set.
+func (m *MockOrgKeyNoticeStore) ClaimDueOrgKeyNotices(ctx context.Context, limit int, lease time.Duration) ([]core.ProviderAccount, error) {
+	m.Recorder.Record("ClaimDueOrgKeyNotices", ctx, limit, lease)
+	if m.ClaimDueOrgKeyNoticesFunc != nil {
+		return m.ClaimDueOrgKeyNoticesFunc(ctx, limit, lease)
+	}
+	return nil, contractkit.MockNotSet("MockOrgKeyNoticeStore", "ClaimDueOrgKeyNotices")
+}
+
+// ConfirmOrgKeyNotice records the call and delegates to ConfirmOrgKeyNoticeFunc when set.
+func (m *MockOrgKeyNoticeStore) ConfirmOrgKeyNotice(ctx context.Context, orgID string, accountID string, markedAt time.Time) error {
+	m.Recorder.Record("ConfirmOrgKeyNotice", ctx, orgID, accountID, markedAt)
+	if m.ConfirmOrgKeyNoticeFunc != nil {
+		return m.ConfirmOrgKeyNoticeFunc(ctx, orgID, accountID, markedAt)
+	}
+	return contractkit.MockNotSet("MockOrgKeyNoticeStore", "ConfirmOrgKeyNotice")
+}
+
+// Compile-time check.
+var _ OrgKeyNoticeStore = (*MockOrgKeyNoticeStore)(nil)
+
 // forge:section MockAccountRoutingStore
-// forge:hash=0b25bc2d3eb0b2e6e741d2390a216607c53af6c2478d0b61249676ea96ca39ba
+// forge:hash=6b7944f43ffb8c17332f4d725d16f1264639b12ce11843e12681881c327e9cbc
 
 // MockAccountRoutingStore is a test mock for the AccountRoutingStore interface.
 //
@@ -136,13 +192,27 @@ var _ AccountCredentialStore = (*MockAccountCredentialStore)(nil)
 // "MockAccountRoutingStore.<Method>Func not set" error.
 type MockAccountRoutingStore struct {
 	contractkit.Recorder
-	ClearOtherThreadAssignmentsFunc func(context.Context, string, string, string) error
-	GetSettingValueFunc             func(context.Context, string, string) (string, bool)
-	GetThreadAssignmentFunc         func(context.Context, string, string) (*core.Assignment, error)
-	SetThreadAssignmentFunc         func(context.Context, core.Assignment, string) (bool, error)
-	ListAccountLimitsFunc           func(context.Context, string) (map[string]core.LimitState, error)
-	RecentAssignmentCountsFunc      func(context.Context, []string, time.Time) (map[string]int, error)
-	PatchProviderAccountFunc        func(context.Context, string, string, core.AccountPatch) (core.ProviderAccount, error)
+	ClearOtherThreadAssignmentsFunc  func(context.Context, string, string, string) error
+	GetSettingValueFunc              func(context.Context, string, string) (string, bool)
+	GetChatPersonalFundingFunc       func(context.Context, string) (*core.PersonalFunding, error)
+	AskPersonalFundingFunc           func(context.Context, core.PersonalFunding, time.Time) (bool, error)
+	GrantPersonalFundingFunc         func(context.Context, core.PersonalFunding, time.Time) error
+	ClearPersonalFundingFunc         func(context.Context, string) (bool, error)
+	MarkPersonalFundingAnnouncedFunc func(context.Context, string) (bool, error)
+	ProviderAccountOrgsFunc          func(context.Context, string) (string, string, bool, error)
+	ThreadFundingFunc                func(context.Context, string) (string, string, string, bool, error)
+	RecordThreadFundingFunc          func(context.Context, string, string, string, string) error
+	ChatFundingOrderFunc             func(context.Context, string) (string, error)
+	ChatPersonPickDriverFunc         func(context.Context, string, string) (string, error)
+	ListThreadAssignmentsFunc        func(context.Context, string) ([]core.Assignment, error)
+	LatestServingAccountFunc         func(context.Context, string) (string, error)
+	GetThreadAssignmentFunc          func(context.Context, string, string) (*core.Assignment, error)
+	SetThreadAssignmentFunc          func(context.Context, core.Assignment, string) (bool, error)
+	ListAccountLimitsFunc            func(context.Context, string) (map[string]core.LimitState, error)
+	ListOwnedAccountLimitsFunc       func(context.Context, core.AccountOwner) (map[string]core.LimitState, error)
+	RecentAssignmentCountsFunc       func(context.Context, []string, time.Time) (map[string]int, error)
+	PatchOwnedProviderAccountFunc    func(context.Context, core.AccountOwner, string, core.AccountPatch) (core.ProviderAccount, error)
+	ConfirmOrgKeyNoticeFunc          func(context.Context, string, string, time.Time) error
 }
 
 // ClearOtherThreadAssignments records the call and delegates to ClearOtherThreadAssignmentsFunc when set.
@@ -161,6 +231,114 @@ func (m *MockAccountRoutingStore) GetSettingValue(ctx context.Context, userID st
 		return m.GetSettingValueFunc(ctx, userID, key)
 	}
 	return "", false
+}
+
+// GetChatPersonalFunding records the call and delegates to GetChatPersonalFundingFunc when set.
+func (m *MockAccountRoutingStore) GetChatPersonalFunding(ctx context.Context, chatID string) (*core.PersonalFunding, error) {
+	m.Recorder.Record("GetChatPersonalFunding", ctx, chatID)
+	if m.GetChatPersonalFundingFunc != nil {
+		return m.GetChatPersonalFundingFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockAccountRoutingStore", "GetChatPersonalFunding")
+}
+
+// AskPersonalFunding records the call and delegates to AskPersonalFundingFunc when set.
+func (m *MockAccountRoutingStore) AskPersonalFunding(ctx context.Context, q core.PersonalFunding, now time.Time) (bool, error) {
+	m.Recorder.Record("AskPersonalFunding", ctx, q, now)
+	if m.AskPersonalFundingFunc != nil {
+		return m.AskPersonalFundingFunc(ctx, q, now)
+	}
+	return false, contractkit.MockNotSet("MockAccountRoutingStore", "AskPersonalFunding")
+}
+
+// GrantPersonalFunding records the call and delegates to GrantPersonalFundingFunc when set.
+func (m *MockAccountRoutingStore) GrantPersonalFunding(ctx context.Context, q core.PersonalFunding, now time.Time) error {
+	m.Recorder.Record("GrantPersonalFunding", ctx, q, now)
+	if m.GrantPersonalFundingFunc != nil {
+		return m.GrantPersonalFundingFunc(ctx, q, now)
+	}
+	return contractkit.MockNotSet("MockAccountRoutingStore", "GrantPersonalFunding")
+}
+
+// ClearPersonalFunding records the call and delegates to ClearPersonalFundingFunc when set.
+func (m *MockAccountRoutingStore) ClearPersonalFunding(ctx context.Context, chatID string) (bool, error) {
+	m.Recorder.Record("ClearPersonalFunding", ctx, chatID)
+	if m.ClearPersonalFundingFunc != nil {
+		return m.ClearPersonalFundingFunc(ctx, chatID)
+	}
+	return false, contractkit.MockNotSet("MockAccountRoutingStore", "ClearPersonalFunding")
+}
+
+// MarkPersonalFundingAnnounced records the call and delegates to MarkPersonalFundingAnnouncedFunc when set.
+func (m *MockAccountRoutingStore) MarkPersonalFundingAnnounced(ctx context.Context, chatID string) (bool, error) {
+	m.Recorder.Record("MarkPersonalFundingAnnounced", ctx, chatID)
+	if m.MarkPersonalFundingAnnouncedFunc != nil {
+		return m.MarkPersonalFundingAnnouncedFunc(ctx, chatID)
+	}
+	return false, contractkit.MockNotSet("MockAccountRoutingStore", "MarkPersonalFundingAnnounced")
+}
+
+// ProviderAccountOrgs records the call and delegates to ProviderAccountOrgsFunc when set.
+func (m *MockAccountRoutingStore) ProviderAccountOrgs(ctx context.Context, accountID string) (string, string, bool, error) {
+	m.Recorder.Record("ProviderAccountOrgs", ctx, accountID)
+	if m.ProviderAccountOrgsFunc != nil {
+		return m.ProviderAccountOrgsFunc(ctx, accountID)
+	}
+	return "", "", false, contractkit.MockNotSet("MockAccountRoutingStore", "ProviderAccountOrgs")
+}
+
+// ThreadFunding records the call and delegates to ThreadFundingFunc when set.
+func (m *MockAccountRoutingStore) ThreadFunding(ctx context.Context, threadID string) (string, string, string, bool, error) {
+	m.Recorder.Record("ThreadFunding", ctx, threadID)
+	if m.ThreadFundingFunc != nil {
+		return m.ThreadFundingFunc(ctx, threadID)
+	}
+	return "", "", "", false, contractkit.MockNotSet("MockAccountRoutingStore", "ThreadFunding")
+}
+
+// RecordThreadFunding records the call and delegates to RecordThreadFundingFunc when set.
+func (m *MockAccountRoutingStore) RecordThreadFunding(ctx context.Context, threadID string, orgID string, funding string, accountID string) error {
+	m.Recorder.Record("RecordThreadFunding", ctx, threadID, orgID, funding, accountID)
+	if m.RecordThreadFundingFunc != nil {
+		return m.RecordThreadFundingFunc(ctx, threadID, orgID, funding, accountID)
+	}
+	return contractkit.MockNotSet("MockAccountRoutingStore", "RecordThreadFunding")
+}
+
+// ChatFundingOrder records the call and delegates to ChatFundingOrderFunc when set.
+func (m *MockAccountRoutingStore) ChatFundingOrder(ctx context.Context, chatID string) (string, error) {
+	m.Recorder.Record("ChatFundingOrder", ctx, chatID)
+	if m.ChatFundingOrderFunc != nil {
+		return m.ChatFundingOrderFunc(ctx, chatID)
+	}
+	return "", contractkit.MockNotSet("MockAccountRoutingStore", "ChatFundingOrder")
+}
+
+// ChatPersonPickDriver records the call and delegates to ChatPersonPickDriverFunc when set.
+func (m *MockAccountRoutingStore) ChatPersonPickDriver(ctx context.Context, chatID string, orgID string) (string, error) {
+	m.Recorder.Record("ChatPersonPickDriver", ctx, chatID, orgID)
+	if m.ChatPersonPickDriverFunc != nil {
+		return m.ChatPersonPickDriverFunc(ctx, chatID, orgID)
+	}
+	return "", contractkit.MockNotSet("MockAccountRoutingStore", "ChatPersonPickDriver")
+}
+
+// ListThreadAssignments records the call and delegates to ListThreadAssignmentsFunc when set.
+func (m *MockAccountRoutingStore) ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error) {
+	m.Recorder.Record("ListThreadAssignments", ctx, threadID)
+	if m.ListThreadAssignmentsFunc != nil {
+		return m.ListThreadAssignmentsFunc(ctx, threadID)
+	}
+	return nil, contractkit.MockNotSet("MockAccountRoutingStore", "ListThreadAssignments")
+}
+
+// LatestServingAccount records the call and delegates to LatestServingAccountFunc when set.
+func (m *MockAccountRoutingStore) LatestServingAccount(ctx context.Context, threadID string) (string, error) {
+	m.Recorder.Record("LatestServingAccount", ctx, threadID)
+	if m.LatestServingAccountFunc != nil {
+		return m.LatestServingAccountFunc(ctx, threadID)
+	}
+	return "", contractkit.MockNotSet("MockAccountRoutingStore", "LatestServingAccount")
 }
 
 // GetThreadAssignment records the call and delegates to GetThreadAssignmentFunc when set.
@@ -190,6 +368,15 @@ func (m *MockAccountRoutingStore) ListAccountLimits(ctx context.Context, userID 
 	return nil, contractkit.MockNotSet("MockAccountRoutingStore", "ListAccountLimits")
 }
 
+// ListOwnedAccountLimits records the call and delegates to ListOwnedAccountLimitsFunc when set.
+func (m *MockAccountRoutingStore) ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error) {
+	m.Recorder.Record("ListOwnedAccountLimits", ctx, owner)
+	if m.ListOwnedAccountLimitsFunc != nil {
+		return m.ListOwnedAccountLimitsFunc(ctx, owner)
+	}
+	return nil, contractkit.MockNotSet("MockAccountRoutingStore", "ListOwnedAccountLimits")
+}
+
 // RecentAssignmentCounts records the call and delegates to RecentAssignmentCountsFunc when set.
 func (m *MockAccountRoutingStore) RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error) {
 	m.Recorder.Record("RecentAssignmentCounts", ctx, accountIDs, since)
@@ -199,13 +386,22 @@ func (m *MockAccountRoutingStore) RecentAssignmentCounts(ctx context.Context, ac
 	return nil, contractkit.MockNotSet("MockAccountRoutingStore", "RecentAssignmentCounts")
 }
 
-// PatchProviderAccount records the call and delegates to PatchProviderAccountFunc when set.
-func (m *MockAccountRoutingStore) PatchProviderAccount(ctx context.Context, userID string, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
-	m.Recorder.Record("PatchProviderAccount", ctx, userID, accountID, p)
-	if m.PatchProviderAccountFunc != nil {
-		return m.PatchProviderAccountFunc(ctx, userID, accountID, p)
+// PatchOwnedProviderAccount records the call and delegates to PatchOwnedProviderAccountFunc when set.
+func (m *MockAccountRoutingStore) PatchOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
+	m.Recorder.Record("PatchOwnedProviderAccount", ctx, owner, accountID, p)
+	if m.PatchOwnedProviderAccountFunc != nil {
+		return m.PatchOwnedProviderAccountFunc(ctx, owner, accountID, p)
 	}
-	return *new(core.ProviderAccount), contractkit.MockNotSet("MockAccountRoutingStore", "PatchProviderAccount")
+	return *new(core.ProviderAccount), contractkit.MockNotSet("MockAccountRoutingStore", "PatchOwnedProviderAccount")
+}
+
+// ConfirmOrgKeyNotice records the call and delegates to ConfirmOrgKeyNoticeFunc when set.
+func (m *MockAccountRoutingStore) ConfirmOrgKeyNotice(ctx context.Context, orgID string, accountID string, markedAt time.Time) error {
+	m.Recorder.Record("ConfirmOrgKeyNotice", ctx, orgID, accountID, markedAt)
+	if m.ConfirmOrgKeyNoticeFunc != nil {
+		return m.ConfirmOrgKeyNoticeFunc(ctx, orgID, accountID, markedAt)
+	}
+	return contractkit.MockNotSet("MockAccountRoutingStore", "ConfirmOrgKeyNotice")
 }
 
 // Compile-time check.

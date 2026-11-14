@@ -14,13 +14,17 @@ import (
 )
 
 type capturedDriverOptions struct {
+	Scope           drivers.Scope
 	Preferences     models.Preferences
 	ReasoningEffort string
 	Model           models.Model
 }
 
-func captureDriverOptionsResolver(captured *capturedDriverOptions) drivers.DriverResolver {
-	return func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+// captureDriverOptionsResolver is a drivers.GetDriver replacement that records
+// what the default-account path asked for.
+func captureDriverOptionsResolver(captured *capturedDriverOptions) func(context.Context, drivers.Scope, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+	return func(ctx context.Context, scope drivers.Scope, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+		captured.Scope = scope
 		captured.Preferences = append(models.Preferences(nil), prefs...)
 
 		driverOpts := llm.DriverOptions{}
@@ -31,6 +35,14 @@ func captureDriverOptionsResolver(captured *capturedDriverOptions) drivers.Drive
 		captured.Model = driverOpts.Model
 
 		return &mockLLMDriverForIdempotency{}, nil
+	}
+}
+
+// asInjectedResolver adapts a GetDriver replacement to the injected-resolver
+// seam, which is handed the user alone.
+func asInjectedResolver(get func(context.Context, drivers.Scope, models.Preferences, ...llm.DriverOption) (llm.Driver, error)) drivers.DriverResolver {
+	return func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+		return get(ctx, drivers.PersonalScope(userID), prefs, opts...)
 	}
 }
 
@@ -69,7 +81,7 @@ func TestCallLLMActivity_ReconcilesThinkingLevelForInjectedResolvers(t *testing.
 				nil,
 				nil,
 				&staticConfigProvider{},
-				captureDriverOptionsResolver(captured),
+				asInjectedResolver(captureDriverOptionsResolver(captured)),
 				nil,
 			)
 

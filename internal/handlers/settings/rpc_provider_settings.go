@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -395,6 +396,13 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 	})
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to persist Reliant API key"))
+	}
+
+	// A re-sync rotates the managed keys minted in each org too (per-org keys,
+	// ControlPlaneConfig.managed_keys_per_org). One that fails keeps its
+	// current key, which still serves; the org-less key above is the sync.
+	if err := drivers.RotateOrgReliantKeys(ctx, userID); err != nil {
+		logging.WarnContext(ctx, "Could not rotate every org's managed Reliant key after SyncReliantProvider", "user_id", userID, "error", err)
 	}
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {

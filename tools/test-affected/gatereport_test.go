@@ -20,7 +20,7 @@ func TestMergeGateBudgetContract(t *testing.T) {
 	if err = json.Unmarshal(b, &got); err != nil {
 		t.Fatal(err)
 	}
-	want := gateBudgets{Wall: 300, Steps: map[string]int{"plan": 25, "npm-r": 60, "pnpm-frontends-web": 60, "npm-electron": 60, "npm-tools-protoc-gen-es": 15, "generate": 60, "prewarm": 60, "docs": 60, "plan-2": 20, "build": 45, "test": 120, "typecheck": 120, "lint": 60, "proto": 15, "vet": 60, "migsafety": 10, "migorder": 15}}
+	want := gateBudgets{Wall: 300, Steps: map[string]int{"plan": 25, "npm-r": 60, "pnpm-frontends-web": 60, "npm-electron": 60, "npm-tools-protoc-gen-es": 15, "generate": 60, "prewarm": 60, "docs": 60, "plan-2": 20, "build": 45, "test": 120, "typecheck": 120, "demo": 150, "lint": 60, "proto": 15, "vet": 60, "migsafety": 10, "migorder": 15}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("budget changed: got %+v want %+v; fix slow checks or move them to the release gate; do not raise the 300s target", got, want)
 	}
@@ -106,6 +106,7 @@ run_plan=$1
 gofull=false
 queue=0
 skip_lint=0
+skip_vet=0
 quarter=2
 pids=()
 phase() { printf 'phase: %s\n' "$1"; shift; "$@"; }
@@ -141,7 +142,7 @@ func TestMergeGateCoverageAndWiring(t *testing.T) {
 		return string(b)
 	}
 	merge, release := read("scripts/merge-gate.sh"), read("scripts/release-gate.sh")
-	for _, s := range []string{"plan -json", "-lanes \"$test_lanes\" -p", "test_lanes=go,electron", "phase docs gen_docs", "task generate:docs", "phase proto env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c 'task proto:lint && scripts/check-compat.sh proto'", "phase migsafety env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c", "scripts/check-compat.sh migrations", "phase vet", "gate-report", "summary.md"} {
+	for _, s := range []string{"plan -json", "-lanes \"$test_lanes\" -web-full reached -p", "phase demo demo_build", "--optional-deps-guard", "phase docs gen_docs", "task generate:docs", "phase proto env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c 'task proto:lint && scripts/check-compat.sh proto'", "phase migsafety env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c", "scripts/check-compat.sh migrations", "phase vet", "gate-report", "summary.md"} {
 		if !strings.Contains(merge, s) {
 			t.Errorf("merge missing %s", s)
 		}
@@ -156,5 +157,36 @@ func TestMergeGateCoverageAndWiring(t *testing.T) {
 	problems := strings.Join(verifyGate(filepath.Join(dir, "plan.json"), dir), ";")
 	if !strings.Contains(problems, "vet") {
 		t.Fatalf("missing obliged checks: %s", problems)
+	}
+}
+
+// A red typecheck printed only "typecheck | FAIL (2)": tsc's diagnostics match
+// no test-failure pattern and the log stayed on the runner (bug report
+// 7e9be182). They now lead the report; a failed phase whose log names nothing
+// gets its last lines instead.
+func TestGateReportNamesTypecheckErrorsAndTailsAnUnnamedFailure(t *testing.T) {
+	dir := t.TempDir()
+	tsc := strings.Repeat("noise\n", 50) + "src/a.ts(12,3): error TS2322: Type 'string' is not assignable to type 'number'.\n"
+	os.WriteFile(filepath.Join(dir, "typecheck.log"), []byte(tsc), 0600)
+	os.WriteFile(filepath.Join(dir, "typecheck.row"), []byte("typecheck 2 10 0\n"), 0600)
+	opaque := strings.Repeat("setup line\n", 60) + "\x1b[31mnpm ERR! missing script: lint\x1b[0m\n"
+	os.WriteFile(filepath.Join(dir, "lint.log"), []byte(opaque), 0600)
+	os.WriteFile(filepath.Join(dir, "lint.row"), []byte("lint 1 5 0\n"), 0600)
+	var out bytes.Buffer
+	if rc := runGateReport([]string{"-dir", dir, "-wall", "10", "-budgets", filepath.Join(repoRoot, "scripts/merge-gate-budgets.json")}, &out, &out); rc != 0 {
+		t.Fatalf("rc %d: %s", rc, &out)
+	}
+	s := out.String()
+	if !strings.HasPrefix(s, "src/a.ts(12,3): error TS2322: Type 'string' is not assignable to type 'number'.\n") {
+		t.Fatalf("tsc error must lead the report: %s", s)
+	}
+	if strings.Contains(s, "noise") {
+		t.Fatalf("a phase whose failure is named must not be tailed: %s", s)
+	}
+	if !strings.Contains(s, "last lines of lint.log") || !strings.Contains(s, "    npm ERR! missing script: lint\n") {
+		t.Fatalf("an unnamed failure must show its log's tail, ANSI-stripped: %s", s)
+	}
+	if n := strings.Count(s, "    setup line\n"); n != failedLogTail-1 {
+		t.Fatalf("tail must be %d lines, got %d setup lines: %s", failedLogTail, n, s)
 	}
 }

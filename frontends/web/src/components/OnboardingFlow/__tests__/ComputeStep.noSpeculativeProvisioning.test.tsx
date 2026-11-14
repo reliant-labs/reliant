@@ -188,7 +188,7 @@ function renderStep(props: {
 }) {
   return render(
     <ComputeStep
-      plan={{ compute: "cloud_paid" }}
+      plan={{}}
       updatePlan={props.updatePlan ?? vi.fn(async () => {})}
       onNext={props.onNext ?? vi.fn()}
       onBack={vi.fn()}
@@ -219,7 +219,7 @@ describe("ComputeStep never provisions", () => {
     setEligible(true);
     rerender(
       <ComputeStep
-        plan={{ compute: "cloud_paid" }}
+        plan={{}}
         updatePlan={vi.fn(async () => {})}
         onNext={onNext}
         onBack={vi.fn()}

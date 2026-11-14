@@ -156,7 +156,7 @@ func TestBuildAvailableDrivers_HealsLegacyKeyOnRead(t *testing.T) {
 	ctx := context.Background()
 	db.SeedProviderAccount(t, repo, "u1", "reliant", legacyKey)
 
-	available, err := BuildAvailableDrivers(ctx, repo, "u1")
+	available, err := BuildAvailableDrivers(ctx, repo, PersonalScope("u1"))
 	require.NoError(t, err)
 	cfg, ok := available.Drivers["reliant"]
 	require.True(t, ok, "legacy key must be healed and the driver registered")

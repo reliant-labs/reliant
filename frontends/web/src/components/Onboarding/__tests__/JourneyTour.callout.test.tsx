@@ -76,7 +76,7 @@ describe("the forge journey's compact controls", () => {
 
   it("an action step: its instruction, Next never a dead end, no Skip, and the tour moves on once it's done", async () => {
     const router = renderTour("/forge/demo?view=traces&tour=forge:fg-trace");
-    expect(await screen.findByTestId("tour-action-hint")).toHaveTextContent("Open the CreateOrder trace at the top");
+    expect(await screen.findByTestId("tour-action-hint")).toHaveTextContent("Open the CreateOrder trace");
     // Clicking the target is the encouraged path, but Next stays live.
     expect(screen.getByTestId("tour-next")).toBeEnabled();
     expect(screen.getByTestId("tour-back")).toBeInTheDocument();

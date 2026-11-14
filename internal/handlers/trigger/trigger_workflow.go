@@ -160,7 +160,7 @@ func (s *Service) EnableWorkflow(
 				err = svcerr.AlreadyExists(fmt.Sprintf("you already have an automation named %q in this project; pick another name", def.Name))
 			} else {
 				var row *core.Trigger
-				if row, err = s.triggerFromDefinition(ctx, userID, def, nil); err == nil {
+				if row, err = s.activationRow(ctx, userID, def, nil); err == nil {
 					row.Enabled = true
 					if err = s.refreshTriggerAccess(ctx, row); err == nil {
 						warnings, err = s.checkReachability(ctx, userID, wf, wt, msg, row)
@@ -214,6 +214,10 @@ func (s *Service) EnableWorkflow(
 	for i, step := range steps {
 		if step != nil {
 			results[i].Warnings = step.warnings
+			// Also one of warnings, for a client that predates the field.
+			if w := results[i].GetFundingWarning(); w != nil {
+				results[i].Warnings = append(results[i].Warnings, w.GetMessage())
+			}
 		}
 	}
 	return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Enabled: true, Results: results}), nil
@@ -240,19 +244,26 @@ func (s *Service) existingActivationStep(
 		return nil, err
 	}
 	// A connection the request does not name stays the one this activation
-	// listens through, rather than falling back to the default.
-	if def.ConnectionId == nil && existing.ConnectionID != nil {
-		id := *existing.ConnectionID
-		def.ConnectionId = &id
+	// listens through, rather than falling back to the default: its saved
+	// connection or its org GitHub App installation, which has no
+	// ConnectionID and would otherwise be dropped (widening the trigger).
+	if def.ConnectionId == nil {
+		def.ConnectionId = effectiveConnectionID(existing)
 	}
 	if def.Name != existing.Name && taken[def.Name] {
 		return nil, svcerr.AlreadyExists(fmt.Sprintf("you already have an automation named %q in this project; pick another name", def.Name))
 	}
-	row, err := s.triggerFromDefinition(ctx, userID, def, existing)
+	row, err := s.activationRow(ctx, userID, def, existing)
 	if err != nil {
 		return nil, err
 	}
 	row.Enabled = true
+	// The stamp the request asks for, decided as UpdateTrigger decides it
+	// (UNSPECIFIED keeps the stored one), so a funding-only change is a
+	// change, and a loosening it refuses refuses the enable here, in phase 1.
+	if row.UnattendedFunding, err = s.unattendedFundingFor(ctx, existing.UserID, existing.OrgID, def.UnattendedFunding, existing); err != nil {
+		return nil, err
+	}
 	if err := s.refreshTriggerAccess(ctx, row); err != nil {
 		return nil, err
 	}
@@ -283,7 +294,9 @@ func sameActivationSettings(a, b *core.Trigger) bool {
 		a.MachinePoolID == b.MachinePoolID &&
 		a.NotifyOnComplete == b.NotifyOnComplete &&
 		a.ActingIdentity.OrOwner() == b.ActingIdentity.OrOwner() &&
-		ptrValue(a.ConnectionID) == ptrValue(b.ConnectionID) &&
+		// Unstamped reads as any (§11.3), so only org_only differs.
+		a.UnattendedFunding.OrgOnly() == b.UnattendedFunding.OrgOnly() &&
+		ptrValue(effectiveConnectionID(a)) == ptrValue(effectiveConnectionID(b)) &&
 		sameJSON(a.Presets, b.Presets) &&
 		sameJSON(a.Params, b.Params)
 }
@@ -365,6 +378,7 @@ func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result 
 		})
 		result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED
 		result.Activation = resp.Msg.GetTrigger()
+		result.FundingWarning = resp.Msg.GetFundingWarning()
 		return nil
 	}
 	resp, err := s.CreateTrigger(ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: step.def}))
@@ -379,6 +393,7 @@ func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result 
 	result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ENABLED
 	result.Activation = resp.Msg.GetTrigger()
 	result.Webhook = resp.Msg.GetWebhook()
+	result.FundingWarning = resp.Msg.GetFundingWarning()
 	return nil
 }
 
@@ -416,6 +431,7 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 		result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED
 	}
 	result.Activation = resp.Msg.GetTrigger()
+	result.FundingWarning = resp.Msg.GetFundingWarning()
 	return nil
 }
 
@@ -549,19 +565,20 @@ func (s *Service) workflowActivationDefinition(
 ) (*reliantv1.TriggerDefinition, error) {
 	enabled := true
 	def := &reliantv1.TriggerDefinition{
-		Name:             name,
-		ActingIdentity:   msg.ActingIdentity,
-		ProjectId:        msg.ProjectId,
-		WorktreeId:       msg.WorktreeId,
-		Enabled:          &enabled,
-		Workflow:         msg.Workflow,
-		Presets:          msg.Presets,
-		Message:          msg.Message,
-		DaemonId:         msg.DaemonId,
-		NoMachine:        msg.NoMachine,
-		MachinePoolId:    msg.MachinePoolId,
-		NotifyOnComplete: msg.NotifyOnComplete,
-		Source:           &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: wt.GetName()},
+		Name:              name,
+		ActingIdentity:    msg.ActingIdentity,
+		UnattendedFunding: msg.UnattendedFunding,
+		ProjectId:         msg.ProjectId,
+		WorktreeId:        msg.WorktreeId,
+		Enabled:           &enabled,
+		Workflow:          msg.Workflow,
+		Presets:           msg.Presets,
+		Message:           msg.Message,
+		DaemonId:          msg.DaemonId,
+		NoMachine:         msg.NoMachine,
+		MachinePoolId:     msg.MachinePoolId,
+		NotifyOnComplete:  msg.NotifyOnComplete,
+		Source:            &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: wt.GetName()},
 	}
 
 	// The shared prompt is for triggers whose declaration has none: a message

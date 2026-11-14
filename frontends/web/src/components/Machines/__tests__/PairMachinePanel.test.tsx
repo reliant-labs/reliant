@@ -50,6 +50,7 @@ vi.mock("@/services/controlPlane/pairing", async (importOriginal) => {
 
 import { describeTerminal } from "@/components/ReliantDownloadOptions";
 import { expectEveryCommandCopyable } from "@/test/commandBlocks";
+import { useAuthStore } from "@/store/authStore";
 import { PairMachinePanel } from "../PairMachinePanel";
 
 function setPlatform(platform: string) {
@@ -66,6 +67,8 @@ function daemonsState(daemons: Partial<DaemonInfo>[]) {
 }
 
 beforeEach(() => {
+  // The panel lives in the signed-in app; useMyOrgs fetches only for a signed-in user (#2669).
+  useAuthStore.setState({ user: { id: "alice" } as never });
   cp.url = "https://cp.example.test";
   mockUseDaemonStatus.mockReturnValue(daemonsState([]));
   setPlatform("Win32");

@@ -71,6 +71,7 @@ import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
 import { upgradeInterceptor } from "./upgradeInterceptor";
 import { orgInterceptor } from "./orgInterceptor";
+import { signupAttributionInterceptor } from "./signupAttribution";
 import { machineWakeInterceptor } from "./machineWakeInterceptor";
 import { createDeadlineInterceptor } from "./rpcDeadline";
 import { writeOwnerInterceptor } from "./writeOwner";
@@ -226,6 +227,7 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   StreamUserUpdates: 0,
   StreamChatUpdates: 0,
   StreamProcessOutput: 0,
+  StreamOrgUpdates: 0,
 };
 
 /**
@@ -440,6 +442,18 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
       // Retryable, and the server already logged it at WARN. Visible here
       // too, but not an exception: the caller's retry is the remedy.
       logger.warn("[gRPC Client] Server deadline exceeded", context);
+      throw error;
+    }
+
+    if (
+      error instanceof ConnectError &&
+      error.code === Code.Unauthenticated &&
+      !req.header.has(AUTH_HEADER)
+    ) {
+      // Sent with no credentials (a signed-out page): the 401 is the answer,
+      // and missingTokenInterceptor already warned. A 401 that carried a
+      // token still falls through to the error log below.
+      logger.debug("[gRPC Client] Unauthenticated request without a token", context);
       throw error;
     }
 
@@ -780,6 +794,9 @@ export function buildInterceptors(
     upgradeInterceptor,
     machineWakeInterceptor,
     ...(withAuth ? [unauthInterceptor, writeOwnerInterceptor] : []),
+    // The landing handoff on signed-in control-plane requests until one
+    // succeeds: the request that creates the account stores it (signupAttribution.ts).
+    ...(withAuth && backend === "control-plane" ? [signupAttributionInterceptor] : []),
     // Innermost: everything above (the token above all) is settled.
     requestSentInterceptor,
   ];

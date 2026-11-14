@@ -503,6 +503,47 @@ func TestPurge_KeepsTheOrgConnectionsAnAdminCreated(t *testing.T) {
 	}
 }
 
+// An org's provider account (an API key an admin added) is the org's, keyed by
+// the owner key 'org:<org_id>' and sealed under the org's tenant. Purging the
+// admin who added it removes their own accounts and their grants, and keeps the
+// org's key, its grants to others and its limit state
+// (control-plane docs/design/org-provider-accounts.md §3.1, §6).
+func TestPurge_KeepsTheOrgProviderAccountsAnAdminCreated(t *testing.T) {
+	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	const admin = "org-admin"
+	seedUser(t, rawDB, admin)
+	mustExec(t, rawDB, `INSERT INTO provider_accounts (id, user_id, provider, auth_kind, identity_key, priority, secret_sealed)
+		VALUES ('acct-personal', $1, 'anthropic', 'api_key', 'key:mine', 0, '\x01')`, admin)
+	mustExec(t, rawDB, `INSERT INTO provider_accounts (id, user_id, owner_kind, org_id, org_access, created_by_user_id,
+			provider, auth_kind, identity_key, priority, secret_sealed)
+		VALUES ('acct-org', 'org:org-1', 'org', 'org-1', 'selected', $1, 'anthropic', 'api_key', 'key:org', 0, '\x01')`, admin)
+	mustExec(t, rawDB, `INSERT INTO provider_account_grants (account_id, org_id, user_id, granted_by_user_id)
+		VALUES ('acct-org', 'org-1', $1, $1), ('acct-org', 'org-1', 'member-2', $1)`, admin)
+	mustExec(t, rawDB, `INSERT INTO provider_account_limits (account_id, user_id, observed_at) VALUES ('acct-org', 'org:org-1', '2026-11-13T00:00:00Z')`)
+
+	if _, err := accountpurge.Purge(ctx, rawDB, admin); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	var personal, org, adminGrant, otherGrant, orgLimits int
+	if err := rawDB.QueryRowContext(ctx, `SELECT
+		(SELECT count(*) FROM provider_accounts WHERE id='acct-personal'),
+		(SELECT count(*) FROM provider_accounts WHERE id='acct-org'),
+		(SELECT count(*) FROM provider_account_grants WHERE user_id=$1),
+		(SELECT count(*) FROM provider_account_grants WHERE user_id='member-2'),
+		(SELECT count(*) FROM provider_account_limits WHERE account_id='acct-org')`, admin).
+		Scan(&personal, &org, &adminGrant, &otherGrant, &orgLimits); err != nil {
+		t.Fatal(err)
+	}
+	if personal != 0 || adminGrant != 0 {
+		t.Errorf("the admin's own account (%d) or grant (%d) survived the purge", personal, adminGrant)
+	}
+	if org != 1 || otherGrant != 1 || orgLimits != 1 {
+		t.Errorf("the purge removed the org's key (%d), a grant the admin made to another member (%d) or the key's limits (%d); want all kept", org, otherGrant, orgLimits)
+	}
+}
+
 func mustExec(t *testing.T, d *sql.DB, q string, args ...any) {
 	t.Helper()
 	if _, err := d.Exec(q, args...); err != nil {
