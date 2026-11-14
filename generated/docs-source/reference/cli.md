@@ -20886,6 +20886,11 @@ This is a full replacement, not a patch: every field is written as given, so
 flags you omit are written as their zero value. The exception is enabled,
 which is left as it is unless you pass --disabled or --disabled=false.
 
+--org-accounts-only makes the trigger's runs spend only its organization's AI
+accounts, never your own. Given alone, it changes only that and keeps the rest
+of the stored definition. The CLI only tightens: letting an automation spend
+your own accounts is done in the app.
+
 ```
 reliant trigger update <id-or-name> [flags]
 ```
@@ -20901,6 +20906,7 @@ reliant trigger update <id-or-name> [flags]
 | `--interval` | `string` | - | Fire every interval, as a Go duration (e.g. 30m); at least 1m |
 | `--message` | `string` | - | The prompt each run starts from (required) |
 | `--name` | `string` | - | Trigger name, unique per project (defaults to the workflow name) |
+| `--org-accounts-only` | `bool` | - | Run only on the trigger's organization's AI accounts, never your own (alone: changes only that) |
 | `--overlap` | `string` | - | What to do when the previous run is still going: skip (default) or allow |
 | `--param` | `stringArray` | `[]` | Workflow input as key=value; repeatable. Values parse as JSON, else as a string |
 | `--preset` | `stringArray` | `[]` | Preset assignment as group=name, or just name for the top level; repeatable |
