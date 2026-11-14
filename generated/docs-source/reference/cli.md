@@ -12190,7 +12190,7 @@ Exit status:
      again later. Low traffic is never 8.
 
 Thresholds come from the env's release_health declaration (KCL); --threshold
-name=value overrides one for this call (max_error_rate_increase, max_p95_ratio, min_requests, new_issue_min_events, require_baseline).
+name=value overrides one for this call (max_error_rate_increase, max_p95_ratio, min_requests, new_issue_min_events, regressed_issue_min_events, require_baseline).
 The document says where each effective threshold came from: release_shape,
 default or request.
 
@@ -12213,6 +12213,7 @@ JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   findings.unattributed
   findings.value
   firing_alerts
+  issue_alerts
   new_issues
   not_evaluated
   query_mode
