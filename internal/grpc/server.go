@@ -468,6 +468,16 @@ func (v *jwtConnectorValidator) ValidateToken(token string) (string, error) {
 	return claims.Sub, nil
 }
 
+// ValidateTokenClient is ValidateToken plus the OAuth client the token was
+// issued to, from its verified client_id claim.
+func (v *jwtConnectorValidator) ValidateTokenClient(token string) (string, string, error) {
+	claims, err := v.validator.ValidateToken(token)
+	if err != nil {
+		return "", "", err
+	}
+	return claims.Sub, claims.ClientID, nil
+}
+
 // maxConcurrentStreams is the HTTP/2 stream cap per connection on both
 // listeners: a browser multiplexes every streaming RPC of every open tab over
 // one connection, and net/http's default (250) is too few for that.

@@ -66,7 +66,7 @@ type ForgeHTTPDeps struct {
 	TokenValidator OAuthTokenValidator
 
 	// Bindings resolves which forge connector an OAuth client acts through.
-	Bindings BindingStore
+	Bindings ForgeBindingStore
 
 	// OAuth configures RFC 9728 discovery; it must name an authorization
 	// server.
@@ -179,7 +179,7 @@ func MountForgeOAuthRoutes(mux *http.ServeMux, cfg OAuthConfig) {
 type forgeAuth struct {
 	store       connectorgrant.Store
 	tokens      OAuthTokenValidator
-	bindings    BindingStore
+	bindings    ForgeBindingStore
 	oauth       OAuthConfig
 	consentBase string
 	logger      *slog.Logger
@@ -200,12 +200,15 @@ func (a *forgeAuth) middleware(next http.Handler) http.Handler {
 			a.challenge(w, "Reliant Forge signs in with OAuth; a connector credential cannot be used here")
 			return
 		}
-		userID, err := a.tokens.ValidateToken(token)
+		userID, clientID, err := validateOAuthClient(a.tokens, token)
 		if err != nil || userID == "" {
 			a.challenge(w, "credential is not valid")
 			return
 		}
-		sess, err := resolveForgeForUser(r.Context(), a.store, a.bindings, userID, oauthClientID(r), a.consentBase)
+		// The client comes from the validated token, never from a header:
+		// a header is the caller's claim, and an application holding a
+		// user's bearer could name another application to borrow its grant.
+		sess, err := resolveForgeForUser(r.Context(), a.store, a.bindings, userID, clientID, a.consentBase)
 		if err != nil {
 			var consent *ConsentError
 			if errors.As(err, &consent) {
@@ -241,23 +244,53 @@ func writeConsentRequired(w http.ResponseWriter, consent *ConsentError, descript
 	})
 }
 
-// resolveForgeForUser picks the forge grant an OAuth caller acts through, in
-// the workspace resolver's order (consent.go): the client's recorded binding,
-// else the one live forge grant, else consent.
+// ForgeBindingStore reads the client bindings a forge caller resolves
+// through: every binding of a user, whatever the state of its grant, so a
+// binding whose grant was revoked or has expired is still seen.
+type ForgeBindingStore interface {
+	ListBindingsByUser(ctx context.Context, userID string) ([]*connectorgrant.ClientBinding, error)
+}
+
+// validateOAuthClient validates token and names the OAuth client it was
+// issued to; a validator that cannot name one reports "".
+func validateOAuthClient(v OAuthTokenValidator, token string) (userID, clientID string, err error) {
+	if cv, ok := v.(OAuthClientValidator); ok {
+		return cv.ValidateTokenClient(token)
+	}
+	userID, err = v.ValidateToken(token)
+	return userID, "", err
+}
+
+// resolveForgeForUser picks the forge grant an OAuth caller acts through:
+//
+//   - A token that names no OAuth client cannot be bound to a choice, so
+//     consent is required.
+//   - A client with a binding acts through its bound grant while that grant
+//     is live. Once it is revoked, expired or gone, the user's choice no longer
+//     exists and consent is required: the client never inherits another grant
+//     the user holds, which may be broader or in another organization.
+//   - A client that was never bound acts through the user's one live forge
+//     grant, else consent.
 func resolveForgeForUser(
 	ctx context.Context,
 	store connectorgrant.Store,
-	bindings BindingStore,
+	bindings ForgeBindingStore,
 	userID, clientID, consentBase string,
 ) (*ForgeSession, error) {
-	if bindings != nil && clientID != "" {
-		b, err := bindings.GetBinding(ctx, userID, connectorgrant.BindingClientID(connectorgrant.KindForge, clientID))
-		if err == nil && b != nil && b.GrantID != "" {
-			if g, err := store.GetGrantByID(ctx, b.GrantID); err == nil && isForgeGrantOf(g, userID) {
-				return forgeSessionForGrant(g), nil
-			}
-			// Gone or revoked: ask again rather than substitute another.
+	consent := &ConsentError{ConsentURL: forgeConsentURL(consentBase, clientID)}
+	if clientID == "" {
+		return nil, consent
+	}
+	bound, err := forgeBindingOf(ctx, bindings, userID, clientID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	if bound != nil {
+		if g, err := store.GetGrantByID(ctx, bound.GrantID); err == nil && isForgeGrantOf(g, userID) && g.IsLive(now) == nil {
+			return forgeSessionForGrant(g), nil
 		}
+		return nil, consent
 	}
 	grants, err := store.ListGrantsByUser(ctx, userID)
 	if err != nil {
@@ -265,14 +298,33 @@ func resolveForgeForUser(
 	}
 	var live []*connectorgrant.Grant
 	for _, g := range grants {
-		if g.KindOrDefault() == connectorgrant.KindForge && g.IsLive(time.Now()) == nil {
+		if g.KindOrDefault() == connectorgrant.KindForge && g.IsLive(now) == nil {
 			live = append(live, g)
 		}
 	}
 	if len(live) == 1 {
 		return forgeSessionForGrant(live[0]), nil
 	}
-	return nil, &ConsentError{ConsentURL: forgeConsentURL(consentBase, clientID)}
+	return nil, consent
+}
+
+// forgeBindingOf is the user's forge binding for clientID, whatever its
+// grant's state; nil when the client was never bound.
+func forgeBindingOf(ctx context.Context, bindings ForgeBindingStore, userID, clientID string) (*connectorgrant.ClientBinding, error) {
+	if bindings == nil {
+		return nil, nil
+	}
+	all, err := bindings.ListBindingsByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	key := connectorgrant.BindingClientID(connectorgrant.KindForge, clientID)
+	for _, b := range all {
+		if b.ClientID == key && b.GrantID != "" {
+			return b, nil
+		}
+	}
+	return nil, nil
 }
 
 func isForgeGrantOf(g *connectorgrant.Grant, userID string) bool {

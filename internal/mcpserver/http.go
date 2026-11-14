@@ -100,6 +100,14 @@ type OAuthTokenValidator interface {
 	ValidateToken(token string) (userID string, err error)
 }
 
+// OAuthClientValidator is an OAuthTokenValidator that also names the OAuth
+// client the token was issued to: its validated client_id claim, "" when the
+// token carries none. The Reliant Forge endpoint picks a client's binding by
+// this alone, never by a header the caller chooses.
+type OAuthClientValidator interface {
+	ValidateTokenClient(token string) (userID, clientID string, err error)
+}
+
 // NewHTTPHandler returns the http.Handler serving MCP to connector clients.
 //
 // Every request is authenticated from scratch: MCP sessions are long-lived,

@@ -108,7 +108,7 @@ func TestForgeHandshakeListsOnlyGrantedTools(t *testing.T) {
 	store := newMemStore()
 	require.NoError(t, store.CreateGrant(context.Background(),
 		forgeGrant("g-forge", nil, []string{"obs_status", "envs_list", "obs_init", "skill_load"})))
-	url, _ := newForgeTestServer(t, store, &stubTokenValidator{userID: "user-1"})
+	url, _ := newForgeTestServer(t, store, &stubClientTokenValidator{userID: "user-1", clientID: "client-a"})
 
 	sess := connectForge(t, url, "user-jwt")
 	assert.Equal(t, "reliant-forge", sess.InitializeResult().ServerInfo.Name)
@@ -128,7 +128,7 @@ func TestForgeHandshakeListsOnlyGrantedTools(t *testing.T) {
 }
 
 func TestForgeDiscoveryDocument(t *testing.T) {
-	url, _ := newForgeTestServer(t, newMemStore(), &stubTokenValidator{userID: "user-1"})
+	url, _ := newForgeTestServer(t, newMemStore(), &stubClientTokenValidator{userID: "user-1", clientID: "client-a"})
 	resp, err := http.Get(url + "/.well-known/oauth-protected-resource/forge/mcp")
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -142,7 +142,7 @@ func TestForgeDiscoveryDocument(t *testing.T) {
 
 func TestForgeRefusesWithoutTokenOrGrant(t *testing.T) {
 	store := newMemStore()
-	url, _ := newForgeTestServer(t, store, &stubTokenValidator{userID: "user-1"})
+	url, _ := newForgeTestServer(t, store, &stubClientTokenValidator{userID: "user-1", clientID: "client-a"})
 	post := func(token string) *http.Response {
 		req, _ := http.NewRequest(http.MethodPost, url+ForgeMountPath,
 			strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
@@ -183,7 +183,7 @@ func TestForgeRefusesWithoutTokenOrGrant(t *testing.T) {
 func TestForgeReadToolCallsControlPlaneAsTheCaller(t *testing.T) {
 	store := newMemStore()
 	require.NoError(t, store.CreateGrant(context.Background(), forgeGrant("g-forge", []string{"shop"}, []string{"envs_list"})))
-	url, cp := newForgeTestServer(t, store, &stubTokenValidator{userID: "user-1"})
+	url, cp := newForgeTestServer(t, store, &stubClientTokenValidator{userID: "user-1", clientID: "client-a"})
 	sess := connectForge(t, url, "user-jwt")
 
 	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{Name: "envs_list", Arguments: map[string]any{"project": "shop"}})
@@ -214,7 +214,7 @@ func TestForgeGrantNarrowedMidSessionAppliesAtOnce(t *testing.T) {
 	store := newMemStore()
 	g := forgeGrant("g-forge", nil, []string{"envs_list"})
 	require.NoError(t, store.CreateGrant(context.Background(), g))
-	url, _ := newForgeTestServer(t, store, &stubTokenValidator{userID: "user-1"})
+	url, _ := newForgeTestServer(t, store, &stubClientTokenValidator{userID: "user-1", clientID: "client-a"})
 	sess := connectForge(t, url, "user-jwt")
 
 	store.mu.Lock()
@@ -232,4 +232,132 @@ func TestWorkspaceResolutionIgnoresForgeGrants(t *testing.T) {
 	_, err := resolveForUser(context.Background(), store, store, "user-1", "", "https://app.example.com")
 	var consent *ConsentError
 	require.ErrorAs(t, err, &consent, "a user whose only grant is a forge grant has no workspace connector")
+}
+
+// stubClientTokenValidator is a validator whose tokens name an OAuth client
+// (the client_id claim), as the deployment's JWT validator's do.
+type stubClientTokenValidator struct {
+	userID, clientID string
+}
+
+func (s *stubClientTokenValidator) ValidateToken(string) (string, error) { return s.userID, nil }
+
+func (s *stubClientTokenValidator) ValidateTokenClient(string) (string, string, error) {
+	return s.userID, s.clientID, nil
+}
+
+// headerTransport sends the bearer plus a header the caller chose.
+type headerTransport struct {
+	token, name, value string
+}
+
+func (h *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.Header.Set("Authorization", "Bearer "+h.token)
+	clone.Header.Set(h.name, h.value)
+	return http.DefaultTransport.RoundTrip(clone)
+}
+
+// bindForge records that the user chose grant for client, as AuthorizeClient
+// does.
+func bindForge(t *testing.T, store *memStore, client, grant string) {
+	t.Helper()
+	require.NoError(t, store.PutBinding(context.Background(), &connectorgrant.ClientBinding{
+		ID: "b-" + client, UserID: "user-1", ClientID: connectorgrant.BindingClientID(connectorgrant.KindForge, client), GrantID: grant,
+	}))
+}
+
+// An application picks its binding by the client its token was issued to.
+// Client A, holding the user's bearer, names client B in the headers the
+// workspace endpoint reads, and still gets only its own, narrower grant.
+func TestForgeClientIsTheTokensNotTheHeaders(t *testing.T) {
+	store := newMemStore()
+	ctx := context.Background()
+	require.NoError(t, store.CreateGrant(ctx, forgeGrant("g-narrow", []string{"shop"}, []string{"envs_list"})))
+	require.NoError(t, store.CreateGrant(ctx, forgeGrant("g-broad", nil, []string{"envs_list", "obs_init", "obs_status"})))
+	bindForge(t, store, "client-a", "g-narrow")
+	bindForge(t, store, "client-b", "g-broad")
+	url, _ := newForgeTestServer(t, store, &stubClientTokenValidator{userID: "user-1", clientID: "client-a"})
+
+	for _, header := range []string{"X-MCP-Client-Id", "X-Client-Name"} {
+		client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "1.0.0"}, nil)
+		sess, err := client.Connect(ctx, &mcp.StreamableClientTransport{
+			Endpoint:   url + ForgeMountPath,
+			HTTPClient: &http.Client{Transport: &headerTransport{token: "user-jwt", name: header, value: "client-b"}},
+		}, nil)
+		require.NoError(t, err, header)
+		res, err := sess.ListTools(ctx, nil)
+		require.NoError(t, err, header)
+		var names []string
+		for _, tool := range res.Tools {
+			names = append(names, tool.Name)
+		}
+		assert.Equal(t, []string{"envs_list"}, names, "%s: client A gets client B's grant through a header", header)
+		_ = sess.Close()
+	}
+
+	// Resolution itself: the token's client picks the binding.
+	sess, err := resolveForgeForUser(ctx, store, store, "user-1", "client-a", "https://app.example.com")
+	require.NoError(t, err)
+	assert.Equal(t, "g-narrow", sess.GrantID)
+}
+
+// A token that names no OAuth client cannot be bound to a choice: consent,
+// even when the user has exactly one forge grant.
+func TestForgeTokenWithNoClientRequiresConsent(t *testing.T) {
+	store := newMemStore()
+	require.NoError(t, store.CreateGrant(context.Background(), forgeGrant("g-forge", nil, []string{"envs_list"})))
+
+	_, err := resolveForgeForUser(context.Background(), store, store, "user-1", "", "https://app.example.com")
+	var consent *ConsentError
+	require.ErrorAs(t, err, &consent)
+	assert.Contains(t, consent.ConsentURL, "kind=forge")
+
+	url, _ := newForgeTestServer(t, store, &stubTokenValidator{userID: "user-1"})
+	req, _ := http.NewRequest(http.MethodPost, url+ForgeMountPath,
+		strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Authorization", "Bearer user-jwt")
+	req.Header.Set("X-MCP-Client-Id", "client-a") // not a substitute for the claim
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+}
+
+// A client whose bound grant is revoked or has expired is asked again; it
+// never falls back to the user's other live grant.
+func TestForgeInvalidatedBindingRequiresConsent(t *testing.T) {
+	ctx := context.Background()
+	past := time.Now().Add(-time.Hour)
+	for name, invalidate := range map[string]func(g *connectorgrant.Grant){
+		"revoked": func(g *connectorgrant.Grant) { g.RevokedAt = &past },
+		"expired": func(g *connectorgrant.Grant) { g.ExpiresAt = &past },
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := newMemStore()
+			bound := forgeGrant("g-bound", []string{"shop"}, []string{"envs_list"})
+			require.NoError(t, store.CreateGrant(ctx, bound))
+			require.NoError(t, store.CreateGrant(ctx, forgeGrant("g-other", nil, []string{"envs_list", "obs_init"})))
+			bindForge(t, store, "client-a", "g-bound")
+
+			sess, err := resolveForgeForUser(ctx, store, store, "user-1", "client-a", "https://app.example.com")
+			require.NoError(t, err)
+			require.Equal(t, "g-bound", sess.GrantID)
+
+			store.mu.Lock()
+			invalidate(bound)
+			store.mu.Unlock()
+			sess, err = resolveForgeForUser(ctx, store, store, "user-1", "client-a", "https://app.example.com")
+			var consent *ConsentError
+			require.ErrorAs(t, err, &consent, "the client inherited %+v", sess)
+			assert.Contains(t, consent.ConsentURL, "client_id=client-a")
+
+			// A client that was never bound still resolves the one live grant.
+			sess, err = resolveForgeForUser(ctx, store, store, "user-1", "client-new", "https://app.example.com")
+			require.NoError(t, err)
+			assert.Equal(t, "g-other", sess.GrantID)
+		})
+	}
 }
