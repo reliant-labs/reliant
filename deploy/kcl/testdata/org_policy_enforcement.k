@@ -8,8 +8,10 @@
 # through the same config_gen.workloadEnvMap and workloads bindings every env
 # uses, so a default that flips, an env-map entry that drops, or the variable
 # leaving a root's reach fails the test. prod's ServerProcessConfig is composed
-# by control-plane's lib/reliant_process.k, which sets no org_policy_enforcement
-# field, so it takes the schema default the *_default selectors pin.
+# by control-plane's deploy/kcl/lib/reliant_process.k, which sets no
+# org_policy_enforcement field, so every point (providers included) takes the
+# schema default the *_default selectors pin: they render exactly that empty
+# ServerProcessConfig through the same workloadEnvMap.
 #
 # Not an environment: there is no main.k here, and nothing imports this file.
 
