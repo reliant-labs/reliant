@@ -1,0 +1,176 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "reliant/v1/usage.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// OrgUsageService shows an organization's admins the LLM usage the
+// organization PAYS FOR (control-plane docs/design/org-provider-accounts.md
+// §5, decision D8): calls made on the org's own API keys, on seats the org
+// pays for, and on Reliant credits the org pays for, by member, account, model
+// and day, with an ESTIMATED list cost for the org's own keys.
+//
+// What it never shows: a member's own accounts. Personal-account usage stays
+// private to the member, even in the org's chats (UsageService). That is
+// structural, not a filter: every read here is of the org's rollup of
+// org-funded calls, which a personal call is never written to.
+//
+// Who may read it: a member of the org who holds the billing:read grant there,
+// read from control-plane at the call (never a cached answer, so a revoked
+// grant stops the next read). Anyone else is PermissionDenied: a member
+// without the grant with reason missing_scope, a non-member (another org's
+// admin included) with reason not_org_member. A machine credential (an rlat_
+// access token) additionally needs billing:read among its own scopes and must
+// be bound to the org.
+service OrgUsageService {
+  // GetOrgLLMUsage returns the org's org-funded LLM usage over a UTC date
+  // range, summed into buckets by day, member, account, model, funding or
+  // provider, optionally filtered.
+  //
+  // Its completeness is never COMPLETE: it is not the whole of the LLM use in
+  // the org's chats (members' own accounts are left out by design), and its
+  // costs are list-price estimates, not what the org was billed.
+  rpc GetOrgLLMUsage(GetOrgLLMUsageRequest) returns (GetOrgLLMUsageResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "read-only: the org's usage totals; changes nothing"}
+    };
+  }
+}
+
+// OrgLLMUsageGroupBy is the dimension an org usage response is bucketed by.
+enum OrgLLMUsageGroupBy {
+  // Treated as ORG_LLM_USAGE_GROUP_BY_DAY.
+  ORG_LLM_USAGE_GROUP_BY_UNSPECIFIED = 0;
+  // key: a UTC day, "YYYY-MM-DD".
+  ORG_LLM_USAGE_GROUP_BY_DAY = 1;
+  // key: the member's user id.
+  ORG_LLM_USAGE_GROUP_BY_MEMBER = 2;
+  // key: the provider account id; label: the account's label.
+  ORG_LLM_USAGE_GROUP_BY_ACCOUNT = 3;
+  // key: the model id.
+  ORG_LLM_USAGE_GROUP_BY_MODEL = 4;
+  // key: "org_key", "org_seat" or "org_wallet".
+  ORG_LLM_USAGE_GROUP_BY_FUNDING = 5;
+  // key: the provider id.
+  ORG_LLM_USAGE_GROUP_BY_PROVIDER = 6;
+}
+
+// OrgLLMFunding is who paid for an org-funded call. There is no personal
+// value: a member's own accounts are never in this service.
+enum OrgLLMFunding {
+  ORG_LLM_FUNDING_UNSPECIFIED = 0;
+  // An API key the org owns, billed to the org by the provider.
+  ORG_LLM_FUNDING_ORG_KEY = 1;
+  // A member's seat (Claude Team, ChatGPT Business, ...) the org pays for.
+  ORG_LLM_FUNDING_ORG_SEAT = 2;
+  // Reliant credits the org pays for.
+  ORG_LLM_FUNDING_ORG_WALLET = 3;
+}
+
+message GetOrgLLMUsageRequest {
+  // The organization: control-plane's organizations.id.
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // First UTC day of the range, "YYYY-MM-DD", inclusive.
+  string start_date = 2 [(buf.validate.field).string.pattern = "^\\d{4}-\\d{2}-\\d{2}$"];
+  // Last UTC day of the range, "YYYY-MM-DD", inclusive. The range is at most
+  // 400 days.
+  string end_date = 3 [(buf.validate.field).string.pattern = "^\\d{4}-\\d{2}-\\d{2}$"];
+  // Unset means day.
+  OrgLLMUsageGroupBy group_by = 4;
+  // Only this member's calls (user id).
+  optional string user_id = 5;
+  // Only this provider account's calls.
+  optional string account_id = 6;
+  // Model id as recorded. Exact match.
+  optional string model = 7;
+  optional OrgLLMFunding funding = 8;
+}
+
+// OrgLLMListCostEstimate is the estimated list cost of a bucket's calls on
+// the org's OWN API keys: their tokens at the list prices in LiteLLM's model
+// catalog. It is an estimate, never a charge: the provider bills the org at
+// whatever it negotiated. Seats and Reliant credits are not in it (a seat is a
+// fixed fee; Reliant credits are billed, and shown, by control-plane).
+message OrgLLMListCostEstimate {
+  // USD nanos (1e-9 USD) of the priced org-key calls. Absent, never zero,
+  // when none was priced: no org-key call, or no price could be read.
+  optional int64 usd_nanos = 1;
+  // Org-key calls in usd_nanos.
+  int64 priced_calls = 2;
+  // Org-key calls whose model has no list price, or whose price could not be
+  // read; their tokens are not in usd_nanos.
+  int64 unpriced_calls = 3;
+}
+
+// OrgLLMUsageBucket is the sum of every matching org-funded call in one group.
+message OrgLLMUsageBucket {
+  // The group, per group_by (see OrgLLMUsageGroupBy).
+  string key = 1;
+  // A name for key a person can read, where key is an id: the account's
+  // label when grouping by account ("" when the account no longer exists).
+  // Empty otherwise; a member's name comes from the org's member list.
+  string label = 2;
+  int64 calls = 3;
+  // Calls that ended in an error. Cancelled calls count as calls only.
+  int64 error_calls = 4;
+  int64 input_tokens = 5;
+  int64 output_tokens = 6;
+  int64 cache_read_tokens = 7;
+  int64 cache_write_tokens = 8;
+  int64 latency_ms_total = 9;
+  // 0 when calls is 0.
+  double avg_latency_ms = 10;
+  OrgLLMListCostEstimate estimated_list_cost = 11;
+}
+
+// OrgLLMCostEstimateStatus says whether the estimates could be made.
+enum OrgLLMCostEstimateStatus {
+  ORG_LLM_COST_ESTIMATE_STATUS_UNSPECIFIED = 0;
+  // Prices were read; every org-key call with a listed model is priced.
+  ORG_LLM_COST_ESTIMATE_STATUS_AVAILABLE = 1;
+  // No price could be read (the price source is unreachable, or this
+  // deployment has none): counts are shown, costs are not.
+  ORG_LLM_COST_ESTIMATE_STATUS_UNAVAILABLE = 2;
+  // The range has no org-key calls, so there is nothing to estimate.
+  ORG_LLM_COST_ESTIMATE_STATUS_NONE = 3;
+}
+
+// OrgLLMCostEstimate describes every estimated_list_cost in a response.
+message OrgLLMCostEstimate {
+  // Always true: every cost here is an estimate.
+  bool is_estimate = 1;
+  OrgLLMCostEstimateStatus status = 2;
+  // What to show beside an estimated cost, for display.
+  string label = 3;
+  // Where the list prices come from ("LiteLLM's model catalog").
+  string price_source = 4;
+  // RFC 3339 UTC time the prices were read from the source; empty when
+  // status is not AVAILABLE.
+  string prices_as_of = 5;
+  // "provider/model" of each org-key model with no list price, sorted.
+  repeated string unpriced_models = 6;
+}
+
+message GetOrgLLMUsageResponse {
+  string org_id = 1;
+  // The request's group_by with the default applied.
+  OrgLLMUsageGroupBy group_by = 2;
+  // One bucket per group that has usage; a group with none is absent, never
+  // zero. By day: oldest first. Otherwise: most tokens first, then key.
+  repeated OrgLLMUsageBucket buckets = 3;
+  // Sum over all buckets; key is empty.
+  OrgLLMUsageBucket totals = 4;
+  // Never COMPLETE (see GetOrgLLMUsage).
+  LLMUsageCompleteness completeness = 5;
+  // RFC 3339 UTC time the totals were read; the current UTC day is still
+  // accumulating.
+  string as_of = 6;
+  // Human-readable account of what is and is not included, for display.
+  string note = 7;
+  OrgLLMCostEstimate estimate = 8;
+}

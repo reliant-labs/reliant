@@ -50,6 +50,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
+	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
@@ -949,6 +950,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		Sharing:            g.Sharing(),
 		AutomationTakeover: g.AutomationTakeover(),
 		OrgProviderAccount: g.OrgProviderAccount(),
+		OrgUsage:           g.OrgUsage(),
 	})
 }
 
@@ -1494,4 +1496,17 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 		return nil, err
 	}
 	return seatmatch.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newOrgUsage constructs the org-usage handler (internal/handlers/org_usage):
+// an org's billing:read holders read its org-funded usage, priced at list
+// through control-plane (OrgUsageListPrices; nil shows no estimates).
+func (g *Graph) newOrgUsage() (*org_usage.Service, error) {
+	return org_usage.New(org_usage.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Store:  g.Database(),
+		Prices: OrgUsageListPrices(g.ServerProcessConfig.GetControlPlane()),
+		Now:    nil, // optional — no provider
+	})
 }

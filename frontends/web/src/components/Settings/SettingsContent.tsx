@@ -14,6 +14,7 @@ import { TokenSettings } from "./TokenSettings";
 import { MembersPage } from "./cloud/members/MembersPage";
 import { PoliciesPage } from "./cloud/policies/PoliciesPage";
 import { OrgAIAccountsPage } from "./cloud/aiAccounts/OrgAIAccountsPage";
+import { OrgAIUsagePage } from "./cloud/orgUsage/OrgAIUsagePage";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
 import { IntegrationsSettings } from "./IntegrationsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
@@ -96,6 +97,8 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
         return <PoliciesPage />;
       case "org-ai-accounts":
         return <OrgAIAccountsPage />;
+      case "org-ai-usage":
+        return <OrgAIUsagePage />;
       case "git-connections":
         return <GitConnectionsSettings />;
       case "integrations":

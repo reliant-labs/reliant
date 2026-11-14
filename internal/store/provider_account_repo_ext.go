@@ -729,3 +729,29 @@ func ConfirmOrgKeyNotice(ctx context.Context, db orm.Context, orgID, accountID s
 		accountID, orgID, markedAt.UTC()).Exec(ctx)
 	return err
 }
+
+// ProviderAccountName is what a usage view shows for an account it has an id
+// of: never a secret, a hint or a sign-in's email.
+type ProviderAccountName struct {
+	ID       string `bun:"id"`
+	Provider string `bun:"provider"`
+	Label    string `bun:"label"`
+	AuthKind string `bun:"auth_kind"`
+}
+
+// ProviderAccountNames returns the provider, label and kind of each account in
+// ids that still exists, keyed by id. A deleted account is absent.
+func ProviderAccountNames(ctx context.Context, db orm.Context, ids []string) (map[string]ProviderAccountName, error) {
+	out := map[string]ProviderAccountName{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []ProviderAccountName
+	if err := db.Bun().NewRaw(`SELECT id, provider, label, auth_kind FROM provider_accounts WHERE id IN (?)`, bun.List(ids)).Scan(ctx, &rows); err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.ID] = r
+	}
+	return out, nil
+}

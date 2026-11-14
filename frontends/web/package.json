@@ -24,6 +24,7 @@
       "MessageService",
       "ModelEndpointService",
       "OrgProviderAccountService",
+      "OrgUsageService",
       "PackageCommandsService",
       "PlanService",
       "PresetService",

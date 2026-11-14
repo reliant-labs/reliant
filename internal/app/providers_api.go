@@ -32,6 +32,7 @@ import (
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
+	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -245,6 +246,7 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		AuthorizationServer: d.Settings.AuthorizationServer,
 		ControlPlaneURL:     cp.URL,
 		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
+		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(d.DB, cp.InternalServiceSecret),
 	})
 }
 
@@ -1471,6 +1473,23 @@ func ProjectOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
 // the control plane is not hosted or this process has no internal-service
 // secret.
 func ProjectOrgMoveFacts(cfg *configv1.ControlPlaneConfig) project.MoveFacts {
+	cp := ControlPlaneEndpoint(cfg)
+	if !cp.Hosted() || cp.InternalServiceSecret == "" {
+		return nil
+	}
+	secret := cp.InternalServiceSecret
+	return controlplane.NewInstrumented(controlplane.Deps{
+		ControlPlane: cfg,
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
+	})
+}
+
+// OrgUsageListPrices is where the org usage view reads list prices:
+// control-plane's LLMPriceInternalService, signed as the internal service.
+// nil — usage is shown without cost estimates — when the control plane is
+// not hosted or this process has no internal-service secret; never a typed
+// nil in the handler's interface.
+func OrgUsageListPrices(cfg *configv1.ControlPlaneConfig) org_usage.ListPrices {
 	cp := ControlPlaneEndpoint(cfg)
 	if !cp.Hosted() || cp.InternalServiceSecret == "" {
 		return nil

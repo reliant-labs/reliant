@@ -89,3 +89,62 @@ func (r *Repo) ListLLMUsageDaily(ctx context.Context, userID string, from, to ti
 	}
 	return rows, nil
 }
+
+// LLMUsageDetail is the user's per-call rows summed per UTC day and every
+// recorded dimension, funding and account included.
+type LLMUsageDetail = store.LLMUsageDetail
+
+// LLMOrgUsageDay is one row of an org's rollup of ORG-FUNDED calls.
+type LLMOrgUsageDay = store.LlmOrgUsageDaily
+
+// OrgKeyModelUsage is the tokens one model used through an org's own API keys.
+type OrgKeyModelUsage = store.OrgKeyModelUsage
+
+// ProviderAccountName is what a usage view shows for an account id.
+type ProviderAccountName = store.ProviderAccountName
+
+// ListLLMUsageDetail returns the user's per-call rows for the UTC days
+// from..to inclusive, summed per day and dimension (funding and account
+// included). Days older than LLMCallUsageRetention are partly or wholly gone.
+// It only ever returns the caller's own rows.
+func (r *Repo) ListLLMUsageDetail(ctx context.Context, userID string, from, to time.Time) ([]*LLMUsageDetail, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	rows, err := store.ListLLMUsageDetail(ctx, r.ORM(), userID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("list llm usage detail: %w", err)
+	}
+	return rows, nil
+}
+
+// ListLLMOrgUsageDaily returns orgID's rollup of org-funded calls for the
+// UTC days from..to inclusive. It is the only table an org admin's usage read
+// touches, and it never holds a personal-account call.
+func (r *Repo) ListLLMOrgUsageDaily(ctx context.Context, orgID string, from, to time.Time) ([]*LLMOrgUsageDay, error) {
+	rows, err := store.ListLLMOrgUsageDaily(ctx, r.ORM(), orgID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("list org llm usage: %w", err)
+	}
+	return rows, nil
+}
+
+// SumLLMOrgKeyUsage sums orgID's calls on its own API keys per provider and
+// model over the UTC days from..to inclusive.
+func (r *Repo) SumLLMOrgKeyUsage(ctx context.Context, orgID string, from, to time.Time) ([]OrgKeyModelUsage, error) {
+	rows, err := store.SumLLMOrgKeyUsage(ctx, r.ORM(), orgID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("sum org key llm usage: %w", err)
+	}
+	return rows, nil
+}
+
+// ProviderAccountNames returns the provider, label and kind of each existing
+// account in ids.
+func (r *Repo) ProviderAccountNames(ctx context.Context, ids []string) (map[string]ProviderAccountName, error) {
+	names, err := store.ProviderAccountNames(ctx, r.ORM(), ids)
+	if err != nil {
+		return nil, fmt.Errorf("provider account names: %w", err)
+	}
+	return names, nil
+}

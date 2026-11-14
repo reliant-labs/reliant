@@ -271,6 +271,12 @@ export type ScenarioRpcHandlers =
     "reliant.v1.OrgProviderAccountService/ReleaseOrgProviderSeat"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").ReleaseOrgProviderSeatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").ReleaseOrgProviderSeatResponseSchema>>;
   }
 
+  // forge:section reliant.v1.OrgUsageService
+  // forge:hash=64716b79a84050f594cf4dffc4ab74ba6f890e02ac10d250ba762b618a8226b0
+  & {
+    "reliant.v1.OrgUsageService/GetOrgLLMUsage"?: (req: import("@/gen/reliant/v1/org_usage_pb").GetOrgLLMUsageRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_usage_pb").GetOrgLLMUsageResponseSchema>>;
+  }
+
   // forge:section reliant.v1.PackageCommandsService
   // forge:hash=3f70e08889d40328b3aa7716cc9e55bc2feb1071ba48fe9b928b14cfad376320
   & {

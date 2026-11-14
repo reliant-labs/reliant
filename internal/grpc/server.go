@@ -86,6 +86,10 @@ type APIHTTPRoutesDeps struct {
 	// HostedHTTPRedeem is the internally authenticated controller ticket route.
 	// Optional on deployments without hosted execution; no public auth fallback.
 	HostedHTTPRedeem http.Handler
+	// OrgKeyUsage is control-plane's internally authenticated read of an
+	// org's org-key usage (OrgKeyUsagePath). Optional; no public auth
+	// fallback.
+	OrgKeyUsage http.Handler
 }
 
 // APIHTTPRoutesStore is what the routes read from the database. The routes
@@ -129,6 +133,9 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	deps.Inbound.Register(handle)
 	if deps.HostedHTTPRedeem != nil {
 		handle("/internal/hosted-http/redeem", deps.HostedHTTPRedeem)
+	}
+	if deps.OrgKeyUsage != nil {
+		handle(OrgKeyUsagePath, deps.OrgKeyUsage)
 	}
 
 	// Connector MCP endpoint: third-party MCP clients (ChatGPT, Claude, and
