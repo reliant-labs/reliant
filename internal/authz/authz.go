@@ -760,6 +760,71 @@ func RequireOrgAdmin(ctx context.Context, userID, orgID string) error {
 	return ErrNotOrgAdmin
 }
 
+// orgScopes is a Membership that also names the org-administration scopes a
+// member is granted org-wide, asked of control-plane now rather than from a
+// cache. *orgs.Resolver is one. member is false for a non-member and when the
+// deployment has no orgs; err is an outage.
+type orgScopes interface {
+	ScopesFresh(ctx context.Context, userID, orgID string) (scopes []string, member bool, err error)
+}
+
+// ErrNotOrgMemberRead is the denial of an org read to a caller who is not a
+// live member of the org (another org's admin included).
+var ErrNotOrgMemberRead = errors.New("authz: not a member of the organization")
+
+// ErrMissingOrgScope is the denial of an org read to a member who does not
+// hold the org-administration scope it needs (billing:read, ...).
+var ErrMissingOrgScope = errors.New("authz: the member does not hold the organization grant this needs")
+
+// RequireOrgScope decides a read an org gates on an explicit grant
+// (billing:read for the org's usage, control-plane
+// docs/design/org-provider-accounts.md §5): nil when userID is a live member
+// of orgID holding scope there right now.
+//
+// The grant is asked fresh (ScopesFresh), never from the membership cache,
+// so a revoked grant stops the next read. It fails closed: a credential bound
+// to another org is ErrDenied, a non-member ErrNotOrgMemberRead, a member without
+// the grant (or of a control plane that cannot name grants) ErrMissingOrgScope,
+// and a context with no Membership, or one that cannot name scopes, and an
+// outage are ErrMembershipUnavailable. Which credentials may ask at all is the
+// caller's to decide (this package cannot see a machine token's own scopes).
+func RequireOrgScope(ctx context.Context, userID, orgID, scope string) error {
+	if userID == "" || orgID == "" || scope == "" {
+		return ErrDenied
+	}
+	if bound, ok := boundOrg(ctx); ok && bound != orgID {
+		logging.InfoContext(ctx, "[authz] a credential bound to another org; denying an org read", "user_id", userID, "credential_org", bound, "org_id", orgID)
+		recordCredentialRefusal(ctx, orgID)
+		return ErrDenied
+	}
+	m := membershipOf(ctx)
+	if m == nil {
+		logging.ErrorContext(ctx, "[authz] no membership on the context; denying an org read (a path was never wired with authz.WithMembership)",
+			"user_id", userID, "org_id", orgID)
+		return ErrMembershipUnavailable
+	}
+	sc, ok := m.(orgScopes)
+	if !ok {
+		logging.ErrorContext(ctx, "[authz] the membership on the context cannot name grants; denying an org read",
+			"user_id", userID, "org_id", orgID)
+		return ErrMembershipUnavailable
+	}
+	held, member, err := sc.ScopesFresh(ctx, userID, orgID)
+	if err != nil {
+		logging.WarnContext(ctx, "[authz] could not read the org grants; denying an org read", "user_id", userID, "org_id", orgID, "error", err)
+		return ErrMembershipUnavailable
+	}
+	if !member {
+		return ErrNotOrgMemberRead
+	}
+	for _, s := range held {
+		if s == scope {
+			return nil
+		}
+	}
+	return ErrMissingOrgScope
+}
+
 // Refusals of a visibility change (ChatShareChange, ProjectShareChange)
 // beyond ErrDenied (the call site's NotFound), ErrNotOrgAdmin and
 // ErrMembershipUnavailable.

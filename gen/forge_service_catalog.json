@@ -54,6 +54,7 @@
         "OrgPolicyResolver",
         "OrgProviderAccount",
         "OrgResolver",
+        "OrgUsage",
         "PackageCommands",
         "PauseService",
         "PayloadGC",
@@ -238,6 +239,13 @@
         {
           "component": "OrgProviderAccount",
           "service": "reliant.v1.OrgProviderAccountService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "OrgUsage",
+          "service": "reliant.v1.OrgUsageService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -21742,6 +21750,403 @@
           "reliant.v1.UsageSource": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "UsageSource"
+          }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.OrgUsageService",
+      "proto_file": "reliant/v1/org_usage.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.OrgUsageService/GetOrgLLMUsage",
+          "name": "GetOrgLLMUsage",
+          "input": "reliant.v1.GetOrgLLMUsageRequest",
+          "output": "reliant.v1.GetOrgLLMUsageResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "OrgUsageService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetOrgLLMUsage",
+            "InputType": "GetOrgLLMUsageRequest",
+            "OutputType": "GetOrgLLMUsageResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetOrgLLMUsageRequest",
+            "OutputTypeFQ": "reliant.v1.GetOrgLLMUsageResponse",
+            "InputProtoFile": "reliant/v1/org_usage.proto",
+            "OutputProtoFile": "reliant/v1/org_usage.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only: the org's usage totals; changes nothing"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/org_usage.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetOrgLLMUsageRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "start_date",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "end_date",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "group_by",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "user_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "model",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "funding",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
+          "GetOrgLLMUsageResponse": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "group_by",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "buckets",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgLLMUsageBucket"
+            },
+            {
+              "Name": "totals",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgLLMUsageBucket"
+            },
+            {
+              "Name": "completeness",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "as_of",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "note",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "estimate",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgLLMCostEstimate"
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetOrgLLMUsageRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "start_date",
+              "kind": "string",
+              "validate": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            {
+              "name": "end_date",
+              "kind": "string",
+              "validate": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            {
+              "name": "group_by",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgLLMUsageGroupBy"
+            },
+            {
+              "name": "user_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "account_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "model",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgLLMFunding",
+              "optional": true
+            }
+          ],
+          "reliant.v1.GetOrgLLMUsageResponse": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "group_by",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgLLMUsageGroupBy"
+            },
+            {
+              "name": "buckets",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgLLMUsageBucket",
+              "repeated": true
+            },
+            {
+              "name": "totals",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgLLMUsageBucket"
+            },
+            {
+              "name": "completeness",
+              "kind": "enum",
+              "type_name": "reliant.v1.LLMUsageCompleteness"
+            },
+            {
+              "name": "as_of",
+              "kind": "string"
+            },
+            {
+              "name": "note",
+              "kind": "string"
+            },
+            {
+              "name": "estimate",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgLLMCostEstimate"
+            }
+          ],
+          "reliant.v1.OrgLLMCostEstimate": [
+            {
+              "name": "is_estimate",
+              "kind": "bool"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgLLMCostEstimateStatus"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "price_source",
+              "kind": "string"
+            },
+            {
+              "name": "prices_as_of",
+              "kind": "string"
+            },
+            {
+              "name": "unpriced_models",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.OrgLLMListCostEstimate": [
+            {
+              "name": "usd_nanos",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "priced_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "unpriced_calls",
+              "kind": "int64"
+            }
+          ],
+          "reliant.v1.OrgLLMUsageBucket": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "calls",
+              "kind": "int64"
+            },
+            {
+              "name": "error_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "input_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "output_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "cache_read_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "cache_write_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "latency_ms_total",
+              "kind": "int64"
+            },
+            {
+              "name": "avg_latency_ms",
+              "kind": "double"
+            },
+            {
+              "name": "estimated_list_cost",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgLLMListCostEstimate"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetOrgLLMUsageRequest": "reliant/v1/org_usage.proto",
+          "reliant.v1.GetOrgLLMUsageResponse": "reliant/v1/org_usage.proto",
+          "reliant.v1.OrgLLMCostEstimate": "reliant/v1/org_usage.proto",
+          "reliant.v1.OrgLLMListCostEstimate": "reliant/v1/org_usage.proto",
+          "reliant.v1.OrgLLMUsageBucket": "reliant/v1/org_usage.proto"
+        },
+        "Enums": {
+          "reliant.v1.LLMUsageCompleteness": [
+            "LLM_USAGE_COMPLETENESS_UNSPECIFIED",
+            "LLM_USAGE_COMPLETENESS_COMPLETE",
+            "LLM_USAGE_COMPLETENESS_PARTIAL"
+          ],
+          "reliant.v1.OrgLLMCostEstimateStatus": [
+            "ORG_LLM_COST_ESTIMATE_STATUS_UNSPECIFIED",
+            "ORG_LLM_COST_ESTIMATE_STATUS_AVAILABLE",
+            "ORG_LLM_COST_ESTIMATE_STATUS_UNAVAILABLE",
+            "ORG_LLM_COST_ESTIMATE_STATUS_NONE"
+          ],
+          "reliant.v1.OrgLLMFunding": [
+            "ORG_LLM_FUNDING_UNSPECIFIED",
+            "ORG_LLM_FUNDING_ORG_KEY",
+            "ORG_LLM_FUNDING_ORG_SEAT",
+            "ORG_LLM_FUNDING_ORG_WALLET"
+          ],
+          "reliant.v1.OrgLLMUsageGroupBy": [
+            "ORG_LLM_USAGE_GROUP_BY_UNSPECIFIED",
+            "ORG_LLM_USAGE_GROUP_BY_DAY",
+            "ORG_LLM_USAGE_GROUP_BY_MEMBER",
+            "ORG_LLM_USAGE_GROUP_BY_ACCOUNT",
+            "ORG_LLM_USAGE_GROUP_BY_MODEL",
+            "ORG_LLM_USAGE_GROUP_BY_FUNDING",
+            "ORG_LLM_USAGE_GROUP_BY_PROVIDER"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.LLMUsageCompleteness": [
+            0,
+            1,
+            2
+          ],
+          "reliant.v1.OrgLLMCostEstimateStatus": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.OrgLLMFunding": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.OrgLLMUsageGroupBy": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.LLMUsageCompleteness": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "LLMUsageCompleteness"
+          },
+          "reliant.v1.OrgLLMCostEstimateStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "OrgLLMCostEstimateStatus"
+          },
+          "reliant.v1.OrgLLMFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "OrgLLMFunding"
+          },
+          "reliant.v1.OrgLLMUsageGroupBy": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "OrgLLMUsageGroupBy"
           }
         }
       }
@@ -44029,6 +44434,11 @@
               "Name": "purpose",
               "ProtoType": "enum",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "GetLLMUsageResponse": [
@@ -44114,6 +44524,11 @@
               "kind": "enum",
               "type_name": "reliant.v1.LLMPurpose",
               "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GetLLMUsageResponse": [
@@ -44187,6 +44602,10 @@
             {
               "name": "avg_latency_ms",
               "kind": "double"
+            },
+            {
+              "name": "label",
+              "kind": "string"
             }
           ]
         },
@@ -44221,7 +44640,9 @@
             "LLM_USAGE_GROUP_BY_MODEL",
             "LLM_USAGE_GROUP_BY_PROVIDER",
             "LLM_USAGE_GROUP_BY_AUTH_MODE",
-            "LLM_USAGE_GROUP_BY_PURPOSE"
+            "LLM_USAGE_GROUP_BY_PURPOSE",
+            "LLM_USAGE_GROUP_BY_FUNDING",
+            "LLM_USAGE_GROUP_BY_ACCOUNT"
           ]
         },
         "EnumNumbers": {
@@ -44250,7 +44671,9 @@
             2,
             3,
             4,
-            5
+            5,
+            6,
+            7
           ]
         },
         "EnumGoRefs": {
@@ -52214,6 +52637,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "OrgUsage",
+      "name": "OrgUsage",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/org_usage.Service",
+      "source": {
+        "path": "internal/handlers/org_usage/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "PackageCommands",
       "name": "PackageCommands",
       "kind": "component",
@@ -53853,6 +54288,28 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "OrgUsage",
+      "field": "Prices",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.ListPrices",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "OrgUsage",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "PackageCommands",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Repository",
@@ -55013,6 +55470,14 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewNATSConn"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "OrgUsage.Prices",
+      "source": {
+        "path": "internal/handlers/org_usage/service.go",
+        "symbol": "New"
       }
     },
     {
