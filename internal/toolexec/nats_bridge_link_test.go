@@ -31,6 +31,7 @@ func TestPendingPoller_StartsOnlyWhenTheLinkIsReady(t *testing.T) {
 	defer cancel()
 	bridge.finishDaemonConnected(daemonCtx, pendingDrainUser, "laptop", nil)
 
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a poller correctly not started drains nothing, which leaves no event to wait for
 	time.Sleep(50 * time.Millisecond)
 	mgr.mu.Lock()
 	require.Empty(t, mgr.commands, "nothing is drained into a link that has not proven itself")
