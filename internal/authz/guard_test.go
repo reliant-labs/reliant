@@ -32,6 +32,7 @@ var rawComparisonAllowed = map[string]string{
 	"internal/db/trigger_takeover.go:AdoptTrigger":                                     "compare-and-swap: the locked row still has the owner the adoption decided on, no caller",
 	"internal/db/trigger_takeover.go:CreateTriggerOffer":                               "compare-and-swap: the locked row still has the owner the offer was made for, no caller",
 	"internal/handlers/automation_takeover/takeover.go:offerState":                     "matches a trigger to the owner its offer was made for (adopted or not since), no caller",
+	"internal/handlers/org_usage/rpc_get_org_llm_usage.go:GetOrgLLMUsage":              "a request filter (only this member's calls) over the org rollup the caller was already authorized to read whole (billing:read); not an access decision",
 	"internal/handlers/streaming/org_stream.go:sendOrgUpdates":                         "leaves the caller's own rows out of the org feed they may already read in full; not an access decision",
 	"internal/tokenauthority/localstore.go:MintForUser":                                "self-hosted orgs: the only org a user has is their own id",
 	"internal/tokenauthority/memory.go:MintForUser":                                    "self-hosted orgs: the only org a user has is their own id",

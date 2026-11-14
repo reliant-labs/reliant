@@ -17,7 +17,9 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // (prompts, replies and tool I/O are never recorded). Every rpc is scoped to
 // the authenticated user: there is no user_id on any request, and a machine
 // credential (an rlat_ access token) acts as the user it was minted for.
-// Members' own-key usage is not visible to an organization's admins.
+// Members' own-key usage is not visible to an organization's admins: what
+// an org's admins read is OrgUsageService, which only ever holds what the
+// org paid for.
 service UsageService {
   // GetLLMUsage returns the caller's LLM usage over a UTC date range, summed
   // into buckets by day, model, provider, auth mode or purpose, optionally
@@ -65,6 +67,14 @@ enum LLMUsageGroupBy {
   LLM_USAGE_GROUP_BY_PROVIDER = 3;
   LLM_USAGE_GROUP_BY_AUTH_MODE = 4;
   LLM_USAGE_GROUP_BY_PURPOSE = 5;
+  // Who paid for the call: "org_key" (an org's own API key), "org_seat" (a
+  // seat an org pays for), "org_wallet" (Reliant credits an org pays for),
+  // "personal" (the caller's own account), "local" (a local model), or ""
+  // when it was not recorded (see GetLLMUsageResponse.detail_available_from).
+  LLM_USAGE_GROUP_BY_FUNDING = 6;
+  // The provider account that served the call (provider_accounts id), with
+  // its label; "" when it was not recorded.
+  LLM_USAGE_GROUP_BY_ACCOUNT = 7;
 }
 
 // LLMUsageCompleteness says how far a response can be trusted to be the whole
@@ -93,13 +103,22 @@ message GetLLMUsageRequest {
   // Model id as recorded. Exact match.
   optional string model = 6;
   optional LLMPurpose purpose = 7;
+  // Only calls made in chats and runs of this organization. Unset: every
+  // org, and calls in no org. The usage is still only the caller's own.
+  optional string org_id = 8;
 }
 
 // LLMUsageBucket is the sum of every matching call in one group.
 message LLMUsageBucket {
   // The group: a UTC day "YYYY-MM-DD", a model id, a provider id, an auth mode
-  // name ("managed", "byok", "subscription", "local") or a purpose name
-  // ("chat", "compaction", "title", "draft_automation"), per group_by.
+  // name ("managed", "byok", "subscription", "local"), a purpose name
+  // ("chat", "compaction", "title", "draft_automation"), a funding name or a
+  // provider account id, per group_by.
+  //
+  // By funding and by account, calls are only broken down while their
+  // individual records are kept (detail_available_from on): older days are
+  // summed into the bucket with key "", as are calls made before funding and
+  // account were recorded.
   string key = 1;
   int64 calls = 2;
   // Calls that ended in an error. Cancelled calls count as calls only.
@@ -112,6 +131,10 @@ message LLMUsageBucket {
   int64 latency_ms_total = 8;
   // 0 when calls is 0.
   double avg_latency_ms = 9;
+  // A name for key a person can read, where key is an id: the account's
+  // label when grouping by account ("" when the account no longer exists, or
+  // for the "" bucket). Empty for every other group_by.
+  string label = 10;
 }
 
 message GetLLMUsageResponse {

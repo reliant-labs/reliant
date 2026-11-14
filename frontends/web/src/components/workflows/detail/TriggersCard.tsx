@@ -57,6 +57,7 @@ import ConfirmationDialog from "../../forge-ui/confirmation_dialog";
 import ToggleSwitch from "../../forge-ui/toggle_switch";
 import Button from "@/components/forge-ui/button";
 import { AutomationCta } from "../../Automations/AutomationCta";
+import { AutomationFunding } from "../../Automations/AutomationFunding";
 import { automationMachineLabel, daemonStatusLabel } from "../../Automations/daemonChoices";
 import { openAutomationDialog } from "../../Automations/dialog/openAutomationDialog";
 import { RunList } from "../../runs/RunList";
@@ -540,6 +541,10 @@ function TriggerDefinition({ trigger }: { trigger: Trigger }) {
       ),
     },
   ];
+  // An automation of an org says whose AI accounts pay for its runs.
+  if (trigger.orgId) {
+    rows.splice(1, 0, { label: "AI accounts", value: <AutomationFunding trigger={trigger} label={triggerLabel(trigger)} /> });
+  }
   // The overlap policy lives on the schedule source; another kind's is not
   // readable here, so it is not guessed at.
   if (schedule) {

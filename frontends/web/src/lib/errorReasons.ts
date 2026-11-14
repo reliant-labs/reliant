@@ -107,6 +107,9 @@ export const ERROR_REASONS = [
   "project_busy",
   /** The project left the organization the dialog saw it in. FailedPrecondition. */
   "org_changed",
+  // ── reliant: an org's AI usage (handlers/org_usage; org-provider-accounts §5) ──
+  /** A member of the org without the org grant the read needs (billing:read). PermissionDenied. */
+  "missing_scope",
   // ── reliant: an org's AI accounts (handlers/org_provider_account; org-provider-accounts §3.5) ──
   /** Only an owner or admin of the org may do this (role read fresh). PermissionDenied. */
   "org_admin_required",

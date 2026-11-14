@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,7 +20,10 @@ import (
 // compat checks keep the merge-base with origin/main and CI_QUEUE_ENTRY=0.
 // --queue sets CI_QUEUE_ENTRY=1, under which check-compat.sh demands a
 // single-parent HEAD and judges HEAD^..HEAD, which is wrong on such a branch
-// (control-plane#2249's review); its behaviour must not change.
+// (control-plane#2249's review); its behaviour must not change. --queue drops
+// vet but keeps the scoped forge lint, --optional-deps-guard among its lanes:
+// it once implied --skip-lint, and #2696 and #2662 turned main red on findings
+// that lint names.
 func TestMergeGateSkipLint(t *testing.T) {
 	testkit.Slow(t, "runs merge-gate.sh's phase launch under bash over throwaway git repositories",
 		testkit.Inputs("scripts/merge-gate.sh"))
@@ -48,12 +52,13 @@ func TestMergeGateSkipLint(t *testing.T) {
 		`set -uo pipefail`,
 		`phase() { printf '%s|%s\n' "$1" "${*:2}" >>"$L/phases"; }`,
 		`build_check() { :; }`,
-		`fail=0 typecheck=false gofull=false half=2 quarter=2 test_lanes=go`,
-		`forge=(forge) lint_lanes=() notes=() pids=() run_plan=$PLAN`,
+		`fail=0 typecheck=false gofull=false half=2 quarter=2 test_lanes=go webdemo=${WEBDEMO:-false}`,
+		`forge=(forge) notes=() pids=() run_plan=$PLAN`,
+		extract(`lint_lanes=(`, "\n# The whole vitest suite"),
 		extract(`base="" amend=0`, "\nexport GOFLAGS"),
 		extract(`[ -n "$base" ] || base=$(git merge-base`, "\nL=${MG_LOGDIR"),
 		`L=$LOGDIR`,
-		extract(`if [ "$queue" = 1 ]; then echo queue >"$L/tier"`, "\npin="),
+		extract(`if [ "$skip_lint" = 1 ]; then echo skip-lint >"$L/tier"`, "\npin="),
 		// As the gate computes it: the working tree against the base.
 		`files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)`,
 		extract("if [ \"$fail\" = 0 ]; then\n  phase build build_check", "\n# Every launched phase is waited for"),
@@ -69,12 +74,15 @@ func TestMergeGateSkipLint(t *testing.T) {
 		wantPhases []string
 		noPhases   []string
 		queueEntry string // CI_QUEUE_ENTRY the compat phases get
+		webDemo    bool   // the plan selected the forge demo build
 	}{
-		{"merge tier", true, nil, "", []string{"build", "test", "lint", "vet", "proto", "migsafety", "migorder"}, nil, "0"},
-		{"skip-lint", true, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "proto", "migsafety", "migorder"}, []string{"vet", "lint"}, "0"},
-		{"skip-lint keeps buf lint without a proto change", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "proto", "migsafety"}, []string{"vet", "lint"}, "0"},
-		{"queue", true, []string{"--queue"}, "queue", []string{"build", "test", "proto", "migsafety", "migorder"}, []string{"vet", "lint"}, "1"},
-		{"queue skips buf lint without a proto change", false, []string{"--queue"}, "queue", []string{"build", "test", "migsafety"}, []string{"vet", "lint", "proto"}, "1"},
+		{"merge tier", true, nil, "", []string{"build", "test", "lint", "vet", "proto", "migsafety", "migorder"}, []string{"demo"}, "0", false},
+		{"skip-lint", true, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "proto", "migsafety", "migorder"}, []string{"vet", "lint"}, "0", false},
+		{"skip-lint keeps buf lint without a proto change", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "proto", "migsafety"}, []string{"vet", "lint"}, "0", false},
+		{"queue", true, []string{"--queue"}, "queue", []string{"build", "test", "lint", "proto", "migsafety", "migorder"}, []string{"vet"}, "1", false},
+		{"queue skips buf lint without a proto change", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "migsafety"}, []string{"vet", "proto"}, "1", false},
+		{"queue builds a selected demo bundle", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "demo"}, []string{"vet"}, "1", true},
+		{"queue with --skip-lint lints nothing", false, []string{"--queue", "--skip-lint"}, "skip-lint", []string{"build", "test"}, []string{"vet", "lint"}, "1", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo, mergeBase := branchWithMergeOfMain(t, tc.proto)
@@ -85,7 +93,7 @@ func TestMergeGateSkipLint(t *testing.T) {
 			}
 			cmd := exec.Command("bash", append([]string{"-c", harness, "merge-gate"}, tc.flags...)...)
 			cmd.Dir = repo
-			cmd.Env = append(os.Environ(), "LOGDIR="+logs, "PLAN="+plan)
+			cmd.Env = append(os.Environ(), "LOGDIR="+logs, "PLAN="+plan, fmt.Sprintf("WEBDEMO=%v", tc.webDemo))
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("harness: %v\n%s", err, out)
 			}
@@ -113,6 +121,13 @@ func TestMergeGateSkipLint(t *testing.T) {
 			for _, n := range tc.noPhases {
 				if _, ok := phases[n]; ok {
 					t.Errorf("phase %s ran: %s", n, phases[n])
+				}
+			}
+			if args, ok := phases["lint"]; ok {
+				for _, lane := range []string{"--tracing", "--optional-deps-guard"} {
+					if !strings.Contains(args, " "+lane) {
+						t.Errorf("lint runs %q, without %s", args, lane)
+					}
 				}
 			}
 			for _, n := range []string{"proto", "migsafety"} {

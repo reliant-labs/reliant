@@ -73,6 +73,7 @@ import {
   type ListedWorkflow,
   type WorkflowListRow,
 } from "./workflowsView";
+import { AutomationsFundingBanner } from "../../Automations/AutomationsFundingBanner";
 
 type ShowChoice = WorkflowsShowKey | "all";
 
@@ -114,6 +115,7 @@ export function WorkflowsListPage() {
   return (
     <div className="space-y-4">
       <WorkflowsHeader projectId={scope.currentProjectId} />
+      <AutomationsFundingBanner />
       {projectsLoading && !scope.currentProjectId ? <WorkflowsSkeleton /> : <WorkflowsBody />}
     </div>
   );

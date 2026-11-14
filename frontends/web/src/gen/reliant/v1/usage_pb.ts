@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/usage.proto.
  */
 export const file_reliant_v1_usage: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL3VzYWdlLnByb3RvEgpyZWxpYW50LnYxItwCChJHZXRMTE1Vc2FnZVJlcXVlc3QSLgoKc3RhcnRfZGF0ZRgBIAEoCUIaukgXchUyE15cZHs0fS1cZHsyfS1cZHsyfSQSLAoIZW5kX2RhdGUYAiABKAlCGrpIF3IVMhNeXGR7NH0tXGR7Mn0tXGR7Mn0kEi0KCGdyb3VwX2J5GAMgASgOMhsucmVsaWFudC52MS5MTE1Vc2FnZUdyb3VwQnkSFQoIcHJvdmlkZXIYBCABKAlIAIgBARIvCglhdXRoX21vZGUYBSABKA4yFy5yZWxpYW50LnYxLkxMTUF1dGhNb2RlSAGIAQESEgoFbW9kZWwYBiABKAlIAogBARIsCgdwdXJwb3NlGAcgASgOMhYucmVsaWFudC52MS5MTE1QdXJwb3NlSAOIAQFCCwoJX3Byb3ZpZGVyQgwKCl9hdXRoX21vZGVCCAoGX21vZGVsQgoKCF9wdXJwb3NlItcBCg5MTE1Vc2FnZUJ1Y2tldBILCgNrZXkYASABKAkSDQoFY2FsbHMYAiABKAMSEwoLZXJyb3JfY2FsbHMYAyABKAMSFAoMaW5wdXRfdG9rZW5zGAQgASgDEhUKDW91dHB1dF90b2tlbnMYBSABKAMSGQoRY2FjaGVfcmVhZF90b2tlbnMYBiABKAMSGgoSY2FjaGVfd3JpdGVfdG9rZW5zGAcgASgDEhgKEGxhdGVuY3lfbXNfdG90YWwYCCABKAMSFgoOYXZnX2xhdGVuY3lfbXMYCSABKAEikQIKE0dldExMTVVzYWdlUmVzcG9uc2USLQoIZ3JvdXBfYnkYASABKA4yGy5yZWxpYW50LnYxLkxMTVVzYWdlR3JvdXBCeRIrCgdidWNrZXRzGAIgAygLMhoucmVsaWFudC52MS5MTE1Vc2FnZUJ1Y2tldBIqCgZ0b3RhbHMYAyABKAsyGi5yZWxpYW50LnYxLkxMTVVzYWdlQnVja2V0EjYKDGNvbXBsZXRlbmVzcxgEIAEoDjIgLnJlbGlhbnQudjEuTExNVXNhZ2VDb21wbGV0ZW5lc3MSDQoFYXNfb2YYBSABKAkSHQoVZGV0YWlsX2F2YWlsYWJsZV9mcm9tGAYgASgJEgwKBG5vdGUYByABKAkqmAEKC0xMTUF1dGhNb2RlEh0KGUxMTV9BVVRIX01PREVfVU5TUEVDSUZJRUQQABIZChVMTE1fQVVUSF9NT0RFX01BTkFHRUQQARIWChJMTE1fQVVUSF9NT0RFX0JZT0sQAhIeChpMTE1fQVVUSF9NT0RFX1NVQlNDUklQVElPThADEhcKE0xMTV9BVVRIX01PREVfTE9DQUwQBCqUAQoKTExNUHVycG9zZRIbChdMTE1fUFVSUE9TRV9VTlNQRUNJRklFRBAAEhQKEExMTV9QVVJQT1NFX0NIQVQQARIaChZMTE1fUFVSUE9TRV9DT01QQUNUSU9OEAISFQoRTExNX1BVUlBPU0VfVElUTEUQAxIgChxMTE1fUFVSUE9TRV9EUkFGVF9BVVRPTUFUSU9OEAQq0gEKD0xMTVVzYWdlR3JvdXBCeRIiCh5MTE1fVVNBR0VfR1JPVVBfQllfVU5TUEVDSUZJRUQQABIaChZMTE1fVVNBR0VfR1JPVVBfQllfREFZEAESHAoYTExNX1VTQUdFX0dST1VQX0JZX01PREVMEAISHwobTExNX1VTQUdFX0dST1VQX0JZX1BST1ZJREVSEAMSIAocTExNX1VTQUdFX0dST1VQX0JZX0FVVEhfTU9ERRAEEh4KGkxMTV9VU0FHRV9HUk9VUF9CWV9QVVJQT1NFEAUqhwEKFExMTVVzYWdlQ29tcGxldGVuZXNzEiYKIkxMTV9VU0FHRV9DT01QTEVURU5FU1NfVU5TUEVDSUZJRUQQABIjCh9MTE1fVVNBR0VfQ09NUExFVEVORVNTX0NPTVBMRVRFEAESIgoeTExNX1VTQUdFX0NPTVBMRVRFTkVTU19QQVJUSUFMEAIyogEKDFVzYWdlU2VydmljZRKRAQoLR2V0TExNVXNhZ2USHi5yZWxpYW50LnYxLkdldExMTVVzYWdlUmVxdWVzdBofLnJlbGlhbnQudjEuR2V0TExNVXNhZ2VSZXNwb25zZSJBorsYPTo7OjlyZWFkLW9ubHk6IHRoZSBjYWxsZXIncyBvd24gdXNhZ2UgdG90YWxzOyBjaGFuZ2VzIG5vdGhpbmdCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge]);
+  fileDesc("ChZyZWxpYW50L3YxL3VzYWdlLnByb3RvEgpyZWxpYW50LnYxIvwCChJHZXRMTE1Vc2FnZVJlcXVlc3QSLgoKc3RhcnRfZGF0ZRgBIAEoCUIaukgXchUyE15cZHs0fS1cZHsyfS1cZHsyfSQSLAoIZW5kX2RhdGUYAiABKAlCGrpIF3IVMhNeXGR7NH0tXGR7Mn0tXGR7Mn0kEi0KCGdyb3VwX2J5GAMgASgOMhsucmVsaWFudC52MS5MTE1Vc2FnZUdyb3VwQnkSFQoIcHJvdmlkZXIYBCABKAlIAIgBARIvCglhdXRoX21vZGUYBSABKA4yFy5yZWxpYW50LnYxLkxMTUF1dGhNb2RlSAGIAQESEgoFbW9kZWwYBiABKAlIAogBARIsCgdwdXJwb3NlGAcgASgOMhYucmVsaWFudC52MS5MTE1QdXJwb3NlSAOIAQESEwoGb3JnX2lkGAggASgJSASIAQFCCwoJX3Byb3ZpZGVyQgwKCl9hdXRoX21vZGVCCAoGX21vZGVsQgoKCF9wdXJwb3NlQgkKB19vcmdfaWQi5gEKDkxMTVVzYWdlQnVja2V0EgsKA2tleRgBIAEoCRINCgVjYWxscxgCIAEoAxITCgtlcnJvcl9jYWxscxgDIAEoAxIUCgxpbnB1dF90b2tlbnMYBCABKAMSFQoNb3V0cHV0X3Rva2VucxgFIAEoAxIZChFjYWNoZV9yZWFkX3Rva2VucxgGIAEoAxIaChJjYWNoZV93cml0ZV90b2tlbnMYByABKAMSGAoQbGF0ZW5jeV9tc190b3RhbBgIIAEoAxIWCg5hdmdfbGF0ZW5jeV9tcxgJIAEoARINCgVsYWJlbBgKIAEoCSKRAgoTR2V0TExNVXNhZ2VSZXNwb25zZRItCghncm91cF9ieRgBIAEoDjIbLnJlbGlhbnQudjEuTExNVXNhZ2VHcm91cEJ5EisKB2J1Y2tldHMYAiADKAsyGi5yZWxpYW50LnYxLkxMTVVzYWdlQnVja2V0EioKBnRvdGFscxgDIAEoCzIaLnJlbGlhbnQudjEuTExNVXNhZ2VCdWNrZXQSNgoMY29tcGxldGVuZXNzGAQgASgOMiAucmVsaWFudC52MS5MTE1Vc2FnZUNvbXBsZXRlbmVzcxINCgVhc19vZhgFIAEoCRIdChVkZXRhaWxfYXZhaWxhYmxlX2Zyb20YBiABKAkSDAoEbm90ZRgHIAEoCSqYAQoLTExNQXV0aE1vZGUSHQoZTExNX0FVVEhfTU9ERV9VTlNQRUNJRklFRBAAEhkKFUxMTV9BVVRIX01PREVfTUFOQUdFRBABEhYKEkxMTV9BVVRIX01PREVfQllPSxACEh4KGkxMTV9BVVRIX01PREVfU1VCU0NSSVBUSU9OEAMSFwoTTExNX0FVVEhfTU9ERV9MT0NBTBAEKpQBCgpMTE1QdXJwb3NlEhsKF0xMTV9QVVJQT1NFX1VOU1BFQ0lGSUVEEAASFAoQTExNX1BVUlBPU0VfQ0hBVBABEhoKFkxMTV9QVVJQT1NFX0NPTVBBQ1RJT04QAhIVChFMTE1fUFVSUE9TRV9USVRMRRADEiAKHExMTV9QVVJQT1NFX0RSQUZUX0FVVE9NQVRJT04QBCqSAgoPTExNVXNhZ2VHcm91cEJ5EiIKHkxMTV9VU0FHRV9HUk9VUF9CWV9VTlNQRUNJRklFRBAAEhoKFkxMTV9VU0FHRV9HUk9VUF9CWV9EQVkQARIcChhMTE1fVVNBR0VfR1JPVVBfQllfTU9ERUwQAhIfChtMTE1fVVNBR0VfR1JPVVBfQllfUFJPVklERVIQAxIgChxMTE1fVVNBR0VfR1JPVVBfQllfQVVUSF9NT0RFEAQSHgoaTExNX1VTQUdFX0dST1VQX0JZX1BVUlBPU0UQBRIeChpMTE1fVVNBR0VfR1JPVVBfQllfRlVORElORxAGEh4KGkxMTV9VU0FHRV9HUk9VUF9CWV9BQ0NPVU5UEAcqhwEKFExMTVVzYWdlQ29tcGxldGVuZXNzEiYKIkxMTV9VU0FHRV9DT01QTEVURU5FU1NfVU5TUEVDSUZJRUQQABIjCh9MTE1fVVNBR0VfQ09NUExFVEVORVNTX0NPTVBMRVRFEAESIgoeTExNX1VTQUdFX0NPTVBMRVRFTkVTU19QQVJUSUFMEAIyogEKDFVzYWdlU2VydmljZRKRAQoLR2V0TExNVXNhZ2USHi5yZWxpYW50LnYxLkdldExMTVVzYWdlUmVxdWVzdBofLnJlbGlhbnQudjEuR2V0TExNVXNhZ2VSZXNwb25zZSJBorsYPTo7OjlyZWFkLW9ubHk6IHRoZSBjYWxsZXIncyBvd24gdXNhZ2UgdG90YWxzOyBjaGFuZ2VzIG5vdGhpbmdCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge]);
 
 /**
  * @generated from message reliant.v1.GetLLMUsageRequest
@@ -66,6 +66,14 @@ export type GetLLMUsageRequest = Message<"reliant.v1.GetLLMUsageRequest"> & {
    * @generated from field: optional reliant.v1.LLMPurpose purpose = 7;
    */
   purpose?: LLMPurpose | undefined;
+
+  /**
+   * Only calls made in chats and runs of this organization. Unset: every
+   * org, and calls in no org. The usage is still only the caller's own.
+   *
+   * @generated from field: optional string org_id = 8;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -83,8 +91,14 @@ export const GetLLMUsageRequestSchema: GenMessage<GetLLMUsageRequest> = /*@__PUR
 export type LLMUsageBucket = Message<"reliant.v1.LLMUsageBucket"> & {
   /**
    * The group: a UTC day "YYYY-MM-DD", a model id, a provider id, an auth mode
-   * name ("managed", "byok", "subscription", "local") or a purpose name
-   * ("chat", "compaction", "title", "draft_automation"), per group_by.
+   * name ("managed", "byok", "subscription", "local"), a purpose name
+   * ("chat", "compaction", "title", "draft_automation"), a funding name or a
+   * provider account id, per group_by.
+   *
+   * By funding and by account, calls are only broken down while their
+   * individual records are kept (detail_available_from on): older days are
+   * summed into the bucket with key "", as are calls made before funding and
+   * account were recorded.
    *
    * @generated from field: string key = 1;
    */
@@ -135,6 +149,15 @@ export type LLMUsageBucket = Message<"reliant.v1.LLMUsageBucket"> & {
    * @generated from field: double avg_latency_ms = 9;
    */
   avgLatencyMs: number;
+
+  /**
+   * A name for key a person can read, where key is an id: the account's
+   * label when grouping by account ("" when the account no longer exists, or
+   * for the "" bucket). Empty for every other group_by.
+   *
+   * @generated from field: string label = 10;
+   */
+  label: string;
 };
 
 /**
@@ -334,6 +357,24 @@ export enum LLMUsageGroupBy {
    * @generated from enum value: LLM_USAGE_GROUP_BY_PURPOSE = 5;
    */
   LLM_USAGE_GROUP_BY_PURPOSE = 5,
+
+  /**
+   * Who paid for the call: "org_key" (an org's own API key), "org_seat" (a
+   * seat an org pays for), "org_wallet" (Reliant credits an org pays for),
+   * "personal" (the caller's own account), "local" (a local model), or ""
+   * when it was not recorded (see GetLLMUsageResponse.detail_available_from).
+   *
+   * @generated from enum value: LLM_USAGE_GROUP_BY_FUNDING = 6;
+   */
+  LLM_USAGE_GROUP_BY_FUNDING = 6,
+
+  /**
+   * The provider account that served the call (provider_accounts id), with
+   * its label; "" when it was not recorded.
+   *
+   * @generated from enum value: LLM_USAGE_GROUP_BY_ACCOUNT = 7;
+   */
+  LLM_USAGE_GROUP_BY_ACCOUNT = 7,
 }
 
 /**
@@ -387,7 +428,9 @@ export const LLMUsageCompletenessSchema: GenEnum<LLMUsageCompleteness> = /*@__PU
  * (prompts, replies and tool I/O are never recorded). Every rpc is scoped to
  * the authenticated user: there is no user_id on any request, and a machine
  * credential (an rlat_ access token) acts as the user it was minted for.
- * Members' own-key usage is not visible to an organization's admins.
+ * Members' own-key usage is not visible to an organization's admins: what
+ * an org's admins read is OrgUsageService, which only ever holds what the
+ * org paid for.
  *
  * @generated from service reliant.v1.UsageService
  */

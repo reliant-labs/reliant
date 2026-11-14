@@ -264,6 +264,7 @@ func newTriggerCreateCmd() *cobra.Command {
 				return conn.annotate(fmt.Errorf("creating trigger: %w", err))
 			}
 			printTriggerDetail(cmd.OutOrStdout(), resp.Msg.GetTrigger())
+			printFundingWarning(cmd.OutOrStdout(), resp.Msg.GetFundingWarning())
 			return nil
 		},
 	}
@@ -274,6 +275,7 @@ func newTriggerCreateCmd() *cobra.Command {
 
 func newTriggerUpdateCmd() *cobra.Command {
 	var flags triggerDefinitionFlags
+	var orgAccountsOnly bool
 	cmd := &cobra.Command{
 		Use:     "update <id-or-name>",
 		PreRunE: refuseFromAgentShell,
@@ -282,7 +284,12 @@ func newTriggerUpdateCmd() *cobra.Command {
 
 This is a full replacement, not a patch: every field is written as given, so
 flags you omit are written as their zero value. The exception is enabled,
-which is left as it is unless you pass --disabled or --disabled=false.`,
+which is left as it is unless you pass --disabled or --disabled=false.
+
+--org-accounts-only makes the trigger's runs spend only its organization's AI
+accounts, never your own. Given alone, it changes only that and keeps the rest
+of the stored definition. The CLI only tightens: letting an automation spend
+your own accounts is done in the app.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conn, err := resolveConnection(cmd)
@@ -299,7 +306,9 @@ which is left as it is unless you pass --disabled or --disabled=false.`,
 			if flags.projectID == "" && flags.projectPath == "" {
 				flags.projectID = existing.GetProjectId()
 			}
-			def, err := flags.definition(cmd.Context(), cmd, conn, true)
+			def, err := updateDefinition(cmd, orgAccountsOnly, existing, func() (*reliantv1.TriggerDefinition, error) {
+				return flags.definition(cmd.Context(), cmd, conn, true)
+			})
 			if err != nil {
 				return err
 			}
@@ -309,11 +318,13 @@ which is left as it is unless you pass --disabled or --disabled=false.`,
 				return conn.annotate(fmt.Errorf("updating trigger: %w", err))
 			}
 			printTriggerDetail(cmd.OutOrStdout(), resp.Msg.GetTrigger())
+			printFundingWarning(cmd.OutOrStdout(), resp.Msg.GetFundingWarning())
 			return nil
 		},
 	}
 	flags.bind(cmd)
 	cmd.Flags().BoolVar(&flags.disabled, "disabled", false, "Pause the trigger (omit to leave its current state alone)")
+	cmd.Flags().BoolVar(&orgAccountsOnly, orgAccountsOnlyFlag, false, "Run only on the trigger's organization's AI accounts, never your own (alone: changes only that)")
 	return cmd
 }
 
@@ -415,6 +426,7 @@ definition and firing history survive and re-enabling needs no re-derivation.`,
 				return conn.annotate(fmt.Errorf("%s trigger: %w", verb, err))
 			}
 			printTriggerDetail(cmd.OutOrStdout(), resp.Msg.GetTrigger())
+			printFundingWarning(cmd.OutOrStdout(), resp.Msg.GetFundingWarning())
 			return nil
 		},
 	}
@@ -700,6 +712,10 @@ func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
 	fmt.Fprintf(w, "Daemon:\t%s\n", orDash(t.GetDaemonId()))
 	fmt.Fprintf(w, "Workflow:\t%s\n", orDash(t.GetWorkflow()))
 	fmt.Fprintf(w, "Acting as:\t%s\n", actingIdentityLabel(t.GetActingIdentity()))
+	if org := t.GetOrgId(); org != "" {
+		fmt.Fprintf(w, "Organization:\t%s\n", org)
+		fmt.Fprintf(w, "Unattended funding:\t%s\n", unattendedFundingLabel(t.GetUnattendedFunding()))
+	}
 	if src := t.GetDefinitionSource(); src != nil {
 		fmt.Fprintf(w, "Definition:\t%s\n", src.GetSummary())
 		for _, warning := range src.GetWarnings() {

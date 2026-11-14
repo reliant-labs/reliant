@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -372,6 +373,38 @@ type OrgMembership struct {
 	// the field). It only ever chooses a default, never grants anything.
 	OrgLiveMembers      int32
 	OrgLiveMembersKnown bool
+	// OrgScopes are the org-administration scopes ("billing:read", ...) the
+	// member is GRANTED org-wide in OrgID, read by control-plane at the call
+	// (control-plane#2759). Empty when Member is false and from a control
+	// plane that predates the field: a caller reads empty as "holds none" and
+	// refuses what it gates (fail closed; docs/design/org-provider-accounts.md
+	// §5 there). A set, not a slice, so an OrgMembership stays comparable.
+	OrgScopes OrgScopeSet
+}
+
+// OrgScopeSet is a set of org-administration scopes, held as their names
+// joined by single spaces in control-plane's order. The zero value holds none.
+type OrgScopeSet string
+
+// NewOrgScopeSet returns the set of scopes, dropping empty and repeated names.
+func NewOrgScopeSet(scopes ...string) OrgScopeSet {
+	var kept []string
+	for _, s := range scopes {
+		s = strings.TrimSpace(s)
+		if s == "" || strings.ContainsAny(s, " \t\n") || slices.Contains(kept, s) {
+			continue
+		}
+		kept = append(kept, s)
+	}
+	return OrgScopeSet(strings.Join(kept, " "))
+}
+
+// List returns the scopes in the set, in order; nil when it holds none.
+func (s OrgScopeSet) List() []string { return strings.Fields(string(s)) }
+
+// Has reports whether the set holds scope.
+func (s OrgScopeSet) Has(scope string) bool {
+	return scope != "" && slices.Contains(strings.Fields(string(s)), scope)
 }
 
 // ErrUnsupported reports a control plane that predates the rpc asked for. A
@@ -387,6 +420,7 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 		Role           string     `json:"role"`
 		MemberSince    *time.Time `json:"memberSince"`
 		OrgLiveMembers *int32     `json:"orgLiveMembers"`
+		OrgScopes      []string   `json:"orgScopes"`
 	}
 	body := map[string]any{"userId": userID}
 	if orgID != "" {
@@ -409,6 +443,7 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 		if out.OrgLiveMembers != nil {
 			m.OrgLiveMembers, m.OrgLiveMembersKnown = *out.OrgLiveMembers, true
 		}
+		m.OrgScopes = NewOrgScopeSet(out.OrgScopes...)
 	}
 	return m, nil
 }

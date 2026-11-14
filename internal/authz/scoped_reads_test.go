@@ -117,6 +117,7 @@ var userScopedReads = map[string]string{
 	"ListCommandFavorites":            readPersonal,
 	"ListDismissedInboxItemIDs":       readPersonal,
 	"ListLLMUsageDaily":               readPersonal,
+	"ListLLMUsageDetail":              readPersonal,
 	"ListMachinePoolsForUser":         readPersonal,
 	"ListModelEndpoints":              readPersonal,
 	"ListProviderAccounts":            readPersonal,

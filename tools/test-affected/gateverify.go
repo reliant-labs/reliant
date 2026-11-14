@@ -82,6 +82,9 @@ func verifyGate(planPath, dir string) []string {
 	if pl.MigOrder.Full {
 		obliged["migorder"] = "the plan selected the migration-order lane"
 	}
+	if pl.WebDemo.Full {
+		obliged["demo"] = "the plan selected the forge demo bundle's build"
+	}
 	var migration, subdir, web bool
 	for _, f := range pl.Files {
 		p := f.Path
@@ -101,16 +104,19 @@ func verifyGate(planPath, dir string) []string {
 	if pl.Web.Full || len(pl.Web.Tests) > 0 || web {
 		obliged["typecheck"] = "a web lane or frontends/web/ change needs the type-check"
 	}
-	// The merge queue's tier and --skip-lint (merge-gate.sh writes <dir>/tier:
-	// "queue" or "skip-lint") leave vet and the scoped forge lint to the
-	// release gate, which runs both over the whole module: the queue's budget
-	// is five minutes (owner, 2026-11-01).
-	skipLint := false
+	// merge-gate.sh writes <dir>/tier. --skip-lint ("skip-lint") leaves vet
+	// and the scoped forge lint to the release gate, which runs both over the
+	// whole module. The merge queue's tier ("queue") leaves vet to it (the
+	// queue's golangci (changed) job runs beside the gate) but runs the
+	// scoped forge lint: with none, #2696 and #2662 reached main on findings
+	// forge lint names in about a minute (the 2026-11-13 backtest).
+	skipLint, skipVet := false, false
 	if tb, err := os.ReadFile(filepath.Join(dir, "tier")); err == nil {
 		tier := strings.TrimSpace(string(tb))
-		skipLint = tier == "queue" || tier == "skip-lint"
+		skipLint = tier == "skip-lint"
+		skipVet = tier == "queue" || tier == "skip-lint"
 	}
-	if !skipLint && (len(pl.Go.Build) > 0 || len(pl.Go.Packages) > 0 || pl.Go.Full) {
+	if !skipVet && (len(pl.Go.Build) > 0 || len(pl.Go.Packages) > 0 || pl.Go.Full) {
 		obliged["vet"] = "production build reach and affected test packages are vetted"
 	}
 	if migration {
