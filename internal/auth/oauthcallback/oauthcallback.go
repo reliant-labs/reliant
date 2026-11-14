@@ -168,6 +168,11 @@ func (s *callbackServer) awaitResult(ctx context.Context) (*Result, error) {
 
 var openBrowser = OpenBrowser
 
+// wrapHandler puts a handler in front of the callback server's. Identity in
+// production; TestPortFreedPromptlyAfterCancel holds a request open in it to
+// keep the graceful drain running while it checks the port.
+var wrapHandler = func(h http.Handler) http.Handler { return h }
+
 // reuseProbeClient asks "is a compatible listener there?" — a local,
 // immediate question, so a short timeout is right.
 var reuseProbeClient = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 2 * time.Second})
@@ -308,7 +313,7 @@ func RunWithConfig(ctx context.Context, authorizeURLTemplate string, cfg Callbac
 		authorizeURL = strings.ReplaceAll(authorizeURLTemplate, "{redirect_uri}", url.QueryEscape(server.redirectURI))
 	}
 
-	httpServer := &http.Server{Handler: server.handler(), ReadHeaderTimeout: 10 * time.Second}
+	httpServer := &http.Server{Handler: wrapHandler(server.handler()), ReadHeaderTimeout: 10 * time.Second}
 	go httpServer.Serve(listener) //nolint:errcheck // best-effort serve in background goroutine
 
 	// Hand off to any queued flows before dropping the listener, then shut
