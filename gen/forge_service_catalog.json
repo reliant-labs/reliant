@@ -53424,6 +53424,18 @@
     },
     {
       "consumer": "OrgProviderAccount",
+      "field": "ChatWaker",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.OrgChatWaker",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database",
+        "TemporalClient"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgProviderAccount",
       "field": "Seats",
       "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Service",
       "methods": [],

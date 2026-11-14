@@ -72,6 +72,21 @@ type Deps struct {
 	//
 	// forge:optional-dep
 	Seats seatmatch.Service
+	// ChatWaker wakes the org's chats a missing or refused org account
+	// blocked, when an org account is added, resumed, re-keyed or granted:
+	// an automation that runs only on the org's accounts waits paused for one
+	// (control-plane docs/design/org-provider-accounts.md §11.4). Nil wakes
+	// nothing; the paused chats then go on at their own retry or a person's
+	// message.
+	//
+	// forge:optional-dep
+	ChatWaker OrgChatWaker
+}
+
+// OrgChatWaker sends a capacity wake to the org's blocked chats. The ids are
+// the runs it could not signal.
+type OrgChatWaker interface {
+	WakeOrgChats(ctx context.Context, orgID, why string) ([]string, error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

@@ -26,6 +26,7 @@ message CLIConfig {
       {path: ["github"]},
       {path: ["machine"]},
       {path: ["project"]},
+      {path: ["providers"]},
       {path: ["trigger"]},
       {path: ["workflow"]}
     ]

@@ -667,42 +667,90 @@ func encodeCleanupMetadata(m *core.CleanupMetadata) (*string, error) {
 // time, and from then on only ages the worktree's last activity.
 const providerWaitSQL = `pb.waiting_since IS NOT NULL`
 
-// worktreeRunActivitySQL is what the chats working in each worktree say
-// about it (core.WorktreeRunActivity). A chat works in a worktree when it is
-// bound to it or one of its threads is (a sub-agent spawned into it). A run
-// counts while it is pending, active, or paused awaiting a resume — the same
-// "live" the recovery admission triggers use — or while one of its threads
-// is parked on a provider wait (a usage limit, a rate-limit backoff) whose
-// resume time has not passed, whatever its run's state (providerWaitSQL).
-// The last activity is the latest of the worktree's own stamps and, for each
-// such chat, its last_active, its runs' start and stop times, and the start
-// and resume time of each wait it holds. GREATEST skips NULLs.
+// worktreeRunActivitySQL is what the runs working in each worktree say about
+// it (core.WorktreeRunActivity). Two kinds of binding put a run in a worktree,
+// and they are scoped differently:
+//
+//   - A CHAT bound to it (chats.worktree_id): every run of that chat works
+//     there, so every run of the chat counts, with the chat's last_active.
+//   - A THREAD bound to it (threads.worktree_id: a sub-agent spawned into it):
+//     only that thread's own work counts — the runs on it (workflows.thread),
+//     the run that owns it (threads.workflow_id), their descendant runs
+//     (workflows.parent_id) up to one on a thread bound to another worktree,
+//     which that worktree judges instead (along with everything below it),
+//     the descendant threads that have no binding of
+//     their own (threads.parent_thread_id), and the provider waits of those
+//     threads. Never its parent chat's other runs: an orchestrator chat runs
+//     for days, and counting its runs held every worktree any of its
+//     sub-agents ever used as running forever, so none was ever reclaimed
+//     (bug 94324f76; designs/disk-audit-2026-11-12.md). This is a superset of
+//     where a thread's tools run (effectiveWorktreeID: its own binding, else
+//     the chat's), so it can only over-count.
+//
+// Narrowing what counts does not narrow admission: the admission triggers
+// (recovery_workflow_admission, recovery_thread_binding_admission) still lock
+// every worktree of the chat when a run starts or a binding changes, so a run
+// that resumes the thread either commits before the archive's row lock and is
+// seen here, or waits and finds the worktree archived, which its first tool
+// batch undoes (ReviveArchivedWorktree). A path an agent uses from elsewhere
+// raises worktrees.last_active (NoteWorktreeUse).
+//
+// A run counts while it is pending, active, or paused awaiting a resume — the
+// same "live" the admission triggers use — or while a thread in scope is
+// parked on a provider wait (a usage limit, a rate-limit backoff) whose resume
+// time has not passed, whatever its run's state (providerWaitSQL). The last
+// activity is the latest of the worktree's own stamps and of everything in
+// scope: a bound chat's last_active, each run's start and stop times, each
+// thread's creation, and the start and resume time of each wait. GREATEST
+// skips NULLs.
 const worktreeRunActivitySQL = `
-WITH bound AS (
-    SELECT c.id AS chat_id, c.worktree_id FROM chats c WHERE c.worktree_id IN (?0)
+WITH RECURSIVE lineage AS (
+    SELECT t.id AS thread_id, t.chat_id, t.worktree_id, t.workflow_id, t.created_at
+    FROM threads t WHERE t.worktree_id IN (?0)
     UNION
-    SELECT t.chat_id, t.worktree_id FROM threads t WHERE t.worktree_id IN (?0)
-), per_chat AS (
-    SELECT b.worktree_id,
-        (EXISTS (SELECT 1 FROM workflows f WHERE f.chat_id = b.chat_id
+    SELECT c.id, c.chat_id, l.worktree_id, c.workflow_id, c.created_at
+    FROM lineage l JOIN threads c ON c.chat_id = l.chat_id AND c.parent_thread_id = l.thread_id
+    WHERE c.worktree_id IS NULL
+), runs AS (
+    SELECT l.worktree_id, f.id
+    FROM lineage l JOIN workflows f ON f.chat_id = l.chat_id AND (f.thread = l.thread_id OR f.id = l.workflow_id)
+    UNION
+    SELECT r.worktree_id, f.id FROM runs r JOIN workflows f ON f.parent_id = r.id
+    WHERE NOT EXISTS (SELECT 1 FROM threads t WHERE t.chat_id = f.chat_id
+        AND (t.id = f.thread OR t.workflow_id = f.id)
+        AND t.worktree_id IS NOT NULL AND t.worktree_id <> r.worktree_id)
+), activity AS (
+    SELECT c.worktree_id,
+        (EXISTS (SELECT 1 FROM workflows f WHERE f.chat_id = c.id
             AND (f.state IN (1, 2) OR (f.state = 3 AND f.stop_reason = 3)))
-         OR EXISTS (SELECT 1 FROM provider_backoff pb WHERE pb.chat_id = b.chat_id
+         OR EXISTS (SELECT 1 FROM provider_backoff pb WHERE pb.chat_id = c.id
             AND ` + providerWaitSQL + ` AND pb.resume_at >= NOW())) AS running,
         GREATEST(c.last_active, (SELECT max(GREATEST(f.created_at, f.completed_at, f.worker_started_at, f.worker_stopped_at))
-            FROM workflows f WHERE f.chat_id = b.chat_id),
+            FROM workflows f WHERE f.chat_id = c.id),
             (SELECT max(GREATEST(pb.waiting_since, pb.resume_at)) FROM provider_backoff pb
-            WHERE pb.chat_id = b.chat_id AND ` + providerWaitSQL + `)) AS last_active
-    FROM bound b JOIN chats c ON c.id = b.chat_id
+            WHERE pb.chat_id = c.id AND ` + providerWaitSQL + `)) AS last_active
+    FROM chats c WHERE c.worktree_id IN (?0)
+    UNION ALL
+    SELECT r.worktree_id,
+        f.state IN (1, 2) OR (f.state = 3 AND f.stop_reason = 3),
+        GREATEST(f.created_at, f.completed_at, f.worker_started_at, f.worker_stopped_at)
+    FROM runs r JOIN workflows f ON f.id = r.id
+    UNION ALL
+    SELECT l.worktree_id, pb.resume_at >= NOW(), GREATEST(pb.waiting_since, pb.resume_at)
+    FROM lineage l JOIN provider_backoff pb ON pb.thread_id = l.thread_id AND pb.chat_id = l.chat_id
+    WHERE ` + providerWaitSQL + `
+    UNION ALL
+    SELECT l.worktree_id, false, l.created_at FROM lineage l
 )
 SELECT w.id AS worktree_id,
-    COALESCE(bool_or(p.running), false) AS running,
-    GREATEST(w.last_active, w.created_at, max(p.last_active)) AS last_active
-FROM worktrees w LEFT JOIN per_chat p ON p.worktree_id = w.id
+    COALESCE(bool_or(a.running), false) AS running,
+    GREATEST(w.last_active, w.created_at, max(a.last_active)) AS last_active
+FROM worktrees w LEFT JOIN activity a ON a.worktree_id = w.id
 WHERE w.id IN (?0)
 GROUP BY w.id, w.last_active, w.created_at`
 
-// WorktreeRunActivities reports, for each of ids that exists, whether a chat
-// run is going in it and when anything last happened in it.
+// WorktreeRunActivities reports, for each of ids that exists, whether a run is
+// going in it and when anything last happened in it (worktreeRunActivitySQL).
 func WorktreeRunActivities(ctx context.Context, db orm.Context, ids []string) (map[string]core.WorktreeRunActivity, error) {
 	out := make(map[string]core.WorktreeRunActivity, len(ids))
 	if len(ids) == 0 {

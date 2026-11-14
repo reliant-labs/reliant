@@ -199,6 +199,12 @@ type OrgPolicyEnforcementConfig struct {
 	// Allowed integrations (§4.3): a run's use of a connection, an
 	// integration trigger's routing and polling.
 	Integrations string `protobuf:"bytes,1,opt,name=integrations,proto3" json:"integrations,omitempty"`
+	// Approval floors (§4.4): the automation-approval floor of an org's
+	// triggers and the chat mode floor (auto runs as manual).
+	Approvals string `protobuf:"bytes,2,opt,name=approvals,proto3" json:"approvals,omitempty"`
+	// Machines (§4.6): `credentials: none` forced on the commands of an org's
+	// runs.
+	Machines string `protobuf:"bytes,3,opt,name=machines,proto3" json:"machines,omitempty"`
 	// MCP servers (§4.5): which servers' tools an org's agents are offered
 	// (call_llm) and may call (the tool executor).
 	Mcp           string `protobuf:"bytes,4,opt,name=mcp,proto3" json:"mcp,omitempty"`
@@ -239,6 +245,20 @@ func (*OrgPolicyEnforcementConfig) Descriptor() ([]byte, []int) {
 func (x *OrgPolicyEnforcementConfig) GetIntegrations() string {
 	if x != nil {
 		return x.Integrations
+	}
+	return ""
+}
+
+func (x *OrgPolicyEnforcementConfig) GetApprovals() string {
+	if x != nil {
+		return x.Approvals
+	}
+	return ""
+}
+
+func (x *OrgPolicyEnforcementConfig) GetMachines() string {
+	if x != nil {
+		return x.Machines
 	}
 	return ""
 }
@@ -520,10 +540,14 @@ const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	"\x16org_policy_enforcement\x18\x0e \x01(\v2-.reliant.config.v1.OrgPolicyEnforcementConfigR\x14orgPolicyEnforcement:\x17\xca\xc1\x18\x13\n" +
 	"\areliant\x1a\b\n" +
 	"\x06serverJ\x04\b\t\x10\n" +
-	"R\x06sentry\"\x99\x03\n" +
+	"R\x06sentry\"\xb4\x06\n" +
 	"\x1aOrgPolicyEnforcementConfig\x12\xca\x01\n" +
 	"\fintegrations\x18\x01 \x01(\tB\xa5\x01\x82\xce\x18\xa0\x01\n" +
-	",RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS\x1a\x05audit*THow the org integrations policy applies: off, audit (count, never refuse) or enforceJ\x03offJ\x05auditJ\aenforceR\fintegrations\x12\xad\x01\n" +
+	",RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS\x1a\x05audit*THow the org integrations policy applies: off, audit (count, never refuse) or enforceJ\x03offJ\x05auditJ\aenforceR\fintegrations\x12\xbd\x01\n" +
+	"\tapprovals\x18\x02 \x01(\tB\x9e\x01\x82\xce\x18\x99\x01\n" +
+	")RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS\x1a\x05audit*PHow the org approval floors apply: off, audit (count, change nothing) or enforceJ\x03offJ\x05auditJ\aenforceR\tapprovals\x12\xd8\x01\n" +
+	"\bmachines\x18\x03 \x01(\tB\xbb\x01\x82\xce\x18\xb6\x01\n" +
+	"(RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES\x1a\x05audit*nHow the org's forced credentials:none on agent commands applies: off, audit (count, change nothing) or enforceJ\x03offJ\x05auditJ\aenforceR\bmachines\x12\xad\x01\n" +
 	"\x03mcp\x18\x04 \x01(\tB\x9a\x01\x82\xce\x18\x95\x01\n" +
 	"#RELIANT_ORGS_POLICY_ENFORCEMENT_MCP\x1a\x05audit*RHow the org MCP server policy applies: off, audit (count, never refuse) or enforceJ\x03offJ\x05auditJ\aenforceR\x03mcp\"\x83\x02\n" +
 	"\rNetworkConfig\x12\xf1\x01\n" +

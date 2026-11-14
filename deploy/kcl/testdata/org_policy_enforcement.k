@@ -1,9 +1,10 @@
 # Fixture for cmd/reliant/cmd TestOrgPolicyEnforcementSwitchReachesTheProcess:
-# the org-policy enforcement switches (integrations, mcp) (ServerProcessConfig
+# the org-policy enforcement switches, integrations, MCP, approvals and machines
+# (ServerProcessConfig
 # org_policy_enforcement, control-plane docs/design/org-policies.md §7) as a
 # deployment projects them into the API server and the worker: at the schema
 # default (audit: count, refuse nothing — every enforcement point ships so),
-# as this repo's dev and demo envs render them, and flipped to enforce. It goes
+# as this repo's dev and demo envs render them, flipped to enforce, and off. It goes
 # through the same config_gen.workloadEnvMap and workloads bindings every env
 # uses, so a default that flips, an env-map entry that drops, or the variable
 # leaving a root's reach fails the test. prod's ServerProcessConfig is composed
@@ -27,7 +28,8 @@ _process = lambda server: config_gen.ServerProcessConfig -> config_gen.ReliantPr
     }
 }
 
-_enforce = config_gen.ServerProcessConfig {org_policy_enforcement = {integrations = "enforce", mcp = "enforce"}}
+_enforce = config_gen.ServerProcessConfig {org_policy_enforcement = {integrations = "enforce", approvals = "enforce", machines = "enforce", mcp = "enforce"}}
+_off = config_gen.ServerProcessConfig {org_policy_enforcement = {integrations = "off", approvals = "off", machines = "off", mcp = "off"}}
 
 api_default = config_gen.workloadEnvMap(_process(config_gen.ServerProcessConfig {}), workloads.api_server)
 worker_default = config_gen.workloadEnvMap(_process(config_gen.ServerProcessConfig {}), workloads.temporal_worker)
@@ -37,3 +39,5 @@ demo_api = config_gen.workloadEnvMap(democfg.reliant_process, workloads.api_serv
 demo_worker = config_gen.workloadEnvMap(democfg.reliant_process, workloads.temporal_worker)
 api_enforce = config_gen.workloadEnvMap(_process(_enforce), workloads.api_server)
 worker_enforce = config_gen.workloadEnvMap(_process(_enforce), workloads.temporal_worker)
+api_off = config_gen.workloadEnvMap(_process(_off), workloads.api_server)
+worker_off = config_gen.workloadEnvMap(_process(_off), workloads.temporal_worker)

@@ -169,6 +169,7 @@ func (l *Launcher) buildChatWorkflowInputsAt(
 		return nil, err
 	}
 	l.injectProviderPolicy(ctx, userID, chat.ID, inputs)
+	applyChatModeFloor(ctx, chat, inputs)
 	return inputs, nil
 }
 
@@ -439,6 +440,8 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 		NormalizeModelInputs(update, protoInputs)
 		coerceSingleValuesToLists(ctx, workflowName, update, protoInputs)
 	}
+	// A mode a later message sends is held to the org's floor too.
+	applyChatModeFloor(ctx, chat, update)
 	return update, nil
 }
 

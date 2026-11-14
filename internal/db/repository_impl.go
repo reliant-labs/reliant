@@ -99,8 +99,8 @@ func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) 
 	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
 }
 
-// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a bound
-// chat whose run is pending or active.
+// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
+// in them: a bound chat's run, or a bound thread's own (store.WorktreeRunActivities).
 func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error) {
 	return store.ListWorktreeIDsWithRunningChat(ctx, r.ORM(), worktreeIDs)
 }
@@ -4212,9 +4212,31 @@ func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 }
 
 func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error {
+	return r.updateWorkflowDraftDefinition(ctx, id, nil, name, slug, definition, status)
+}
+
+// ErrWorkflowDraftVersionConflict reports that a draft was written since the
+// version the caller read: its write was computed from content that is no
+// longer current, so it was not applied.
+var ErrWorkflowDraftVersionConflict = svcerr.Aborted("workflow draft changed since it was read")
+
+// UpdateWorkflowDraftDefinitionAtVersion is UpdateWorkflowDraftDefinition
+// applied only while the draft is still at version: a compare-and-swap under
+// the draft's row lock. A draft written since returns
+// ErrWorkflowDraftVersionConflict and is left as it is, so two edits computed
+// from the same read cannot both report success while one is lost.
+func (r *Repo) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status WorkflowDraftStatus) error {
+	return r.updateWorkflowDraftDefinition(ctx, id, &version, name, slug, definition, status)
+}
+
+func (r *Repo) updateWorkflowDraftDefinition(ctx context.Context, id string, version *int64, name string, slug string, definition string, status WorkflowDraftStatus) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if _, err := r.lockWritableDraft(txCtx, id); err != nil {
+		row, err := r.lockWritableDraft(txCtx, id)
+		if err != nil {
 			return err
+		}
+		if version != nil && row.Version != *version {
+			return ErrWorkflowDraftVersionConflict
 		}
 		if err := store.SetWorkflowDraftDefinition(txCtx, r.ORM(), id, name, slug, definition, status); err != nil {
 			return mapWorkflowSlugConflict(err, slug)

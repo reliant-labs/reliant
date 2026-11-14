@@ -169,7 +169,9 @@ func (d *ExecDeadline) watch(parent context.Context, timeout time.Duration, star
 
 // stop cancels the command unless it was released in the meantime: select
 // picks among ready cases at random, so a deadline that fires in the same
-// instant as an adoption must not take down the process just handed off.
+// instant as an adoption, or a caller that cancels after Release returned,
+// must not take down the process just handed off. Every stopping branch of
+// watch goes through here, so this check is the whole guarantee.
 func (d *ExecDeadline) stop(cause error) {
 	select {
 	case <-d.released:

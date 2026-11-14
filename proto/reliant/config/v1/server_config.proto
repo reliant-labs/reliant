@@ -91,6 +91,22 @@ message OrgPolicyEnforcementConfig {
     allowed_values: ["off", "audit", "enforce"]
     description: "How the org integrations policy applies: off, audit (count, never refuse) or enforce"
   }];
+  // Approval floors (§4.4): the automation-approval floor of an org's
+  // triggers and the chat mode floor (auto runs as manual).
+  string approvals = 2 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS"
+    default_value: "audit"
+    allowed_values: ["off", "audit", "enforce"]
+    description: "How the org approval floors apply: off, audit (count, change nothing) or enforce"
+  }];
+  // Machines (§4.6): `credentials: none` forced on the commands of an org's
+  // runs.
+  string machines = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES"
+    default_value: "audit"
+    allowed_values: ["off", "audit", "enforce"]
+    description: "How the org's forced credentials:none on agent commands applies: off, audit (count, change nothing) or enforce"
+  }];
   // MCP servers (§4.5): which servers' tools an org's agents are offered
   // (call_llm) and may call (the tool executor).
   string mcp = 4 [(forge.v1.config) = {

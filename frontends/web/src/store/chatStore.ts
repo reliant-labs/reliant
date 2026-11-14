@@ -111,6 +111,7 @@ import {
 import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { sendWithDaemonWait } from "../lib/daemon-retry";
 import { sendOnExistingChat } from "../lib/chatSendRouting";
+import { runRecipientChoices, type RunRecipientChoice } from "../lib/runRecipient";
 import { applyApprovalUpdate, approvalsFromCache } from "../hooks/approval-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
@@ -980,8 +981,10 @@ interface ChatStoreState {
   // for a final error; a caller that gave up retrying a machine calls it too.
   markSendFailed: (chatId: string, clientMessageId: string) => void;
   // Send a failed message again, the way the composer sends. Rejects if this
-  // attempt fails too (its bubble is "Not sent" again).
-  retryFailedSend: (chatId: string, clientMessageId: string) => Promise<void>;
+  // attempt fails too (its bubble is "Not sent" again). targetThread sends it
+  // to that thread instead of where it first went: one of the agents a
+  // run_recipient_ambiguous refusal listed (failedSendRecipients).
+  retryFailedSend: (chatId: string, clientMessageId: string, targetThread?: string) => Promise<void>;
   // Drop a failed message from the transcript.
   discardFailedSend: (chatId: string, clientMessageId: string) => void;
   loadMessages: (chatId: string) => Promise<void>;
@@ -1181,12 +1184,24 @@ interface SendPayload {
     targetThread?: string | null;
     selectedPresets?: Record<string, string>;
   };
+  // Set when the send was refused because several agents run in its run
+  // (run_recipient_ambiguous): the agents the refusal listed.
+  recipientChoices?: RunRecipientChoice[];
 }
 const sendPayloads = new Map<string, SendPayload>();
 
 /** Whether a failed send can still be sent again from here. */
 export function canRetryFailedSend(clientMessageId: string): boolean {
   return sendPayloads.has(clientMessageId);
+}
+
+/**
+ * The agents a failed send can be sent to instead: those its
+ * run_recipient_ambiguous refusal listed. [] for any other failure, and once
+ * the payload is gone (a reload).
+ */
+export function failedSendRecipients(clientMessageId: string): RunRecipientChoice[] {
+  return sendPayloads.get(clientMessageId)?.recipientChoices ?? [];
 }
 
 /**
@@ -1847,6 +1862,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // saying so — with a way to send it again — beats a dimmed bubble that
         // never resolves (a refused send leaves nothing on the server, #688).
         if (!isDaemonConnectingError(error)) {
+          const payload = sendPayloads.get(clientMessageId);
+          const choices = runRecipientChoices(error);
+          if (payload && choices.length > 0) payload.recipientChoices = choices;
           get().markSendFailed(chatId, clientMessageId);
         }
         throw error;
@@ -1955,7 +1973,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
   },
 
-  retryFailedSend: async (chatId: string, clientMessageId: string) => {
+  retryFailedSend: async (chatId: string, clientMessageId: string, targetThread?: string) => {
     const payload = sendPayloads.get(clientMessageId);
     if (!payload) {
       // A reload drops the payload, never the text on screen: leave the entry
@@ -1987,6 +2005,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             payload.attachmentIds,
             {
               ...payload.options,
+              ...(targetThread ? { targetThread } : {}),
               workflowParams,
               workflow: payload.options.workflow ?? null,
               clientMessageId: retryId,

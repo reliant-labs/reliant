@@ -276,6 +276,8 @@ func NewOrgPolicyResolver(d OrgPolicyResolverDeps) (*orgpolicy.Resolver, error) 
 	// none, every point admits everything anyway.
 	orgpolicy.SetProcessEnforcement(orgpolicy.PointIntegrations, orgpolicy.ParseEnforcement(d.Enforcement.GetIntegrations()))
 	orgpolicy.SetProcessEnforcement(orgpolicy.PointMCP, orgpolicy.ParseEnforcement(d.Enforcement.GetMcp()))
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointApprovals, orgpolicy.ParseEnforcement(d.Enforcement.GetApprovals()))
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointMachines, orgpolicy.ParseEnforcement(d.Enforcement.GetMachines()))
 	src, hosted := d.Authority.(orgpolicy.Source)
 	if !hosted {
 		orgpolicy.SetProcessResolver(nil)

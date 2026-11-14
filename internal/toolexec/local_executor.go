@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -194,6 +195,14 @@ func (e *LocalToolExecutor) executeTool(
 		toolContext.Repos = repos
 	}
 	if daemonClient != nil {
+		// An org that forces `credentials: none` on its runs' commands
+		// (the worker's OrgStamp; RemoteExecutor.applyMachinePolicy) gets it
+		// on every command this tool builds, here on the worker and on a
+		// machine that reads the stamp: the tool reaches a command only
+		// through this client.
+		if daemonpolicy.OrgStampFrom(contextMap).CredentialsForced() {
+			daemonClient = daemon.ForceCredentialsNone(daemonClient)
+		}
 		toolContext = toolContext.WithDaemon(daemonClient)
 	}
 	if e.mcpBinder != nil {

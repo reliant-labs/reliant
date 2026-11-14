@@ -184,6 +184,27 @@ func TestExecDeadline(t *testing.T) {
 		}
 	})
 
+	// reliant#2731: once Release has returned, a caller cancelling makes both
+	// of the watcher's released and parent.Done cases ready, and select picks
+	// one at random. When it picks parent.Done the watcher calls stop, so stop
+	// itself must refuse a released command. This drives that branch directly
+	// instead of hoping the scheduler picks it.
+	t.Run("stop after Release leaves the command running", func(t *testing.T) {
+		parent, cancel := context.WithCancel(context.Background())
+		d := StartExecDeadline(parent, time.Hour)
+		d.Release()
+		cancel()
+		d.stop(parent.Err())
+		d.stop(context.DeadlineExceeded)
+		d.stop(ErrWallClockDeadline)
+		if err := d.Context().Err(); err != nil {
+			t.Fatalf("released deadline's context is done (%v): a parent cancel that won the watcher's select killed an adopted command", err)
+		}
+		if d.Err() != nil {
+			t.Errorf("Err() = %v, want nil for a command that was never stopped", d.Err())
+		}
+	})
+
 	t.Run("context carries the caller's values", func(t *testing.T) {
 		type key struct{}
 		parent := context.WithValue(context.Background(), key{}, "v")
