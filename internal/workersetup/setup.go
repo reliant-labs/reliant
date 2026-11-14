@@ -380,6 +380,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	w.RegisterActivityWithOptions(pauses.Confirm, activity.RegisterOptions{
 		Name: ConfirmPauseNoticeActivityName,
 	})
+	w.RegisterActivityWithOptions(pauses.Refuse, activity.RegisterOptions{
+		Name: RefusePauseNoticeActivityName,
+	})
 
 	// Moving a project to another org: the saga is pure orchestration; its
 	// steps need the control plane and the trigger service.

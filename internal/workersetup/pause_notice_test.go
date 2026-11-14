@@ -4,6 +4,7 @@ package workersetup
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -33,6 +34,8 @@ type pauseStore struct {
 	mu        sync.Mutex
 	triggers  map[string]*core.Trigger
 	confirmed []string
+	refused   []string
+	leases    []time.Duration
 }
 
 func (s *pauseStore) GetTrigger(_ context.Context, id string) (*core.Trigger, error) {
@@ -42,12 +45,29 @@ func (s *pauseStore) GetTrigger(_ context.Context, id string) (*core.Trigger, er
 	return nil, core.ErrTriggerNotFound
 }
 
-func (s *pauseStore) ListUndeliveredPauseNotices(context.Context, int) ([]*core.Trigger, error) {
+// ClaimDuePauseNotices claims every trigger not confirmed or refused; the
+// lease is the store's business (store.ClaimDuePauseNotices, pinned there).
+func (s *pauseStore) ClaimDuePauseNotices(_ context.Context, _ int, lease time.Duration) ([]*core.Trigger, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.leases = append(s.leases, lease)
 	var out []*core.Trigger
-	for _, t := range s.triggers {
-		out = append(out, t)
+	for id, t := range s.triggers {
+		if !slices.Contains(s.confirmed, id) && !slices.Contains(s.refused, id) {
+			out = append(out, t)
+		}
 	}
 	return out, nil
+}
+
+func (s *pauseStore) RefusePauseNotice(_ context.Context, id string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !at.Equal(pausedAt) {
+		return errors.New("not this pause")
+	}
+	s.refused = append(s.refused, id)
+	return nil
 }
 
 func (s *pauseStore) ConfirmPauseNotice(_ context.Context, id string, at time.Time) error {
@@ -113,6 +133,7 @@ func TestNoOrgAccountPauseNotifier_Starts(t *testing.T) {
 	down.err = nil
 	assert.Equal(t, 1, sweepPauseNotices(context.Background(), failing, orgKeyNoticeQueue{starter: down, taskQueue: "q"}))
 	assert.Len(t, down.ids, 1, "the sweep starts it")
+	assert.Equal(t, []time.Duration{pauseNoticeSweepLease}, failing.leases, "the sweep claims what it takes")
 
 	down.err = serviceerror.NewWorkflowExecutionAlreadyStarted("started", "", "")
 	assert.Equal(t, 0, sweepPauseNotices(context.Background(), failing, orgKeyNoticeQueue{starter: down, taskQueue: "q"}),
@@ -148,6 +169,7 @@ func runPauseNotice(t *testing.T, admins pauseNotifier) (*pauseStore, error) {
 	activities := pauseNotices{admins: admins, store: store}
 	env.RegisterActivityWithOptions(activities.Notify, activity.RegisterOptions{Name: NotifyOrgAutomationNoOrgAccountActivityName})
 	env.RegisterActivityWithOptions(activities.Confirm, activity.RegisterOptions{Name: ConfirmPauseNoticeActivityName})
+	env.RegisterActivityWithOptions(activities.Refuse, activity.RegisterOptions{Name: RefusePauseNoticeActivityName})
 	env.ExecuteWorkflow(OrgAutomationNoOrgAccountNoticeWorkflow, n)
 	require.True(t, env.IsWorkflowCompleted())
 	return store, env.GetWorkflowError()
@@ -176,6 +198,8 @@ func TestOrgAutomationNoOrgAccountNotice_Delivery(t *testing.T) {
 	assert.True(t, app.NonRetryable())
 	assert.Equal(t, 1, gone.calls)
 	assert.Empty(t, store.confirmed, "a refusal is not a delivery")
+	assert.Equal(t, []string{"t-1"}, store.refused, "refused for good: never started again for this pause")
+	assert.Equal(t, 0, sweepPauseNotices(context.Background(), store, orgKeyNoticeQueue{starter: &pauseStarter{}, taskQueue: "q"}))
 
 	store, err = runPauseNotice(t, nil)
 	require.NoError(t, err)

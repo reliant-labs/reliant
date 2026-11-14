@@ -240,8 +240,10 @@ func SetTriggerEnabled(ctx context.Context, db orm.Context, id string, enabled b
 func PauseTrigger(ctx context.Context, db orm.Context, id, reason string) error {
 	enabled := false
 	now := time.Now().UTC()
+	// A new pause owes its notice now: the previous pause's sweep claim
+	// (pause_notice_next_at) is not this one's.
 	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled, PausedReason: &reason, PausedAt: &now}, "paused",
-		TriggerFieldEnabled, TriggerFieldPausedReason, TriggerFieldPausedAt)
+		TriggerFieldEnabled, TriggerFieldPausedReason, TriggerFieldPausedAt, TriggerFieldPauseNoticeNextAt)
 }
 
 // SetTriggerWebhookTokenHash rotates a webhook trigger's token hash. The hash

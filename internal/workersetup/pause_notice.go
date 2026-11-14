@@ -40,7 +40,11 @@ const (
 	OrgAutomationNoOrgAccountNoticeWorkflowName = "OrgAutomationNoOrgAccountNoticeWorkflow"
 	NotifyOrgAutomationNoOrgAccountActivityName = "NotifyOrgAutomationNoOrgAccount"
 	ConfirmPauseNoticeActivityName              = "ConfirmPauseNotice"
+	RefusePauseNoticeActivityName               = "RefusePauseNotice"
 )
+
+// orgNoticeRefusedType is the error type of a refusal a retry cannot change.
+const orgNoticeRefusedType = "OrgNoticeRefused"
 
 // pauseNoticeUpgradeWaits is how long the notice waits, before each new ask,
 // for a control plane that cannot send it yet: doubling from half an hour to a
@@ -65,13 +69,19 @@ type PauseNoticeAnswer struct {
 // OrgAutomationNoOrgAccountNoticeWorkflow delivers one pause's notice: asks the
 // control plane, retried as a rejected key's is (orgKeyNoticeRetry), waits and
 // asks again while it cannot send the kind, and records the pause as notified
-// once it is delivered. A refusal that a retry cannot change fails it
-// unconfirmed (temporal.NewNonRetryableApplicationError, from the activity).
+// once it is delivered. A refusal that a retry cannot change fails it, marked
+// refused for this pause so it is never started again.
 func OrgAutomationNoOrgAccountNoticeWorkflow(ctx workflow.Context, n controlplane.OrgAutomationNoOrgAccountNotice) error {
 	ctx = workflow.WithActivityOptions(ctx, orgKeyNoticeRetry)
 	for attempt := 0; ; attempt++ {
 		var answer PauseNoticeAnswer
 		if err := workflow.ExecuteActivity(ctx, NotifyOrgAutomationNoOrgAccountActivityName, n).Get(ctx, &answer); err != nil {
+			var refused *temporal.ApplicationError
+			if errors.As(err, &refused) && refused.Type() == orgNoticeRefusedType {
+				// Refused for good: never started again for this pause. If the
+				// mark fails, the sweep asks once more and is refused again.
+				_ = workflow.ExecuteActivity(ctx, RefusePauseNoticeActivityName, n).Get(ctx, nil)
+			}
 			return err
 		}
 		if !answer.Unsupported {
@@ -95,9 +105,11 @@ type pauseNotifier interface {
 	NotifyOrgAutomationNoOrgAccount(ctx context.Context, n controlplane.OrgAutomationNoOrgAccountNotice) (deduplicated bool, err error)
 }
 
-// pauseNoticeConfirmer records that a pause's notice was delivered.
+// pauseNoticeConfirmer records how a pause's notice ended: delivered, or
+// refused for good.
 type pauseNoticeConfirmer interface {
 	ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error
+	RefusePauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error
 }
 
 // pauseNotices is the notice's activities.
@@ -133,7 +145,7 @@ func (a pauseNotices) Notify(ctx context.Context, n controlplane.OrgAutomationNo
 	case errors.As(err, &refused) && refused.Permanent():
 		return PauseNoticeAnswer{}, temporal.NewNonRetryableApplicationError(
 			fmt.Sprintf("the control plane refused to email org %s's admins about automation %s: %v", n.OrgID, n.TriggerID, err),
-			"OrgNoticeRefused", err)
+			orgNoticeRefusedType, err)
 	}
 	return PauseNoticeAnswer{}, err
 }
@@ -161,6 +173,16 @@ func cannotSendNoticeKind(err error) bool {
 // since is not written over (ConfirmPauseNotice): that pause's notice is its
 // own.
 func (a pauseNotices) Confirm(ctx context.Context, n controlplane.OrgAutomationNoOrgAccountNotice) error {
+	return a.record(ctx, n, pauseNoticeConfirmer.ConfirmPauseNotice)
+}
+
+// Refuse records that the control plane refused n's pause's notice for good.
+func (a pauseNotices) Refuse(ctx context.Context, n controlplane.OrgAutomationNoOrgAccountNotice) error {
+	return a.record(ctx, n, pauseNoticeConfirmer.RefusePauseNotice)
+}
+
+func (a pauseNotices) record(ctx context.Context, n controlplane.OrgAutomationNoOrgAccountNotice,
+	write func(pauseNoticeConfirmer, context.Context, string, time.Time) error) error {
 	if a.store == nil {
 		return nil
 	}
@@ -168,7 +190,7 @@ func (a pauseNotices) Confirm(ctx context.Context, n controlplane.OrgAutomationN
 	if err != nil {
 		return temporal.NewNonRetryableApplicationError("read the incident of the notice", "OrgNoticeIncident", err)
 	}
-	return a.store.ConfirmPauseNotice(ctx, n.TriggerID, pausedAt)
+	return write(a.store, ctx, n.TriggerID, pausedAt)
 }
 
 // pauseNoticeWorkflowID names one pause: an automation, paused at one time.
@@ -180,7 +202,7 @@ func pauseNoticeWorkflowID(n controlplane.OrgAutomationNoOrgAccountNotice) strin
 // back, and what the sweep lists. *db.Repo satisfies it.
 type PauseNoticeStore interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
-	ListUndeliveredPauseNotices(ctx context.Context, limit int) ([]*core.Trigger, error)
+	ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error)
 }
 
 // pauseNotice is the notice of t's current pause, nil when t is not paused for
@@ -238,11 +260,18 @@ func noOrgAccountPauseNotifier(store PauseNoticeStore, q orgKeyNoticeQueue) func
 	}
 }
 
-// sweepPauseNotices starts the notice of every no-org-account pause whose email
-// was never confirmed delivered and has no workflow running, and reports how
-// many it started.
+// pauseNoticeSweepLease is how long a sweep's claim on a pause holds before
+// the next sweep may take it again: a running or waiting notice is looked at
+// again (a start that finds it running costs one Temporal call), and a start
+// that failed is retried, about hourly, while every other due pause gets its
+// turn first.
+const pauseNoticeSweepLease = time.Hour
+
+// sweepPauseNotices claims the due no-org-account pauses whose email is still
+// owed (ClaimDuePauseNotices) and starts each one's notice unless it is
+// already running, and reports how many it started.
 func sweepPauseNotices(ctx context.Context, store PauseNoticeStore, q orgKeyNoticeQueue) int {
-	pending, err := store.ListUndeliveredPauseNotices(ctx, orgKeyNoticeSweepBatch)
+	pending, err := store.ClaimDuePauseNotices(ctx, orgKeyNoticeSweepBatch, pauseNoticeSweepLease)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not list the paused automations whose notice never started", "error", err)
 		return 0

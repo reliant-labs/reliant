@@ -4518,10 +4518,16 @@ func (r *Repo) ListNoOrgAccountPauses(ctx context.Context, userID string, adminO
 	return store.ListNoOrgAccountPauses(ctx, r.ORM(), userID, adminOrgIDs)
 }
 
-// ListUndeliveredPauseNotices returns the no-org-account pauses whose email was never confirmed
-// delivered (store.ListUndeliveredPauseNotices).
-func (r *Repo) ListUndeliveredPauseNotices(ctx context.Context, limit int) ([]*core.Trigger, error) {
-	return store.ListUndeliveredPauseNotices(ctx, r.ORM(), limit)
+// ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
+// moving each one's next attempt lease on (store.ClaimDuePauseNotices).
+func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {
+	return store.ClaimDuePauseNotices(ctx, r.ORM(), limit, lease)
+}
+
+// RefusePauseNotice records that a no-org-account pause's email was refused for good
+// (store.RefusePauseNotice).
+func (r *Repo) RefusePauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
+	return store.RefusePauseNotice(ctx, r.ORM(), triggerID, pausedAt)
 }
 
 // ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
