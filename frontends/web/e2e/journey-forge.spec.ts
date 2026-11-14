@@ -239,6 +239,7 @@ test.describe('the demo page-entry tour', () => {
     await expect(page.getByTestId('tour-callout')).toContainText('Logs', LOADED);
     await page.getByTestId('tour-next').click();
     await expect(page.getByTestId('tour-callout')).toHaveCount(0);
-    await expect(page).toHaveURL(/view=logs/);
+    // An old /forge/demo?view=logs link redirects to the page it names (#2687).
+    await expect(page).toHaveURL(/\/forge\/p\/shop\/observability\/logs/);
   });
 });
