@@ -33,6 +33,13 @@ var compileMarkers = []struct {
 	{"Rust compile error", regexp.MustCompile(`error\[E\d{4}\]|could not compile`)},
 	{"Java/Kotlin compile error", regexp.MustCompile(`COMPILATION ERROR|Compilation failed|error: cannot find symbol`)},
 	{"C# compile error", regexp.MustCompile(`error CS\d{4}:`)},
+	// clang/gcc diagnostics on a C-family source file, Objective-C and Logos
+	// (.xm/.x) included: "src/Lock.xm:12:5: error: too many arguments to
+	// function call". Anchored on a source extension and line:col so a test
+	// that prints the word "error:" does not match. An Objective-C baseline
+	// with 12 such errors was reported as proven (bug report 9b88de9a).
+	{"C/C++/Objective-C compile error", regexp.MustCompile(`\.(c|cc|cpp|cxx|h|hh|hpp|m|mm|x|xm|xmi):\d+:\d+: (fatal )?error: `)},
+	{"Swift compile error", regexp.MustCompile(`\.swift:\d+:\d+: error: `)},
 }
 
 // noTestsMarkers recognise a run that executed no test at all — usually a
