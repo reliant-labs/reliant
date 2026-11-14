@@ -10,31 +10,11 @@ import (
 // MCPToolPrefix begins the name of every MCP-provided tool: mcp__<server>__<tool>.
 const MCPToolPrefix = "mcp__"
 
-// PlacementMetadataKey is the reserved key under which RemoteExecutor records
-// where a PlacementPreferDaemon call actually ran, inside an object-shaped
-// Metadata document: {"ran_at": "daemon"|"server", "fallback_reason": "..."}.
-// The key is present for both outcomes, so the result's shape does not depend
-// on placement. Leading underscore for the same reason as _truncation.
-const PlacementMetadataKey = "_placement"
-
-// Valid reports whether p is one of the defined placements.
+// Valid reports whether p is one of the three defined placements.
 func (p Placement) Valid() bool {
 	switch p {
-	case PlacementDaemon, PlacementServer, PlacementAny, PlacementPreferDaemon:
+	case PlacementDaemon, PlacementServer, PlacementAny:
 		return true
-	}
-	return false
-}
-
-// RunsAt reports whether a tool declared with placement p has an
-// implementation at location, which is PlacementDaemon or PlacementServer:
-// the daemon runtime advertises, and the server may execute, exactly these.
-func (p Placement) RunsAt(location Placement) bool {
-	switch p {
-	case PlacementAny, PlacementPreferDaemon:
-		return location == PlacementDaemon || location == PlacementServer
-	case PlacementDaemon, PlacementServer:
-		return p == location
 	}
 	return false
 }

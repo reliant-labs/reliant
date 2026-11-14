@@ -107,7 +107,7 @@ func TestFormatWebSearchResultsEmpty(t *testing.T) {
 
 func TestWebSearchToolMetadata(t *testing.T) {
 	t.Parallel()
-	tool := NewWebSearchTool(netguard.ForDeployment(true))
+	tool := NewWebSearchTool(netguard.ForDeployment(""))
 	typedTool := tool.(*ToolWrapper[WebSearchParams, ToolResponse])
 
 	params := WebSearchParams{

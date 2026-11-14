@@ -531,7 +531,6 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputsWithOwnership() (map[stri
 		}
 	}
 
-	rememberPresetModel(subInputs)
 	overlayNodeArgs(subInputs, ownedKeys, e.subWorkflowInputs)
 
 	if len(e.subWorkflow.GetInputs()) > 0 {

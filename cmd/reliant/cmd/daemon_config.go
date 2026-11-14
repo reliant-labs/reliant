@@ -51,8 +51,6 @@ func daemonHost(cfg *config.DaemonConfig) daemonruntime.Host {
 		RuntimeType:  cfg.GetRuntimeType(),
 		FrontendPort: int(cfg.GetFrontendPort()),
 		ProjectPath:  cfg.GetProjectPath(),
-
-		AllowPrivateFetch: cfg.GetFetchAllowPrivateNetwork(),
 	}
 }
 

@@ -14,11 +14,9 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/pkg/config"
-	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 // Deps holds dependencies for the tools_daemon service. The daemon-gateway
@@ -78,7 +76,7 @@ type UserUpdatePublisher interface {
 // LifecyclePublisher emits a daemon's daemon.v1.state.* lifecycle events.
 // *daemonstate.Publisher implements it.
 type LifecyclePublisher interface {
-	Connected(daemonID, userID, daemonType string, build daemonwire.Build)
+	Connected(daemonID, userID, daemonType string)
 	Disconnected(daemonID, userID, daemonType string)
 	Activity(daemonID, userID, daemonType, reason string)
 }
@@ -135,9 +133,7 @@ func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
-	svc := newService(deps)
-	observability.SetDaemonFleetSource(svc.fleetBuilds)
-	return svc, nil
+	return newService(deps), nil
 }
 
 // newService builds the service's connection state around deps. Tests of

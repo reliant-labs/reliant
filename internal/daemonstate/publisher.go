@@ -45,23 +45,17 @@ func NewPublisher(nc *nats.Conn) *Publisher {
 
 // Connected publishes a one-shot connected event. Not rate-limited — every
 // connect must be visible to the consumer so derived stores can transition.
-// build is the build the connecting daemon reported; the zero value (an
-// unknown build) is left off the wire.
-func (p *Publisher) Connected(daemonID, userID, daemonType string, build daemonwire.Build) {
+func (p *Publisher) Connected(daemonID, userID, daemonType string) {
 	if p == nil || p.nc == nil || daemonID == "" {
 		return
 	}
-	evt := daemonwire.Event{
+	p.publish(daemonwire.Event{
 		DaemonID:   daemonID,
 		UserID:     userID,
 		Type:       daemonwire.EventConnected,
 		At:         time.Now().UTC(),
 		DaemonType: daemonType,
-	}
-	if build != (daemonwire.Build{}) {
-		evt.Build = &build
-	}
-	p.publish(evt)
+	})
 }
 
 // Disconnected publishes a one-shot disconnected event. Not rate-limited.

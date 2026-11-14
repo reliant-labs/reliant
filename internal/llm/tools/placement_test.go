@@ -11,7 +11,7 @@ import (
 func TestPlacementOf_BuiltIns(t *testing.T) {
 	for name, want := range map[string]Placement{
 		ShellToolName: PlacementDaemon,
-		ToolFetch:     PlacementPreferDaemon,
+		ToolFetch:     PlacementAny,
 		ToolAskUser:   PlacementServer,
 	} {
 		got, err := PlacementOf(name)

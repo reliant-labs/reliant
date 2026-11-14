@@ -39,7 +39,6 @@ type AccountCredentialStore interface {
 // credential marker, and the per-user routing mode setting.
 type AccountRoutingStore interface {
 	AccountAssignmentStore
-	ClearOtherThreadAssignments(ctx context.Context, userID, threadID, provider string) error
 	AccountCredentialStore
 	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
 }
