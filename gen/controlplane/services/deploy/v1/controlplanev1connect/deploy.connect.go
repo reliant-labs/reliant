@@ -389,7 +389,11 @@ type DeployServiceClient interface {
 	// ListUsage returns metered infrastructure usage for the caller's org, with
 	// per-resource attribution. Post-hoc: these rows come from a sweeper that
 	// read the live cluster, so a deployment declared and never applied appears
-	// in none of them.
+	// in none of them. Quantities and dollar amounts are readable by any
+	// member. A client that renders withheld costs sets
+	// withhold_costs_without_billing_read: then dollar amounts need billing:read
+	// (org owners and admins), the rule of every other cost read, and without it
+	// the rows come back with costs_withheld set.
 	ListUsage(context.Context, *connect.Request[v1.ListDeployUsageRequest]) (*connect.Response[v1.ListDeployUsageResponse], error)
 	// RecordBundle records one rendered deploy artifact against an environment.
 	//
@@ -1421,7 +1425,11 @@ type DeployServiceHandler interface {
 	// ListUsage returns metered infrastructure usage for the caller's org, with
 	// per-resource attribution. Post-hoc: these rows come from a sweeper that
 	// read the live cluster, so a deployment declared and never applied appears
-	// in none of them.
+	// in none of them. Quantities and dollar amounts are readable by any
+	// member. A client that renders withheld costs sets
+	// withhold_costs_without_billing_read: then dollar amounts need billing:read
+	// (org owners and admins), the rule of every other cost read, and without it
+	// the rows come back with costs_withheld set.
 	ListUsage(context.Context, *connect.Request[v1.ListDeployUsageRequest]) (*connect.Response[v1.ListDeployUsageResponse], error)
 	// RecordBundle records one rendered deploy artifact against an environment.
 	//

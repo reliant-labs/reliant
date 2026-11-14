@@ -334,8 +334,17 @@ type GetDeployCapabilitiesResponse struct {
 	// "object-summaries"). forge sends a hosted bundle only the parts named here;
 	// a server that names none gets the document every older decoder knew.
 	BundleDocumentFeatures []string `protobuf:"bytes,4,rep,name=bundle_document_features,json=bundleDocumentFeatures,proto3" json:"bundle_document_features,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Snapshot semantics this server implements beyond the intent seals
+	// immutable_snapshot_seals names. forge attaches a snapshot to a bundle only
+	// when the feature that makes the server keep it is named here:
+	//   "evidence-seal": RecordDeployBundle accepts a schema-v2 bundle carrying
+	//   a complete snapshot for a release cut WITHOUT snapshot intents (a plain
+	//   `forge env deploy`), records an evidence seal on that bundle, and the
+	//   promotion that ships the bundle freezes the snapshot (snapshot,
+	//   snapshot_digest, bundle_id, bundle_digest on DeployPromotion).
+	SnapshotFeatures []string `protobuf:"bytes,5,rep,name=snapshot_features,json=snapshotFeatures,proto3" json:"snapshot_features,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetDeployCapabilitiesResponse) Reset() {
@@ -392,6 +401,13 @@ func (x *GetDeployCapabilitiesResponse) GetFrozenPromotionBundles() bool {
 func (x *GetDeployCapabilitiesResponse) GetBundleDocumentFeatures() []string {
 	if x != nil {
 		return x.BundleDocumentFeatures
+	}
+	return nil
+}
+
+func (x *GetDeployCapabilitiesResponse) GetSnapshotFeatures() []string {
+	if x != nil {
+		return x.SnapshotFeatures
 	}
 	return nil
 }
@@ -5349,9 +5365,14 @@ type ListDeployUsageRequest struct {
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
 	// its own org.
-	OrgId         *string `protobuf:"bytes,7,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	OrgId *string `protobuf:"bytes,7,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// The caller renders costs_withheld, so the dollars may follow billing:read:
+	// a caller without it gets every cost as 0 with costs_withheld set. Unset
+	// (every client that predates this field), every member gets the dollars as
+	// before and costs_withheld is never set.
+	WithholdCostsWithoutBillingRead bool `protobuf:"varint,8,opt,name=withhold_costs_without_billing_read,json=withholdCostsWithoutBillingRead,proto3" json:"withhold_costs_without_billing_read,omitempty"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *ListDeployUsageRequest) Reset() {
@@ -5433,6 +5454,13 @@ func (x *ListDeployUsageRequest) GetOrgId() string {
 	return ""
 }
 
+func (x *ListDeployUsageRequest) GetWithholdCostsWithoutBillingRead() bool {
+	if x != nil {
+		return x.WithholdCostsWithoutBillingRead
+	}
+	return false
+}
+
 type ListDeployUsageResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Rows  []*v1.DeployUsageRow   `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
@@ -5440,8 +5468,14 @@ type ListDeployUsageResponse struct {
 	// total without re-summing integers it may have narrowed to floats on the
 	// way in.
 	TotalCostUsdNanos int64 `protobuf:"varint,2,opt,name=total_cost_usd_nanos,json=totalCostUsdNanos,proto3" json:"total_cost_usd_nanos,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Set only when the request asked for withhold_costs_without_billing_read
+	// and the caller does not hold billing:read in the org: no dollar amount is
+	// returned, so every cost_usd_nanos and total_cost_usd_nanos is 0 meaning
+	// "not shown", never "free". Render the quantities and say who can grant
+	// billing:read.
+	CostsWithheld bool `protobuf:"varint,3,opt,name=costs_withheld,json=costsWithheld,proto3" json:"costs_withheld,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListDeployUsageResponse) Reset() {
@@ -5486,6 +5520,13 @@ func (x *ListDeployUsageResponse) GetTotalCostUsdNanos() int64 {
 		return x.TotalCostUsdNanos
 	}
 	return 0
+}
+
+func (x *ListDeployUsageResponse) GetCostsWithheld() bool {
+	if x != nil {
+		return x.CostsWithheld
+	}
+	return false
 }
 
 // RecordDeployBundleRequest carries the ARTIFACT, not a description of it.
@@ -8916,12 +8957,13 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x1fservices/deploy/v1/deploy.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"E\n" +
 	"\x1cGetDeployCapabilitiesRequest\x12\x1a\n" +
 	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
-	"\a_org_id\"\x87\x02\n" +
+	"\a_org_id\"\xb4\x02\n" +
 	"\x1dGetDeployCapabilitiesResponse\x128\n" +
 	"\x18snapshot_schema_versions\x18\x01 \x03(\tR\x16snapshotSchemaVersions\x128\n" +
 	"\x18immutable_snapshot_seals\x18\x02 \x01(\bR\x16immutableSnapshotSeals\x128\n" +
 	"\x18frozen_promotion_bundles\x18\x03 \x01(\bR\x16frozenPromotionBundles\x128\n" +
-	"\x18bundle_document_features\x18\x04 \x03(\tR\x16bundleDocumentFeatures\"\x8f\x01\n" +
+	"\x18bundle_document_features\x18\x04 \x03(\tR\x16bundleDocumentFeatures\x12+\n" +
+	"\x11snapshot_features\x18\x05 \x03(\tR\x10snapshotFeatures\"\x8f\x01\n" +
 	"\x1bResolveHostedProjectRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +
@@ -9313,7 +9355,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x14GetDeployRunResponse\x12,\n" +
 	"\x03run\x18\x01 \x01(\v2\x1a.controlplane.v1.DeployRunR\x03run\x128\n" +
 	"\arelease\x18\x02 \x01(\v2\x1e.controlplane.v1.DeployReleaseR\arelease\x127\n" +
-	"\x06stages\x18\x03 \x03(\v2\x1f.controlplane.v1.DeployRunStageR\x06stages\"\xdb\x03\n" +
+	"\x06stages\x18\x03 \x03(\v2\x1f.controlplane.v1.DeployRunStageR\x06stages\"\xa9\x04\n" +
 	"\x16ListDeployUsageRequest\x129\n" +
 	"\n" +
 	"start_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
@@ -9322,15 +9364,17 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x0eenvironment_id\x18\x04 \x01(\tH\x01R\renvironmentId\x88\x01\x01\x12(\n" +
 	"\rdeployment_id\x18\x05 \x01(\tH\x02R\fdeploymentId\x88\x01\x01\x124\n" +
 	"\x13granularity_seconds\x18\x06 \x01(\x05H\x03R\x12granularitySeconds\x88\x01\x01\x12\x1a\n" +
-	"\x06org_id\x18\a \x01(\tH\x04R\x05orgId\x88\x01\x01B\x10\n" +
+	"\x06org_id\x18\a \x01(\tH\x04R\x05orgId\x88\x01\x01\x12L\n" +
+	"#withhold_costs_without_billing_read\x18\b \x01(\bR\x1fwithholdCostsWithoutBillingReadB\x10\n" +
 	"\x0e_resource_kindB\x11\n" +
 	"\x0f_environment_idB\x10\n" +
 	"\x0e_deployment_idB\x16\n" +
 	"\x14_granularity_secondsB\t\n" +
-	"\a_org_id\"\x7f\n" +
+	"\a_org_id\"\xa6\x01\n" +
 	"\x17ListDeployUsageResponse\x123\n" +
 	"\x04rows\x18\x01 \x03(\v2\x1f.controlplane.v1.DeployUsageRowR\x04rows\x12/\n" +
-	"\x14total_cost_usd_nanos\x18\x02 \x01(\x03R\x11totalCostUsdNanos\"\x94\x02\n" +
+	"\x14total_cost_usd_nanos\x18\x02 \x01(\x03R\x11totalCostUsdNanos\x12%\n" +
+	"\x0ecosts_withheld\x18\x03 \x01(\bR\rcostsWithheld\"\x94\x02\n" +
 	"\x19RecordDeployBundleRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x1e\n" +
 	"\n" +
