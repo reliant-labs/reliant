@@ -1,0 +1,283 @@
+# forge v1.0.15: every command path of the release, hidden commands and aliases included.
+# Written by scripts/released-commands.sh; read by TestScaffoldTemplatesRunOnlyReleasedForgeCommands.
+forge api
+forge api curl
+forge build
+forge build receipt
+forge ci
+forge ci gate
+forge ci migration-safety
+forge ci run
+forge ci summarize
+forge ci test-budget
+forge ci test-skips
+forge ci validate-kcl
+forge ci verify-generated
+forge ci verify-test-run
+forge ci verify-tests
+forge ci vuln-scan
+forge cloud
+forge cloud identity
+forge cloud identity delete
+forge cloud identity export
+forge cloud identity invite
+forge cloud identity lock
+forge cloud identity reset
+forge cloud identity revoke-sessions
+forge cloud identity set-roles
+forge cloud identity status
+forge cloud identity unlock
+forge cloud identity users
+forge cloud status
+forge cloud token
+forge cloud token create
+forge cloud token list
+forge cloud token revoke
+forge cluster
+forge cluster connect
+forge cluster disconnect
+forge cluster down
+forge cluster info
+forge cluster instances
+forge cluster list
+forge cluster logs
+forge cluster recover-chart-lock
+forge cluster reload
+forge cluster reset
+forge cluster show
+forge cluster status
+forge cluster up
+forge cluster urls
+forge component
+forge component install
+forge component list
+forge component search
+forge db
+forge db introspect
+forge db migrate
+forge db migrate force
+forge db migrate status
+forge db migrate up
+forge db migrate version
+forge db migration
+forge db migration new
+forge db migration rebase
+forge db query
+forge db reset
+forge db seed
+forge db seed apply
+forge db seed reset
+forge db seed status
+forge db squash
+forge debug
+forge debug args
+forge debug break
+forge debug breakpoints
+forge debug clear
+forge debug continue
+forge debug eval
+forge debug goroutines
+forge debug locals
+forge debug stack
+forge debug start
+forge debug step
+forge debug step-in
+forge debug step-out
+forge debug stop
+forge doctor
+forge doctor parity
+forge domain
+forge domain add
+forge domain bind
+forge domain list
+forge domain ls
+forge domain remove
+forge domain rm
+forge domain show
+forge domain unbind
+forge domain verify
+forge env
+forge env build
+forge env config
+forge env delete
+forge env deploy
+forge env devstack
+forge env devstack key
+forge env devstack list
+forge env devstack port
+forge env devstack prune
+forge env devstack release
+forge env diff
+forge env down
+forge env exec
+forge env list
+forge env new
+forge env options
+forge env ps
+forge env releases
+forge env releases at
+forge env releases backfill-migrations
+forge env releases list
+forge env releases show
+forge env render
+forge env secrets
+forge env secrets adopt
+forge env secrets sync
+forge env secrets verify
+forge env shape
+forge env smoke
+forge env start
+forge env status
+forge env stop
+forge env up
+forge fix
+forge fix composition-graph
+forge fix config-proto-package
+forge fix connect-errors
+forge fix harness-mocks
+forge fix narrow-deps
+forge fix operatorkit
+forge fix tx-isolation
+forge frontend
+forge frontend sourcemaps
+forge frontend sourcemaps push
+forge gate
+forge gate list
+forge gate record
+forge generate
+forge kcl
+forge kcl eval
+forge kcl imports
+forge ledger
+forge ledger export
+forge ledger import
+forge ledger show
+forge ledger where
+forge lint
+forge login
+forge logout
+forge mcp
+forge merge-driver
+forge merge-driver check
+forge merge-driver install
+forge merge-generated
+forge obs
+forge obs alerts
+forge obs alerts check
+forge obs alerts run
+forge obs changes
+forge obs check
+forge obs dashboards
+forge obs dashboards add-panel
+forge obs dashboards audit
+forge obs dashboards check
+forge obs endpoints
+forge obs issue
+forge obs issue assign
+forge obs issue comment
+forge obs issue ignore
+forge obs issue resolve
+forge obs issue unresolve
+forge obs issues
+forge obs logs
+forge obs metrics
+forge obs metrics declared
+forge obs metrics describe
+forge obs metrics exemplars
+forge obs metrics list
+forge obs metrics query
+forge obs profile
+forge obs query
+forge obs session
+forge obs sessions
+forge obs status
+forge obs trace
+forge obs traces
+forge obs workloads
+forge package
+forge package new
+forge project
+forge project annotations
+forge project audit
+forge project capabilities
+forge project checkouts
+forge project delete
+forge project delete service
+forge project disown
+forge project features
+forge project frontends
+forge project graph
+forge project introspect
+forge project introspect handlers
+forge project libraries
+forge project map
+forge project memory
+forge project migrate
+forge project migrate import
+forge project migrate tdd
+forge project new
+forge project rescaffold
+forge project scaffolded
+forge project shapes
+forge project upgrade
+forge project upgrade apply
+forge project upgrade list
+forge protoc-gen-forge
+forge registry
+forge registry login
+forge registry ref
+forge release
+forge release bundle
+forge release verify
+forge release where
+forge report-bug
+forge scaffold
+forge scaffold adapter
+forge scaffold binary
+forge scaffold crd
+forge scaffold entity
+forge scaffold frontend
+forge scaffold handler-file
+forge scaffold library
+forge scaffold operator
+forge scaffold package
+forge scaffold rpc
+forge scaffold scenario
+forge scaffold service
+forge scaffold webhook
+forge scaffold worker
+forge secret
+forge secret access
+forge secret allow
+forge secret deny
+forge secret ensure
+forge secret import
+forge secret list
+forge secret migrate
+forge secret set
+forge secret unset
+forge skill
+forge skill list
+forge skill load
+forge skill search
+forge slot
+forge slot run
+forge slot status
+forge start
+forge storage
+forge storage auto-gc
+forge storage check
+forge storage configure-nodes
+forge storage daemon
+forge storage gc
+forge storage gocache
+forge storage install
+forge storage policy
+forge storage register
+forge storage status
+forge storage worktrees
+forge test
+forge tools
+forge tools install
+forge tools pins
+forge version

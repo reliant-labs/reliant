@@ -1,0 +1,170 @@
+{{- $m := index .Methods 0 -}}
+// yours: scaffolded once, never touched again — forge will not overwrite this file.
+//
+// ONE RPC PER FILE. This file covers {{$m.Name | goName}} and nothing else, and it
+// declares no package-level identifier, so two people implementing two RPCs
+// in this package never touch the same line. That is not tidiness — a
+// previous scaffold put every RPC's rows and one package-level `setup()`
+// into a single handlers_scaffold_test.go, two owners collided on it, and
+// the whole file was deleted before either wrote a test. Anything forge
+// scaffolds once has to survive the way forge's own output says to grow.
+//
+{{- if and $m.ClientStreaming $m.ServerStreaming}}
+// {{$m.Name | goName}} is a BIDIRECTIONAL streaming RPC, and this file is its slot —
+// forge does not scaffold a case for it. The harness's
+// {{.ServicePackage}}.NewTest{{.TestHelperName}}Server serves HTTP/1.1, and connect-go
+// carries a bidi stream only over HTTP/2: serve svc.Register from an
+// httptest.NewUnstartedServer with EnableHTTP2 set and StartTLS, and dial it
+// with that server's Client(). Build svc with
+// {{.ServicePackage}}.NewTest{{.TestHelperName}}(t) (helpers_gen_test.go); pass
+// {{.ServicePackage}}.With{{.TestHelperName}}Deps(...) to override a dependency.
+{{- else if or $m.ClientStreaming $m.ServerStreaming}}
+// Test{{$m.Name | goName}}_Generated drives the {{if $m.ServerStreaming}}server{{else}}client{{end}} stream through a real
+// Connect client. A stream cannot be called in process the way a unary
+// handler can, so {{.ServicePackage}}.NewTest{{.TestHelperName}}Server (helpers_gen_test.go)
+// serves the *Service over HTTP with the default test principal installed
+// server-side — the way a stream reaches it in production — and returns the
+// typed client. Add a t.Run per case.
+//
+// The scaffold case is SELF-DESTRUCTING: tdd.AssertScaffoldStub matches only
+// the error forge's own generated stub returns, so the case goes red the
+// moment you implement {{$m.Name | goName}}. That failure is the point — replace it
+// then with real assertions. forge writes this file only when it is absent
+// and {{$m.Name | goName}} is still a stub, so a file you have edited, or an RPC you
+// have implemented, is never re-offered.
+{{- else}}
+// Test{{$m.Name | goName}}_Generated is a thin shim over `tdd.RunRPCCases`
+// (== `tdd.TableRPC`, see pkg/tdd/rpc.go). Rows declare the request, the
+// expected outcome, and (optionally) a Setup/Check hook — the runner
+// iterates rows as t.Run subtests and asserts on either a Connect error
+// code or a happy-path response.
+//
+// The scaffold row is SELF-DESTRUCTING: `WantScaffoldStub` matches only the
+// error forge's own generated stub returns, so the row goes red the moment
+// you implement {{$m.Name | goName}}. That failure is the point — replace it then with
+// real assertions (Check for the happy path, WantErr for failure modes).
+// forge writes this file only when it is absent and {{$m.Name | goName}} is still a
+// stub, so a file you have edited, or an RPC you have implemented, is never
+// re-offered.
+{{- end}}
+{{- if not (and $m.ClientStreaming $m.ServerStreaming)}}
+//
+// It does NOT match a bare `connect.CodeUnimplemented`, deliberately. A
+// finished handler can return that code for its own reasons — a forwarder,
+// a feature flag, an unwired optional dep — and a {{if or $m.ClientStreaming $m.ServerStreaming}}case{{else}}row{{end}} keyed on the code
+// alone keeps passing against fully-implemented RPCs. Asserting an
+// unforgeable sentinel is what makes "nobody has written this yet"
+// falsifiable.
+{{- end}}
+//
+// CRUD RPCs are intentionally absent — their lifecycle coverage lives in
+// handlers_crud_test.go (yours as well). Each method has exactly one
+// per-RPC test owner; never both.
+//
+// Library reference: github.com/reliant-labs/forge/pkg/tdd
+// Skill: forge skill load testing/patterns
+package {{.ServicePackage}}_test
+{{- if and $m.ClientStreaming $m.ServerStreaming}}
+{{- else if or $m.ClientStreaming $m.ServerStreaming}}
+
+import (
+	"context"
+	"testing"
+	"time"
+{{- if $m.ServerStreaming}}
+
+	"connectrpc.com/connect"
+{{- end}}
+
+	"github.com/reliant-labs/forge/pkg/tdd"
+
+	pb "{{.Module}}/gen/{{.ProtoPackage}}/v1"
+
+	{{.ServicePackage}} "{{.Module}}/internal/handlers/{{.ServiceImportPath}}"
+)
+
+func Test{{$m.Name | goName}}_Generated(t *testing.T) {
+	t.Parallel()
+
+	// {{.ServicePackage}}.NewTest{{.TestHelperName}}Server serves the {{.ServicePackage}} *Service wired
+	// with stubbed dependencies; pass {{.ServicePackage}}.With{{.TestHelperName}}Deps(...) to
+	// override one, or {{.ServicePackage}}.WithoutPrincipal() for an anonymous caller.
+	_, client := {{.ServicePackage}}.NewTest{{.TestHelperName}}Server(t)
+
+	t.Run("unimplemented_scaffold", func(t *testing.T) {
+		// Delete this case once you implement {{$m.Name | goName}}; it only asserts nobody has.
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+{{- if $m.ServerStreaming}}
+		stream, err := client.{{$m.Name | goName}}(ctx, connect.NewRequest(&pb.{{$m.InputType | goName}}{}))
+		if err == nil {
+			for stream.Receive() {
+				// A real case asserts on each stream.Msg() here.
+			}
+			err = stream.Err()
+			_ = stream.Close()
+		}
+{{- else}}
+		stream := client.{{$m.Name | goName}}(ctx)
+		// A real case sends its messages here. The stub may refuse the stream
+		// before reading one, so the outcome is CloseAndReceive's.
+		_ = stream.Send(&pb.{{$m.InputType | goName}}{})
+		_, err := stream.CloseAndReceive()
+{{- end}}
+		tdd.AssertScaffoldStub(t, err)
+	})
+}
+{{- else}}
+
+import (
+	"testing"
+
+	"connectrpc.com/connect"
+
+	"github.com/reliant-labs/forge/pkg/tdd"
+
+	pb "{{.Module}}/gen/{{.ProtoPackage}}/v1"
+
+	{{/* The handler package is imported for its test factory: NewTest<X> is
+	     declared in that package's OWN helpers_gen_test.go (package
+	     {{.ServicePackage}}, a _test.go file). Go compiles a package's
+	     in-package _test.go files INTO the package under test, and this
+	     external {{.ServicePackage}}_test package imports that augmented
+	     package — so the helper is visible here, while `testing` never
+	     reaches the production binary. (The import path uses the on-disk
+	     dir leaf; the selector uses the package clause, and the two may
+	     legally differ — hence the explicit alias.) */ -}}
+	{{.ServicePackage}} "{{.Module}}/internal/handlers/{{.ServiceImportPath}}"
+)
+
+// Test{{$m.Name | goName}}_Generated runs the canonical scaffold rows for {{$m.Name | goName}}.
+// Add more rows by appending tdd.RPCCase entries — never write a new
+// Test<X> function for what is really a new row in this table.
+func Test{{$m.Name | goName}}_Generated(t *testing.T) {
+	t.Parallel()
+
+	// {{.ServicePackage}}.NewTest{{.TestHelperName}} (helpers_gen_test.go) returns the
+	// {{.ServicePackage}} *Service wired with stubbed dependencies. Override one
+	// with {{.ServicePackage}}.With{{.TestHelperName}}Deps(...), or per-row via Case.Setup.
+{{- if .UnfilledDeps}}
+	//
+	// WithPlaceholderDeps stands in for {{joinStrings .UnfilledDeps ", "}}, which
+	// the harness cannot construct. The scaffold row is answered before the
+	// handler reaches it; supply a real one through With{{.TestHelperName}}Deps
+	// before adding a row that does.
+	svc := {{.ServicePackage}}.NewTest{{.TestHelperName}}(t, {{.ServicePackage}}.WithPlaceholderDeps())
+{{- else}}
+	svc := {{.ServicePackage}}.NewTest{{.TestHelperName}}(t)
+{{- end}}
+
+	tdd.RunRPCCases(t, []tdd.RPCCase[pb.{{$m.InputType | goName}}, pb.{{$m.OutputType | goName}}]{
+		{
+			Name: "unimplemented_scaffold", // delete this row once you implement {{$m.Name | goName}}; it only asserts nobody has
+			Req:  connect.NewRequest(&pb.{{$m.InputType | goName}}{}),
+			Ctx:  {{.ServicePackage}}.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
+			// replace with Check: func(t *testing.T, resp *connect.Response[pb.{{$m.OutputType | goName}}]) {...}, or WantErr: connect.CodeInvalidArgument
+			WantScaffoldStub: true,
+		},
+	}, svc.{{$m.Name | goName}})
+}
+{{- end}}

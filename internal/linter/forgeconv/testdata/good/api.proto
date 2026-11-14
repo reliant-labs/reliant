@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package good.v1;
+
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "example.com/good/gen/good/v1;goodv1";
+
+service GoodService {
+  option (forge.v1.service) = {
+    name: "GoodService"
+    version: "1.0.0"
+  };
+
+  rpc Get(GetRequest) returns (GetResponse) {
+    option (forge.v1.method) = { auth_required: true };
+  }
+}
+
+// User is a well-formed entity: explicit pk annotation, explicit
+// timestamps:true.
+message User {
+  option (forge.v1.entity) = {
+    table: "users"
+    timestamps: true
+    soft_delete: true
+  };
+
+  string id = 1 [(forge.v1.field) = { pk: true }];
+  string org_id = 2 [(forge.v1.field) = { ref: "orgs.id" }];
+  string email = 3 [(forge.v1.field) = { unique: true }];
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+  google.protobuf.Timestamp deleted_at = 6;
+}
+
+// Plain API request — not an entity, lint must not complain.
+message GetRequest {
+  string id = 1;
+}
+
+message GetResponse {
+  User user = 1;
+}

@@ -1,0 +1,11 @@
+# The sample frontend's TypeScript generation. Run through ./regen.sh, which
+# compiles in a scratch copy beside forge's vendored validate.proto.
+version: v2
+inputs:
+  - directory: proto
+plugins:
+  - local: protoc-gen-es
+    out: gen
+    opt:
+      - target=ts
+      - import_extension=js

@@ -1,0 +1,164 @@
+//go:build e2e
+// +build e2e
+
+package tasks_test
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+var (
+	baseURL    string
+	serviceCmd *exec.Cmd
+)
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+
+	// 1. Build the project binary
+	fmt.Println("==> Building app binary...")
+	build := exec.CommandContext(ctx, "go", "build", "-o", "./bin/app", "./cmd/app")
+	// Cancel by SIGINT, not SIGKILL. The Go toolchain removes its own
+	// scratch directories (go-build*, go-link-* under TMPDIR, hundreds of
+	// MB for a link) from a signal handler, and exec.CommandContext's
+	// default cancellation is Process.Kill, which gives it no chance to.
+	// A test binary killed on timeout therefore orphans that scratch
+	// permanently; WaitDelay keeps a wedged compiler from hanging the
+	// cancel in exchange.
+	build.Cancel = func() error { return build.Process.Signal(os.Interrupt) }
+	build.WaitDelay = 10 * time.Second
+	build.Dir = findProjectRoot()
+	build.Stdout = os.Stdout
+	build.Stderr = os.Stderr
+	if err := build.Run(); err != nil {
+		log.Fatalf("failed to build binary: %v", err)
+	}
+
+	// 2. Start docker-compose for test dependencies
+	fmt.Println("==> Starting test dependencies via docker-compose...")
+	composeFile := "e2e/tasks/docker-compose.e2e.yml"
+	composeUp := exec.CommandContext(ctx, "docker", "compose", "-f", composeFile, "up", "-d", "--wait")
+	composeUp.Dir = findProjectRoot()
+	composeUp.Stdout = os.Stdout
+	composeUp.Stderr = os.Stderr
+	if err := composeUp.Run(); err != nil {
+		log.Fatalf("failed to start docker-compose: %v", err)
+	}
+
+	// 3. Start the service binary with a random free port
+	port := freePort()
+	baseURL = fmt.Sprintf("http://localhost:%d", port)
+
+	// The service runs as its own subcommand of the project binary, against
+	// the postgres docker-compose.e2e.yml publishes on 15432. DATABASE_URL is
+	// required config (the server refuses to start without it), and
+	// AUTO_MIGRATE brings that empty database up to the current schema before
+	// the service serves.
+	fmt.Printf("==> Starting tasks on port %d...\n", port)
+	serviceCmd = exec.CommandContext(ctx, "./bin/app", "tasks")
+	serviceCmd.Dir = findProjectRoot()
+	// Inheriting the parent environment for a CHILD process is not reading
+	// app config, which is what the typed-config rule exists to prevent.
+	serviceCmd.Env = append(os.Environ(), //nolint:forbidigo // child-process env, not app config
+		fmt.Sprintf("PORT=%d", port),
+		"DATABASE_URL=postgres://test:test@localhost:15432/app_test?sslmode=disable",
+		"AUTO_MIGRATE=true",
+	)
+	serviceCmd.Stdout = os.Stdout
+	serviceCmd.Stderr = os.Stderr
+	if err := serviceCmd.Start(); err != nil {
+		cleanup()
+		log.Fatalf("failed to start service: %v", err)
+	}
+
+	// 4. Wait for the service to be ready
+	fmt.Println("==> Waiting for service health check...")
+	if err := waitForHealth(baseURL, 30*time.Second); err != nil {
+		cleanup()
+		log.Fatalf("service failed to become ready: %v", err)
+	}
+	fmt.Println("==> Service is ready!")
+
+	// 5. Run tests
+	code := m.Run()
+
+	// 6. Cleanup
+	cleanup()
+	os.Exit(code)
+}
+
+func cleanup() {
+	if serviceCmd != nil && serviceCmd.Process != nil {
+		fmt.Println("==> Stopping service...")
+		_ = serviceCmd.Process.Signal(os.Interrupt)
+		done := make(chan error, 1)
+		go func() { done <- serviceCmd.Wait() }()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			_ = serviceCmd.Process.Kill()
+		}
+	}
+
+	fmt.Println("==> Stopping docker-compose...")
+	composeFile := "e2e/tasks/docker-compose.e2e.yml"
+	composeDown := exec.CommandContext(context.Background(), "docker", "compose", "-f", composeFile, "down", "-v")
+	composeDown.Dir = findProjectRoot()
+	composeDown.Stdout = os.Stdout
+	composeDown.Stderr = os.Stderr
+	_ = composeDown.Run()
+}
+
+func findProjectRoot() string {
+	// Walk up from the test directory to find the project root (where go.mod lives)
+	dir, _ := os.Getwd()
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	// Fallback: assume we're two levels deep (e2e/<service>/)
+	return "../.."
+}
+
+func waitForHealth(base string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+
+	healthURL := base + "/healthz"
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("health check timed out after %s", timeout)
+		case <-ticker.C:
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+			if err != nil {
+				continue
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err == nil && resp.StatusCode == http.StatusOK {
+				resp.Body.Close()
+				return nil
+			}
+			if resp != nil {
+				resp.Body.Close()
+			}
+		}
+	}
+}

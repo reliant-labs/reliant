@@ -1,0 +1,67 @@
+"""
+KCL representation of the {{.TypeName}} CustomResourceDefinition.
+
+Scaffolded by `forge scaffold crd {{.TypeName}}` as a STARTER manifest. The
+Go API types in `api/{{.Version}}/{{.LowerName}}_types.go` are the
+source of truth; this file is the cluster-installable shape.
+
+The schema below intentionally uses `x-kubernetes-preserve-unknown-fields`
+on Spec and Status so the CRD installs cleanly before the structural
+schema is hand-extended. Tighten the schema to match `{{.TypeName}}Spec`
+/ `{{.TypeName}}Status` once the type is stable, or wire controller-gen
+into your toolchain and replace this file with its output.
+
+Imported into the per-env main.k via `additional_manifests`:
+
+    import deploy.kcl.lib.{{.LowerName}}_crd as {{.LowerName}}_crd
+
+    _env = schema.Environment {
+        ...
+        additional_manifests = [{{.LowerName}}_crd.{{.TypeName}}_CRD]
+    }
+"""
+
+{{.TypeName}}_CRD = {
+    apiVersion = "apiextensions.k8s.io/v1"
+    kind = "CustomResourceDefinition"
+    metadata = {
+        name = "{{.PluralLower}}.{{.Group}}"
+        labels = {
+            "app.kubernetes.io/managed-by" = "forge"
+            "app.kubernetes.io/part-of" = "{{.OperatorName}}"
+        }
+    }
+    spec = {
+        group = "{{.Group}}"
+        scope = "Namespaced"
+        names = {
+            plural = "{{.PluralLower}}"
+            singular = "{{.LowerName}}"
+            kind = "{{.TypeName}}"
+            listKind = "{{.TypeName}}List"
+        }
+        versions = [
+            {
+                name = "{{.Version}}"
+                served = True
+                storage = True
+                schema = {
+                    openAPIV3Schema = {
+                        type = "object"
+                        properties = {
+                            spec = {
+                                type = "object"
+                                "x-kubernetes-preserve-unknown-fields" = True
+                            }
+                            status = {
+                                type = "object"
+                                "x-kubernetes-preserve-unknown-fields" = True
+                            }
+                        }
+                    }
+                }
+                subresources = {status = {}}
+            }
+        ]
+    }
+}
