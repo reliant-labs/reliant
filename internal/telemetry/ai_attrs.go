@@ -79,7 +79,7 @@ const (
 	EventRetryWait = "gen_ai.retry_wait"
 	// EventFirstToken is recorded when a streamed response's first token
 	// arrives: the span's start to it is the time to first token.
-	EventFirstToken = "gen_ai.first_token"
+	EventFirstToken = "gen_ai.first_token" //nolint:gosec // G101: an OpenTelemetry span event name, not a credential
 )
 
 // Values of AttrGenAIOperationName.
