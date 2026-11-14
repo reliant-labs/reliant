@@ -92,6 +92,20 @@ service OrgPolicyService {
       activity: {none: "reads only: validates and compares a proposed document, writes nothing"}
     };
   }
+
+  // GetMyPolicyUsage returns the caller's own LLM spend in the org against
+  // the spend caps that bind them this period (§6), and the org's spend
+  // against the org cap as that cap counts it. Any member: a cap no one can
+  // see is a cap no one can comply with.
+  //
+  // forge:custom — the caller's usage, not the CRUD of a table.
+  rpc GetMyPolicyUsage(GetMyPolicyUsageRequest) returns (GetMyPolicyUsageResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      activity: {none: "reads only: the caller's spend against the org's caps"}
+    };
+  }
 }
 
 // OrgPolicyRecord is one version of an org's policy document.
@@ -172,4 +186,44 @@ message PreviewOrgPolicyResponse {
   // refuse the document (for instance a rule that would leave unattended runs
   // with no source the org pays for).
   repeated string warnings = 5;
+}
+
+message GetMyPolicyUsageRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// PolicySpendUsage is spend against one cap in its current period.
+message PolicySpendUsage {
+  // cap is the cap that applies; unset when none does (no cap, or the
+  // member's override is unlimited).
+  SpendCap cap = 1;
+  // unlimited is a member override that exempts the caller from the member
+  // cap. Only on GetMyPolicyUsageResponse.member.
+  bool unlimited = 2;
+  // spent_usd_nanos is the spend the cap counts in the current period: the
+  // cap's own period, or the calendar month when no cap applies.
+  int64 spent_usd_nanos = 3;
+  // period_start and period_end bound the current UTC period (end
+  // exclusive).
+  google.protobuf.Timestamp period_start = 4;
+  google.protobuf.Timestamp period_end = 5;
+}
+
+message GetMyPolicyUsageResponse {
+  // policy_version is the version of the policy the caps came from (0: no
+  // policy).
+  int64 policy_version = 1;
+  // mode is the spend section's mode; UNSPECIFIED when there is no spend
+  // section.
+  OrgPolicyMode mode = 2;
+  // enforced reports whether the caps refuse calls today: the section is
+  // ENFORCE and the platform enforces spend caps. False while a cap is only
+  // being trialled (audit).
+  bool enforced = 3;
+  // member is the caller's own spend against their cap (their override,
+  // else the member default).
+  PolicySpendUsage member = 4;
+  // org is the org's spend against the org cap, counted as applies_to says.
+  PolicySpendUsage org = 5;
+  SpendAppliesTo applies_to = 6;
 }
