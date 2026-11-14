@@ -165,8 +165,9 @@ func (s *Service) CreateTrigger(
 	}
 
 	return connect.NewResponse(&reliantv1.CreateTriggerResponse{
-		Trigger: s.render(ctx, trigger),
-		Webhook: cred,
+		Trigger:        s.render(ctx, trigger),
+		Webhook:        cred,
+		FundingWarning: s.fundingWarning(ctx, trigger),
 	}), nil
 }
 
@@ -361,7 +362,8 @@ func (s *Service) UpdateTrigger(
 		s.grants.releaseIfUnused(ctx, existing.UserID, existing.DaemonID)
 	}
 	return connect.NewResponse(&reliantv1.UpdateTriggerResponse{
-		Trigger: s.render(ctx, updated),
+		Trigger:        s.render(ctx, updated),
+		FundingWarning: s.fundingWarning(ctx, updated),
 	}), nil
 }
 
@@ -456,7 +458,8 @@ func (s *Service) SetTriggerEnabled(
 		s.grants.releaseIfUnused(ctx, trigger.UserID, trigger.DaemonID)
 	}
 	return connect.NewResponse(&reliantv1.SetTriggerEnabledResponse{
-		Trigger: s.render(ctx, trigger),
+		Trigger:        s.render(ctx, trigger),
+		FundingWarning: s.fundingWarning(ctx, trigger),
 	}), nil
 }
 
