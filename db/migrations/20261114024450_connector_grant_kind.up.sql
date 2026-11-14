@@ -27,20 +27,35 @@
 -- grant created meanwhile is invisible to the forge endpoint it no longer
 -- serves, and the workspace endpoint of that release would offer it to the
 -- one-live-connector fallback only if it were the user's only grant.
+--
+-- Locks: every statement here is a catalog change. The new columns carry
+-- constant defaults (no rewrite), DROP NOT NULL scans nothing, and every
+-- CHECK is added NOT VALID, so the ACCESS EXCLUSIVE lock is held only for the
+-- catalog change, never for a scan of the table; lock_timeout bounds the wait
+-- for it (behind a long transaction the migration fails after 5s and the next
+-- deploy retries it, instead of queueing every connector read behind it). New
+-- and updated rows are checked from this commit on.
+-- 20261114055500_connector_grant_kind_validate validates the existing rows in
+-- its own transaction, under SHARE UPDATE EXCLUSIVE, which does not block
+-- reads or writes. Every existing row is a workspace grant with a daemon and
+-- a non-empty path_root (the constraints this replaces), so validation cannot
+-- fail.
+SET LOCAL lock_timeout = '5s';
+
 ALTER TABLE connector_grants
     ADD COLUMN kind text NOT NULL DEFAULT 'workspace',
     ADD COLUMN org_id text NOT NULL DEFAULT '',
     ADD COLUMN project_names jsonb NOT NULL DEFAULT '[]'::jsonb;
 
 ALTER TABLE connector_grants
-    ADD CONSTRAINT connector_grants_kind_valid CHECK (kind = ANY (ARRAY['workspace'::text, 'forge'::text])),
-    ADD CONSTRAINT connector_grants_forge_org CHECK (kind <> 'forge' OR length(TRIM(BOTH FROM org_id)) > 0),
-    ADD CONSTRAINT connector_grants_project_names_array CHECK (jsonb_typeof(project_names) = 'array');
+    ADD CONSTRAINT connector_grants_kind_valid CHECK (kind = ANY (ARRAY['workspace'::text, 'forge'::text])) NOT VALID,
+    ADD CONSTRAINT connector_grants_forge_org CHECK (kind <> 'forge' OR length(TRIM(BOTH FROM org_id)) > 0) NOT VALID,
+    ADD CONSTRAINT connector_grants_project_names_array CHECK (jsonb_typeof(project_names) = 'array') NOT VALID;
 
 ALTER TABLE connector_grants ALTER COLUMN daemon_id DROP NOT NULL;
 ALTER TABLE connector_grants
-    ADD CONSTRAINT connector_grants_daemon_by_kind CHECK ((kind = 'workspace') = (daemon_id IS NOT NULL));
+    ADD CONSTRAINT connector_grants_daemon_by_kind CHECK ((kind = 'workspace') = (daemon_id IS NOT NULL)) NOT VALID;
 
-ALTER TABLE connector_grants DROP CONSTRAINT connector_grants_path_root_not_empty;
 ALTER TABLE connector_grants
-    ADD CONSTRAINT connector_grants_path_root_not_empty CHECK (kind <> 'workspace' OR length(TRIM(BOTH FROM path_root)) > 0);
+    DROP CONSTRAINT connector_grants_path_root_not_empty,
+    ADD CONSTRAINT connector_grants_path_root_not_empty CHECK (kind <> 'workspace' OR length(TRIM(BOTH FROM path_root)) > 0) NOT VALID;
