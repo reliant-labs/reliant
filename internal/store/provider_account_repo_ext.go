@@ -312,6 +312,9 @@ type ProviderAccountOwnership struct {
 	Owner           core.AccountOwner
 	OrgAccess       string
 	CreatedByUserID string
+	// AttributedOrgID and AttributionSource attribute a person's new row to the org that pays
+	// for it (the managed key minted in that org); both "" for a plain personal row.
+	AttributedOrgID, AttributionSource string
 }
 
 // InsertProviderAccount writes a new account at priority, created at createdAt, and returns it
@@ -332,6 +335,8 @@ func InsertProviderAccount(ctx context.Context, db orm.Context, id string, own P
 	if own.Owner.IsOrg() {
 		row.OrgID, row.OrgAccess = &own.Owner.ID, acctNullText(own.OrgAccess)
 		row.CreatedByUserID = acctNullText(own.CreatedByUserID)
+	} else if own.AttributedOrgID != "" {
+		row.AttributedOrgID, row.AttributionSource = acctNullText(own.AttributedOrgID), acctNullText(own.AttributionSource)
 	}
 	// RETURNING, so the account carries the stored (microsecond) timestamps, as a read would.
 	if err := db.Bun().NewInsert().Model(row).Returning(providerAccountMetaColumns).Scan(ctx); err != nil {
