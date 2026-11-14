@@ -35,7 +35,7 @@
 -- for it (behind a long transaction the migration fails after 5s and the next
 -- deploy retries it, instead of queueing every connector read behind it). New
 -- and updated rows are checked from this commit on.
--- 20261114055500_connector_grant_kind_validate validates the existing rows in
+-- 20261114060001_connector_grant_kind_validate validates the existing rows in
 -- its own transaction, under SHARE UPDATE EXCLUSIVE, which does not block
 -- reads or writes. Every existing row is a workspace grant with a daemon and
 -- a non-empty path_root (the constraints this replaces), so validation cannot
