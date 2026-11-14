@@ -119,6 +119,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge component list`](#reliant-forge-component-list) | List all available components |
 | [`reliant forge component search`](#reliant-forge-component-search) | Search components by keyword |
 | [`reliant forge db`](#reliant-forge-db) | Database and migration commands |
+| [`reliant forge db analyze`](#reliant-forge-db-analyze) | Measure what pending migrations do on a real postgres: locks, rewrites, scans, time |
 | [`reliant forge db introspect`](#reliant-forge-db-introspect) | Inspect the migrated database schema |
 | [`reliant forge db migrate`](#reliant-forge-db-migrate) | Apply, inspect and repair migration state with forge's migrator |
 | [`reliant forge db migrate force`](#reliant-forge-db-migrate-force) | Clear a dirty migration state by recording a version without running SQL |
@@ -3954,6 +3955,10 @@ Forge uses a migration-first database model:
 To read an environment's data: 'forge db query `<env>` "`<sql>`"' runs one
 read-only statement and prints the rows.
 
+To see what pending migrations do on a real postgres — locks, rewrites,
+validation scans — 'forge db analyze' measures them in a rolled-back
+transaction.
+
 When something is wedged:
 
   A migration failed part-way and the state is marked dirty
@@ -3991,6 +3996,7 @@ reliant forge db [flags]
 
 | Command | Description |
 |---------|-------------|
+| [`analyze`](#reliant-forge-db-analyze) | Measure what pending migrations do on a real postgres: locks, rewrites, scans, time |
 | [`introspect`](#reliant-forge-db-introspect) | Inspect the migrated database schema |
 | [`migrate`](#reliant-forge-db-migrate) | Apply, inspect and repair migration state with forge's migrator |
 | [`migration`](#reliant-forge-db-migration) | Create and re-version forward-only SQL migration files |
@@ -4005,6 +4011,70 @@ reliant forge db [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--db` | `string` | - | Database to act on, when the project declares several (deploy/kcl databases with migrations); default: the one named "default", else the only one |
+
+---
+
+#### reliant forge db analyze
+
+Measure what pending migrations do on a real postgres: locks, rewrites, scans, time
+
+Apply migrations statement by statement, each file in its own transaction as
+forge's migrator applies them, on a DISPOSABLE copy of the target, and measure
+each statement: the locks it took (pg_locks), the tables and indexes it
+rewrote (pg_class.relfilenode), the tables it scanned
+(pg_stat_xact_user_tables), and how long it ran.
+
+Which migrations:
+  scratch (default)  the migrations added or changed since --base (default: the
+                     merge-base with the remote default branch), on an embedded
+                     postgres migrated with the unchanged ones
+  dsn                every migration the target's schema_migrations lacks, on a
+                     database you provide — typically an anonymized prod snapshot
+
+A dsn target is only read, then copied (CREATE DATABASE … TEMPLATE) and the
+copy dropped when the analysis ends: the target is never written. It must be
+marked as one forge may copy, by whoever builds it:
+  ALTER DATABASE `<db>` SET forge.analyze_target = 'on';
+and the role needs CREATEDB and ownership of it, with nothing else connected to
+it during the copy. A target that is a non-development environment's declared
+database is refused too. The DSN is read from an environment variable
+(database.analyze.target.dsn_env, default FORGE_ANALYZE_DATABASE_URL), never
+from forge.yaml. A file whose one statement cannot run inside a transaction
+(CREATE INDEX CONCURRENTLY) runs it on its own; its lock is reported
+statically.
+
+Rules (lint.rules sets their severity; each warns before it gates):
+  db-analyze-table-rewrite         a pre-existing table or its indexes rewritten
+  db-analyze-access-exclusive-lock ACCESS EXCLUSIVE held across a scan or rewrite
+  db-analyze-validation-scan        a full scan under a lock that blocks writes
+  db-analyze-blocking-index-build   an index built without CONCURRENTLY
+  db-analyze-statement-timeout     a statement exceeded statement_timeout
+
+Exit codes: 0 nothing gating; 1 a gating finding; 2 could not analyze (no
+postgres, target ahead of the tree, refused DSN, a statement that failed).
+An empty analysis is reported as scanned 0, with the reason.
+
+Load the db/analyze skill for configuration and how to read the document.
+
+Examples:
+  forge db analyze
+  forge db analyze --json
+  FORGE_ANALYZE_DATABASE_URL=postgres://... forge db analyze --target dsn
+
+```
+reliant forge db analyze [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--base` | `string` | - | Revision a scratch target's migrations are split at (default: the merge-base with the remote default branch) |
+| `--dir` | `string` | - | Migrations directory (default: the --db database's, else forge.yaml database.migrations_dir, else db/migrations; a relative path resolves against the project root, not the CWD) |
+| `--dsn-env` | `string` | - | Environment variable holding a dsn target's connection string (default: database.analyze.target.dsn_env, else FORGE_ANALYZE_DATABASE_URL) |
+| `--json` | `bool` | - | Print the forge.db-analyze/v1 document |
+| `--target` | `string` | - | Where to analyze: scratch (an embedded postgres) or dsn (default: database.analyze.target.kind, else scratch) |
 
 ---
 
@@ -12593,9 +12663,13 @@ standard OpenTelemetry variables your app needs — nothing forge-specific:
   OTEL_SERVICE_NAME             one per deployable (api, worker, web)
   OTEL_RESOURCE_ATTRIBUTES      deployment.environment.name=`<env>`,service.version=\<your version>
 
-It records the envs in forge.yaml (`envs:` with `monitoring: true`), writing a
-minimal forge.yaml when there is none (it asks first; --write-config to skip the
-question, --no-write to keep the directory untouched and pass --project).
+It declares each env nothing declares yet in an env document,
+deploy/envs/`<env>`.yaml (apiVersion forge.dev/env/v1: the project, the env and
+where its telemetry goes; `forge project schema env` prints the schema). It needs
+no forge.yaml. In a directory with no forge files it asks first (--write-config
+to skip the question, --no-write to keep the directory untouched and pass
+--project). An env document already there is read, never rewritten; an env
+forge.yaml `envs:` declares (the legacy shorthand) stays in forge.yaml.
 
   forge login
   forge obs init prod staging
@@ -12615,12 +12689,12 @@ reliant forge obs init [env…] [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--json` | `bool` | - | print the result as a forge.obs.init/v1 document |
-| `--no-write` | `bool` | - | never write forge.yaml (name the project with --project) |
+| `--no-write` | `bool` | - | write no file: no env document, no forge.yaml (name the project with --project) |
 | `--org` | `string` | - | the organization a NEW project is created in (default: your only one) |
 | `--service` | `string` | - | fill OTEL_SERVICE_NAME with this service.name (default: a placeholder to fill per deployable) |
 | `--token-name` | `string` | `forge-obs-init` | the ingest token's label (ci, laptop, prod-k8s) |
 | `--ttl` | `duration` | `0s` | the ingest token's lifetime (default and maximum 90 days, at least 1h) |
-| `--write-config` | `bool` | - | write or update forge.yaml without asking |
+| `--write-config` | `bool` | - | write the env document (deploy/envs/`<env>`.yaml) without asking |
 
 ---
 
@@ -17919,12 +17993,16 @@ into the env, which is the deploy marker `forge obs changes` lists,
 `forge obs check` judges, and the console's Releases page shows as
 "recorded by CI".
 
-No deploy/kcl is needed: forge.yaml's `name:` is the project, and the env is
-created on the control plane as self-managed on first use. A version alone is
+No deploy/kcl is needed, and no forge.yaml: the project is forge.yaml's `name:`,
+else the one the env's document names (deploy/envs/`<env>`.yaml, which
+`forge obs init` writes). The env is created on the control plane as
+self-managed on first use. A version alone is
 enough (--version, with the commit detected from CI); pass --workload/--image
 pairs to record the digests your pipeline shipped.
 
-Where it records: an env with deploy/kcl uses the ledger its KCL selects.
+Where it records: an env declared by deploy/kcl or an env document records
+only when every workload in it is bound to the external runtime, on the
+control plane it declares.
 Otherwise, signed in (forge login, or a CI token with deploy:write in
 FORGE_CONTROL_PLANE_TOKEN, minted in the web app's Settings → API tokens) it records on Reliant cloud;
 not signed in, on this machine's ledger, which monitoring cannot see.
