@@ -6,12 +6,18 @@ name: Merge queue
 # anything longer belongs in the pre-release gate").
 #
 # WHAT RUNS HERE: `task ci:merge -- --queue`, the affected tier relative to the
-# group's base: build, the affected -short tests (direct importers), the web
-# typecheck when web changed, forge generate / docs drift when their inputs
-# changed, migration safety and order when a migration changed, buf lint when a
-# proto changed; then each new or changed Go test three times, the cheap
-# repo checks, and the vendored control-plane contract check when the group
-# changes proto-vendor/controlplane/ (control-plane #2556).
+# group's base: build, the affected -short tests (direct importers; on a FULL
+# web fallback the vitest files the group's own web modules reach), the web
+# typecheck when web changed, forge lint's own lanes scoped to the changed
+# directories (--optional-deps-guard and --tracing among them), the forge demo
+# bundle's build when the change reaches it, forge generate / docs drift when
+# their inputs changed, migration safety and order when a migration changed,
+# buf lint when a proto changed; then each new or changed Go test three times,
+# the cheap repo checks, and the vendored control-plane contract check when the
+# group changes proto-vendor/controlplane/ (control-plane #2556). The scoped
+# forge lint joined on 2026-11-13: until then `--queue` implied `--skip-lint`,
+# and #2696 and #2662 turned main red on findings it names in 1-2 minutes
+# (reverse-walk backtest, 2026-11-13).
 #
 # BESIDE IT, golangci-lint on the changed packages (owner, 2026-11-08): the
 # `golangci` job, `task ci:golangci`, the Go packages the group changed since
@@ -24,10 +30,10 @@ name: Merge queue
 # findings only the release gate's whole-module lint saw (staticcheck QF1001
 # from #2293 and #2427, gosec G101 from #2368); this job reproduces all three.
 #
-# WHAT DOES NOT: vet, forge lint, golangci over packages the group did not
-# change, buf lint on an unchanged proto, the
-# race detector, slow and integration tests, the whole vitest suite, the
-# renderer's release build, Playwright and the electron package smoke. ci.yml
+# WHAT DOES NOT: vet, forge lint's golangci, buf, whole-project and deploy
+# lanes, golangci over packages the group did not change, buf lint on an
+# unchanged proto, the race detector, slow and integration tests, the whole
+# vitest suite, the renderer's release build, Playwright and the electron package smoke. ci.yml
 # runs every one of them on each push to main and nightly, and the release
 # gate's record requires them, so a release (an RC set) is never cut over them.
 #
