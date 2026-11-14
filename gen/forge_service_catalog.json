@@ -11530,6 +11530,21 @@
               "Name": "expires_at",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "project_names",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "CreateConnectorResponse": [
@@ -11559,7 +11574,13 @@
               "MessageType": "reliant.v1.AuthorizedClient"
             }
           ],
-          "ListAvailableToolsRequest": null,
+          "ListAvailableToolsRequest": [
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
           "ListAvailableToolsResponse": [
             {
               "Name": "tools",
@@ -11736,6 +11757,20 @@
             {
               "name": "created_at",
               "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectorKind"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_names",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ConnectorActivity": [
@@ -11834,6 +11869,20 @@
               "name": "expires_at",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectorKind"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_names",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.CreateConnectorResponse": [
@@ -11860,7 +11909,14 @@
               "repeated": true
             }
           ],
-          "reliant.v1.ListAvailableToolsRequest": [],
+          "reliant.v1.ListAvailableToolsRequest": [
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectorKind",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListAvailableToolsResponse": [
             {
               "name": "tools",
@@ -11951,6 +12007,11 @@
             "CONNECTOR_EXEC_MODE_DENY",
             "CONNECTOR_EXEC_MODE_ALLOWLIST",
             "CONNECTOR_EXEC_MODE_UNRESTRICTED"
+          ],
+          "reliant.v1.ConnectorKind": [
+            "CONNECTOR_KIND_UNSPECIFIED",
+            "CONNECTOR_KIND_WORKSPACE",
+            "CONNECTOR_KIND_FORGE"
           ]
         },
         "EnumNumbers": {
@@ -11959,12 +12020,21 @@
             1,
             2,
             3
+          ],
+          "reliant.v1.ConnectorKind": [
+            0,
+            1,
+            2
           ]
         },
         "EnumGoRefs": {
           "reliant.v1.ConnectorExecMode": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ConnectorExecMode"
+          },
+          "reliant.v1.ConnectorKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ConnectorKind"
           }
         }
       }

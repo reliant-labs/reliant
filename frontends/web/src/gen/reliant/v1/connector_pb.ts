@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/connector.proto.
  */
 export const file_reliant_v1_connector: GenFile = /*@__PURE__*/
-  fileDesc("ChpyZWxpYW50L3YxL2Nvbm5lY3Rvci5wcm90bxIKcmVsaWFudC52MSK+AQoWQXV0aG9yaXplQ2xpZW50UmVxdWVzdBIRCgljbGllbnRfaWQYASABKAkSEwoLY2xpZW50X25hbWUYAiABKAkSGQoMY29ubmVjdG9yX2lkGAMgASgJSACIAQESPgoNbmV3X2Nvbm5lY3RvchgEIAEoCzIiLnJlbGlhbnQudjEuQ3JlYXRlQ29ubmVjdG9yUmVxdWVzdEgBiAEBQg8KDV9jb25uZWN0b3JfaWRCEAoOX25ld19jb25uZWN0b3IiVwoXQXV0aG9yaXplQ2xpZW50UmVzcG9uc2USKAoJY29ubmVjdG9yGAEgASgLMhUucmVsaWFudC52MS5Db25uZWN0b3ISEgoKY3JlZGVudGlhbBgCIAEoCSIeChxMaXN0QXV0aG9yaXplZENsaWVudHNSZXF1ZXN0In8KEEF1dGhvcml6ZWRDbGllbnQSEQoJY2xpZW50X2lkGAEgASgJEhMKC2NsaWVudF9uYW1lGAIgASgJEhQKDGNvbm5lY3Rvcl9pZBgDIAEoCRIWCg5jb25uZWN0b3JfbmFtZRgEIAEoCRIVCg1hdXRob3JpemVkX2F0GAUgASgJIk4KHUxpc3RBdXRob3JpemVkQ2xpZW50c1Jlc3BvbnNlEi0KB2NsaWVudHMYASADKAsyHC5yZWxpYW50LnYxLkF1dGhvcml6ZWRDbGllbnQiNQogUmV2b2tlQ2xpZW50QXV0aG9yaXphdGlvblJlcXVlc3QSEQoJY2xpZW50X2lkGAEgASgJIjQKIVJldm9rZUNsaWVudEF1dGhvcml6YXRpb25SZXNwb25zZRIPCgdyZXZva2VkGAEgASgIItICCglDb25uZWN0b3ISCgoCaWQYASABKAkSEQoJZGFlbW9uX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSFAoMdG9rZW5fcHJlZml4GAQgASgJEhUKDWFsbG93ZWRfdG9vbHMYBSADKAkSEQoJcGF0aF9yb290GAYgASgJEjAKCWV4ZWNfbW9kZRgHIAEoDjIdLnJlbGlhbnQudjEuQ29ubmVjdG9yRXhlY01vZGUSFgoOZXhlY19hbGxvd2xpc3QYCCADKAkSFwoKZXhwaXJlc19hdBgJIAEoCUgAiAEBEhkKDGxhc3RfdXNlZF9hdBgKIAEoCUgBiAEBEhcKCnJldm9rZWRfYXQYCyABKAlIAogBARISCgpjcmVhdGVkX2F0GAwgASgJQg0KC19leHBpcmVzX2F0Qg8KDV9sYXN0X3VzZWRfYXRCDQoLX3Jldm9rZWRfYXQi1QEKFkNyZWF0ZUNvbm5lY3RvclJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSFQoNYWxsb3dlZF90b29scxgDIAMoCRIRCglwYXRoX3Jvb3QYBCABKAkSMAoJZXhlY19tb2RlGAUgASgOMh0ucmVsaWFudC52MS5Db25uZWN0b3JFeGVjTW9kZRIWCg5leGVjX2FsbG93bGlzdBgGIAMoCRIXCgpleHBpcmVzX2F0GAcgASgJSACIAQFCDQoLX2V4cGlyZXNfYXQiaAoXQ3JlYXRlQ29ubmVjdG9yUmVzcG9uc2USKAoJY29ubmVjdG9yGAEgASgLMhUucmVsaWFudC52MS5Db25uZWN0b3ISEgoKY3JlZGVudGlhbBgCIAEoCRIPCgdtY3BfdXJsGAMgASgJIhcKFUxpc3RDb25uZWN0b3JzUmVxdWVzdCJDChZMaXN0Q29ubmVjdG9yc1Jlc3BvbnNlEikKCmNvbm5lY3RvcnMYASADKAsyFS5yZWxpYW50LnYxLkNvbm5lY3RvciIkChZSZXZva2VDb25uZWN0b3JSZXF1ZXN0EgoKAmlkGAEgASgJIioKF1Jldm9rZUNvbm5lY3RvclJlc3BvbnNlEg8KB3Jldm9rZWQYASABKAgi4AEKEUNvbm5lY3RvckFjdGl2aXR5EgoKAmlkGAEgASgJEhAKCGdyYW50X2lkGAIgASgJEhEKCWRhZW1vbl9pZBgDIAEoCRIRCgl0b29sX25hbWUYBCABKAkSFAoMY29tbWFuZF90eXBlGAUgASgJEhEKCWFyZ3VtZW50cxgGIAEoCRIOCgZkZW5pZWQYByABKAgSFQoNZXJyb3JfbWVzc2FnZRgIIAEoCRITCgtkdXJhdGlvbl9tcxgJIAEoBRISCgpjcmVhdGVkX2F0GAogASgJEg4KBnN0YXR1cxgLIAEoCSJgChxMaXN0Q29ubmVjdG9yQWN0aXZpdHlSZXF1ZXN0EhUKCGdyYW50X2lkGAEgASgJSACIAQESEgoFbGltaXQYAiABKAVIAYgBAUILCglfZ3JhbnRfaWRCCAoGX2xpbWl0IlAKHUxpc3RDb25uZWN0b3JBY3Rpdml0eVJlc3BvbnNlEi8KCGFjdGl2aXR5GAEgAygLMh0ucmVsaWFudC52MS5Db25uZWN0b3JBY3Rpdml0eSIbChlMaXN0QXZhaWxhYmxlVG9vbHNSZXF1ZXN0IlgKDUNvbm5lY3RvclRvb2wSDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIQCghtdXRhdGluZxgDIAEoCBISCgpuZWVkc19leGVjGAQgASgIIkYKGkxpc3RBdmFpbGFibGVUb29sc1Jlc3BvbnNlEigKBXRvb2xzGAEgAygLMhkucmVsaWFudC52MS5Db25uZWN0b3JUb29sKp8BChFDb25uZWN0b3JFeGVjTW9kZRIjCh9DT05ORUNUT1JfRVhFQ19NT0RFX1VOU1BFQ0lGSUVEEAASHAoYQ09OTkVDVE9SX0VYRUNfTU9ERV9ERU5ZEAESIQodQ09OTkVDVE9SX0VYRUNfTU9ERV9BTExPV0xJU1QQAhIkCiBDT05ORUNUT1JfRVhFQ19NT0RFX1VOUkVTVFJJQ1RFRBADMtUHChBDb25uZWN0b3JTZXJ2aWNlElwKD0NyZWF0ZUNvbm5lY3RvchIiLnJlbGlhbnQudjEuQ3JlYXRlQ29ubmVjdG9yUmVxdWVzdBojLnJlbGlhbnQudjEuQ3JlYXRlQ29ubmVjdG9yUmVzcG9uc2UiABJZCg5MaXN0Q29ubmVjdG9ycxIhLnJlbGlhbnQudjEuTGlzdENvbm5lY3RvcnNSZXF1ZXN0GiIucmVsaWFudC52MS5MaXN0Q29ubmVjdG9yc1Jlc3BvbnNlIgASewoPUmV2b2tlQ29ubmVjdG9yEiIucmVsaWFudC52MS5SZXZva2VDb25uZWN0b3JSZXF1ZXN0GiMucmVsaWFudC52MS5SZXZva2VDb25uZWN0b3JSZXNwb25zZSIforsYGzoZCgZyZXZva2USDwoJY29ubmVjdG9yEgJpZBJuChVMaXN0Q29ubmVjdG9yQWN0aXZpdHkSKC5yZWxpYW50LnYxLkxpc3RDb25uZWN0b3JBY3Rpdml0eVJlcXVlc3QaKS5yZWxpYW50LnYxLkxpc3RDb25uZWN0b3JBY3Rpdml0eVJlc3BvbnNlIgASZQoSTGlzdEF2YWlsYWJsZVRvb2xzEiUucmVsaWFudC52MS5MaXN0QXZhaWxhYmxlVG9vbHNSZXF1ZXN0GiYucmVsaWFudC52MS5MaXN0QXZhaWxhYmxlVG9vbHNSZXNwb25zZSIAEpkBCg9BdXRob3JpemVDbGllbnQSIi5yZWxpYW50LnYxLkF1dGhvcml6ZUNsaWVudFJlcXVlc3QaIy5yZWxpYW50LnYxLkF1dGhvcml6ZUNsaWVudFJlc3BvbnNlIj2iuxg5OjcKCWF1dGhvcml6ZRIqChBjb25uZWN0b3JfY2xpZW50EgljbGllbnRfaWQaC2NsaWVudF9uYW1lEm4KFUxpc3RBdXRob3JpemVkQ2xpZW50cxIoLnJlbGlhbnQudjEuTGlzdEF1dGhvcml6ZWRDbGllbnRzUmVxdWVzdBopLnJlbGlhbnQudjEuTGlzdEF1dGhvcml6ZWRDbGllbnRzUmVzcG9uc2UiABKnAQoZUmV2b2tlQ2xpZW50QXV0aG9yaXphdGlvbhIsLnJlbGlhbnQudjEuUmV2b2tlQ2xpZW50QXV0aG9yaXphdGlvblJlcXVlc3QaLS5yZWxpYW50LnYxLlJldm9rZUNsaWVudEF1dGhvcml6YXRpb25SZXNwb25zZSItorsYKTonCgZyZXZva2USHQoQY29ubmVjdG9yX2NsaWVudBIJY2xpZW50X2lkQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_forge_v1_forge]);
+  fileDesc("ChpyZWxpYW50L3YxL2Nvbm5lY3Rvci5wcm90bxIKcmVsaWFudC52MSK+AQoWQXV0aG9yaXplQ2xpZW50UmVxdWVzdBIRCgljbGllbnRfaWQYASABKAkSEwoLY2xpZW50X25hbWUYAiABKAkSGQoMY29ubmVjdG9yX2lkGAMgASgJSACIAQESPgoNbmV3X2Nvbm5lY3RvchgEIAEoCzIiLnJlbGlhbnQudjEuQ3JlYXRlQ29ubmVjdG9yUmVxdWVzdEgBiAEBQg8KDV9jb25uZWN0b3JfaWRCEAoOX25ld19jb25uZWN0b3IiVwoXQXV0aG9yaXplQ2xpZW50UmVzcG9uc2USKAoJY29ubmVjdG9yGAEgASgLMhUucmVsaWFudC52MS5Db25uZWN0b3ISEgoKY3JlZGVudGlhbBgCIAEoCSIeChxMaXN0QXV0aG9yaXplZENsaWVudHNSZXF1ZXN0In8KEEF1dGhvcml6ZWRDbGllbnQSEQoJY2xpZW50X2lkGAEgASgJEhMKC2NsaWVudF9uYW1lGAIgASgJEhQKDGNvbm5lY3Rvcl9pZBgDIAEoCRIWCg5jb25uZWN0b3JfbmFtZRgEIAEoCRIVCg1hdXRob3JpemVkX2F0GAUgASgJIk4KHUxpc3RBdXRob3JpemVkQ2xpZW50c1Jlc3BvbnNlEi0KB2NsaWVudHMYASADKAsyHC5yZWxpYW50LnYxLkF1dGhvcml6ZWRDbGllbnQiNQogUmV2b2tlQ2xpZW50QXV0aG9yaXphdGlvblJlcXVlc3QSEQoJY2xpZW50X2lkGAEgASgJIjQKIVJldm9rZUNsaWVudEF1dGhvcml6YXRpb25SZXNwb25zZRIPCgdyZXZva2VkGAEgASgIIqIDCglDb25uZWN0b3ISCgoCaWQYASABKAkSEQoJZGFlbW9uX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSFAoMdG9rZW5fcHJlZml4GAQgASgJEhUKDWFsbG93ZWRfdG9vbHMYBSADKAkSEQoJcGF0aF9yb290GAYgASgJEjAKCWV4ZWNfbW9kZRgHIAEoDjIdLnJlbGlhbnQudjEuQ29ubmVjdG9yRXhlY01vZGUSFgoOZXhlY19hbGxvd2xpc3QYCCADKAkSFwoKZXhwaXJlc19hdBgJIAEoCUgAiAEBEhkKDGxhc3RfdXNlZF9hdBgKIAEoCUgBiAEBEhcKCnJldm9rZWRfYXQYCyABKAlIAogBARISCgpjcmVhdGVkX2F0GAwgASgJEicKBGtpbmQYDSABKA4yGS5yZWxpYW50LnYxLkNvbm5lY3RvcktpbmQSDgoGb3JnX2lkGA4gASgJEhUKDXByb2plY3RfbmFtZXMYDyADKAlCDQoLX2V4cGlyZXNfYXRCDwoNX2xhc3RfdXNlZF9hdEINCgtfcmV2b2tlZF9hdCKlAgoWQ3JlYXRlQ29ubmVjdG9yUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSDAoEbmFtZRgCIAEoCRIVCg1hbGxvd2VkX3Rvb2xzGAMgAygJEhEKCXBhdGhfcm9vdBgEIAEoCRIwCglleGVjX21vZGUYBSABKA4yHS5yZWxpYW50LnYxLkNvbm5lY3RvckV4ZWNNb2RlEhYKDmV4ZWNfYWxsb3dsaXN0GAYgAygJEhcKCmV4cGlyZXNfYXQYByABKAlIAIgBARInCgRraW5kGAggASgOMhkucmVsaWFudC52MS5Db25uZWN0b3JLaW5kEg4KBm9yZ19pZBgJIAEoCRIVCg1wcm9qZWN0X25hbWVzGAogAygJQg0KC19leHBpcmVzX2F0ImgKF0NyZWF0ZUNvbm5lY3RvclJlc3BvbnNlEigKCWNvbm5lY3RvchgBIAEoCzIVLnJlbGlhbnQudjEuQ29ubmVjdG9yEhIKCmNyZWRlbnRpYWwYAiABKAkSDwoHbWNwX3VybBgDIAEoCSIXChVMaXN0Q29ubmVjdG9yc1JlcXVlc3QiQwoWTGlzdENvbm5lY3RvcnNSZXNwb25zZRIpCgpjb25uZWN0b3JzGAEgAygLMhUucmVsaWFudC52MS5Db25uZWN0b3IiJAoWUmV2b2tlQ29ubmVjdG9yUmVxdWVzdBIKCgJpZBgBIAEoCSIqChdSZXZva2VDb25uZWN0b3JSZXNwb25zZRIPCgdyZXZva2VkGAEgASgIIuABChFDb25uZWN0b3JBY3Rpdml0eRIKCgJpZBgBIAEoCRIQCghncmFudF9pZBgCIAEoCRIRCglkYWVtb25faWQYAyABKAkSEQoJdG9vbF9uYW1lGAQgASgJEhQKDGNvbW1hbmRfdHlwZRgFIAEoCRIRCglhcmd1bWVudHMYBiABKAkSDgoGZGVuaWVkGAcgASgIEhUKDWVycm9yX21lc3NhZ2UYCCABKAkSEwoLZHVyYXRpb25fbXMYCSABKAUSEgoKY3JlYXRlZF9hdBgKIAEoCRIOCgZzdGF0dXMYCyABKAkiYAocTGlzdENvbm5lY3RvckFjdGl2aXR5UmVxdWVzdBIVCghncmFudF9pZBgBIAEoCUgAiAEBEhIKBWxpbWl0GAIgASgFSAGIAQFCCwoJX2dyYW50X2lkQggKBl9saW1pdCJQCh1MaXN0Q29ubmVjdG9yQWN0aXZpdHlSZXNwb25zZRIvCghhY3Rpdml0eRgBIAMoCzIdLnJlbGlhbnQudjEuQ29ubmVjdG9yQWN0aXZpdHkiUgoZTGlzdEF2YWlsYWJsZVRvb2xzUmVxdWVzdBIsCgRraW5kGAEgASgOMhkucmVsaWFudC52MS5Db25uZWN0b3JLaW5kSACIAQFCBwoFX2tpbmQiWAoNQ29ubmVjdG9yVG9vbBIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEhAKCG11dGF0aW5nGAMgASgIEhIKCm5lZWRzX2V4ZWMYBCABKAgiRgoaTGlzdEF2YWlsYWJsZVRvb2xzUmVzcG9uc2USKAoFdG9vbHMYASADKAsyGS5yZWxpYW50LnYxLkNvbm5lY3RvclRvb2wqnwEKEUNvbm5lY3RvckV4ZWNNb2RlEiMKH0NPTk5FQ1RPUl9FWEVDX01PREVfVU5TUEVDSUZJRUQQABIcChhDT05ORUNUT1JfRVhFQ19NT0RFX0RFTlkQARIhCh1DT05ORUNUT1JfRVhFQ19NT0RFX0FMTE9XTElTVBACEiQKIENPTk5FQ1RPUl9FWEVDX01PREVfVU5SRVNUUklDVEVEEAMqZwoNQ29ubmVjdG9yS2luZBIeChpDT05ORUNUT1JfS0lORF9VTlNQRUNJRklFRBAAEhwKGENPTk5FQ1RPUl9LSU5EX1dPUktTUEFDRRABEhgKFENPTk5FQ1RPUl9LSU5EX0ZPUkdFEAIy1QcKEENvbm5lY3RvclNlcnZpY2USXAoPQ3JlYXRlQ29ubmVjdG9yEiIucmVsaWFudC52MS5DcmVhdGVDb25uZWN0b3JSZXF1ZXN0GiMucmVsaWFudC52MS5DcmVhdGVDb25uZWN0b3JSZXNwb25zZSIAElkKDkxpc3RDb25uZWN0b3JzEiEucmVsaWFudC52MS5MaXN0Q29ubmVjdG9yc1JlcXVlc3QaIi5yZWxpYW50LnYxLkxpc3RDb25uZWN0b3JzUmVzcG9uc2UiABJ7Cg9SZXZva2VDb25uZWN0b3ISIi5yZWxpYW50LnYxLlJldm9rZUNvbm5lY3RvclJlcXVlc3QaIy5yZWxpYW50LnYxLlJldm9rZUNvbm5lY3RvclJlc3BvbnNlIh+iuxgbOhkKBnJldm9rZRIPCgljb25uZWN0b3ISAmlkEm4KFUxpc3RDb25uZWN0b3JBY3Rpdml0eRIoLnJlbGlhbnQudjEuTGlzdENvbm5lY3RvckFjdGl2aXR5UmVxdWVzdBopLnJlbGlhbnQudjEuTGlzdENvbm5lY3RvckFjdGl2aXR5UmVzcG9uc2UiABJlChJMaXN0QXZhaWxhYmxlVG9vbHMSJS5yZWxpYW50LnYxLkxpc3RBdmFpbGFibGVUb29sc1JlcXVlc3QaJi5yZWxpYW50LnYxLkxpc3RBdmFpbGFibGVUb29sc1Jlc3BvbnNlIgASmQEKD0F1dGhvcml6ZUNsaWVudBIiLnJlbGlhbnQudjEuQXV0aG9yaXplQ2xpZW50UmVxdWVzdBojLnJlbGlhbnQudjEuQXV0aG9yaXplQ2xpZW50UmVzcG9uc2UiPaK7GDk6NwoJYXV0aG9yaXplEioKEGNvbm5lY3Rvcl9jbGllbnQSCWNsaWVudF9pZBoLY2xpZW50X25hbWUSbgoVTGlzdEF1dGhvcml6ZWRDbGllbnRzEigucmVsaWFudC52MS5MaXN0QXV0aG9yaXplZENsaWVudHNSZXF1ZXN0GikucmVsaWFudC52MS5MaXN0QXV0aG9yaXplZENsaWVudHNSZXNwb25zZSIAEqcBChlSZXZva2VDbGllbnRBdXRob3JpemF0aW9uEiwucmVsaWFudC52MS5SZXZva2VDbGllbnRBdXRob3JpemF0aW9uUmVxdWVzdBotLnJlbGlhbnQudjEuUmV2b2tlQ2xpZW50QXV0aG9yaXphdGlvblJlc3BvbnNlIi2iuxgpOicKBnJldm9rZRIdChBjb25uZWN0b3JfY2xpZW50EgljbGllbnRfaWRCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge]);
 
 /**
  * @generated from message reliant.v1.AuthorizeClientRequest
@@ -260,6 +260,30 @@ export type Connector = Message<"reliant.v1.Connector"> & {
    * @generated from field: string created_at = 12;
    */
   createdAt: string;
+
+  /**
+   * kind is what the connector reaches: a workspace (daemon_id, path_root,
+   * exec_mode) or the Reliant Forge account tools (org_id, project_names).
+   * UNSPECIFIED is a workspace connector: every connector before kinds.
+   *
+   * @generated from field: reliant.v1.ConnectorKind kind = 13;
+   */
+  kind: ConnectorKind;
+
+  /**
+   * org_id is the organization a forge connector may read and act in.
+   *
+   * @generated from field: string org_id = 14;
+   */
+  orgId: string;
+
+  /**
+   * project_names confines a forge connector to these forge projects of
+   * org_id; empty means every project of it.
+   *
+   * @generated from field: repeated string project_names = 15;
+   */
+  projectNames: string[];
 };
 
 /**
@@ -274,8 +298,9 @@ export const ConnectorSchema: GenMessage<Connector> = /*@__PURE__*/
  */
 export type CreateConnectorRequest = Message<"reliant.v1.CreateConnectorRequest"> & {
   /**
-   * daemon_id is required: a connector is bound to exactly one workspace.
-   * There is deliberately no "all my daemons" form.
+   * daemon_id is required for a workspace connector: it is bound to exactly
+   * one workspace. There is deliberately no "all my daemons" form. A forge
+   * connector names none.
    *
    * @generated from field: string daemon_id = 1;
    */
@@ -294,8 +319,8 @@ export type CreateConnectorRequest = Message<"reliant.v1.CreateConnectorRequest"
   allowedTools: string[];
 
   /**
-   * path_root confines filesystem access. Must be non-empty; an empty root
-   * means no access rather than unrestricted access.
+   * path_root confines filesystem access. Must be non-empty for a workspace
+   * connector; an empty root means no access rather than unrestricted access.
    *
    * @generated from field: string path_root = 4;
    */
@@ -317,6 +342,30 @@ export type CreateConnectorRequest = Message<"reliant.v1.CreateConnectorRequest"
    * @generated from field: optional string expires_at = 7;
    */
   expiresAt?: string | undefined;
+
+  /**
+   * kind is what the connector reaches; UNSPECIFIED is a workspace.
+   *
+   * @generated from field: reliant.v1.ConnectorKind kind = 8;
+   */
+  kind: ConnectorKind;
+
+  /**
+   * org_id is required for a forge connector: the organization it may read
+   * and act in. The grant only narrows what the caller's own credential may
+   * do there, so an org the caller does not belong to permits nothing.
+   *
+   * @generated from field: string org_id = 9;
+   */
+  orgId: string;
+
+  /**
+   * project_names confines a forge connector to these projects of org_id;
+   * empty means every project.
+   *
+   * @generated from field: repeated string project_names = 10;
+   */
+  projectNames: string[];
 };
 
 /**
@@ -344,7 +393,8 @@ export type CreateConnectorResponse = Message<"reliant.v1.CreateConnectorRespons
   credential: string;
 
   /**
-   * mcp_url is the endpoint to paste into the third-party client.
+   * mcp_url is the endpoint to paste into the third-party client: /mcp for a
+   * workspace connector, /forge/mcp for a forge connector.
    *
    * @generated from field: string mcp_url = 3;
    */
@@ -549,6 +599,13 @@ export const ListConnectorActivityResponseSchema: GenMessage<ListConnectorActivi
  * @generated from message reliant.v1.ListAvailableToolsRequest
  */
 export type ListAvailableToolsRequest = Message<"reliant.v1.ListAvailableToolsRequest"> & {
+  /**
+   * kind selects the catalog: a workspace connector's tools (UNSPECIFIED)
+   * or the Reliant Forge connector's.
+   *
+   * @generated from field: optional reliant.v1.ConnectorKind kind = 1;
+   */
+  kind?: ConnectorKind | undefined;
 };
 
 /**
@@ -660,6 +717,42 @@ export enum ConnectorExecMode {
  */
 export const ConnectorExecModeSchema: GenEnum<ConnectorExecMode> = /*@__PURE__*/
   enumDesc(file_reliant_v1_connector, 0);
+
+/**
+ * ConnectorKind is what a connector grants access to.
+ *
+ * @generated from enum reliant.v1.ConnectorKind
+ */
+export enum ConnectorKind {
+  /**
+   * Unspecified is a workspace connector, the only kind before kinds existed.
+   *
+   * @generated from enum value: CONNECTOR_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * A workspace connector: MCP tools inside one daemon's workspace, at /mcp.
+   *
+   * @generated from enum value: CONNECTOR_KIND_WORKSPACE = 1;
+   */
+  WORKSPACE = 1,
+
+  /**
+   * A Reliant Forge connector: forge's account-scoped MCP tools (monitoring,
+   * releases, environments) in one organization, optionally confined to some
+   * projects, at /forge/mcp.
+   *
+   * @generated from enum value: CONNECTOR_KIND_FORGE = 2;
+   */
+  FORGE = 2,
+}
+
+/**
+ * Describes the enum reliant.v1.ConnectorKind.
+ */
+export const ConnectorKindSchema: GenEnum<ConnectorKind> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_connector, 1);
 
 /**
  * ConnectorService manages connector grants: the stored consent that lets a
