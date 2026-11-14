@@ -3,14 +3,15 @@ package inbox
 
 import (
 	"context"
-	"errors"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"sort"
 	"strings"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/orgs"
@@ -77,6 +78,17 @@ func (s *Service) noOrgAccountItems(ctx context.Context, userID string) ([]*reli
 	if err != nil {
 		return nil, err
 	}
+	// The store read is scoped to the owner or the administered orgs; each
+	// row is decided here: one the caller may read as theirs (authz, so a
+	// member who left the org no longer sees it), or one of an org they
+	// administer (control-plane's answer, as for rejected keys).
+	administered := make(map[string]bool, len(adminOrgs))
+	for _, id := range adminOrgs {
+		administered[id] = true
+	}
+	triggers = authz.Visible(ctx, userID, triggers, func(ctx context.Context, userID string, t *core.Trigger) bool {
+		return administered[ptr.From(t.OrgID)] || authz.CanReadTrigger(ctx, userID, t)
+	})
 	failed := core.TriggerEventFailed
 	items := make([]*reliantv1.InboxItem, 0, len(triggers))
 	for _, t := range triggers {
@@ -96,8 +108,9 @@ func noOrgAccountItem(t *core.Trigger, userID, detail string) *reliantv1.InboxIt
 	if t.PausedAt != nil {
 		since = t.PausedAt.UTC()
 	}
+	// Named only when it is someone else's: an admin reading a member's.
 	owner := ""
-	if t.UserID != userID {
+	if !authz.CanAccessPersonal(userID, t.UserID) {
 		owner = t.UserID
 	}
 	return &reliantv1.InboxItem{
@@ -122,8 +135,13 @@ func (s *Service) onPersonalAccountsItems(ctx context.Context, userID string) ([
 		return nil, nil
 	}
 	triggers, err := s.deps.Repo.ListPersonallyFundedTriggers(ctx, userID)
-	if err != nil || len(triggers) == 0 {
+	if err != nil {
 		return nil, err
+	}
+	// Only automations the caller may still read: none of an org they left.
+	triggers = authz.Visible(ctx, userID, triggers, authz.CanReadTrigger)
+	if len(triggers) == 0 {
+		return nil, nil
 	}
 	byOrg := map[string][]*core.Trigger{}
 	var orgIDs []string
@@ -151,6 +169,9 @@ func (s *Service) onPersonalAccountsItems(ctx context.Context, userID string) ([
 // isTeamOrg reports whether org has two or more live members, cached for
 // teamOrgTTL. An unknown count or a failed read is not a team.
 func (s *Service) isTeamOrg(ctx context.Context, userID, org string) bool {
+	if s.deps.Members == nil {
+		return false // no orgs on this deployment: never a notice on a guess
+	}
 	if v, ok := s.teamOrgs.Load(org); ok {
 		if e := v.(teamOrgEntry); time.Now().Before(e.expires) {
 			return e.team

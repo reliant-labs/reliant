@@ -20,14 +20,15 @@ import (
 )
 
 // vendoredFields is the protojson names of message's fields in the vendored
-// OrgNotifyInternalService contract (testdata/org_notify_internal.proto,
-// control-plane main at 3eeb9637c).
+// OrgNotifyInternalService contract (testdata/org_notify_internal.proto; its
+// header names the control-plane commit). The request's notice oneof lists
+// every alternative; a request carries exactly one.
 func vendoredFields(t *testing.T, src, message string) []string {
 	t.Helper()
 	body := regexp.MustCompile(`(?s)message ` + message + ` \{(.*?)\n\}`).FindStringSubmatch(src)
 	require.NotNil(t, body, "the vendored contract declares %s", message)
 	var out []string
-	for _, m := range regexp.MustCompile(`(?m)^\s+(?:string|int32|bool|OrgProviderKeyRejected) (\w+) = \d+;`).FindAllStringSubmatch(body[1], -1) {
+	for _, m := range regexp.MustCompile(`(?m)^\s+(?:string|int32|bool|OrgProviderKeyRejected|OrgAutomationNoOrgAccount) (\w+) = \d+;`).FindAllStringSubmatch(body[1], -1) {
 		parts := strings.Split(m[1], "_")
 		for i := 1; i < len(parts); i++ {
 			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
@@ -79,8 +80,8 @@ func TestNotifyOrgKeyRejected_SpeaksTheVendoredContract(t *testing.T) {
 	assert.Equal(t, "/controlplane.v1.OrgNotifyInternalService/NotifyOrgAdmins", path)
 	assert.Equal(t, "Bearer signed-s", auth)
 
-	request := vendoredFields(t, src, "NotifyOrgAdminsRequest")
-	assert.Equal(t, request, keys(body), "the request's fields, by their protojson names")
+	assert.Equal(t, []string{"incidentKey", "orgId", "orgProviderKeyRejected"}, keys(body))
+	assert.Subset(t, vendoredFields(t, src, "NotifyOrgAdminsRequest"), keys(body), "the request's fields, by their protojson names")
 	notice, ok := body["orgProviderKeyRejected"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, vendoredFields(t, src, "OrgProviderKeyRejected"), keys(notice))
@@ -88,6 +89,43 @@ func TestNotifyOrgKeyRejected_SpeaksTheVendoredContract(t *testing.T) {
 	assert.Equal(t, "org-acme", body["orgId"])
 	assert.Equal(t, "2030-01-02T03:04:05Z", body["incidentKey"])
 	assert.Contains(t, vendoredFields(t, src, "NotifyOrgAdminsResponse"), "deduplicated")
+}
+
+// The automation-paused notice (P11) speaks the same contract: the same path
+// and bearer, and exactly the vendored OrgAutomationNoOrgAccount's protojson
+// field names under the oneof's org_automation_no_org_account.
+func TestNotifyOrgAutomationNoOrgAccount_SpeaksTheVendoredContract(t *testing.T) {
+	raw, err := os.ReadFile("testdata/org_notify_internal.proto")
+	require.NoError(t, err)
+	src := string(raw)
+	require.Contains(t, src, "OrgAutomationNoOrgAccount org_automation_no_org_account = 4;")
+
+	var path, auth string
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path, auth = r.URL.Path, r.Header.Get("Authorization")
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &body)
+		_, _ = w.Write([]byte(`{"recipients":2}`))
+	}))
+	defer srv.Close()
+	c := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL}, Sign: signWith("s")})
+
+	dedup, err := c.NotifyOrgAutomationNoOrgAccount(context.Background(), OrgAutomationNoOrgAccountNotice{
+		OrgID: "org-acme", IncidentKey: "2030-01-02T03:04:05Z", TriggerID: "trg-1",
+		Automation: "Nightly triage", Model: "claude-sonnet-5", OwnerUserID: "user-7",
+	})
+	require.NoError(t, err)
+	assert.False(t, dedup, "a first send is not deduplicated")
+	assert.Equal(t, "/controlplane.v1.OrgNotifyInternalService/NotifyOrgAdmins", path)
+	assert.Equal(t, "Bearer signed-s", auth)
+
+	assert.Equal(t, []string{"incidentKey", "orgAutomationNoOrgAccount", "orgId"}, keys(body))
+	assert.Subset(t, vendoredFields(t, src, "NotifyOrgAdminsRequest"), keys(body), "the request's fields, by their protojson names")
+	notice, ok := body["orgAutomationNoOrgAccount"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, vendoredFields(t, src, "OrgAutomationNoOrgAccount"), keys(notice))
+	assert.Equal(t, map[string]any{"triggerId": "trg-1", "automation": "Nightly triage", "model": "claude-sonnet-5", "ownerUserId": "user-7"}, notice)
 }
 
 // The lease answer ("being sent; retry") is Unavailable: retryable, never a

@@ -339,7 +339,7 @@ type Trigger struct {
 	// admins was started (TriggerPausedNoOrgAccount pauses only). Read-only.
 	PauseNoticeFor *time.Time
 	CreatedAt      time.Time
-	UpdatedAt    time.Time
+	UpdatedAt      time.Time
 
 	// ProjectName and DaemonName are read-only display names joined in by
 	// GetTrigger and ListTriggers. Empty when the project or daemon row is
