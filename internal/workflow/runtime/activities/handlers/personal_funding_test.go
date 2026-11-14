@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -44,6 +45,11 @@ type fundingFake struct {
 	recordErr error
 	// chatOrderErr fails ChatFundingOrder.
 	chatOrderErr error
+	// personPick is the provider each chat's owner picked, by org:
+	// chat -> {org, driver}.
+	personPick map[string][2]string
+	// personPickErr fails ChatPersonPickDriver.
+	personPickErr error
 }
 
 func newFundingFake() *fundingFake {
@@ -131,6 +137,18 @@ func (f *fundingFake) RecordThreadFunding(_ context.Context, threadID, orgID, fu
 	}
 	f.threadFunding[threadID] = [3]string{funding, orgID, accountID}
 	return nil
+}
+
+func (f *fundingFake) ChatPersonPickDriver(_ context.Context, chatID, orgID string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.personPickErr != nil {
+		return "", f.personPickErr
+	}
+	if p, ok := f.personPick[chatID]; ok && p[0] == orgID {
+		return p[1], nil
+	}
+	return "", nil
 }
 
 func (f *fundingFake) ChatFundingOrder(_ context.Context, chatID string) (string, error) {
@@ -806,4 +824,153 @@ func TestPersonalFunding_UnreadableChatOrderFailsClosed(t *testing.T) {
 	isWait(t, err)
 	assert.Empty(t, env.built, "no personal driver is built")
 	assert.Nil(t, env.store.row("chat-1"), "no lease is granted")
+}
+
+// The provider the chat's owner picked for its root through the composer,
+// as a person (chat_person_picks), is consent for the root's attended calls
+// on that provider in that org: the call goes on with no question.
+func TestPersonalFunding_PersonPickIsConsentForTheRoot(t *testing.T) {
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+	env := newFundingEnv(t, "", "")
+	env.store.personPick = map[string][2]string{"chat-1": {fundOrg, "codex"}}
+	res, err := env.resolve(t, "root", "gpt-5.6-sol@codex")
+	require.NoError(t, err)
+	assert.Equal(t, "my-codex", res.Account.Config.AccountID)
+	assert.Nil(t, env.store.row("chat-1"), "a person's pick asks nothing")
+}
+
+// Everything else that names a provider is a preference, not consent: with
+// the org holding an account, a personal-only driver still asks (the default
+// "ask"), and no personal driver is built.
+func TestPersonalFunding_OnlyThePersonsRootPickIsConsent(t *testing.T) {
+	codexPick := map[string][2]string{"chat-1": {fundOrg, "codex"}}
+	for _, tc := range []struct {
+		name   string
+		pick   map[string][2]string
+		pickEr error
+		order  orgfunding.Order
+		mutate func(*llmCallSpec)
+		asks   bool
+	}{
+		{name: "a workflow's model@driver selector, no pick", mutate: func(s *llmCallSpec) { s.Selector.ID = "gpt-5.6-sol@codex" }, asks: true},
+		{name: "the run's providers (a preset's or workflow's providers:), no pick", mutate: func(s *llmCallSpec) { s.RunProviders = []string{"codex"} }, asks: true},
+		{name: "the selector's providers, no pick", mutate: func(s *llmCallSpec) { s.Selector.Providers = []string{"codex"} }, asks: true},
+		{name: "the provider switch, no pick", mutate: func(s *llmCallSpec) { s.ChatProvider = "codex" }, asks: true},
+		{name: "a sub-agent's selector, with the root's pick", pick: codexPick, mutate: func(s *llmCallSpec) {
+			s.Selector.ID, s.Descendant, s.TurnStart = "gpt-5.6-sol@codex", true, false
+		}, asks: false},
+		{name: "a spawn's providers, with the root's pick", pick: codexPick, mutate: func(s *llmCallSpec) {
+			s.RunProviders, s.Descendant = []string{"codex"}, true
+		}, asks: false},
+		{name: "an unattended root call, with a pick", pick: codexPick, mutate: func(s *llmCallSpec) {
+			s.Attended, s.UnattendedAnySource = false, false
+		}, asks: false},
+		{name: "a pick made in another org", pick: map[string][2]string{"chat-1": {"org-other", "codex"}}, asks: true},
+		{name: "a pick of another provider", pick: map[string][2]string{"chat-1": {fundOrg, "claude"}}, asks: true},
+		{name: "a pick that cannot be read", pickEr: errors.New("db down"), asks: true},
+		{name: "org_only outranks a pick", pick: codexPick, order: orgfunding.OrderOrgOnly, asks: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+			env := newFundingEnv(t, "", tc.order)
+			env.store.personPick, env.store.personPickErr = tc.pick, tc.pickEr
+			mutate := tc.mutate
+			if mutate == nil {
+				mutate = func(*llmCallSpec) {}
+			}
+			_, err := env.resolve(t, "root", "gpt-5.6-sol", mutate)
+			require.Error(t, err, "no personal spending")
+			assert.NotContains(t, env.built, "my-codex", "no personal driver is built")
+			if tc.asks {
+				require.NotNil(t, env.store.row("chat-1"), "it asks")
+			}
+		})
+	}
+}
+
+// Case 1 (limited) with the person's own pick: the org's accounts of the
+// picked provider are rate-limited and the person picked that provider for
+// the chat's root. The root's call goes on on their account, asking nothing
+// and granting no lease (promotePickWhileOrgLimited); anything else is as
+// without a pick.
+func TestPersonalFunding_LimitedOrgTierHonoursTheRootPick(t *testing.T) {
+	reset := time.Date(2099, 1, 2, 5, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name   string
+		pick   string
+		order  orgfunding.Order
+		mutate func(*llmCallSpec)
+		serves bool
+		asked  bool
+	}{
+		{name: "a matching pick serves on the person's account", pick: "claude", serves: true},
+		{name: "a pick of another provider asks", pick: "codex", asked: true},
+		{name: "a sub-agent of the root never gains the pick", pick: "claude", mutate: func(s *llmCallSpec) { s.Descendant = true }, asked: true},
+		{name: "org_only outranks the pick", pick: "claude", order: orgfunding.OrderOrgOnly},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// The org's key and the person's own account are both Claude's:
+			// the provider the person picked.
+			orgClaude := acmeKey("acme-key")
+			orgClaude.DriverID = "claude"
+			withAvailableDrivers(t, tiered(orgClaude, personal(claudeAccount("my-claude", "me@me.com", 0))))
+			env := newFundingEnv(t, "", tc.order)
+			env.store.personPick = map[string][2]string{"chat-1": {fundOrg, tc.pick}}
+			env.routing.Store.(*routerFake).bench("acme-key", reset, "five_hour")
+			mutate := tc.mutate
+			if mutate == nil {
+				mutate = func(*llmCallSpec) {}
+			}
+			res, err := env.resolve(t, "root", routeModel, mutate)
+			if tc.serves {
+				require.NoError(t, err)
+				assert.Equal(t, "my-claude", res.Account.Config.AccountID, "the picked provider's own account serves")
+				assert.Nil(t, env.store.row("chat-1"), "no question and no lease")
+				return
+			}
+			var failure *types.UsageLimitFailure
+			require.ErrorAs(t, err, &failure, "a limited org tier is a usage-limit refusal")
+			assert.False(t, failure.Facts.AlternativeAccount, "no retry on the person's account")
+			assert.NotContains(t, env.built, "my-claude")
+			q := env.store.row("chat-1")
+			if tc.asked {
+				require.NotNil(t, q)
+				assert.Equal(t, core.PersonalFundingAsked, q.State)
+			} else {
+				assert.Nil(t, q, "no question and no lease")
+			}
+		})
+	}
+}
+
+// A usable org account of the picked provider still serves first: the pick
+// is consent, not a preference over the org's accounts.
+func TestPersonalFunding_RootPickKeepsTheOrgFirst(t *testing.T) {
+	orgClaude := acmeKey("acme-key")
+	orgClaude.DriverID = "claude"
+	withAvailableDrivers(t, tiered(orgClaude, personal(claudeAccount("my-claude", "me@me.com", 0))))
+	env := newFundingEnv(t, "", "")
+	env.store.personPick = map[string][2]string{"chat-1": {fundOrg, "claude"}}
+	res, err := env.resolve(t, "root", routeModel)
+	require.NoError(t, err)
+	assert.Equal(t, "acme-key", res.Account.Config.AccountID)
+}
+
+// An unattended run that may spend only its org's sources, none of which
+// serves its model, fails the call with the no_org_account reason through
+// the real resolution path: no personal driver is built, and the failure is
+// one the runtime pauses on rather than retries (§11.4).
+func TestUnattendedOrgOnly_NoOrgSourceFailsWithTheReason(t *testing.T) {
+	withAvailableDrivers(t, tiered())
+	env := newFundingEnv(t, "", "")
+	_, err := env.resolve(t, "root", "gpt-5.6-sol@codex", func(s *llmCallSpec) { s.Attended, s.UnattendedAnySource = false, false })
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "this automation runs only on its organization's AI accounts, and none of them can run gpt-5.6-sol")
+	assert.ErrorIs(t, err, drivererrors.ErrNoServableProvider)
+	assert.Empty(t, env.built)
+
+	// An attended run on the same empty providers keeps today's wording.
+	_, err = env.resolve(t, "root", "gpt-5.6-sol@codex")
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "organization's AI accounts")
 }

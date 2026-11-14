@@ -162,7 +162,8 @@ func (g *Graph) newOrgPolicyWatcher() (*OrgPolicyWatcher, error) {
 
 func (g *Graph) newOrgPolicyResolver() (*orgpolicy.Resolver, error) {
 	return NewOrgPolicyResolver(OrgPolicyResolverDeps{
-		Authority: g.TokenAuthority(),
+		Authority:   g.TokenAuthority(),
+		Enforcement: g.ServerProcessConfig.GetOrgPolicyEnforcement(),
 	})
 }
 
@@ -1158,6 +1159,9 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		Repo:    g.Database(),
 		Sweeper: g.WorktreeSweep(),
 		Orgs:    g.OrgResolver(),
+		// The caller's live orgs, asked of the control plane as the caller;
+		// nil when self-hosted. A nil Service converts to a nil OrgLister.
+		MyOrgs: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 	})
 }
 
@@ -1463,6 +1467,7 @@ func (g *Graph) newOrgProviderAccount() (*org_provider_account.Service, error) {
 		ValidateKey: keyvalidate.Validate,
 		OrgRollout:  g.ApiServerConfig.GetOrgs(), // NewOrgProviderAccount sets the same, from the config it is given
 		Seats:       g.Seatmatch(),
+		ChatWaker:   orgAccountChatWaker(g.Database(), g.TemporalClient()),
 	})
 }
 

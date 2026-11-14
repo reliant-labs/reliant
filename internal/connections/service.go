@@ -13,6 +13,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
+	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -100,6 +102,50 @@ func (s *Service) ListIntegrations() []Integration {
 		out = append(out, in)
 	}
 	return out
+}
+
+// IntegrationPolicy is how an org's policy treats one integration in the
+// org's runs (control-plane docs/design/org-policies.md §4.3).
+type IntegrationPolicy struct {
+	// Allowed is false when the policy does not admit the integration.
+	Allowed bool
+	// Enforced is true when a use it does not admit is refused; false while
+	// the rule, or the platform's switch, only counts it (audit).
+	Enforced bool
+	// Version is the policy version the answer comes from.
+	Version int64
+}
+
+// OrgIntegrationPolicies answers, for a live member of orgID, how orgID's
+// policy treats each of integrationIDs, so a picker can mark one "not allowed
+// in <org>" instead of letting someone build a workflow that cannot run. An
+// integration the policy does not govern is absent. The answer is advisory:
+// a policy that cannot be read right now answers nothing (and every use is
+// still judged where it happens), and the point switched off governs nothing.
+func (s *Service) OrgIntegrationPolicies(ctx context.Context, userID, orgID string, integrationIDs []string) (map[string]IntegrationPolicy, error) {
+	if err := authz.OrgMemberDenial(ctx, userID, orgID); err != nil {
+		if errors.Is(err, authz.ErrMembershipUnavailable) {
+			return nil, &Error{Code: CodeUnavailable, Message: "could not check organization membership; try again", Err: err}
+		}
+		return nil, &Error{Code: CodePermissionDenied, Message: "you are not a member of that organization", Err: err}
+	}
+	out := map[string]IntegrationPolicy{}
+	if orgpolicy.EnforcementOf(orgpolicy.PointIntegrations) == orgpolicy.EnforcementOff {
+		return out, nil
+	}
+	pol, err := orgpolicy.For(ctx, orgID)
+	if err != nil {
+		logging.WarnContext(ctx, "connections: the organization's policy cannot be read; integrations are listed unmarked", "org_id", orgID, "error", err)
+		return out, nil
+	}
+	for _, id := range integrationIDs {
+		adm := orgpolicy.IntegrationAdmission(pol.Doc, id)
+		if !adm.Governed {
+			continue
+		}
+		out[id] = IntegrationPolicy{Allowed: adm.Admitted, Enforced: orgpolicy.Enforced(orgpolicy.PointIntegrations, adm.Mode), Version: pol.Version}
+	}
+	return out, nil
 }
 
 func (s *Service) List(ctx context.Context, userID, integrationID string) ([]*core.Connection, error) {

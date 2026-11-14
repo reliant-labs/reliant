@@ -287,7 +287,9 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"get_workflow": {
 		Bindable: map[string]struct{}{
-			"id": {},
+			"id":         {},
+			"line_count": {},
+			"start_line": {},
 		},
 		Unbindable: map[string]string{},
 	},

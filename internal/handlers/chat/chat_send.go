@@ -188,7 +188,8 @@ func (s *Service) liveRunStateUpdate(
 	newPresets map[string]string,
 ) (map[string]interface{}, error) {
 	if len(req.Msg.WorkflowParams) == 0 && len(newPresets) == 0 {
-		return nil, nil
+		// Even a plain message holds the run to its org's mode floor.
+		return s.withLiveModeFloor(ctx, userID, chat, workflowName, nil)
 	}
 	stateUpdate, err := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, workflowName, newPresets, req.Msg.WorkflowParams)
 	if err != nil {
@@ -197,7 +198,7 @@ func (s *Service) liveRunStateUpdate(
 	if validationErrors := s.launcher().ValidateStateUpdate(ctx, userID, chat, workflowName, chat.SelectedPresets, stateUpdate); len(validationErrors) > 0 {
 		return nil, inputValidationError(validationErrors)
 	}
-	return stateUpdate, nil
+	return s.withLiveModeFloor(ctx, userID, chat, workflowName, stateUpdate)
 }
 
 // inputValidationError is SendMessage's refusal for inputs that failed
@@ -1087,7 +1088,7 @@ func (s *Service) SendMessage(
 // fails the send (retryable) rather than accepting it unattended.
 func (s *Service) recordPersonTurn(ctx context.Context, userID string, chat *db.Chat) error {
 	kind := core.TriggerEventKind(chat.LaunchKind)
-	launched := (chat.TriggerID != nil && kind.Unattended()) || kind == core.TriggerEventKindAgentStartRun
+	launched := kind.Unattended() || kind == core.TriggerEventKindAgentStartRun
 	if !launched {
 		return nil
 	}

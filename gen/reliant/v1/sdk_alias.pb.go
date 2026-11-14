@@ -174,12 +174,14 @@ type (
 	InboxItem_AutomationLaunchFailed         = sdk.InboxItem_AutomationLaunchFailed
 	InboxItem_AutomationNeedsSetup           = sdk.InboxItem_AutomationNeedsSetup
 	InboxItem_AutomationRunPaused            = sdk.InboxItem_AutomationRunPaused
+	InboxItem_OrgProviderKeyRejected         = sdk.InboxItem_OrgProviderKeyRejected
 	InboxItem_Question                       = sdk.InboxItem_Question
 	InboxItem_Recovery                       = sdk.InboxItem_Recovery
 	InboxItem_Storage                        = sdk.InboxItem_Storage
 	InboxItem_WaitingForMachine              = sdk.InboxItem_WaitingForMachine
 	InboxItem_WorktreeMarked                 = sdk.InboxItem_WorktreeMarked
 	InboxItem_WorktreeReclaim                = sdk.InboxItem_WorktreeReclaim
+	InboxOrgProviderKeyRejected              = sdk.InboxOrgProviderKeyRejected
 	InboxQuestion                            = sdk.InboxQuestion
 	InboxRefusedAutomation                   = sdk.InboxRefusedAutomation
 	InboxStorage                             = sdk.InboxStorage
@@ -412,6 +414,7 @@ type (
 	UnadoptChatResponse                      = sdk.UnadoptChatResponse
 	UnarchiveWorktreeRequest                 = sdk.UnarchiveWorktreeRequest
 	UnarchiveWorktreeResponse                = sdk.UnarchiveWorktreeResponse
+	UnattendedFunding                        = sdk.UnattendedFunding
 	UnlaunchedTriggerEvent                   = sdk.UnlaunchedTriggerEvent
 	UnlaunchedTriggerEventOutcome            = sdk.UnlaunchedTriggerEventOutcome
 	UnstageFilesRequest                      = sdk.UnstageFilesRequest
@@ -544,6 +547,7 @@ const (
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED                     = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP                       = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED                        = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED
+	InboxItemKind_INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED                    = sdk.InboxItemKind_INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED
 	InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING                             = sdk.InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING
 	InboxItemKind_INBOX_ITEM_KIND_QUESTION                                     = sdk.InboxItemKind_INBOX_ITEM_KIND_QUESTION
 	InboxItemKind_INBOX_ITEM_KIND_RECOVERY                                     = sdk.InboxItemKind_INBOX_ITEM_KIND_RECOVERY
@@ -648,6 +652,9 @@ const (
 	TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_ALLOW                          = sdk.TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_ALLOW
 	TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_SKIP                           = sdk.TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_SKIP
 	TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_UNSPECIFIED                    = sdk.TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_UNSPECIFIED
+	UnattendedFunding_UNATTENDED_FUNDING_ANY                                   = sdk.UnattendedFunding_UNATTENDED_FUNDING_ANY
+	UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY                              = sdk.UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY
+	UnattendedFunding_UNATTENDED_FUNDING_UNSPECIFIED                           = sdk.UnattendedFunding_UNATTENDED_FUNDING_UNSPECIFIED
 	UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_FAILED      = sdk.UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_FAILED
 	UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_SKIPPED     = sdk.UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_SKIPPED
 	UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_UNSPECIFIED = sdk.UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_UNSPECIFIED
@@ -761,6 +768,8 @@ var (
 	TriggerKind_value                    = sdk.TriggerKind_value
 	TriggerOverlapPolicy_name            = sdk.TriggerOverlapPolicy_name
 	TriggerOverlapPolicy_value           = sdk.TriggerOverlapPolicy_value
+	UnattendedFunding_name               = sdk.UnattendedFunding_name
+	UnattendedFunding_value              = sdk.UnattendedFunding_value
 	UnlaunchedTriggerEventOutcome_name   = sdk.UnlaunchedTriggerEventOutcome_name
 	UnlaunchedTriggerEventOutcome_value  = sdk.UnlaunchedTriggerEventOutcome_value
 	WorkflowExecutionView_name           = sdk.WorkflowExecutionView_name

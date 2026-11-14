@@ -74,6 +74,9 @@ func (s *Service) AddOrgProviderAPIKey(
 	} else {
 		activity.Skip(ctx) // the org already held this key: nothing was added
 	}
+	if created {
+		s.wakeOrgChats(ctx, orgID, "an org account was added")
+	}
 	s.deps.Logger.InfoContext(ctx, "org provider account added",
 		"org_id", orgID, "account_id", acct.ID, "provider", provider, "created", created, "user_id", userID)
 	out, err := s.one(ctx, orgID, acct)

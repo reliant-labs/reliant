@@ -47,6 +47,12 @@ type Service interface {
 	// caller holds that is bound to daemonID.
 	RevokeDaemonResumeTokens(ctx context.Context, jwt, daemonID string) error
 
+	// ListMyOrganizations is every org the caller (jwt, a person's session)
+	// is a live member of, with their role in each, read live from the
+	// control plane (OrganizationService.ListMyOrganizations). A machine
+	// credential is refused there: it has no orgs to list.
+	ListMyOrganizations(ctx context.Context, jwt string) ([]MyOrganization, error)
+
 	// PreviewAccountDeletionWallet asks the control plane what deleting the
 	// caller's account would refund and forfeit. Changes nothing.
 	PreviewAccountDeletionWallet(ctx context.Context, jwt string) (*AccountDeletionWalletQuote, error)
@@ -168,6 +174,17 @@ type Service interface {
 	// writes nothing. Errors as the steps above; a control plane that
 	// predates it is ErrProjectOrgMoveUnsupported.
 	PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
+
+	// NotifyOrgKeyRejected emails orgID's owners and admins that a provider
+	// rejected one of the org's own API keys (OrgNotifyInternalService
+	// .NotifyOrgAdmins; control-plane docs/design/org-provider-accounts.md
+	// §4.7), signed with this process's internal-service identity. The
+	// control plane renders a fixed template, resolves the recipients and
+	// sends once per incident; deduplicated reports a repeat. Errors:
+	// ErrOrgNotifyUnsupported when the control plane has no such service or
+	// this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
+	// control-plane's code and reason.
+	NotifyOrgKeyRejected(ctx context.Context, n OrgKeyRejectedNotice) (deduplicated bool, err error)
 }
 
 // Deps configures the adapter.
@@ -184,4 +201,10 @@ type Deps struct {
 	Sign func() (string, error)
 	// HTTPClient carries every call. Nil uses a client with a 30s timeout.
 	HTTPClient *http.Client
+}
+
+// MyOrganization is one org the caller belongs to and their role in it ("owner", "admin" or
+// "member").
+type MyOrganization struct {
+	ID, Role string
 }

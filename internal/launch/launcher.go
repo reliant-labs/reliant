@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
@@ -58,6 +59,9 @@ type Launcher struct {
 	threads   ThreadCreator
 	taskQueue string
 	pinner    ChatPinner
+	// sources reads an org-accounts-only launch's sources
+	// (checkOrgAccountsOnly); nil is drivers.LookupAvailableDrivers.
+	sources orgSources
 }
 
 // ChatPinner decides which machine a chat that names none runs on, so the
@@ -394,6 +398,9 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// Build and validate workflow inputs BEFORE creating chat
 	initialData, err := l.buildInputs(ctx, userID, chat, workflowName, spec.CatalogPin, spec.Presets, spec.Params)
 	if err != nil {
+		return nil, err
+	}
+	if err := l.checkOrgAccountsOnly(ctx, spec, chat, initialData); err != nil {
 		return nil, err
 	}
 
@@ -755,7 +762,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	}
 	{
 		_, presets, _ := effectiveStart(chat, spec)
-		if _, err := l.buildInputs(ctx, userID, &checked, workflowName, spec.CatalogPin, presets, spec.Params); err != nil {
+		inputs, err := l.buildInputs(ctx, userID, &checked, workflowName, spec.CatalogPin, presets, spec.Params)
+		if err != nil {
+			return nil, err
+		}
+		if err := l.checkOrgAccountsOnly(ctx, spec, &checked, inputs); err != nil {
 			return nil, err
 		}
 	}
@@ -1582,6 +1593,14 @@ func (l *Launcher) recordStartSelection(ctx context.Context, userID string, chat
 	patch := l.SelectionPatch(ctx, userID, chat.ProjectID, workflowName, params)
 	if len(patch) == 0 {
 		return nil
+	}
+	// The root model of a start the chat's owner made as a person is their
+	// pick (chat_person_picks), recorded by the selection write itself, in
+	// the launch transaction; a trigger's, an agent's or the CLI login's
+	// start records none.
+	if _, picked := patch["model"]; picked && chat.OrgID != nil && *chat.OrgID != "" &&
+		userID == chat.UserID && auth.RequirePerson(ctx, "pick the chat's model") == nil {
+		ctx = db.WithPersonPick(ctx, db.PersonPick{UserID: userID, OrgID: *chat.OrgID})
 	}
 	if _, err := chatselection.NewInstrumented(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
 		return fmt.Errorf("failed to record the chat's selection: %w", err)

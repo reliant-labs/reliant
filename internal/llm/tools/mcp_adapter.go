@@ -63,6 +63,10 @@ func (a *MCPToolAdapter) Name() string {
 	return fmt.Sprintf("mcp__%s__%s", a.serverName, a.tool.Name)
 }
 
+// MCPServer is the logical name of the MCP server the tool belongs to: the
+// <server> of its name, exactly (a server name may itself contain "__").
+func (a *MCPToolAdapter) MCPServer() string { return a.serverName }
+
 // Description returns the tool description.
 func (a *MCPToolAdapter) Description() string {
 	desc := a.tool.Description

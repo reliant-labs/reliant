@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -174,19 +175,7 @@ func orgAccountCandidates(ctx context.Context, repo OrgAccountStore, scope Scope
 			// Belt and braces over the owner-scoped read.
 			continue
 		}
-		admitted := false
-		switch acct.OrgAccess {
-		case core.OrgAccessMembers:
-			admitted = true
-		case core.OrgAccessAdmins:
-			admitted = facts.m.Role == "owner" || facts.m.Role == "admin"
-		case core.OrgAccessSelected:
-			if grants == nil {
-				grants = memberGrants(ctx, repo, scope, facts)
-			}
-			admitted = grants[acct.ID]
-		}
-		if !admitted {
+		if !admits(ctx, repo, scope, facts, acct.ID, acct.OrgAccess, &grants) {
 			continue
 		}
 		c := candidate{acct: acct, tier: models.TierFirst, funding: models.FundingOrgKey, group: 1}
@@ -198,11 +187,60 @@ func orgAccountCandidates(ctx context.Context, repo OrgAccountStore, scope Scope
 	return out
 }
 
+// admits applies an org account's audience (§3.3) to a live member: everyone,
+// owners and admins, or the members it is granted to in their current
+// membership. grants is read once, on the first selected-access account.
+func admits(ctx context.Context, repo MemberGrantStore, scope Scope, facts memberFacts, accountID, access string, grants *map[string]bool) bool {
+	switch access {
+	case core.OrgAccessMembers:
+		return true
+	case core.OrgAccessAdmins:
+		return facts.m.Role == "owner" || facts.m.Role == "admin"
+	case core.OrgAccessSelected:
+		if *grants == nil {
+			*grants = memberGrants(ctx, repo, scope, facts)
+		}
+		return (*grants)[accountID]
+	}
+	return false
+}
+
+// MemberGrantStore is the one read of grants the access rule needs; *db.Repo
+// satisfies it.
+type MemberGrantStore interface {
+	ListMemberAccountGrants(ctx context.Context, orgID, userID string) (map[string]time.Time, error)
+}
+
+// UsableOrgAccounts is the subset of orgID's own accounts (metadata only) that
+// userID may use in that org now, by the rule the loader routes with (§3.3,
+// §4.1): a live member, read from control-plane through the process's
+// resolver, whom each account's audience admits. Anything it cannot confirm (no
+// resolver, a negative, an outage) leaves every account out: fail closed. It
+// is for showing a person which org account serves them, never for routing.
+func UsableOrgAccounts(ctx context.Context, grants MemberGrantStore, userID, orgID string, accounts []core.ProviderAccount) []core.ProviderAccount {
+	scope := Scope{UserID: userID, OrgID: orgID, Attended: true}
+	facts := orgMemberFacts(ctx, currentOrgMembership(), scope)
+	if !facts.member || len(accounts) == 0 {
+		return nil
+	}
+	var granted map[string]bool
+	out := make([]core.ProviderAccount, 0, len(accounts))
+	for _, a := range accounts {
+		if a.OwnerKind != core.AccountOwnerOrg || a.OrgID != orgID {
+			continue
+		}
+		if admits(ctx, grants, scope, facts, a.ID, a.OrgAccess, &granted) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
 // memberGrants is the set of the org's accounts granted to the person in their
 // CURRENT membership: a grant counts only when made at or after member_since,
 // so a person who left and rejoined starts with none, and with no
 // member_since (an older control plane) none counts (§3.3, fail closed).
-func memberGrants(ctx context.Context, repo OrgAccountStore, scope Scope, facts memberFacts) map[string]bool {
+func memberGrants(ctx context.Context, repo MemberGrantStore, scope Scope, facts memberFacts) map[string]bool {
 	out := map[string]bool{}
 	if facts.m.MemberSince.IsZero() {
 		return out

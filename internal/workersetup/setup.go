@@ -141,6 +141,11 @@ type Config struct {
 	// nothing and a refused account is waited out, not switched away from.
 	AccountLimits handlers.AccountLimitRecorder
 
+	// OrgAdmins emails an org's owners and admins when a provider rejects
+	// one of the org's own API keys (OrgKeyRejectedNoticeWorkflow). Optional:
+	// nil sends no email (the inbox item is the only notice).
+	OrgAdmins OrgAdminNotifier
+
 	// StopNudges tells running activities that a stop was just requested
 	// for their workflow, so they ask the server for the cancel at once
 	// instead of a heartbeat window later (workflow/runtime/stop_nudge.go).
@@ -272,7 +277,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.SecretResolver = cfg.SecretResolver
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
-	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits)
+	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)
@@ -325,7 +330,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 				cfg.TriggerPollers,
 				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: repo}),
 				cfg.TriggerCredentials,
-			)
+			).WithAutoPause(triggerAutoPause(cfg))
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
 		}
 	}
@@ -347,6 +352,15 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	} else {
 		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
 	}
+
+	// A rejected org key's email to the org's owners and admins: always
+	// registered, so a notice started on any worker is delivered by any.
+	w.RegisterWorkflowWithOptions(OrgKeyRejectedNoticeWorkflow, workflow.RegisterOptions{
+		Name: OrgKeyRejectedNoticeWorkflowName,
+	})
+	w.RegisterActivityWithOptions(orgKeyNotices{admins: cfg.OrgAdmins}.Notify, activity.RegisterOptions{
+		Name: NotifyOrgKeyRejectedActivityName,
+	})
 
 	// Moving a project to another org: the saga is pure orchestration; its
 	// steps need the control plane and the trigger service.
@@ -374,7 +388,15 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		)
 	}
 
-	return newWorker(w, fatal), registry, nil
+	out := newWorker(w, fatal)
+	// Rejected org keys whose notice never started (a Temporal outage at the
+	// rejection) are started here, where the notice's workflow runs.
+	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
+		out.background = append(out.background, func(ctx context.Context) {
+			runOrgKeyNoticeSweep(ctx, cfg.Database, q, OrgKeyNoticeSweepInterval)
+		})
+	}
+	return out, registry, nil
 }
 
 // workerOptions is the shared worker's worker.Options, gomaxprocs being the

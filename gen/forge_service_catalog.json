@@ -10497,7 +10497,13 @@
               "MessageType": "reliant.v1.Connection"
             }
           ],
-          "ListIntegrationsRequest": null,
+          "ListIntegrationsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
           "ListIntegrationsResponse": [
             {
               "Name": "integrations",
@@ -10860,6 +10866,11 @@
               "kind": "message",
               "type_name": "reliant.v1.IntegrationConnectionParam",
               "repeated": true
+            },
+            {
+              "name": "org_policy",
+              "kind": "message",
+              "type_name": "reliant.v1.IntegrationOrgPolicy"
             }
           ],
           "reliant.v1.IntegrationAuthMethod": [
@@ -10907,6 +10918,20 @@
             {
               "name": "required",
               "kind": "bool"
+            }
+          ],
+          "reliant.v1.IntegrationOrgPolicy": [
+            {
+              "name": "allowed",
+              "kind": "bool"
+            },
+            {
+              "name": "enforced",
+              "kind": "bool"
+            },
+            {
+              "name": "policy_version",
+              "kind": "int64"
             }
           ],
           "reliant.v1.ListConnectionEventsRequest": [
@@ -10960,7 +10985,13 @@
               "repeated": true
             }
           ],
-          "reliant.v1.ListIntegrationsRequest": [],
+          "reliant.v1.ListIntegrationsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListIntegrationsResponse": [
             {
               "name": "integrations",
@@ -11092,6 +11123,7 @@
           "reliant.v1.Integration": "reliant/v1/connection.proto",
           "reliant.v1.IntegrationAuthMethod": "reliant/v1/connection.proto",
           "reliant.v1.IntegrationConnectionParam": "reliant/v1/connection.proto",
+          "reliant.v1.IntegrationOrgPolicy": "reliant/v1/connection.proto",
           "reliant.v1.ListConnectionEventsRequest": "reliant/v1/connection.proto",
           "reliant.v1.ListConnectionEventsResponse": "reliant/v1/connection.proto",
           "reliant.v1.ListConnectionsRequest": "reliant/v1/connection.proto",
@@ -17323,6 +17355,22 @@
               "name": "last_run_chat_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "incident_key",
+              "kind": "string"
+            },
+            {
+              "name": "attention_state",
+              "kind": "string"
+            },
+            {
+              "name": "failure_class",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
             }
           ],
           "reliant.v1.InboxAutomationLaunchFailed": [
@@ -21206,6 +21254,16 @@
             {
               "name": "using_credits",
               "kind": "bool"
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountFunding"
+            },
+            {
+              "name": "funding_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ReleaseOrgProviderSeatRequest": [
@@ -21395,6 +21453,13 @@
             "ORG_PROVIDER_ACCOUNT_ACCESS_ADMINS",
             "ORG_PROVIDER_ACCOUNT_ACCESS_SELECTED"
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET"
+          ],
           "reliant.v1.ProviderAccountStatus": [
             "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
             "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
@@ -21423,6 +21488,13 @@
             2,
             3
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.ProviderAccountStatus": [
             0,
             1,
@@ -21448,6 +21520,10 @@
           "reliant.v1.OrgProviderAccountAccess": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "OrgProviderAccountAccess"
+          },
+          "reliant.v1.ProviderAccountFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountFunding"
           },
           "reliant.v1.ProviderAccountStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -27741,6 +27817,16 @@
             {
               "name": "using_credits",
               "kind": "bool"
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountFunding"
+            },
+            {
+              "name": "funding_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.RefreshProviderAccountUsageRequest": [
@@ -27885,6 +27971,13 @@
             "STATE_USE_PERSONAL",
             "STATE_KEEP_WAITING"
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET"
+          ],
           "reliant.v1.ProviderAccountStatus": [
             "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
             "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
@@ -27924,6 +28017,13 @@
             2,
             3
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.ProviderAccountStatus": [
             0,
             1,
@@ -27958,6 +28058,10 @@
           "reliant.v1.PersonalFundingQuestion.State": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "PersonalFundingQuestion_State"
+          },
+          "reliant.v1.ProviderAccountFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountFunding"
           },
           "reliant.v1.ProviderAccountStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -33560,6 +33664,16 @@
             {
               "name": "using_credits",
               "kind": "bool"
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountFunding"
+            },
+            {
+              "name": "funding_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ProviderStatus": [
@@ -34276,6 +34390,13 @@
             "STATUS_DENIED",
             "STATUS_ERROR"
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET"
+          ],
           "reliant.v1.ProviderAccountStatus": [
             "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
             "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
@@ -34344,6 +34465,13 @@
             4,
             5
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.ProviderAccountStatus": [
             0,
             1,
@@ -34403,6 +34531,10 @@
           "reliant.v1.PollCopilotDeviceAuthResponse.Status": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "PollCopilotDeviceAuthResponse_Status"
+          },
+          "reliant.v1.ProviderAccountFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountFunding"
           },
           "reliant.v1.ProviderAccountStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -47523,6 +47655,33 @@
               "name": "permissions",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "attention",
+              "kind": "message",
+              "type_name": "reliant.v1.WorkflowAttention"
+            }
+          ],
+          "reliant.v1.WorkflowAttention": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "on_start",
+              "kind": "string"
+            },
+            {
+              "name": "recovery_timeout",
+              "kind": "string"
+            },
+            {
+              "name": "on_success",
+              "kind": "string"
+            },
+            {
+              "name": "on_failure",
+              "kind": "string"
             }
           ],
           "reliant.v1.WorkflowConcurrency": [
@@ -47859,6 +48018,7 @@
           "reliant.v1.WebhookHmac": "reliant/v1/trigger.proto",
           "reliant.v1.WebhookSource": "reliant/v1/trigger.proto",
           "reliant.v1.Workflow": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.WorkflowAttention": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowConcurrency": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
           "reliant.v1.WorkflowListItem": "reliant/v1/workflow.proto",
@@ -53162,6 +53322,15 @@
     },
     {
       "consumer": "Inbox",
+      "field": "MyOrgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgLister",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgResolver",
       "methods": [],
@@ -53320,6 +53489,18 @@
       ],
       "providers": [
         "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgProviderAccount",
+      "field": "ChatWaker",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.OrgChatWaker",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database",
+        "TemporalClient"
       ],
       "resolution": "composition_expression"
     },
@@ -54498,6 +54679,14 @@
       "component": "DaemonRegistry.Names",
       "source": {
         "path": "internal/handlers/daemon_registry/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Inbox.MyOrgs",
+      "source": {
+        "path": "internal/handlers/inbox/service.go",
         "symbol": "New"
       }
     },

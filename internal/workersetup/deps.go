@@ -34,6 +34,16 @@ type AccountAssignmentStore interface {
 // mark on an account whose key the provider rejected.
 type AccountCredentialStore interface {
 	PatchOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
+	// ConfirmOrgKeyNotice records that Temporal accepted the notice of an
+	// org key's rejection mark (markedAt); a changed mark is left alone.
+	ConfirmOrgKeyNotice(ctx context.Context, orgID, accountID string, markedAt time.Time) error
+}
+
+// OrgKeyNoticeStore is what the sweep of unstarted rejected-key notices
+// reads and confirms. *db.Repo satisfies it.
+type OrgKeyNoticeStore interface {
+	ListUnstartedOrgKeyNotices(ctx context.Context, limit int) ([]core.ProviderAccount, error)
+	ConfirmOrgKeyNotice(ctx context.Context, orgID, accountID string, markedAt time.Time) error
 }
 
 // AccountRoutingStore is what accountRouting wires: the router's store, the
@@ -54,6 +64,7 @@ type AccountRoutingStore interface {
 	ThreadFunding(ctx context.Context, threadID string) (funding, orgID, accountID string, found bool, err error)
 	RecordThreadFunding(ctx context.Context, threadID, orgID, funding, accountID string) error
 	ChatFundingOrder(ctx context.Context, chatID string) (string, error)
+	ChatPersonPickDriver(ctx context.Context, chatID, orgID string) (string, error)
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
 	LatestServingAccount(ctx context.Context, threadID string) (string, error)
 }

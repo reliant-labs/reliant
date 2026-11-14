@@ -46,10 +46,12 @@ type scopeOrigin struct {
 
 var scopeOrigins = []scopeOrigin{
 	{"internal/llm/drivers/scope.go: PersonalScope: Scope{}", "the personal scope's own constructor"},
+	{"internal/llm/drivers/org_accounts.go: UsableOrgAccounts: Scope{}", "the chat's org and owner, read from the chat row, to show which org key serves it (never routes)"},
 
 	// The activity edge: the run's org and attendance, read from the chat row.
 	{"internal/workflow/runtime/activities/handlers/llm_request.go: llmCallSpec.scope: PersonalScope", "a call with no org: no chat, or a chat that predates orgs (§4.1)"},
 	{"internal/workflow/runtime/activities/handlers/llm_request.go: llmCallSpec.scope: Scope{}", "the run's scope, from OrgID/Attended the activity read off the chat row"},
+	{"internal/launch/org_accounts_only.go: (*Launcher).checkOrgAccountsOnly: Scope{}", "an org_only automation's launch: the unattended, org-funded-only scope of the run it would start, from the new chat row's owner and org (§11.4)"},
 	{"internal/workflow/runtime/activities/handlers/draft_automation.go: (*DraftAutomationActivity).Execute: llmCallSpec{no OrgID}", "a builder draft belongs to no chat or run; a person is drafting (P5: the automation's org)"},
 	{"internal/workflow/runtime/activities/handlers/llm_probe.go: ProbeLLMCall: llmCallSpec{no OrgID}", "the dev probe belongs to no run"},
 

@@ -61,9 +61,11 @@ func ListOrgWorkflowDrafts(ctx context.Context, db orm.Context, orgID string) ([
 // the owner, and every credential the old owner held. The webhook token hash
 // and sealed HMAC secret are cleared (NULL), so the old token stops opening
 // the trigger at once and the old secret, sealed under the old owner's
-// vault tenant, is gone; the new owner is issued their own.
+// vault tenant, is gone; the new owner is issued their own. The unattended
+// funding stamp is the adopter's, re-stamped as if they created it.
 var adoptedTriggerColumns = append(append([]string(nil), triggerDefinitionColumns...),
-	TriggerFieldUserID, TriggerFieldPausedReason, TriggerFieldWebhookTokenHash, TriggerFieldWebhookSecretSealed)
+	TriggerFieldUserID, TriggerFieldPausedReason, TriggerFieldWebhookTokenHash, TriggerFieldWebhookSecretSealed,
+	TriggerFieldUnattendedFunding)
 
 // AdoptTrigger re-owns a trigger in place: t is its new row (t.UserID the new
 // owner, disabled). Its id, org, kind and history are kept. The caller holds
