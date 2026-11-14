@@ -43,6 +43,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 	"github.com/reliant-labs/reliant/internal/handlers/org_policy_impact"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
+	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
@@ -86,7 +87,7 @@ var userServices = []string{
 	reliantv1connect.AccountServiceName, reliantv1connect.ConnectionServiceName, reliantv1connect.ConnectorServiceName,
 	reliantv1connect.BackgroundServiceName, reliantv1connect.TerminalServiceName, reliantv1connect.UsageServiceName,
 	reliantv1connect.WorktreeReclaimServiceName, reliantv1connect.SharingServiceName, reliantv1connect.AutomationTakeoverServiceName,
-	reliantv1connect.OrgProviderAccountServiceName, reliantv1connect.OrgPolicyImpactServiceName,
+	reliantv1connect.OrgProviderAccountServiceName, reliantv1connect.OrgUsageServiceName, reliantv1connect.OrgPolicyImpactServiceName,
 }
 
 // testUserRoutes is the api's route set over services that are never called
@@ -107,9 +108,9 @@ func testUserRoutes(t *testing.T, opts MountOptions) *UserRoutes {
 		System: &system.Service{}, Terminal: &terminal.Service{}, Token: &token.Service{}, ToolCall: &tool_call.Service{},
 		Workflow: &workflowhandler.Service{}, Usage: &usage.Service{}, WorktreeReclaim: &worktree_reclaim.Service{},
 		AutomationTakeover: &automation_takeover.Service{}, OrgProviderAccount: &org_provider_account.Service{},
-		OrgPolicyImpact: &org_policy_impact.Service{},
-		Logger:          slog.Default(),
-		Options:         opts,
+		OrgUsage: &org_usage.Service{}, OrgPolicyImpact: &org_policy_impact.Service{},
+		Logger:  slog.Default(),
+		Options: opts,
 	})
 	require.NoError(t, err)
 	return routes

@@ -1,0 +1,105 @@
+// VENDORED from reliant-labs/control-plane PR #2789 at a988e76c5 (feat/p9-org-usage-cp; re-vendored from main once it merges):
+// proto/services/llm_price_internal/v1/llm_price_internal.proto. Do not edit; re-vendor from control-plane main.
+// TestGetModelListPrices_SpeaksTheVendoredContract holds the client to it.
+syntax = "proto3";
+
+// LLMPriceInternalService tells reliant the LIST price of a model call: the
+// public per-token rates in LiteLLM's model catalog
+// (docs/design/org-provider-accounts.md §5, P9).
+//
+// reliant counts the tokens an organization's own API keys used; it has no
+// price table. It asks here so that an org admin's usage view can show an
+// ESTIMATED list cost beside the counts, and control-plane prices the same
+// counts for the cost summary's `byok` source with the same catalog. A list
+// price is never what the organization was billed: the provider bills the org
+// directly, at whatever it negotiated. Every figure built from this answer is
+// labelled an estimate and never claims to be complete.
+//
+// Every RPC here requires an internal-service JWT (sub=internal-service,
+// role=admin, signed with INTERNAL_SERVICE_SECRET) and refuses every other
+// caller, a human session and any `rlat_` access token included.
+//
+// It is WITHHELD from the public contract (proto/public-api.txt): reliant
+// speaks it as plain Connect HTTP+JSON.
+package controlplane.v1;
+
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/llm_price_internal/v1;llm_price_internalv1";
+
+service LLMPriceInternalService {
+  option (forge.v1.service) = {
+    name: "LLMPriceInternalService"
+    version: "1.0.0"
+    description: "list prices of model calls from LiteLLM's model catalog, for reliant's estimated org-key costs"
+  };
+
+  // GetModelListPrices answers one list price per model asked about, in the
+  // order asked. A model the catalog does not know is answered with
+  // priced = false and no rates, never a zero rate.
+  //
+  // Errors:
+  //   - INVALID_ARGUMENT: no model, more than MaxModels (500), or a model
+  //     with an empty model id.
+  //   - UNAVAILABLE: the catalog could not be read and none was read before.
+  //     The caller shows its counts without an estimate.
+  rpc GetModelListPrices(GetModelListPricesRequest) returns (GetModelListPricesResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      activity: {none: "read-only: public list prices; changes nothing"}
+    };
+  }
+}
+
+// LLMModelRef names one model as reliant records it on a usage row.
+message LLMModelRef {
+  // reliant's provider id ("anthropic", "openai", "openrouter", "google",
+  // "xai", ...). Used to find the catalog entry when the bare model id is not
+  // one; may be empty.
+  string provider = 1;
+  // The model id as recorded ("claude-sonnet-4-5", "gpt-5", ...). Required.
+  string model = 2;
+}
+
+message GetModelListPricesRequest {
+  repeated LLMModelRef models = 1;
+}
+
+// LLMModelListPrice is one model's list rates. A rate is in USD nanos
+// (1e-9 USD) per million tokens of its class. The estimated list cost of a
+// call is
+//
+//   (input_tokens       * input_usd_nanos_per_million_tokens
+//  + output_tokens      * output_usd_nanos_per_million_tokens
+//  + cache_read_tokens  * cache_read_usd_nanos_per_million_tokens
+//  + cache_write_tokens * cache_write_usd_nanos_per_million_tokens) / 1e6
+//
+// with each token class priced as it was counted.
+message LLMModelListPrice {
+  // The model asked about, echoed.
+  string provider = 1;
+  string model = 2;
+  // Whether the catalog has a price for it. False: every rate is zero and
+  // means "unknown", never "free".
+  bool priced = 3;
+  // The catalog entry the rates were read from ("claude-sonnet-4-5",
+  // "openrouter/anthropic/claude-sonnet-4.5", ...); empty when not priced.
+  string catalog_key = 4;
+  int64 input_usd_nanos_per_million_tokens = 5;
+  int64 output_usd_nanos_per_million_tokens = 6;
+  // A cache class the catalog does not price separately is priced at the
+  // input rate.
+  int64 cache_read_usd_nanos_per_million_tokens = 7;
+  int64 cache_write_usd_nanos_per_million_tokens = 8;
+}
+
+message GetModelListPricesResponse {
+  // One per requested model, in request order.
+  repeated LLMModelListPrice prices = 1;
+  // Where the rates come from: "litellm_model_catalog".
+  string source = 2;
+  // When the catalog the rates were read from was fetched from LiteLLM.
+  google.protobuf.Timestamp catalog_fetched_at = 3;
+}
