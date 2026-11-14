@@ -301,20 +301,7 @@ func resolveForgeForUser(
 // forgeBindingOf is the user's forge binding for clientID, whatever its
 // grant's state; nil when the client was never bound.
 func forgeBindingOf(ctx context.Context, bindings ForgeBindingStore, userID, clientID string) (*connectorgrant.ClientBinding, error) {
-	if bindings == nil {
-		return nil, nil
-	}
-	all, err := bindings.ListBindingsByUser(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	key := connectorgrant.BindingClientID(connectorgrant.KindForge, clientID)
-	for _, b := range all {
-		if b.ClientID == key && b.GrantID != "" {
-			return b, nil
-		}
-	}
-	return nil, nil
+	return bindingFor(ctx, bindings, userID, connectorgrant.BindingClientID(connectorgrant.KindForge, clientID))
 }
 
 func isForgeGrantOf(g *connectorgrant.Grant, userID string) bool {

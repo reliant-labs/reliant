@@ -76,9 +76,11 @@ type HTTPDeps struct {
 	// credentials are accepted.
 	TokenValidator OAuthTokenValidator
 
-	// Bindings resolves which connector an OAuth client acts through. Nil
-	// means a user with several connectors cannot use OAuth at all, since
-	// there would be no record of which one they chose.
+	// Bindings resolves which connector an OAuth client acts through, keyed
+	// by the client_id claim of its token (TokenValidator must implement
+	// OAuthClientValidator to name it). Nil means a user with several
+	// connectors cannot use OAuth at all, since there would be no record of
+	// which one they chose.
 	Bindings BindingStore
 
 	// ConsentBaseURL is where the consent screen lives, used to tell a client
@@ -102,8 +104,8 @@ type OAuthTokenValidator interface {
 
 // OAuthClientValidator is an OAuthTokenValidator that also names the OAuth
 // client the token was issued to: its validated client_id claim, "" when the
-// token carries none. The Reliant Forge endpoint picks a client's binding by
-// this alone, never by a header the caller chooses.
+// token carries none. Both MCP endpoints pick a client's binding by this
+// alone, never by a header the caller chooses.
 type OAuthClientValidator interface {
 	ValidateTokenClient(token string) (userID, clientID string, err error)
 }
@@ -293,18 +295,20 @@ func (a *connectorAuth) resolve(r *http.Request, token string) (*Session, error)
 		return nil, errors.New("no OAuth validator configured")
 	}
 
-	userID, err := a.tokens.ValidateToken(token)
+	userID, clientID, err := validateOAuthClient(a.tokens, token)
 	if err != nil {
 		return nil, err
 	}
 	if userID == "" {
 		return nil, errors.New("token carries no subject")
 	}
+	a.logClientHint(r, clientID)
 
 	// An OAuth token identifies a user, not a grant. resolveForUser bridges
-	// the two: a recorded consent choice first, a single unambiguous connector
-	// second, and otherwise a consent requirement rather than a guess.
-	sess, err := resolveForUser(r.Context(), a.store, a.bindings, userID, oauthClientID(r), a.consentBase)
+	// the two: the consent choice recorded for the token's client first, a
+	// single unambiguous connector second, and otherwise a consent
+	// requirement rather than a guess.
+	sess, err := resolveForUser(r.Context(), a.store, a.bindings, userID, clientID, a.consentBase)
 	if err != nil {
 		return nil, err
 	}
@@ -338,19 +342,26 @@ func (a *connectorAuth) grantForCredential(ctx context.Context, token string) (*
 	return grant, nil
 }
 
-// oauthClientID identifies the calling application.
-//
-// The MCP spec does not put the client id on the resource request, so it is
-// read from the token's claims where the authorization server included it, or
-// from a client-supplied header. When it cannot be determined, consent still
-// works — the user simply authorizes "this client" without it being named.
-func oauthClientID(r *http.Request) string {
+// clientHintFromHeaders is the application a caller SAYS it is, from the
+// X-MCP-Client-Id or X-Client-Name header. It is a logging hint only and never
+// authorizes anything: the caller chooses these headers, so an application
+// holding a user's bearer could name another application and act through
+// that one's broader grant. Authorization reads the token's client_id claim
+// (validateOAuthClient).
+func clientHintFromHeaders(r *http.Request) string {
 	if id := strings.TrimSpace(r.Header.Get("X-MCP-Client-Id")); id != "" {
 		return id
 	}
-	// Client name from the MCP initialize handshake, when the transport
-	// surfaced it.
 	return strings.TrimSpace(r.Header.Get("X-Client-Name"))
+}
+
+// logClientHint records a caller whose headers name a different application
+// than its token was issued to: harmless for authorization, but worth seeing.
+func (a *connectorAuth) logClientHint(r *http.Request, clientID string) {
+	if hint := clientHintFromHeaders(r); hint != "" && hint != clientID {
+		a.logger.DebugContext(r.Context(), "mcpserver: client header differs from the token's client; the token's is used",
+			"tokenClientID", clientID, "headerClientHint", hint)
+	}
 }
 
 // touch records use. Telemetry, so a failure must never fail the request.
