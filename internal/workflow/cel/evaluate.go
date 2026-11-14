@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/cel-go/common/types/ref"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -149,6 +150,13 @@ func (e *EvalError) Error() string {
 }
 
 func (e *EvalError) Unwrap() error { return e.Err }
+
+// ErrorClass makes a failed expression the user's error (svcerr.ClassUser):
+// it is the workflow's own {{ }} or condition, judged on the data it read, so
+// only its author can fix it. The run fails and says why; the process logger
+// writes it at INFO instead of ERROR, so a misconfigured workflow no longer
+// opens an obs issue (prod fce68f36, 23295ad3, 3b4272c4).
+func (e *EvalError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 // evaluateRaw compiles and evaluates a CEL expression against a typed context.
 // Returns the native Go value with all CEL internal types converted.
