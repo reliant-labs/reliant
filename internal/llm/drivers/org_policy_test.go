@@ -362,3 +362,46 @@ func TestOrgPolicy_AnAllowedAccountKeepsItsDriver(t *testing.T) {
 	assert.Nil(t, OrgPolicyRefusal(ctx, orgScope(true), avail, models.ModelSelector{ID: policyModel + "@anthropic"}, false),
 		"a model the org's key serves is not refused by the policy")
 }
+
+// §11.3, §11.6: an enforced automations section is total. It replaces an
+// org_only automation's stamp, so a section that names members' own accounts
+// lets such a run spend them; a section that only audits, or a platform switch
+// that audits, leaves the stamp standing.
+func TestOrgPolicy_EnforcedAutomationsReplaceTheStamp(t *testing.T) {
+	repo := seedPolicyUser(t)
+	orgOnly := Scope{UserID: policyUser, OrgID: policyOrg}
+	personal := func(mode controlplanev1.OrgPolicyMode) *controlplanev1.OrgPolicy {
+		return &controlplanev1.OrgPolicy{Automations: &controlplanev1.AutomationsPolicy{
+			Mode: mode, AllowedSources: []controlplanev1.ProviderSource{controlplanev1.ProviderSource_PROVIDER_SOURCE_PERSONAL},
+		}}
+	}
+
+	withProvidersSwitch(t, orgpolicy.EnforcementEnforce)
+	avail, err := buildAvailableDrivers(policyCtx(personal(enforced)), repo, orgOnly, noReportClients)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"anthropic", "claude"}, driverIDs(avail),
+		"the section names the person's own accounts: an org_only run spends them, and not the Reliant credits it does not name")
+
+	for name, tc := range map[string]struct {
+		sw  orgpolicy.Enforcement
+		doc *controlplanev1.OrgPolicy
+	}{
+		"the section audits": {orgpolicy.EnforcementEnforce, personal(audited)},
+		"the point audits":   {orgpolicy.EnforcementAudit, personal(enforced)},
+		"no section":         {orgpolicy.EnforcementEnforce, &controlplanev1.OrgPolicy{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			withProvidersSwitch(t, tc.sw)
+			avail, err := buildAvailableDrivers(policyCtx(tc.doc), repo, orgOnly, noReportClients)
+			require.NoError(t, err)
+			assert.NotContains(t, driverIDs(avail), "anthropic", "the org_only stamp stands")
+			assert.NotContains(t, driverIDs(avail), "claude")
+		})
+	}
+
+	// An attended run is never touched by the automations section.
+	withProvidersSwitch(t, orgpolicy.EnforcementEnforce)
+	attended, err := buildAvailableDrivers(policyCtx(personal(enforced)), repo, orgScope(true), noReportClients)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"anthropic", "claude", "reliant"}, driverIDs(attended))
+}
