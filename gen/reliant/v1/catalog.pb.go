@@ -419,7 +419,13 @@ func (x *LocalModelSource) GetOnline() bool {
 
 // ListModelsRequest is the request for ListModels
 type ListModelsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The organization whose work the picker is choosing a model for: the
+	// list is what a chat of that org may run on (its org accounts and seats,
+	// filtered by its policy). The caller must be a live member of it
+	// (PermissionDenied otherwise); a machine credential may name only its own
+	// org. Unset lists the caller's own accounts, as before orgs.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -452,6 +458,13 @@ func (x *ListModelsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListModelsRequest.ProtoReflect.Descriptor instead.
 func (*ListModelsRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ListModelsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 // ListModelsResponse is the response for ListModels
@@ -834,7 +847,13 @@ func (x *AvailableModelInfo) GetEnabled() bool {
 
 // ListAvailableModelsRequest is the request for ListAvailableModels
 type ListAvailableModelsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The organization whose work the picker is choosing a model for: the
+	// list is what a chat of that org may run on (its org accounts and seats,
+	// filtered by its policy). The caller must be a live member of it
+	// (PermissionDenied otherwise); a machine credential may name only its own
+	// org. Unset lists the caller's own accounts, as before orgs.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -867,6 +886,13 @@ func (x *ListAvailableModelsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListAvailableModelsRequest.ProtoReflect.Descriptor instead.
 func (*ListAvailableModelsRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListAvailableModelsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 // ListAvailableModelsResponse is the response for ListAvailableModels
@@ -3306,8 +3332,10 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\vendpoint_id\x18\x03 \x01(\tR\n" +
 	"endpointId\x12#\n" +
 	"\rendpoint_kind\x18\x04 \x01(\tR\fendpointKind\x12\x16\n" +
-	"\x06online\x18\x05 \x01(\bR\x06online\"\x13\n" +
-	"\x11ListModelsRequest\"\x8b\x01\n" +
+	"\x06online\x18\x05 \x01(\bR\x06online\":\n" +
+	"\x11ListModelsRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\x8b\x01\n" +
 	"\x12ListModelsResponse\x12-\n" +
 	"\x06models\x18\x01 \x03(\v2\x15.reliant.v1.ModelInfoR\x06models\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x120\n" +
@@ -3335,8 +3363,10 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x0esupports_tools\x18\f \x01(\bR\rsupportsTools\x12)\n" +
 	"\x10supports_caching\x18\r \x01(\bR\x0fsupportsCaching\x12\x12\n" +
 	"\x04tags\x18\x0e \x03(\tR\x04tags\x12\x18\n" +
-	"\aenabled\x18\x0f \x01(\bR\aenabled\"\x1c\n" +
-	"\x1aListAvailableModelsRequest\"U\n" +
+	"\aenabled\x18\x0f \x01(\bR\aenabled\"C\n" +
+	"\x1aListAvailableModelsRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"U\n" +
 	"\x1bListAvailableModelsResponse\x126\n" +
 	"\x06models\x18\x01 \x03(\v2\x1e.reliant.v1.AvailableModelInfoR\x06models\"\\\n" +
 	"\bToolInfo\x12\x12\n" +
@@ -3710,6 +3740,8 @@ func file_reliant_v1_catalog_proto_init() {
 		return
 	}
 	file_reliant_v1_connection_proto_init()
+	file_reliant_v1_catalog_proto_msgTypes[2].OneofWrappers = []any{}
+	file_reliant_v1_catalog_proto_msgTypes[8].OneofWrappers = []any{}
 	file_reliant_v1_catalog_proto_msgTypes[13].OneofWrappers = []any{}
 	file_reliant_v1_catalog_proto_msgTypes[17].OneofWrappers = []any{}
 	file_reliant_v1_catalog_proto_msgTypes[31].OneofWrappers = []any{}

@@ -329,6 +329,7 @@ func (g *Graph) newCatalog() (*catalog.Service, error) {
 		Search:             g.APICatalogSearch(),
 		InputOptions:       g.InputOptions(),
 		IntegrationMethods: catalog.IntegrationMethodsFrom(g.APIConnections().Service),
+		Orgs:               g.OrgResolver(),
 	})
 }
 
