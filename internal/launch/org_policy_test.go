@@ -3,6 +3,7 @@ package launch
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -95,4 +96,30 @@ func TestLaunchAccountScope(t *testing.T) {
 	assert.Equal(t, drivers.Scope{UserID: "u", OrgID: org, UnattendedAnySource: true}, launchAccountScope(Spec{Unattended: true}, "u", chat))
 	assert.Equal(t, drivers.PersonalScope("u"), launchAccountScope(Spec{Unattended: true}, "u", &db.Chat{}))
 	assert.Equal(t, drivers.PersonalScope("u"), AccountScope("u", nil))
+}
+
+type downPolicy struct{}
+
+func (downPolicy) ResolveOrgPolicy(context.Context, string) (accesstokenclient.OrgPolicy, error) {
+	return accesstokenclient.OrgPolicy{}, errors.New("control plane unreachable")
+}
+
+// A local model input under a policy that cannot be read is a failed read
+// (drivers.ErrDriverLookupFailed, which buildInputs returns as a retryable
+// InternalError), never a policy verdict or an invalid input: a trigger's
+// firing is retried, not recorded failed.
+func TestLaunchValidation_AnUnreadablePolicyIsRetryable(t *testing.T) {
+	prev := orgpolicy.EnforcementOf(orgpolicy.PointProviders)
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointProviders, orgpolicy.EnforcementEnforce)
+	t.Cleanup(func() { orgpolicy.SetProcessEnforcement(orgpolicy.PointProviders, prev) })
+	ctx := orgpolicy.WithResolver(context.Background(), orgpolicy.New(downPolicy{}))
+	org := "org-acme"
+	chat := &db.Chat{ProjectID: "project-1", OrgID: &org}
+
+	errs := NewLauncher(nil, nil, nil, nil, "").validateChatWorkflowInputsAt(ctx, "user-1", chat, launchAccountScope(Spec{Unattended: true}, "user-1", chat),
+		"builtin://agent", "", map[string]interface{}{"mode": "auto", "model": map[string]interface{}{"id": "llama3@local"}}, false)
+	require.Len(t, errs, 1)
+	assert.ErrorIs(t, errs[0], drivers.ErrDriverLookupFailed)
+	_, refused := PolicyRefusal(errs[0])
+	assert.False(t, refused)
 }

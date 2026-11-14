@@ -155,7 +155,8 @@ func TestOrgPolicyProviders_FailoverNeverLandsOnAForbiddenProvider(t *testing.T)
 	throughTheSeam(t)
 	withProvidersEnforcement(t, orgpolicy.EnforcementEnforce)
 	const fallback = "gpt-5.5@openai"
-	limited := &ratelimit.UsageLimitError{Provider: "Anthropic", ResetAt: time.Now().Add(time.Hour)}
+	// A reset far ahead of any clock this runs on: the account stays limited.
+	limited := &ratelimit.UsageLimitError{Provider: "Anthropic", ResetAt: time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)}
 	scope := drivers.Scope{UserID: "u1", OrgID: providersPolicyOrg, Attended: true}
 
 	for name, tc := range map[string]struct {

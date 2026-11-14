@@ -4,6 +4,7 @@ package orgpolicy
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"go.opentelemetry.io/otel"
@@ -101,11 +102,10 @@ func TestModelAdmission(t *testing.T) {
 // Audit mode counts without refusing: a use the providers rule does not
 // admit is denied and counted (reliant.org_policy.denials, mode audit) while
 // the point audits, and refused and counted (mode enforce) once it enforces.
-// A quiet look is never counted. This is the one test in the package that
-// installs a meter provider: otel's global forwards only to the first.
+// A quiet look is never counted. The counts are deltas over one reader the
+// process installs once (denialsReader), so the test repeats in one process.
 func TestJudgeProvider_AuditCountsWithoutRefusing(t *testing.T) {
-	reader := sdkmetric.NewManualReader()
-	otel.SetMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	reader := denialsReader()
 	count := func(mode string) int64 {
 		var rm metricdata.ResourceMetrics
 		if err := reader.Collect(context.Background(), &rm); err != nil {
@@ -133,17 +133,18 @@ func TestJudgeProvider_AuditCountsWithoutRefusing(t *testing.T) {
 	}}))
 
 	withSwitch(t, PointProviders, EnforcementAudit)
+	audits, enforces := count("audit"), count("enforce")
 	d, err := JudgeProvider(ctx, "org-a", "claude", srcPersonal, false, false)
 	if err != nil || !d.Denied || d.Refused || d.Version != 7 || d.Subject != "claude/personal" {
 		t.Fatalf("audit: %+v %v; want denied, not refused, version 7", d, err)
 	}
-	if got := count("audit"); got != 1 {
+	if got := count("audit") - audits; got != 1 {
 		t.Fatalf("audit count = %d, want 1", got)
 	}
 	if _, err := JudgeProvider(ctx, "org-a", "claude", srcPersonal, false, true); err != nil {
 		t.Fatal(err)
 	}
-	if got := count("audit"); got != 1 {
+	if got := count("audit") - audits; got != 1 {
 		t.Fatalf("a quiet look was counted: %d", got)
 	}
 	if d, _ := JudgeProvider(ctx, "org-a", "anthropic", srcPersonal, false, false); d.Denied {
@@ -154,10 +155,20 @@ func TestJudgeProvider_AuditCountsWithoutRefusing(t *testing.T) {
 	if d, err := JudgeProvider(ctx, "org-a", "claude", srcPersonal, false, false); err != nil || !d.Refused || d.Reason != ReasonProviderNotAllowed {
 		t.Fatalf("enforce: %+v %v; want refused", d, err)
 	}
-	if got := count("enforce"); got != 1 {
+	if got := count("enforce") - enforces; got != 1 {
 		t.Fatalf("enforce count = %d, want 1", got)
 	}
 }
+
+// denialsReader is the reader of the process's one meter provider, installed
+// on first use: otel's global delegates to the first provider set, and the
+// denials counter is built once (denialsOnce), so a second provider would
+// never see it.
+var denialsReader = sync.OnceValue(func() *sdkmetric.ManualReader {
+	reader := sdkmetric.NewManualReader()
+	otel.SetMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	return reader
+})
 
 func attrIs(set attribute.Set, key, want string) bool {
 	v, ok := set.Value(attribute.Key(key))

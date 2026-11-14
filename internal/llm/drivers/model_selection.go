@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // ValidateModelSelector validates that a model selector can be resolved with the user's configured API keys.
@@ -52,7 +53,13 @@ func ValidateModelSelector(ctx context.Context, scope Scope, selector interface{
 	// The org's policy is still asked: a run of an org that allows no local
 	// model fails here with the reason (*orgpolicy.Refusal), at launch.
 	if local.IsSelector(ms) {
-		return CheckOrgPolicy(ctx, scope, models.DriverID(local.Family), models.FundingLocal, "", false)
+		err := CheckOrgPolicy(ctx, scope, models.DriverID(local.Family), models.FundingLocal, "", false)
+		if _, refused := orgpolicy.RefusalOf(err); err != nil && !refused {
+			// The policy could not be read: a failed read, retried, never a
+			// verdict on the input.
+			return fmt.Errorf("%w: %w", ErrDriverLookupFailed, err)
+		}
+		return err
 	}
 
 	// Get available drivers/providers for the user. A failed settings read is

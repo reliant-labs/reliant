@@ -5,11 +5,13 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/accesstoken"
 	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -23,12 +25,15 @@ import (
 // narrows anything, and audit leaves every resolution as it was.
 
 const (
-	policyOrg    = "org-policy"
-	policyUser   = "policy-user"
-	policyModel  = "claude-4.6-sonnet" // claude, anthropic and the gateway (reliant=claude-sonnet-4-6) serve it
-	policyOpus   = "claude-4.6-opus"   // reliant=claude-opus-4-6
-	policyAPIKey = "rlat_abcdef0123456789abcdef0123456789"
+	policyOrg   = "org-policy"
+	policyUser  = "policy-user"
+	policyModel = "claude-4.6-sonnet" // claude, anthropic and the gateway (reliant=claude-sonnet-4-6) serve it
+	policyOpus  = "claude-4.6-opus"   // reliant=claude-opus-4-6
 )
+
+// policyManagedKey is a synthetic managed key: the rlat_ shape the gateway
+// accepts (accesstoken.HasFormat), and nothing else.
+var policyManagedKey = accesstoken.Prefix + strings.Repeat("x", accesstoken.TokenLen-len(accesstoken.Prefix))
 
 // policyDocs answers each org's policy from a table, at version 4; an org
 // absent from it has none. down fails every call, as an outage does.
@@ -79,7 +84,7 @@ func seedPolicyUser(t *testing.T) *db.Repo {
 	t.Cleanup(func() { AccountAvailabilityClient = previous })
 	addClaude(t, repo, policyUser, policyUser+"-claude")
 	db.SeedProviderAccount(t, repo, policyUser, "anthropic", "sk-ant-api03-"+policyUser)
-	db.SeedProviderAccount(t, repo, policyUser, "reliant", policyAPIKey)
+	db.SeedProviderAccount(t, repo, policyUser, "reliant", policyManagedKey)
 	return repo
 }
 
@@ -275,6 +280,20 @@ func TestCheckOrgPolicy(t *testing.T) {
 		})
 	}
 	assert.NoError(t, CheckOrgPolicy(ctx, PersonalScope(policyUser), "claude", models.FundingPersonal, policyModel, true), "work of no org")
+}
+
+// A local model's launch check under a policy that cannot be read is a
+// failed read (ErrDriverLookupFailed, retryable), never a verdict on the
+// input: a launch is retried, not recorded failed.
+func TestValidateModelSelector_LocalUnderAnUnreadablePolicyIsAFailedRead(t *testing.T) {
+	withProvidersSwitch(t, orgpolicy.EnforcementEnforce)
+	ctx := orgpolicy.WithResolver(context.Background(), orgpolicy.New(policyDocs{down: true}))
+	err := ValidateModelSelector(ctx, orgScope(true), map[string]interface{}{"id": "llama3@local"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrDriverLookupFailed)
+	assert.True(t, orgpolicy.IsUnavailable(err))
+	_, refused := orgpolicy.RefusalOf(err)
+	assert.False(t, refused)
 }
 
 // A policy that cannot be read while the point enforces fails the read,
