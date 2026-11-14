@@ -46,7 +46,16 @@ func buildAvailableDriversFor(ctx context.Context, repo AvailabilityStore, membe
 	if err != nil {
 		return models.AvailableDrivers{}, err
 	}
+	// The run's org policy (org_policy.go): before the availability reports,
+	// so a refused account is never even asked for its catalog.
+	policy, err := orgPolicyFilterFor(ctx, scope)
+	if err != nil {
+		return models.AvailableDrivers{}, err
+	}
+	accounts, refused := policy.accounts(accounts)
 	available := withAccountAvailability(ctx, accounts, build)
+	available.Availability = policy.availability(available.Availability)
+	available.PolicyRefused = refused
 	available.DriverRank = driverRank(available.Accounts)
 	for driverID, reason := range unavailable {
 		if _, ok := available.Accounts[driverID]; ok {

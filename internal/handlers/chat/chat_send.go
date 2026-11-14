@@ -206,6 +206,11 @@ func (s *Service) liveRunStateUpdate(
 func inputValidationError(validationErrors []error) error {
 	errMsgs := make([]string, len(validationErrors))
 	for i, e := range validationErrors {
+		if refused, ok := launch.PolicyRefusal(e); ok {
+			// The org's policy refused a model input: its verdict and
+			// reason (a FailedPrecondition), not a malformed input.
+			return refused
+		}
 		errMsgs[i] = e.Error()
 	}
 	return svcerr.InvalidArgument(fmt.Sprintf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
