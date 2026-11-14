@@ -974,3 +974,82 @@ func TestUnattendedOrgOnly_NoOrgSourceFailsWithTheReason(t *testing.T) {
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "organization's AI accounts")
 }
+
+// A first turn held on the org's limited key made no call, so nothing else
+// records whose accounts it waits for: the hold does (thread_funding). When
+// the org then gives the person nothing at all (the key's access narrowed, the
+// other key paused), the retry a capacity wake sends is case 2, under "ask"
+// with Keep waiting answered and under "wait" alike: it never goes on on the
+// person's own account (reliant#2723's browser pass).
+func TestPersonalFunding_HeldOnTheOrgTierThenTheOrgGivesNothing(t *testing.T) {
+	reset := time.Date(2099, 1, 2, 5, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		onLimit orgfunding.OnOrgLimit
+		asks    bool
+	}{{"", true}, {orgfunding.OnOrgLimitWait, false}} {
+		t.Run("on_org_limit="+string(tc.onLimit), func(t *testing.T) {
+			withAvailableDrivers(t, tiered(acmeKey("acme-key"), personal(claudeAccount("my-claude", "me@me.com", 0))))
+			env := newFundingEnv(t, tc.onLimit, "")
+			env.routing.Store.(*routerFake).bench("acme-key", reset, "five_hour")
+			_, err := env.resolve(t, "root", routeModel)
+			var failure *types.UsageLimitFailure
+			require.ErrorAs(t, err, &failure)
+			assert.False(t, failure.Facts.AlternativeAccount)
+			assert.Equal(t, [3]string{models.FundingOrgKey, fundOrg, "acme-key"}, env.store.threadFunding["root"], "the hold records whose account it waits for")
+			if tc.asks {
+				env.store.answer("chat-1", core.PersonalFundingKeepWaiting, nil)
+			}
+
+			withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
+			_, err = env.resolve(t, "root", routeModel)
+			isWait(t, err)
+			assert.Empty(t, env.built, "no provider call on the person's account")
+			q := env.store.row("chat-1")
+			if !tc.asks {
+				assert.Nil(t, q, "wait never asks")
+				return
+			}
+			require.NotNil(t, q)
+			assert.Equal(t, core.PersonalFundingAsked, q.State)
+			assert.Equal(t, core.PersonalFundingUnusable, q.Reason)
+		})
+	}
+}
+
+// A chat with a question about the org's accounts, answered or not, was
+// waiting for them or leasing in their place. When the org gives the person
+// nothing any more, that is case 2: a Keep waiting, an unanswered question or
+// a lease that ended is never consent to go on.
+func TestPersonalFunding_TheChatsQuestionOutlivesTheOrgsAccounts(t *testing.T) {
+	ended := time.Now().Add(-time.Minute)
+	for name, row := range map[string]core.PersonalFunding{
+		"asked":        {State: core.PersonalFundingAsked, Reason: core.PersonalFundingLimited},
+		"keep waiting": {State: core.PersonalFundingKeepWaiting, Reason: core.PersonalFundingLimited},
+		"lease ended":  {State: core.PersonalFundingUsePersonal, Reason: core.PersonalFundingLimited, LeaseUntil: &ended},
+	} {
+		t.Run(name, func(t *testing.T) {
+			withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
+			env := newFundingEnv(t, "", "")
+			row.ChatID, row.UserID, row.OrgID, row.Model = "chat-1", "u1", fundOrg, routeModel
+			env.store.rows["chat-1"] = &row
+			// The thread's calls were the person's own (the lease's).
+			env.store.threadFunding["root"] = [3]string{models.FundingPersonal, fundOrg, "my-claude"}
+			_, err := env.resolve(t, "root", routeModel)
+			isWait(t, err)
+			assert.Empty(t, env.built)
+			q := env.store.row("chat-1")
+			require.NotNil(t, q)
+			assert.Equal(t, core.PersonalFundingAsked, q.State)
+			assert.Equal(t, core.PersonalFundingUnusable, q.Reason)
+		})
+	}
+	t.Run("another person's question says nothing", func(t *testing.T) {
+		withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
+		env := newFundingEnv(t, "", "")
+		env.store.rows["chat-1"] = &core.PersonalFunding{ChatID: "chat-1", UserID: "someone-else", OrgID: fundOrg,
+			State: core.PersonalFundingKeepWaiting, Reason: core.PersonalFundingLimited, Model: routeModel}
+		res, err := env.resolve(t, "root", routeModel)
+		require.NoError(t, err)
+		assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+	})
+}

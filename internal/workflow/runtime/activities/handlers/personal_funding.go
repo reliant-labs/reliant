@@ -322,8 +322,10 @@ func (r *AccountRouting) replacedOrgFunding(ctx context.Context, spec llmCallSpe
 
 // recordThreadFunding remembers who pays for the thread's calls from this one
 // on (thread_funding): what replacedOrgFunding reads once that account is gone.
-// It runs only for a call that goes ahead, so a held call keeps the org's
-// provenance and the next attempt asks again. It fails closed: an org-funded
+// It runs for a call that goes ahead, so a held call keeps the org's
+// provenance and the next attempt asks again; a call held because the org's
+// tier is limited records the org's account it waits for (recordOrgWait). It
+// fails closed: an org-funded
 // call whose provenance cannot be written is not made (a retryable error),
 // since a later deletion of that account would then go unseen. A personal or
 // local call's provenance only ever widens what asks, so its failed write is
@@ -415,6 +417,13 @@ func (r *AccountRouting) decideCallFunding(ctx context.Context, spec llmCallSpec
 	switch {
 	case r.replacedOrgFunding(ctx, spec, avail, acct):
 		reason = core.PersonalFundingUnusable
+	case !plan.orgGave && plan.question != nil:
+		// The org gives the person nothing now, but this chat asked about
+		// its accounts (or was answered, a lease since ended): it was
+		// waiting for, or leasing in place of, the org's accounts, which
+		// are now gone. That is case 2, never "the org gave nothing": a
+		// Keep waiting, or a lease that ended, is no consent to go on.
+		reason = core.PersonalFundingUnusable
 	case !plan.orgGave:
 		// The org gave the person no account: nothing of the org's is
 		// being replaced, so their own accounts serve as before.
@@ -437,7 +446,40 @@ func (r *AccountRouting) decideCallFunding(ctx context.Context, spec llmCallSpec
 		ChatID: spec.ChatID, UserID: spec.UserID, OrgID: spec.OrgID, Reason: reason, Model: modelID,
 		PersonalProvider: providerDriver, PersonalAccountLabel: accountName(acct.Config),
 	}
+	if reason == core.PersonalFundingUnserved {
+		// The org's accounts do serve the model, and every one is limited:
+		// the thread was kept on the person's account (a turn start after
+		// its lease ended, the org still limited). That is case 1, with the
+		// org's reset, not "the org's accounts do not serve this model".
+		if reset, limited := orgTierLimitedFor(avail, modelID, now); limited {
+			q.Reason, q.OrgResetAt = core.PersonalFundingLimited, &reset
+		}
+	}
 	return r.decidePersonalFunding(ctx, plan, q, providerDriver, now, true)
+}
+
+// orgTierLimitedFor reports whether avail holds org-funded first-tier accounts
+// that serve modelID (on any driver serving it) and every one of them is
+// limited at now, with the earliest of their resets.
+func orgTierLimitedFor(avail models.AvailableDrivers, modelID string, now time.Time) (reset time.Time, limited bool) {
+	def, ok := models.MustGetRegistry().GetDefinition(modelID)
+	if !ok {
+		return time.Time{}, false
+	}
+	for _, p := range def.Providers {
+		for _, a := range avail.Accounts[models.DriverID(p.Driver)] {
+			if !orgFundedFirstTier(a) || (a.Serves != nil && !a.Serves(modelID)) {
+				continue
+			}
+			if !a.LimitedUntil.After(now) {
+				return time.Time{}, false
+			}
+			if reset.IsZero() || a.LimitedUntil.Before(reset) {
+				reset = a.LimitedUntil
+			}
+		}
+	}
+	return reset, !reset.IsZero()
 }
 
 // decidePersonalFunding acts on the person's choice for a call that would use
@@ -517,6 +559,37 @@ func (r *AccountRouting) fundingOnLimit(ctx context.Context, uc usageLimitContex
 	if _, err := r.decidePersonalFunding(ctx, uc.Plan, q, string(uc.Driver), fundingNow(), false); err == nil {
 		// Granted: the retry runs on the person's own account, and says so.
 		facts.AlternativeAccount = true
+	}
+}
+
+// recordOrgWait records, for a thread refused before any call because the
+// org's accounts serving its model are all limited, that it waits for one of
+// them (thread_funding). A thread held so on its first turn has served on no
+// account: without this it carries no provenance, and should the org's
+// accounts then leave its candidates altogether (a grant withdrawn, access
+// narrowed, the key paused or deleted) the next attempt, a capacity wake's
+// retry, would read as "the org gave the person nothing" and spend their own
+// account with no question and no notice. With it, that attempt is §10.1 case
+// 2 (replacedOrgFunding), whatever was answered meanwhile. accounts are the
+// provider's accounts the call was routed over.
+//
+// The write is best effort: the call is held whether or not it lands, and the
+// next hold writes it again.
+func (r *AccountRouting) recordOrgWait(ctx context.Context, uc usageLimitContext, accounts []models.AccountConfig) {
+	if r == nil || r.Funding == nil || !uc.Plan.active || uc.Plan.unchecked || uc.ThreadID == "" || !uc.OrgFundedLimited {
+		return
+	}
+	for _, a := range accounts {
+		if a.Serves != nil && !a.Serves(uc.ModelID) {
+			continue
+		}
+		if !orgFundedFirstTier(a) || a.AccountID == "" {
+			continue
+		}
+		if err := r.Funding.RecordThreadFunding(ctx, uc.ThreadID, uc.Scope.OrgID, a.Funding, a.AccountID); err != nil {
+			logging.WarnContext(ctx, "Could not record that the thread waits for the org's account", "threadID", uc.ThreadID, "accountID", a.AccountID, "error", err)
+		}
+		return
 	}
 }
 

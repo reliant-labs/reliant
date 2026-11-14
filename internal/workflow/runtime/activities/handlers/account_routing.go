@@ -269,6 +269,11 @@ type usageLimitContext struct {
 	ChatID           string
 	Plan             fundingPlan
 	OrgFundedLimited bool
+	// RoutedAccounts are the provider's accounts a call refused before any
+	// request (every account limited) was routed over: whose org account the
+	// held thread waits for (recordOrgWait). Unset for a provider's refusal,
+	// whose account recorded its provenance before the call.
+	RoutedAccounts []models.AccountConfig
 }
 
 // usageLimitFailure turns a usage-limit refusal into a *types.UsageLimitFailure
@@ -334,6 +339,9 @@ func (r *AccountRouting) usageLimitFailure(ctx context.Context, err error, uc us
 	}
 	if !synthetic && uc.Account != nil {
 		uc.OrgFundedLimited = uc.OrgFundedLimited || limitedTierIsOrgFunded(uc.Account.Accounts, uc.ModelID)
+	}
+	if synthetic {
+		r.recordOrgWait(ctx, uc, uc.RoutedAccounts)
 	}
 	r.fundingOnLimit(ctx, uc, &facts)
 	if !facts.AlternativeAccount {
