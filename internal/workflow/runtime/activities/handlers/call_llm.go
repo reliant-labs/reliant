@@ -358,7 +358,7 @@ func explicitSamplingOverrides(args *reliantv1.CallLLMArgs) (*float64, string) {
 }
 
 // executeCore contains PURE BUSINESS LOGIC only
-func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, args *reliantv1.CallLLMArgs) (*reliantv1.CallLLMOutput, error) {
+func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, args *reliantv1.CallLLMArgs) (out *reliantv1.CallLLMOutput, retErr error) {
 	logger := activity.GetLogger(ctx)
 
 	// Thread path must be provided - no more "0" default
@@ -382,6 +382,17 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chat: %w", err)
 	}
+
+	// The agent turn's span (invoke_agent): this turn's provider calls are
+	// its children, and its tool calls are opened under it by execute_tools,
+	// which reads where it is from the output (trace_parent).
+	ctx, turn := startAgentTurn(ctx, rtx, chat)
+	defer func() {
+		if out != nil {
+			out.TraceParent = turn.TraceParent()
+		}
+		turn.End(retErr)
+	}()
 
 	// A running workflow may predate launch-time pinning. Its inputs are a
 	// snapshot, but the chat's durable pin must still keep this turn on disk.

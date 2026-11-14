@@ -233,6 +233,7 @@ func TestDerivation_StaleDisconnectNeverDeletesALiveLease(t *testing.T) {
 	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventConnected, At: reattached})
 	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventActivity, At: reattached.Add(time.Second)})
 	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventDisconnected, At: drained})
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — each event is handled on its own detached goroutine, so a correctly ignored one leaves no event to wait for
 	time.Sleep(150 * time.Millisecond)
 
 	row, ok := repo.snapshot("d-1")
@@ -287,6 +288,7 @@ func TestDerivation_DropsInvalidEventsAtParse(t *testing.T) {
 	}) {
 		t.Fatal("valid event after the invalid ones was not applied")
 	}
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — events are handled on detached goroutines, so the valid one landing does not order the dropped ones before it
 	time.Sleep(100 * time.Millisecond)
 	if row, _ := repo.daemonSnapshot("d-bad"); row.LifecyclePhase != nil {
 		t.Error("an invalid payload reached the repository")

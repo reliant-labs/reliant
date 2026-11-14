@@ -2528,7 +2528,7 @@ func (m *MockcreateWorkflowStore) WorkflowSlugExists(ctx context.Context, userID
 var _ createWorkflowStore = (*MockcreateWorkflowStore)(nil)
 
 // forge:section MockworkflowWriteStore
-// forge:hash=5a8ed37bd8a4acaae366eb21dd8bbdda70dc27185f26a01bd3283dc63c28e02d
+// forge:hash=b75801dc96bd52fc6087865427d37c013aca470d67912a4ae17309f57ef05c80
 
 // MockworkflowWriteStore is a test mock for the workflowWriteStore interface.
 //
@@ -2538,12 +2538,13 @@ var _ createWorkflowStore = (*MockcreateWorkflowStore)(nil)
 // "MockworkflowWriteStore.<Method>Func not set" error.
 type MockworkflowWriteStore struct {
 	contractkit.Recorder
-	GetUsableWorkflowBySlugFunc       func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc        func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetProjectWorkflowsJSONFunc       func(context.Context, string) (*string, error)
-	UpdateWorkflowDraftDefinitionFunc func(context.Context, string, string, string, string, db.WorkflowDraftStatus) error
-	GetWorkflowDraftFunc              func(context.Context, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftByNameFunc        func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetUsableWorkflowBySlugFunc                func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlugFunc                 func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetProjectWorkflowsJSONFunc                func(context.Context, string) (*string, error)
+	UpdateWorkflowDraftDefinitionFunc          func(context.Context, string, string, string, string, db.WorkflowDraftStatus) error
+	UpdateWorkflowDraftDefinitionAtVersionFunc func(context.Context, string, int64, string, string, string, db.WorkflowDraftStatus) error
+	GetWorkflowDraftFunc                       func(context.Context, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftByNameFunc                 func(context.Context, string, string) (*db.WorkflowDraft, error)
 }
 
 // GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
@@ -2580,6 +2581,15 @@ func (m *MockworkflowWriteStore) UpdateWorkflowDraftDefinition(ctx context.Conte
 		return m.UpdateWorkflowDraftDefinitionFunc(ctx, id, name, slug, definition, status)
 	}
 	return contractkit.MockNotSet("MockworkflowWriteStore", "UpdateWorkflowDraftDefinition")
+}
+
+// UpdateWorkflowDraftDefinitionAtVersion records the call and delegates to UpdateWorkflowDraftDefinitionAtVersionFunc when set.
+func (m *MockworkflowWriteStore) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status db.WorkflowDraftStatus) error {
+	m.Recorder.Record("UpdateWorkflowDraftDefinitionAtVersion", ctx, id, version, name, slug, definition, status)
+	if m.UpdateWorkflowDraftDefinitionAtVersionFunc != nil {
+		return m.UpdateWorkflowDraftDefinitionAtVersionFunc(ctx, id, version, name, slug, definition, status)
+	}
+	return contractkit.MockNotSet("MockworkflowWriteStore", "UpdateWorkflowDraftDefinitionAtVersion")
 }
 
 // GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.

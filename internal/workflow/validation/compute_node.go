@@ -33,6 +33,33 @@ func validateComputeNode(node *reliantv1.Node, nodePath []string, result *Result
 	}
 }
 
+// rejectActionParamEnclosingRefs reports an action param's {{ }} read of a
+// node outside the inline body the action runs in: a read that can only fail
+// at run time. Action params are not otherwise compiled here (their templates
+// are left to run time, validateActionNode), so this is the one CEL check
+// they get, and it can refuse no workflow that could ever have run.
+func (s *workflowScope) rejectActionParamEnclosingRefs(v *structpb.Value, path []string, result *Result) {
+	switch k := v.GetKind().(type) {
+	case *structpb.Value_StringValue:
+		if !containsTemplate(k.StringValue) {
+			return
+		}
+		for _, match := range extractTemplateExpressions(k.StringValue) {
+			if s.rejectEnclosingNodeRefs(match.Expr, path, result) {
+				return
+			}
+		}
+	case *structpb.Value_StructValue:
+		for _, key := range sortedValueKeys(k.StructValue.GetFields()) {
+			s.rejectActionParamEnclosingRefs(k.StructValue.GetFields()[key], appendPath(path, key), result)
+		}
+	case *structpb.Value_ListValue:
+		for i, item := range k.ListValue.GetValues() {
+			s.rejectActionParamEnclosingRefs(item, appendPath(path, fmt.Sprintf("[%d]", i)), result)
+		}
+	}
+}
+
 // validateValueTemplates type-checks every {{ }} template inside a
 // google.protobuf.Value tree (a map value may be a string, a list or a
 // nested map), reporting each at its path.

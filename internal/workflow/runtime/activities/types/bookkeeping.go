@@ -47,4 +47,7 @@ type WorkflowCheckpointInput struct {
 	// CatalogPin is the catalog the run started with, recorded beside its
 	// position so a restart from here loads the same definitions.
 	CatalogPin string `json:"catalog_pin,omitempty"`
+	// RunID is the run's AI-monitoring id (forge.ai.run.id), recorded beside
+	// its position so a restart from here continues the same run.
+	RunID string `json:"run_id,omitempty"`
 }

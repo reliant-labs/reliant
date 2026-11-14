@@ -17325,10 +17325,39 @@
               "repeated": true
             }
           ],
+          "reliant.v1.InboxAutomationNoOrgAccount": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "owner_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.InboxAutomationRunPaused": [
             {
               "name": "reason",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.InboxAutomationsOnPersonalAccounts": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "count",
+              "kind": "int32"
+            },
+            {
+              "name": "trigger_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.InboxItem": [
@@ -17453,6 +17482,18 @@
               "name": "org_provider_key_rejected",
               "kind": "message",
               "type_name": "reliant.v1.InboxOrgProviderKeyRejected",
+              "oneof": "payload"
+            },
+            {
+              "name": "automation_no_org_account",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxAutomationNoOrgAccount",
+              "oneof": "payload"
+            },
+            {
+              "name": "automations_on_personal_accounts",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxAutomationsOnPersonalAccounts",
               "oneof": "payload"
             }
           ],
@@ -17985,7 +18026,9 @@
           "reliant.v1.InboxAutomationFailing": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationLaunchFailed": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationNeedsSetup": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxAutomationNoOrgAccount": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationRunPaused": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxAutomationsOnPersonalAccounts": "reliant/v1/inbox.proto",
           "reliant.v1.InboxItem": "reliant/v1/inbox.proto",
           "reliant.v1.InboxOrgProviderKeyRejected": "reliant/v1/inbox.proto",
           "reliant.v1.InboxQuestion": "reliant/v1/inbox.proto",
@@ -18041,7 +18084,9 @@
             "INBOX_ITEM_KIND_WORKTREE_RECLAIM",
             "INBOX_ITEM_KIND_WORKTREE_MARKED",
             "INBOX_ITEM_KIND_PERSONAL_FUNDING",
-            "INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED"
+            "INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED",
+            "INBOX_ITEM_KIND_AUTOMATION_NO_ORG_ACCOUNT",
+            "INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS"
           ],
           "reliant.v1.TriggerHealthStatus": [
             "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -18084,7 +18129,9 @@
             12,
             13,
             14,
-            15
+            15,
+            16,
+            17
           ],
           "reliant.v1.TriggerHealthStatus": [
             0,
@@ -53419,6 +53466,18 @@
       ],
       "providers": [
         "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgProviderAccount",
+      "field": "ChatWaker",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.OrgChatWaker",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database",
+        "TemporalClient"
       ],
       "resolution": "composition_expression"
     },

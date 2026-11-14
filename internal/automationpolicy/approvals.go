@@ -7,7 +7,9 @@ import (
 	"sort"
 	"strings"
 
+	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // ApprovalSettingKey is the setting that says when an agent's change to a
@@ -76,6 +78,48 @@ func ResolveApprovalMode(settings []*core.Setting, projects ...string) ApprovalM
 	}
 	if mode == "" {
 		return account
+	}
+	return mode
+}
+
+// OrgFloorMode is the ApprovalMode an org's automation-approval floor names
+// (control-plane docs/design/org-policies.md §4.4), "" for no floor.
+func OrgFloorMode(floor controlplanev1.AutomationApprovalFloor) ApprovalMode {
+	switch floor {
+	case controlplanev1.AutomationApprovalFloor_AUTOMATION_APPROVAL_FLOOR_ALWAYS:
+		return ApprovalAlways
+	case controlplanev1.AutomationApprovalFloor_AUTOMATION_APPROVAL_FLOOR_ON_CAPABILITY_CHANGE:
+		return ApprovalOnCapabilityChange
+	}
+	return ""
+}
+
+// WithOrgFloor is mode raised to the automation-approval floor of each org in
+// orgIDs (orgpolicy.AutomationApprovalFloor): one more input to the same
+// Stricter chain the project and account settings go through, so it can only
+// ever raise how often a card is asked for, never lower it. A floor the org
+// sets in audit (or the platform has not turned on) changes nothing and is
+// recorded. An empty orgID is work outside any org.
+func WithOrgFloor(ctx context.Context, mode ApprovalMode, orgIDs ...string) ApprovalMode {
+	for _, orgID := range orgIDs {
+		if orgID == "" {
+			continue
+		}
+		floor, d := orgpolicy.AutomationApprovalFloor(ctx, orgID)
+		floorMode := OrgFloorMode(floor)
+		if floorMode == "" {
+			continue
+		}
+		raised := mode.Stricter(floorMode)
+		if raised == mode {
+			// The member's own setting is already at least as strict: the
+			// floor changes nothing, enforced or not.
+			continue
+		}
+		d.Record(ctx, "from", string(mode), "to", string(raised))
+		if d.Enforced {
+			mode = raised
+		}
 	}
 	return mode
 }

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -64,6 +65,7 @@ func TestSandbox_AHandOffUnderANamedCacheDirectorySurvivesACd(t *testing.T) {
 			`nohup sh -c "sleep 1; echo c > '` + late + `-nohup'" >/dev/null 2>&1 & echo started`
 		out, err := wrappedWritable(t, project, home, []string{keep}, sh, env).CombinedOutput()
 		require.NoError(t, err, "%s", out)
+		// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — the children would write 1s in; this window is their chance to, and there is no event to wait for
 		time.Sleep(3 * time.Second)
 		for _, f := range []string{"-bg", "-setsid", "-nohup"} {
 			assert.NoFileExists(t, late+f, "a %s child wrote after its command exited", f[1:])
@@ -126,13 +128,20 @@ func TestSandbox_ALeaseMirrorUnderTheCacheIsReadOnlyToANoneCommand(t *testing.T)
 	})
 
 	t.Run("a running command reads the mirror as it started", func(t *testing.T) {
-		cmd := wrappedWritable(t, project, home, []string{slot}, `cat '`+mirror+`'; sleep 2; cat '`+mirror+`'`, env)
-		var out strings.Builder
+		// The command reads the mirror, then blocks on its stdin until the
+		// mirror has been replaced outside, then reads it again.
+		cmd := wrappedWritable(t, project, home, []string{slot}, `cat '`+mirror+`'; read -r _; cat '`+mirror+`'`, env)
+		var out lockedOutput
 		cmd.Stdout, cmd.Stderr = &out, &out
+		release, err := cmd.StdinPipe()
+		require.NoError(t, err)
 		require.NoError(t, cmd.Start())
-		time.Sleep(time.Second)
+		testkit.Eventually(t, "the command's first read of the mirror", func() bool {
+			return strings.Contains(out.String(), "runA 100 3\n")
+		})
 		require.NoError(t, os.WriteFile(mirror+".new", []byte("runB 200 4\n"), 0o644))
 		require.NoError(t, os.Rename(mirror+".new", mirror))
+		require.NoError(t, release.Close())
 		require.NoError(t, cmd.Wait(), "%s", out.String())
 		assert.Equal(t, "runA 100 3\nrunA 100 3\n", out.String())
 	})
@@ -142,7 +151,7 @@ func TestSandbox_ALeaseMirrorUnderTheCacheIsReadOnlyToANoneCommand(t *testing.T)
 	// lock on a file in the overlaid cache does not: the overlay's inode is not the real one).
 	lockedInside := func(t *testing.T, path string) (outside string) {
 		cmd := wrappedWritable(t, project, home, []string{slot}, `exec 9<'`+path+`' && /usr/bin/flock -s -n 9 && echo locked && sleep 2`, env)
-		var out strings.Builder
+		var out lockedOutput
 		cmd.Stdout, cmd.Stderr = &out, &out
 		require.NoError(t, cmd.Start())
 		for deadline := time.Now().Add(5 * time.Second); !strings.Contains(out.String(), "locked") && time.Now().Before(deadline); {
@@ -167,13 +176,18 @@ func TestSandbox_ALeaseMirrorUnderTheCacheIsReadOnlyToANoneCommand(t *testing.T)
 	// A kept directory is bound by inode when the command starts: replaced (removed and made
 	// again) or renamed while it runs, the command still writes only the one it was given.
 	t.Run("a kept directory is bound by inode", func(t *testing.T) {
-		cmd := wrappedWritable(t, project, home, []string{slot}, `sleep 1.5; echo late > '`+slot+`/late' && echo wrote`, env)
-		var out strings.Builder
+		// Running means bound: the command says so, then blocks on its stdin
+		// until the directory has been swapped outside.
+		cmd := wrappedWritable(t, project, home, []string{slot}, `echo running; read -r _; echo late > '`+slot+`/late' && echo wrote`, env)
+		var out lockedOutput
 		cmd.Stdout, cmd.Stderr = &out, &out
+		release, err := cmd.StdinPipe()
+		require.NoError(t, err)
 		require.NoError(t, cmd.Start())
-		time.Sleep(500 * time.Millisecond)
+		testkit.Eventually(t, "the command to start", func() bool { return strings.Contains(out.String(), "running") })
 		require.NoError(t, os.Rename(slot, slot+".old"))
 		require.NoError(t, os.MkdirAll(slot, 0o755))
+		require.NoError(t, release.Close())
 		require.NoError(t, cmd.Wait(), "%s", out.String())
 		assert.NoFileExists(t, filepath.Join(slot, "late"), "the new directory gets nothing")
 		assert.FileExists(t, filepath.Join(slot+".old", "late"), "the write went to the directory it was bound to")
@@ -206,4 +220,23 @@ os.waitpid(pid, 0)
 		}
 	})
 
+}
+
+// lockedOutput is a command's output that the test may read while the command
+// still writes it (exec copies a non-file writer on its own goroutine).
+type lockedOutput struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (o *lockedOutput) Write(p []byte) (int, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.b.Write(p)
+}
+
+func (o *lockedOutput) String() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.b.String()
 }

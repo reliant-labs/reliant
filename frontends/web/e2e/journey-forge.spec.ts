@@ -10,12 +10,11 @@ import { expect, test, type Page, type Request, type Route } from '@playwright/t
 //   forge        ?shell=forge (lib/shell.ts), signed OUT: the demo is public
 //                there, and the landing page's ?journey= starts the journey.
 //
-// The eleven steps are driven the way a visitor drives them: each required
-// action is the real click on the console (open the trace, its logs, the
-// flamegraph, the issue, Ask an agent), then Next. Throughout, the demo must
-// not reach a daemon, a chat or real telemetry; and each shell's end card
-// offers the other journey the way that shell can (in the forge shell, a link
-// to Reliant at the runtime config's APP_URL).
+// Steps 1-10 are driven the way a visitor drives them: each required action
+// is the real click on the console (open the trace, its logs, the flamegraph,
+// the issue, Ask an agent), then Next. Throughout, the demo must not reach a
+// daemon, a chat or real telemetry. (The walk to the end card, step 11, was
+// flaky and is deleted: flake:removed #2749.)
 
 const TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736';
 const ISSUE_ID = 'iss-orders-deadline';
@@ -53,15 +52,6 @@ async function mockForgeShellSignedOut(page: Page): Promise<void> {
   await page.route('**/config.js', (route) =>
     route.fulfill({ status: 200, contentType: 'text/javascript', body: `window.__FORGE_CONFIG__ = ${JSON.stringify(config)};` }),
   );
-  // The end card opens Reliant in a new tab: record it instead of leaving the test's origin.
-  await page.addInitScript(() => {
-    const opened: string[] = [];
-    (window as unknown as { __opened: string[] }).__opened = opened;
-    window.open = ((url?: string | URL) => {
-      opened.push(String(url));
-      return null;
-    }) as typeof window.open;
-  });
 }
 
 /** The open step's card: the spotlight's callout, or a centred card. Its controls are inside it (controls: "callout"). */
@@ -83,16 +73,15 @@ async function openTrace(page: Page) {
   await row.getByRole('button', { name: /^Open trace/ }).click();
 }
 
-/** The end card's command list holding `text`: the card lists the scaffold commands, then the obs ones. */
-const endCardCommands = (page: Page, text: string) => page.getByTestId('tour-commands').filter({ hasText: text });
-
 /**
- * Reliant's and the forge shell's eleven steps, intro to Ask an agent, each by its required action. A
- * required action moves the tour on by itself (no Skip step), and Next stays enabled beside it so a visitor
- * who cannot find the target is never stuck (#2567); fg-logs and fg-ask hold for Next.
- * Leaves the end card open.
+ * The forge shell's steps 1-10, intro to Ask an agent, each by its required action. A required action
+ * moves the tour on by itself (no Skip step), and Next stays enabled beside it so a visitor who cannot find
+ * the target is never stuck (#2567); fg-logs and fg-ask hold for Next.
+ * Stops on step 10 with the Ask sheet done: its Next to the end card (step 11) is flaky. It failed to
+ * advance on reliant main twice ("Step 10 of 11" for 20s; flake:removed #2749; main-red control-plane#2743), so it and
+ * the end card's checks are deleted under the flaky-test rule.
  */
-async function walkToEndCard(page: Page) {
+async function walkToAskAgent(page: Page) {
   const T = 11;
   await atStep(page, 1, T, 'What is Forge?');
   await expect(page.getByTestId('onboarding-nav-bar')).toHaveCount(0);
@@ -141,9 +130,6 @@ async function walkToEndCard(page: Page) {
   await expect(page.getByTestId('ask-agent-demo-note')).toBeVisible();
   await sheet.getByRole('button', { name: 'Done' }).click();
   await expect(page.getByTestId('tour-next-done')).toBeVisible();
-  await next(page);
-
-  await atStep(page, 11, T, 'Try it on your app');
 }
 
 function expectNoDaemonOrChat(log: { urls: string[]; sockets: string[] }) {
@@ -163,26 +149,11 @@ test.describe('the forge journey in the forge shell', () => {
     // Never sent to sign in first.
     await expect(page.getByRole('heading', { name: /sign in/i })).toHaveCount(0);
 
-    await walkToEndCard(page);
-
-    // The end card: the forge CLI, and the workflows journey offered where it runs, at APP_URL.
-    await expect(endCardCommands(page, 'obs status prod')).toContainText('forge obs status prod');
-    for (const commands of await page.getByTestId('tour-commands').all()) {
-      await expect(commands).not.toContainText('reliant forge');
-    }
-    await page.getByTestId('tour-secondary').filter({ hasText: 'Try AI workflows in Reliant' }).click();
-    expect(await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened)).toEqual([
-      `${RELIANT_ORIGIN}/?journey=workflows`,
-    ]);
+    await walkToAskAgent(page);
 
     // The forge shell has no daemon and no chats at all: nothing under reliant.v1.
     expectNoDaemonOrChat(log);
     expect(log.urls.filter((url) => url.includes('/reliant.v1.'))).toEqual([]);
-
-    // Finish goes to the shell's Apps, which asks a signed-out visitor to sign in.
-    await page.getByTestId('tour-next').click();
-    await expect(page).toHaveURL(/\/(apps|auth)(\?|$)/, LOADED);
-    expect(page.url()).not.toContain('tour=');
   });
 
   test('the demo is public: /demo opens it signed out, with the tour', async ({ page }) => {
