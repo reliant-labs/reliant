@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
@@ -125,64 +127,97 @@ func TestRunScopeResolvesOnceAndOnlyWhenAsked(t *testing.T) {
 
 // Who may pay for a generation in an org chat follows the person's choice,
 // as the chat's model calls do (org-provider-accounts §4.4, §10): the org's
-// accounts first; the person's own only with their say; never under
-// org_only. Without their say a generation only their own accounts could
-// make is not made, and says how to allow it. The person's managed key bills
-// the org (org-funded); their Gemini key is their own.
+// accounts first; the person's own only with their say, or when the org gives
+// them nothing; never under org_only. Without their say a generation only
+// their own accounts could make is not made, and says how to allow it.
 func TestMediaSpendsThePersonsOwnAccountsOnlyWithTheirSay(t *testing.T) {
-	seedMediaUser(t)
-	withProvidersSwitch(t, orgpolicy.EnforcementEnforce)
-	image := models.ModelSelector{Tags: []string{mediaImageTag}}
+	account := func(driver, id, funding string, tier models.AccountTier) models.AccountConfig {
+		return models.AccountConfig{
+			DriverConfig: models.DriverConfig{DriverID: models.DriverID(driver), APIKey: "key-" + id, Enabled: true, AccountID: id},
+			Funding:      funding, Tier: tier,
+		}
+	}
+	candidates := func(orgGave bool, accounts ...models.AccountConfig) models.AvailableDrivers {
+		out := models.AvailableDrivers{Drivers: map[models.DriverID]models.DriverConfig{}, Accounts: map[models.DriverID][]models.AccountConfig{}, OrgGave: orgGave}
+		for _, a := range accounts {
+			out.Accounts[a.DriverID] = append(out.Accounts[a.DriverID], a)
+			if _, ok := out.Drivers[a.DriverID]; !ok {
+				out.Drivers[a.DriverID] = a.DriverConfig
+			}
+		}
+		return out
+	}
+	orgKey := account("openai", "org-openai", models.FundingOrgKey, models.TierFirst)
+	ownGemini := account("gemini", "own-gemini", models.FundingPersonal, models.TierSecond)
+	// The org's key is paused, rejected or refused by its policy: the loader
+	// left it out, and still reports that the org gives the person an account.
+	orgKeyGone := candidates(true, ownGemini)
 
-	t.Run("the org's accounts serve first", func(t *testing.T) {
-		resolved, _, _, err := resolveMediaModel(inRun(policyCtx(nil), orgScope(true)), policyUser, image, models.ModalityImage)
-		require.NoError(t, err)
-		assert.Equal(t, "reliant", resolved.Provider.Driver, "org-funded managed credit before the person's own Gemini key")
-	})
-
-	// The org's policy leaves its managed credit no image model: only the
-	// person's own Gemini key could generate one.
-	noManagedImages := policyCtx(&controlplanev1.OrgPolicy{Models: &controlplanev1.ModelsPolicy{Mode: enforced, Allowed: []string{"claude-opus-4-6"}}})
-	for name, tc := range map[string]struct {
+	for _, tc := range []struct {
+		name    string
+		scope   Scope
 		funding RunFunding
-		want    string // the driver that serves, "" for a refusal
+		all     models.AvailableDrivers
+		want    string // the driver that serves; "" for a funding refusal
 		orgOnly bool
 	}{
-		"without their say it is not made":         {funding: RunFunding{}},
-		"org_only never reaches their accounts":    {funding: RunFunding{OrgOnly: true, PersonalWhenOrgCannot: true}, orgOnly: true},
-		"use_personal when the org's cannot":       {funding: RunFunding{PersonalWhenOrgCannot: true}, want: "gemini"},
-		"their own accounts first, by their order": {funding: RunFunding{PersonalFirst: true}, want: "gemini"},
+		{"the org's accounts serve first", orgScope(true), RunFunding{}, candidates(true, orgKey, ownGemini), "openai", false},
+		{"the org's key gone: without their say nothing is spent", orgScope(true), RunFunding{}, orgKeyGone, "", false},
+		{"the org's key gone, org_only", orgScope(true), RunFunding{OrgOnly: true, PersonalWhenOrgCannot: true}, orgKeyGone, "", true},
+		{"the org's key gone, use_personal when the org's cannot", orgScope(true), RunFunding{PersonalWhenOrgCannot: true}, orgKeyGone, "gemini", false},
+		{"their own accounts first, by their order", orgScope(true), RunFunding{PersonalFirst: true}, candidates(true, ownGemini), "gemini", false},
+		{"an org that gives nothing leaves their own serving", orgScope(true), RunFunding{}, candidates(false, ownGemini), "gemini", false},
+		{"org_only holds even then", orgScope(true), RunFunding{OrgOnly: true}, candidates(false, ownGemini), "", true},
+		{"work of no org is the person's own", PersonalScope(policyUser), RunFunding{OrgOnly: true}, candidates(false, ownGemini), "gemini", false},
 	} {
-		t.Run(name, func(t *testing.T) {
-			ctx := inRunFunded(noManagedImages, orgScope(true), tc.funding)
-			resolved, _, _, err := resolveMediaModel(ctx, policyUser, image, models.ModalityImage)
+		t.Run(tc.name, func(t *testing.T) {
+			resolved, from, err := resolveMediaFrom(context.Background(), policyUser, tc.scope, tc.funding, tc.all,
+				models.ModelSelector{Tags: []string{mediaImageTag}}, models.ModalityImage, false)
 			if tc.want != "" {
 				require.NoError(t, err)
 				assert.Equal(t, tc.want, resolved.Provider.Driver)
-				assert.NoError(t, CheckMediaAvailable(ctx, policyUser, models.ModalityImage))
+				assert.True(t, from.Drivers[models.DriverID(tc.want)].IsConfigured(), "the set it was resolved from holds the account that serves")
 				return
 			}
+			assert.Nil(t, resolved, "no model, so no generator is built")
 			var funding *models.MediaPersonalFundingError
 			require.True(t, errors.As(err, &funding), "want the funding refusal, got %v", err)
 			assert.Equal(t, tc.orgOnly, funding.OrgOnly)
 			assert.Contains(t, funding.Message, "not a failure to retry")
-			_, err = ResolveImageGenerator(ctx, policyUser, image)
-			assert.True(t, errors.As(err, &funding), "the generator is never built: %v", err)
-			assert.True(t, errors.As(CheckMediaAvailable(ctx, policyUser, models.ModalityImage), &funding), "load_tool says so too")
 		})
 	}
+}
 
-	t.Run("an org that gave the person nothing leaves their own accounts serving", func(t *testing.T) {
-		repo, cleanup := db.SetupTestDB(t)
-		t.Cleanup(cleanup)
-		InitializeAPIKeyProvider(repo)
-		db.SeedProviderAccount(t, repo, policyUser, "gemini", "AIza-"+policyUser)
-		resolved, _, _, err := resolveMediaModel(inRun(policyCtx(nil), orgScope(true)), policyUser, image, models.ModalityImage)
-		require.NoError(t, err)
-		assert.Equal(t, "gemini", resolved.Provider.Driver)
+// The loader says whether the org gives the person an account before any is
+// left out, so an org key the org's policy refuses (or one paused, or
+// needing sign-in) is never read as "the org gave nothing".
+func TestLoader_OrgGaveCountsAnAccountThatCannotServeNow(t *testing.T) {
+	members := &fakeMembers{ok: true, answer: map[string]accesstokenclient.OrgMembership{
+		"org-x": {OrgID: "org-x", Member: true, Role: "member", MemberSince: memberSince},
+	}}
+	repo := func(orgKeys ...core.AccountWithSecrets) *orgFakeRepo {
+		return &orgFakeRepo{user: "u", mine: []core.AccountWithSecrets{personalKey("own", "u", "gemini")}, orgs: map[string][]core.AccountWithSecrets{"org-x": orgKeys}}
+	}
+	scope := Scope{UserID: "u", OrgID: "org-x", Attended: true}
 
-		_, _, _, err = resolveMediaModel(inRunFunded(policyCtx(nil), orgScope(true), RunFunding{OrgOnly: true}), policyUser, image, models.ModalityImage)
-		var funding *models.MediaPersonalFundingError
-		assert.True(t, errors.As(err, &funding), "org_only holds even then: %v", err)
-	})
+	assert.True(t, loaded(t, repo(orgKey("x-key", "org-x", core.OrgAccessMembers, 0)), members, scope).OrgGave)
+	assert.False(t, loaded(t, repo(), members, scope).OrgGave, "an org with no account for the person")
+	assert.False(t, loaded(t, repo(orgKey("x-key", "org-x", core.OrgAccessMembers, 0)), members, PersonalScope("u")).OrgGave, "work of no org")
+
+	paused := orgKey("x-key", "org-x", core.OrgAccessMembers, 0)
+	at := memberSince
+	paused.PausedAt = &at
+	avail := loaded(t, repo(paused), members, scope)
+	assert.True(t, avail.OrgGave, "a paused org key still counts")
+	assert.Empty(t, avail.Accounts["anthropic"], "and it serves nothing")
+
+	withProvidersSwitch(t, orgpolicy.EnforcementEnforce)
+	avail, err := buildAvailableDriversFor(policyCtxFor("org-x", onlyDrivers(enforced, "gemini")), repo(orgKey("x-key", "org-x", core.OrgAccessMembers, 0)), members, scope, noReportClients)
+	require.NoError(t, err)
+	assert.True(t, avail.OrgGave, "an org key the org's policy refuses still counts")
+	assert.Empty(t, avail.Accounts["anthropic"])
+}
+
+func policyCtxFor(orgID string, doc *controlplanev1.OrgPolicy) context.Context {
+	return orgpolicy.WithResolver(context.Background(), orgpolicy.New(policyDocs{docs: map[string]*controlplanev1.OrgPolicy{orgID: doc}}))
 }

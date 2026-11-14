@@ -109,9 +109,18 @@ func resolveMedia(ctx context.Context, userID string, selector models.ModelSelec
 
 	scope, funding := runScopeFor(ctx, userID)
 	all := GetAvailableDrivers(ctx, scope)
+	resolved, candidates, err := resolveMediaFrom(ctx, userID, scope, funding, all, selector, modality, counted)
+	return resolved, candidates, scope, err
+}
+
+// resolveMediaFrom is resolveMedia over all, scope's candidates: the
+// resolved model and the candidate set it was resolved from (whose default
+// account serves it), or why none serves.
+func resolveMediaFrom(ctx context.Context, userID string, scope Scope, funding RunFunding, all models.AvailableDrivers, selector models.ModelSelector, modality models.Modality, counted bool) (*models.ResolvedModel, models.AvailableDrivers, error) {
+	selector.RequireOutputModality = modality
 	registry, err := models.GetRegistry()
 	if err != nil {
-		return nil, all, scope, err
+		return nil, all, err
 	}
 
 	// Who may pay, in the order the person chose (§4.4, §10): the org's
@@ -119,20 +128,20 @@ func resolveMedia(ctx context.Context, userID string, selector models.ModelSelec
 	tries, heldBack := mediaFundingTries(scope, funding, all)
 	for _, candidates := range tries {
 		if resolved, err := resolveMediaIn(ctx, userID, registry, candidates, selector, modality); err == nil {
-			return resolved, candidates, scope, nil
+			return resolved, candidates, nil
 		}
 	}
 	resolved, err := resolveMediaIn(ctx, userID, registry, all, selector, modality)
 	if heldBack && err == nil && resolved != nil {
-		return nil, all, scope, models.NewMediaPersonalFundingError(modality, funding.OrgOnly)
+		return nil, all, models.NewMediaPersonalFundingError(modality, funding.OrgOnly)
 	}
 	if refusal := mediaPolicyRefusal(ctx, scope, all, selector, counted); refusal != nil {
-		return nil, all, scope, refusal
+		return nil, all, refusal
 	}
 	if err == nil {
 		err = models.NewMediaUnavailableError(registry.WithAvailability(all.Availability), modality)
 	}
-	return nil, all, scope, err
+	return nil, all, err
 }
 
 // resolveMediaIn resolves selector over candidates: the person's preference
@@ -165,10 +174,12 @@ func resolveMediaIn(ctx context.Context, userID string, registry *models.ModelRe
 // serve is refused with how to give it rather than "connect a provider".
 //
 // Work of no org, and a person who chose their own accounts first, draw on
-// everything (their own first). An org that gave the person nothing leaves
-// their own accounts serving as before. Otherwise the org's accounts serve
-// first, and the person's own only under use_personal (or an automation
-// stamped to spend any source); org_only never reaches them.
+// everything (their own first). An org that gives the person nothing
+// (all.OrgGave, decided before any account was left out for its status or
+// the org's policy, so an org key that is paused, rejected or refused still
+// counts) leaves their own accounts serving as before. Otherwise the org's
+// accounts serve first, and the person's own only under use_personal (or an
+// automation stamped to spend any source); org_only never reaches them.
 func mediaFundingTries(scope Scope, funding RunFunding, all models.AvailableDrivers) (tries []models.AvailableDrivers, heldBack bool) {
 	if scope.Personal() {
 		return []models.AvailableDrivers{all}, false
@@ -176,14 +187,13 @@ func mediaFundingTries(scope Scope, funding RunFunding, all models.AvailableDriv
 	if funding.PersonalFirst && !funding.OrgOnly {
 		return []models.AvailableDrivers{PersonalFirst(all)}, false
 	}
-	orgGave, personal := false, false
+	personal := false
 	for _, list := range all.Accounts {
 		for _, a := range list {
-			orgGave = orgGave || models.OrgFunded(a.Funding)
 			personal = personal || a.Funding == models.FundingPersonal
 		}
 	}
-	if !personal || (!orgGave && !funding.OrgOnly) {
+	if !personal || (!all.OrgGave && !funding.OrgOnly) {
 		return []models.AvailableDrivers{all}, false
 	}
 	orgFunded := withoutPersonalAccounts(all)

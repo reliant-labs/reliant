@@ -184,6 +184,15 @@ type AvailableDrivers struct {
 	// per model.
 	DriverRank map[DriverID]AccountTier
 
+	// OrgGave reports that the run's org gives the person at least one
+	// account it pays for on the first tier (its own key the person may use,
+	// or a seat it pays for), whether or not that account can serve now:
+	// paused, needing sign-in, rate-limited or refused by the org's policy
+	// all still count. Spending the person's own accounts in its place needs
+	// their say (org-provider-accounts §10); an org that gives nothing leaves
+	// them serving as before. False for every scope of no org.
+	OrgGave bool
+
 	// StickyDriver, when set, is the provider a thread is already on between
 	// the tool steps of one turn: TierFor ranks it above every tier for a
 	// model it serves, so a better tier is taken up at the next turn start,
