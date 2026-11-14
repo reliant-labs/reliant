@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
 // A tool call that spends a provider (an image or a video generation)
@@ -31,4 +32,16 @@ func TestExecuteToolsRunScopeIsTheChatsRun(t *testing.T) {
 	assert.Equal(t, drivers.PersonalScope("u1"),
 		a.runScope(ctx, &db.Chat{ID: "c", UserID: "u1"})(),
 		"a chat that predates orgs: the person's own accounts")
+}
+
+// The scope a tool call resolves in is bound to the person its request
+// executes as: an org chat's scope never reaches a call made as another
+// person, whoever the tool then asks for (drivers.runScopeFor).
+func TestExecuteToolsRunScopeIsBoundToTheActingUser(t *testing.T) {
+	tec := &toolExecutionContext{
+		chat:     chatOf("c", string(core.TriggerEventKindChatStart), nil),
+		project:  &db.Project{ID: "p", UserID: "u1"},
+		worktree: &rctx.WorktreeInfo{},
+	}
+	assert.Equal(t, tec.buildToolRequest().UserID, tec.actingUserID(), "the request and the run scope name the same person")
 }

@@ -37,7 +37,7 @@ func seedMediaUser(t *testing.T) {
 }
 
 func inRun(ctx context.Context, scope Scope) context.Context {
-	return WithRunScope(ctx, func() Scope { return scope })
+	return WithRunScope(ctx, scope.UserID, func() Scope { return scope })
 }
 
 func TestMediaResolvesInTheRunsScope(t *testing.T) {
@@ -90,9 +90,17 @@ func TestMediaTheOrgsPolicyForbidsIsRefusedWithItsReason(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestRunScopeIsOnlyTheActorsWhenItSpendsTheActor(t *testing.T) {
+	// The activity executes the call as u2, in a chat policyUser owns.
+	ctx := WithRunScope(context.Background(), "u2", func() Scope { return orgScope(true) })
+	assert.Equal(t, PersonalScope("u2"), runScopeFor(ctx, "u2"), "a call made as someone other than the chat's owner never gets its org")
+	assert.Equal(t, PersonalScope(policyUser), runScopeFor(ctx, policyUser), "nor does the owner's id, when the call executes as someone else")
+	assert.Equal(t, PersonalScope(""), runScopeFor(WithRunScope(context.Background(), "", func() Scope { return Scope{} }), ""))
+}
+
 func TestRunScopeResolvesOnceAndOnlyWhenAsked(t *testing.T) {
 	calls := 0
-	ctx := WithRunScope(context.Background(), func() Scope { calls++; return orgScope(true) })
+	ctx := WithRunScope(context.Background(), policyUser, func() Scope { calls++; return orgScope(true) })
 	assert.Zero(t, calls, "a tool call that spends nothing reads nothing")
 	assert.Equal(t, orgScope(true), runScopeFor(ctx, policyUser))
 	assert.Equal(t, orgScope(true), runScopeFor(ctx, policyUser))

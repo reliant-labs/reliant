@@ -61,7 +61,7 @@ var scopeOrigins = []scopeOrigin{
 	{"internal/workflow/runtime/activities/handlers/llm_probe.go: ProbeLLMCall: llmCallSpec{no OrgID}", "the dev probe belongs to no run"},
 
 	// One-shot and send-time callers with no run scope in hand yet.
-	{"internal/llm/drivers/run_scope.go: runScopeFor: PersonalScope", "an image or video generation (and load_tool's check of one) that belongs to no run, or whose context carries another person's run: their own accounts; a tool call's run scope is set by ExecuteTools from the chat row (WithRunScope)"},
+	{"internal/llm/drivers/run_scope.go: runScopeFor: PersonalScope", "an image or video generation (and load_tool's check of one) that belongs to no run, or is made as anyone but the actor the run scope is bound to and the person it spends: their own accounts; a tool call's run scope is set by ExecuteTools from the chat row (WithRunScope)"},
 	{"internal/handlers/catalog/catalog.go: (*Service).pickerScope: PersonalScope", "a picker in a deployment with no orgs: the person's own accounts"},
 	{"internal/handlers/catalog/catalog.go: (*Service).pickerScope: PersonalScope", "a picker request naming no org (every client before orgs): the person's own accounts"},
 	{"internal/handlers/catalog/catalog.go: (*Service).pickerScope: Scope{}", "a picker for the org the request names (ListModels, ListAvailableModels org_id), once orgs.Named verified the caller a live member of it (a machine credential: its own org only), attended: what a chat of that org may run on"},

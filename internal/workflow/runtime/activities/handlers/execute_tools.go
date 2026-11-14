@@ -209,7 +209,7 @@ func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 		ToolInput:        tec.dispatchInput,
 		ToolCallID:       tec.toolCallID,
 		ContentBlockID:   "", // Not required - tool calls can be ephemeral
-		UserID:           tec.project.UserID,
+		UserID:           tec.actingUserID(),
 		ChatID:           tec.chat.ID,
 		ProjectID:        tec.project.ID,
 		WorktreeID:       tec.worktree.ID,
@@ -228,6 +228,12 @@ func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 }
 
 // chatID returns the chat ID for status emissions
+// actingUserID is the person a tool call executes as: the user its request
+// carries (buildToolRequest), and the one its run scope is bound to.
+func (tec *toolExecutionContext) actingUserID() string {
+	return tec.project.UserID
+}
+
 func (tec *toolExecutionContext) getChatID() string {
 	return tec.chatID
 }
@@ -812,8 +818,9 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	// A tool that spends a provider (an image or a video generation)
 	// resolves in the run's scope, read from the chat row as call_llm reads
 	// it for the model's own calls: the chat's org, its accounts and policy,
-	// and who is behind the run (drivers.WithRunScope).
-	ctx = drivers.WithRunScope(ctx, a.runScope(ctx, tec.chat))
+	// and who is behind the run (drivers.WithRunScope). It is bound to the
+	// person the call executes as.
+	ctx = drivers.WithRunScope(ctx, tec.actingUserID(), a.runScope(ctx, tec.chat))
 
 	// The call is about to enter real execution -- record it durably as
 	// PENDING before dispatch so a reload mid-execution sees at least this
@@ -837,7 +844,8 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 
 // runScope resolves the scope of chat's run, as llmCallSpec.scope does for
 // its model calls: the chat row's org, attended or not (chatAttendance). It
-// reads the database only when a tool asks.
+// spends the chat owner's accounts, so drivers honours it only for a call
+// executing as that owner. It reads the database only when a tool asks.
 func (a *ExecuteToolsActivity) runScope(ctx context.Context, chat *db.Chat) func() drivers.Scope {
 	return func() drivers.Scope {
 		who := chatAttendance(ctx, a.repo, chat)
