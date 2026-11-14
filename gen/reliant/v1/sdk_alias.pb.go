@@ -404,6 +404,7 @@ type (
 	TriggerEventOutcome                      = sdk.TriggerEventOutcome
 	TriggerEventRun                          = sdk.TriggerEventRun
 	TriggerFailure                           = sdk.TriggerFailure
+	TriggerFundingWarning                    = sdk.TriggerFundingWarning
 	TriggerHealth                            = sdk.TriggerHealth
 	TriggerHealthStatus                      = sdk.TriggerHealthStatus
 	TriggerKind                              = sdk.TriggerKind

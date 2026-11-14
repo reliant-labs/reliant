@@ -49,6 +49,8 @@
         "ModelEndpoint",
         "NATSConn",
         "OrgCredentialSweep",
+        "OrgPolicyAttendance",
+        "OrgPolicyImpact",
         "OrgPolicyResolver",
         "OrgProviderAccount",
         "OrgResolver",
@@ -222,6 +224,13 @@
         {
           "component": "ModelEndpoint",
           "service": "reliant.v1.ModelEndpointService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "OrgPolicyImpact",
+          "service": "reliant.v1.OrgPolicyImpactService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -11530,6 +11539,21 @@
               "Name": "expires_at",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "project_names",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "CreateConnectorResponse": [
@@ -11559,7 +11583,13 @@
               "MessageType": "reliant.v1.AuthorizedClient"
             }
           ],
-          "ListAvailableToolsRequest": null,
+          "ListAvailableToolsRequest": [
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
           "ListAvailableToolsResponse": [
             {
               "Name": "tools",
@@ -11736,6 +11766,20 @@
             {
               "name": "created_at",
               "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectorKind"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_names",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ConnectorActivity": [
@@ -11834,6 +11878,20 @@
               "name": "expires_at",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectorKind"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_names",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.CreateConnectorResponse": [
@@ -11860,7 +11918,14 @@
               "repeated": true
             }
           ],
-          "reliant.v1.ListAvailableToolsRequest": [],
+          "reliant.v1.ListAvailableToolsRequest": [
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectorKind",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListAvailableToolsResponse": [
             {
               "name": "tools",
@@ -11951,6 +12016,11 @@
             "CONNECTOR_EXEC_MODE_DENY",
             "CONNECTOR_EXEC_MODE_ALLOWLIST",
             "CONNECTOR_EXEC_MODE_UNRESTRICTED"
+          ],
+          "reliant.v1.ConnectorKind": [
+            "CONNECTOR_KIND_UNSPECIFIED",
+            "CONNECTOR_KIND_WORKSPACE",
+            "CONNECTOR_KIND_FORGE"
           ]
         },
         "EnumNumbers": {
@@ -11959,12 +12029,21 @@
             1,
             2,
             3
+          ],
+          "reliant.v1.ConnectorKind": [
+            0,
+            1,
+            2
           ]
         },
         "EnumGoRefs": {
           "reliant.v1.ConnectorExecMode": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ConnectorExecMode"
+          },
+          "reliant.v1.ConnectorKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ConnectorKind"
           }
         }
       }
@@ -20309,6 +20388,156 @@
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ModelEndpointRoute"
           }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.OrgPolicyImpactService",
+      "proto_file": "reliant/v1/org_policy_impact.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.OrgPolicyImpactService/GetPolicyImpact",
+          "name": "GetPolicyImpact",
+          "input": "reliant.v1.GetPolicyImpactRequest",
+          "output": "reliant.v1.GetPolicyImpactResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "OrgPolicyImpactService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetPolicyImpact",
+            "InputType": "GetPolicyImpactRequest",
+            "OutputType": "GetPolicyImpactResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetPolicyImpactRequest",
+            "OutputTypeFQ": "reliant.v1.GetPolicyImpactResponse",
+            "InputProtoFile": "reliant/v1/org_policy_impact.proto",
+            "OutputProtoFile": "reliant/v1/org_policy_impact.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/org_policy_impact.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetPolicyImpactRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "policy_json",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetPolicyImpactResponse": [
+            {
+              "Name": "window_days",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "chats_considered",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "chats_refused",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "automations_refused",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "reasons",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PolicyImpactReason"
+            },
+            {
+              "Name": "truncated",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetPolicyImpactRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "policy_json",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.GetPolicyImpactResponse": [
+            {
+              "name": "window_days",
+              "kind": "int32"
+            },
+            {
+              "name": "chats_considered",
+              "kind": "int32"
+            },
+            {
+              "name": "chats_refused",
+              "kind": "int32"
+            },
+            {
+              "name": "automations_refused",
+              "kind": "int32"
+            },
+            {
+              "name": "reasons",
+              "kind": "message",
+              "type_name": "reliant.v1.PolicyImpactReason",
+              "repeated": true
+            },
+            {
+              "name": "truncated",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.PolicyImpactReason": [
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "chats",
+              "kind": "int32"
+            },
+            {
+              "name": "automations",
+              "kind": "int32"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetPolicyImpactRequest": "reliant/v1/org_policy_impact.proto",
+          "reliant.v1.GetPolicyImpactResponse": "reliant/v1/org_policy_impact.proto",
+          "reliant.v1.PolicyImpactReason": "reliant/v1/org_policy_impact.proto"
         }
       }
     },
@@ -41765,6 +41994,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.WebhookCredential"
+            },
+            {
+              "Name": "funding_warning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "DeleteTriggerRequest": [
@@ -42156,6 +42391,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Trigger"
+            },
+            {
+              "Name": "funding_warning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "UpdateTriggerRequest": [
@@ -42177,6 +42418,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Trigger"
+            },
+            {
+              "Name": "funding_warning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerFundingWarning"
             }
           ]
         },
@@ -42220,6 +42467,11 @@
               "name": "webhook",
               "kind": "message",
               "type_name": "reliant.v1.WebhookCredential"
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "reliant.v1.DeleteTriggerRequest": [
@@ -42695,6 +42947,11 @@
               "name": "trigger",
               "kind": "message",
               "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "reliant.v1.Trigger": [
@@ -43213,6 +43470,20 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.TriggerFundingWarning": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "model",
+              "kind": "string"
+            },
+            {
+              "name": "message",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.TriggerHealth": [
             {
               "name": "status",
@@ -43282,6 +43553,11 @@
               "name": "trigger",
               "kind": "message",
               "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ],
           "reliant.v1.WebhookCredential": [
@@ -43406,6 +43682,11 @@
               "name": "warnings",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "funding_warning",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerFundingWarning"
             }
           ]
         },
@@ -43454,6 +43735,7 @@
           "reliant.v1.TriggerEventDefinition": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerFailure": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerFundingWarning": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerSender": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto",
@@ -51860,6 +52142,30 @@
       "implementation_candidates": []
     },
     {
+      "id": "OrgPolicyAttendance",
+      "name": "OrgPolicyAttendance",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.ChatAttendance",
+      "source": {
+        "path": "internal/app/providers_api.go",
+        "symbol": "NewOrgPolicyAttendance"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "OrgPolicyImpact",
+      "name": "OrgPolicyImpact",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Service",
+      "source": {
+        "path": "internal/handlers/org_policy_impact/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "OrgPolicyResolver",
       "name": "OrgPolicyResolver",
       "kind": "provider",
@@ -53466,6 +53772,32 @@
       ],
       "providers": [
         "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
+      "field": "Attendance",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.ChatAttendance",
+      "methods": [],
+      "candidates": [
+        "OrgPolicyAttendance"
+      ],
+      "providers": [
+        "OrgPolicyAttendance"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },

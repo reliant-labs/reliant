@@ -202,6 +202,42 @@ func (p *AutoPause) Refuse(ctx context.Context, t *core.Trigger) (core.TriggerEv
 	return core.TriggerEventFailed, creatorLeftOrgDetail, nil
 }
 
+// RefusePolicy says what a firing of t records when its launch was refused by
+// its org's policy (launch.PolicyRefusedError: the run's model, or the only
+// provider or kind of account that serves it, is not allowed; control-plane
+// docs/design/org-policies.md §5, §5.1): failed, with the policy's message,
+// and t paused, once, with core.TriggerPausedOrgPolicy, so a schedule does not
+// record the same refusal every tick. It resumes when its owner re-enables it.
+// A nil AutoPause records the failure without pausing.
+//
+// The error is the pause's write: the caller fails the firing retryably and
+// records nothing; its retry reaches the same refusal and pauses again.
+func (p *AutoPause) RefusePolicy(ctx context.Context, t *core.Trigger, refused *launch.PolicyRefusedError) (string, error) {
+	detail := refused.Refusal.Message()
+	if p == nil {
+		return detail, nil
+	}
+	paused, err := p.store.PauseTrigger(ctx, t.ID, core.TriggerPausedOrgPolicy)
+	if err != nil {
+		return "", fmt.Errorf("pause trigger %s whose run its organization's policy refused: %w", t.ID, err)
+	}
+	if !paused {
+		// Already paused: a concurrent firing paused it, or this is a
+		// person's "run now" of the paused trigger.
+		return detail, nil
+	}
+	logging.InfoContext(ctx, "[triggers] paused a trigger whose run its organization's policy refused",
+		"trigger_id", t.ID, "org_id", ptr.From(t.OrgID), "input", refused.Input, "reason", refused.Refusal.Reason)
+	if p.schedules != nil {
+		err = p.schedules.GetHandle(ctx, ScheduleID(t.ID)).Pause(ctx, client.SchedulePauseOptions{Note: orgPolicyPausedDetail})
+		if err != nil && !isNotFound(err) {
+			logging.WarnContext(ctx, "[triggers] could not pause the schedule of a trigger paused for an org policy; its fires skip until it converges",
+				"trigger_id", t.ID, "error", err)
+		}
+	}
+	return detail + " The automation was paused; resume it once the policy allows its model.", nil
+}
+
 // IntegrationRefused applies t's org's integrations policy to integration,
 // the one t listens to (control-plane docs/design/org-policies.md §4.3, §5):
 // true when the policy refuses it, and t is then paused, once, with

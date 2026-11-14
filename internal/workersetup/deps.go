@@ -42,7 +42,7 @@ type AccountCredentialStore interface {
 // OrgKeyNoticeStore is what the sweep of unstarted rejected-key notices
 // reads and confirms. *db.Repo satisfies it.
 type OrgKeyNoticeStore interface {
-	ListUnstartedOrgKeyNotices(ctx context.Context, limit int) ([]core.ProviderAccount, error)
+	ClaimDueOrgKeyNotices(ctx context.Context, limit int, lease time.Duration) ([]core.ProviderAccount, error)
 	ConfirmOrgKeyNotice(ctx context.Context, orgID, accountID string, markedAt time.Time) error
 }
 

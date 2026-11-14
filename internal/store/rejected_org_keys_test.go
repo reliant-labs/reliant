@@ -77,6 +77,40 @@ func TestRejectedOrgKeysIndex(t *testing.T) {
 	assert.Contains(t, predicate, "needs_reauth_at IS NOT NULL")
 }
 
+// The org-key notice sweep is fair (as the pause sweep): with 120 older
+// marks whose start keeps failing claimed by earlier sweeps, a newer mark is
+// the one the next sweep claims; a claimed mark is not claimed again within
+// its lease, but is at once when the key is marked anew.
+func TestClaimDueOrgKeyNotices_IsFairToANewerMark(t *testing.T) {
+	f := newCredFixture(t)
+	ctx := context.Background()
+	for i := 1; i <= 120; i++ {
+		id := fmt.Sprintf("k-old-%d", i)
+		f.orgKey(id, "acme")
+		f.exec(`UPDATE provider_accounts SET needs_reauth_at = now() - interval '1 day' + $2 * interval '1 second',
+			needs_reauth_reason = 'rejected', reauth_notice_next_at = now() + interval '1 hour' WHERE id = $1`, id, i)
+	}
+	f.orgKey("k-new", "acme")
+	f.exec(`UPDATE provider_accounts SET needs_reauth_at = now(), needs_reauth_reason = 'rejected' WHERE id = 'k-new'`)
+
+	claim := func() []string {
+		t.Helper()
+		got, err := store.ClaimDueOrgKeyNotices(ctx, f.env.ORM, 100, time.Hour)
+		require.NoError(t, err)
+		var out []string
+		for _, a := range got {
+			out = append(out, a.ID)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"k-new"}, claim(), "only the newer mark is due")
+	assert.Empty(t, claim(), "claimed: not due again within the lease")
+
+	// Marked anew after its claim: due at once.
+	f.exec(`UPDATE provider_accounts SET needs_reauth_at = now() + interval '1 second' WHERE id = 'k-old-7'`)
+	assert.Equal(t, []string{"k-old-7"}, claim())
+}
+
 // A rejected org key's mark is a notice still to start until it is confirmed
 // for exactly that mark: confirming lists it no more, a confirm for an older
 // mark changes nothing, and a new mark (after a rotation) is listed again.
@@ -89,7 +123,8 @@ func TestUnstartedOrgKeyNotices(t *testing.T) {
 	}
 	ids := func() []string {
 		t.Helper()
-		got, err := store.ListUnstartedOrgKeyNotices(ctx, f.env.ORM, 10)
+		f.exec(`UPDATE provider_accounts SET reauth_notice_next_at = NULL`) // every mark due again
+		got, err := store.ClaimDueOrgKeyNotices(ctx, f.env.ORM, 10, time.Hour)
 		require.NoError(t, err)
 		var out []string
 		for _, a := range got {

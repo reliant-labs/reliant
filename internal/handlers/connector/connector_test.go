@@ -447,3 +447,54 @@ func TestClientConsentRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, listed.Msg.GetClients())
 }
+
+// A Reliant Forge connector names an org (and optionally projects) and forge
+// tools; it gets no credential (it acts only as its signed-in person) and
+// points at /forge/mcp.
+func TestCreateForgeConnector(t *testing.T) {
+	store := newStubStore()
+	tokens := tokenauthority.NewMemory()
+	svc := newConnectorService(t, store, tokens, "https://api.example.com")
+
+	resp, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(&reliantv1.CreateConnectorRequest{
+		Kind: reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE, OrgId: "org-1", ProjectNames: []string{"shop", "shop"},
+		AllowedTools: []string{"obs_status", "obs_init"},
+	}))
+	require.NoError(t, err)
+	require.Empty(t, resp.Msg.GetCredential(), "a forge connector has no credential")
+	require.Equal(t, "https://api.example.com/forge/mcp", resp.Msg.GetMcpUrl())
+	c := resp.Msg.GetConnector()
+	require.Equal(t, reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE, c.GetKind())
+	require.Equal(t, "org-1", c.GetOrgId())
+	require.Equal(t, []string{"shop"}, c.GetProjectNames())
+
+	for name, req := range map[string]*reliantv1.CreateConnectorRequest{
+		"no org":         {Kind: reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE, AllowedTools: []string{"obs_status"}},
+		"workspace tool": {Kind: reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE, OrgId: "org-1", AllowedTools: []string{"read_file"}},
+		"a daemon":       {Kind: reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE, OrgId: "org-1", DaemonId: "d-1", AllowedTools: []string{"obs_status"}},
+		"bad project":    {Kind: reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE, OrgId: "org-1", ProjectNames: []string{"Shop!"}, AllowedTools: []string{"obs_status"}},
+		"workspace org":  {DaemonId: "d-1", PathRoot: "/", OrgId: "org-1", AllowedTools: []string{"read_file"}},
+	} {
+		_, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(req))
+		require.Error(t, err, name)
+	}
+}
+
+// A client's forge binding is stored under its namespaced id, beside (not
+// over) its workspace binding.
+func TestAuthorizeClientNamespacesForgeBinding(t *testing.T) {
+	store := newStubStore()
+	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
+	_, err := svc.AuthorizeClient(connectorCtx("user-1"), connect.NewRequest(&reliantv1.AuthorizeClientRequest{
+		ClientId: "claude",
+		NewConnector: &reliantv1.CreateConnectorRequest{
+			Kind: reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE, OrgId: "org-1", AllowedTools: []string{"obs_status"},
+		},
+	}))
+	require.NoError(t, err)
+	var ids []string
+	for _, b := range store.bindings {
+		ids = append(ids, b.ClientID)
+	}
+	require.Equal(t, []string{"forge:claude"}, ids)
+}

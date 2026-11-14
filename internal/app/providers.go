@@ -278,6 +278,7 @@ func NewOrgPolicyResolver(d OrgPolicyResolverDeps) (*orgpolicy.Resolver, error) 
 	orgpolicy.SetProcessEnforcement(orgpolicy.PointMCP, orgpolicy.ParseEnforcement(d.Enforcement.GetMcp()))
 	orgpolicy.SetProcessEnforcement(orgpolicy.PointApprovals, orgpolicy.ParseEnforcement(d.Enforcement.GetApprovals()))
 	orgpolicy.SetProcessEnforcement(orgpolicy.PointMachines, orgpolicy.ParseEnforcement(d.Enforcement.GetMachines()))
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointProviders, orgpolicy.ParseEnforcement(d.Enforcement.GetProviders()))
 	src, hosted := d.Authority.(orgpolicy.Source)
 	if !hosted {
 		orgpolicy.SetProcessResolver(nil)

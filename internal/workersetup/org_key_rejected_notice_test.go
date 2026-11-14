@@ -189,9 +189,11 @@ func TestOrgKeyRejectedNotice_NothingToSendEndsIt(t *testing.T) {
 type sweepStore struct {
 	pending   []core.ProviderAccount
 	confirmed []string
+	leases    []time.Duration
 }
 
-func (s *sweepStore) ListUnstartedOrgKeyNotices(context.Context, int) ([]core.ProviderAccount, error) {
+func (s *sweepStore) ClaimDueOrgKeyNotices(_ context.Context, _ int, lease time.Duration) ([]core.ProviderAccount, error) {
+	s.leases = append(s.leases, lease)
 	return s.pending, nil
 }
 
@@ -214,6 +216,7 @@ func TestSweepOrgKeyNotices_StartsTheUnconfirmed(t *testing.T) {
 	q := orgKeyNoticeQueue{starter: s, taskQueue: "q"}
 	assert.Equal(t, 0, sweepOrgKeyNotices(context.Background(), store, q))
 	assert.Empty(t, store.confirmed, "nothing started, nothing confirmed")
+	assert.Equal(t, []time.Duration{orgKeyNoticeSweepLease}, store.leases, "the sweep claims what it takes")
 
 	s.err = nil
 	assert.Equal(t, 2, sweepOrgKeyNotices(context.Background(), store, q))

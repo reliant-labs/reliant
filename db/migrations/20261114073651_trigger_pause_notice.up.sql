@@ -1,7 +1,7 @@
 -- forge:backward-compatible — adds four nullable columns with no default and no constraint; the previous release neither reads nor writes them, and its writes name their columns, so they stay NULL (a pause it makes has no paused_at, which this release reads as no pause notice to send).
 
 -- Migration: trigger_pause_notice
--- Created: 2026-11-13T23:31:46Z
+-- Created: 2026-11-14T07:36:51Z
 --
 -- paused_at is when the system last paused the trigger (PauseTrigger): the
 -- incident an automation paused for want of an org account is announced by

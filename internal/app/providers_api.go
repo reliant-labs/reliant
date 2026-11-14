@@ -32,6 +32,7 @@ import (
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
+	"github.com/reliant-labs/reliant/internal/handlers/org_policy_impact"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
@@ -65,6 +66,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/reconciliation"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -1535,4 +1537,18 @@ func inboxMembers(r *orgs.Resolver) inbox.OrgMemberCounter {
 		return nil
 	}
 	return r
+}
+
+// OrgPolicyAttendanceDeps is the store the attendance rule reads: chats,
+// their launch events and whether a person has taken a turn.
+type OrgPolicyAttendanceDeps struct {
+	Store *db.Repo
+}
+
+// NewOrgPolicyAttendance is the attendance rule GetPolicyImpact judges an
+// org's chats by: the activities' own (handlers.Attendance), the one every
+// call made for a chat is scoped with, so the preview of the automations
+// policy counts exactly the chats it will govern.
+func NewOrgPolicyAttendance(d OrgPolicyAttendanceDeps) (org_policy_impact.ChatAttendance, error) {
+	return handlers.Attendance{Store: d.Store}, nil
 }

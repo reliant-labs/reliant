@@ -1,4 +1,4 @@
-// VENDORED from reliant-labs/control-plane at a111d7c45 (#2755 head; re-pin to its merge commit):
+// VENDORED from reliant-labs/control-plane at 8cc4ff246 (the merge commit of #2755):
 // proto/services/org_notify_internal/v1/org_notify_internal.proto. Do not edit; re-vendor from control-plane main.
 // TestNotifyOrgKeyRejected_SpeaksTheVendoredContract and
 // TestNotifyOrgAutomationNoOrgAccount_SpeaksTheVendoredContract hold the client to it.
