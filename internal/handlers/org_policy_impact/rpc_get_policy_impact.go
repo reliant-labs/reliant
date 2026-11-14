@@ -59,7 +59,7 @@ func (s *Service) GetPolicyImpact(
 			return nil, svcerr.Wrap(svcerr.WithReason(svcerr.InvalidArgument("policy_json is not an organization policy document: "+err.Error()), ReasonPolicyInvalid))
 		}
 	}
-	calls, err := s.deps.Store.LatestOrgChatCalls(ctx, orgID, s.deps.Now().Add(-ImpactWindow))
+	calls, err := s.deps.Store.LatestOrgChatCalls(ctx, orgID, s.now().Add(-ImpactWindow))
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

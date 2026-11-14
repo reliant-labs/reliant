@@ -70,10 +70,15 @@ func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
-	if deps.Now == nil {
-		deps.Now = time.Now
-	}
 	return &Service{deps: deps}, nil
+}
+
+// now is the service's clock: Deps.Now, else the wall clock.
+func (s *Service) now() time.Time {
+	if s.deps.Now != nil {
+		return s.deps.Now()
+	}
+	return time.Now()
 }
 
 // Name returns the service name for logging and registry.
