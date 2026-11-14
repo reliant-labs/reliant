@@ -329,24 +329,23 @@ type OrgChatCall struct {
 	Provider string `bun:"provider"`
 	Model    string `bun:"model"`
 	Funding  string `bun:"funding"`
-	// Automation is a chat a stored trigger launched.
-	Automation bool `bun:"automation"`
 }
 
 // LatestOrgChatCalls is, for each of orgID's chats that is not archived and
-// made a chat-turn call at or after since, its latest such call. The window
-// rides the created_at index; the org and the chat's own org are both
-// matched, so a call billed to the org from a chat that has since moved is
-// not counted.
-func LatestOrgChatCalls(ctx context.Context, db orm.Context, orgID string, since time.Time) ([]OrgChatCall, error) {
+// made a chat-turn call at or after since, its latest such call: the limit
+// chats whose latest call is the most recent. The window rides the
+// created_at index; the org and the chat's own org are both matched, so a
+// call billed to the org from a chat that has since moved is not counted.
+func LatestOrgChatCalls(ctx context.Context, db orm.Context, orgID string, since time.Time, limit int) ([]OrgChatCall, error) {
 	var rows []OrgChatCall
-	err := db.Bun().NewRaw(`SELECT DISTINCT ON (u.chat_id) u.chat_id, u.provider, u.model, u.funding,
-		EXISTS (SELECT 1 FROM trigger_events e WHERE e.chat_id = u.chat_id AND e.trigger_id IS NOT NULL) AS automation
+	err := db.Bun().NewRaw(`SELECT chat_id, provider, model, funding FROM (
+		SELECT DISTINCT ON (u.chat_id) u.chat_id, u.provider, u.model, u.funding, u.created_at
 		FROM llm_call_usage u
 		JOIN chats c ON c.id = u.chat_id
 		WHERE u.created_at >= ?0 AND u.org_id = ?1 AND c.org_id = ?1 AND c.state <> ?2 AND u.purpose = ?3
-		ORDER BY u.chat_id, u.created_at DESC, u.attempt DESC`,
-		since.UTC(), orgID, core.ChatStateArchived, LLMPurposeChat).Scan(ctx, &rows)
+		ORDER BY u.chat_id, u.created_at DESC, u.attempt DESC
+	) latest ORDER BY created_at DESC, chat_id LIMIT ?4`,
+		since.UTC(), orgID, core.ChatStateArchived, LLMPurposeChat, limit).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("list the latest calls of org %s's chats: %w", orgID, err)
 	}

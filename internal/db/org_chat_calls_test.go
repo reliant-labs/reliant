@@ -10,19 +10,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // LatestOrgChatCalls is what GetPolicyImpact judges a proposed org policy on:
-// each of the org's live chats' latest chat-turn call in the window, and
-// whether a stored trigger launched the chat.
+// each of the org's live chats' latest chat-turn call in the window, the most
+// recently active first, up to the limit.
 func TestLatestOrgChatCalls(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	now := time.Now().UTC().Truncate(time.Second)
+	// A fixed time: every fixture and the window are relative to it.
+	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
 	acme, globex := "org-acme", "org-globex"
 
 	chat := func(id string, org *string, state ChatState) {
@@ -49,23 +49,27 @@ func TestLatestOrgChatCalls(t *testing.T) {
 	call("other/1", "c-other-org", globex, "claude", "personal", store.LLMPurposeChat, now.Add(-time.Hour))
 	call("stale/1", "c-stale", acme, "claude", "personal", store.LLMPurposeChat, now.Add(-30*24*time.Hour))
 
-	trigger := newTestTrigger("trg-impact", "u1", "test-project", "nightly")
-	require.NoError(t, repo.CreateTrigger(ctx, trigger))
-	ev := newTestTriggerEvent("ev-impact", trigger.ID, "u1", "impact-1", now)
-	ev.Outcome, ev.ChatID = core.TriggerEventLaunched, strPtrForTest("c-auto")
-	_, err := repo.CreateTriggerEvent(ctx, ev)
+	got, err := repo.LatestOrgChatCalls(ctx, acme, now.Add(-14*24*time.Hour), 10)
 	require.NoError(t, err)
-
-	got, err := repo.LatestOrgChatCalls(ctx, acme, now.Add(-14*24*time.Hour))
-	require.NoError(t, err)
-	sort.Slice(got, func(i, j int) bool { return got[i].ChatID < got[j].ChatID })
 	assert.Equal(t, []OrgChatCall{
-		{ChatID: "c-auto", Provider: "codex", Model: "claude-4.8-opus", Funding: "personal", Automation: true},
+		{ChatID: "c-auto", Provider: "codex", Model: "claude-4.8-opus", Funding: "personal"},
 		{ChatID: "c-live", Provider: "anthropic", Model: "claude-4.8-opus", Funding: "org_key"},
-	}, got, "the latest chat turn of each live chat of the org in the window; titles, archived chats, other orgs and idle chats are not counted")
+	}, sortedByChat(got), "the latest chat turn of each live chat of the org in the window; titles, archived chats, other orgs and idle chats are not counted")
 
-	_, err = repo.LatestOrgChatCalls(ctx, "", now)
+	// The limit keeps the most recently active chats.
+	call("auto/2", "c-auto", acme, "codex", "personal", store.LLMPurposeChat, now.Add(-time.Minute))
+	got, err = repo.LatestOrgChatCalls(ctx, acme, now.Add(-14*24*time.Hour), 1)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "c-auto", got[0].ChatID)
+
+	_, err = repo.LatestOrgChatCalls(ctx, "", now, 1)
+	assert.Error(t, err)
+	_, err = repo.LatestOrgChatCalls(ctx, acme, now, 0)
 	assert.Error(t, err)
 }
 
-func strPtrForTest(s string) *string { return &s }
+func sortedByChat(rows []OrgChatCall) []OrgChatCall {
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ChatID < rows[j].ChatID })
+	return rows
+}

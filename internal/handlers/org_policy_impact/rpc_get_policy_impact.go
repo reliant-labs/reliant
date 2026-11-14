@@ -24,6 +24,10 @@ import (
 // idle for longer is not counted, it has nothing to pause.
 const ImpactWindow = 14 * 24 * time.Hour
 
+// ImpactChatLimit bounds the chats one preview reads, the most recently
+// active first; a larger org's answer says it is truncated.
+const ImpactChatLimit = 2000
+
 // ReasonPolicyInvalid is the x-forge-error-reason of a policy_json that does
 // not parse as an OrgPolicy document: control-plane's reason for a document
 // its validation refuses.
@@ -59,19 +63,24 @@ func (s *Service) GetPolicyImpact(
 			return nil, svcerr.Wrap(svcerr.WithReason(svcerr.InvalidArgument("policy_json is not an organization policy document: "+err.Error()), ReasonPolicyInvalid))
 		}
 	}
-	calls, err := s.deps.Store.LatestOrgChatCalls(ctx, orgID, s.now().Add(-ImpactWindow))
+	calls, err := s.deps.Store.LatestOrgChatCalls(ctx, orgID, s.now().Add(-ImpactWindow), ImpactChatLimit+1)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	return connect.NewResponse(impactOf(doc, calls)), nil
-}
-
-// impactOf counts calls by the reason doc would refuse each with.
-func impactOf(doc *controlplanev1.OrgPolicy, calls []db.OrgChatCall) *pb.GetPolicyImpactResponse {
-	out := &pb.GetPolicyImpactResponse{WindowDays: int32(ImpactWindow / (24 * time.Hour)), ChatsConsidered: int32(len(calls))}
+	truncated := len(calls) > ImpactChatLimit
+	if truncated {
+		calls = calls[:ImpactChatLimit]
+	}
+	out := &pb.GetPolicyImpactResponse{
+		WindowDays: int32(ImpactWindow / (24 * time.Hour)), ChatsConsidered: int32(len(calls)), Truncated: truncated,
+	}
 	byReason := map[string]*pb.PolicyImpactReason{}
 	for _, call := range calls {
-		reason := refusalOf(doc, call)
+		unattended, err := s.unattended(ctx, doc, call.ChatID)
+		if err != nil {
+			return nil, svcerr.Wrap(err)
+		}
+		reason := refusalOf(doc, call, unattended)
 		if reason == "" {
 			continue
 		}
@@ -82,7 +91,7 @@ func impactOf(doc *controlplanev1.OrgPolicy, calls []db.OrgChatCall) *pb.GetPoli
 		}
 		r.Chats++
 		out.ChatsRefused++
-		if call.Automation {
+		if unattended {
 			r.Automations++
 			out.AutomationsRefused++
 		}
@@ -91,15 +100,31 @@ func impactOf(doc *controlplanev1.OrgPolicy, calls []db.OrgChatCall) *pb.GetPoli
 		out.Reasons = append(out.Reasons, r)
 	}
 	sort.Slice(out.Reasons, func(i, j int) bool { return out.Reasons[i].Reason < out.Reasons[j].Reason })
-	return out
+	return connect.NewResponse(out), nil
 }
 
-// refusalOf is the reason doc would refuse call's chat's next call with, ""
-// when it admits it. A chat a stored trigger launched is judged as an
-// unattended run, so the automations section applies to it.
-func refusalOf(doc *controlplanev1.OrgPolicy, call db.OrgChatCall) string {
+// unattended is whether chatID's next call has nobody behind it, by the rule
+// its calls are scoped with (Deps.Attendance): a run a stored trigger
+// launched, deleted since or not, that nobody adopted, and an agent-started
+// run whose lineage root is one. Only the automations section reads it, so a
+// document without one reads no chat.
+func (s *Service) unattended(ctx context.Context, doc *controlplanev1.OrgPolicy, chatID string) (bool, error) {
+	if doc.GetAutomations() == nil {
+		return false, nil
+	}
+	chat, err := s.deps.Store.GetChat(ctx, chatID)
+	if err != nil {
+		return false, err
+	}
+	return s.deps.Attendance.ChatUnattended(ctx, chat), nil
+}
+
+// refusalOf is the reason doc would refuse the next call of a chat whose
+// latest call was call with, "" when it admits it. unattended applies the
+// automations section too.
+func refusalOf(doc *controlplanev1.OrgPolicy, call db.OrgChatCall, unattended bool) string {
 	driver := models.DriverID(call.Provider)
-	if adm := orgpolicy.ProviderAdmission(doc, call.Provider, drivers.ProviderSource(driver, call.Funding), call.Automation); adm.Governed && !adm.Admitted {
+	if adm := orgpolicy.ProviderAdmission(doc, call.Provider, drivers.ProviderSource(driver, call.Funding), unattended); adm.Governed && !adm.Admitted {
 		return orgpolicy.ReasonProviderNotAllowed
 	}
 	if driver == models.ManagedDriverID {

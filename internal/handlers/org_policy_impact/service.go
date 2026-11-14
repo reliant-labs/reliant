@@ -24,8 +24,16 @@ import (
 // satisfies it.
 type Store interface {
 	// LatestOrgChatCalls is each of the org's live chats' latest chat-turn
-	// call at or after since.
-	LatestOrgChatCalls(ctx context.Context, orgID string, since time.Time) ([]db.OrgChatCall, error)
+	// call at or after since, the limit most recent.
+	LatestOrgChatCalls(ctx context.Context, orgID string, since time.Time, limit int) ([]db.OrgChatCall, error)
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+}
+
+// ChatAttendance decides whether a chat's next call has nobody behind it, by
+// the rule its calls are scoped with; activity handlers.Attendance is the
+// production one.
+type ChatAttendance interface {
+	ChatUnattended(ctx context.Context, chat *db.Chat) bool
 }
 
 // Deps holds dependencies for the org_policy_impact service. Composition
@@ -35,8 +43,11 @@ type Store interface {
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
-	// Store reads the org's chats' latest model calls.
+	// Store reads the org's chats' latest model calls, and the chats.
 	Store Store
+	// Attendance decides which chats are an automation's run, so the
+	// automations section judges exactly the chats it governs.
+	Attendance ChatAttendance
 	// Now is the clock the window is read from; nil is time.Now.
 	//
 	// forge:optional-dep
@@ -54,6 +65,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Store == nil {
 		return fmt.Errorf("org_policy_impact: Deps.Store is required")
+	}
+	if d.Attendance == nil {
+		return fmt.Errorf("org_policy_impact: Deps.Attendance is required")
 	}
 	return nil
 }

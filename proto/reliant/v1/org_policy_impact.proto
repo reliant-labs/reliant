@@ -46,11 +46,15 @@ message GetPolicyImpactResponse {
   // refuse: each pauses at its next call, with the reason, until its model
   // changes or the policy does.
   int32 chats_refused = 3;
-  // automations_refused is how many of chats_refused an automation runs
-  // (a stored trigger launched it): its trigger pauses at its next fire.
+  // automations_refused is how many of chats_refused nobody is behind (an
+  // automation's run, by the attendance rule its calls are scoped with: a
+  // chat a person adopted is not one): it ends, and its trigger pauses.
   int32 automations_refused = 4;
   // reasons break chats_refused down by refusal reason, in reason order.
   repeated PolicyImpactReason reasons = 5;
+  // truncated is true when the org had more live chats in the window than
+  // the preview reads: the counts are of the most recently active ones.
+  bool truncated = 6;
 }
 
 // PolicyImpactReason is the chats one refusal reason would stop.

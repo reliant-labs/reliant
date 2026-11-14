@@ -91,11 +91,15 @@ type GetPolicyImpactResponse struct {
 	// refuse: each pauses at its next call, with the reason, until its model
 	// changes or the policy does.
 	ChatsRefused int32 `protobuf:"varint,3,opt,name=chats_refused,json=chatsRefused,proto3" json:"chats_refused,omitempty"`
-	// automations_refused is how many of chats_refused an automation runs
-	// (a stored trigger launched it): its trigger pauses at its next fire.
+	// automations_refused is how many of chats_refused nobody is behind (an
+	// automation's run, by the attendance rule its calls are scoped with: a
+	// chat a person adopted is not one): it ends, and its trigger pauses.
 	AutomationsRefused int32 `protobuf:"varint,4,opt,name=automations_refused,json=automationsRefused,proto3" json:"automations_refused,omitempty"`
 	// reasons break chats_refused down by refusal reason, in reason order.
-	Reasons       []*PolicyImpactReason `protobuf:"bytes,5,rep,name=reasons,proto3" json:"reasons,omitempty"`
+	Reasons []*PolicyImpactReason `protobuf:"bytes,5,rep,name=reasons,proto3" json:"reasons,omitempty"`
+	// truncated is true when the org had more live chats in the window than
+	// the preview reads: the counts are of the most recently active ones.
+	Truncated     bool `protobuf:"varint,6,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -163,6 +167,13 @@ func (x *GetPolicyImpactResponse) GetReasons() []*PolicyImpactReason {
 		return x.Reasons
 	}
 	return nil
+}
+
+func (x *GetPolicyImpactResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
 }
 
 // PolicyImpactReason is the chats one refusal reason would stop.
@@ -237,14 +248,15 @@ const file_reliant_v1_org_policy_impact_proto_rawDesc = "" +
 	"\x16GetPolicyImpactRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1f\n" +
 	"\vpolicy_json\x18\x02 \x01(\tR\n" +
-	"policyJson\"\xf5\x01\n" +
+	"policyJson\"\x93\x02\n" +
 	"\x17GetPolicyImpactResponse\x12\x1f\n" +
 	"\vwindow_days\x18\x01 \x01(\x05R\n" +
 	"windowDays\x12)\n" +
 	"\x10chats_considered\x18\x02 \x01(\x05R\x0fchatsConsidered\x12#\n" +
 	"\rchats_refused\x18\x03 \x01(\x05R\fchatsRefused\x12/\n" +
 	"\x13automations_refused\x18\x04 \x01(\x05R\x12automationsRefused\x128\n" +
-	"\areasons\x18\x05 \x03(\v2\x1e.reliant.v1.PolicyImpactReasonR\areasons\"d\n" +
+	"\areasons\x18\x05 \x03(\v2\x1e.reliant.v1.PolicyImpactReasonR\areasons\x12\x1c\n" +
+	"\ttruncated\x18\x06 \x01(\bR\ttruncated\"d\n" +
 	"\x12PolicyImpactReason\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x14\n" +
 	"\x05chats\x18\x02 \x01(\x05R\x05chats\x12 \n" +

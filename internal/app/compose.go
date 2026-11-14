@@ -1501,9 +1501,17 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 // newOrgPolicyImpact constructs the org-policy-impact handler (internal/handlers/org_policy_impact).
 func (g *Graph) newOrgPolicyImpact() (*org_policy_impact.Service, error) {
 	return org_policy_impact.New(org_policy_impact.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Store:  g.Database(),
-		Now:    nil, // optional — no provider
+		Logger:     g.Log,
+		Config:     g.Cfg,
+		Store:      g.Database(),
+		Now:        nil, // optional — no provider
+		Attendance: g.OrgPolicyAttendance(),
+	})
+}
+
+// newOrgPolicyAttendance constructs the OrgPolicyAttendance provider (NewOrgPolicyAttendance, internal/app/providers_api.go).
+func (g *Graph) newOrgPolicyAttendance() (org_policy_impact.ChatAttendance, error) {
+	return NewOrgPolicyAttendance(OrgPolicyAttendanceDeps{
+		Store: g.Database(),
 	})
 }

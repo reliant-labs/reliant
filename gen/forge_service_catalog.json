@@ -49,6 +49,7 @@
         "ModelEndpoint",
         "NATSConn",
         "OrgCredentialSweep",
+        "OrgPolicyAttendance",
         "OrgPolicyImpact",
         "OrgPolicyResolver",
         "OrgProviderAccount",
@@ -20400,6 +20401,11 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.PolicyImpactReason"
+            },
+            {
+              "Name": "truncated",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ]
         },
@@ -20437,6 +20443,10 @@
               "kind": "message",
               "type_name": "reliant.v1.PolicyImpactReason",
               "repeated": true
+            },
+            {
+              "name": "truncated",
+              "kind": "bool"
             }
           ],
           "reliant.v1.PolicyImpactReason": [
@@ -52009,6 +52019,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "OrgPolicyAttendance",
+      "name": "OrgPolicyAttendance",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.ChatAttendance",
+      "source": {
+        "path": "internal/app/providers_api.go",
+        "symbol": "NewOrgPolicyAttendance"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "OrgPolicyImpact",
       "name": "OrgPolicyImpact",
       "kind": "component",
@@ -53614,6 +53636,19 @@
       ],
       "providers": [
         "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
+      "field": "Attendance",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.ChatAttendance",
+      "methods": [],
+      "candidates": [
+        "OrgPolicyAttendance"
+      ],
+      "providers": [
+        "OrgPolicyAttendance"
       ],
       "resolution": "composition_expression"
     },

@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/org_policy_impact.proto.
  */
 export const file_reliant_v1_org_policy_impact: GenFile = /*@__PURE__*/
-  fileDesc("CiJyZWxpYW50L3YxL29yZ19wb2xpY3lfaW1wYWN0LnByb3RvEgpyZWxpYW50LnYxIj0KFkdldFBvbGljeUltcGFjdFJlcXVlc3QSDgoGb3JnX2lkGAEgASgJEhMKC3BvbGljeV9qc29uGAIgASgJIq0BChdHZXRQb2xpY3lJbXBhY3RSZXNwb25zZRITCgt3aW5kb3dfZGF5cxgBIAEoBRIYChBjaGF0c19jb25zaWRlcmVkGAIgASgFEhUKDWNoYXRzX3JlZnVzZWQYAyABKAUSGwoTYXV0b21hdGlvbnNfcmVmdXNlZBgEIAEoBRIvCgdyZWFzb25zGAUgAygLMh4ucmVsaWFudC52MS5Qb2xpY3lJbXBhY3RSZWFzb24iSAoSUG9saWN5SW1wYWN0UmVhc29uEg4KBnJlYXNvbhgBIAEoCRINCgVjaGF0cxgCIAEoBRITCgthdXRvbWF0aW9ucxgDIAEoBTJ2ChZPcmdQb2xpY3lJbXBhY3RTZXJ2aWNlElwKD0dldFBvbGljeUltcGFjdBIiLnJlbGlhbnQudjEuR2V0UG9saWN5SW1wYWN0UmVxdWVzdBojLnJlbGlhbnQudjEuR2V0UG9saWN5SW1wYWN0UmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z");
+  fileDesc("CiJyZWxpYW50L3YxL29yZ19wb2xpY3lfaW1wYWN0LnByb3RvEgpyZWxpYW50LnYxIj0KFkdldFBvbGljeUltcGFjdFJlcXVlc3QSDgoGb3JnX2lkGAEgASgJEhMKC3BvbGljeV9qc29uGAIgASgJIsABChdHZXRQb2xpY3lJbXBhY3RSZXNwb25zZRITCgt3aW5kb3dfZGF5cxgBIAEoBRIYChBjaGF0c19jb25zaWRlcmVkGAIgASgFEhUKDWNoYXRzX3JlZnVzZWQYAyABKAUSGwoTYXV0b21hdGlvbnNfcmVmdXNlZBgEIAEoBRIvCgdyZWFzb25zGAUgAygLMh4ucmVsaWFudC52MS5Qb2xpY3lJbXBhY3RSZWFzb24SEQoJdHJ1bmNhdGVkGAYgASgIIkgKElBvbGljeUltcGFjdFJlYXNvbhIOCgZyZWFzb24YASABKAkSDQoFY2hhdHMYAiABKAUSEwoLYXV0b21hdGlvbnMYAyABKAUydgoWT3JnUG9saWN5SW1wYWN0U2VydmljZRJcCg9HZXRQb2xpY3lJbXBhY3QSIi5yZWxpYW50LnYxLkdldFBvbGljeUltcGFjdFJlcXVlc3QaIy5yZWxpYW50LnYxLkdldFBvbGljeUltcGFjdFJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw");
 
 /**
  * @generated from message reliant.v1.GetPolicyImpactRequest
@@ -73,8 +73,9 @@ export type GetPolicyImpactResponse = Message<"reliant.v1.GetPolicyImpactRespons
   chatsRefused: number;
 
   /**
-   * automations_refused is how many of chats_refused an automation runs
-   * (a stored trigger launched it): its trigger pauses at its next fire.
+   * automations_refused is how many of chats_refused nobody is behind (an
+   * automation's run, by the attendance rule its calls are scoped with: a
+   * chat a person adopted is not one): it ends, and its trigger pauses.
    *
    * @generated from field: int32 automations_refused = 4;
    */
@@ -86,6 +87,14 @@ export type GetPolicyImpactResponse = Message<"reliant.v1.GetPolicyImpactRespons
    * @generated from field: repeated reliant.v1.PolicyImpactReason reasons = 5;
    */
   reasons: PolicyImpactReason[];
+
+  /**
+   * truncated is true when the org had more live chats in the window than
+   * the preview reads: the counts are of the most recently active ones.
+   *
+   * @generated from field: bool truncated = 6;
+   */
+  truncated: boolean;
 };
 
 /**
