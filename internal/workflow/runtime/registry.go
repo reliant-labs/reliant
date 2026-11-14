@@ -80,7 +80,8 @@ func (e *TerminalError) Unwrap() error {
 
 // markTextOnlyUserError marks as user errors (svcerr.ClassUser) the activity
 // failures classifyError recognises only by their text: provider credit or
-// quota exhaustion, a provider usage window, and spent Reliant credit. Each is
+// quota exhaustion, a provider usage window, spent Reliant credit, and a
+// prompt the provider refused under its usage policy. Each is
 // the user's to fix, and the same rule that makes classifyError stop retrying
 // them makes them user errors — written at INFO, never sent to Sentry.
 //
@@ -93,6 +94,11 @@ func markTextOnlyUserError(err error) error {
 		return err
 	}
 	if drivererrors.IsProviderCreditExhaustion(err) {
+		return svcerr.WithClass(err, svcerr.ClassUser)
+	}
+	// The provider refused the user's prompt under its usage policy (prod
+	// c1ef7abd): the content is the user's to change.
+	if drivererrors.IsProviderPromptRefusal(err) {
 		return svcerr.WithClass(err, svcerr.ClassUser)
 	}
 	if kind, _, ok := chatmarkers.Extract(err.Error()); ok &&
