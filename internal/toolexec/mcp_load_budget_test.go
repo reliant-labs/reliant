@@ -86,6 +86,7 @@ func TestDaemonMCPRuntime_SlowLoadIsBoundedAndContinuesInBackground(t *testing.T
 	assert.Less(t, time.Since(start), 30*time.Second, "the turn waited on the machine past its budget")
 	require.True(t, result.HasFailures(), "an unfinished load cannot report its servers as loaded")
 
+	// forge:lint-disable-next-line forge-test-fixed-sleep: moves the real clock past the load's wait budget, a lower bound load can only lengthen; the binder's load clock is not reachable from here
 	time.Sleep(60 * time.Millisecond) // the load has now outrun the budget
 	// errMCPMachineUnresponsive comes only from the path that does not wait;
 	// waiting out the budget again would report the load as still running.

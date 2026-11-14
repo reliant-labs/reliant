@@ -556,6 +556,7 @@ func resumeStoppedSpawn(ctx workflow.Context, thread string, deps stoppedSpawnRe
 		config.childWorkflowID = DeterministicWorkflowID(h.ParentWorkflowID, h.ToolCallID)
 	}
 	prep := prepareSpawnRelaunch(config, h, deps.chatID, deps.projectPath, deps.workflowInputs, deps.makeThreadPauseCtrl)
+	prep.childExecContext.Telemetry = spawnRunTelemetry(ctx, config.childWorkflowID, h.ParentWorkflowID, prep.targetWorkflow, config.presetName)
 	// Live from this moment, so a second doorbell finds it running, and its
 	// parent's loop waits for its outcome.
 	tracker.registerDetachedSpawn(&detachedSpawnRecord{

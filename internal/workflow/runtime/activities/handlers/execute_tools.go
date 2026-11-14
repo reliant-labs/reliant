@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -453,7 +454,6 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 
 					// Use tool info directly from message.ToolCall - no DB lookup required
 					toolName := toolCall.Name
-					toolInput := toolCall.Input
 					toolCallID := toolCall.ID
 
 					// Validate required fields
@@ -469,65 +469,17 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 						return
 					}
 
-					if reason := refusedByWorkflow[toolCallID]; reason != "" {
-						resultsChan <- toolCallResult{
-							index:  job.index,
-							result: a.refuseToolCall(ctx, rtx, toolCall, reason),
-						}
-						return
-					}
-
-					// The one capability check: was this tool offered in the
-					// request that produced this call? That set includes what
-					// load_tool granted on earlier turns, so a legitimately
-					// loaded tool (generate_image, deliberately outside every
-					// default bundle) passes, while a name the model was not
-					// shown — carried over from history, or hallucinated — is
-					// refused here instead of running. The tier is part of the
-					// set: a tool above it is never offered.
-					if reason := capabilityRefusal(caps, toolCall); reason != "" {
-						resultsChan <- toolCallResult{
-							index:  job.index,
-							result: a.refuseToolCall(ctx, rtx, toolCall, reason),
-						}
-						return
-					}
-
-					// Response tools: identified via expected_response_tools list from workflow config.
-					// Execute inline (return input as metadata); no external tool call.
+					// The call's span (execute_tool), under the turn that asked
+					// for it: refusals included, so a refused call is visible
+					// as one. The gateway's round trip to the daemon is its
+					// child (ctx carries it into the dispatch).
+					location := toolLocation(toolName)
 					if responseToolSet[toolName] {
-						var toolSchema map[string]interface{}
-						if responseToolSchemas != nil {
-							toolSchema = responseToolSchemas[toolName]
-						}
-						result := executeResponseToolInline(toolCallID, toolName, toolInput, toolSchema)
-						resultsChan <- toolCallResult{
-							index:  job.index,
-							result: result,
-						}
-						return
+						location = telemetry.ToolLocationLocal
 					}
-
-					if workspace.blocked != "" && tools.NeedsMachine(toolName) {
-						resultsChan <- toolCallResult{index: job.index, result: a.refuseToolCall(ctx, rtx, toolCall, workspace.blocked)}
-						return
-					}
-
-					// Execute the tool via normal toolexec path
-					result := a.executeSingleTool(
-						ctx,
-						caps,
-						rtx.ChatID,
-						rtx.Thread,
-						toolName,
-						toolInput,
-						toolCallID,
-						activityID,
-						workflowRunID,
-						attemptNumber,
-						workingPath,        // Working directory override: the run's, or where ensureBatchWorkspace moved it
-						rtx.DaemonSelector, // Pass daemon selector for targeted routing
-					)
+					callCtx, span := telemetry.StartToolCall(ctx, toolName, toolCallID, location, turnTraceParent(rtx))
+					result := a.runToolCall(callCtx, rtx, toolCall, caps, refusedByWorkflow[toolCallID], responseToolSet[toolName], responseToolSchemas[toolName], workspace.blocked, activityID, workflowRunID, attemptNumber, workingPath)
+					span.End(result.IsError, nil)
 
 					resultsChan <- toolCallResult{
 						index:  job.index,
@@ -638,6 +590,67 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 		"totalResultChars", totalResultChars)
 
 	return output, nil
+}
+
+// runToolCall runs one call of a batch, or answers it without running: a call
+// the workflow refused (refusal), one outside the turn's capabilities, a
+// response tool (answered inline from its input against responseSchema), or a
+// machine call while the batch's workspace is blocked (blocked).
+func (a *ExecuteToolsActivity) runToolCall(
+	ctx context.Context,
+	rtx RuntimeContext,
+	toolCall message.ToolCall,
+	caps *tools.Capabilities,
+	refusal string,
+	responseTool bool,
+	responseSchema map[string]interface{},
+	blocked string,
+	activityID string,
+	workflowRunID string,
+	attemptNumber int,
+	workingPath string,
+) message.ToolResult {
+	if refusal != "" {
+		return a.refuseToolCall(ctx, rtx, toolCall, refusal)
+	}
+
+	// The one capability check: was this tool offered in the
+	// request that produced this call? That set includes what
+	// load_tool granted on earlier turns, so a legitimately
+	// loaded tool (generate_image, deliberately outside every
+	// default bundle) passes, while a name the model was not
+	// shown — carried over from history, or hallucinated — is
+	// refused here instead of running. The tier is part of the
+	// set: a tool above it is never offered.
+	if reason := capabilityRefusal(caps, toolCall); reason != "" {
+		return a.refuseToolCall(ctx, rtx, toolCall, reason)
+	}
+
+	// Response tools: identified via expected_response_tools list from workflow config.
+	// Execute inline (return input as metadata); no external tool call.
+	if responseTool {
+		return executeResponseToolInline(toolCall.ID, toolCall.Name, toolCall.Input, responseSchema)
+	}
+
+	if blocked != "" && tools.NeedsMachine(toolCall.Name) {
+		return a.refuseToolCall(ctx, rtx, toolCall, blocked)
+	}
+
+	// Execute the tool via normal toolexec path
+	return a.executeSingleTool(
+		ctx,
+		caps,
+		rtx.ChatID,
+		rtx.Thread,
+		toolCall.Name,
+		toolCall.Input,
+		toolCall.ID,
+		activityID,
+		workflowRunID,
+		attemptNumber,
+		workingPath,        // Working directory override: the run's, or where ensureBatchWorkspace moved it
+		rtx.DaemonSelector, // Pass daemon selector for targeted routing
+	)
 }
 
 // ============================================================================
