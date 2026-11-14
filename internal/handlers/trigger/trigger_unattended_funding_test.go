@@ -11,8 +11,11 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // The stamp a trigger write decides (org-provider-accounts §11.3, I4): a new
@@ -79,6 +82,50 @@ func TestUnattendedFundingFor(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tc.want, got)
 			}
+		})
+	}
+}
+
+// policyDoc answers one policy for every org.
+type policyDoc struct{ doc *controlplanev1.OrgPolicy }
+
+func (p policyDoc) ResolveOrgPolicy(context.Context, string) (accesstokenclient.OrgPolicy, error) {
+	return accesstokenclient.OrgPolicy{Version: 2, Policy: p.doc}, nil
+}
+
+// §11.3: loosening an automation in a team org is allowed when the org's
+// policy admits members' own accounts for automations (its automations
+// section names PERSONAL and its providers section, if it names sources, does
+// too), and refused otherwise.
+func TestUnattendedFundingFor_PolicyMayAllowLoosening(t *testing.T) {
+	org := "org-acme"
+	personal := controlplanev1.ProviderSource_PROVIDER_SOURCE_PERSONAL
+	orgKeys := controlplanev1.ProviderSource_PROVIDER_SOURCE_ORG_ACCOUNTS
+	s := &Service{deps: Deps{Orgs: &MockOrgResolver{
+		LiveMembersFreshFunc: func(context.Context, string, string) (int, bool, error) { return 4, true, nil },
+	}}}
+	existing := &core.Trigger{UnattendedFunding: core.UnattendedFundingOrgOnly}
+	loosen := func(doc *controlplanev1.OrgPolicy) (core.UnattendedFunding, error) {
+		ctx := orgpolicy.WithResolver(context.Background(), orgpolicy.New(policyDoc{doc}))
+		return s.unattendedFundingFor(ctx, "owner", &org, reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ANY, existing)
+	}
+
+	got, err := loosen(&controlplanev1.OrgPolicy{Automations: &controlplanev1.AutomationsPolicy{AllowedSources: []controlplanev1.ProviderSource{orgKeys, personal}}})
+	require.NoError(t, err)
+	assert.Equal(t, core.UnattendedFundingAny, got, "the policy admits members' own accounts for automations")
+
+	for name, doc := range map[string]*controlplanev1.OrgPolicy{
+		"no policy":                    {},
+		"automations without personal": {Automations: &controlplanev1.AutomationsPolicy{AllowedSources: []controlplanev1.ProviderSource{orgKeys}}},
+		"providers refuse personal": {
+			Automations: &controlplanev1.AutomationsPolicy{AllowedSources: []controlplanev1.ProviderSource{personal}},
+			Providers:   &controlplanev1.ProvidersPolicy{AllowedSources: []controlplanev1.ProviderSource{orgKeys}},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := loosen(doc)
+			require.Error(t, err)
+			assert.Equal(t, ReasonOrgOnlyAutomation, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
 		})
 	}
 }

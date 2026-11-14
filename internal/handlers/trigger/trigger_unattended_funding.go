@@ -3,11 +3,14 @@ package trigger
 
 import (
 	"context"
+	"slices"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -28,9 +31,9 @@ const ReasonOrgOnlyAutomation = "org_only_automation"
 //     so a client that predates the field never changes it.
 //   - ORG_ONLY is always allowed: the owner can always tighten.
 //   - ANY over org_only, or on a new trigger, is a loosening. It is allowed
-//     only in an org this read shows is solo; otherwise it is refused with
-//     ReasonOrgOnlyAutomation. Until the org's automation policy exists (phase
-//     7), being solo is the only thing that allows it.
+//     in an org this read shows is solo, or when the org's policy admits
+//     members' own accounts for automations (policyAdmitsPersonalAutomations);
+//     otherwise it is refused with ReasonOrgOnlyAutomation.
 func (s *Service) unattendedFundingFor(ctx context.Context, ownerID string, orgID *string, chosen reliantv1.UnattendedFunding, existing *core.Trigger) (core.UnattendedFunding, error) {
 	if orgID == nil || *orgID == "" {
 		return "", nil
@@ -58,7 +61,7 @@ func (s *Service) unattendedFundingFor(ctx context.Context, ownerID string, orgI
 	if err != nil {
 		return "", err
 	}
-	if !known || n >= 2 {
+	if (!known || n >= 2) && !policyAdmitsPersonalAutomations(ctx, *orgID) {
 		return "", svcerr.WithReason(svcerr.FailedPrecondition(
 			"automations in this organization run on its own AI accounts only; "+
 				"an organization with other members cannot let an automation spend its owner's personal accounts"),
@@ -78,4 +81,22 @@ func (s *Service) liveMembers(ctx context.Context, ownerID, orgID string) (int, 
 		return 0, false, svcerr.WithCause(svcerr.Unavailable("could not read the organization's members; try again"), err)
 	}
 	return n, known, nil
+}
+
+// policyAdmitsPersonalAutomations reports whether orgID's policy, read now
+// through orgpolicy.For, admits members' own accounts for its automations
+// (org-provider-accounts §11.3, §11.6): its automations section names PERSONAL,
+// and its providers section, when it names sources, does too. Then an admin
+// has chosen to let automations spend them, so the owner may loosen theirs.
+// A policy that cannot be read admits nothing: the loosening is refused, as
+// it was before the policy existed.
+func policyAdmitsPersonalAutomations(ctx context.Context, orgID string) bool {
+	pol, err := orgpolicy.For(ctx, orgID)
+	if err != nil {
+		return false
+	}
+	personal := controlplanev1.ProviderSource_PROVIDER_SOURCE_PERSONAL
+	providers := pol.Doc.GetProviders().GetAllowedSources()
+	return slices.Contains(pol.Doc.GetAutomations().GetAllowedSources(), personal) &&
+		(len(providers) == 0 || slices.Contains(providers, personal))
 }
