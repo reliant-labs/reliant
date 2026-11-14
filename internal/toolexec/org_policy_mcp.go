@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
@@ -62,32 +63,23 @@ func refuseMCPByOrgPolicy(ctx context.Context, req *ToolRequest, startTime time.
 
 // OrgPolicyContextKey is the context-map key of a daemon-bound request that
 // carries the run's org policy stamp (control-plane
-// docs/design/org-policies.md §5.4): the daemon-relevant rules the worker
-// ENFORCES for the run, with the org and policy version they come from. The
-// gateway forwards it untouched; a daemon that predates it ignores the
-// unknown key; one that reads it refuses to spawn an MCP server the stamp
-// does not allow. It is defence in depth, unsigned, and nothing relies on it:
-// the worker's own refusal (refuseMCPByOrgPolicy) is the enforcement. No
-// stamp means today's behaviour exactly.
-const OrgPolicyContextKey = "org_policy"
+// docs/design/org-policies.md §5.4; daemonpolicy.OrgStamp): the
+// daemon-relevant rules the worker ENFORCES for the run (the MCP allowlist,
+// forced `credentials: none`), with the org and policy version they come
+// from. The gateway forwards it untouched; a daemon that predates it ignores
+// the unknown key; one that reads it refuses to spawn an MCP server the stamp
+// does not allow and forces the credentials sandbox. It is defence in depth,
+// unsigned, and nothing relies on it: the worker's own refusal and rewrite are
+// the enforcement. No stamp means today's behaviour exactly.
+const OrgPolicyContextKey = daemonpolicy.OrgStampContextKey
 
-// orgPolicyStampValue is req's stamp as a context-map value:
-//
-//	{"org_id": ..., "version": N, "mcp": {"allow_all": bool, "allowed_servers": [...]}}
-//
-// nil when the worker enforces nothing the daemon could also apply.
-func orgPolicyStampValue(req *ToolRequest) map[string]interface{} {
-	s := req.mcpStamp
+// mcpOrgStamp is the stamp of an enforced MCP rule (orgpolicy.EnforcedMCPStamp),
+// nil for none. applyMachinePolicy adds the machines rule to it.
+func mcpOrgStamp(s *orgpolicy.MCPStamp) *daemonpolicy.OrgStamp {
 	if s == nil {
 		return nil
 	}
-	servers := make([]interface{}, 0, len(s.AllowedServers))
-	for _, name := range s.AllowedServers {
-		servers = append(servers, name)
-	}
-	return map[string]interface{}{
-		"org_id":  s.OrgID,
-		"version": s.Version,
-		"mcp":     map[string]interface{}{"allow_all": s.AllowAll, "allowed_servers": servers},
-	}
+	return &daemonpolicy.OrgStamp{OrgID: s.OrgID, Version: s.Version, MCP: &daemonpolicy.OrgStampMCP{
+		AllowAll: s.AllowAll, AllowedServers: append([]string(nil), s.AllowedServers...),
+	}}
 }
