@@ -105,7 +105,7 @@ func (f *orgPolicyFilter) refusesModel(driver, modelID string) bool {
 	if driver != orgpolicy.ManagedDriverID || !f.narrowsModels() {
 		return false
 	}
-	return !orgpolicy.ModelAdmission(f.doc, managedAPIModel(modelID)).Admitted
+	return !orgpolicy.ModelAdmission(f.doc, ManagedAPIModel(modelID)).Admitted
 }
 
 // accounts is in without the accounts the policy refuses, and what it took
@@ -166,9 +166,9 @@ func (f *orgPolicyFilter) availability(base models.AvailabilityFunc) models.Avai
 	}
 }
 
-// managedAPIModel is the gateway's spelling of modelID (the managed driver's
+// ManagedAPIModel is the gateway's spelling of modelID (the managed driver's
 // api_model), "" when the managed driver does not serve it.
-func managedAPIModel(modelID string) string {
+func ManagedAPIModel(modelID string) string {
 	reg, err := models.GetRegistry()
 	if err != nil {
 		return ""
@@ -206,7 +206,7 @@ func CheckOrgPolicy(ctx context.Context, scope Scope, driver models.DriverID, fu
 		return err
 	}
 	if !d.Refused && driver == models.ManagedDriverID {
-		if d, err = orgpolicy.JudgeModel(ctx, scope.OrgID, managedAPIModel(modelID), !counted); err != nil {
+		if d, err = orgpolicy.JudgeModel(ctx, scope.OrgID, ManagedAPIModel(modelID), !counted); err != nil {
 			return err
 		}
 	}

@@ -89,3 +89,19 @@ func (r *Repo) ListLLMUsageDaily(ctx context.Context, userID string, from, to ti
 	}
 	return rows, nil
 }
+
+// OrgChatCall is one of an org's live chats' latest chat-turn model call.
+type OrgChatCall = store.OrgChatCall
+
+// LatestOrgChatCalls is, for each of orgID's live chats that made a
+// chat-turn call at or after since, its latest one, the limit most recent:
+// what a proposed org policy judges it on (GetPolicyImpact).
+func (r *Repo) LatestOrgChatCalls(ctx context.Context, orgID string, since time.Time, limit int) ([]OrgChatCall, error) {
+	if orgID == "" {
+		return nil, fmt.Errorf("org ID cannot be empty")
+	}
+	if limit <= 0 {
+		return nil, fmt.Errorf("limit must be positive")
+	}
+	return store.LatestOrgChatCalls(ctx, r.ORM(), orgID, since, limit)
+}
