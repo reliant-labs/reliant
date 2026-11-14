@@ -180,16 +180,29 @@ func (r *AccountRouting) fundingPlanFor(ctx context.Context, spec llmCallSpec, a
 		plan.personPick = pick
 	}
 	// A limited or unusable answer reorders the call to the person's own
-	// accounts while it lasts; an unusable one only until a turn start finds
-	// the org's accounts usable again (checked after routing). An unserved
-	// answer needs no reorder: no org account serves its model anyway.
-	// org_only honours no lease: the person's own account never serves.
-	recheckAtTurnStart := q != nil && q.Reason == core.PersonalFundingUnusable && spec.TurnStart
+	// accounts while it lasts, between the tool steps of a turn. At a turn
+	// start the org's accounts are tried first (§4.5): an org account usable
+	// again (a key resumed or added, a grant, an earlier reset) takes the
+	// thread back, with a notice, and ends the lease; while none is, the
+	// lease holds (llmCallSpec.leaseHolds). An unserved answer needs no
+	// reorder: no org account serves its model anyway. org_only honours no
+	// lease: the person's own account never serves.
+	recheckAtTurnStart := q != nil && spec.TurnStart && !spec.leaseHolds &&
+		(q.Reason == core.PersonalFundingUnusable || q.Reason == core.PersonalFundingLimited)
 	if plan.order != orgfunding.OrderOrgOnly && q != nil && q.Reason != core.PersonalFundingUnserved &&
 		q.LeaseActive(fundingNow(), "") && !recheckAtTurnStart {
 		plan.leased = true
 	}
 	return plan
+}
+
+// limitedLeaseHolds reports a turn start that tried the org's accounts first
+// under the chat's live limited lease and found them all still limited: the
+// lease holds, and the call re-resolves with the person's own accounts first
+// (llmCallSpec.leaseHolds) rather than asking again.
+func (p fundingPlan) limitedLeaseHolds(spec llmCallSpec, modelID string) bool {
+	return p.active && !p.leased && spec.TurnStart && !spec.leaseHolds && p.order != orgfunding.OrderOrgOnly &&
+		p.question != nil && p.question.Reason == core.PersonalFundingLimited && p.question.LeaseActive(fundingNow(), modelID)
 }
 
 // apply is avail as this plan routes it: the person's own accounts first under

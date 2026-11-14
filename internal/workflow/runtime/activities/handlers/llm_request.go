@@ -47,6 +47,10 @@ type llmCallSpec struct {
 	// ChatID is the chat the call is for: whose funding question (§10) it
 	// reads and writes. Empty for a call with no chat.
 	ChatID string
+	// leaseHolds is set on a turn start's one re-resolution after the org's
+	// accounts, tried first under the chat's live limited lease, were all
+	// still limited (fundingPlan.limitedLeaseHolds): the lease reorders it.
+	leaseHolds bool
 	// TurnStart reports that the call begins a turn (its history ends with a
 	// person's or an agent's message, not a tool result). Only a turn start
 	// moves a thread up to a better tier (§4.5, D6).
@@ -657,6 +661,13 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		upgrade := spec.TurnStart || (plan.question != nil && plan.question.State != core.PersonalFundingUsePersonal)
 		account, rerr = routeAccount(ctx, spec, routingDrivers, providerDriver, definitionID(definition), upgrade)
 		if rerr != nil {
+			if plan.limitedLeaseHolds(spec, definitionID(definition)) &&
+				limitedTierIsOrgFunded(routingDrivers.Accounts[models.DriverID(providerDriver)], definitionID(definition)) {
+				// A turn start tried the org's accounts first under the
+				// chat's lease, and they are still limited: the lease holds.
+				spec.leaseHolds = true
+				return resolveLLMCall(ctx, resolver, spec)
+			}
 			// Every account is limited: refuse here, with no provider call, the
 			// way the provider would have, carrying the facts to decide on.
 			return nil, spec.Routing.usageLimitFailure(ctx, rerr, usageLimitContext{

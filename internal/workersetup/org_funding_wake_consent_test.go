@@ -394,3 +394,57 @@ func TestOrgFunding_TurnStartUpgradeMovesBackToTheOrg(t *testing.T) {
 	assert.Equal(t, []string{mine.ID, team.ID}, w.builtFor)
 	assert.Nil(t, w.question())
 }
+
+// §4.5 over the production wiring: the member's "Use my account" answer runs
+// until the org's reset an hour away, but the owner resumes Team now. The
+// next turn start moves back to Team, says so in the chat, and the answer is
+// over, without waiting for the reset.
+func TestOrgFunding_LiveLeaseEndsWhenAnOrgKeyIsResumed(t *testing.T) {
+	w, team, _, mine := limitedOrgChat(t)
+	_, err := w.step()
+	requireWait(t, err)
+	_, err = w.repo.AnswerPersonalFunding(w.ctx, w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
+	require.NoError(t, err)
+	out, err := w.step()
+	require.NoError(t, err)
+	assert.Equal(t, mine.ID, out.GetProviderAccountId())
+
+	// Still limited at the next turn start: the answer holds, nothing asked.
+	w.say("next")
+	out, err = w.step()
+	require.NoError(t, err)
+	assert.Equal(t, mine.ID, out.GetProviderAccountId())
+	require.True(t, w.question().LeaseActive(time.Now(), ""))
+
+	w.pause(team, false)
+	w.say("and now?")
+	out, err = w.step()
+	require.NoError(t, err)
+	assert.Equal(t, team.ID, out.GetProviderAccountId())
+	assert.Equal(t, []string{mine.ID, mine.ID, team.ID}, w.builtFor)
+	assert.Nil(t, w.question(), "the answer is over")
+	notices := w.notices()
+	require.NotEmpty(t, notices)
+	assert.Contains(t, notices[len(notices)-1], "Team Anthropic", "the chat says it is back on the org's key")
+}
+
+// notices are the chat's system notices, in order.
+func (w *orgFundingWorld) notices() []string {
+	w.t.Helper()
+	msgs, err := w.repo.ListMessages(w.ctx, w.chatID, db.MessageListOptions{})
+	require.NoError(w.t, err)
+	var out []string
+	for _, m := range msgs {
+		if m.Role != reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM {
+			continue
+		}
+		blocks, err := w.repo.ListContentBlocks(w.ctx, m.ID)
+		require.NoError(w.t, err)
+		for _, b := range blocks {
+			if b.Content != nil {
+				out = append(out, *b.Content)
+			}
+		}
+	}
+	return out
+}
