@@ -39,6 +39,7 @@ import {
   ComputeSubscriptionCheckout,
   type ComputePlanOption,
 } from "../Billing/ComputeSubscriptionCheckout";
+import { MachinePlanChange } from "../Billing/MachinePlanChange";
 import { LinkIdentityModal } from "../Billing/LinkIdentityModal";
 import {
   derivePlanDisplay,
@@ -258,7 +259,14 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
           <p className="text-sm text-muted-foreground">Loading billing…</p>
         ) : (
           <div className="space-y-4">
-            {checkoutPlanId && (
+            {checkoutPlanId && subQ.data?.subscription?.plan?.id && (
+              <MachinePlanChange
+                planId={checkoutPlanId}
+                onDone={handleCheckoutDone}
+                onCancel={() => setCheckoutPlanId(null)}
+              />
+            )}
+            {checkoutPlanId && !subQ.data?.subscription?.plan?.id && (
               <Card>
                 {/* The same checkout desktop and onboarding mount — one
                     compute purchase experience, not three that drift. */}

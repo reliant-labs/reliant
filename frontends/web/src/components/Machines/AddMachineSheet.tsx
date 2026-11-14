@@ -56,6 +56,7 @@ import { createMachine } from "@/components/Settings/cloud/createMachine";
 import { describeError } from "@/services/controlPlane/environments";
 import { deriveMachineOptions } from "@/components/Billing/machineOptions";
 import { ComputeSubscriptionCheckout } from "@/components/Billing/ComputeSubscriptionCheckout";
+import { MachinePlanChange } from "@/components/Billing/MachinePlanChange";
 import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
 import { DaemonWaitState } from "@/components/DaemonWaitState";
 
@@ -277,6 +278,20 @@ function AddMachineSheetBody({
   const body = (() => {
     switch (step.kind) {
       case "pay":
+        if (row?.plan && subQ.data?.subscription?.plan?.id) {
+          // A subscriber reaching a bigger size changes plan (an upgrade,
+          // charged the prorated difference now), not a second subscription.
+          return (
+            <div className="space-y-3">
+              <BackButton onClick={() => setStep({ kind: "choose" })} />
+              <MachinePlanChange
+                planId={row.plan.planId}
+                onDone={() => setStep({ kind: "paid" })}
+                onCancel={() => setStep({ kind: "choose" })}
+              />
+            </div>
+          );
+        }
         return row?.plan ? (
           <div className="space-y-3">
             <BackButton onClick={() => setStep({ kind: "choose" })} />
