@@ -20,7 +20,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
-	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -191,7 +190,7 @@ func (t *generateImageTool) Execute(tc *rctx.ToolContext, params GenerateImagePa
 	generator, err := t.resolve(tc.Context, userID, choice.Selector)
 	if err != nil {
 		var unavailable *models.MediaUnavailableError
-		if !errors.As(err, &unavailable) && !orgpolicy.IsRefusal(err) {
+		if !errors.As(err, &unavailable) && !mediaVerdict(err) {
 			if msg := t.tierUnavailable(tc, userID, choice, ""); msg != "" {
 				return NewTextErrorResponse(msg), nil
 			}

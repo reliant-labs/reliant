@@ -68,3 +68,21 @@ func TestMediaToolUnavailable_ExplainsAPolicyRefusal(t *testing.T) {
 	assert.Equal(t, models.ModalityImage, modality)
 	assert.Contains(t, msg, "Image generation was refused: Your organization's policy does not allow this provider")
 }
+
+// A generation only the person's own accounts could make, in an org chat
+// whose person has not chosen to spend them there, is a decision about who
+// pays: shown as it is, with no other tier tried.
+func TestGenerateImage_AFundingRefusalIsShownAsItIs(t *testing.T) {
+	refused := models.NewMediaPersonalFundingError(models.ModalityImage, false)
+	resolves := 0
+	tool := &generateImageTool{repo: newFakeAttachmentRepo(), resolve: func(context.Context, string, models.ModelSelector) (ImageGenerator, error) {
+		resolves++
+		return nil, refused
+	}}
+	resp, err := tool.Execute(generateImageCtx(t), GenerateImageParams{Prompt: "x", Tier: "fast"})
+	require.NoError(t, err)
+	assert.True(t, resp.IsError)
+	assert.Equal(t, refused.Message, resp.Content)
+	assert.Equal(t, 1, resolves)
+	assert.Contains(t, refused.Message, "Image generation was not started")
+}

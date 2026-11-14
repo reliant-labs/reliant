@@ -303,9 +303,13 @@ func mediaToolUnavailable(ctx context.Context, name string) (message string, mod
 		return "", modality
 	}
 	var unavailable *models.MediaUnavailableError
+	var funding *models.MediaPersonalFundingError
 	err := check(ctx, userID, modality)
 	if errors.As(err, &unavailable) {
 		return unavailable.Message, modality
+	}
+	if errors.As(err, &funding) {
+		return funding.Message, modality
 	}
 	if refusal, ok := orgpolicy.RefusalOf(err); ok {
 		return refusal.ToolResult(mediaGenerationLabel(modality)), modality
@@ -322,10 +326,23 @@ func mediaResolveFailure(prefix string, modality models.Modality, err error) str
 	if errors.As(err, &unavailable) {
 		return unavailable.Message
 	}
+	var funding *models.MediaPersonalFundingError
+	if errors.As(err, &funding) {
+		return funding.Message
+	}
 	if msg, ok := mediaPolicyRefused(modality, err); ok {
 		return msg
 	}
 	return fmt.Sprintf("%s: %v", prefix, err)
+}
+
+// mediaVerdict reports whether a resolver error is a decision about who may
+// pay (an org policy's refusal, or spending the person's own accounts
+// without their say) rather than a tier the providers lack: no other tier
+// is offered for it.
+func mediaVerdict(err error) bool {
+	var funding *models.MediaPersonalFundingError
+	return orgpolicy.IsRefusal(err) || errors.As(err, &funding)
 }
 
 // mediaPolicyRefused is the tool result for a generation the org's policy

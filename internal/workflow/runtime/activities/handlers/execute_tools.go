@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/nomachine"
+	"github.com/reliant-labs/reliant/internal/orgfunding"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -331,6 +332,9 @@ func (a *ExecuteToolsActivity) Category() schema.ActivityCategory {
 func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput) (*reliantv1.ExecuteToolsOutput, error) {
 	rtx := input.Runtime
 	ctx = automationpolicy.WithExecution(ctx, automationpolicy.Execution{Unattended: rtx.Unattended, Approvals: rtx.ActivationApprovals})
+	// The run's own funding order, which may only tighten what the person
+	// chose, for the run scope of its tool calls (runFunding).
+	ctx = context.WithValue(ctx, runFundingOrderKey{}, rtx.Failover.Funding)
 	protoArgs := model.GetExecuteToolsArgs(input.Node)
 	if protoArgs == nil {
 		return nil, fmt.Errorf("expected execute_tools node, got %s", model.NodeType(input.Node))
@@ -843,13 +847,64 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 }
 
 // runScope resolves the scope of chat's run, as llmCallSpec.scope does for
-// its model calls: the chat row's org, attended or not (chatAttendance). It
-// spends the chat owner's accounts, so drivers honours it only for a call
-// executing as that owner. It reads the database only when a tool asks.
-func (a *ExecuteToolsActivity) runScope(ctx context.Context, chat *db.Chat) func() drivers.Scope {
-	return func() drivers.Scope {
+// its model calls: the chat row's org, attended or not (chatAttendance), and
+// what its person said about spending their own accounts there
+// (runFunding). It spends the chat owner's accounts, so drivers honours it
+// only for a call executing as that owner. It reads the database only when a
+// tool asks.
+func (a *ExecuteToolsActivity) runScope(ctx context.Context, chat *db.Chat) func() (drivers.Scope, drivers.RunFunding) {
+	return func() (drivers.Scope, drivers.RunFunding) {
 		who := chatAttendance(ctx, a.repo, chat)
-		return llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope()
+		scope := llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope()
+		if scope.Personal() {
+			return scope, drivers.RunFunding{}
+		}
+		runOrder, _ := ctx.Value(runFundingOrderKey{}).(string)
+		return scope, runFunding(ctx, a.repo, chat, who, runOrder)
+	}
+}
+
+// runFundingOrderKey carries the run's funding order (its failover policy)
+// from Execute to the run scope of each of its tool calls.
+type runFundingOrderKey struct{}
+
+// runFunding is what the person behind chat's run in its org said about
+// spending their own accounts there, read as fundingPlanFor reads it for the
+// run's model calls (org-provider-accounts §4.4, §10): their per-org setting,
+// outranked by the chat's own order, and tightened (never loosened) by the
+// run's. An automation stamped to spend any source has its stamp as consent
+// (§11.3). A store that cannot answer is org_only: the person's own accounts
+// are never spent without their say.
+func runFunding(ctx context.Context, store RunFundingStore, chat *db.Chat, who attendance, runOrder string) drivers.RunFunding {
+	if store == nil {
+		return drivers.RunFunding{OrgOnly: true}
+	}
+	orgID := chatOrgID(chat)
+	pref := orgfunding.Default()
+	if v, ok := store.GetSettingValue(ctx, chat.UserID, orgfunding.SettingKey); ok {
+		pref = orgfunding.Parse(v).For(orgID)
+	}
+	order, limit := pref.Order, pref.OnOrgLimit
+	if chatOrder, err := store.ChatFundingOrder(ctx, chat.ID); err != nil {
+		logging.WarnContext(ctx, "Could not read the chat's funding order; using only the org's accounts", "chatID", chat.ID, "error", err)
+		return drivers.RunFunding{OrgOnly: true}
+	} else if o := orgfunding.ParseOrder(chatOrder); o != "" {
+		order = o
+	}
+	switch orgfunding.ParseOrder(runOrder) {
+	case orgfunding.OrderOrgOnly:
+		order = orgfunding.OrderOrgOnly
+	case orgfunding.OrderOrgFirst:
+		if order == orgfunding.OrderPersonalFirst {
+			order = orgfunding.OrderOrgFirst
+		}
+	}
+	if order == orgfunding.OrderOrgOnly {
+		return drivers.RunFunding{OrgOnly: true}
+	}
+	return drivers.RunFunding{
+		PersonalFirst:         order == orgfunding.OrderPersonalFirst,
+		PersonalWhenOrgCannot: limit == orgfunding.OnOrgLimitUsePersonal || (!who.attended && who.anySource),
 	}
 }
 

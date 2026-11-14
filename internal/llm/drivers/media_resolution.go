@@ -27,32 +27,18 @@ func mediaProviders(availableDrivers models.AvailableDrivers, _ models.Modality)
 }
 
 // CheckMediaAvailable reports whether the user has a provider that can serve
-// the modality, using the same availability-filtered registry path the
-// Resolve*Generator functions use, in the scope of the run the call belongs
-// to (WithRunScope). It returns a *models.MediaUnavailableError carrying the
-// one shared message when not, or the org policy's *orgpolicy.Refusal when
-// the policy is why.
+// the modality, through the same resolution the Resolve*Generator functions
+// use, in the scope of the run the call belongs to (WithRunScope). It returns
+// a *models.MediaUnavailableError carrying the one shared message when not,
+// the org policy's *orgpolicy.Refusal when the policy is why, or a
+// *models.MediaPersonalFundingError when only the person's own accounts could
+// and they have not chosen to spend them in the org.
 func CheckMediaAvailable(ctx context.Context, userID string, modality models.Modality) error {
-	registry, err := models.GetRegistry()
-	if err != nil {
+	if _, err := models.GetRegistry(); err != nil {
 		return nil
 	}
-	scope := runScopeFor(ctx, userID)
-	availableDrivers := GetAvailableDrivers(ctx, scope)
-	registry = registry.WithAvailability(availableDrivers.Availability)
-	selector := models.ModelSelector{
-		Tags:                  []string{mediaBaseTag(modality)},
-		RequireOutputModality: modality,
-	}
-	if providers := mediaProviders(availableDrivers, modality); len(providers) > 0 {
-		if _, err = registry.Resolve(selector, providers); err == nil {
-			return nil
-		}
-	}
-	if refusal := mediaPolicyRefusal(ctx, scope, availableDrivers, selector, false); refusal != nil {
-		return refusal
-	}
-	return models.NewMediaUnavailableError(registry, modality)
+	_, _, _, err := resolveMedia(ctx, userID, models.ModelSelector{Tags: []string{mediaBaseTag(modality)}}, modality, false)
+	return err
 }
 
 // mediaPolicyRefusal is the org policy's refusal when what it took out of
@@ -108,44 +94,134 @@ func mediaBaseTag(modality models.Modality) string {
 // the scope of the run the call belongs to (WithRunScope): a chat's org and
 // who is behind it, as its model calls resolve. A user with no provider for
 // the modality gets *models.MediaUnavailableError, the same error
-// CheckMediaAvailable returns, or the org policy's *orgpolicy.Refusal when
-// the policy is why.
+// CheckMediaAvailable returns; the org policy's *orgpolicy.Refusal when the
+// policy is why; and *models.MediaPersonalFundingError when only the person's
+// own accounts could serve and they have not chosen to spend them in the org.
 func resolveMediaModel(ctx context.Context, userID string, selector models.ModelSelector, modality models.Modality) (*models.ResolvedModel, models.AvailableDrivers, Scope, error) {
+	return resolveMedia(ctx, userID, selector, modality, true)
+}
+
+// resolveMedia is resolveMediaModel; counted is whether a policy refusal is
+// the generation's one judged use (the generation itself, not load_tool's
+// look ahead).
+func resolveMedia(ctx context.Context, userID string, selector models.ModelSelector, modality models.Modality, counted bool) (*models.ResolvedModel, models.AvailableDrivers, Scope, error) {
 	selector.RequireOutputModality = modality
 
-	scope := runScopeFor(ctx, userID)
-	availableDrivers := GetAvailableDrivers(ctx, scope)
-	providers := mediaProviders(availableDrivers, modality)
-
+	scope, funding := runScopeFor(ctx, userID)
+	all := GetAvailableDrivers(ctx, scope)
 	registry, err := models.GetRegistry()
 	if err != nil {
-		return nil, availableDrivers, scope, err
+		return nil, all, scope, err
 	}
-	registry = registry.WithAvailability(availableDrivers.Availability)
-	if len(providers) == 0 {
-		if refusal := mediaPolicyRefusal(ctx, scope, availableDrivers, selector, true); refusal != nil {
-			return nil, availableDrivers, scope, refusal
+
+	// Who may pay, in the order the person chose (§4.4, §10): the org's
+	// accounts first, and the person's own only with their say.
+	tries, heldBack := mediaFundingTries(scope, funding, all)
+	for _, candidates := range tries {
+		if resolved, err := resolveMediaIn(ctx, userID, registry, candidates, selector, modality); err == nil {
+			return resolved, candidates, scope, nil
 		}
-		return nil, availableDrivers, scope, models.NewMediaUnavailableError(registry, modality)
 	}
+	resolved, err := resolveMediaIn(ctx, userID, registry, all, selector, modality)
+	if heldBack && err == nil && resolved != nil {
+		return nil, all, scope, models.NewMediaPersonalFundingError(modality, funding.OrgOnly)
+	}
+	if refusal := mediaPolicyRefusal(ctx, scope, all, selector, counted); refusal != nil {
+		return nil, all, scope, refusal
+	}
+	if err == nil {
+		err = models.NewMediaUnavailableError(registry.WithAvailability(all.Availability), modality)
+	}
+	return nil, all, scope, err
+}
 
+// resolveMediaIn resolves selector over candidates: the person's preference
+// for the modality's default tier first, then the registry.
+func resolveMediaIn(ctx context.Context, userID string, registry *models.ModelRegistry, candidates models.AvailableDrivers, selector models.ModelSelector, modality models.Modality) (*models.ResolvedModel, error) {
+	registry = registry.WithAvailability(candidates.Availability)
+	providers := mediaProviders(candidates, modality)
+	if len(providers) == 0 {
+		return nil, models.NewMediaUnavailableError(registry, modality)
+	}
 	if resolved := preferredMediaModel(ctx, userID, registry, selector, providers, modality); resolved != nil {
-		return resolved, availableDrivers, scope, nil
+		return resolved, nil
 	}
-
 	resolved, err := registry.Resolve(selector, providers)
 	if err != nil {
-		if refusal := mediaPolicyRefusal(ctx, scope, availableDrivers, selector, true); refusal != nil {
-			return nil, availableDrivers, scope, refusal
-		}
 		if _, baseErr := registry.Resolve(models.ModelSelector{
 			Tags: []string{mediaBaseTag(modality)}, RequireOutputModality: modality,
 		}, providers); baseErr != nil {
-			return nil, availableDrivers, scope, models.NewMediaUnavailableError(registry, modality)
+			return nil, models.NewMediaUnavailableError(registry, modality)
 		}
-		return nil, availableDrivers, scope, fmt.Errorf("no %s model available: %w", modality, err)
+		return nil, fmt.Errorf("no %s model available: %w", modality, err)
 	}
-	return resolved, availableDrivers, scope, nil
+	return resolved, nil
+}
+
+// mediaFundingTries is the candidate sets a generation in scope resolves
+// over, in order, as funding allows (org-provider-accounts §4.4, §10): the
+// first that serves is used. heldBack reports that the person's own accounts
+// were left out for want of their say, so a generation only those could
+// serve is refused with how to give it rather than "connect a provider".
+//
+// Work of no org, and a person who chose their own accounts first, draw on
+// everything (their own first). An org that gave the person nothing leaves
+// their own accounts serving as before. Otherwise the org's accounts serve
+// first, and the person's own only under use_personal (or an automation
+// stamped to spend any source); org_only never reaches them.
+func mediaFundingTries(scope Scope, funding RunFunding, all models.AvailableDrivers) (tries []models.AvailableDrivers, heldBack bool) {
+	if scope.Personal() {
+		return []models.AvailableDrivers{all}, false
+	}
+	if funding.PersonalFirst && !funding.OrgOnly {
+		return []models.AvailableDrivers{PersonalFirst(all)}, false
+	}
+	orgGave, personal := false, false
+	for _, list := range all.Accounts {
+		for _, a := range list {
+			orgGave = orgGave || models.OrgFunded(a.Funding)
+			personal = personal || a.Funding == models.FundingPersonal
+		}
+	}
+	if !personal || (!orgGave && !funding.OrgOnly) {
+		return []models.AvailableDrivers{all}, false
+	}
+	orgFunded := withoutPersonalAccounts(all)
+	if funding.PersonalWhenOrgCannot && !funding.OrgOnly {
+		return []models.AvailableDrivers{orgFunded, all}, false
+	}
+	return []models.AvailableDrivers{orgFunded}, true
+}
+
+// withoutPersonalAccounts is avail without the person's own accounts: a
+// driver left with none leaves the set, and one that keeps an org-funded
+// account defaults to it.
+func withoutPersonalAccounts(avail models.AvailableDrivers) models.AvailableDrivers {
+	out := avail
+	out.Accounts = make(map[models.DriverID][]models.AccountConfig, len(avail.Accounts))
+	out.Drivers = make(map[models.DriverID]models.DriverConfig, len(avail.Drivers))
+	for d, list := range avail.Accounts {
+		kept := make([]models.AccountConfig, 0, len(list))
+		for _, a := range list {
+			if a.Funding != models.FundingPersonal {
+				kept = append(kept, a)
+			}
+		}
+		if len(kept) == 0 {
+			continue
+		}
+		out.Accounts[d] = kept
+		def := kept[0].DriverConfig
+		if cfg, ok := avail.Drivers[d]; ok {
+			for _, a := range kept {
+				if a.AccountID == cfg.AccountID {
+					def = cfg
+				}
+			}
+		}
+		out.Drivers[d] = def
+	}
+	return out
 }
 
 // preferredMediaModel applies the user's Settings preference for the modality's

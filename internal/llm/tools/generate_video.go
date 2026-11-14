@@ -21,7 +21,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers/videogen"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/videojobs"
 )
@@ -233,7 +232,7 @@ func (t *generateVideoTool) Execute(tc *rctx.ToolContext, params GenerateVideoPa
 	generator, err := t.resolve(tc.Context, userID, choice.Selector)
 	if err != nil {
 		var unavailable *models.MediaUnavailableError
-		if !errors.As(err, &unavailable) && !orgpolicy.IsRefusal(err) {
+		if !errors.As(err, &unavailable) && !mediaVerdict(err) {
 			if msg := t.tierUnavailable(tc, userID, choice, ""); msg != "" {
 				return NewTextErrorResponse(msg), nil
 			}
