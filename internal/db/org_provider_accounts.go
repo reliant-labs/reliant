@@ -305,10 +305,11 @@ func (r *Repo) ListRejectedOrgKeysIn(ctx context.Context, orgIDs []string) ([]co
 	return store.ListRejectedOrgKeysIn(ctx, r.ORM(), orgIDs)
 }
 
-// ListUnstartedOrgKeyNotices returns up to limit rejected org keys whose email to the org's
-// owners and admins was never confirmed started (store.ListUnstartedOrgKeyNotices).
-func (r *Repo) ListUnstartedOrgKeyNotices(ctx context.Context, limit int) ([]core.ProviderAccount, error) {
-	return store.ListUnstartedOrgKeyNotices(ctx, r.ORM(), limit)
+// ClaimDueOrgKeyNotices claims up to limit rejected org keys whose email to the org's owners
+// and admins was never confirmed started and is due, moving each one's next attempt lease on
+// (store.ClaimDueOrgKeyNotices).
+func (r *Repo) ClaimDueOrgKeyNotices(ctx context.Context, limit int, lease time.Duration) ([]core.ProviderAccount, error) {
+	return store.ClaimDueOrgKeyNotices(ctx, r.ORM(), limit, lease)
 }
 
 // ConfirmOrgKeyNotice records that the notice of a rejected org key's mark was started

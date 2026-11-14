@@ -146,7 +146,7 @@ func (m *MockAccountCredentialStore) ConfirmOrgKeyNotice(ctx context.Context, or
 var _ AccountCredentialStore = (*MockAccountCredentialStore)(nil)
 
 // forge:section MockOrgKeyNoticeStore
-// forge:hash=0aa5297c466248596e5786b7a29385e5cfae754dcb7b2d0c8afb4e0f2126dd06
+// forge:hash=43cbb6fdda45f02290e5a7da9d9f17475457514aba7b94a5e4c204d61dba1658
 
 // MockOrgKeyNoticeStore is a test mock for the OrgKeyNoticeStore interface.
 //
@@ -156,17 +156,17 @@ var _ AccountCredentialStore = (*MockAccountCredentialStore)(nil)
 // "MockOrgKeyNoticeStore.<Method>Func not set" error.
 type MockOrgKeyNoticeStore struct {
 	contractkit.Recorder
-	ListUnstartedOrgKeyNoticesFunc func(context.Context, int) ([]core.ProviderAccount, error)
-	ConfirmOrgKeyNoticeFunc        func(context.Context, string, string, time.Time) error
+	ClaimDueOrgKeyNoticesFunc func(context.Context, int, time.Duration) ([]core.ProviderAccount, error)
+	ConfirmOrgKeyNoticeFunc   func(context.Context, string, string, time.Time) error
 }
 
-// ListUnstartedOrgKeyNotices records the call and delegates to ListUnstartedOrgKeyNoticesFunc when set.
-func (m *MockOrgKeyNoticeStore) ListUnstartedOrgKeyNotices(ctx context.Context, limit int) ([]core.ProviderAccount, error) {
-	m.Recorder.Record("ListUnstartedOrgKeyNotices", ctx, limit)
-	if m.ListUnstartedOrgKeyNoticesFunc != nil {
-		return m.ListUnstartedOrgKeyNoticesFunc(ctx, limit)
+// ClaimDueOrgKeyNotices records the call and delegates to ClaimDueOrgKeyNoticesFunc when set.
+func (m *MockOrgKeyNoticeStore) ClaimDueOrgKeyNotices(ctx context.Context, limit int, lease time.Duration) ([]core.ProviderAccount, error) {
+	m.Recorder.Record("ClaimDueOrgKeyNotices", ctx, limit, lease)
+	if m.ClaimDueOrgKeyNoticesFunc != nil {
+		return m.ClaimDueOrgKeyNoticesFunc(ctx, limit, lease)
 	}
-	return nil, contractkit.MockNotSet("MockOrgKeyNoticeStore", "ListUnstartedOrgKeyNotices")
+	return nil, contractkit.MockNotSet("MockOrgKeyNoticeStore", "ClaimDueOrgKeyNotices")
 }
 
 // ConfirmOrgKeyNotice records the call and delegates to ConfirmOrgKeyNoticeFunc when set.
