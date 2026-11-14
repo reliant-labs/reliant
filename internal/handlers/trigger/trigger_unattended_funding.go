@@ -84,15 +84,18 @@ func (s *Service) liveMembers(ctx context.Context, ownerID, orgID string) (int, 
 }
 
 // policyAdmitsPersonalAutomations reports whether orgID's policy, read now
-// through orgpolicy.For, admits members' own accounts for its automations
-// (org-provider-accounts §11.3, §11.6): its automations section names PERSONAL,
-// and its providers section, when it names sources, does too. Then an admin
-// has chosen to let automations spend them, so the owner may loosen theirs.
-// A policy that cannot be read admits nothing: the loosening is refused, as
-// it was before the policy existed.
+// through orgpolicy.For, lets its automations spend members' own accounts
+// (org-provider-accounts §11.3, §11.6): its automations section decides the
+// sources of unattended runs (orgpolicy.AutomationsDecide: it names sources
+// and both the platform switch and the section enforce, the same answer the
+// loader lifts the stamp on) and names PERSONAL, and its providers section,
+// when it names sources, does too. Then an admin has chosen to let
+// automations spend them, so the owner may loosen theirs. A policy in audit,
+// one that cannot be read, and none at all admit nothing: the loosening is
+// refused (fail closed), as before the policy existed.
 func policyAdmitsPersonalAutomations(ctx context.Context, orgID string) bool {
 	pol, err := orgpolicy.For(ctx, orgID)
-	if err != nil {
+	if err != nil || !orgpolicy.AutomationsDecide(pol.Doc) {
 		return false
 	}
 	personal := controlplanev1.ProviderSource_PROVIDER_SOURCE_PERSONAL

@@ -69,6 +69,19 @@ func ProviderAdmission(doc *controlplanev1.OrgPolicy, driver string, source cont
 	return adm
 }
 
+// AutomationsDecide reports whether doc's automations section decides an
+// unattended run's sources by itself (org-provider-accounts.md §11.3, §11.6):
+// it names sources, and both the platform switch (PointProviders) and the
+// section's own mode enforce. Then it is total: it replaces each automation's
+// unattended-funding stamp, wider or narrower. Under audit, off, or with no
+// sources named it decides nothing and the stamp stands. It is the one answer
+// both the loader (the stamp lifted at resolution) and a trigger write (an
+// owner loosening their automation) ask, so the two cannot disagree.
+func AutomationsDecide(doc *controlplanev1.OrgPolicy) bool {
+	sec := doc.GetAutomations()
+	return len(sec.GetAllowedSources()) > 0 && Enforced(PointProviders, sec.GetMode())
+}
+
 // providersAdmit is the providers section's own answer.
 func providersAdmit(sec *controlplanev1.ProvidersPolicy, driver string, source controlplanev1.ProviderSource) bool {
 	return (len(sec.GetAllowed()) == 0 || slices.ContainsFunc(sec.GetAllowed(), func(id string) bool { return strings.TrimSpace(id) == driver })) &&

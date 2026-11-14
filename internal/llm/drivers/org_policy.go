@@ -93,11 +93,7 @@ func orgPolicyFilterFor(ctx context.Context, scope Scope) (*orgPolicyFilter, err
 // narrower, and accounts() admits exactly what it (and the providers
 // section) allows. Under audit it decides nothing, and the stamp stands.
 func (f *orgPolicyFilter) automationsDecide() bool {
-	if f == nil || !f.unattended {
-		return false
-	}
-	sec := f.doc.GetAutomations()
-	return len(sec.GetAllowedSources()) > 0 && orgpolicy.Enforced(orgpolicy.PointProviders, sec.GetMode())
+	return f != nil && f.unattended && orgpolicy.AutomationsDecide(f.doc)
 }
 
 // liftStamp is scope with the automation's stamp lifted when the automations
