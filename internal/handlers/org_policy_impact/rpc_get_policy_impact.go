@@ -75,14 +75,26 @@ func (s *Service) GetPolicyImpact(
 		WindowDays: int32(ImpactWindow / (24 * time.Hour)), ChatsConsidered: int32(len(calls)), Truncated: truncated,
 	}
 	byReason := map[string]*pb.PolicyImpactReason{}
+	// Attendance decides a refusal only through the automations section; it
+	// always decides whether a refused chat is an automation's. So it is read
+	// before judging when the document has that section, else only for a
+	// chat that is refused.
+	governsAttendance := doc.GetAutomations() != nil
 	for _, call := range calls {
-		unattended, err := s.unattended(ctx, doc, call.ChatID)
-		if err != nil {
-			return nil, svcerr.Wrap(err)
+		var unattended bool
+		if governsAttendance {
+			if unattended, err = s.unattended(ctx, call.ChatID); err != nil {
+				return nil, svcerr.Wrap(err)
+			}
 		}
 		reason := refusalOf(doc, call, unattended)
 		if reason == "" {
 			continue
+		}
+		if !governsAttendance {
+			if unattended, err = s.unattended(ctx, call.ChatID); err != nil {
+				return nil, svcerr.Wrap(err)
+			}
 		}
 		r := byReason[reason]
 		if r == nil {
@@ -106,12 +118,8 @@ func (s *Service) GetPolicyImpact(
 // unattended is whether chatID's next call has nobody behind it, by the rule
 // its calls are scoped with (Deps.Attendance): a run a stored trigger
 // launched, deleted since or not, that nobody adopted, and an agent-started
-// run whose lineage root is one. Only the automations section reads it, so a
-// document without one reads no chat.
-func (s *Service) unattended(ctx context.Context, doc *controlplanev1.OrgPolicy, chatID string) (bool, error) {
-	if doc.GetAutomations() == nil {
-		return false, nil
-	}
+// run whose lineage root is one.
+func (s *Service) unattended(ctx context.Context, chatID string) (bool, error) {
 	chat, err := s.deps.Store.GetChat(ctx, chatID)
 	if err != nil {
 		return false, err

@@ -223,6 +223,55 @@ func TestGetPolicyImpact_AutomationsFollowTheAttendanceRule(t *testing.T) {
 	assert.EqualValues(t, 3, resp.Msg.GetAutomationsRefused())
 }
 
+// Whatever rule refuses a chat, a refused chat nobody is behind is counted as
+// an automation's: a providers-only or a models-only policy refuses
+// automations too.
+func TestGetPolicyImpact_EveryRuleCountsTheAutomationsItRefuses(t *testing.T) {
+	trigger := "trg-1"
+	enforce := controlplanev1.OrgPolicyMode_ORG_POLICY_MODE_ENFORCE
+	for name, tc := range map[string]struct {
+		doc    *controlplanev1.OrgPolicy
+		rows   []db.OrgChatCall
+		reason string
+	}{
+		"providers only": {
+			doc: &controlplanev1.OrgPolicy{Providers: &controlplanev1.ProvidersPolicy{Mode: enforce, AllowedSources: []controlplanev1.ProviderSource{
+				controlplanev1.ProviderSource_PROVIDER_SOURCE_ORG_ACCOUNTS,
+			}}},
+			rows: []db.OrgChatCall{
+				{ChatID: "fired", Provider: "claude", Model: "claude-4.6-sonnet", Funding: "personal"},
+				{ChatID: "persons", Provider: "claude", Model: "claude-4.6-sonnet", Funding: "personal"},
+				{ChatID: "fired-on-org-key", Provider: "anthropic", Model: "claude-4.6-sonnet", Funding: "org_key"},
+			},
+			reason: orgpolicy.ReasonProviderNotAllowed,
+		},
+		"models only": {
+			doc: &controlplanev1.OrgPolicy{Models: &controlplanev1.ModelsPolicy{Mode: enforce, Allowed: []string{"claude-opus-4-6"}}},
+			rows: []db.OrgChatCall{
+				{ChatID: "fired", Provider: "reliant", Model: "claude-4.6-sonnet@reliant", Funding: "org_wallet"},
+				{ChatID: "persons", Provider: "reliant", Model: "claude-4.6-sonnet@reliant", Funding: "org_wallet"},
+				{ChatID: "fired-on-org-key", Provider: "reliant", Model: "claude-4.6-opus", Funding: "org_wallet"},
+			},
+			reason: orgpolicy.ReasonModelNotAllowed,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &calls{rows: tc.rows, chats: map[string]*db.Chat{
+				"fired": scheduled("fired", &trigger), "fired-on-org-key": scheduled("fired-on-org-key", &trigger),
+			}}
+			resp, err := newService(t, store).GetPolicyImpact(as("ada", auth.CredentialSession), connect.NewRequest(&pb.GetPolicyImpactRequest{
+				OrgId: org, PolicyJson: policyJSON(t, tc.doc),
+			}))
+			require.NoError(t, err)
+			assert.EqualValues(t, 2, resp.Msg.GetChatsRefused(), "the fired and the person's chat; the admitted automation is not")
+			assert.EqualValues(t, 1, resp.Msg.GetAutomationsRefused(), "only the fired chat is an automation's")
+			require.Len(t, resp.Msg.GetReasons(), 1)
+			assert.Equal(t, tc.reason, resp.Msg.GetReasons()[0].GetReason())
+			assert.EqualValues(t, 1, resp.Msg.GetReasons()[0].GetAutomations())
+		})
+	}
+}
+
 // A larger org's preview reads its most recently active chats and says so.
 func TestGetPolicyImpact_SaysWhenItIsTruncated(t *testing.T) {
 	rows := make([]db.OrgChatCall, org_policy_impact.ImpactChatLimit+5)
