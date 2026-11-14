@@ -2,6 +2,7 @@
 package main
 
 import (
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -37,6 +38,12 @@ func isWebCode(p string) bool {
 		return true
 	}
 	return false
+}
+
+// isWebStylesheet is a frontends/web/ stylesheet whose @imports the demo
+// graph follows.
+func isWebStylesheet(p string) bool {
+	return strings.HasPrefix(p, "frontends/web/") && !strings.Contains(p, "/node_modules/") && path.Ext(p) == ".css"
 }
 
 // IsWebTestFile is what vitest's default include picks up, minus the Playwright specs.
@@ -149,7 +156,7 @@ func demoGraph(deps map[string][]string, exists map[string]bool) map[string]bool
 // untracked repo path; read returns a file's text.
 func BuildWebGraph(files []string, read func(string) (string, bool)) *WebGraph {
 	exists := map[string]bool{}
-	var code []string
+	var code, styles []string
 	for _, f := range files {
 		if strings.HasPrefix(f, "frontends/web/") {
 			exists[f] = true
@@ -157,8 +164,12 @@ func BuildWebGraph(files []string, read func(string) (string, bool)) *WebGraph {
 		if isWebCode(f) {
 			code = append(code, f)
 		}
+		if isWebStylesheet(f) {
+			styles = append(styles, f)
+		}
 	}
 	sort.Strings(code)
+	sort.Strings(styles)
 
 	deps := map[string][]string{}
 	wg := &WebGraph{Reach: map[string][]string{}, Near: map[string][]string{}, Direct: map[string][]string{}, Text: map[string]string{}}
@@ -204,7 +215,17 @@ func BuildWebGraph(files []string, read func(string) (string, bool)) *WebGraph {
 			}
 		}
 	}
-	wg.Demo = demoGraph(deps, exists)
+	// A stylesheet's @import is an edge of the bundle (vite inlines it), so
+	// the demo closure follows it: index.css imports styles/ and themes/
+	// sheets, and a broken nested @import breaks the demo build. The test
+	// graph does not follow them (vitest does not process CSS by default).
+	demoDeps := maps.Clone(deps)
+	for _, f := range styles {
+		if text, ok := read(f); ok {
+			demoDeps[f] = webDeps(f, text, exists)
+		}
+	}
+	wg.Demo = demoGraph(demoDeps, exists)
 	for f := range wg.Reach {
 		sort.Strings(wg.Reach[f])
 	}

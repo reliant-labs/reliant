@@ -76,7 +76,10 @@ type-checked clean, and failed the v1.17.0-rc.3 cut on
 substitution applied: a module `x.ts` with a sibling `x.demo.ts` (a **demo
 twin**) is replaced by the twin, so the twin is followed and the original is a
 member but its own imports are not (after #2699 gave `useOrgs.ts` a twin,
-`authStore.ts` left the graph). Like the test graph it over-approximates
+`authStore.ts` left the graph). Unlike the test graph it also follows a
+stylesheet's `@import`s, since vite inlines them: `index.css` imports the
+`styles/` and `themes/` sheets, and a broken nested `@import` breaks the demo
+build. Like the test graph it over-approximates
 (every quoted specifier is an edge); a missing entry selects the lane for any
 web change. It takes 1.8-2.0 minutes on a loaded host; most web changes reach
 it, since the demo shares the console pages, hooks and stores.

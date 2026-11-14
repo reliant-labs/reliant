@@ -15,8 +15,12 @@ import (
 //	components/Chat/Chat.tsx (Reliant only: no demo module imports it)
 func demoSrc() map[string]string {
 	return map[string]string{
-		demoEntry:                     `import "../index.css"; import { DemoRoot } from "./DemoRoot"`,
-		"frontends/web/src/index.css": ``,
+		demoEntry: `import "../index.css"; import { DemoRoot } from "./DemoRoot"`,
+		"frontends/web/src/index.css": `@import "tailwindcss";
+@import "./styles/cursor-fixes.css";`,
+		"frontends/web/src/styles/cursor-fixes.css":      `@import "../themes/chart-palette.css";`,
+		"frontends/web/src/themes/chart-palette.css":     `:root { --c: 1 }`,
+		"frontends/web/src/themes/unused.css":            `:root { --u: 1 }`,
 		"frontends/web/src/demoBundle/DemoRoot.tsx":      `import { useOrgs } from "@/hooks/useOrgs"; import "../gen/reliant/v1/org_pb"`,
 		"frontends/web/src/hooks/useOrgs.ts":             `import { useAuthStore } from "../store/authStore"`,
 		"frontends/web/src/store/authStore.ts":           `import type { T } from "../components/Chat/Chat"; export const useAuthStore = 1`,
@@ -46,6 +50,11 @@ func TestWebDemoBuildFollowsTheBundlesImportGraph(t *testing.T) {
 		{"a module two imports deep", false, "frontends/web/src/store/authStore.ts", true, "import graph"},
 		{"the entry itself", false, demoEntry, true, "import graph"},
 		{"a stylesheet the entry imports", false, "frontends/web/src/index.css", true, "import graph"},
+		// index.css @imports styles/ and themes/ sheets; a broken nested
+		// @import breaks the demo build as surely as a direct one.
+		{"a stylesheet index.css imports", false, "frontends/web/src/styles/cursor-fixes.css", true, "import graph"},
+		{"a stylesheet two @imports deep", false, "frontends/web/src/themes/chart-palette.css", true, "import graph"},
+		{"a stylesheet nothing imports", false, "frontends/web/src/themes/unused.css", false, ""},
 		{"a type-only import is no edge", false, "frontends/web/src/components/Chat/Chat.tsx", false, ""},
 		{"a test file", false, "frontends/web/src/hooks/__tests__/orgs.test.ts", false, ""},
 		{"a proto whose client the bundle imports", false, "proto/reliant/v1/org.proto", true, "regenerates org_pb.ts"},
