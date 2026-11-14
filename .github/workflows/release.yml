@@ -364,6 +364,74 @@ jobs:
   # ============================================================================
   # BACKEND BINARIES: Matrix build (full-width fan-out)
   # ============================================================================
+  # ============================================================================
+  # RENDERER SOURCE MAPS: file the desktop renderer's maps (reliant#2535)
+  # ============================================================================
+  # Without them control-plane cannot symbolicate the desktop app's browser
+  # errors (culprits stay `app://bundle/assets/main-<hash>.js`). Its fallback
+  # fingerprint is the content-hashed file name plus minified function names,
+  # both new every build, so each desktop release re-opened every browser
+  # issue as a NewIssue. scripts/release-sourcemaps.sh says what is filed where,
+  # and scripts/test-release-sourcemaps.sh proves it.
+  #
+  # BESIDE the platform builds, never before them: nothing waits on this job.
+  # A failed filing must not mark a shipped release failed (release-health.yml
+  # opens `release:failed` for a red tag run), so the step continues on error.
+  # It still shows as a failed step with the reason in its ::error::.
+  #
+  # WHICH RUN FILES. The run whose renderer ships: a prebuild dispatch (its
+  # artifacts are what a reusing tag publishes), or a tag push that builds. A
+  # tag push that reuses a prebuild (prebuilt_run set) files nothing, because
+  # its own renderer build is not what ships. The script files nothing for a
+  # version that is not a release (a dev dispatch).
+  #
+  # THE CREDENTIAL is RELIANT_DESKTOP_SOURCEMAPS_TOKEN, deploy/kcl/desktop's
+  # token_env: a REGISTRY-ONLY org automation token for tenant zero carrying
+  # sourcemaps:write and nothing else (forge#2059, control-plane#2493). The
+  # registry grants it push on `*-sourcemaps` repositories only and the control
+  # plane refuses it on every RPC, so RELIANT_DESKTOP_SOURCEMAPS_ORG (a repository
+  # variable, not a secret) names its org. It is an environment secret of the
+  # `desktop-sourcemaps` environment, whose deployment branch policy admits only
+  # `v*` tags. Unset, the step only warns. This job holds no other secret and
+  # reads nothing but the repository.
+  renderer-sourcemaps:
+    name: File Renderer Source Maps
+    needs: prepare
+    if: needs.prepare.outputs.prebuilt_run == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: desktop-sourcemaps
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Download web build artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: web-dist
+          path: frontends/web/dist
+
+      - name: File the renderer's source maps
+        continue-on-error: true
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          RELIANT_DESKTOP_SOURCEMAPS_TOKEN: ${{ secrets.RELIANT_DESKTOP_SOURCEMAPS_TOKEN }}
+          RELIANT_DESKTOP_SOURCEMAPS_ORG: ${{ vars.RELIANT_DESKTOP_SOURCEMAPS_ORG }}
+          # The pinned forge is a commit pseudo-version the module proxy may
+          # not have yet (Taskfile.yml's GOPRIVATE note).
+          GOPRIVATE: github.com/reliant-labs/*
+        run: bash scripts/release-sourcemaps.sh "$VERSION" frontends/web/dist
+
   build-backend:
     name: Build backend (${{ matrix.target_os }}-${{ matrix.target_arch }})
     needs: prepare
