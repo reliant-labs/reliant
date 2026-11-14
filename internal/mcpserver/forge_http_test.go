@@ -383,3 +383,41 @@ func TestForgeDisconnectedClientRequiresConsent(t *testing.T) {
 	var consent *ConsentError
 	require.ErrorAs(t, err, &consent, "a disconnected client got the user's grant back")
 }
+
+// An open session acts only while its client is still bound to the grant it
+// opened under: rebinding the application to another grant, or disconnecting
+// it, refuses the open session's next call; a new session gets the new grant.
+func TestForgeOpenSessionFollowsTheCurrentBinding(t *testing.T) {
+	ctx := context.Background()
+	for name, change := range map[string]func(t *testing.T, store *memStore){
+		"rebound": func(t *testing.T, store *memStore) { bindForge(t, store, "client-a", "g-narrow") },
+		"disconnected": func(t *testing.T, store *memStore) {
+			_, err := store.DeleteBinding(ctx, "user-1", connectorgrant.BindingClientID(connectorgrant.KindForge, "client-a"))
+			require.NoError(t, err)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := newMemStore()
+			require.NoError(t, store.CreateGrant(ctx, forgeGrant("g-broad", nil, []string{"envs_list"})))
+			require.NoError(t, store.CreateGrant(ctx, forgeGrant("g-narrow", []string{"not-shop"}, []string{"envs_list"})))
+			bindForge(t, store, "client-a", "g-broad")
+			url, _ := newForgeTestServer(t, store, &stubClientTokenValidator{userID: "user-1", clientID: "client-a"})
+			sess := connectForge(t, url, "user-jwt")
+			call := func() (*mcp.CallToolResult, error) {
+				return sess.CallTool(ctx, &mcp.CallToolParams{Name: "envs_list", Arguments: map[string]any{"project": "shop"}})
+			}
+			res, err := call()
+			require.NoError(t, err)
+			require.False(t, res.IsError, "the bound grant serves the session")
+
+			change(t, store)
+			// A disconnected client is refused at the door (403, consent); a
+			// rebound one authenticates, so the session itself must refuse.
+			res, err = call()
+			if err == nil {
+				require.True(t, res.IsError, "the open session kept acting through the grant its client is no longer bound to")
+				assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, "reconnect Reliant Forge")
+			}
+		})
+	}
+}

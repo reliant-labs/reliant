@@ -142,6 +142,7 @@ func NewForgeHTTPHandler(deps ForgeHTTPDeps) (http.Handler, error) {
 			// The bearer the session opened with: the legacy SSE transport
 			// carries no per-request headers to a tool call.
 			SessionToken: CallerToken(r.Context()),
+			BoundGrant:   auth.boundGrant,
 		})
 		if err != nil {
 			logger.ErrorContext(r.Context(), "mcpserver: forge: could not build server for session",
@@ -348,6 +349,12 @@ type ForgeServerDeps struct {
 	// SessionToken is the bearer the session opened with, for transports
 	// whose tool calls carry no headers (legacy SSE).
 	SessionToken string
+	// BoundGrant answers the grant the bearer's client is bound to NOW.
+	// Every tool call is refused unless it is still the grant the session
+	// was opened under: a session is long-lived, and a user who rebinds the
+	// application to another grant (or disconnects it) must not leave the
+	// open session acting through the old one. Required.
+	BoundGrant func(ctx context.Context, bearer string) (string, error)
 }
 
 // NewForgeServer builds the MCP server of one forge session: forge's hosted
@@ -358,6 +365,9 @@ func NewForgeServer(sess *ForgeSession, deps ForgeServerDeps) (*mcp.Server, erro
 	}
 	if deps.Store == nil {
 		return nil, errors.New("mcpserver: forge: grant store is required")
+	}
+	if deps.BoundGrant == nil {
+		return nil, errors.New("mcpserver: forge: a bound-grant resolver is required")
 	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "reliant-forge", Title: "Reliant Forge", Version: serverVersion},
 		&mcp.ServerOptions{Instructions: forgecli.HostedInstructions()})
@@ -370,15 +380,7 @@ func NewForgeServer(sess *ForgeSession, deps ForgeServerDeps) (*mcp.Server, erro
 		// An empty list grants nothing (fail closed), never everything.
 		Tools: append([]string{}, sess.ToolNames...),
 		Token: func(ctx context.Context, req *mcp.CallToolRequest) (string, error) {
-			if req != nil && req.Extra != nil && req.Extra.Header != nil {
-				if t := bearerToken(&http.Request{Header: req.Extra.Header}); t != "" {
-					return t, nil
-				}
-			}
-			if t := CallerToken(ctx); t != "" {
-				return t, nil
-			}
-			return deps.SessionToken, nil
+			return forgeCallBearer(ctx, req, deps.SessionToken), nil
 		},
 		Authorize: func(ctx context.Context, tool forgecli.AccountToolInfo, target forgecli.AccountTarget) error {
 			return authorizeForgeTarget(ctx, deps.Store, sess.GrantID, tool.Name, target)
@@ -395,6 +397,34 @@ func NewForgeServer(sess *ForgeSession, deps ForgeServerDeps) (*mcp.Server, erro
 		return nil, err
 	}
 	return srv, nil
+}
+
+// forgeCallBearer is the bearer a tool call is made with: its own request's,
+// else the one its session opened with.
+func forgeCallBearer(ctx context.Context, req *mcp.CallToolRequest, sessionToken string) string {
+	if req != nil && req.Extra != nil && req.Extra.Header != nil {
+		if t := bearerToken(&http.Request{Header: req.Extra.Header}); t != "" {
+			return t
+		}
+	}
+	if t := CallerToken(ctx); t != "" {
+		return t
+	}
+	return sessionToken
+}
+
+// boundGrant is the grant bearer's client is bound to now, resolved exactly
+// as a new request is (validated client, live binding only).
+func (a *forgeAuth) boundGrant(ctx context.Context, bearer string) (string, error) {
+	userID, clientID, err := validateOAuthClient(a.tokens, bearer)
+	if err != nil || userID == "" {
+		return "", errForgeGrantGone
+	}
+	sess, err := resolveForgeForUser(ctx, a.store, a.bindings, userID, clientID, a.consentBase)
+	if err != nil {
+		return "", err
+	}
+	return sess.GrantID, nil
 }
 
 // errForgeGrantGone is a session whose grant was revoked, expired or changed.
@@ -455,7 +485,15 @@ func forgeCallMiddleware(sess *ForgeSession, deps ForgeServerDeps) mcp.Middlewar
 					Arguments: call.Params.Arguments, At: started.UTC(), Status: connectorgrant.AuditStarted,
 				})
 			}
-			res, err := next(ctx, method, req)
+			var res mcp.Result
+			var err error
+			if g, berr := deps.BoundGrant(ctx, forgeCallBearer(ctx, call, deps.SessionToken)); berr != nil || g != sess.GrantID {
+				// Rebound, disconnected or revoked since the session opened:
+				// the session's grant no longer speaks for this client.
+				res = &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "Error: " + errForgeGrantGone.Error()}}}
+			} else {
+				res, err = next(ctx, method, req)
+			}
 			if deps.Audit != nil {
 				deps.Audit.Complete(ctx, auditID, false, forgeCallError(res, err), time.Since(started))
 			}
