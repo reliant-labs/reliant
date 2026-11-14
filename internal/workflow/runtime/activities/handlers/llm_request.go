@@ -664,6 +664,7 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 				ModelID: definitionID(definition), Policy: spec.Failover,
 				ChatID: spec.ChatID, Plan: plan,
 				OrgFundedLimited: limitedTierIsOrgFunded(routingDrivers.Accounts[models.DriverID(providerDriver)], definitionID(definition)),
+				RoutedAccounts:   routingDrivers.Accounts[models.DriverID(providerDriver)],
 			})
 		}
 		// Before any provider call: does this call move the chat from the
