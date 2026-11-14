@@ -49,6 +49,7 @@
         "ModelEndpoint",
         "NATSConn",
         "OrgCredentialSweep",
+        "OrgPolicyImpact",
         "OrgPolicyResolver",
         "OrgProviderAccount",
         "OrgResolver",
@@ -222,6 +223,13 @@
         {
           "component": "ModelEndpoint",
           "service": "reliant.v1.ModelEndpointService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "OrgPolicyImpact",
+          "service": "reliant.v1.OrgPolicyImpactService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -20309,6 +20317,147 @@
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ModelEndpointRoute"
           }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.OrgPolicyImpactService",
+      "proto_file": "reliant/v1/org_policy_impact.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.OrgPolicyImpactService/GetPolicyImpact",
+          "name": "GetPolicyImpact",
+          "input": "reliant.v1.GetPolicyImpactRequest",
+          "output": "reliant.v1.GetPolicyImpactResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "OrgPolicyImpactService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetPolicyImpact",
+            "InputType": "GetPolicyImpactRequest",
+            "OutputType": "GetPolicyImpactResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetPolicyImpactRequest",
+            "OutputTypeFQ": "reliant.v1.GetPolicyImpactResponse",
+            "InputProtoFile": "reliant/v1/org_policy_impact.proto",
+            "OutputProtoFile": "reliant/v1/org_policy_impact.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/org_policy_impact.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetPolicyImpactRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "policy_json",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetPolicyImpactResponse": [
+            {
+              "Name": "window_days",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "chats_considered",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "chats_refused",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "automations_refused",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "reasons",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PolicyImpactReason"
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetPolicyImpactRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "policy_json",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.GetPolicyImpactResponse": [
+            {
+              "name": "window_days",
+              "kind": "int32"
+            },
+            {
+              "name": "chats_considered",
+              "kind": "int32"
+            },
+            {
+              "name": "chats_refused",
+              "kind": "int32"
+            },
+            {
+              "name": "automations_refused",
+              "kind": "int32"
+            },
+            {
+              "name": "reasons",
+              "kind": "message",
+              "type_name": "reliant.v1.PolicyImpactReason",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.PolicyImpactReason": [
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "chats",
+              "kind": "int32"
+            },
+            {
+              "name": "automations",
+              "kind": "int32"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetPolicyImpactRequest": "reliant/v1/org_policy_impact.proto",
+          "reliant.v1.GetPolicyImpactResponse": "reliant/v1/org_policy_impact.proto",
+          "reliant.v1.PolicyImpactReason": "reliant/v1/org_policy_impact.proto"
         }
       }
     },
@@ -51860,6 +52009,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "OrgPolicyImpact",
+      "name": "OrgPolicyImpact",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Service",
+      "source": {
+        "path": "internal/handlers/org_policy_impact/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "OrgPolicyResolver",
       "name": "OrgPolicyResolver",
       "kind": "provider",
@@ -53453,6 +53614,19 @@
       ],
       "providers": [
         "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },

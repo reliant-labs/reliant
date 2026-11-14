@@ -1,0 +1,63 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// OrgPolicyImpactService says what a proposed org policy would do to the
+// org's work in reliant, before an admin saves it (control-plane
+// docs/design/org-policies.md §6): the Policies page merges its answer with
+// control-plane's PreviewOrgPolicy, which answers what control-plane knows.
+//
+// Who may ask: an owner or admin of the org, as a person, with the role read
+// fresh from control-plane. A credential an agent or a script can hold is
+// PermissionDenied with reason human_only; anyone else, reason
+// org_admin_required.
+//
+// What it says is counts, never who: no chat, member or provider of a
+// member's own account is named, so a preview cannot show an admin which
+// members use their own subscriptions in the org's chats.
+service OrgPolicyImpactService {
+  // GetPolicyImpact judges the org's live chats against a proposed policy's
+  // providers, automations and models sections, each by the latest model
+  // call it made in the last window_days: how many would be refused at their
+  // next call, and why. It reads only; nothing is written or enforced.
+  rpc GetPolicyImpact(GetPolicyImpactRequest) returns (GetPolicyImpactResponse) {}
+}
+
+message GetPolicyImpactRequest {
+  // org_id is the org the proposed policy is for.
+  string org_id = 1;
+  // policy_json is the proposed controlplane.v1.OrgPolicy document, in
+  // proto3 JSON: the form control-plane stores it in and its OrgPolicyService
+  // answers with. Empty is no policy. A document that does not parse is
+  // InvalidArgument with reason policy_invalid.
+  string policy_json = 2;
+}
+
+message GetPolicyImpactResponse {
+  // window_days is how far back a chat's latest model call is read.
+  int32 window_days = 1;
+  // chats_considered is the org's live (not archived) chats that made a
+  // model call in the window.
+  int32 chats_considered = 2;
+  // chats_refused is those whose latest call the proposed policy would
+  // refuse: each pauses at its next call, with the reason, until its model
+  // changes or the policy does.
+  int32 chats_refused = 3;
+  // automations_refused is how many of chats_refused an automation runs
+  // (a stored trigger launched it): its trigger pauses at its next fire.
+  int32 automations_refused = 4;
+  // reasons break chats_refused down by refusal reason, in reason order.
+  repeated PolicyImpactReason reasons = 5;
+}
+
+// PolicyImpactReason is the chats one refusal reason would stop.
+message PolicyImpactReason {
+  // reason is the refusal's reason: provider_not_allowed or
+  // model_not_allowed.
+  string reason = 1;
+  int32 chats = 2;
+  int32 automations = 3;
+}

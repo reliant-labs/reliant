@@ -49,6 +49,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/mcp"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
+	"github.com/reliant-labs/reliant/internal/handlers/org_policy_impact"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
@@ -949,6 +950,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		Sharing:            g.Sharing(),
 		AutomationTakeover: g.AutomationTakeover(),
 		OrgProviderAccount: g.OrgProviderAccount(),
+		OrgPolicyImpact:    g.OrgPolicyImpact(),
 	})
 }
 
@@ -1494,4 +1496,14 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 		return nil, err
 	}
 	return seatmatch.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newOrgPolicyImpact constructs the org-policy-impact handler (internal/handlers/org_policy_impact).
+func (g *Graph) newOrgPolicyImpact() (*org_policy_impact.Service, error) {
+	return org_policy_impact.New(org_policy_impact.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Store:  g.Database(),
+		Now:    nil, // optional — no provider
+	})
 }

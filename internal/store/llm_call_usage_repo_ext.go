@@ -42,6 +42,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // llm_call_usage (count-only per-call ledger) and llm_call_usage_daily (its rollup).
@@ -316,4 +318,37 @@ func PruneLLMUsagePurgeFences(ctx context.Context, db orm.Context, now time.Time
 		return 0, fmt.Errorf("prune llm usage purge fences: %w", err)
 	}
 	return res.RowsAffected()
+}
+
+// OrgChatCall is the latest chat-turn model call one of an org's live chats
+// made: what its next call would be judged on by a proposed org policy
+// (org-policies §6, GetPolicyImpact). Counts and metadata only, like
+// llm_call_usage itself.
+type OrgChatCall struct {
+	ChatID   string `bun:"chat_id"`
+	Provider string `bun:"provider"`
+	Model    string `bun:"model"`
+	Funding  string `bun:"funding"`
+	// Automation is a chat a stored trigger launched.
+	Automation bool `bun:"automation"`
+}
+
+// LatestOrgChatCalls is, for each of orgID's chats that is not archived and
+// made a chat-turn call at or after since, its latest such call. The window
+// rides the created_at index; the org and the chat's own org are both
+// matched, so a call billed to the org from a chat that has since moved is
+// not counted.
+func LatestOrgChatCalls(ctx context.Context, db orm.Context, orgID string, since time.Time) ([]OrgChatCall, error) {
+	var rows []OrgChatCall
+	err := db.Bun().NewRaw(`SELECT DISTINCT ON (u.chat_id) u.chat_id, u.provider, u.model, u.funding,
+		EXISTS (SELECT 1 FROM trigger_events e WHERE e.chat_id = u.chat_id AND e.trigger_id IS NOT NULL) AS automation
+		FROM llm_call_usage u
+		JOIN chats c ON c.id = u.chat_id
+		WHERE u.created_at >= ?0 AND u.org_id = ?1 AND c.org_id = ?1 AND c.state <> ?2 AND u.purpose = ?3
+		ORDER BY u.chat_id, u.created_at DESC, u.attempt DESC`,
+		since.UTC(), orgID, core.ChatStateArchived, LLMPurposeChat).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("list the latest calls of org %s's chats: %w", orgID, err)
+	}
+	return rows, nil
 }
