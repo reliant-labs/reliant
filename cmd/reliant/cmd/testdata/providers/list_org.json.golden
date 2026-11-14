@@ -1,0 +1,20 @@
+{
+  "accounts": [
+    {
+      "id": "a3",
+      "provider": "claude",
+      "label": "alice@acme.com",
+      "plan": "Team",
+      "status": "limited until 2026-11-13T15:40:00Z",
+      "funding": "org_seat",
+      "org_id": "org-acme"
+    }
+  ],
+  "org": {
+    "org_id": "org-acme",
+    "order": "org_first",
+    "on_org_limit": "ask",
+    "keys": [],
+    "keys_hidden": "person_required"
+  }
+}

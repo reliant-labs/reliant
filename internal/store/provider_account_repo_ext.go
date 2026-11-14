@@ -701,3 +701,31 @@ func ListRejectedOrgKeysIn(ctx context.Context, db orm.Context, orgIDs []string)
 	}
 	return out, nil
 }
+
+// ListUnstartedOrgKeyNotices returns up to limit org-owned accounts whose rejection mark
+// (needs_reauth_at) has no confirmed notice to the org's owners and admins: reauth_notice_for is
+// not that mark. Metadata only, oldest mark first.
+func ListUnstartedOrgKeyNotices(ctx context.Context, db orm.Context, limit int) ([]core.ProviderAccount, error) {
+	var rows []*ProviderAccount
+	if err := db.Bun().NewSelect().Model(&rows).ExcludeColumn(providerAccountSealedColumns...).
+		Where("owner_kind = ?", core.AccountOwnerOrg).Where("needs_reauth_at IS NOT NULL").
+		Where("reauth_notice_for IS DISTINCT FROM needs_reauth_at").
+		Order("needs_reauth_at", "id").Limit(int64(limit)).Scan(ctx); err != nil {
+		return nil, err
+	}
+	out := make([]core.ProviderAccount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, providerAccountToCore(r))
+	}
+	return out, nil
+}
+
+// ConfirmOrgKeyNotice records that the notice of orgID's account accountID, marked at markedAt,
+// was accepted by Temporal. It writes nothing when the mark has changed since (rotated, or
+// marked again): that mark's notice is still to start.
+func ConfirmOrgKeyNotice(ctx context.Context, db orm.Context, orgID, accountID string, markedAt time.Time) error {
+	_, err := db.Bun().NewRaw(`UPDATE provider_accounts SET reauth_notice_for = needs_reauth_at
+		WHERE id = ? AND owner_kind = 'org' AND org_id = ? AND needs_reauth_at = ?`,
+		accountID, orgID, markedAt.UTC()).Exec(ctx)
+	return err
+}

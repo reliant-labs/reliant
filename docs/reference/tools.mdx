@@ -1653,6 +1653,10 @@ PARAMETERS:
 - id: (required) Workflow UUID, slug, or name — including a builtin or project
   workflow name straight out of list_workflows, or the id from create_workflow.
 
+- start_line, line_count: (optional) a window of the YAML's lines. A workflow
+  that fits arrives whole; a larger one arrives as its first lines that fit,
+  with the exact start_line that continues it.
+
 RETURNS:
 The complete workflow YAML with validation status. For editable drafts it also
 returns the version and timestamp; pass that version as expected_version to

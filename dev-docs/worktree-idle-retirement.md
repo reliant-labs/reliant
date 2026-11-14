@@ -11,7 +11,12 @@ checkout is clean, its commits are pushed or merged, and its complete contents
 have been quiet for the configured floor. This includes writes inside
 node_modules, pinned tools, build outputs and caches. A pending, active, or
 paused/resumable execution bound through either its chat or a spawned thread
-excludes the worktree. Failed activity/process/layout lookups fail closed.
+excludes the worktree. A chat bound to the worktree counts with all of its
+runs; a thread bound to it (a sub-agent spawned into it) counts only with its
+own runs, their descendant runs and threads, and its own provider waits, never
+its parent chat's other runs, which kept every sub-agent worktree of a
+long-running orchestrator chat live forever (bug 94324f76;
+`worktreeRunActivitySQL`). Failed activity/process/layout lookups fail closed.
 
 Pushed commits are **not** permission to lose unique files. Dirty/untracked
 work, protected descendants (.env, databases, data, secrets), nested or unknown
