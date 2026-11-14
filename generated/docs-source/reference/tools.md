@@ -2588,7 +2588,7 @@ Read one path in a repository through GitHub, with no checkout. For a file, cont
 
 **Tags:** `integration`
 
-List the repository's files recursively from its git tree, with no checkout: each entry's full path, type (blob is a file, tree a directory, commit a submodule) and size. Pass path to list only one directory, which a large repository needs: results longer than about 30,000 characters are cut short. truncated is true when the tree is larger than GitHub returns at once (100,000 entries). Omit ref for the default branch.
+List the repository's files recursively from its git tree, with no checkout: each entry's full path, type (blob is a file, tree a directory, commit a submodule) and size. Pass path to list only one directory, which a large repository needs: results longer than about 30,000 characters are cut short. truncated is true when the tree is larger than GitHub returns at once (100,000 entries). Omit ref for the default branch. A directory or ref that does not exist answers missing true with no entries, not an error, as repo.get_content does.
 
 ---
 
