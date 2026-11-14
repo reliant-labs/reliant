@@ -9,8 +9,9 @@ name: Merge queue
 # group's base: build, the affected -short tests (direct importers), the web
 # typecheck when web changed, forge generate / docs drift when their inputs
 # changed, migration safety and order when a migration changed, buf lint when a
-# proto changed; then each new or changed Go test three times, and the cheap
-# repo checks.
+# proto changed; then each new or changed Go test three times, the cheap
+# repo checks, and the vendored control-plane contract check when the group
+# changes proto-vendor/controlplane/ (control-plane #2556).
 #
 # BESIDE IT, golangci-lint on the changed packages (owner, 2026-11-08): the
 # `golangci` job, `task ci:golangci`, the Go packages the group changed since
@@ -98,6 +99,50 @@ jobs:
       - name: task ci:repo-checks
         if: ${{ !cancelled() }}
         run: task ci:repo-checks BASE="${BASE}"
+      # The vendored control-plane contract, when this group changes it: the
+      # same check as ci.yml's cp-contract job (proto-vendor/controlplane/ is
+      # exactly its SOURCE commit's export, and SOURCE is on control-plane
+      # main), BEFORE the merge. It used to run only on the push to main, so
+      # #2592 vendored an unmerged control-plane commit, merged, and turned main
+      # red (control-plane #2556). scripts/ci-lanes.sh decides, as for ci.yml;
+      # a group that does not touch the contract spends nothing here.
+      # control-plane is private: read with CONTROL_PLANE_DEPLOY_KEY, read-only.
+      - name: Vendored control-plane contract changed?
+        id: cp_contract
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          lane=$(scripts/ci-lanes.sh --base "${BASE}" | sed -n 's/^cp_contract=//p')
+          echo "changed=${lane:-false}" | tee -a "$GITHUB_OUTPUT"
+          [ "${lane}" = true ] || exit 0
+          sha=$(sed -n 's/^control-plane \([0-9a-f]\{40\}\)$/\1/p' proto-vendor/controlplane/SOURCE 2>/dev/null | head -1)
+          [ -n "${sha}" ] || { echo "::error::proto-vendor/controlplane/SOURCE names no control-plane commit; re-vendor with task contract:controlplane:sync"; exit 1; }
+          echo "sha=${sha}" | tee -a "$GITHUB_OUTPUT"
+      - name: Check out control-plane at SOURCE (private, read-only)
+        if: ${{ !cancelled() && steps.cp_contract.outputs.changed == 'true' }}
+        uses: actions/checkout@v6
+        with:
+          repository: reliant-labs/control-plane
+          ref: ${{ steps.cp_contract.outputs.sha }}
+          path: control-plane-sibling
+          ssh-key: ${{ secrets.CONTROL_PLANE_DEPLOY_KEY }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      # The vendored tree is a byte-for-byte `buf export`: the same buf as
+      # control-plane's .github/actions/setup-buf pin (and ci.yml's cp-contract).
+      - name: buf for the contract check
+        if: ${{ !cancelled() && steps.cp_contract.outputs.changed == 'true' }}
+        uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+          version: "1.57.0"
+          github_token: ${{ github.token }}
+      - name: task contract:controlplane:check
+        if: ${{ !cancelled() && steps.cp_contract.outputs.changed == 'true' }}
+        env:
+          CONTROL_PLANE_DIR: ${{ github.workspace }}/control-plane-sibling
+        run: task contract:controlplane:check
       # The `golangci` job's verdict, read from this run attempt's jobs. It has
       # almost always finished by now (a typical diff lints in about a minute);
       # otherwise this waits for it, up to its own timeout. Not on a gate that
