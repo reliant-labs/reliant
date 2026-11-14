@@ -1,7 +1,7 @@
 -- forge:backward-compatible — adds a new table the previous release never reads or writes.
 
 -- Migration: org_seat_releases
--- Created: 2026-11-13T08:41:41Z
+-- Created: 2026-11-13T11:43:32Z
 --
 -- A member's sign-in an org admin released from the org's seats
 -- (org-provider-accounts.md §6, "Admin releases one seat"). The binding
