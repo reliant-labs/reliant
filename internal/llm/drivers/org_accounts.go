@@ -96,7 +96,7 @@ func orgMemberFacts(ctx context.Context, src OrgMembership, scope Scope) memberF
 // isManagedKey reports whether acct is the managed Reliant key (billed to an
 // org's Reliant wallet, never to the person).
 func isManagedKey(acct *core.AccountWithSecrets) bool {
-	return acct.AuthKind == core.AuthKindManaged || (acct.Provider == "reliant" && acct.IdentityKey == core.ManagedIdentityKey)
+	return acct.AuthKind == core.AuthKindManaged || (acct.Provider == "reliant" && core.IsManagedIdentityKey(acct.IdentityKey))
 }
 
 // personalCandidate classifies one of the person's own rows for scope. ok is

@@ -265,10 +265,23 @@ func validateUpsert(u core.AccountUpsert) error {
 		return fmt.Errorf("invalid auth_kind %q", u.AuthKind)
 	case u.Secrets.Secret == "":
 		return errors.New("account secret cannot be empty")
-	case u.AuthKind == core.AuthKindManaged && u.IdentityKey != core.ManagedIdentityKey:
-		return fmt.Errorf("a managed account's identity must be %q", core.ManagedIdentityKey)
+	case u.AuthKind == core.AuthKindManaged && !validManagedUpsert(u):
+		return fmt.Errorf("a managed account's identity must be %q, or %q with its org's managed attribution",
+			core.ManagedIdentityKey, core.ManagedOrgIdentityKey("<org>"))
+	case u.AuthKind != core.AuthKindManaged && (u.AttributedOrgID != "" || u.AttributionSource != ""):
+		return errors.New("only a managed key is attributed when it is written; a seat is attributed by its workspace binding")
 	}
 	return nil
+}
+
+// validManagedUpsert reports whether a managed key's write is one of its two shapes: the
+// org-less key (identity ManagedIdentityKey, no attribution), or the key minted in one org
+// (identity ManagedOrgIdentityKey(org), attributed to that org with source managed).
+func validManagedUpsert(u core.AccountUpsert) bool {
+	if u.AttributedOrgID == "" {
+		return u.IdentityKey == core.ManagedIdentityKey && u.AttributionSource == ""
+	}
+	return u.IdentityKey == core.ManagedOrgIdentityKey(u.AttributedOrgID) && u.AttributionSource == core.AttributionManaged
 }
 
 // upsertTx is the one write path for connecting an account: a fresh sign-in and the rewrite of a
@@ -380,7 +393,10 @@ func (s *accountStore) insertTx(ctx context.Context, u core.AccountUpsert, imp *
 	if imp != nil {
 		createdAt = imp.createdAt
 	}
-	own := store.ProviderAccountOwnership{Owner: owner, OrgAccess: u.OrgAccess, CreatedByUserID: u.CreatedByUserID}
+	own := store.ProviderAccountOwnership{
+		Owner: owner, OrgAccess: u.OrgAccess, CreatedByUserID: u.CreatedByUserID,
+		AttributedOrgID: u.AttributedOrgID, AttributionSource: u.AttributionSource,
+	}
 	return store.InsertProviderAccount(ctx, s.db, id, own, u.Provider, priority, c, createdAt)
 }
 
