@@ -52,6 +52,7 @@ var scopeOrigins = []scopeOrigin{
 	{"internal/workflow/runtime/activities/handlers/llm_request.go: llmCallSpec.scope: PersonalScope", "a call with no org: no chat, or a chat that predates orgs (§4.1)"},
 	{"internal/workflow/runtime/activities/handlers/llm_request.go: llmCallSpec.scope: Scope{}", "the run's scope, from OrgID/Attended the activity read off the chat row"},
 	{"internal/launch/org_accounts_only.go: (*Launcher).checkOrgAccountsOnly: Scope{}", "an org_only automation's launch: the unattended, org-funded-only scope of the run it would start, from the new chat row's owner and org (§11.4)"},
+	{"internal/handlers/trigger/trigger_funding_warning.go: (*Service).fundingWarning: Scope{}", "an enabled automation's create, update or resume: the unattended scope its fires will run in, from the stored trigger's owner, org and funding stamp, to warn when no org account can run its model (§11.3; never routes)"},
 	{"internal/launch/org_policy.go: AccountScope: PersonalScope", "a person's act on a chat of no org (or no chat): their own accounts"},
 	{"internal/launch/org_policy.go: AccountScope: Scope{}", "a person's act on a chat (a send, a pick, a launch, a wait answered): the chat row's org, attended; launch, send-time substitution, the provider default and usableFallbackModel all take it (org-policies R2)"},
 	{"internal/launch/selected_model.go: SelectionCheck.scope: PersonalScope", "a pick in a chat of no org: the person's own accounts"},
