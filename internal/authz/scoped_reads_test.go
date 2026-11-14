@@ -65,6 +65,11 @@ var userScopedReads = map[string]string{
 	// The takeover decides each offer: its offeree and offerer must be live
 	// members of its org, or an admin of it asked (internal/orgtakeover).
 	"ListPendingTriggerOffers": readCallersFilter,
+	// The inbox's P11 notices (inbox_automation_notices.go): each row is the
+	// caller's own, decided by CanReadTrigger, or one of an org they
+	// administer (control-plane's live answer).
+	"ListNoOrgAccountPauses":       readCallersFilter,
+	"ListPersonallyFundedTriggers": readCallersFilter,
 	// The account loader counts a grant only for a live member of the org,
 	// and only when it postdates their current membership (internal/llm/
 	// drivers, org-provider-accounts §3.3).

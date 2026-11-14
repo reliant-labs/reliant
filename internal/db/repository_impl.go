@@ -4505,3 +4505,38 @@ func (r *Repo) validateAPIKeysSealedConstraint(ctx context.Context) error {
 func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
 	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
 }
+
+// HasNoOrgAccountPauses reports whether any trigger is paused for want of an org account
+// (store.HasNoOrgAccountPauses).
+func (r *Repo) HasNoOrgAccountPauses(ctx context.Context) (bool, error) {
+	return store.HasNoOrgAccountPauses(ctx, r.ORM())
+}
+
+// ListNoOrgAccountPauses returns the triggers paused for want of an org account that userID owns
+// or that belong to one of adminOrgIDs (store.ListNoOrgAccountPauses).
+func (r *Repo) ListNoOrgAccountPauses(ctx context.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error) {
+	return store.ListNoOrgAccountPauses(ctx, r.ORM(), userID, adminOrgIDs)
+}
+
+// ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
+// moving each one's next attempt lease on (store.ClaimDuePauseNotices).
+func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {
+	return store.ClaimDuePauseNotices(ctx, r.ORM(), limit, lease)
+}
+
+// RefusePauseNotice records that a no-org-account pause's email was refused for good
+// (store.RefusePauseNotice).
+func (r *Repo) RefusePauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
+	return store.RefusePauseNotice(ctx, r.ORM(), triggerID, pausedAt)
+}
+
+// ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
+func (r *Repo) ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
+	return store.ConfirmPauseNotice(ctx, r.ORM(), triggerID, pausedAt)
+}
+
+// ListPersonallyFundedTriggers returns userID's org triggers whose runs may spend their own
+// accounts (store.ListPersonallyFundedTriggers).
+func (r *Repo) ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error) {
+	return store.ListPersonallyFundedTriggers(ctx, r.ORM(), userID)
+}

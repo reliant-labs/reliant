@@ -50,3 +50,39 @@ func (c *client) NotifyOrgKeyRejected(ctx context.Context, n OrgKeyRejectedNotic
 	}
 	return out.Deduplicated, nil
 }
+
+// OrgAutomationNoOrgAccountNotice is one pause of an automation for want of an
+// org account, for its org's owners and admins.
+type OrgAutomationNoOrgAccountNotice struct {
+	OrgID string
+	// IncidentKey identifies this pause: a repeat is deduplicated, a later
+	// pause (after it was resumed) is a new email.
+	IncidentKey string
+	// TriggerID and Automation are the automation's id and name.
+	TriggerID, Automation string
+	// Model and OwnerUserID are optional; the control plane names the owner
+	// only when they are a live member of the org.
+	Model, OwnerUserID string
+}
+
+// NotifyOrgAutomationNoOrgAccount is Service.NotifyOrgAutomationNoOrgAccount.
+func (c *client) NotifyOrgAutomationNoOrgAccount(ctx context.Context, n OrgAutomationNoOrgAccountNotice) (bool, error) {
+	in := map[string]any{
+		"orgId":       n.OrgID,
+		"incidentKey": n.IncidentKey,
+		"orgAutomationNoOrgAccount": map[string]any{
+			"triggerId": n.TriggerID, "automation": n.Automation, "model": n.Model, "ownerUserId": n.OwnerUserID,
+		},
+	}
+	var out struct {
+		Deduplicated bool `json:"deduplicated"`
+	}
+	err := c.projectOrgMoveCall(ctx, orgNotifyAdminsPath, in, &out)
+	if errors.Is(err, ErrProjectOrgMoveUnsupported) {
+		return false, ErrOrgNotifyUnsupported
+	}
+	if err != nil {
+		return false, err
+	}
+	return out.Deduplicated, nil
+}

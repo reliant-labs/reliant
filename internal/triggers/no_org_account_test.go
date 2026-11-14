@@ -247,3 +247,28 @@ func TestPausedTriggerWithAnUnknownReasonStaysPaused(t *testing.T) {
 	assert.False(t, msg.GetEnabled())
 	assert.Equal(t, fromANewerRelease, msg.GetPausedReason())
 }
+
+// The pause's hook (the worker's email to the org's admins) is told once, when
+// the second failure in a row pauses the trigger, with the refused model; not
+// for the first failure, and not when a later fire finds it already paused.
+func TestFire_NoOrgAccountPauseTellsItsHookOnce(t *testing.T) {
+	repo := newFakeRepo()
+	trigger := orgOnlyTrigger(t)
+	repo.triggers[trigger.ID] = trigger
+	type call struct{ id, model string }
+	var calls []call
+	pause := NewAutoPause(repo, nil).WithNoOrgAccountPause(func(_ context.Context, id, model string) {
+		calls = append(calls, call{id, model})
+	})
+	firer := NewFirer(repo, &fakeLauncher{err: noOrgAccount}).WithAutoPause(pause)
+	for day := 2; day <= 4; day++ {
+		_, _ = firer.Fire(acmeMember(), fireAt(trigger.ID, day))
+		if day == 2 {
+			assert.Empty(t, calls, "one failure pauses nothing")
+		}
+	}
+	manual := fireAt(trigger.ID, 5)
+	manual.Manual = true
+	_, _ = firer.Fire(acmeMember(), manual)
+	assert.Equal(t, []call{{trigger.ID, "claude-opus-4-6"}}, calls)
+}

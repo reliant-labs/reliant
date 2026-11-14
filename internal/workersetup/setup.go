@@ -361,6 +361,28 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	w.RegisterActivityWithOptions(orgKeyNotices{admins: cfg.OrgAdmins}.Notify, activity.RegisterOptions{
 		Name: NotifyOrgKeyRejectedActivityName,
 	})
+	// An automation paused for want of an org account: the same, for its
+	// org's owners and admins.
+	w.RegisterWorkflowWithOptions(OrgAutomationNoOrgAccountNoticeWorkflow, workflow.RegisterOptions{
+		Name: OrgAutomationNoOrgAccountNoticeWorkflowName,
+	})
+	var pauseAdmins pauseNotifier
+	if cfg.OrgAdmins != nil {
+		pauseAdmins = cfg.OrgAdmins
+	}
+	pauses := pauseNotices{admins: pauseAdmins}
+	if cfg.Database != nil {
+		pauses.store = cfg.Database
+	}
+	w.RegisterActivityWithOptions(pauses.Notify, activity.RegisterOptions{
+		Name: NotifyOrgAutomationNoOrgAccountActivityName,
+	})
+	w.RegisterActivityWithOptions(pauses.Confirm, activity.RegisterOptions{
+		Name: ConfirmPauseNoticeActivityName,
+	})
+	w.RegisterActivityWithOptions(pauses.Refuse, activity.RegisterOptions{
+		Name: RefusePauseNoticeActivityName,
+	})
 
 	// Moving a project to another org: the saga is pure orchestration; its
 	// steps need the control plane and the trigger service.
@@ -390,10 +412,13 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 
 	out := newWorker(w, fatal)
 	// Rejected org keys whose notice never started (a Temporal outage at the
-	// rejection) are started here, where the notice's workflow runs.
+	// rejection), and paused automations whose email was never delivered, are
+	// started here, where the notices' workflows run.
 	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
 		out.background = append(out.background, func(ctx context.Context) {
-			runOrgKeyNoticeSweep(ctx, cfg.Database, q, OrgKeyNoticeSweepInterval)
+			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval,
+				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.Database, q) },
+				func(ctx context.Context) { sweepPauseNotices(ctx, cfg.Database, q) })
 		})
 	}
 	return out, registry, nil
@@ -516,7 +541,12 @@ func triggerAutoPause(cfg *Config) *triggers.AutoPause {
 	if cfg.TemporalClient != nil {
 		schedules = cfg.TemporalClient.ScheduleClient()
 	}
-	return triggers.NewAutoPause(cfg.Database, schedules)
+	pause := triggers.NewAutoPause(cfg.Database, schedules)
+	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil {
+		// A pause for want of an org account emails the org's admins.
+		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(cfg.Database, q))
+	}
+	return pause
 }
 
 // TaskQueueName returns the task queue name that would be used by a worker with the given config.

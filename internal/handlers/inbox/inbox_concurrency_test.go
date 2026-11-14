@@ -48,6 +48,9 @@ func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
 func newInflightRepo(hold time.Duration) *inflightRepo {
 	r := &inflightRepo{MockRepository: &MockRepository{}}
 	m := r.MockRepository
+	// The org account notices: nothing paused, nothing on personal accounts.
+	m.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return false, nil }
+	m.ListPersonallyFundedTriggersFunc = func(context.Context, string) ([]*core.Trigger, error) { return nil, nil }
 	trg := &core.Trigger{ID: "trg-1", UserID: "user-1", Enabled: true, ProjectID: "p1", Name: "nightly"}
 	m.GetProjectFunc = func(_ context.Context, id string) (*db.Project, error) {
 		return &db.Project{ID: id, UserID: "user-1"}, nil

@@ -54077,6 +54077,19 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Members",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgMemberCounter",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "MyOrgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgLister",
       "methods": [],

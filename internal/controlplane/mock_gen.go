@@ -15,7 +15,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=4d4fda98cfed8b1d8cb3465191bddebd74d1747ec94ab0afaf848c4a80e731fb
+// forge:hash=2230bfb8ee17e7e07618d04abcd7be382466a3fa4234553d9348790121d26efc
 
 // MockService is a test mock for the Service interface.
 //
@@ -25,28 +25,29 @@ import (
 // "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
-	MintLLMKeyFunc                   func(context.Context, string, string) (LLMKey, error)
-	MintDaemonResumeTokenFunc        func(context.Context, string, string, string) (DaemonResumeToken, error)
-	RevokeDaemonResumeTokensFunc     func(context.Context, string, string) error
-	ListMyOrganizationsFunc          func(context.Context, string) ([]MyOrganization, error)
-	PreviewAccountDeletionWalletFunc func(context.Context, string) (*AccountDeletionWalletQuote, error)
-	DeleteCurrentUserAccountFunc     func(context.Context, string) (*AccountDeletionResult, error)
-	CloneRepoOntoDaemonFunc          func(context.Context, string, CloneRepoRequest) (CloneRepoResult, error)
-	ResumeDaemonFunc                 func(context.Context, string, string) error
-	SuspendDaemonFunc                func(context.Context, string, string) error
-	ResizeDaemonFunc                 func(context.Context, string, string, string) error
-	SetDaemonIdleTimeoutFunc         func(context.Context, string, string, string) error
-	RenameDaemonFunc                 func(context.Context, string, string, string) error
-	ResumeDaemonForRunFunc           func(context.Context, string, string) (bool, error)
-	UpsertAutopilotReceiverFunc      func(context.Context, AutopilotReceiver) error
-	DeleteAutopilotReceiverFunc      func(context.Context, string) error
-	ListAutopilotReceiversFunc       func(context.Context) ([]string, error)
-	PrepareProjectOrgMoveFunc        func(context.Context, ProjectOrgMoveStep, string) (int, error)
-	AbortProjectOrgMoveFunc          func(context.Context, ProjectOrgMoveStep) error
-	RecordProjectOrgMoveFunc         func(context.Context, ProjectOrgMoveStep, string, map[string]int64) error
-	PreviewProjectOrgMoveFunc        func(context.Context, ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
-	NotifyOrgKeyRejectedFunc         func(context.Context, OrgKeyRejectedNotice) (bool, error)
-	GetModelListPricesFunc           func(context.Context, []ModelRef) ([]ModelListPrice, time.Time, error)
+	MintLLMKeyFunc                      func(context.Context, string, string) (LLMKey, error)
+	MintDaemonResumeTokenFunc           func(context.Context, string, string, string) (DaemonResumeToken, error)
+	RevokeDaemonResumeTokensFunc        func(context.Context, string, string) error
+	ListMyOrganizationsFunc             func(context.Context, string) ([]MyOrganization, error)
+	PreviewAccountDeletionWalletFunc    func(context.Context, string) (*AccountDeletionWalletQuote, error)
+	DeleteCurrentUserAccountFunc        func(context.Context, string) (*AccountDeletionResult, error)
+	CloneRepoOntoDaemonFunc             func(context.Context, string, CloneRepoRequest) (CloneRepoResult, error)
+	ResumeDaemonFunc                    func(context.Context, string, string) error
+	SuspendDaemonFunc                   func(context.Context, string, string) error
+	ResizeDaemonFunc                    func(context.Context, string, string, string) error
+	SetDaemonIdleTimeoutFunc            func(context.Context, string, string, string) error
+	RenameDaemonFunc                    func(context.Context, string, string, string) error
+	ResumeDaemonForRunFunc              func(context.Context, string, string) (bool, error)
+	UpsertAutopilotReceiverFunc         func(context.Context, AutopilotReceiver) error
+	DeleteAutopilotReceiverFunc         func(context.Context, string) error
+	ListAutopilotReceiversFunc          func(context.Context) ([]string, error)
+	PrepareProjectOrgMoveFunc           func(context.Context, ProjectOrgMoveStep, string) (int, error)
+	AbortProjectOrgMoveFunc             func(context.Context, ProjectOrgMoveStep) error
+	RecordProjectOrgMoveFunc            func(context.Context, ProjectOrgMoveStep, string, map[string]int64) error
+	PreviewProjectOrgMoveFunc           func(context.Context, ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
+	NotifyOrgKeyRejectedFunc            func(context.Context, OrgKeyRejectedNotice) (bool, error)
+	NotifyOrgAutomationNoOrgAccountFunc func(context.Context, OrgAutomationNoOrgAccountNotice) (bool, error)
+	GetModelListPricesFunc              func(context.Context, []ModelRef) ([]ModelListPrice, time.Time, error)
 }
 
 // MintLLMKey records the call and delegates to MintLLMKeyFunc when set.
@@ -236,6 +237,15 @@ func (m *MockService) NotifyOrgKeyRejected(ctx context.Context, n OrgKeyRejected
 		return m.NotifyOrgKeyRejectedFunc(ctx, n)
 	}
 	return false, contractkit.MockNotSet("MockService", "NotifyOrgKeyRejected")
+}
+
+// NotifyOrgAutomationNoOrgAccount records the call and delegates to NotifyOrgAutomationNoOrgAccountFunc when set.
+func (m *MockService) NotifyOrgAutomationNoOrgAccount(ctx context.Context, n OrgAutomationNoOrgAccountNotice) (bool, error) {
+	m.Recorder.Record("NotifyOrgAutomationNoOrgAccount", ctx, n)
+	if m.NotifyOrgAutomationNoOrgAccountFunc != nil {
+		return m.NotifyOrgAutomationNoOrgAccountFunc(ctx, n)
+	}
+	return false, contractkit.MockNotSet("MockService", "NotifyOrgAutomationNoOrgAccount")
 }
 
 // GetModelListPrices records the call and delegates to GetModelListPricesFunc when set.

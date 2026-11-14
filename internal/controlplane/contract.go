@@ -187,6 +187,14 @@ type Service interface {
 	// control-plane's code and reason.
 	NotifyOrgKeyRejected(ctx context.Context, n OrgKeyRejectedNotice) (deduplicated bool, err error)
 
+	// NotifyOrgAutomationNoOrgAccount emails orgID's owners and admins that an
+	// automation which may run only on the org's own AI accounts was paused
+	// because none of them could run its model (NotifyOrgAdmins'
+	// org_automation_no_org_account; org-provider-accounts §11.4). Errors as
+	// NotifyOrgKeyRejected; a control plane that predates the notice kind
+	// answers invalid_argument, a permanent refusal.
+	NotifyOrgAutomationNoOrgAccount(ctx context.Context, n OrgAutomationNoOrgAccountNotice) (deduplicated bool, err error)
+
 	// GetModelListPrices reads the list price of each model from
 	// control-plane's LLMPriceInternalService (LiteLLM's model catalog;
 	// docs/design/org-provider-accounts.md §5, P9), one per ref in order, and

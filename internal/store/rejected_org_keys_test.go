@@ -4,12 +4,14 @@ package store_test
 import (
 	"context"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -149,4 +151,113 @@ func TestUnstartedOrgKeyNotices(t *testing.T) {
 	assert.Equal(t, []string{"k-acme"}, ids(), "a confirm of the old mark is not this one's")
 	require.NoError(t, store.ConfirmOrgKeyNotice(ctx, f.env.ORM, "acme", "k-acme", later))
 	assert.Empty(t, ids())
+}
+
+// Round-2 B1: pauses whose notice is running, waiting or refused never hold
+// the sweep's batch. With 120 older pauses claimed (their workflows running)
+// or refused, a newer pause whose start failed at the pause is the one the
+// next sweep claims; and a claimed pause comes round again once its lease
+// passes, behind the never-claimed.
+func TestClaimDuePauseNotices_IsFairToANewerPause(t *testing.T) {
+	f := newCredFixture(t)
+	ctx := context.Background()
+	f.exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active) VALUES ('p-f', 'owner', 'p', '/tmp/p', now(), now(), now()) ON CONFLICT DO NOTHING`)
+	f.exec(`INSERT INTO triggers (id, user_id, project_id, org_id, name, kind, config, enabled, workflow, created_at, updated_at,
+			paused_reason, paused_at, pause_notice_next_at, pause_notice_refused_for)
+		SELECT 'old-' || g, 'owner', 'p-f', 'acme', 'old-' || g, 'schedule', '{}', false, 'builtin://agent', now(), now(),
+			'no_org_account', now() - interval '1 day' + g * interval '1 second',
+			CASE WHEN g % 2 = 0 THEN now() + interval '1 hour' END,
+			CASE WHEN g % 2 = 1 THEN now() - interval '1 day' + g * interval '1 second' END
+		  FROM generate_series(1, 120) g`)
+	f.exec(`INSERT INTO triggers (id, user_id, project_id, org_id, name, kind, config, enabled, workflow, created_at, updated_at,
+			paused_reason, paused_at)
+		VALUES ('new', 'owner', 'p-f', 'acme', 'new', 'schedule', '{}', false, 'builtin://agent', now(), now(), 'no_org_account', now())`)
+
+	got, err := store.ClaimDuePauseNotices(ctx, f.env.ORM, 100, time.Hour)
+	require.NoError(t, err)
+	require.Len(t, got, 1, "only the newer pause is due")
+	assert.Equal(t, "new", got[0].ID)
+
+	// Every running one's lease passes: they are due again, after a pause
+	// never claimed, and never the refused.
+	f.exec(`UPDATE triggers SET pause_notice_next_at = now() - interval '1 minute' WHERE id LIKE 'old-%' AND pause_notice_next_at IS NOT NULL`)
+	f.exec(`INSERT INTO triggers (id, user_id, project_id, org_id, name, kind, config, enabled, workflow, created_at, updated_at,
+			paused_reason, paused_at)
+		VALUES ('newest', 'owner', 'p-f', 'acme', 'newest', 'schedule', '{}', false, 'builtin://agent', now(), now(), 'no_org_account', now())`)
+	got, err = store.ClaimDuePauseNotices(ctx, f.env.ORM, 10, time.Hour)
+	require.NoError(t, err)
+	require.Len(t, got, 10)
+	claimed := map[string]bool{}
+	for _, tr := range got {
+		claimed[tr.ID] = true
+		var n int
+		_, _ = fmt.Sscanf(tr.ID, "old-%d", &n)
+		assert.True(t, tr.ID == "newest" || n%2 == 0, "never a refused pause: %s", tr.ID)
+	}
+	assert.True(t, claimed["newest"], "a never-claimed pause goes first")
+}
+
+// The no-org-account pauses: listed to their owner and to the admins of their
+// org, a pause until its notice is confirmed for exactly that pause (a resume,
+// or another reason's pause, lists nothing); and an owner's org triggers that
+// may spend their own accounts (any, or unstamped).
+func TestTriggerNoticeQueries(t *testing.T) {
+	f := newCredFixture(t)
+	ctx := context.Background()
+	f.exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active) VALUES ('p-n', 'owner', 'p', '/tmp/p', now(), now(), now()) ON CONFLICT DO NOTHING`)
+	add := func(id, user, org string, funding any) {
+		f.exec(`INSERT INTO triggers (id, user_id, project_id, org_id, name, kind, config, enabled, workflow, created_at, updated_at, unattended_funding)
+			VALUES ($1, $2, 'p-n', NULLIF($3, ''), $1, 'schedule', '{}', true, 'builtin://agent', now(), now(), $4)`, id, user, org, funding)
+	}
+	add("t-owned", "owner", "acme", "org_only")
+	add("t-team", "teammate", "acme", "org_only")
+	add("t-beta", "stranger", "beta", "org_only")
+	add("t-any", "owner", "acme", "any")
+	add("t-null", "owner", "acme", nil)
+	add("t-noorg", "owner", "", nil)
+	for _, id := range []string{"t-owned", "t-team", "t-beta"} {
+		require.NoError(t, store.PauseTrigger(ctx, f.env.ORM, id, "no_org_account"))
+	}
+	require.NoError(t, store.PauseTrigger(ctx, f.env.ORM, "t-any", "creator_left_org"))
+
+	ids := func(ts []*core.Trigger, err error) []string {
+		t.Helper()
+		require.NoError(t, err)
+		var out []string
+		for _, tr := range ts {
+			out = append(out, tr.ID)
+		}
+		sort.Strings(out)
+		return out
+	}
+	assert.Equal(t, []string{"t-owned"}, ids(store.ListNoOrgAccountPauses(ctx, f.env.ORM, "owner", nil)))
+	assert.Equal(t, []string{"t-owned", "t-team"}, ids(store.ListNoOrgAccountPauses(ctx, f.env.ORM, "owner", []string{"acme"})))
+
+	// The sweep claims what is owed and due; a claim holds for its lease.
+	claim := func() []string {
+		t.Helper()
+		f.exec(`UPDATE triggers SET pause_notice_next_at = NULL`) // every pause due again
+		return ids(store.ClaimDuePauseNotices(ctx, f.env.ORM, 10, time.Hour))
+	}
+	assert.Equal(t, []string{"t-beta", "t-owned", "t-team"}, claim())
+	assert.Empty(t, ids(store.ClaimDuePauseNotices(ctx, f.env.ORM, 10, time.Hour)), "claimed: not due again within the lease")
+	owned, err := store.GetTrigger(ctx, f.env.ORM, "t-owned")
+	require.NoError(t, err)
+	require.NotNil(t, owned.PausedAt)
+	require.NoError(t, store.ConfirmPauseNotice(ctx, f.env.ORM, "t-owned", owned.PausedAt.Add(-time.Second)))
+	assert.Contains(t, claim(), "t-owned", "a confirm of another pause is not this one's")
+	require.NoError(t, store.ConfirmPauseNotice(ctx, f.env.ORM, "t-owned", *owned.PausedAt))
+	assert.Equal(t, []string{"t-beta", "t-team"}, claim())
+
+	// Refused for good: never claimed again for that pause; a new pause is
+	// owed its own notice, due at once (PauseTrigger clears the claim).
+	beta, err := store.GetTrigger(ctx, f.env.ORM, "t-beta")
+	require.NoError(t, err)
+	require.NoError(t, store.RefusePauseNotice(ctx, f.env.ORM, "t-beta", *beta.PausedAt))
+	assert.Equal(t, []string{"t-team"}, claim())
+	f.exec(`UPDATE triggers SET pause_notice_next_at = now() + interval '1 hour' WHERE id = 't-beta'`)
+	require.NoError(t, store.PauseTrigger(ctx, f.env.ORM, "t-beta", "no_org_account"))
+	assert.Contains(t, ids(store.ClaimDuePauseNotices(ctx, f.env.ORM, 10, time.Hour)), "t-beta", "a new pause is due now")
+
+	assert.Equal(t, []string{"t-any", "t-null"}, ids(store.ListPersonallyFundedTriggers(ctx, f.env.ORM, "owner")))
 }

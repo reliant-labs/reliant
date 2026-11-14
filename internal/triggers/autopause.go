@@ -31,6 +31,17 @@ import (
 type AutoPause struct {
 	store     TriggerPauser
 	schedules ScheduleClient
+	// noOrgAccount is told of each pause RefuseNoOrgAccount makes, with the
+	// model none of the org's accounts could run (WithNoOrgAccountPause).
+	noOrgAccount func(ctx context.Context, triggerID, model string)
+}
+
+// WithNoOrgAccountPause has fn told of each pause for want of an org account,
+// once, after it is written: the worker emails the org's owners and admins
+// from it (control-plane docs/design/org-provider-accounts.md §11.4).
+func (p *AutoPause) WithNoOrgAccountPause(fn func(ctx context.Context, triggerID, model string)) *AutoPause {
+	p.noOrgAccount = fn
+	return p
 }
 
 // NewAutoPause pauses through store, and pauses the trigger's Temporal
@@ -117,6 +128,13 @@ func (p *AutoPause) RefuseNoOrgAccount(ctx context.Context, history FiringHistor
 	}
 	logging.InfoContext(ctx, "[triggers] paused a trigger that none of its organization's accounts can run",
 		"trigger_id", t.ID, "user_id", t.UserID, "org_id", ptr.From(t.OrgID), "model", model)
+	if p.noOrgAccount != nil {
+		notifyModel := ""
+		if refused != nil {
+			notifyModel = refused.Model
+		}
+		p.noOrgAccount(ctx, t.ID, notifyModel)
+	}
 	if p.schedules != nil {
 		err = p.schedules.GetHandle(ctx, ScheduleID(t.ID)).Pause(ctx, client.SchedulePauseOptions{Note: noOrgAccountPausedDetail})
 		if err != nil && !isNotFound(err) {

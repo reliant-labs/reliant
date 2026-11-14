@@ -331,8 +331,15 @@ type Trigger struct {
 	// (TriggerPausedCreatorLeftOrg); empty when it is enabled or a person
 	// paused it. Meaningful only while Enabled is false: enabling clears it.
 	PausedReason string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// PausedAt is when the system last paused it (with PausedReason), nil
+	// when it is enabled, a person paused it, or a release before the column
+	// paused it. Read-only: only PauseTrigger writes it.
+	PausedAt *time.Time
+	// PauseNoticeFor is the PausedAt whose email to the org's owners and
+	// admins was started (TriggerPausedNoOrgAccount pauses only). Read-only.
+	PauseNoticeFor *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 
 	// ProjectName and DaemonName are read-only display names joined in by
 	// GetTrigger and ListTriggers. Empty when the project or daemon row is

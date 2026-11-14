@@ -1,6 +1,7 @@
-// VENDORED from reliant-labs/control-plane at 3eeb9637c83600876ae9ce60a95b8933c426af22 (main, #2701):
+// VENDORED from reliant-labs/control-plane at 8cc4ff246 (the merge commit of #2755):
 // proto/services/org_notify_internal/v1/org_notify_internal.proto. Do not edit; re-vendor from control-plane main.
-// TestNotifyOrgKeyRejected_SpeaksTheVendoredContract holds the client to it.
+// TestNotifyOrgKeyRejected_SpeaksTheVendoredContract and
+// TestNotifyOrgAutomationNoOrgAccount_SpeaksTheVendoredContract hold the client to it.
 syntax = "proto3";
 
 // OrgNotifyInternalService emails an organization's owners and admins about
@@ -71,6 +72,7 @@ message NotifyOrgAdminsRequest {
   // The notice. Exactly one kind is set.
   oneof notice {
     OrgProviderKeyRejected org_provider_key_rejected = 3;
+    OrgAutomationNoOrgAccount org_automation_no_org_account = 4;
   }
 }
 
@@ -89,6 +91,25 @@ message OrgProviderKeyRejected {
   string key_hint = 4;
   // Why the provider refused it, as reliant recorded. Optional.
   string reason = 5;
+}
+
+// OrgAutomationNoOrgAccount: an automation that may run only on the org's own
+// AI accounts was paused because none of them could run its model
+// (docs/design/org-provider-accounts.md §11.4). An owner or admin adds an org
+// API key or enables Reliant credits; its owner resumes it. Deduplicated per
+// automation.
+message OrgAutomationNoOrgAccount {
+  // reliant's triggers id of the automation: the subject the notice is
+  // deduplicated by.
+  string trigger_id = 1;
+  // The automation's name.
+  string automation = 2;
+  // The model none of the org's accounts could run, as reliant names it.
+  // Optional.
+  string model = 3;
+  // The automation's owner (users.id), named in the email when they are a
+  // live member of the org. Optional.
+  string owner_user_id = 4;
 }
 
 message NotifyOrgAdminsResponse {
