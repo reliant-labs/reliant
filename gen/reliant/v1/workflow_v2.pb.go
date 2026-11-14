@@ -6204,8 +6204,14 @@ type CallLLMOutput struct {
 	// request to a different account of the same provider can drop reasoning the
 	// new account cannot verify.
 	ProviderAccountId string `protobuf:"bytes,20,opt,name=provider_account_id,json=providerAccountId,proto3" json:"provider_account_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// TraceParent is this turn's span (invoke_agent) as a W3C traceparent. It
+	// is recorded here — in workflow history — so the execute_tools that runs
+	// this turn's tool calls, on whichever worker it lands, opens each call's
+	// span under the turn that asked for it (internal/telemetry/ai_spans.go).
+	// Empty when the turn was not traced.
+	TraceParent   string `protobuf:"bytes,21,opt,name=trace_parent,json=traceParent,proto3" json:"trace_parent,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CallLLMOutput) Reset() {
@@ -6360,6 +6366,13 @@ func (x *CallLLMOutput) GetCapabilities() *ToolCapabilities {
 func (x *CallLLMOutput) GetProviderAccountId() string {
 	if x != nil {
 		return x.ProviderAccountId
+	}
+	return ""
+}
+
+func (x *CallLLMOutput) GetTraceParent() string {
+	if x != nil {
+		return x.TraceParent
 	}
 	return ""
 }
@@ -9460,7 +9473,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12\x1a\n" +
-	"\bredacted\x18\x03 \x01(\tR\bredacted\"\xb3\a\n" +
+	"\bredacted\x18\x03 \x01(\tR\bredacted\"\xe6\a\n" +
 	"\rCallLLMOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12#\n" +
 	"\rresponse_text\x18\x02 \x01(\tR\fresponseText\x126\n" +
@@ -9493,7 +9506,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\fcapabilities\x18\x13 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesB\x0e\x82\xb5\x18\n" +
 	"Z\badvancedR\fcapabilities\x12>\n" +
 	"\x13provider_account_id\x18\x14 \x01(\tB\x0e\x82\xb5\x18\n" +
-	"Z\badvancedR\x11providerAccountId\"\xce\x05\n" +
+	"Z\badvancedR\x11providerAccountId\x121\n" +
+	"\ftrace_parent\x18\x15 \x01(\tB\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\vtraceParent\"\xce\x05\n" +
 	"\x10ToolCapabilities\x12\x18\n" +
 	"\aoffered\x18\x01 \x03(\tR\aoffered\x12!\n" +
 	"\floadable_all\x18\x02 \x01(\bR\vloadableAll\x12\x1a\n" +

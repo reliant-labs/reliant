@@ -55,6 +55,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.47.0
 	go.temporal.io/api v1.63.5
 	go.temporal.io/sdk v1.50.0
+	go.temporal.io/sdk/contrib/opentelemetry v0.8.1
 	golang.org/x/image v0.45.0
 	golang.org/x/mod v0.42.0
 	golang.org/x/net v0.62.0
@@ -326,7 +327,6 @@ require (
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	go.opentelemetry.io/otel/sdk/log v1.47.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.1 // indirect
-	go.temporal.io/sdk/contrib/opentelemetry v0.8.1 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect

@@ -25,6 +25,7 @@ func SaveWorkflowCheckpoint(ctx context.Context, db orm.Context, cp *core.Workfl
 			NodeID:        cp.NodeID,
 			LoopIteration: cp.LoopIteration,
 			CatalogPin:    checkpointPin(cp.CatalogPin),
+			RunID:         checkpointPin(cp.RunID),
 		}).
 		Value(WorkflowCheckpointFieldUpdatedAt, "NOW()").
 		On("CONFLICT (workflow_id) DO UPDATE").
@@ -32,6 +33,7 @@ func SaveWorkflowCheckpoint(ctx context.Context, db orm.Context, cp *core.Workfl
 		Set("node_id = EXCLUDED.node_id").
 		Set("loop_iteration = EXCLUDED.loop_iteration").
 		Set("catalog_pin = EXCLUDED.catalog_pin").
+		Set("run_id = EXCLUDED.run_id").
 		Set("updated_at = NOW()").
 		Returning("NULL").
 		Exec(ctx)
@@ -54,6 +56,7 @@ func LoadWorkflowCheckpoint(ctx context.Context, db orm.Context, workflowID stri
 		NodeID:        row.NodeID,
 		LoopIteration: row.LoopIteration,
 		CatalogPin:    deref(row.CatalogPin),
+		RunID:         deref(row.RunID),
 		UpdatedAt:     row.UpdatedAt,
 	}, nil
 }
