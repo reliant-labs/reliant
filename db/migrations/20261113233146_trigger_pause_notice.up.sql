@@ -7,12 +7,13 @@
 -- incident an automation paused for want of an org account is announced by
 -- (control-plane docs/design/org-provider-accounts.md §11.4), to its owner
 -- and the org's admins in the inbox, and by email to the admins.
--- pause_notice_for records that Temporal accepted that email's workflow for
--- exactly that pause; a no_org_account pause whose paused_at it does not
--- equal (NULL included) still has its email to start.
+-- pause_notice_for records that that email was delivered for exactly that
+-- pause (sent, already sent, or nobody to send it to); a no_org_account pause
+-- whose paused_at it does not equal (NULL included) still has its email to
+-- deliver.
 
 ALTER TABLE triggers ADD COLUMN paused_at timestamptz;
 ALTER TABLE triggers ADD COLUMN pause_notice_for timestamptz;
 
 COMMENT ON COLUMN triggers.paused_at IS 'When the system last paused the trigger (with paused_reason); meaningful only while enabled is false and paused_reason is set.';
-COMMENT ON COLUMN triggers.pause_notice_for IS 'The paused_at whose email to the org''s owners and admins Temporal accepted (no_org_account pauses only); a pause it does not equal still has its notice to start.';
+COMMENT ON COLUMN triggers.pause_notice_for IS 'The paused_at whose email to the org''s owners and admins was delivered (no_org_account pauses only); a pause it does not equal still has its notice to deliver.';

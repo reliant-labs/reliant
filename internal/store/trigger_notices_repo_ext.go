@@ -47,10 +47,10 @@ func ListNoOrgAccountPauses(ctx context.Context, db orm.Context, userID string, 
 	return triggersToCore(rows)
 }
 
-// ListUnstartedPauseNotices returns up to limit triggers paused for want of an
-// org account whose email to the org's admins was never confirmed started
+// ListUndeliveredPauseNotices returns up to limit triggers paused for want of an
+// org account whose email to the org's admins was never confirmed delivered
 // (pause_notice_for is not their paused_at), oldest pause first.
-func ListUnstartedPauseNotices(ctx context.Context, db orm.Context, limit int) ([]*core.Trigger, error) {
+func ListUndeliveredPauseNotices(ctx context.Context, db orm.Context, limit int) ([]*core.Trigger, error) {
 	var rows []*Trigger
 	if err := noOrgAccountPause(db.Bun().NewSelect().Model(&rows)).
 		Where("pause_notice_for IS DISTINCT FROM paused_at").
@@ -61,7 +61,8 @@ func ListUnstartedPauseNotices(ctx context.Context, db orm.Context, limit int) (
 }
 
 // ConfirmPauseNotice records that the email about trigger id's pause at
-// pausedAt was accepted by Temporal. It writes nothing when the trigger has
+// pausedAt was delivered: the control plane sent it, or had already sent it
+// (deduplicated), or there is no one to send it to. It writes nothing when the trigger has
 // been resumed or paused again since: that pause's notice is its own.
 func ConfirmPauseNotice(ctx context.Context, db orm.Context, id string, pausedAt time.Time) error {
 	_, err := db.Bun().NewRaw(`UPDATE triggers SET pause_notice_for = paused_at

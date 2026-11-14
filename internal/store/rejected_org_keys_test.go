@@ -153,14 +153,14 @@ func TestTriggerNoticeQueries(t *testing.T) {
 	assert.Equal(t, []string{"t-owned"}, ids(store.ListNoOrgAccountPauses(ctx, f.env.ORM, "owner", nil)))
 	assert.Equal(t, []string{"t-owned", "t-team"}, ids(store.ListNoOrgAccountPauses(ctx, f.env.ORM, "owner", []string{"acme"})))
 
-	assert.Equal(t, []string{"t-beta", "t-owned", "t-team"}, ids(store.ListUnstartedPauseNotices(ctx, f.env.ORM, 10)))
+	assert.Equal(t, []string{"t-beta", "t-owned", "t-team"}, ids(store.ListUndeliveredPauseNotices(ctx, f.env.ORM, 10)))
 	owned, err := store.GetTrigger(ctx, f.env.ORM, "t-owned")
 	require.NoError(t, err)
 	require.NotNil(t, owned.PausedAt)
 	require.NoError(t, store.ConfirmPauseNotice(ctx, f.env.ORM, "t-owned", owned.PausedAt.Add(-time.Second)))
-	assert.Contains(t, ids(store.ListUnstartedPauseNotices(ctx, f.env.ORM, 10)), "t-owned", "a confirm of another pause is not this one's")
+	assert.Contains(t, ids(store.ListUndeliveredPauseNotices(ctx, f.env.ORM, 10)), "t-owned", "a confirm of another pause is not this one's")
 	require.NoError(t, store.ConfirmPauseNotice(ctx, f.env.ORM, "t-owned", *owned.PausedAt))
-	assert.Equal(t, []string{"t-beta", "t-team"}, ids(store.ListUnstartedPauseNotices(ctx, f.env.ORM, 10)))
+	assert.Equal(t, []string{"t-beta", "t-team"}, ids(store.ListUndeliveredPauseNotices(ctx, f.env.ORM, 10)))
 
 	assert.Equal(t, []string{"t-any", "t-null"}, ids(store.ListPersonallyFundedTriggers(ctx, f.env.ORM, "owner")))
 }

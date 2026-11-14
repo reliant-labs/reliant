@@ -370,8 +370,15 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	if cfg.OrgAdmins != nil {
 		pauseAdmins = cfg.OrgAdmins
 	}
-	w.RegisterActivityWithOptions(pauseNotices{admins: pauseAdmins}.Notify, activity.RegisterOptions{
+	pauses := pauseNotices{admins: pauseAdmins}
+	if cfg.Database != nil {
+		pauses.store = cfg.Database
+	}
+	w.RegisterActivityWithOptions(pauses.Notify, activity.RegisterOptions{
 		Name: NotifyOrgAutomationNoOrgAccountActivityName,
+	})
+	w.RegisterActivityWithOptions(pauses.Confirm, activity.RegisterOptions{
+		Name: ConfirmPauseNoticeActivityName,
 	})
 
 	// Moving a project to another org: the saga is pure orchestration; its
@@ -402,7 +409,8 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 
 	out := newWorker(w, fatal)
 	// Rejected org keys whose notice never started (a Temporal outage at the
-	// rejection) are started here, where the notice's workflow runs.
+	// rejection), and paused automations whose email was never delivered, are
+	// started here, where the notices' workflows run.
 	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
 		out.background = append(out.background, func(ctx context.Context) {
 			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval,

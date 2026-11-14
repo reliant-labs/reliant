@@ -4518,13 +4518,13 @@ func (r *Repo) ListNoOrgAccountPauses(ctx context.Context, userID string, adminO
 	return store.ListNoOrgAccountPauses(ctx, r.ORM(), userID, adminOrgIDs)
 }
 
-// ListUnstartedPauseNotices returns the no-org-account pauses whose email was never confirmed
-// started (store.ListUnstartedPauseNotices).
-func (r *Repo) ListUnstartedPauseNotices(ctx context.Context, limit int) ([]*core.Trigger, error) {
-	return store.ListUnstartedPauseNotices(ctx, r.ORM(), limit)
+// ListUndeliveredPauseNotices returns the no-org-account pauses whose email was never confirmed
+// delivered (store.ListUndeliveredPauseNotices).
+func (r *Repo) ListUndeliveredPauseNotices(ctx context.Context, limit int) ([]*core.Trigger, error) {
+	return store.ListUndeliveredPauseNotices(ctx, r.ORM(), limit)
 }
 
-// ConfirmPauseNotice records that a no-org-account pause's email was started (store.ConfirmPauseNotice).
+// ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
 func (r *Repo) ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
 	return store.ConfirmPauseNotice(ctx, r.ORM(), triggerID, pausedAt)
 }
