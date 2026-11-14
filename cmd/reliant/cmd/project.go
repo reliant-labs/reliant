@@ -157,6 +157,39 @@ RELIANT_TOKEN or the login 'reliant auth login' stored for that server.`,
 	return cmd
 }
 
+// projectDaemonLister is the slice of the ProjectService client that
+// checkProjectOnDaemon needs; reliantv1connect.ProjectServiceClient satisfies it.
+type projectDaemonLister interface {
+	ListProjectDaemons(context.Context, *connect.Request[reliantv1.ListProjectDaemonsRequest]) (*connect.Response[reliantv1.ListProjectDaemonsResponse], error)
+}
+
+// checkProjectOnDaemon refuses `workflow run --project-id --daemon` unless the
+// project is checked out on that machine. Only --project-path looks a folder
+// up, or attaches it, on the named machine; a project id names a project
+// wherever it already is, so a run sent to a machine that does not hold it
+// could only fail once it touched the project.
+func checkProjectOnDaemon(ctx context.Context, client projectDaemonLister, projectID, daemonID string) error {
+	resp, err := client.ListProjectDaemons(ctx, connect.NewRequest(&reliantv1.ListProjectDaemonsRequest{}))
+	if err != nil {
+		return fmt.Errorf("checking that project %s is on machine %s: %w", projectID, daemonID, err)
+	}
+	for _, pd := range resp.Msg.GetProjectDaemons() {
+		if pd.GetProjectId() != projectID || pd.GetDaemonId() != daemonID {
+			continue
+		}
+		switch pd.GetInstallState() {
+		case reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_INSTALLED,
+			// Rows written before install_state existed read as installed.
+			reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_UNSPECIFIED:
+			return nil
+		}
+		return fmt.Errorf("project %s is not ready on machine %s (%s): wait for it to finish, or pass --project-path to attach the folder there",
+			projectID, daemonID, pd.GetInstallState())
+	}
+	return fmt.Errorf("project %s is not on machine %s: pass --project-path with the folder on that machine (it is looked up or attached there), or drop --daemon to run on the project's own machine",
+		projectID, daemonID)
+}
+
 // projectResolverClient is the narrow slice of the ProjectService client that
 // project resolution needs. Declaring it locally keeps resolveProjectID unit
 // testable with a small fake — reliantv1connect.ProjectServiceClient satisfies
@@ -178,11 +211,18 @@ func newProjectServiceClient(conn *connection) reliantv1connect.ProjectServiceCl
 // connection's server, creating the project if needed. This is the entry point
 // 'workflow run --project-path' calls.
 func resolveProjectPathToID(ctx context.Context, conn *connection, path string) (string, error) {
+	return resolveProjectPathToIDOn(ctx, conn, path, "")
+}
+
+// resolveProjectPathToIDOn is resolveProjectPathToID for the folder on one
+// machine (daemonID; "" is the user's default machine): the project is found,
+// attached or created there (CreateProjectRequest.daemon_id).
+func resolveProjectPathToIDOn(ctx context.Context, conn *connection, path, daemonID string) (string, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return "", fmt.Errorf("resolving project path: %w", err)
 	}
-	return resolveProjectID(ctx, newProjectServiceClient(conn), absPath)
+	return resolveProjectIDOn(ctx, newProjectServiceClient(conn), absPath, daemonID)
 }
 
 // resolveProjectID maps an absolute path to a project ID: it returns the ID of
@@ -199,7 +239,16 @@ func resolveProjectPathToID(ctx context.Context, conn *connection, path string) 
 // It also closes the find-then-create race that AlreadyExists existed to
 // paper over.
 func resolveProjectID(ctx context.Context, client projectResolverClient, absPath string) (string, error) {
+	return resolveProjectIDOn(ctx, client, absPath, "")
+}
+
+// resolveProjectIDOn is resolveProjectID on the machine daemonID ("" is the
+// user's default machine, as resolveProjectID).
+func resolveProjectIDOn(ctx context.Context, client projectResolverClient, absPath, daemonID string) (string, error) {
 	req := &reliantv1.CreateProjectRequest{Name: filepath.Base(absPath), Path: absPath}
+	if daemonID != "" {
+		req.DaemonId = &daemonID
+	}
 	resp, err := client.CreateProject(ctx, connect.NewRequest(req))
 	if err == nil {
 		return resp.Msg.GetProject().GetId(), nil
