@@ -69,7 +69,6 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEven
 		Id:               t.ID,
 		Name:             t.Name,
 		ProjectId:        t.ProjectID,
-		OrgId:            t.OrgID,
 		WorktreeId:       t.WorktreeID,
 		Enabled:          t.Enabled,
 		Workflow:         t.Workflow,

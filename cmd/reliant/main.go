@@ -4,7 +4,6 @@ package main
 import (
 	"github.com/reliant-labs/reliant/cmd/reliant/cmd"
 	"github.com/reliant-labs/reliant/internal/credsandbox"
-	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/pid1"
 )
@@ -22,10 +21,6 @@ func main() {
 	// A daemon runs each heavy command under this binary as its slot wrapper
 	// (`reliant __heavy-slot …`); that process is the wrapper, not the CLI.
 	heavyjob.Dispatch()
-
-	// An agent's `gh pr create` runs through this binary (`reliant
-	// __gh-shim …`), which names the agent's chat in the pull request body.
-	ghshim.Dispatch()
 
 	cmd.Execute()
 }

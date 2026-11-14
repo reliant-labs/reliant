@@ -6,8 +6,7 @@
  *
  *   header       title, star, source tag; one meta line (where it came from,
  *                version and editor, panels, the environments it is about);
- *                actions — release: History, Save as copy; built-in: Save
- *                as copy (the platform defines it, so it has no history); workspace:
+ *                actions — release: History, Save as copy; workspace:
  *                History, Promote to code, Edit layout, Add panel, More
  *                (save a copy, archive).
  *   variables    env (the console's own scope: changing it here changes it
@@ -90,7 +89,6 @@ import {
   rangeMs,
   refreshMs,
   REFRESH_INTERVALS,
-  isStandardBuiltinRef,
   spanOf,
   type CompareMode,
   type CompareTarget,
@@ -164,9 +162,6 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const consoleExplore = useExploreHref();
 
   const doc = useDashboard(orgId, dashRef, dashRef.kind === "builtin" ? undefined : search.version, dashRef.kind === "builtin" ? undefined : search.release);
-  // An organization view is a typed view with no panels to run; a project's
-  // standard built-in is a spec over its data, read like a release dashboard.
-  const orgView = dashRef.kind === "builtin" && !isStandardBuiltinRef(dashRef);
   // The demo's reason first (obsReadOnly.tsx): there, nobody can, admin or not.
   const obsLock = useObsReadOnly();
   const readOnlyReason = obsLock.reason;
@@ -208,10 +203,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const hrefs = useMemo(() => (orgScoped ? orgDashboardHrefs(consoleHrefs, orgPick) : consoleHrefs), [orgScoped, consoleHrefs, orgPick]);
   const exploreLink = useMemo(() => (orgScoped ? orgExploreHref(orgPick) : consoleExplore), [orgScoped, orgPick, consoleExplore]);
   const scope = useMemo<ObsScope | null>(() => {
-    if (!orgId || unrecorded || orgRosterBlocked || orgView) return null;
+    if (!orgId || unrecorded || orgRosterBlocked || dashRef.kind === "builtin") return null;
     if (platform) return { orgId, envIds: [], filters: [], platformScope: true };
     return orgScoped ? orgQueryScope(orgId, orgPick) : { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] };
-  }, [orgId, project, envId, unrecorded, orgRosterBlocked, platform, orgScoped, orgPick, orgView]);
+  }, [orgId, project, envId, unrecorded, orgRosterBlocked, platform, orgScoped, orgPick, dashRef.kind]);
 
   // Recently viewed: once per dashboard opened, and quietly — a view that
   // could not be recorded changes nothing the reader can see.
@@ -237,9 +232,9 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   // A platform dashboard belongs to no environment: the environment the top
   // bar names (hidden for it) must not lend it that environment's alert bands
   // or its last release to compare with. Previous-period comparison stays.
-  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!spec && !!envId && !platform && !orgRosterBlocked && !orgView });
+  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!spec && !!envId && !platform && !orgRosterBlocked && dashRef.kind !== "builtin" });
   // Both wait for the document: until it loads, a platform dashboard is not yet known to be one.
-  const history = useAlertHistory(orgView || !spec || platform || orgRosterBlocked ? null : orgId, range, envId ?? undefined);
+  const history = useAlertHistory(dashRef.kind === "builtin" || !spec || platform || orgRosterBlocked ? null : orgId, range, envId ?? undefined);
   const scopeEnvIds = useMemo(
     () => (envId ? [envId] : orgScoped && orgPick.ids.length ? orgPick.ids : environments.map((candidate) => candidate.id)),
     [envId, environments, orgScoped, orgPick.ids]
@@ -356,7 +351,6 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
           {() => (
           <DashboardPanelCard
             panel={panel}
-            dashboardId={spec.id}
             queryPanel={viewerQuery(spec, panel, search).panel}
             layout={
               layout
@@ -510,14 +504,14 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
               }}
               testId="dashboard-star"
             />
-            <SourceTag source={summary.source} standard={isStandardBuiltinRef(dashRef)} />
+            <SourceTag source={summary.source} />
             {viewingOld && <Tag tone="warning">v{search.version}</Tag>}
           </>
         }
         meta={<DashboardMeta summary={summary} panels={spec.panels.length} environments={environments} hrefs={hrefs} marks={marks} hasBands={bands.length > 0} />}
         actions={
           <>
-            {dashRef.kind !== "builtin" && <HistoryMenu orgId={orgId} dashRef={dashRef} summary={summary} hrefs={hrefs} search={search} />}
+            <HistoryMenu orgId={orgId} dashRef={dashRef} summary={summary} hrefs={hrefs} search={search} />
             {summary.readOnly ? (
               <button
                 type="button"
@@ -598,8 +592,6 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
               )}
               : edit it there, or save a copy to change it here.
             </>
-          ) : summary.source === "builtin" ? (
-            <>Built in for every project, over this project&apos;s data: save a copy to change it.</>
           ) : (
             <>Generated by forge from your services on every release: save a copy to change it.</>
           )}
@@ -742,7 +734,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
       {dialog === "copy" && (
         <SaveCopyDialog
           sourceTitle={summary.title}
-          what={!summary.readOnly ? "dashboard" : summary.source === "repo" ? "repo dashboard" : summary.source === "builtin" ? "built-in dashboard" : "generated dashboard"}
+          what={summary.readOnly ? (summary.source === "repo" ? "repo dashboard" : "generated dashboard") : "dashboard"}
           env={env}
           pending={copy.isPending}
           error={copy.error}
@@ -1099,7 +1091,6 @@ interface PanelLayoutControls {
 
 function DashboardPanelCard({
   panel,
-  dashboardId,
   queryPanel,
   scope,
   dataContext,
@@ -1113,8 +1104,6 @@ function DashboardPanelCard({
   layout,
 }: {
   panel: Panel;
-  /** Names the panel's reads in control-plane's query_log (Forge-Panel). */
-  dashboardId: string;
   queryPanel: Panel;
   scope: ObsScope | null;
   dataContext?: PanelDataContext;
@@ -1136,7 +1125,7 @@ function DashboardPanelCard({
   const range = widening?.range ?? rangeOfCard;
   // A panel reads only once it is near the viewport: twenty panels do not all queue at mount.
   const [bodyRef, near] = useNearViewport();
-  const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near, dashboardId });
+  const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near });
   // Not yet near is "not loaded yet", not "no data".
   const query = near || !panelRunsQuery(queryPanel.kind) ? rawQuery : { ...rawQuery, isLoading: true };
   // A sql panel compares only the figures it draws: its statement's windows
@@ -1152,7 +1141,6 @@ function DashboardPanelCard({
       target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : target.mode === "period" ? () => rangeMs(range) : undefined,
     refetchInterval: refreshEvery,
     enabled: comparable && near,
-    dashboardId,
   });
   // A sql figure's sparkline: its trendSql, over the same window.
   const trendPanel = useMemo(() => sqlTrendPanel(queryPanel), [queryPanel]);

@@ -124,7 +124,7 @@ func TestMergeGateRunsGenerateAloneOnASmallHost(t *testing.T) {
 	// is waited for even on failure: cleanup removes the scratch checkouts.
 	for _, want := range []string{
 		`if [ "$dgen" = true ] && [ "$fail" = 0 ]; then`,
-		"\nfor p in ${pids[@]+\"${pids[@]}\"}; do wait \"$p\" || fail=1; done\n",
+		"\nfor p in \"${pids[@]}\"; do wait \"$p\" || fail=1; done\n",
 	} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("merge-gate must contain %q", want)

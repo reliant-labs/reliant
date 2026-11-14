@@ -12,14 +12,13 @@ import (
 )
 
 // graph is one node graph of a definition: the workflow's own, an inline
-// loop or sub-workflow body, or a terminal handler (on_failure, finally).
+// loop or sub-workflow body, or the on_failure handler.
 type graph struct {
 	wf *reliantv1.Workflow
 	// prefix qualifies the graph's node ids ("", "fix_loop.", "on_failure.").
 	prefix string
-	// onFailure is a terminal handler (on_failure or finally) or a body
-	// inside one: its steps run once, after the run has ended, with nowhere
-	// left to route an error.
+	// onFailure is the handler or a body inside it: its steps run once, after
+	// the run has already failed, with nowhere left to route an error.
 	onFailure bool
 }
 
@@ -37,9 +36,6 @@ func graphsOf(wf *reliantv1.Workflow) []graph {
 	walk(wf, "", false)
 	if h := wf.GetOnFailure(); h != nil {
 		walk(h, "on_failure.", true)
-	}
-	if h := wf.GetFinally(); h != nil {
-		walk(h, "finally.", true)
 	}
 	return out
 }

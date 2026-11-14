@@ -1282,19 +1282,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to load project config: %w", err)
 	}
-	if args.GetExcludeSkillCatalog() {
-		if len(model.CelStringListValue(args.GetSkills())) > 0 {
-			return nil, fmt.Errorf("exclude_skill_catalog cannot be combined with nonempty skills")
-		}
-		// The snapshot may be shared across concurrent calls. Filter a shallow
-		// copy so all downstream consumers (announcement, forge auto-preload,
-		// and skill-tool factory) see no catalog without mutating the snapshot.
-		if projectCfg != nil {
-			filtered := *projectCfg
-			filtered.Skills = nil
-			projectCfg = &filtered
-		}
-	}
 
 	// Explicit per-call overrides from workflow args. Zero values mean "use
 	// the model default" — resolveLLMCall (the request-construction path

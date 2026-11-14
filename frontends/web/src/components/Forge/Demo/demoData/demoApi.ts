@@ -3,8 +3,9 @@
 /**
  * The demo console's ObservabilityApi.
  *
- *  - Every shell: shop's story (shopStory.ts, answered by shop/shopApi.ts),
- *    behind the read-only layer (readOnlyApi.ts).
+ *  - Every shell: the sample app's fixtures (the shop graph, the toured trace
+ *    crossing into inventory, dashboards read-only), behind the read-only
+ *    layer (readOnlyApi.ts).
  *  - The public demo host (its Connect transport is forge's mock transport,
  *    demoShellBoot.ts): the reads the `demo` scenario serves on the wire
  *    (DEMO_SCENARIO_RPCS) go through the console's REAL client instead, so
@@ -19,7 +20,8 @@ import { hasControlPlane } from "@/services/controlPlane/config";
 import { controlPlaneObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { isDemoShell } from "@/lib/shell";
 
-import { createShopApi } from "./shop/shopApi";
+import { createDemoFixtures } from "./busyApp";
+import { withDemoWorkloadLedger } from "./workloadScenario";
 import { withReadOnly } from "../../Observability/readOnlyApi";
 import { DEMO_SCENARIO_RPCS, type DemoScenarioMethod } from "./demoScenario";
 
@@ -29,7 +31,7 @@ export interface DemoApiOptions {
 }
 
 export function createDemoApi({ wire = isDemoShell() && hasControlPlane }: DemoApiOptions = {}): ObservabilityApi {
-  const fixtures = createShopApi();
+  const fixtures = withDemoWorkloadLedger(createDemoFixtures());
   if (!wire) return withReadOnly(fixtures);
   const overWire = Object.fromEntries(
     (Object.keys(DEMO_SCENARIO_RPCS) as DemoScenarioMethod[]).map((method) => [method, controlPlaneObservabilityApi[method]]),

@@ -13,7 +13,6 @@ func init() {
 	FieldDescriptions["action.with"] = "Action parameters, keyed as in the action's schema. Values may be literals or {{ }} templates"
 	FieldDescriptions["ask_question.metadata"] = "The questions to ask, as JSON: a questions list, each with question text and its options"
 	FieldDescriptions["call_llm.exclude_ambient_memory"] = "Exclude automatic saved memories (default false); not full context isolation"
-	FieldDescriptions["call_llm.exclude_skill_catalog"] = "Exclude configured skills for this call (default false); rejects skill preloads, does not redact history or restrict other tools"
 	FieldDescriptions["call_llm.model"] = "A model tag (flagship, fast, cheap) or an explicit model ID"
 	FieldDescriptions["call_llm.skills"] = "Skills to preload into this call, by path, so the model starts with their instructions"
 	FieldDescriptions["call_llm.system_prompt"] = "Optional instructions for how the model should behave on this call"

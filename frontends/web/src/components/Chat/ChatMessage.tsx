@@ -36,7 +36,7 @@ import type { Message } from "../../api/client";
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
 import {
-  useChatIdOrActive,
+  useActiveChatId,
   useToolResultsByCallId,
   useToolCallStates,
   useChat,
@@ -278,8 +278,9 @@ function ChatMessageComponent({
   // A slice only ever cuts an assistant message.
   const slice = isUser ? undefined : sliceProp;
   const sliceRole = slice?.role;
+  const activeChatId = useActiveChatId();
   // Prefer chatId from props (command center), fallback to chat navigation store
-  const chatId = useChatIdOrActive(propChatId);
+  const chatId = propChatId || activeChatId;
 
   // PERFORMANCE: Track message render timing
   const renderStartRef = useRef<number | undefined>(undefined);

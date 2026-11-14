@@ -64,11 +64,7 @@ describe("selectProject workspace restore", () => {
 
     expect(useProjectStore.getState().currentProject?.id).toBe(to.id);
     expect(restoreLastWorktree).toHaveBeenCalledWith(to.id, undefined, { isCurrent: expect.any(Function) });
-    // Timed as a restore, not a click (lib/chatOpenInteraction ChatOpenEntry).
-    expect(selectChat).toHaveBeenCalledWith(expect.objectContaining({ id: rememberedChat.id }), {
-      deferPersist: true,
-      openEntry: "restore",
-    });
+    expect(selectChat).toHaveBeenCalledWith(expect.objectContaining({ id: rememberedChat.id }), { deferPersist: true });
   });
 
   it("with restoreWorkspace: false, switches the project only", async () => {

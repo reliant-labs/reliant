@@ -22,8 +22,4 @@ type UserUpdate struct {
 	EntityID       string                   `json:"entity_id"`
 	Data           json.RawMessage          `json:"data"`
 	CreatedAt      time.Time                `json:"created_at"`
-	// OrgID is the org the update is about, stamped when it was stored
-	// (user_updates_stamp_org); nil for one written before orgs, about
-	// nothing of an org, or not yet read back (a live update).
-	OrgID *string `json:"org_id,omitempty"`
 }

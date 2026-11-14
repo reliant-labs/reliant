@@ -134,7 +134,6 @@ func TestRecoveryActivitySevenDayBoundary(t *testing.T) {
 	}
 }
 func TestRecoveryActivityContentResetsDespiteSameStatusAndMtime(t *testing.T) {
-	skipWithoutSafeInspection(t)
 	o, root, c := activityFixture(t)
 	path := filepath.Join(root, "dirty")
 	if err := os.WriteFile(path, []byte("version a"), 0600); err != nil {
@@ -236,7 +235,6 @@ func TestRecoveryActivityStateInsideWorkspaceRefused(t *testing.T) {
 	}
 }
 func TestRecoveryActivitySemanticIndexIgnoresRefresh(t *testing.T) {
-	skipWithoutSafeInspection(t)
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "HEAD"), []byte("ref: refs/heads/test\n"), 0600); err != nil {
 		t.Fatal(err)

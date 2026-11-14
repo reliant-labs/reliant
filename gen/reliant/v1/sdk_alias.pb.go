@@ -178,12 +178,10 @@ type (
 	InboxItem_Recovery                       = sdk.InboxItem_Recovery
 	InboxItem_Storage                        = sdk.InboxItem_Storage
 	InboxItem_WaitingForMachine              = sdk.InboxItem_WaitingForMachine
-	InboxItem_WorktreeReclaim                = sdk.InboxItem_WorktreeReclaim
 	InboxQuestion                            = sdk.InboxQuestion
 	InboxRefusedAutomation                   = sdk.InboxRefusedAutomation
 	InboxStorage                             = sdk.InboxStorage
 	InboxWaitingForMachine                   = sdk.InboxWaitingForMachine
-	InboxWorktreeReclaim                     = sdk.InboxWorktreeReclaim
 	IndexedPreset                            = sdk.IndexedPreset
 	IndexedScenario                          = sdk.IndexedScenario
 	IndexedSkill                             = sdk.IndexedSkill
@@ -441,8 +439,6 @@ type (
 	WorkspaceBranchContext                   = sdk.WorkspaceBranchContext
 	Worktree                                 = sdk.Worktree
 	WorktreeFileChange                       = sdk.WorktreeFileChange
-	WorktreeReclaimProposal                  = sdk.WorktreeReclaimProposal
-	WorktreeReclaimProposals                 = sdk.WorktreeReclaimProposals
 	WorktreeRecovery                         = sdk.WorktreeRecovery
 	WorktreeRecoveryCheckout                 = sdk.WorktreeRecoveryCheckout
 	WorktreeRepoStatus                       = sdk.WorktreeRepoStatus
@@ -539,7 +535,6 @@ const (
 	InboxItemKind_INBOX_ITEM_KIND_STORAGE                                      = sdk.InboxItemKind_INBOX_ITEM_KIND_STORAGE
 	InboxItemKind_INBOX_ITEM_KIND_UNSPECIFIED                                  = sdk.InboxItemKind_INBOX_ITEM_KIND_UNSPECIFIED
 	InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE                          = sdk.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE
-	InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM                             = sdk.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM
 	MessageRole_MESSAGE_ROLE_ASSISTANT                                         = sdk.MessageRole_MESSAGE_ROLE_ASSISTANT
 	MessageRole_MESSAGE_ROLE_SYSTEM                                            = sdk.MessageRole_MESSAGE_ROLE_SYSTEM
 	MessageRole_MESSAGE_ROLE_TOOL                                              = sdk.MessageRole_MESSAGE_ROLE_TOOL

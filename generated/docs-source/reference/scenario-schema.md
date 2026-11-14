@@ -235,7 +235,6 @@ expect:
 | `outputs` | object | No | Outputs specifies expected values for the workflow's declared outputs. |
 | `messages` | object | No | Messages asserts on the messages the run saved to the thread, keyed by |
 | `on_failure` | OnFailureExpectation | No | OnFailure asserts on the workflow's `on_failure` handler: whether it ran |
-| `finally` | FinallyExpectation | No | Finally asserts on the workflow's `finally` handler: whether it ran and |
 
 ---
 

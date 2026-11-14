@@ -111,7 +111,7 @@ const sectionGroups: SectionGroup[] = [
 ];
 
 /**
- * Developer settings (Restart Backend, experimental flags)
+ * Developer settings (Restart Backend, the mock driver, experimental flags)
  * are for people building Reliant: a Vite dev server, or a runtime config
  * that says it is a dev build (an unpackaged Electron app sets isDev). A
  * production web build is neither, so its users never see the section —

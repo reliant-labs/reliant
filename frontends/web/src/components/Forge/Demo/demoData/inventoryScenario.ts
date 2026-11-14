@@ -1,10 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
-/** shop's database (`shop`: customers, products, stock, orders, order_items;
- * shop/database.ts) and identity provider, on the public demo's wire
- * transport. No preview adapter, server, identity provider or credential is
- * involved. A customer's identity subject is deliberately NOT the database
- * primary key.
+/** Synthetic shop inventory, on the public demo's wire transport. No preview
+ * adapter, server, identity provider or credential is involved. IDs are local
+ * fixture references; the subject is deliberately NOT the database primary key.
  */
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { timestampFromMs, ValueSchema } from "@bufbuild/protobuf/wkt";
@@ -19,56 +17,47 @@ import { IdentityService } from "@/gen/controlplane/services/identity/v1/identit
 
 import { completed } from "./demoServiceDefaults";
 import { demoEnvId } from "./demoScope";
-import { shopDatabase, type Cell, type Row } from "./shop/database";
-import { DEMO_DB_TABLES, demoNow } from "./shopStory";
 import { mockService } from "@reliantlabs/forge-web-runtime/mock-transport";
 
+type Cell = string | number | boolean | null;
+type Row = Record<string, Cell>;
 type Column = { name: string; pgType: string; nullable?: boolean; comment?: string };
 const invalid = (message: string): never => { throw new ConnectError(message, Code.InvalidArgument); };
 const missing = (): never => { throw new ConnectError("No such sample resource.", Code.NotFound); };
 
-/** A Postgres timestamptz cell (database.ts pgTime) as epoch ms. */
-const timeOf = (value: string) => Date.parse(/^\d{4}-\d\d-\d\d \d/.test(value) ? value.replace(" ", "T").replace(/\+00$/, "Z") : value);
+export const DEMO_SUBJECTS = ["subject-maya", "subject-jon", "subject-priya"] as const;
+const names = ["Maya Chen", "Jon Rivera", "Priya Shah"];
+export const DEMO_USERS: Row[] = DEMO_SUBJECTS.map((subject, i) => ({
+  id: `customer-${i + 1}`, identity_subject: subject, email: `${["maya", "jon", "priya"][i]}@example.com`,
+  name: names[i], active: i !== 1, created_at: `2026-01-0${i + 1}T12:00:00Z`,
+}));
+const machines: Row[] = ["packing", "catalog", "support"].map((name, i) => ({ id: `machine-${i + 1}`, owner_id: `customer-${i + 1}`, name: `${name}-station`, connected: i !== 1 }));
+const chats: Row[] = Array.from({ length: 123 }, (_, i) => ({
+  id: `chat-${String(i + 1).padStart(3, "0")}`, user_id: `customer-${i % 3 + 1}`, machine_id: `machine-${i % 3 + 1}`,
+  title: ["Where is my order?", "Restock the linen tote", "Update the product catalog"][i % 3],
+  message_count: (i * 7) % 41, archived: i % 5 === 0,
+  closed_at: i % 5 === 0 ? "2026-01-10T12:00:00Z" : null,
+}));
+const inventory: Row[] = Array.from({ length: 32 }, (_, i) => ({
+  id: `sku-${String(i + 1).padStart(3, "0")}`, name: `${["Linen tote", "Ceramic mug", "Desk notebook", "Cotton tee"][i % 4]} / ${i + 1}`,
+  quantity: i * 3, price_cents: 1200 + i * 100, available: i > 0,
+}));
 
-const NULLABLE = new Set(["orders.paid_at"]);
-const COMMENTS: Record<string, string> = {
-  "customers.identity_subject": "forge:identity-subject=id",
-  "stock.reserved": "Units held for paid orders that have not shipped.",
-  "orders.state": "pending, paid, payment_failed, shipped, delivered or cancelled.",
-};
-const PRIMARY_KEY: Record<string, string> = { stock: "sku" };
+const text = (name: string): Column => ({ name, pgType: "text" });
+const fk = (table: string, column: string, refTable: string) => ({ constraint: `${table}_${column}_fkey`, schema: "public", table, columns: [column], refSchema: "public", refTable, refColumns: ["id"] });
+const links = [fk("chats", "user_id", "users"), fk("chats", "machine_id", "machines"), fk("machines", "owner_id", "users")];
+const definitions: { name: string; rows: Row[]; columns: Column[] }[] = [
+  { name: "users", rows: DEMO_USERS, columns: [text("id"), { ...text("identity_subject"), comment: "forge:identity-subject=id" }, text("email"), text("name"), { name: "active", pgType: "boolean" }, { name: "created_at", pgType: "timestamp with time zone" }] },
+  { name: "chats", rows: chats, columns: [text("id"), text("user_id"), text("machine_id"), text("title"), { name: "message_count", pgType: "integer" }, { name: "archived", pgType: "boolean" }, { name: "closed_at", pgType: "timestamp with time zone", nullable: true }] },
+  { name: "machines", rows: machines, columns: [text("id"), text("owner_id"), text("name"), { name: "connected", pgType: "boolean" }] },
+  { name: "inventory", rows: inventory, columns: [text("id"), text("name"), { name: "quantity", pgType: "integer" }, { name: "price_cents", pgType: "integer" }, { name: "available", pgType: "boolean" }] },
+];
 
-const fk = (table: string, column: string, refTable: string, refColumn = "id") => ({ constraint: `${table}_${column}_fkey`, schema: "public", table, columns: [column], refSchema: "public", refTable, refColumns: [refColumn] });
-const links = [fk("orders", "customer_id", "customers"), fk("order_items", "order_id", "orders"), fk("order_items", "sku", "products", "sku"), fk("stock", "sku", "products", "sku")];
-
-/** The `shop` database's tables in one environment, as of the page load (database.ts). */
-const cache = new Map<string, { name: string; rows: Row[]; columns: Column[]; pk: string }[]>();
-function definitionsOf(env: string) {
-  let defs = cache.get(env);
-  if (!defs) {
-    const db = shopDatabase(env, demoNow());
-    defs = DEMO_DB_TABLES.map((t) => ({
-      name: t.name,
-      rows: db[t.name],
-      pk: PRIMARY_KEY[t.name] ?? "id",
-      columns: t.columns.map(([name, pgType]) => ({ name, pgType, ...(NULLABLE.has(`${t.name}.${name}`) ? { nullable: true } : {}), ...(COMMENTS[`${t.name}.${name}`] ? { comment: COMMENTS[`${t.name}.${name}`] } : {}) })),
-    }));
-    cache.set(env, defs);
-  }
-  return defs;
-}
-
-/** The identity provider's users: shop's customers who signed up (the subject is NOT the database primary key). */
-export function demoIdentityUsers(env = "env-dev") {
-  return definitionsOf(env).find((t) => t.name === "customers")!.rows;
-}
-export const DEMO_SUBJECTS = demoIdentityUsers().slice(0, 3).map((row) => String(row.identity_subject));
-
-export function demoDatabaseTables(env = "env-dev"): MessageInitShape<typeof DatabaseTableSchema>[] {
-  return definitionsOf(env).map(({ name, columns, rows, pk }) => ({
+export function demoDatabaseTables(): MessageInitShape<typeof DatabaseTableSchema>[] {
+  return definitions.map(({ name, columns, rows }) => ({
     schema: "public", name, kind: DatabaseTableKind.TABLE, estimatedRows: BigInt(rows.length),
-    comment: `shop's ${name.replace("_", " ")}. Sample data.`, primaryKey: [pk],
-    columns: columns.map((c) => ({ ...c, isPrimaryKey: c.name === pk })),
+    comment: `Synthetic shop ${name}; sample data only.`, primaryKey: ["id"],
+    columns: columns.map((c) => ({ ...c, isPrimaryKey: c.name === "id" })),
     foreignKeys: links.filter((key) => key.table === name), referencedBy: links.filter((key) => key.refTable === name),
   }));
 }
@@ -82,7 +71,7 @@ function authorize(req: { environmentId: string; database: string; confirmEnvId?
 }
 
 function typed(value: string, column: Column): Exclude<Cell, null> {
-  if (column.pgType === "integer" || column.pgType === "bigint") {
+  if (column.pgType === "integer") {
     if (!/^[+-]?\d+$/.test(value) || !Number.isSafeInteger(Number(value))) invalid("Enter a whole number.");
     return Number(value);
   }
@@ -91,7 +80,7 @@ function typed(value: string, column: Column): Exclude<Cell, null> {
     return value === "true";
   }
   if (column.pgType === "timestamp with time zone") {
-    const time = timeOf(value);
+    const time = Date.parse(value);
     if (!Number.isFinite(time)) invalid("Enter a timestamp.");
     return time;
   }
@@ -128,7 +117,7 @@ function predicate(filter: BrowseFilter, columns: Column[]): (row: Row) => boole
   return (row) => {
     const raw = row[c.name];
     if (raw === null) return false; // SQL's UNKNOWN, including NEQ / IN.
-    const lhs = c.pgType === "timestamp with time zone" ? timeOf(String(raw)) : raw;
+    const lhs = c.pgType === "timestamp with time zone" ? Date.parse(String(raw)) : raw;
     switch (op) {
       case BrowseFilterOp.EQ: return lhs === rhs[0];
       case BrowseFilterOp.NEQ: return lhs !== rhs[0];
@@ -144,11 +133,11 @@ function predicate(filter: BrowseFilter, columns: Column[]): (row: Row) => boole
 
 function browse(req: BrowseTableRequest) {
   authorize(req);
-  const table = definitionsOf(req.environmentId).find((t) => `public.${t.name}` === req.table) ?? missing();
+  const table = definitions.find((t) => `public.${t.name}` === req.table) ?? missing();
   if (req.limit < 1 || req.limit > 500 || req.offset < 0n || req.offset > 1_000_000n) invalid("Page bounds are outside the sample limits.");
   const columns = req.columns.length ? req.columns.map((name) => table.columns.find((c) => c.name === name) ?? invalid("Unknown sample column.")) : table.columns;
   const filters = req.filters.map((filter) => predicate(filter, table.columns));
-  const sorts = req.sort.length ? req.sort : [{ column: table.pk, desc: false }];
+  const sorts = req.sort.length ? req.sort : [{ column: "id", desc: false }];
   for (const sort of sorts) if (!table.columns.some((c) => c.name === sort.column)) invalid("Unknown sort column.");
   const matching = table.rows.filter((row) => filters.every((test) => test(row))).sort((a, b) => {
     for (const sort of sorts) {
@@ -173,15 +162,15 @@ export function inventoryScenarioHandlers() {
   return {
     ...completed(AppDatabaseService, mockService(AppDatabaseService, {
       listBrowsableDatabases: (req) => ({ databases: demoEnvId(req.environmentId) ? [{ name: "shop", kind: BrowsableDatabaseKind.MANAGED, policy: req.environmentId === "env-prod" ? DataAccessPolicy.AUDITED : DataAccessPolicy.OPEN, reachable: true }] : [] }),
-      describeDatabase: (req) => { authorize(req); return { database: "shop", tables: demoDatabaseTables(req.environmentId), durationMs: 1n, auditId: "demo-local-read" }; },
+      describeDatabase: (req) => { authorize(req); return { database: "shop", tables: demoDatabaseTables(), durationMs: 1n, auditId: "demo-local-read" }; },
       browseTable: browse,
     })),
     ...completed(IdentityService, mockService(IdentityService, {
       getIdentityStatus: (req) => demoEnvId(req.environmentId) ? { hasInstance: true, state: IdentityState.READY, ownerEnvironmentId: req.environmentId, issuer: "https://identity.shop.example.com", domain: "identity.shop.example.com", public: false } : {},
-      getUser: (req) => ({ user: demoEnvId(req.environmentId) ? identityUsers(req.environmentId).find((user) => user.userId === req.userId) : undefined }),
+      getUser: (req) => ({ user: demoEnvId(req.environmentId) ? identityUsers().find((user) => user.userId === req.userId) : undefined }),
       listUsers: (req) => {
         if (!demoEnvId(req.environmentId)) return { users: [] };
-        const users = identityUsers(req.environmentId).filter((u) => (!req.query || u.email.toLowerCase().includes(req.query.toLowerCase())) && (req.state === undefined || req.state === u.state));
+        const users = identityUsers().filter((u) => (!req.query || u.email.toLowerCase().includes(req.query.toLowerCase())) && (req.state === undefined || req.state === u.state));
         const offset = req.pageToken ? Number(req.pageToken) : 0;
         if (!Number.isSafeInteger(offset) || offset < 0 || (req.pageToken && String(offset) !== req.pageToken)) invalid("Invalid sample page token.");
         const size = Math.min(Math.max(req.pageSize || 50, 1), 100);
@@ -191,12 +180,6 @@ export function inventoryScenarioHandlers() {
   };
 }
 
-function identityUsers(env: string) {
-  // The customers who signed up, newest first; one in eleven has not signed in since.
-  return demoIdentityUsers(env).map((row, i) => ({
-    userId: String(row.identity_subject), email: String(row.email), displayName: String(row.name),
-    state: IdentityUserState.ACTIVE, roles: ["customer"],
-    createdAt: timestampFromMs(timeOf(String(row.created_at))),
-    lastSignInAt: i % 11 === 10 ? undefined : timestampFromMs(demoNow() - ((i * 37) % 300) * 3_600_000 - 60_000 * i),
-  }));
+function identityUsers() {
+  return DEMO_USERS.map((row, i) => ({ userId: String(row.identity_subject), email: String(row.email), displayName: String(row.name), state: IdentityUserState.ACTIVE, roles: ["customer"], createdAt: timestampFromMs(Date.parse(String(row.created_at))), lastSignInAt: timestampFromMs(Date.parse(`2026-01-${10 + i}T12:00:00Z`)) }));
 }

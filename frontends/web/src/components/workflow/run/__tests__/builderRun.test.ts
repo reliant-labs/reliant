@@ -6,7 +6,7 @@ import type { Edge, Node } from "@xyflow/react";
 
 import { NodeExecutionEventType, NodeExecutionStatus } from "../../../../gen/reliant/v1/streaming_pb";
 import type { NodeExecutionUpdate } from "../../../../types/streaming";
-import { deriveBuilderRun, missingConnectionIntegration, runErrorFieldKey, type BuilderRunInput } from "../builderRun";
+import { deriveBuilderRun, runErrorFieldKey, type BuilderRunInput } from "../builderRun";
 import { withBuilderRun, withBuilderRunEdges } from "../../nodes/runMarkers";
 
 function decided(nodeId: string, overrides: Partial<NodeExecutionUpdate> = {}): NodeExecutionUpdate {
@@ -199,18 +199,5 @@ describe("withBuilderRun / withBuilderRunEdges", () => {
     expect(a!.data).toMatchObject({ executionStatus: undefined, runBadge: "skipped" });
     expect(b!.className).toContain("wf-node--run-waiting");
     expect(b!.ariaLabel).toBe("Run, b, waiting for you");
-  });
-});
-
-describe("missingConnectionIntegration", () => {
-  it("names the integration of a missing-connection error", () => {
-    expect(missingConnectionIntegration("no slack connection")).toBe("slack");
-    expect(missingConnectionIntegration("step post failed: no Gmail connection")).toBe("gmail");
-  });
-
-  it("ignores every other error", () => {
-    expect(missingConnectionIntegration("no such connection")).toBeUndefined();
-    expect(missingConnectionIntegration("slack: channel_not_found")).toBeUndefined();
-    expect(missingConnectionIntegration(undefined)).toBeUndefined();
   });
 });

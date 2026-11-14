@@ -24,7 +24,6 @@ func TestGatewayStopsTheHandOverFirst(t *testing.T) {
 		"managed_reconciler",
 		"daemon_listener",
 		"activity_subscriber",
-		"disconnect_subscriber",
 		"tool_bridge",
 		"state_derivation",
 		"tools_daemon_sweeper",

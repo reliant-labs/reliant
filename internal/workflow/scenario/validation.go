@@ -71,12 +71,6 @@ func ValidateScenario(scenario *Scenario, workflow *reliantv1.Workflow) *Validat
 			validNodes[id] = info
 		}
 	}
-	// And the finally handler's under "finally.".
-	if handler := workflow.GetFinally(); handler != nil {
-		for id, info := range collectValidNodes(handler, finallyPathPrefix) {
-			validNodes[id] = info
-		}
-	}
 
 	// Validate event node references
 	for i, event := range scenario.Events {
@@ -242,10 +236,6 @@ func canSaveMessage(info nodeInfo) bool {
 // handler's nodes (runtime.OnFailureNodeID). A literal for the same reason as
 // spawnNodeRefPrefix; pinned by TestOnFailurePathPrefixMatchesRuntime in the runner package.
 const onFailurePathPrefix = "on_failure"
-
-// finallyPathPrefix is the path segment of a finally handler's nodes
-// (runtime.FinallyNodeID); pinned by TestFinallyPathPrefixMatchesRuntime.
-const finallyPathPrefix = "finally"
 
 func collectValidNodes(workflow *reliantv1.Workflow, prefix string) map[string]nodeInfo {
 	nodes := make(map[string]nodeInfo)

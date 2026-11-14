@@ -12,8 +12,6 @@ import "./lib/configGuard";
 // Then a claim link's token leaves the address bar before the router or any
 // telemetry SDK can read it — see lib/claimLink.ts.
 import "./lib/claimLinkBoot";
-// An org invitation link's token, likewise — see lib/inviteLink.ts.
-import "./lib/inviteLinkBoot";
 // Finally the landing site's rid / utm_* handoff is held before the router or a
 // sign-in redirect replaces the URL — see lib/landingAttribution.ts.
 import "./lib/attributionBoot";

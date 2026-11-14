@@ -101,13 +101,6 @@ const { createCrashSignalReporter, installCrashSignals, safeRouteName } = requir
 const { autoUpdater } = require("electron-updater");
 const electronLog = require("electron-log");
 const ChunkedDownloader = require("./chunked-downloader");
-const {
-  canCheckForUpdates,
-  classifyCheckResult,
-  createDownloadRunner,
-  createMenuUpdateCheck,
-  nextUpdateState,
-} = require("./update-check");
 const crypto = require("crypto");
 
 // Configure auto-updater logging
@@ -1167,7 +1160,11 @@ async function createWindow() {
       log.debug("[AutoUpdater] Window loaded, scheduling update check...");
       setTimeout(() => {
         log.debug("[AutoUpdater] Running update check from did-finish-load...");
-        runBackgroundUpdateCheck("did-finish-load");
+        autoUpdater.checkForUpdates().then(result => {
+          log.info("[AutoUpdater] Check completed:", result);
+        }).catch(err => {
+          log.error("[AutoUpdater] Check failed:", err);
+        });
       }, 3000); // 3 seconds after window loads
     }
   });
@@ -1891,6 +1888,60 @@ ipcMain.handle("restart-backend", async () => {
   return { success: false, error: "Backend manager not initialized" };
 });
 
+// Mock driver configuration handlers
+ipcMain.handle("get-mock-driver-config", async () => {
+  try {
+    const configPath = path.join(
+      app.getPath("userData"),
+      "mock-driver-config.json"
+    );
+    if (fs.existsSync(configPath)) {
+      const data = fs.readFileSync(configPath, "utf8");
+      return JSON.parse(data);
+    }
+    return null;
+  } catch (error) {
+    log.error("[IPC] Failed to load mock driver config:", error);
+    return null;
+  }
+});
+
+ipcMain.handle("set-mock-driver-config", async (event, config) => {
+  try {
+    const configPath = path.join(
+      app.getPath("userData"),
+      "mock-driver-config.json"
+    );
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+    // Store in backend manager for next restart
+    if (backendManager) {
+      // mockDriverConfig removed — daemon mode doesn't support mock drivers
+    }
+
+    return true;
+  } catch (error) {
+    log.error("[IPC] Failed to save mock driver config:", error);
+    throw error;
+  }
+});
+
+ipcMain.handle("browse-mock-file", async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ["openFile"],
+    title: "Select Mock Driver Replay File",
+    filters: [
+      { name: "JSON Files", extensions: ["json"] },
+      { name: "All Files", extensions: ["*"] },
+    ],
+  });
+
+  if (!result.cancelled && result.filePaths.length > 0) {
+    return result.filePaths[0];
+  }
+  return null;
+});
+
 ipcMain.handle("select-directory", async (event) => {
   const result = await dialog.showOpenDialog({
     properties: ["openDirectory", "createDirectory"],
@@ -2577,57 +2628,6 @@ let usedChunkedDownload = false;
 // Store the path to the manually downloaded update file
 let chunkedDownloadPath = null;
 
-// The updater's state as the windows should see it (update-check.js
-// nextUpdateState). A window that opens or reloads asks for it
-// ("get-update-status"), so the sidebar's update button does not wait for
-// the next check to reappear.
-let lastUpdateStatus = null;
-
-// How often a running app looks for a new release. The startup check alone
-// left an app that stays open for days on its launch-day version.
-const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
-let periodicUpdateCheckTimer = null;
-
-function broadcastUpdateStatus(status) {
-  lastUpdateStatus = nextUpdateState(lastUpdateStatus, status);
-  BrowserWindow.getAllWindows().forEach((window) => {
-    window.webContents.send("update-status", status);
-  });
-}
-
-// A check nobody asked for: the startup one and the periodic one. It reports
-// only through the update-status events, and stands down while a download is
-// in flight or done (see canCheckForUpdates).
-function runBackgroundUpdateCheck(source) {
-  if (!app.isPackaged || isInstallingUpdate) return;
-  if (!canCheckForUpdates(lastUpdateStatus, downloadRunner.isInFlight())) {
-    log.info(`[AutoUpdater] Skipping ${source} check: an update is downloading or downloaded`);
-    return;
-  }
-  autoUpdater.checkForUpdates().then((result) => {
-    log.info(`[AutoUpdater] ${source} check completed: ${classifyCheckResult(result)}`);
-  }).catch((err) => {
-    log.error(`[AutoUpdater] ${source} check failed:`, err);
-  });
-}
-
-function startPeriodicUpdateChecks() {
-  if (!app.isPackaged || periodicUpdateCheckTimer) return;
-  periodicUpdateCheckTimer = setInterval(() => runBackgroundUpdateCheck("periodic"), UPDATE_CHECK_INTERVAL_MS);
-  // Never the reason the process stays alive.
-  periodicUpdateCheckTimer.unref?.();
-}
-
-// The app menu's "Check for Updates…" (update-check.js).
-const checkForUpdatesFromMenu = createMenuUpdateCheck({
-  getStatus: () => lastUpdateStatus,
-  isDownloading: () => downloadRunner.isInFlight(),
-  check: () => autoUpdater.checkForUpdates(),
-  reveal: (status) => sendToSurfacedWindow("update-reveal", status),
-  showMessage: (options) => dialog.showMessageBox({ ...options, buttons: ["OK"] }),
-  currentVersion: () => app.getVersion(),
-});
-
 // Auto-updater event handlers
 autoUpdater.on("checking-for-update", () => {
   log.info("[AutoUpdater] Checking for updates...");
@@ -2638,7 +2638,10 @@ autoUpdater.on("checking-for-update", () => {
   downloadStartTime = null;
   usedChunkedDownload = false;
   chunkedDownloadPath = null;
-  broadcastUpdateStatus({ type: "checking" });
+  // Send to all windows
+  BrowserWindow.getAllWindows().forEach((window) => {
+    window.webContents.send("update-status", { type: "checking" });
+  });
 });
 
 autoUpdater.on("update-available", async (info) => {
@@ -2652,18 +2655,24 @@ autoUpdater.on("update-available", async (info) => {
     files: info.files?.map(f => ({ url: f.url, size: f.size, sha512: f.sha512 ? f.sha512.substring(0, 16) + '...' : 'none' }))
   });
 
-  broadcastUpdateStatus({
-    type: "available",
-    version: info.version,
-    releaseNotes: info.releaseNotes,
+  // Send to all windows
+  BrowserWindow.getAllWindows().forEach((window) => {
+    window.webContents.send("update-status", {
+      type: "available",
+      version: info.version,
+      releaseNotes: info.releaseNotes,
+    });
   });
 });
 
-autoUpdater.on("update-not-available", (info) => {
+autoUpdater.on("update-not-available", () => {
   log.info("[AutoUpdater] Update not available");
   // Clear update info when no update is available
   currentUpdateInfo = null;
-  broadcastUpdateStatus({ type: "not-available", version: info?.version });
+  // Send to all windows
+  BrowserWindow.getAllWindows().forEach((window) => {
+    window.webContents.send("update-status", { type: "not-available" });
+  });
 });
 
 autoUpdater.on("error", (err) => {
@@ -2679,9 +2688,12 @@ autoUpdater.on("error", (err) => {
     log.error("[AutoUpdater] HTTP/2 protocol error - this should be resolved by disabling HTTP/2");
   }
 
-  broadcastUpdateStatus({
-    type: "error",
-    error: userFriendlyError,
+  // Send to all windows
+  BrowserWindow.getAllWindows().forEach((window) => {
+    window.webContents.send("update-status", {
+      type: "error",
+      error: userFriendlyError,
+    });
   });
 });
 
@@ -2712,61 +2724,48 @@ autoUpdater.on("download-progress", (progressObj) => {
 
   // Mark that download has started
   downloadStarted = true;
-  broadcastUpdateStatus({
-    type: "download-progress",
-    version: currentUpdateInfo?.version,
-    progress: progressObj,
+  // Send to all windows
+  BrowserWindow.getAllWindows().forEach((window) => {
+    window.webContents.send("update-status", {
+      type: "download-progress",
+      progress: progressObj,
+    });
   });
 });
 
 autoUpdater.on("update-downloaded", async (info) => {
   log.info("[AutoUpdater] Update downloaded:", info.version);
 
-  // UI will handle prompting user to restart
-  broadcastUpdateStatus({
-    type: "downloaded",
-    version: info.version,
+  // Send to all windows - UI will handle prompting user to restart
+  BrowserWindow.getAllWindows().forEach((window) => {
+    window.webContents.send("update-status", {
+      type: "downloaded",
+      version: info.version,
+    });
   });
   // No automatic dialog - let React UI handle the restart prompt
 });
 
 // Auto-updater IPC handlers
-ipcMain.handle("get-update-status", () => lastUpdateStatus);
-
 ipcMain.handle("check-for-updates", async () => {
   if (!app.isPackaged) {
     log.info("[AutoUpdater] Skipping update check in development");
     return { error: "Updates not available in development" };
   }
 
-  // A download in flight or done: report it rather than re-check, which
-  // would discard it (see canCheckForUpdates).
-  if (!canCheckForUpdates(lastUpdateStatus, downloadRunner.isInFlight())) {
-    log.info("[AutoUpdater] Manual check skipped: an update is downloading or downloaded");
-    return { success: true, updateAvailable: true, status: lastUpdateStatus };
-  }
-
   try {
     log.info("[AutoUpdater] Manual check requested");
     const result = await autoUpdater.checkForUpdates();
-    // A non-null result does NOT mean an update: electron-updater always
-    // returns the latest release's info (update-check.js classifyCheckResult).
-    // The update-available / update-not-available events have already set
-    // currentUpdateInfo and lastUpdateStatus.
-    const outcome = classifyCheckResult(result);
-    log.info(`[AutoUpdater] Manual check completed: ${outcome}`);
-    if (outcome === "inactive") {
-      return { error: "Updates are not available in this build" };
+    const updateInfo = result ? result.updateInfo : null;
+    if (updateInfo) {
+      log.info("[AutoUpdater] Check completed, update available:", updateInfo.version);
+      // Store update info (also stored in update-available event, but store here too for safety)
+      currentUpdateInfo = updateInfo;
+    } else {
+      log.info("[AutoUpdater] Check completed, no update available");
+      currentUpdateInfo = null;
     }
-    const updateAvailable = outcome === "available";
-    return {
-      success: true,
-      updateAvailable,
-      updateInfo: updateAvailable ? result.updateInfo : null,
-      status: updateAvailable
-        ? lastUpdateStatus
-        : { type: "not-available", version: result.updateInfo?.version },
-    };
+    return { success: true, updateInfo };
   } catch (error) {
     log.error("[AutoUpdater] Manual check failed:", error.message);
     currentUpdateInfo = null;
@@ -2872,10 +2871,11 @@ async function downloadWithChunkedFallback() {
       lastProgressTime = Date.now();
       lastProgressBytes = progress.transferred;
 
-      broadcastUpdateStatus({
-        type: "download-progress",
-        version: currentUpdateInfo?.version,
-        progress: progress,
+      BrowserWindow.getAllWindows().forEach((window) => {
+        window.webContents.send("update-status", {
+          type: "download-progress",
+          progress: progress,
+        });
       });
     }
   });
@@ -2912,9 +2912,7 @@ async function downloadWithChunkedFallback() {
   return { success: true };
 }
 
-// The download-update IPC. Runs through downloadRunner (below), which reports
-// every failure to the update state and joins a repeated request.
-async function downloadAvailableUpdate() {
+ipcMain.handle("download-update", async () => {
   if (!app.isPackaged) {
     log.info("[AutoUpdater] Skipping download in development");
     return { error: "Updates not available in development" };
@@ -3040,17 +3038,7 @@ async function downloadAvailableUpdate() {
   return {
     error: lastError?.message || "Download failed after multiple attempts. Please check your network connection and try again."
   };
-}
-
-const downloadRunner = createDownloadRunner({
-  download: downloadAvailableUpdate,
-  // Returned-only failures never emit autoUpdater "error"; without this the
-  // state would stay "download-progress" and every later check would stand
-  // down (update-check.js createDownloadRunner).
-  onFailure: (message) => broadcastUpdateStatus({ type: "error", error: message }),
 });
-
-ipcMain.handle("download-update", () => downloadRunner.run());
 
 ipcMain.handle("install-update", async () => {
   if (!app.isPackaged) {
@@ -3363,10 +3351,16 @@ function createApplicationMenu() {
           ? [
               {
                 label: "Check for Updates...",
-                click: () => {
-                  checkForUpdatesFromMenu().catch((error) => {
-                    log.error("[AutoUpdater] Menu update check failed:", error);
-                  });
+                click: async () => {
+                  const result = await autoUpdater.checkForUpdates();
+                  if (!result) {
+                    dialog.showMessageBox({
+                      type: "info",
+                      title: "No Updates",
+                      message: "You are running the latest version.",
+                      buttons: ["OK"],
+                    });
+                  }
                 },
               },
               { type: "separator" },
@@ -4034,8 +4028,7 @@ app.whenReady().then(async () => {
   if (!app.isPackaged) {
     log.info("[AutoUpdater] Automatic checks disabled in development mode");
   } else {
-    log.info("[AutoUpdater] Automatic checks enabled - will check after window loads, then hourly");
-    startPeriodicUpdateChecks();
+    log.info("[AutoUpdater] Automatic checks enabled - will check after window loads");
   }
 });
 

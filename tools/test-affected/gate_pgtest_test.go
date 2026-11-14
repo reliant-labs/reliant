@@ -35,7 +35,7 @@ func gatePgtestRegion(t *testing.T) string {
 		return start + body + end
 	}
 	return cut("phase() {", "\n}\n") +
-		cut("# ── pgtest: the shared test Postgres serves", `for p in ${pids[@]+"${pids[@]}"}; do wait "$p" || fail=1; done`)
+		cut("# ── pgtest: the shared test Postgres serves", `for p in "${pids[@]}"; do wait "$p" || fail=1; done`)
 }
 
 func TestMergeGatePgtestPhase(t *testing.T) {

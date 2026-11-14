@@ -269,7 +269,6 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 
 	mismatches = append(mismatches, checkMessageExpectations(expect.Messages, execution.SavedMessages)...)
 	mismatches = append(mismatches, checkOnFailureExpectation(expect.OnFailure, execution.OnFailure)...)
-	mismatches = append(mismatches, checkFinallyExpectation(expect.Finally, execution.Finally)...)
 
 	// Check workflow-level outputs (dotted paths into structured values)
 	for path, expectedValue := range expect.Outputs {
@@ -468,33 +467,6 @@ func asNumber(v interface{}) (number, bool) {
 
 func intNumber(i int64) number   { return number{isInt: true, i: big.NewInt(i)} }
 func uintNumber(u uint64) number { return number{isInt: true, i: new(big.Int).SetUint64(u)} }
-
-// checkFinallyExpectation compares an `expect.finally` block with what the
-// run's handler did. A workflow with no handler has nothing observed, which is
-// "did not run".
-func checkFinallyExpectation(want *FinallyExpectation, got *FinallyObserved) []string {
-	if want == nil {
-		return nil
-	}
-	var out []string
-	ran := got != nil && got.Ran
-	if want.Ran != nil && *want.Ran != ran {
-		out = append(out, fmt.Sprintf("expected finally ran=%t but it ran=%t", *want.Ran, ran))
-	}
-	if !ran {
-		if want.Status != "" || want.HandlerFailed != nil {
-			out = append(out, "expected the finally handler to have run, but it did not")
-		}
-		return out
-	}
-	if want.Status != "" && got.Status != want.Status {
-		out = append(out, fmt.Sprintf("expected run.status %q but got %q", want.Status, got.Status))
-	}
-	if want.HandlerFailed != nil && *want.HandlerFailed != (got.HandlerError != "") {
-		out = append(out, fmt.Sprintf("expected the finally handler to have failed=%t but its error was %q", *want.HandlerFailed, got.HandlerError))
-	}
-	return out
-}
 
 // checkOnFailureExpectation compares an `expect.on_failure` block with what the
 // run's handler did. A workflow with no handler has nothing observed, which is

@@ -17,10 +17,7 @@
  *                     Custom (dashboardGroups.ts): collapsible, with counts.
  *                     A row names its Forge workload; where it came from
  *                     (source, release, file) is secondary, in a tooltip.
- *     Templates       the gallery to start from (and a blank dashboard). The
- *                     standard dashboards every project gets are not here:
- *                     they are built-ins, listed in their groups, read-only
- *                     with "Save as copy".
+ *     Templates       the gallery to start from (and a blank dashboard).
  *
  * Searching or narrowing opens the list. "New dashboard" offers a blank one,
  * a template, or a forge dashboard file to import. Authoring needs the admin
@@ -57,13 +54,13 @@ import { appLabel, type ObsEnvironment } from "../obsPlace";
 import { OBS_TOPICS, ObsError } from "../ObsStates";
 import { DashboardHeader } from "./DashboardHeader";
 import { DASHBOARD_GROUPS, GROUP_ABOUT, GROUP_LABELS, groupIndex, groupOf, workloadOf, type DashboardGroup } from "./dashboardGroups";
-import { filterIndex, galleryTemplates, isStandardBuiltin, NAV_STARRED, ownerOf, ownersOf, SOURCE_LABELS, starredOf, type SourceFilter } from "./dashboardModel";
+import { filterIndex, NAV_STARRED, ownerOf, ownersOf, SOURCE_LABELS, starredOf, type SourceFilter } from "./dashboardModel";
 import { DashboardsHub, type DashboardsHubHrefs } from "./DashboardsHub";
 import { NewDashboardDialog, SaveCopyDialog, envScopeOf } from "./dialogs";
 import { PanelBody } from "./PanelBody";
 import { BUTTON_PRIMARY, INK_LINK, Menu, StarButton } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
-import { FIELD_BARE, FIELD_SHELL, toggleTone } from "../../controlStyles";
+import { toggleTone } from "../../controlStyles";
 
 /** The list's own view: absent is the Overview (when the app has one). */
 export type DashboardsView = "all";
@@ -263,7 +260,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
             </button>
             {templates.isLoading
               ? [0, 1, 2].map((i) => <div key={i} className="h-24 animate-pulse rounded-lg border border-border bg-surface motion-reduce:animate-none" />)
-              : galleryTemplates(templates.data ?? [], all).map((template) => (
+              : (templates.data ?? []).map((template) => (
                   <button
                     key={template.ref.key}
                     type="button"
@@ -288,23 +285,18 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
 
   // Every group's table shares its columns: the name (with the workload it is
   // about and its tags), its app in org mode, where it came from (secondary),
-  // when it last changed, its panels, and the star. The tables are laid out
-  // fixed, at the same widths, so the columns line up from one group to the
-  // next and a long description truncates rather than pushing Source out of
-  // the card. On a phone the secondary columns drop out (Name, Panels, star),
-  // which keeps a row one line of title and one of detail.
+  // when it last changed, its panels, and the star.
   const columns: DataTableColumn<DashRow>[] = [
     {
       key: "name",
       header: "Name",
       render: (_, { d }) => <NameCell d={d} />,
     },
-    ...(orgWide ? [{ key: "app", header: "App", width: "9rem", render: (_: unknown, { d }: DashRow) => <AppTag app={d.ref.projectId} /> }] : []),
+    ...(orgWide ? [{ key: "app", header: "App", render: (_: unknown, { d }: DashRow) => <AppTag app={d.ref.projectId} /> }] : []),
     {
       key: "source",
       header: "Source",
       interactive: true,
-      width: "7.5rem",
       headerClassName: "hidden md:table-cell",
       className: "hidden md:table-cell",
       render: (_, { d }) => <SourceCell d={d} environments={environments} />,
@@ -312,12 +304,11 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
     {
       key: "updated",
       header: "Updated",
-      width: "6.5rem",
       headerClassName: "hidden lg:table-cell",
       className: "hidden lg:table-cell",
       render: (_, { d }) => <span className="text-xs text-ink-muted">{updatedOf(d)}</span>,
     },
-    { key: "panels", header: "Panels", numeric: true, width: "4.5rem", render: (_, { d }) => <span className="text-ink-muted">{d.panelCount || "—"}</span> },
+    { key: "panels", header: "Panels", numeric: true, render: (_, { d }) => <span className="text-ink-muted">{d.panelCount || "—"}</span> },
     {
       key: "star",
       header: "Star",
@@ -393,7 +384,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
                 <Card padding="none" className="overflow-hidden">
                   <DataTable<DashRow>
                     flush
-                    layout="fixed"
+                    stacked
                     ariaLabel={`${GROUP_LABELS[group]} dashboards`}
                     columns={columns}
                     data={dashboards.map((d) => ({ d }))}
@@ -574,7 +565,7 @@ function NameCell({ d }: { d: DashboardSummary }) {
             <Tag key={tag}>{tag}</Tag>
           ))}
         </span>
-      ) : d.source === "builtin" && d.viewKind !== "llm-usage" && !isStandardBuiltin(d) ? (
+      ) : d.source === "builtin" && d.viewKind !== "llm-usage" ? (
         // LLM usage is the caller's own: it needs no billing permission.
         <span className="text-xs text-ink-muted">Requires cost-read permission, not billing management.</span>
       ) : d.description ? (
@@ -597,7 +588,6 @@ function SourceCell({ d, environments }: { d: DashboardSummary; environments: re
 
 /** The tooltip's words: which release shipped it and from where, or who saved it and for which environments. */
 function originOf(d: DashboardSummary, environments: readonly ObsEnvironment[]): string {
-  if (isStandardBuiltin(d)) return "Built in for every project, over this project's data. Read-only here; save a copy to change it.";
   if (d.source === "builtin") return "Organization accounting from canonical billing sources.";
   if (d.release) {
     const shipped = d.release.releaseVersion ? `Shipped in ${d.release.releaseVersion}` : "Shipped in a release";
@@ -642,14 +632,14 @@ function Toolbar({
   const chip = (on: boolean) => cn(CHIP, toggleTone(on));
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="dashboards-toolbar">
-      <label className={cn(FIELD_SHELL, "w-full sm:w-auto sm:min-w-72")}>
+      <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
         <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span className="sr-only">Search dashboards</span>
         <input
           value={search.q ?? ""}
           onChange={(event) => onSearch({ q: event.target.value || undefined })}
           placeholder="Search dashboards, workloads, tags"
-          className={FIELD_BARE}
+          className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink-muted focus:outline-none"
           data-testid="dashboards-search"
         />
       </label>

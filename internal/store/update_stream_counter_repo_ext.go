@@ -25,34 +25,13 @@ const (
 // number it assigned. Bound parameters through the raw passthrough, not bun's
 // formatter: it runs for every chat and user update, and a formatted text is a
 // new prepared statement per stream id.
-//
-// It also carries the chat's heads watermark forward (advanceHeadsThroughSQL),
-// so it MUST stay paired with ApplyChatUpdateHead in the caller's transaction.
 const allocateUpdateSequenceSQL = `
-INSERT INTO update_stream_counters (stream_kind, stream_id, last_assigned_seq, heads_through_seq)
-VALUES ($1, $2, 1, 1)
+INSERT INTO update_stream_counters (stream_kind, stream_id, last_assigned_seq)
+VALUES ($1, $2, 1)
 ON CONFLICT (stream_kind, stream_id) DO UPDATE
-SET last_assigned_seq = update_stream_counters.last_assigned_seq + 1,
-    heads_through_seq = ` + advanceHeadsThroughSQL + `
+SET last_assigned_seq = update_stream_counters.last_assigned_seq + 1
 RETURNING last_assigned_seq
 `
-
-// advanceHeadsThroughSQL is the new heads_through_seq of a counter being
-// advanced by one: advanced with it while the chat's heads are complete
-// through the last sequence, left behind otherwise. Every allocation of this
-// release applies its update to chat_update_heads in the same transaction
-// (ApplyChatUpdateHead), so the watermark keeps pace exactly as long as no
-// write skipped the heads. The previous release's allocation advances
-// last_assigned_seq alone, which leaves the chat incomplete until the backfill
-// catches it up; its snapshot then reads the log. A counter this release
-// creates starts complete (1 = 1): the chat had no updates to miss. On a user
-// stream the column means nothing and is harmless.
-// dev-docs/design/chat-update-heads.md.
-const advanceHeadsThroughSQL = `CASE
-        WHEN update_stream_counters.heads_through_seq = update_stream_counters.last_assigned_seq
-        THEN update_stream_counters.last_assigned_seq + 1
-        ELSE update_stream_counters.heads_through_seq
-    END`
 
 // AllocateUpdateSequence advances one logical stream's transactional counter.
 //

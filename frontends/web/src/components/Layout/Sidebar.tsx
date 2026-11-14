@@ -55,7 +55,6 @@ import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
 import { SidebarApps } from "../Apps/SidebarApps";
 import { OrgSwitcher } from "../Orgs/OrgSwitcher";
-import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import type { RunsSearch } from "../../routeSchemas";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
@@ -68,7 +67,6 @@ import { useProjects } from "../../hooks/project-queries";
 import { ProjectFilterMenu } from "./ProjectFilterMenu";
 import { MachineFilterMenu, machineFilterLabel } from "./MachineFilterMenu";
 import { useDaemonList } from "../../hooks/useOnboardingQueries";
-import { useMachineOrgs } from "../../hooks/useMachineOrgs";
 import { ALL_PROJECTS, useCachedWorktrees } from "../../hooks/worktree-queries";
 import {
   countByMachine,
@@ -1015,14 +1013,7 @@ function SidebarComponent({
     () => effectiveMachineFilter(machineFilterIds, machines ?? []),
     [machineFilterIds, machines],
   );
-  // The menu offers the active org's machines (with several orgs), plus any
-  // the filter already names; the chats it filters are the active org's.
-  const machineOrgs = useMachineOrgs();
-  const menuMachines = useMemo(
-    () => machineOrgs.inActiveOrg(machines ?? [], machineFilter ?? []),
-    [machineOrgs, machines, machineFilter],
-  );
-  const showMachineFilter = menuMachines.length > 1;
+  const showMachineFilter = (machines?.length ?? 0) > 1;
   const handleMachineFilterChange = useCallback(
     (filter: MachineFilter) => setMachineFilterIds(filter),
     [setMachineFilterIds],
@@ -2038,7 +2029,7 @@ function SidebarComponent({
           {showMachineFilter && (
             <MachineFilterMenu
               filter={machineFilter}
-              machines={menuMachines}
+              machines={machines ?? []}
               onChange={handleMachineFilterChange}
               includeNoMachine={hasNoMachineChats || !!machineFilter?.includes(NO_MACHINE)}
               needsYouByMachine={needsYouByMachine}
@@ -2326,17 +2317,11 @@ function SidebarComponent({
         <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />
         {/* Renders nothing for a person with one org. */}
         <OrgSwitcher />
-        <div className="flex items-center gap-1">
-          <div className="min-w-0 flex-1">
-            <SidebarNavButton
-              icon={<Settings className="h-4 w-4" />}
-              label="Settings"
-              onClick={onNavigateToSettings}
-            />
-          </div>
-          {/* Renders nothing unless the desktop app has an update waiting. */}
-          <SidebarUpdateButton />
-        </div>
+        <SidebarNavButton
+          icon={<Settings className="h-4 w-4" />}
+          label="Settings"
+          onClick={onNavigateToSettings}
+        />
       </div>
 
       {/* One context menu for every row; its items follow the row. */}

@@ -1,7 +1,6 @@
 /**
  * A chat open as one `chat.open` interaction span: from the click
- * (chatStore.selectChat), or the navigation to the mobile chat screen
- * (routeChatOpen), to the frame after the timeline stopped catching up
+ * (chatStore.selectChat) to the frame after the timeline stopped catching up
  * (ChatPresenter). The RPCs made while it is open, the StreamChatUpdates
  * fetch among them, become its children, and through their traceparent so do
  * the server's chat_stream.* / chat_snapshot.* spans.
@@ -15,7 +14,6 @@
  *   chat.sync            snapshot | replay | none (the stream was already live)
  *   chat.overlay_shown   whether the catch-up overlay came up
  *   chat.tool_bodies     stub | full (lib/toolBodies.ts), to compare open times
- *   chat.open.entry      where the open came from (ChatOpenEntry)
  *
  * One open at a time, keyed by its chat: nothing about another chat ever
  * marks or ends it. Best-effort throughout: the runtime never throws, and
@@ -36,26 +34,13 @@ export const CHAT_OPEN_INTERACTION = "chat.open";
 
 type ChatOpenSync = ChatSyncKind | "none";
 
-/**
- * Where a chat open came from, as `chat.open.entry`:
- *
- *   switch        chatStore.selectChat: a sidebar row, search, a new chat
- *   restore       chatStore.selectChat reopening the workspace's last chat
- *                 as the app loads
- *   mobile_route  the mobile chat screen, navigated to within the app
- *   deep_link     the mobile chat screen as the page the app loaded on: a
- *                 reload, a notification, a pasted link
- */
-export type ChatOpenEntry = "switch" | "restore" | "mobile_route" | "deep_link";
-
 interface ChatOpen {
   chatId: string;
   op: Interaction;
   /**
-   * The open is set up: the stream subscription selectChat (or, for a routed
-   * open, ChatContainer) asserts is in place, so the timeline's readiness now
-   * speaks for this open. Until then a render of the new chat may predate its
-   * sync-pending signal.
+   * selectChat has finished: the stream subscription it asserts is in place,
+   * so the timeline's readiness now speaks for this open. Until then a render
+   * of the new chat may predate its sync-pending signal.
    */
   armed: boolean;
 }
@@ -85,7 +70,6 @@ function openFor(chatId: string | null | undefined): Interaction | undefined {
 export function beginChatOpen(
   chatId: string,
   attributes: InteractionAttributes = {},
-  entry: ChatOpenEntry = "switch",
 ): Interaction {
   const op = interaction(CHAT_OPEN_INTERACTION, {
     "chat.id": chatId,
@@ -93,40 +77,13 @@ export function beginChatOpen(
     "chat.overlay_shown": false,
     // stub | full: whether the transcript opened without finished tool bodies.
     "chat.tool_bodies": TRANSCRIPT_TOOL_BODIES,
-    "chat.open.entry": entry,
     ...attributes,
   });
   publish({ chatId, op, armed: false });
   return op;
 }
 
-/**
- * The chat a routed screen shows is changing from `fromChatId` to `toChatId`
- * (either may be none). The mobile chat screen (/m/chats/$chatId) opens its
- * chat from the URL and never through chatStore.selectChat, so the router
- * calls this as each navigation starts: the span then covers loading the
- * screen as well. The open in flight for the chat being left ends as
- * superseded. An open selectChat already started for `toChatId` (a new chat
- * is selected, then navigated to) is that open: none starts beside it.
- * ChatContainer arms the open once it has asserted the chat's subscription.
- */
-export function routeChatOpen(
-  fromChatId: string | undefined,
-  toChatId: string | undefined,
-  entry: ChatOpenEntry,
-  attributes: InteractionAttributes = {},
-): void {
-  if (fromChatId === toChatId) return;
-  if (fromChatId) leaveChatOpen(fromChatId);
-  if (!toChatId || openFor(toChatId)) return;
-  beginChatOpen(toChatId, attributes, entry);
-}
-
-/**
- * The open of `chatId` is set up: the stream subscription selectChat or
- * ChatContainer asserts is in place. See ChatOpen.armed. A no-op unless an
- * open of that chat is in flight and not yet armed.
- */
+/** selectChat is done setting the open up; see ChatOpen.armed. */
 export function armChatOpen(chatId: string): void {
   if (!current || current.chatId !== chatId || current.armed) return;
   publish({ ...current, armed: true });
@@ -159,7 +116,7 @@ export function leaveChatOpen(chatId: string): void {
   openFor(chatId)?.end({ outcome: "superseded" });
 }
 
-/** The open in flight for `chatId` once it is armed, reactively. */
+/** The open in flight for `chatId` once selectChat armed it, reactively. */
 export function useChatOpen(chatId: string | null | undefined): Interaction | undefined {
   const open = useSyncExternalStore(subscribe, () => current);
   if (!chatId || !open || open.chatId !== chatId || !open.armed) return undefined;
@@ -169,10 +126,7 @@ export function useChatOpen(chatId: string | null | undefined): Interaction | un
 export interface ChatOpenReadiness {
   /** The timeline is still catching up (lib/timelineCatchUp). */
   catchingUp: boolean;
-  /**
-   * The catch-up overlay covers the timeline ("shown"). One fading out over
-   * a caught-up timeline ("leaving") covers nothing and does not count.
-   */
+  /** The catch-up overlay is on screen. */
   overlayVisible: boolean;
   /**
    * The chat's sync never completed and cannot right now: the stream is

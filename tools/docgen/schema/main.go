@@ -79,13 +79,7 @@ var toolHints = map[string]string{
 		"unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). " +
 		"Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, " +
 		"error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends " +
-		"FAILED; an error in the handler is logged and never recursive. To release something however the run ends, " +
-		"cancel included, use `finally`.",
-	"finally": "A handler for however a run ends: an inline graph ({entry, nodes, edges}) that runs once when a run " +
-		"completes, fails (after on_failure) or is cancelled. Never when it pauses or hands off to a successor run. Its " +
-		"nodes read `run.status` ('completed' | 'failed' | 'cancelled'), `failure.*` (empty unless the run failed), " +
-		"`inputs`, and the `nodes` outputs the run produced (guard them with `.?`). It cannot change how the run ended; " +
-		"an error in it is logged and never recursive. Release leases, claims and labels here.",
+		"FAILED; an error in the handler is logged and never recursive.",
 }
 
 func main() {

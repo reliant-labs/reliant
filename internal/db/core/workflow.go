@@ -38,10 +38,6 @@ type Workflow struct {
 	// was deleted. Readers must therefore still fall back to the chat while
 	// both sources exist; see the migration for the ordering.
 	OwnerUserID *string `json:"owner_user_id,omitempty"`
-	// OrgID is the organization the run belongs to: its chat's, filled by
-	// the database on insert (workflows_inherit_chat_org). Writers leave it
-	// nil. nil on a read: the run's chat has no org yet.
-	OrgID *string `json:"org_id,omitempty"`
 
 	// Outcome is the run's own verdict — "success" or "failure" — stamped by
 	// the terminal node it reached (Node.outcome in the workflow YAML).

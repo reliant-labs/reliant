@@ -64,6 +64,11 @@ export interface ElectronAPI {
   setTrayStatus: (status: { agentStatus: 'idle' | 'running' | 'error'; activeWorkflows: number; hasChats: boolean; canCreateChat: boolean; currentProjectName: string | null; currentWorktreeName: string | null; currentWorktreeId: string; activeChatId: string | null; activeChatTitle: string | null; recentChats: Array<{ id: string; title: string; activity: string; needsRecovery: boolean }>; workspaces: Array<{ id: string; name: string; isMain: boolean }>; workflows: Array<{ name: string; source: 'builtin' | 'user' | 'project' }>; lastActivityAt: string | null }) => Promise<{ success: boolean; error?: string }>;
   onNotification: (callback: (data: NotificationData) => void) => void;
 
+  // Mock driver configuration
+  getMockDriverConfig: () => Promise<any>;
+  setMockDriverConfig: (config: any) => Promise<void>;
+  browseMockFile: () => Promise<string | null>;
+
   // Window management
   getWindowContext: () => Promise<{ worktreeId?: string; projectId?: string; projectName?: string } | null>;
   openWorktreeWindow: (worktreeData: { id: string; name?: string; path?: string; projectId?: string }) => Promise<{ success: boolean; windowId?: string; error?: string }>;
@@ -82,25 +87,10 @@ export interface ElectronAPI {
   toggleFullscreen: () => Promise<{ success: boolean; isFullScreen?: boolean; error?: string }>;
 
   // Auto-updater
-  /**
-   * `status` is the updater's state once the check answers ("available",
-   * "not-available", or a download already in flight or done, which a check
-   * does not interrupt).
-   */
-  checkForUpdates: () => Promise<{
-    success?: boolean;
-    error?: string;
-    updateAvailable?: boolean;
-    updateInfo?: { version?: string; releaseNotes?: unknown } | null;
-    status?: UpdateStatus | null;
-  }>;
+  checkForUpdates: () => Promise<{ success?: boolean; error?: string; updateInfo?: UpdateStatus }>;
   downloadUpdate: () => Promise<{ success?: boolean; error?: string }>;
   installUpdate: () => Promise<{ success?: boolean; error?: string }>;
   onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
-  /** The updater's current state, null before any check has answered. */
-  getUpdateStatus?: () => Promise<UpdateStatus | null>;
-  /** The app menu's "Check for Updates…" asks this window to show the update dialog. */
-  onUpdateReveal?: (callback: (status: UpdateStatus | null) => void) => () => void;
 
   // Event listeners
   onWorktreeContextChanged: (callback: (data: { worktreeId?: string; projectId?: string }) => void) => () => void;

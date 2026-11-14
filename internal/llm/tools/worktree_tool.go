@@ -276,7 +276,7 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 	}
 	// The name is the handle agents pass to spawn(worktree=<name>): one live
 	// worktree per name. Insert applies the rule, shared with the UI's create.
-	wt, err := workspacecreate.Insert(ctx, w.repo, machine, req)
+	wt, err := workspacecreate.Insert(ctx, w.repo, req)
 	if err != nil {
 		var held *workspacecreate.NameTakenError
 		var branchHeld *workspacecreate.BranchHeldError

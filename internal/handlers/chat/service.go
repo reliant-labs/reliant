@@ -52,12 +52,6 @@ type Deps struct {
 	// resolve it. Without it a local pick cannot be checked and is refused.
 	// forge:optional-dep
 	LocalModels local.Directory
-	// Orgs says which organization a new chat acts in and verifies the org
-	// a list names (internal/orgs). Nil, or a nil *orgs.Resolver, is a
-	// deployment with no orgs: chats take their project's org, or none, and
-	// lists ignore org_id.
-	// forge:optional-dep
-	Orgs OrgResolver
 }
 
 // Temporal is the slice of the Temporal client the chat handlers use, and

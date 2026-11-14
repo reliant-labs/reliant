@@ -146,6 +146,23 @@ func ResolveRepoPath(tc *rctx.ToolContext, repoParam string) (string, error) {
 	return filepath.Join(root, match.RelativePath), nil
 }
 
+// AvailableRepoChoices returns the list of valid `repo` param values for the
+// given context: ["root", repo1.name, repo2.name, ...]. Returns nil when the
+// project has zero or one repos (single-repo projects don't need the param).
+func AvailableRepoChoices(tc *rctx.ToolContext) []string {
+	if tc == nil || len(tc.Repos) <= 1 {
+		return nil
+	}
+	out := make([]string, 0, len(tc.Repos)+1)
+	out = append(out, "root")
+	for _, r := range tc.Repos {
+		if r != nil && r.Name != "" {
+			out = append(out, r.Name)
+		}
+	}
+	return out
+}
+
 // GetWorktreeID retrieves the worktree ID from context
 func GetWorktreeID(rctx *rctx.ToolContext) string {
 	if rctx.Worktree != nil {

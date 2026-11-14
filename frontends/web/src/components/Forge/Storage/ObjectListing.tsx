@@ -340,7 +340,7 @@ function Narrow({ initial, folder, onNarrow }: { initial: string; folder: string
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="Starts with…"
-          className={cn(CONTROL_FIELD, "h-[44px] w-48 max-w-full pl-8 pr-12 font-mono text-sm sm:h-8 sm:pr-7")}
+          className={cn(CONTROL_FIELD, "h-[44px] w-48 max-w-full pl-8 pr-12 font-mono text-xs sm:h-7 sm:pr-7")}
           data-testid="storage-narrow-input"
         />
       </label>

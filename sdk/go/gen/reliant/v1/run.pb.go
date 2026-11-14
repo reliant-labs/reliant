@@ -1031,14 +1031,8 @@ type ListRunsRequest struct {
 	// trigger_id, launch_kind (the event's kind) and the time bounds apply,
 	// and query matches the trigger's name.
 	IncludeUnlaunchedEvents *bool `protobuf:"varint,17,opt,name=include_unlaunched_events,json=includeUnlaunchedEvents,proto3,oneof" json:"include_unlaunched_events,omitempty"`
-	// List only this organization's runs. It must be one the caller is a
-	// live member of (PERMISSION_DENIED otherwise). Runs created before orgs
-	// list under the caller's default org. Unset lists every one the caller
-	// owns, in any org, as before this field existed.
-	// A run belongs to its chat's org.
-	OrgId         *string `protobuf:"bytes,18,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *ListRunsRequest) Reset() {
@@ -1181,13 +1175,6 @@ func (x *ListRunsRequest) GetIncludeUnlaunchedEvents() bool {
 		return *x.IncludeUnlaunchedEvents
 	}
 	return false
-}
-
-func (x *ListRunsRequest) GetOrgId() string {
-	if x != nil && x.OrgId != nil {
-		return *x.OrgId
-	}
-	return ""
 }
 
 type ListRunsResponse struct {
@@ -2001,7 +1988,7 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\f_duration_msB\f\n" +
 	"\n" +
 	"_exit_codeB\x11\n" +
-	"\x0f_loop_iteration\"\x96\a\n" +
+	"\x0f_loop_iteration\"\xef\x06\n" +
 	"\x0fListRunsRequest\x12\"\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tH\x00R\tsessionId\x88\x01\x01\x12 \n" +
@@ -2024,9 +2011,7 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"page_token\x18\x0e \x01(\tH\x06R\tpageToken\x88\x01\x01\x12.\n" +
 	"\x10include_archived\x18\x0f \x01(\bH\aR\x0fincludeArchived\x88\x01\x01\x12)\n" +
 	"\x0eparent_chat_id\x18\x10 \x01(\tH\bR\fparentChatId\x88\x01\x01\x12?\n" +
-	"\x19include_unlaunched_events\x18\x11 \x01(\bH\tR\x17includeUnlaunchedEvents\x88\x01\x01\x12\x1a\n" +
-	"\x06org_id\x18\x12 \x01(\tH\n" +
-	"R\x05orgId\x88\x01\x01B\r\n" +
+	"\x19include_unlaunched_events\x18\x11 \x01(\bH\tR\x17includeUnlaunchedEvents\x88\x01\x01B\r\n" +
 	"\v_session_idB\f\n" +
 	"\n" +
 	"_parent_idB\b\n" +
@@ -2037,8 +2022,7 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\v_page_tokenB\x13\n" +
 	"\x11_include_archivedB\x11\n" +
 	"\x0f_parent_chat_idB\x1c\n" +
-	"\x1a_include_unlaunched_eventsB\t\n" +
-	"\a_org_id\"\xc6\x01\n" +
+	"\x1a_include_unlaunched_events\"\xc6\x01\n" +
 	"\x10ListRunsResponse\x12#\n" +
 	"\x04runs\x18\x01 \x03(\v2\x0f.reliant.v1.RunR\x04runs\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12&\n" +

@@ -83,9 +83,6 @@ func validateSecrets(wf *reliantv1.Workflow, result *Result) {
 	if h := wf.GetOnFailure(); h != nil {
 		walkBody(h, []string{wf.GetName(), "on_failure"}, false)
 	}
-	if h := wf.GetFinally(); h != nil {
-		walkBody(h, []string{wf.GetName(), "finally"}, false)
-	}
 
 	for _, name := range names {
 		if !used[name] {
@@ -232,7 +229,7 @@ func secretHeaderAllowed(name string) bool {
 // scope, and a value that depends on a prior node's output could be steered by
 // data.
 func validateSecretEnvironmentScope(raw string, path []string, result *Result) {
-	others := []wfcel.CELNamespace{wfcel.CELNodes, wfcel.CELIter, wfcel.CELOutput, wfcel.CELOutputs, wfcel.CELTrigger, wfcel.CELFailure, wfcel.CELRun, secretsNamespace}
+	others := []wfcel.CELNamespace{wfcel.CELNodes, wfcel.CELIter, wfcel.CELOutput, wfcel.CELOutputs, wfcel.CELTrigger, wfcel.CELFailure, secretsNamespace}
 	if refs, err := wfcel.TemplateReferencesAny(raw, others); err == nil && refs {
 		result.AddError(CategoryStructure, path, "environment", "a secret's environment may be an expression over inputs only")
 	}

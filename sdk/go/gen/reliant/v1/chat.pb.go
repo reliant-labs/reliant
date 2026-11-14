@@ -1033,11 +1033,7 @@ type Chat struct {
 	// Who started this chat (chats.origin, written once at launch and never
 	// rewritten). The chat list (ListChats, SearchChats, the Archived tab) holds
 	// USER chats plus runs the user adopted; every other origin lives in Runs.
-	Origin ChatOrigin `protobuf:"varint,43,opt,name=origin,proto3,enum=reliant.v1.ChatOrigin" json:"origin,omitempty"`
-	// The organization the chat belongs to, fixed at creation; its LLM usage
-	// bills this org. Unset for a chat created before orgs or where no org
-	// could be resolved: such a chat belongs to its creator's default org.
-	OrgId         *string `protobuf:"bytes,44,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	Origin        ChatOrigin `protobuf:"varint,43,opt,name=origin,proto3,enum=reliant.v1.ChatOrigin" json:"origin,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1287,13 +1283,6 @@ func (x *Chat) GetOrigin() ChatOrigin {
 		return x.Origin
 	}
 	return ChatOrigin_CHAT_ORIGIN_UNSPECIFIED
-}
-
-func (x *Chat) GetOrgId() string {
-	if x != nil && x.OrgId != nil {
-		return *x.OrgId
-	}
-	return ""
 }
 
 // ChatSelection is the server-side record of what the composer chose for a chat.
@@ -2151,16 +2140,8 @@ type StartChatRequest struct {
 	// makes no promise: every call starts a new chat. A value that is not a UUID
 	// is refused with INVALID_ARGUMENT.
 	ClientMessageId *string `protobuf:"bytes,21,opt,name=client_message_id,json=clientMessageId,proto3,oneof" json:"client_message_id,omitempty"`
-	// The organization to act in (control-plane organizations.id); the web
-	// fills it with the active org. It must be one the caller is a live member
-	// of (PERMISSION_DENIED otherwise), and a machine credential may name only
-	// its own org. Unset is the caller's default org. A new chat in a project
-	// that belongs to an org belongs to that org: naming another is
-	// FAILED_PRECONDITION. Ignored when chat_id names an existing chat, whose
-	// org never changes.
-	OrgId         *string `protobuf:"bytes,23,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *StartChatRequest) Reset() {
@@ -2294,13 +2275,6 @@ func (x *StartChatRequest) GetCliRun() bool {
 func (x *StartChatRequest) GetClientMessageId() string {
 	if x != nil && x.ClientMessageId != nil {
 		return *x.ClientMessageId
-	}
-	return ""
-}
-
-func (x *StartChatRequest) GetOrgId() string {
-	if x != nil && x.OrgId != nil {
-		return *x.OrgId
 	}
 	return ""
 }
@@ -2645,13 +2619,8 @@ type ListChatsRequest struct {
 	// The project to list. Empty lists every project the caller owns: the
 	// sidebar's "All projects" view. Chats are scoped by the caller either way,
 	// so a project id that is not the caller's lists nothing.
-	ProjectId string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Limit     *int32 `protobuf:"varint,2,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
-	// List only this organization's chats. It must be one the caller is a
-	// live member of (PERMISSION_DENIED otherwise). Chats created before orgs
-	// list under the caller's default org. Unset lists every chat the caller
-	// owns, in any org, as before this field existed.
-	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	ProjectId     string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Limit         *int32 `protobuf:"varint,2,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2698,13 +2667,6 @@ func (x *ListChatsRequest) GetLimit() int32 {
 		return *x.Limit
 	}
 	return 0
-}
-
-func (x *ListChatsRequest) GetOrgId() string {
-	if x != nil && x.OrgId != nil {
-		return *x.OrgId
-	}
-	return ""
 }
 
 // ListChatsResponse returns the list of chats
@@ -7783,7 +7745,7 @@ var File_reliant_v1_chat_proto protoreflect.FileDescriptor
 const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/chat.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\x1a\x19reliant/v1/worktree.proto\"\xe5\f\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\x1a\x19reliant/v1/worktree.proto\"\xbe\f\n" +
 	"\x04Chat\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x14\n" +
@@ -7826,8 +7788,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\tselection\x18( \x01(\v2\x19.reliant.v1.ChatSelectionR\tselection\x127\n" +
 	"\bworktree\x18) \x01(\v2\x1b.reliant.v1.WorktreeSummaryR\bworktree\x12'\n" +
 	"\x0fworking_threads\x18* \x01(\x05R\x0eworkingThreads\x12.\n" +
-	"\x06origin\x18+ \x01(\x0e2\x16.reliant.v1.ChatOriginR\x06origin\x12\x1a\n" +
-	"\x06org_id\x18, \x01(\tH\vR\x05orgId\x88\x01\x01\x1aB\n" +
+	"\x06origin\x18+ \x01(\x0e2\x16.reliant.v1.ChatOriginR\x06origin\x1aB\n" +
 	"\x14SelectedPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
@@ -7841,8 +7802,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\v_trigger_idB\r\n" +
 	"\v_adopted_atB\x19\n" +
 	"\x17_usage_limit_resumes_atB\x17\n" +
-	"\x15_usage_limit_providerB\t\n" +
-	"\a_org_id\"\xe3\x01\n" +
+	"\x15_usage_limit_provider\"\xe3\x01\n" +
 	"\rChatSelection\x12#\n" +
 	"\rworkflow_name\x18\x01 \x01(\tR\fworkflowName\x12/\n" +
 	"\x06params\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06params\x12C\n" +
@@ -7952,7 +7912,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\x0e2\x17.reliant.v1.MessageRoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12B\n" +
 	"\rdisplay_style\x18\x03 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x00R\fdisplayStyle\x88\x01\x01B\x10\n" +
-	"\x0e_display_style\"\xd8\a\n" +
+	"\x0e_display_style\"\xb1\a\n" +
 	"\x10StartChatRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
@@ -7971,8 +7931,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"no_machine\x18\x14 \x01(\bH\x05R\tnoMachine\x88\x01\x01\x12&\n" +
 	"\fbuilder_test\x18\x13 \x01(\bH\x06R\vbuilderTest\x88\x01\x01\x12\x1c\n" +
 	"\acli_run\x18\x16 \x01(\bH\aR\x06cliRun\x88\x01\x01\x12/\n" +
-	"\x11client_message_id\x18\x15 \x01(\tH\bR\x0fclientMessageId\x88\x01\x01\x12\x1a\n" +
-	"\x06org_id\x18\x17 \x01(\tH\tR\x05orgId\x88\x01\x01\x1aY\n" +
+	"\x11client_message_id\x18\x15 \x01(\tH\bR\x0fclientMessageId\x88\x01\x01\x1aY\n" +
 	"\x13WorkflowParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1aB\n" +
@@ -7990,8 +7949,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\r_builder_testB\n" +
 	"\n" +
 	"\b_cli_runB\x14\n" +
-	"\x12_client_message_idB\t\n" +
-	"\a_org_id\"q\n" +
+	"\x12_client_message_id\"q\n" +
 	"\x11StartChatResponse\x12$\n" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -8034,14 +7992,12 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\x91\x01\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\"j\n" +
 	"\x10ListChatsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
-	"\x05limit\x18\x02 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12\x1a\n" +
-	"\x06org_id\x18\x04 \x01(\tH\x01R\x05orgId\x88\x01\x01B\b\n" +
-	"\x06_limitB\t\n" +
-	"\a_org_idJ\x04\b\x03\x10\x04R\fsidebar_only\"\xe5\x01\n" +
+	"\x05limit\x18\x02 \x01(\x05H\x00R\x05limit\x88\x01\x01B\b\n" +
+	"\x06_limitJ\x04\b\x03\x10\x04R\fsidebar_only\"\xe5\x01\n" +
 	"\x11ListChatsResponse\x12&\n" +
 	"\x05chats\x18\x01 \x03(\v2\x10.reliant.v1.ChatR\x05chats\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x129\n" +

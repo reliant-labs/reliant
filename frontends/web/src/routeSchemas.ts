@@ -591,7 +591,6 @@ const textListParam = z.array(z.union([z.string(), z.number().transform(String)]
 
 export const forgeConsoleDataSearchSchema = z.object({
   env: envScopeParam,
-  subject: z.string().max(1600).optional().catch(undefined),
   db: textParam,
   table: textParam,
   f: textListParam,
@@ -825,13 +824,10 @@ const envPageTab = z
  * `secret` selects one secret's detail in the Secrets tab (see
  * forgeConsoleSecretsSearchSchema).
  */
-const identitySubjectParam = z.string().min(1).max(200).refine((v) => v.trim() === v && ![...v].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)).optional().catch(undefined);
 export const forgeConsoleEnvSearchSchema = z.object({
   env: envScopeParam,
   secret: z.string().optional(),
   tab: envPageTab,
-  user: identitySubjectParam.refine((v) => v === undefined || v.length <= 128).catch(undefined),
-  q: identitySubjectParam,
 });
 
 /** The retired /forge/env/$env: read only to redirect (Console/paths.ts legacyEnvTarget). */

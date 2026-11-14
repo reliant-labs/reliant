@@ -6,16 +6,17 @@
  * reads the forge journey walks, answered on the WIRE, as control-plane would
  * answer them.
  *
- * The data is shop's story (shopStory.ts, answered by shop/shopApi.ts),
+ * The data is the console's existing sample app (Observability/__fixtures__,
+ * the same fixtures the component tests and the other shells' demo use),
  * encoded into the proto messages: each handler decodes the request into the
- * console's model, asks the story's model, and encodes the answer. So the demo host
+ * console's model, asks the fixture, and encodes the answer. So the demo host
  * runs the console's REAL client — api.ts, its mappers, the read scheduler —
  * over the mock transport, and swapping in the demo-data gateway
  * (demoTransport.ts, `passthrough: "first"`) is a config flip, not new code.
  *
  * Which RPCs are served here is DEMO_SCENARIO_RPCS; the rest of the console
  * (issues, sessions, workloads, alerting, dashboards, metrics, delivery) still
- * reads the same model (shop/shopApi.ts) directly, until each is encoded here
+ * reads the model fixtures directly (DemoConsole), until each is encoded here
  * (research/2026-11-05-console-health/forge-mock-friction.md, item R1).
  */
 
@@ -44,11 +45,10 @@ import {
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { AttributeOp, LogRecord, ObsScope, Severity, Span, TimeWindow, TraceRed, TraceSummary } from "@/services/controlPlane/observability/types";
 
-import { createShopApi } from "./shop/shopApi";
+import { createDemoFixtures } from "./busyApp";
 import { consoleScenarioHandlers } from "./consoleScenario";
 import { configScenarioHandlers } from "./configScenario";
 import { inventoryScenarioHandlers } from "./inventoryScenario";
-import { storageScenarioHandlers } from "./storageScenario";
 import { DEMO_DEFAULT_SERVICES, defaultHandlers, withMessageRequests } from "./demoServiceDefaults";
 import { scopedToDemo } from "./demoScope";
 
@@ -200,7 +200,7 @@ const points = (timestamps: number[], values: (number | null)[]) =>
  * sample app by default). Each handler returns a proto message (create()),
  * as a server would.
  */
-export function createDemoScenario(fixtures: ObservabilityApi = createShopApi()): MockScenario {
+export function createDemoScenario(fixtures: ObservabilityApi = createDemoFixtures()): MockScenario {
   const handlers = {
     [DEMO_SCENARIO_RPCS.listTraces]: async (req: ListTracesRequest) => {
       const scope = modelScope(req.scope);
@@ -298,5 +298,5 @@ export function createDemoScenario(fixtures: ObservabilityApi = createShopApi())
   // (consoleScenario.ts: Releases, Environments, Secrets, Domains, Activity), then forge's
   // generated defaults for every other read of the console's services (demoServiceDefaults.ts).
   // A read naming another project or environment is answered empty first (demoScope.ts).
-  return { name: "demo", handlers: withMessageRequests(scopedToDemo({ ...defaultHandlers(), ...consoleScenarioHandlers(), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...storageScenarioHandlers(), ...handlers }, DEMO_DEFAULT_SERVICES)) as unknown as MockScenario["handlers"] };
+  return { name: "demo", handlers: withMessageRequests(scopedToDemo({ ...defaultHandlers(), ...consoleScenarioHandlers(), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...handlers }, DEMO_DEFAULT_SERVICES)) as unknown as MockScenario["handlers"] };
 }

@@ -31,7 +31,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runenv"
-	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -178,19 +177,6 @@ func storageReaperConfig(cfg *config.ReliantConfig, managed bool) diskwatch.Reap
 	out, warnings := diskwatch.ParseReaperConfig(sr.GetMode(), sr.GetInterval(), sr.GetPressureInterval(), sr.GetGocacheInterval(), sr.GetPolicyPath(), managed)
 	for _, w := range warnings {
 		logging.Warn("Storage reaper config: " + w)
-	}
-	return out
-}
-
-// worktreeReclaimConfig is the root config's machine-wide worktree reclaim
-// (internal/worktreereclaim/sweep.go), which rides the storage reaper's
-// schedule. A value it cannot use is named in a warning and replaced by its
-// default; it never stops the daemon.
-func worktreeReclaimConfig(cfg *config.ReliantConfig) worktreereclaim.SweepConfig {
-	wr := cfg.GetWorktreeReclaim()
-	out, warnings := worktreereclaim.ParseSweepConfig(wr.GetMode(), wr.GetRoots(), wr.GetCleanIdle(), wr.GetApprovalIdle())
-	for _, w := range warnings {
-		logging.Warn("Worktree reclaim config: " + w)
 	}
 	return out
 }

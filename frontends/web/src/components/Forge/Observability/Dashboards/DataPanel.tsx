@@ -6,8 +6,7 @@ import Link from "@/components/forge-ui/link";
 import type { DataAccessConfirmation, DbTable } from "@/services/controlPlane/observability/appDatabaseApi";
 import type { Panel } from "@/services/controlPlane/observability/types";
 import { dataBrowserErrorKind } from "@/services/controlPlane/observability/errors";
-import { AccessReasonDialog } from "../../AuditedAccess/AccessReasonDialog";
-import { isCurrentReader, useReaderSession } from "../../AuditedAccess/readerSession";
+import { AccessReasonDialog } from "../../Data/AccessReasonDialog";
 import { clearAccess, isDenied, needsConfirmation, readAccess, writeAccess } from "../../Data/dataAccess-model";
 import { DataError } from "../../Data/DataStates";
 import { findTable } from "../../Data/dataLinks-model";
@@ -46,38 +45,27 @@ interface DataSchema {
 }
 
 /** Same admission as the browser, with an EXACT database selection: never fall back to a different DB. */
-interface DataPanelGateProps {
+export function DataPanelGate({ context, database, tableName, children }: {
   context: PanelDataContext;
   database: string;
   tableName: string;
   children: (schema: DataSchema) => ReactNode;
-}
-export function DataPanelGate(props: DataPanelGateProps) {
-  const reader = useReaderSession();
-  if (!reader.principalId) return <p role="status">Sign in to read Data links and saved views.</p>;
-  return <ReaderDataPanelGate key={`${reader.epoch}/${props.context.env.id}/${props.database}`} {...props} />;
-}
-function ReaderDataPanelGate({ context, database, tableName, children }: DataPanelGateProps) {
-  const reader = useReaderSession();
+}) {
   const { env } = context;
   const databases = useBrowsableDatabases(env.id);
   const selected = databases.data?.find((db) => db.name === database);
-  const [access, setAccess] = useState(() => readAccess(env.id, reader));
+  const [access, setAccess] = useState(() => readAccess(env.id));
   const [asking, setAsking] = useState(false);
-  const [confirmationRequired, setConfirmationRequired] = useState(false);
-  const audited = (!!selected && needsConfirmation(selected.policy)) || confirmationRequired;
+  const audited = !!selected && needsConfirmation(selected.policy);
   const permitted = !!selected && selected.reachable && !isDenied(selected.policy) && (!audited || !!access);
   const sentAccess = audited && access ? access : undefined;
   const describe = useDescribeDatabase(env.id, selected?.name ?? null, sentAccess, permitted);
-  const confirmationLost = () => {
-    if (!isCurrentReader(reader)) return;
-    clearAccess(env.id, reader); setAccess(null); setConfirmationRequired(true); setAsking(true);
-  };
+  const confirmationLost = () => { clearAccess(env.id); setAccess(null); setAsking(true); };
   useEffect(() => {
-    if (isCurrentReader(reader) && describe.error && dataBrowserErrorKind(describe.error) === "confirmation") {
-      clearAccess(env.id, reader); setAccess(null); setConfirmationRequired(true);
+    if (describe.error && dataBrowserErrorKind(describe.error) === "confirmation") {
+      clearAccess(env.id); setAccess(null);
     }
-  }, [describe.error, env.id, reader]);
+  }, [describe.error, env.id]);
   const tables = permitted && !describe.error ? describe.data?.tables ?? [] : [];
   const table = findTable(tables, tableName);
   const error = databases.error || describe.error;
@@ -88,7 +76,7 @@ function ReaderDataPanelGate({ context, database, tableName, children }: DataPan
   return <>
     {error ? <DataError error={error} env={env.name} subject={database} onRetry={() => void (databases.error ? databases.refetch() : describe.refetch())} /> : note && <p className="text-xs text-ink-muted" role="status">{note}</p>}
     {selected && audited && !access && <Button size="sm" variant="outline" onClick={() => setAsking(true)}>Give a Data access reason</Button>}
-    {asking && audited && <AccessReasonDialog open env={env.name} subject="data" testIdPrefix="data" description="Every saved Data view read is recorded with this reader's reason." initialReason={access?.reason ?? ""} onCancel={() => setAsking(false)} onConfirm={(reason) => { if (!isCurrentReader(reader)) return; setAccess(writeAccess(env.id, reason, reader)); setAsking(false); }} />}
+    {asking && audited && <AccessReasonDialog open env={env.name} initialReason={access?.reason ?? ""} onCancel={() => setAsking(false)} onConfirm={(reason) => { setAccess(writeAccess(env.id, reason)); setAsking(false); }} />}
     {children({ table, tables, access: sentAccess, onConfirmationLost: confirmationLost })}
   </>;
 }

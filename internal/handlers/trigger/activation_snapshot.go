@@ -271,11 +271,6 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						return err
 					}
 				}
-				if w.GetFinally() != nil {
-					if err := walk(w.GetFinally(), depth+1); err != nil {
-						return err
-					}
-				}
 				secretSummary, secretCaps := secretDeclarationDisclosure(w, values, k, tainted)
 				snap.Summary = append(snap.Summary, secretSummary...)
 				snap.Capabilities.Add(secretCaps...)

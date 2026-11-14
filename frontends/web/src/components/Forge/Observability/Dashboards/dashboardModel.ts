@@ -103,52 +103,6 @@ export function sameRef(a: DashboardRef, b: DashboardRef): boolean {
   return a.kind === b.kind && a.projectId === b.projectId && a.key === b.key;
 }
 
-// ── Built-ins ────────────────────────────────────────────────────────────────
-
-/**
- * Built-ins come in two kinds. ORGANIZATION VIEWS (org-costs, org-usage,
- * org-billing, and the client's own org-llm) are typed views of the whole
- * organization: no spec, no project. STANDARD dashboards are the ones every
- * project gets from the platform (overview, service health, frontend, product
- * usage, releases, workloads): a spec over the project's own data, read-only,
- * with "Save as copy". The URL names a built-in by its key alone, so the key
- * decides which it is: every organization view's key starts with "org-".
- */
-export function isOrganizationViewKey(key: string): boolean {
-  return key.startsWith("org-");
-}
-
-/** The ref a built-in's page addresses: an organization view has no project; a standard dashboard is the project's. */
-export function builtinPageRef(key: string, project: string): DashboardRef {
-  return { kind: "builtin", projectId: isOrganizationViewKey(key) ? "" : project, key };
-}
-
-/** Whether a ref is one of a project's standard built-ins (a spec over its data), not an organization view. */
-export function isStandardBuiltinRef(ref: DashboardRef): boolean {
-  return ref.kind === "builtin" && !isOrganizationViewKey(ref.key);
-}
-
-/**
- * Whether a summary is one of a project's standard built-ins: the server says
- * so by category ("standard"); a typed view (viewKind) never is one.
- */
-export function isStandardBuiltin(summary: Pick<DashboardSummary, "source" | "category" | "viewKind" | "ref">): boolean {
-  if (summary.source !== "builtin") return false;
-  if (summary.viewKind && summary.viewKind !== "standard") return false;
-  return summary.category === "standard" || isStandardBuiltinRef(summary.ref);
-}
-
-/**
- * The gallery less the dashboards the project already has built in. A
- * control plane that lists the standard dashboards as built-ins sends no
- * template for them; one from before still did, and a template a built-in
- * stands for would offer the same dashboard twice.
- */
-export function galleryTemplates(templates: readonly DashboardSummary[], index: readonly DashboardSummary[]): DashboardSummary[] {
-  const builtIn = new Set(index.filter(isStandardBuiltin).map((d) => d.ref.key));
-  return templates.filter((t) => !builtIn.has(t.ref.key));
-}
-
 /** A dashboard's URL kind segment: only release and workspace dashboards are pages. */
 export type DashboardPageKind = Exclude<DashboardKind, "template">;
 

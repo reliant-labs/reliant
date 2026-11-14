@@ -66,9 +66,9 @@ export function writeAccess(namespace: AccessNamespace, environmentId: string, r
   return { confirmEnvId: environmentId, reason: trimmed };
 }
 
-export function clearAccess(namespace: AccessNamespace, environmentId: string, reader = getReaderSession()): void {
+export function clearAccess(namespace: AccessNamespace, environmentId: string): void {
   try {
-    window.sessionStorage.removeItem(accessStorageKey(namespace, environmentId, reader));
+    window.sessionStorage.removeItem(accessStorageKey(namespace, environmentId));
   } catch {
     // Nothing kept.
   }

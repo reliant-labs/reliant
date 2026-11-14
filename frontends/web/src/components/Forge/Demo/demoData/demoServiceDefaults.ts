@@ -23,7 +23,6 @@ import { create, isMessage } from "@bufbuild/protobuf";
 import { ActivityService } from "@/gen/controlplane/services/activity/v1/activity_pb";
 import { AlertingService } from "@/gen/controlplane/services/alerting/v1/alerting_pb";
 import { AppDatabaseService } from "@/gen/controlplane/services/app_database/v1/app_database_pb";
-import { StorageBrowserService } from "@/gen/controlplane/services/storage_browser/v1/storage_browser_pb";
 import { DashboardService } from "@/gen/controlplane/services/dashboard/v1/dashboard_pb";
 import { DeliveryInsightsService } from "@/gen/controlplane/services/delivery_insights/v1/delivery_insights_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
@@ -42,7 +41,6 @@ export const DEMO_DEFAULT_SERVICES: readonly DescService[] = [
   ActivityService,
   AlertingService,
   AppDatabaseService,
-  StorageBrowserService,
   DashboardService,
   DeliveryInsightsService,
   DeployService,

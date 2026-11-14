@@ -9,7 +9,7 @@
  *    Releases (list, one release, a rollout), Secrets, Domains and Activity
  *    each come back with believable rows for shop's dev/staging/prod.
  *  - Secrets are names only: nothing that looks like a value is on the wire.
- *  - The story matches the observability views': prod runs v1.8.3, the
+ *  - The story matches the observability fixtures: prod runs v1.8.3, the
  *    release the CreateOrder issue first appeared in.
  *  - Nothing outside shop: a read naming another project or environment gets an
  *    empty answer, from the story's handlers and from the generated defaults.
@@ -31,8 +31,7 @@ import { listActivity } from "@/services/controlPlane/observability/activityApi"
 import { getEnvironmentStatus, listEnvironmentPromotions, listProjectEnvironments } from "@/services/forge/cloudEnvs";
 import { listDomains } from "@/services/forge/domains";
 import { getEnvironmentShape, getLiveView } from "@/services/forge/live";
-import { getProjectRelease, getPromotionRollout, listProjectReleases, listReleasePromotions } from "@/services/forge/releases";
-import { envPromotionRows } from "@/components/Forge/Releases/envPromotionsModel";
+import { getProjectRelease, getPromotionRollout, listProjectReleases } from "@/services/forge/releases";
 import { listSecrets } from "@/services/forge/secretStore";
 
 import { DEMO_DOMAINS, DEMO_ENVS, DEMO_PROJECT, DEMO_RELEASES, DEMO_SECRETS, DEMO_WORKLOADS, consoleScenarioHandlers } from "../consoleScenario";
@@ -40,9 +39,6 @@ import { DEMO_DEFAULT_SERVICES } from "../demoServiceDefaults";
 import { outsideDemo } from "../demoScope";
 import { createDemoTransport, isDemoRead } from "../demoTransport";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../../../Observability/__fixtures__/fixtureApi";
-import { shopPromotions } from "../shop/delivery";
-import { demoNow, resetDemoNowForTests } from "../shopStory";
-import { describePromotion } from "../../../Observability/releaseMarkers";
 
 const { OPTIONAL: LABEL_OPTIONAL, REPEATED: LABEL_REPEATED } = FieldDescriptorProto_Label;
 const { MESSAGE: TYPE_MESSAGE, STRING: TYPE_STRING } = FieldDescriptorProto_Type;
@@ -57,27 +53,9 @@ afterEach(() => {
 });
 
 describe("the console's sample data, on the demo's transport", () => {
-  it("is the app the demo console's chrome names: same project, same environments", () => {
+  it("is the observability fixtures' app: same project, same environments", () => {
     expect(DEMO_PROJECT).toBe(FIXTURE_PROJECT);
     expect(DEMO_ENVS.map((e) => [e.id, e.name])).toEqual(FIXTURE_ENVS.map((e) => [e.id, e.name]));
-  });
-
-  it("puts the same commit and promoter on the charts' release markers as on the console's releases", async () => {
-    const markers = shopPromotions(demoNow());
-    // Every release the console cut carries its own commit on every marker.
-    for (const release of DEMO_RELEASES) {
-      for (const marker of markers.filter((m) => m.version === release.version)) expect(marker.gitCommit, `${release.version} in ${marker.envName}`).toBe(release.commit);
-    }
-    // Every whole-environment promotion is one marker: same id, promoter and time.
-    for (const env of DEMO_ENVS) {
-      for (const promotion of (await listReleasePromotions(env.id)).filter((p) => p.targets.length === 0)) {
-        const marker = markers.find((m) => m.promotionId === promotion.id);
-        expect(marker?.promotedBy, `${promotion.id}`).toBe(promotion.promotedByActor);
-        expect(marker?.promotedAtMs, `${promotion.id}`).toBe(Date.parse(promotion.createdAt!));
-      }
-    }
-    const prod = markers.filter((m) => m.envName === "prod" && m.version === "v1.8.3").at(-1)!;
-    expect(describePromotion(prod)).toBe("v1.8.3 (commit e7d93a2) promoted to prod by jon");
   });
 
   it("Environments: three deployed envs, prod and staging on v1.8.3, dev on the fix", async () => {
@@ -104,60 +82,10 @@ describe("the console's sample data, on the demo's transport", () => {
     expect(promotions.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("Promotions: every ledger is newest first, of releases the demo cut, after each was cut; staging's holds every kind of row", async () => {
-    // The scenario dates everything relative to the clock (`ago`), so the
-    // clock is frozen: the cut times and the promotion times below are the
-    // same instant minus their ages, compared exactly, however long the run.
-    vi.useFakeTimers({ toFake: ["Date"], now: Date.parse("2026-11-10T12:00:00Z") });
-    resetDemoNowForTests(Date.now());
-    try {
-      const cutAt = new Map<string, number>(DEMO_RELEASES.map((r) => [r.version, Date.now() - r.age]));
-      const ids = new Set<string>();
-      for (const env of DEMO_ENVS) {
-        const ledger = await listReleasePromotions(env.id);
-        expect(ledger.every((p, i) => i === 0 || Date.parse(ledger[i - 1].createdAt!) >= Date.parse(p.createdAt!))).toBe(true);
-        for (const p of ledger) {
-          // A release the demo's list has, so a rollback is judged; never promoted before it was cut.
-          expect(cutAt.has(p.releaseVersion)).toBe(true);
-          expect(Date.parse(p.createdAt!), `${p.id} is dated before ${p.releaseVersion} was cut`).toBeGreaterThanOrEqual(cutAt.get(p.releaseVersion)!);
-          expect(ids.has(p.id)).toBe(false);
-          ids.add(p.id);
-          // Each promotion's rollout is its own, not the running one's.
-          expect((await getPromotionRollout(env.id, p.id))?.promotionId).toBe(p.id);
-        }
-      }
-    } finally {
-      vi.useRealTimers();
-      resetDemoNowForTests();
-    }
-
-    const rank = new Map(DEMO_RELEASES.map((r, index) => [r.version, index]));
-    const staging = envPromotionRows(await listReleasePromotions("env-staging"), rank, new Map());
-    expect(staging.length).toBeGreaterThan(10);
-    expect(staging[0]).toMatchObject({ version: "v1.8.3", targets: [], rollback: false });
-    // A whole-release rollback, a scoped deploy, a mixed rollback + redeploy, and a row with no health check.
-    expect(staging.some((row) => row.targets.length === 0 && row.rollback && !row.mixed)).toBe(true);
-    expect(staging.some((row) => row.targets.length > 0 && !row.rollback && !row.redeploy)).toBe(true);
-    expect(staging.find((row) => row.mixed)?.moves).toEqual([
-      { target: "api", from: "v1.8.3", change: "rollback" },
-      { target: "shop-web", from: "v1.8.2", change: "redeploy" },
-    ]);
-    expect(staging.some((row) => row.health.verdict === "unknown")).toBe(true);
-    expect(staging.some((row) => row.health.verdict === "healthy")).toBe(true);
-    expect(staging.some((row) => row.health.verdict === "regressed")).toBe(false);
-    // The one regression is prod's v1.8.3: the incident.
-    const prod = envPromotionRows(await listReleasePromotions("env-prod"), rank, new Map());
-    expect(prod[0]).toMatchObject({ version: "v1.8.3" });
-    expect(prod[0].health.verdict).toBe("regressed");
-  });
-
   it("Deploys: one per promotion, newest first, and a staging build that failed before it cut a release", async () => {
     const { listDeployRuns, getDeployRun } = await import("@/services/forge/deployAttempts");
     const runs = await listDeployRuns(DEMO_PROJECT);
-    // One per promotion in every env's ledger, plus the failed build.
-    const promotions = (await Promise.all(DEMO_ENVS.map((env) => listReleasePromotions(env.id)))).flat();
-    expect(runs.length).toBe(promotions.length + 1);
-    expect(new Set(runs.map((r) => r.id)).size).toBe(runs.length);
+    expect(runs.length).toBe(10);
     expect(runs.every((r, i) => i === 0 || Date.parse(runs[i - 1].startedAt!) >= Date.parse(r.startedAt!))).toBe(true);
     expect(runs.slice(0, 2).map((r) => [r.env, r.release, r.state])).toEqual([
       ["dev", "v1.8.4", "succeeded"],
@@ -209,7 +137,7 @@ describe("the console's sample data, on the demo's transport", () => {
 
   it("Activity: promotions, a release cut, a triage and a rotation, newest first", async () => {
     const { events } = await listActivity({ orgId: "org-demo", projectId: DEMO_PROJECT, envIds: [] });
-    expect(events.map((e) => e.verb)).toEqual(["query_database", "promote", "cut", "assign", "issue_opened", "promote", "promote", "cut", "rotate", "rotate", "resolve"]);
+    expect(events.map((e) => e.verb)).toEqual(["promote", "cut", "assign", "promote", "promote", "rotate"]);
     expect(events.every((e, i) => i === 0 || events[i - 1].atMs >= e.atMs)).toBe(true);
   });
 
@@ -270,11 +198,7 @@ describe("every console read is answered; every write is refused", () => {
         // ownership and confirmation checks with generated placeholder data.
         const addressed: Record<string, object> = {
           "controlplane.v1.AppDatabaseService/DescribeDatabase": { environmentId: "env-dev", database: "shop" },
-          "controlplane.v1.AppDatabaseService/BrowseTable": { environmentId: "env-dev", database: "shop", table: "public.orders", limit: 50 },
-          "controlplane.v1.StorageBrowserService/ListBrowsableBuckets": { environmentId: "env-staging" },
-          "controlplane.v1.StorageBrowserService/ListObjects": { environmentId: "env-staging", bucket: "uploads" },
-          "controlplane.v1.StorageBrowserService/GetObjectMetadata": { environmentId: "env-staging", bucket: "uploads", key: "README.txt" },
-          "controlplane.v1.StorageBrowserService/PreviewObject": { environmentId: "env-staging", bucket: "uploads", key: "README.txt" },
+          "controlplane.v1.AppDatabaseService/BrowseTable": { environmentId: "env-dev", database: "shop", table: "public.chats", limit: 50 },
           "controlplane.v1.DeployService/GetWorkloadConfig": { environmentId: "env-dev", workload: "api" },
         };
         await expect(client[method.localName](addressed[`${service.typeName}/${method.name}`] ?? {}), `${service.typeName}/${method.name}`).resolves.toBeDefined();

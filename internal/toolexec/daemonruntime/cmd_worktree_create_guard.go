@@ -43,9 +43,7 @@ import (
 // create is not re-sent, and the checkout it finished is left for the server,
 // which knows the workspace failed, to clean up (owner decision 17 (a),
 // 2026-11-08: adopting a re-sent request's checkout from git state returns as
-// its own design). The server asks for that with worktree.remove_failed_create
-// (cmd_worktree_failed_create.go) when the machine connects, and before a
-// retry that finds its branch held.
+// its own design).
 
 // worktreeCreatePath is where worktree.create puts a checkout:
 // <HOME>/.reliant/worktrees/<workspace_id>[/<sub_path>]. A sub_path of ""

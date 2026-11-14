@@ -55,8 +55,8 @@
  * error reporting, and the upgrade modal — drift gone.
  */
 
-import { ConnectError, Code, createContextKey, createContextValues } from "@connectrpc/connect";
-import type { ContextValues, Interceptor } from "@connectrpc/connect";
+import { ConnectError, Code } from "@connectrpc/connect";
+import type { Interceptor } from "@connectrpc/connect";
 import {
   authInterceptor as runtimeAuthInterceptor,
   errorNormalizeInterceptor,
@@ -776,39 +776,6 @@ export function buildInterceptors(
     upgradeInterceptor,
     machineWakeInterceptor,
     ...(withAuth ? [unauthInterceptor] : []),
-    // Innermost: everything above (the token above all) is settled.
-    requestSentInterceptor,
   ];
   return chain;
 }
-
-// ─── Request sent ────────────────────────────────────────────────────
-
-/**
- * A callback a caller attaches to one RPC (`contextValues`) to learn when its
- * request is handed to the network: after every interceptor above has run,
- * the bearer token's lookup included, and right before the transport calls
- * fetch. The chat stream marks its open's `stream_requested` phase with it
- * (api/chat-streaming-grpc.ts), which separates time spent before the
- * request left the browser from time waiting on the server.
- */
-export const requestSentKey = createContextKey<(() => void) | undefined>(undefined, {
-  description: "called when the request is handed to fetch",
-});
-
-/** Attach `onSent` to an RPC's context values (see requestSentKey). */
-export function withRequestSent(values: ContextValues | undefined, onSent: () => void): ContextValues {
-  const next = values ?? createContextValues();
-  next.set(requestSentKey, onSent);
-  return next;
-}
-
-// Not async, so it adds no promise hop before fetch.
-const requestSentInterceptor: Interceptor = (next) => (req) => {
-  try {
-    req.contextValues.get(requestSentKey)?.();
-  } catch {
-    // An observer never fails the request it observes.
-  }
-  return next(req);
-};

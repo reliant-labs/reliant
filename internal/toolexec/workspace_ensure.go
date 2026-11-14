@@ -146,14 +146,8 @@ type WorkspaceNotice struct {
 	// root) that were recreated, or for NoticeIncomplete, that are missing.
 	Checkouts []string `json:"checkouts,omitempty"`
 	// Reason says why the workspace could not be recreated.
-	Reason string `json:"reason,omitempty"`
-	// RestoredWork (NoticeRepaired) says what the daemon put back from the
-	// capture it took when it reclaimed the idle workspace's disk
-	// (worktreereclaim: uncommitted changes, staged state, untracked files),
-	// and what it could not. Empty: the checkouts were rebuilt from the
-	// branch alone. Older daemons never set it.
-	RestoredWork string    `json:"restored_work,omitempty"`
-	At           time.Time `json:"at"`
+	Reason string    `json:"reason,omitempty"`
+	At     time.Time `json:"at"`
 }
 
 // EnsureWorkspace asks the daemon that runs a chat's tools to make their

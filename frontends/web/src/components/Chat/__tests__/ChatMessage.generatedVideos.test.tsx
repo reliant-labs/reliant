@@ -46,7 +46,6 @@ vi.mock("../../../hooks/attachment-queries", () => ({
 // inside it — a mocked-away card could not show that.
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
-  useChatIdOrActive: (chatId?: string | null) => chatId || "chat-1",
   // A getter, not a captured const: vi.mock is hoisted above the GENERATED
   // declaration, so the factory must not read it until render time.
   useToolResultsByCallId: () => resultsWithVideo,

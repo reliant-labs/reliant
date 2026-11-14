@@ -98,12 +98,6 @@ type Deps struct {
 	// it DraftAutomation answers Unavailable and the dialog is filled by hand.
 	// forge:optional-dep
 	Drafter AutomationDrafter
-	// Orgs says which organization a create acts in and verifies the org a
-	// list names (internal/orgs). Nil, or a nil *orgs.Resolver, is a
-	// deployment with no orgs: rows are created with none and lists ignore
-	// org_id.
-	// forge:optional-dep
-	Orgs OrgResolver
 }
 
 // Syncer is the schedule backend the handlers converge onto. Declared here,

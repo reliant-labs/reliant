@@ -9,7 +9,6 @@ import { useMemo, useCallback, useEffect } from "react";
 import { MessageRole } from "../../gen/reliant/v1/chat_pb";
 import { sendOnExistingChat } from "../../lib/chatSendRouting";
 import { sortMessagesForDisplay } from "../../lib/messageOrder";
-import { armChatOpen } from "../../lib/chatOpenInteraction";
 import { ChatPresenter } from "./ChatPresenter";
 import {
   useChat,
@@ -124,10 +123,6 @@ export function ChatContainer({
   );
   useEffect(() => {
     reconcileChatSubscription(chatId);
-    // An open the router started (the mobile chat screen, which never goes
-    // through selectChat) is set up once the subscription is asserted, here.
-    // selectChat's own opens are armed already, so this is a no-op for them.
-    armChatOpen(chatId);
   }, [chatId, connectionStatus, reconcileChatSubscription]);
 
   // Process messages: canonical order (lib/messageOrder), filter out tool messages

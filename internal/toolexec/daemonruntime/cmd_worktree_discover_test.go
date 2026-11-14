@@ -4,7 +4,6 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -190,12 +189,6 @@ func TestPrune_RealGit(t *testing.T) {
 
 type adoptStore struct{ rows map[string]db.Worktree }
 
-// SettleCheckoutTeardown is never reached: CreateWorktree here never reports a
-// pending checkout teardown.
-func (s *adoptStore) SettleCheckoutTeardown(context.Context, string, string, string) (*db.CheckoutTeardown, error) {
-	return nil, errors.New("no checkout teardowns in this store")
-}
-
 func (s *adoptStore) CreateWorktree(_ context.Context, w *db.Worktree) error {
 	s.rows[w.ID] = *w
 	return nil
@@ -332,7 +325,7 @@ func TestAdoptFinish_RollbackMovesCheckoutBack(t *testing.T) {
 		repos := []*core.Repo{{ID: "ra", Name: "a", RelativePath: "a"}, {ID: "rb", Name: "b", RelativePath: "b"}}
 		store := &adoptStore{rows: map[string]db.Worktree{}}
 		req := workspacecreate.Request{Project: project, Checkout: project.Path, Repos: repos, Name: "adopted", Branch: "feat-a", OwnerDaemonID: "d", WorkspaceID: ws}
-		wt, err := workspacecreate.Insert(context.Background(), store, nil, req)
+		wt, err := workspacecreate.Insert(context.Background(), store, req)
 		require.NoError(t, err)
 		moved := adoptMove(t, f.a, f.aWT, ws, "a", wt.ID)
 		require.True(t, moved.Success, moved.Error)
@@ -376,7 +369,7 @@ func TestAdoptFinish_ReusesExistingBranchAsIs(t *testing.T) {
 	repos := []*core.Repo{{ID: "ra", Name: "a", RelativePath: "a"}, {ID: "rb", Name: "b", RelativePath: "b"}}
 	store := &adoptStore{rows: map[string]db.Worktree{}}
 	req := workspacecreate.Request{Project: project, Checkout: project.Path, Repos: repos, Name: "adopted", Branch: "feat-a", OwnerDaemonID: "d", WorkspaceID: ws}
-	wt, err := workspacecreate.Insert(context.Background(), store, nil, req)
+	wt, err := workspacecreate.Insert(context.Background(), store, req)
 	require.NoError(t, err)
 	moved := adoptMove(t, f.a, f.aWT, ws, "a", wt.ID)
 	require.True(t, moved.Success, moved.Error)
@@ -403,7 +396,7 @@ func TestAdoptFinish_CreatesBranchWhenAbsent(t *testing.T) {
 	repos := []*core.Repo{{ID: "ra", Name: "a", RelativePath: "a"}, {ID: "rb", Name: "b", RelativePath: "b"}}
 	store := &adoptStore{rows: map[string]db.Worktree{}}
 	req := workspacecreate.Request{Project: project, Checkout: project.Path, Repos: repos, Name: "adopted", Branch: "feat-a", OwnerDaemonID: "d", WorkspaceID: ws}
-	wt, err := workspacecreate.Insert(context.Background(), store, nil, req)
+	wt, err := workspacecreate.Insert(context.Background(), store, req)
 	require.NoError(t, err)
 	moved := adoptMove(t, f.a, f.aWT, ws, "a", wt.ID)
 	require.True(t, moved.Success, moved.Error)

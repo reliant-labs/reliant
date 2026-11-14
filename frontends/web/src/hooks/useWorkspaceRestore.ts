@@ -245,7 +245,7 @@ export function useWorkspaceRestore(
             chatId: chatToRestore.id,
             title: chatToRestore.title,
           });
-          await openChatInWorkspace(chatToRestore, { openEntry: "restore" });
+          await openChatInWorkspace(chatToRestore);
 
           // Step 8: Schedule scroll position restoration (after chat renders)
           const scrollPosition = worktreeState.scrollPositions[chatToRestore.id];

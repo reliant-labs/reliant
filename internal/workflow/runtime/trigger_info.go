@@ -105,8 +105,7 @@ func propagateTrigger(parent, child map[string]interface{}) {
 	}
 }
 
-// propagateFailure hands a terminal handler's failure (and a finally
-// handler's run ending) to the bodies nested
+// propagateFailure hands an on_failure handler's failure to the bodies nested
 // inside it (a loop, an inline workflow), so `failure` means the same thing in
 // every node of the handler. Absent in a run's main graph, where there is none.
 func propagateFailure(parent, child map[string]interface{}) {
@@ -115,9 +114,5 @@ func propagateFailure(parent, child map[string]interface{}) {
 	}
 	if f, ok := parent[wfcel.FailureInputKey]; ok {
 		child[wfcel.FailureInputKey] = f
-	}
-	// A finally handler's `run`, likewise.
-	if r, ok := parent[wfcel.RunInputKey]; ok {
-		child[wfcel.RunInputKey] = r
 	}
 }

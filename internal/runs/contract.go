@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/converter"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -59,14 +58,6 @@ type TemporalClient interface {
 // only inspect or resume runs do not need to implement termination machinery.
 type TemporalTerminator interface {
 	TerminateWorkflow(ctx context.Context, workflowID, runID, reason string, details ...interface{}) error
-}
-
-// TemporalCanceller is implemented by Temporal clients that can stop an
-// execution cooperatively: ask it to cancel, then ask it whether it is ending
-// (model.RunStopQuery). A client without it gets the hard terminate.
-type TemporalCanceller interface {
-	CancelWorkflow(ctx context.Context, workflowID, runID string) error
-	QueryWorkflow(ctx context.Context, workflowID, runID, queryType string, args ...interface{}) (converter.EncodedValue, error)
 }
 
 // PauseController is the signal/reset machinery this service drives, satisfied

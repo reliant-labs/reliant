@@ -66,7 +66,7 @@ const (
 type ClaimableServiceClient interface {
 	// StartClaimableDeploy mints (or, idempotently, finds) the anonymous
 	// identity for one (device_id, project, env): an anonymous GoTrue user that
-	// owns an ordinary org, plus a narrow `rlat_` token the CLI deploys
+	// owns an ordinary personal org, plus a narrow `rlat_` token the CLI deploys
 	// with, plus the claim link.
 	//
 	// IDEMPOTENT per (device_id, project, env) while the row is live or
@@ -244,7 +244,7 @@ func (c *claimableServiceClient) GetClaimFreeSite(ctx context.Context, req *conn
 type ClaimableServiceHandler interface {
 	// StartClaimableDeploy mints (or, idempotently, finds) the anonymous
 	// identity for one (device_id, project, env): an anonymous GoTrue user that
-	// owns an ordinary org, plus a narrow `rlat_` token the CLI deploys
+	// owns an ordinary personal org, plus a narrow `rlat_` token the CLI deploys
 	// with, plus the claim link.
 	//
 	// IDEMPOTENT per (device_id, project, env) while the row is live or

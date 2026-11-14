@@ -135,13 +135,6 @@ export const RUN_STATUS_LABEL: Record<RunNodeStatus, string> = {
   waiting: "waiting for you",
 };
 
-/** The integration id a "no slack connection" run error names, if it is that error. */
-export function missingConnectionIntegration(message: string | undefined): string | undefined {
-  if (!message) return undefined;
-  const id = /\bno ([a-z][a-z0-9_-]*) connection\b/i.exec(message)?.[1]?.toLowerCase();
-  return id === "such" ? undefined : id;
-}
-
 /**
  * The config-panel field a run error is about, when it names one. A step whose
  * {{ }} expression could not be evaluated fails with the field's path:

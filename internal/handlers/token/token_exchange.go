@@ -39,9 +39,7 @@ import (
 // ── ATTENUATION, NEVER ESCALATION ────────────────────────────────────
 //
 // The granted scopes are the intersection of what was requested, what is
-// exchangeable, and what the CALLING token holds (for a wildcard credential,
-// its ceiling: see exchangeCeiling, which also names the environment-bindable
-// scopes for the control plane to keep or clip). A token may never grant
+// exchangeable, and what the CALLING token holds. A token may never grant
 // authority it does not hold (forge/pkg/accesstoken), so a credential issued
 // without deploy permission cannot become one that has it — and the scope list
 // Settings shows for a token stays the truth about what it can do, directly or
@@ -89,71 +87,6 @@ var exchangeableScopes = func() []fat.Scope {
 	}
 	return scopes
 }()
-
-// environmentBindableScopes are the control-plane permissions a person may
-// hold bound to ONE deploy environment (control-plane orggrants.EnvScopes,
-// docs/design/orgs-and-members.md §4): a release manager's deploy:write on
-// prod alone, say. Named as strings and kept only when this binary's forge
-// knows the scope (storage:read and deploy:config:read arrive with a newer
-// pin), so the set grows with the catalog and never names a scope that could
-// not be minted.
-var environmentBindableScopes = func() fat.Set {
-	out := fat.Set{}
-	for _, raw := range []string{"deploy:write", "secret:write", "db:query", "storage:read", "deploy:config:read"} {
-		if scope, ok := fat.ParseScope(raw); ok {
-			out[scope] = struct{}{}
-		}
-	}
-	return out
-}()
-
-// exchangeCeiling is what the calling session may hand on: what it resolved to,
-// plus — for a wildcard credential (a daemon's or a CLI login's, which hold
-// every scope their person holds) — the environment-bindable scopes.
-//
-// WHY THE WILDCARD ADDS THEM. The control plane resolves a credential that may
-// act on every environment to its person's ORG-WIDE grants only, so a grant
-// bound to prod never shows in subject.Scopes. Intersecting with that alone
-// would mint the helper's child without it, and the child could never spend it.
-// A wildcard's ceiling holds every scope, so naming a bindable one is no
-// widening of the ceiling; and it is never authority either: the control
-// plane's MintForUser keeps it only when the person holds it on some
-// environment (and the daemon's policy allows it), resolves the child to
-// org-wide grants, and judges every use on its own environment. A control
-// plane that predates that rule clips it away at the mint, so against an older
-// control plane the child stays as narrow as before, never wider. An explicit-
-// list credential's ceiling is not visible here, so it hands on only what it
-// resolved to.
-func exchangeCeiling(subject *fat.Principal) fat.Set {
-	if !subject.AllScopes {
-		return subject.Scopes
-	}
-	out := make(fat.Set, len(subject.Scopes)+len(environmentBindableScopes))
-	for scope := range subject.Scopes {
-		out[scope] = struct{}{}
-	}
-	for scope := range environmentBindableScopes {
-		out[scope] = struct{}{}
-	}
-	return out
-}
-
-// environmentOnlyExchange is the refusal of an exchange whose child would
-// carry only scopes held on specific environments: it would resolve to its
-// person's org-wide grants, which is nothing, and never authenticate. The
-// control plane refuses such a mint itself (control-plane #2400,
-// "failed_precondition", passed through above); an older one mints it, and
-// confirmOrg then finds it resolves to nothing. granted, when known, is named.
-func environmentOnlyExchange(granted []fat.Scope) error {
-	what := "the requested permissions"
-	if len(granted) > 0 {
-		what = fat.JoinScopes(granted)
-	}
-	return svcerr.FailedPrecondition(fmt.Sprintf(
-		"this exchange would authorize nothing: you hold %s only on specific environments, and an exchanged "+
-			"credential carries only what you hold across the organization; ask for it together with a permission "+
-			"you hold across the organization (forge asks for deploy:read), or ask an organization admin for one", what))
-}
 
 // TokenControlPlane is what TokenService knows about the deployment's control
 // plane.
@@ -207,10 +140,9 @@ func (s *Service) ExchangeToken(
 			"a token bound to a %s cannot be exchanged", subject.Resource.Kind))
 	}
 
-	ceiling := exchangeCeiling(subject)
 	granted := make([]fat.Scope, 0, len(requested))
 	for _, scope := range requested {
-		if ceiling.Has(scope) {
+		if subject.Scopes.Has(scope) {
 			granted = append(granted, scope)
 		}
 	}
@@ -260,22 +192,6 @@ func (s *Service) ExchangeToken(
 		var refused *accesstokenclient.RPCError
 		if errors.As(err, &refused) && refused.Code == "permission_denied" {
 			return nil, svcerr.WithReason(svcerr.PermissionDenied(refused.Message), refused.Reason)
-		}
-		// The control plane's refusal of a ceiling that would authorize
-		// nothing (control-plane #2400) is the caller's to act on, not an
-		// outage.
-		//
-		// MIXED VERSIONS. A control plane before #2400 clips a bindable
-		// scope to org-wide grants at the mint, so this exchange stays as
-		// narrow as before (never wider) and an environment-only request
-		// ends as its permission_denied above. A control plane with #2400
-		// refuses that request here. Either way nothing that cannot
-		// authenticate is handed back; confirmOrg is the backstop. Rolling
-		// this server back restores exchangeCeiling's old answer (the
-		// resolved scopes only), the narrow behaviour, with no control-plane
-		// step: the control plane only ever clips more.
-		if errors.As(err, &refused) && refused.Code == "failed_precondition" {
-			return nil, svcerr.WithReason(svcerr.FailedPrecondition(refused.Message), refused.Reason)
 		}
 		return nil, authorityError("exchange", err)
 	}
@@ -338,12 +254,6 @@ func (s *Service) confirmOrg(ctx context.Context, userID string, minted tokenaut
 	if revokeErr := s.deps.Authority.RevokeForUser(ctx, userID, minted.TokenID); revokeErr != nil {
 		logging.ErrorContext(ctx, "could not revoke a mis-scoped exchanged token", "token_id", minted.TokenID,
 			"error", tokenauthority.Describe(revokeErr))
-	}
-	if errors.Is(err, accesstokenclient.ErrNoRecognisedScope) {
-		// An older control plane minted a child that resolves to nothing:
-		// every scope it kept is held only on specific environments.
-		// Revoked above; say why rather than report an outage.
-		return environmentOnlyExchange(nil)
 	}
 	if err != nil {
 		return svcerr.WithCause(svcerr.Unavailable("token service unavailable"), err)

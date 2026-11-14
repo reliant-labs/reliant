@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=fa8730a76e5b6839cda43ab726c2fbbbc5f16e7cc69ed6fdf452e541d1def560
+// forge:hash=9aeaa0d41f3963b54afb54d8cd4a454c85541c4a8780d1b48b4caaa9c86c16ad
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -62,7 +62,6 @@ type MockRepository struct {
 	GetDaemonFunc                           func(context.Context, string) (*db.Daemon, error)
 	ListDaemonsByUserIDFunc                 func(context.Context, string) ([]*db.Daemon, error)
 	GetChatFunc                             func(context.Context, string) (*db.Chat, error)
-	GetProjectFunc                          func(context.Context, string) (*db.Project, error)
 }
 
 // ListWorktreeRecoveries records the call and delegates to ListWorktreeRecoveriesFunc when set.
@@ -360,15 +359,6 @@ func (m *MockRepository) GetChat(ctx context.Context, id string) (*db.Chat, erro
 		return m.GetChatFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetChat")
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockRepository) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProject")
 }
 
 // Compile-time check.

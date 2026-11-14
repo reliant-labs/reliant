@@ -686,52 +686,6 @@ on_failure:
 
 **Testing.** Name the handler's nodes `on_failure.<node>` in a scenario's `events`, `completed` and `messages`, and assert `expect.on_failure` (`ran`, `node_id`, `error_code`, `attempt`, `error_contains`, `handler_failed`).
 
-`on_failure` never runs for a cancelled run. To release something however the run ends, use `finally`.
-
-## However a run ends: `finally`
-
-A workflow-level `finally:` is an inline graph that runs **once** when the run ends, whatever ended it: it completed, it failed, or it was cancelled (`control_run cancel`, CancelRun, archiving the chat). Use it to release what the run holds, such as a lease, a claim or a label, so nothing stays held until a TTL runs out.
-
-```yaml
-name: fix-pr
-inputs:
-  pr: {type: integer}
-entry: [lease]
-nodes:
-  - id: lease
-    type: run
-    args:
-      command: "scripts/lease.sh take --pr {{ inputs.pr }}"
-  # ... the work ...
-finally:
-  sequence:
-    - id: release
-      type: run
-      condition: "nodes.?lease.exit_code.orValue(1) == 0"
-      timeout: 3m
-      args:
-        command: "scripts/lease.sh release --pr {{ inputs.pr }}"
-    - id: note
-      type: save_message
-      condition: "run.status != 'completed'"
-      args:
-        role: assistant
-        display_style: warning
-        content: "Ended {{ run.status }}; released the lease."
-```
-
-**When it runs.** When the run completes, fails (after `on_failure`), or is cancelled. Not when it pauses, since a paused run comes back, and not when it hands off to a successor run.
-
-**What it can read.** `run.status`, which is `'completed'`, `'failed'` or `'cancelled'`; `failure.*`, with every key present and empty unless the run failed; the run's `inputs`; and the `nodes` outputs it had produced. Guard every main-graph read with `has()` or `.?`, because a failure or a cancel can stop the graph anywhere.
-
-**On a cancel.** The run's in-flight steps are cancelled first, and a `run` node's command is stopped on its machine. Then `finally` runs on its own five-minute budget, so its own commands are not cancelled. A run that does not stop within a few seconds of the cancel (for example, one with no worker to run it) is hard-terminated, and its `finally` does not run, so keep a TTL on anything it holds as a backstop.
-
-**The same rules as `on_failure`.** It cannot change how the run ended. An error in it is logged, never handled again. It has no `inputs`, `outputs` or nested handlers, shares no node ids with the main graph (`finally` itself is reserved), and may not contain `approval` or `ask_question` nodes. Make its steps idempotent: releasing something that is not held must succeed.
-
-**A child's `finally`.** A workflow started by a `workflow:` node with `ref:` runs its own `finally` when it ends, inside its own scope, before the parent's. Its nodes are named `<node>.finally.<id>` in scenarios.
-
-**Testing.** Name the handler's nodes `finally.<node>` in a scenario, and assert `expect.finally` (`ran`, `status`, `handler_failed`).
-
 ## Combining Techniques
 
 These techniques compose naturally. A sophisticated workflow might combine: pipeline (improve prompt → implement → verify), parallel execution in isolated workspaces, retry loops while tests fail, escalation to senior agent on failure, and multi-model review.

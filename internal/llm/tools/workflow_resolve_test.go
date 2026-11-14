@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -181,51 +180,6 @@ func TestResolveWorkflowDraft_OtherUsersUUIDNotFound(t *testing.T) {
 	_, err := resolveWorkflowDraft(createTestContext(t, ""), repo, foreign.ID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "workflow not found")
-}
-
-// rawDraftLookup returns its one draft by every key, as an owner-filtered
-// store read does before authz confirms it.
-type rawDraftLookup struct{ draft *db.WorkflowDraft }
-
-func (r rawDraftLookup) GetWorkflowDraft(context.Context, string) (*db.WorkflowDraft, error) {
-	return r.draft, nil
-}
-
-func (r rawDraftLookup) GetWorkflowDraftByName(context.Context, string, string) (*db.WorkflowDraft, error) {
-	return r.draft, nil
-}
-
-func (r rawDraftLookup) GetWorkflowDraftBySlug(context.Context, string, string) (*db.WorkflowDraft, error) {
-	return r.draft, nil
-}
-
-// liveIn is a membership of the orgs it names only.
-type liveIn map[string]bool
-
-func (m liveIn) IsMember(_ context.Context, _, orgID string) (bool, bool, error) {
-	return m[orgID], true, nil
-}
-
-// A saved workflow of an org its owner has left is not found by any key a
-// tool call names: its UUID, its slug or its name. One of a live org is.
-func TestResolveWorkflowDraft_RemovedMemberByEveryKey(t *testing.T) {
-	t.Parallel()
-	globex, home := "globex", "home"
-	left := &db.WorkflowDraft{ID: uuid.New().String(), UserID: "test-user", OrgID: &globex, Name: "Left Flow", Slug: "left-flow"}
-	kept := &db.WorkflowDraft{ID: uuid.New().String(), UserID: "test-user", OrgID: &home, Name: "Home Flow", Slug: "home-flow"}
-	tc := createTestContext(t, "")
-	tc.Context = authz.WithMembership(tc.Context, liveIn{"home": true})
-
-	for _, key := range []string{left.ID, left.Slug, left.Name} {
-		_, err := resolveWorkflowDraft(tc, rawDraftLookup{left}, key)
-		require.Error(t, err, "a removed member's draft by %q", key)
-		assert.Contains(t, err.Error(), "workflow not found")
-	}
-	for _, key := range []string{kept.ID, kept.Slug, kept.Name} {
-		got, err := resolveWorkflowDraft(tc, rawDraftLookup{kept}, key)
-		require.NoError(t, err, "a live member's draft by %q", key)
-		assert.Equal(t, kept.ID, got.ID)
-	}
 }
 
 func TestCreateWorkflow_DuplicateSlugIsClearToolError(t *testing.T) {

@@ -63,9 +63,7 @@ func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID st
 
 // ListWorktreeIDsWithRunningChat conservatively excludes both chat and
 // spawned-thread workspace bindings while their chat has a pending, active or
-// paused/resumable run, or a thread parked on a provider wait that has not
-// reached its resume time (providerWaitSQL). A thread can override its
-// chat's workspace.
+// paused/resumable run. A thread can override its chat's workspace.
 func ListWorktreeIDsWithRunningChat(ctx context.Context, db orm.Context, worktreeIDs []string) (map[string]bool, error) {
 	out := make(map[string]bool)
 	if len(worktreeIDs) == 0 {
@@ -78,10 +76,7 @@ func ListWorktreeIDsWithRunningChat(ctx context.Context, db orm.Context, worktre
  SELECT chat_id, worktree_id FROM threads WHERE worktree_id = ANY(?0::text[])
 )
 SELECT DISTINCT b.worktree_id FROM bindings b JOIN workflows w ON w.chat_id = b.chat_id
-WHERE w.state IN (?1, ?2) OR (w.state = ?3 AND w.stop_reason = ?4)
-UNION
-SELECT b.worktree_id FROM bindings b JOIN provider_backoff pb ON pb.chat_id = b.chat_id
-WHERE `+providerWaitSQL+` AND pb.resume_at >= NOW()`,
+WHERE w.state IN (?1, ?2) OR (w.state = ?3 AND w.stop_reason = ?4)`,
 		pgdialect.Array(worktreeIDs), core.WorkflowStatePending, core.WorkflowStateActive,
 		core.WorkflowStateStopped, core.StopReasonPaused).Scan(ctx, &ids)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -225,9 +220,6 @@ func UpdateChatActiveDaemon(ctx context.Context, db orm.Context, chatID string, 
 // ChatMove is a chat's move to another project: the worktree (the new
 // project's main checkout) and the machine it runs on there.
 type ChatMove struct {
-	// UserID owns the chat: the move takes their org lock first
-	// (LockUserOrgs), so no backfill stamps between its decision and commit.
-	UserID        string
 	ChatID        string
 	FromProjectID string
 	ToProjectID   string
@@ -235,15 +227,6 @@ type ChatMove struct {
 	// DaemonID pins the chat's machine; nil clears the pin. Pinning one puts a
 	// no-machine chat on a machine, as UpdateChatActiveDaemon does.
 	DaemonID *string
-	// OrgID is the org the move was decided in: the chat's own org, else its
-	// project's, else DefaultOrgID. The statement moves the chat only while
-	// the chat and the target project still resolve to it, and stamps it on a
-	// chat with none, so the backfill cannot later give the moved chat
-	// another org. nil decides nothing: neither side had an org yet.
-	OrgID *string
-	// DefaultOrgID is the caller's default org, what a side with no org
-	// resolves to; nil when the decision did not need it.
-	DefaultOrgID *string
 }
 
 // Chat activities (reliantv1.ChatActivity) a chat may be moved in: IDLE and
@@ -260,25 +243,12 @@ const (
 // chat row lock withChatWorktreeAdmission takes (which a workflow's admission
 // takes too), so a run cannot start between them. last_active does not move:
 // the sidebar orders by it, and moving a chat is not activity in it.
-//
-// The org is re-decided here too, from the rows as they are now: the chat's
-// effective org (its own, else its project's, else the default ?8) must still
-// be the target project's (its own, else the default), with NULL compared as
-// a value, so "neither side has an org yet" is a decision the statement checks
-// like any other, never a bypass. A backfill that stamped one side since the
-// handler read them makes the move a no-op. A backfill stamps the projects and
-// then the chat in one transaction, and the chat row lock is held here, so it
-// has either committed both before this statement's snapshot or is waiting on
-// this chat. ?7, when set, is the org the handler decided, and must also still
-// hold. The chat is stamped with that org, or the target's, so the backfill
-// cannot later give the moved chat another one.
 const moveChatToProjectSQL = `
 UPDATE chats SET
     project_id = ?0,
     worktree_id = ?1,
     active_daemon_id = ?2,
     no_machine = no_machine AND ?2::text IS NULL,
-    org_id = COALESCE(org_id, ?7::text, (SELECT p.org_id FROM projects p WHERE p.id = ?0)),
     updated_at = NOW()
 WHERE id = ?3
   AND project_id = ?4
@@ -286,10 +256,6 @@ WHERE id = ?3
       SELECT 1 FROM chats_with_activity v
       WHERE v.id = ?3 AND v.activity IN (?5, ?6)
   )
-  AND COALESCE(org_id, (SELECT p.org_id FROM projects p WHERE p.id = ?4), ?8::text)
-      IS NOT DISTINCT FROM COALESCE((SELECT p.org_id FROM projects p WHERE p.id = ?0), ?8::text)
-  AND (?7::text IS NULL
-      OR COALESCE(org_id, (SELECT p.org_id FROM projects p WHERE p.id = ?4), ?8::text) = ?7::text)
 RETURNING id`
 
 // moveChatPlansSQL moves the chat's plans with it: plans.project_id cascades
@@ -306,13 +272,10 @@ WHERE project_id = ?1
 func MoveChatToProject(ctx context.Context, db orm.Context, m ChatMove) (moved bool, err error) {
 	worktreeID := m.WorktreeID
 	err = withChatWorktreeAdmission(ctx, db, m.ChatID, &worktreeID, func(ctx context.Context) error {
-		// The statement below re-decides the org IS NOT DISTINCT FROM under
-		// the owner's org lock, which is taken before the chat's row lock
-		// (org_lock.go) by the caller's transaction (db.MoveChatToProject).
 		var ids []string
 		if err := db.Bun().NewRaw(moveChatToProjectSQL,
 			m.ToProjectID, m.WorktreeID, m.DaemonID, m.ChatID, m.FromProjectID,
-			chatActivityIdle, chatActivityError, m.OrgID, m.DefaultOrgID,
+			chatActivityIdle, chatActivityError,
 		).Scan(ctx, &ids); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("failed to move chat: %w", recoveryAdmissionError(err))
 		}
@@ -670,7 +633,6 @@ func GetChatRow(ctx context.Context, db orm.Context, id string) (*core.ChatRow, 
 		Title:          row.Title,
 		ProjectID:      row.ProjectID,
 		UserID:         row.UserID,
-		OrgID:          row.OrgID,
 		WorkflowID:     row.WorkflowID,
 		WorkflowName:   row.WorkflowName,
 		RunID:          row.RunID,
@@ -725,7 +687,6 @@ func chatToRow(chat *core.Chat) *Chat {
 		Title:           chat.Title,
 		ProjectID:       chat.ProjectID,
 		UserID:          chat.UserID,
-		OrgID:           chat.OrgID,
 		State:           &state,
 		WorkflowID:      chat.WorkflowID,
 		RunID:           chat.RunID,

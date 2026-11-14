@@ -11,16 +11,9 @@
  * writes: Rename, Make default, Test, and Remove (which revokes at the
  * provider where it can) behind a confirmation that names the automations
  * that will lose it. Nothing here ever reads a secret.
- *
- * It is also where to make one: "Connect" lists the integrations this
- * deployment offers and opens the same dialog the workflow builder and an
- * automation's Enable step use (sign in at the provider, or paste a key), so a
- * workflow that only runs on a schedule can still get the connection its steps
- * need.
  */
 
 import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -28,23 +21,17 @@ import {
   useAllConnections,
   useDeleteConnection,
   useIntegrationNames,
-  useIntegrations,
   useRenameConnection,
   useSetDefaultConnection,
   useTestConnection,
   type Connection,
-  type Integration,
 } from "@/hooks/connection-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
 import type { Trigger } from "@/hooks/trigger-model";
-import { methodsUnavailableHere } from "@/lib/integrationAvailability";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import Button from "../forge-ui/button";
 import Card from "../forge-ui/card";
 import ConfirmationDialog from "../forge-ui/confirmation_dialog";
-import Modal from "../forge-ui/modal";
-import { IntegrationLogoTile } from "../icons/IntegrationLogo";
-import { ConnectIntegrationDialog, type ConnectIntegrationTarget } from "../workflow/connections/ConnectIntegrationDialog";
 import { integrationDisplayName } from "../workflow/inputs/inputTypeNouns";
 import { RowMenu } from "../workflows/RowMenu";
 import { WorkflowBadge } from "../workflows/WorkflowSourceBadge";
@@ -81,25 +68,6 @@ export function usedBySentence(automations: readonly Trigger[]): string {
   return `Used by ${automations.length} automations`;
 }
 
-/** Where OAuth returns to, and where a run's "no <integration> connection" error points. */
-export const INTEGRATIONS_SETTINGS_PATH = "/settings/integrations";
-
-/** The integrations someone can connect here: they take a credential of some kind. */
-export function connectableIntegrations(integrations: readonly Integration[]): Integration[] {
-  return integrations
-    .filter((integration) => integration.methods.some((method) => method.kind !== "none"))
-    .sort((a, b) => a.displayName.localeCompare(b.displayName));
-}
-
-function connectTargetOf(integration: Integration): ConnectIntegrationTarget {
-  return {
-    integrationId: integration.id,
-    displayName: integration.displayName,
-    icon: integration.id,
-    connection: { methods: integration.methods, params: integration.params },
-  };
-}
-
 const STATUS: Record<Connection["status"], { label: string; variant: "neutral" | "info" | "warning" | "error" }> = {
   active: { label: "Connected", variant: "neutral" },
   needs_reauth: { label: "Needs sign-in again", variant: "warning" },
@@ -109,31 +77,17 @@ const STATUS: Record<Connection["status"], { label: string; variant: "neutral" |
 
 export function IntegrationsSettings() {
   const connections = useAllConnections();
-  const integrations = useIntegrations();
-  const connectable = useMemo(() => connectableIntegrations(integrations.data ?? []), [integrations.data]);
   const names = useIntegrationNames();
-  const [picking, setPicking] = useState(false);
-  const [target, setTarget] = useState<ConnectIntegrationTarget | null>(null);
-  const connect = (integration: Integration) => {
-    setPicking(false);
-    setTarget(connectTargetOf(integration));
-  };
   const triggers = useTriggers(undefined);
   const usedBy = useMemo(() => automationsByConnection(triggers.data ?? []), [triggers.data]);
   const groups = useMemo(() => groupConnections(connections.data ?? []), [connections.data]);
   const nameOf = (id: string) => names.get(id) || integrationDisplayName(id);
-  const integrationOf = (id: string) => connectable.find((integration) => integration.id === id);
 
   return (
     <div className="space-y-6">
       <SettingsPageHeader
         title="Integrations"
-        description="The accounts your automations and agents act through: GitHub, Slack, Gmail, Twilio and HTTP. Connect one here, or when a workflow step first needs it; this is also where to check it still works, or revoke it."
-        actions={
-          <Button variant="primary" size="lg" leftIcon={<Plus />} onClick={() => setPicking(true)} disabled={connectable.length === 0}>
-            Connect
-          </Button>
-        }
+        description="The accounts your automations and agents act through: GitHub, Slack, Gmail, Twilio and HTTP. You connect one when something first needs it; this is where to find it again, check it still works, or revoke it."
       />
       {connections.isLoading ? (
         <Card padding="md" aria-busy="true">
@@ -151,37 +105,16 @@ export function IntegrationsSettings() {
         <Card padding="md">
           <p className="text-sm font-medium text-foreground">No connections yet.</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Connect an integration so the workflows and automations that use it can run, including ones that start on a
-            schedule. Each one you make shows up here.
+            You connect an integration when an automation or a workflow step first needs it, from its setup or the
+            workflow builder. Each one you make shows up here.
           </p>
-          {connectable.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {connectable.map((integration) => (
-                <Button key={integration.id} variant="outline" size="sm" onClick={() => connect(integration)}>
-                  Connect {integration.displayName}
-                </Button>
-              ))}
-            </div>
-          )}
         </Card>
       ) : (
         groups.map((group) => (
           <section key={group.integrationId} aria-labelledby={`integration-${group.integrationId}`} className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <h2 id={`integration-${group.integrationId}`} className="text-sm font-semibold text-foreground">
-                {nameOf(group.integrationId)}
-              </h2>
-              {integrationOf(group.integrationId) && (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  aria-label={`Add another ${nameOf(group.integrationId)} connection`}
-                  onClick={() => connect(integrationOf(group.integrationId)!)}
-                >
-                  Add another
-                </Button>
-              )}
-            </div>
+            <h2 id={`integration-${group.integrationId}`} className="text-sm font-semibold text-foreground">
+              {nameOf(group.integrationId)}
+            </h2>
             <Card padding="none">
               <ul className="divide-y divide-border/60" aria-label={`${nameOf(group.integrationId)} connections`}>
                 {group.connections.map((connection) => (
@@ -197,45 +130,7 @@ export function IntegrationsSettings() {
           </section>
         ))
       )}
-      <ConnectPicker open={picking} integrations={connectable} onClose={() => setPicking(false)} onPick={connect} />
-      <ConnectIntegrationDialog target={target} onClose={() => setTarget(null)} redirectAfter={INTEGRATIONS_SETTINGS_PATH} />
     </div>
-  );
-}
-
-function ConnectPicker({
-  open,
-  integrations,
-  onClose,
-  onPick,
-}: {
-  open: boolean;
-  integrations: Integration[];
-  onClose: () => void;
-  onPick: (integration: Integration) => void;
-}) {
-  return (
-    <Modal open={open} onClose={onClose} size="md" title="Connect an integration">
-      <ul className="space-y-2" aria-label="Integrations">
-        {integrations.map((integration) => {
-          const unavailable = methodsUnavailableHere(integration.methods);
-          return (
-            <li key={integration.id}>
-              <button
-                type="button"
-                disabled={unavailable}
-                onClick={() => onPick(integration)}
-                className="flex w-full items-center gap-3 rounded-lg border border-border px-3 py-2 text-left text-sm text-foreground hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
-              >
-                <IntegrationLogoTile icon={integration.id} size="sm" />
-                <span className="font-medium">{integration.displayName}</span>
-                {unavailable && <span className="ml-auto text-xs text-muted-foreground">Not available on this deployment</span>}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </Modal>
   );
 }
 

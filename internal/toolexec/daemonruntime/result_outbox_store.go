@@ -43,10 +43,6 @@ import (
 //     by daemon restart". The worker's tool.status then says "completed", the
 //     result is sent like any other, and the model is told to verify the
 //     call's effects — instead of a vaguer "unknown request" later.
-//   - A run step's result is retained a while after its acknowledgement
-//     (result_retain.go): its file is renamed to <request id>.retained,
-//     stamped with the acknowledgement time, instead of being removed, and a
-//     restart loads it back as delivered and retained until the window ends.
 //   - Results can hold file contents and command output. The directory is
 //     0700, every file 0600, and nothing here logs more than a request id and
 //     a size.
@@ -58,11 +54,9 @@ import (
 // runtime): the outbox then behaves exactly as it did, in memory.
 
 const (
-	resultFileExt   = ".result"
-	retainedFileExt = ".retained"
-	seenFileExt     = ".seen"
-	runningFileExt  = ".running"
-	tempInfix       = ".tmp-"
+	resultFileExt  = ".result"
+	runningFileExt = ".running"
+	tempInfix      = ".tmp-"
 
 	// outboxDirName is the outbox's directory inside the daemon's data
 	// directory. It is per instance: two daemons on one machine have two
@@ -86,10 +80,6 @@ var requestIDFile = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 // nothing, so an outbox with no directory is the in-memory outbox it was.
 type outboxStore struct {
 	dir string
-	// dirSync flushes a directory entry change on the tombstone path, where
-	// it must succeed (result_once_store.go); nil is syncDirStrict. Tests
-	// replace it to make the sync fail.
-	dirSync func(dir string) error
 }
 
 // openOutboxStore prepares dir for use: created 0700, and tightened to 0700
@@ -162,30 +152,6 @@ func (s *outboxStore) removeResult(requestID string) {
 	}
 }
 
-// retainResult keeps an acknowledged result's file as a retained one, its
-// modification time set to at, the acknowledgement, which starts its
-// retention window. A rename: the bytes were made durable when the result was
-// held. A rename lost to a crash leaves the file a held result, which is
-// answered as "completed" and resent: the retry still gets it. A result that
-// was never persisted stays in memory only.
-func (s *outboxStore) retainResult(requestID string, at time.Time) {
-	if !s.storable(requestID) {
-		return
-	}
-	retained := s.path(requestID, retainedFileExt)
-	if err := os.Rename(s.path(requestID, resultFileExt), retained); err != nil {
-		return
-	}
-	_ = os.Chtimes(retained, at, at)
-}
-
-// removeRetained deletes a retained result's file, once its window ends.
-func (s *outboxStore) removeRetained(requestID string) {
-	if s.storable(requestID) {
-		_ = os.Remove(s.path(requestID, retainedFileExt))
-	}
-}
-
 // outboxLoadReport says what reloading the outbox found.
 type outboxLoadReport struct {
 	// Restored is the number of unacknowledged results put back in the outbox.
@@ -200,22 +166,17 @@ type outboxLoadReport struct {
 	Expired int
 	// OverBudget counts results dropped, oldest first, to fit the byte budget.
 	OverBudget int
-	// Retained is the number of acknowledged run-step results reloaded for a
-	// retry that may still reattach to them (result_retain.go).
-	Retained int
-	// Seen is the number of run-step tombstones reloaded (result_once.go).
-	Seen int
 }
 
 // load reads the directory back at startup. It returns every result the
 // outbox should hold, including one standing in for each call that was
-// running; every retained result still inside resultRetainTTL, its heldAt the
-// acknowledgement; and a report. It removes what it cannot use.
-func (s *outboxStore) load(now time.Time, ttl time.Duration, budget int) (held, retained []*heldResult, report outboxLoadReport) {
+// running, and a report. It removes what it cannot use.
+func (s *outboxStore) load(now time.Time, ttl time.Duration, budget int) ([]*heldResult, outboxLoadReport) {
+	var report outboxLoadReport
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		logging.Warn(logPrefix+" Could not read the tool result outbox; starting with it empty", "error", err)
-		return nil, nil, report
+		return nil, report
 	}
 
 	results := make(map[string]*heldResult)
@@ -247,28 +208,6 @@ func (s *outboxStore) load(now time.Time, ttl time.Duration, budget int) (held, 
 				continue
 			}
 			results[id] = h
-		case strings.HasSuffix(name, retainedFileExt):
-			id := strings.TrimSuffix(name, retainedFileExt)
-			if !requestIDFile.MatchString(id) {
-				continue
-			}
-			h, err := readResultFile(full, id)
-			if err != nil {
-				report.Corrupt = append(report.Corrupt, name)
-				_ = os.Remove(full)
-				continue
-			}
-			info, err := e.Info()
-			if err != nil {
-				continue
-			}
-			h.heldAt = info.ModTime() // the acknowledgement (retainResult)
-			if now.Sub(h.heldAt) > resultRetainTTL {
-				report.Expired++
-				_ = os.Remove(full)
-				continue
-			}
-			retained = append(retained, h)
 		case strings.HasSuffix(name, runningFileExt):
 			id := strings.TrimSuffix(name, runningFileExt)
 			if !requestIDFile.MatchString(id) {
@@ -330,13 +269,12 @@ func (s *outboxStore) load(now time.Time, ttl time.Duration, budget int) (held, 
 		logging.Warn(logPrefix+" Skipped unreadable files in the tool result outbox",
 			"count", len(report.Corrupt), "files", strings.Join(report.Corrupt, ","))
 	}
-	report.Retained = len(retained)
-	if report.Restored+report.Interrupted+report.Expired+report.OverBudget+report.Retained > 0 {
+	if report.Restored+report.Interrupted+report.Expired+report.OverBudget > 0 {
 		logging.Info(logPrefix+" Reloaded the tool result outbox",
 			"restored", report.Restored, "interrupted_by_restart", report.Interrupted,
-			"expired", report.Expired, "over_budget", report.OverBudget, "retained", report.Retained)
+			"expired", report.Expired, "over_budget", report.OverBudget)
 	}
-	return ordered, retained, report
+	return ordered, report
 }
 
 // interruptedByRestartResponse is the answer for a call the previous daemon
@@ -406,16 +344,6 @@ func readResultFile(path, requestID string) (*heldResult, error) {
 // none: a 0600 temp file in the same directory, synced, renamed over name,
 // and the directory synced so the rename itself survives a power cut.
 func writeFileDurably(dir, name string, data []byte) error {
-	if err := writeFileSynced(dir, name, data); err != nil {
-		return err
-	}
-	syncDir(dir)
-	return nil
-}
-
-// writeFileSynced is writeFileDurably up to, and not including, syncing the
-// directory: the file's bytes are synced and renamed into place.
-func writeFileSynced(dir, name string, data []byte) error {
 	tmp, err := os.CreateTemp(dir, name+tempInfix+"*")
 	if err != nil {
 		return err
@@ -443,6 +371,7 @@ func writeFileSynced(dir, name string, data []byte) error {
 		_ = os.Remove(tmpName)
 		return err
 	}
+	syncDir(dir)
 	return nil
 }
 

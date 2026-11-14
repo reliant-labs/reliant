@@ -20,23 +20,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/messageproto"
-	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
-// OrgResolver answers the org questions of chat rpcs. *orgs.Resolver is one.
-type OrgResolver interface {
-	Named(ctx context.Context, userID, requested string) (string, error)
-	DefaultOrg(ctx context.Context, userID string) (string, error)
-	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
-}
-
 // Repository is everything the chat handlers read and write.
 type Repository interface {
-	// AssignUnassignedOrg stamps the caller's projects and chats that have
-	// no org with their default org (the lazy backfill, orgs.ListScope).
-	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	// Chat rows: listing and search, delete, and the state, unread,
 	// adoption and machine flags the handlers flip.
 	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)

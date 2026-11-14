@@ -27,7 +27,6 @@
  */
 
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { Client } from "@connectrpc/connect";
 
 import {
   IdentityDeliveryState as WireDeliveryState,
@@ -272,9 +271,8 @@ function mapUser(u: WireUser): IdentityUser {
 
 export { currentOrgId } from "../orgs";
 
-export function createIdentityReadApi(readerClient: Pick<Client<typeof IdentityService>, "getIdentityStatus" | "getUser" | "listUsers">) {
-async function getIdentityStatus(orgId: string, environmentId: string): Promise<IdentityStatus> {
-  const r = await readerClient.getIdentityStatus({ orgId, environmentId });
+export async function getIdentityStatus(orgId: string, environmentId: string): Promise<IdentityStatus> {
+  const r = await client().getIdentityStatus({ orgId, environmentId });
   return {
     hasInstance: r.hasInstance,
     state: STATE[r.state] ?? "unknown",
@@ -312,19 +310,16 @@ async function getIdentityStatus(orgId: string, environmentId: string): Promise<
   };
 }
 
-async function getIdentityUser(orgId: string, environmentId: string, userId: string): Promise<IdentityUser | null> {
-  const r = await readerClient.getUser({ orgId, environmentId, userId });
-  return r.user ? mapUser(r.user) : null;
-}
+export const USERS_PAGE_SIZE = 50;
 
-async function listIdentityUsers(
+export async function listIdentityUsers(
   orgId: string,
   environmentId: string,
   filter: IdentityUserFilter,
   pageToken: string
 ): Promise<IdentityUsersPage> {
   const query = filter.query?.trim();
-  const r = await readerClient.listUsers({
+  const r = await client().listUsers({
     orgId,
     environmentId,
     query: query ? query : undefined,
@@ -340,13 +335,6 @@ async function listIdentityUsers(
     reportsSignIns: r.totalSize > 0,
   };
 }
-
-return { getStatus: getIdentityStatus, getUser: getIdentityUser, listUsers: listIdentityUsers };
-}
-export const USERS_PAGE_SIZE = 50;
-export const getIdentityStatus = (...args: Parameters<ReturnType<typeof createIdentityReadApi>["getStatus"]>) => createIdentityReadApi(client()).getStatus(...args);
-export const getIdentityUser = (...args: Parameters<ReturnType<typeof createIdentityReadApi>["getUser"]>) => createIdentityReadApi(client()).getUser(...args);
-export const listIdentityUsers = (...args: Parameters<ReturnType<typeof createIdentityReadApi>["listUsers"]>) => createIdentityReadApi(client()).listUsers(...args);
 
 function mapCode(c: WirePasswordCode | undefined): IdentityPasswordCode | null {
   if (!c?.code) return null;

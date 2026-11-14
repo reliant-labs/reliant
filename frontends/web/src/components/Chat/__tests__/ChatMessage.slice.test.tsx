@@ -49,7 +49,6 @@ vi.mock("../MessageGeneratedVideos", () => ({
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
-  useChatIdOrActive: (chatId?: string | null) => chatId || "chat-1",
   useToolResultsByCallId: () => ({
     "call-img": {
       content: "Image generated.",

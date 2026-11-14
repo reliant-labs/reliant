@@ -289,12 +289,12 @@ func (x *StartClaimableDeployRequest) GetPowNonce() string {
 
 type StartClaimableDeployResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// An ordinary `rlat_` token for the anonymous user's first org, scoped
+	// An ordinary `rlat_` token for the anonymous user's personal org, scoped
 	// to deploy:read and deploy:write only, expiring at purge_after. The CLI
 	// stores it under the credential client id "forge-cli-claimable", never
 	// under "forge-cli".
 	AccessToken string `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
-	// The anonymous user's first org: the org every deploy lands in.
+	// The anonymous user's personal org: the org every deploy lands in.
 	OrgId string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	// https://app.reliant.dev/claim#rcl_<token>. Hand it to a human; whoever
 	// claims first owns the deploy. Returned again, identical, on every reused

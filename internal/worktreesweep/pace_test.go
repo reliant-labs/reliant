@@ -33,10 +33,6 @@ type fakeStore struct {
 	// with no entry has had nothing happen in it since the epoch.
 	activity    map[string]core.WorktreeRunActivity
 	activityErr error
-	// used is the use each daemon answer reported (NoteWorktreeUse), which
-	// raises the row's activity as last_active does; useErr fails it.
-	used   map[string]time.Time
-	useErr error
 }
 
 func newFakeStore(daemon string) *fakeStore {
@@ -146,28 +142,6 @@ func (f *fakeStore) WorktreeRunActivities(_ context.Context, ids []string) (map[
 	}
 	return out, nil
 }
-
-// UseStore: last_active is part of the row's activity.
-func (f *fakeStore) NoteWorktreeUse(_ context.Context, id string, at time.Time) error {
-	if f.useErr != nil {
-		return f.useErr
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.used == nil {
-		f.used = map[string]time.Time{}
-	}
-	f.used[id] = at
-	if f.activity == nil {
-		f.activity = map[string]core.WorktreeRunActivity{}
-	}
-	if a := f.activity[id]; at.After(a.LastActive) {
-		a.LastActive = at
-		f.activity[id] = a
-	}
-	return nil
-}
-
 func (f *fakeStore) ArchiveLandedWorktree(_ context.Context, id string, quietSince time.Time) (bool, error) {
 	if f.archiveErr != nil {
 		return false, f.archiveErr

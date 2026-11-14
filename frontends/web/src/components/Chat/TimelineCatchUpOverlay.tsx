@@ -13,25 +13,14 @@ const LABEL = "Loading conversation…";
  * The visual label is aria-hidden: the announcement comes from
  * TimelineCatchUpStatus, a live region that stays mounted so assistive tech
  * hears the change.
- *
- * `leaving`: the timeline has caught up and is usable under it already. The
- * overlay only fades out, and lets every pointer through while it does.
  */
-export function TimelineCatchUpOverlay({
-  hasContent,
-  leaving = false,
-}: {
-  hasContent: boolean;
-  leaving?: boolean;
-}) {
+export function TimelineCatchUpOverlay({ hasContent }: { hasContent: boolean }) {
   return (
     <div
       data-testid="timeline-catchup-overlay"
-      data-leaving={leaving || undefined}
       aria-hidden="true"
       className={cn(
-        "absolute inset-0 z-20 flex items-center justify-center",
-        leaving ? "timeline-catchup-out pointer-events-none" : "timeline-catchup-in",
+        "timeline-catchup-in absolute inset-0 z-20 flex items-center justify-center",
         hasContent && "bg-background/40 backdrop-blur-xs",
       )}
       // Under floating chrome the frame runs beneath both bars; center the

@@ -54,13 +54,11 @@ const triggerSourceOneof protoreflect.Name = "source"
 // evaluated when an event fires them, and a run started from a plain chat has
 // no event to resolve them against. `on_failure` belongs here too: its nodes
 // read `failure` and the node outputs of a run that is already over, none of
-// which exist when the definition loads. `finally` likewise: it reads `run`
-// and the outputs of a run that has ended.
+// which exist when the definition loads.
 var runtimeEvaluatedTopLevelKeys = map[string]bool{
 	"outputs":    true,
 	"triggers":   true,
 	"on_failure": true,
-	"finally":    true,
 }
 
 // IsRuntimeEvaluatedTopLevelKey reports whether a top-level workflow key's

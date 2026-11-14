@@ -19,7 +19,7 @@ import (
 )
 
 // GetLatestNonMessageUpdatesPerEntity is fast only because it can walk
-// idx_chat_updates_snapshot_entity_heads, a PARTIAL index. Postgres uses a partial
+// idx_chat_updates_snapshot_heads, a PARTIAL index. Postgres uses a partial
 // index only when it can prove the query's predicate implies the index's, and
 // it proves that only from values visible at plan time.
 //

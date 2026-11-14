@@ -54,21 +54,6 @@ function commitOf(version: string): string {
   return out.slice(0, 40);
 }
 
-/**
- * The commits of the releases the demo console also shows
- * (Demo/demoData/consoleScenario.ts, DEMO_RELEASES): a chart marker names the
- * same commit as the Releases page. consoleScenario.test.ts holds the two equal.
- */
-const SHARED_COMMITS: Readonly<Record<string, string>> = {
-  "v1.8.4": "9c2e41d07a3f",
-  "v1.8.3": "e7d93a2b5c18",
-  "v1.8.2": "c51f08e3a96b",
-  "v1.8.1": "07e2b9d4f1a0",
-};
-
-/** Who put v1.8.3 everywhere, as the console's ledger says (consoleScenario.ts). */
-const V183_PROMOTER = "jon";
-
 /** The fixture's ledger, oldest first, relative to `t0`. */
 export function fixtureLedger(t0: number): Promotion[] {
   const out: Promotion[] = [];
@@ -80,7 +65,7 @@ export function fixtureLedger(t0: number): Promotion[] {
       envName: env.name,
       releaseId: `rel-${version}`,
       version,
-      gitCommit: SHARED_COMMITS[version] ?? commitOf(version),
+      gitCommit: commitOf(version),
       gitTag: tag,
       promotedAtMs: t0 - agoMs,
       promotedBy: by,
@@ -110,9 +95,9 @@ export function fixtureLedger(t0: number): Promotion[] {
       add(STAGING, version, (staging - 1) * DAY, "Grace Hopper");
     }
   }
-  add(DEV, "v1.8.3", 26 * HOUR, V183_PROMOTER);
-  add(STAGING, "v1.8.3", 3 * HOUR, V183_PROMOTER);
-  add(PROD, "v1.8.3", 40 * 60_000, V183_PROMOTER);
+  add(DEV, "v1.8.3", 26 * HOUR, "ci");
+  add(STAGING, "v1.8.3", 3 * HOUR, "ci");
+  add(PROD, "v1.8.3", 40 * 60_000, "Ada Lovelace");
   add(DEV, "v1.8.4-rc.1", 20 * 60_000, "ci", "promote", "");
   return out.sort((a, b) => a.promotedAtMs - b.promotedAtMs);
 }

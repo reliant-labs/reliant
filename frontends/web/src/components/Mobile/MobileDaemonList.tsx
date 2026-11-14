@@ -12,12 +12,11 @@
  * only mobile-specific behavior is the poll gate — see `useVisibilityPolling`.
  */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Loader2, Plus, Server } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
-import { useMachineOrgs } from "@/hooks/useMachineOrgs";
 import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
 import { cn } from "../../lib/utils";
 import { lastSeenMs, presentDaemon, sizeLabel } from "./daemonPresentation";
@@ -76,7 +75,7 @@ function NewMachineButton({ onCreate }: { onCreate: () => void }) {
  * the virtualizer — and a machine is a self-contained object, so one card each
  * is arguably the truer mapping anyway.
  */
-function DaemonRow({ daemon, orgName }: { daemon: Daemon; orgName?: string }) {
+function DaemonRow({ daemon }: { daemon: Daemon }) {
   const lastSeen = lastSeenMs(daemon);
   const size = sizeLabel(daemon);
 
@@ -103,7 +102,6 @@ function DaemonRow({ daemon, orgName }: { daemon: Daemon; orgName?: string }) {
           <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
             <DaemonStatusPill daemon={daemon} />
             {lastSeen !== null && <span>{relativeTimeFromMs(lastSeen)}</span>}
-            {orgName && <span className="truncate">{orgName}</span>}
           </div>
         </div>
 
@@ -126,13 +124,7 @@ function DaemonListHeader({ onCreate }: { onCreate: () => void }) {
 
 export function MobileDaemonList() {
   const refetchInterval = useVisibilityPolling(POLL_INTERVAL_MS);
-  const { data: allDaemons, isLoading } = useDaemonList({ refetchInterval });
-  // With several orgs, the active org's machines, each labelled with its org.
-  const machineOrgs = useMachineOrgs();
-  const daemons = useMemo(
-    () => (allDaemons ? machineOrgs.inActiveOrg(allDaemons) : allDaemons),
-    [allDaemons, machineOrgs],
-  );
+  const { data: daemons, isLoading } = useDaemonList({ refetchInterval });
   const [createOpen, setCreateOpen] = useState(false);
 
   const header = <DaemonListHeader onCreate={() => setCreateOpen(true)} />;
@@ -186,9 +178,7 @@ export function MobileDaemonList() {
         // Stable identity across the 5s refetch: without it a daemon changing
         // status can recycle into a neighbour's DOM node mid-scroll.
         computeItemKey={(_, daemon) => daemon.daemonId}
-        itemContent={(_, daemon) => (
-          <DaemonRow daemon={daemon} orgName={machineOrgs.multiOrg ? machineOrgs.orgOf(daemon.daemonId)?.name : undefined} />
-        )}
+        itemContent={(_, daemon) => <DaemonRow daemon={daemon} />}
         components={{
           Header: () => <div className="h-4" />,
           Footer: () => <div className="h-6" />,

@@ -1,15 +1,13 @@
 /**
  * The org switcher and the binding that keeps the transport's org true.
  *
- * Pins the product rules: one org shows its name and "Create organization"
- * (the phone list, a pure choice, still needs two); two or more list every
- * org and mark the server default; creating one switches to it; choosing one changes the org the next
+ * Pins the product rules: one org shows no chrome at all; two or more list
+ * every org and mark the server default; choosing one changes the org the next
  * control-plane request names and drops what the previous org cached; and a
  * person who left the org they had selected falls back to the default instead
  * of continuing to send an org the control plane would refuse.
  */
-import { act, render, screen, waitFor } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -25,11 +23,6 @@ vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
   setDefaultOrganization: (id: string) => setDefaultOrganization(id),
 }));
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
-vi.mock("@/lib/toast-manager", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-
-import { Code, ConnectError } from "@connectrpc/connect";
-import { setTransport } from "@/lib/connect";
-import { mockTransport } from "@/lib/test-utils";
 
 import { ActiveOrgBinding } from "../ActiveOrgBinding";
 import { OrgSwitcher } from "../OrgSwitcher";
@@ -55,65 +48,16 @@ beforeEach(() => {
   setDefaultOrganization.mockReset().mockResolvedValue(undefined);
   useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null });
   useAuthStore.setState({ user: { id: "alice" } as never });
-  setTransport(null);
 });
 
 describe("OrgSwitcher", () => {
-  it("shows a person with one org its name and a way to create another", async () => {
+  it("renders nothing for a person with one org", async () => {
     listMyOrganizations.mockResolvedValue({ orgs: [ACME], defaultOrgId: "org-a" });
-    renderWithQuery(<Harness />);
-    expect(await screen.findByTestId("org-switcher-name")).toHaveTextContent("Acme");
-    await waitFor(() => expect(getActiveOrgId()).toBe("org-a"));
-    await userEvent.click(screen.getByTestId("org-switcher"));
-    expect(await screen.findByTestId("org-create")).toHaveTextContent("Create organization");
-  });
-
-  it("creating an organization makes it the org the app acts in", async () => {
-    listMyOrganizations.mockResolvedValue({ orgs: [ACME], defaultOrgId: "org-a" });
-    const create = vi.fn((_req: unknown) => ({ organization: { id: "org-new", name: "New Co", slug: "new-co", role: "owner", isOwner: true } }));
-    setTransport(mockTransport({ "OrganizationService.CreateOrganization": create }));
-    // The app's one client: switching re-reads the membership list through it.
-    const { queryClient } = await import("@/lib/query-client");
-    queryClient.clear();
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Harness />
-      </QueryClientProvider>,
-    );
-    await userEvent.click(await screen.findByTestId("org-switcher"));
-    await userEvent.click(await screen.findByTestId("org-create"));
-    await userEvent.type(await screen.findByTestId("create-org-name"), "  New Co ");
-    // The new org is in the list the binding reconciles against once re-read.
-    listMyOrganizations.mockResolvedValue({ orgs: [ACME, org("org-new", "New Co")], defaultOrgId: "org-a" });
-    await userEvent.click(screen.getByTestId("create-org-submit"));
-    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ name: "New Co" })));
-    await waitFor(() => expect(getActiveOrgId()).toBe("org-new"));
-    expect(localStorage.getItem("reliant.activeOrg.alice")).toBe("org-new");
-  });
-
-  it("a refused create says why in words", async () => {
-    listMyOrganizations.mockResolvedValue({ orgs: [ACME], defaultOrgId: "org-a" });
-    setTransport(
-      mockTransport({
-        "OrganizationService.CreateOrganization": {
-          error: new ConnectError("prose", Code.ResourceExhausted, { "x-forge-error-reason": "owned_org_limit" }),
-        },
-      }),
-    );
-    renderWithQuery(<Harness />);
-    await userEvent.click(await screen.findByTestId("org-switcher"));
-    await userEvent.click(await screen.findByTestId("org-create"));
-    await userEvent.type(await screen.findByTestId("create-org-name"), "Third");
-    await userEvent.click(screen.getByTestId("create-org-submit"));
-    expect(await screen.findByTestId("create-org-error")).toHaveTextContent(/as many organizations as one person can/);
-    expect(getActiveOrgId()).toBe("org-a");
-  });
-
-  it("the phone list still needs a choice to show", async () => {
-    listMyOrganizations.mockResolvedValue({ orgs: [ACME], defaultOrgId: "org-a" });
-    const { container, queryClient } = renderWithQuery(<Harness variant="list" />);
+    const { container, queryClient } = renderWithQuery(<Harness />);
     await waitFor(() => expect(queryClient.getQueryData(["orgs", "mine"])).toBeTruthy());
-    expect(container.querySelector('[data-testid="org-list"]')).toBeNull();
+    expect(container.querySelector('[data-testid="org-switcher"]')).toBeNull();
+    // ...and the app still acts in that org.
+    await waitFor(() => expect(getActiveOrgId()).toBe("org-a"));
   });
 
   it("lists every org with the default marked, starting on the default", async () => {
@@ -147,28 +91,9 @@ describe("OrgSwitcher", () => {
     await waitFor(() => expect(getActiveOrgId()).toBe("org-b"));
     expect(localStorage.getItem("reliant.activeOrg.alice")).toBe("org-b");
     await waitFor(() => expect(queryClient.getQueryData(["forge", "cloud-envs", "app"])).toBeUndefined());
-    // The binding drops only the org-scoped roots; the product's lists are
-    // its onSwitch's to reset (followActiveOrg), which this harness omits.
+    // A chat is the user's, not an org's: it survives the switch.
     expect(queryClient.getQueryData(["chats", "list"])).toEqual(["a chat"]);
     expect(screen.getByTestId("org-switcher-name")).toHaveTextContent("Side Project");
-  });
-
-  it("tells the product app about a switch, once, and not about the first load", async () => {
-    listMyOrganizations.mockResolvedValue({ orgs: [ACME, SIDE], defaultOrgId: "org-a" });
-    const onSwitch = vi.fn();
-    const { queryClient } = renderWithQuery(
-      <>
-        <ActiveOrgBinding onSwitch={onSwitch} />
-        <OrgSwitcher />
-      </>,
-    );
-    await waitFor(() => expect(getActiveOrgId()).toBe("org-a"));
-    expect(onSwitch).not.toHaveBeenCalled();
-
-    await userEvent.click(await screen.findByTestId("org-switcher"));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: /Side Project/ }));
-    await waitFor(() => expect(onSwitch).toHaveBeenCalledTimes(1));
-    expect(onSwitch).toHaveBeenCalledWith("org-b", queryClient);
   });
 
   it("restores the person's own choice on the next visit", async () => {

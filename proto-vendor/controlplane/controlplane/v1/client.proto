@@ -50,24 +50,3 @@ message ServiceBuild {
   string service = 1;
   string version = 2;
 }
-
-// InstanceScope is a read's acknowledgement that it was narrowed to dev
-// instances: the `forge env up` stacks whose telemetry the OTLP gateway stamped,
-// from the dev token it accepted, with reliant.instance.id (the instance) and
-// reliant.instance.user (the user id of the person who ran it). Shared by
-// ObservabilityService, IssuesService and RumService, whose requests carry
-// instance_ids / instance_users.
-//
-// A response carries it ONLY when the server applied the narrowing to every
-// row the response holds, and it echoes the request's values exactly (an
-// instance user as the email the client sent, not the user id it resolved
-// to). A response to a narrowed request WITHOUT it was not narrowed: a server
-// that predates the fields drops them, and a read that cannot narrow (a sql
-// panel, the service graph, the usage meter) answers for the whole scope. A client must not present such an answer as the instance's.
-//
-// Both lists empty never happens: a read that narrowed nothing carries no
-// InstanceScope at all.
-message InstanceScope {
-  repeated string instance_ids = 1;
-  repeated string instance_users = 2;
-}

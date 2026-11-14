@@ -200,8 +200,7 @@ func (e *workspaceEnsurer) ensure(ctx context.Context, req toolexec.WorkspaceEns
 		// Recreate exactly what is missing: when the root is gone that is
 		// every checkout, but a single deleted nested repo is rebuilt alone.
 		var ok bool
-		var restored string
-		if ok, reason, restored = repairWorkspace(ctx, root, req, missing); ok {
+		if ok, reason = repairWorkspace(ctx, root, req, missing); ok {
 			// Gone retires the absent old checkout, but recreation's best-effort
 			// locking is not proof. Require the restored lock before tool admission.
 			if !e.retireFence(ctx, root, req) {
@@ -215,7 +214,6 @@ func (e *workspaceEnsurer) ensure(ctx context.Context, req toolexec.WorkspaceEns
 				RunningIn:     root,
 				Branch:        req.Branch,
 				Checkouts:     checkoutRels(missing),
-				RestoredWork:  restored,
 				At:            now,
 			})
 			return toolexec.WorkspaceEnsureResponse{Status: toolexec.WorkspaceRepaired, Path: root, Notice: rec.noticeFor(req.Audience, now)}
@@ -306,26 +304,25 @@ func checkoutRels(checkouts []toolexec.WorkspaceEnsureRepo) []string {
 // repairWorkspace recreates the given checkouts of root from req.Branch, or
 // says why it cannot. It refuses rather than guesses: a repository that is
 // gone, or a directory where a checkout belongs that holds files of its own,
-// is left exactly as it is. restored describes work put back from a reclaim
-// capture (recreateWorktree), "" when there was none.
-func repairWorkspace(ctx context.Context, root string, req toolexec.WorkspaceEnsureRequest, checkouts []toolexec.WorkspaceEnsureRepo) (ok bool, reason, restored string) {
+// is left exactly as it is.
+func repairWorkspace(ctx context.Context, root string, req toolexec.WorkspaceEnsureRequest, checkouts []toolexec.WorkspaceEnsureRepo) (bool, string) {
 	if req.Branch == "" {
-		return false, "the workspace has no branch recorded", ""
+		return false, "the workspace has no branch recorded"
 	}
 	repos := make([]worktreeRecreateRepo, 0, len(checkouts))
 	for _, c := range checkouts {
 		if _, err := os.Stat(filepath.Join(c.RepoPath, ".git")); err != nil {
-			return false, fmt.Sprintf("the project's repository %s is missing on this machine", c.RepoPath), ""
+			return false, fmt.Sprintf("the project's repository %s is missing on this machine", c.RepoPath)
 		}
 		dest := filepath.Join(root, filepath.FromSlash(c.Rel))
 		// Where the checkout belongs there is a directory without one. Empty,
 		// it is ours to replace; with files in it, it is somebody's.
 		if entries, err := os.ReadDir(dest); err == nil {
 			if len(entries) > 0 {
-				return false, fmt.Sprintf("%s exists but is not a git checkout, and was left alone", dest), ""
+				return false, fmt.Sprintf("%s exists but is not a git checkout, and was left alone", dest)
 			}
 			if err := os.Remove(dest); err != nil {
-				return false, fmt.Sprintf("could not clear the empty directory %s: %v", dest, err), ""
+				return false, fmt.Sprintf("could not clear the empty directory %s: %v", dest, err)
 			}
 		}
 		repos = append(repos, worktreeRecreateRepo{RepoPath: c.RepoPath, Rel: c.Rel})
@@ -338,9 +335,9 @@ func repairWorkspace(ctx context.Context, root string, req toolexec.WorkspaceEns
 		Repos:        repos,
 	})
 	if !resp.Success {
-		return false, resp.Error, ""
+		return false, resp.Error
 	}
-	return true, "", resp.CaptureNote
+	return true, ""
 }
 
 // fallbackDir is where calls run when their workspace is gone: the preferred

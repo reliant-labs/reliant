@@ -4,9 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { resetShellForTests } from "@/lib/shell";
 import { PageEntryTour } from "../tips/PageEntryTour";
-import { resetDemoSessionForTests } from "../demoSession";
 
-beforeEach(() => { resetShellForTests("reliant"); resetDemoSessionForTests(); });
+beforeEach(() => resetShellForTests("reliant"));
 afterEach(() => { cleanup(); resetShellForTests(); });
 
 it.each(["Done", "Escape"] as const)("dismisses with %s in the Reliant shell without demo chrome or a focus target", async (method) => {

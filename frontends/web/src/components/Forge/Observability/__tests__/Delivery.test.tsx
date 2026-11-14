@@ -44,9 +44,9 @@ describe("release markers follow the scope", () => {
     const row = screen.getByTestId("obs-releases").querySelector("li")!;
     expect(row).toHaveTextContent("prod");
     expect(row).toHaveTextContent("v1.8.3");
-    expect(row).toHaveTextContent("by jon");
-    // The commit, short, as it is usually read: the release's own (the demo console's too).
-    expect(row.textContent).toMatch(/v1\.8\.3e7d93a2by/);
+    expect(row).toHaveTextContent("by Ada Lovelace");
+    // The commit, short, as it is usually read.
+    expect(row.textContent).toMatch(/v1\.8\.3[0-9a-f]{7}by/);
   });
 
   it("says when the filters leave no environment", async () => {

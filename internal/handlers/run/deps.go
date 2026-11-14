@@ -10,24 +10,10 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/orgs"
 )
 
 // Repository is the slice of *db.Repo the run handlers use.
-// OrgResolver answers the org questions of these rpcs. *orgs.Resolver is
-// one; nil (or a nil *orgs.Resolver) is a deployment with no orgs.
-type OrgResolver interface {
-	Named(ctx context.Context, userID, requested string) (string, error)
-	DefaultOrg(ctx context.Context, userID string) (string, error)
-	ActingOrg(ctx context.Context, userID, requested string) (string, error)
-	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
-}
-
 type Repository interface {
-	// AssignUnassignedOrg stamps the caller's rows that have no org with
-	// their default org (the lazy backfill, orgs.ListScope).
-	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
 	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)

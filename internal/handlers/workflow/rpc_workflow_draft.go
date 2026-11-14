@@ -177,14 +177,9 @@ func (s *Service) CreateWorkflowDraft(
 		}
 	}
 
-	orgID, err := s.actingOrg(ctx, userID, req.Msg.GetOrgId())
-	if err != nil {
-		return nil, err
-	}
 	draft := &db.WorkflowDraft{
 		ID:         draftID,
 		UserID:     userID,
-		OrgID:      orgID,
 		Name:       name,
 		Slug:       slug,
 		Definition: definition,

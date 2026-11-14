@@ -14,8 +14,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/procledger"
 )
@@ -164,18 +162,9 @@ func (id procIdentity) agent() (string, bool) {
 // base) whose state `what` could not be read for cause. nil means it is not
 // using roots and the caller moves on to the next process; an error holds.
 func judgeUninspectable(ctx context.Context, base, pid, what string, roots []string, cause error) error {
+	hold := fmt.Errorf("process %s %s unreadable: %w", pid, what, cause)
 	if !errors.Is(cause, fs.ErrPermission) {
-		return fmt.Errorf("process %s %s unreadable: %w", pid, what, cause)
-	}
-	n, err := strconv.Atoi(pid)
-	if err != nil {
-		return fmt.Errorf("process %s %s unreadable: %w", pid, what, cause)
-	}
-	// Every hold below is a process of this user that cannot be inspected:
-	// it holds, and it is recorded so the report can name it (blockers.go).
-	held := func(e *UninspectableProcessError) error {
-		blockers.note(e, roots)
-		return e
+		return hold
 	}
 	id, err := readProcIdentity(base)
 	if err != nil {
@@ -184,15 +173,13 @@ func judgeUninspectable(ctx context.Context, base, pid, what string, roots []str
 		}
 		slog.DebugContext(ctx, "worktreereclaim: uninspectable process holds: its identity is unreadable",
 			"pid", pid, "unreadable", what, "error", err)
-		// readProcIdentity parses stat first: when only status or cmdline
-		// failed, the start time still names this one process.
-		e := &UninspectableProcessError{PID: n, What: what, Err: cause}
-		if id.start != 0 {
-			e.Comm, e.StartTicks, e.Started = id.comm, id.start, procStarted(id.start)
-		}
-		return held(e)
+		return hold
 	}
-	hold := &UninspectableProcessError{PID: n, Comm: id.comm, What: what, StartTicks: id.start, Started: procStarted(id.start), Err: cause}
+	hold = fmt.Errorf("process %s (%s) %s unreadable: %w", pid, id.comm, what, cause)
+	n, err := strconv.Atoi(pid)
+	if err != nil {
+		return hold
+	}
 	if p, ok := procledger.Lookup(n); ok && p.Pgid == id.pgrp && p.Start == id.start {
 		for _, path := range p.Paths {
 			if processPathUses(path, roots) {
@@ -212,38 +199,7 @@ func judgeUninspectable(ctx context.Context, base, pid, what string, roots []str
 	}
 	slog.DebugContext(ctx, "worktreereclaim: uninspectable process holds: neither accounted for nor a known agent",
 		"pid", pid, "comm", id.comm, "name", id.name, "argv0", argv0(id.argv), "unreadable", what)
-	return held(hold)
-}
-
-// userHZ is the kernel's clock-tick rate for /proc/<pid>/stat's start time:
-// USER_HZ, 100 on every architecture Linux exposes to userspace.
-const userHZ = 100
-
-var bootTime = sync.OnceValue(func() time.Time {
-	data, err := os.ReadFile("/proc/stat")
-	if err != nil {
-		return time.Time{}
-	}
-	for line := range strings.SplitSeq(string(data), "\n") {
-		if v, ok := strings.CutPrefix(line, "btime "); ok {
-			if sec, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil {
-				return time.Unix(sec, 0)
-			}
-		}
-	}
-	return time.Time{}
-})
-
-// procStarted is when a process started, from stat's start time in clock
-// ticks after boot; zero when the boot time is unknown. It is for display:
-// a blocker's identity is the ticks themselves (blockerKey), which need no
-// boot time.
-func procStarted(ticks uint64) time.Time {
-	boot := bootTime()
-	if boot.IsZero() {
-		return time.Time{}
-	}
-	return boot.Add(time.Duration(ticks) * time.Second / userHZ)
+	return hold
 }
 
 func argv0(argv []string) string {

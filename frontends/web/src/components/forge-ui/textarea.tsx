@@ -48,12 +48,12 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(function T
 
   const composed = [
     "block w-full rounded-md border bg-surface",
-    "text-ink placeholder:text-ink-muted transition-colors",
-    "focus:outline-none focus-visible:ring-2",
+    "placeholder:text-ink-subtle",
+    "focus:outline-none focus:ring-1",
     "disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-ink-muted",
     invalid
-      ? "border-danger focus-visible:ring-danger"
-      : "border-border-strong hover:border-ink-muted focus-visible:ring-ring",
+      ? "border-danger focus:border-danger focus:ring-danger"
+      : "border-border-strong focus:border-accent focus:ring-accent",
     sizeStyles[textareaSize],
     resizeStyles[resize],
     className ?? "",

@@ -16,7 +16,6 @@ import { ArrowLeft } from "lucide-react";
 import Button from "@/components/forge-ui/button";
 import { cn } from "@/lib/utils";
 
-import { shortForgeVersion } from "./forgeVersion";
 import { scaffoldFixtures, type ScaffoldCast, type ScaffoldManifest } from "./fixtures";
 import { ScaffoldPanel } from "./ScaffoldPanel";
 import { TerminalReplay } from "./TerminalReplay";
@@ -41,22 +40,15 @@ export function HowThisAppWasBuilt({ cast, manifest, onBack, className, autoPlay
   return (
     <div className={cn("space-y-10", className)} data-testid="how-built">
       <section className="space-y-5 rounded-xl border border-border bg-surface p-4 sm:p-6" aria-label="The recorded build">
-        {/* The public entry's hero (DemoWelcome) already says what Forge does: no second pitch. */}
-        {(!leadWithRecording || onBack) && (
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            {!leadWithRecording && <BuildSummary />}
-            {onBack && <Button className="min-h-[44px]" variant="outline" leftIcon={<ArrowLeft />} onClick={onBack} data-testid="how-built-back">Back to the console</Button>}
-          </div>
-        )}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <BuildSummary />
+          {onBack && <Button className="min-h-[44px]" variant="outline" leftIcon={<ArrowLeft />} onClick={onBack} data-testid="how-built-back">Back to the console</Button>}
+        </div>
         <TerminalReplay cast={fixtures.cast} autoPlay={leadWithRecording ? false : autoPlay} />
-        <details className="border-t border-border pt-3 text-sm text-ink-muted" data-testid="how-built-about">
+        <p className="text-sm leading-relaxed text-ink">In this recording, API definitions were added, then Forge generated the supporting code. It shows code generation, code checks and a successful Go build—not a deployment or a test-suite run. The console&apos;s monitoring data is a separate sample.</p>
+        <details className="border-t border-border pt-3 text-sm text-ink-muted">
           <summary className="min-h-[44px] cursor-pointer py-3 font-medium text-ink">About this recording</summary>
-          <div className="space-y-2">
-            <p>API definitions were added, then Forge generated the supporting code. The recording shows code generation, code checks and a successful Go build, not a deployment or a test-suite run; the console&apos;s monitoring data is a separate sample.</p>
-            <p>
-              Recorded with <span title={`forge ${fixtures.manifest.forge_version}`}>Forge {shortForgeVersion(fixtures.manifest.forge_version)}</span> on {recorded}. The commands and code are unchanged from that run; long waits play shorter.
-            </p>
-          </div>
+          <p>Recorded with Forge {fixtures.manifest.forge_version} on {recorded}. The commands and code below are unchanged from that run.</p>
         </details>
       </section>
       <ScaffoldPanel manifest={fixtures.manifest} cast={fixtures.cast} />

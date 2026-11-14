@@ -54,8 +54,6 @@ export const READ_SLOT_RPCS: ReadonlySet<string> = new Set([
 /** The methods of the services above that take no read slot. */
 export const NO_READ_SLOT_RPCS: ReadonlySet<string> = new Set([
   "getObservabilityUsage",
-  // Postgres and Kubernetes only (runtime configs and the release ledger); no ClickHouse query.
-  "listFrontendReplay",
   "updateIssueStatus",
   "addIssueComment",
   "updateIssueComment",

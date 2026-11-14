@@ -51,39 +51,6 @@ service ActivityService {
       idempotent: true
     };
   }
-
-  // ListMembershipActivity is the org-admin audit view of membership: who
-  // created the org, invited, joined, left, was removed or changed role
-  // (target kind "member"), newest first. Caller: a person whose role in
-  // org_id is admin or owner (PermissionDenied, reason "admin_required"
-  // otherwise); a machine credential is refused ("human_only").
-  rpc ListMembershipActivity(ListMembershipActivityRequest) returns (ListActivityResponse) {
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
-  }
-}
-
-message ListMembershipActivityRequest {
-  // The org whose membership history is read. Required.
-  string org_id = 1 [
-    (buf.validate.field).required = true,
-    (buf.validate.field).string.max_len = 128
-  ];
-  // Filters, AND-combined. Each matches exactly; unset does not filter.
-  optional string actor_id = 2 [(buf.validate.field).string.max_len = 256];
-  // A membership verb: "create_org", "invite", "revoke_invite", "join",
-  // "remove", "leave", "set_role", "set_grants".
-  optional string verb = 3 [(buf.validate.field).string.max_len = 64];
-  optional string via = 4 [(buf.validate.field).string.max_len = 32];
-  // Unset or 0 = 50; max 500.
-  int32 page_size = 5 [
-    (buf.validate.field).int32.gte = 0,
-    (buf.validate.field).int32.lte = 500
-  ];
-  // next_page_token from the previous page.
-  string page_token = 6 [(buf.validate.field).string.max_len = 512];
 }
 
 // ActivityTimeRange is a half-open range [start, end). Either end may be unset

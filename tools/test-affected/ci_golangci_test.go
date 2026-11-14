@@ -124,7 +124,7 @@ func TestMergeQueueGolangciGates(t *testing.T) {
 		writeExec(t, filepath.Join(dir, "gh"), `#!/usr/bin/env bash
 case "$*" in *"/actions/runs/123/attempts/2/jobs"*) ;; *) echo "unexpected gh $*" >&2; exit 9 ;; esac
 f="`+dir+`/answers"
-line=$(head -1 "$f"); [ "$(wc -l <"$f")" -gt 1 ] && { sed 1d "$f" >"$f.n"; mv "$f.n" "$f"; }
+line=$(head -1 "$f"); [ "$(wc -l <"$f")" -gt 1 ] && sed -i 1d "$f"
 [ "$line" = fail ] && exit 1
 printf '%s\n' "$line"
 `)

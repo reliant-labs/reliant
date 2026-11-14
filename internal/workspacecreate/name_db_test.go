@@ -30,11 +30,11 @@ func TestNameRule_ReuseAfterArchive(t *testing.T) {
 	project := seedProject(t, repo)
 
 	req := Request{Project: project, Name: "feat", Branch: "feat-1", OwnerDaemonID: "d1"}
-	first, err := Insert(ctx, repo, nil, req)
+	first, err := Insert(ctx, repo, req)
 	require.NoError(t, err)
 
 	// A live row holds the name.
-	_, err = Insert(ctx, repo, nil, Request{Project: project, Name: "feat", Branch: "feat-2", OwnerDaemonID: "d1"})
+	_, err = Insert(ctx, repo, Request{Project: project, Name: "feat", Branch: "feat-2", OwnerDaemonID: "d1"})
 	var taken *NameTakenError
 	require.ErrorAs(t, err, &taken)
 	assert.True(t, errors.Is(err, core.ErrWorktreeNameTaken))
@@ -42,7 +42,7 @@ func TestNameRule_ReuseAfterArchive(t *testing.T) {
 
 	// Archiving releases it.
 	require.NoError(t, repo.ArchiveWorktree(ctx, first.ID))
-	second, err := Insert(ctx, repo, nil, Request{Project: project, Name: "feat", Branch: "feat-2", OwnerDaemonID: "d1"})
+	second, err := Insert(ctx, repo, Request{Project: project, Name: "feat", Branch: "feat-2", OwnerDaemonID: "d1"})
 	require.NoError(t, err)
 	live, err := repo.GetLiveWorktreeByName(ctx, project.ID, "feat")
 	require.NoError(t, err)
@@ -62,13 +62,13 @@ func TestNameRule_FailedRowIsReplaced(t *testing.T) {
 	project := seedProject(t, repo)
 
 	req := Request{Project: project, Checkout: project.Path, Repos: []*core.Repo{{ID: "r", Name: "demo"}}, Name: "feat", Branch: "feat-1", OwnerDaemonID: "d1"}
-	failed, err := Insert(ctx, repo, nil, req)
+	failed, err := Insert(ctx, repo, req)
 	require.NoError(t, err)
 	failed.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 	require.NoError(t, repo.UpdateWorktree(ctx, failed))
 
 	// The same name AND the same branch: the failed row never held work.
-	retry, err := Insert(ctx, repo, nil, req)
+	retry, err := Insert(ctx, repo, req)
 	require.NoError(t, err)
 	old, err := repo.GetWorktree(ctx, failed.ID)
 	require.NoError(t, err)
@@ -84,12 +84,12 @@ func TestNameRule_ArchivedBranchIsNeverTaken(t *testing.T) {
 	ctx := context.Background()
 	project := seedProject(t, repo)
 
-	first, err := Insert(ctx, repo, nil, Request{Project: project, Name: "feat", Branch: "feat-1", OwnerDaemonID: "d1"})
+	first, err := Insert(ctx, repo, Request{Project: project, Name: "feat", Branch: "feat-1", OwnerDaemonID: "d1"})
 	require.NoError(t, err)
 	require.NoError(t, repo.ArchiveWorktree(ctx, first.ID))
 
 	for _, force := range []bool{false, true} {
-		_, err = Insert(ctx, repo, nil, Request{Project: project, Name: "feat", Branch: "feat-1", Force: force, OwnerDaemonID: "d1"})
+		_, err = Insert(ctx, repo, Request{Project: project, Name: "feat", Branch: "feat-1", Force: force, OwnerDaemonID: "d1"})
 		var held *BranchHeldError
 		require.ErrorAs(t, err, &held, "force=%v", force)
 		assert.Contains(t, err.Error(), "pass a different branch")
@@ -100,6 +100,6 @@ func TestNameRule_ArchivedBranchIsNeverTaken(t *testing.T) {
 
 	// Once the sweep has deleted the branch, it is free again.
 	require.NoError(t, repo.UpdateWorktreeCleanupMetadata(ctx, first.ID, &db.CleanupMetadata{DirectoryDeleted: true, BranchDeleted: true}))
-	_, err = Insert(ctx, repo, nil, Request{Project: project, Name: "feat", Branch: "feat-1", OwnerDaemonID: "d1"})
+	_, err = Insert(ctx, repo, Request{Project: project, Name: "feat", Branch: "feat-1", OwnerDaemonID: "d1"})
 	require.NoError(t, err)
 }

@@ -437,13 +437,6 @@ message ListRunsRequest {
   // trigger_id, launch_kind (the event's kind) and the time bounds apply,
   // and query matches the trigger's name.
   optional bool include_unlaunched_events = 17;
-
-  // List only this organization's runs. It must be one the caller is a
-  // live member of (PERMISSION_DENIED otherwise). Runs created before orgs
-  // list under the caller's default org. Unset lists every one the caller
-  // owns, in any org, as before this field existed.
-  // A run belongs to its chat's org.
-  optional string org_id = 18;
 }
 
 message ListRunsResponse {

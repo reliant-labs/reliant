@@ -5,9 +5,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -36,12 +34,7 @@ func worktreeSummaryToProto(w *db.Worktree) *reliantv1.WorktreeSummary {
 // The client groups the sidebar from this, so it never has to page the whole
 // worktree list just to name the groups. A failure leaves the summaries out
 // (the chats still list); the client then groups those chats under a fallback.
-//
-// The store's main-workspace read checks only that the projects are the
-// caller's; a main workspace is listed only when the caller may read its
-// project (authz, so not one of an org they have left or a credential's
-// other org) and the project is in the list's org scope.
-func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string, scope *core.OrgScope, chats []*db.Chat, protoChats []*reliantv1.Chat) []*reliantv1.WorktreeSummary {
+func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string, chats []*db.Chat, protoChats []*reliantv1.Chat) []*reliantv1.WorktreeSummary {
 	seen := make(map[string]struct{}, len(chats))
 	ids := make([]string, 0, len(chats))
 	for _, c := range chats {
@@ -74,27 +67,18 @@ func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string,
 
 	// The query checks ownership itself: a project id that is not the
 	// caller's gets no main workspace.
-	var inProject *string
+	var scope *string
 	if projectID != "" {
-		inProject = &projectID
+		scope = &projectID
 	}
-	mains, err := s.deps.Repo.ListMainWorktreesForUser(ctx, userID, inProject)
+	mains, err := s.deps.Repo.ListMainWorktreesForUser(ctx, userID, scope)
 	if err != nil {
 		logging.WarnContext(ctx, "Failed to load the main workspaces of a chat list", "error", err, "projectID", projectID)
 		return nil
 	}
-	readable := map[string]bool{}
-	out := make([]*reliantv1.WorktreeSummary, 0, len(mains))
-	for _, w := range mains {
-		ok, seen := readable[w.ProjectID]
-		if !seen {
-			project, err := s.deps.Repo.GetProject(ctx, w.ProjectID)
-			ok = err == nil && authz.CanReadProject(ctx, userID, project) && scope.Includes(project.OrgID)
-			readable[w.ProjectID] = ok
-		}
-		if ok {
-			out = append(out, worktreeSummaryToProto(w))
-		}
+	out := make([]*reliantv1.WorktreeSummary, len(mains))
+	for i, w := range mains {
+		out[i] = worktreeSummaryToProto(w)
 	}
 	return out
 }

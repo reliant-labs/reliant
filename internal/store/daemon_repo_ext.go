@@ -352,12 +352,11 @@ func daemonToCore(row *Daemon) *core.Daemon {
 // the user's default when daemonID is "". It reports false, writing nothing,
 // when daemonID is not one of the user's machines.
 //
-// daemons.is_default is what every reader reads, in every release. The schema
-// keeps it durable (20261109201518_restore_default_daemon): a trigger
-// remembers each change of the column in user_default_daemons, and restores
-// it when the registry recreates the remembered machine's row under the same
-// id. A clear while that row is gone matches no daemons row, so no trigger
-// sees it: clearing deletes the remembered default here.
+// daemons.is_default is what every reader reads, in every release. Clearing
+// also forgets the default remembered in user_default_daemons (migration
+// 20261109190012_user_default_daemons), which outlives the machine's row so
+// the default survives the registry recreating it: a clear while that row is
+// gone matches no daemons row, and only this delete forgets it.
 //
 // It must run in a transaction: the user's rows are locked first, so two
 // concurrent sets for one user serialize instead of colliding on

@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -56,16 +55,12 @@ const (
 	// file, content hash): another firing of it is the same item, a new
 	// broken version is a new one.
 	inboxDefinitionBrokenPrefix = "automation_definition_broken:"
-	// A worktree-reclaim id names the machine and the set of proposals it
-	// asks about (reclaimItemID).
-	inboxWorktreeReclaimPrefix = "worktree_reclaim:"
 )
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
 	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxStoragePrefix,
 	inboxNeedsSetupPrefix, inboxRecoveryPrefix, inboxRunPausedPrefix, inboxDefinitionBrokenPrefix,
-	inboxWorktreeReclaimPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -124,10 +119,8 @@ func (s *Service) ListInbox(
 	if projectID != "" {
 		scoped := items[:0]
 		for _, it := range items {
-			// A machine's storage, and its worktrees, are not any project's:
-			// they show in every scope.
-			if it.ProjectId == projectID || it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE ||
-				it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM {
+			// A machine's storage is not any project's: it shows in every scope.
+			if it.ProjectId == projectID || it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE {
 				scoped = append(scoped, it)
 			} else {
 				resp.OtherProjectsCount++
@@ -238,7 +231,6 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 	g.Go(func() error {
 		return lim.do(gctx, func() (err error) {
 			out.pending, err = s.deps.Repo.ListInboxPending(gctx, userID)
-			out.pending = authz.Visible(gctx, userID, out.pending, s.readableItem().pending)
 			return err
 		})
 	})
@@ -248,9 +240,6 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 		var stored []*core.Trigger
 		if err := lim.do(gctx, func() (err error) {
 			stored, err = s.deps.Repo.ListTriggers(gctx, core.TriggerFilters{UserID: userID})
-			// Automation health is the triggers the caller may read: none of
-			// an org they have left.
-			stored = authz.Visible(gctx, userID, stored, authz.CanReadTrigger)
 			return err
 		}); err != nil {
 			return err
@@ -286,7 +275,6 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 			if err != nil {
 				return err
 			}
-			rows = authz.Visible(gctx, userID, rows, s.readableItem().recovery)
 			for _, row := range rows {
 				if row.Phase == "refs_deleted" {
 					continue
@@ -797,9 +785,6 @@ func (s *Service) storageItems(ctx context.Context, userID string) ([]*reliantv1
 		if m.Processes != nil {
 			out = append(out, s.processesItem(ctx, userID, m, names[m.DaemonID]))
 		}
-		if it := reclaimItem(m, names[m.DaemonID]); it != nil {
-			out = append(out, it)
-		}
 		if !m.StorageItem() {
 			continue
 		}
@@ -875,65 +860,6 @@ func (s *Service) processesItem(ctx context.Context, userID string, m *worktrees
 		WaitingSince: time.UnixMilli(since).UTC().Format(time.RFC3339Nano),
 		Payload:      &reliantv1.InboxItem_Storage{Storage: payload},
 	}
-}
-
-// reclaimItem is a machine's worktree-reclaim item: the proposals its daemon
-// last reported that nobody has decided yet, with any already approved
-// (shown as such until the machine reports them removed; one it refused to
-// remove is undecided again, with why). Declined ones are not asked about again; a
-// declined worktree that changes is a new proposal. nil when nothing is
-// undecided.
-func reclaimItem(m *worktreesweep.MachineStorage, name string) *reliantv1.InboxItem {
-	wr := m.Reclaim
-	if wr == nil || m.DaemonID == "" {
-		return nil
-	}
-	payload := &reliantv1.InboxWorktreeReclaim{DaemonId: m.DaemonID, DaemonName: name, Online: m.Online, Mode: wr.Mode, Total: wr.Total}
-	if m.Disk != nil {
-		payload.ReportedAt = time.UnixMilli(m.Disk.ReportedAtMs).UTC().Format(time.RFC3339)
-	}
-	var undecided []*reliantv1.WorktreeReclaimProposal
-	var since int64
-	for _, p := range wr.Proposals {
-		switch p.Decision {
-		case "":
-			undecided = append(undecided, p)
-			if since == 0 || (p.ProposedAtMs > 0 && p.ProposedAtMs < since) {
-				since = p.ProposedAtMs
-			}
-		case "approve":
-		default:
-			continue
-		}
-		payload.Proposals = append(payload.Proposals, proto.CloneOf(p))
-	}
-	if len(undecided) == 0 {
-		return nil
-	}
-	if since == 0 {
-		since = wr.PassFinishedAtMs
-	}
-	return &reliantv1.InboxItem{
-		Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM,
-		ItemId:       reclaimItemID(m.DaemonID, undecided),
-		WaitingSince: time.UnixMilli(since).UTC().Format(time.RFC3339Nano),
-		Payload:      &reliantv1.InboxItem_WorktreeReclaim{WorktreeReclaim: payload},
-	}
-}
-
-// reclaimItemID names a machine's worktree-reclaim item by the proposals it
-// asks about, worktree_reclaim:<daemon>:<digest of their keys and
-// fingerprints>. The same undecided set is one item however often the
-// machine reports it, so a dismissal holds for it; a new proposal, or a
-// worktree whose state changed, is a new set and a new item.
-func reclaimItemID(daemonID string, undecided []*reliantv1.WorktreeReclaimProposal) string {
-	keys := make([]string, 0, len(undecided))
-	for _, p := range undecided {
-		keys = append(keys, p.Key+"\x00"+p.Fingerprint)
-	}
-	sort.Strings(keys)
-	sum := sha256.Sum256([]byte(strings.Join(keys, "\n")))
-	return inboxWorktreeReclaimPrefix + daemonID + ":" + hex.EncodeToString(sum[:8])
 }
 
 // storageItemID names a machine's storage item by what the user is told, so a
@@ -1092,68 +1018,4 @@ func (s *Service) CleanupStorage(
 		activity.Skip(ctx) // every worktree was skipped: nothing is being cleaned up
 	}
 	return connect.NewResponse(resp), nil
-}
-
-// itemReads decides inbox items through authz, reading each chat and project
-// once per inbox read: an item about a chat or project the caller may no
-// longer read (an org they have left, a credential's other org) is not
-// listed. An item of no org (its project is gone: a recovery outlives its
-// source by design; or it names none) is decided as authz decides a row of
-// no org: the owner's, reached by a credential only through its owner's
-// default org.
-type itemReads struct {
-	s        *Service
-	mu       sync.Mutex
-	chats    map[string]bool
-	projects map[string]bool
-}
-
-func (s *Service) readableItem() *itemReads {
-	return &itemReads{s: s, chats: map[string]bool{}, projects: map[string]bool{}}
-}
-
-func (r *itemReads) chat(ctx context.Context, userID, id string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	ok, seen := r.chats[id]
-	if !seen {
-		chat, err := r.s.deps.Repo.GetChat(ctx, id)
-		ok = err == nil && authz.CanReadChat(ctx, userID, chat)
-		r.chats[id] = ok
-	}
-	return ok
-}
-
-func (r *itemReads) project(ctx context.Context, userID, id string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	ok, seen := r.projects[id]
-	if !seen {
-		project, err := r.s.deps.Repo.GetProject(ctx, id)
-		switch {
-		case svcerr.IsNotFound(err):
-			ok = authz.CanReadOwn(ctx, userID, nil)
-		default:
-			ok = err == nil && authz.CanReadProject(ctx, userID, project)
-		}
-		r.projects[id] = ok
-	}
-	return ok
-}
-
-func (r *itemReads) pending(ctx context.Context, userID string, p *core.InboxPending) bool {
-	switch {
-	case p.ChatID != "":
-		return r.chat(ctx, userID, p.ChatID)
-	case p.ProjectID != "":
-		return r.project(ctx, userID, p.ProjectID)
-	}
-	return authz.CanReadOwn(ctx, userID, nil)
-}
-
-func (r *itemReads) recovery(ctx context.Context, userID string, row *core.WorktreeRecovery) bool {
-	if row.ProjectID == "" {
-		return authz.CanReadOwn(ctx, userID, nil)
-	}
-	return r.project(ctx, userID, row.ProjectID)
 }

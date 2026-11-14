@@ -14,8 +14,8 @@ import (
 //
 //	<!-- reliant-chat: <chat id> -->
 //
-// A shell command carries the same id as ChatIDEnv, and the daemon's gh shim
-// (internal/ghshim) stamps it on a pull request opened with `gh pr create`.
+// A shell command carries the same id as ChatIDEnv, for a pull request opened
+// with `gh pr create`.
 
 // owningChatMarker is the marker for chatID.
 func owningChatMarker(chatID string) string {

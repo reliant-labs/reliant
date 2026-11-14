@@ -388,7 +388,7 @@ func TestReapIdle_SIGTERMThenSIGKILLTheWholeGroup(t *testing.T) {
 	process := startQuiet(t, m, StartProcessOptions{
 		ChatID:     "chat-done",
 		WorkingDir: dir,
-		Command: `( trap "" TERM; echo $(exec sh -c 'echo $PPID') > ` + pidFile + `; : > ` + ready + `; while true; do sleep 0.05; done ) >/dev/null 2>&1 &
+		Command: `( trap "" TERM; echo $BASHPID > ` + pidFile + `; : > ` + ready + `; while true; do sleep 0.05; done ) >/dev/null 2>&1 &
 wait`,
 	})
 	require.Eventually(t, func() bool { _, err := os.Stat(ready); return err == nil }, 30*time.Second, 10*time.Millisecond)

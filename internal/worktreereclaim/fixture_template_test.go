@@ -2,14 +2,12 @@
 package worktreereclaim
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -53,34 +51,6 @@ func heavyUnderShort(t *testing.T, why string) {
 	}
 }
 
-// skipWithoutSafeInspection skips a test that needs the mount-safe, symlink-safe
-// file and tree inspection (openat2/fstatfs, Linux only). Elsewhere those
-// refuse by design and the reaper holds every worktree rather than guess.
-func skipWithoutSafeInspection(t *testing.T) {
-	t.Helper()
-	dir := t.TempDir()
-	file := filepath.Join(dir, "probe")
-	if err := os.WriteFile(file, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	f, err := activityOpenRegular(file)
-	if err != nil && runtime.GOOS == "linux" {
-		t.Fatalf("safe file inspection must work on Linux: %v", err)
-	}
-	if err != nil {
-		t.Skipf("this host lacks safe file inspection (Linux openat2): %v", err)
-	}
-	f.Close()
-	tree, err := inspectRetirementTree(context.Background(), dir)
-	if err != nil && runtime.GOOS == "linux" {
-		t.Fatalf("mount-safe tree inspection must work on Linux: %v", err)
-	}
-	if err != nil {
-		t.Skipf("this host lacks mount-safe tree inspection (Linux openat2/statfs): %v", err)
-	}
-	tree.close()
-}
-
 // templateRoot is where templates are built; TestMain removes it.
 var templateRoot string
 
@@ -89,12 +59,6 @@ func TestMain(m *testing.M) {
 	// and for an undumpable process (process_uninspectable_linux_test.go).
 	credsandbox.Dispatch()
 	runTestHelper()
-	// A developer's global core.fsmonitor=true makes git start a per-repo
-	// fsmonitor daemon, whose socket copyTree cannot copy and which outlives
-	// the test. Environment config outranks every file.
-	for k, v := range map[string]string{"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.fsmonitor", "GIT_CONFIG_VALUE_0": "false"} {
-		os.Setenv(k, v)
-	}
 	code := m.Run()
 	if templateRoot != "" {
 		_ = os.RemoveAll(templateRoot)

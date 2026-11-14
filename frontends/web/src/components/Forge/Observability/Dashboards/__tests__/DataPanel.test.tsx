@@ -1,8 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 import { describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
-import { setReaderPrincipal } from "../../../AuditedAccess/readerSession";
-import { writeAccess } from "../../../Data/dataAccess-model";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code } from "@connectrpc/connect";
@@ -58,25 +56,6 @@ describe("dashboard Data links", () => {
 
 const saved: Panel = { id: "view", kind: "browse", title: "Saved users", signal: "", series: [], browse: { database: "shop", table: "public.users", columns: ["id"], filters: [{ column: "id", op: "eq", values: ["{owner}"] }], sort: [{ column: "id", desc: true }], size: 25 } };
 describe("saved browse panels", () => {
-  it("drops the mounted saved-view grid and requires B's own confirmation on an account transition", async () => {
-    writeAccess(PROD.id, "Reader A saved view");
-    const { api, wrapper } = setup();
-    render(<DataPanelBody panel={saved} query={query} context={{ ...context, env: PROD, params: { owner: fixtureUserId(0) } }} />, { wrapper });
-    await screen.findAllByTestId("data-row");
-    const reads = browseCalls(api).length;
-    act(() => setReaderPrincipal("reader-b"));
-    expect(screen.queryAllByTestId("data-row")).toHaveLength(0);
-    await userEvent.click(await screen.findByRole("button", { name: "Give a Data access reason" }));
-    expect(browseCalls(api)).toHaveLength(reads);
-    await userEvent.type(screen.getByTestId("data-access-reason"), "Reader B saved view");
-    await userEvent.click(screen.getByTestId("data-access-confirm"));
-    await screen.findAllByTestId("data-row");
-    expect(browseCalls(api).at(-1)).toMatchObject({ access: { reason: "Reader B saved view", confirmEnvId: PROD.id } });
-    act(() => setReaderPrincipal(null));
-    expect(screen.queryAllByTestId("data-row")).toHaveLength(0);
-    expect(screen.getByRole("status")).toHaveTextContent("Sign in");
-  });
-
   it("runs structured BrowseTable, opens the same view, and rebinds on env changes", async () => {
     const { api, wrapper } = setup(createDataFixtureApi({ policy: { "env-prod": "open" } }));
     const view = render(<DataPanelBody panel={saved} query={query} context={{ ...context, params: { owner: fixtureUserId(0) } }} />, { wrapper });

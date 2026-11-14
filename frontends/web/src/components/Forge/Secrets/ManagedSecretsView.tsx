@@ -249,8 +249,7 @@ function StoreHeader({
           <WithCode text={availabilityExplanation(availability) ?? modeExplanation(mode, envKind)} />
         </p>
 
-        {/* Read-only (the demo): nothing to confirm ahead of, so no "Confirm now". */}
-        {protection?.protected && <ProtectionLine protection={protection} onUnlock={lock.readOnly ? undefined : onUnlock} />}
+        {protection?.protected && <ProtectionLine protection={protection} onUnlock={onUnlock} />}
 
         {/* The one documentation link on this surface. It sits under the
             explanation rather than beside the heading because it is the

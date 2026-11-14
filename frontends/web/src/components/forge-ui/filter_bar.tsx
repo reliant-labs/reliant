@@ -21,21 +21,17 @@ import React, { useEffect, useRef, useState } from "react";
  *   theirs, so the reader knows what a click will do before making it;
  * - "Clear filters" names how many filters are set.
  *
- * Every control is the same field: 32px tall (h-8), rounded-md, the control
- * edge (the strong border token), the surface fill, text-sm, a muted placeholder and
- * the one focus ring (`ring-2 ring-ring`). The search icon sits 10px in, and
- * the text starts 32px in, as in every other field of the console. So the bar
- * never wraps a control onto a half line, and a chip, a menu and the search
- * box read as one family. Self-contained, like the rest of forge-ui: no app
- * hooks, no icon library.
+ * Sizes match the search input (h-8), so the bar never wraps a control onto a
+ * half line. Self-contained, like the rest of forge-ui: no app hooks, no icon
+ * library.
  */
 
 const BASE =
-  "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
 /** The two states: an unset filter is a plain control, a set one is filled with the accent tint. */
 export function filterChipClass(on: boolean): string {
-  return `${BASE} ${on ? "border-accent/50 bg-accent/10 font-medium text-accent-ink" : "border-border-strong bg-surface text-ink hover:border-ink-muted hover:bg-ink/5"}`;
+  return `${BASE} ${on ? "border-accent/50 bg-accent/10 font-medium text-accent-ink" : "border-border bg-surface text-ink hover:bg-ink/5"}`;
 }
 
 function Count({ value, on }: { value: number; on: boolean }) {
@@ -82,7 +78,7 @@ export function FilterBar({ label, active = 0, onClear, trailing, className, tes
         <button
           type="button"
           onClick={onClear}
-          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-sm font-medium text-accent-ink hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-accent-ink hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           data-testid={testId ? `${testId}-clear` : undefined}
         >
           Clear filters
@@ -108,7 +104,7 @@ export interface FilterSearchProps {
 export function FilterSearch({ value, onChange, placeholder, label, testId, className }: FilterSearchProps) {
   return (
     <label
-      className={`flex h-8 w-full items-center gap-2 rounded-md border bg-surface px-2.5 text-ink-muted transition-colors focus-within:ring-2 focus-within:ring-ring sm:w-auto sm:min-w-56 ${value ? "border-accent/50" : "border-border-strong hover:border-ink-muted"} ${className ?? ""}`}
+      className={`flex h-8 min-w-56 items-center gap-1.5 rounded-md border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-accent ${value ? "border-accent/50" : "border-border"} ${className ?? ""}`}
     >
       <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" aria-hidden="true">
         <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
@@ -217,7 +213,7 @@ export function FilterMenu({ label, value, options, onChange, testId }: FilterMe
           type="button"
           onClick={() => onChange(undefined)}
           aria-label={`Clear ${label.toLowerCase()} filter`}
-          className="inline-flex h-8 w-7 items-center justify-center rounded-r-md border border-l-0 border-accent/50 bg-accent/10 text-accent-ink hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-8 w-7 items-center justify-center rounded-r-md border border-l-0 border-accent/50 bg-accent/10 text-accent-ink hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           data-testid={testId ? `${testId}-clear` : undefined}
         >
           <Cross />

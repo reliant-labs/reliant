@@ -370,11 +370,9 @@ func insideQuotes(prefix string) bool {
 
 func (c *checker) checkWorkflow() {
 	wf := c.wf
-	// finally runs on a failure too (run.status == 'failed'), so either
-	// handler is a failure path.
-	if len(wf.GetTriggers()) > 0 && wf.GetOnFailure() == nil && wf.GetFinally() == nil {
-		c.add(RuleNoFailurePath, "", "the workflow is started by triggers and has no on_failure or finally, so an unattended run that fails reports to nobody",
-			"add on_failure: (or finally:, which also runs on a cancel) with a step that tells someone (a comment, a message, an issue)")
+	if len(wf.GetTriggers()) > 0 && wf.GetOnFailure() == nil {
+		c.add(RuleNoFailurePath, "", "the workflow is started by triggers and has no on_failure, so an unattended run that fails reports to nobody",
+			"add on_failure: with a step that tells someone (a comment, a message, an issue)")
 	}
 	if wf.GetAutomationOnly() && len(wf.GetTriggers()) == 0 {
 		c.add(RuleAutomationUntriggered, "", "automation_only: true and no triggers: no chat can start this workflow and nothing else will",
@@ -478,7 +476,7 @@ func (c *checker) checkSecrets() {
 		}
 	}
 	rest := proto.Clone(c.wf).(*reliantv1.Workflow)
-	rest.Nodes, rest.OnFailure, rest.Finally = nil, nil, nil
+	rest.Nodes, rest.OnFailure = nil, nil
 	scan("", stringsOf(rest))
 }
 

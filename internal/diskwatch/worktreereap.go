@@ -48,13 +48,6 @@ import (
 // It rides the storage reaper's schedule and single-flight
 // (RELIANT_STORAGE_REAPER), at its own slower cadence: one pass runs git over
 // every worktree of every repository.
-//
-// The daemon's in-process sweep (WorktreeSweep, worktreereclaim.SweepMachine)
-// rides the same schedule. It reaches every linked worktree on the machine,
-// captures each into a local ref before deleting it, and holds the daemon's
-// admission lease, which this subprocess cannot. Its mode
-// (RELIANT_WORKTREE_RECLAIM) decides what runs: on, the sweep alone; dry-run,
-// the sweep's report and then this reap as before; off, this reap alone.
 
 const (
 	// WorktreeReapInterval is how often the worktree reap runs.
@@ -79,67 +72,7 @@ type worktreeReapRunner func(ctx context.Context, repo string) (reaperRun, error
 type worktreeReapState struct {
 	run worktreeReapRunner
 	// guarded by Watcher.mu
-	last  time.Time
-	sweep WorktreeSweep
-	// lastApproval is when the last approved-only sweep started.
-	lastApproval time.Time
-}
-
-// WorktreeSweep is the daemon's in-process, machine-wide worktree reclaim
-// (worktreereclaim.SweepMachine: every linked worktree on the machine,
-// captured into a local ref before it is deleted). It rides this reap's
-// schedule and single-flight. In mode on it REPLACES the forge subprocess
-// below for worktrees: two deleters with different fences must never run
-// side by side. In dry-run it only reports, and the forge reap runs as
-// before. Off, or no Run, leaves the forge reap exactly as it was.
-type WorktreeSweep struct {
-	// Mode is "off", "dry-run" or "on".
-	Mode string
-	// Run runs one pass. approvedOnly is a pass over just the worktrees a
-	// person has approved since the last one.
-	Run func(ctx context.Context, trigger string, pressure, approvedOnly bool)
-	// ApprovalsSince reports whether an approval was recorded after since.
-	ApprovalsSince func(since time.Time) bool
-}
-
-// ConfigureWorktreeSweep installs the in-process worktree reclaim. Call
-// before RunReaper. Nil-safe.
-func (w *Watcher) ConfigureWorktreeSweep(s WorktreeSweep) {
-	if w == nil {
-		return
-	}
-	w.mu.Lock()
-	w.worktreeReap.sweep = s
-	w.mu.Unlock()
-}
-
-func (w *Watcher) worktreeSweep() WorktreeSweep {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.worktreeReap.sweep
-}
-
-// worktreeApprovalTick runs an approved-only sweep when a person approved a
-// worktree since the last one, so a decision is acted on within a minute,
-// not at the next 6h pass. Only in mode on; dry-run reports approvals in its
-// scheduled passes.
-func (w *Watcher) worktreeApprovalTick(ctx context.Context, pressure bool) bool {
-	s := w.worktreeSweep()
-	if s.Run == nil || s.Mode != "on" || s.ApprovalsSince == nil {
-		return false
-	}
-	w.mu.Lock()
-	since := w.worktreeReap.lastApproval
-	w.mu.Unlock()
-	if !s.ApprovalsSince(since) || !w.tryAcquireReaper() {
-		return false
-	}
-	defer w.releaseReaper()
-	w.mu.Lock()
-	w.worktreeReap.lastApproval = w.now()
-	w.mu.Unlock()
-	s.Run(ctx, "approval", pressure, true)
-	return true
+	last time.Time
 }
 
 // worktreeReapCommandArgs is the argument list after the binary.
@@ -190,10 +123,7 @@ func (w *Watcher) worktreePressure() bool {
 // running. It reports whether it reaped any repository.
 func (w *Watcher) worktreeReapTick(ctx context.Context) bool {
 	pressure := w.worktreePressure()
-	if !w.worktreeReapDue(w.now(), pressure) {
-		return w.worktreeApprovalTick(ctx, pressure)
-	}
-	if !w.tryAcquireReaper() {
+	if !w.worktreeReapDue(w.now(), pressure) || !w.tryAcquireReaper() {
 		return false
 	}
 	defer w.releaseReaper()
@@ -217,13 +147,6 @@ func (w *Watcher) worktreeReapPass(ctx context.Context, trigger string) (reaped 
 	w.mu.Lock()
 	w.worktreeReap.last = w.now()
 	w.mu.Unlock()
-
-	if s := w.worktreeSweep(); s.Run != nil && s.Mode != "off" && s.Mode != "" {
-		s.Run(ctx, trigger, trigger == "pressure", false)
-		if s.Mode == "on" {
-			return 1 // the sweep is this machine's only worktree deleter
-		}
-	}
 
 	var repos []string
 	for _, t := range w.targetList() {

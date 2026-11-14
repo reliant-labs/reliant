@@ -158,13 +158,6 @@ func (s *Service) startChat(
 	if jwt, ok := auth.GetUserJWT(userID); ok {
 		spec.UserJWT = jwt
 	}
-	// A new chat's org is fixed here and never changes; an existing chat
-	// keeps its own.
-	if msg.GetChatId() == "" {
-		if spec.OrgID, spec.DefaultOrgID, err = s.newChatOrgs(ctx, userID, msg.ProjectId, msg.GetOrgId()); err != nil {
-			return nil, err
-		}
-	}
 
 	// A chat with no machine by design: there is nothing to choose, validate
 	// or wake. The launcher refuses the contradictions (with a daemon_id, or
@@ -293,14 +286,9 @@ func (s *Service) ListChats(
 	if req.Msg.ProjectId != "" {
 		projectID = &req.Msg.ProjectId
 	}
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
-	if err != nil {
-		return nil, err
-	}
 	filters := db.ChatFilters{
 		UserID:          userID,
 		ProjectID:       projectID,
-		Org:             scope,
 		Limit:           limit,
 		ExcludeArchived: true,
 		// The chat list holds conversations: USER-origin chats and adopted
@@ -312,16 +300,13 @@ func (s *Service) ListChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list chats"))
 	}
-	// The store lists what the caller owns; a chat of an org they have left
-	// is not theirs to see, named org or not (GetChat refuses it too).
-	chats = authz.Visible(ctx, userID, chats, authz.CanReadChat[*db.Chat])
 
 	// The background reconciler repairs stale DB status against Temporal.
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
 	}
-	mainWorktrees := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, scope, chats, protoChats)
+	mainWorktrees := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, chats, protoChats)
 
 	// Get latest user update sequence for stream sync —
 	// the frontend uses this to connect the streaming RPC without redundant event replay.
@@ -691,7 +676,6 @@ func (s *Service) SearchChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to search chats"))
 	}
-	chats = authz.Visible(ctx, userID, chats, authz.CanReadChat[*db.Chat])
 
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
@@ -715,9 +699,6 @@ func (s *Service) ListArchivedChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list archived chats"))
 	}
-	archivedChats = authz.Visible(ctx, userID, archivedChats, func(ctx context.Context, userID string, ac *db.ArchivedChatInfo) bool {
-		return authz.CanReadChat(ctx, userID, &ac.Chat)
-	})
 
 	protoChats := make([]*reliantv1.ArchivedChat, len(archivedChats))
 	for i, ac := range archivedChats {

@@ -327,10 +327,6 @@ message Project {
   // Unset when never read: not a forge project, a forge.yaml without a name,
   // or no daemon has reported it since the project was created.
   optional string forge_project_name = 13;
-  // The organization the project belongs to, fixed at creation. Unset for a
-  // project created before orgs or where no org could be resolved: such a
-  // project belongs to its creator's default org.
-  optional string org_id = 14;
 }
 
 // ProjectDaemon records that a daemon has a local clone of a project.
@@ -380,13 +376,6 @@ message CreateProjectRequest {
   // a project's checkout on this machine is AlreadyExists, as is a project
   // that is already on this machine at another path.
   optional string daemon_id = 5;
-
-  // The organization to act in (control-plane organizations.id); the web
-  // fills it with the active org. It must be one the caller is a live member
-  // of (PERMISSION_DENIED otherwise), and a machine credential may name only
-  // its own org. Unset is the caller's default org. An existing project that is
-  // attached keeps its own org.
-  optional string org_id = 6;
 }
 
 // CreateProjectResponse returns the created project
@@ -404,11 +393,6 @@ message CreateProjectResponse {
 message ListProjectsRequest {
   int32 limit = 1;
   int32 offset = 2;
-  // List only this organization's projects. It must be one the caller is a
-  // live member of (PERMISSION_DENIED otherwise). Projects created before
-  // orgs list under the caller's default org. Unset lists every project the
-  // caller owns, in any org, as before this field existed.
-  optional string org_id = 3;
 }
 
 // ListProjectsResponse returns a list of projects
@@ -700,12 +684,6 @@ message CreateProjectFromRepoRequest {
   // Absolute path on the daemon. Defaults to the conventional projects
   // directory for the repo name.
   optional string path = 5;
-
-  // The organization to act in (control-plane organizations.id); the web
-  // fills it with the active org. It must be one the caller is a live member
-  // of (PERMISSION_DENIED otherwise), and a machine credential may name only
-  // its own org. Unset is the caller's default org.
-  optional string org_id = 6;
 }
 
 message CreateProjectFromRepoResponse {

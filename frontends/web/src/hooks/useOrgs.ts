@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { hasControlPlane } from "@/services/controlPlane/config";
 import {
@@ -13,12 +13,8 @@ import {
 } from "@/services/controlPlane/orgs";
 import { chooseActiveOrg, useActiveOrgStore } from "@/store/activeOrgStore";
 
-/**
- * Every org the caller belongs to (human sessions; a machine credential gets
- * none). `client` names the QueryClient for a caller that may render outside
- * a QueryClientProvider (useMachineOrgs).
- */
-export function useMyOrgs(client?: QueryClient) {
+/** Every org the caller belongs to (human sessions; a machine credential gets none). */
+export function useMyOrgs() {
   return useQuery<MyOrgs>({
     queryKey: orgKeys.mine,
     queryFn: listMyOrganizations,
@@ -26,7 +22,7 @@ export function useMyOrgs(client?: QueryClient) {
     staleTime: 60_000,
     // Leaving an org elsewhere must show up when the person comes back.
     refetchOnWindowFocus: true,
-  }, client);
+  });
 }
 
 export interface ActiveOrg {
@@ -44,8 +40,8 @@ export interface ActiveOrg {
 }
 
 /** The active org, resolved against the live membership list. */
-export function useActiveOrg(client?: QueryClient): ActiveOrg {
-  const q = useMyOrgs(client);
+export function useActiveOrg(): ActiveOrg {
+  const q = useMyOrgs();
   const chosen = useActiveOrgStore((s) => s.chosenId);
   const data = q.data;
   const activeOrgId = data ? resolveActiveOrg(data, chosen) : null;

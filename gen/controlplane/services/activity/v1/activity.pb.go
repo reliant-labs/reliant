@@ -78,96 +78,6 @@ func (ActivityActorKind) EnumDescriptor() ([]byte, []int) {
 	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{0}
 }
 
-type ListMembershipActivityRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The org whose membership history is read. Required.
-	OrgId string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	// Filters, AND-combined. Each matches exactly; unset does not filter.
-	ActorId *string `protobuf:"bytes,2,opt,name=actor_id,json=actorId,proto3,oneof" json:"actor_id,omitempty"`
-	// A membership verb: "create_org", "invite", "revoke_invite", "join",
-	// "remove", "leave", "set_role", "set_grants".
-	Verb *string `protobuf:"bytes,3,opt,name=verb,proto3,oneof" json:"verb,omitempty"`
-	Via  *string `protobuf:"bytes,4,opt,name=via,proto3,oneof" json:"via,omitempty"`
-	// Unset or 0 = 50; max 500.
-	PageSize int32 `protobuf:"varint,5,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	// next_page_token from the previous page.
-	PageToken     string `protobuf:"bytes,6,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListMembershipActivityRequest) Reset() {
-	*x = ListMembershipActivityRequest{}
-	mi := &file_services_activity_v1_activity_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMembershipActivityRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMembershipActivityRequest) ProtoMessage() {}
-
-func (x *ListMembershipActivityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_activity_v1_activity_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMembershipActivityRequest.ProtoReflect.Descriptor instead.
-func (*ListMembershipActivityRequest) Descriptor() ([]byte, []int) {
-	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *ListMembershipActivityRequest) GetOrgId() string {
-	if x != nil {
-		return x.OrgId
-	}
-	return ""
-}
-
-func (x *ListMembershipActivityRequest) GetActorId() string {
-	if x != nil && x.ActorId != nil {
-		return *x.ActorId
-	}
-	return ""
-}
-
-func (x *ListMembershipActivityRequest) GetVerb() string {
-	if x != nil && x.Verb != nil {
-		return *x.Verb
-	}
-	return ""
-}
-
-func (x *ListMembershipActivityRequest) GetVia() string {
-	if x != nil && x.Via != nil {
-		return *x.Via
-	}
-	return ""
-}
-
-func (x *ListMembershipActivityRequest) GetPageSize() int32 {
-	if x != nil {
-		return x.PageSize
-	}
-	return 0
-}
-
-func (x *ListMembershipActivityRequest) GetPageToken() string {
-	if x != nil {
-		return x.PageToken
-	}
-	return ""
-}
-
 // ActivityTimeRange is a half-open range [start, end). Either end may be unset
 // (unbounded on that side).
 type ActivityTimeRange struct {
@@ -180,7 +90,7 @@ type ActivityTimeRange struct {
 
 func (x *ActivityTimeRange) Reset() {
 	*x = ActivityTimeRange{}
-	mi := &file_services_activity_v1_activity_proto_msgTypes[1]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -192,7 +102,7 @@ func (x *ActivityTimeRange) String() string {
 func (*ActivityTimeRange) ProtoMessage() {}
 
 func (x *ActivityTimeRange) ProtoReflect() protoreflect.Message {
-	mi := &file_services_activity_v1_activity_proto_msgTypes[1]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -205,7 +115,7 @@ func (x *ActivityTimeRange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityTimeRange.ProtoReflect.Descriptor instead.
 func (*ActivityTimeRange) Descriptor() ([]byte, []int) {
-	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{1}
+	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ActivityTimeRange) GetStart() *timestamppb.Timestamp {
@@ -245,7 +155,7 @@ type ActivityScope struct {
 
 func (x *ActivityScope) Reset() {
 	*x = ActivityScope{}
-	mi := &file_services_activity_v1_activity_proto_msgTypes[2]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -257,7 +167,7 @@ func (x *ActivityScope) String() string {
 func (*ActivityScope) ProtoMessage() {}
 
 func (x *ActivityScope) ProtoReflect() protoreflect.Message {
-	mi := &file_services_activity_v1_activity_proto_msgTypes[2]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -270,7 +180,7 @@ func (x *ActivityScope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityScope.ProtoReflect.Descriptor instead.
 func (*ActivityScope) Descriptor() ([]byte, []int) {
-	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{2}
+	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ActivityScope) GetOrgId() string {
@@ -325,7 +235,7 @@ type ListActivityRequest struct {
 
 func (x *ListActivityRequest) Reset() {
 	*x = ListActivityRequest{}
-	mi := &file_services_activity_v1_activity_proto_msgTypes[3]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -337,7 +247,7 @@ func (x *ListActivityRequest) String() string {
 func (*ListActivityRequest) ProtoMessage() {}
 
 func (x *ListActivityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_activity_v1_activity_proto_msgTypes[3]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -350,7 +260,7 @@ func (x *ListActivityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListActivityRequest.ProtoReflect.Descriptor instead.
 func (*ListActivityRequest) Descriptor() ([]byte, []int) {
-	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{3}
+	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ListActivityRequest) GetScope() *ActivityScope {
@@ -427,7 +337,7 @@ type ListActivityResponse struct {
 
 func (x *ListActivityResponse) Reset() {
 	*x = ListActivityResponse{}
-	mi := &file_services_activity_v1_activity_proto_msgTypes[4]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -439,7 +349,7 @@ func (x *ListActivityResponse) String() string {
 func (*ListActivityResponse) ProtoMessage() {}
 
 func (x *ListActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_activity_v1_activity_proto_msgTypes[4]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -452,7 +362,7 @@ func (x *ListActivityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListActivityResponse.ProtoReflect.Descriptor instead.
 func (*ListActivityResponse) Descriptor() ([]byte, []int) {
-	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{4}
+	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListActivityResponse) GetEvents() []*ActivityEvent {
@@ -498,7 +408,7 @@ type ActivityEvent struct {
 
 func (x *ActivityEvent) Reset() {
 	*x = ActivityEvent{}
-	mi := &file_services_activity_v1_activity_proto_msgTypes[5]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -510,7 +420,7 @@ func (x *ActivityEvent) String() string {
 func (*ActivityEvent) ProtoMessage() {}
 
 func (x *ActivityEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_services_activity_v1_activity_proto_msgTypes[5]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -523,7 +433,7 @@ func (x *ActivityEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityEvent.ProtoReflect.Descriptor instead.
 func (*ActivityEvent) Descriptor() ([]byte, []int) {
-	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{5}
+	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ActivityEvent) GetId() string {
@@ -609,7 +519,7 @@ type ActivityActor struct {
 
 func (x *ActivityActor) Reset() {
 	*x = ActivityActor{}
-	mi := &file_services_activity_v1_activity_proto_msgTypes[6]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -621,7 +531,7 @@ func (x *ActivityActor) String() string {
 func (*ActivityActor) ProtoMessage() {}
 
 func (x *ActivityActor) ProtoReflect() protoreflect.Message {
-	mi := &file_services_activity_v1_activity_proto_msgTypes[6]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -634,7 +544,7 @@ func (x *ActivityActor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityActor.ProtoReflect.Descriptor instead.
 func (*ActivityActor) Descriptor() ([]byte, []int) {
-	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{6}
+	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ActivityActor) GetId() string {
@@ -674,7 +584,7 @@ type ActivityEventTarget struct {
 
 func (x *ActivityEventTarget) Reset() {
 	*x = ActivityEventTarget{}
-	mi := &file_services_activity_v1_activity_proto_msgTypes[7]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -686,7 +596,7 @@ func (x *ActivityEventTarget) String() string {
 func (*ActivityEventTarget) ProtoMessage() {}
 
 func (x *ActivityEventTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_services_activity_v1_activity_proto_msgTypes[7]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -699,7 +609,7 @@ func (x *ActivityEventTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityEventTarget.ProtoReflect.Descriptor instead.
 func (*ActivityEventTarget) Descriptor() ([]byte, []int) {
-	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{7}
+	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ActivityEventTarget) GetKind() string {
@@ -734,7 +644,7 @@ type ActivityEnvironment struct {
 
 func (x *ActivityEnvironment) Reset() {
 	*x = ActivityEnvironment{}
-	mi := &file_services_activity_v1_activity_proto_msgTypes[8]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -746,7 +656,7 @@ func (x *ActivityEnvironment) String() string {
 func (*ActivityEnvironment) ProtoMessage() {}
 
 func (x *ActivityEnvironment) ProtoReflect() protoreflect.Message {
-	mi := &file_services_activity_v1_activity_proto_msgTypes[8]
+	mi := &file_services_activity_v1_activity_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -759,7 +669,7 @@ func (x *ActivityEnvironment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityEnvironment.ProtoReflect.Descriptor instead.
 func (*ActivityEnvironment) Descriptor() ([]byte, []int) {
-	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{8}
+	return file_services_activity_v1_activity_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ActivityEnvironment) GetId() string {
@@ -780,18 +690,7 @@ var File_services_activity_v1_activity_proto protoreflect.FileDescriptor
 
 const file_services_activity_v1_activity_proto_rawDesc = "" +
 	"\n" +
-	"#services/activity/v1/activity.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe0\x01\n" +
-	"\x1dListMembershipActivityRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1e\n" +
-	"\bactor_id\x18\x02 \x01(\tH\x00R\aactorId\x88\x01\x01\x12\x17\n" +
-	"\x04verb\x18\x03 \x01(\tH\x01R\x04verb\x88\x01\x01\x12\x15\n" +
-	"\x03via\x18\x04 \x01(\tH\x02R\x03via\x88\x01\x01\x12\x1b\n" +
-	"\tpage_size\x18\x05 \x01(\x05R\bpageSize\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x06 \x01(\tR\tpageTokenB\v\n" +
-	"\t_actor_idB\a\n" +
-	"\x05_verbB\x06\n" +
-	"\x04_via\"s\n" +
+	"#services/activity/v1/activity.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"s\n" +
 	"\x11ActivityTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
 	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xe2\x01\n" +
@@ -856,10 +755,9 @@ const file_services_activity_v1_activity_proto_rawDesc = "" +
 	"\x1fACTIVITY_ACTOR_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18ACTIVITY_ACTOR_KIND_USER\x10\x01\x12\x1f\n" +
 	"\x1bACTIVITY_ACTOR_KIND_MACHINE\x10\x02\x12\x1e\n" +
-	"\x1aACTIVITY_ACTOR_KIND_SYSTEM\x10\x032\xdf\x01\n" +
+	"\x1aACTIVITY_ACTOR_KIND_SYSTEM\x10\x032n\n" +
 	"\x0fActivityService\x12[\n" +
-	"\fListActivity\x12$.controlplane.v1.ListActivityRequest\x1a%.controlplane.v1.ListActivityResponse\x12o\n" +
-	"\x16ListMembershipActivity\x12..controlplane.v1.ListMembershipActivityRequest\x1a%.controlplane.v1.ListActivityResponseB\xd7\x01\n" +
+	"\fListActivity\x12$.controlplane.v1.ListActivityRequest\x1a%.controlplane.v1.ListActivityResponseB\xd7\x01\n" +
 	"\x13com.controlplane.v1B\rActivityProtoP\x01ZTgithub.com/reliant-labs/reliant/gen/controlplane/services/activity/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -875,40 +773,37 @@ func file_services_activity_v1_activity_proto_rawDescGZIP() []byte {
 }
 
 var file_services_activity_v1_activity_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_services_activity_v1_activity_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_services_activity_v1_activity_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_services_activity_v1_activity_proto_goTypes = []any{
-	(ActivityActorKind)(0),                // 0: controlplane.v1.ActivityActorKind
-	(*ListMembershipActivityRequest)(nil), // 1: controlplane.v1.ListMembershipActivityRequest
-	(*ActivityTimeRange)(nil),             // 2: controlplane.v1.ActivityTimeRange
-	(*ActivityScope)(nil),                 // 3: controlplane.v1.ActivityScope
-	(*ListActivityRequest)(nil),           // 4: controlplane.v1.ListActivityRequest
-	(*ListActivityResponse)(nil),          // 5: controlplane.v1.ListActivityResponse
-	(*ActivityEvent)(nil),                 // 6: controlplane.v1.ActivityEvent
-	(*ActivityActor)(nil),                 // 7: controlplane.v1.ActivityActor
-	(*ActivityEventTarget)(nil),           // 8: controlplane.v1.ActivityEventTarget
-	(*ActivityEnvironment)(nil),           // 9: controlplane.v1.ActivityEnvironment
-	nil,                                   // 10: controlplane.v1.ActivityEvent.DetailEntry
-	(*timestamppb.Timestamp)(nil),         // 11: google.protobuf.Timestamp
+	(ActivityActorKind)(0),        // 0: controlplane.v1.ActivityActorKind
+	(*ActivityTimeRange)(nil),     // 1: controlplane.v1.ActivityTimeRange
+	(*ActivityScope)(nil),         // 2: controlplane.v1.ActivityScope
+	(*ListActivityRequest)(nil),   // 3: controlplane.v1.ListActivityRequest
+	(*ListActivityResponse)(nil),  // 4: controlplane.v1.ListActivityResponse
+	(*ActivityEvent)(nil),         // 5: controlplane.v1.ActivityEvent
+	(*ActivityActor)(nil),         // 6: controlplane.v1.ActivityActor
+	(*ActivityEventTarget)(nil),   // 7: controlplane.v1.ActivityEventTarget
+	(*ActivityEnvironment)(nil),   // 8: controlplane.v1.ActivityEnvironment
+	nil,                           // 9: controlplane.v1.ActivityEvent.DetailEntry
+	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
 }
 var file_services_activity_v1_activity_proto_depIdxs = []int32{
-	11, // 0: controlplane.v1.ActivityTimeRange.start:type_name -> google.protobuf.Timestamp
-	11, // 1: controlplane.v1.ActivityTimeRange.end:type_name -> google.protobuf.Timestamp
-	2,  // 2: controlplane.v1.ActivityScope.time_range:type_name -> controlplane.v1.ActivityTimeRange
-	3,  // 3: controlplane.v1.ListActivityRequest.scope:type_name -> controlplane.v1.ActivityScope
+	10, // 0: controlplane.v1.ActivityTimeRange.start:type_name -> google.protobuf.Timestamp
+	10, // 1: controlplane.v1.ActivityTimeRange.end:type_name -> google.protobuf.Timestamp
+	1,  // 2: controlplane.v1.ActivityScope.time_range:type_name -> controlplane.v1.ActivityTimeRange
+	2,  // 3: controlplane.v1.ListActivityRequest.scope:type_name -> controlplane.v1.ActivityScope
 	0,  // 4: controlplane.v1.ListActivityRequest.actor_kind:type_name -> controlplane.v1.ActivityActorKind
-	6,  // 5: controlplane.v1.ListActivityResponse.events:type_name -> controlplane.v1.ActivityEvent
-	11, // 6: controlplane.v1.ActivityEvent.at:type_name -> google.protobuf.Timestamp
-	7,  // 7: controlplane.v1.ActivityEvent.actor:type_name -> controlplane.v1.ActivityActor
-	8,  // 8: controlplane.v1.ActivityEvent.target:type_name -> controlplane.v1.ActivityEventTarget
-	9,  // 9: controlplane.v1.ActivityEvent.env:type_name -> controlplane.v1.ActivityEnvironment
-	10, // 10: controlplane.v1.ActivityEvent.detail:type_name -> controlplane.v1.ActivityEvent.DetailEntry
+	5,  // 5: controlplane.v1.ListActivityResponse.events:type_name -> controlplane.v1.ActivityEvent
+	10, // 6: controlplane.v1.ActivityEvent.at:type_name -> google.protobuf.Timestamp
+	6,  // 7: controlplane.v1.ActivityEvent.actor:type_name -> controlplane.v1.ActivityActor
+	7,  // 8: controlplane.v1.ActivityEvent.target:type_name -> controlplane.v1.ActivityEventTarget
+	8,  // 9: controlplane.v1.ActivityEvent.env:type_name -> controlplane.v1.ActivityEnvironment
+	9,  // 10: controlplane.v1.ActivityEvent.detail:type_name -> controlplane.v1.ActivityEvent.DetailEntry
 	0,  // 11: controlplane.v1.ActivityActor.kind:type_name -> controlplane.v1.ActivityActorKind
-	4,  // 12: controlplane.v1.ActivityService.ListActivity:input_type -> controlplane.v1.ListActivityRequest
-	1,  // 13: controlplane.v1.ActivityService.ListMembershipActivity:input_type -> controlplane.v1.ListMembershipActivityRequest
-	5,  // 14: controlplane.v1.ActivityService.ListActivity:output_type -> controlplane.v1.ListActivityResponse
-	5,  // 15: controlplane.v1.ActivityService.ListMembershipActivity:output_type -> controlplane.v1.ListActivityResponse
-	14, // [14:16] is the sub-list for method output_type
-	12, // [12:14] is the sub-list for method input_type
+	3,  // 12: controlplane.v1.ActivityService.ListActivity:input_type -> controlplane.v1.ListActivityRequest
+	4,  // 13: controlplane.v1.ActivityService.ListActivity:output_type -> controlplane.v1.ListActivityResponse
+	13, // [13:14] is the sub-list for method output_type
+	12, // [12:13] is the sub-list for method input_type
 	12, // [12:12] is the sub-list for extension type_name
 	12, // [12:12] is the sub-list for extension extendee
 	0,  // [0:12] is the sub-list for field type_name
@@ -919,16 +814,15 @@ func file_services_activity_v1_activity_proto_init() {
 	if File_services_activity_v1_activity_proto != nil {
 		return
 	}
-	file_services_activity_v1_activity_proto_msgTypes[0].OneofWrappers = []any{}
+	file_services_activity_v1_activity_proto_msgTypes[1].OneofWrappers = []any{}
 	file_services_activity_v1_activity_proto_msgTypes[2].OneofWrappers = []any{}
-	file_services_activity_v1_activity_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_activity_v1_activity_proto_rawDesc), len(file_services_activity_v1_activity_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   10,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -3,7 +3,6 @@ import { useGetRun } from "@/hooks/run-service-hooks_gen";
 import type { RunNodeExecution } from "@/gen/reliant/v1/run_pb";
 import { WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
 import Button from "@/components/forge-ui/button";
-import { MissingConnectionLink } from "@/components/workflow/run/MissingConnectionLink";
 
 /** Reads the same bounded projection get_run uses; never raw node inputs. */
 export function RunNodes({ workflowId }: { workflowId: string }) {
@@ -28,7 +27,6 @@ export function RunNodes({ workflowId }: { workflowId: string }) {
             {failure && <div role="alert" className="mb-2 text-sm">
               <h4 className="font-medium text-destructive">Why the run failed</h4>
               <pre className="mt-1 whitespace-pre-wrap break-words text-destructive">{failure}</pre>
-              <MissingConnectionLink message={failure} className="mt-1 inline-block text-sm font-medium text-foreground underline-offset-2 hover:underline" />
             </div>}
             <RunNodeList nodes={query.data?.nodes ?? []} truncated={query.data?.nodesTruncated ?? false} failed={failure !== ""} />
           </>}
@@ -52,7 +50,6 @@ export function RunNodeList({ nodes, truncated, failed = false }: { nodes: RunNo
           <p className="mt-1 break-all text-xs text-muted-foreground">Workflow {node.workflowId} · attempt {node.attempt}{node.loopIteration !== undefined ? ` · iteration ${node.loopIteration}` : ""}</p>
           {node.startedAt && <p className="text-xs text-muted-foreground">{node.startedAt} — {node.completedAt}</p>}
           {node.error && <pre className="mt-2 whitespace-pre-wrap break-words text-destructive">{node.error}</pre>}
-          <MissingConnectionLink message={node.error} className="mt-1 inline-block text-sm font-medium text-foreground underline-offset-2 hover:underline" />
           {[["stdout", node.stdoutTail], ["stderr", node.stderrTail]].map(([label, text]) => text ? <div key={label} className="mt-2">
             <h4 className="text-xs font-medium text-muted-foreground">{label} (last 50 lines, bounded)</h4>
             <pre className="mt-1 overflow-auto whitespace-pre-wrap break-words rounded border border-border/60 bg-background p-3 text-xs text-foreground">{text}</pre>

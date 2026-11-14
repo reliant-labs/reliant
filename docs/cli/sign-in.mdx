@@ -89,9 +89,7 @@ Some things are unchanged. A daemon that is already running stays connected as i
 
 ## Sign in where there is no browser
 
-The browser approval finishes by redirecting your browser to `127.0.0.1` on the computer running the CLI. On a server you reach over SSH, or on a Reliant cloud machine, there is no browser on that computer, so the redirect has nowhere to land. There, `reliant auth login` and `reliant auth token create` use a device code instead: the CLI prints a short code and a link, you open the link on any device you are signed in to Reliant on, check the code and approve. Pass `--device` to choose it anywhere (or `--browser` to insist on the browser).
-
-On a CI runner nobody is there to approve anything. Create a token on a computer you are at and take it to the one that runs unattended.
+`reliant auth login` finishes by redirecting your browser to `127.0.0.1` on the computer running the CLI. On a server you reach over SSH, or on a CI runner, there is no browser on that computer, so the redirect has nowhere to land. Don't try to log in there. Create a token on a computer that has a browser and take it to the one that doesn't.
 
 **To run commands** (`workflow run`, `project list`, `trigger …`) on the headless machine, create an API token on your own computer:
 
@@ -99,7 +97,7 @@ On a CI runner nobody is there to approve anything. Create a token on a computer
 reliant auth token create --name build-server
 ```
 
-You approve it like `login`, in the browser or with a device code (`--device`). The token is printed **once** and not stored, and your own login is untouched. On the headless machine, provide it as `RELIANT_TOKEN`:
+This is a browser approval like `login`. The token is printed **once** and not stored, and your own login is untouched. On the headless machine, provide it as `RELIANT_TOKEN`:
 
 ```bash
 export RELIANT_TOKEN=rlat_…

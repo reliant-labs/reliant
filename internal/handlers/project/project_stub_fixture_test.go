@@ -3,9 +3,7 @@ package project_test
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -81,7 +79,7 @@ func ownedProject() *db.Project {
 // GetProjectWithUserCheck answer.
 func ownedProjectRepo(t *testing.T) *project.MockRepository {
 	t.Helper()
-	store := &project.MockRepository{
+	return &project.MockRepository{
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
 			if id == "p-1" && userID == "test-user" {
 				return ownedProject(), nil
@@ -102,64 +100,6 @@ func ownedProjectRepo(t *testing.T) *project.MockRepository {
 			return &db.Daemon{ID: id, UserID: "test-user"}, nil
 		},
 	}
-	withTeardowns(store)
-	return store
-}
-
-// withTeardowns gives store an in-memory checkout teardown book behaving as
-// db.Repo's: one pending op per checkout, reused by a retry of the same
-// teardown (marked Reused, as db.Repo marks it); a settle is final, and a done remove drops the checkout row (here:
-// calls DeleteProjectDaemonFunc). It returns the book, by op id.
-func withTeardowns(store *project.MockRepository) map[string]*db.CheckoutTeardown {
-	var mu sync.Mutex
-	book := map[string]*db.CheckoutTeardown{}
-	store.BeginCheckoutTeardownFunc = func(ctx context.Context, projectID, daemonID, kind, path string, guard func(context.Context) error) (*db.CheckoutTeardown, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		for _, op := range book {
-			if op.ProjectID == projectID && op.DaemonID == daemonID && op.State == db.CheckoutTeardownPending {
-				if op.Kind != kind || op.Path != path {
-					return nil, &db.CheckoutTeardownBusyError{Teardown: op}
-				}
-				retry := *op
-				retry.Reused = true
-				return &retry, nil
-			}
-		}
-		if guard != nil {
-			if err := guard(ctx); err != nil {
-				return nil, err
-			}
-		}
-		op := &db.CheckoutTeardown{ID: fmt.Sprintf("op-%d", len(book)+1), ProjectID: projectID, DaemonID: daemonID,
-			Kind: kind, Path: path, State: db.CheckoutTeardownPending, CreatedAt: time.Now()}
-		book[op.ID] = op
-		return op, nil
-	}
-	store.SettleCheckoutTeardownFunc = func(ctx context.Context, id, state, detail string) (*db.CheckoutTeardown, error) {
-		mu.Lock()
-		op := book[id]
-		if op == nil {
-			mu.Unlock()
-			return nil, svcerr.NotFound("checkout teardown")
-		}
-		settledNow := op.State == db.CheckoutTeardownPending
-		if settledNow {
-			op.State, op.Detail = state, detail
-		}
-		out := *op
-		mu.Unlock()
-		if settledNow && state == db.CheckoutTeardownDone && op.Kind == db.CheckoutTeardownRemove && store.DeleteProjectDaemonFunc != nil {
-			if err := store.DeleteProjectDaemonFunc(ctx, op.ProjectID, op.DaemonID); err != nil {
-				return nil, err
-			}
-		}
-		return &out, nil
-	}
-	if store.ListWorktreesFunc == nil {
-		store.ListWorktreesFunc = func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error) { return nil, nil }
-	}
-	return book
 }
 
 // newService builds the service over store. router is the caller's daemon;

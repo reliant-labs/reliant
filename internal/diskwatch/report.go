@@ -2,8 +2,6 @@
 package diskwatch
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -193,24 +191,7 @@ func Signature(rep *reliantv1.DiskReport) string {
 			fmt.Fprintf(&b, "|%s|%d", p.Top[0].Command, p.Top[0].Tasks/step)
 		}
 	}
-	b.WriteString(ReclaimSignature(rep))
 	return b.String()
-}
-
-// ReclaimSignature changes when the machine's worktree-reclaim proposals do:
-// a proposal added, gone or changed state (its fingerprint), a decision
-// recorded, a note written. The inbox item lists exactly that.
-func ReclaimSignature(rep *reliantv1.DiskReport) string {
-	wr := rep.GetWorktreeReclaim()
-	if wr == nil {
-		return ""
-	}
-	h := sha256.New()
-	fmt.Fprintf(h, "%s|%d|", wr.Mode, wr.Total)
-	for _, p := range wr.Proposals {
-		fmt.Fprintf(h, "%s|%s|%s|%d;", p.Key, p.Fingerprint, p.Decision, p.NoteAtMs)
-	}
-	return "reclaim|" + hex.EncodeToString(h.Sum(nil))[:16]
 }
 
 // UrgentSignature changes only when the UI should hear about it now — a
@@ -229,8 +210,6 @@ func UrgentSignature(rep *reliantv1.DiskReport) string {
 	if RefusingForProcesses(rep) {
 		b.WriteString("procs-refusing")
 	}
-	// A new proposal, or one decided, is something the inbox shows at once.
-	b.WriteString(ReclaimSignature(rep))
 	return b.String()
 }
 

@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/inbox.proto.
  */
 export const file_reliant_v1_inbox: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL2luYm94LnByb3RvEgpyZWxpYW50LnYxIlgKEExpc3RJbmJveFJlcXVlc3QSEgoFbGltaXQYASABKAVIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQFCCAoGX2xpbWl0Qg0KC19wcm9qZWN0X2lkIp0BChFMaXN0SW5ib3hSZXNwb25zZRIkCgVpdGVtcxgBIAMoCzIVLnJlbGlhbnQudjEuSW5ib3hJdGVtEhYKDmJsb2NraW5nX2NvdW50GAIgASgFEhkKEWhhc19pbmZvcm1hdGlvbmFsGAMgASgIEhEKCXRydW5jYXRlZBgEIAEoCBIcChRvdGhlcl9wcm9qZWN0c19jb3VudBgFIAEoBSKKCAoJSW5ib3hJdGVtEicKBGtpbmQYASABKA4yGS5yZWxpYW50LnYxLkluYm94SXRlbUtpbmQSDwoHaXRlbV9pZBgCIAEoCRIPCgdjaGF0X2lkGAMgASgJEg4KBnJ1bl9pZBgEIAEoCRISCgp0cmlnZ2VyX2lkGAUgASgJEhQKDHRyaWdnZXJfbmFtZRgGIAEoCRISCgpwcm9qZWN0X2lkGAcgASgJEhQKDHByb2plY3RfbmFtZRgIIAEoCRIVCg13b3JrZmxvd19uYW1lGAkgASgJEhIKCmNoYXRfdGl0bGUYCiABKAkSFQoNd2FpdGluZ19zaW5jZRgLIAEoCRItCghhcHByb3ZhbBgUIAEoCzIZLnJlbGlhbnQudjEuSW5ib3hBcHByb3ZhbEgAEi0KCHF1ZXN0aW9uGBUgASgLMhkucmVsaWFudC52MS5JbmJveFF1ZXN0aW9uSAASQQoTd2FpdGluZ19mb3JfbWFjaGluZRgWIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hXYWl0aW5nRm9yTWFjaGluZUgAEkAKEmF1dG9tYXRpb25fZmFpbGluZxgXIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uRmFpbGluZ0gAEksKGGF1dG9tYXRpb25fbGF1bmNoX2ZhaWxlZBgYIAEoCzInLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkSAASKwoHc3RvcmFnZRgaIAEoCzIYLnJlbGlhbnQudjEuSW5ib3hTdG9yYWdlSAASRwoWYXV0b21hdGlvbl9uZWVkc19zZXR1cBgbIAEoCzIlLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTmVlZHNTZXR1cEgAEjEKCHJlY292ZXJ5GBwgASgLMh0ucmVsaWFudC52MS5SZWNvdmVyeUluYm94SXRlbUgAEkUKFWF1dG9tYXRpb25fcnVuX3BhdXNlZBgdIAEoCzIkLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uUnVuUGF1c2VkSAASUwocYXV0b21hdGlvbl9kZWZpbml0aW9uX2Jyb2tlbhgeIAEoCzIrLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uRGVmaW5pdGlvbkJyb2tlbkgAEjwKEHdvcmt0cmVlX3JlY2xhaW0YHyABKAsyIC5yZWxpYW50LnYxLkluYm94V29ya3RyZWVSZWNsYWltSAASOgoPd29ya3RyZWVfbWFya2VkGCAgASgLMh8ucmVsaWFudC52MS5JbmJveFdvcmt0cmVlTWFya2VkSABCCQoHcGF5bG9hZEoECBkQGlIMcnVuX2ZpbmlzaGVkIioKGEluYm94QXV0b21hdGlvblJ1blBhdXNlZBIOCgZyZWFzb24YASABKAkiiwIKEVJlY292ZXJ5SW5ib3hJdGVtEhMKC3JlY292ZXJ5X2lkGAEgASgJEhoKEnNvdXJjZV93b3JrdHJlZV9pZBgCIAEoCRIcChRzb3VyY2Vfd29ya3RyZWVfbmFtZRgDIAEoCRISCgpwcm9qZWN0X2lkGAQgASgJEhQKDHByb2plY3RfbmFtZRgFIAEoCRINCgVwaGFzZRgGIAEoCRIWCg5jaGVja291dF9jb3VudBgHIAEoBRISCgpsYXN0X2Vycm9yGAggASgJEhEKCW9wZXJhdGlvbhgJIAEoCRIVCg1vcGVyYXRpb25fa2V5GAogASgJEhgKEHRhcmdldF9kYWVtb25faWQYCyABKAkiswEKDUluYm94QXBwcm92YWwSEwoLYXBwcm92YWxfaWQYASABKAkSLwoNYXBwcm92YWxfdHlwZRgCIAEoDjIYLnJlbGlhbnQudjEuQXBwcm92YWxUeXBlEg0KBXRpdGxlGAMgASgJEhAKCGJhdGNoX2lkGAcgASgJSgQIBBAFSgQIBRAGSgQIBhAHUgl0b29sX25hbWVSDHRvb2xfY2FsbF9pZFIQYXJndW1lbnRfc3VtbWFyeSJ6Cg1JbmJveFF1ZXN0aW9uEhMKC3F1ZXN0aW9uX2lkGAEgASgJEhEKCXRocmVhZF9pZBgCIAEoCRIOCgZwcm9tcHQYAyABKAkSFQoIbWV0YWRhdGEYBCABKAlIAIgBARINCgVhc3luYxgFIAEoCEILCglfbWV0YWRhdGEiQAoWSW5ib3hXYWl0aW5nRm9yTWFjaGluZRIRCglkYWVtb25faWQYASABKAkSEwoLZGFlbW9uX25hbWUYAiABKAkidwoWSW5ib3hBdXRvbWF0aW9uRmFpbGluZxIpCgZoZWFsdGgYASABKAsyGS5yZWxpYW50LnYxLlRyaWdnZXJIZWFsdGgSHQoQbGFzdF9ydW5fY2hhdF9pZBgCIAEoCUgAiAEBQhMKEV9sYXN0X3J1bl9jaGF0X2lkIpIBCh9JbmJveEF1dG9tYXRpb25EZWZpbml0aW9uQnJva2VuEjYKCmRlZmluaXRpb24YASABKAsyIi5yZWxpYW50LnYxLlRyaWdnZXJFdmVudERlZmluaXRpb24SNwoLYXV0b21hdGlvbnMYAiADKAsyIi5yZWxpYW50LnYxLkluYm94UmVmdXNlZEF1dG9tYXRpb24iQgoWSW5ib3hSZWZ1c2VkQXV0b21hdGlvbhISCgp0cmlnZ2VyX2lkGAEgASgJEhQKDHRyaWdnZXJfbmFtZRgCIAEoCSJKChlJbmJveEF1dG9tYXRpb25OZWVkc1NldHVwEi0KBmlzc3VlcxgBIAMoCzIdLnJlbGlhbnQudjEuVHJpZ2dlclNldHVwSXNzdWUiXQobSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkEg4KBnJlYXNvbhgBIAEoCRIQCghldmVudF9pZBgCIAEoCRIcChRjb25zZWN1dGl2ZV9mYWlsdXJlcxgDIAEoBSIrChdEaXNtaXNzSW5ib3hJdGVtUmVxdWVzdBIQCghpdGVtX2lkcxgCIAMoCSIaChhEaXNtaXNzSW5ib3hJdGVtUmVzcG9uc2UiKwoXUmVzdG9yZUluYm94SXRlbVJlcXVlc3QSEAoIaXRlbV9pZHMYASADKAkiGgoYUmVzdG9yZUluYm94SXRlbVJlc3BvbnNlIpsCCgxJbmJveFN0b3JhZ2USEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJEhAKCGRpc2tfbG93GAUgASgIEhMKC3JlcG9ydGVkX2F0GAYgASgJEiYKBGhlbGQYByADKAsyGC5yZWxpYW50LnYxLkhlbGRXb3JrdHJlZRIOCgZvbmxpbmUYCCABKAgSJwoHdm9sdW1lcxgJIAMoCzIWLnJlbGlhbnQudjEuRGlza1ZvbHVtZRIsCglwcm9jZXNzZXMYCiABKAsyGS5yZWxpYW50LnYxLlByb2Nlc3NSZXBvcnRKBAgDEARKBAgEEAVSD2Rpc2tfZnJlZV9ieXRlc1IQZGlza190b3RhbF9ieXRlcyLDAQoMSGVsZFdvcmt0cmVlEhMKC3dvcmt0cmVlX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMcHJvamVjdF9uYW1lGAMgASgJEgwKBHBhdGgYBCABKAkSDgoGcmVhc29uGAUgASgJEg4KBmRldGFpbBgGIAEoCRISCgpzaXplX2J5dGVzGAcgASgDEhEKCXJlbW92YWJsZRgIIAEoCBIQCghjbGVhbmluZxgJIAEoCBITCgtmb3JnZXR0YWJsZRgKIAEoCCK4AQoUSW5ib3hXb3JrdHJlZVJlY2xhaW0SEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJEg4KBm9ubGluZRgDIAEoCBITCgtyZXBvcnRlZF9hdBgEIAEoCRIMCgRtb2RlGAUgASgJEjYKCXByb3Bvc2FscxgGIAMoCzIjLnJlbGlhbnQudjEuV29ya3RyZWVSZWNsYWltUHJvcG9zYWwSDQoFdG90YWwYByABKAUi2AEKE0luYm94V29ya3RyZWVNYXJrZWQSEwoLd29ya3RyZWVfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIMCgRwYXRoGAMgASgJEg4KBmJyYW5jaBgEIAEoCRIRCglkYWVtb25faWQYBSABKAkSEwoLZGFlbW9uX25hbWUYBiABKAkSDwoHbWFya19pZBgHIAEoCRIRCgltYXJrZWRfYXQYCCABKAkSEgoKcmVjbGFpbV9hdBgJIAEoCRIOCgZyZWFzb24YCiABKAkSEAoIYXBwcm92ZWQYCyABKAgiQQoZS2VlcE1hcmtlZFdvcmt0cmVlUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIPCgdtYXJrX2lkGAIgASgJIhwKGktlZXBNYXJrZWRXb3JrdHJlZVJlc3BvbnNlIkcKH1JlY2xhaW1NYXJrZWRXb3JrdHJlZU5vd1JlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDwoHbWFya19pZBgCIAEoCSIiCiBSZWNsYWltTWFya2VkV29ya3RyZWVOb3dSZXNwb25zZSIzChxGb3JnZXRTdG9yYWdlV29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJIh8KHUZvcmdldFN0b3JhZ2VXb3JrdHJlZVJlc3BvbnNlIkAKFUNsZWFudXBTdG9yYWdlUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSFAoMd29ya3RyZWVfaWRzGAIgAygJIksKFkNsZWFudXBTdG9yYWdlUmVzcG9uc2USMQoHcmVzdWx0cxgBIAMoCzIgLnJlbGlhbnQudjEuQ2xlYW51cFN0b3JhZ2VSZXN1bHQicAoUQ2xlYW51cFN0b3JhZ2VSZXN1bHQSEwoLd29ya3RyZWVfaWQYASABKAkSMgoHb3V0Y29tZRgCIAEoDjIhLnJlbGlhbnQudjEuQ2xlYW51cFN0b3JhZ2VPdXRjb21lEg8KB21lc3NhZ2UYAyABKAkqngQKDUluYm94SXRlbUtpbmQSHwobSU5CT1hfSVRFTV9LSU5EX1VOU1BFQ0lGSUVEEAASHAoYSU5CT1hfSVRFTV9LSU5EX0FQUFJPVkFMEAESHAoYSU5CT1hfSVRFTV9LSU5EX1FVRVNUSU9OEAISJwojSU5CT1hfSVRFTV9LSU5EX1dBSVRJTkdfRk9SX01BQ0hJTkUQAxImCiJJTkJPWF9JVEVNX0tJTkRfQVVUT01BVElPTl9GQUlMSU5HEAQSLAooSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fTEFVTkNIX0ZBSUxFRBAFEhsKF0lOQk9YX0lURU1fS0lORF9TVE9SQUdFEAcSKgomSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fTkVFRFNfU0VUVVAQCBIcChhJTkJPWF9JVEVNX0tJTkRfUkVDT1ZFUlkQCRIpCiVJTkJPWF9JVEVNX0tJTkRfQVVUT01BVElPTl9SVU5fUEFVU0VEEAoSMAosSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fREVGSU5JVElPTl9CUk9LRU4QCxIkCiBJTkJPWF9JVEVNX0tJTkRfV09SS1RSRUVfUkVDTEFJTRAMEiMKH0lOQk9YX0lURU1fS0lORF9XT1JLVFJFRV9NQVJLRUQQDSIECAYQBiocSU5CT1hfSVRFTV9LSU5EX1JVTl9GSU5JU0hFRCqLAQoVQ2xlYW51cFN0b3JhZ2VPdXRjb21lEicKI0NMRUFOVVBfU1RPUkFHRV9PVVRDT01FX1VOU1BFQ0lGSUVEEAASJAogQ0xFQU5VUF9TVE9SQUdFX09VVENPTUVfQUNDRVBURUQQARIjCh9DTEVBTlVQX1NUT1JBR0VfT1VUQ09NRV9TS0lQUEVEEAIyvgUKDEluYm94U2VydmljZRJKCglMaXN0SW5ib3gSHC5yZWxpYW50LnYxLkxpc3RJbmJveFJlcXVlc3QaHS5yZWxpYW50LnYxLkxpc3RJbmJveFJlc3BvbnNlIgAShQEKDkNsZWFudXBTdG9yYWdlEiEucmVsaWFudC52MS5DbGVhbnVwU3RvcmFnZVJlcXVlc3QaIi5yZWxpYW50LnYxLkNsZWFudXBTdG9yYWdlUmVzcG9uc2UiLKK7GCg6JgoPY2xlYW51cF9zdG9yYWdlEhMKBmRhZW1vbhIJZGFlbW9uX2lkEp0BChVGb3JnZXRTdG9yYWdlV29ya3RyZWUSKC5yZWxpYW50LnYxLkZvcmdldFN0b3JhZ2VXb3JrdHJlZVJlcXVlc3QaKS5yZWxpYW50LnYxLkZvcmdldFN0b3JhZ2VXb3JrdHJlZVJlc3BvbnNlIi+iuxgrOikKDmZvcmdldF9zdG9yYWdlEhcKCHdvcmt0cmVlEgt3b3JrdHJlZV9pZBKkAQoQRGlzbWlzc0luYm94SXRlbRIjLnJlbGlhbnQudjEuRGlzbWlzc0luYm94SXRlbVJlcXVlc3QaJC5yZWxpYW50LnYxLkRpc21pc3NJbmJveEl0ZW1SZXNwb25zZSJForsYQTo/Oj1wZXItdXNlciBpbmJveCByZWFkIHN0YXRlOiBoaWRlcyBpdGVtcyB3aXRob3V0IHJlc29sdmluZyB0aGVtEpIBChBSZXN0b3JlSW5ib3hJdGVtEiMucmVsaWFudC52MS5SZXN0b3JlSW5ib3hJdGVtUmVxdWVzdBokLnJlbGlhbnQudjEuUmVzdG9yZUluYm94SXRlbVJlc3BvbnNlIjOiuxgvOi06K3Blci11c2VyIGluYm94IHJlYWQgc3RhdGU6IHVuZG9lcyBhIGRpc21pc3NCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge, file_reliant_v1_approval, file_reliant_v1_tools_daemon, file_reliant_v1_trigger]);
+  fileDesc("ChZyZWxpYW50L3YxL2luYm94LnByb3RvEgpyZWxpYW50LnYxIlgKEExpc3RJbmJveFJlcXVlc3QSEgoFbGltaXQYASABKAVIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQFCCAoGX2xpbWl0Qg0KC19wcm9qZWN0X2lkIp0BChFMaXN0SW5ib3hSZXNwb25zZRIkCgVpdGVtcxgBIAMoCzIVLnJlbGlhbnQudjEuSW5ib3hJdGVtEhYKDmJsb2NraW5nX2NvdW50GAIgASgFEhkKEWhhc19pbmZvcm1hdGlvbmFsGAMgASgIEhEKCXRydW5jYXRlZBgEIAEoCBIcChRvdGhlcl9wcm9qZWN0c19jb3VudBgFIAEoBSLOBwoJSW5ib3hJdGVtEicKBGtpbmQYASABKA4yGS5yZWxpYW50LnYxLkluYm94SXRlbUtpbmQSDwoHaXRlbV9pZBgCIAEoCRIPCgdjaGF0X2lkGAMgASgJEg4KBnJ1bl9pZBgEIAEoCRISCgp0cmlnZ2VyX2lkGAUgASgJEhQKDHRyaWdnZXJfbmFtZRgGIAEoCRISCgpwcm9qZWN0X2lkGAcgASgJEhQKDHByb2plY3RfbmFtZRgIIAEoCRIVCg13b3JrZmxvd19uYW1lGAkgASgJEhIKCmNoYXRfdGl0bGUYCiABKAkSFQoNd2FpdGluZ19zaW5jZRgLIAEoCRItCghhcHByb3ZhbBgUIAEoCzIZLnJlbGlhbnQudjEuSW5ib3hBcHByb3ZhbEgAEi0KCHF1ZXN0aW9uGBUgASgLMhkucmVsaWFudC52MS5JbmJveFF1ZXN0aW9uSAASQQoTd2FpdGluZ19mb3JfbWFjaGluZRgWIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hXYWl0aW5nRm9yTWFjaGluZUgAEkAKEmF1dG9tYXRpb25fZmFpbGluZxgXIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uRmFpbGluZ0gAEksKGGF1dG9tYXRpb25fbGF1bmNoX2ZhaWxlZBgYIAEoCzInLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkSAASKwoHc3RvcmFnZRgaIAEoCzIYLnJlbGlhbnQudjEuSW5ib3hTdG9yYWdlSAASRwoWYXV0b21hdGlvbl9uZWVkc19zZXR1cBgbIAEoCzIlLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTmVlZHNTZXR1cEgAEjEKCHJlY292ZXJ5GBwgASgLMh0ucmVsaWFudC52MS5SZWNvdmVyeUluYm94SXRlbUgAEkUKFWF1dG9tYXRpb25fcnVuX3BhdXNlZBgdIAEoCzIkLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uUnVuUGF1c2VkSAASUwocYXV0b21hdGlvbl9kZWZpbml0aW9uX2Jyb2tlbhgeIAEoCzIrLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uRGVmaW5pdGlvbkJyb2tlbkgAEjwKEHdvcmt0cmVlX3JlY2xhaW0YHyABKAsyIC5yZWxpYW50LnYxLkluYm94V29ya3RyZWVSZWNsYWltSABCCQoHcGF5bG9hZEoECBkQGlIMcnVuX2ZpbmlzaGVkIioKGEluYm94QXV0b21hdGlvblJ1blBhdXNlZBIOCgZyZWFzb24YASABKAkiiwIKEVJlY292ZXJ5SW5ib3hJdGVtEhMKC3JlY292ZXJ5X2lkGAEgASgJEhoKEnNvdXJjZV93b3JrdHJlZV9pZBgCIAEoCRIcChRzb3VyY2Vfd29ya3RyZWVfbmFtZRgDIAEoCRISCgpwcm9qZWN0X2lkGAQgASgJEhQKDHByb2plY3RfbmFtZRgFIAEoCRINCgVwaGFzZRgGIAEoCRIWCg5jaGVja291dF9jb3VudBgHIAEoBRISCgpsYXN0X2Vycm9yGAggASgJEhEKCW9wZXJhdGlvbhgJIAEoCRIVCg1vcGVyYXRpb25fa2V5GAogASgJEhgKEHRhcmdldF9kYWVtb25faWQYCyABKAkiswEKDUluYm94QXBwcm92YWwSEwoLYXBwcm92YWxfaWQYASABKAkSLwoNYXBwcm92YWxfdHlwZRgCIAEoDjIYLnJlbGlhbnQudjEuQXBwcm92YWxUeXBlEg0KBXRpdGxlGAMgASgJEhAKCGJhdGNoX2lkGAcgASgJSgQIBBAFSgQIBRAGSgQIBhAHUgl0b29sX25hbWVSDHRvb2xfY2FsbF9pZFIQYXJndW1lbnRfc3VtbWFyeSJ6Cg1JbmJveFF1ZXN0aW9uEhMKC3F1ZXN0aW9uX2lkGAEgASgJEhEKCXRocmVhZF9pZBgCIAEoCRIOCgZwcm9tcHQYAyABKAkSFQoIbWV0YWRhdGEYBCABKAlIAIgBARINCgVhc3luYxgFIAEoCEILCglfbWV0YWRhdGEiQAoWSW5ib3hXYWl0aW5nRm9yTWFjaGluZRIRCglkYWVtb25faWQYASABKAkSEwoLZGFlbW9uX25hbWUYAiABKAkidwoWSW5ib3hBdXRvbWF0aW9uRmFpbGluZxIpCgZoZWFsdGgYASABKAsyGS5yZWxpYW50LnYxLlRyaWdnZXJIZWFsdGgSHQoQbGFzdF9ydW5fY2hhdF9pZBgCIAEoCUgAiAEBQhMKEV9sYXN0X3J1bl9jaGF0X2lkIpIBCh9JbmJveEF1dG9tYXRpb25EZWZpbml0aW9uQnJva2VuEjYKCmRlZmluaXRpb24YASABKAsyIi5yZWxpYW50LnYxLlRyaWdnZXJFdmVudERlZmluaXRpb24SNwoLYXV0b21hdGlvbnMYAiADKAsyIi5yZWxpYW50LnYxLkluYm94UmVmdXNlZEF1dG9tYXRpb24iQgoWSW5ib3hSZWZ1c2VkQXV0b21hdGlvbhISCgp0cmlnZ2VyX2lkGAEgASgJEhQKDHRyaWdnZXJfbmFtZRgCIAEoCSJKChlJbmJveEF1dG9tYXRpb25OZWVkc1NldHVwEi0KBmlzc3VlcxgBIAMoCzIdLnJlbGlhbnQudjEuVHJpZ2dlclNldHVwSXNzdWUiXQobSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkEg4KBnJlYXNvbhgBIAEoCRIQCghldmVudF9pZBgCIAEoCRIcChRjb25zZWN1dGl2ZV9mYWlsdXJlcxgDIAEoBSIrChdEaXNtaXNzSW5ib3hJdGVtUmVxdWVzdBIQCghpdGVtX2lkcxgCIAMoCSIaChhEaXNtaXNzSW5ib3hJdGVtUmVzcG9uc2UiKwoXUmVzdG9yZUluYm94SXRlbVJlcXVlc3QSEAoIaXRlbV9pZHMYASADKAkiGgoYUmVzdG9yZUluYm94SXRlbVJlc3BvbnNlIpsCCgxJbmJveFN0b3JhZ2USEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJEhAKCGRpc2tfbG93GAUgASgIEhMKC3JlcG9ydGVkX2F0GAYgASgJEiYKBGhlbGQYByADKAsyGC5yZWxpYW50LnYxLkhlbGRXb3JrdHJlZRIOCgZvbmxpbmUYCCABKAgSJwoHdm9sdW1lcxgJIAMoCzIWLnJlbGlhbnQudjEuRGlza1ZvbHVtZRIsCglwcm9jZXNzZXMYCiABKAsyGS5yZWxpYW50LnYxLlByb2Nlc3NSZXBvcnRKBAgDEARKBAgEEAVSD2Rpc2tfZnJlZV9ieXRlc1IQZGlza190b3RhbF9ieXRlcyLDAQoMSGVsZFdvcmt0cmVlEhMKC3dvcmt0cmVlX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMcHJvamVjdF9uYW1lGAMgASgJEgwKBHBhdGgYBCABKAkSDgoGcmVhc29uGAUgASgJEg4KBmRldGFpbBgGIAEoCRISCgpzaXplX2J5dGVzGAcgASgDEhEKCXJlbW92YWJsZRgIIAEoCBIQCghjbGVhbmluZxgJIAEoCBITCgtmb3JnZXR0YWJsZRgKIAEoCCK4AQoUSW5ib3hXb3JrdHJlZVJlY2xhaW0SEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJEg4KBm9ubGluZRgDIAEoCBITCgtyZXBvcnRlZF9hdBgEIAEoCRIMCgRtb2RlGAUgASgJEjYKCXByb3Bvc2FscxgGIAMoCzIjLnJlbGlhbnQudjEuV29ya3RyZWVSZWNsYWltUHJvcG9zYWwSDQoFdG90YWwYByABKAUiMwocRm9yZ2V0U3RvcmFnZVdvcmt0cmVlUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCSIfCh1Gb3JnZXRTdG9yYWdlV29ya3RyZWVSZXNwb25zZSJAChVDbGVhbnVwU3RvcmFnZVJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEhQKDHdvcmt0cmVlX2lkcxgCIAMoCSJLChZDbGVhbnVwU3RvcmFnZVJlc3BvbnNlEjEKB3Jlc3VsdHMYASADKAsyIC5yZWxpYW50LnYxLkNsZWFudXBTdG9yYWdlUmVzdWx0InAKFENsZWFudXBTdG9yYWdlUmVzdWx0EhMKC3dvcmt0cmVlX2lkGAEgASgJEjIKB291dGNvbWUYAiABKA4yIS5yZWxpYW50LnYxLkNsZWFudXBTdG9yYWdlT3V0Y29tZRIPCgdtZXNzYWdlGAMgASgJKvkDCg1JbmJveEl0ZW1LaW5kEh8KG0lOQk9YX0lURU1fS0lORF9VTlNQRUNJRklFRBAAEhwKGElOQk9YX0lURU1fS0lORF9BUFBST1ZBTBABEhwKGElOQk9YX0lURU1fS0lORF9RVUVTVElPThACEicKI0lOQk9YX0lURU1fS0lORF9XQUlUSU5HX0ZPUl9NQUNISU5FEAMSJgoiSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fRkFJTElORxAEEiwKKElOQk9YX0lURU1fS0lORF9BVVRPTUFUSU9OX0xBVU5DSF9GQUlMRUQQBRIbChdJTkJPWF9JVEVNX0tJTkRfU1RPUkFHRRAHEioKJklOQk9YX0lURU1fS0lORF9BVVRPTUFUSU9OX05FRURTX1NFVFVQEAgSHAoYSU5CT1hfSVRFTV9LSU5EX1JFQ09WRVJZEAkSKQolSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fUlVOX1BBVVNFRBAKEjAKLElOQk9YX0lURU1fS0lORF9BVVRPTUFUSU9OX0RFRklOSVRJT05fQlJPS0VOEAsSJAogSU5CT1hfSVRFTV9LSU5EX1dPUktUUkVFX1JFQ0xBSU0QDCIECAYQBiocSU5CT1hfSVRFTV9LSU5EX1JVTl9GSU5JU0hFRCqLAQoVQ2xlYW51cFN0b3JhZ2VPdXRjb21lEicKI0NMRUFOVVBfU1RPUkFHRV9PVVRDT01FX1VOU1BFQ0lGSUVEEAASJAogQ0xFQU5VUF9TVE9SQUdFX09VVENPTUVfQUNDRVBURUQQARIjCh9DTEVBTlVQX1NUT1JBR0VfT1VUQ09NRV9TS0lQUEVEEAIyvgUKDEluYm94U2VydmljZRJKCglMaXN0SW5ib3gSHC5yZWxpYW50LnYxLkxpc3RJbmJveFJlcXVlc3QaHS5yZWxpYW50LnYxLkxpc3RJbmJveFJlc3BvbnNlIgAShQEKDkNsZWFudXBTdG9yYWdlEiEucmVsaWFudC52MS5DbGVhbnVwU3RvcmFnZVJlcXVlc3QaIi5yZWxpYW50LnYxLkNsZWFudXBTdG9yYWdlUmVzcG9uc2UiLKK7GCg6JgoPY2xlYW51cF9zdG9yYWdlEhMKBmRhZW1vbhIJZGFlbW9uX2lkEp0BChVGb3JnZXRTdG9yYWdlV29ya3RyZWUSKC5yZWxpYW50LnYxLkZvcmdldFN0b3JhZ2VXb3JrdHJlZVJlcXVlc3QaKS5yZWxpYW50LnYxLkZvcmdldFN0b3JhZ2VXb3JrdHJlZVJlc3BvbnNlIi+iuxgrOikKDmZvcmdldF9zdG9yYWdlEhcKCHdvcmt0cmVlEgt3b3JrdHJlZV9pZBKkAQoQRGlzbWlzc0luYm94SXRlbRIjLnJlbGlhbnQudjEuRGlzbWlzc0luYm94SXRlbVJlcXVlc3QaJC5yZWxpYW50LnYxLkRpc21pc3NJbmJveEl0ZW1SZXNwb25zZSJForsYQTo/Oj1wZXItdXNlciBpbmJveCByZWFkIHN0YXRlOiBoaWRlcyBpdGVtcyB3aXRob3V0IHJlc29sdmluZyB0aGVtEpIBChBSZXN0b3JlSW5ib3hJdGVtEiMucmVsaWFudC52MS5SZXN0b3JlSW5ib3hJdGVtUmVxdWVzdBokLnJlbGlhbnQudjEuUmVzdG9yZUluYm94SXRlbVJlc3BvbnNlIjOiuxgvOi06K3Blci11c2VyIGluYm94IHJlYWQgc3RhdGU6IHVuZG9lcyBhIGRpc21pc3NCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge, file_reliant_v1_approval, file_reliant_v1_tools_daemon, file_reliant_v1_trigger]);
 
 /**
  * @generated from message reliant.v1.ListInboxRequest
@@ -254,12 +254,6 @@ export type InboxItem = Message<"reliant.v1.InboxItem"> & {
      */
     value: InboxWorktreeReclaim;
     case: "worktreeReclaim";
-  } | {
-    /**
-     * @generated from field: reliant.v1.InboxWorktreeMarked worktree_marked = 32;
-     */
-    value: InboxWorktreeMarked;
-    case: "worktreeMarked";
   } | { case: undefined; value?: undefined };
 };
 
@@ -895,159 +889,6 @@ export const InboxWorktreeReclaimSchema: GenMessage<InboxWorktreeReclaim> = /*@_
   messageDesc(file_reliant_v1_inbox, 19);
 
 /**
- * InboxWorktreeMarked is a live worktree marked to be reclaimed. The item's
- * project_id and project_name are the worktree's project; waiting_since is
- * when it was marked.
- *
- * @generated from message reliant.v1.InboxWorktreeMarked
- */
-export type InboxWorktreeMarked = Message<"reliant.v1.InboxWorktreeMarked"> & {
-  /**
-   * @generated from field: string worktree_id = 1;
-   */
-  worktreeId: string;
-
-  /**
-   * @generated from field: string name = 2;
-   */
-  name: string;
-
-  /**
-   * @generated from field: string path = 3;
-   */
-  path: string;
-
-  /**
-   * @generated from field: string branch = 4;
-   */
-  branch: string;
-
-  /**
-   * @generated from field: string daemon_id = 5;
-   */
-  daemonId: string;
-
-  /**
-   * @generated from field: string daemon_name = 6;
-   */
-  daemonName: string;
-
-  /**
-   * The mark this item is about; KeepMarkedWorktree and
-   * ReclaimMarkedWorktreeNow act only while the worktree still carries it.
-   *
-   * @generated from field: string mark_id = 7;
-   */
-  markId: string;
-
-  /**
-   * RFC 3339: when it was marked, and when it will be reclaimed if nothing
-   * happens in it before then.
-   *
-   * @generated from field: string marked_at = 8;
-   */
-  markedAt: string;
-
-  /**
-   * @generated from field: string reclaim_at = 9;
-   */
-  reclaimAt: string;
-
-  /**
-   * Why it qualified: "landed" (its work is merged) or "recoverable-idle"
-   * (clean, pushed and unused).
-   *
-   * @generated from field: string reason = 10;
-   */
-  reason: string;
-
-  /**
-   * True once the person chose "Reclaim now": it is reclaimed at the next
-   * check that finds nothing has happened in it.
-   *
-   * @generated from field: bool approved = 11;
-   */
-  approved: boolean;
-};
-
-/**
- * Describes the message reliant.v1.InboxWorktreeMarked.
- * Use `create(InboxWorktreeMarkedSchema)` to create a new message.
- */
-export const InboxWorktreeMarkedSchema: GenMessage<InboxWorktreeMarked> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 20);
-
-/**
- * @generated from message reliant.v1.KeepMarkedWorktreeRequest
- */
-export type KeepMarkedWorktreeRequest = Message<"reliant.v1.KeepMarkedWorktreeRequest"> & {
-  /**
-   * @generated from field: string worktree_id = 1;
-   */
-  worktreeId: string;
-
-  /**
-   * @generated from field: string mark_id = 2;
-   */
-  markId: string;
-};
-
-/**
- * Describes the message reliant.v1.KeepMarkedWorktreeRequest.
- * Use `create(KeepMarkedWorktreeRequestSchema)` to create a new message.
- */
-export const KeepMarkedWorktreeRequestSchema: GenMessage<KeepMarkedWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 21);
-
-/**
- * @generated from message reliant.v1.KeepMarkedWorktreeResponse
- */
-export type KeepMarkedWorktreeResponse = Message<"reliant.v1.KeepMarkedWorktreeResponse"> & {
-};
-
-/**
- * Describes the message reliant.v1.KeepMarkedWorktreeResponse.
- * Use `create(KeepMarkedWorktreeResponseSchema)` to create a new message.
- */
-export const KeepMarkedWorktreeResponseSchema: GenMessage<KeepMarkedWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 22);
-
-/**
- * @generated from message reliant.v1.ReclaimMarkedWorktreeNowRequest
- */
-export type ReclaimMarkedWorktreeNowRequest = Message<"reliant.v1.ReclaimMarkedWorktreeNowRequest"> & {
-  /**
-   * @generated from field: string worktree_id = 1;
-   */
-  worktreeId: string;
-
-  /**
-   * @generated from field: string mark_id = 2;
-   */
-  markId: string;
-};
-
-/**
- * Describes the message reliant.v1.ReclaimMarkedWorktreeNowRequest.
- * Use `create(ReclaimMarkedWorktreeNowRequestSchema)` to create a new message.
- */
-export const ReclaimMarkedWorktreeNowRequestSchema: GenMessage<ReclaimMarkedWorktreeNowRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 23);
-
-/**
- * @generated from message reliant.v1.ReclaimMarkedWorktreeNowResponse
- */
-export type ReclaimMarkedWorktreeNowResponse = Message<"reliant.v1.ReclaimMarkedWorktreeNowResponse"> & {
-};
-
-/**
- * Describes the message reliant.v1.ReclaimMarkedWorktreeNowResponse.
- * Use `create(ReclaimMarkedWorktreeNowResponseSchema)` to create a new message.
- */
-export const ReclaimMarkedWorktreeNowResponseSchema: GenMessage<ReclaimMarkedWorktreeNowResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 24);
-
-/**
  * @generated from message reliant.v1.ForgetStorageWorktreeRequest
  */
 export type ForgetStorageWorktreeRequest = Message<"reliant.v1.ForgetStorageWorktreeRequest"> & {
@@ -1062,7 +903,7 @@ export type ForgetStorageWorktreeRequest = Message<"reliant.v1.ForgetStorageWork
  * Use `create(ForgetStorageWorktreeRequestSchema)` to create a new message.
  */
 export const ForgetStorageWorktreeRequestSchema: GenMessage<ForgetStorageWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 25);
+  messageDesc(file_reliant_v1_inbox, 20);
 
 /**
  * @generated from message reliant.v1.ForgetStorageWorktreeResponse
@@ -1075,7 +916,7 @@ export type ForgetStorageWorktreeResponse = Message<"reliant.v1.ForgetStorageWor
  * Use `create(ForgetStorageWorktreeResponseSchema)` to create a new message.
  */
 export const ForgetStorageWorktreeResponseSchema: GenMessage<ForgetStorageWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 26);
+  messageDesc(file_reliant_v1_inbox, 21);
 
 /**
  * @generated from message reliant.v1.CleanupStorageRequest
@@ -1104,7 +945,7 @@ export type CleanupStorageRequest = Message<"reliant.v1.CleanupStorageRequest"> 
  * Use `create(CleanupStorageRequestSchema)` to create a new message.
  */
 export const CleanupStorageRequestSchema: GenMessage<CleanupStorageRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 27);
+  messageDesc(file_reliant_v1_inbox, 22);
 
 /**
  * @generated from message reliant.v1.CleanupStorageResponse
@@ -1124,7 +965,7 @@ export type CleanupStorageResponse = Message<"reliant.v1.CleanupStorageResponse"
  * Use `create(CleanupStorageResponseSchema)` to create a new message.
  */
 export const CleanupStorageResponseSchema: GenMessage<CleanupStorageResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 28);
+  messageDesc(file_reliant_v1_inbox, 23);
 
 /**
  * @generated from message reliant.v1.CleanupStorageResult
@@ -1153,7 +994,7 @@ export type CleanupStorageResult = Message<"reliant.v1.CleanupStorageResult"> & 
  * Use `create(CleanupStorageResultSchema)` to create a new message.
  */
 export const CleanupStorageResultSchema: GenMessage<CleanupStorageResult> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 29);
+  messageDesc(file_reliant_v1_inbox, 24);
 
 /**
  * InboxItemKind is declared in priority order: lower values sort first. The
@@ -1268,18 +1109,6 @@ export enum InboxItemKind {
    * @generated from enum value: INBOX_ITEM_KIND_WORKTREE_RECLAIM = 12;
    */
   WORKTREE_RECLAIM = 12,
-
-  /**
-   * A live worktree is marked to be reclaimed: it has been quiet for a day,
-   * its work has landed (or it is clean and idle), and its machine placed a
-   * tombstone in it (.reliant/RECLAIM_PENDING). It is reclaimed at
-   * reclaim_at unless something happens in it first. One item per mark:
-   * KeepMarkedWorktree cancels it, ReclaimMarkedWorktreeNow skips the wait.
-   * Informational: nothing has to be done to keep a worktree that is used.
-   *
-   * @generated from enum value: INBOX_ITEM_KIND_WORKTREE_MARKED = 13;
-   */
-  WORKTREE_MARKED = 13,
 }
 
 /**

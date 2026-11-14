@@ -2,9 +2,9 @@
 import { clearAccess, readAccess, writeAccess, type AccessConfirmation } from "../AuditedAccess/accessSession-model";
 import { getReaderSession, isCurrentReader, readerStorageScope } from "../AuditedAccess/readerSession";
 
-export const readStorageAccess = (environmentId: string, reader = getReaderSession()): AccessConfirmation | null => readAccess("storage", environmentId, reader);
-export const writeStorageAccess = (environmentId: string, reason: string, reader = getReaderSession()): AccessConfirmation => writeAccess("storage", environmentId, reason, reader);
-export const clearStorageAccess = (environmentId: string, reader = getReaderSession()): void => clearAccess("storage", environmentId, reader);
+export const readStorageAccess = (environmentId: string): AccessConfirmation | null => readAccess("storage", environmentId);
+export const writeStorageAccess = (environmentId: string, reason: string): AccessConfirmation => writeAccess("storage", environmentId, reason);
+export const clearStorageAccess = (environmentId: string): void => clearAccess("storage", environmentId);
 const openedKey = (environmentId: string, bucket: string, reader = getReaderSession()) => `forge.storage.opened.${readerStorageScope(reader)}.${environmentId}.${bucket}`;
 // Retain only this epoch's memory fallback; late completions never mark the next reader.
 let memoryEpoch = "";

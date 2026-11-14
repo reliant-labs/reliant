@@ -56,10 +56,6 @@ type StartRunRequest struct {
 	// ParentChatID is the chat whose agent is starting this run. It is
 	// recorded on the launch event, and the fork-bomb guard walks it.
 	ParentChatID string
-	// OrgID is the calling chat's org: a run an agent starts spends the
-	// same org's money, so it may start only in a project of that org (or
-	// one with none). Empty when the calling chat has no org.
-	OrgID string
 	// DedupeKey makes the launch idempotent: the same key never launches
 	// twice, so a retried tool call attaches to the run it already started.
 	DedupeKey string

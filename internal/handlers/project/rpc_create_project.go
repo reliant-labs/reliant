@@ -13,7 +13,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -40,13 +39,6 @@ func (s *Service) CreateProject(
 	// compiles to the host's rules and judges every `C:\...` path relative.
 	if req.Msg.Path != "" && !ospath.IsAbs(req.Msg.Path) {
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("project path must be absolute, got: %q", req.Msg.Path))
-	}
-
-	// The org is decided before anything touches a machine, so a request
-	// naming an org the caller is not in changes nothing.
-	orgID, err := s.actingOrg(ctx, userID, req.Msg.GetOrgId())
-	if err != nil {
-		return nil, err
 	}
 
 	// pinned is the machine the request names (daemon_id); "" is today's
@@ -76,9 +68,6 @@ func (s *Service) CreateProject(
 	// directory, so before handing the caller an id to bind a run to, confirm
 	// the directory the row names is still there.
 	if existing, err := s.deps.Repo.GetProjectByPathAndUser(ctx, req.Msg.Path, userID); pinned == "" && err == nil && existing != nil {
-		if err := reusableProject(ctx, userID, existing); err != nil {
-			return nil, err
-		}
 		// The row was found BY this path, so the path asked about is the
 		// one the caller named — on the machine the request runs on.
 		machine := s.requestMachine(ctx, userID, existing.ID, req.Msg.Path)
@@ -172,9 +161,6 @@ func (s *Service) CreateProject(
 	if pinned != "" {
 		if root, ok := rootRepo(discoverResp.Discovered); ok && strings.TrimSpace(root.RemoteURL) != "" {
 			if existing, err := s.deps.Repo.GetProjectByRemoteURLAndUser(ctx, strings.TrimSpace(root.RemoteURL), userID); err == nil && existing != nil {
-				if err := reusableProject(ctx, userID, existing); err != nil {
-					return nil, err
-				}
 				return s.attachExisting(ctx, userID, pinned, existing, req.Msg.Path)
 			}
 		}
@@ -280,7 +266,6 @@ func (s *Service) CreateProject(
 		RemoteURL:        projectRemoteURL,
 		IsForge:          discoverResp.HasForge,
 		ForgeProjectName: forgeProjectName,
-		OrgID:            orgID,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		LastActive:       now,
@@ -487,9 +472,6 @@ func (s *Service) findOrAttachOn(ctx context.Context, userID, daemonID, path str
 	if err != nil || existing == nil {
 		return nil, nil
 	}
-	if err := reusableProject(ctx, userID, existing); err != nil {
-		return nil, err
-	}
 	// Attaching a found project never creates its folder: an empty
 	// directory dressed as the project is the phantom
 	// verifyProjectDirectoryExists refuses.
@@ -497,17 +479,6 @@ func (s *Service) findOrAttachOn(ctx context.Context, userID, daemonID, path str
 		return nil, err
 	}
 	return s.attachExisting(ctx, userID, daemonID, existing, path)
-}
-
-// reusableProject refuses a find-or-create's found project that the caller
-// may no longer act in (an org they have left, a credential's other org). It
-// still holds its (user_id, path) and (user_id, remote_url) keys, so a new
-// project cannot take them either: AlreadyExists, naming nothing of it.
-func reusableProject(ctx context.Context, userID string, existing *db.Project) error {
-	if authz.CanWriteProject(ctx, userID, existing) {
-		return nil
-	}
-	return svcerr.AlreadyExists("a project you can no longer access already uses this path or repository")
 }
 
 // attachExisting records the folder at path on the machine as existing's

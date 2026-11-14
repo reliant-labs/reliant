@@ -105,27 +105,6 @@ function detectBorderRadius(element: Element): number {
   return Math.round(nonZero.reduce((a, b) => a + b, 0) / nonZero.length);
 }
 
-/**
- * The first element matching `selector` that is actually rendered. A page can
- * hold the same test id twice (a desktop table and its phone layout), and a
- * hidden copy measures 0×0 at the top-left: highlighting it draws a ring
- * nowhere near anything. Engines without checkVisibility (jsdom) count every
- * match as visible.
- */
-export function findVisibleTarget(selector: string): Element | null {
-  let matches: NodeListOf<Element>;
-  try {
-    matches = document.querySelectorAll(selector);
-  } catch {
-    return null;
-  }
-  for (const el of matches) {
-    const check = (el as Element & { checkVisibility?: () => boolean }).checkVisibility;
-    if (typeof check !== "function" || check.call(el)) return el;
-  }
-  return null;
-}
-
 const DEFAULT_TOOLTIP_SIZE: ElementSize = { width: 320, height: 200 };
 const VIEWPORT_PADDING = 16;
 // Height reserved for the OnboardingNavBar at the bottom of the screen
@@ -150,9 +129,8 @@ function calculateTooltipPosition(
   // card gives up part of the inset.
   const room = window.innerHeight - bottomReserve - 2 * VIEWPORT_PADDING;
   viewportTop = Math.max(0, viewportTop);
-  // Never taller than the screen leaves it: a card that does not fit scrolls inside itself.
-  const maxHeight = Math.max(Math.min(MIN_CALLOUT_HEIGHT, window.innerHeight - 2 * VIEWPORT_PADDING), room - viewportTop);
-  const height = Math.min(tooltipSize.height, maxHeight);
+  const maxHeight = viewportTop > 0 ? Math.max(MIN_CALLOUT_HEIGHT, room - viewportTop) : undefined;
+  const height = maxHeight === undefined ? tooltipSize.height : Math.min(tooltipSize.height, maxHeight);
   viewportTop = Math.min(viewportTop, Math.max(0, room - height));
   const placed = placeCallout(
     { ...rect, left: rect.left - viewportLeft, top: rect.top - viewportTop },
@@ -161,28 +139,6 @@ function calculateTooltipPosition(
     { preferred: position, order, gap: targetGap, margin: VIEWPORT_PADDING, bottomReserve }
   );
   return { top: placed.top + viewportTop, left: placed.left + viewportLeft, actualPosition: placed.side, maxHeight };
-}
-
-/**
- * Where the card goes when its target is not on the page (not rendered yet,
- * gone after a navigation): the bottom-right corner of the page's box, on
- * screen, never at a stale spot.
- */
-function cornerPosition(tooltipSize: ElementSize, bottomReserve: number, viewportLeft = 0, viewportTop = 0): Position & { actualPosition: CalloutSide; maxHeight: number } {
-  const maxHeight = Math.max(MIN_CALLOUT_HEIGHT, window.innerHeight - bottomReserve - 2 * VIEWPORT_PADDING - Math.max(0, viewportTop));
-  const height = Math.min(tooltipSize.height, maxHeight);
-  const width = Math.min(tooltipSize.width, window.innerWidth - 2 * VIEWPORT_PADDING);
-  return {
-    top: Math.max(viewportTop + VIEWPORT_PADDING, window.innerHeight - bottomReserve - VIEWPORT_PADDING - height),
-    left: Math.max(viewportLeft + VIEWPORT_PADDING, window.innerWidth - VIEWPORT_PADDING - width),
-    actualPosition: "bottom",
-    maxHeight,
-  };
-}
-
-/** Whether a target's box lies wholly outside the window (scrolled away). */
-function isOffscreen(rect: TargetRect): boolean {
-  return rect.top + rect.height < 0 || rect.top > window.innerHeight || rect.left + rect.width < 0 || rect.left > window.innerWidth;
 }
 
 /** Below this width a callout is a bottom sheet (tailwind `sm`). */
@@ -279,10 +235,6 @@ export function OnboardingSpotlight({
   const stepAside = sheet && handsOff;
   // Read by the placement effect below, which must not re-run (and re-scroll) when they flip.
   const handsOffRef = useRef({ handsOff, stepAside });
-  const autoScrollRef = useRef(callout?.autoScroll !== false);
-  useEffect(() => {
-    autoScrollRef.current = callout?.autoScroll !== false;
-  }, [callout?.autoScroll]);
   useEffect(() => {
     handsOffRef.current = { handsOff, stepAside };
   }, [handsOff, stepAside]);
@@ -297,11 +249,7 @@ export function OnboardingSpotlight({
   void _totalSteps;
   void _onSkipAll;
   const [spotlightRect, setSpotlightRect] = useState<SpotlightRect | null>(null);
-  // The retries ran out, or a found target went away: the card waits in the corner, with no dim and no ring.
-  const [targetMissing, setTargetMissing] = useState(false);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
-  // The overlay itself: its own re-renders are not the page changing.
-  const layerRef = useRef<HTMLDivElement | null>(null);
   // The sheet's own content still scrolls; the page under it does not.
   useEffect(() => {
     if (!holdPage) return;
@@ -309,10 +257,9 @@ export function OnboardingSpotlight({
   }, [holdPage]);
   const [tooltipSize, setTooltipSize] = useState<ElementSize>(DEFAULT_TOOLTIP_SIZE);
   // Initialize from last position for smooth tooltip transition between steps
-  // (Kept on this screen: the last step may have been placed on a wider or taller one.)
   const [tooltipPos, setTooltipPos] = useState<Position & { actualPosition: string; maxHeight?: number }>(() => ({
-    top: Math.max(VIEWPORT_PADDING, Math.min(lastTooltipPosition?.top ?? window.innerHeight / 2, window.innerHeight - DEFAULT_TOOLTIP_SIZE.height - VIEWPORT_PADDING)),
-    left: Math.max(VIEWPORT_PADDING, Math.min(lastTooltipPosition?.left ?? window.innerWidth / 2, window.innerWidth - DEFAULT_TOOLTIP_SIZE.width - VIEWPORT_PADDING)),
+    top: lastTooltipPosition?.top ?? window.innerHeight / 2,
+    left: lastTooltipPosition?.left ?? window.innerWidth / 2,
     actualPosition: "bottom",
   }));
   // Start visible so tooltip can animate from last position
@@ -360,13 +307,10 @@ export function OnboardingSpotlight({
   }, []);
 
   const updatePosition = useCallback(() => {
-    const target = findVisibleTarget(targetSelector);
+    const target = document.querySelector(targetSelector);
     if (!target) {
-      // Gone (a navigation under the step, a re-render): no ring at the old spot.
-      setSpotlightRect((current) => {
-        if (current) console.warn(`[OnboardingSpotlight] Target not found: ${targetSelector}`);
-        return null;
-      });
+      console.warn(`[OnboardingSpotlight] Target not found: ${targetSelector}`);
+      setSpotlightRect(null);
       setHighlightVisible(false);
       return;
     }
@@ -390,34 +334,19 @@ export function OnboardingSpotlight({
       height: rect.height,
       borderRadius,
     };
-    setSpotlightRect((current) =>
-      current &&
-      current.top === newRect.top &&
-      current.left === newRect.left &&
-      current.width === newRect.width &&
-      current.height === newRect.height &&
-      current.borderRadius === newRect.borderRadius
-        ? current
-        : newRect
-    );
+    setSpotlightRect(newRect);
     // Fade in the highlight after a brief delay
     scheduleTimeout(() => setHighlightVisible(true), 50);
   }, [targetSelector, spotlightConfig, shouldDetectBorderRadius, scheduleTimeout]);
 
-  // A target scrolled out of the window: nothing to ring or dim around, so the card waits in the corner.
-  const offscreen = !!spotlightRect && isOffscreen(spotlightRect);
   useEffect(() => {
-    const bottomReserve = compact ? 0 : NAV_BAR_CLEARANCE;
-    if (!spotlightRect || offscreen) {
-      if (targetMissing || offscreen) setTooltipPos(cornerPosition(tooltipSize, bottomReserve, callout?.viewportLeft ?? 0, callout?.viewportTop ?? 0));
-      return;
-    }
+    if (!spotlightRect) return;
     setTooltipPos(
       compact
         ? calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, 0, BESIDE_FIRST, callout?.viewportLeft ?? 0, callout?.viewportTop ?? 0)
         : calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding)
     );
-  }, [spotlightRect, offscreen, targetMissing, tooltipPosition, tooltipSize, tooltipPadding, compact, callout?.viewportLeft, callout?.viewportTop]);
+  }, [spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, compact, callout?.viewportLeft, callout?.viewportTop]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(measureTooltip);
@@ -427,23 +356,10 @@ export function OnboardingSpotlight({
   useEffect(() => {
     // Initial position update with retry logic for elements that appear after navigation
     let unroom: (() => void) | null = null;
-    // Desktop: a step arriving at a target outside the window brings it into view, once, unless the
-    // reader already scrolled or the caller asked to leave the page alone (autoScroll: false).
-    let readerScrolledHere = false;
-    const stopWatching = sheet ? null : watchUserScroll(() => { readerScrolledHere = true; });
-    let arrived = false;
     const attemptUpdate = () => {
-      const target = findVisibleTarget(targetSelector);
+      const target = document.querySelector(targetSelector);
       if (target) {
         if (sheet && !handsOffRef.current.handsOff) unroom = scrollAboveSheet(target);
-        if (!sheet && !arrived && autoScrollRef.current && !readerScrolledHere && isOffscreen(target.getBoundingClientRect())) {
-          try {
-            target.scrollIntoView({ block: "center", behavior: "auto" });
-          } catch {
-            // jsdom: nothing to scroll.
-          }
-        }
-        arrived = true;
         updatePosition();
         setIsVisible(true);
         return true;
@@ -474,8 +390,7 @@ export function OnboardingSpotlight({
               console.info(`[OnboardingSpotlight] Auto-skipping step due to missing target`);
               onNext();
             } else {
-              setTargetMissing(true);
-              setIsVisible(true); // Show the card so the user can still move on
+              setIsVisible(true); // Show overlay so user can use keyboard to skip
             }
           }
         }
@@ -497,40 +412,12 @@ export function OnboardingSpotlight({
     };
     window.addEventListener("resize", reposition);
     window.addEventListener("scroll", reposition, true);
-    window.visualViewport?.addEventListener("resize", reposition);
-
-    // The page changing under the step (a navigation, a list re-rendering, a
-    // tab switch) moves or removes the target without a scroll or resize:
-    // follow it, once a frame at most, so the ring never stays at a stale
-    // spot, and re-anchors when the target comes back.
-    let frame: number | null = null;
-    const observer =
-      typeof MutationObserver === "undefined"
-        ? null
-        : new MutationObserver((records) => {
-            // The card's own content changing is not the page moving.
-            if (records.every((record) => layerRef.current?.contains(record.target))) return;
-            if (frame !== null) return;
-            frame = requestAnimationFrame(() => {
-              frame = null;
-              if (handsOffRef.current.stepAside) return;
-              const found = findVisibleTarget(targetSelector) !== null;
-              if (found && retryInterval) return; // the retry loop is still placing it
-              setTargetMissing(!found);
-              updatePosition();
-            });
-          });
-    observer?.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden", "open"] });
 
     return () => {
       if (retryInterval) clearInterval(retryInterval);
       if (settleTimeout) clearTimeout(settleTimeout);
-      if (frame !== null) cancelAnimationFrame(frame);
-      observer?.disconnect();
-      stopWatching?.();
       window.removeEventListener("resize", reposition);
       window.removeEventListener("scroll", reposition, true);
-      window.visualViewport?.removeEventListener("resize", reposition);
       unroom?.();
     };
   }, [updatePosition, targetSelector, autoSkipIfMissing, onNext, sheet]);
@@ -593,7 +480,6 @@ export function OnboardingSpotlight({
 
   const spotlightContent = (
     <div
-      ref={layerRef}
       className={cn(
         "fixed inset-0 z-[100] transition-opacity duration-300 overflow-hidden pointer-events-none",
         isVisible ? "opacity-100" : "opacity-0"
@@ -601,7 +487,7 @@ export function OnboardingSpotlight({
     >
       {/* Semi-transparent overlay with cutout */}
       <svg
-        className={cn("absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300", (stepAside || (compact && (!cutoutRect || offscreen))) && "opacity-0")}
+        className={cn("absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300", stepAside && "opacity-0")}
         data-testid="onboarding-spotlight-dim"
         data-stepped-aside={stepAside ? "true" : undefined}
       >
@@ -640,7 +526,7 @@ export function OnboardingSpotlight({
       {/* Click blockers — only while a required action is pending (see
        * blockOutside), and only around a target that was found. Four panes
        * around the cutout, so the target itself stays clickable. */}
-      {blockOutside && cutoutRect && !offscreen && (
+      {blockOutside && cutoutRect && (
         <>
           {[
             { top: 0, left: 0, width: "100%", height: cutoutRect.y },
@@ -668,7 +554,6 @@ export function OnboardingSpotlight({
       {cutoutRect && (
         <div
           key={nudge}
-          data-testid="onboarding-spotlight-ring"
           className={cn(
             "absolute pointer-events-none transition-opacity duration-300",
             highlightVisible && !stepAside ? "opacity-100" : "opacity-0",
@@ -699,8 +584,6 @@ export function OnboardingSpotlight({
         )}
         data-testid="tour-callout"
         data-side={sheet ? "sheet" : tooltipPos.actualPosition}
-        data-target-missing={targetMissing && !cutoutRect ? "true" : undefined}
-        data-target-offscreen={offscreen ? "true" : undefined}
         style={
           sheet
             ? { left: 0, right: 0, bottom: 0, top: "auto", width: "100%", maxHeight: `${SHEET_MAX_VH}dvh`, overflowY: "auto", overscrollBehavior: "contain", borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }

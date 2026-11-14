@@ -30,7 +30,6 @@ import {
 import { sectionMachines, type PlacementState, type ProjectPlacement } from "@/lib/projectPlacement";
 import Tooltip from "../forge-ui/tooltip";
 import { machineDisplayName } from "@/lib/machineName";
-import { useMachineOrgs } from "@/hooks/useMachineOrgs";
 
 /** The new chat's project, and how to put it on a machine that lacks it. */
 export interface MachinePickerProject {
@@ -102,13 +101,7 @@ export function MachinePicker({
     }
   }, [isOpen]);
 
-  // With several orgs, the active org's machines (and the current choice),
-  // each labelled with its org.
-  const machineOrgs = useMachineOrgs();
-  const options = chatMachineOptions(
-    machineOrgs.inActiveOrg(daemons, [value, defaultDaemon?.daemonId]),
-  );
-  const orgName = (daemonId: string) => (machineOrgs.multiOrg ? machineOrgs.orgOf(daemonId)?.name : undefined);
+  const options = chatMachineOptions(daemons);
   const userDefaultId = daemons.find((d) => d.isDefault)?.daemonId;
   const noMachine = value === NO_MACHINE;
   const selectedLabel = noMachine
@@ -185,12 +178,6 @@ export function MachinePicker({
                 )}
                 {state && <span aria-hidden="true">·</span>}
                 <span>{option.statusLabel}</span>
-                {orgName(option.value) && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span data-testid={`machine-org-${option.value}`}>{orgName(option.value)}</span>
-                  </>
-                )}
               </div>
             </div>
             {selected && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}

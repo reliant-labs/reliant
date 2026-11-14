@@ -28,7 +28,6 @@ vi.mock("../ToolExecution", async (importOriginal) => ({
 vi.mock("../../../hooks/useWorkflowExecutions", () => ({ useWorkflowExecutions: () => ({ allWorkflows: [] }) }));
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
-  useChatIdOrActive: (chatId?: string | null) => chatId || "chat-1",
   useToolResultsByCallId: () => mocks.results,
   useToolCallStates: () => new Map(),
   useChat: () => ({ worktreeId: "worktree-1" }),

@@ -499,12 +499,7 @@ export function hasElidedBlock(message: Message): boolean {
  * `held` holds in full under the same block id takes the held body: its
  * input, content, truncated and original_size. Every other field comes from
  * `incoming`, the newer copy. A block's body never changes once it is
- * written, so the held body is the block's body — but only once it is
- * written: a held copy that was still streaming (a disconnect while the LLM
- * wrote a tool's arguments) holds a PARTIAL body under the same block id.
- * So bodies are kept only from a held message that is COMPLETE; any other
- * held copy leaves the incoming elision marker in place, and the row fetches
- * the finished body when it is shown.
+ * written, so the held body is the block's body.
  *
  * This is the live → reload → resync path: a turn watched live holds full
  * blocks, a reconnect's snapshot re-delivers them as stubs, and the rows the
@@ -513,7 +508,6 @@ export function hasElidedBlock(message: Message): boolean {
  */
 export function keepHeldBodies(held: Message, incoming: Message): Message {
   if (held === incoming || !hasElidedBlock(incoming)) return incoming;
-  if (held.streamingState !== StreamingState.COMPLETE) return incoming;
   const heldBlocks = new Map<string, ContentBlock>();
   for (const block of held.contentBlocks || []) {
     if (block.id && !block.bodyElided) heldBlocks.set(block.id, block);

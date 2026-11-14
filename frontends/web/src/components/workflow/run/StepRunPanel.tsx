@@ -16,7 +16,6 @@ import { cn } from "../../../lib/utils";
 import type { StepRecord } from "./stepRecord";
 import { humanizeField } from "../workflowFindings";
 import { runErrorFieldKey, type RunNodeStatus } from "./builderRun";
-import { MissingConnectionLink } from "./MissingConnectionLink";
 import { useStepRun, type StepRun } from "./BuilderRunContext";
 
 const STATUS_TEXT: Record<RunNodeStatus, string> = {
@@ -172,10 +171,6 @@ function ErrorBlock({ message, fieldKey, onFocusField }: { message: string; fiel
             Go to {humanizeField(fieldKey)}
           </button>
         )}
-        <MissingConnectionLink
-          message={message}
-          className="rounded border border-destructive/40 bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
         {hasDetails && (
           <button
             type="button"

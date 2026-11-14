@@ -16,7 +16,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/lineage"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
@@ -414,17 +413,15 @@ func (d *Dispatcher) buildSpec(trigger *core.Trigger, ev *core.RunEvent, launchE
 	hidden := reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN
 	return launch.Spec{
 		OwnerUserID: trigger.UserID,
-		// Every chat a trigger launches belongs to the trigger's org.
-		OrgID:      ptr.From(trigger.OrgID),
-		ProjectID:  trigger.ProjectID,
-		WorktreeID: trigger.WorktreeID,
-		NewChatID:  uuid.NewSHA1(chatIDNamespace, []byte(dedupe)).String(),
-		Title:      &title,
-		Workflow:   trigger.Workflow,
-		DaemonID:   trigger.DaemonID,
-		NoMachine:  trigger.NoMachine,
-		Presets:    trigger.Presets,
-		Params:     params,
+		ProjectID:   trigger.ProjectID,
+		WorktreeID:  trigger.WorktreeID,
+		NewChatID:   uuid.NewSHA1(chatIDNamespace, []byte(dedupe)).String(),
+		Title:       &title,
+		Workflow:    trigger.Workflow,
+		DaemonID:    trigger.DaemonID,
+		NoMachine:   trigger.NoMachine,
+		Presets:     trigger.Presets,
+		Params:      params,
 		Messages: []launch.SeedMessage{
 			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: trigger.Message},
 			{

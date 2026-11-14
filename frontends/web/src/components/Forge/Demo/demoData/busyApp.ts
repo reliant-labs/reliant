@@ -1,81 +1,60 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * shop's request-level telemetry: every trace, span, log line and profile
- * the demo shows, sampled from the story's traffic model (shopStory.ts) so
- * that what a list shows and what an aggregate says agree.
+ * The demo's busy app: shop's telemetry at the volume a real app has, on top
+ * of the console's model fixtures (Observability/__fixtures__), which stay
+ * small because component tests pin their rows.
  *
- *   Requests  one potential request per SLOT_MS per environment, kept with
- *             the story's load (dailyLoad × ENV_TRAFFIC): ~2,400 an hour in
- *             prod at peak, a trickle in staging and dev. Each picks a route
- *             (DEMO_ROUTES) by weight and a log-normal latency around its
- *             base, with a rare outlier.
- *   Incident  in prod after v1.8.3's promotion, a charging route (CreateOrder,
- *             Checkout) fails DEMO_INCIDENT.failShare of the time at its 3s
- *             deadline, and is slow (retried, then succeeded) slowShare of
- *             the time. Nowhere else does anything fail.
- *   Traces    the root span, its queries, the charge to the payment provider
- *             (two attempts when it retried), and — on six in ten orders — the
- *             order event's hop api → NATS → worker → inventory (10–40 spans).
- *             A browser-started request (Checkout, a product page) has
- *             shop-web's span as its root. The toured trace (DEMO_TOURED_TRACE)
- *             is prod's newest failing CreateOrder, with the span ids the tour
- *             points at.
- *   Logs      a few lines per request, linked by trace and span, each saying
- *             what that request did.
- *   Profiles  per service and per profile type, in the type's unit.
+ *   Traces    one request every few seconds across shop's routes and RPCs
+ *             (api, orders, inventory, payments, worker): a fast p50, a long
+ *             tail and a few slow outliers. CreateOrder / Checkout fail on the
+ *             payments call after v1.8.3 reached prod (DEMO_RELEASE_AGO_MS
+ *             ago, the fixture ledger's marker). Every fifth request crosses
+ *             api → NATS → worker → Connect → inventory → Postgres, with
+ *             10–40 spans. The toured trace (FIXTURE_TRACE_ID) is the fixtures'
+ *             own, untouched, and always the newest failing CreateOrder.
+ *   Logs      several lines per request, linked by trace id, with warn/error
+ *             bursts on the payments path that line up with the issue.
+ *   Overview  per-service rate with a daily rhythm, and errors and latency
+ *             that step up at the v1.8.3 marker.
+ *   Profiles  a different CPU profile per service.
  *
- * Deterministic: a request is a function of its environment and SLOT (its
- * time bucket since the epoch), so it keeps its id, route and duration as
- * the window moves. No Math.random. Compact: nothing is stored; a read builds
- * only the slots its window covers (capped, MAX_SLOTS) and pages through them
- * with an opaque cursor.
+ * Deterministic: every value is a function of a request's SLOT (its time
+ * bucket since the epoch), so a request keeps its id, route and duration as
+ * the window moves, and a page shows the same thing twice. No Math.random.
+ * Compact: nothing is stored; a read builds only the slots its window covers,
+ * capped (MAX_SLOTS), and pages through them with an opaque cursor.
  */
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { NO_CLIENT } from "@/services/controlPlane/observability/client";
-import type { Flamegraph, LogRecord, ServiceHealth, ServiceSignalsResult, Severity, Span, Trace, TraceRed, TraceSummary } from "@/services/controlPlane/observability/types";
+import type { Flamegraph, LogRecord, ServiceHealth, Severity, Span, Trace, TraceSummary } from "@/services/controlPlane/observability/types";
 
-import { DEMO_CLIENTS } from "./shop/clients";
-import {
-  DEMO_BACKENDS,
-  DEMO_CUSTOMERS,
-  DEMO_DEPENDENCIES,
-  DEMO_ENV_IDS,
-  DEMO_FRONTEND,
-  DEMO_INCIDENT,
-  DEMO_PAYMENTS_HOST,
-  DEMO_PRODUCTS,
-  DEMO_ROUTE_WEIGHT,
-  DEMO_ROUTES,
-  DEMO_TOURED_TRACE,
-  dailyLoad,
-  demoLedger,
-  demoNow,
-  demoStats,
-  demoTrend,
-  ENV_TRAFFIC,
-  incidentStartMs,
-  LATENCY_SIGMA,
-  OUTLIER_FACTOR,
-  OUTLIER_SHARE,
-  RUNNING,
-  SLOT_MS,
-  type DemoEnvKey,
-  type DemoRoute,
-} from "./shopStory";
+import { createFixtureApi, FIXTURE_TRACE_ID } from "../../Observability/__fixtures__/fixtureApi";
+import { FIXTURE_SIGNALS } from "../../Observability/__fixtures__/fixtureSignals";
+import { FIXTURE_CLIENTS } from "../../Observability/__fixtures__/fixtureSessions";
 
-export { dailyLoad, SLOT_MS };
-
-/** At most this many slots per environment are built for one read (a 24h window is paged from its newest). */
+/** One request every SLOT_MS. ~1,200 an hour, ~29,000 a day. */
+export const SLOT_MS = 3_000;
+/** At most this many requests are built for one read (a 24h window is paged from its newest). */
 export const MAX_SLOTS = 3_000;
-/** When v1.8.3 reached prod (RUNNING's age): the incident's start. */
-export const DEMO_RELEASE_AGO_MS = RUNNING["env-prod"].age;
+/** When v1.8.3 reached prod: the fixture ledger's marker (fixtureDelivery.ts). */
+export const DEMO_RELEASE_AGO_MS = 40 * 60_000;
 
-/** The services that emit server telemetry (traces' services also include shop-web for browser-started requests). */
-export const BUSY_SERVICES = DEMO_BACKENDS;
+export const BUSY_SERVICES = ["api", "orders", "inventory", "payments", "worker"] as const;
 
-const ENV_NAME: Record<DemoEnvKey, string> = { "env-dev": "dev", "env-staging": "staging", "env-prod": "prod" };
+const ROUTES = [
+  { op: "orders.v1.OrdersService/CreateOrder", weight: 14, base: 48, payments: true },
+  { op: "orders.v1.OrdersService/GetOrder", weight: 22, base: 9, payments: false },
+  { op: "orders.v1.OrdersService/ListOrders", weight: 16, base: 31, payments: false },
+  { op: "orders.v1.OrdersService/CancelOrder", weight: 3, base: 22, payments: true },
+  { op: "checkout.v1.CheckoutService/Checkout", weight: 8, base: 95, payments: true },
+  { op: "inventory.v1.InventoryService/GetStock", weight: 18, base: 6, payments: false },
+  { op: "inventory.v1.InventoryService/Reserve", weight: 6, base: 14, payments: false },
+  { op: "GET /products/:slug", weight: 10, base: 18, payments: false },
+  { op: "worker.fulfilment.tick", weight: 3, base: 210, payments: false },
+] as const;
+const TOTAL_WEIGHT = ROUTES.reduce((a, r) => a + r.weight, 0);
 
 /** A float in [0, 1) from integers: deterministic, well mixed. */
 function hash01(...parts: number[]): number {
@@ -90,154 +69,114 @@ function hash01(...parts: number[]): number {
   return (h >>> 0) / 0x1_0000_0000;
 }
 
-const hex = (n: number, len: number, salt = 77) => {
+const hex = (n: number, len: number) => {
   let s = "";
-  for (let i = 0; s.length < len; i++) s += Math.floor(hash01(n, i, salt) * 0x1_0000_0000).toString(16).padStart(8, "0");
+  for (let i = 0; s.length < len; i++) s += Math.floor(hash01(n, i, 77) * 0x1_0000_0000).toString(16).padStart(8, "0");
   return s.slice(0, len);
 };
 
-/** What a read needs to know about the world: now, and which release each environment ran when. */
-interface Ctx {
-  now: number;
-  /** Per environment: [promotedAtMs, version], oldest first (whole-environment promotions). */
-  versions: Record<DemoEnvKey, [number, string][]>;
-  /** The toured trace's start. No generated prod CreateOrder fails after it. */
-  touredAtMs: number;
-}
-
-function ctxOf(now: number): Ctx {
-  const versions = Object.fromEntries(DEMO_ENV_IDS.map((e) => [e, [] as [number, string][]])) as Ctx["versions"];
-  for (const p of demoLedger(now)) if (!p.targets.length) versions[p.envId].push([p.atMs, p.version]);
-  return { now, versions, touredAtMs: now - 60_000 };
-}
-
-function versionAt(ctx: Ctx, env: DemoEnvKey, atMs: number): string {
-  let v = ctx.versions[env][0]?.[1] ?? "v1.8.1";
-  for (const [at, version] of ctx.versions[env]) if (at <= atMs) v = version;
-  return v;
+/** Load over the day: busier in the (UTC) afternoon, quiet at night. */
+export function dailyLoad(timeMs: number): number {
+  const hour = (timeMs / 3_600_000) % 24;
+  return 0.55 + 0.45 * Math.sin(((hour - 9) / 24) * 2 * Math.PI);
 }
 
 interface Req {
-  env: DemoEnvKey;
-  envIndex: number;
   slot: number;
   traceId: string;
   startMs: number;
-  route: DemoRoute;
+  route: (typeof ROUTES)[number];
   durationMs: number;
-  /** The charge timed out twice: the request failed at its deadline. */
   failed: boolean;
-  /** The charge timed out once, then succeeded on the retry. */
-  retried: boolean;
   crosses: boolean;
   spanCount: number;
   version: string;
-  customer: (typeof DEMO_CUSTOMERS)[number];
-  order: string;
 }
 
-/** The request in `env`'s `slot`, or null when the load leaves that slot idle. */
-function requestAt(ctx: Ctx, env: DemoEnvKey, slot: number): Req | null {
-  const e = DEMO_ENV_IDS.indexOf(env);
-  const startMs = slot * SLOT_MS + Math.floor(hash01(slot, 1, e) * SLOT_MS);
-  if (startMs > ctx.now) return null;
-  if (hash01(slot, 2, e) >= dailyLoad(startMs) * ENV_TRAFFIC[env]) return null;
-  let pick = hash01(slot, 3, e) * DEMO_ROUTE_WEIGHT;
-  const route = DEMO_ROUTES.find((r) => (pick -= r.weight) < 0) ?? DEMO_ROUTES[0];
-  // Latency: log-normal around the route's base, and one in ~150 an outlier.
-  const u = Math.max(1e-9, hash01(slot, 4, e));
-  const v = hash01(slot, 5, e);
+/** The request in `slot`, or null when the daily rhythm leaves that slot idle. */
+function requestAt(slot: number, releaseAtMs: number): Req | null {
+  const startMs = slot * SLOT_MS + Math.floor(hash01(slot, 1) * SLOT_MS);
+  if (hash01(slot, 2) > dailyLoad(startMs)) return null;
+  let pick = hash01(slot, 3) * TOTAL_WEIGHT;
+  const route = ROUTES.find((r) => (pick -= r.weight) < 0) ?? ROUTES[0];
+  // Latency: log-normal around the route's base, a long tail, and one in ~150 an outlier.
+  const u = Math.max(1e-9, hash01(slot, 4));
+  const v = hash01(slot, 5);
   const normal = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-  let durationMs = hash01(slot, 6, e) < OUTLIER_SHARE ? route.base * OUTLIER_FACTOR * Math.exp(0.3 * normal) : route.base * Math.exp(LATENCY_SIGMA * normal);
-  const incident = route.charges && env === "env-prod" && startMs >= incidentStartMs(ctx.now);
-  const roll = hash01(slot, 8, e);
-  let failed = incident && roll < DEMO_INCIDENT.failShare;
-  // The toured trace is prod's newest failing CreateOrder.
-  if (failed && route.op.endsWith("/CreateOrder") && startMs >= ctx.touredAtMs) failed = false;
-  const retried = incident && !failed && roll >= DEMO_INCIDENT.failShare && roll < DEMO_INCIDENT.failShare + DEMO_INCIDENT.slowShare;
-  if (failed) durationMs = DEMO_INCIDENT.deadlineMs + 10 + hash01(slot, 9, e) * 20;
-  else if (retried) durationMs = route.base + DEMO_INCIDENT.retryMs + 120 * Math.exp(0.08 * normal);
-  const crosses = route.hops.length > 0 && hash01(slot, 10, e) < 0.6;
-  const spanCount = crosses ? 10 + Math.floor(hash01(slot, 11, e) * 31) : 3 + Math.floor(hash01(slot, 11, e) * 4);
+  let durationMs = route.base * Math.exp(0.55 * normal);
+  if (hash01(slot, 6) < 1 / 150) durationMs *= 12 + hash01(slot, 7) * 20;
+  const afterRelease = startMs >= releaseAtMs;
+  // Payments fail rarely before v1.8.3, and often (with a deadline's latency) after it.
+  const failRate = route.payments ? (afterRelease ? 0.22 : 0.012) : 0.004;
+  const failed = hash01(slot, 8) < failRate;
+  if (failed && route.payments) durationMs = Math.max(durationMs, 1_000 + hash01(slot, 9) * 1_500);
+  const crosses = route.payments && hash01(slot, 10) < 0.6;
+  const spanCount = crosses ? 10 + Math.floor(hash01(slot, 11) * 31) : 2 + Math.floor(hash01(slot, 11) * 6);
   return {
-    env,
-    envIndex: e,
     slot,
-    traceId: `${hex(slot * 3 + e, 23)}${e.toString(16)}${(slot >>> 0).toString(16).padStart(8, "0")}`,
+    traceId: `${hex(slot, 24)}${(slot >>> 0).toString(16).padStart(8, "0")}`.slice(0, 32),
     startMs,
     route,
     durationMs: Math.round(durationMs * 100) / 100,
     failed,
-    retried,
     crosses,
     spanCount,
-    version: versionAt(ctx, env, startMs),
-    customer: DEMO_CUSTOMERS[Math.floor(hash01(slot, 12, e) * DEMO_CUSTOMERS.length)],
-    order: `ord_${hex(slot * 3 + e, 6, 31)}`,
+    version: afterRelease ? "v1.8.3" : "v1.8.2",
   };
 }
 
-/** The requests in [startMs, endMs) of `envs`, newest first, at most MAX_SLOTS slots each. */
-function requestsIn(ctx: Ctx, startMs: number, endMs: number, envs: readonly DemoEnvKey[] = DEMO_ENV_IDS, maxSlots = MAX_SLOTS): { requests: Req[]; sampledFromMs: number } {
+/** The requests in [startMs, endMs), newest first, at most MAX_SLOTS slots. */
+function requestsIn(startMs: number, endMs: number, releaseAtMs: number, maxSlots = MAX_SLOTS): Req[] {
   const out: Req[] = [];
-  const last = Math.floor((Math.min(endMs, ctx.now + 1) - 1) / SLOT_MS);
+  const last = Math.floor((endMs - 1) / SLOT_MS);
   const first = Math.max(Math.floor(startMs / SLOT_MS), last - maxSlots + 1);
   for (let slot = last; slot >= first; slot--) {
-    for (const env of envs) {
-      const r = requestAt(ctx, env, slot);
-      if (r && r.startMs >= startMs && r.startMs < endMs) out.push(r);
-    }
+    const r = requestAt(slot, releaseAtMs);
+    if (r && r.startMs >= startMs && r.startMs < endMs) out.push(r);
   }
-  out.sort((a, b) => b.startMs - a.startMs);
-  return { requests: out, sampledFromMs: Math.max(startMs, first * SLOT_MS) };
+  return out;
 }
 
-const parseTrace = (traceId: string): { env: DemoEnvKey; slot: number } | null => {
-  if (!/^[0-9a-f]{32}$/.test(traceId)) return null;
-  const env = DEMO_ENV_IDS[parseInt(traceId[23], 16)];
-  return env ? { env, slot: parseInt(traceId.slice(24), 16) } : null;
-};
-
-const isBrowser = (r: Req) => r.route.browser;
+const slotOf = (traceId: string): number | null => (/^[0-9a-f]{32}$/.test(traceId) ? parseInt(traceId.slice(24), 16) : null);
 
 function servicesOf(r: Req): string[] {
-  const set = new Set<string>([r.route.service]);
-  if (r.crosses) r.route.hops.forEach((h) => set.add(h.service));
-  return [...(isBrowser(r) ? [DEMO_FRONTEND] : []), ...DEMO_BACKENDS.filter((s) => set.has(s))];
+  const root = r.route.op.split(".")[0];
+  const own = root === "checkout" || root === "GET /products/:slug" ? "api" : root === "worker" ? "worker" : root === "orders" ? "orders" : root;
+  const set = new Set(["api", own]);
+  if (r.route.payments) set.add("payments");
+  if (r.crosses) ["worker", "inventory"].forEach((s) => set.add(s));
+  return BUSY_SERVICES.filter((s) => set.has(s));
 }
 
 function summary(r: Req): TraceSummary {
-  const browser = isBrowser(r);
-  const n = Math.floor(hash01(r.slot, 13, r.envIndex) * 1000);
-  const trace = traceOf(r);
-  const end = Math.max(...trace.spans.map((s) => s.startMs + s.durationMs));
+  const browser = r.route.op.startsWith("GET ") || r.route.op.includes("Checkout");
+  const userN = Math.floor(hash01(r.slot, 12) * 400);
   return {
     traceId: r.traceId,
-    rootService: browser ? DEMO_FRONTEND : r.route.service,
+    rootService: browser ? "shop-web" : servicesOf(r)[0],
     rootOperation: r.route.op,
     startMs: r.startMs,
-    durationMs: Math.round((end - r.startMs) * 100) / 100,
-    rootDurationMs: trace.spans[0].durationMs,
-    spanCount: trace.spans.length,
-    errorCount: trace.spans.filter((s) => s.status === "error").length,
+    durationMs: r.durationMs + (r.crosses ? 30 : 0),
+    rootDurationMs: r.durationMs,
+    spanCount: r.spanCount,
+    errorCount: r.failed ? 1 + Math.floor(hash01(r.slot, 13) * 2) : 0,
     services: servicesOf(r),
-    userId: browser || r.route.charges ? r.customer.id : "",
-    sessionId: browser ? `sess-${hex(r.slot * 3 + r.envIndex, 10, 53)}` : "",
-    country: browser ? r.customer.country : "",
+    userId: browser ? `u_${8000 + userN}` : "",
+    sessionId: browser ? `sess-${hex(r.slot, 6)}` : "",
+    country: browser ? ["DE", "US", "GB", "FR", "NL"][userN % 5] : "",
     region: "",
-    city: browser ? r.customer.city : "",
-    client: browser ? DEMO_CLIENTS[n % DEMO_CLIENTS.length] : NO_CLIENT,
+    city: "",
+    client: browser ? FIXTURE_CLIENTS[userN % FIXTURE_CLIENTS.length] : NO_CLIENT,
     frontendVersion: browser ? r.version : "",
-    backendBuilds: servicesOf(r).filter((s) => s !== DEMO_FRONTEND).map((service) => ({ service, version: r.version })),
+    backendBuilds: servicesOf(r).map((service) => ({ service, version: r.version })),
     source: "",
     operatorData: false,
   };
 }
 
-/** A request's spans: (the browser's,) the root, its queries, the charge, and — when it crosses — the queue hop into worker and inventory. */
+/** A generated request's spans: the root, its queries, and — when it crosses — the queue hop into worker and inventory. */
 function traceOf(r: Req): Trace {
   const spans: Span[] = [];
-  const env = ENV_NAME[r.env];
   const span = (id: string, parent: string, name: string, service: string, start: number, duration: number, extra: Partial<Span> = {}): Span => {
     const s: Span = {
       spanId: id,
@@ -250,7 +189,7 @@ function traceOf(r: Req): Trace {
       status: "ok",
       statusMessage: "",
       attributes: {},
-      resource: { "service.name": service, "service.version": r.version, "deployment.environment.name": env },
+      resource: { "service.name": service, "service.version": r.version },
       events: [],
       source: "",
       operatorData: false,
@@ -259,440 +198,136 @@ function traceOf(r: Req): Trace {
     spans.push(s);
     return s;
   };
-  const id = (n: number) => hex((r.slot * 3 + r.envIndex) * 64 + n, 16, 91);
-  const rpc = !r.route.op.startsWith("GET ") && r.route.op.includes("/");
-  const errorStatus = r.failed ? { status: "error" as const, statusMessage: DEMO_INCIDENT.error } : {};
-  const browserSpan = isBrowser(r)
-    ? span(id(60), "", r.route.op.startsWith("GET ") ? r.route.op.replace("{slug}", "linen-tote-bag") : `HTTP POST ${r.route.op}`, DEMO_FRONTEND, -4, r.durationMs + 8, {
-        kind: "client",
-        attributes: { "http.request.method": r.route.op.startsWith("GET ") ? "GET" : "POST" },
-        ...errorStatus,
-      })
-    : null;
-  const root = span(id(0), browserSpan?.spanId ?? "", r.route.op, r.route.service, 0, r.durationMs, {
-    kind: "server",
-    attributes: rpc ? { "rpc.system": "connect_rpc", "rpc.method": r.route.op.split("/")[1] } : { "http.route": r.route.op.slice(4) },
-    ...errorStatus,
-  });
-  const table = r.route.service === "inventory" ? ["SELECT stock", "UPDATE stock"] : r.route.op.includes("products") ? ["SELECT products", "SELECT stock"] : ["SELECT customers", "INSERT orders", "SELECT orders"];
-  // The budget left for queries: the total, minus the charge's spans and the crossing's.
-  const fixed = 1 + (browserSpan ? 1 : 0) + (r.route.charges ? (r.failed || r.retried ? 3 : 2) : 0) + (r.crosses ? 4 : 0);
-  const queries = Math.max(1, Math.min(r.crosses ? 3 : r.spanCount - fixed, 6));
+  const id = (n: number) => hex(r.slot * 64 + n, 16);
+  const root = span(id(0), "", r.route.op, servicesOf(r)[0], 0, r.durationMs, { kind: "server", attributes: { "rpc.system": "connect_rpc" } });
+  const queries = Math.max(1, Math.min(r.spanCount - 1, r.crosses ? 3 : r.spanCount - 1));
   let at = 0.6;
-  const queryShare = r.route.charges ? 0.25 : 0.7;
   for (let q = 0; q < queries; q++) {
-    const d = (Math.min(r.durationMs, r.route.base * 3) * queryShare) / queries;
-    span(id(1 + q), root.spanId, table[q % table.length], r.route.service, at, d * 0.85, { kind: "client", attributes: { "db.system.name": "postgresql" } });
+    const d = (r.durationMs * 0.5) / queries;
+    span(id(1 + q), root.spanId, ["SELECT orders", "SELECT customers", "INSERT orders", "SELECT stock"][q % 4], root.service, at, d * 0.8, {
+      kind: "client",
+      attributes: { "db.system.name": "postgresql" },
+    });
     at += d;
   }
-  if (r.route.charges) {
-    const chargeMs = r.failed ? DEMO_INCIDENT.deadlineMs - at : r.retried ? DEMO_INCIDENT.retryMs + 110 : r.durationMs * 0.5;
-    const charge = span(id(10), root.spanId, "payments.Charge", r.route.service, at, chargeMs, {
+  if (r.route.payments) {
+    const pay = span(id(10), root.spanId, "payments.v1.PaymentsService/Charge", "payments", at, r.durationMs * 0.4, {
       kind: "client",
-      attributes: { "peer.service": DEMO_DEPENDENCIES.payments, "server.address": DEMO_PAYMENTS_HOST },
-      ...errorStatus,
-      events: r.failed || r.retried ? [{ timeMs: r.startMs + at + DEMO_INCIDENT.retryMs, name: "retry", attributes: { attempt: "2" } }] : [],
+      ...(r.failed ? { status: "error" as const, statusMessage: "context deadline exceeded" } : {}),
     });
-    const post = (n: number, start: number, d: number, timedOut: boolean, last: boolean) =>
-      span(id(n), charge.spanId, `POST https://${DEMO_PAYMENTS_HOST}/v1/charges`, r.route.service, start, d, {
-        kind: "client",
-        attributes: { "http.request.method": "POST", "server.address": DEMO_PAYMENTS_HOST, "http.response.status_code": timedOut ? "" : "200" },
-        // A timed-out attempt the retry recovered is not an error of the request's: only a failed request's spans are.
-        ...(timedOut && r.failed ? { status: "error" as const, statusMessage: last ? "context deadline exceeded" : `timed out after ${DEMO_INCIDENT.retryMs / 1000}s` } : {}),
-        ...(timedOut && !r.failed ? { events: [{ timeMs: r.startMs + start + d, name: "timeout", attributes: { "error.type": "timeout" } }] } : {}),
-      });
-    if (r.failed || r.retried) {
-      post(11, at + 0.4, DEMO_INCIDENT.retryMs, true, false);
-      post(12, at + DEMO_INCIDENT.retryMs + 1, r.failed ? chargeMs - DEMO_INCIDENT.retryMs - 2 : 105, r.failed, true);
-    } else {
-      post(11, at + 0.4, chargeMs - 1, false, true);
-    }
-    at += chargeMs;
+    at += pay.durationMs;
   }
   if (r.crosses) {
-    const pub = span(id(20), root.spanId, "nats publish orders.created", r.route.service, Math.min(at, r.durationMs - 1), 0.6, { kind: "producer" });
-    const consume = span(id(21), pub.spanId, "orders.created process", "worker", r.durationMs + 1, 28, { kind: "consumer" });
-    const call = span(id(22), consume.spanId, "inventory.v1.InventoryService/Reserve", "worker", r.durationMs + 2, 24, { kind: "client", attributes: { "rpc.system": "connect_rpc" } });
-    const server = span(id(23), call.spanId, "inventory.v1.InventoryService/Reserve", "inventory", r.durationMs + 2.5, 22, { kind: "server", attributes: { "rpc.system": "connect_rpc", "rpc.method": "Reserve" } });
+    const pub = span(id(11), root.spanId, "nats publish orders.created", root.service, Math.min(at, r.durationMs - 1), 0.6, { kind: "producer" });
+    const consume = span(id(12), pub.spanId, "orders.created process", "worker", r.durationMs + 1, 28, { kind: "consumer" });
+    const call = span(id(13), consume.spanId, "inventory.v1.InventoryService/Reserve", "worker", r.durationMs + 2, 24, { kind: "client" });
+    const server = span(id(14), call.spanId, "inventory.v1.InventoryService/Reserve", "inventory", r.durationMs + 2.5, 22, { kind: "server" });
     // The rest of the span budget: a statement per reserved line item.
     const lines = Math.max(1, r.spanCount - spans.length);
     for (let k = 0; k < lines; k++) {
-      span(id(30 + k), server.spanId, "UPDATE stock", "inventory", r.durationMs + 3 + (k * 20) / lines, 20 / lines - 0.1, {
+      span(id(20 + k), server.spanId, "UPDATE stock", "inventory", r.durationMs + 3 + (k * 20) / lines, 20 / lines - 0.1, {
         kind: "client",
-        attributes: { "db.system.name": "postgresql", "db.query.text": "UPDATE stock SET reserved = reserved + $1 WHERE sku = $2 AND on_hand - reserved >= $1" },
+        attributes: { "db.system.name": "postgresql", "db.query.text": "UPDATE stock SET reserved = reserved + ? WHERE sku = ? AND available >= ?" },
       });
     }
   }
   return { traceId: r.traceId, spans, truncated: false };
 }
 
-/** The lines a request logged, oldest first. */
+const LINES: Record<string, string[]> = {
+  ok: ["rpc handled", "order created", "cache hit for customer profile", "stock reserved", "order event published"],
+  slow: ["slow query: SELECT * FROM orders WHERE customer_id = $1"],
+  warn: ["payments Charge attempt 1 failed, retrying"],
+  error: ["payments Charge failed: context deadline exceeded"],
+};
+
+/** The lines a request logged, oldest first: several per request, more and louder when it failed. */
 function logsOf(r: Req): LogRecord[] {
   const out: LogRecord[] = [];
-  const product = DEMO_PRODUCTS[r.slot % DEMO_PRODUCTS.length];
   const line = (n: number, at: number, severity: Severity, service: string, body: string) =>
     out.push({
-      id: `busy:${r.envIndex}:${r.slot}:${n}`,
+      id: `busy:${r.slot}:${n}`,
       timeMs: r.startMs + at,
       severity,
       severityText: severity.toUpperCase(),
       service,
       body,
       traceId: r.traceId,
-      spanId: hex((r.slot * 3 + r.envIndex) * 64, 16, 91),
-      attributes: { procedure: r.route.op.startsWith("GET ") ? r.route.op : `/${r.route.op}`, "http.status_code": r.failed ? "504" : "200" },
-      resource: { "service.name": service, "k8s.pod.name": `${service}-7d9f8c-${["q2m4z", "k8x1p"][r.slot % 2]}`, "deployment.environment.name": ENV_NAME[r.env] },
+      spanId: hex(r.slot * 64, 16),
+      attributes: { procedure: `/${r.route.op}`, "http.status_code": r.failed ? "503" : "200" },
+      resource: { "service.name": service, "k8s.pod.name": `${service}-7d9f8c-x${r.slot % 3}`, "deployment.environment.name": "prod" },
       source: "",
       operatorData: false,
     });
-  const service = r.route.service;
-  const label = r.route.op.startsWith("GET ") ? r.route.op : r.route.op.split("/").pop()!;
-  line(0, 0.2, "info", service, `${label} started`);
-  if (!r.failed && !r.retried && r.durationMs > r.route.base * 4) line(1, r.durationMs * 0.5, "warn", service, `slow query (${Math.round(r.durationMs * 0.6)}ms): SELECT … FROM ${service === "inventory" ? "stock" : "orders"} WHERE customer_id = $1`);
-  if (r.failed || r.retried) line(2, DEMO_INCIDENT.retryMs, "warn", service, DEMO_INCIDENT.retryWarning);
-  if (r.failed) {
-    line(3, r.durationMs - 1, "error", service, DEMO_INCIDENT.error);
+  const service = servicesOf(r)[0];
+  line(0, 0.2, "info", service, `${r.route.op.split("/").pop()} started`);
+  if (r.durationMs > r.route.base * 3) line(1, r.durationMs * 0.5, "warn", service, LINES.slow[0]);
+  if (r.failed && r.route.payments) {
+    line(2, r.durationMs * 0.4, "warn", "payments", LINES.warn[0]);
+    line(3, r.durationMs * 0.95, "error", "payments", LINES.error[0]);
   } else {
-    if (r.retried) line(3, r.durationMs * 0.9, "info", service, "payments: charge succeeded on attempt 2");
-    if (hash01(r.slot, 14, r.envIndex) < 0.15) line(4, 1, "debug", service, `cache hit for customer ${r.customer.id}`);
-    const done: Record<string, string> = {
-      CreateOrder: `order ${r.order} created for ${r.customer.id}`,
-      GetOrder: `order ${r.order} read`,
-      ListOrders: `listed ${10 + (r.slot % 15)} orders for ${r.customer.id}`,
-      CancelOrder: `order ${r.order} cancelled`,
-      Checkout: `checkout completed: order ${r.order}`,
-      GetStock: `stock read for ${product.sku}`,
-      Reserve: `reserved ${1 + (r.slot % 3)} items of ${product.sku}`,
-      "fulfilment.tick": `fulfilment tick: ${r.slot % 7} orders handed to the carrier`,
-    };
-    line(5, r.durationMs * 0.95, "info", service, done[label] ?? `rendered ${product.name}`);
+    line(4, r.durationMs * 0.9, hash01(r.slot, 14) < 0.15 ? "debug" : "info", service, LINES.ok[r.slot % LINES.ok.length]);
   }
-  if (r.crosses) {
-    line(6, r.durationMs + 20, "info", "worker", `order event ${r.order} processed`);
-    line(7, r.durationMs + 24, "info", "inventory", `reserved ${1 + (r.slot % 3)} items for order ${r.order}`);
-  }
+  if (r.crosses) line(5, r.durationMs + 20, "info", "inventory", `reserved ${1 + (r.slot % 3)} items for order ord_${hex(r.slot, 4)}`);
   return out;
 }
 
-// ── The toured trace ─────────────────────────────────────────────────────────
-
-/**
- * The trace the tour opens: prod's newest failing CreateOrder (a minute ago),
- * span for span what journeys/forge.tsx points at — the api's method span
- * (a2), a SELECT (b1), the charge (b3) and its two timed-out attempts, the
- * order event (b4) the worker consumed (d1), its Connect call (d3) into
- * inventory's server span (e1), method span (e2) and UPDATE (e3).
- */
-function touredTrace(ctx: Ctx): Trace {
-  const t0 = ctx.touredAtMs;
-  const deadline = DEMO_INCIDENT.deadlineMs;
-  const span = (spanId: string, parentSpanId: string, name: string, service: string, start: number, duration: number, extra: Partial<Span> = {}): Span => ({
-    spanId,
-    parentSpanId,
-    name,
-    service,
-    kind: parentSpanId ? "client" : "server",
-    startMs: t0 + start,
-    durationMs: duration,
-    status: "ok",
-    statusMessage: "",
-    attributes: { "rpc.system": "connect_rpc" },
-    resource: { "service.name": service, "service.version": DEMO_INCIDENT.release, "deployment.environment.name": "prod" },
-    events: [],
-    source: "",
-    operatorData: false,
-    ...extra,
-  });
-  const failed = { status: "error" as const, statusMessage: DEMO_INCIDENT.error };
-  return {
-    traceId: DEMO_TOURED_TRACE.traceId,
-    truncated: false,
-    spans: [
-      span("a1", "", "orders.v1.OrdersService/CreateOrder", "api", 0, deadline + 12.4, { kind: "server", attributes: { "rpc.system": "connect_rpc", "rpc.method": "CreateOrder", "http.status_code": "504" }, ...failed }),
-      span("a2", "a1", "orders.CreateOrder", "api", 1.0, deadline + 10.6, { kind: "internal", attributes: { "forge.method.id": "orders.v1.OrdersService/CreateOrder" } }),
-      span("b1", "a2", "SELECT customers", "api", 3.1, 4.6, { attributes: { "db.system.name": "postgresql", "db.operation.name": "SELECT" } }),
-      span("b2", "a2", "INSERT orders", "api", 8.2, 6.9, { attributes: { "db.system.name": "postgresql", "db.operation.name": "INSERT" } }),
-      span("b3", "a2", "payments.Charge", "api", 16.0, deadline - 16.5, {
-        attributes: { "peer.service": "payments", "server.address": DEMO_PAYMENTS_HOST },
-        ...failed,
-        events: [{ timeMs: t0 + 16 + DEMO_INCIDENT.retryMs, name: "retry", attributes: { attempt: "2" } }],
-      }),
-      span("c1", "b3", `POST https://${DEMO_PAYMENTS_HOST}/v1/charges`, "api", 16.4, DEMO_INCIDENT.retryMs, { attributes: { "http.request.method": "POST" }, status: "error", statusMessage: `timed out after ${DEMO_INCIDENT.retryMs / 1000}s` }),
-      span("c2", "b3", `POST https://${DEMO_PAYMENTS_HOST}/v1/charges`, "api", 17.5 + DEMO_INCIDENT.retryMs, deadline - DEMO_INCIDENT.retryMs - 19, { attributes: { "http.request.method": "POST" }, status: "error", statusMessage: "context deadline exceeded" }),
-      span("b4", "a2", "nats publish orders.created", "api", deadline + 2, 0.8, { kind: "producer", attributes: { "messaging.system": "nats" } }),
-      span("d1", "b4", "orders.created process", "worker", deadline + 4.3, 28.7, { kind: "consumer", attributes: { "messaging.system": "nats" } }),
-      span("d3", "d1", "inventory.v1.InventoryService/Reserve", "worker", deadline + 6.0, 19.6, { kind: "client", attributes: { "rpc.system": "connect_rpc", "rpc.service": "inventory.v1.InventoryService", "rpc.method": "Reserve" } }),
-      span("e1", "d3", "inventory.v1.InventoryService/Reserve", "inventory", deadline + 6.8, 18.2, { kind: "server", attributes: { "rpc.system": "connect_rpc", "rpc.method": "Reserve", "http.status_code": "200" } }),
-      span("e2", "e1", "inventory.Reserve", "inventory", deadline + 7.0, 17.7, { kind: "internal", attributes: { "forge.method.id": "inventory.v1.InventoryService/Reserve" } }),
-      span("e3", "e2", "UPDATE stock", "inventory", deadline + 7.5, 16.7, {
-        attributes: { "db.system.name": "postgresql", "db.operation.name": "UPDATE", "db.query.text": "UPDATE stock SET reserved = reserved + $1 WHERE sku = $2 AND on_hand - reserved >= $1" },
-      }),
-    ],
-  };
-}
-
-function touredSummary(ctx: Ctx): TraceSummary {
-  const trace = touredTrace(ctx);
-  const end = Math.max(...trace.spans.map((s) => s.startMs + s.durationMs));
-  const customer = DEMO_CUSTOMERS[0];
-  return {
-    traceId: trace.traceId,
-    rootService: "api",
-    rootOperation: "orders.v1.OrdersService/CreateOrder",
-    startMs: ctx.touredAtMs,
-    durationMs: Math.round((end - ctx.touredAtMs) * 100) / 100,
-    rootDurationMs: trace.spans[0].durationMs,
-    spanCount: trace.spans.length,
-    errorCount: trace.spans.filter((s) => s.status === "error").length,
-    services: ["api", "worker", "inventory"],
-    userId: customer.id,
-    sessionId: "",
-    country: "",
-    region: "",
-    city: "",
-    client: NO_CLIENT,
-    frontendVersion: "",
-    backendBuilds: ["api", "worker", "inventory"].map((service) => ({ service, version: DEMO_INCIDENT.release })),
-    source: "",
-    operatorData: false,
-  };
-}
-
-/** What the toured request logged: five lines from three services. */
-function touredLogs(ctx: Ctx): LogRecord[] {
-  const t0 = ctx.touredAtMs;
-  const d = DEMO_INCIDENT.deadlineMs;
-  const lines: [string, number, Severity, string, string][] = [
-    ["a1", 0.5, "info", "api", "CreateOrder started"],
-    ["c1", 16.4 + DEMO_INCIDENT.retryMs, "warn", "api", DEMO_INCIDENT.retryWarning],
-    ["c2", d - 1, "error", "api", DEMO_INCIDENT.error],
-    ["d1", d + 31, "info", "worker", "order event ord_7q2k9f processed"],
-    ["e2", d + 24.5, "info", "inventory", "reserved 2 items for order ord_7q2k9f"],
-  ];
-  return lines.map(([spanId, at, severity, service, body]) => ({
-    id: `toured:${spanId}`,
-    timeMs: t0 + at,
-    severity,
-    severityText: severity.toUpperCase(),
-    service,
-    body,
-    traceId: DEMO_TOURED_TRACE.traceId,
-    spanId,
-    attributes: { "rpc.method": "CreateOrder", procedure: "/orders.v1.OrdersService/CreateOrder", "http.status_code": severity === "error" ? "504" : "200" },
-    resource: { "service.name": service, "k8s.pod.name": `${service}-7d9f8c-q2m4z`, "deployment.environment.name": "prod" },
-    source: "",
-    operatorData: false,
-  }));
-}
-
-// ── Profiles ─────────────────────────────────────────────────────────────────
-
-type Stacks = [string[], number][];
-
-/** Per service, per profile type: the frames it spends its time / memory / goroutines in. */
-const PROFILES: Record<string, Record<string, Stacks>> = {
-  api: {
-    cpu: [
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "orders.(*Service).CreateOrder", "encoding/json.Marshal"], 38],
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "orders.(*Service).ListOrders", "pgx.(*Conn).Query"], 91],
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "orders.(*Service).GetOrder", "pgx.(*Conn).QueryRow"], 44],
-      [["main", "net/http.(*conn).serve", "payments.(*Client).Charge", "net/http.(*Transport).roundTrip", "crypto/tls.(*Conn).Read"], 23],
-      [["main", "net/http.(*conn).serve", "web.(*Products).Render", "html/template.(*Template).Execute"], 31],
-      [["main", "runtime.gcBgMarkWorker"], 27],
-    ],
-    alloc_space: [
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "orders.(*Service).ListOrders", "pgx.(*Rows).Scan"], 412 << 20],
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "protojson.Marshal"], 268 << 20],
-      [["main", "net/http.(*conn).serve", "web.(*Products).Render", "bytes.(*Buffer).grow"], 181 << 20],
-      [["main", "net/http.(*conn).serve", "payments.(*Client).Charge", "encoding/json.Unmarshal"], 36 << 20],
-    ],
-    alloc_objects: [
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "orders.(*Service).ListOrders", "pgx.(*Rows).Scan"], 2_140_000],
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "protojson.Marshal"], 1_380_000],
-      [["main", "net/http.(*conn).serve", "web.(*Products).Render", "html/template.(*state).walk"], 960_000],
-    ],
-    inuse_space: [
-      [["main", "orders.NewService", "lru.New[...]"], 48 << 20],
-      [["main", "pgxpool.NewWithConfig", "pgx.connect"], 22 << 20],
-      [["main", "net/http.(*conn).serve", "bufio.NewReaderSize"], 9 << 20],
-      [["main", "web.LoadTemplates", "html/template.(*Template).Parse"], 6 << 20],
-    ],
-    inuse_objects: [
-      [["main", "orders.NewService", "lru.New[...]"], 182_000],
-      [["main", "pgxpool.NewWithConfig", "pgx.connect"], 41_000],
-      [["main", "net/http.(*conn).serve", "bufio.NewReaderSize"], 12_000],
-    ],
-    goroutine: [
-      [["main", "net/http.(*conn).serve", "net/http.(*conn).readRequest"], 64],
-      [["main", "net/http.(*conn).serve", "payments.(*Client).Charge", "net/http.(*persistConn).roundTrip"], 22],
-      [["main", "pgxpool.(*Pool).backgroundHealthCheck"], 1],
-      [["main", "nats.(*Conn).readLoop"], 2],
-    ],
-  },
-  worker: {
-    cpu: [
-      [["main", "nats.(*Subscription).processMsg", "fulfilment.(*Worker).Process", "inventoryv1connect.(*inventoryServiceClient).Reserve"], 58],
-      [["main", "nats.(*Subscription).processMsg", "fulfilment.(*Worker).Process", "encoding/json.Unmarshal"], 29],
-      [["main", "lifecyclekit.Every", "fulfilment.(*Worker).Tick", "pgx.(*Conn).Query"], 21],
-      [["main", "runtime.gcBgMarkWorker"], 9],
-    ],
-    alloc_space: [
-      [["main", "nats.(*Subscription).processMsg", "fulfilment.(*Worker).Process", "encoding/json.Unmarshal"], 96 << 20],
-      [["main", "lifecyclekit.Every", "fulfilment.(*Worker).Tick", "pgx.(*Rows).Scan"], 54 << 20],
-      [["main", "nats.(*Conn).readLoop", "nats.(*msgParser).parse"], 31 << 20],
-    ],
-    alloc_objects: [
-      [["main", "nats.(*Subscription).processMsg", "fulfilment.(*Worker).Process", "encoding/json.Unmarshal"], 610_000],
-      [["main", "lifecyclekit.Every", "fulfilment.(*Worker).Tick", "pgx.(*Rows).Scan"], 280_000],
-    ],
-    inuse_space: [
-      [["main", "nats.Connect", "nats.(*Conn).setup"], 8 << 20],
-      [["main", "fulfilment.New", "make([]fulfilment.job)"], 3 << 20],
-    ],
-    inuse_objects: [
-      [["main", "nats.Connect", "nats.(*Conn).setup"], 9_400],
-      [["main", "fulfilment.New", "make([]fulfilment.job)"], 2_100],
-    ],
-    goroutine: [
-      [["main", "fulfilment.(*Worker).Run", "fulfilment.(*Worker).Process"], 8],
-      [["main", "nats.(*Conn).readLoop"], 1],
-      [["main", "lifecyclekit.Every"], 1],
-    ],
-  },
-  inventory: {
-    cpu: [
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "inventory.(*Service).GetStock", "pgx.(*Conn).QueryRow"], 63],
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "inventory.(*Service).Reserve", "pgx.(*Tx).Exec"], 47],
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "proto.Marshal"], 12],
-      [["main", "runtime.gcBgMarkWorker"], 8],
-    ],
-    alloc_space: [
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "inventory.(*Service).GetStock", "pgx.(*Rows).Scan"], 122 << 20],
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "proto.Marshal"], 64 << 20],
-    ],
-    alloc_objects: [
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "inventory.(*Service).GetStock", "pgx.(*Rows).Scan"], 720_000],
-      [["main", "net/http.(*conn).serve", "connect.(*Handler).ServeHTTP", "proto.Marshal"], 330_000],
-    ],
-    inuse_space: [
-      [["main", "inventory.NewService", "sync.Map.Store"], 14 << 20],
-      [["main", "pgxpool.NewWithConfig", "pgx.connect"], 11 << 20],
-    ],
-    inuse_objects: [
-      [["main", "inventory.NewService", "sync.Map.Store"], 52_000],
-      [["main", "pgxpool.NewWithConfig", "pgx.connect"], 20_000],
-    ],
-    goroutine: [
-      [["main", "net/http.(*conn).serve", "net/http.(*conn).readRequest"], 18],
-      [["main", "pgxpool.(*Pool).backgroundHealthCheck"], 1],
-    ],
-  },
+/** The services' CPU profiles, one per service: the frames each spends its time in. */
+const PROFILES: Record<string, [string[], number][]> = {
+  api: [
+    [["main", "net/http.(*conn).serve", "orders.(*Service).CreateOrder", "encoding/json.Marshal"], 40],
+    [["main", "net/http.(*conn).serve", "orders.(*Service).CreateOrder", "database/sql.(*DB).QueryContext"], 90],
+    [["main", "net/http.(*conn).serve", "payments.(*Client).Charge", "net/http.(*Client).Do"], 70],
+    [["main", "runtime.gcBgMarkWorker"], 25],
+  ],
+  inventory: [
+    [["main", "connect.(*Handler).ServeHTTP", "inventory.(*Service).Reserve", "pgx.(*Conn).Exec"], 80],
+    [["main", "connect.(*Handler).ServeHTTP", "inventory.(*Service).GetStock", "pgx.(*Conn).Query"], 55],
+    [["main", "runtime.mallocgc"], 15],
+  ],
+  worker: [
+    [["main", "nats.(*Subscription).processMsg", "fulfilment.(*Worker).Process", "inventory.v1.InventoryServiceClient.Reserve"], 60],
+    [["main", "nats.(*Subscription).processMsg", "fulfilment.(*Worker).Process", "encoding/json.Unmarshal"], 30],
+    [["main", "lifecyclekit.Every", "fulfilment.(*Worker).Tick"], 20],
+  ],
 };
 
-export const DEMO_PROFILE_TYPES = ["cpu", "alloc_space", "alloc_objects", "inuse_space", "inuse_objects", "goroutine"] as const;
-
-const unitOf = (type: string) => (type === "cpu" ? "nanoseconds" : type.endsWith("_space") ? "bytes" : "none");
-
-function profileOf(service: string, type: string): Flamegraph {
-  const byType = PROFILES[service] ?? PROFILES.api;
-  const kind = byType[type] ? type : "cpu";
-  const stacks = byType[kind];
+function profileOf(service: string): Flamegraph {
+  const stacks = PROFILES[service] ?? PROFILES.api;
   const names = [...new Set(stacks.flatMap(([frames]) => frames))];
   const samples = stacks.map(([frames]) => frames.map((f) => names.indexOf(f)));
-  // CPU weights are milliseconds of samples over the window, in nanoseconds.
-  const weights = stacks.map(([, w]) => (kind === "cpu" ? w * 1e7 : w));
+  const weights = stacks.map(([, w]) => w * 1e6);
   const total = weights.reduce((a, b) => a + b, 0);
-  const unit = unitOf(kind);
   return {
     speedscopeJson: JSON.stringify({
       $schema: "https://www.speedscope.app/file-format-schema.json",
       shared: { frames: names.map((name) => ({ name })) },
-      profiles: [{ type: "sampled", name: `${service} ${kind}`, unit, startValue: 0, endValue: total, samples, weights }],
-      name: `${service} ${kind}`,
+      profiles: [{ type: "sampled", name: `${service} cpu`, unit: "nanoseconds", startValue: 0, endValue: total, samples, weights }],
+      name: `${service} cpu`,
       exporter: "forge demo",
     }),
     totalValue: total,
-    unit,
+    unit: "nanoseconds",
     stackCount: stacks.length,
-    availableProfileTypes: [...DEMO_PROFILE_TYPES],
+    availableProfileTypes: ["cpu", "alloc_space", "inuse_space", "goroutine"],
     truncated: false,
   };
 }
 
-// ── Reads ────────────────────────────────────────────────────────────────────
-
-/** What each service sends and declares (Service signals): every backend sends all three and declares them. */
-export const DEMO_SIGNALS: ServiceSignalsResult = {
-  truncated: false,
-  services: DEMO_BACKENDS.map((service) => ({ service, emitting: ["logs", "profiles", "traces"], declared: ["logs", "profiles", "traces"], declarationKnown: true })),
-};
-
 const offsetOf = (cursor: string | undefined) => (cursor && /^busy:\d+$/.test(cursor) ? Number(cursor.slice(5)) : 0);
 
-const envsOf = (envIds: readonly string[] | undefined): DemoEnvKey[] =>
-  envIds?.length ? DEMO_ENV_IDS.filter((e) => envIds.includes(e)) : [...DEMO_ENV_IDS];
-
-/** A group-by key's value on one trace. */
-function groupValue(t: TraceSummary & { env: string }, key: string): string {
-  switch (key.replace(/^(resource|span)\.attr\./, "")) {
-    case "deployment.environment.name":
-      return t.env;
-    case "service.name":
-      return t.rootService;
-    case "service.version":
-      return t.backendBuilds[0]?.version ?? t.frontendVersion;
-    case "rpc.method":
-      return t.rootOperation.split("/").pop() ?? "";
-    case "status":
-      return t.errorCount ? "error" : "ok";
-    default:
-      return "";
-  }
-}
-
-function redOf(list: TraceSummary[], seconds: number): TraceRed {
-  const durations = list.map((t) => t.durationMs).sort((a, b) => a - b);
-  const at = (p: number) => durations[Math.min(durations.length - 1, Math.floor(p * durations.length))] ?? 0;
-  const errors = list.filter((t) => t.errorCount > 0).length;
+/** `base` with shop's traffic at a busy app's volume (see the header). `now` anchors the v1.8.3 marker. */
+export function withBusyApp(base: ObservabilityApi, now: number = Date.now()): ObservabilityApi {
+  const releaseAtMs = now - DEMO_RELEASE_AGO_MS;
   return {
-    traceCount: list.length,
-    errorTraceCount: errors,
-    ratePerSecond: seconds > 0 ? list.length / seconds : 0,
-    errorRate: list.length ? errors / list.length : 0,
-    p50Ms: at(0.5),
-    p95Ms: at(0.95),
-    p99Ms: at(0.99),
-  };
-}
-
-/** Prod's failed incident requests in [startMs, endMs), newest first (the toured one included): the incident issue's events. */
-export function failedIncidentRequests(now: number, startMs: number, endMs: number, limit: number) {
-  const ctx = ctxOf(now);
-  const { requests } = requestsIn(ctx, startMs, endMs, ["env-prod"], 2_000);
-  const out = requests
-    .filter((r) => r.failed)
-    .map((r) => ({ traceId: r.traceId, startMs: r.startMs, chargeSpanId: hex((r.slot * 3 + r.envIndex) * 64 + 10, 16, 91), method: r.route.op.split("/").pop() ?? "", sessionId: "", userId: r.customer.id }));
-  if (ctx.touredAtMs >= startMs && ctx.touredAtMs < endMs) {
-    out.push({ traceId: DEMO_TOURED_TRACE.traceId, startMs: ctx.touredAtMs, chargeSpanId: "b3", method: "CreateOrder", sessionId: "", userId: DEMO_CUSTOMERS[0].id });
-  }
-  return out.sort((a, b) => b.startMs - a.startMs).slice(0, limit);
-}
-
-type TelemetryApi = Pick<ObservabilityApi, "listTraces" | "getTrace" | "searchLogs" | "getServiceOverview" | "getFlamegraph" | "getServiceSignals">;
-
-/** shop's traces, logs, service overview, profiles and signals, as of `now`. */
-export function createBusyApp(now: number = demoNow()): TelemetryApi {
-  const ctx = ctxOf(now);
-  const touredInScope = (envIds: readonly string[], startMs: number, endMs: number) =>
-    envsOf(envIds).includes("env-prod") && ctx.touredAtMs >= startMs && ctx.touredAtMs < endMs;
-  return {
+    ...base,
     listTraces: async (req) => {
-      const envs = envsOf(req.envIds);
-      const { requests, sampledFromMs } = requestsIn(ctx, req.window.startMs, req.window.endMs, envs);
-      let all: (TraceSummary & { env: string })[] = requests.map((r) => ({ ...summary(r), env: ENV_NAME[r.env] }));
-      if (touredInScope(req.envIds, req.window.startMs, req.window.endMs)) all.push({ ...touredSummary(ctx), env: "prod" });
-      all.sort((a, b) => b.startMs - a.startMs);
-      if (req.rootSpanName) all = all.filter((t) => t.rootOperation.toLowerCase().includes(req.rootSpanName.toLowerCase()));
+      const toured = await base.listTraces(req);
+      let all = requestsIn(req.window.startMs, req.window.endMs, releaseAtMs).map(summary);
+      // The toured trace is the fixtures' (fixtureTrace): kept, as their newest row.
+      const own = toured.traces.find((t) => t.traceId === FIXTURE_TRACE_ID);
+      if (own) all = [own, ...all];
+      if (req.rootSpanName) all = all.filter((t) => t.rootOperation.includes(req.rootSpanName));
       if (req.services?.length) all = all.filter((t) => t.services.some((s) => req.services.includes(s)));
       if (req.errorsOnly) all = all.filter((t) => t.errorCount > 0);
       if (req.minDurationMs) all = all.filter((t) => t.durationMs >= req.minDurationMs);
@@ -702,58 +337,40 @@ export function createBusyApp(now: number = demoNow()): TelemetryApi {
       if (req.os) all = all.filter((t) => t.client.osName === req.os);
       if (req.frontendVersion) all = all.filter((t) => t.frontendVersion === req.frontendVersion);
       if (req.backendVersion) all = all.filter((t) => t.backendBuilds.some((b) => b.version === req.backendVersion));
-      const seconds = (req.window.endMs - req.window.startMs) / 1000;
-      const red = redOf(all, seconds);
-      // A window longer than the slots built: the counts are scaled to the whole window (latency is the sample's).
-      if (sampledFromMs > req.window.startMs) {
-        const whole = demoStats({ startMs: req.window.startMs, endMs: req.window.endMs, envIds: envs, now }).requests;
-        const sampled = demoStats({ startMs: sampledFromMs, endMs: req.window.endMs, envIds: envs, now }).requests;
-        const scale = sampled > 0 ? whole / sampled : 1;
-        red.traceCount = Math.round(red.traceCount * scale);
-        red.errorTraceCount = Math.round(red.errorTraceCount * scale);
-        red.ratePerSecond = red.traceCount / seconds;
-      }
-      const groupBy = req.groupBy ?? [];
-      const groups = new Map<string, { group: Record<string, string>; list: TraceSummary[] }>();
-      if (groupBy.length) {
-        for (const t of all) {
-          const group = Object.fromEntries(groupBy.map((k) => [k, groupValue(t, k)]));
-          const key = JSON.stringify(group);
-          if (!groups.has(key)) groups.set(key, { group, list: [] });
-          groups.get(key)!.list.push(t);
-        }
-      }
+      const durations = all.map((t) => t.durationMs).sort((a, b) => a - b);
+      const at = (p: number) => durations[Math.min(durations.length - 1, Math.floor(p * durations.length))] ?? 0;
+      const errors = all.filter((t) => t.errorCount > 0).length;
+      const red = {
+        traceCount: all.length,
+        errorTraceCount: errors,
+        ratePerSecond: all.length / ((req.window.endMs - req.window.startMs) / 1000),
+        errorRate: all.length ? errors / all.length : 0,
+        p50Ms: at(0.5),
+        p95Ms: at(0.95),
+        p99Ms: at(0.99),
+      };
       const from = offsetOf(req.cursor);
       const limit = req.limit > 0 ? req.limit : 100;
-      const page = all.slice(from, from + limit).map(({ env: _env, ...t }) => t);
-      return {
-        traces: page,
-        nextCursor: from + limit < all.length ? `busy:${from + limit}` : "",
-        red,
-        redGroups: [...groups.values()].map((g) => ({ group: g.group, red: redOf(g.list, seconds) })),
-      };
+      const page = all.slice(from, from + limit);
+      return { traces: page, nextCursor: from + limit < all.length ? `busy:${from + limit}` : "", red, redGroups: toured.redGroups };
     },
     getTrace: async (req) => {
-      if (req.traceId === DEMO_TOURED_TRACE.traceId) return touredTrace(ctx);
-      const at = parseTrace(req.traceId);
-      const r = at ? requestAt(ctx, at.env, at.slot) : null;
-      return r && r.traceId === req.traceId ? traceOf(r) : { traceId: req.traceId, spans: [], truncated: false };
+      const slot = req.traceId === FIXTURE_TRACE_ID ? null : slotOf(req.traceId);
+      const r = slot === null ? null : requestAt(slot, releaseAtMs);
+      return r && r.traceId === req.traceId ? traceOf(r) : base.getTrace(req);
     },
     searchLogs: async (req) => {
+      const toured = await base.searchLogs({ ...req, cursor: undefined });
+      const tracedTo = req.traceId;
       let records: LogRecord[];
-      if (req.traceId === DEMO_TOURED_TRACE.traceId) {
-        records = touredLogs(ctx);
-      } else if (req.traceId) {
-        const at = parseTrace(req.traceId);
-        const r = at ? requestAt(ctx, at.env, at.slot) : null;
-        records = r && r.traceId === req.traceId ? logsOf(r) : [];
+      if (tracedTo && tracedTo !== FIXTURE_TRACE_ID) {
+        const slot = slotOf(tracedTo);
+        const r = slot === null ? null : requestAt(slot, releaseAtMs);
+        records = r && r.traceId === tracedTo ? logsOf(r).reverse() : [];
       } else {
-        const envs = envsOf(req.envIds);
-        records = requestsIn(ctx, req.window.startMs, req.window.endMs, envs).requests.flatMap(logsOf);
-        if (touredInScope(req.envIds, req.window.startMs, req.window.endMs)) records.push(...touredLogs(ctx));
+        const generated = tracedTo ? [] : requestsIn(req.window.startMs, req.window.endMs, releaseAtMs).flatMap((r) => logsOf(r).reverse());
+        records = [...toured.records.filter((l) => l.traceId === FIXTURE_TRACE_ID), ...generated].sort((a, b) => b.timeMs - a.timeMs);
       }
-      records = records.filter((r) => !!req.traceId || (r.timeMs >= req.window.startMs && r.timeMs < req.window.endMs)).sort((a, b) => b.timeMs - a.timeMs);
-      if (req.spanId) records = records.filter((r) => r.spanId === req.spanId);
       if (req.services?.length) records = records.filter((r) => req.services.includes(r.service));
       if (req.severities?.length) records = records.filter((r) => req.severities.includes(r.severity));
       if (req.query) records = records.filter((r) => r.body.toLowerCase().includes(req.query.toLowerCase()));
@@ -762,58 +379,59 @@ export function createBusyApp(now: number = demoNow()): TelemetryApi {
       return { records: records.slice(from, from + limit), nextCursor: from + limit < records.length ? `busy:${from + limit}` : "" };
     },
     getServiceOverview: async (req) => {
-      const groupBy = req.groupBy ?? [];
-      const byEnv = groupBy.length === 1 && groupBy[0].replace(/^resource\.attr\./, "") === "deployment.environment.name";
-      const names = DEMO_BACKENDS.filter((s) => !req.services?.length || req.services.includes(s));
+      const res = await base.getServiceOverview(req);
+      if ((req.groupBy ?? []).length) return res;
+      const names = BUSY_SERVICES.filter((s) => !req.services?.length || req.services.includes(s));
       const steps = 30;
       const stepMs = (req.window.endMs - req.window.startMs) / steps;
-      const cells: { name: string; envIds: DemoEnvKey[]; group: Record<string, string> }[] = byEnv
-        ? names.flatMap((name) => envsOf(req.envIds).map((env) => ({ name, envIds: [env], group: { [groupBy[0]]: ENV_NAME[env] } })))
-        : names.map((name) => ({ name, envIds: envsOf(req.envIds), group: {} }));
-      const services: ServiceHealth[] = cells.map(({ name, envIds, group }) => {
-        const q = { startMs: req.window.startMs, endMs: req.window.endMs, envIds, service: name, now };
-        const whole = demoStats(q);
-        const trend = demoTrend(q, steps);
-        const timestamps = trend.map((b) => Math.round(b.startMs / 1000));
-        const requestTrend = trend.map((b) => b.stats.requests);
-        const errorTrend = trend.map((b) => b.stats.errors);
-        // The headline is the sparkline's sum, so the two can never disagree.
+      const timestamps = Array.from({ length: steps }, (_, i) => Math.round((req.window.startMs + i * stepMs) / 1000));
+      const services: ServiceHealth[] = names.map((name, k) => {
+        const scale = [42, 18, 24, 9, 6][k];
+        const p50 = [12, 9, 6, 140, 60][k];
+        const requestTrend = timestamps.map((t, i) => Math.round(scale * (stepMs / 1000) * dailyLoad(t * 1000) * (0.9 + 0.2 * hash01(k, i, Math.floor(t / 60)))));
+        const errorTrend = requestTrend.map((n, i) => {
+          const after = timestamps[i] * 1000 >= releaseAtMs;
+          const share = name === "payments" ? (after ? 0.09 : 0.004) : name === "api" ? (after ? 0.02 : 0.003) : 0.001;
+          return Math.round(n * share * (0.6 + 0.8 * hash01(k, i, 9)));
+        });
         const requestCount = requestTrend.reduce((a, b) => a + b, 0);
         const errorCount = errorTrend.reduce((a, b) => a + b, 0);
+        const regressed = req.window.endMs > releaseAtMs && (name === "payments" || name === "api");
+        const p95 = p50 * (regressed ? 6.5 : 3.2);
         return {
           name,
-          group,
+          group: {},
           requestCount,
           requestRate: requestCount / ((req.window.endMs - req.window.startMs) / 1000),
           errorCount,
           errorRate: requestCount ? errorCount / requestCount : 0,
-          p50Ms: whole.p50Ms,
-          p95Ms: whole.p95Ms,
-          p99Ms: whole.p99Ms,
-          errorLogCount: errorCount,
+          p50Ms: p50,
+          p95Ms: p95,
+          p99Ms: p95 * 2.2,
+          errorLogCount: Math.round(errorCount * 1.4),
           timestamps,
           requestTrend,
           errorTrend,
           rateSeries: requestTrend.map((n) => n / (stepMs / 1000)),
-          errorRateSeries: trend.map((b) => (b.stats.requests ? b.stats.errors / b.stats.requests : null)),
+          errorRateSeries: requestTrend.map((n, i) => (n ? errorTrend[i] / n : null)),
           source: "",
           operatorData: false,
         };
       });
       return { services, trendStepSeconds: Math.round(stepMs / 1000) };
     },
-    getFlamegraph: async (req) => profileOf(req.traceId ? "api" : req.service || "api", req.profileType || "cpu"),
-    getServiceSignals: async () => DEMO_SIGNALS,
+    getFlamegraph: async (req) => (req.traceId === FIXTURE_TRACE_ID ? base.getFlamegraph(req) : profileOf(req.service || "api")),
   };
 }
 
+/**
+ * The demo's data, in every shell and on the wire alike: the sample app's
+ * fixtures (the shop graph, the toured trace crossing into inventory, more
+ * issues, dashboards read-only) with the busy app's traffic on top.
+ */
+export function createDemoFixtures(now: number = Date.now()): ObservabilityApi {
+  return withBusyApp(createFixtureApi({ signals: FIXTURE_SIGNALS, dashboardsReadOnly: true, graph: "shop", crossService: true, moreIssues: true }), now);
+}
+
 /** Test seams. */
-export const busyAppInternals = {
-  ctxOf,
-  requestAt,
-  requestsIn: (now: number, startMs: number, endMs: number, envs?: readonly DemoEnvKey[]) => requestsIn(ctxOf(now), startMs, endMs, envs).requests,
-  traceOf,
-  logsOf,
-  summary,
-  touredTrace: (now: number) => touredTrace(ctxOf(now)),
-};
+export const busyAppInternals = { requestAt, requestsIn, traceOf, logsOf, summary };

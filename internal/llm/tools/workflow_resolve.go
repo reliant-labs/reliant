@@ -53,12 +53,10 @@ func resolveWorkflowDraft(ctx *rctx.ToolContext, repo workflowDraftLookup, idOrN
 			return nil, workflowNotFoundError(idOrName)
 		}
 
-		// By slug or name as by id: a draft the caller may not read (an org
-		// they left) is not found.
-		if draft, err := repo.GetWorkflowDraftBySlug(ctx, userID, idOrName); err == nil && authz.CanReadWorkflow(ctx, userID, draft) {
+		if draft, err := repo.GetWorkflowDraftBySlug(ctx, userID, idOrName); err == nil && draft != nil {
 			return draft, nil
 		}
-		if draft, err := repo.GetWorkflowDraftByName(ctx, userID, idOrName); err == nil && authz.CanReadWorkflow(ctx, userID, draft) {
+		if draft, err := repo.GetWorkflowDraftByName(ctx, userID, idOrName); err == nil && draft != nil {
 			return draft, nil
 		}
 		return nil, workflowNotFoundError(idOrName)

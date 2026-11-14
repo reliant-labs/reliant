@@ -46,6 +46,7 @@ import { RescanModal } from "./components/Projects/RescanModal";
 
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { LoadingSpinner } from "./components/Layout/LoadingSpinner";
+import { GlobalUpdateHandler } from "./components/Settings/GlobalUpdateHandler";
 import { useChatStore } from "./store/chatStore";
 import { useActivityStore, ChatActivity, isBusyActivity } from "./store/activityStore";
 import { useChatNavigationStore } from "./store/chatNavigationStore";
@@ -1844,6 +1845,9 @@ function App() {
         isOpen={showQuickFileOpen}
         onClose={() => setShowQuickFileOpen(false)}
       />
+
+      {/* Global Update Handler - shows update modal when updates are available */}
+      <GlobalUpdateHandler />
     </div>
   );
 

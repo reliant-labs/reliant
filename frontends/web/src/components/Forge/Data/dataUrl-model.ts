@@ -44,8 +44,6 @@ export const DEFAULT_PAGE_SIZE = 50;
 export const MAX_OFFSET = 1_000_000;
 
 export interface DataSearch {
-  /** Explicit Identity selection, bound to a control-plane environment id. Never an audit reason. */
-  subject?: string;
   db?: string;
   table?: string;
   f?: string[];
@@ -59,7 +57,7 @@ export interface DataSearch {
 }
 
 /** Every DataSearch key: what a link out of the browser carries, and what leaving it clears. */
-export const DATA_SEARCH_KEYS = ["subject", "db", "table", "f", "sort", "cols", "offset", "page", "size", "row"] as const satisfies readonly (keyof DataSearch)[];
+export const DATA_SEARCH_KEYS = ["db", "table", "f", "sort", "cols", "offset", "page", "size", "row"] as const satisfies readonly (keyof DataSearch)[];
 
 export interface DataFilter {
   column: string;

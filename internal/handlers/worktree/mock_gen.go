@@ -17,7 +17,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=c75a88ea6acac121282ec3582685ee318696e7efc15fe18369a31bafb1fd800a
+// forge:hash=075ba76947b7732a5123cf82b7d2209920d55cc7cd0fddf3fe58879f437cce80
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -51,7 +51,6 @@ type MockRepository struct {
 	ArchiveWorktreeFunc                  func(context.Context, string) error
 	GetLiveWorktreeByNameFunc            func(context.Context, string, string) (*db.Worktree, error)
 	ListWorktreesByBranchFunc            func(context.Context, string, string) ([]*db.Worktree, error)
-	SettleCheckoutTeardownFunc           func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
 	GetRepoByProjectAndPathFunc          func(context.Context, string, string) (*core.Repo, error)
 	CreateRepoFunc                       func(context.Context, *core.Repo) error
 	ListReposByProjectFunc               func(context.Context, string) ([]*core.Repo, error)
@@ -274,15 +273,6 @@ func (m *MockRepository) ListWorktreesByBranch(ctx context.Context, projectID st
 		return m.ListWorktreesByBranchFunc(ctx, projectID, branch)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListWorktreesByBranch")
-}
-
-// SettleCheckoutTeardown records the call and delegates to SettleCheckoutTeardownFunc when set.
-func (m *MockRepository) SettleCheckoutTeardown(ctx context.Context, id string, state string, detail string) (*db.CheckoutTeardown, error) {
-	m.Recorder.Record("SettleCheckoutTeardown", ctx, id, state, detail)
-	if m.SettleCheckoutTeardownFunc != nil {
-		return m.SettleCheckoutTeardownFunc(ctx, id, state, detail)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "SettleCheckoutTeardown")
 }
 
 // GetRepoByProjectAndPath records the call and delegates to GetRepoByProjectAndPathFunc when set.

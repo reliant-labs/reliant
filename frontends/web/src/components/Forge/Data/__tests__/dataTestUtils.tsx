@@ -9,9 +9,6 @@
  */
 
 import { useState } from "react";
-import { beforeEach } from "vitest";
-import { setReaderPrincipal } from "../../AuditedAccess/readerSession";
-beforeEach(() => setReaderPrincipal("fixture-reader", true));
 import { act, render } from "@testing-library/react";
 import { defaultParseSearch } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

@@ -32,7 +32,7 @@ import Link from "@/components/forge-ui/link";
 import { useListTraces, type TraceFilters } from "@/hooks/observability-queries";
 import { useSessions, type SessionFilters } from "@/hooks/observability-session-queries";
 import { rumErrorKind } from "@/services/controlPlane/observability/errors";
-import type { ListTracesResult, ObsScope } from "@/services/controlPlane/observability/types";
+import type { ObsScope } from "@/services/controlPlane/observability/types";
 import type { SessionSummary } from "@/services/controlPlane/observability/rumTypes";
 import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
@@ -157,18 +157,6 @@ export function tileTraceFilters(range: RangePreset): TraceFilters {
   return { range, rootSpanName: "", services: [], errorsOnly: false, minDurationMs: 0, groupBy: NO_KEYS };
 }
 
-/**
- * How many traces the window holds, in words. The tile loads one page (the
- * latest TRACE_PAGE_SIZE), so the page's length is NOT the window's count:
- * the server's RED totals are, when it sends them; otherwise a page with more
- * behind it is "100+", never "100".
- */
-export function traceCountLabel(page: Pick<ListTracesResult, "traces" | "nextCursor" | "red"> | undefined): string {
-  if (!page) return "";
-  if (page.red) return formatCount(page.red.traceCount);
-  return `${formatCount(page.traces.length)}${page.nextCursor ? "+" : ""}`;
-}
-
 export interface TracesTileProps {
   scope: ObsScope | null;
   range: RangePreset;
@@ -181,8 +169,7 @@ export interface TracesTileProps {
 export function TracesTile({ scope, range, band, all }: TracesTileProps) {
   const filters = useMemo(() => tileTraceFilters(range), [range]);
   const traces = useListTraces(scope, filters);
-  const page = traces.data?.pages[0];
-  const rows = useMemo(() => page?.traces ?? [], [page]);
+  const rows = useMemo(() => traces.data?.pages[0]?.traces ?? [], [traces.data]);
   const points = useMemo(() => pointsOf(rows), [rows]);
   const model = useMemo(() => {
     if (points.length === 0) return null;
@@ -190,16 +177,8 @@ export function TracesTile({ scope, range, band, all }: TracesTileProps) {
       points.map((p) => p.durationMs),
       "log"
     );
-    const red = page?.red;
-    return {
-      buckets: histogram(points, domain, "log", TILE_BUCKETS),
-      // The window's own percentiles and failure rate when the server sends them (the Traces page's figures); else the loaded page's.
-      pct: red ? { p50: red.p50Ms, p95: red.p95Ms, p99: red.p99Ms } : percentiles(points),
-      failedRate: red ? red.errorRate : points.filter((p) => p.error).length / points.length,
-      // The bars are drawn from the loaded page: say so when it is not the whole window.
-      sampled: red ? red.traceCount > points.length : !!page?.nextCursor,
-    };
-  }, [points, page]);
+    return { buckets: histogram(points, domain, "log", TILE_BUCKETS), pct: percentiles(points), failed: points.filter((p) => p.error).length };
+  }, [points]);
   const windowWords = RANGE_LABELS[range].toLowerCase();
   const failed = !!traces.error && !traces.data;
   const state = traces.isLoading ? "loading" : failed ? "error" : model ? "ready" : "empty";
@@ -207,7 +186,7 @@ export function TracesTile({ scope, range, band, all }: TracesTileProps) {
   return (
     <Tile
       title="Traces"
-      meta={model ? `${traceCountLabel(page)} in the ${windowWords}` : undefined}
+      meta={model ? `${formatCount(points.length)} in the ${windowWords}` : undefined}
       all={<AllLink open={all} value={null}>Open traces</AllLink>}
       testId="overview-traces-tile"
       state={state}
@@ -223,7 +202,7 @@ export function TracesTile({ scope, range, band, all }: TracesTileProps) {
           No traces in the {windowWords}. Traces appear once a service handles a request; forge&apos;s generated handlers trace every one.
         </TileMessage>
       ) : (
-        <LatencyHistogram buckets={model.buckets} pct={model.pct} failedRate={model.failedRate} drawn={model.sampled ? points.length : null} band={band} />
+        <LatencyHistogram buckets={model.buckets} pct={model.pct} failed={model.failed} total={points.length} band={band} />
       )}
     </Tile>
   );
@@ -232,16 +211,14 @@ export function TracesTile({ scope, range, band, all }: TracesTileProps) {
 function LatencyHistogram({
   buckets,
   pct,
-  failedRate,
-  drawn,
+  failed,
+  total,
   band,
 }: {
   buckets: HistogramBucket[];
-  pct: { p50: number; p95: number; p99: number } | null;
-  /** Failed traces as a fraction, 0..1. */
-  failedRate: number;
-  /** How many traces the bars are drawn from, when that is fewer than the window holds; null when it is all of them. */
-  drawn: number | null;
+  pct: ReturnType<typeof percentiles>;
+  failed: number;
+  total: number;
   band: Open<LatencyBand>;
 }) {
   const max = Math.max(1, ...buckets.map((b) => b.ok + b.error));
@@ -268,7 +245,7 @@ function LatencyHistogram({
           ))}
         <div className="flex items-baseline gap-1">
           <dt>failed</dt>
-          <dd className={cn("font-medium tabular-nums", failedRate > 0 ? "text-danger-ink" : "text-ink")}>{formatPercent(failedRate)}</dd>
+          <dd className={cn("font-medium tabular-nums", failed > 0 ? "text-danger-ink" : "text-ink")}>{formatPercent(failed / total)}</dd>
         </div>
       </dl>
       <ul className="flex h-24 items-stretch gap-px" aria-label="Traces by latency. Choose a bar to see its traces.">
@@ -300,7 +277,6 @@ function LatencyHistogram({
       <div className="flex justify-between text-2xs tabular-nums text-ink-muted" aria-hidden="true">
         <span>{formatDuration(shown[0]?.lo ?? 0)}</span>
         <span className="inline-flex items-center gap-3">
-          {drawn !== null && <span data-testid="overview-traces-sampled">bars: latest {formatCount(drawn)}</span>}
           <span className="inline-flex items-center gap-1">
             <span className="h-2 w-2 rounded-sm bg-info/70" /> OK
           </span>

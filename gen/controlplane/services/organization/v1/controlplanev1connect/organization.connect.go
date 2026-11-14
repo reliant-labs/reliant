@@ -52,36 +52,6 @@ const (
 	// OrganizationServiceSetDefaultOrganizationProcedure is the fully-qualified name of the
 	// OrganizationService's SetDefaultOrganization RPC.
 	OrganizationServiceSetDefaultOrganizationProcedure = "/controlplane.v1.OrganizationService/SetDefaultOrganization"
-	// OrganizationServiceCreateOrganizationProcedure is the fully-qualified name of the
-	// OrganizationService's CreateOrganization RPC.
-	OrganizationServiceCreateOrganizationProcedure = "/controlplane.v1.OrganizationService/CreateOrganization"
-	// OrganizationServiceListMembersProcedure is the fully-qualified name of the OrganizationService's
-	// ListMembers RPC.
-	OrganizationServiceListMembersProcedure = "/controlplane.v1.OrganizationService/ListMembers"
-	// OrganizationServiceInviteMemberProcedure is the fully-qualified name of the OrganizationService's
-	// InviteMember RPC.
-	OrganizationServiceInviteMemberProcedure = "/controlplane.v1.OrganizationService/InviteMember"
-	// OrganizationServiceListInvitationsProcedure is the fully-qualified name of the
-	// OrganizationService's ListInvitations RPC.
-	OrganizationServiceListInvitationsProcedure = "/controlplane.v1.OrganizationService/ListInvitations"
-	// OrganizationServiceRevokeInvitationProcedure is the fully-qualified name of the
-	// OrganizationService's RevokeInvitation RPC.
-	OrganizationServiceRevokeInvitationProcedure = "/controlplane.v1.OrganizationService/RevokeInvitation"
-	// OrganizationServiceGetInvitationProcedure is the fully-qualified name of the
-	// OrganizationService's GetInvitation RPC.
-	OrganizationServiceGetInvitationProcedure = "/controlplane.v1.OrganizationService/GetInvitation"
-	// OrganizationServiceAcceptInvitationProcedure is the fully-qualified name of the
-	// OrganizationService's AcceptInvitation RPC.
-	OrganizationServiceAcceptInvitationProcedure = "/controlplane.v1.OrganizationService/AcceptInvitation"
-	// OrganizationServiceRemoveMemberProcedure is the fully-qualified name of the OrganizationService's
-	// RemoveMember RPC.
-	OrganizationServiceRemoveMemberProcedure = "/controlplane.v1.OrganizationService/RemoveMember"
-	// OrganizationServiceLeaveOrganizationProcedure is the fully-qualified name of the
-	// OrganizationService's LeaveOrganization RPC.
-	OrganizationServiceLeaveOrganizationProcedure = "/controlplane.v1.OrganizationService/LeaveOrganization"
-	// OrganizationServiceUpdateMemberRoleProcedure is the fully-qualified name of the
-	// OrganizationService's UpdateMemberRole RPC.
-	OrganizationServiceUpdateMemberRoleProcedure = "/controlplane.v1.OrganizationService/UpdateMemberRole"
 )
 
 // OrganizationServiceClient is a client for the controlplane.v1.OrganizationService service.
@@ -99,61 +69,6 @@ type OrganizationServiceClient interface {
 	// PermissionDenied when the caller is not a member of org_id. That includes
 	// an org that does not exist, so the answer does not reveal which orgs exist.
 	SetDefaultOrganization(context.Context, *connect.Request[v1.SetDefaultOrganizationRequest]) (*connect.Response[v1.SetDefaultOrganizationResponse], error)
-	// CreateOrganization creates an org owned by the caller, with them as its
-	// owner member. It becomes their default only when they have none. Anyone
-	// with a verified email may create one (reason "email_unverified"
-	// otherwise), up to a per-person cap (ResourceExhausted, "owned_org_limit").
-	// A taken slug is AlreadyExists, "slug_taken".
-	//
-	// forge:custom — not the generic CRUD of the shared Organization message:
-	// it creates the owner membership and grant preset in the same transaction.
-	CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error)
-	// ListMembers lists the org's members (roster fields only) and its seat
-	// usage. Any member may call it. Which permissions each member holds stays
-	// on AccessTokenService.ListOrgMemberGrants.
-	ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error)
-	// InviteMember invites an email address into the org with a role. Admin or
-	// owner; only an owner may invite an owner. Idempotent per (org, email): a
-	// second invite of an address with a pending invitation rotates its token,
-	// extends its expiry, re-sends it and answers resent=true (that is the
-	// "resend" action). accept_url is returned to the inviter as a copy-link
-	// fallback; it is useless to anyone whose verified email does not match.
-	InviteMember(context.Context, *connect.Request[v1.InviteMemberRequest]) (*connect.Response[v1.InviteMemberResponse], error)
-	// ListInvitations lists the org's invitations, pending ones by default.
-	// Admin or owner: they are other people's email addresses.
-	ListInvitations(context.Context, *connect.Request[v1.ListInvitationsRequest]) (*connect.Response[v1.ListInvitationsResponse], error)
-	// RevokeInvitation revokes a pending invitation. Admin or owner; only an
-	// owner may revoke an owner invitation.
-	RevokeInvitation(context.Context, *connect.Request[v1.RevokeInvitationRequest]) (*connect.Response[v1.RevokeInvitationResponse], error)
-	// GetInvitation previews an invitation from its token, for the accept page.
-	// It discloses little: the org's name, the role, the inviter, a masked
-	// address and whether it matches the caller's verified email. An unknown
-	// token is NotFound.
-	GetInvitation(context.Context, *connect.Request[v1.GetInvitationRequest]) (*connect.Response[v1.GetInvitationResponse], error)
-	// AcceptInvitation joins the caller to the invitation's org with its role.
-	// The caller's VERIFIED email must equal the invitation's
-	// (PermissionDenied, "invite_email_mismatch", and the invitation stays
-	// pending). The seat limit is enforced here, under the org's membership
-	// lock (ResourceExhausted, "seat_limit_reached").
-	AcceptInvitation(context.Context, *connect.Request[v1.AcceptInvitationRequest]) (*connect.Response[v1.AcceptInvitationResponse], error)
-	// RemoveMember removes another member. Admin or owner; only an owner may
-	// remove an owner; not yourself (FailedPrecondition, "cannot_remove_self":
-	// use LeaveOrganization). The last owner cannot be removed ("last_owner").
-	// Removal deletes their grants, revokes their tokens in this org (the
-	// daemon-bound tokens of machines they operate here included: the machine
-	// is the org's and stops) and the org-automation tokens they minted, and
-	// retires their LLM gateway keys in this org.
-	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
-	// LeaveOrganization removes the caller from the org, with the same cleanup
-	// as RemoveMember. The last owner cannot leave ("last_owner"). Returns the
-	// caller's default org afterwards ("" when they belong to none).
-	LeaveOrganization(context.Context, *connect.Request[v1.LeaveOrganizationRequest]) (*connect.Response[v1.LeaveOrganizationResponse], error)
-	// UpdateMemberRole changes a member's role. Admin or owner; only an owner
-	// may promote to or demote from owner. The current role is a no-op that
-	// leaves grants alone; a real change resets the member's grants to the new
-	// role's preset, and scopes says what they hold now. Demoting the last
-	// owner is refused ("last_owner").
-	UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error)
 }
 
 // NewOrganizationServiceClient constructs a client for the controlplane.v1.OrganizationService
@@ -179,66 +94,6 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(organizationServiceMethods.ByName("SetDefaultOrganization")),
 			connect.WithClientOptions(opts...),
 		),
-		createOrganization: connect.NewClient[v1.CreateOrganizationRequest, v1.CreateOrganizationResponse](
-			httpClient,
-			baseURL+OrganizationServiceCreateOrganizationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("CreateOrganization")),
-			connect.WithClientOptions(opts...),
-		),
-		listMembers: connect.NewClient[v1.ListMembersRequest, v1.ListMembersResponse](
-			httpClient,
-			baseURL+OrganizationServiceListMembersProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("ListMembers")),
-			connect.WithClientOptions(opts...),
-		),
-		inviteMember: connect.NewClient[v1.InviteMemberRequest, v1.InviteMemberResponse](
-			httpClient,
-			baseURL+OrganizationServiceInviteMemberProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("InviteMember")),
-			connect.WithClientOptions(opts...),
-		),
-		listInvitations: connect.NewClient[v1.ListInvitationsRequest, v1.ListInvitationsResponse](
-			httpClient,
-			baseURL+OrganizationServiceListInvitationsProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("ListInvitations")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeInvitation: connect.NewClient[v1.RevokeInvitationRequest, v1.RevokeInvitationResponse](
-			httpClient,
-			baseURL+OrganizationServiceRevokeInvitationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("RevokeInvitation")),
-			connect.WithClientOptions(opts...),
-		),
-		getInvitation: connect.NewClient[v1.GetInvitationRequest, v1.GetInvitationResponse](
-			httpClient,
-			baseURL+OrganizationServiceGetInvitationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("GetInvitation")),
-			connect.WithClientOptions(opts...),
-		),
-		acceptInvitation: connect.NewClient[v1.AcceptInvitationRequest, v1.AcceptInvitationResponse](
-			httpClient,
-			baseURL+OrganizationServiceAcceptInvitationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("AcceptInvitation")),
-			connect.WithClientOptions(opts...),
-		),
-		removeMember: connect.NewClient[v1.RemoveMemberRequest, v1.RemoveMemberResponse](
-			httpClient,
-			baseURL+OrganizationServiceRemoveMemberProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("RemoveMember")),
-			connect.WithClientOptions(opts...),
-		),
-		leaveOrganization: connect.NewClient[v1.LeaveOrganizationRequest, v1.LeaveOrganizationResponse](
-			httpClient,
-			baseURL+OrganizationServiceLeaveOrganizationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("LeaveOrganization")),
-			connect.WithClientOptions(opts...),
-		),
-		updateMemberRole: connect.NewClient[v1.UpdateMemberRoleRequest, v1.UpdateMemberRoleResponse](
-			httpClient,
-			baseURL+OrganizationServiceUpdateMemberRoleProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("UpdateMemberRole")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
@@ -246,16 +101,6 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 type organizationServiceClient struct {
 	listMyOrganizations    *connect.Client[v1.ListMyOrganizationsRequest, v1.ListMyOrganizationsResponse]
 	setDefaultOrganization *connect.Client[v1.SetDefaultOrganizationRequest, v1.SetDefaultOrganizationResponse]
-	createOrganization     *connect.Client[v1.CreateOrganizationRequest, v1.CreateOrganizationResponse]
-	listMembers            *connect.Client[v1.ListMembersRequest, v1.ListMembersResponse]
-	inviteMember           *connect.Client[v1.InviteMemberRequest, v1.InviteMemberResponse]
-	listInvitations        *connect.Client[v1.ListInvitationsRequest, v1.ListInvitationsResponse]
-	revokeInvitation       *connect.Client[v1.RevokeInvitationRequest, v1.RevokeInvitationResponse]
-	getInvitation          *connect.Client[v1.GetInvitationRequest, v1.GetInvitationResponse]
-	acceptInvitation       *connect.Client[v1.AcceptInvitationRequest, v1.AcceptInvitationResponse]
-	removeMember           *connect.Client[v1.RemoveMemberRequest, v1.RemoveMemberResponse]
-	leaveOrganization      *connect.Client[v1.LeaveOrganizationRequest, v1.LeaveOrganizationResponse]
-	updateMemberRole       *connect.Client[v1.UpdateMemberRoleRequest, v1.UpdateMemberRoleResponse]
 }
 
 // ListMyOrganizations calls controlplane.v1.OrganizationService.ListMyOrganizations.
@@ -266,56 +111,6 @@ func (c *organizationServiceClient) ListMyOrganizations(ctx context.Context, req
 // SetDefaultOrganization calls controlplane.v1.OrganizationService.SetDefaultOrganization.
 func (c *organizationServiceClient) SetDefaultOrganization(ctx context.Context, req *connect.Request[v1.SetDefaultOrganizationRequest]) (*connect.Response[v1.SetDefaultOrganizationResponse], error) {
 	return c.setDefaultOrganization.CallUnary(ctx, req)
-}
-
-// CreateOrganization calls controlplane.v1.OrganizationService.CreateOrganization.
-func (c *organizationServiceClient) CreateOrganization(ctx context.Context, req *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error) {
-	return c.createOrganization.CallUnary(ctx, req)
-}
-
-// ListMembers calls controlplane.v1.OrganizationService.ListMembers.
-func (c *organizationServiceClient) ListMembers(ctx context.Context, req *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error) {
-	return c.listMembers.CallUnary(ctx, req)
-}
-
-// InviteMember calls controlplane.v1.OrganizationService.InviteMember.
-func (c *organizationServiceClient) InviteMember(ctx context.Context, req *connect.Request[v1.InviteMemberRequest]) (*connect.Response[v1.InviteMemberResponse], error) {
-	return c.inviteMember.CallUnary(ctx, req)
-}
-
-// ListInvitations calls controlplane.v1.OrganizationService.ListInvitations.
-func (c *organizationServiceClient) ListInvitations(ctx context.Context, req *connect.Request[v1.ListInvitationsRequest]) (*connect.Response[v1.ListInvitationsResponse], error) {
-	return c.listInvitations.CallUnary(ctx, req)
-}
-
-// RevokeInvitation calls controlplane.v1.OrganizationService.RevokeInvitation.
-func (c *organizationServiceClient) RevokeInvitation(ctx context.Context, req *connect.Request[v1.RevokeInvitationRequest]) (*connect.Response[v1.RevokeInvitationResponse], error) {
-	return c.revokeInvitation.CallUnary(ctx, req)
-}
-
-// GetInvitation calls controlplane.v1.OrganizationService.GetInvitation.
-func (c *organizationServiceClient) GetInvitation(ctx context.Context, req *connect.Request[v1.GetInvitationRequest]) (*connect.Response[v1.GetInvitationResponse], error) {
-	return c.getInvitation.CallUnary(ctx, req)
-}
-
-// AcceptInvitation calls controlplane.v1.OrganizationService.AcceptInvitation.
-func (c *organizationServiceClient) AcceptInvitation(ctx context.Context, req *connect.Request[v1.AcceptInvitationRequest]) (*connect.Response[v1.AcceptInvitationResponse], error) {
-	return c.acceptInvitation.CallUnary(ctx, req)
-}
-
-// RemoveMember calls controlplane.v1.OrganizationService.RemoveMember.
-func (c *organizationServiceClient) RemoveMember(ctx context.Context, req *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error) {
-	return c.removeMember.CallUnary(ctx, req)
-}
-
-// LeaveOrganization calls controlplane.v1.OrganizationService.LeaveOrganization.
-func (c *organizationServiceClient) LeaveOrganization(ctx context.Context, req *connect.Request[v1.LeaveOrganizationRequest]) (*connect.Response[v1.LeaveOrganizationResponse], error) {
-	return c.leaveOrganization.CallUnary(ctx, req)
-}
-
-// UpdateMemberRole calls controlplane.v1.OrganizationService.UpdateMemberRole.
-func (c *organizationServiceClient) UpdateMemberRole(ctx context.Context, req *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error) {
-	return c.updateMemberRole.CallUnary(ctx, req)
 }
 
 // OrganizationServiceHandler is an implementation of the controlplane.v1.OrganizationService
@@ -334,61 +129,6 @@ type OrganizationServiceHandler interface {
 	// PermissionDenied when the caller is not a member of org_id. That includes
 	// an org that does not exist, so the answer does not reveal which orgs exist.
 	SetDefaultOrganization(context.Context, *connect.Request[v1.SetDefaultOrganizationRequest]) (*connect.Response[v1.SetDefaultOrganizationResponse], error)
-	// CreateOrganization creates an org owned by the caller, with them as its
-	// owner member. It becomes their default only when they have none. Anyone
-	// with a verified email may create one (reason "email_unverified"
-	// otherwise), up to a per-person cap (ResourceExhausted, "owned_org_limit").
-	// A taken slug is AlreadyExists, "slug_taken".
-	//
-	// forge:custom — not the generic CRUD of the shared Organization message:
-	// it creates the owner membership and grant preset in the same transaction.
-	CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error)
-	// ListMembers lists the org's members (roster fields only) and its seat
-	// usage. Any member may call it. Which permissions each member holds stays
-	// on AccessTokenService.ListOrgMemberGrants.
-	ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error)
-	// InviteMember invites an email address into the org with a role. Admin or
-	// owner; only an owner may invite an owner. Idempotent per (org, email): a
-	// second invite of an address with a pending invitation rotates its token,
-	// extends its expiry, re-sends it and answers resent=true (that is the
-	// "resend" action). accept_url is returned to the inviter as a copy-link
-	// fallback; it is useless to anyone whose verified email does not match.
-	InviteMember(context.Context, *connect.Request[v1.InviteMemberRequest]) (*connect.Response[v1.InviteMemberResponse], error)
-	// ListInvitations lists the org's invitations, pending ones by default.
-	// Admin or owner: they are other people's email addresses.
-	ListInvitations(context.Context, *connect.Request[v1.ListInvitationsRequest]) (*connect.Response[v1.ListInvitationsResponse], error)
-	// RevokeInvitation revokes a pending invitation. Admin or owner; only an
-	// owner may revoke an owner invitation.
-	RevokeInvitation(context.Context, *connect.Request[v1.RevokeInvitationRequest]) (*connect.Response[v1.RevokeInvitationResponse], error)
-	// GetInvitation previews an invitation from its token, for the accept page.
-	// It discloses little: the org's name, the role, the inviter, a masked
-	// address and whether it matches the caller's verified email. An unknown
-	// token is NotFound.
-	GetInvitation(context.Context, *connect.Request[v1.GetInvitationRequest]) (*connect.Response[v1.GetInvitationResponse], error)
-	// AcceptInvitation joins the caller to the invitation's org with its role.
-	// The caller's VERIFIED email must equal the invitation's
-	// (PermissionDenied, "invite_email_mismatch", and the invitation stays
-	// pending). The seat limit is enforced here, under the org's membership
-	// lock (ResourceExhausted, "seat_limit_reached").
-	AcceptInvitation(context.Context, *connect.Request[v1.AcceptInvitationRequest]) (*connect.Response[v1.AcceptInvitationResponse], error)
-	// RemoveMember removes another member. Admin or owner; only an owner may
-	// remove an owner; not yourself (FailedPrecondition, "cannot_remove_self":
-	// use LeaveOrganization). The last owner cannot be removed ("last_owner").
-	// Removal deletes their grants, revokes their tokens in this org (the
-	// daemon-bound tokens of machines they operate here included: the machine
-	// is the org's and stops) and the org-automation tokens they minted, and
-	// retires their LLM gateway keys in this org.
-	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
-	// LeaveOrganization removes the caller from the org, with the same cleanup
-	// as RemoveMember. The last owner cannot leave ("last_owner"). Returns the
-	// caller's default org afterwards ("" when they belong to none).
-	LeaveOrganization(context.Context, *connect.Request[v1.LeaveOrganizationRequest]) (*connect.Response[v1.LeaveOrganizationResponse], error)
-	// UpdateMemberRole changes a member's role. Admin or owner; only an owner
-	// may promote to or demote from owner. The current role is a no-op that
-	// leaves grants alone; a real change resets the member's grants to the new
-	// role's preset, and scopes says what they hold now. Demoting the last
-	// owner is refused ("last_owner").
-	UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error)
 }
 
 // NewOrganizationServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -410,92 +150,12 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		connect.WithSchema(organizationServiceMethods.ByName("SetDefaultOrganization")),
 		connect.WithHandlerOptions(opts...),
 	)
-	organizationServiceCreateOrganizationHandler := connect.NewUnaryHandler(
-		OrganizationServiceCreateOrganizationProcedure,
-		svc.CreateOrganization,
-		connect.WithSchema(organizationServiceMethods.ByName("CreateOrganization")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceListMembersHandler := connect.NewUnaryHandler(
-		OrganizationServiceListMembersProcedure,
-		svc.ListMembers,
-		connect.WithSchema(organizationServiceMethods.ByName("ListMembers")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceInviteMemberHandler := connect.NewUnaryHandler(
-		OrganizationServiceInviteMemberProcedure,
-		svc.InviteMember,
-		connect.WithSchema(organizationServiceMethods.ByName("InviteMember")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceListInvitationsHandler := connect.NewUnaryHandler(
-		OrganizationServiceListInvitationsProcedure,
-		svc.ListInvitations,
-		connect.WithSchema(organizationServiceMethods.ByName("ListInvitations")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceRevokeInvitationHandler := connect.NewUnaryHandler(
-		OrganizationServiceRevokeInvitationProcedure,
-		svc.RevokeInvitation,
-		connect.WithSchema(organizationServiceMethods.ByName("RevokeInvitation")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceGetInvitationHandler := connect.NewUnaryHandler(
-		OrganizationServiceGetInvitationProcedure,
-		svc.GetInvitation,
-		connect.WithSchema(organizationServiceMethods.ByName("GetInvitation")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceAcceptInvitationHandler := connect.NewUnaryHandler(
-		OrganizationServiceAcceptInvitationProcedure,
-		svc.AcceptInvitation,
-		connect.WithSchema(organizationServiceMethods.ByName("AcceptInvitation")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceRemoveMemberHandler := connect.NewUnaryHandler(
-		OrganizationServiceRemoveMemberProcedure,
-		svc.RemoveMember,
-		connect.WithSchema(organizationServiceMethods.ByName("RemoveMember")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceLeaveOrganizationHandler := connect.NewUnaryHandler(
-		OrganizationServiceLeaveOrganizationProcedure,
-		svc.LeaveOrganization,
-		connect.WithSchema(organizationServiceMethods.ByName("LeaveOrganization")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceUpdateMemberRoleHandler := connect.NewUnaryHandler(
-		OrganizationServiceUpdateMemberRoleProcedure,
-		svc.UpdateMemberRole,
-		connect.WithSchema(organizationServiceMethods.ByName("UpdateMemberRole")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/controlplane.v1.OrganizationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case OrganizationServiceListMyOrganizationsProcedure:
 			organizationServiceListMyOrganizationsHandler.ServeHTTP(w, r)
 		case OrganizationServiceSetDefaultOrganizationProcedure:
 			organizationServiceSetDefaultOrganizationHandler.ServeHTTP(w, r)
-		case OrganizationServiceCreateOrganizationProcedure:
-			organizationServiceCreateOrganizationHandler.ServeHTTP(w, r)
-		case OrganizationServiceListMembersProcedure:
-			organizationServiceListMembersHandler.ServeHTTP(w, r)
-		case OrganizationServiceInviteMemberProcedure:
-			organizationServiceInviteMemberHandler.ServeHTTP(w, r)
-		case OrganizationServiceListInvitationsProcedure:
-			organizationServiceListInvitationsHandler.ServeHTTP(w, r)
-		case OrganizationServiceRevokeInvitationProcedure:
-			organizationServiceRevokeInvitationHandler.ServeHTTP(w, r)
-		case OrganizationServiceGetInvitationProcedure:
-			organizationServiceGetInvitationHandler.ServeHTTP(w, r)
-		case OrganizationServiceAcceptInvitationProcedure:
-			organizationServiceAcceptInvitationHandler.ServeHTTP(w, r)
-		case OrganizationServiceRemoveMemberProcedure:
-			organizationServiceRemoveMemberHandler.ServeHTTP(w, r)
-		case OrganizationServiceLeaveOrganizationProcedure:
-			organizationServiceLeaveOrganizationHandler.ServeHTTP(w, r)
-		case OrganizationServiceUpdateMemberRoleProcedure:
-			organizationServiceUpdateMemberRoleHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -511,44 +171,4 @@ func (UnimplementedOrganizationServiceHandler) ListMyOrganizations(context.Conte
 
 func (UnimplementedOrganizationServiceHandler) SetDefaultOrganization(context.Context, *connect.Request[v1.SetDefaultOrganizationRequest]) (*connect.Response[v1.SetDefaultOrganizationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.SetDefaultOrganization is not implemented"))
-}
-
-func (UnimplementedOrganizationServiceHandler) CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.CreateOrganization is not implemented"))
-}
-
-func (UnimplementedOrganizationServiceHandler) ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.ListMembers is not implemented"))
-}
-
-func (UnimplementedOrganizationServiceHandler) InviteMember(context.Context, *connect.Request[v1.InviteMemberRequest]) (*connect.Response[v1.InviteMemberResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.InviteMember is not implemented"))
-}
-
-func (UnimplementedOrganizationServiceHandler) ListInvitations(context.Context, *connect.Request[v1.ListInvitationsRequest]) (*connect.Response[v1.ListInvitationsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.ListInvitations is not implemented"))
-}
-
-func (UnimplementedOrganizationServiceHandler) RevokeInvitation(context.Context, *connect.Request[v1.RevokeInvitationRequest]) (*connect.Response[v1.RevokeInvitationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.RevokeInvitation is not implemented"))
-}
-
-func (UnimplementedOrganizationServiceHandler) GetInvitation(context.Context, *connect.Request[v1.GetInvitationRequest]) (*connect.Response[v1.GetInvitationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.GetInvitation is not implemented"))
-}
-
-func (UnimplementedOrganizationServiceHandler) AcceptInvitation(context.Context, *connect.Request[v1.AcceptInvitationRequest]) (*connect.Response[v1.AcceptInvitationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.AcceptInvitation is not implemented"))
-}
-
-func (UnimplementedOrganizationServiceHandler) RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.RemoveMember is not implemented"))
-}
-
-func (UnimplementedOrganizationServiceHandler) LeaveOrganization(context.Context, *connect.Request[v1.LeaveOrganizationRequest]) (*connect.Response[v1.LeaveOrganizationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.LeaveOrganization is not implemented"))
-}
-
-func (UnimplementedOrganizationServiceHandler) UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.UpdateMemberRole is not implemented"))
 }

@@ -42,9 +42,7 @@ function renderTour(path: string) {
     search: { middlewares: [retainTourParam as never] },
   });
   const demo = createRoute({ getParentRoute: () => root, path: "/forge/demo", component: Console, validateSearch: (s: Record<string, unknown>) => s });
-  // Another page, reached from the sidebar mid-step: none of the step's targets are on it.
-  const other = createRoute({ getParentRoute: () => root, path: "/forge/p/shop/releases", component: () => <div data-testid="releases-page" />, validateSearch: (s: Record<string, unknown>) => s });
-  const router = createRouter({ routeTree: root.addChildren([demo, other]), history: createMemoryHistory({ initialEntries: [path] }) });
+  const router = createRouter({ routeTree: root.addChildren([demo]), history: createMemoryHistory({ initialEntries: [path] }) });
   render(<RouterProvider router={router} />);
   return router;
 }
@@ -74,11 +72,10 @@ describe("the forge journey's compact controls", () => {
     expect(screen.getByTestId("tour-next")).toHaveTextContent("Next");
   });
 
-  it("an action step: its instruction, Next never a dead end, no Skip, and the tour moves on once it's done", async () => {
+  it("a required action: its instruction, Next disabled, no Skip, and the tour moves on once it's done", async () => {
     const router = renderTour("/forge/demo?view=traces&tour=forge:fg-trace");
     expect(await screen.findByTestId("tour-action-hint")).toHaveTextContent("Open the CreateOrder trace at the top");
-    // Clicking the target is the encouraged path, but Next stays live.
-    expect(screen.getByTestId("tour-next")).toBeEnabled();
+    expect(screen.getByTestId("tour-next")).toBeDisabled();
     expect(screen.getByTestId("tour-back")).toBeInTheDocument();
     expect(screen.queryByText("Skip step")).toBeNull();
     expect(screen.getByTestId("tour-exit")).toBeInTheDocument();
@@ -86,29 +83,6 @@ describe("the forge journey's compact controls", () => {
       await router.navigate({ to: "/forge/demo", search: (prev: Record<string, unknown>) => ({ ...prev, trace: DEMO_TRACE_ID }) } as never);
     });
     await waitFor(() => expect((router.state.location.search as { tour?: string }).tour).toBe("forge:fg-hops"), { timeout: 3000 });
-  });
-
-  it("Next on an action step does the action for the visitor: the next stop opens what it would have", async () => {
-    const router = renderTour("/forge/demo?view=traces&tour=forge:fg-trace");
-    fireEvent.click(await screen.findByTestId("tour-next"));
-    await waitFor(() => expect(router.state.location.search).toMatchObject({ tour: "forge:fg-hops", trace: DEMO_TRACE_ID }), { timeout: 3000 });
-  });
-
-  it("leaving the step's page tears its highlight down, and coming back draws it again", async () => {
-    const router = renderTour("/forge/demo?view=traces&tour=forge:fg-trace");
-    await waitFor(() => expect(screen.getByTestId("onboarding-spotlight-ring")).toBeInTheDocument());
-    await act(async () => {
-      await router.navigate({ href: "/forge/p/shop/releases?tour=forge:fg-trace" });
-    });
-    expect(await screen.findByTestId("releases-page")).toBeInTheDocument();
-    // No ring, no dim and no step card left over the new page: the step offers its own page instead.
-    expect(screen.queryByTestId("onboarding-spotlight-ring")).toBeNull();
-    expect(screen.queryByTestId("onboarding-spotlight-dim")).toBeNull();
-    expect(screen.queryByTestId("tour-action-hint")).toBeNull();
-    await act(async () => {
-      router.history.back();
-    });
-    await waitFor(() => expect(screen.getByTestId("onboarding-spotlight-ring")).toBeInTheDocument());
   });
 
   it("Exit tour closes it", async () => {
@@ -141,7 +115,7 @@ describe("the callout controls are the engine's default, in every shell", () => 
     ["reliant", "reliant"],
     ["forge", "forge"],
 
-  ] as const)("the %s shell: no bottom bar; Step X of Y, Back, Next, Exit", async (shell, tourShell) => {
+  ] as const)("the %s shell: no bottom bar; Step X of Y, Back, Next (disabled until the action), Exit", async (shell, tourShell) => {
     resetShellForTests(shell);
     setTourShell(tourShell);
     renderTour("/forge/demo?view=traces&tour=forge:fg-trace");
@@ -149,7 +123,7 @@ describe("the callout controls are the engine's default, in every shell", () => 
     expect(screen.queryByTestId("onboarding-nav-bar")).toBeNull();
     expect(controls).toHaveTextContent(/Step \d+ of \d+/);
     expect(screen.getByTestId("tour-back")).toBeInTheDocument();
-    expect(screen.getByTestId("tour-next")).toBeEnabled();
+    expect(screen.getByTestId("tour-next")).toBeDisabled();
     expect(screen.getByTestId("tour-exit")).toHaveTextContent("Exit tour");
   });
 

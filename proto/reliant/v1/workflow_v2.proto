@@ -527,16 +527,6 @@ message CallLLMArgs {
     visibility_contexts: "advanced"
     category: "Prompt"
   }];
-  // Opt out of the configured skill catalog for THIS call only. Omits the
-  // announcement and automatic skill preloads. Nonempty skills is rejected.
-  // Does not redact history or restrict tools (including explicit skill loads);
-  // strict no-skill workflows must set this on every call and offer no tools.
-  bool exclude_skill_catalog = 17 [(reliant) = {
-    description: "Exclude configured skills for this call (default false); rejects skill preloads, does not redact history or restrict other tools"
-    label: "Exclude skill catalog"
-    visibility_contexts: "advanced"
-    category: "Prompt"
-  }];
 }
 
 // ResponseTool defines a custom tool for structured LLM output.
@@ -2225,17 +2215,6 @@ message Workflow {
   // had produced. The run still ends FAILED: the handler cannot mask the
   // failure, and an error in it is logged, never recursive.
   Workflow on_failure = 19;
-  // Finally is a handler that runs ONCE when a run of this workflow ENDS,
-  // whatever ended it: it completed, it failed, or it was cancelled
-  // (control_run cancel, CancelRun, archiving its chat). Not when it pauses,
-  // and not when it hands off to a successor run (continue-as-new). It is an
-  // inline graph like on_failure, and runs after it. Its nodes read
-  // `run.status` ('completed' | 'failed' | 'cancelled'), `failure.*` (every
-  // key present; empty unless the run failed), `inputs`, and the `nodes`
-  // outputs the run had produced. It cannot change how the run ended, and an
-  // error in it is logged, never recursive. It is where a workflow releases
-  // what it holds — a lease, a claim, a label — however the run ends.
-  Workflow finally = 24;
   // Requires declares what a run needs from outside the definition: the
   // executables its commands call, the integrations its actions and agents
   // authenticate to, the checkouts it reads. A run checks them after its

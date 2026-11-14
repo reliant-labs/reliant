@@ -10,14 +10,20 @@ import { dump } from "js-yaml";
 
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 
-import { DEMO_WORKLOADS, demoWorkloadName } from "./consoleScenario";
+import { DEMO_RELEASES, DEMO_WORKLOADS, RUNNING, demoWorkloadName } from "./consoleScenario";
 import { completed } from "./demoServiceDefaults";
 import { DEMO_ENVS } from "./demoScope";
 import { mockService } from "@reliantlabs/forge-web-runtime/mock-transport";
-import { DEMO_RELEASES, demoBundleDigest, demoBundleId, RUNNING } from "./shopStory";
 
 export const DEMO_WITHHELD = "[withheld]";
-export { demoBundleDigest, demoBundleId };
+export const demoBundleId = (env: string, version: string) => `demo-bundle-${env}-${version}`;
+export function demoBundleDigest(env: string, version: string): string {
+  // A clearly synthetic but stable per-environment/release identity. Different
+  // namespace projections must not pretend to share the same immutable bundle.
+  const envIndex = DEMO_ENVS.findIndex((e) => e.id === env) + 1;
+  const releaseIndex = DEMO_RELEASES.findIndex((r) => r.version === version) + 1;
+  return `sha256:${`${envIndex}${releaseIndex}`.repeat(32)}`;
+}
 
 export function configScenarioHandlers() {
   return completed(DeployService, mockService(DeployService, {
@@ -34,7 +40,7 @@ export function configScenarioHandlers() {
       const objects: JsonObject[] = [{
         apiVersion: "v1", kind: "ConfigMap", metadata: { name: `${workload.name}-config`, namespace: `shop-${env.name}` },
         data: {
-          LOG_LEVEL: env.name === "dev" ? "debug" : "info", ORDER_TIMEOUT_MS: version === "v1.8.4" ? "5000" : "3000",
+          LOG_LEVEL: env.name === "dev" ? "debug" : "info", ORDER_TIMEOUT_MS: version === "v1.8.4" ? "5000" : "2000",
           DATABASE_URL: DEMO_WITHHELD, PAYMENTS_API_KEY: DEMO_WITHHELD,
         },
       }];

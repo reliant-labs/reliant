@@ -38,7 +38,7 @@ export function ColumnPicker({ columns, visible, onChange }: { columns: DbColumn
       align="right"
       panelClassName="w-72 p-2"
       trigger={(props) => (
-        <button {...props} type="button" className={cn(CONTROL_FIELD, "inline-flex h-8 items-center gap-1.5 px-2.5 text-sm")} data-testid="data-columns">
+        <button {...props} type="button" className={cn(CONTROL_FIELD, "inline-flex h-7 items-center gap-1.5 bg-surface px-2 text-xs")} data-testid="data-columns">
           <Columns3 className="h-3.5 w-3.5" aria-hidden="true" />
           Columns{all ? "" : ` ${shown.size}/${columns.length}`}
         </button>

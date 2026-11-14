@@ -100,9 +100,6 @@ func ListChats(ctx context.Context, db orm.Context, f core.ChatFilters) ([]*core
 	if f.ExcludeArchived {
 		opts = append(opts, orm.WhereNotEq(ChatsWithActivityFieldState, core.ChatStateArchived))
 	}
-	if f.Org != nil {
-		opts = append(opts, whereOrg(ChatsWithActivityFieldOrgID, f.Org))
-	}
 	if f.SidebarOnly {
 		// The policy lives in ONE place, the view's list_in_sidebar column.
 		opts = append(opts, orm.WhereEq(ChatsWithActivityFieldListInSidebar, true))
@@ -260,7 +257,6 @@ func chatFromView(row *ChatsWithActivity) *core.Chat {
 		WorktreeID:           row.WorktreeID,
 		ArchivedWorktreeName: row.ArchivedWorktreeName,
 		UserID:               chatViewString(row.UserID),
-		OrgID:                row.OrgID,
 		WorkflowName:         row.WorkflowName,
 		WorkflowID:           row.WorkflowID,
 		RunID:                row.RunID,

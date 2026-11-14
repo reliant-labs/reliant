@@ -24,7 +24,7 @@ func TestRecloneProjectOnDaemon_Generated(t *testing.T) {
 		return nil
 	}
 	svc := newService(t, store, answering("git.reclone",
-		`{"branch":"main","op_id":"op-1","path":"/clone","repo":"git@example.com:acme/proj.git"}`, `{"success":true,"path":"/clone"}`))
+		`{"branch":"main","path":"/clone","repo":"git@example.com:acme/proj.git"}`, `{"success":true,"path":"/clone"}`))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RecloneProjectOnDaemonRequest, pb.RecloneProjectOnDaemonResponse]{
 		{

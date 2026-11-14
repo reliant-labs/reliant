@@ -21,26 +21,17 @@ function renderDemo(path: string) {
 beforeEach(() => { resetShellForTests("demo"); setTourShell("forge"); setTourStorage(memoryTourStorage()); resetDemoSessionForTests(); });
 afterEach(() => { cleanup(); setTourShell(null); resetShellForTests(); });
 
-it("opens a page's tip by itself on its first visit this session, as a single Done card", async () => {
+it("opens this page's tour automatically on direct load, regardless of session seen/dismissed state", async () => {
+  demoSession.markTipSeen("logs"); demoSession.disableTips();
   const {router} = renderDemo("/forge/p/shop/observability/logs");
   expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
   expect(screen.queryByTestId("tour-step-count")).toBeNull();
   expect(screen.queryByTestId("tour-exit")).toBeNull();
   expect(screen.getByTestId("tour-next")).toHaveTextContent("Done");
   expect(screen.getByTestId("tour-callout").querySelector('[data-testid="demo-cta-signup"]')).toBeNull();
-  // No "How it was built" button inside the card: it is a nav row.
-  expect(screen.getByTestId("tour-callout")).not.toHaveTextContent(/How (Forge builds this|it was built)/);
+  expect(screen.queryByText("Take the tour")).toBeNull();
   expect(screen.queryByTestId("onboarding-nav-bar")).toBeNull();
   expect((router.state.location.search as {tour?:string}).tour).toBeUndefined();
-  expect(demoSession.hasSeenTip("logs")).toBe(true);
-});
-it("a page already seen this session opens closed, with its ? button", async () => {
-  demoSession.markTipSeen("logs");
-  renderDemo("/forge/p/shop/observability/logs");
-  expect(await screen.findByRole("button", {name:"About Logs"})).toBeInTheDocument();
-  expect(screen.queryByTestId("tour-callout")).toBeNull();
-  fireEvent.click(screen.getByRole("button", {name:"About Logs"}));
-  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
 });
 it("dismissal holds through same-page filters and rerenders, ? replays without navigation", async () => {
   const {go,router} = renderDemo("/forge/p/shop/observability/logs");
@@ -54,60 +45,24 @@ it("dismissal holds through same-page filters and rerenders, ? replays without n
   expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
   expect(router.state.location.pathname).toBe("/forge/p/shop/observability/logs");
 });
-it("each page's tip opens by itself once a session; coming back does not reopen it", async () => {
+it("each actual page navigation and return starts a new page-local tour", async () => {
   const {go} = renderDemo("/forge/p/shop");
   expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.overview.body);
   fireEvent.click(screen.getByTestId("tour-next"));
   await go("/forge/p/shop/releases");
   expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.releases.body);
+  fireEvent.click(screen.getByTestId("tour-next"));
   await go("/forge/p/shop/observability/logs");
   expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
+  fireEvent.click(screen.getByTestId("tour-next"));
   await go("/forge/p/shop");
-  expect(await screen.findByRole("button", {name:"About Overview"})).toBeInTheDocument();
-  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.overview.body);
 });
-it.each([
-  ["one release", "/forge/p/shop/releases/v1"],
-  ["one workload", "/forge/p/shop/workloads/prod/api"],
-  ["one environment", "/forge/p/shop/environments/prod"],
-  ["one dashboard", "/forge/p/shop/observability/dashboards/release/latency"],
-  ["an open trace", "/forge/p/shop/observability/traces?trace=abc"],
-  ["an open issue", "/forge/p/shop/observability/errors?issue=iss-1"],
-  ["an open trace on the demo console", "/forge/demo?view=traces&trace=abc"],
-])("never opens by itself on a sub-page (%s), and does not use up its section's tip", async (_name, path) => {
-  renderDemo(path);
-  expect(await screen.findByTestId("demo-page-info")).toBeInTheDocument();
-  expect(screen.queryByTestId("tour-callout")).toBeNull();
-  expect(demoSession.get().seenTips).toEqual([]);
-});
-it("tears the card down when the page changes under it: an item opened inside it, or another page", async () => {
-  const {go} = renderDemo("/forge/p/shop/observability/errors");
-  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.errors.body);
-  // Opening an issue in the list: same path, a sub-page now.
-  await go("/forge/p/shop/observability/errors?issue=iss-orders-deadline");
-  expect(screen.queryByTestId("tour-callout")).toBeNull();
-  expect(screen.queryByTestId("onboarding-spotlight-ring")).toBeNull();
-  // Back to the list: its tip was seen this session, so it stays closed.
-  await go("/forge/p/shop/observability/errors");
-  expect(await screen.findByRole("button", {name:"About Errors"})).toBeInTheDocument();
-  expect(screen.queryByTestId("tour-callout")).toBeNull();
-  // Another section's first visit replaces nothing: only its own card shows.
-  await go("/forge/p/shop/releases");
-  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.releases.body);
-  expect(screen.getAllByTestId("tour-callout")).toHaveLength(1);
-});
-it("filters, ranges and tabs are not a new visit: a dismissed tip stays dismissed", async () => {
-  const {go} = renderDemo("/forge/p/shop/observability/traces");
-  await waitFor(() => fireEvent.click(screen.getByTestId("tour-next")));
-  await go("/forge/p/shop/observability/traces?range=6h&errors=true&groupBy=service");
-  expect(screen.queryByTestId("tour-callout")).toBeNull();
-});
-it("a reload in the same session keeps a seen page's tip closed", async () => {
+it("refresh starts again, even after dismissing the previous mount", async () => {
   renderDemo("/forge/p/shop/observability/errors");
   await waitFor(() => fireEvent.click(screen.getByTestId("tour-next"))); cleanup();
   renderDemo("/forge/p/shop/observability/errors");
-  expect(await screen.findByRole("button", {name:"About Errors"})).toBeInTheDocument();
-  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.errors.body);
 });
 it("drawer hides the callout, then closing it reveals the new page without consuming dismissal", async () => {
   const {go} = renderDemo("/forge/p/shop"); await screen.findByTestId("tour-callout");
@@ -127,7 +82,7 @@ it("drawer hides the callout, then closing it reveals the new page without consu
 });
 it("explicit guided tour links suppress the automatic page card", async () => {
   renderDemo("/forge/demo?view=overview&tour=forge:fg-intro");
-  expect(await screen.findByTestId("tour-card")).toHaveTextContent("What is Forge?");
+  expect(await screen.findByTestId("tour-card")).toHaveTextContent("What is forge?");
   expect(screen.queryByTestId("tour-callout")).toBeNull();
   expect(screen.getByTestId("tour-next")).toHaveTextContent("Next");
 });
@@ -160,31 +115,17 @@ it("a logs tour link that carries its trace runs the guided step, not the page c
   expect(callout).toHaveTextContent("What that request logged");
   expect(callout).not.toHaveTextContent(DEMO_TIPS.logs.body);
 });
-it("the action row is Take the tour, Install Forge and Sign up, and survives navigation", async()=>{
-  const {go}=renderDemo("/forge/p/shop");
-  const row = await screen.findByTestId("demo-screen-actions");
-  expect(row).toHaveTextContent("Sample app · read-only data");
-  expect(row).toHaveTextContent("Take the tour");
-  expect(row).toHaveTextContent("Install Forge");
-  expect(row.querySelector('[data-testid="demo-cta-signup"]')).not.toBeNull();
-  expect(row).not.toHaveTextContent(/How Forge builds this|How it was built/);
-  // No z-index of its own: a dialog or the tour's modal card always paints over it.
-  expect(row.className).not.toMatch(/\bz-/);
+it("persistent actions survive navigation and open build help without losing page context", async()=>{
+  const {go,router}=renderDemo("/forge/p/shop");
+  expect(await screen.findByTestId("demo-screen-actions")).toHaveTextContent("How Forge builds this");
   await go("/forge/p/shop/observability/logs");
   expect(screen.getByTestId("demo-screen-actions")).toHaveTextContent("Install Forge");
-});
-it.each(["/forge/p/shop", "/forge/demo?view=overview&tour=forge:fg-intro", "/forge/demo?section=built"])("discloses what the demo records on every entry (%s)", async (path) => {
-  renderDemo(path);
-  const row = await screen.findByTestId("demo-screen-actions");
-  expect(row.querySelector('[data-testid="forge-demo-telemetry-notice"]')).toHaveTextContent(/This demo (records|counts)/);
-  expect(row.querySelector('[data-testid="forge-demo-telemetry-notice"] a')).toHaveTextContent("Privacy");
-  // The legacy yellow banner is not drawn on the demo host: this row replaces it.
-  expect(screen.queryByTestId("forge-demo-banner")).toBeNull();
-});
-it("hides Take the tour while a tour is open", async()=>{
-  renderDemo("/forge/demo?view=overview&tour=forge:fg-intro");
-  const row = await screen.findByTestId("demo-screen-actions");
-  expect(row).not.toHaveTextContent("Take the tour");
+  expect(screen.getByTestId("tour-callout").querySelector('[data-testid="demo-cta-signup"]')).toBeNull();
+  fireEvent.click(screen.getAllByRole("button",{name:"How Forge builds this"})[0]);
+  expect(await screen.findByRole("dialog", { name: "How Forge builds this" })).toBeVisible();
+  expect(router.state.location.pathname).toBe("/forge/p/shop/observability/logs");
+  fireEvent.click(screen.getByRole("button", {name:"Back to exploring"}));
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
 it("keeps a page callout below the screen-action row, which stacks over the tour", async () => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
@@ -246,24 +187,10 @@ describe("a page's anchor that mounts late (a lazy chunk)", () => {
     anchor.scrollIntoView = scrollIntoView;
     return { anchor, scrollIntoView };
   };
-  it("never moves the page for a tip that opened by itself", async () => {
+  it("is scrolled to when it turns up", async () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
     renderDemo("/forge/p/shop/releases");
     await screen.findByTestId("tour-callout");
-    const { anchor, scrollIntoView } = lateAnchor();
-    try {
-      act(() => { document.querySelector("main")!.appendChild(anchor); });
-      // Off screen (jsdom measures nothing): the corner card stays, and the page stays put.
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(scrollIntoView).not.toHaveBeenCalled();
-      expect(screen.getByTestId("tour-callout").getAttribute("data-side")).toBeNull();
-    } finally { anchor.remove(); }
-  });
-  it("is scrolled to when the reader asks for the tip with ?", async () => {
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
-    demoSession.markTipSeen("releases");
-    renderDemo("/forge/p/shop/releases");
-    fireEvent.click(await screen.findByRole("button", {name:"About Releases"}));
     const { anchor, scrollIntoView } = lateAnchor();
     try {
       act(() => { document.querySelector("main")!.appendChild(anchor); });
@@ -272,9 +199,8 @@ describe("a page's anchor that mounts late (a lazy chunk)", () => {
   });
   it("leaves the page where the reader put it once they have scrolled", async () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
-    demoSession.markTipSeen("releases");
     renderDemo("/forge/p/shop/releases");
-    fireEvent.click(await screen.findByRole("button", {name:"About Releases"}));
+    await screen.findByTestId("tour-callout");
     act(() => { window.dispatchEvent(new Event("wheel")); });
     const { anchor, scrollIntoView } = lateAnchor();
     try {
@@ -285,11 +211,7 @@ describe("a page's anchor that mounts late (a lazy chunk)", () => {
     } finally { anchor.remove(); }
   });
 });
-it("copy stays concise, plain and names each page as its nav row does",()=>{
-  for(const key of DEMO_TIP_KEYS){expect(DEMO_TIPS[key].body.length,key).toBeLessThan(480);expect(DEMO_TIPS[key].body).not.toMatch(/NATS|transport|where supported|\bforge\b/);}
-  // Two plain sentences, no legal hedging.
-  expect(DEMO_TIPS.alerts.body.split(/(?<=\.)\s/)).toHaveLength(2);
-  for (const [key, label] of Object.entries({ overview: "Overview", rpc: "RPC explorer", graph: "Service graph", traces: "Traces", alerts: "Alerts", dashboards: "Dashboards", releases: "Releases" })) {
-    expect(DEMO_TIPS[key as keyof typeof DEMO_TIPS].title).toBe(label);
-  }
+it("copy stays concise and permission-aware",()=>{
+  for(const key of DEMO_TIP_KEYS){expect(DEMO_TIPS[key].body.length,key).toBeLessThan(480);expect(DEMO_TIPS[key].body).not.toMatch(/NATS|transport/);}
+  expect(DEMO_TIPS.alerts.body).toMatch(/nothing deploys without configuration and permission/);
 });

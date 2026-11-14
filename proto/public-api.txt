@@ -100,4 +100,3 @@ withhold ToolsDaemonService       # daemon-facing wiring
 withhold UsageService             # not part of the first public surface
 withhold WorkflowService          # authoring; read-only workflow verbs come later
 withhold WorktreeService          # not part of the first public surface
-withhold WorktreeReclaimService   # manages the caller's own machine (like CleanupStorage)

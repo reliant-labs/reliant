@@ -19,7 +19,6 @@ import { errorTextClass, fieldClass, hintClass, labelClass } from "../../workflo
 import { NO_MACHINE, type DaemonChoice } from "../daemonChoices";
 import { tourEvents } from "../../Onboarding/tourEvents";
 import { machineOptionLabel, NO_MACHINE_OPTION_LABEL } from "./machineDefault";
-import { useMachineOrgs } from "@/hooks/useMachineOrgs";
 
 export interface WhereSummaryProps {
   /** Field ids: `${idPrefix}-project`, `-machine`, `-worktree`. */
@@ -259,26 +258,18 @@ export interface MachineSelectProps {
   noMachineBlocker?: string;
 }
 
-/**
- * Runs on: every machine, then "No machine", always last (report 03 §7). With
- * several orgs, the active org's machines, each labelled with its org.
- */
+/** Runs on: every machine, then "No machine", always last (report 03 §7). */
 export function MachineSelect({ id, value, loading, choices, onChange, invalid, inheritLabel, noMachineBlocker }: MachineSelectProps) {
-  const machineOrgs = useMachineOrgs();
-  const offered = machineOrgs.inActiveOrg(choices, [value]);
   return (
     <select id={id} className={fieldClass} value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={invalid} aria-describedby={invalid ? `${id}-error` : undefined}>
       <option value="" disabled={!inheritLabel}>
         {inheritLabel ?? (loading ? "Loading machines…" : "Choose a machine")}
       </option>
-      {offered.map((choice) => {
-        const org = machineOrgs.multiOrg ? machineOrgs.orgOf(choice.daemonId)?.name : undefined;
-        return (
-          <option key={choice.daemonId} value={choice.daemonId} disabled={!choice.eligible}>
-            {org ? `${machineOptionLabel(choice)} · ${org}` : machineOptionLabel(choice)}
-          </option>
-        );
-      })}
+      {choices.map((choice) => (
+        <option key={choice.daemonId} value={choice.daemonId} disabled={!choice.eligible}>
+          {machineOptionLabel(choice)}
+        </option>
+      ))}
       <option value={NO_MACHINE} disabled={!!noMachineBlocker}>
         {noMachineBlocker ? `${NO_MACHINE_OPTION_LABEL}: ${noMachineBlocker}` : NO_MACHINE_OPTION_LABEL}
       </option>

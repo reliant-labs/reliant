@@ -24,7 +24,6 @@ vi.mock("../SystemNotificationMessage", () => ({
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
-  useChatIdOrActive: (chatId?: string | null) => chatId || "chat-1",
   useChat: () => ({ worktreeId: "worktree-1" }),
   useToolResultsByCallId: () => ({}),
   useToolCallStates: () => new Map(),

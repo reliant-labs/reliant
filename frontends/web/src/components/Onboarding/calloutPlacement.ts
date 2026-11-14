@@ -2,9 +2,7 @@
  * Where a tour callout goes so that it never covers the thing it points at.
  *
  * Tries each side in order (the preferred one first) and takes the first
- * where the callout fits between the target and the viewport's edge, wholly
- * on screen (a target scrolled below the fold has no room "above" it that is
- * not also below the fold). Along
+ * where the callout fits between the target and the viewport's edge. Along
  * the other axis it is centred on the target and then kept on screen, which
  * can't make it overlap: the side already separates them. Only when no side
  * fits (a target nearly as big as the screen) does it fall back to the
@@ -79,19 +77,19 @@ export function placeCallout(target: Box, size: Size, viewport: Size, options: P
     switch (side) {
       case "right": {
         const left = target.left + target.width + gap;
-        return { top: centreTop, left, fits: left >= minLeft && left <= maxLeft };
+        return { top: centreTop, left, fits: left <= maxLeft };
       }
       case "left": {
         const left = target.left - gap - size.width;
-        return { top: centreTop, left, fits: left >= minLeft && left <= maxLeft };
+        return { top: centreTop, left, fits: left >= minLeft };
       }
       case "bottom": {
         const top = target.top + target.height + gap;
-        return { top, left: centreLeft, fits: top >= minTop && top <= maxTop };
+        return { top, left: centreLeft, fits: top <= maxTop };
       }
       case "top": {
         const top = target.top - gap - size.height;
-        return { top, left: centreLeft, fits: top >= minTop && top <= maxTop };
+        return { top, left: centreLeft, fits: top >= minTop };
       }
     }
   };

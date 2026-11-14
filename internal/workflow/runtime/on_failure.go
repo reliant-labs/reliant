@@ -254,58 +254,28 @@ func runOnFailureAt(
 	record *OnFailureRecord,
 	scopePath string,
 ) {
+	logger := workflow.GetLogger(ctx)
 	*record = OnFailureRecord{Ran: true, NodeID: failure.NodeID, NodePath: failure.NodePath, Error: failure.Error,
 		ErrorCode: failure.ErrorCode, Attempt: failure.Attempt}
-	workflow.GetLogger(ctx).Info("[Workflow Runtime] Running on_failure handler",
-		"workflowID", workflowID,
-		"scope", scopePath,
-		"failedNode", failure.NodePath,
-		"errorCode", failure.ErrorCode,
-	)
-	record.TimedOut, record.HandlerError = runInlineHandler(ctx, OnFailureNodeID, handler, input, workflowID, execCtx, childTracker,
-		nodeOutputs, map[string]interface{}{FailureInputKey: failure.CELValue()}, scopePath)
-}
-
-// runInlineHandler runs a workflow's terminal handler — on_failure or
-// finally — once, at scopePath, as the inline graph handlerID, and swallows
-// everything that goes wrong in it. It reports whether the handler was cut
-// off by onFailureTimeout and, when it failed, its error as one line.
-//
-// extraInputs are added to a COPY of the run's inputs, so the reserved keys
-// (FailureInputKey, RunInputKey) exist inside the handler and never leak into
-// the run's live inputs.
-func runInlineHandler(
-	ctx workflow.Context,
-	handlerID string,
-	handler *reliantv1.Workflow,
-	input WorkflowInput,
-	workflowID string,
-	execCtx *ExecutionContext,
-	childTracker *ChildWorkflowTracker,
-	nodeOutputs map[string]interface{},
-	extraInputs map[string]interface{},
-	scopePath string,
-) (timedOut bool, handlerError string) {
-	logger := workflow.GetLogger(ctx)
 	if handler == nil || len(handler.GetNodes()) == 0 {
-		return false, ""
+		return
 	}
 	// A disconnected context: the run may be ending with its own context
-	// already cancelled — by a failing step, or by a cancel of the whole run —
-	// and the handler must still be able to dispatch.
+	// already cancelled by a failing step, and the handler must still be able
+	// to dispatch.
 	hctx, cancel := workflow.WithCancel(ctx)
 	defer cancel()
 	hctx, _ = workflow.NewDisconnectedContext(hctx)
 	timerCtx, cancelTimer := workflow.WithCancel(hctx)
 	defer cancelTimer()
 
-	handlerInputs := make(map[string]interface{}, len(input.Inputs)+len(extraInputs))
+	// The handler's inputs: the run's own, plus the failure. A copy, so the
+	// reserved key never leaks into the run's live inputs.
+	handlerInputs := make(map[string]interface{}, len(input.Inputs)+1)
 	for k, v := range input.Inputs {
 		handlerInputs[k] = v
 	}
-	for k, v := range extraInputs {
-		handlerInputs[k] = v
-	}
+	handlerInputs[FailureInputKey] = failure.CELValue()
 
 	// The snapshot: top-level keys copied, so adding to it cannot reach the
 	// run's store. The values themselves are read-only by convention.
@@ -315,7 +285,7 @@ func runInlineHandler(
 	}
 
 	node := &reliantv1.Node{
-		Id:   handlerID,
+		Id:   OnFailureNodeID,
 		Type: model.NodeTypeWorkflow,
 		Args: &reliantv1.Node_Workflow{Workflow: &reliantv1.SubWorkflowArgs{Inline: handler}},
 	}
@@ -326,16 +296,23 @@ func runInlineHandler(
 		node, node, "", -1,
 	)
 	if err != nil {
-		logger.Error("[Workflow Runtime] terminal handler could not start", "workflowID", workflowID, "handler", handlerID, "error", err)
-		return false, oneLineError(err)
+		logger.Error("[Workflow Runtime] on_failure handler could not start", "workflowID", workflowID, "error", err)
+		return
 	}
 	// The handler's thread is the run's own: it reports where the run reports.
-	exec = exec.WithInvocationContract(inlineHandlerContract(input.WorkflowName, handlerID, joinNodePath(scopePath, handlerID))).
+	exec = exec.WithInvocationContract(inlineHandlerContract(input.WorkflowName, joinNodePath(scopePath, OnFailureNodeID))).
 		WithNodePathPrefix(scopePath).
 		WithSeedNodeOutputs(snapshot).
-		WithExecContext(execCtx.ForChild(handlerID, model.ThreadModeInherit, input.WorkflowName, true)).
+		WithExecContext(execCtx.ForChild(OnFailureNodeID, model.ThreadModeInherit, input.WorkflowName, true)).
 		WithProjectPath(execCtx.ProjectPath).
 		WithPauseController(failFastPauseController())
+
+	logger.Info("[Workflow Runtime] Running on_failure handler",
+		"workflowID", workflowID,
+		"scope", scopePath,
+		"failedNode", failure.NodePath,
+		"errorCode", failure.ErrorCode,
+	)
 
 	done := workflow.NewChannel(hctx)
 	var runErr error
@@ -356,13 +333,12 @@ func runInlineHandler(
 
 	switch {
 	case !finished:
-		logger.Error("[Workflow Runtime] terminal handler timed out; the run's verdict stands", "workflowID", workflowID, "handler", handlerID, "timeout", onFailureTimeout)
-		return true, ""
+		record.TimedOut = true
+		logger.Error("[Workflow Runtime] on_failure handler timed out; the run still fails", "workflowID", workflowID, "timeout", onFailureTimeout)
 	case runErr != nil:
-		logger.Error("[Workflow Runtime] terminal handler failed; the run's verdict stands", "workflowID", workflowID, "handler", handlerID, "error", runErr)
-		return false, oneLineError(runErr)
+		record.HandlerError = oneLineError(runErr)
+		logger.Error("[Workflow Runtime] on_failure handler failed; the run still fails", "workflowID", workflowID, "error", runErr)
 	}
-	return false, ""
 }
 
 // OnFailureNodeID is the id the handler runs under, and so the prefix of its
@@ -379,12 +355,12 @@ func failFastPauseController() *PauseController {
 	return &PauseController{FailFast: true}
 }
 
-// inlineHandlerContract is the semantic contract of a terminal handler as an inline
+// inlineHandlerContract is the semantic contract of the handler as an inline
 // body: it inherits the run's inputs by reference and carries its own graph.
-func inlineHandlerContract(workflowName, handlerID, nodePath string) core.SubWorkflowContract {
+func inlineHandlerContract(workflowName, nodePath string) core.SubWorkflowContract {
 	return core.SubWorkflowContract{
 		NodePath:          nodePath,
-		NodeID:            handlerID,
+		NodeID:            OnFailureNodeID,
 		NodeType:          model.NodeTypeWorkflow,
 		InvocationMode:    core.InvocationModeInline,
 		WorkflowIdentity:  workflowName,

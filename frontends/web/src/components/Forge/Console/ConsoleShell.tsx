@@ -44,7 +44,6 @@ import Link from "@/components/forge-ui/link";
 
 import type { DashboardPageKind } from "../Observability/Dashboards/dashboardModel";
 import { shortVersion } from "../Releases/releaseModel";
-import { useConsoleNavExtras } from "./consoleNavExtras";
 import { EnvScopeControl } from "./EnvScopeControl";
 import type { ScopeOption } from "./envScope";
 import {
@@ -271,19 +270,8 @@ export function ConsoleShell({
   children,
   ...nav
 }: ConsoleShellProps) {
-  const { lead, drawerAppendix, envOrder } = useConsoleNavExtras();
-  const rank = (name: string) => (envOrder?.includes(name) ? envOrder.indexOf(name) : (envOrder?.length ?? 0));
-  const long = envOrder ? [...scope.long].sort((a, b) => rank(a.name) - rank(b.name)) : scope.long;
-  const built = buildConsoleNav(nav);
-  // A host's lead row (the demo's "How it was built") is the current page when active, not the console page under it.
-  const items = lead
-    ? [
-        { label: lead.label, href: lead.href, icon: lead.icon, active: lead.active },
-        ...(lead.active ? built.items.map((item) => ({ ...item, active: false })) : built.items),
-      ]
-    : built.items;
-  const footer = built.footer;
-  const crumbs = lead?.active ? [{ label: lead.label }] : consoleCrumbs(nav.project, nav.page, nav.env, nav.dashboardTitle, nav.linkTo);
+  const { items, footer } = buildConsoleNav(nav);
+  const crumbs = consoleCrumbs(nav.project, nav.page, nav.env, nav.dashboardTitle, nav.linkTo);
 
   return (
     /*
@@ -306,7 +294,6 @@ export function ConsoleShell({
         collapsed={collapsed}
         onToggle={onToggleCollapsed}
         contentLayout={contentLayout}
-        navAppendix={drawerAppendix ? <div className="md:hidden">{drawerAppendix}</div> : undefined}
         headerContent={
           <>
             <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
@@ -336,7 +323,7 @@ export function ConsoleShell({
             {orgSwitcher}
             <EnvScopeControl
               value={nav.env}
-              long={long}
+              long={scope.long}
               previews={scope.previews}
               onChange={onEnvChange}
               pinnedEnv={pinnedEnvOf(nav.page)}

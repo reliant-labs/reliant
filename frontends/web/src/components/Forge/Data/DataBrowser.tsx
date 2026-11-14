@@ -28,15 +28,11 @@ import Card from "@/components/forge-ui/card";
 import type { BrowsableDb, DataAccessConfirmation } from "@/services/controlPlane/observability/appDatabaseApi";
 import { dataBrowserErrorKind } from "@/services/controlPlane/observability/errors";
 
-import { AccessReasonDialog } from "../AuditedAccess/AccessReasonDialog";
-import { isCurrentReader, useReaderSession } from "../AuditedAccess/readerSession";
-import { useReaderCacheCleanup } from "../AuditedAccess/useReaderCacheCleanup";
+import { AccessReasonDialog } from "./AccessReasonDialog";
 import { clearAccess, isDenied, needsConfirmation, readAccess, writeAccess } from "./dataAccess-model";
 import { DatabaseSelector, PolicyTag } from "./DatabaseSelector";
 import { DataGrid } from "./DataGrid";
 import { findTable } from "./dataLinks-model";
-import { appDataTargets, identityDataLinksEnabled, parseAppDataSubject } from "./identityLinks-model";
-import Link from "@/components/forge-ui/link";
 import { DataDenied, DataError, DataLoading, DataNote } from "./DataStates";
 import { patchSearch, type DataSearch } from "./dataUrl-model";
 import { RowPage } from "./RowPage";
@@ -58,15 +54,7 @@ export function defaultDatabase(databases: readonly BrowsableDb[]): BrowsableDb 
   return databases.find((db) => db.reachable && !isDenied(db.policy)) ?? databases[0] ?? null;
 }
 
-export function DataBrowser(props: DataBrowserProps) {
-  const reader = useReaderSession();
-  useReaderCacheCleanup("data-browser");
-  if (!reader.principalId) return <DataNote testId="data-reader-required" title="Sign in to browse data"><p>Data reads need an authenticated reader.</p></DataNote>;
-  return <ReaderDataBrowser key={`${reader.epoch}:${props.env.id}`} {...props} />;
-}
-
-function ReaderDataBrowser({ env, search, onNavigate, href }: DataBrowserProps) {
-  const reader = useReaderSession();
+export function DataBrowser({ env, search, onNavigate, href }: DataBrowserProps) {
   const databases = useBrowsableDatabases(env.id);
   const list = useMemo(() => databases.data ?? [], [databases.data]);
   const named = list.find((db) => db.name === search.db) ?? null;
@@ -80,18 +68,15 @@ function ReaderDataBrowser({ env, search, onNavigate, href }: DataBrowserProps) 
     }
   }, [databases.data, selected, search, onNavigate]);
 
-  const [access, setAccess] = useState<DataAccessConfirmation | null>(() => readAccess(env.id, reader));
+  const [access, setAccess] = useState<DataAccessConfirmation | null>(() => readAccess(env.id));
   const [asking, setAsking] = useState(false);
-  const [confirmationRequired, setConfirmationRequired] = useState(false);
   const confirmationLost = useCallback(() => {
-    if (!isCurrentReader(reader)) return;
-    clearAccess(env.id, reader);
+    clearAccess(env.id);
     setAccess(null);
-    setConfirmationRequired(true);
     setAsking(true);
-  }, [env.id, reader]);
+  }, [env.id]);
 
-  const audited = (!!selected && needsConfirmation(selected.policy)) || confirmationRequired;
+  const audited = !!selected && needsConfirmation(selected.policy);
   const waitingForReason = audited && !access;
   useEffect(() => {
     if (waitingForReason) setAsking(true);
@@ -130,8 +115,6 @@ function ReaderDataBrowser({ env, search, onNavigate, href }: DataBrowserProps) 
 
   const tables = describe.data?.tables ?? [];
   const table = findTable(tables, search.table);
-  const subject = identityDataLinksEnabled() ? parseAppDataSubject(search.subject, env.id) : null;
-  const subjectTargets = subject ? appDataTargets(tables, subject) : [];
 
   return (
     <div className="space-y-4" data-testid="data-browser" data-env={env.name} data-db={selected?.name ?? ""}>
@@ -158,13 +141,9 @@ function ReaderDataBrowser({ env, search, onNavigate, href }: DataBrowserProps) 
         <AccessReasonDialog
           open
           env={env.name}
-          subject="data"
-          testIdPrefix="data"
-          description="Each database and table you open is recorded with your reason. You are asked once for this reader and tab session."
           initialReason={access?.reason ?? ""}
           onConfirm={(reason) => {
-            if (!isCurrentReader(reader)) return;
-            setAccess(writeAccess(env.id, reason, reader));
+            setAccess(writeAccess(env.id, reason));
             setAsking(false);
           }}
           onCancel={() => setAsking(false)}
@@ -216,13 +195,6 @@ function ReaderDataBrowser({ env, search, onNavigate, href }: DataBrowserProps) 
             ) : tables.length === 0 ? (
               <DataNote testId="data-no-tables" title={`Nothing in ${selected.name} is readable`}>
                 <p>The read-only role can SELECT no table or view here. Forge grants it every table but the ones marked forge:secret.</p>
-              </DataNote>
-            ) : search.subject && !search.table ? (
-              <DataNote testId="data-identity-tables" title="App data">
-                {!identityDataLinksEnabled() ? <p>Identity crosslinks are disabled in this build. Choose a table to browse Data normally.</p> : !subject ? <p>This Identity link belongs to another environment or is invalid. Open Identity in this environment to choose a user.</p> : <>
-                  <p>Direct marked columns in {selected.name}. Choose another database above to inspect it. Up to 25 links from the first 200 tables and 200 columns per table; no rows or counts are read until you open one. Use Related on a row for descendants.</p>
-                  {subjectTargets.length === 0 ? <p>No explicit identity-subject columns found in this bounded description.</p> : <ul className="space-y-2">{subjectTargets.map((target) => <li key={target.label}><Link href={linkTo(target.search)} className="text-primary-ink hover:underline">{target.label}</Link></li>)}</ul>}
-                </>}
               </DataNote>
             ) : !search.table ? (
               <DataNote testId="data-pick-table" icon={<MousePointerClick className="h-4 w-4" />} title="Choose a table">

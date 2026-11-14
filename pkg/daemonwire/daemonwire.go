@@ -3,7 +3,7 @@
 // Package daemonwire is the NATS wire contract for daemon state shared by
 // Reliant and the managed control plane, as a public, cross-module surface.
 //
-// The state contract has two parts. The per-daemon state stream,
+// The contract has two parts. The per-daemon state stream,
 // daemon.v1.state.<daemonID>.<type>, carries one Event per message, and it
 // flows in both directions:
 //
@@ -22,10 +22,6 @@
 // The registry snapshot, on SubjectRegistrySnapshot, is the second part: the
 // control plane's periodic, per-owner reconcile of that registry, and the
 // guarantee behind the per-daemon events, which ride plain NATS and get lost.
-//
-// Commands are the third (commands.go): orders the control plane gives every
-// gateway replica about a daemon's stream, such as SubjectDisconnectCommand,
-// which ends an established stream whose credential was revoked.
 //
 // This package is the only definition of the subjects, the event types and
 // the payload shapes. Both publishers and both consumers import it, so the two

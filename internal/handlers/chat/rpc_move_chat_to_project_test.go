@@ -271,7 +271,7 @@ func TestMoveChatToProject_RefusesAChatWithARunInProgress(t *testing.T) {
 	// The write re-checks the activity itself, so a run that starts after
 	// the handler read the chat still wins.
 	moved, err := f.repo.MoveChatToProject(f.ctx, db.ChatMove{
-		UserID: moveUser, ChatID: chatID, FromProjectID: from, ToProjectID: to, WorktreeID: toMain,
+		ChatID: chatID, FromProjectID: from, ToProjectID: to, WorktreeID: toMain,
 	})
 	require.NoError(t, err)
 	assert.False(t, moved)

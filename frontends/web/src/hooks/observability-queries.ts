@@ -360,8 +360,6 @@ export interface PanelQueryOptions {
   /** Auto-refresh: re-read the panel this often (ms). */
   refetchInterval?: number | false;
   enabled?: boolean;
-  /** The dashboard the panel belongs to: labels the read in control-plane's query_log (Forge-Panel). */
-  dashboardId?: string;
 }
 
 /**
@@ -395,7 +393,7 @@ export function usePanelQuery(
       const offset = options.offsetMs?.() ?? 0;
       const window = resolveWindow(range, Date.now() - offset);
       if (panel.kind === "postgres") return queryPostgresPanel(databaseApi, scope as ObsScope, window, panel, signal);
-      return api.queryPanel({ ...(scope as ObsScope), window, panel, services, stepSeconds: 0, groupBy, dashboardId: options.dashboardId }, { signal });
+      return api.queryPanel({ ...(scope as ObsScope), window, panel, services, stepSeconds: 0, groupBy }, { signal });
     },
     enabled,
     staleTime: 30_000,

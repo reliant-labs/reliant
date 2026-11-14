@@ -4,10 +4,8 @@ package workspacecreate
 
 import (
 	"context"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // The package's surface is two functions, Insert and Finish, that take their
@@ -30,16 +28,4 @@ type Store interface {
 	ArchiveWorktree(ctx context.Context, id string) error
 	GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*db.Worktree, error)
 	ListWorktreesByBranch(ctx context.Context, projectID, branch string) ([]*db.Worktree, error)
-	// SettleCheckoutTeardown records how a remove or reclone of the checkout
-	// ended, once the machine says (checkoutteardown.Query).
-	SettleCheckoutTeardown(ctx context.Context, id, state, detail string) (*db.CheckoutTeardown, error)
-}
-
-// FailedCreateStore is the slice of *db.Repo that RemoveFailedCreatesOn reads
-// and records through when a machine connects.
-type FailedCreateStore interface {
-	ListFailedWorktreesForDaemon(ctx context.Context, daemonID string, since time.Time, limit int) ([]*db.Worktree, error)
-	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
-	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
-	MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *db.CleanupMetadata, archived bool) bool) error
 }

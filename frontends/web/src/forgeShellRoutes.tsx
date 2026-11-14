@@ -11,8 +11,6 @@
  *   /claim                                    claim a no-signup deploy
  *                                             (components/Claim), landing in
  *                                             the app's console
- *   /accept-invite                            accept an org invitation
- *                                             (components/Orgs/AcceptInvitePage)
  *   /forge/demo, /demo                        the forge journey's demo console
  *                                             on fixture data: public
  *   _authenticated                            ForgeAuthGuard: signed in, nothing else
@@ -73,7 +71,6 @@ const ResetPasswordScreen = lazyRoute(() => import('./components/ResetPasswordSc
 const EmailVerification = lazyRoute(() => import('./components/EmailVerification'), 'EmailVerification')
 const UpgradeAccount = lazyRoute(() => import('./components/UpgradeAccount'), 'UpgradeAccount')
 const ClaimPage = lazyRoute(() => import('./components/Claim/ClaimPage'), 'ClaimPage')
-const AcceptInvitePage = lazyRoute(() => import('./components/Orgs/AcceptInvitePage'), 'AcceptInvitePage')
 const CliLogin = lazyRoute(() => import('./components/Auth/CliLogin'), 'CliLogin')
 const OAuthConsent = lazyRoute(() => import('./components/Auth/OAuthConsent'), 'OAuthConsent')
 
@@ -192,13 +189,6 @@ export function buildForgeShellTree({
     component: ClaimPage,
   })
 
-  // Accept an org invitation; unguarded like /claim (lib/inviteLinkBoot runs first).
-  const acceptInviteRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: '/accept-invite',
-    component: AcceptInvitePage,
-  })
-
   // The forge journey's demo console, public: fixture observability data, no
   // daemon, no chat, no account. Root-level, outside the guard, so it is
   // reached signed out; `/demo` points at it (a landing link's short form).
@@ -270,7 +260,6 @@ export function buildForgeShellTree({
     verifyEmailRoute,
     upgradeRoute,
     claimRoute,
-    acceptInviteRoute,
     forgeDemoRoute,
     demoRedirectRoute,
     indexRoute,

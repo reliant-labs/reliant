@@ -84,7 +84,7 @@ function AddFilter({ columns, onAdd }: { columns: DbColumn[]; onAdd: (filter: Da
         <button
           {...props}
           type="button"
-          className={cn(CONTROL_FIELD, "inline-flex h-8 items-center gap-1.5 px-2.5 text-sm")}
+          className={cn(CONTROL_FIELD, "inline-flex h-7 items-center gap-1.5 bg-surface px-2 text-xs")}
           data-testid="data-filter-add"
         >
           <Filter className="h-3.5 w-3.5" aria-hidden="true" />

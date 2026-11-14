@@ -10,7 +10,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -249,9 +248,7 @@ func (s *Service) persistGlobalScopeSnapshotAcrossProjects(
 		return fmt.Errorf("failed to list projects for global MCP snapshot propagation: %w", err)
 	}
 
-	// The user's global config reaches only projects they may still change:
-	// none of an org they have left.
-	for _, project := range authz.Visible(ctx, sourceProject.UserID, projects, authz.CanWriteProject) {
+	for _, project := range projects {
 		if project == nil || strings.TrimSpace(project.ID) == "" {
 			continue
 		}

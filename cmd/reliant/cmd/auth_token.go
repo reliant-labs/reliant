@@ -4,8 +4,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"runtime"
 	"slices"
 	"strings"
 	"text/tabwriter"
@@ -28,8 +26,7 @@ func newAuthTokenCmd() *cobra.Command {
 login. 'reliant auth login' already stores one for this CLI; 'create' mints an
 additional, separately named token to hand to a script or CI (RELIANT_TOKEN).
 
-Creating a token is a consented login (browser or device code): a token never
-mints a token.
+Creating a token is a consented browser login: a token never mints a token.
 Listing and revoking use the resolved credential (RELIANT_TOKEN or your login).`,
 	}
 
@@ -134,23 +131,16 @@ func grantMismatch(requested, granted []string, tokenName string) error {
 func newAuthTokenCreateCmd() *cobra.Command {
 	var name string
 	var scopeFlags []string
-	var forceDevice, forceBrowser bool
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new API token",
 		Long: `Mints an API token (reliant:api, 90 days) named reliant-cli@<name> through a
-login you approve, and prints it once. It is NOT stored: this CLI keeps using
-its own login. Hand the printed token to automation as RELIANT_TOKEN.
+browser login you approve, and prints it once. It is NOT stored: this CLI
+keeps using its own login. Hand the printed token to automation as
+RELIANT_TOKEN.
 
 Re-running with the same --name replaces that token.
-
-You approve it the way you approve 'reliant auth login': in a browser that
-calls back to a loopback port of THIS machine, or with a device code (RFC 8628)
-you approve on any device. The browser is the default, except where its
-callback cannot reach your browser: a Reliant cloud machine, an ssh session, a
-Linux host with no display, or a Reliant agent's shell. There the device code
-is used. --device or --browser chooses explicitly.
 
 --scope narrows the token to part of the API instead of all of it. Repeat it, or
 give a comma-separated list. Without it the token is reliant:api, the whole
@@ -158,8 +148,7 @@ API. A narrow token reaches only the rpcs its scopes cover and gets
 PermissionDenied (scope_missing) on the rest. Valid scopes:
 ` + tokenScopeChoices() + `.`,
 		Example: `  reliant auth token create --name ci --scope runs:read --scope triggers:fire
-  reliant auth token create --name inbox-bot --scope inbox:read,inbox:manage
-  reliant auth token create --name ci --device`,
+  reliant auth token create --name inbox-bot --scope inbox:read,inbox:manage`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if strings.TrimSpace(name) == "" {
 				return fmt.Errorf("--name is required")
@@ -172,25 +161,13 @@ PermissionDenied (scope_missing) on the rest. Valid scopes:
 			if err != nil {
 				return err
 			}
-			// The same choice as `reliant auth login`: the browser flow's
-			// callback needs a browser on this machine, the device flow does
-			// not. Prompts go to stderr so stdout carries only the token.
-			flow := chooseLoginFlow(forceDevice, forceBrowser,
-				os.Getenv, //nolint:forbidigo // SSH_*, DISPLAY, RELIANT_DAEMON_TYPE and the agent-shell marker describe the host this process runs on, not configuration of it
-				runtime.GOOS)
-			prompts := cmd.ErrOrStderr()
-			if flow.Device {
-				// The control plane prompts for every device request that is
-				// not a machine pairing as a CLI sign-in; say what approving
-				// this one does.
-				fmt.Fprintf(prompts, "Approving the code below mints the API token %q (%s); it does not sign this CLI in.\n",
-					cliauth.ClientID+"@"+name, strings.Join(scopes, " "))
-			}
-			cred, err := runLogin(cmd.Context(), prompts, loginRequest{
-				Server: conn.ServerURL,
-				Scopes: scopes,
-				Name:   name,
-			}, flow)
+			cred, err := cliauth.Login{
+				Server:  conn.ServerURL,
+				Scopes:  scopes,
+				Name:    name,
+				Out:     cmd.ErrOrStderr(),
+				OpenURL: loginOpener,
+			}.Run(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("minting token: %w", err)
 			}
@@ -218,9 +195,6 @@ PermissionDenied (scope_missing) on the rest. Valid scopes:
 
 	cmd.Flags().StringVar(&name, "name", "", "Label for the token, e.g. ci-deploy (required)")
 	cmd.Flags().StringSliceVar(&scopeFlags, "scope", nil, "Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api)")
-	cmd.Flags().BoolVar(&forceDevice, "device", false, "Approve with a device code on any device (the default where a browser cannot reach this machine)")
-	cmd.Flags().BoolVar(&forceBrowser, "browser", false, "Approve in a browser that calls back to this machine (the default on a desktop)")
-	cmd.MarkFlagsMutuallyExclusive("device", "browser")
 	return cmd
 }
 

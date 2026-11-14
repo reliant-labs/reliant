@@ -157,11 +157,8 @@ fi
 # exists only in an unreleased sibling checkout builds perfectly here and
 # fails every CI job. This repo has a go.work; without this line the script
 # would "verify" nothing.
-# Preserve the full default; authors may name the directly affected packages
-# rather than duplicate the merge steward's full-module build.
-read -r -a build_packages <<< "${PIN_BUILD_PACKAGES:-./...}"
-echo "==> GOWORK=off go build ${build_packages[*]}"
-GOWORK=off go build "${build_packages[@]}"
+echo "==> GOWORK=off go build ./..."
+GOWORK=off go build ./...
 
 # ── Regenerate what the pin feeds ────────────────────────────────────────
 # A forge bump changes generated output: forge's own (descriptor, mocks,

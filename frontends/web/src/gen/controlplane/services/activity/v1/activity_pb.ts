@@ -15,60 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/activity/v1/activity.proto.
  */
 export const file_services_activity_v1_activity: GenFile = /*@__PURE__*/
-  fileDesc("CiNzZXJ2aWNlcy9hY3Rpdml0eS92MS9hY3Rpdml0eS5wcm90bxIPY29udHJvbHBsYW5lLnYxIu8BCh1MaXN0TWVtYmVyc2hpcEFjdGl2aXR5UmVxdWVzdBIbCgZvcmdfaWQYASABKAlCC7pICMgBAXIDGIABEh8KCGFjdG9yX2lkGAIgASgJQgi6SAVyAxiAAkgAiAEBEhoKBHZlcmIYAyABKAlCB7pIBHICGEBIAYgBARIZCgN2aWEYBCABKAlCB7pIBHICGCBIAogBARIdCglwYWdlX3NpemUYBSABKAVCCrpIBxoFGPQDKAASHAoKcGFnZV90b2tlbhgGIAEoCUIIukgFcgMYgARCCwoJX2FjdG9yX2lkQgcKBV92ZXJiQgYKBF92aWEiZwoRQWN0aXZpdHlUaW1lUmFuZ2USKQoFc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEicKA2VuZBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAi2gEKDUFjdGl2aXR5U2NvcGUSFwoGb3JnX2lkGAEgASgJQge6SARyAhABEjYKCnRpbWVfcmFuZ2UYBCABKAsyIi5jb250cm9scGxhbmUudjEuQWN0aXZpdHlUaW1lUmFuZ2USIQoKcHJvamVjdF9pZBgFIAEoCUIIukgFcgMYgAFIAIgBARIZCgdlbnZfaWRzGAYgAygJQgi6SAWSAQIQMkINCgtfcHJvamVjdF9pZEoECAIQA0oECAMQBEoECAcQCFIGZW52X2lkUghzZXJ2aWNlc1IHZmlsdGVycyKuAwoTTGlzdEFjdGl2aXR5UmVxdWVzdBI1CgVzY29wZRgBIAEoCzIeLmNvbnRyb2xwbGFuZS52MS5BY3Rpdml0eVNjb3BlQga6SAPIAQESHwoIYWN0b3JfaWQYAiABKAlCCLpIBXIDGIACSACIAQESOwoKYWN0b3Jfa2luZBgDIAEoDjIiLmNvbnRyb2xwbGFuZS52MS5BY3Rpdml0eUFjdG9yS2luZEgBiAEBEhoKBHZlcmIYBCABKAlCB7pIBHICGEBIAogBARIhCgt0YXJnZXRfa2luZBgFIAEoCUIHukgEcgIYQEgDiAEBEiAKCXRhcmdldF9pZBgGIAEoCUIIukgFcgMYgAJIBIgBARIZCgN2aWEYByABKAlCB7pIBHICGCBIBYgBARIdCglwYWdlX3NpemUYCCABKAVCCrpIBxoFGPQDKAASHAoKcGFnZV90b2tlbhgJIAEoCUIIukgFcgMYgARCCwoJX2FjdG9yX2lkQg0KC19hY3Rvcl9raW5kQgcKBV92ZXJiQg4KDF90YXJnZXRfa2luZEIMCgpfdGFyZ2V0X2lkQgYKBF92aWEiXwoUTGlzdEFjdGl2aXR5UmVzcG9uc2USLgoGZXZlbnRzGAEgAygLMh4uY29udHJvbHBsYW5lLnYxLkFjdGl2aXR5RXZlbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIoUDCg1BY3Rpdml0eUV2ZW50EgoKAmlkGAEgASgJEiYKAmF0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCgVhY3RvchgDIAEoCzIeLmNvbnRyb2xwbGFuZS52MS5BY3Rpdml0eUFjdG9yEgwKBHZlcmIYBCABKAkSNAoGdGFyZ2V0GAUgASgLMiQuY29udHJvbHBsYW5lLnYxLkFjdGl2aXR5RXZlbnRUYXJnZXQSMQoDZW52GAYgASgLMiQuY29udHJvbHBsYW5lLnYxLkFjdGl2aXR5RW52aXJvbm1lbnQSDwoHcHJvamVjdBgHIAEoCRILCgN2aWEYCCABKAkSOgoGZGV0YWlsGAkgAygLMiouY29udHJvbHBsYW5lLnYxLkFjdGl2aXR5RXZlbnQuRGV0YWlsRW50cnkSEQoJcHJvY2VkdXJlGAogASgJGi0KC0RldGFpbEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiWwoNQWN0aXZpdHlBY3RvchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEjAKBGtpbmQYAyABKA4yIi5jb250cm9scGxhbmUudjEuQWN0aXZpdHlBY3RvcktpbmQiPgoTQWN0aXZpdHlFdmVudFRhcmdldBIMCgRraW5kGAEgASgJEgoKAmlkGAIgASgJEg0KBWxhYmVsGAMgASgJIi8KE0FjdGl2aXR5RW52aXJvbm1lbnQSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCSqXAQoRQWN0aXZpdHlBY3RvcktpbmQSIwofQUNUSVZJVFlfQUNUT1JfS0lORF9VTlNQRUNJRklFRBAAEhwKGEFDVElWSVRZX0FDVE9SX0tJTkRfVVNFUhABEh8KG0FDVElWSVRZX0FDVE9SX0tJTkRfTUFDSElORRACEh4KGkFDVElWSVRZX0FDVE9SX0tJTkRfU1lTVEVNEAMyzQIKD0FjdGl2aXR5U2VydmljZRJlCgxMaXN0QWN0aXZpdHkSJC5jb250cm9scGxhbmUudjEuTGlzdEFjdGl2aXR5UmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5MaXN0QWN0aXZpdHlSZXNwb25zZSIIorsYBAgBGAESeQoWTGlzdE1lbWJlcnNoaXBBY3Rpdml0eRIuLmNvbnRyb2xwbGFuZS52MS5MaXN0TWVtYmVyc2hpcEFjdGl2aXR5UmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5MaXN0QWN0aXZpdHlSZXNwb25zZSIIorsYBAgBGAEaWIK1GFQKD0FjdGl2aXR5U2VydmljZRIFMS4wLjAaOlRoZSB0eXBlZCBhY3Rpdml0eSBzdHJlYW06IHdobyBjaGFuZ2VkIHdoYXQsIHdoZXJlIGFuZCBob3dC1wEKE2NvbS5jb250cm9scGxhbmUudjFCDUFjdGl2aXR5UHJvdG9QAVpUZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2FjdGl2aXR5L3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_timestamp]);
-
-/**
- * @generated from message controlplane.v1.ListMembershipActivityRequest
- */
-export type ListMembershipActivityRequest = Message<"controlplane.v1.ListMembershipActivityRequest"> & {
-  /**
-   * The org whose membership history is read. Required.
-   *
-   * @generated from field: string org_id = 1;
-   */
-  orgId: string;
-
-  /**
-   * Filters, AND-combined. Each matches exactly; unset does not filter.
-   *
-   * @generated from field: optional string actor_id = 2;
-   */
-  actorId?: string | undefined;
-
-  /**
-   * A membership verb: "create_org", "invite", "revoke_invite", "join",
-   * "remove", "leave", "set_role", "set_grants".
-   *
-   * @generated from field: optional string verb = 3;
-   */
-  verb?: string | undefined;
-
-  /**
-   * @generated from field: optional string via = 4;
-   */
-  via?: string | undefined;
-
-  /**
-   * Unset or 0 = 50; max 500.
-   *
-   * @generated from field: int32 page_size = 5;
-   */
-  pageSize: number;
-
-  /**
-   * next_page_token from the previous page.
-   *
-   * @generated from field: string page_token = 6;
-   */
-  pageToken: string;
-};
-
-/**
- * Describes the message controlplane.v1.ListMembershipActivityRequest.
- * Use `create(ListMembershipActivityRequestSchema)` to create a new message.
- */
-export const ListMembershipActivityRequestSchema: GenMessage<ListMembershipActivityRequest> = /*@__PURE__*/
-  messageDesc(file_services_activity_v1_activity, 0);
+  fileDesc("CiNzZXJ2aWNlcy9hY3Rpdml0eS92MS9hY3Rpdml0eS5wcm90bxIPY29udHJvbHBsYW5lLnYxImcKEUFjdGl2aXR5VGltZVJhbmdlEikKBXN0YXJ0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBInCgNlbmQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wItoBCg1BY3Rpdml0eVNjb3BlEhcKBm9yZ19pZBgBIAEoCUIHukgEcgIQARI2Cgp0aW1lX3JhbmdlGAQgASgLMiIuY29udHJvbHBsYW5lLnYxLkFjdGl2aXR5VGltZVJhbmdlEiEKCnByb2plY3RfaWQYBSABKAlCCLpIBXIDGIABSACIAQESGQoHZW52X2lkcxgGIAMoCUIIukgFkgECEDJCDQoLX3Byb2plY3RfaWRKBAgCEANKBAgDEARKBAgHEAhSBmVudl9pZFIIc2VydmljZXNSB2ZpbHRlcnMirgMKE0xpc3RBY3Rpdml0eVJlcXVlc3QSNQoFc2NvcGUYASABKAsyHi5jb250cm9scGxhbmUudjEuQWN0aXZpdHlTY29wZUIGukgDyAEBEh8KCGFjdG9yX2lkGAIgASgJQgi6SAVyAxiAAkgAiAEBEjsKCmFjdG9yX2tpbmQYAyABKA4yIi5jb250cm9scGxhbmUudjEuQWN0aXZpdHlBY3RvcktpbmRIAYgBARIaCgR2ZXJiGAQgASgJQge6SARyAhhASAKIAQESIQoLdGFyZ2V0X2tpbmQYBSABKAlCB7pIBHICGEBIA4gBARIgCgl0YXJnZXRfaWQYBiABKAlCCLpIBXIDGIACSASIAQESGQoDdmlhGAcgASgJQge6SARyAhggSAWIAQESHQoJcGFnZV9zaXplGAggASgFQgq6SAcaBRj0AygAEhwKCnBhZ2VfdG9rZW4YCSABKAlCCLpIBXIDGIAEQgsKCV9hY3Rvcl9pZEINCgtfYWN0b3Jfa2luZEIHCgVfdmVyYkIOCgxfdGFyZ2V0X2tpbmRCDAoKX3RhcmdldF9pZEIGCgRfdmlhIl8KFExpc3RBY3Rpdml0eVJlc3BvbnNlEi4KBmV2ZW50cxgBIAMoCzIeLmNvbnRyb2xwbGFuZS52MS5BY3Rpdml0eUV2ZW50EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSKFAwoNQWN0aXZpdHlFdmVudBIKCgJpZBgBIAEoCRImCgJhdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLQoFYWN0b3IYAyABKAsyHi5jb250cm9scGxhbmUudjEuQWN0aXZpdHlBY3RvchIMCgR2ZXJiGAQgASgJEjQKBnRhcmdldBgFIAEoCzIkLmNvbnRyb2xwbGFuZS52MS5BY3Rpdml0eUV2ZW50VGFyZ2V0EjEKA2VudhgGIAEoCzIkLmNvbnRyb2xwbGFuZS52MS5BY3Rpdml0eUVudmlyb25tZW50Eg8KB3Byb2plY3QYByABKAkSCwoDdmlhGAggASgJEjoKBmRldGFpbBgJIAMoCzIqLmNvbnRyb2xwbGFuZS52MS5BY3Rpdml0eUV2ZW50LkRldGFpbEVudHJ5EhEKCXByb2NlZHVyZRgKIAEoCRotCgtEZXRhaWxFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIlsKDUFjdGl2aXR5QWN0b3ISCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIwCgRraW5kGAMgASgOMiIuY29udHJvbHBsYW5lLnYxLkFjdGl2aXR5QWN0b3JLaW5kIj4KE0FjdGl2aXR5RXZlbnRUYXJnZXQSDAoEa2luZBgBIAEoCRIKCgJpZBgCIAEoCRINCgVsYWJlbBgDIAEoCSIvChNBY3Rpdml0eUVudmlyb25tZW50EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkqlwEKEUFjdGl2aXR5QWN0b3JLaW5kEiMKH0FDVElWSVRZX0FDVE9SX0tJTkRfVU5TUEVDSUZJRUQQABIcChhBQ1RJVklUWV9BQ1RPUl9LSU5EX1VTRVIQARIfChtBQ1RJVklUWV9BQ1RPUl9LSU5EX01BQ0hJTkUQAhIeChpBQ1RJVklUWV9BQ1RPUl9LSU5EX1NZU1RFTRADMtIBCg9BY3Rpdml0eVNlcnZpY2USZQoMTGlzdEFjdGl2aXR5EiQuY29udHJvbHBsYW5lLnYxLkxpc3RBY3Rpdml0eVJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuTGlzdEFjdGl2aXR5UmVzcG9uc2UiCKK7GAQIARgBGliCtRhUCg9BY3Rpdml0eVNlcnZpY2USBTEuMC4wGjpUaGUgdHlwZWQgYWN0aXZpdHkgc3RyZWFtOiB3aG8gY2hhbmdlZCB3aGF0LCB3aGVyZSBhbmQgaG93QtcBChNjb20uY29udHJvbHBsYW5lLnYxQg1BY3Rpdml0eVByb3RvUAFaVGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9hY3Rpdml0eS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * ActivityTimeRange is a half-open range [start, end). Either end may be unset
@@ -93,7 +40,7 @@ export type ActivityTimeRange = Message<"controlplane.v1.ActivityTimeRange"> & {
  * Use `create(ActivityTimeRangeSchema)` to create a new message.
  */
 export const ActivityTimeRangeSchema: GenMessage<ActivityTimeRange> = /*@__PURE__*/
-  messageDesc(file_services_activity_v1_activity, 1);
+  messageDesc(file_services_activity_v1_activity, 0);
 
 /**
  * ActivityScope is console contract K1 as this service reads it. Field numbers
@@ -141,7 +88,7 @@ export type ActivityScope = Message<"controlplane.v1.ActivityScope"> & {
  * Use `create(ActivityScopeSchema)` to create a new message.
  */
 export const ActivityScopeSchema: GenMessage<ActivityScope> = /*@__PURE__*/
-  messageDesc(file_services_activity_v1_activity, 2);
+  messageDesc(file_services_activity_v1_activity, 1);
 
 /**
  * @generated from message controlplane.v1.ListActivityRequest
@@ -211,7 +158,7 @@ export type ListActivityRequest = Message<"controlplane.v1.ListActivityRequest">
  * Use `create(ListActivityRequestSchema)` to create a new message.
  */
 export const ListActivityRequestSchema: GenMessage<ListActivityRequest> = /*@__PURE__*/
-  messageDesc(file_services_activity_v1_activity, 3);
+  messageDesc(file_services_activity_v1_activity, 2);
 
 /**
  * @generated from message controlplane.v1.ListActivityResponse
@@ -235,7 +182,7 @@ export type ListActivityResponse = Message<"controlplane.v1.ListActivityResponse
  * Use `create(ListActivityResponseSchema)` to create a new message.
  */
 export const ListActivityResponseSchema: GenMessage<ListActivityResponse> = /*@__PURE__*/
-  messageDesc(file_services_activity_v1_activity, 4);
+  messageDesc(file_services_activity_v1_activity, 3);
 
 /**
  * ActivityEvent is one entry: "<actor> <verb> <target> [in <env>] via <via>".
@@ -315,7 +262,7 @@ export type ActivityEvent = Message<"controlplane.v1.ActivityEvent"> & {
  * Use `create(ActivityEventSchema)` to create a new message.
  */
 export const ActivityEventSchema: GenMessage<ActivityEvent> = /*@__PURE__*/
-  messageDesc(file_services_activity_v1_activity, 5);
+  messageDesc(file_services_activity_v1_activity, 4);
 
 /**
  * @generated from message controlplane.v1.ActivityActor
@@ -345,7 +292,7 @@ export type ActivityActor = Message<"controlplane.v1.ActivityActor"> & {
  * Use `create(ActivityActorSchema)` to create a new message.
  */
 export const ActivityActorSchema: GenMessage<ActivityActor> = /*@__PURE__*/
-  messageDesc(file_services_activity_v1_activity, 6);
+  messageDesc(file_services_activity_v1_activity, 5);
 
 /**
  * @generated from message controlplane.v1.ActivityEventTarget
@@ -380,7 +327,7 @@ export type ActivityEventTarget = Message<"controlplane.v1.ActivityEventTarget">
  * Use `create(ActivityEventTargetSchema)` to create a new message.
  */
 export const ActivityEventTargetSchema: GenMessage<ActivityEventTarget> = /*@__PURE__*/
-  messageDesc(file_services_activity_v1_activity, 7);
+  messageDesc(file_services_activity_v1_activity, 6);
 
 /**
  * @generated from message controlplane.v1.ActivityEnvironment
@@ -404,7 +351,7 @@ export type ActivityEnvironment = Message<"controlplane.v1.ActivityEnvironment">
  * Use `create(ActivityEnvironmentSchema)` to create a new message.
  */
 export const ActivityEnvironmentSchema: GenMessage<ActivityEnvironment> = /*@__PURE__*/
-  messageDesc(file_services_activity_v1_activity, 8);
+  messageDesc(file_services_activity_v1_activity, 7);
 
 /**
  * @generated from enum controlplane.v1.ActivityActorKind
@@ -486,20 +433,6 @@ export const ActivityService: GenService<{
   listActivity: {
     methodKind: "unary";
     input: typeof ListActivityRequestSchema;
-    output: typeof ListActivityResponseSchema;
-  },
-  /**
-   * ListMembershipActivity is the org-admin audit view of membership: who
-   * created the org, invited, joined, left, was removed or changed role
-   * (target kind "member"), newest first. Caller: a person whose role in
-   * org_id is admin or owner (PermissionDenied, reason "admin_required"
-   * otherwise); a machine credential is refused ("human_only").
-   *
-   * @generated from rpc controlplane.v1.ActivityService.ListMembershipActivity
-   */
-  listMembershipActivity: {
-    methodKind: "unary";
-    input: typeof ListMembershipActivityRequestSchema;
     output: typeof ListActivityResponseSchema;
   },
 }> = /*@__PURE__*/

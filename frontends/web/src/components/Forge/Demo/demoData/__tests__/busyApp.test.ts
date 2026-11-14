@@ -1,24 +1,20 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * shop's request-level telemetry (busyApp.ts): a real app's volume,
- * deterministic, with the story's one incident — CreateOrder and Checkout
- * failing on the payment provider in prod after v1.8.3, nothing failing
- * anywhere else — the toured trace intact, multi-service traces of 10–40
- * spans, logs linked to their traces, pages and filters that work, and
- * profiles that differ by service and type, in the type's unit.
+ * The demo's busy app (busyApp.ts): shop's telemetry at a real app's volume,
+ * deterministic, with the story's shape — payments failing after v1.8.3, the
+ * toured trace intact, multi-service traces of 10–40 spans, logs linked to
+ * their traces, pages and filters that work.
  */
 
 import { describe, expect, it } from "vitest";
 
-import { BUSY_SERVICES, createBusyApp, DEMO_PROFILE_TYPES, DEMO_RELEASE_AGO_MS } from "../busyApp";
-import { DEMO_INCIDENT, DEMO_TOURED_TRACE, demoStats } from "../shopStory";
+import { FIXTURE_TRACE_ID } from "../../../Observability/__fixtures__/fixtureApi";
+import { BUSY_SERVICES, createDemoFixtures, DEMO_RELEASE_AGO_MS } from "../busyApp";
 
 const NOW = Date.UTC(2026, 10, 6, 15, 0, 0);
 const HOUR = 3_600_000;
-const TOURED = DEMO_TOURED_TRACE.traceId;
-const scope = { orgId: "org-acme", projectId: "shop", envIds: [] as string[], filters: [] };
-const prod = { ...scope, envIds: ["env-prod"] };
+const scope = { orgId: "org-fixture", projectId: "shop", envIds: [] as string[], filters: [] };
 const day = { startMs: NOW - 24 * HOUR, endMs: NOW };
 const hour = { startMs: NOW - HOUR, endMs: NOW };
 const traces = (window: typeof day, extra: Record<string, unknown> = {}) => ({
@@ -32,66 +28,55 @@ const traces = (window: typeof day, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-describe("shop's busy app", () => {
-  const api = createBusyApp(NOW);
+describe("the demo's busy app", () => {
+  const api = createDemoFixtures(NOW);
 
-  it("has hundreds of traces an hour across every shop service, newest first, with a long-tailed latency", async () => {
+  it("has hundreds of traces an hour across every shop service, with a long-tailed latency", async () => {
     const res = await api.listTraces(traces(hour));
     expect(res.traces.length).toBeGreaterThan(500);
-    expect(new Set(res.traces.flatMap((t) => t.services))).toEqual(new Set([...BUSY_SERVICES, "shop-web"]));
-    const starts = res.traces.map((t) => t.startMs);
-    expect(starts).toEqual([...starts].sort((a, b) => b - a));
+    expect(new Set(res.traces.flatMap((t) => t.services))).toEqual(new Set([...BUSY_SERVICES]));
     expect(res.red!.p50Ms).toBeLessThan(60);
     expect(res.red!.p99Ms).toBeGreaterThan(res.red!.p50Ms * 10);
-    expect(new Set(res.traces.map((t) => t.rootOperation)).size).toBe(9);
+    expect(new Set(res.traces.map((t) => t.rootOperation)).size).toBeGreaterThanOrEqual(8);
   });
 
   it("is deterministic, and a request keeps its identity as the window moves", async () => {
     const a = await api.listTraces(traces(hour));
-    const b = await createBusyApp(NOW).listTraces(traces(hour));
+    const b = await createDemoFixtures(NOW).listTraces(traces(hour));
     expect(b.traces).toEqual(a.traces);
-    const later = await createBusyApp(NOW + 600_000).listTraces(traces({ startMs: hour.startMs + 600_000, endMs: hour.endMs + 600_000 }));
-    const shared = a.traces.find((t) => t.startMs > hour.startMs + 700_000 && t.startMs < NOW - DEMO_RELEASE_AGO_MS && t.traceId !== TOURED)!;
+    const later = await api.listTraces(traces({ startMs: hour.startMs + 600_000, endMs: hour.endMs + 600_000 }));
+    const shared = a.traces.find((t) => t.startMs > hour.startMs + 700_000 && t.traceId !== FIXTURE_TRACE_ID)!;
     expect(later.traces.find((t) => t.traceId === shared.traceId)).toEqual(shared);
   });
 
-  it("fails only on prod's charging routes after v1.8.3, at the 3s deadline, with the incident's error", async () => {
+  it("fails on the payments path after v1.8.3 reached prod, rarely before", async () => {
     const res = await api.listTraces(traces(day));
     const releaseAt = NOW - DEMO_RELEASE_AGO_MS;
-    const failed = res.traces.filter((t) => t.errorCount > 0);
-    expect(failed.length).toBeGreaterThan(10);
-    for (const t of failed) {
-      expect(t.startMs).toBeGreaterThanOrEqual(releaseAt);
-      expect(t.rootOperation).toMatch(/CreateOrder|Checkout/);
-      expect(t.durationMs).toBeGreaterThanOrEqual(DEMO_INCIDENT.deadlineMs);
-    }
-    const staging = await api.listTraces({ ...traces(day), envIds: ["env-staging"] });
-    expect(staging.traces.length).toBeGreaterThan(0);
-    expect(staging.traces.every((t) => t.errorCount === 0)).toBe(true);
-    const one = await api.getTrace({ ...scope, window: day, traceId: failed.find((t) => t.traceId !== TOURED)!.traceId });
-    expect(one.spans.filter((s) => s.status === "error").map((s) => s.statusMessage)).toContain(DEMO_INCIDENT.error);
+    const payments = res.traces.filter((t) => t.services.includes("payments") && t.traceId !== FIXTURE_TRACE_ID);
+    const rate = (list: typeof payments) => list.filter((t) => t.errorCount > 0).length / Math.max(1, list.length);
+    const before = payments.filter((t) => t.startMs < releaseAt);
+    const after = payments.filter((t) => t.startMs >= releaseAt);
+    expect(rate(after)).toBeGreaterThan(rate(before) * 5);
+    const others = res.traces.filter((t) => !t.services.includes("payments"));
+    expect(rate(others)).toBeLessThan(0.02);
   });
 
-  it("keeps the toured trace intact: prod's newest failing CreateOrder", async () => {
-    const res = await api.listTraces(traces(hour, { errorsOnly: true, rootSpanName: "CreateOrder" }));
-    expect(res.traces[0].traceId).toBe(TOURED);
-    const toured = await api.getTrace({ ...scope, window: hour, traceId: TOURED });
-    expect(toured.spans.map((s) => s.spanId)).toEqual(expect.arrayContaining(["a1", "a2", "b1", "d1", "d3", "e1", "e2", "e3"]));
-    expect(res.traces[0].spanCount).toBe(toured.spans.length);
-    const logs = await api.searchLogs({ ...scope, window: hour, query: "", services: [], severities: [], traceId: TOURED, limit: 100 });
-    expect(logs.records).toHaveLength(5);
-    expect(new Set(logs.records.map((r) => r.service))).toEqual(new Set(["api", "worker", "inventory"]));
+  it("keeps the toured trace intact and first", async () => {
+    const res = await api.listTraces(traces(hour));
+    expect(res.traces[0].traceId).toBe(FIXTURE_TRACE_ID);
+    const toured = await api.getTrace({ ...scope, window: hour, traceId: FIXTURE_TRACE_ID });
+    expect(toured.spans.map((s) => s.spanId)).toContain("e1");
   });
 
   it("crosses api → NATS → worker → inventory with 10–40 spans on multi-service traces", async () => {
     const res = await api.listTraces(traces(hour));
-    const crossing = res.traces.filter((t) => t.services.includes("inventory") && t.services.includes("worker") && t.traceId !== TOURED);
+    const crossing = res.traces.filter((t) => t.services.includes("inventory") && t.services.includes("worker") && t.traceId !== FIXTURE_TRACE_ID);
     expect(crossing.length).toBeGreaterThan(20);
     for (const t of crossing.slice(0, 20)) {
       const trace = await api.getTrace({ ...scope, window: hour, traceId: t.traceId });
       expect(trace.spans.length).toBe(t.spanCount);
       expect(trace.spans.length).toBeGreaterThanOrEqual(10);
-      expect(trace.spans.length).toBeLessThanOrEqual(45);
+      expect(trace.spans.length).toBeLessThanOrEqual(40);
       const ids = new Set(trace.spans.map((s) => s.spanId));
       for (const s of trace.spans) if (s.parentSpanId) expect(ids.has(s.parentSpanId)).toBe(true);
       expect(trace.spans.some((s) => s.name === "nats publish orders.created")).toBe(true);
@@ -106,8 +91,6 @@ describe("shop's busy app", () => {
     const second = await api.listTraces(traces(day, { limit: 100, cursor: first.nextCursor }));
     expect(second.traces[0].startMs).toBeLessThanOrEqual(first.traces[99].startMs);
     expect(new Set([...first.traces, ...second.traces].map((t) => t.traceId)).size).toBe(200);
-    // A day is more than the slots built: the counts still cover the whole day.
-    expect(first.red!.traceCount).toBeGreaterThan(15_000);
     const errors = await api.listTraces(traces(hour, { errorsOnly: true }));
     expect(errors.traces.every((t) => t.errorCount > 0)).toBe(true);
     const slow = await api.listTraces(traces(hour, { minDurationMs: 500 }));
@@ -116,18 +99,14 @@ describe("shop's busy app", () => {
     expect(checkout.traces.every((t) => t.rootOperation.includes("Checkout"))).toBe(true);
   });
 
-  it("has thousands of log lines, each saying what its request did, linked to their traces", async () => {
+  it("has thousands of log lines, linked to their traces, with error bursts on payments", async () => {
     const logs = { ...scope, window: hour, query: "", services: [], severities: [], limit: 100_000 };
     const all = await api.searchLogs(logs);
     expect(all.records.length).toBeGreaterThan(2_000);
-    const times = all.records.map((r) => r.timeMs);
-    expect(times).toEqual([...times].sort((a, b) => b - a));
     const errors = all.records.filter((r) => r.severity === "error");
-    expect(errors.length).toBeGreaterThan(8);
-    expect(new Set(errors.map((r) => r.body))).toEqual(new Set([DEMO_INCIDENT.error]));
-    expect(all.records.some((r) => r.body.startsWith(":") || /payments payments/.test(r.body))).toBe(false);
-    expect(all.records.some((r) => r.body === "GET /products/{slug} started")).toBe(true);
-    const oneTrace = all.records.find((r) => r.traceId && r.traceId !== TOURED)!.traceId;
+    expect(errors.length).toBeGreaterThan(20);
+    expect(errors.every((r) => r.service === "payments" || r.traceId === FIXTURE_TRACE_ID)).toBe(true);
+    const oneTrace = all.records.find((r) => r.traceId && r.traceId !== FIXTURE_TRACE_ID)!.traceId;
     const scoped = await api.searchLogs({ ...logs, traceId: oneTrace });
     expect(scoped.records.length).toBeGreaterThan(0);
     expect(scoped.records.every((r) => r.traceId === oneTrace)).toBe(true);
@@ -136,36 +115,29 @@ describe("shop's busy app", () => {
     expect(page.nextCursor).not.toBe("");
   });
 
-  it("draws every service's RED from the model, with api's errors stepping up at the release", async () => {
-    const res = await api.getServiceOverview({ ...prod, window: hour });
+  it("draws every service's RED with errors and latency stepping up at the release", async () => {
+    const res = await api.getServiceOverview({ ...scope, window: hour });
     expect(res.services.map((s) => s.name)).toEqual([...BUSY_SERVICES]);
-    const apiRow = res.services.find((s) => s.name === "api")!;
-    const model = demoStats({ ...hour, envIds: ["env-prod"], service: "api", now: NOW });
-    expect(Math.abs(apiRow.requestCount - model.requests) / model.requests).toBeLessThan(0.02);
-    expect(Math.abs(apiRow.errorRate - model.errorRate)).toBeLessThan(0.005);
-    const sum = (xs: (number | null)[]) => xs.reduce<number>((a, b) => a + (b ?? 0), 0);
-    // The headline and its sparkline agree.
-    expect(sum(apiRow.errorTrend)).toBe(apiRow.errorCount);
-    const at = apiRow.timestamps.findIndex((t) => t * 1000 >= NOW - DEMO_RELEASE_AGO_MS);
-    expect(sum(apiRow.errorTrend.slice(0, at - 1))).toBe(0);
-    expect(sum(apiRow.errorTrend.slice(at + 1))).toBeGreaterThan(0);
-    expect(res.services.find((s) => s.name === "inventory")!.errorCount).toBe(0);
-    // Not every node looks the same.
-    expect(new Set(res.services.map((s) => Math.round(s.p95Ms))).size).toBe(3);
+    const payments = res.services.find((s) => s.name === "payments")!;
+    const releaseAt = NOW - DEMO_RELEASE_AGO_MS;
+    const at = payments.timestamps.findIndex((t) => t * 1000 >= releaseAt);
+    const rate = (from: number, to: number) => {
+      const sum = (xs: (number | null)[]) => xs.reduce<number>((a, b) => a + (b ?? 0), 0);
+      return sum(payments.errorTrend.slice(from, to)) / sum(payments.requestTrend.slice(from, to));
+    };
+    expect(rate(at, 30)).toBeGreaterThan(rate(0, at) * 5);
   });
 
-  it("has a profile per service and per type, in the type's unit", async () => {
-    const req = { ...scope, window: hour };
-    const seen = new Set<string>();
-    for (const service of BUSY_SERVICES) {
-      for (const profileType of DEMO_PROFILE_TYPES) {
-        const flame = await api.getFlamegraph({ ...req, service, profileType });
-        expect(JSON.parse(flame.speedscopeJson).name).toBe(`${service} ${profileType}`);
-        expect(flame.unit).toBe(profileType === "cpu" ? "nanoseconds" : profileType.endsWith("_space") ? "bytes" : "none");
-        expect(flame.availableProfileTypes).toEqual([...DEMO_PROFILE_TYPES]);
-        seen.add(flame.speedscopeJson);
-      }
-    }
-    expect(seen.size).toBe(BUSY_SERVICES.length * DEMO_PROFILE_TYPES.length);
+  it("has a profile per service", async () => {
+    const req = { ...scope, window: hour, profileType: "cpu" };
+    const names = await Promise.all(["api", "inventory", "worker"].map(async (service) => JSON.parse((await api.getFlamegraph({ ...req, service })).speedscopeJson).name));
+    expect(names).toEqual(["api cpu", "inventory cpu", "worker cpu"]);
+  });
+
+  it("lists more issues, one regressed by v1.8.3 and resolved in v1.8.4", async () => {
+    const res = await api.listIssues({ ...scope, window: day, statuses: [], limit: 50 } as never);
+    expect(res.issues.length).toBeGreaterThanOrEqual(6);
+    const idem = await api.getIssue({ ...scope, issueId: "iss-payments-idempotency" } as never);
+    expect(idem.issue).toMatchObject({ status: "resolved", resolvedVersion: "v1.8.4", lastVersion: "v1.8.3" });
   });
 });

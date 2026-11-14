@@ -93,9 +93,7 @@ message CompleteOnboardingResponse {}
 // is machine-readable so the client can render the specific remedy and link to
 // it, rather than showing a generic error.
 message AccountDeletionBlocker {
-  // Machine-readable reason: "paid_subscription", or
-  // "sole_owner_of_shared_org" (the caller is the only owner of an org with
-  // other members; they make someone else an owner, or leave, first).
+  // Machine-readable reason: "paid_subscription".
   string reason = 1;
   // Human-readable sentence the UI may render verbatim.
   string detail = 2;

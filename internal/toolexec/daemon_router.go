@@ -219,9 +219,7 @@ const (
 	// ErrorCodeDaemonRestarted is the daemon's own answer, after it restarted,
 	// for a call that was running when its previous process died. A running
 	// call cannot be resumed, so the outcome is unknown. It comes from the
-	// daemon (it persisted the fact), not from a transport. A daemon also
-	// gives it for a request id it already ran and whose result it no longer
-	// holds (it never runs one twice): the same "it ran; outcome unknown".
+	// daemon (it persisted the fact), not from a transport.
 	ErrorCodeDaemonRestarted = "DAEMON_RESTARTED"
 	// ErrorCodeDaemonReconnecting is the gateway's answer for a request it
 	// held because the daemon's fresh stream had not yet carried a round

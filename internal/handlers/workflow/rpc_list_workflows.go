@@ -46,12 +46,6 @@ func (s *Service) ListWorkflows(
 	if err != nil {
 		return nil, err
 	}
-	// Saved workflows of another org are left out when the request names
-	// one; builtin and repository workflows are listed whatever the org.
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
-	if err != nil {
-		return nil, err
-	}
 
 	// Every read the listing makes, made once and concurrently: the user's
 	// workflows, the project's synced ones, and the builtin visibility
@@ -184,9 +178,6 @@ func (s *Service) ListWorkflows(
 			return resolvingToSelf(self, validationRefs)
 		}
 		for _, draft := range drafts {
-			if !scope.Includes(draft.OrgID) {
-				continue
-			}
 			if !req.Msg.GetIncludeHidden() && (draft.IsHidden || draft.Status != db.WorkflowDraftStatusComplete) {
 				continue
 			}

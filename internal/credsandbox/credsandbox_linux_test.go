@@ -20,7 +20,6 @@ import (
 // helper, as cmd/reliant's main does.
 func TestMain(m *testing.M) {
 	Dispatch()
-	runTestStarter()
 	code := m.Run()
 	// A sandboxed script whose `cd` into its fixture failed once wrote its
 	// probes (a .bashrc, newtop) into this package's directory, and they were

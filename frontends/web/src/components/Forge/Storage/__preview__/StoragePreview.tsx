@@ -29,7 +29,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import PageHeader from "@/components/forge-ui/page_header";
 import { StorageBrowserApiProvider } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
 
-import { createFixtureReader, FixtureReaderProvider } from "../../AuditedAccess/readerSession";
 import { ConsolePreviewShell } from "../../Console/ConsolePreviewShell";
 import { withSearch } from "../../Console/paths";
 import { createStorageFixtureApi, STORAGE_FIXTURE_ENVS, type StorageFixtureOptions } from "../__fixtures__/fixtureStorageApi";
@@ -45,10 +44,8 @@ const CASES: { id: string; label: string; options: StorageFixtureOptions }[] = [
   { id: "deny", label: "policy: deny", options: { policy: { "env-prod": "deny", "env-staging": "deny", "env-dev": "deny" } } },
   { id: "denied", label: "no storage:read grant (PermissionDenied)", options: { fail: { method: "listBrowsableBuckets", code: Code.PermissionDenied } } },
   { id: "empty", label: "no buckets declared", options: { noBuckets: true } },
-  { id: "buckets-down", label: "bucket list: unavailable", options: { fail: { method: "listBrowsableBuckets", code: Code.Unavailable } } },
   { id: "shape", label: "no recorded release (shape_unknown)", options: { fail: { method: "listBrowsableBuckets", code: Code.FailedPrecondition, reason: "shape_unknown" } } },
   { id: "rate", label: "listing: rate limited", options: { fail: { method: "listObjects", code: Code.ResourceExhausted, reason: "rate_limited" } } },
-  { id: "loading", label: "bucket list: loading (never answers)", options: { delayMs: 24 * 60 * 60 * 1000 } },
   { id: "slow", label: "slow answers (loading states)", options: { delayMs: 1500 } },
 ];
 
@@ -66,9 +63,6 @@ export default function StoragePreview() {
   const dark = !!search.dark && String(search.dark) !== "0" && String(search.dark) !== "false";
   const scheme = search.scheme ?? "reliant";
   const [minted, setMinted] = useState(0);
-  // The harness reads as a synthetic reader (as the demo does), so it draws
-  // the browser without a signed-in session.
-  const [reader] = useState(createFixtureReader);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -131,18 +125,16 @@ export default function StoragePreview() {
       <div className="space-y-4">
         <PageHeader density="compact" title="Storage" className="mb-0" />
         <QueryClientProvider client={queryClient}>
-          <FixtureReaderProvider reader={reader}>
-            <StorageBrowserApiProvider api={api}>
-              <StorageBrowser
-                key={`${caseId}-${env.id}`}
-                env={env}
-                search={storage}
-                onNavigate={onNavigate}
-                href={href}
-                onDownloadUrl={() => setMinted((count) => count + 1)}
-              />
-            </StorageBrowserApiProvider>
-          </FixtureReaderProvider>
+          <StorageBrowserApiProvider api={api}>
+            <StorageBrowser
+              key={`${caseId}-${env.id}`}
+              env={env}
+              search={storage}
+              onNavigate={onNavigate}
+              href={href}
+              onDownloadUrl={() => setMinted((count) => count + 1)}
+            />
+          </StorageBrowserApiProvider>
         </QueryClientProvider>
       </div>
     </ConsolePreviewShell>

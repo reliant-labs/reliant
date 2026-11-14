@@ -29,8 +29,6 @@ import { CONTROL_FIELD } from "../controlStyles";
 import { CellPopover, CellPreview, CutMark, type OpenCell } from "./CellValue";
 import { ColumnPicker } from "./ColumnPicker";
 import { cellDisplay, isNumericType, shortTypeLabel } from "./dataCells-model";
-import { identityTarget, type IdentityTarget } from "./identityLinks-model";
-import { IdentityRowLink } from "./IdentityRowLink";
 import { foreignKeysOf, foreignKeyTarget, qualifiedName, rowParamOf, rowRecord, totalLabel } from "./dataLinks-model";
 import { DataError, DataLoading, DataNote } from "./DataStates";
 import {
@@ -152,7 +150,6 @@ export function DataGrid({ env, database, table, tables, search, access, onSearc
       ) : (
         <>
           <GridTable
-            env={env}
             page={page}
             table={table}
             tables={tables}
@@ -241,7 +238,6 @@ function EmptyPage({
 }
 
 function GridTable({
-  env,
   page,
   table,
   tables,
@@ -252,7 +248,6 @@ function GridTable({
   linkTo,
   rowHref,
 }: {
-  env: { id: string; name: string };
   page: BrowsePage;
   table: DbTable;
   tables: DbTable[];
@@ -355,8 +350,6 @@ function GridTable({
                 {shown.map((name) => (
                   <GridCell
                     key={name}
-                    env={env}
-                    identity={identityTarget(meta.get(name), record.get(name) ?? null, cutCells.has(index.get(name)!))}
                     name={name}
                     resultType={resultType(name)}
                     flaggedCut={cutCells.has(index.get(name)!)}
@@ -396,8 +389,6 @@ function fkTarget(table: DbTable, tables: DbTable[], column: string, record: Rea
 }
 
 function GridCell({
-  env,
-  identity,
   name,
   resultType,
   flaggedCut,
@@ -406,8 +397,6 @@ function GridCell({
   linkTo,
   onOpen,
 }: {
-  env: { id: string; name: string };
-  identity: IdentityTarget | null;
   name: string;
   resultType: string;
   flaggedCut: boolean;
@@ -451,7 +440,6 @@ function GridCell({
           {display.serverCut && <CutMark />}
         </button>
       )}
-      {identity && <div className="px-3 pb-1"><IdentityRowLink env={env} target={identity} /></div>}
     </td>
   );
 }

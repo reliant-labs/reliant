@@ -179,19 +179,8 @@ const (
 	ReasonNoMachine HeldReason = "no-machine-on-record"
 	// ReasonRecentlyActive: touched within the idle floor.
 	ReasonRecentlyActive HeldReason = "recently_active"
-	// ReasonUsedAfterArchive: something in the checkout (a file or directory,
-	// its HEAD or its reflog) changed after the row was archived, so the archive
-	// was decided on activity that did not see this use. The worktree is in
-	// use: it is never retired on that archive. Today's servers record it as
-	// an ordinary hold (shown in the Inbox, re-checked with back-off); the
-	// server change that un-archives such a row is tracked separately.
-	ReasonUsedAfterArchive HeldReason = "used_after_archive"
 	// ReasonStale: the request's fence no longer matches the lock.
 	ReasonStale HeldReason = "stale"
-	// ReasonMarked: the worktree was archived under a reclaim mark, and its
-	// tombstone is gone or carries another mark: someone cancelled the
-	// reclaim. Nothing is removed; the server restores the row.
-	ReasonMarked HeldReason = "marked"
 	// ReasonError: the pass failed (a timeout, a git failure). Recorded so the
 	// row backs off instead of being retried at the front of every pass.
 	ReasonError HeldReason = "error"
@@ -320,18 +309,6 @@ type Worktree struct {
 	ShedLanded bool       `json:"shed_landed,omitempty"`
 	BaseBranch string     `json:"base_branch,omitempty"`
 	Checkouts  []Checkout `json:"checkouts,omitempty"`
-	// Mark (ACTIVE requests only) places the reclaim tombstone with this
-	// mark before the worktree is locked (tombstone.go). Read-only otherwise:
-	// it never archives or removes anything.
-	Mark *ReclaimMark `json:"mark,omitempty"`
-	// Unmark (ACTIVE requests only) removes the tombstone of this mark id;
-	// "*" removes any. A mark the server cancelled.
-	Unmark string `json:"unmark,omitempty"`
-	// ReclaimMark (ARCHIVED requests only) is the mark the server archived
-	// the worktree under. The daemon removes nothing unless every checkout
-	// still carries that tombstone (ReasonMarked): whoever deleted it wants
-	// the worktree kept. Empty for a row archived any other way.
-	ReclaimMark string `json:"reclaim_mark,omitempty"`
 }
 
 // Result reports what happened to one worktree.
@@ -367,19 +344,8 @@ type Result struct {
 	Landed bool `json:"landed,omitempty"`
 	// RecoverableIdle reports a complete clean, pushed/merged, unused checkout
 	// whose files (including caches) have all been quiet for the requested floor.
-	RecoverableIdle bool `json:"recoverable_idle,omitempty"`
-	// Tombstone (every ACTIVE answer from a daemon that places tombstones)
-	// is the workspace's reclaim tombstone. Its presence is the capability
-	// the server requires before it marks or reclaims anything.
-	Tombstone *TombstoneReport `json:"tombstone,omitempty"`
-	// LastUse (an ACTIVE worktree) is the last time this daemon saw the
-	// workspace used: a tool call or command that named a path inside it or
-	// ran in it (UseLog), or a file written in it. It covers what the server
-	// cannot see from its rows: an agent whose chat is bound elsewhere working
-	// here by absolute path. The server counts it as activity before it
-	// archives the row. Absent when nothing was seen.
-	LastUse *time.Time `json:"last_use,omitempty"`
-	Error   string     `json:"error,omitempty"`
+	RecoverableIdle bool   `json:"recoverable_idle,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // Request is the payload of worktree.reconcile and worktree.snapshot_remove.

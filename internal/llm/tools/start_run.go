@@ -11,7 +11,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/ctxkeys"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -141,7 +140,6 @@ func (s *startRunTool) Execute(rctx *rctx.ToolContext, params StartRunParams) (T
 		DaemonID:     callerDaemonID(caller.chat),
 		NoMachine:    caller.chat.NoMachine,
 		ParentChatID: rctx.ChatID,
-		OrgID:        ptr.From(caller.chat.OrgID),
 		DedupeKey:    dedupeKey,
 	})
 	if err != nil {

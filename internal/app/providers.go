@@ -38,7 +38,6 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
-	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
@@ -49,7 +48,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
-	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
@@ -223,31 +221,6 @@ func NewTokenAuthority(d TokenAuthorityDeps) (tokenauthority.Authority, error) {
 	}
 	logging.Info("token authority initialized", "authority", mode)
 	return authority, nil
-}
-
-// OrgResolverDeps is the token authority whose store may answer org
-// membership.
-type OrgResolverDeps struct {
-	Authority tokenauthority.Authority
-}
-
-// NewOrgResolver is the deployment's organization resolver (internal/orgs):
-// control-plane's ResolveOrgMembership, cached, when the token authority is
-// control-plane's AccessTokenInternalService. A self-hosted store has no orgs
-// to answer about, so the resolver is nil, which every consumer reads as "no
-// orgs": nothing is stamped with one and lists ignore org_id.
-func NewOrgResolver(d OrgResolverDeps) (*orgs.Resolver, error) {
-	// The process's background decides org resources against the same
-	// resolver its listeners and activities install (authz).
-	src, hosted := d.Authority.(orgs.Source)
-	if !hosted {
-		logging.Info("org resolver: no control plane; organizations are off")
-		authz.SetProcessMembership(authz.NoOrgs{})
-		return nil, nil
-	}
-	resolver := orgs.New(src)
-	authz.SetProcessMembership(resolver)
-	return resolver, nil
 }
 
 // TLSFiles is the certificate and key a listener serves TLS with; both empty

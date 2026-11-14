@@ -159,17 +159,7 @@ type RumScope struct {
 	ProjectId *string `protobuf:"bytes,5,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	// Control-plane environment ids (deploy_environments.id). Empty = every
 	// environment of the org (of the project, when project_id is set).
-	EnvIds []string `protobuf:"bytes,6,rep,name=env_ids,json=envIds,proto3" json:"env_ids,omitempty"`
-	// QueryScope.instance_ids: only the sessions of these dev instances (the
-	// sessions their browser spans carry). A session can outlive the instance
-	// that began it, so no answer is the instance's alone: a summary and a
-	// recording are the whole session's, and a timeline's errors are selected
-	// by session (a narrowed timeline omits them). No RumService response sets
-	// instance_scope.
-	InstanceIds []string `protobuf:"bytes,9,rep,name=instance_ids,json=instanceIds,proto3" json:"instance_ids,omitempty"`
-	// QueryScope.instance_users: the instances of these people, by email; an
-	// email that names no member matches nothing.
-	InstanceUsers []string `protobuf:"bytes,10,rep,name=instance_users,json=instanceUsers,proto3" json:"instance_users,omitempty"`
+	EnvIds        []string `protobuf:"bytes,6,rep,name=env_ids,json=envIds,proto3" json:"env_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -235,20 +225,6 @@ func (x *RumScope) GetProjectId() string {
 func (x *RumScope) GetEnvIds() []string {
 	if x != nil {
 		return x.EnvIds
-	}
-	return nil
-}
-
-func (x *RumScope) GetInstanceIds() []string {
-	if x != nil {
-		return x.InstanceIds
-	}
-	return nil
-}
-
-func (x *RumScope) GetInstanceUsers() []string {
-	if x != nil {
-		return x.InstanceUsers
 	}
 	return nil
 }
@@ -602,10 +578,6 @@ type ListSessionsResponse struct {
 	Sessions []*SessionSummary `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions,omitempty"`
 	// Empty on the last page.
 	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	// Never set: the sessions listed are those with the instances' activity,
-	// but each summary aggregates its whole session, which can span instances
-	// (controlplane.v1.InstanceScope).
-	InstanceScope *v1.InstanceScope `protobuf:"bytes,3,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -652,13 +624,6 @@ func (x *ListSessionsResponse) GetNextPageToken() string {
 		return x.NextPageToken
 	}
 	return ""
-}
-
-func (x *ListSessionsResponse) GetInstanceScope() *v1.InstanceScope {
-	if x != nil {
-		return x.InstanceScope
-	}
-	return nil
 }
 
 type GetSessionRequest struct {
@@ -714,11 +679,8 @@ func (x *GetSessionRequest) GetSessionId() string {
 }
 
 type GetSessionResponse struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Session *SessionSummary        `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
-	// Never set: the summary aggregates the whole session, which can span
-	// instances (controlplane.v1.InstanceScope).
-	InstanceScope *v1.InstanceScope `protobuf:"bytes,2,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       *SessionSummary        `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -756,13 +718,6 @@ func (*GetSessionResponse) Descriptor() ([]byte, []int) {
 func (x *GetSessionResponse) GetSession() *SessionSummary {
 	if x != nil {
 		return x.Session
-	}
-	return nil
-}
-
-func (x *GetSessionResponse) GetInstanceScope() *v1.InstanceScope {
-	if x != nil {
-		return x.InstanceScope
 	}
 	return nil
 }
@@ -1034,11 +989,6 @@ type GetSessionTimelineResponse struct {
 	Entries []*SessionTimelineEntry `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
 	// Empty on the last page.
 	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	// Never set: narrowed, the span entries are the instances' own, but the
-	// timeline's errors can only be selected by session, so a narrowed timeline
-	// omits them and is not the instances' whole timeline
-	// (controlplane.v1.InstanceScope).
-	InstanceScope *v1.InstanceScope `protobuf:"bytes,3,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1085,13 +1035,6 @@ func (x *GetSessionTimelineResponse) GetNextPageToken() string {
 		return x.NextPageToken
 	}
 	return ""
-}
-
-func (x *GetSessionTimelineResponse) GetInstanceScope() *v1.InstanceScope {
-	if x != nil {
-		return x.InstanceScope
-	}
-	return nil
 }
 
 type GetSessionReplayRequest struct {
@@ -1250,10 +1193,7 @@ type GetSessionReplayResponse struct {
 	// Set whenever events is not empty, including on the last page. Passing it
 	// later returns the events recorded since: how a session still being recorded
 	// is followed.
-	ResumeToken string `protobuf:"bytes,3,opt,name=resume_token,json=resumeToken,proto3" json:"resume_token,omitempty"`
-	// Never set: the recording is the whole session's, which can span
-	// instances (controlplane.v1.InstanceScope).
-	InstanceScope *v1.InstanceScope `protobuf:"bytes,4,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
+	ResumeToken   string `protobuf:"bytes,3,opt,name=resume_token,json=resumeToken,proto3" json:"resume_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1309,13 +1249,6 @@ func (x *GetSessionReplayResponse) GetResumeToken() string {
 	return ""
 }
 
-func (x *GetSessionReplayResponse) GetInstanceScope() *v1.InstanceScope {
-	if x != nil {
-		return x.InstanceScope
-	}
-	return nil
-}
-
 var File_services_rum_v1_rum_proto protoreflect.FileDescriptor
 
 const file_services_rum_v1_rum_proto_rawDesc = "" +
@@ -1323,7 +1256,7 @@ const file_services_rum_v1_rum_proto_rawDesc = "" +
 	"\x19services/rum/v1/rum.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/client.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"n\n" +
 	"\fRumTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
-	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xae\x02\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xe4\x01\n" +
 	"\bRumScope\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1a\n" +
 	"\bservices\x18\x03 \x03(\tR\bservices\x12<\n" +
@@ -1331,10 +1264,7 @@ const file_services_rum_v1_rum_proto_rawDesc = "" +
 	"time_range\x18\x04 \x01(\v2\x1d.controlplane.v1.RumTimeRangeR\ttimeRange\x12\"\n" +
 	"\n" +
 	"project_id\x18\x05 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x17\n" +
-	"\aenv_ids\x18\x06 \x03(\tR\x06envIds\x12!\n" +
-	"\finstance_ids\x18\t \x03(\tR\vinstanceIds\x12%\n" +
-	"\x0einstance_users\x18\n" +
-	" \x03(\tR\rinstanceUsersB\r\n" +
+	"\aenv_ids\x18\x06 \x03(\tR\x06envIdsB\r\n" +
 	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\x87\x05\n" +
 	"\x0eSessionSummary\x12\x1d\n" +
 	"\n" +
@@ -1382,18 +1312,16 @@ const file_services_rum_v1_rum_proto_rawDesc = "" +
 	"\b_browserB\x05\n" +
 	"\x03_osB\x0e\n" +
 	"\f_device_typeB\x13\n" +
-	"\x11_frontend_version\"\xc2\x01\n" +
+	"\x11_frontend_version\"{\n" +
 	"\x14ListSessionsResponse\x12;\n" +
 	"\bsessions\x18\x01 \x03(\v2\x1f.controlplane.v1.SessionSummaryR\bsessions\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12E\n" +
-	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"c\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"c\n" +
 	"\x11GetSessionRequest\x12/\n" +
 	"\x05scope\x18\x01 \x01(\v2\x19.controlplane.v1.RumScopeR\x05scope\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId\"\x96\x01\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\"O\n" +
 	"\x12GetSessionResponse\x129\n" +
-	"\asession\x18\x01 \x01(\v2\x1f.controlplane.v1.SessionSummaryR\asession\x12E\n" +
-	"\x0einstance_scope\x18\x02 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xf5\x04\n" +
+	"\asession\x18\x01 \x01(\v2\x1f.controlplane.v1.SessionSummaryR\asession\"\xf5\x04\n" +
 	"\x14SessionTimelineEntry\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x128\n" +
 	"\x04kind\x18\x02 \x01(\x0e2$.controlplane.v1.SessionTimelineKindR\x04kind\x12\x12\n" +
@@ -1425,11 +1353,10 @@ const file_services_rum_v1_rum_proto_rawDesc = "" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x1b\n" +
 	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x04 \x01(\tR\tpageToken\"\xcc\x01\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\"\x85\x01\n" +
 	"\x1aGetSessionTimelineResponse\x12?\n" +
 	"\aentries\x18\x01 \x03(\v2%.controlplane.v1.SessionTimelineEntryR\aentries\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12E\n" +
-	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xa5\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa5\x01\n" +
 	"\x17GetSessionReplayRequest\x12/\n" +
 	"\x05scope\x18\x01 \x01(\v2\x19.controlplane.v1.RumScopeR\x05scope\x12\x1d\n" +
 	"\n" +
@@ -1441,12 +1368,11 @@ const file_services_rum_v1_rum_proto_rawDesc = "" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x14\n" +
 	"\x05index\x18\x02 \x01(\rR\x05index\x12\x16\n" +
 	"\x06chunks\x18\x03 \x01(\x05R\x06chunks\x12\x12\n" +
-	"\x04data\x18\x04 \x01(\fR\x04data\"\xe2\x01\n" +
+	"\x04data\x18\x04 \x01(\fR\x04data\"\x9b\x01\n" +
 	"\x18GetSessionReplayResponse\x124\n" +
 	"\x06events\x18\x01 \x03(\v2\x1c.controlplane.v1.ReplayEventR\x06events\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12!\n" +
-	"\fresume_token\x18\x03 \x01(\tR\vresumeToken\x12E\n" +
-	"\x0einstance_scope\x18\x04 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope*\xef\x01\n" +
+	"\fresume_token\x18\x03 \x01(\tR\vresumeToken*\xef\x01\n" +
 	"\x13SessionTimelineKind\x12%\n" +
 	"!SESSION_TIMELINE_KIND_UNSPECIFIED\x10\x00\x12$\n" +
 	" SESSION_TIMELINE_KIND_NAVIGATION\x10\x01\x12\x1f\n" +
@@ -1495,7 +1421,6 @@ var file_services_rum_v1_rum_proto_goTypes = []any{
 	nil,                                // 14: controlplane.v1.SessionTimelineEntry.PropsEntry
 	(*timestamppb.Timestamp)(nil),      // 15: google.protobuf.Timestamp
 	(*v1.ClientContext)(nil),           // 16: controlplane.v1.ClientContext
-	(*v1.InstanceScope)(nil),           // 17: controlplane.v1.InstanceScope
 }
 var file_services_rum_v1_rum_proto_depIdxs = []int32{
 	15, // 0: controlplane.v1.RumTimeRange.start:type_name -> google.protobuf.Timestamp
@@ -1506,33 +1431,29 @@ var file_services_rum_v1_rum_proto_depIdxs = []int32{
 	16, // 5: controlplane.v1.SessionSummary.client:type_name -> controlplane.v1.ClientContext
 	2,  // 6: controlplane.v1.ListSessionsRequest.scope:type_name -> controlplane.v1.RumScope
 	3,  // 7: controlplane.v1.ListSessionsResponse.sessions:type_name -> controlplane.v1.SessionSummary
-	17, // 8: controlplane.v1.ListSessionsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	2,  // 9: controlplane.v1.GetSessionRequest.scope:type_name -> controlplane.v1.RumScope
-	3,  // 10: controlplane.v1.GetSessionResponse.session:type_name -> controlplane.v1.SessionSummary
-	17, // 11: controlplane.v1.GetSessionResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	15, // 12: controlplane.v1.SessionTimelineEntry.time:type_name -> google.protobuf.Timestamp
-	0,  // 13: controlplane.v1.SessionTimelineEntry.kind:type_name -> controlplane.v1.SessionTimelineKind
-	14, // 14: controlplane.v1.SessionTimelineEntry.props:type_name -> controlplane.v1.SessionTimelineEntry.PropsEntry
-	2,  // 15: controlplane.v1.GetSessionTimelineRequest.scope:type_name -> controlplane.v1.RumScope
-	8,  // 16: controlplane.v1.GetSessionTimelineResponse.entries:type_name -> controlplane.v1.SessionTimelineEntry
-	17, // 17: controlplane.v1.GetSessionTimelineResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	2,  // 18: controlplane.v1.GetSessionReplayRequest.scope:type_name -> controlplane.v1.RumScope
-	15, // 19: controlplane.v1.ReplayEvent.time:type_name -> google.protobuf.Timestamp
-	12, // 20: controlplane.v1.GetSessionReplayResponse.events:type_name -> controlplane.v1.ReplayEvent
-	17, // 21: controlplane.v1.GetSessionReplayResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	4,  // 22: controlplane.v1.RumService.ListSessions:input_type -> controlplane.v1.ListSessionsRequest
-	6,  // 23: controlplane.v1.RumService.GetSession:input_type -> controlplane.v1.GetSessionRequest
-	9,  // 24: controlplane.v1.RumService.GetSessionTimeline:input_type -> controlplane.v1.GetSessionTimelineRequest
-	11, // 25: controlplane.v1.RumService.GetSessionReplay:input_type -> controlplane.v1.GetSessionReplayRequest
-	5,  // 26: controlplane.v1.RumService.ListSessions:output_type -> controlplane.v1.ListSessionsResponse
-	7,  // 27: controlplane.v1.RumService.GetSession:output_type -> controlplane.v1.GetSessionResponse
-	10, // 28: controlplane.v1.RumService.GetSessionTimeline:output_type -> controlplane.v1.GetSessionTimelineResponse
-	13, // 29: controlplane.v1.RumService.GetSessionReplay:output_type -> controlplane.v1.GetSessionReplayResponse
-	26, // [26:30] is the sub-list for method output_type
-	22, // [22:26] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	2,  // 8: controlplane.v1.GetSessionRequest.scope:type_name -> controlplane.v1.RumScope
+	3,  // 9: controlplane.v1.GetSessionResponse.session:type_name -> controlplane.v1.SessionSummary
+	15, // 10: controlplane.v1.SessionTimelineEntry.time:type_name -> google.protobuf.Timestamp
+	0,  // 11: controlplane.v1.SessionTimelineEntry.kind:type_name -> controlplane.v1.SessionTimelineKind
+	14, // 12: controlplane.v1.SessionTimelineEntry.props:type_name -> controlplane.v1.SessionTimelineEntry.PropsEntry
+	2,  // 13: controlplane.v1.GetSessionTimelineRequest.scope:type_name -> controlplane.v1.RumScope
+	8,  // 14: controlplane.v1.GetSessionTimelineResponse.entries:type_name -> controlplane.v1.SessionTimelineEntry
+	2,  // 15: controlplane.v1.GetSessionReplayRequest.scope:type_name -> controlplane.v1.RumScope
+	15, // 16: controlplane.v1.ReplayEvent.time:type_name -> google.protobuf.Timestamp
+	12, // 17: controlplane.v1.GetSessionReplayResponse.events:type_name -> controlplane.v1.ReplayEvent
+	4,  // 18: controlplane.v1.RumService.ListSessions:input_type -> controlplane.v1.ListSessionsRequest
+	6,  // 19: controlplane.v1.RumService.GetSession:input_type -> controlplane.v1.GetSessionRequest
+	9,  // 20: controlplane.v1.RumService.GetSessionTimeline:input_type -> controlplane.v1.GetSessionTimelineRequest
+	11, // 21: controlplane.v1.RumService.GetSessionReplay:input_type -> controlplane.v1.GetSessionReplayRequest
+	5,  // 22: controlplane.v1.RumService.ListSessions:output_type -> controlplane.v1.ListSessionsResponse
+	7,  // 23: controlplane.v1.RumService.GetSession:output_type -> controlplane.v1.GetSessionResponse
+	10, // 24: controlplane.v1.RumService.GetSessionTimeline:output_type -> controlplane.v1.GetSessionTimelineResponse
+	13, // 25: controlplane.v1.RumService.GetSessionReplay:output_type -> controlplane.v1.GetSessionReplayResponse
+	22, // [22:26] is the sub-list for method output_type
+	18, // [18:22] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_services_rum_v1_rum_proto_init() }

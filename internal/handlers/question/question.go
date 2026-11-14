@@ -138,19 +138,6 @@ func (s *Service) ListPendingQuestions(
 	)
 	if req.Msg.ChatId == nil {
 		questions, err = s.deps.Repo.ListAnswerablePendingQuestionsByUser(ctx, userID)
-		// The store lists the caller's questions; one in a chat they may no
-		// longer read (an org they left, a credential's other org) is not
-		// listed, as GetChat would not show its chat.
-		readable := map[string]bool{}
-		questions = authz.Visible(ctx, userID, questions, func(ctx context.Context, userID string, q *db.Question) bool {
-			ok, seen := readable[q.ChatID]
-			if !seen {
-				chat, getErr := s.deps.Repo.GetChatRow(ctx, q.ChatID)
-				ok = getErr == nil && authz.CanReadChat(ctx, userID, chat)
-				readable[q.ChatID] = ok
-			}
-			return ok
-		})
 	} else {
 		chatID := req.Msg.GetChatId()
 		if chatID == "" {

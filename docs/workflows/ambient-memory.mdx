@@ -79,29 +79,6 @@ configuration is not the same thing as no project. Captured-request tests verify
 that machine-less + empty tools/skills still carries bootstrap instructions and,
 when configured, the skill catalog.
 
-## Excluding the configured skill catalog
-
-On each `call_llm`, also set `exclude_skill_catalog: true` to omit the configured
-skill names/descriptions and automatic preloads. It defaults to false and is
-**call-local**, not inherited or latched on the thread. Nonempty `skills` with
-this flag is rejected before provider resolution. Forge start-here auto-preload
-cannot add content under this exclusion. The shared config snapshot is unchanged.
-
-For a no-skill workflow, use both exclusions on **every** model call, `skills: []`,
-and empty **both** `preloaded_tools` and `loadable_tools` as in the example above.
-The skill exclusion does not restrict tool execution: an explicitly offered skill,
-shell or other tool can still retrieve private information. It does not redact
-existing history, summaries, explicit prompts or prior tool results. Use a fresh
-thread with only the approved public brief; do not reuse a previously exposed chat.
-The bootstrap and other items listed above remain.
-
-This needs the **executing server worker** to contain the change. Updating the
-local CLI/daemon or observing `System.Version` on the API server alone does not
-prove worker support, especially during a mixed-version rollout. Operators must
-verify every worker serving the task queue has the reviewed implementation, using
-the deployed immutable image digest and its source commit, before activation.
-No new worker capability/attestation API is introduced by this flag.
-
 ## Before enabling an approved-only application
 
 Independently inspect the complete serialized request for the intended provider

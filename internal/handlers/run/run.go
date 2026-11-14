@@ -222,25 +222,16 @@ func (s *Service) startWithNewSession(
 // — a headless run does not belong to a project in any meaningful sense, and
 // giving callers a knob here would make a temporary coupling look intentional.
 // The branch disappears with the run container.
-//
-// Only a project the caller may still run work in hosts it: not one of an org
-// they have left, nor of a credential's other org.
 func (s *Service) defaultProjectID(ctx context.Context, userID string) (string, error) {
-	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: defaultProjectScan})
+	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1})
 	if err != nil {
 		return "", svcerr.WrapOr(err, svcerr.Internal("failed to list projects"))
 	}
-	for _, p := range projects {
-		if authz.CanWriteProject(ctx, userID, p) {
-			return p.ID, nil
-		}
+	if len(projects) == 0 {
+		return "", svcerr.FailedPrecondition("no project available to host the run; supply session_id or create a project first")
 	}
-	return "", svcerr.FailedPrecondition("no project available to host the run; supply session_id or create a project first")
+	return projects[0].ID, nil
 }
-
-// defaultProjectScan bounds how many of the caller's most recently active
-// projects defaultProjectID reads to find one it may host a run in.
-const defaultProjectScan = 200
 
 // respondWithSessionRun reads the session's current run and returns it.
 func (s *Service) respondWithSessionRun(
@@ -362,23 +353,12 @@ func (s *Service) ListRuns(
 	req *connect.Request[reliantv1.ListRunsRequest],
 ) (*connect.Response[reliantv1.ListRunsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
-	// The org a request names is verified (and a machine credential's applied)
-	// before any branch: one chat's runs are its chat's org's, so a session or
-	// parent outside the scope lists nothing.
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
-	if err != nil {
-		return nil, err
-	}
 
 	switch {
 	case req.Msg.GetParentId() != "":
 		// Ownership is checked via the parent, which resolves to a chat.
-		_, chat, err := s.runOwnedBy(ctx, userID, req.Msg.GetParentId())
-		if err != nil {
+		if _, _, err := s.runOwnedBy(ctx, userID, req.Msg.GetParentId()); err != nil {
 			return nil, err
-		}
-		if !scope.Includes(chat.OrgID) {
-			return connect.NewResponse(filterRunsToProto(nil, req.Msg)), nil
 		}
 		children, err := s.deps.Repo.ListChildWorkflows(ctx, req.Msg.GetParentId())
 		if err != nil {
@@ -394,9 +374,6 @@ func (s *Service) ListRuns(
 		if !authz.CanReadChat(ctx, userID, chat) {
 			return nil, svcerr.NotFound("session")
 		}
-		if !scope.Includes(chat.OrgID) {
-			return connect.NewResponse(filterRunsToProto(nil, req.Msg)), nil
-		}
 		runs, err := s.deps.Repo.ListRootWorkflows(ctx, req.Msg.GetSessionId())
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list runs"))
@@ -404,7 +381,7 @@ func (s *Service) ListRuns(
 		return connect.NewResponse(filterRunsToProto(runs, req.Msg)), nil
 
 	default:
-		return s.listAllRuns(ctx, userID, scope, req.Msg)
+		return s.listAllRuns(ctx, userID, req.Msg)
 	}
 }
 
@@ -416,7 +393,6 @@ const (
 func (s *Service) listAllRuns(
 	ctx context.Context,
 	userID string,
-	scope *core.OrgScope,
 	req *reliantv1.ListRunsRequest,
 ) (*connect.Response[reliantv1.ListRunsResponse], error) {
 	limit := int(req.Limit)
@@ -429,7 +405,6 @@ func (s *Service) listAllRuns(
 
 	filters := db.RunListFilters{
 		UserID:          userID,
-		Org:             scope,
 		ProjectID:       req.ProjectId,
 		Workflows:       req.Workflow,
 		TriggerID:       req.TriggerId,
@@ -479,16 +454,6 @@ func (s *Service) listAllRuns(
 		}
 		items, events, next = mergeRunLog(items, hasMore, events, eventsMore, limit)
 	}
-	// The store lists what the caller owns; a run (its chat) or a firing (its
-	// trigger) of an org they have left is not theirs to see, named org or
-	// not. Filtered after the page and its cursor are cut from the rows as
-	// read, so a page of denied rows is short, never the end of the log.
-	items = authz.Visible(ctx, userID, items, func(ctx context.Context, userID string, item *db.RunListItem) bool {
-		return authz.CanReadOwn(ctx, userID, item.OrgID)
-	})
-	events = authz.Visible(ctx, userID, events, func(ctx context.Context, userID string, event *db.UnlaunchedTriggerEvent) bool {
-		return authz.CanReadOwn(ctx, userID, event.OrgID)
-	})
 
 	resp := runLogResponse(items, events)
 	if next != nil {

@@ -1,7 +1,19 @@
 import Modal from "../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
-import { Download, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
-import type { UpdateStatus } from "../../types/electron";
+import { Download, CheckCircle2, AlertCircle } from "lucide-react";
+
+interface UpdateStatus {
+  type: 'checking' | 'available' | 'not-available' | 'downloaded' | 'download-progress' | 'error';
+  version?: string;
+  progress?: {
+    percent: number;
+    transferred: number;
+    total: number;
+    bytesPerSecond: number;
+  };
+  error?: string;
+  releaseNotes?: string;
+}
 
 interface UpdateModalProps {
   isOpen: boolean;
@@ -221,61 +233,13 @@ export function UpdateModal({
                   Update Error
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Reliant couldn't finish updating. Try again in a moment.
+                  An error occurred while checking for updates.
                 </p>
                 <div className="p-4 bg-destructive/5 rounded-lg border border-destructive/20">
                   <p className="text-xs font-mono text-destructive-ink">
                     {updateStatus.error}
                   </p>
                 </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3 justify-end">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                className="min-w-[100px]"
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        );
-
-      case 'checking':
-        return (
-          <div className="flex items-start gap-4">
-            <div className="p-3 rounded-full bg-primary/10">
-              <RefreshCw className="w-6 h-6 text-primary-ink animate-spin" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-foreground mb-2">
-                Checking for Updates
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Looking for a newer version of Reliant...
-              </p>
-            </div>
-          </div>
-        );
-
-      case 'not-available':
-        return (
-          <div className="space-y-6">
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-full bg-success/10">
-                <CheckCircle2 className="w-6 h-6 text-success" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-foreground mb-2">
-                  You're Up to Date
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  {updateStatus.version
-                    ? `Reliant ${updateStatus.version} is the latest version.`
-                    : 'You have the latest version of Reliant.'}
-                </p>
               </div>
             </div>
 

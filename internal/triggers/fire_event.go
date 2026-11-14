@@ -18,7 +18,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 )
 
@@ -353,10 +352,8 @@ func eventSpec(ctx context.Context, repo any, trigger *core.Trigger, ev *core.Tr
 
 	return launch.Spec{
 		OwnerUserID: trigger.UserID,
-		// Every chat a trigger launches belongs to the trigger's org.
-		OrgID:      ptr.From(trigger.OrgID),
-		ProjectID:  trigger.ProjectID,
-		WorktreeID: trigger.WorktreeID,
+		ProjectID:   trigger.ProjectID,
+		WorktreeID:  trigger.WorktreeID,
 		// Name-based on the event's identity: a re-fire derives the same
 		// chat, so the launcher's own idempotency catches it.
 		NewChatID: uuid.NewSHA1(chatIDNamespace, []byte("event:"+string(ev.Kind)+":"+ev.DedupeKey)).String(),

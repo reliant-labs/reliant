@@ -85,8 +85,6 @@ func TestNoRawNodeTypeLiteralsInProductionFiles(t *testing.T) {
 		// Non-node-type semantic enums/keys that intentionally share these words.
 		"cel/types.go": {
 			"workflow": {},
-			// The `run` namespace a finally handler reads (run.status).
-			"run": {},
 		},
 		"runtime/cel_env.go": {
 			"workflow": {},
@@ -112,7 +110,6 @@ func TestNoRawNodeTypeLiteralsInProductionFiles(t *testing.T) {
 		"reference/stub.go": {
 			"workflow": {},
 			"join":     {},
-			"run":      {},
 		},
 		// Runtime metadata/update keys, not workflow node types.
 		"runtime/activities/handlers/approval.go": {

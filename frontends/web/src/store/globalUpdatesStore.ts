@@ -49,9 +49,6 @@ import { createCoalescedInvalidator } from "../lib/coalescedInvalidation";
 import { setDaemonLastSeen } from "../api/transport";
 import { toast } from "../lib/toast-manager";
 import { publishDraftUpdate } from "./workflowDraftUpdates";
-import { getActiveOrgId } from "./activeOrgStore";
-import { isOtherOrgUpdate, type OrgLookup } from "./orgUpdateFilter";
-import { getCachedProjects } from "../hooks/project-queries";
 
 const LOG_PREFIX = "[🌐 GlobalUpdates]";
 
@@ -593,27 +590,13 @@ function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
   );
 }
 
-// What the app holds of an update's chat and project, for the org filter.
-const cachedOrgs: OrgLookup = {
-  chatOrg: (chatId) => getChatFromCache(chatId)?.orgId || undefined,
-  projectOrg: (projectId) => getCachedProjects().find((p) => p.id === projectId)?.org_id,
-};
-
 // Route user updates to the stores and caches they patch. Shared by the user
 // stream and the chat stream's forwarded updates.
 function routeUserUpdates(
   updates: UserUpdate[],
   set: StoreSet,
 ): void {
-  const activeOrgId = getActiveOrgId();
-  const openChatId = useChatStore.getState().activeChatId;
   for (const update of updates) {
-    // The app shows one org at a time; the stream carries every org the
-    // person is in. Another org's update reaches nothing: its chats are not
-    // in the lists, and it raises no notification. The cursor still moves
-    // past it (handleUpdate), and a switch re-reads the lists.
-    if (isOtherOrgUpdate(update, activeOrgId, cachedOrgs, openChatId)) continue;
-
     // The Runs list holds chats the sidebar's cache patches never reach
     // (automation and agent-started runs), so a change to any run marks it
     // stale. Only observed lists refetch; an unopened Runs page costs nothing.

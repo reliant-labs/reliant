@@ -1508,19 +1508,8 @@ type Trigger struct {
 	// comes from, as resolved now. Unset when it does not resolve (Health says
 	// why) or for an ad hoc trigger.
 	DefinitionSource *TriggerDefinitionSource `protobuf:"bytes,32,opt,name=definition_source,json=definitionSource,proto3" json:"definition_source,omitempty"`
-	// The organization the trigger belongs to, fixed at creation: its
-	// project's when the project has one. Every chat it launches belongs to
-	// it, so its runs bill this org. Unset for a trigger created before orgs.
-	OrgId *string `protobuf:"bytes,35,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
-	// Read-only: why Reliant paused the trigger itself, while `enabled` is
-	// false. "creator_left_org": a firing was refused because the trigger's
-	// creator, whose identity its runs execute as, is no longer a member of
-	// its organization; it fires again once they rejoin and resume it. Empty
-	// when the trigger is enabled or a person paused it. Clients show an
-	// unknown value as a plain pause.
-	PausedReason  string `protobuf:"bytes,36,opt,name=paused_reason,json=pausedReason,proto3" json:"paused_reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Trigger) Reset() {
@@ -1804,20 +1793,6 @@ func (x *Trigger) GetDefinitionSource() *TriggerDefinitionSource {
 		return x.DefinitionSource
 	}
 	return nil
-}
-
-func (x *Trigger) GetOrgId() string {
-	if x != nil && x.OrgId != nil {
-		return *x.OrgId
-	}
-	return ""
-}
-
-func (x *Trigger) GetPausedReason() string {
-	if x != nil {
-		return x.PausedReason
-	}
-	return ""
 }
 
 type isTrigger_Source interface {
@@ -2870,14 +2845,7 @@ func (x *WebhookCredential) GetUrl() string {
 type CreateTriggerRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The trigger to create. Its source arm determines the kind.
-	Trigger *TriggerDefinition `protobuf:"bytes,1,opt,name=trigger,proto3" json:"trigger,omitempty"`
-	// The organization to act in (control-plane organizations.id); the web
-	// fills it with the active org. It must be one the caller is a live member
-	// of (PERMISSION_DENIED otherwise), and a machine credential may name only
-	// its own org. Unset is the caller's default org.
-	// A trigger in a project that belongs to an org belongs to that org:
-	// naming another is FAILED_PRECONDITION.
-	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	Trigger       *TriggerDefinition `protobuf:"bytes,1,opt,name=trigger,proto3" json:"trigger,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2917,13 +2885,6 @@ func (x *CreateTriggerRequest) GetTrigger() *TriggerDefinition {
 		return x.Trigger
 	}
 	return nil
-}
-
-func (x *CreateTriggerRequest) GetOrgId() string {
-	if x != nil && x.OrgId != nil {
-		return *x.OrgId
-	}
-	return ""
 }
 
 // CreateTriggerResponse is the response for CreateTrigger.
@@ -3180,12 +3141,7 @@ type ListTriggersRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Narrow to one project. Unset lists the caller's triggers across every
 	// project.
-	ProjectId *string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
-	// List only this organization's triggers. It must be one the caller is a
-	// live member of (PERMISSION_DENIED otherwise). Triggers created before orgs
-	// list under the caller's default org. Unset lists every one the caller
-	// owns, in any org, as before this field existed.
-	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	ProjectId     *string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3223,13 +3179,6 @@ func (*ListTriggersRequest) Descriptor() ([]byte, []int) {
 func (x *ListTriggersRequest) GetProjectId() string {
 	if x != nil && x.ProjectId != nil {
 		return *x.ProjectId
-	}
-	return ""
-}
-
-func (x *ListTriggersRequest) GetOrgId() string {
-	if x != nil && x.OrgId != nil {
-		return *x.OrgId
 	}
 	return ""
 }
@@ -5234,7 +5183,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\b\n" +
-	"\x06source\"\x8b\x0e\n" +
+	"\x06source\"\xbf\r\n" +
 	"\aTrigger\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
@@ -5279,9 +5228,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x10workflow_trigger\x18\x1a \x01(\tH\x06R\x0fworkflowTrigger\x88\x01\x01\x12C\n" +
 	"\x0facting_identity\x18\x1c \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x12'\n" +
 	"\x0fwebhook_managed\x18\x1d \x01(\bR\x0ewebhookManaged\x12P\n" +
-	"\x11definition_source\x18  \x01(\v2#.reliant.v1.TriggerDefinitionSourceR\x10definitionSource\x12\x1a\n" +
-	"\x06org_id\x18# \x01(\tH\aR\x05orgId\x88\x01\x01\x12#\n" +
-	"\rpaused_reason\x18$ \x01(\tR\fpausedReason\x1a:\n" +
+	"\x11definition_source\x18  \x01(\v2#.reliant.v1.TriggerDefinitionSourceR\x10definitionSource\x1a:\n" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aQ\n" +
@@ -5294,8 +5241,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\v_last_eventB\x10\n" +
 	"\x0e_connection_idB\x0e\n" +
 	"\f_webhook_urlB\x13\n" +
-	"\x11_workflow_triggerB\t\n" +
-	"\a_org_id\"\xb5\x01\n" +
+	"\x11_workflow_trigger\"\xb5\x01\n" +
 	"\x17TriggerDefinitionSource\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1b\n" +
@@ -5407,11 +5353,9 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x14_webhook_hmac_secret\";\n" +
 	"\x11WebhookCredential\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x10\n" +
-	"\x03url\x18\x02 \x01(\tR\x03url\"v\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\"O\n" +
 	"\x14CreateTriggerRequest\x127\n" +
-	"\atrigger\x18\x01 \x01(\v2\x1d.reliant.v1.TriggerDefinitionR\atrigger\x12\x1a\n" +
-	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
-	"\a_org_id\"\x7f\n" +
+	"\atrigger\x18\x01 \x01(\v2\x1d.reliant.v1.TriggerDefinitionR\atrigger\"\x7f\n" +
 	"\x15CreateTriggerResponse\x12-\n" +
 	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\x127\n" +
 	"\awebhook\x18\x02 \x01(\v2\x1d.reliant.v1.WebhookCredentialR\awebhook\"+\n" +
@@ -5423,13 +5367,11 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x11GetTriggerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"C\n" +
 	"\x12GetTriggerResponse\x12-\n" +
-	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\"o\n" +
+	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\"H\n" +
 	"\x13ListTriggersRequest\x12\"\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x1a\n" +
-	"\x06org_id\x18\x02 \x01(\tH\x01R\x05orgId\x88\x01\x01B\r\n" +
-	"\v_project_idB\t\n" +
-	"\a_org_id\"G\n" +
+	"project_id\x18\x01 \x01(\tH\x00R\tprojectId\x88\x01\x01B\r\n" +
+	"\v_project_id\"G\n" +
 	"\x14ListTriggersResponse\x12/\n" +
 	"\btriggers\x18\x01 \x03(\v2\x13.reliant.v1.TriggerR\btriggers\"_\n" +
 	"\x14UpdateTriggerRequest\x12\x0e\n" +
@@ -5916,7 +5858,6 @@ func file_reliant_v1_trigger_proto_init() {
 		(*TriggerDefinition_WorkflowEvent)(nil),
 		(*TriggerDefinition_WorkflowTrigger)(nil),
 	}
-	file_reliant_v1_trigger_proto_msgTypes[17].OneofWrappers = []any{}
 	file_reliant_v1_trigger_proto_msgTypes[23].OneofWrappers = []any{}
 	file_reliant_v1_trigger_proto_msgTypes[31].OneofWrappers = []any{}
 	file_reliant_v1_trigger_proto_msgTypes[32].OneofWrappers = []any{}

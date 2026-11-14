@@ -15,7 +15,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
-	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 )
 
@@ -463,18 +462,16 @@ func (f *Firer) buildSpec(ctx context.Context, trigger *core.Trigger, sched *Sch
 
 	return launch.Spec{
 		OwnerUserID: trigger.UserID,
-		// Every chat a trigger launches belongs to the trigger's org.
-		OrgID:      ptr.From(trigger.OrgID),
-		ProjectID:  trigger.ProjectID,
-		WorktreeID: trigger.WorktreeID,
-		NewChatID:  uuid.NewSHA1(chatIDNamespace, []byte(req.FireWorkflowID)).String(),
-		Title:      &title,
-		Workflow:   trigger.Workflow,
-		DaemonID:   trigger.DaemonID,
-		NoMachine:  trigger.NoMachine,
-		Presets:    trigger.Presets,
-		Params:     params,
-		Messages:   messages,
+		ProjectID:   trigger.ProjectID,
+		WorktreeID:  trigger.WorktreeID,
+		NewChatID:   uuid.NewSHA1(chatIDNamespace, []byte(req.FireWorkflowID)).String(),
+		Title:       &title,
+		Workflow:    trigger.Workflow,
+		DaemonID:    trigger.DaemonID,
+		NoMachine:   trigger.NoMachine,
+		Presets:     trigger.Presets,
+		Params:      params,
+		Messages:    messages,
 
 		Unattended:     true,
 		ActingIdentity: trigger.ActingIdentity,

@@ -539,12 +539,6 @@ export type ScenarioRpcHandlers =
     "reliant.v1.WorktreeService/CreateWorktreePR"?: (req: import("@/gen/reliant/v1/worktree_pb").CreateWorktreePRRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/worktree_pb").CreateWorktreePRResponseSchema>>;
   }
 
-  // forge:section reliant.v1.WorktreeReclaimService
-  // forge:hash=afd85eebf842fae92b2d923f6df6004172822be23f99e1b21e0e1c3b7917188a
-  & {
-    "reliant.v1.WorktreeReclaimService/DecideWorktreeReclaim"?: (req: import("@/gen/reliant/v1/worktree_reclaim_pb").DecideWorktreeReclaimRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/worktree_reclaim_pb").DecideWorktreeReclaimResponseSchema>>;
-  }
-
   // forge:section (escape hatch)
   // forge:hash=a30b8645651d24acba0f462dc443195c4f6e5355f3dfd02825b44c2866fc85b5
   & {

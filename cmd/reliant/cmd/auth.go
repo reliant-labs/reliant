@@ -156,19 +156,7 @@ For CI, skip login and set RELIANT_TOKEN.`,
 			flow := chooseLoginFlow(forceDevice, forceBrowser,
 				os.Getenv, //nolint:forbidigo // SSH_*, DISPLAY, RELIANT_DAEMON_TYPE and the agent-shell marker describe the host this process runs on, not configuration of it
 				runtime.GOOS)
-			// ONE LOGIN: the forge scopes ride along as a CEILING the control
-			// plane clips to your grants, so forge can later exchange this
-			// login for a short-lived deploy token instead of asking for a
-			// second login. A token may never grant authority it does not
-			// hold, so without them there would be nothing to exchange.
-			// ScopeMachines: `reliant machine` manages the user's own
-			// machines as this login.
-			scopes := append([]string{cliauth.ScopeAPI, cliauth.ScopeMachines}, cliauth.ForgeScopes()...)
-			cred, err := runLogin(cmd.Context(), cmd.OutOrStdout(), loginRequest{
-				Server: target.ServerURL,
-				Scopes: scopes,
-				Name:   cliLoginName(),
-			}, flow)
+			cred, err := runLogin(cmd, target.ServerURL, flow)
 			if err != nil {
 				return fmt.Errorf("login failed: %w", err)
 			}
@@ -181,20 +169,19 @@ For CI, skip login and set RELIANT_TOKEN.`,
 	return cmd
 }
 
-// loginRequest is what a login asks the control plane for: a token with
-// Scopes, named <client>@<Name>, from the authorization server Server names.
-type loginRequest struct {
-	Server string
-	Scopes []string
-	Name   string
-}
-
-// runLogin gets a token by flow: `reliant auth login`'s own, or an API token
-// `reliant auth token create` mints. Both flows ask for the same authority
-// under the same name, so where it came from makes no difference to the
-// token. out receives the prompts.
-func runLogin(ctx context.Context, out io.Writer, req loginRequest, flow loginFlow) (credentials.Credential, error) {
-	server, scopes := req.Server, req.Scopes
+// runLogin gets the CLI's login token by flow. Both flows ask for the same
+// authority under the same name, so where it came from makes no difference
+// to the token.
+func runLogin(cmd *cobra.Command, server string, flow loginFlow) (credentials.Credential, error) {
+	out := cmd.OutOrStdout()
+	// ONE LOGIN: the forge scopes ride along as a CEILING the control plane
+	// clips to your grants, so forge can later exchange this login for a
+	// short-lived deploy token instead of asking for a second login. A token
+	// may never grant authority it does not hold, so without them there would
+	// be nothing to exchange.
+	// ScopeMachines: `reliant machine` manages the user's own machines as
+	// this login.
+	scopes := append([]string{cliauth.ScopeAPI, cliauth.ScopeMachines}, cliauth.ForgeScopes()...)
 	if flow.Device {
 		if !flow.Forced {
 			fmt.Fprintf(out, "Signing in with a device code: %s, so a browser login's callback could not reach your browser (--browser overrides).\n", flow.Remote)
@@ -202,7 +189,7 @@ func runLogin(ctx context.Context, out io.Writer, req loginRequest, flow loginFl
 		dev := cliauth.DeviceLogin{
 			Server:   server,
 			Scopes:   scopes,
-			Name:     req.Name,
+			Name:     cliLoginName(),
 			Hostname: instanceid.Hostname(),
 			Platform: runtime.GOOS + "/" + runtime.GOARCH,
 			Out:      out,
@@ -214,7 +201,7 @@ func runLogin(ctx context.Context, out io.Writer, req loginRequest, flow loginFl
 		if flow.Remote == "" {
 			dev.OpenURL = loginOpener
 		}
-		cred, err := dev.Run(ctx)
+		cred, err := dev.Run(cmd.Context())
 		if !errors.Is(err, cliauth.ErrNoDeviceFlow) {
 			return cred, err
 		}
@@ -227,10 +214,10 @@ func runLogin(ctx context.Context, out io.Writer, req loginRequest, flow loginFl
 	return cliauth.Login{
 		Server:  server,
 		Scopes:  scopes,
-		Name:    req.Name,
+		Name:    cliLoginName(),
 		Out:     out,
 		OpenURL: loginOpener,
-	}.Run(ctx)
+	}.Run(cmd.Context())
 }
 
 // finishLogin stores a fresh login, retires what the previous one left behind

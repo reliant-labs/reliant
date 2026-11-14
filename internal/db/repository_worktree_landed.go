@@ -25,12 +25,6 @@ func (r *Repo) WorktreeRunActivities(ctx context.Context, ids []string) (map[str
 	return store.WorktreeRunActivities(ctx, r.ORM(), ids)
 }
 
-// NoteWorktreeUse raises a live worktree's last_active to the last use its
-// daemon saw (store.NoteWorktreeUse).
-func (r *Repo) NoteWorktreeUse(ctx context.Context, id string, at time.Time) error {
-	return store.NoteWorktreeUse(ctx, r.ORM(), id, at)
-}
-
 // ArchiveLandedWorktree archives a landed worktree that has been quiet since
 // quietSince, leaving its chats live (store.ArchiveLandedWorktree).
 func (r *Repo) ArchiveLandedWorktree(ctx context.Context, id string, quietSince time.Time) (bool, error) {

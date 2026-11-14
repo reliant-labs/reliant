@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * "Install Forge", from the public demo's banner and end card (DemoCta): the
+ * "Install forge", from the public demo's banner and end card (DemoCta): the
  * commands from forge's README, each with a Copy button that records
  * `demo_install_copied{method}`.
  */
@@ -20,7 +20,7 @@ export const INSTALL_COMMANDS = [
 
 export function InstallForgeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <Modal open={open} onClose={onClose} size="md" title="Install Forge" description="Installs one binary. Then forge start takes an empty directory to a running app with this console.">
+    <Modal open={open} onClose={onClose} size="md" title="Install forge" description="Installs one binary. forge start takes an empty directory to a running app with this console.">
       <div className="space-y-3" data-testid="demo-install-sheet">
         <p className="text-sm text-ink-muted">With the install script, or Homebrew:</p>
         <div className="space-y-1.5">

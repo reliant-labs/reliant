@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"errors"
+	"strings"
 
 	"go.temporal.io/sdk/workflow"
 
@@ -35,38 +36,28 @@ import (
 // commands to histories that, recorded before it, failed straight through.
 const childOnFailureChangeID = "ref-child-on-failure"
 
-// childFailureScope is what a ref'd child with a terminal handler records
-// while it runs: where it failed (its own recorder, chained to the run's) and
-// the last verdict one of its nodes declared. handler is its on_failure and
-// finally its finally (finally.go); either may be nil, not both.
+// childFailureScope is what a ref'd child with a handler records while it
+// runs: where it failed (its own recorder, chained to the run's) and the last
+// verdict one of its nodes declared.
 type childFailureScope struct {
 	handler     *reliantv1.Workflow
-	finally     *reliantv1.Workflow
 	recorder    *failureRecorder
 	outcome     string
 	outcomeNode string
 }
 
 // beginChildFailureScope arms the scope for a child loaded by ref that
-// declares on_failure or finally, and attaches its recorder to the executor's
-// context. nil (nothing to do) for an inline body, a handler, or a child with
-// neither.
+// declares on_failure, and attaches its recorder to the executor's context.
+// nil (nothing to do) for an inline body, a handler, or a child with none.
 func (e *InlineWorkflowExecutor) beginChildFailureScope() *childFailureScope {
 	if e.subWorkflow == nil || e.loadStrategy() == core.LoadStrategyInlineEmbedded || e.pauseCtrl.failsFast() {
 		return nil
 	}
 	handler := e.subWorkflow.GetOnFailure()
-	if handler != nil && len(handler.GetNodes()) == 0 {
-		handler = nil
-	}
-	finally := e.subWorkflow.GetFinally()
-	if finally != nil && len(finally.GetNodes()) == 0 {
-		finally = nil
-	}
-	if handler == nil && finally == nil {
+	if handler == nil || len(handler.GetNodes()) == 0 {
 		return nil
 	}
-	scope := &childFailureScope{handler: handler, finally: finally, recorder: &failureRecorder{parent: failureRecorderFrom(e.ctx)}}
+	scope := &childFailureScope{handler: handler, recorder: &failureRecorder{parent: failureRecorderFrom(e.ctx)}}
 	e.ctx = withFailureRecorder(e.ctx, scope.recorder)
 	e.childFailure = scope
 	return scope
@@ -83,51 +74,29 @@ func (s *childFailureScope) noteOutcome(node *reliantv1.Node) {
 	}
 }
 
-// finishChildFailureScope runs the child's handlers for how it ended: its
-// on_failure if it failed, then its finally whatever ended it. err is what
-// the child's graph returned.
+// finishChildFailureScope runs the child's handler if the child failed. err
+// is what the child's graph returned.
 func (e *InlineWorkflowExecutor) finishChildFailureScope(scope *childFailureScope, err error) {
-	if scope == nil {
+	if scope == nil || errors.Is(err, ErrThreadCancelled) || !runFailed(e.ctx, err, scope.outcome) {
 		return
 	}
-	failure := func() Failure {
-		f := failureFor(scope.recorder, err, scope.outcome, scope.outcomeNode)
-		// The recorder holds run-wide paths ("release.count"); the child's
-		// handler reads paths in the child ("count").
-		f.NodePath = childFinallyPath(f.NodePath, e.nodePath())
-		return f
-	}
-	input := WorkflowInput{ChatID: e.chatID, WorkflowName: e.subWorkflowName, Inputs: e.bodyInputs}
-
 	// Decided only on a failure, so a run that never fails records nothing.
-	if scope.handler != nil && !errors.Is(err, ErrThreadCancelled) && runFailed(e.ctx, err, scope.outcome) &&
-		workflow.GetVersion(e.ctx, childOnFailureChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
-		f := failure()
-		var record OnFailureRecord
-		runOnFailureAt(e.ctx, scope.handler, input, e.workflowID, e.execContext, e.childTracker, e.bodyNodeOutputs, f, &record, e.nodePath())
-		e.logger.Info("[InlineWorkflow] Ran the ref'd child's on_failure handler",
-			"nodeID", e.nodeID,
-			"subWorkflow", e.subWorkflowName,
-			"failedNode", f.NodePath,
-			"errorCode", f.ErrorCode,
-			"handlerError", record.HandlerError,
-			"timedOut", record.TimedOut,
-		)
-	}
-
-	if scope.finally == nil {
+	if workflow.GetVersion(e.ctx, childOnFailureChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 		return
 	}
-	status, ending := runEnding(e.ctx, err, scope.outcome)
-	if !ending || !finallyGate(e.ctx) {
-		return
-	}
-	var record FinallyRecord
-	runFinallyAt(e.ctx, scope.finally, input, e.workflowID, e.execContext, e.childTracker, e.bodyNodeOutputs, status, failure(), &record, e.nodePath())
-	e.logger.Info("[InlineWorkflow] Ran the ref'd child's finally handler",
+	failure := failureFor(scope.recorder, err, scope.outcome, scope.outcomeNode)
+	// The recorder holds run-wide paths ("release.count"); the child's
+	// handler reads paths in the child ("count").
+	failure.NodePath = strings.TrimPrefix(failure.NodePath, e.nodePath()+".")
+	var record OnFailureRecord
+	runOnFailureAt(e.ctx, scope.handler,
+		WorkflowInput{ChatID: e.chatID, WorkflowName: e.subWorkflowName, Inputs: e.bodyInputs},
+		e.workflowID, e.execContext, e.childTracker, e.bodyNodeOutputs, failure, &record, e.nodePath())
+	e.logger.Info("[InlineWorkflow] Ran the ref'd child's on_failure handler",
 		"nodeID", e.nodeID,
 		"subWorkflow", e.subWorkflowName,
-		"status", status,
+		"failedNode", failure.NodePath,
+		"errorCode", failure.ErrorCode,
 		"handlerError", record.HandlerError,
 		"timedOut", record.TimedOut,
 	)

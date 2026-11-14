@@ -11,7 +11,7 @@ import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
-import { useChatIdOrActive, useChat } from "../../store/chatStoreHooks";
+import { useActiveChatId, useChat } from "../../store/chatStoreHooks";
 import { useProjectStore } from "../../store/projectStore";
 import { BranchOptionsMenu } from "./BranchOptionsMenu";
 import { BranchToWorktreeModal } from "./BranchToWorktreeModal";
@@ -59,7 +59,8 @@ export interface MessageBranching {
 
 /** Branching the chat from one message: the menu, its modals and handlers. */
 export function useMessageBranching(chatId: string | undefined | null, messageId: string): MessageBranching {
-  const effectiveChatId = useChatIdOrActive(chatId);
+  const activeChatId = useActiveChatId();
+  const effectiveChatId = chatId || activeChatId;
   const currentProject = useProjectStore((state) => state.currentProject);
   const sourceWorktreeId = useChat(effectiveChatId || "")?.worktreeId;
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);

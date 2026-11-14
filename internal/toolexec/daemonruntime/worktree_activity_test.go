@@ -149,11 +149,7 @@ func TestRecoveryAdmissionProcessInspectionHoldsAndFailsClosed(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			g, _ := gateWithRegistry()
-			// The gate canonicalizes what it is given (macOS: /var is /private/var).
-			workspace, err := filepath.EvalSymlinks(t.TempDir())
-			if err != nil {
-				t.Fatal(err)
-			}
+			workspace := t.TempDir()
 			var seen []string
 			g.processUse = func(_ context.Context, paths []string) error { seen = paths; return inspectErr }
 			lease, err := g.acquire([]string{workspace})

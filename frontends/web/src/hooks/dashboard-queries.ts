@@ -18,7 +18,6 @@ import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPl
 import type { DashboardIndex, DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 import { obsRetry } from "@/services/controlPlane/observability/errors";
 import { clientBuiltinDocument, isClientBuiltin, withClientBuiltins } from "@/services/controlPlane/observability/clientBuiltins";
-import { isDemoShell } from "@/lib/shell";
 
 /** A dashboard that is not there (NotFound) is an answer, not a blip: never retried. Otherwise the area's policy. */
 export function dashboardRetry(failureCount: number, error: unknown): boolean {
@@ -48,8 +47,7 @@ export function useDashboardIndex(orgId: string | null, projectId: string | unde
   return useQuery({
     queryKey: dashboardKeys.index(orgId, projectId ?? null, envId ?? ""),
     queryFn: () => api.listDashboards({ orgId: orgId as string, projectId, envId }),
-    // The demo's sample app is not the visitor's Reliant account: no LLM usage of theirs to show.
-    select: (index: DashboardIndex) => (isDemoShell() ? index : withClientBuiltins(index, { projectId, envId })),
+    select: (index: DashboardIndex) => withClientBuiltins(index, { projectId, envId }),
     enabled: !!orgId,
     staleTime: 60_000,
     retry: dashboardRetry,

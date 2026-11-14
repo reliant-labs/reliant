@@ -73,32 +73,22 @@ const (
 
 // DashboardServiceClient is a client for the controlplane.v1.DashboardService service.
 type DashboardServiceClient interface {
-	// ListDashboards is the merged index: built-ins (the organization views in an
-	// org-wide list; a project's standard dashboards in a project's list), release
-	// dashboards (with the release that shipped them), then workspace dashboards
-	// (author, version, edited), each marked `starred` and carrying
-	// `last_viewed_at` for the caller. Filter by source, owner, environment and
-	// free text; every filter is optional.
-	//
-	// A project's standard built-ins are listed when project_id names a project.
-	// A release dashboard of the same id replaces one (it is the project's own,
-	// specialized version). One over data the project definitely has none of is
-	// not listed: product usage needs product events, frontend needs browser
-	// telemetry; when that cannot be told, it is listed.
+	// ListDashboards is the merged index: release dashboards (with the release
+	// that shipped them), then workspace dashboards (author, version, edited),
+	// each marked `starred` and carrying `last_viewed_at` for the caller. Filter
+	// by source, owner, environment and free text; every filter is optional.
 	ListDashboards(context.Context, *connect.Request[v1.ListDashboardsRequest]) (*connect.Response[v1.ListDashboardsResponse], error)
 	// GetDashboard returns one dashboard's spec: a release dashboard (optionally
 	// as shipped in an earlier release), a workspace dashboard (optionally an
-	// older version), a project built-in, or a template. An organization view
-	// has no spec: only its summary is returned.
+	// older version), or a template.
 	GetDashboard(context.Context, *connect.Request[v1.GetDashboardRequest]) (*connect.Response[v1.GetDashboardResponse], error)
 	// SaveDashboard creates (base_version 0) or updates (base_version = the
 	// version the caller edited) a workspace dashboard and returns the new
 	// version. Optimistic: a stale base_version is Aborted (version_conflict)
 	// and writes nothing.
 	SaveDashboard(context.Context, *connect.Request[v1.SaveDashboardRequest]) (*connect.Response[v1.SaveDashboardResponse], error)
-	// SaveAsCopy forks a release dashboard, a project built-in, a template or
-	// another workspace dashboard into a NEW workspace dashboard (version 1,
-	// forked_from set).
+	// SaveAsCopy forks a release dashboard, a template or another workspace
+	// dashboard into a NEW workspace dashboard (version 1, forked_from set).
 	SaveAsCopy(context.Context, *connect.Request[v1.SaveAsCopyRequest]) (*connect.Response[v1.SaveAsCopyResponse], error)
 	// ListDashboardVersions is a dashboard's history, newest first. For a
 	// workspace dashboard these are its saved versions; for a release dashboard,
@@ -117,10 +107,10 @@ type DashboardServiceClient interface {
 	// RecordDashboardView notes that the caller opened a dashboard, for
 	// "recently viewed". The server keeps the caller's most recent 50.
 	RecordDashboardView(context.Context, *connect.Request[v1.RecordDashboardViewRequest]) (*connect.Response[v1.RecordDashboardViewResponse], error)
-	// ListDashboardTemplates is the gallery: for the platform's own org, the
-	// platform's selfmon dashboards; for any other org it is empty. The
-	// dashboards derived from what forge generates are not templates: every
-	// project lists them as built-ins. SaveAsCopy instantiates a template.
+	// ListDashboardTemplates is the gallery: templates derived from what forge
+	// generates (service RED, workloads, releases, frontend) and, for the
+	// platform's own org, the platform's selfmon dashboards. SaveAsCopy
+	// instantiates one.
 	ListDashboardTemplates(context.Context, *connect.Request[v1.ListDashboardTemplatesRequest]) (*connect.Response[v1.ListDashboardTemplatesResponse], error)
 	// PromoteDashboardToCode returns the file a repo would hold for a workspace
 	// dashboard (bytes, exactly as forge writes it) and where it goes. The
@@ -293,32 +283,22 @@ func (c *dashboardServiceClient) PromoteDashboardToCode(ctx context.Context, req
 
 // DashboardServiceHandler is an implementation of the controlplane.v1.DashboardService service.
 type DashboardServiceHandler interface {
-	// ListDashboards is the merged index: built-ins (the organization views in an
-	// org-wide list; a project's standard dashboards in a project's list), release
-	// dashboards (with the release that shipped them), then workspace dashboards
-	// (author, version, edited), each marked `starred` and carrying
-	// `last_viewed_at` for the caller. Filter by source, owner, environment and
-	// free text; every filter is optional.
-	//
-	// A project's standard built-ins are listed when project_id names a project.
-	// A release dashboard of the same id replaces one (it is the project's own,
-	// specialized version). One over data the project definitely has none of is
-	// not listed: product usage needs product events, frontend needs browser
-	// telemetry; when that cannot be told, it is listed.
+	// ListDashboards is the merged index: release dashboards (with the release
+	// that shipped them), then workspace dashboards (author, version, edited),
+	// each marked `starred` and carrying `last_viewed_at` for the caller. Filter
+	// by source, owner, environment and free text; every filter is optional.
 	ListDashboards(context.Context, *connect.Request[v1.ListDashboardsRequest]) (*connect.Response[v1.ListDashboardsResponse], error)
 	// GetDashboard returns one dashboard's spec: a release dashboard (optionally
 	// as shipped in an earlier release), a workspace dashboard (optionally an
-	// older version), a project built-in, or a template. An organization view
-	// has no spec: only its summary is returned.
+	// older version), or a template.
 	GetDashboard(context.Context, *connect.Request[v1.GetDashboardRequest]) (*connect.Response[v1.GetDashboardResponse], error)
 	// SaveDashboard creates (base_version 0) or updates (base_version = the
 	// version the caller edited) a workspace dashboard and returns the new
 	// version. Optimistic: a stale base_version is Aborted (version_conflict)
 	// and writes nothing.
 	SaveDashboard(context.Context, *connect.Request[v1.SaveDashboardRequest]) (*connect.Response[v1.SaveDashboardResponse], error)
-	// SaveAsCopy forks a release dashboard, a project built-in, a template or
-	// another workspace dashboard into a NEW workspace dashboard (version 1,
-	// forked_from set).
+	// SaveAsCopy forks a release dashboard, a template or another workspace
+	// dashboard into a NEW workspace dashboard (version 1, forked_from set).
 	SaveAsCopy(context.Context, *connect.Request[v1.SaveAsCopyRequest]) (*connect.Response[v1.SaveAsCopyResponse], error)
 	// ListDashboardVersions is a dashboard's history, newest first. For a
 	// workspace dashboard these are its saved versions; for a release dashboard,
@@ -337,10 +317,10 @@ type DashboardServiceHandler interface {
 	// RecordDashboardView notes that the caller opened a dashboard, for
 	// "recently viewed". The server keeps the caller's most recent 50.
 	RecordDashboardView(context.Context, *connect.Request[v1.RecordDashboardViewRequest]) (*connect.Response[v1.RecordDashboardViewResponse], error)
-	// ListDashboardTemplates is the gallery: for the platform's own org, the
-	// platform's selfmon dashboards; for any other org it is empty. The
-	// dashboards derived from what forge generates are not templates: every
-	// project lists them as built-ins. SaveAsCopy instantiates a template.
+	// ListDashboardTemplates is the gallery: templates derived from what forge
+	// generates (service RED, workloads, releases, frontend) and, for the
+	// platform's own org, the platform's selfmon dashboards. SaveAsCopy
+	// instantiates one.
 	ListDashboardTemplates(context.Context, *connect.Request[v1.ListDashboardTemplatesRequest]) (*connect.Response[v1.ListDashboardTemplatesResponse], error)
 	// PromoteDashboardToCode returns the file a repo would hold for a workspace
 	// dashboard (bytes, exactly as forge writes it) and where it goes. The

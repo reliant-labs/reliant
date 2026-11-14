@@ -26,6 +26,5 @@ export const useProjectStore: typeof Real.useProjectStore = create<ProjectStore>
   createProject: none,
   updateProject: none,
   deleteProject: none,
-  followActiveOrg: async () => {},
   reset: () => {},
 }));

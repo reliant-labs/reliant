@@ -234,7 +234,7 @@ func TestApplyGracefulCancel_KillsGrandchildThatOutlivesTheShell(t *testing.T) {
 
 	dir := t.TempDir()
 	ready, pidFile := filepath.Join(dir, "ready"), filepath.Join(dir, "pid")
-	script := `( trap "" TERM; echo $(exec sh -c 'echo $PPID') > ` + pidFile + `; : > ` + ready + `; while true; do sleep 0.05; done ) >/dev/null 2>&1 &
+	script := `( trap "" TERM; echo $BASHPID > ` + pidFile + `; : > ` + ready + `; while true; do sleep 0.05; done ) >/dev/null 2>&1 &
 	           wait`
 	cmd := exec.CommandContext(ctx, "bash", "-c", script)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

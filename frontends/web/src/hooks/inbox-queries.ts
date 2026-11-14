@@ -32,7 +32,6 @@ import {
   useListInbox,
   useRestoreInboxItem,
 } from "./inbox-service-hooks_gen";
-import { useDecideWorktreeReclaim as useDecideWorktreeReclaimRpc } from "./worktree-reclaim-service-hooks_gen";
 
 export type { InboxItem, ListInboxResponse } from "../gen/reliant/v1/inbox_pb";
 export { InboxItemKind } from "../gen/reliant/v1/inbox_pb";
@@ -193,21 +192,6 @@ export function useCleanupStorage() {
   const queryClient = useQueryClient();
   return useCleanupStorageRpc({
     onError: () => {
-      void invalidateInbox(queryClient);
-    },
-  });
-}
-
-/**
- * Answer a machine's worktree-reclaim item (`mutate({ daemonId, decisions })`):
- * remove or keep each proposed worktree, as shown. The machine records each
- * decision only while the worktree is still in the state shown. The inbox is
- * read again either way: the item lists what the machine proposes now.
- */
-export function useDecideWorktreeReclaim() {
-  const queryClient = useQueryClient();
-  return useDecideWorktreeReclaimRpc({
-    onSettled: () => {
       void invalidateInbox(queryClient);
     },
   });

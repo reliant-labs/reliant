@@ -167,26 +167,6 @@ describe("StepRunPanel", () => {
     expect(focusField).toHaveBeenCalledWith("post", "channel");
   });
 
-  it("links a \"no slack connection\" failure to Settings → Integrations", async () => {
-    const message = "no slack connection";
-    listStepExecutions.mockResolvedValue({
-      truncated: false,
-      records: [record({ activityName: "FailStep", error: message, success: false })],
-    });
-    renderWithRun(<StepRunPanel nodeId="post" />, runWith({ post: { status: "failed", error: message } }));
-
-    const link = await screen.findByRole("link", { name: "Connect Slack in Settings → Integrations" });
-    expect(link).toHaveAttribute("href", "/settings/integrations");
-  });
-
-  it("offers no connection link for other failures", async () => {
-    listStepExecutions.mockResolvedValue({ truncated: false, records: [record({ error: "slack: rate limited", success: false })] });
-    renderWithRun(<StepRunPanel nodeId="post" />, runWith({ post: { status: "failed", error: "slack: rate limited" } }));
-
-    await screen.findByText("Inputs (resolved)");
-    expect(screen.queryByRole("link", { name: /Settings → Integrations/ })).not.toBeInTheDocument();
-  });
-
   it("lists the tool calls an Agent step made and the turns it ran", async () => {
     listStepExecutions.mockResolvedValue({
       truncated: false,

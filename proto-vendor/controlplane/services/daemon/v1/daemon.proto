@@ -163,14 +163,6 @@ message GetDaemonResponse {
 message ListDaemonsRequest {
   optional DaemonType daemon_type = 1;
   optional DaemonStatus status = 2;
-  // The organization to list machines in: only the machines that org owns
-  // (Daemon.org_id) and that you run. Naming your default organization also
-  // lists the machines you run that were recorded before machines had an
-  // owning org, because that org is the one billed for them. You must be a
-  // member of the org; a machine credential may name only its own org.
-  // Unset: every machine you run, in every organization, which is what
-  // clients that predate this field get.
-  optional string org_id = 3;
 }
 
 message ListDaemonsResponse {

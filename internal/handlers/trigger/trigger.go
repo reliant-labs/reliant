@@ -89,14 +89,6 @@ func (s *Service) CreateTrigger(
 	if trigger.Kind == core.TriggerKindSchedule && s.deps.Syncer == nil {
 		return nil, svcerr.Unavailable("the schedule backend is unavailable; cannot create a trigger that would never fire")
 	}
-	// Fixed at creation: every chat the trigger launches belongs to it.
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, trigger.ProjectID, userID)
-	if err != nil {
-		return nil, triggerDBError("get project", err)
-	}
-	if trigger.OrgID, err = s.triggerOrg(ctx, userID, req.Msg.GetOrgId(), project); err != nil {
-		return nil, err
-	}
 	trigger.ID = uuid.NewString()
 	// nil enabled means true: a create that omits the field wants a working
 	// trigger, not a disabled one.
@@ -107,9 +99,7 @@ func (s *Service) CreateTrigger(
 		return nil, err
 	}
 
-	// Under the owner's org lock, only while the project's org this decision
-	// read still holds.
-	if err := s.deps.Repo.CreateTriggerInOrg(ctx, trigger, db.OrgRead{Table: "projects", ID: project.ID, Org: project.OrgID}); err != nil {
+	if err := s.deps.Repo.CreateTrigger(ctx, trigger); err != nil {
 		return nil, triggerDBError("create trigger", err)
 	}
 
@@ -206,18 +196,11 @@ func (s *Service) ListTriggers(
 
 	// The filter carries the caller's id, so this can never return another
 	// user's triggers regardless of what project id was asked for.
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
-	if err != nil {
-		return nil, err
-	}
-	filters := core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId, Org: scope}
+	filters := core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId}
 	stored, err := s.deps.Repo.ListTriggers(ctx, filters)
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
 	}
-	// A trigger of an org the caller has left is not listed, named org or
-	// not: the list shows what GetTrigger would.
-	stored = authz.Visible(ctx, userID, stored, authz.CanReadTrigger)
 
 	// One query for every trigger's recent firings: health and last_event are
 	// computed from it, so the list costs a constant number of queries.
@@ -275,31 +258,6 @@ func (s *Service) UpdateTrigger(
 	}
 	updated.ID = existing.ID
 	updated.CreatedAt = existing.CreatedAt
-	// A trigger's org is fixed (no moving between orgs): it may move only to
-	// a project of the same org, and only a caller acting in that org may
-	// change it at all (updatedTriggerOrg).
-	var source, target *core.Project
-	if existing.OrgID == nil {
-		if source, err = s.deps.Repo.GetProjectWithUserCheck(ctx, existing.ProjectID, existing.UserID); err != nil && !svcerr.IsNotFound(err) {
-			return nil, triggerDBError("get project", err)
-		}
-	}
-	if updated.ProjectID != existing.ProjectID {
-		if target, err = s.deps.Repo.GetProjectWithUserCheck(ctx, updated.ProjectID, existing.UserID); err != nil {
-			return nil, triggerDBError("get project", err)
-		}
-	}
-	if updated.OrgID, err = s.updatedTriggerOrg(ctx, existing.UserID, existing, source, target); err != nil {
-		return nil, err
-	}
-	// The write re-reads, under the owner's org lock, every org this
-	// decision read: a backfill between here and there refuses it.
-	reads := []db.OrgRead{{Table: "triggers", ID: existing.ID, Org: existing.OrgID}}
-	for _, p := range []*core.Project{source, target} {
-		if p != nil {
-			reads = append(reads, db.OrgRead{Table: "projects", ID: p.ID, Org: p.OrgID})
-		}
-	}
 	// nil enabled on update means "leave it as it is": an update of the
 	// schedule should not silently resume a trigger the owner paused.
 	updated.Enabled = existing.Enabled
@@ -310,7 +268,7 @@ func (s *Service) UpdateTrigger(
 		return nil, err
 	}
 
-	if err := s.deps.Repo.UpdateTriggerInOrg(ctx, updated, reads...); err != nil {
+	if err := s.deps.Repo.UpdateTrigger(ctx, updated); err != nil {
 		return nil, triggerDBError("update trigger", err)
 	}
 

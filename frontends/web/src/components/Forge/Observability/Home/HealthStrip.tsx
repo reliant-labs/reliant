@@ -13,6 +13,7 @@
 
 import { useMemo } from "react";
 
+import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import { useAlertHistory, useAlerts, usePanelQuery } from "@/hooks/observability-queries";
 import type { ObsScope, PanelResult } from "@/services/controlPlane/observability/types";
@@ -86,10 +87,8 @@ function valueOf(result: PanelResult | undefined, label: string): number | null 
 function change(now: number | null, before: number | null, format: (delta: number) => string, label: string): string | null {
   if (now === null || before === null) return null;
   const delta = now - before;
-  // A change too small to show at the figure's precision ("+0pt") is no change.
-  const shown = format(Math.abs(delta));
-  if (Math.abs(delta) < 1e-9 || shown === format(0)) return `no change vs ${label}`;
-  return `${delta > 0 ? "+" : "−"}${shown} vs ${label}`;
+  if (Math.abs(delta) < 1e-9) return `no change vs ${label}`;
+  return `${delta > 0 ? "+" : "−"}${format(Math.abs(delta))} vs ${label}`;
 }
 
 function Strip({
@@ -131,9 +130,7 @@ function Strip({
   const failed = !!totals.error && !keepsLastResult(totals.error, totals.data);
 
   return (
-    // One card, four cells split by hairlines (the gap shows the border colour
-    // behind them): a strip of figures, not four cards. Two to a row on a phone.
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border xl:grid-cols-4" data-testid="observability-strip">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="observability-strip">
       <Cell
         label="Requests"
         figure={loading ? null : failed ? "—" : formatCount(requests ?? 0)}
@@ -198,16 +195,16 @@ function Cell({
     <>
       <div className="text-xs text-ink-muted">{label}</div>
       {figure === null ? (
-        <div className="mt-1 h-6 w-16 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-busy="true" aria-label={`Loading ${label}`} />
+        <div className="mt-1 h-7 w-20 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-busy="true" aria-label={`Loading ${label}`} />
       ) : (
-        <div className={cn("mt-0.5 text-lg font-semibold leading-7 tabular-nums", tone === "warning" ? "text-warning-ink" : "text-ink")}>{figure}</div>
+        <div className={cn("mt-0.5 text-xl font-semibold tabular-nums", tone === "warning" ? "text-warning-ink" : "text-ink")}>{figure}</div>
       )}
       <div className="min-h-4 truncate text-xs text-ink-muted">{detail ?? " "}</div>
-      <div className="mt-1.5 h-7">
+      <div className="mt-2 h-9">
         {spark.timestamps.length > 1 && (
           <UPlotChart
             compact
-            height={28}
+            height={36}
             timestamps={spark.timestamps}
             series={[{ label, values: spark.values, tone: spark.tone, color: spark.color }]}
             unit={spark.unit}
@@ -219,14 +216,14 @@ function Cell({
     </>
   );
   return (
-    <div className="min-w-0 bg-surface px-4 py-3" data-testid={`observability-cell-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+    <Card padding="none" className="min-w-0 px-4 pb-3 pt-3" data-testid={`observability-cell-${label.toLowerCase().replace(/\s+/g, "-")}`}>
       {href ? (
-        <Link href={href} className="no-color -m-1 block rounded p-1 hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <Link href={href} className="no-color block">
           {body}
         </Link>
       ) : (
         body
       )}
-    </div>
+    </Card>
   );
 }

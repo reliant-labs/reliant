@@ -3,7 +3,6 @@ import { useNavigate } from "@tanstack/react-router";
 import Modal from "./forge-ui/modal";
 import type { AppOutOfDateData } from "../store/modalStore";
 import { logger } from "../lib/logger";
-import { useAppUpdateStore } from "../store/appUpdateStore";
 
 export interface AppOutOfDateModalProps {
   isOpen: boolean;
@@ -29,10 +28,9 @@ export function AppOutOfDateModal({ isOpen, onClose }: AppOutOfDateModalProps) {
       window.location.reload();
       return;
     }
-    // Settings → About shows where the updater stands; the check opens the
-    // update dialog over it when it finds an update.
+    // The updater's progress UI lives in Settings → About.
     void navigate({ to: "/settings/$section", params: { section: "about" } });
-    useAppUpdateStore.getState().checkForUpdates().catch((err: unknown) => {
+    window.electronAPI?.checkForUpdates?.().catch((err: unknown) => {
       logger.error("[AppOutOfDateModal] update check failed", err);
     });
   };
