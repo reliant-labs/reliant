@@ -65,6 +65,9 @@ const (
 	// OrgPolicyServiceGetMyPolicyUsageProcedure is the fully-qualified name of the OrgPolicyService's
 	// GetMyPolicyUsage RPC.
 	OrgPolicyServiceGetMyPolicyUsageProcedure = "/controlplane.v1.OrgPolicyService/GetMyPolicyUsage"
+	// OrgPolicyServiceListOrgPolicyDenialsProcedure is the fully-qualified name of the
+	// OrgPolicyService's ListOrgPolicyDenials RPC.
+	OrgPolicyServiceListOrgPolicyDenialsProcedure = "/controlplane.v1.OrgPolicyService/ListOrgPolicyDenials"
 )
 
 // OrgPolicyServiceClient is a client for the controlplane.v1.OrgPolicyService service.
@@ -105,6 +108,15 @@ type OrgPolicyServiceClient interface {
 	//
 	// forge:custom — the caller's usage, not the CRUD of a table.
 	GetMyPolicyUsage(context.Context, *connect.Request[v1.GetMyPolicyUsageRequest]) (*connect.Response[v1.GetMyPolicyUsageResponse], error)
+	// ListOrgPolicyDenials returns what the org's policies refused, and what
+	// rules in audit mode would have refused, per UTC day (§3.4): "blocked 31
+	// calls this week by the model policy, 9 would have been blocked by the
+	// audit-mode rule". Admin or owner. Counts reach it within a minute; the
+	// last moments before a gateway process exits may be missing (best
+	// effort; the metric org_policy_denials_total is the exact count).
+	//
+	// forge:custom — an aggregate read, not the CRUD of a table.
+	ListOrgPolicyDenials(context.Context, *connect.Request[v1.ListOrgPolicyDenialsRequest]) (*connect.Response[v1.ListOrgPolicyDenialsResponse], error)
 }
 
 // NewOrgPolicyServiceClient constructs a client for the controlplane.v1.OrgPolicyService service.
@@ -142,15 +154,22 @@ func NewOrgPolicyServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(orgPolicyServiceMethods.ByName("GetMyPolicyUsage")),
 			connect.WithClientOptions(opts...),
 		),
+		listOrgPolicyDenials: connect.NewClient[v1.ListOrgPolicyDenialsRequest, v1.ListOrgPolicyDenialsResponse](
+			httpClient,
+			baseURL+OrgPolicyServiceListOrgPolicyDenialsProcedure,
+			connect.WithSchema(orgPolicyServiceMethods.ByName("ListOrgPolicyDenials")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // orgPolicyServiceClient implements OrgPolicyServiceClient.
 type orgPolicyServiceClient struct {
-	getOrgPolicy     *connect.Client[v1.GetOrgPolicyRequest, v1.GetOrgPolicyResponse]
-	updateOrgPolicy  *connect.Client[v1.UpdateOrgPolicyRequest, v1.UpdateOrgPolicyResponse]
-	previewOrgPolicy *connect.Client[v1.PreviewOrgPolicyRequest, v1.PreviewOrgPolicyResponse]
-	getMyPolicyUsage *connect.Client[v1.GetMyPolicyUsageRequest, v1.GetMyPolicyUsageResponse]
+	getOrgPolicy         *connect.Client[v1.GetOrgPolicyRequest, v1.GetOrgPolicyResponse]
+	updateOrgPolicy      *connect.Client[v1.UpdateOrgPolicyRequest, v1.UpdateOrgPolicyResponse]
+	previewOrgPolicy     *connect.Client[v1.PreviewOrgPolicyRequest, v1.PreviewOrgPolicyResponse]
+	getMyPolicyUsage     *connect.Client[v1.GetMyPolicyUsageRequest, v1.GetMyPolicyUsageResponse]
+	listOrgPolicyDenials *connect.Client[v1.ListOrgPolicyDenialsRequest, v1.ListOrgPolicyDenialsResponse]
 }
 
 // GetOrgPolicy calls controlplane.v1.OrgPolicyService.GetOrgPolicy.
@@ -171,6 +190,11 @@ func (c *orgPolicyServiceClient) PreviewOrgPolicy(ctx context.Context, req *conn
 // GetMyPolicyUsage calls controlplane.v1.OrgPolicyService.GetMyPolicyUsage.
 func (c *orgPolicyServiceClient) GetMyPolicyUsage(ctx context.Context, req *connect.Request[v1.GetMyPolicyUsageRequest]) (*connect.Response[v1.GetMyPolicyUsageResponse], error) {
 	return c.getMyPolicyUsage.CallUnary(ctx, req)
+}
+
+// ListOrgPolicyDenials calls controlplane.v1.OrgPolicyService.ListOrgPolicyDenials.
+func (c *orgPolicyServiceClient) ListOrgPolicyDenials(ctx context.Context, req *connect.Request[v1.ListOrgPolicyDenialsRequest]) (*connect.Response[v1.ListOrgPolicyDenialsResponse], error) {
+	return c.listOrgPolicyDenials.CallUnary(ctx, req)
 }
 
 // OrgPolicyServiceHandler is an implementation of the controlplane.v1.OrgPolicyService service.
@@ -211,6 +235,15 @@ type OrgPolicyServiceHandler interface {
 	//
 	// forge:custom — the caller's usage, not the CRUD of a table.
 	GetMyPolicyUsage(context.Context, *connect.Request[v1.GetMyPolicyUsageRequest]) (*connect.Response[v1.GetMyPolicyUsageResponse], error)
+	// ListOrgPolicyDenials returns what the org's policies refused, and what
+	// rules in audit mode would have refused, per UTC day (§3.4): "blocked 31
+	// calls this week by the model policy, 9 would have been blocked by the
+	// audit-mode rule". Admin or owner. Counts reach it within a minute; the
+	// last moments before a gateway process exits may be missing (best
+	// effort; the metric org_policy_denials_total is the exact count).
+	//
+	// forge:custom — an aggregate read, not the CRUD of a table.
+	ListOrgPolicyDenials(context.Context, *connect.Request[v1.ListOrgPolicyDenialsRequest]) (*connect.Response[v1.ListOrgPolicyDenialsResponse], error)
 }
 
 // NewOrgPolicyServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -244,6 +277,12 @@ func NewOrgPolicyServiceHandler(svc OrgPolicyServiceHandler, opts ...connect.Han
 		connect.WithSchema(orgPolicyServiceMethods.ByName("GetMyPolicyUsage")),
 		connect.WithHandlerOptions(opts...),
 	)
+	orgPolicyServiceListOrgPolicyDenialsHandler := connect.NewUnaryHandler(
+		OrgPolicyServiceListOrgPolicyDenialsProcedure,
+		svc.ListOrgPolicyDenials,
+		connect.WithSchema(orgPolicyServiceMethods.ByName("ListOrgPolicyDenials")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.OrgPolicyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case OrgPolicyServiceGetOrgPolicyProcedure:
@@ -254,6 +293,8 @@ func NewOrgPolicyServiceHandler(svc OrgPolicyServiceHandler, opts ...connect.Han
 			orgPolicyServicePreviewOrgPolicyHandler.ServeHTTP(w, r)
 		case OrgPolicyServiceGetMyPolicyUsageProcedure:
 			orgPolicyServiceGetMyPolicyUsageHandler.ServeHTTP(w, r)
+		case OrgPolicyServiceListOrgPolicyDenialsProcedure:
+			orgPolicyServiceListOrgPolicyDenialsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -277,4 +318,8 @@ func (UnimplementedOrgPolicyServiceHandler) PreviewOrgPolicy(context.Context, *c
 
 func (UnimplementedOrgPolicyServiceHandler) GetMyPolicyUsage(context.Context, *connect.Request[v1.GetMyPolicyUsageRequest]) (*connect.Response[v1.GetMyPolicyUsageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrgPolicyService.GetMyPolicyUsage is not implemented"))
+}
+
+func (UnimplementedOrgPolicyServiceHandler) ListOrgPolicyDenials(context.Context, *connect.Request[v1.ListOrgPolicyDenialsRequest]) (*connect.Response[v1.ListOrgPolicyDenialsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrgPolicyService.ListOrgPolicyDenials is not implemented"))
 }

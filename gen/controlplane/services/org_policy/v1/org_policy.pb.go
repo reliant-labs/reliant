@@ -825,6 +825,213 @@ func (x *GetMyPolicyUsageResponse) GetAppliesTo() v1.SpendAppliesTo {
 	return v1.SpendAppliesTo(0)
 }
 
+type ListOrgPolicyDenialsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// days is how many UTC days back to read, today included; 0 means 7.
+	Days          int32 `protobuf:"varint,2,opt,name=days,proto3" json:"days,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListOrgPolicyDenialsRequest) Reset() {
+	*x = ListOrgPolicyDenialsRequest{}
+	mi := &file_services_org_policy_v1_org_policy_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListOrgPolicyDenialsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListOrgPolicyDenialsRequest) ProtoMessage() {}
+
+func (x *ListOrgPolicyDenialsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_org_policy_v1_org_policy_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListOrgPolicyDenialsRequest.ProtoReflect.Descriptor instead.
+func (*ListOrgPolicyDenialsRequest) Descriptor() ([]byte, []int) {
+	return file_services_org_policy_v1_org_policy_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ListOrgPolicyDenialsRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ListOrgPolicyDenialsRequest) GetDays() int32 {
+	if x != nil {
+		return x.Days
+	}
+	return 0
+}
+
+// OrgPolicyDenialCount is one day's count of one policy's refusals for one
+// reason, caller and outcome.
+type OrgPolicyDenialCount struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// day is the UTC day, YYYY-MM-DD.
+	Day string `protobuf:"bytes,1,opt,name=day,proto3" json:"day,omitempty"`
+	// policy is the section: "models", "spend", ...
+	Policy string `protobuf:"bytes,2,opt,name=policy,proto3" json:"policy,omitempty"`
+	// reason is the refusal reason, e.g. "model_not_allowed".
+	Reason string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	// user_id is the member the call acted as; empty for a hosted app's
+	// environment key.
+	UserId string `protobuf:"bytes,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// outcome is "refused" (an enforced rule) or "audited" (a rule in audit
+	// mode: counted, nothing refused).
+	Outcome       string `protobuf:"bytes,5,opt,name=outcome,proto3" json:"outcome,omitempty"`
+	Count         int64  `protobuf:"varint,6,opt,name=count,proto3" json:"count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrgPolicyDenialCount) Reset() {
+	*x = OrgPolicyDenialCount{}
+	mi := &file_services_org_policy_v1_org_policy_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrgPolicyDenialCount) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrgPolicyDenialCount) ProtoMessage() {}
+
+func (x *OrgPolicyDenialCount) ProtoReflect() protoreflect.Message {
+	mi := &file_services_org_policy_v1_org_policy_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrgPolicyDenialCount.ProtoReflect.Descriptor instead.
+func (*OrgPolicyDenialCount) Descriptor() ([]byte, []int) {
+	return file_services_org_policy_v1_org_policy_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *OrgPolicyDenialCount) GetDay() string {
+	if x != nil {
+		return x.Day
+	}
+	return ""
+}
+
+func (x *OrgPolicyDenialCount) GetPolicy() string {
+	if x != nil {
+		return x.Policy
+	}
+	return ""
+}
+
+func (x *OrgPolicyDenialCount) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *OrgPolicyDenialCount) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *OrgPolicyDenialCount) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *OrgPolicyDenialCount) GetCount() int64 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+type ListOrgPolicyDenialsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// counts are newest day first.
+	Counts        []*OrgPolicyDenialCount `protobuf:"bytes,1,rep,name=counts,proto3" json:"counts,omitempty"`
+	RefusedTotal  int64                   `protobuf:"varint,2,opt,name=refused_total,json=refusedTotal,proto3" json:"refused_total,omitempty"`
+	AuditedTotal  int64                   `protobuf:"varint,3,opt,name=audited_total,json=auditedTotal,proto3" json:"audited_total,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListOrgPolicyDenialsResponse) Reset() {
+	*x = ListOrgPolicyDenialsResponse{}
+	mi := &file_services_org_policy_v1_org_policy_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListOrgPolicyDenialsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListOrgPolicyDenialsResponse) ProtoMessage() {}
+
+func (x *ListOrgPolicyDenialsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_org_policy_v1_org_policy_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListOrgPolicyDenialsResponse.ProtoReflect.Descriptor instead.
+func (*ListOrgPolicyDenialsResponse) Descriptor() ([]byte, []int) {
+	return file_services_org_policy_v1_org_policy_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ListOrgPolicyDenialsResponse) GetCounts() []*OrgPolicyDenialCount {
+	if x != nil {
+		return x.Counts
+	}
+	return nil
+}
+
+func (x *ListOrgPolicyDenialsResponse) GetRefusedTotal() int64 {
+	if x != nil {
+		return x.RefusedTotal
+	}
+	return 0
+}
+
+func (x *ListOrgPolicyDenialsResponse) GetAuditedTotal() int64 {
+	if x != nil {
+		return x.AuditedTotal
+	}
+	return 0
+}
+
 var File_services_org_policy_v1_org_policy_proto protoreflect.FileDescriptor
 
 const file_services_org_policy_v1_org_policy_proto_rawDesc = "" +
@@ -884,12 +1091,27 @@ const file_services_org_policy_v1_org_policy_proto_rawDesc = "" +
 	"\x06member\x18\x04 \x01(\v2!.controlplane.v1.PolicySpendUsageR\x06member\x123\n" +
 	"\x03org\x18\x05 \x01(\v2!.controlplane.v1.PolicySpendUsageR\x03org\x12>\n" +
 	"\n" +
-	"applies_to\x18\x06 \x01(\x0e2\x1f.controlplane.v1.SpendAppliesToR\tappliesTo2\xa7\x03\n" +
+	"applies_to\x18\x06 \x01(\x0e2\x1f.controlplane.v1.SpendAppliesToR\tappliesTo\"H\n" +
+	"\x1bListOrgPolicyDenialsRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x12\n" +
+	"\x04days\x18\x02 \x01(\x05R\x04days\"\xa1\x01\n" +
+	"\x14OrgPolicyDenialCount\x12\x10\n" +
+	"\x03day\x18\x01 \x01(\tR\x03day\x12\x16\n" +
+	"\x06policy\x18\x02 \x01(\tR\x06policy\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x17\n" +
+	"\auser_id\x18\x04 \x01(\tR\x06userId\x12\x18\n" +
+	"\aoutcome\x18\x05 \x01(\tR\aoutcome\x12\x14\n" +
+	"\x05count\x18\x06 \x01(\x03R\x05count\"\xa7\x01\n" +
+	"\x1cListOrgPolicyDenialsResponse\x12=\n" +
+	"\x06counts\x18\x01 \x03(\v2%.controlplane.v1.OrgPolicyDenialCountR\x06counts\x12#\n" +
+	"\rrefused_total\x18\x02 \x01(\x03R\frefusedTotal\x12#\n" +
+	"\raudited_total\x18\x03 \x01(\x03R\fauditedTotal2\x9c\x04\n" +
 	"\x10OrgPolicyService\x12[\n" +
 	"\fGetOrgPolicy\x12$.controlplane.v1.GetOrgPolicyRequest\x1a%.controlplane.v1.GetOrgPolicyResponse\x12d\n" +
 	"\x0fUpdateOrgPolicy\x12'.controlplane.v1.UpdateOrgPolicyRequest\x1a(.controlplane.v1.UpdateOrgPolicyResponse\x12g\n" +
 	"\x10PreviewOrgPolicy\x12(.controlplane.v1.PreviewOrgPolicyRequest\x1a).controlplane.v1.PreviewOrgPolicyResponse\x12g\n" +
-	"\x10GetMyPolicyUsage\x12(.controlplane.v1.GetMyPolicyUsageRequest\x1a).controlplane.v1.GetMyPolicyUsageResponseB\xda\x01\n" +
+	"\x10GetMyPolicyUsage\x12(.controlplane.v1.GetMyPolicyUsageRequest\x1a).controlplane.v1.GetMyPolicyUsageResponse\x12s\n" +
+	"\x14ListOrgPolicyDenials\x12,.controlplane.v1.ListOrgPolicyDenialsRequest\x1a-.controlplane.v1.ListOrgPolicyDenialsResponseB\xda\x01\n" +
 	"\x13com.controlplane.v1B\x0eOrgPolicyProtoP\x01ZVgithub.com/reliant-labs/reliant/gen/controlplane/services/org_policy/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -904,55 +1126,61 @@ func file_services_org_policy_v1_org_policy_proto_rawDescGZIP() []byte {
 	return file_services_org_policy_v1_org_policy_proto_rawDescData
 }
 
-var file_services_org_policy_v1_org_policy_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_services_org_policy_v1_org_policy_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_services_org_policy_v1_org_policy_proto_goTypes = []any{
-	(*OrgPolicyRecord)(nil),          // 0: controlplane.v1.OrgPolicyRecord
-	(*GetOrgPolicyRequest)(nil),      // 1: controlplane.v1.GetOrgPolicyRequest
-	(*GetOrgPolicyResponse)(nil),     // 2: controlplane.v1.GetOrgPolicyResponse
-	(*UpdateOrgPolicyRequest)(nil),   // 3: controlplane.v1.UpdateOrgPolicyRequest
-	(*UpdateOrgPolicyResponse)(nil),  // 4: controlplane.v1.UpdateOrgPolicyResponse
-	(*PreviewOrgPolicyRequest)(nil),  // 5: controlplane.v1.PreviewOrgPolicyRequest
-	(*OrgPolicyViolation)(nil),       // 6: controlplane.v1.OrgPolicyViolation
-	(*OrgPolicyFieldChange)(nil),     // 7: controlplane.v1.OrgPolicyFieldChange
-	(*PreviewOrgPolicyResponse)(nil), // 8: controlplane.v1.PreviewOrgPolicyResponse
-	(*GetMyPolicyUsageRequest)(nil),  // 9: controlplane.v1.GetMyPolicyUsageRequest
-	(*PolicySpendUsage)(nil),         // 10: controlplane.v1.PolicySpendUsage
-	(*GetMyPolicyUsageResponse)(nil), // 11: controlplane.v1.GetMyPolicyUsageResponse
-	(*v1.OrgPolicy)(nil),             // 12: controlplane.v1.OrgPolicy
-	(*timestamppb.Timestamp)(nil),    // 13: google.protobuf.Timestamp
-	(*v1.SpendCap)(nil),              // 14: controlplane.v1.SpendCap
-	(v1.OrgPolicyMode)(0),            // 15: controlplane.v1.OrgPolicyMode
-	(v1.SpendAppliesTo)(0),           // 16: controlplane.v1.SpendAppliesTo
+	(*OrgPolicyRecord)(nil),              // 0: controlplane.v1.OrgPolicyRecord
+	(*GetOrgPolicyRequest)(nil),          // 1: controlplane.v1.GetOrgPolicyRequest
+	(*GetOrgPolicyResponse)(nil),         // 2: controlplane.v1.GetOrgPolicyResponse
+	(*UpdateOrgPolicyRequest)(nil),       // 3: controlplane.v1.UpdateOrgPolicyRequest
+	(*UpdateOrgPolicyResponse)(nil),      // 4: controlplane.v1.UpdateOrgPolicyResponse
+	(*PreviewOrgPolicyRequest)(nil),      // 5: controlplane.v1.PreviewOrgPolicyRequest
+	(*OrgPolicyViolation)(nil),           // 6: controlplane.v1.OrgPolicyViolation
+	(*OrgPolicyFieldChange)(nil),         // 7: controlplane.v1.OrgPolicyFieldChange
+	(*PreviewOrgPolicyResponse)(nil),     // 8: controlplane.v1.PreviewOrgPolicyResponse
+	(*GetMyPolicyUsageRequest)(nil),      // 9: controlplane.v1.GetMyPolicyUsageRequest
+	(*PolicySpendUsage)(nil),             // 10: controlplane.v1.PolicySpendUsage
+	(*GetMyPolicyUsageResponse)(nil),     // 11: controlplane.v1.GetMyPolicyUsageResponse
+	(*ListOrgPolicyDenialsRequest)(nil),  // 12: controlplane.v1.ListOrgPolicyDenialsRequest
+	(*OrgPolicyDenialCount)(nil),         // 13: controlplane.v1.OrgPolicyDenialCount
+	(*ListOrgPolicyDenialsResponse)(nil), // 14: controlplane.v1.ListOrgPolicyDenialsResponse
+	(*v1.OrgPolicy)(nil),                 // 15: controlplane.v1.OrgPolicy
+	(*timestamppb.Timestamp)(nil),        // 16: google.protobuf.Timestamp
+	(*v1.SpendCap)(nil),                  // 17: controlplane.v1.SpendCap
+	(v1.OrgPolicyMode)(0),                // 18: controlplane.v1.OrgPolicyMode
+	(v1.SpendAppliesTo)(0),               // 19: controlplane.v1.SpendAppliesTo
 }
 var file_services_org_policy_v1_org_policy_proto_depIdxs = []int32{
-	12, // 0: controlplane.v1.OrgPolicyRecord.policy:type_name -> controlplane.v1.OrgPolicy
-	13, // 1: controlplane.v1.OrgPolicyRecord.updated_at:type_name -> google.protobuf.Timestamp
+	15, // 0: controlplane.v1.OrgPolicyRecord.policy:type_name -> controlplane.v1.OrgPolicy
+	16, // 1: controlplane.v1.OrgPolicyRecord.updated_at:type_name -> google.protobuf.Timestamp
 	0,  // 2: controlplane.v1.GetOrgPolicyResponse.policy:type_name -> controlplane.v1.OrgPolicyRecord
-	12, // 3: controlplane.v1.UpdateOrgPolicyRequest.policy:type_name -> controlplane.v1.OrgPolicy
+	15, // 3: controlplane.v1.UpdateOrgPolicyRequest.policy:type_name -> controlplane.v1.OrgPolicy
 	0,  // 4: controlplane.v1.UpdateOrgPolicyResponse.policy:type_name -> controlplane.v1.OrgPolicyRecord
-	12, // 5: controlplane.v1.PreviewOrgPolicyRequest.policy:type_name -> controlplane.v1.OrgPolicy
+	15, // 5: controlplane.v1.PreviewOrgPolicyRequest.policy:type_name -> controlplane.v1.OrgPolicy
 	6,  // 6: controlplane.v1.PreviewOrgPolicyResponse.violations:type_name -> controlplane.v1.OrgPolicyViolation
 	7,  // 7: controlplane.v1.PreviewOrgPolicyResponse.changes:type_name -> controlplane.v1.OrgPolicyFieldChange
-	14, // 8: controlplane.v1.PolicySpendUsage.cap:type_name -> controlplane.v1.SpendCap
-	13, // 9: controlplane.v1.PolicySpendUsage.period_start:type_name -> google.protobuf.Timestamp
-	13, // 10: controlplane.v1.PolicySpendUsage.period_end:type_name -> google.protobuf.Timestamp
-	15, // 11: controlplane.v1.GetMyPolicyUsageResponse.mode:type_name -> controlplane.v1.OrgPolicyMode
+	17, // 8: controlplane.v1.PolicySpendUsage.cap:type_name -> controlplane.v1.SpendCap
+	16, // 9: controlplane.v1.PolicySpendUsage.period_start:type_name -> google.protobuf.Timestamp
+	16, // 10: controlplane.v1.PolicySpendUsage.period_end:type_name -> google.protobuf.Timestamp
+	18, // 11: controlplane.v1.GetMyPolicyUsageResponse.mode:type_name -> controlplane.v1.OrgPolicyMode
 	10, // 12: controlplane.v1.GetMyPolicyUsageResponse.member:type_name -> controlplane.v1.PolicySpendUsage
 	10, // 13: controlplane.v1.GetMyPolicyUsageResponse.org:type_name -> controlplane.v1.PolicySpendUsage
-	16, // 14: controlplane.v1.GetMyPolicyUsageResponse.applies_to:type_name -> controlplane.v1.SpendAppliesTo
-	1,  // 15: controlplane.v1.OrgPolicyService.GetOrgPolicy:input_type -> controlplane.v1.GetOrgPolicyRequest
-	3,  // 16: controlplane.v1.OrgPolicyService.UpdateOrgPolicy:input_type -> controlplane.v1.UpdateOrgPolicyRequest
-	5,  // 17: controlplane.v1.OrgPolicyService.PreviewOrgPolicy:input_type -> controlplane.v1.PreviewOrgPolicyRequest
-	9,  // 18: controlplane.v1.OrgPolicyService.GetMyPolicyUsage:input_type -> controlplane.v1.GetMyPolicyUsageRequest
-	2,  // 19: controlplane.v1.OrgPolicyService.GetOrgPolicy:output_type -> controlplane.v1.GetOrgPolicyResponse
-	4,  // 20: controlplane.v1.OrgPolicyService.UpdateOrgPolicy:output_type -> controlplane.v1.UpdateOrgPolicyResponse
-	8,  // 21: controlplane.v1.OrgPolicyService.PreviewOrgPolicy:output_type -> controlplane.v1.PreviewOrgPolicyResponse
-	11, // 22: controlplane.v1.OrgPolicyService.GetMyPolicyUsage:output_type -> controlplane.v1.GetMyPolicyUsageResponse
-	19, // [19:23] is the sub-list for method output_type
-	15, // [15:19] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	19, // 14: controlplane.v1.GetMyPolicyUsageResponse.applies_to:type_name -> controlplane.v1.SpendAppliesTo
+	13, // 15: controlplane.v1.ListOrgPolicyDenialsResponse.counts:type_name -> controlplane.v1.OrgPolicyDenialCount
+	1,  // 16: controlplane.v1.OrgPolicyService.GetOrgPolicy:input_type -> controlplane.v1.GetOrgPolicyRequest
+	3,  // 17: controlplane.v1.OrgPolicyService.UpdateOrgPolicy:input_type -> controlplane.v1.UpdateOrgPolicyRequest
+	5,  // 18: controlplane.v1.OrgPolicyService.PreviewOrgPolicy:input_type -> controlplane.v1.PreviewOrgPolicyRequest
+	9,  // 19: controlplane.v1.OrgPolicyService.GetMyPolicyUsage:input_type -> controlplane.v1.GetMyPolicyUsageRequest
+	12, // 20: controlplane.v1.OrgPolicyService.ListOrgPolicyDenials:input_type -> controlplane.v1.ListOrgPolicyDenialsRequest
+	2,  // 21: controlplane.v1.OrgPolicyService.GetOrgPolicy:output_type -> controlplane.v1.GetOrgPolicyResponse
+	4,  // 22: controlplane.v1.OrgPolicyService.UpdateOrgPolicy:output_type -> controlplane.v1.UpdateOrgPolicyResponse
+	8,  // 23: controlplane.v1.OrgPolicyService.PreviewOrgPolicy:output_type -> controlplane.v1.PreviewOrgPolicyResponse
+	11, // 24: controlplane.v1.OrgPolicyService.GetMyPolicyUsage:output_type -> controlplane.v1.GetMyPolicyUsageResponse
+	14, // 25: controlplane.v1.OrgPolicyService.ListOrgPolicyDenials:output_type -> controlplane.v1.ListOrgPolicyDenialsResponse
+	21, // [21:26] is the sub-list for method output_type
+	16, // [16:21] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_services_org_policy_v1_org_policy_proto_init() }
@@ -966,7 +1194,7 @@ func file_services_org_policy_v1_org_policy_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_org_policy_v1_org_policy_proto_rawDesc), len(file_services_org_policy_v1_org_policy_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
