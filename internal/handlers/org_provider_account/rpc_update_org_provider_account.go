@@ -55,6 +55,9 @@ func (s *Service) UpdateOrgProviderAccount(
 			return nil, svcerr.Wrap(err)
 		}
 	}
+	if (patch.Paused != nil && !*patch.Paused) || access != "" {
+		s.wakeOrgChats(ctx, orgID, "an org account was resumed or opened to more members")
+	}
 	out, err := s.one(ctx, orgID, acct)
 	if err != nil {
 		return nil, err

@@ -699,6 +699,7 @@ func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
 	}
 	fmt.Fprintf(w, "Daemon:\t%s\n", orDash(t.GetDaemonId()))
 	fmt.Fprintf(w, "Workflow:\t%s\n", orDash(t.GetWorkflow()))
+	fmt.Fprintf(w, "Acting as:\t%s\n", actingIdentityLabel(t.GetActingIdentity()))
 	if src := t.GetDefinitionSource(); src != nil {
 		fmt.Fprintf(w, "Definition:\t%s\n", src.GetSummary())
 		for _, warning := range src.GetWarnings() {
@@ -766,6 +767,19 @@ func triggerStateLabel(t *reliantv1.Trigger) string {
 		return "enabled"
 	}
 	return "paused"
+}
+
+// actingIdentityLabel says whose name a trigger's GitHub writes carry, in the
+// words --acting-as takes; "-" when the server sent none (an older server).
+func actingIdentityLabel(a reliantv1.ActingIdentity) string {
+	switch a {
+	case reliantv1.ActingIdentity_ACTING_IDENTITY_APP:
+		return "app (the Reliant GitHub App's bot)"
+	case reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER:
+		return "owner (the activation owner's own GitHub account)"
+	default:
+		return "-"
+	}
 }
 
 // triggerHealthLabel is TriggerHealth.status in the words the app uses

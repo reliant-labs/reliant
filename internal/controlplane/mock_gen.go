@@ -14,7 +14,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=1016533f7d0e5c6981e9ee1fb84f3b5a75b7c451f8d1bde9f2ae205c9b519369
+// forge:hash=dfed85457d405cca1089774c5beb09e94ac7374b800a6c0226e138935100518e
 
 // MockService is a test mock for the Service interface.
 //
@@ -44,6 +44,7 @@ type MockService struct {
 	AbortProjectOrgMoveFunc          func(context.Context, ProjectOrgMoveStep) error
 	RecordProjectOrgMoveFunc         func(context.Context, ProjectOrgMoveStep, string, map[string]int64) error
 	PreviewProjectOrgMoveFunc        func(context.Context, ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
+	NotifyOrgKeyRejectedFunc         func(context.Context, OrgKeyRejectedNotice) (bool, error)
 }
 
 // MintLLMKey records the call and delegates to MintLLMKeyFunc when set.
@@ -224,6 +225,15 @@ func (m *MockService) PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMov
 		return m.PreviewProjectOrgMoveFunc(ctx, q)
 	}
 	return nil, contractkit.MockNotSet("MockService", "PreviewProjectOrgMove")
+}
+
+// NotifyOrgKeyRejected records the call and delegates to NotifyOrgKeyRejectedFunc when set.
+func (m *MockService) NotifyOrgKeyRejected(ctx context.Context, n OrgKeyRejectedNotice) (bool, error) {
+	m.Recorder.Record("NotifyOrgKeyRejected", ctx, n)
+	if m.NotifyOrgKeyRejectedFunc != nil {
+		return m.NotifyOrgKeyRejectedFunc(ctx, n)
+	}
+	return false, contractkit.MockNotSet("MockService", "NotifyOrgKeyRejected")
 }
 
 // Compile-time check.

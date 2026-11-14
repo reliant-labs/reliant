@@ -73,6 +73,8 @@ const SECTION_TITLE: Record<InboxItemKind, string> = {
   [InboxItemKind.WORKTREE_MARKED]: "Worktrees marked to be reclaimed",
   [InboxItemKind.PERSONAL_FUNDING]: "Chats asking to use your own AI account",
   [InboxItemKind.ORG_PROVIDER_KEY_REJECTED]: "Organization AI keys that stopped working",
+  [InboxItemKind.AUTOMATION_NO_ORG_ACCOUNT]: "Automations paused: no organization AI account",
+  [InboxItemKind.AUTOMATIONS_ON_PERSONAL_ACCOUNTS]: "Automations on your own AI accounts",
 };
 
 /** Section the items by kind, in kind (priority) order, keeping each kind's server order. */

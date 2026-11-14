@@ -474,6 +474,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
 | [`reliant project list`](#reliant-project-list) | List your projects |
+| [`reliant providers`](#reliant-providers) | Show the AI accounts your chats run on, and who pays for each |
+| [`reliant providers list`](#reliant-providers-list) | List your AI accounts and who pays for each |
 | [`reliant server`](#reliant-server) | Run cloud server components |
 | [`reliant server api`](#reliant-server-api) | Run the stateless HTTP + gRPC API server |
 | [`reliant server gateway`](#reliant-server-gateway) | Run the daemon connection gateway |
@@ -495,6 +497,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant workflow answer`](#reliant-workflow-answer) | Answer a pending question on a workflow execution |
 | [`reliant workflow eval`](#reliant-workflow-eval) | Evaluate a CEL expression or {{ }} template against a sample context |
 | [`reliant workflow follow`](#reliant-workflow-follow) | Follow a workflow execution and stream NDJSON lifecycle events |
+| [`reliant workflow funding`](#reliant-workflow-funding) | Show whether a run waits to ask before using your own AI account |
 | [`reliant workflow lint`](#reliant-workflow-lint) | Check workflows for behaviour validation cannot see |
 | [`reliant workflow list`](#reliant-workflow-list) | List available workflows |
 | [`reliant workflow pause`](#reliant-workflow-pause) | Pause a running workflow execution (keeps it resumable) |
@@ -20328,6 +20331,63 @@ reliant project list [flags]
 
 ---
 
+## reliant providers
+
+Show the AI accounts your chats run on, and who pays for each
+
+Shows the AI accounts your chats run on: your own subscriptions and API keys,
+the seats an organization pays for, and, in an organization, its own API keys.
+
+Choosing whose accounts an organization's chats use first, and managing an
+organization's keys and team workspaces, is done in the Reliant app (web or
+desktop): Settings → AI providers and Settings → Organization → AI accounts. The
+server takes those only from a person signed in to the app, never from the CLI
+login, which any agent's shell can use.
+
+```
+reliant providers
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-providers-list) | List your AI accounts and who pays for each |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant providers list
+
+List your AI accounts and who pays for each
+
+Lists your AI accounts, grouped by who pays: your own, and each organization
+that pays for one of your sign-ins (a team seat, or its Reliant credits).
+
+With --org, it also shows your choices for that organization (whose accounts
+its chats use first, and what happens when its accounts can't serve a chat) and
+the organization's own API keys you may use. The organization's keys are listed
+only to a person signed in to the app: from the CLI it says where to see them.
+
+```
+reliant providers list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
+| `--org` | `string` | - | An organization's id: also show your choices for it and its own API keys |
+
+---
+
 ## reliant server
 
 Run cloud server components
@@ -20760,6 +20820,7 @@ reliant workflow
 | [`answer`](#reliant-workflow-answer) | Answer a pending question on a workflow execution |
 | [`eval`](#reliant-workflow-eval) | Evaluate a CEL expression or {{ }} template against a sample context |
 | [`follow`](#reliant-workflow-follow) | Follow a workflow execution and stream NDJSON lifecycle events |
+| [`funding`](#reliant-workflow-funding) | Show whether a run waits to ask before using your own AI account |
 | [`lint`](#reliant-workflow-lint) | Check workflows for behaviour validation cannot see |
 | [`list`](#reliant-workflow-list) | List available workflows |
 | [`pause`](#reliant-workflow-pause) | Pause a running workflow execution (keeps it resumable) |
@@ -20932,6 +20993,37 @@ reliant workflow follow <execution-id> [flags]
 | `--interval` | `duration` | `2s` | Poll interval |
 | `--tail` | `bool` | - | Skip historical events and follow from now |
 | `--timeout` | `duration` | `0s` | Stop following after this long (exit code 2); 0 means no timeout |
+
+---
+
+### reliant workflow funding
+
+Show whether a run waits to ask before using your own AI account
+
+A run of a chat in an organization asks before it moves from the
+organization's AI accounts to your own, and waits until it is answered. This
+prints the question: why it asks, which of your accounts would serve, and
+whether it was answered.
+
+The answer is your consent to spend your own account, so only a person signed
+in to the Reliant app can give it: open the chat in the Reliant app (web or desktop). The CLI login
+is an access token any agent's shell can use, so the server does not take it
+from here. To stop a chat asking, choose "Use my accounts" or "Wait" for the
+organization in Settings → AI providers.
+
+Exit codes:
+  0  the run has no open question
+  4  the run waits on an open question
+
+```
+reliant workflow funding <execution-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
 
 ---
 

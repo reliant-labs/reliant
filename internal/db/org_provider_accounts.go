@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
@@ -302,4 +303,16 @@ func (r *Repo) HasRejectedOrgKeys(ctx context.Context) (bool, error) {
 // those orgs' owners and admins.
 func (r *Repo) ListRejectedOrgKeysIn(ctx context.Context, orgIDs []string) ([]core.ProviderAccount, error) {
 	return store.ListRejectedOrgKeysIn(ctx, r.ORM(), orgIDs)
+}
+
+// ListUnstartedOrgKeyNotices returns up to limit rejected org keys whose email to the org's
+// owners and admins was never confirmed started (store.ListUnstartedOrgKeyNotices).
+func (r *Repo) ListUnstartedOrgKeyNotices(ctx context.Context, limit int) ([]core.ProviderAccount, error) {
+	return store.ListUnstartedOrgKeyNotices(ctx, r.ORM(), limit)
+}
+
+// ConfirmOrgKeyNotice records that the notice of a rejected org key's mark was started
+// (store.ConfirmOrgKeyNotice).
+func (r *Repo) ConfirmOrgKeyNotice(ctx context.Context, orgID, accountID string, markedAt time.Time) error {
+	return store.ConfirmOrgKeyNotice(ctx, r.ORM(), orgID, accountID, markedAt)
 }

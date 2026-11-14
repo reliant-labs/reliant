@@ -116,6 +116,22 @@ func TestSendMessage_ParallelAgentsAreRefusedNotGuessed(t *testing.T) {
 	for _, want := range []string{implement, review, "implement.agent_loop", "review.agent_loop", `"implement"`, `"review"`} {
 		assert.Contains(t, err.Error(), want, "the refusal lists every running agent so the sender can pick one")
 	}
+	// reliant#2465: the same list rides as a RunRecipientAmbiguous detail, so
+	// a client can offer the agents as choices instead of parsing the prose.
+	var listed []*reliantv1.RunRecipientAmbiguous_Agent
+	for _, d := range svcerr.ToConnect(err).Details() {
+		if v, derr := d.Value(); derr == nil {
+			if ambiguous, ok := v.(*reliantv1.RunRecipientAmbiguous); ok {
+				listed = append(listed, ambiguous.GetAgents()...)
+			}
+		}
+	}
+	require.Len(t, listed, 2, "the refusal carries a RunRecipientAmbiguous detail listing both agents")
+	assert.Equal(t, implement, listed[0].GetThreadId())
+	assert.Equal(t, "implement.agent_loop", listed[0].GetNode())
+	assert.Equal(t, "implement", listed[0].GetTitle())
+	assert.Equal(t, review, listed[1].GetThreadId())
+	assert.Equal(t, "review.agent_loop", listed[1].GetNode())
 	assert.Empty(t, queuedBodies(t, ctx, repo, implement))
 	assert.Empty(t, queuedBodies(t, ctx, repo, review))
 	assert.Empty(t, queuedBodies(t, ctx, repo, fx.rootThreadID))

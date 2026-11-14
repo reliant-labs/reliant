@@ -231,6 +231,14 @@ const TriggerPausedCreatorLeftOrg = "creator_left_org"
 // (control-plane docs/design/org-policies.md §5.1).
 const TriggerPausedOrgPolicy = "org_policy"
 
+// TriggerPausedNoOrgAccount is Trigger.PausedReason of a trigger stamped
+// org_only that the system paused because two firings in a row found none
+// of its org's own AI accounts able to run its model (control-plane
+// docs/design/org-provider-accounts.md §11.4, I5). It stays paused until its
+// owner resumes it. A release that predates the reason reads it as any
+// paused trigger: enabled is false.
+const TriggerPausedNoOrgAccount = "no_org_account"
+
 // UnattendedFunding is which AI accounts the runs a trigger fires may spend
 // (control-plane docs/design/org-provider-accounts.md §11.3, I4).
 type UnattendedFunding string
