@@ -6,6 +6,7 @@ import (
 	"context"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
 )
@@ -56,4 +57,13 @@ func (o orgChatWaker) WakeOrgChats(ctx context.Context, orgID, why string) ([]st
 
 func (o orgChatWaker) WakeRuns(ctx context.Context, workflowIDs []string, why string) []string {
 	return capacitywake.WakeRuns(ctx, o.temporal.Client, workflowIDs, why)
+}
+
+// orgAccountChatWaker is the org's chat waker for an org account change, nil
+// without Temporal (a nil *TemporalClient in one would be a non-nil waker).
+func orgAccountChatWaker(repo *db.Repo, temporal *TemporalClient) org_provider_account.OrgChatWaker {
+	if repo == nil || temporal == nil || temporal.Client == nil {
+		return nil
+	}
+	return orgChatWaker{repo: repo, temporal: temporal}
 }

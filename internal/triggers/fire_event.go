@@ -291,6 +291,13 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if launch.OwnerLeftOrg(launchErr) {
 		return f.refuseCreatorLeftOrg(ctx, ev, def, trigger, launchErr)
 	}
+	if errors.Is(launchErr, launch.ErrNoOrgAccount) {
+		detail, err := f.pause.RefuseNoOrgAccount(ctx, f.repo, trigger, launchErr)
+		if err != nil {
+			return nil, err
+		}
+		return f.settle(ctx, ev, def, core.TriggerEventFailed, detail, launchErr)
+	}
 	var validation *launch.ValidationError
 	if errors.As(launchErr, &validation) || errors.Is(launchErr, launch.ErrNotFound) {
 		return f.settle(ctx, ev, def, core.TriggerEventFailed, launchErr.Error(), launchErr)
@@ -421,9 +428,10 @@ func eventSpec(ctx context.Context, repo any, trigger *core.Trigger, ev *core.Tr
 				DisplayStyle: &hidden,
 			},
 		},
-		Unattended:     true,
-		ActingIdentity: trigger.ActingIdentity,
-		Automation:     trigger.Name,
+		Unattended:      true,
+		ActingIdentity:  trigger.ActingIdentity,
+		Automation:      trigger.Name,
+		OrgAccountsOnly: trigger.UnattendedFunding.OrgOnly(),
 	}, nil
 }
 
