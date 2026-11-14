@@ -103,22 +103,7 @@ func TestDeleteUserProjectWaitsForAnInFlightChatWriter(t *testing.T) {
 
 	// The delete must block on the writer's key share. Until it is seen
 	// waiting, it must not have finished: finishing first is the defect.
-	for {
-		select {
-		case err := <-done:
-			t.Fatalf("DeleteUserProject finished (err %v) while a writer to its chat had not committed", err)
-		default:
-		}
-		var waiting bool
-		if err := env.SQL.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity
-			WHERE datname = current_database() AND wait_event_type = 'Lock')`).Scan(&waiting); err != nil {
-			t.Fatal(err)
-		}
-		if waiting {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	waitForLockWait(t, env, done)
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("commit the writer: %v", err)
 	}
@@ -166,5 +151,175 @@ func TestChatWriteAdmissionAdmitsAChatThatWasNeverPurged(t *testing.T) {
 	defer func() { _ = tx.Rollback() }()
 	if err := writeChatUpdate(ctx, tx, "chat-never-created"); err != nil {
 		t.Fatalf("write: %v", err)
+	}
+}
+
+// workflowContentWrites are the inserts a running workflow makes into the
+// tables chatPurgeSteps cleans that have no foreign key to chats, as raw SQL
+// (so they stand for every release's writers). Each names the chat, or for
+// step_executions the workflow, it writes under.
+var workflowContentWrites = []struct {
+	name  string
+	write func(ctx context.Context, tx *sql.Tx, chat, workflow string) error
+}{
+	{"workflows", func(ctx context.Context, tx *sql.Tx, chat, workflow string) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO workflows (id, chat_id, workflow_name, thread, created_at)
+			VALUES ($1,$2,'wf','main',$3) ON CONFLICT (id) DO NOTHING`, workflow, chat, projectDeleteWriterNow)
+		return err
+	}},
+	{"workflow_checkpoints", func(ctx context.Context, tx *sql.Tx, chat, workflow string) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO workflow_checkpoints (workflow_id, chat_id, node_id, loop_iteration, updated_at)
+			VALUES ($1,$2,'node',0,NOW())
+			ON CONFLICT (workflow_id) DO UPDATE SET node_id = EXCLUDED.node_id, updated_at = NOW()`, workflow, chat)
+		return err
+	}},
+	{"questions", func(ctx context.Context, tx *sql.Tx, chat, workflow string) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO questions (id, chat_id, workflow_id) VALUES ($1,$2,$3)`,
+			workflow+"-q", chat, workflow)
+		return err
+	}},
+	{"step_executions", func(ctx context.Context, tx *sql.Tx, _, workflow string) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO step_executions (id, workflow_id, step_id, activity_name, created_at)
+			VALUES ($1,$2,'step','act',$3)`, workflow+"-s", workflow, projectDeleteWriterNow)
+		return err
+	}},
+}
+
+func assertNoWorkflowContentOf(t *testing.T, env *storetest.Env, chat, workflow string) {
+	t.Helper()
+	for _, q := range []struct{ sql, arg string }{
+		{`SELECT count(*) FROM workflows WHERE chat_id = $1`, chat},
+		{`SELECT count(*) FROM workflow_checkpoints WHERE chat_id = $1`, chat},
+		{`SELECT count(*) FROM questions WHERE chat_id = $1`, chat},
+		{`SELECT count(*) FROM step_executions WHERE workflow_id = $1`, workflow},
+	} {
+		var n int
+		if err := env.SQL.QueryRowContext(context.Background(), q.sql, q.arg).Scan(&n); err != nil {
+			t.Fatalf("%s: %v", q.sql, err)
+		}
+		if n != 0 {
+			t.Errorf("%s = %d after the project was deleted, want 0 (orphaned)", q.sql, n)
+		}
+	}
+}
+
+// seedWorkflow commits the chat's workflow, which a step execution names.
+func seedWorkflow(t *testing.T, env *storetest.Env, chat, workflow string) {
+	t.Helper()
+	if _, err := env.SQL.ExecContext(context.Background(), `INSERT INTO workflows (id, chat_id, workflow_name, thread, created_at)
+		VALUES ($1,$2,'wf','main',$3)`, workflow, chat, projectDeleteWriterNow); err != nil {
+		t.Fatalf("insert workflow: %v", err)
+	}
+}
+
+// waitForLockWait polls until some session of the test database waits on a
+// lock, failing if done delivers first: the delete finishing before the
+// writer committed is the defect.
+func waitForLockWait(t *testing.T, env *storetest.Env, done <-chan error) {
+	t.Helper()
+	ctx := context.Background()
+	for {
+		select {
+		case err := <-done:
+			t.Fatalf("DeleteUserProject finished (err %v) while a writer to its chat had not committed", err)
+		default:
+		}
+		var waiting bool
+		if err := env.SQL.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+			WHERE datname = current_database() AND wait_event_type = 'Lock')`).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// A workflow writer that is mid-transaction when DeleteUserProject reaches its
+// chat is waited for, and what it wrote goes with the chat, for each table
+// the purge cleans that has no foreign key to cascade it.
+func TestDeleteUserProjectWaitsForAnInFlightWorkflowWriter(t *testing.T) {
+	for _, w := range workflowContentWrites {
+		t.Run(w.name, func(t *testing.T) {
+			env := storetest.New(t)
+			ctx := context.Background()
+			project, chat, workflow := "proj-inflight-"+w.name, "chat-inflight-"+w.name, "wf-inflight-"+w.name
+			seedProjectWithChat(t, env, project, chat)
+			if w.name == "step_executions" {
+				seedWorkflow(t, env, chat, workflow)
+			}
+
+			tx, err := env.SQL.BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = tx.Rollback() }()
+			if err := w.write(ctx, tx, chat, workflow); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+
+			done := make(chan error, 1)
+			go func() { done <- store.DeleteUserProject(ctx, env.ORM, project, "owner") }()
+			waitForLockWait(t, env, done)
+			if err := tx.Commit(); err != nil {
+				t.Fatalf("commit the writer: %v", err)
+			}
+			if err := <-done; err != nil {
+				t.Fatalf("DeleteUserProject: %v", err)
+			}
+			assertNoWorkflowContentOf(t, env, chat, workflow)
+		})
+	}
+}
+
+// A workflow writer that reaches a chat after DeleteUserProject purged it — a
+// run still going, of this release or the previous one — is refused, and
+// leaves nothing behind. step_executions is refused through the purged
+// workflow it names.
+func TestDeleteUserProjectRefusesALateWorkflowWriter(t *testing.T) {
+	for _, w := range workflowContentWrites {
+		t.Run(w.name, func(t *testing.T) {
+			env := storetest.New(t)
+			ctx := context.Background()
+			project, chat, workflow := "proj-late-"+w.name, "chat-late-"+w.name, "wf-late-"+w.name
+			seedProjectWithChat(t, env, project, chat)
+			seedWorkflow(t, env, chat, workflow)
+
+			if err := store.DeleteUserProject(ctx, env.ORM, project, "owner"); err != nil {
+				t.Fatalf("DeleteUserProject: %v", err)
+			}
+			tx, err := env.SQL.BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = tx.Rollback() }()
+			err = w.write(ctx, tx, chat, workflow)
+			var pgErr *pgconn.PgError
+			if !errors.As(err, &pgErr) || pgErr.Code != "23503" {
+				t.Fatalf("write to a deleted chat: err = %v, want a foreign_key_violation", err)
+			}
+			_ = tx.Rollback()
+			assertNoWorkflowContentOf(t, env, chat, workflow)
+		})
+	}
+}
+
+// A chat or workflow that never existed is not refused: only purged ones are
+// tombstoned.
+func TestWorkflowWriteAdmissionAdmitsWhatWasNeverPurged(t *testing.T) {
+	for _, w := range workflowContentWrites {
+		t.Run(w.name, func(t *testing.T) {
+			env := storetest.New(t)
+			ctx := context.Background()
+			tx, err := env.SQL.BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = tx.Rollback() }()
+			if err := w.write(ctx, tx, "chat-never-created", "wf-never-created"); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+		})
 	}
 }
