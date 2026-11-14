@@ -8,8 +8,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchModelList = vi.hoisted(() => vi.fn());
+const waitForConfig = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("../../hooks/catalog-models", () => ({ fetchModelList }));
-vi.mock("../../lib/configReady", () => ({ waitForConfig: async () => {} }));
+vi.mock("../../lib/configReady", () => ({ waitForConfig }));
 
 import { useActiveOrgStore } from "../activeOrgStore";
 import { useGlobalDataStore } from "../globalDataStore";
@@ -25,6 +26,8 @@ function deferred<T>() {
 }
 
 beforeEach(() => {
+  waitForConfig.mockReset();
+  waitForConfig.mockImplementation(async () => {});
   fetchModelList.mockReset();
   fetchModelList.mockImplementation(async (org: string | null) => modelsOf(org));
   useGlobalDataStore.getState().reset();
@@ -66,6 +69,23 @@ describe("globalDataStore and the active org", () => {
     slow.resolve(modelsOf("acme"));
     await prefetch;
     expect(useGlobalDataStore.getState().models.map((m) => m.id)).toEqual(["m@globex"]);
+  });
+
+  it("lists the org switched to while the config was still loading, never the one left", async () => {
+    const config = deferred<void>();
+    waitForConfig.mockImplementationOnce(() => config.promise);
+    const prefetch = useGlobalDataStore.getState().prefetch();
+
+    useActiveOrgStore.setState({ effectiveId: "globex" });
+    await vi.waitFor(() => expect(useGlobalDataStore.getState().models.map((m) => m.id)).toEqual(["m@globex"]));
+
+    config.resolve();
+    await prefetch;
+    expect(fetchModelList, "the prefetch that was replaced asks for nothing").not.toHaveBeenCalledWith("acme");
+    const state = useGlobalDataStore.getState();
+    expect(state.models.map((m) => m.id)).toEqual(["m@globex"]);
+    expect(state.modelsOrgId).toBe("globex");
+    expect(state.modelsLoading || state.isPrefetching, "no loading flag is left set").toBe(false);
   });
 
   it("does nothing before the first load, which reads the org itself", () => {

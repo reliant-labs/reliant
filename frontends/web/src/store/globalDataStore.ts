@@ -78,6 +78,15 @@ interface GlobalDataState {
 // endpoints) for the next one.
 let generation = 0;
 
+/**
+ * Whether a fetch started in `startedIn` for `orgId` may install its answer:
+ * no reset or org switch replaced it since (each bumps `generation` and
+ * starts its own fetch), and requests still name the org it asked for.
+ */
+function stillCurrent(startedIn: number, orgId: string | null): boolean {
+  return startedIn === generation && getActiveOrgId() === orgId;
+}
+
 export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   // Initial state
   models: [],
@@ -103,7 +112,6 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
     
     set({ isPrefetching: true });
     const startedIn = generation;
-    const orgId = getActiveOrgId();
 
     try {
       // Wait for backend configuration to be ready (especially in Electron)
@@ -112,6 +120,12 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
       } catch {
         // Continue anyway - the API calls will fail gracefully if backend isn't ready
       }
+      // A reset or an org switch meanwhile started its own fetch, which owns
+      // the loading flags now.
+      if (startedIn !== generation) return;
+      // The org is read once the config is ready, so it is the one the
+      // requests below name.
+      const orgId = getActiveOrgId();
 
       // Set all loading states
       set({ modelsLoading: true });
@@ -146,7 +160,15 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
       isPrefetching: false,
     };
 
-    if (startedIn !== generation) return;
+    if (!stillCurrent(startedIn, orgId)) {
+      // Another org's answer: never shown. A switch already started the
+      // current org's fetch; anything else is re-listed here.
+      if (startedIn === generation) {
+        set({ isPrefetching: false, modelsLoading: false });
+        void get().refetchModels();
+      }
+      return;
+    }
     set(newState);
     } catch (error) {
       if (startedIn !== generation) return;
@@ -166,7 +188,10 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
     const orgId = getActiveOrgId();
     try {
       const response = await fetchModelList(orgId);
-      if (startedIn !== generation) return;
+      if (!stillCurrent(startedIn, orgId)) {
+        if (startedIn === generation) void get().refetchModels();
+        return;
+      }
       set({
         models: response.models || [],
         tiers: response.tiers || {},
