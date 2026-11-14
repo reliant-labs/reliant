@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -220,4 +221,62 @@ func TestLoader_OrgGaveCountsAnAccountThatCannotServeNow(t *testing.T) {
 
 func policyCtxFor(orgID string, doc *controlplanev1.OrgPolicy) context.Context {
 	return orgpolicy.WithResolver(context.Background(), orgpolicy.New(policyDocs{docs: map[string]*controlplanev1.OrgPolicy{orgID: doc}}))
+}
+
+// failingOrgReads is orgFakeRepo whose reads of the org's accounts, or of the
+// person's grants, fail, as an outage does.
+type failingOrgReads struct {
+	*orgFakeRepo
+	accounts, grants bool
+}
+
+func (r failingOrgReads) ListOwnedProviderAccountsWithSecrets(ctx context.Context, owner core.AccountOwner) ([]core.AccountWithSecrets, error) {
+	if r.accounts {
+		return nil, errors.New("database unreachable")
+	}
+	return r.orgFakeRepo.ListOwnedProviderAccountsWithSecrets(ctx, owner)
+}
+
+func (r failingOrgReads) ListMemberAccountGrants(ctx context.Context, orgID, userID string) (map[string]time.Time, error) {
+	if r.grants {
+		return nil, errors.New("database unreachable")
+	}
+	return r.orgFakeRepo.ListMemberAccountGrants(ctx, orgID, userID)
+}
+
+// What the org gives the person, when nobody could say, is not "nothing": a
+// generation never spends their own accounts without their say because a
+// read failed.
+func TestMediaAnUnknownOrgAnswerNeverSpendsThePersonsOwnAccounts(t *testing.T) {
+	member := &fakeMembers{ok: true, answer: map[string]accesstokenclient.OrgMembership{
+		"org-x": {OrgID: "org-x", Member: true, Role: "member", MemberSince: memberSince},
+	}}
+	repo := func() *orgFakeRepo {
+		return &orgFakeRepo{user: "u", mine: []core.AccountWithSecrets{personalKey("own", "u", "gemini")},
+			orgs: map[string][]core.AccountWithSecrets{"org-x": {orgKey("x-selected", "org-x", core.OrgAccessSelected, 0)}}}
+	}
+	scope := Scope{UserID: "u", OrgID: "org-x", Attended: true}
+	for name, tc := range map[string]struct {
+		repo    AvailabilityStore
+		members OrgMembership
+	}{
+		"the org's accounts cannot be read":  {failingOrgReads{orgFakeRepo: repo(), accounts: true}, member},
+		"the person's grants cannot be read": {failingOrgReads{orgFakeRepo: repo(), grants: true}, member},
+		"the membership cannot be read":      {repo(), &fakeMembers{ok: true, err: errors.New("control plane down")}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			avail := loaded(t, tc.repo, tc.members, scope)
+			assert.True(t, avail.OrgGave, "unknown is not \"the org gave nothing\"")
+			require.NotEmpty(t, avail.Accounts["gemini"], "the person's own key is still a candidate")
+
+			resolved, _, err := resolveMediaFrom(context.Background(), "u", scope, RunFunding{}, avail,
+				models.ModelSelector{Tags: []string{mediaImageTag}}, models.ModalityImage, false)
+			assert.Nil(t, resolved, "no generator is built")
+			var funding *models.MediaPersonalFundingError
+			assert.True(t, errors.As(err, &funding), "want the funding refusal, got %v", err)
+		})
+	}
+
+	avail := loaded(t, repo(), member, scope)
+	assert.False(t, avail.OrgGave, "a definite answer: the person was granted nothing")
 }

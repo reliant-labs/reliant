@@ -99,7 +99,8 @@ func usableAPIKey(key string) bool {
 // returns exactly the person's accounts, on one tier, as before orgs.
 //
 // orgGave reports that the org gives the person a first-tier account it pays
-// for, decided before any is left out for its status (models.AvailableDrivers.OrgGave).
+// for, decided before any is left out for its status, or that it could not be
+// told (models.AvailableDrivers.OrgGave).
 func configuredAccounts(ctx context.Context, repo AvailabilityStore, members OrgMembership, scope Scope) (accounts map[models.DriverID][]models.AccountConfig, unavailable map[models.DriverID]string, orgGave bool, err error) {
 	userID := scope.UserID
 	if userID == "" {
@@ -135,7 +136,8 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, members Org
 		}
 		cands = append(cands, c)
 	}
-	cands = append(cands, orgAccountCandidates(ctx, repo, scope, facts)...)
+	orgCands, undecided := orgAccountCandidates(ctx, repo, scope, facts)
+	cands = append(cands, orgCands...)
 	// Stable: within a tier and group, the owner's priority order the reads returned.
 	slices.SortStableFunc(cands, func(a, b candidate) int {
 		if a.tier != b.tier {
@@ -143,6 +145,10 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, members Org
 		}
 		return a.group - b.group
 	})
+	// What the org gives the person, before any account is left out: an
+	// answer nobody could give (a membership, org-account or grant read that
+	// failed) is not "nothing", so it counts as given.
+	orgGave = facts.undecided || undecided
 	for _, c := range cands {
 		orgGave = orgGave || (c.tier == models.TierFirst && models.OrgFunded(c.funding))
 	}
