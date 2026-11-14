@@ -181,6 +181,7 @@ func TestDerivation_LifecycleUnknownPhaseIsDropped(t *testing.T) {
 		DaemonID: "d-future", UserID: "u-1", Type: daemonwire.EventLifecycle,
 		At: time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC), Phase: daemonwire.LifecyclePhase("hibernating"),
 	})
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a dropped event leaves no trace to wait for
 	time.Sleep(150 * time.Millisecond)
 
 	if repo.lifecycleCallCount() != 0 {

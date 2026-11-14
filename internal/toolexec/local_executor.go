@@ -129,6 +129,17 @@ func (e *LocalToolExecutor) executeTool(
 
 	var tool tools.Tool
 
+	// The run's org stamp (daemonpolicy.OrgStamp), from the worker that
+	// enforces the org's policy. Whatever runs this call honours it: it is
+	// carried on ctx for what starts MCP servers (mcp.Manager), and an MCP
+	// tool of a server the org does not allow is refused here, before its
+	// server is started. No stamp: today's behaviour exactly.
+	stamp := daemonpolicy.OrgStampFrom(contextMap)
+	ctx = daemonpolicy.WithOrgStamp(ctx, stamp)
+	if !stamp.MCPToolAllowed(toolName) {
+		return orgMCPRefusal(toolName)
+	}
+
 	// Extract context fields
 	chatID, _ := contextMap["chat_id"].(string)
 	thread, _ := contextMap["thread"].(string)
@@ -200,7 +211,7 @@ func (e *LocalToolExecutor) executeTool(
 		// on every command this tool builds, here on the worker and on a
 		// machine that reads the stamp: the tool reaches a command only
 		// through this client.
-		if daemonpolicy.OrgStampFrom(contextMap).CredentialsForced() {
+		if stamp.CredentialsForced() {
 			daemonClient = daemon.ForceCredentialsNone(daemonClient)
 		}
 		toolContext = toolContext.WithDaemon(daemonClient)
@@ -250,6 +261,13 @@ func (e *LocalToolExecutor) executeTool(
 			ErrorMessage: fmt.Sprintf("tool not found: %s", toolName),
 			ErrorCode:    "TOOL_NOT_FOUND",
 		}
+	}
+
+	// The org's MCP allowlist, on the server the name actually resolved to:
+	// the name-prefix check above only keeps a disallowed server from being
+	// started, and cannot tell server "a" from server "a__b" by a name.
+	if mcpTool, ok := tool.(interface{ MCPServer() string }); ok && !stamp.MCPServerAllowed(mcpTool.MCPServer()) {
+		return orgMCPRefusal(toolName)
 	}
 
 	// Admitted only once the tool is known to exist, so a daemon without it
@@ -314,4 +332,15 @@ func boundParamsFrom(contextMap map[string]interface{}) []string {
 		}
 	}
 	return out
+}
+
+// orgMCPRefusal is the result of an MCP tool call the run's org does not allow.
+func orgMCPRefusal(toolName string) *ExecutionResult {
+	return &ExecutionResult{
+		Success:      false,
+		IsError:      true,
+		Content:      fmt.Sprintf("Your organization does not allow the MCP server of %s for its agents.", toolName),
+		ErrorMessage: "refused by the organization's MCP policy",
+		ErrorCode:    ErrorCodeOrgPolicy,
+	}
 }
