@@ -295,27 +295,41 @@ func (c terminalWSConfig) place(ctx context.Context, router toolexec.DaemonRoute
 // orgStamp is the org policy stamp of a terminal opened for this chat,
 // project or workspace (daemonpolicy.OrgStamp; control-plane
 // docs/design/org-policies.md §5.4): the org's forced `credentials: none`
-// when its machines rule is enforced, else nil. The org is the chat's, else
-// the project's (the workspace's project when only it is named).
+// when its machines rule is enforced, else nil.
+//
+// The org is that of the workspace the terminal opens in, judged as
+// placement judges it (daemonplacement.WorkspaceDaemon): the project named,
+// else the workspace's project, else the chat's. A chat of another project
+// is stale UI context and decides nothing, so naming a chat of a relaxed org
+// beside a forced org's project cannot shed the project's stamp, nor can a
+// stale chat impose its org on another project's terminal. The project's org
+// wins; the chat's counts only when the project records none.
 func (c terminalWSConfig) orgStamp(ctx context.Context, projectID, worktreeID, chatID string) map[string]interface{} {
 	if c.checkouts == nil {
 		return nil
 	}
-	org := ""
-	if chatID != "" {
-		if chat, err := c.checkouts.GetChat(ctx, chatID); err == nil && chat != nil && chat.OrgID != nil {
-			org = *chat.OrgID
-		}
-	}
-	if org == "" && projectID == "" && worktreeID != "" {
+	if projectID == "" && worktreeID != "" {
 		if wt, err := c.checkouts.GetWorktree(ctx, worktreeID); err == nil && wt != nil {
 			projectID = wt.ProjectID
 		}
 	}
-	if org == "" && projectID != "" {
+	var chat *db.Chat
+	if chatID != "" {
+		if got, err := c.checkouts.GetChat(ctx, chatID); err == nil && got != nil && (projectID == "" || got.ProjectID == projectID) {
+			chat = got
+			if projectID == "" {
+				projectID = got.ProjectID
+			}
+		}
+	}
+	org := ""
+	if projectID != "" {
 		if project, err := c.checkouts.GetProject(ctx, projectID); err == nil && project != nil && project.OrgID != nil {
 			org = *project.OrgID
 		}
+	}
+	if org == "" && chat != nil && chat.OrgID != nil {
+		org = *chat.OrgID
 	}
 	d := orgpolicy.ForceCredentialsNone(ctx, org)
 	d.Record(ctx, "terminal", true)

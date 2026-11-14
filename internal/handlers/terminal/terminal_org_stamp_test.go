@@ -49,17 +49,27 @@ func TestTerminalOrgStamp(t *testing.T) {
 	force, other := "org-force", "org-other"
 	cfg := terminalWSConfig{checkouts: orgProjects{
 		fakeTerminalCheckouts: fakeTerminalCheckouts{
-			chats:     map[string]*db.Chat{"chat-forced": {ID: "chat-forced", OrgID: &force}, "chat-other": {ID: "chat-other", OrgID: &other}},
+			chats: map[string]*db.Chat{
+				"chat-forced": {ID: "chat-forced", ProjectID: "proj-forced", OrgID: &force},
+				"chat-other":  {ID: "chat-other", ProjectID: "proj-other", OrgID: &other},
+				// A chat whose project records no org carries its own.
+				"chat-forced-solo": {ID: "chat-forced-solo", ProjectID: "proj-no-org", OrgID: &force},
+			},
 			worktrees: map[string]*db.Worktree{"wt-1": {ID: "wt-1", ProjectID: "proj-forced"}},
 		},
-		orgs: map[string]string{"proj-forced": force},
+		orgs: map[string]string{"proj-forced": force, "proj-other": other},
 	}}
 	enforced := orgpolicy.WithResolver(context.Background(), orgpolicy.New(forcingOrg{controlplanev1.OrgPolicyMode_ORG_POLICY_MODE_ENFORCE}))
 
 	for name, ids := range map[string][3]string{
-		"the chat's org":                {"", "", "chat-forced"},
+		"the chat's project's org":      {"", "", "chat-forced"},
+		"the chat's own org":            {"", "", "chat-forced-solo"},
 		"the project's org":             {"proj-forced", "", ""},
 		"the workspace's project's org": {"", "wt-1", ""},
+		// A chat of a relaxed org named beside a forced org's project or
+		// workspace is another project's: it cannot shed the stamp.
+		"a relaxed chat beside a forced project":   {"proj-forced", "", "chat-other"},
+		"a relaxed chat beside a forced workspace": {"", "wt-1", "chat-other"},
 	} {
 		stamp := daemonpolicy.OrgStampFrom(map[string]interface{}{daemonpolicy.OrgStampContextKey: cfg.orgStamp(enforced, ids[0], ids[1], ids[2])})
 		require.NotNil(t, stamp, name)
@@ -71,6 +81,9 @@ func TestTerminalOrgStamp(t *testing.T) {
 	// Another org, an audited section, a switch in audit, and no checkouts
 	// stamp nothing: today's terminal.
 	assert.Nil(t, cfg.orgStamp(enforced, "", "", "chat-other"))
+	// Nor does a stale forced chat impose its org on another project.
+	assert.Nil(t, cfg.orgStamp(enforced, "proj-other", "", "chat-forced"))
+	assert.Nil(t, cfg.orgStamp(enforced, "proj-no-org", "", "chat-forced"))
 	audited := orgpolicy.WithResolver(context.Background(), orgpolicy.New(forcingOrg{controlplanev1.OrgPolicyMode_ORG_POLICY_MODE_AUDIT}))
 	assert.Nil(t, cfg.orgStamp(audited, "", "", "chat-forced"))
 	orgpolicy.SetProcessEnforcement(orgpolicy.PointMachines, orgpolicy.EnforcementAudit)
