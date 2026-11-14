@@ -1,0 +1,23 @@
+Name:                nightly
+ID:                  trg-1
+State:               enabled
+Health:              -
+Project:             proj-1
+Worktree:            wt-1
+Daemon:              daemon-1
+Workflow:            builtin://agent
+Acting as:           owner (the activation owner's own GitHub account)
+Organization:        acme
+Unattended funding:  org_only (its runs spend only the organization's AI accounts)
+Schedule:            0 9 * * *
+Timezone:            UTC
+Overlap:             skip
+Catchup window:      -
+Next fire:           -
+Preset (top level):  fast
+Param model:         map[id:claude-opus-4-6]
+Created:             2026-11-14T00:00:00Z
+Updated:             2026-11-14T00:00:00Z
+
+Message:
+  Audit the dependency tree.
