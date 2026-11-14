@@ -57,7 +57,7 @@ var scopeOrigins = []scopeOrigin{
 	{"internal/launch/org_policy.go: AccountScope: Scope{}", "a person's act on a chat (a send, a pick, a launch, a wait answered): the chat row's org, attended; launch, send-time substitution, the provider default and usableFallbackModel all take it (org-policies R2)"},
 	{"internal/launch/selected_model.go: SelectionCheck.scope: PersonalScope", "a pick in a chat of no org: the person's own accounts"},
 	{"internal/launch/selected_model.go: SelectionCheck.scope: Scope{}", "a pick in a chat: its org, read from the chat row by the handler (selectionCheck), attended"},
-	{"internal/workflow/runtime/activities/handlers/draft_automation.go: (*DraftAutomationActivity).Execute: llmCallSpec{no OrgID}", "a builder draft belongs to no chat or run; a person is drafting (P5: the automation's org)"},
+	{"internal/workflow/runtime/activities/handlers/draft_automation.go: (*DraftAutomationActivity).Execute: llmCallSpec{OrgID: not from the chat row}", "a builder draft belongs to no chat or run; a person is drafting in a project, whose org the api-server reads from the project row (DraftAutomationInput.OrgID)"},
 	{"internal/workflow/runtime/activities/handlers/llm_probe.go: ProbeLLMCall: llmCallSpec{no OrgID}", "the dev probe belongs to no run"},
 
 	// One-shot and send-time callers with no run scope in hand yet.

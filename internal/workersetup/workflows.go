@@ -6,6 +6,8 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
 
 // titleLLMAttempts is how many times the LLM is asked for a title before the
@@ -77,6 +79,10 @@ func GenerateTitleWorkflow(ctx workflow.Context, input map[string]interface{}) e
 
 // DraftAutomationWorkflowName is TriggerService.DraftAutomation's workflow.
 const DraftAutomationWorkflowName = "DraftAutomationWorkflow"
+
+// DraftNeedsConsentErrorType is the application-error type of a draft only the
+// person's own account could make, with no consent to it on record (§10).
+const DraftNeedsConsentErrorType = handlers.DraftNeedsConsentErrorType
 
 // draftLLMAttempts bounds the model requests one draft may take. A second
 // sample usually fixes a draft the normalizer refused (a malformed cron); a
