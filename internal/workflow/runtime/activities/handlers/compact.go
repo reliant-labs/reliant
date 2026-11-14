@@ -162,6 +162,15 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 	// Generate summary of messages to be compacted
 	summary, err := a.generateCompactionSummaryOnProvider(ctx, chat, thread, rtx.FallbackModel, rtx.Failover, currentContextMessages, summarizeWith, rtx)
 	if err != nil {
+		var noConsent *personalFundingRefused
+		if errors.As(err, &noConsent) {
+			// Only the person's own account could summarize, with no consent
+			// on record. Keep the context as it is: the turn's own call
+			// decides next, asking or waiting as it must.
+			logging.InfoContext(ctx, "[COMPACTION] No consent to the person's own account; leaving the turn to decide", "chatID", rtx.ChatID, "thread", thread, "provider", noConsent.Provider)
+			a.emitThreadUpdate(ctx, rtx.ChatID, thread, "active", "")
+			return CompactOutput{SkippedReason: noConsent.Error()}, nil
+		}
 		if errors.Is(err, errCompactionOverflow) {
 			// Reuse the existing non-destructive skip outcome. Do not create a
 			// new context window from an unusable or incomplete summary.
@@ -311,6 +320,15 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 			"chatID", input.ChatID, "titleLen", len(generatedTitle))
 	} else {
 		generatedTitle, err = a.generateTitleForChat(ctx, chat, input.FirstMessage)
+		var noConsent *personalFundingRefused
+		if errors.As(err, &noConsent) {
+			// Only the person's own accounts could title it, and they have
+			// not agreed to pay for this chat's calls (§10): a deterministic
+			// title now, never a request, never a question.
+			generatedTitle, err = generateSimpleTitleFallback(input.FirstMessage), nil
+			logging.InfoContext(ctx, "[GenerateTitle] No consent to the person's own account; titling with the first message",
+				"chatID", input.ChatID, "provider", noConsent.Provider)
+		}
 		if err != nil {
 			attempt := int32(1)
 			func() {
@@ -415,7 +433,11 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 		UnattendedAnySource: who.anySource,
 		SessionID:           chat.ID, // Use chat ID as thread ID for Anthropic
 		ChatID:              chat.ID,
-		Temperature:         &temperature,
+		// The turn decides who pays (§10) and asks: a compaction reads that
+		// consent and never writes it, and is skipped where the turn would
+		// ask or wait, so the turn that follows decides.
+		Background:  true,
+		Temperature: &temperature,
 		// The summary is a request over this thread's own prefix, so it goes to
 		// the thread's account.
 		ThreadID:          thread,
@@ -518,6 +540,7 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 		return "", a.routing.providerFailure(ctx, fmt.Errorf("failed to generate summary: %w", err), usageLimitContext{
 			Scope: spec.scope(), ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: failover,
+			ChatID: chat.ID, Plan: resolved.plan,
 		})
 	}
 }
@@ -663,7 +686,11 @@ func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, chat *
 		OrgID:               chatOrgID(chat),
 		Attended:            who.attended,
 		UnattendedAnySource: who.anySource,
-		Temperature:         &temperature,
+		// The chat's consent (§10), read and never written: a title spends
+		// the person's own account only where the chat's turn already may.
+		ChatID:      chatID,
+		Background:  true,
+		Temperature: &temperature,
 		// Room for a tool_use block wrapping the title, not just a bare
 		// string: a tighter cap truncates the arguments JSON mid-object and
 		// loses an otherwise good title.
@@ -702,11 +729,28 @@ func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, chat *
 	var raw string
 	var err error
 	var lastRefusal error
+	// consentRefused is the refusal of a provider only the person's own
+	// account could serve, with no consent on record: if nothing else
+	// serves, the title is the first message (generateSimpleTitleFallback).
+	var consentRefused *personalFundingRefused
 	// The title makes up to titleAttempts requests (an account or provider
 	// that refuses is retried elsewhere); the meter records each.
 	meter := newUsageMeter(a.repo, userID, chatID, store.LLMPurposeTitle)
 	for range titleAttempts {
 		raw, err = a.requestTitle(ctx, meter, spec, firstMessage)
+		var noConsent *personalFundingRefused
+		if errors.As(err, &noConsent) {
+			// Another provider may still be the org's: try it, as for a
+			// provider whose accounts are all limited.
+			consentRefused, lastRefusal = noConsent, err
+			if noConsent.Provider == "" || slices.Contains(spec.ExcludeProviders, noConsent.Provider) {
+				break
+			}
+			logging.InfoContext(ctx, "[GenerateTitle] Only the person's own account could serve the provider, with no consent; titling on another provider",
+				"userID", userID, "provider", noConsent.Provider)
+			spec.ExcludeProviders = append(spec.ExcludeProviders, noConsent.Provider)
+			continue
+		}
 		var refused *types.UsageLimitFailure
 		if err == nil || !errors.As(err, &refused) {
 			break
@@ -729,6 +773,10 @@ func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, chat *
 	var unresolved *resolveFailure
 	if err != nil && lastRefusal != nil && errors.As(err, &unresolved) {
 		err = lastRefusal
+	}
+	if err != nil && consentRefused != nil {
+		// Nothing the person agreed to pay for could title it.
+		return "", consentRefused
 	}
 	if err != nil {
 		return "", err
@@ -817,6 +865,7 @@ func (a *GenerateTitleActivity) requestTitle(ctx context.Context, meter *usageMe
 		return "", a.routing.providerFailure(ctx, fmt.Errorf("failed to generate title: %w", err), usageLimitContext{
 			Scope: spec.scope(), Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account,
+			ChatID: spec.ChatID, Plan: resolved.plan,
 		})
 	}
 

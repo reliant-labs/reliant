@@ -3,6 +3,7 @@ package trigger_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -97,4 +98,28 @@ func TestDraftAutomation_Generated(t *testing.T) {
 	_, err := noDrafter.DraftAutomation(trigger.AuthedContext(t), connect.NewRequest(&pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-1"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+}
+
+// A draft in an org's project is that org's work: the drafter is told the
+// org, read from the project row. A draft only the caller's own account could
+// make, with no consent on record, is refused with what to do about it.
+func TestDraftAutomation_ScopedToTheProjectsOrg(t *testing.T) {
+	t.Parallel()
+	org := "org-acme"
+	repo := &trigger.MockRepository{
+		GetProjectWithUserCheckFunc: func(_ context.Context, projectID, _ string) (*db.Project, error) {
+			return &db.Project{ID: projectID, OrgID: &org}, nil
+		},
+	}
+	drafter := &draftAutomationFake{draft: &pb.AutomationDraft{Summary: "hourly"}}
+	svc := trigger.NewTestTrigger(t, trigger.WithTriggerDeps(trigger.Deps{Repo: repo, Drafter: drafter}))
+	_, err := svc.DraftAutomation(trigger.AuthedContext(t), connect.NewRequest(&pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-1"}))
+	require.NoError(t, err)
+	assert.Equal(t, org, drafter.got.OrgID)
+
+	drafter.err = fmt.Errorf("draft workflow: %w", trigger.ErrDraftNeedsConsent)
+	_, err = svc.DraftAutomation(trigger.AuthedContext(t), connect.NewRequest(&pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-1"}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Contains(t, err.Error(), "Settings › AI providers")
 }

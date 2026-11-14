@@ -51,6 +51,20 @@ type llmCallSpec struct {
 	// accounts, tried first under the chat's live limited lease, were all
 	// still limited (fundingPlan.limitedLeaseHolds): the lease reorders it.
 	leaseHolds bool
+	// Background marks a call made on a chat's (or an org's) behalf that is
+	// not a turn of it: a title, a compaction summary, an automation draft.
+	// Its consent check (§10) is read-only: it decides as the turn would
+	// (org-funded accounts first; the person's own only with consent already
+	// on record), but never asks, never grants a lease, never clears or
+	// marks the chat's question and owes no notice. Where the turn would ask
+	// or wait for consent, it is refused with a *personalFundingRefused,
+	// which the caller settles (a title falls back, a compaction is skipped
+	// and the turn decides). With no ChatID it still runs, scoped to OrgID.
+	Background bool
+	// backgroundLease is set on a background call's one re-resolution after
+	// the org's accounts were refused as limited, with consentsOnLimit: it
+	// routes as the turn's lease would, recording nothing.
+	backgroundLease bool
 	// TurnStart reports that the call begins a turn (its history ends with a
 	// person's or an agent's message, not a tool result). Only a turn start
 	// moves a thread up to a better tier (§4.5, D6).
@@ -666,6 +680,13 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 				// A turn start tried the org's accounts first under the
 				// chat's lease, and they are still limited: the lease holds.
 				spec.leaseHolds = true
+				return resolveLLMCall(ctx, resolver, spec)
+			}
+			if !spec.backgroundLease && plan.consentsOnLimit() &&
+				limitedTierIsOrgFunded(routingDrivers.Accounts[models.DriverID(providerDriver)], definitionID(definition)) {
+				// The org's accounts are limited and the person's setting is
+				// to use their own: as the turn's lease, without recording it.
+				spec.backgroundLease = true
 				return resolveLLMCall(ctx, resolver, spec)
 			}
 			// Every account is limited: refuse here, with no provider call, the

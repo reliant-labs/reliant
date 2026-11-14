@@ -343,7 +343,9 @@ func (r *AccountRouting) usageLimitFailure(ctx context.Context, err error, uc us
 	if synthetic {
 		r.recordOrgWait(ctx, uc, uc.RoutedAccounts)
 	}
-	r.fundingOnLimit(ctx, uc, &facts)
+	if refused := r.fundingOnLimit(ctx, uc, &facts); refused != nil {
+		return refused
+	}
 	if !facts.AlternativeAccount {
 		facts.FallbackModel = r.fallbackModel(ctx, uc)
 	}
