@@ -26,11 +26,9 @@ import Tabs from "@/components/forge-ui/tabs";
 import { OrgLLMCostEstimateStatus, type GetOrgLLMUsageResponse, type OrgLLMUsageBucket } from "@/gen/reliant/v1/org_usage_pb";
 import { useOrgLLMUsage } from "@/hooks/org-usage-queries";
 import { useActiveOrg } from "@/hooks/useOrgs";
-import { memberNamesBySubject } from "@/services/controlPlane/members";
 import type { MyOrg } from "@/services/controlPlane/orgs";
 
 import { SettingsPageHeader } from "../../SettingsPageHeader";
-import { useMembers } from "../members/useMembers";
 import {
   bucketName,
   formatEstimate,
@@ -42,7 +40,9 @@ import {
   USAGE_RANGES,
   type UsageGroupId,
   type UsageRangeId,
+  type MemberNames,
 } from "./orgUsageModel";
+import { useMemberNames } from "./useMemberNames";
 
 const TITLE = "AI usage";
 
@@ -67,8 +67,7 @@ function OrgAIUsage({ org }: { org: MyOrg }) {
   const dates = useMemo(() => rangeDates(range), [range]);
   const groupBy = USAGE_GROUPS.find((g) => g.id === group)!.groupBy;
   const q = useOrgLLMUsage({ orgId: org.id, groupBy, ...dates });
-  const members = useMembers(org.id);
-  const names = memberNamesBySubject(members.data?.pages.flatMap((p) => p.members) ?? []);
+  const names = useMemberNames(org.id);
 
   return (
     <div className="forge-ui space-y-6" data-testid="org-ai-usage-page">
@@ -128,7 +127,7 @@ function UsageReport({
 }: {
   data: GetOrgLLMUsageResponse;
   group: UsageGroupId;
-  names: Map<string, string>;
+  names: MemberNames;
   orgName: string;
 }) {
   const totals = data.totals;

@@ -10,7 +10,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
@@ -18,11 +18,12 @@ import { LLMUsageCompleteness } from "@/gen/reliant/v1/usage_pb";
 import { OrgLLMCostEstimateStatus, OrgLLMUsageGroupBy } from "@/gen/reliant/v1/org_usage_pb";
 import type { MyOrg } from "@/services/controlPlane/orgs";
 
-import { formatEstimate, rangeDates } from "../orgUsageModel";
+import { bucketName, formatEstimate, rangeDates } from "../orgUsageModel";
 
 const mocks = vi.hoisted(() => ({
   org: null as MyOrg | null,
   read: vi.fn(),
+  listMembers: vi.fn(),
 }));
 
 vi.mock("@/services/controlPlane/config", () => ({ hasControlPlane: true }));
@@ -32,9 +33,18 @@ vi.mock("@/store/authStore", () => ({
 vi.mock("@/hooks/useOrgs", () => ({
   useActiveOrg: () => ({ active: mocks.org, orgs: mocks.org ? [mocks.org] : [], isLoading: false }),
 }));
-vi.mock("@/components/Settings/cloud/members/useMembers", () => ({
-  useMembers: () => ({ data: { pages: [{ members: [{ userId: "cp-1", externalId: "u-ada", name: "Ada", email: "ada@acme.com" }] }] } }),
+// The roster is read for real (useMembers' infinite query) over a fake
+// control plane: two pages, Ada on the first, Bea on the second.
+vi.mock("@/services/controlPlane/members", async (importActual) => ({
+  ...(await importActual<typeof import("@/services/controlPlane/members")>()),
+  listMembers: (orgId: string, pageToken: string) => mocks.listMembers(orgId, pageToken),
 }));
+
+const member = (externalId: string, name: string) => ({ userId: `cp-${externalId}`, externalId, name, email: `${externalId}@acme.com` });
+const rosterPages = (_orgId: string, pageToken: string) =>
+  pageToken === ""
+    ? { members: [member("u-ada", "Ada")], nextPageToken: "p2" }
+    : { members: [member("u-bea", "Bea")], nextPageToken: "" };
 
 import { OrgAIUsagePage } from "../OrgAIUsagePage";
 
@@ -57,6 +67,7 @@ const bucket = (key: string, extra: Record<string, unknown> = {}) => ({
 function answer(groupBy: OrgLLMUsageGroupBy) {
   const byMember = [
     bucket("u-ada", { estimatedListCost: { usdNanos: 4_500_000_000n, pricedCalls: 1n, unpricedCalls: 0n } }),
+    bucket("u-bea", { calls: 1n, estimatedListCost: { pricedCalls: 0n, unpricedCalls: 0n } }),
     bucket("u-gone", { calls: 1n, estimatedListCost: { pricedCalls: 0n, unpricedCalls: 0n } }),
   ];
   const byAccount = [bucket("acct-key", { label: "Acme prod", estimatedListCost: { usdNanos: 4_500_000_000n, pricedCalls: 1n, unpricedCalls: 0n } }), bucket("acct-gone")];
@@ -86,7 +97,19 @@ function renderPage() {
   );
 }
 
+// A fixed UTC instant: the ranges are computed from today, so a run near a
+// month boundary or in another zone must not change what is asked.
+const NOW = new Date("2026-11-14T15:00:00Z");
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+  mocks.listMembers.mockReset();
+  mocks.listMembers.mockImplementation(async (orgId: string, pageToken: string) => rosterPages(orgId, pageToken));
   mocks.read.mockReset();
   mocks.org = acme;
   mocks.read.mockImplementation((req: { groupBy: OrgLLMUsageGroupBy }) => answer(req.groupBy));
@@ -101,9 +124,12 @@ describe("OrgAIUsagePage", () => {
     expect(within(totals).getByText("Estimate")).toBeInTheDocument();
 
     expect(screen.getByText("Ada")).toBeInTheDocument();
+    // Bea is on the roster's SECOND page: read to the end, she is named.
+    expect(await screen.findByText("Bea")).toBeInTheDocument();
     expect(screen.getByText("Former member")).toBeInTheDocument();
+    expect(mocks.listMembers).toHaveBeenCalledWith("org-a", "p2");
     const costs = screen.getAllByTestId("org-usage-row-cost").map((c) => c.textContent);
-    expect(costs).toEqual(["~$4.50", "—"]);
+    expect(costs).toEqual(["~$4.50", "—", "—"]);
     expect(screen.queryByText("$0.00")).toBeNull();
 
     expect(screen.getByTestId("org-usage-estimate-label")).toHaveTextContent("provider bill is authoritative");
@@ -111,7 +137,33 @@ describe("OrgAIUsagePage", () => {
     expect(screen.getByTestId("org-usage-footnote")).toHaveTextContent("never included");
 
     const req = mocks.read.mock.calls[0][0];
-    expect(req).toMatchObject({ orgId: "org-a", groupBy: OrgLLMUsageGroupBy.ORG_LLM_USAGE_GROUP_BY_MEMBER, ...rangeDates("month") });
+    expect(req).toMatchObject({ orgId: "org-a", groupBy: OrgLLMUsageGroupBy.ORG_LLM_USAGE_GROUP_BY_MEMBER, startDate: "2026-11-01", endDate: "2026-11-14" });
+  });
+
+  it("calls a member not yet read 'loading', never 'former', while the roster is still being read", async () => {
+    let releasePage2: () => void = () => {};
+    mocks.listMembers.mockImplementation((orgId: string, pageToken: string) =>
+      pageToken === "" ? Promise.resolve(rosterPages(orgId, pageToken)) : new Promise((resolve) => (releasePage2 = () => resolve(rosterPages(orgId, pageToken)))),
+    );
+    renderPage();
+    await screen.findByText("Ada");
+    await waitFor(() => expect(mocks.listMembers).toHaveBeenCalledWith("org-a", "p2"));
+    expect(screen.getAllByText("Loading name…")).toHaveLength(2);
+    expect(screen.queryByText("Former member")).toBeNull();
+    releasePage2();
+    expect(await screen.findByText("Bea")).toBeInTheDocument();
+    expect(screen.getByText("Former member")).toBeInTheDocument();
+  });
+
+  it("calls a member 'name unavailable', never 'former', when the roster fails", async () => {
+    mocks.listMembers.mockImplementation(async (orgId: string, pageToken: string) => {
+      if (pageToken === "") return rosterPages(orgId, pageToken);
+      throw new ConnectError("roster down", Code.Unavailable);
+    });
+    renderPage();
+    expect(await screen.findAllByText("Name unavailable")).toHaveLength(2);
+    expect(screen.getByText("Ada")).toBeInTheDocument();
+    expect(screen.queryByText("Former member")).toBeNull();
   });
 
   it("regroups by account, naming each by its label", async () => {
@@ -129,7 +181,7 @@ describe("OrgAIUsagePage", () => {
     renderPage();
     await screen.findByText("Ada");
     fireEvent.change(screen.getByTestId("org-usage-range"), { target: { value: "90d" } });
-    await waitFor(() => expect(mocks.read).toHaveBeenLastCalledWith(expect.objectContaining(rangeDates("90d"))));
+    await waitFor(() => expect(mocks.read).toHaveBeenLastCalledWith(expect.objectContaining({ startDate: "2026-08-17", endDate: "2026-11-14" })));
   });
 
   it("tells a member without billing:read how to get it, as a note rather than an error", async () => {
@@ -159,6 +211,14 @@ describe("orgUsageModel", () => {
     expect(formatEstimate(0n)).toBe("~$0.00");
     expect(formatEstimate(3_000_000n)).toBe("<$0.01");
     expect(formatEstimate(1_234_560_000_000n)).toBe("~$1,234.56");
+  });
+
+  it("a member is former only once the whole roster was read", () => {
+    const b = { key: "u-x", label: "" };
+    expect(bucketName("member", b, { names: new Map(), state: "complete" })).toBe("Former member");
+    expect(bucketName("member", b, { names: new Map(), state: "loading" })).toBe("Loading name…");
+    expect(bucketName("member", b, { names: new Map(), state: "failed" })).toBe("Name unavailable");
+    expect(bucketName("member", b, { names: new Map([["u-x", "Xi"]]), state: "failed" })).toBe("Xi");
   });
 
   it("ranges are whole UTC days ending today", () => {

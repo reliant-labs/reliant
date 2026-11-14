@@ -54,14 +54,32 @@ const FUNDING_LABELS: Record<string, string> = {
 };
 
 /**
- * The name of a bucket: a member's name from the org roster, an account's
- * label, a model id. A member who left (no roster entry) and an account since
- * deleted keep a plain description rather than a raw id.
+ * How far the org roster that names members has been read: every page
+ * ("complete"), still reading ("loading"), or a page failed ("failed"). Only
+ * a complete roster can say someone is a former member.
  */
-export function bucketName(group: UsageGroupId, b: Pick<OrgLLMUsageBucket, "key" | "label">, memberNames: Map<string, string>): string {
+export type RosterState = "complete" | "loading" | "failed";
+
+export interface MemberNames {
+  names: Map<string, string>;
+  state: RosterState;
+}
+
+/**
+ * The name of a bucket: a member's name from the org roster, an account's
+ * label, a model id. A member absent from the WHOLE roster left the org; one
+ * absent while the roster is still loading or failed is unresolved, never
+ * "former". An account since deleted keeps a plain description, not a raw id.
+ */
+export function bucketName(group: UsageGroupId, b: Pick<OrgLLMUsageBucket, "key" | "label">, members: MemberNames): string {
   switch (group) {
-    case "member":
-      return memberNames.get(b.key) ?? "Former member";
+    case "member": {
+      const name = members.names.get(b.key);
+      if (name) return name;
+      if (members.state === "loading") return "Loading name…";
+      if (members.state === "failed") return "Name unavailable";
+      return "Former member";
+    }
     case "account":
       if (b.label) return b.label;
       return b.key ? "Removed account" : "Account not recorded";
