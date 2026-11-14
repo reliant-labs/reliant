@@ -62,9 +62,9 @@ var scopeOrigins = []scopeOrigin{
 	// One-shot and send-time callers with no run scope in hand yet.
 	{"internal/llm/drivers/media_resolution.go: CheckMediaAvailable: PersonalScope", "load_tool's media check carries only the user (P5: the chat's scope)"},
 	{"internal/llm/drivers/media_resolution.go: resolveMediaModel: PersonalScope", "media generation carries only the user (P5: the chat's scope)"},
-	{"internal/handlers/catalog/catalog.go: (*Service).ListModels: PersonalScope", "the picker reads the person's accounts (P5/P6: the active org's)"},
-	{"internal/handlers/catalog/catalog.go: (*Service).ListModels: PersonalScope", "the picker's per-account availability (P5/P6: the active org's)"},
-	{"internal/handlers/catalog/catalog.go: (*Service).ListAvailableModels: PersonalScope", "the picker reads the person's accounts (P5/P6: the active org's)"},
+	{"internal/handlers/catalog/catalog.go: (*Service).pickerScope: PersonalScope", "a picker in a deployment with no orgs: the person's own accounts"},
+	{"internal/handlers/catalog/catalog.go: (*Service).pickerScope: PersonalScope", "a picker request naming no org (every client before orgs): the person's own accounts"},
+	{"internal/handlers/catalog/catalog.go: (*Service).pickerScope: Scope{}", "a picker for the org the request names (ListModels, ListAvailableModels org_id), once orgs.Named verified the caller a live member of it (a machine credential: its own org only), attended: what a chat of that org may run on"},
 	{"tools/reliant-dev/models_probe_run.go: newModelsProbeCmd: PersonalScope", "the dev probe belongs to no run"},
 }
 

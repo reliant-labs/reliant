@@ -3886,7 +3886,13 @@
               "MessageType": "reliant.v1.CatalogEntry"
             }
           ],
-          "ListAvailableModelsRequest": null,
+          "ListAvailableModelsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
           "ListAvailableModelsResponse": [
             {
               "Name": "models",
@@ -4016,7 +4022,13 @@
               "MessageType": "reliant.v1.ModelInfo"
             }
           ],
-          "ListModelsRequest": null,
+          "ListModelsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
           "ListModelsResponse": [
             {
               "Name": "models",
@@ -4565,7 +4577,13 @@
               "kind": "bool"
             }
           ],
-          "reliant.v1.ListAvailableModelsRequest": [],
+          "reliant.v1.ListAvailableModelsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListAvailableModelsResponse": [
             {
               "name": "models",
@@ -4694,7 +4712,13 @@
               "repeated": true
             }
           ],
-          "reliant.v1.ListModelsRequest": [],
+          "reliant.v1.ListModelsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListModelsResponse": [
             {
               "name": "models",
@@ -53251,6 +53275,19 @@
       "candidates": [],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Catalog",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/catalog.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
       ],
       "resolution": "composition_expression"
     },

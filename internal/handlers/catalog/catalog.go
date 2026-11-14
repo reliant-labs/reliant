@@ -30,9 +30,14 @@ func (s *Service) ListModels(
 	req *connect.Request[reliantv1.ListModelsRequest],
 ) (*connect.Response[reliantv1.ListModelsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	scope, err := s.pickerScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 
-	// Get user's available drivers (configured API keys)
-	availableDrivers := drivers.GetAvailableDrivers(ctx, drivers.PersonalScope(userID))
+	// The drivers the scope may run on: the person's own accounts, and in an
+	// org its accounts and seats, narrowed by its policy.
+	availableDrivers := drivers.GetAvailableDrivers(ctx, scope)
 
 	// Per-account availability (Enabled per {driver, model}) comes from the
 	// modular provider capability, not a provider special-case. Static providers
@@ -41,7 +46,7 @@ func (s *Service) ListModels(
 	// the picker. We index it by driver -> model id -> enabled to gate the loop
 	// below uniformly.
 	enabledByDriver := make(map[string]map[string]bool)
-	for _, mi := range drivers.ListAvailableModelsOrEmpty(ctx, drivers.PersonalScope(userID)) {
+	for _, mi := range drivers.ListAvailableModelsOrEmpty(ctx, scope) {
 		byModel := enabledByDriver[mi.DriverID]
 		if byModel == nil {
 			byModel = make(map[string]bool)
@@ -123,7 +128,8 @@ func (s *Service) ListModels(
 		}
 	}
 
-	modelList = append(modelList, s.localModelInfos(ctx, userID)...)
+	localModels := s.pickerLocalModels(ctx, scope)
+	modelList = append(modelList, localModelInfos(localModels)...)
 
 	// Sort models: by provider, then by model priority within each provider
 	sortModelsByProvider(modelList)
@@ -133,7 +139,7 @@ func (s *Service) ListModels(
 	resp := &reliantv1.ListModelsResponse{
 		Models: modelList,
 		Total:  int32(len(modelList)),
-		Tiers:  tierResolutions(registry, configuredProviderIDs(availableDrivers), s.loadTagPrefs(ctx, userID), s.listLocalModels(ctx, userID)),
+		Tiers:  tierResolutions(registry, configuredProviderIDs(availableDrivers), s.loadTagPrefs(ctx, userID), localModels),
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -142,8 +148,7 @@ func (s *Service) ListModels(
 // including offline daemons' models (online=false) so the picker can show them
 // disabled. A directory failure omits local models rather than failing the
 // whole catalog.
-func (s *Service) localModelInfos(ctx context.Context, userID string) []*reliantv1.ModelInfo {
-	found := s.listLocalModels(ctx, userID)
+func localModelInfos(found []local.Model) []*reliantv1.ModelInfo {
 	infos := make([]*reliantv1.ModelInfo, 0, len(found))
 	for _, m := range found {
 		def := m.Definition
@@ -198,6 +203,38 @@ func localModelSource(m local.Model) *reliantv1.LocalModelSource {
 		EndpointKind: m.EndpointKind,
 		Online:       m.Online,
 	}
+}
+
+// pickerScope is the scope a model picker lists for: the org the request
+// names, once the caller is verified a live member of it (orgs.Named: never
+// the client's word alone, and a machine credential's own org only), so the
+// picker shows what a chat of that org may run on: its org accounts and
+// seats, the caller's own accounts as its policy admits them, and nothing its
+// policy refuses (control-plane docs/design/org-policies.md §4.1 point 3,
+// org-provider-accounts.md §4.1). A request that names no org, from every
+// client before orgs, lists the caller's own accounts.
+func (s *Service) pickerScope(ctx context.Context, userID, requested string) (scope drivers.Scope, err error) {
+	if s.deps.Orgs == nil {
+		return drivers.PersonalScope(userID), nil
+	}
+	orgID, err := s.deps.Orgs.Named(ctx, userID, requested)
+	if err != nil {
+		return scope, svcerr.Wrap(err)
+	}
+	if orgID == "" {
+		return drivers.PersonalScope(userID), nil
+	}
+	return drivers.Scope{UserID: userID, OrgID: orgID, Attended: true}, nil
+}
+
+// pickerLocalModels is the caller's local models a chat of scope may run on:
+// none when the org's policy refuses local models, as the driver build would
+// at the call (drivers.CheckOrgPolicy).
+func (s *Service) pickerLocalModels(ctx context.Context, scope drivers.Scope) []local.Model {
+	if !scope.Personal() && drivers.OrgPolicyRefuses(ctx, scope, models.DriverID(local.Family), models.FundingLocal) {
+		return nil
+	}
+	return s.listLocalModels(ctx, scope.UserID)
 }
 
 func (s *Service) listLocalModels(ctx context.Context, userID string) []local.Model {
@@ -411,8 +448,12 @@ func (s *Service) ListAvailableModels(
 	req *connect.Request[reliantv1.ListAvailableModelsRequest],
 ) (*connect.Response[reliantv1.ListAvailableModelsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	scope, err := s.pickerScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 
-	infos, err := drivers.ListAvailableModels(ctx, drivers.PersonalScope(userID))
+	infos, err := drivers.ListAvailableModels(ctx, scope)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list available models"))
 	}

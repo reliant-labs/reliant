@@ -58,6 +58,18 @@ type Deps struct {
 	// detail.
 	// forge:optional-dep
 	IntegrationMethods func(integrationID string) (connections.Integration, bool)
+	// Orgs verifies the org a model picker request names (ListModels,
+	// ListAvailableModels org_id): the caller must be a live member of it,
+	// and a machine credential acts in its own org only. Without it (a
+	// deployment with no orgs) the pickers list the caller's own accounts.
+	// forge:optional-dep
+	Orgs OrgResolver
+}
+
+// OrgResolver answers which org a request acts in by name; *orgs.Resolver's
+// Named, declared here where it is consumed.
+type OrgResolver interface {
+	Named(ctx context.Context, userID, requested string) (string, error)
 }
 
 // ToolBuilder builds a registered tool. *tools.ToolsFactory implements it.
