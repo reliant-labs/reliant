@@ -97,6 +97,9 @@ func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitReco
 // one of the org's own API keys. controlplane.Service is one.
 type OrgAdminNotifier interface {
 	NotifyOrgKeyRejected(ctx context.Context, n controlplane.OrgKeyRejectedNotice) (deduplicated bool, err error)
+	// NotifyOrgAutomationNoOrgAccount emails them that an automation was
+	// paused for want of an org account (pause_notice.go).
+	NotifyOrgAutomationNoOrgAccount(ctx context.Context, n controlplane.OrgAutomationNoOrgAccountNotice) (deduplicated bool, err error)
 }
 
 // orgKeyNoticeQueue is where a rejected org key's notice is started: the

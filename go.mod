@@ -370,3 +370,5 @@ tool (
 	github.com/bufbuild/buf/cmd/buf
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )
+
+replace github.com/reliant-labs/reliant/sdk/go => ./sdk/go

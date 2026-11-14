@@ -1162,6 +1162,9 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		// The caller's live orgs, asked of the control plane as the caller;
 		// nil when self-hosted. A nil Service converts to a nil OrgLister.
 		MyOrgs: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		// Which of the caller's orgs are teams, for the notice of their
+		// automations still on their own accounts; nil without orgs.
+		Members: inboxMembers(g.OrgResolver()),
 	})
 }
 

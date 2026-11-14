@@ -129,6 +129,10 @@ type scriptedNotifier struct {
 	calls int
 }
 
+func (s *scriptedNotifier) NotifyOrgAutomationNoOrgAccount(context.Context, controlplane.OrgAutomationNoOrgAccountNotice) (bool, error) {
+	return false, nil
+}
+
 func (s *scriptedNotifier) NotifyOrgKeyRejected(context.Context, controlplane.OrgKeyRejectedNotice) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

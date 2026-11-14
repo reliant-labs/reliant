@@ -197,12 +197,14 @@ func sweepOrgKeyNotices(ctx context.Context, store OrgKeyNoticeStore, q orgKeyNo
 	return started
 }
 
-// runOrgKeyNoticeSweep sweeps at once and every interval until ctx ends.
-func runOrgKeyNoticeSweep(ctx context.Context, store OrgKeyNoticeStore, q orgKeyNoticeQueue, interval time.Duration) {
+// runNoticeSweeps runs each sweep at once and every interval until ctx ends.
+func runNoticeSweeps(ctx context.Context, interval time.Duration, sweeps ...func(context.Context)) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
-		sweepOrgKeyNotices(ctx, store, q)
+		for _, sweep := range sweeps {
+			sweep(ctx)
+		}
 		select {
 		case <-ctx.Done():
 			return

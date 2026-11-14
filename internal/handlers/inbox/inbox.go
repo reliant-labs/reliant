@@ -72,6 +72,7 @@ var inboxItemPrefixes = []string{
 	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxStoragePrefix,
 	inboxNeedsSetupPrefix, inboxRecoveryPrefix, inboxRunPausedPrefix, inboxDefinitionBrokenPrefix,
 	inboxWorktreeReclaimPrefix, inboxWorktreeMarkedPrefix, inboxPersonalFundingPrefix, inboxOrgKeyRejectedPrefix,
+	inboxNoOrgAccountPrefix, inboxOnPersonalAccountsPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -118,7 +119,7 @@ func (s *Service) ListInbox(
 	}
 	// The read may be shared with concurrent calls (sharedRead): this
 	// response gets its own copies.
-	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.declarations, read.recovery, read.orgKeys} {
+	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.declarations, read.recovery, read.orgKeys, read.automationNotices} {
 		for _, it := range shared {
 			items = append(items, proto.CloneOf(it))
 		}
@@ -194,6 +195,10 @@ type inboxReads struct {
 	recovery     []*reliantv1.InboxItem
 	// orgKeys are the rejected API keys of the orgs the caller administers.
 	orgKeys []*reliantv1.InboxItem
+	// automationNotices are the org-provider-accounts §11 notices: automations
+	// paused for want of an org account, and the caller's automations still
+	// on their own accounts in a team org.
+	automationNotices []*reliantv1.InboxItem
 	// orgs is the org of each chat, project ("chat:<id>", "project:<id>")
 	// and trigger ("trigger:<id>") the items are about, nil for one with no
 	// org yet: what ListInbox's org scope decides an item by (itemOrg).
@@ -325,6 +330,15 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 		})
 		// Advisory: an admin also sees a key's state in the org's settings.
 		advisory("Failed to list the rejected keys of the caller's orgs for inbox", err)
+		return nil
+	})
+	g.Go(func() error {
+		err := lim.do(gctx, func() (err error) {
+			out.automationNotices, err = s.automationNoticeItems(gctx, userID)
+			return err
+		})
+		// Advisory: each automation shows its own pause and funding.
+		advisory("Failed to list the org account notices of the caller's automations for inbox", err)
 		return nil
 	})
 	// Recoveries are durable catalog entries, NOT machine storage observations.

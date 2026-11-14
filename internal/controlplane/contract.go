@@ -185,6 +185,14 @@ type Service interface {
 	// this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
 	// control-plane's code and reason.
 	NotifyOrgKeyRejected(ctx context.Context, n OrgKeyRejectedNotice) (deduplicated bool, err error)
+
+	// NotifyOrgAutomationNoOrgAccount emails orgID's owners and admins that an
+	// automation which may run only on the org's own AI accounts was paused
+	// because none of them could run its model (NotifyOrgAdmins'
+	// org_automation_no_org_account; org-provider-accounts §11.4). Errors as
+	// NotifyOrgKeyRejected; a control plane that predates the notice kind
+	// answers invalid_argument, a permanent refusal.
+	NotifyOrgAutomationNoOrgAccount(ctx context.Context, n OrgAutomationNoOrgAccountNotice) (deduplicated bool, err error)
 }
 
 // Deps configures the adapter.

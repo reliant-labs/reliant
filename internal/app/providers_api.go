@@ -31,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
@@ -1525,4 +1526,13 @@ func APIOrgProviderAccounts(api *configv1.ApiServerConfig) bool {
 func NewOrgProviderAccount(api *configv1.ApiServerConfig, d org_provider_account.Deps) (*org_provider_account.Service, error) {
 	d.OrgRollout = api.GetOrgs()
 	return org_provider_account.New(d)
+}
+
+// inboxMembers is the resolver as the inbox's member counter, nil for a
+// deployment with no orgs (a nil *orgs.Resolver would be a non-nil interface).
+func inboxMembers(r *orgs.Resolver) inbox.OrgMemberCounter {
+	if r == nil {
+		return nil
+	}
+	return r
 }

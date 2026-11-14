@@ -3,12 +3,14 @@ package store_test
 
 import (
 	"context"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -113,4 +115,52 @@ func TestUnstartedOrgKeyNotices(t *testing.T) {
 	assert.Equal(t, []string{"k-acme"}, ids(), "a confirm of the old mark is not this one's")
 	require.NoError(t, store.ConfirmOrgKeyNotice(ctx, f.env.ORM, "acme", "k-acme", later))
 	assert.Empty(t, ids())
+}
+
+// The no-org-account pauses: listed to their owner and to the admins of their
+// org, a pause until its notice is confirmed for exactly that pause (a resume,
+// or another reason's pause, lists nothing); and an owner's org triggers that
+// may spend their own accounts (any, or unstamped).
+func TestTriggerNoticeQueries(t *testing.T) {
+	f := newCredFixture(t)
+	ctx := context.Background()
+	f.exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active) VALUES ('p-n', 'owner', 'p', '/tmp/p', now(), now(), now()) ON CONFLICT DO NOTHING`)
+	add := func(id, user, org string, funding any) {
+		f.exec(`INSERT INTO triggers (id, user_id, project_id, org_id, name, kind, config, enabled, workflow, created_at, updated_at, unattended_funding)
+			VALUES ($1, $2, 'p-n', NULLIF($3, ''), $1, 'schedule', '{}', true, 'builtin://agent', now(), now(), $4)`, id, user, org, funding)
+	}
+	add("t-owned", "owner", "acme", "org_only")
+	add("t-team", "teammate", "acme", "org_only")
+	add("t-beta", "stranger", "beta", "org_only")
+	add("t-any", "owner", "acme", "any")
+	add("t-null", "owner", "acme", nil)
+	add("t-noorg", "owner", "", nil)
+	for _, id := range []string{"t-owned", "t-team", "t-beta"} {
+		require.NoError(t, store.PauseTrigger(ctx, f.env.ORM, id, "no_org_account"))
+	}
+	require.NoError(t, store.PauseTrigger(ctx, f.env.ORM, "t-any", "creator_left_org"))
+
+	ids := func(ts []*core.Trigger, err error) []string {
+		t.Helper()
+		require.NoError(t, err)
+		var out []string
+		for _, tr := range ts {
+			out = append(out, tr.ID)
+		}
+		sort.Strings(out)
+		return out
+	}
+	assert.Equal(t, []string{"t-owned"}, ids(store.ListNoOrgAccountPauses(ctx, f.env.ORM, "owner", nil)))
+	assert.Equal(t, []string{"t-owned", "t-team"}, ids(store.ListNoOrgAccountPauses(ctx, f.env.ORM, "owner", []string{"acme"})))
+
+	assert.Equal(t, []string{"t-beta", "t-owned", "t-team"}, ids(store.ListUnstartedPauseNotices(ctx, f.env.ORM, 10)))
+	owned, err := store.GetTrigger(ctx, f.env.ORM, "t-owned")
+	require.NoError(t, err)
+	require.NotNil(t, owned.PausedAt)
+	require.NoError(t, store.ConfirmPauseNotice(ctx, f.env.ORM, "t-owned", owned.PausedAt.Add(-time.Second)))
+	assert.Contains(t, ids(store.ListUnstartedPauseNotices(ctx, f.env.ORM, 10)), "t-owned", "a confirm of another pause is not this one's")
+	require.NoError(t, store.ConfirmPauseNotice(ctx, f.env.ORM, "t-owned", *owned.PausedAt))
+	assert.Equal(t, []string{"t-beta", "t-team"}, ids(store.ListUnstartedPauseNotices(ctx, f.env.ORM, 10)))
+
+	assert.Equal(t, []string{"t-any", "t-null"}, ids(store.ListPersonallyFundedTriggers(ctx, f.env.ORM, "owner")))
 }

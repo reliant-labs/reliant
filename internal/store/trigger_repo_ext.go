@@ -239,7 +239,9 @@ func SetTriggerEnabled(ctx context.Context, db orm.Context, id string, enabled b
 // (core.TriggerPaused*), or returns core.ErrTriggerNotFound.
 func PauseTrigger(ctx context.Context, db orm.Context, id, reason string) error {
 	enabled := false
-	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled, PausedReason: &reason}, "paused", TriggerFieldEnabled, TriggerFieldPausedReason)
+	now := time.Now().UTC()
+	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled, PausedReason: &reason, PausedAt: &now}, "paused",
+		TriggerFieldEnabled, TriggerFieldPausedReason, TriggerFieldPausedAt)
 }
 
 // SetTriggerWebhookTokenHash rotates a webhook trigger's token hash. The hash
@@ -541,6 +543,7 @@ func triggerToCore(row *Trigger) (*core.Trigger, error) {
 	// does not know the column) means nothing.
 	if row.PausedReason != nil && !t.Enabled {
 		t.PausedReason = *row.PausedReason
+		t.PausedAt, t.PauseNoticeFor = row.PausedAt, row.PauseNoticeFor
 	}
 	return t, nil
 }
