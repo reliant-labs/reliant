@@ -59,7 +59,7 @@ func cpContractSteps(t *testing.T) (steps []mqStep, detect, checkout, check, gol
 // and the check is fatal: a failing check fails the required check.
 func TestMergeQueueChecksTheVendoredContract(t *testing.T) {
 	steps, detect, checkout, check, wait := cpContractSteps(t)
-	if !(detect < checkout && checkout < check) {
+	if detect >= checkout || checkout >= check {
 		t.Errorf("order detect=%d checkout=%d check=%d: the check must read the checkout, which needs detection's sha", detect, checkout, check)
 	}
 	if wait >= 0 && check > wait {
