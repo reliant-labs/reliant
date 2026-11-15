@@ -37,7 +37,7 @@ import { consolePath, isObsNavView, withSearch, type ConsolePage } from './compo
 import { FORGE_DEMO_PATH } from './components/Forge/Demo/demoPath'
 import { FIXTURE_PROJECT } from './components/Forge/Observability/__fixtures__/fixtureApi'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
-import { forgeConsolePages } from './forgeConsolePages'
+import { forgeConsolePages, preloadForgeConsole } from './forgeConsolePages'
 import { DemoConsoleProviders } from './demoBundle/DemoConsoleProviders'
 import { retainTourParam } from './components/Onboarding/tourParam'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
@@ -52,6 +52,9 @@ import { Toaster } from './lib/toast'
 const entry = captureForgeEntry()
 // Before anything renders the tour: forge copy, memory-only progress, anonymous telemetry.
 bootDemoShell()
+// After the first page has loaded: the console's first chunks, so a phone's first tap into it renders rather than downloads.
+if (document.readyState === 'complete') preloadForgeConsole()
+else window.addEventListener('load', () => preloadForgeConsole(), { once: true })
 
 /** Where the demo lands: the sample app's console, whose nav opens every real page. */
 export const DEMO_HOME = consolePath(FIXTURE_PROJECT, { kind: 'overview' })
