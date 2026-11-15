@@ -1,0 +1,39 @@
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "../src/lib/query-client";
+import { EventBusProvider } from "../src/lib/event-context";
+import { AuthContextProvider } from "../src/lib/auth/context";
+
+// There is no token bridge here, and that is the honest state rather than a
+// gap. This tree ships the mock session provider (see src/lib/auth/context),
+// which holds no credential any server accepts — so wiring one into the
+// Connect transport would attach an Authorization header that every real
+// backend rejects, and make a 401 look like a server fault instead of an
+// unwired app.
+//
+// When you implement AuthProvider (src/lib/auth/provider) over a real
+// identity source, feed its token to the transport here:
+//
+//   import { setAuthTokenGetter } from "../src/lib/connect";
+//   setAuthTokenGetter(() => provider.getToken());
+//
+// The browser frontends need no such bridge at all: they sign in natively
+// and their session rides an HttpOnly cookie the browser attaches itself.
+
+export default function RootLayout() {
+  const isDev = process.env.NODE_ENV === "development";
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <EventBusProvider devMode={isDev}>
+        <AuthContextProvider>
+          <Stack>
+            <Stack.Screen name="index" options={{"{{"}} title: "{{.FrontendName}}" {{"}}"}} />
+          </Stack>
+          <StatusBar style="auto" />
+        </AuthContextProvider>
+      </EventBusProvider>
+    </QueryClientProvider>
+  );
+}

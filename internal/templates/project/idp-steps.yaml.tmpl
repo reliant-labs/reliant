@@ -1,0 +1,80 @@
+# Development identity provider — the DECLARED state of the local IdP.
+#
+# This file is the whole setup. forge passes it to Zitadel as `--steps`, and
+# Zitadel converges to it on first boot: the instance, the organization, the
+# human you sign in as, and the service account whose token forge uses to
+# register the browser application without a console visit. Nothing here is
+# applied by a script that has to be run in order against a live system, so a
+# teammate who clones this repo gets the same IdP from:
+#
+#     forge env up dev
+#
+# That holds however the IdP runs. The scaffolded dev environment supervises
+# Zitadel as a HOST PROCESS (deploy/kcl/dev/main.k declares it as a
+# `forge.HostInfra` with `engine = "zitadel"`), and docker-compose.yml still
+# defines an `idp` container for projects that prefer one. Both read THIS
+# file, unchanged.
+#
+# It is read ONLY on the FIRST boot, when the instance is created. Editing
+# it afterwards changes nothing — the instance already exists. To pick up a
+# change here, drop the IdP's state and let it rebuild:
+#
+#     forge env down dev
+#     psql "postgres://postgres:postgres@localhost:<postgres port>/postgres" \
+#         -c 'DROP DATABASE zitadel'
+#     rm -f .forge/idp/pat.txt
+#     forge env up dev
+#
+# (The postgres port is the one deploy/kcl/dev/main.k declares; `forge env
+# status` prints it. On the container path it is `docker compose down idp`
+# and a DROP DATABASE inside the `idp-db` container instead.)
+#
+# THESE ARE DEV CREDENTIALS, and they are committed on purpose: a scaffolded
+# blank is not neutral, it is a broken app plus a scavenger hunt. They are
+# safe here because this instance is bound to 127.0.0.1 and holds nothing
+# but test users. Your real IdP is a different issuer — point `jwt_issuer`
+# at it (see the `auth` skill); nothing in this file is used against it.
+FirstInstance:
+  InstanceName: {{.ProjectName}}-dev
+
+  Org:
+    Name: {{.ProjectName}}
+
+    # The human you sign in AS. The sign-in page at the IdP's own origin
+    # takes this username and password.
+    #
+    # Verified: true matters — an unverified email lands the first sign-in
+    # on a "verify your email" interstitial that a local instance has no
+    # SMTP server to satisfy, so the loop cannot be completed at all.
+    # PasswordChangeRequired: false for the same reason: a forced password
+    # change on first login is a prompt in the way of the thing you are
+    # actually trying to test.
+    Human:
+      UserName: admin@{{.ProjectName}}.localhost
+      Password: "Password1!"
+      FirstName: Dev
+      LastName: Admin
+      Email:
+        Address: admin@{{.ProjectName}}.localhost
+        Verified: true
+      PasswordChangeRequired: false
+
+    # The service account forge authenticates as when it registers the
+    # browser application during environment bring-up.
+    #
+    # Its personal access token is written to the path the compose file
+    # sets as ZITADEL_FIRSTINSTANCE_PATPATH (./.forge/idp/pat.txt, which
+    # .gitignore excludes). That is what makes registering the application
+    # automatable: the credential exists, on disk, as a RESULT of the
+    # declared boot — with nothing read out of the IdP's own database and
+    # no secret copied from a console.
+    Machine:
+      Machine:
+        Username: forge-setup
+        Name: forge setup client
+      Pat:
+        # Far future: this token is only as long-lived as the dev
+        # container, and an expiry that lapses mid-project would surface
+        # as an unattributable authentication failure in a tool that is
+        # supposed to be one command.
+        ExpirationDate: "2100-01-01T00:00:00Z"

@@ -1,0 +1,18 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Adapter cache stub; fill in or delete.
+//
+// {{.Name}} is an adapter, so most calls go to a remote system. The
+// canonical pattern is "cache the response for a small TTL and rate-limit
+// the underlying call so a burst of business-logic queries doesn't fan
+// out to one HTTP request each." Free public APIs in particular almost
+// always need a cache + rate budget right out of the gate.
+//
+// This file exists as a visible "fill me in" prompt: every adapter that
+// talks to a remote service grows a cache.go almost immediately, so the
+// scaffold ships an empty one so the cost of "where do I put it" is paid
+// once, by the scaffolder, instead of once per adapter.
+//
+// FORGE_SCAFFOLD: configure TTL and per-host rate budget here if this
+// adapter talks to a remote service. If the adapter is fully local (no
+// network), delete this file.
+package {{.Name}}

@@ -1,0 +1,80 @@
+{
+  "schema": "forge.obs.metrics_list/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "dev",
+    "backend": "local",
+    "from": "2026-10-22T11:00:00Z",
+    "to": "2026-10-22T12:00:00Z"
+  },
+  "query_mode": "structured",
+  "metrics": [
+    {
+      "name": "heap",
+      "type": "gauge",
+      "unit": "By",
+      "services": [
+        "api",
+        "worker"
+      ],
+      "service_count": 2,
+      "last_seen": "2026-10-22T11:59:00Z",
+      "series_estimate": 1,
+      "queryable": true,
+      "seen": true
+    },
+    {
+      "name": "rpc.server.calls",
+      "type": "sum",
+      "unit": "{call}",
+      "monotonic": true,
+      "temporality": "cumulative",
+      "services": [
+        "api"
+      ],
+      "service_count": 1,
+      "last_seen": "2026-10-22T11:59:00Z",
+      "series_estimate": 2,
+      "queryable": true,
+      "builtin": true,
+      "seen": true
+    },
+    {
+      "name": "rpc.server.duration",
+      "type": "histogram",
+      "unit": "ms",
+      "temporality": "cumulative",
+      "services": [
+        "api"
+      ],
+      "service_count": 1,
+      "last_seen": "2026-10-22T11:59:00Z",
+      "series_estimate": 1,
+      "queryable": true,
+      "builtin": true,
+      "seen": true
+    },
+    {
+      "name": "rpc.server.errors",
+      "type": "sum",
+      "unit": "{call}",
+      "monotonic": true,
+      "temporality": "cumulative",
+      "services": [
+        "api"
+      ],
+      "service_count": 1,
+      "last_seen": "2026-10-22T11:59:00Z",
+      "series_estimate": 1,
+      "queryable": true,
+      "builtin": true,
+      "seen": true
+    }
+  ],
+  "truncated": false,
+  "suggested": [
+    "forge obs metrics describe dev heap",
+    "forge obs metrics query dev heap"
+  ]
+}

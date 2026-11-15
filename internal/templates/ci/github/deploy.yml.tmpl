@@ -1,0 +1,198 @@
+# yours: scaffolded once, never touched again — forge will not overwrite this file.
+# This CI workflow is a starting point you own — add jobs, secrets, and steps freely.
+# Deleting it sticks (.forge/scaffolded/); `forge project rescaffold <path>` re-creates it.
+#
+# Every deploy goes THROUGH forge: `forge env build <env> --push` then
+# `forge env deploy <env>` — never a raw KCL render piped to kubectl. forge is what
+# resolves `kcl_plugin.forge` (imported by every env render), materializes the
+# KCL module this checkout's forge ships, binds the kubectl context the env
+# DECLARES (forge.ClusterTarget.cluster — never the runner's current context),
+# re-renders each frontend's config.js for THIS env before building, pins the
+# pushed image by digest, runs the secret/image preflight against the live
+# target, and publishes hosted workloads (forge.OnHosted) to the env's control
+# plane instead of a cluster. A raw render skips every one of those.
+#
+# Environments are the ones this project declares — one per
+# deploy/kcl/<env>/main.k at scaffold time, `dev` excluded (it runs locally
+# via `forge env up`). Add an env later by adding it to the matrix below.
+#
+# Triggers:
+#   * workflow_run (after "Build & Push Images" succeeds on main)
+#     → deploys the env marked auto below (the first of several; a lone env
+#       is never auto-deployed).
+#   * workflow_dispatch → a human deploys any env on demand.
+#
+# There is deliberately no tag trigger: a tag records what a release IS, it
+# does not decide when production changes. Deploying to a protected env is a
+# person pressing the button, gated by that env's GitHub environment rules.
+#
+# Credentials, per runtime the env binds (forge reads it from the env's KCL):
+#   * forge.OnCluster workloads → secrets.KUBECONFIG, a kubeconfig holding a
+#     context named exactly the ClusterTarget's `cluster`. forge refuses to
+#     deploy when that context is missing, rather than falling back to the
+#     current one.
+#   * forge.OnHosted workloads → secrets.FORGE_CONTROL_PLANE_TOKEN, a bearer
+#     token for the env's forge.ControlPlane (mint a machine identity, not a
+#     person's token). No kubeconfig: the control plane owns the cluster.
+#   An env that binds both needs both.
+name: Deploy
+{{- if .Environments}}
+
+on:
+  workflow_run:
+    workflows: ["Build & Push Images"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          {{- range .Environments}}
+          - {{.Name}}
+          {{- end}}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    name: Deploy to ${{"{{"}} matrix.env {{"}}"}}
+    runs-on: ubuntu-latest
+    # A deploy that has not finished in 30 minutes is stuck, not slow.
+    timeout-minutes: 30
+    strategy:
+      # Each env is an independent deploy: one failing must not cancel another.
+      fail-fast: false
+      matrix:
+        include:
+          {{- range .Environments}}
+          - env: {{.Name}}
+            auto: {{.Auto}}
+            {{- if .Protection}}
+            protected: true
+            {{- end}}
+          {{- end}}
+    # Auto envs deploy after a green image build on main; every env accepts a
+    # dispatch naming it. A workflow_run for a FAILED build deploys nothing.
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      github.event_name == 'workflow_dispatch'
+    {{- if .Concurrency}}
+    concurrency:
+      group: deploy-${{"{{"}} matrix.env {{"}}"}}
+      cancel-in-progress: {{.CancelInProgress}}
+    {{- end}}
+    # A protected env runs under its GitHub environment, so its protection
+    # rules (required reviewers, branch policy) gate the deploy.
+    environment: ${{"{{"}} matrix.protected && matrix.env || '' {{"}}"}}
+    env:
+      FORGE_CONTROL_PLANE_TOKEN: ${{"{{"}} secrets.FORGE_CONTROL_PLANE_TOKEN {{"}}"}}
+    steps:
+      - name: Select this run's environments
+        id: select
+        # The matrix names every env; this decides whether THIS run deploys
+        # this one. Steps below are skipped (not failed) for the others.
+        run: |
+          if [ "${{"{{"}} github.event_name {{"}}"}}" = "workflow_dispatch" ]; then
+            [ "${{"{{"}} github.event.inputs.environment {{"}}"}}" = "${{"{{"}} matrix.env {{"}}"}}" ] && run=true || run=false
+          else
+            run=${{"{{"}} matrix.auto {{"}}"}}
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.select.outputs.run == 'true'
+        with:
+          # Deploy the commit whose image build triggered this run, not
+          # whatever main points at by the time the run starts.
+          ref: ${{"{{"}} github.event.workflow_run.head_sha || github.sha {{"}}"}}
+
+      - uses: actions/setup-go@v5
+        if: steps.select.outputs.run == 'true'
+        with:
+          go-version-file: go.mod
+{{- if .HasFrontends}}
+
+{{- if eq .Frontend.PM "pnpm"}}
+
+      - uses: pnpm/action-setup@v4
+        if: steps.select.outputs.run == 'true'
+        with:
+          package_json_file: "{{.FrontendPath}}/package.json"
+{{- end}}
+
+      - uses: actions/setup-node@v4
+        if: steps.select.outputs.run == 'true'
+        with:
+          node-version-file: "{{.FrontendPath}}/package.json"
+          cache: "{{.Frontend.PM}}"
+          cache-dependency-path: "{{.FrontendPath}}/{{.Frontend.Lockfile}}"
+{{- end}}
+
+      - name: Install forge
+        if: steps.select.outputs.run == 'true'
+        # The version comes from the project at run time — go.mod's forge, the
+        # one this code compiles against — so bumping forge in go.mod is the
+        # whole upgrade. Only a module whose go.mod does not require forge at
+        # all (a CLI or library) uses forge.yaml's forge_version. A `replace`
+        # of forge, a lookup that fails, or a pin no proxy can serve fails
+        # this step by name; it never falls back to a different forge.
+{{installForgeRun 8}}
+{{- if .HasFrontends}}
+
+      - name: Install frontend dependencies
+        if: steps.select.outputs.run == 'true'
+        working-directory: {{.FrontendPath}}
+        run: {{.Frontend.FrozenInstall}}
+{{- end}}
+
+      - name: Log in to the declared registry
+        if: steps.select.outputs.run == 'true'
+        # forge logs docker in to the registry each image this env builds
+        # names; the workflow supplies only the
+        # credential. GITHUB_TOKEN (with `packages: write`) is the credential
+        # for GitHub's container registry. For another registry, pipe its
+        # credential instead — a GAR key with --username _json_key, an ECR
+        # token with --username AWS — from a repository or environment SECRET.
+        env:
+          LOGIN_TOKEN: ${{"{{"}} secrets.GITHUB_TOKEN {{"}}"}}
+        run: printf '%s' "$LOGIN_TOKEN" | forge registry login "${{"{{"}} matrix.env {{"}}"}}" --username "${{"{{"}} github.actor {{"}}"}}" --password-stdin
+
+      - name: Set kubeconfig
+        # Only an env with forge.OnCluster workloads needs one; a hosted env deploys through
+        # its control plane with FORGE_CONTROL_PLANE_TOKEN instead. forge binds
+        # the env's DECLARED context from this file — it never uses whatever
+        # context happens to be current.
+        if: steps.select.outputs.run == 'true'
+        env:
+          KUBECONFIG_CONTENTS: ${{"{{"}} secrets.KUBECONFIG {{"}}"}}
+        run: |
+          if [ -z "$KUBECONFIG_CONTENTS" ]; then
+            echo "secrets.KUBECONFIG is not set — fine for a hosted env; a forge.OnCluster env will stop at forge's context check."
+            exit 0
+          fi
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBECONFIG_CONTENTS" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Build and push ${{"{{"}} matrix.env {{"}}"}}
+        # Builds what THIS env declares, with this env's frontend config.js
+        # rendered into the build, and pushes it. The pushed tag (and digest)
+        # land in .forge/state/build-<env>.json, which the deploy below pins.
+        if: steps.select.outputs.run == 'true'
+        run: forge env build "${{"{{"}} matrix.env {{"}}"}}" --push
+
+      - name: Deploy ${{"{{"}} matrix.env {{"}}"}}
+        # Applies to exactly the target the env declares and waits for every
+        # workload to become ready (--rollout wait, the default). A cluster
+        # env gets the live preflight first: every referenced Secret key and
+        # image must exist on the target, or nothing is applied.
+        # CI has no TTY; --yes is "I read the plan", and the plan is printed
+        # above. Without it forge exits 5, plan_unconfirmed.
+        if: steps.select.outputs.run == 'true'
+        run: forge env deploy "${{"{{"}} matrix.env {{"}}"}}" --yes
+{{- end}}

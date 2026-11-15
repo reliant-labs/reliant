@@ -1,0 +1,454 @@
+# yours: scaffolded once, never touched again — forge will not overwrite this file.
+# This CI workflow is a starting point you own — add jobs, secrets, and steps freely.
+# Deleting it sticks (.forge/scaffolded/); `forge project rescaffold <path>` re-creates it.
+name: CI
+
+# ── CI is a thin wrapper around a local gate ──────────────────────────────
+#
+# This file prepares an environment (checkout, toolchains, caches) and then
+# calls ONE task per job. The task is the definition of the lane, so the same
+# command on your machine gives the same verdict:
+#
+#   task ci               everything below, in one summary table
+#   task ci:checks        the `checks` job
+#   task test             the `test` job
+#   task test:integration the `integration-test` job
+#
+# "CI didn't run" therefore never has to mean "unverified": run `task ci`.
+# The gate is `forge ci gate` (forge owns the check list and the tool pins; add
+# your own under `ci.gate.extra_checks` in forge.yaml). It runs every check even
+# after one fails, prints a summary table (also written to the job summary
+# here), exits non-zero if anything failed, and reports a check that could not
+# run as SKIPPED — which fails the gate unless named in CI_SKIP.
+#
+# ── Why there are few jobs ────────────────────────────────────────────────
+#
+# GitHub bills every job rounded UP to the whole minute, and a runner is a
+# fresh machine: each job repeats checkout, toolchain setup, cache restore and
+# the forge install before doing any work. A job per check (lint, build,
+# verify-generated, vuln-scan, ...) spent most of its minutes on that setup, so
+# the cost of a PR grew with the NUMBER of checks rather than with what they
+# do. So:
+#
+#   changes           tiny: skips the heavy jobs for a docs-only change.
+#   checks            every static and build check, behind ONE setup.
+#   test              the unit lane. Long, so it runs beside `checks` instead
+#                     of after it: nothing in one needs the other's output.
+#   integration-test  the integration lane, when the repo has one (PRs only).
+#
+# Add a check to `checks` by adding it to the gate (ci.gate.extra_checks), not
+# by adding a job. Add a job only for something that needs its own runner (a
+# service container, a different OS).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: {{.PermContents | default "read"}}
+
+# On a pull request a newer push cancels the run in progress. On main the run
+# in progress always finishes, and a newer push SUPERSEDES the pending one:
+# every push to main shares this group with cancel-in-progress false, and
+# GitHub keeps at most one pending run per group, cancelling the older one when
+# a newer one queues. A burst of merges costs the run in progress plus one run
+# of the newest commit, and the commits between get no run of their own.
+# Cancelling the run in progress on main is never right: each merge would kill
+# the run before it — often while its jobs are still queued for a runner — and
+# main could go hours without a single verdict. A workflow that also runs on a
+# schedule, a dispatch or a workflow_call keys its group on github.event_name
+# too, so those runs never supersede a push run (build-images.yml, e2e.yml).
+concurrency:
+  group: ci-${{"{{"}} github.ref {{"}}"}}
+  cancel-in-progress: ${{"{{"}} github.event_name == 'pull_request' {{"}}"}}
+
+# Go version is read from go.mod's `go` directive via setup-go's
+# `go-version-file` input so CI stays in sync with the project's declared
+# version without a duplicate env var that drifts.
+
+jobs:
+  # What changed in this run? A change that cannot affect the heavy jobs skips
+  # them. A job skipped via `if:` still REPORTS (as skipped, which branch
+  # protection treats as satisfied), unlike `paths-ignore`, which prevents the
+  # workflow from being created and so never reports at all.
+  #
+  # Docs-only means every changed file is `*.md` or under docs/. Anything
+  # uncertain (an empty diff, an unusable push range, a path nobody thought
+  # about) resolves to "run everything": the safe direction to be wrong in.
+  # If your code go:embeds a Markdown file, narrow the pattern below.
+  changes:
+    name: Detect what changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{"{{"}} steps.filter.outputs.code {{"}}"}}
+      integration: ${{"{{"}} steps.filter.outputs.integration {{"}}"}}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Classify changed files
+        id: filter
+        env:
+          EVENT_NAME: ${{"{{"}} github.event_name {{"}}"}}
+          BASE_REF: ${{"{{"}} github.base_ref {{"}}"}}
+          HEAD_SHA: ${{"{{"}} github.event.pull_request.head.sha {{"}}"}}
+          PUSH_BEFORE: ${{"{{"}} github.event.before {{"}}"}}
+          PUSH_SHA: ${{"{{"}} github.sha {{"}}"}}
+        run: |
+          set -euo pipefail
+
+          # Whether the repo has an integration lane at all, so a project
+          # without one does not pay for a job that has nothing to run. The
+          # same question `task ci` answers locally (N/A when none).
+          if git grep -qE '^//go:build .*\bintegration\b' -- '*_test.go'; then
+            echo "integration=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "integration=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          run_everything() {
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "$1 — running everything"
+            exit 0
+          }
+
+          if [ "${EVENT_NAME}" = "push" ]; then
+            head="${PUSH_SHA}"
+            base="${PUSH_BEFORE}"
+            if [ -z "${base}" ] \
+              || [ "${base}" = "0000000000000000000000000000000000000000" ] \
+              || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+              run_everything "push with no usable 'before' (${base:-unset})"
+            fi
+          else
+            head="${HEAD_SHA}"
+            base="$(git merge-base "origin/${BASE_REF}" "${head}")"
+          fi
+
+          changed="$(git diff --no-renames --name-only "${base}" "${head}")"
+          echo "--- changed files ---"
+          echo "${changed}"
+          echo "---------------------"
+
+          if [ -z "${changed}" ]; then
+            run_everything "empty diff"
+          fi
+          if [ -z "$(printf '%s\n' "${changed}" | grep -vE '^docs/|\.md$' || true)" ]; then
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "docs only (*.md, docs/**) — every heavy job skips."
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Every static and build check, behind one setup: verify-generated, lint,
+  # build, vulnerability and license scans, KCL validation and deployability.
+  # `task ci:checks` runs them all (even after one fails) and prints the table.
+  checks:
+    name: Checks
+    needs: changes
+    if: ${{"{{"}} needs.changes.outputs.code == 'true' {{"}}"}}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+{{- if .HasFrontends}}
+{{- template "node-setup" .}}
+{{- end}}
+      # Task is the single definition of the lane: this job and your terminal
+      # run the same commands out of Taskfile.yml.
+      - uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{"{{"}} secrets.GITHUB_TOKEN {{"}}"}}
+{{- if .RunsBufGenerate}}
+      # Pinned, not left to the action's default: verify-generated demands
+      # byte-identical output and `buf lint` judges the same files, so buf must
+      # not move under them. `forge ci gate` holds the buf on PATH to this same
+      # version — the project's go.mod buf tool when it declares one, else
+      # forge's pin — installing it itself when you run `task ci` with another.
+      - name: Install buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: "{{.BufVersion}}"
+          # Authenticated, so the release download is not anonymously
+          # rate-limited.
+          github_token: ${{"{{"}} secrets.GITHUB_TOKEN {{"}}"}}
+{{- end}}
+{{- if .LintGolangci}}
+      - name: Install golangci-lint
+        # Install only: the lint itself runs inside `task ci:checks`, with the
+        # rest. v7+ is required for golangci-lint v2 (the .golangci.yml forge
+        # scaffolds is `version: "2"`). The version is pinned, not `latest`:
+        # a linter release adds checks, and `latest` would turn this job red
+        # on code nobody changed. Bump it deliberately, with the fixes the new
+        # release asks for, in the same commit.
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: {{.GolangciLintVersion}}
+          install-only: true
+{{- end}}
+      - name: Install forge
+{{- template "install-forge" .}}
+{{- if .VerifyGenerated}}
+      # verify-generated REGENERATES the tree and demands a byte-identical
+      # result, so it needs every tool that produced the committed output, at
+      # the versions that produced it. `forge tools install` installs the Go
+      # codegen plugins buf.gen.yaml runs (protoc-gen-go, protoc-gen-connect-go)
+      # and the goimports forge formats Go output with, each at the version
+      # go.mod resolves. --force: a runner image's own copy of a plugin must not
+      # stand in for go.mod's version.
+      - name: Install codegen tools
+        run: forge tools install --force
+{{- end}}
+      # The gate builds govulncheck and go-licenses at their pins on first use.
+      # Cached by version, so a restored entry is only ever a hit or a harmless
+      # miss: the gate checks the version of what it finds.
+      - name: Cache gate tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/forge/tools
+          key: forge-gate-tools-${{"{{"}} runner.os {{"}}"}}-${{"{{"}} hashFiles('go.mod', 'forge.yaml') {{"}}"}}
+          restore-keys: |
+            forge-gate-tools-${{"{{"}} runner.os {{"}}"}}-
+      - name: Run the checks
+        run: task ci:checks
+
+  test:
+    name: Test
+    needs: changes
+    if: ${{"{{"}} needs.changes.outputs.code == 'true' {{"}}"}}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+{{- if .HasFrontends}}
+{{- template "node-setup" .}}
+{{- end}}
+      # Task is the single definition of the test suite: this job, the local
+      # edit loop, and `task test:all` all run the same commands out of
+      # Taskfile.yml. The workflow deliberately does NOT re-spell `go test`
+      # here — that is how the two drifted apart before (CI ran a bare
+      # `go test ./...` that skipped the frontend lane entirely, so a broken
+      # frontend test could merge green).
+      - uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{"{{"}} secrets.GITHUB_TOKEN {{"}}"}}
+      - name: Tests
+        # GOTESTRACE carries forge.yaml's `ci.test.race` through to the
+        # Taskfile, which is the one place the `go test` flags are spelled.
+        # Without the pass-through the key would go silently dead the moment
+        # the test command moved out of this workflow.
+        run: task test{{if not .TestRace}} GOTESTRACE={{end}}
+{{- if .TestCoverage}}
+      # `task coverage` (not a second hand-rolled `go test -coverprofile`):
+      # same reason as above, and it keeps the profile flags in one place.
+      - name: Go test coverage
+        run: task coverage
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+{{- end}}
+
+  # The integration lane, for repos that have one (`//go:build integration`
+  # test files). PRs only: a push to main already merged something that passed
+  # this gate. Drop the `github.event_name` clause to run it on main as well.
+  integration-test:
+    name: Integration Tests
+    needs: changes
+    if: ${{"{{"}} github.event_name == 'pull_request' && needs.changes.outputs.code == 'true' && needs.changes.outputs.integration == 'true' {{"}}"}}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{"{{"}} secrets.GITHUB_TOKEN {{"}}"}}
+      # ubuntu-latest runners ship a running Docker daemon, which is what
+      # testcontainers dials. Asserted rather than assumed: the failure when
+      # the socket is missing is a per-test "failed to start container",
+      # repeated for every test, which reads like a code defect.
+      - name: Verify Docker is available
+        run: docker info > /dev/null
+      - name: Integration tests
+        run: task test:integration{{if not .TestRace}} GOTESTRACE={{end}}
+
+{{- if .HasDocker}}
+
+  # Built only after `checks` passes: an image build on a PR that already
+  # failed lint is minutes spent learning nothing.
+  docker-build:
+    name: Docker Build
+    needs: [checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build project image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          load: true
+          tags: {{.ProjectName}}:ci
+          cache-from: type=gha,scope=ci-{{.ProjectName}}
+          cache-to: type=gha,scope=ci-{{.ProjectName}},mode=max
+{{- if .VulnDocker}}
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "{{.ProjectName}}:ci"
+          format: table
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+{{- end}}
+{{- if .HasFrontends}}
+{{- range .Frontends}}
+      - name: Build {{.Name}} image
+        uses: docker/build-push-action@v6
+        with:
+          context: {{.Path}}
+          file: {{.Path}}/Dockerfile
+          load: true
+          tags: {{$.ProjectName}}/{{.Name}}:ci
+          cache-from: type=gha,scope=ci-{{.Name}}
+          cache-to: type=gha,scope=ci-{{.Name}},mode=max
+{{- if $.VulnDocker}}
+      - name: Trivy scan {{.Name}}
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "{{$.ProjectName}}/{{.Name}}:ci"
+          format: table
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+{{- end}}
+{{- end}}
+{{- end}}
+{{- end}}
+{{- if .E2EEnabled}}
+
+  e2e:
+    name: E2E Tests
+    needs: [docker-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      # Both runtimes below run the suite through `task test:e2e`, so both
+      # need Go and Task. The e2e suite is Go (`go test -tags=e2e ./e2e/...`)
+      # under every runtime — the runtime only decides what infrastructure it
+      # talks to.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{"{{"}} secrets.GITHUB_TOKEN {{"}}"}}
+{{- if eq .E2ERuntime "docker-compose"}}
+      - name: Run E2E tests
+        # The generated harness (e2e/<service>/main_test.go) brings its OWN
+        # e2e/<service>/docker-compose.e2e.yml up and tears it down. This step
+        # must therefore NOT start compose itself: doing so raced the harness
+        # for the same ports, and it pointed at a root-level
+        # docker-compose.e2e.yml that forge has never written.
+        run: task test:e2e
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: test-results/
+{{- else if eq .E2ERuntime "k3d"}}
+      - name: Install forge
+{{- template "install-forge" .}}
+      - name: Install k3d
+        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+      # Everything below goes THROUGH forge, exactly as .github/workflows/e2e.yml
+      # does: the cluster the e2e env declares, the images it builds, the
+      # context and namespace it deploys to, and the rollout wait. A raw
+      # `docker build` + `k3d image import` + label-selected `kubectl wait`
+      # re-states each of those and drifts from all of them.
+      #
+      # This requires the project to declare an `e2e` environment
+      # (deploy/kcl/e2e/main.k). Create one on the local cluster with:
+      #   forge env new e2e --runtime cluster
+      # and point its ClusterTarget at the k3d cluster and the k3d registry
+      # its deploy/k3d.yaml creates.
+      - name: Create the e2e cluster
+        run: forge cluster up e2e --wait
+      - name: Build images
+        # Pushes each image to the registry its own reference names.
+        run: forge env build e2e --push
+      - name: Deploy and test
+        # `forge env deploy` waits for every workload to become ready.
+        # CI has no TTY; --yes is "I read the plan", and the plan is printed
+        # above. Without it forge exits 5, plan_unconfirmed.
+        run: |
+          forge env deploy e2e --yes
+          task test:e2e
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: test-results/
+{{- end}}
+{{- end}}{{- define "node-setup"}}
+{{- $pnpm := ""}}{{range .Frontends}}{{if and (eq .PM "pnpm") (not $pnpm)}}{{$pnpm = .Path}}{{end}}{{end}}
+{{- if $pnpm}}
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # The release this frontend's package.json `packageManager` pins,
+          # so CI, the Dockerfile and local installs run one pnpm.
+          package_json_file: "{{$pnpm}}/package.json"
+{{- end}}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Single source of truth: the first frontend's package.json
+          # `engines.node` field. Keeps CI, the Dockerfile, and local
+          # dev aligned without a duplicated Node version in the workflow.
+          node-version-file: "{{(index .Frontends 0).Path}}/package.json"
+          cache: "{{(index .Frontends 0).PM}}"
+          cache-dependency-path: |
+{{- range .Frontends}}
+            {{.Path}}/{{.Lockfile}}
+{{- end}}
+{{- range .Frontends}}
+      # The lockfile-exact install is the workflow's job, not the
+      # Taskfile's: the workflow owns how the environment is PREPARED,
+      # Taskfile.yml owns what the lane IS. The gate's deps row sees
+      # node_modules and does nothing.
+      - name: Install {{.Name}} dependencies
+        working-directory: {{.Path}}
+        run: {{.FrozenInstall}}
+{{- end}}
+{{- end}}
+{{- define "install-forge"}}
+        # The version comes from the project at run time — go.mod's forge, the
+        # one this code compiles against — so bumping forge in go.mod is the
+        # whole upgrade. Only a module whose go.mod does not require forge at
+        # all (a CLI or library) uses forge.yaml's forge_version. A `replace`
+        # of forge, a lookup that fails, or a pin no proxy can serve fails
+        # this step by name; it never falls back to a different forge.
+{{installForgeRun 8}}
+{{- end}}

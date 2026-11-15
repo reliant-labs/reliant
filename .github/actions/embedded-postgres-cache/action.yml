@@ -1,0 +1,62 @@
+name: Restore the embedded postgres archives
+description: >-
+  Restores the embedded-postgres archives pkg/pgtest downloads, so a job that
+  boots postgres does not fetch them from Maven Central. Restore only: a job
+  that runs on main follows its work with embedded-postgres-cache-save, which
+  saves whatever new archive the job fetched.
+
+# WHY A SHARED ACTION rather than a step copied into each workflow.
+#
+# pkg/pgtest downloads the postgres binary from repo1.maven.org on a cold
+# cache (pkg/pgtest/fetch.go). Maven Central rate-limits: with several PRs in
+# CI at once it answered HTTP 429 to all four retries, and every test that
+# needed postgres failed — tierguard in `Test (guards)`, the whole fixture
+# corpus — for a reason that had nothing to do with the change under test.
+#
+# The archives land in <os.UserCacheDir()>/forge/embedded-postgres, which is
+# ~/.cache/forge/embedded-postgres on a Linux runner, %LocalAppData% on
+# Windows and ~/Library/Caches on macOS — so the path follows runner.os. (The
+# Windows job fetched on every run until it used this action, and a Maven
+# Central 404 for a published 18.3.0 archive turned main red.)
+#
+# WHY THE SAVED KEY IS THE DIRECTORY'S CONTENT, not go.sum. One job boots
+# more than one postgres: the default 18.3.0, and 16.9.0 for
+# TestEmbeddedServerRunsTheDeclaredMajor. A go.sum key held whatever the
+# first job to save it had fetched (18.3.0 alone, 14 MB), and a job that
+# restores its exact key never saves, so 16.9.0 was fetched from Maven
+# Central on every push to main until a 429 failed the Unit job (run
+# 40849355291, 2026-10-29). Now the save names the archives the directory
+# holds (embedded-postgres-<os>-archives-<hash of file names and sizes>), a
+# job that fetched a new one saves a new entry, and the restore takes the
+# newest entry by prefix. A job only ever adds to what it restored, so the
+# newest entry is the one with the most archives.
+
+runs:
+  using: composite
+  steps:
+    - name: Name the embedded postgres cache directory
+      shell: bash
+      run: |
+        case "$RUNNER_OS" in
+          Windows) dir='~/AppData/Local/forge/embedded-postgres' ;;
+          macOS) dir='~/Library/Caches/forge/embedded-postgres' ;;
+          *) dir='~/.cache/forge/embedded-postgres' ;;
+        esac
+        echo "EMBEDDED_POSTGRES_CACHE_PATH=$dir" >> "$GITHUB_ENV"
+    - name: Restore the embedded postgres archives
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ env.EMBEDDED_POSTGRES_CACHE_PATH }}
+        # Never an exact hit: the saved keys end in a content hash. The
+        # prefixes take the newest saved entry, then one from the go.sum-keyed
+        # scheme this replaced.
+        key: embedded-postgres-${{ runner.os }}-archives-restore
+        restore-keys: |
+          embedded-postgres-${{ runner.os }}-archives-
+          embedded-postgres-${{ runner.os }}-
+    - name: Record which entry was restored
+      shell: bash
+      env:
+        MATCHED: ${{ steps.restore.outputs.cache-matched-key }}
+      run: echo "EMBEDDED_POSTGRES_RESTORED_KEY=$MATCHED" >> "$GITHUB_ENV"
