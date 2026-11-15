@@ -121,7 +121,9 @@ describe.each(WHEN)("the product analytics dashboards, %s", (_when, at) => {
     // A wider history only adds older sessions: the default one's are all still there, unchanged.
     const defaultFirst = Math.floor(NOW / DAY) * DAY - 99 * DAY;
     expect(sessions.filter((s) => s.start >= defaultFirst)).toEqual(demoActivity("env-prod", NOW).sessions);
-  });
+    // A year of every env's activity, read by three panels and rebuilt twice here: 2-4s on an idle
+    // 31-core box, 5s+ on one core, so the 5s default timed the 365-day case out in the merge queue.
+  }, 30_000);
 
   it("splits sign-ups the same way everywhere: by channel, method, country and device, all equal to new (rule 2)", async () => {
     const fresh = figure(await read("users", "new", week));

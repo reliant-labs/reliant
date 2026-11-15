@@ -21,9 +21,9 @@ export const forgeConsolePages: ForgeConsoleComponents = {
   storage: lazyRoute(() => import('./components/Forge/Storage/StoragePage'), 'StoragePage'),
   environments: lazyRoute(() => import('./components/Forge/Overview/EnvironmentsPage'), 'EnvironmentsPage'),
   environment: lazyRoute(() => import('./components/Forge/EnvPage/ForgeEnvPage'), 'ForgeEnvPage'),
-  secrets: lazyRoute(() => import('./components/Forge/Console/ConsolePages'), 'SecretsPage'),
+  secrets: lazyRoute(() => import('./components/Forge/Console/SecretsPage'), 'SecretsPage'),
   domains: lazyRoute(() => import('./components/Forge/Domains/ForgeDomainsPage'), 'ForgeDomainsPage'),
-  activity: lazyRoute(() => import('./components/Forge/Console/ConsolePages'), 'ActivityPage'),
+  activity: lazyRoute(() => import('./components/Forge/Console/ActivityPage'), 'ActivityPage'),
   data: lazyRoute(() => import('./components/Forge/Data/DataPage'), 'DataPage'),
   users: lazyRoute(() => import('./components/Forge/Users/UsersPage'), 'UsersPage'),
   orgLayout: lazyRoute(() => import('./components/Forge/Org'), 'OrgConsoleLayout'),
@@ -32,4 +32,34 @@ export const forgeConsolePages: ForgeConsoleComponents = {
   legacyEnv: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyEnvRoute'),
   legacyDomains: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyDomainsRoute'),
   legacyCommand: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyCommandRoute'),
+}
+
+/**
+ * Warm, one per idle moment, the chunks a console visit opens first: the
+ * frame, the Overview, an Observability view and the views' panel. A host
+ * calls it after its first paint, so the first tap into the console renders
+ * instead of downloading. Nothing is shown and nothing reloads: a chunk a
+ * deploy removed is found when its page is opened (lazyRoute.tsx).
+ */
+export function preloadForgeConsole(): void {
+  const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData
+  if (saveData) return
+  const loads: (() => Promise<unknown> | undefined)[] = [
+    () => forgeConsolePages.layout.preload?.(),
+    () => forgeConsolePages.console.preload?.(),
+    () => forgeConsolePages.overview.preload?.(),
+    () => forgeConsolePages.observabilityView.preload?.(),
+    () => import('./components/Forge/Observability/ObservabilityPanel'),
+  ]
+  const whenIdle = (fn: () => void) =>
+    typeof requestIdleCallback === 'function' ? requestIdleCallback(fn, { timeout: 5_000 }) : setTimeout(fn, 300)
+  const next = () => {
+    const load = loads.shift()
+    if (!load) return
+    void Promise.resolve()
+      .then(load)
+      .catch(() => {})
+      .finally(() => whenIdle(next))
+  }
+  whenIdle(next)
 }
