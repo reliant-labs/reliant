@@ -12190,7 +12190,7 @@ Exit status:
      again later. Low traffic is never 8.
 
 Thresholds come from the env's release_health declaration (KCL); --threshold
-name=value overrides one for this call (max_error_rate_increase, max_p95_ratio, min_requests, new_issue_min_events, regressed_issue_min_events, require_baseline).
+name=value overrides one for this call (max_error_rate_increase, max_p95_ratio, min_requests, new_issue_min_events, regressed_issue_min_events, require_baseline, error_rate_min_errors, baseline_window).
 The document says where each effective threshold came from: release_shape,
 default or request.
 
