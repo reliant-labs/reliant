@@ -1,0 +1,520 @@
+// Package commitpolicy checks a forge project's git state against forge's
+// commit policy:
+//
+//   - Generated code a COMPILER needs is COMMITTED. gen/, every
+//     forge-generated source file and every buf-generated stub must be
+//     tracked, so a checkout builds (`go build`, `go install`, a frontend
+//     build) as-cloned and `forge ci verify-generated` can see drift in it.
+//   - Generated files only forge or tooling reads are NEVER committed
+//     (IsToolDerived): forge derives each one on demand, in any checkout, so
+//     a committed copy buys nothing and costs a merge conflict between every
+//     two branches whose inputs differ. The proto descriptor,
+//     gen/forge_descriptor/, is one: committed as one aggregate file, it
+//     conflicted between any two pull requests that touched any proto.
+//   - Machine-local materializations are NEVER committed: the legacy
+//     .forge-kcl/ module copy, and a web frontend's dev runtime document
+//     public/config.js, whose values resolve per machine.
+//
+// # Why this is a check and not just a template
+//
+// The scaffold .gitignore encodes the policy, but a project keeps the
+// .gitignore it was born with forever — forge never rewrites a file the user
+// owns. A project scaffolded while the template ignored gen/*, *_gen.go and
+// the mocks carries those rules indefinitely, and nothing notices: its CI
+// fails on `undefined:` symbols that live in ignored files, while `forge ci
+// verify-generated`, which diffs with `git status --porcelain`, is blind to
+// ignored paths by construction and reports green. That is the exact state a
+// scaffolded project reached (its CI went red on every compiling job) before
+// this check existed. It runs in `forge lint` and after verify-generated's
+// regenerate, so every project that lints or runs CI is held to the policy
+// whatever its .gitignore says.
+//
+// It judges THIS project's files only. A nested tree that belongs to another
+// project — its own git repository, or a Go module outside this one's module
+// path — is skipped whole; see isForeignProject.
+package commitpolicy
+
+import (
+	"bufio"
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"golang.org/x/mod/modfile"
+)
+
+// Rule ids, stable for `forge lint --json` consumers.
+const (
+	// RuleGeneratedIgnored: a generated file the .gitignore excludes.
+	RuleGeneratedIgnored = "generated-code-ignored"
+	// RuleLocalStateTracked: a machine-local materialization in git.
+	RuleLocalStateTracked = "machine-local-state-tracked"
+	// RuleToolDerivedTracked: a generated file only tooling reads, in git.
+	RuleToolDerivedTracked = "tool-derived-file-tracked"
+)
+
+// toolDerivedDirs and toolDerivedFiles name, project-relative, the generated
+// outputs no compiler reads: forge derives them on demand wherever a command
+// needs them, so they are never committed (see the package doc). A new
+// tool-only output joins this list, its reader learns to derive it when it is
+// missing, and the scaffold's .gitignore ignores it.
+var (
+	toolDerivedDirs = []string{
+		"gen/forge_descriptor/", // codegen.DescriptorDir: services and rpcs extracted from proto/
+	}
+	toolDerivedFiles = []string{
+		"gen/forge_descriptor.json", // codegen.LegacyDescriptorFile: the pre-split aggregate
+	}
+)
+
+// IsToolDerived reports whether rel (project-relative, slash-separated) is a
+// generated output only forge or tooling reads, which this policy keeps out
+// of git.
+func IsToolDerived(rel string) bool {
+	for _, d := range toolDerivedDirs {
+		if strings.HasPrefix(rel, d) {
+			return true
+		}
+	}
+	for _, f := range toolDerivedFiles {
+		if rel == f {
+			return true
+		}
+	}
+	return false
+}
+
+// Violation is one breach of the policy.
+type Violation struct {
+	Rule string
+	// Path is project-relative, slash-separated. For an ignored generated
+	// file it is the file; for tracked local state it is the tracked path
+	// (a directory for .forge-kcl/).
+	Path string
+	// Why says what the path is and why the policy applies to it.
+	Why string
+	// Fix is the literal command (or edit) that resolves it.
+	Fix string
+}
+
+// legacyKCLDir is the project-local KCL module copy older forge versions
+// materialized (and committed).
+const legacyKCLDir = ".forge-kcl"
+
+// devRuntimeConfig is a web frontend's dev runtime document, relative to the
+// frontend directory.
+const devRuntimeConfig = "public/config.js"
+
+// GoBuildCacheSentinel is the first line of the README the Go toolchain
+// writes into every GOCACHE root. It is how a build cache identifies ITSELF,
+// which is the only robust way to recognize one: GOCACHE is configurable, so
+// the directory can be called anything. Agents in this workspace point it at
+// $WORKTREE/.gocache to keep concurrent worktrees off a shared cache, but
+// that name is a convention, not a contract.
+//
+// Matching on the sentinel rather than a name also keeps the carve-out
+// honest: a directory only earns the skip by actually being a Go cache.
+const GoBuildCacheSentinel = "This directory holds cached build artifacts from the Go build system."
+
+// IsGoBuildCacheDir reports whether dir is a GOCACHE root, by reading the
+// sentinel README the toolchain puts there.
+//
+// Exported because two independent project-root walkers need it and must not
+// disagree: this commit policy, and internal/removalguard's surviving-
+// reference scan, which hit the identical false positive — a cache entry's
+// copy of a stub for a since-removed feature read as a live reference to it.
+//
+// This matters because a cache entry is a VERBATIM copy of compiler input,
+// generated Go source included — an entry's first line is routinely
+// "// Code generated by 'go test'. DO NOT EDIT." So isGenerated matches it,
+// and since a build cache is gitignored by design, every entry otherwise
+// becomes a "generated code, but excluded from git" violation. Measured: 133
+// in one control-plane worktree, 276 reported in the field, which buries the
+// findings this rule exists to surface.
+func IsGoBuildCacheDir(dir string) bool {
+	f, err := os.Open(filepath.Join(dir, "README"))
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	buf := make([]byte, len(GoBuildCacheSentinel))
+	n, _ := io.ReadFull(f, buf)
+	return string(buf[:n]) == GoBuildCacheSentinel
+}
+
+// skipDirs are never walked: dependencies, build output, VCS and forge state.
+// None of them hold project source, and several are huge.
+var skipDirs = map[string]bool{
+	".git":           true,
+	".forge":         true,
+	legacyKCLDir:     true,
+	"node_modules":   true,
+	"vendor":         true,
+	".next":          true,
+	".next-prod":     true,
+	"dist":           true,
+	"build":          true,
+	"out":            true,
+	".turbo":         true,
+	".expo":          true,
+	"testdata":       true,
+	".scratch":       true,
+	".forge-link":    true,
+	".forge-pkg":     true,
+	".cloud-dev":     true,
+	".firebase":      true,
+	".firebase-dist": true,
+}
+
+// Check inspects the git work tree rooted at projectDir. It returns nil,
+// nil outside a git work tree (or without git): there is no commit state to
+// judge, and guessing would be worse than silence.
+func Check(projectDir string) ([]Violation, error) {
+	if !inWorkTree(projectDir) {
+		return nil, nil
+	}
+	var out []Violation
+
+	ignored, err := ignoredGeneratedFiles(projectDir)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, ignored...)
+
+	tracked, err := trackedLocalState(projectDir)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, tracked...)
+
+	derived, err := trackedToolDerived(projectDir)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, derived...)
+
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Rule != out[j].Rule {
+			return out[i].Rule < out[j].Rule
+		}
+		return out[i].Path < out[j].Path
+	})
+	return out, nil
+}
+
+func inWorkTree(dir string) bool {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--is-inside-work-tree").Output()
+	return err == nil && strings.TrimSpace(string(out)) == "true"
+}
+
+// ignoredGeneratedFiles walks the project for generated files and reports the
+// ones git ignores.
+func ignoredGeneratedFiles(projectDir string) ([]Violation, error) {
+	var candidates []string
+	ownModule := modulePath(projectDir)
+	err := filepath.WalkDir(projectDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			if p != projectDir && (skipDirs[d.Name()] || IsGoBuildCacheDir(p) || isForeignProject(p, ownModule)) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return nil // symlinks (the dev web-runtime bridge) are not source
+		}
+		rel, rerr := filepath.Rel(projectDir, p)
+		if rerr != nil {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if isDevRuntimeConfig(rel) {
+			return nil // machine-local by policy; ignoring it is correct
+		}
+		if isGenerated(p, rel) {
+			candidates = append(candidates, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan for generated files: %w", err)
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	ignored, err := checkIgnore(projectDir, candidates)
+	if err != nil {
+		return nil, err
+	}
+	var out []Violation
+	for _, rel := range candidates {
+		rule, ok := ignored[rel]
+		if !ok {
+			continue
+		}
+		out = append(out, Violation{
+			Rule: RuleGeneratedIgnored,
+			Path: rel,
+			Why: fmt.Sprintf("generated code, but excluded from git by %s — a fresh clone or CI checkout will not have it, "+
+				"and `forge ci verify-generated` cannot see drift in an ignored file", rule),
+			Fix: fmt.Sprintf("remove the ignore rule (%s), then `git add %s` — forge's policy is that generated code is committed and a checkout builds as-cloned", rule, rel),
+		})
+	}
+	return out, nil
+}
+
+// isForeignProject reports whether dir is the root of ANOTHER project's tree
+// nested inside this one, whose generated files are that project's to commit
+// or ignore — not this one's. control-plane, for example, keeps a gitignored
+// checkout of the reliant module at context/ as an image build context; its
+// protobuf and sqlc stubs read as this project's ignored generated code, 199
+// violations that kept `forge lint` from ever exiting 0 there.
+//
+// The boundaries are the ones the toolchains themselves stop at:
+//
+//   - a nested git repository or worktree (`.git` as a directory or a
+//     gitdir file): the outer repository cannot commit its files at all;
+//   - a go.mod declaring a module outside ownModule: `go build ./...` from
+//     the project root never reaches it. The project's own nested modules
+//     (gen/, a frontend's boundary module) declare paths under ownModule
+//     and are still checked. With no root go.mod there is no module to
+//     compare against, and no tree is treated as foreign on this ground.
+//
+// Skipping every IGNORED path instead would be wrong: this rule exists to
+// find generated files that are ignored, so it would never fire again.
+func isForeignProject(dir, ownModule string) bool {
+	if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
+		return true
+	}
+	if ownModule == "" {
+		return false
+	}
+	mod := modulePath(dir)
+	return mod != "" && mod != ownModule && !strings.HasPrefix(mod, ownModule+"/")
+}
+
+// modulePath returns the module path declared by dir/go.mod, or "" when
+// there is no readable go.mod.
+func modulePath(dir string) string {
+	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return ""
+	}
+	return modfile.ModulePath(data)
+}
+
+// DeliveredRenderMarker is the phrase every harness-delivered agent skill
+// carries in its banner (rendered by older forge versions, which
+// are swept on generate).
+//
+// A delivered skill is NOT project-generated code: it is a render of the
+// skill catalog embedded in the forge binary, stamped with the rendering
+// forge's version, with no input from the project. Like .forge-kcl/ it is
+// binary-derived state — `forge skill load` prints the authoritative copy
+// straight from the binary — so every forge build would rewrite a committed
+// copy, and whether to track the directory is the project's call (forge's
+// own repo ignores .claude/; a harness: reliant project has none). The
+// commit policy therefore neither requires it to be committed nor forbids
+// it.
+const DeliveredRenderMarker = "project-specific guidance belongs in your own skills directory"
+
+// isGenerated reports whether the file is generated code this policy
+// requires to be committed: forge's own output (the DO-NOT-EDIT banner or an
+// embedded forge:hash marker) and buf's stubs (Go and TypeScript).
+// Harness-delivered agent skills (see DeliveredRenderMarker) and tool-derived
+// outputs (IsToolDerived) are excluded.
+func isGenerated(abs, rel string) bool {
+	switch {
+	case IsToolDerived(rel):
+		return false
+	case strings.HasSuffix(rel, ".pb.go"), strings.HasSuffix(rel, ".connect.go"), strings.HasSuffix(rel, "_pb.ts"), strings.HasSuffix(rel, "_connect.ts"):
+		return true
+	}
+	head := readHead(abs)
+	if bytes.Contains(head, []byte(DeliveredRenderMarker)) {
+		return false
+	}
+	return hasGeneratedHeader(head)
+}
+
+// headerProbeBytes bounds the header read: banners and markers sit in the
+// first few lines (a skill's banner follows its YAML frontmatter).
+const headerProbeBytes = 2048
+
+// readHead returns up to headerProbeBytes from the start of the file, or nil.
+func readHead(path string) []byte {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+	buf := make([]byte, headerProbeBytes)
+	n, _ := io.ReadFull(f, buf)
+	return buf[:n]
+}
+
+// hasGeneratedHeader reports whether a file head carries forge's banner or
+// certification marker, or the Go-convention generated banner.
+func hasGeneratedHeader(head []byte) bool {
+	if bytes.Contains(head, []byte("Code generated by forge. DO NOT EDIT.")) {
+		return true
+	}
+	if i := bytes.Index(head, []byte("forge:hash=")); i >= 0 {
+		// Require a real hash value, so prose that merely mentions the
+		// marker key is not mistaken for a stamped file.
+		v := head[i+len("forge:hash="):]
+		return len(v) >= 16 && isHex(v[:16])
+	}
+	// Go's convention: `^// Code generated .* DO NOT EDIT\.$` on its own line.
+	sc := bufio.NewScanner(bytes.NewReader(head))
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.HasPrefix(line, "// Code generated ") && strings.HasSuffix(line, " DO NOT EDIT.") {
+			return true
+		}
+	}
+	return false
+}
+
+func isHex(b []byte) bool {
+	for _, c := range b {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// isDevRuntimeConfig reports whether rel is a frontend's dev runtime document
+// (frontends/<name>/public/config.js).
+func isDevRuntimeConfig(rel string) bool {
+	return strings.HasPrefix(rel, "frontends/") && strings.HasSuffix(rel, "/"+devRuntimeConfig) &&
+		strings.Count(rel, "/") == 3
+}
+
+// checkIgnore returns, for each of paths git ignores, the matching rule as
+// "<source>:<line>:<pattern>".
+func checkIgnore(dir string, paths []string) (map[string]string, error) {
+	cmd := exec.Command("git", "-C", dir, "check-ignore", "-v", "--stdin", "-z")
+	cmd.Stdin = strings.NewReader(strings.Join(paths, "\x00") + "\x00")
+	out, err := cmd.Output()
+	if err != nil {
+		var ee *exec.ExitError
+		if !errors.As(err, &ee) || ee.ExitCode() != 1 { // 1 = nothing ignored
+			return nil, fmt.Errorf("git check-ignore: %w", err)
+		}
+	}
+	// -z -v output: <source> NUL <linenum> NUL <pattern> NUL <pathname> NUL
+	fields := strings.Split(string(out), "\x00")
+	got := map[string]string{}
+	for i := 0; i+3 < len(fields); i += 4 {
+		source, line, pattern, path := fields[i], fields[i+1], fields[i+2], fields[i+3]
+		if strings.HasPrefix(pattern, "!") {
+			continue // matched a negation: NOT ignored
+		}
+		got[path] = fmt.Sprintf("%s:%s:%s", source, line, pattern)
+	}
+	return got, nil
+}
+
+// trackedLocalState reports machine-local materializations that are in git.
+func trackedLocalState(projectDir string) ([]Violation, error) {
+	out, err := exec.Command("git", "-C", projectDir, "ls-files", "-z", "--",
+		legacyKCLDir, "frontends/*/"+devRuntimeConfig).Output()
+	if err != nil {
+		return nil, fmt.Errorf("git ls-files: %w", err)
+	}
+	var vs []Violation
+	kclTracked := false
+	for _, p := range strings.Split(string(out), "\x00") {
+		switch {
+		case p == "":
+		case strings.HasPrefix(p, legacyKCLDir+"/"):
+			kclTracked = true
+		case isDevRuntimeConfig(p):
+			vs = append(vs, Violation{
+				Rule: RuleLocalStateTracked,
+				Path: p,
+				Why: "the DEV runtime config document — rendered from deploy/kcl/dev/config.k, whose ports resolve per machine, " +
+					"so a committed copy drifts on every machine that regenerates. `forge generate`, `forge build` and `forge env up` " +
+					"materialize it; a deploy writes each environment's own copy beside the bundle",
+				Fix: fmt.Sprintf("git rm --cached %s && echo %s >> %s/.gitignore", p, devRuntimeConfig, strings.TrimSuffix(p, "/"+devRuntimeConfig)),
+			})
+		}
+	}
+	if kclTracked {
+		vs = append(vs, Violation{
+			Rule: RuleLocalStateTracked,
+			Path: legacyKCLDir + "/",
+			Why: "a copy of the forge KCL module, which forge now supplies from the binary that renders — a committed copy pins one " +
+				"forge build's schemas into every clone and CI checkout, and fights every other build",
+			Fix: fmt.Sprintf("forge generate && git rm -r --cached %s && echo %s/ >> .gitignore", legacyKCLDir, legacyKCLDir),
+		})
+	}
+	return vs, nil
+}
+
+// trackedToolDerived reports tool-derived outputs (IsToolDerived) that are in
+// git and still in the work tree. A tracked file `forge generate` already
+// deleted (the legacy aggregate descriptor) is a pending deletion that `git
+// status` shows; it needs no finding of its own.
+func trackedToolDerived(projectDir string) ([]Violation, error) {
+	args := []string{"-C", projectDir, "ls-files", "-z", "--"}
+	args = append(args, toolDerivedDirs...)
+	args = append(args, toolDerivedFiles...)
+	out, err := exec.Command("git", args...).Output()
+	if err != nil {
+		return nil, fmt.Errorf("git ls-files: %w", err)
+	}
+	reported := map[string]bool{}
+	var vs []Violation
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p == "" || !IsToolDerived(p) {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(projectDir, filepath.FromSlash(p))); err != nil {
+			continue
+		}
+		path := p
+		for _, d := range toolDerivedDirs {
+			if strings.HasPrefix(p, d) {
+				path = d
+			}
+		}
+		if reported[path] {
+			continue
+		}
+		reported[path] = true
+		vs = append(vs, Violation{
+			Rule: RuleToolDerivedTracked,
+			Path: path,
+			Why: "generated for forge and tooling only — no compiler reads it, and forge derives it on demand in any checkout — " +
+				"so a committed copy is a merge conflict between every two branches whose inputs differ",
+			Fix: fmt.Sprintf("forge generate && git rm -r --cached --ignore-unmatch %s (forge generate also adds the ignore rule)", strings.TrimSuffix(path, "/")),
+		})
+	}
+	return vs, nil
+}
+
+// Format renders violations as the multi-line block `forge lint` and `forge
+// ci verify-generated` print.
+func Format(vs []Violation) string {
+	var b strings.Builder
+	for _, v := range vs {
+		fmt.Fprintf(&b, "  ❌ %s — %s\n", v.Path, v.Why)
+		fmt.Fprintf(&b, "      ↪ %s\n", v.Fix)
+	}
+	return b.String()
+}

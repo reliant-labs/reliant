@@ -1,0 +1,130 @@
+# The nightly tier: checks worth running, but not worth a pull request's wall
+# time. Everything here runs on a schedule against main, and on demand
+# (workflow_dispatch, any branch).
+#
+# WHAT LIVES HERE, AND WHY IT IS NOT ON EVERY PR.
+#
+#   windows/arm64 vet   `go vet ./...` for GOOS=windows GOARCH=arm64. The
+#                       Windows job in ci.yml still BUILDS arm64 on every PR
+#                       — that is the proof forge compiles there — but the
+#                       full vet re-checked the whole module (~4 min cold) to
+#                       find what the amd64 vet beside it already checks:
+#                       only GOARCH-specific files differ. vet's verdict
+#                       depends on the target, not the host, so it runs on
+#                       Linux.
+#
+#   e2e (all)           the whole e2e suite through e2e-suite.yml with
+#                       `select: all`: every TestE2E* test, including the
+#                       TestE2ENightly* ones a push to main leaves out. The
+#                       other tests run on every push to main too; running
+#                       them again here costs only runner time, keeps one code
+#                       path for planning and auditing a run, and records a
+#                       fresh duration for EVERY test, which is what
+#                       scripts/e2e-timings.sh reads by default.
+#
+#   e2e scaffold        e2e-scaffold.yml's `forge project new` smoke. Like the
+#                       suite it left the pull request for push-to-main
+#                       (ci.yml, "TWO TIERS"); it runs here too so a red
+#                       caused by the outside world — an npm or module-proxy
+#                       release, a runner image — is reported even on a day
+#                       nothing merged.
+#
+#   consumer canary    consumer-canary.yml: reliant and control-plane at main,
+#                       built against this forge (`-force`: no diff to judge).
+#
+# NOT HERE: ci.yml's slow tier (full-mode tests under -race, the guards,
+# native Windows). It runs on every push to main, and workflow_dispatch runs
+# it on any branch.
+#
+# A check moves here only when it is slow AND its failure is rare and cheap to
+# bisect a day later. Moving one is a decision about where a regression will
+# be caught, so say why in the job's comment, as above.
+#
+# A RED NIGHTLY IS NOT ALLOWED TO BE QUIET. Nobody watches scheduled runs, so
+# the `report` job opens an issue titled "Nightly CI is red" when any job
+# fails (or comments on the open one), and closes it the first time a nightly
+# on main is green again. One open issue at a time, linked to every red run.
+name: Nightly
+
+on:
+  schedule:
+    # 07:17 UTC: off the top of the hour, when scheduled runs pile up and
+    # GitHub delays them most.
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A run in progress always finishes (ci.yml says why); a second schedule or
+# dispatch on the same ref waits for it.
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-arm64-vet:
+    name: windows/arm64 vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      # The module cache alone: no scope holds windows/arm64 artifacts, and
+      # one run a day does not earn a scope of its own (ci.yml's "Build-cache
+      # note").
+      - uses: ./.github/actions/restore-go-caches
+        with:
+          scope: ""
+      - name: go vet ./... (windows/arm64)
+        env:
+          CGO_ENABLED: "0"
+          GOOS: windows
+          GOARCH: arm64
+        run: go vet ./...
+
+  e2e:
+    name: e2e (all)
+    uses: ./.github/workflows/e2e-suite.yml
+    with:
+      select: all
+
+  e2e-scaffold:
+    name: e2e scaffold
+    uses: ./.github/workflows/e2e-scaffold.yml
+
+  # reliant and control-plane at their main, built against this forge, whether
+  # or not forge changed: a consumer that moved under an unchanged forge is the
+  # other half of the pin cost (consumer-canary.yml). `secrets: inherit` hands
+  # the called workflow CONTROL_PLANE_DEPLOY_KEY.
+  consumer-canary:
+    name: consumer canary
+    uses: ./.github/workflows/consumer-canary.yml
+    secrets: inherit
+
+  report:
+    name: report (issue on red)
+    needs: [windows-arm64-vet, e2e, e2e-scaffold, consumer-canary]
+    # Always: a red job is exactly when this has something to say. Only for
+    # main, so a dispatch on a feature branch never files an issue.
+    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # The script alone: one rolling issue, found by its label, reopened on
+      # the next red, commented only when the set of red jobs changes.
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+      - name: Open, update or close the "Nightly CI is red" issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RESULTS: ${{ toJSON(needs) }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: scripts/ci-nightly-issue.sh

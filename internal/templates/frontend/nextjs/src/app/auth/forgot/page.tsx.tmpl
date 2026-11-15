@@ -1,0 +1,22 @@
+"use client";
+
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// The "forgot password" screen: /auth/forgot. Static-export safe — it reads no
+// query string and renders the same for every visitor.
+//
+// All the behaviour, and the honest note about when the email actually
+// arrives, lives in @/components/forgot-password-form. This file is the
+// framing; restyle it like the sign-in screen.
+
+import { AuthPage } from "@/components/auth-ui";
+import { ForgotPasswordForm } from "@/components/forgot-password-form";
+import { joinBasePath } from "@/lib/basepath_gen";
+
+export default function ForgotPasswordPage() {
+  return (
+    <AuthPage>
+      <ForgotPasswordForm signInHref={joinBasePath("/auth/sign-in")} />
+    </AuthPage>
+  );
+}

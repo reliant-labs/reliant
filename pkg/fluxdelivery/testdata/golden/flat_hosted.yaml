@@ -1,0 +1,69 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    deploy.reliant.dev/generation: "42"
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: shard0
+  name: acme.env.env-prod
+  namespace: flux-acme
+spec:
+  interval: 5m0s
+  layerSelector:
+    mediaType: application/vnd.forge.bundle.manifests.v1.tar+gzip
+    operation: extract
+  ref:
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  secretRef:
+    name: registry-pull
+  url: oci://registry.example.com/orgs/acme/bundle.v1/prod
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/cluster: hosted
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: shard0
+  name: acme.env.env-prod-hosted
+  namespace: flux-acme
+spec:
+  commonMetadata:
+    labels:
+      reliant.dev/environment: env-prod
+      reliant.dev/org: acme
+  deletionPolicy: Orphan
+  interval: 5m0s
+  patches:
+  - patch: |
+      metadata:
+        labels:
+          forge.dev/deployment-id: d-1
+    target:
+      group: forge.dev
+      kind: Workload
+      name: api
+      version: v1alpha1
+  path: manifests/hosted
+  prune: true
+  serviceAccountName: reliant-deploy-tenant
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: acme.env.env-prod
+  targetNamespace: env-prod
+  timeout: 5m0s
+  wait: true

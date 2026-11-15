@@ -1,0 +1,89 @@
+{
+  "schema": "forge.obs.metrics_query/v2",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "dev",
+    "backend": "local",
+    "from": "2026-10-22T11:00:00Z",
+    "to": "2026-10-22T12:00:00Z"
+  },
+  "query_mode": "structured",
+  "panel": {
+    "id": "explore",
+    "title": "Explore",
+    "kind": "line",
+    "signal": "metrics",
+    "series": [
+      {
+        "label": "A",
+        "agg": "rate",
+        "field": "rpc.server.calls",
+        "metricType": "sum"
+      }
+    ],
+    "groupBy": [
+      "rpc.method"
+    ]
+  },
+  "step_seconds": 60,
+  "meta": [
+    {
+      "label": "A",
+      "metric": "rpc.server.calls",
+      "type": "sum",
+      "monotonic": true,
+      "temporality": "cumulative",
+      "agg": "rate",
+      "value_unit": "{call}/s"
+    }
+  ],
+  "series": [
+    {
+      "label": "A",
+      "labels": {
+        "rpc.method": "List"
+      },
+      "points": [
+        {
+          "time": "2026-10-22T11:00:00Z",
+          "value": 2
+        },
+        {
+          "time": "2026-10-22T11:01:00Z",
+          "value": 2
+        },
+        {
+          "time": "2026-10-22T11:02:00Z",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "label": "A",
+      "labels": {
+        "rpc.method": "Get"
+      },
+      "points": [
+        {
+          "time": "2026-10-22T11:00:00Z",
+          "value": 1
+        },
+        {
+          "time": "2026-10-22T11:01:00Z",
+          "value": 1
+        },
+        {
+          "time": "2026-10-22T11:02:00Z",
+          "value": 1
+        }
+      ]
+    }
+  ],
+  "series_total": 2,
+  "warnings": [],
+  "truncated": false,
+  "suggested": [
+    "forge obs metrics describe dev rpc.server.calls"
+  ]
+}

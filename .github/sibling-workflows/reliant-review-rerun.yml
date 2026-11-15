@@ -1,0 +1,49 @@
+name: Reliant review re-run
+
+# Keeps a head pr-review passed from being held out of the merge queue by its
+# own stale `Reliant review` runs (scripts/ci-review-rerun.sh has the why). The
+# green run of the check heals its own head (its last step). This sweep covers
+# the pull requests that step cannot reach: a pull request's runs use the
+# check's definition from its merge commit, so a branch cut before a fix keeps
+# the bug until it is rebased, and nothing on it ever runs the fixed step.
+# `schedule` always runs THIS file from main, so a stuck pull request heals
+# without anyone touching it. (Not `workflow_run`: one more job for every
+# review run, on runners the org shares 20 at a time, to catch what the green
+# run's own step already does.)
+#
+# Not a required check. It re-runs only the check's pull-request runs on a
+# head the gate passes now, one at a time; merge-group runs are never touched.
+on:
+  schedule:
+    - cron: "7,27,47 * * * *"
+  workflow_dispatch:
+
+# A sweep still running when the next is due finishes; the next waits.
+concurrency:
+  group: reliant-review-rerun
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: write # re-run the check's red verdicts
+
+jobs:
+  sweep:
+    name: Re-run passed heads' red review verdicts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: re-run red verdicts on passed heads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          dir="${RUNNER_TEMP}/review"
+          mkdir -p "${dir}"
+          for s in ci-review-rerun.sh ci-review-marker.sh; do
+            gh api -H 'Accept: application/vnd.github.raw' "repos/${GITHUB_REPOSITORY}/contents/scripts/${s}?ref=main" > "${dir}/${s}"
+          done
+          # Done 5 minutes before the job's timeout: a backlog that does not
+          # fit (runners the org shares 20 at a time) is the next sweep's.
+          RERUN_STOP_AT=$(($(date +%s) + 25 * 60)) bash "${dir}/ci-review-rerun.sh" sweep
