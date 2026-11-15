@@ -243,11 +243,25 @@ export function pinnedEnvOf(page: ConsolePage): string | null {
  * object it came from. Undefined and empty values are dropped.
  */
 export function withSearch(path: string, search: Record<string, unknown> = {}): string {
-  const kept = Object.fromEntries(
-    Object.entries(search).filter(([, value]) => value !== undefined && value !== null && value !== "")
-  );
-  return `${path}${defaultStringifySearch(kept)}`;
+  const kept = Object.entries(search).filter(([, value]) => value !== undefined && value !== null && value !== "");
+  // Every console link builds its href on every render, and the router's
+  // encoder JSON.parses each string value to decide whether to quote it (a
+  // thrown SyntaxError per plain string: about a second of a phone's main
+  // thread per tour). The answer is a pure function of the entries, so it is
+  // remembered by them.
+  let key = path;
+  for (const [name, value] of kept) key += `\u0000${name}\u0001${typeof value}\u0001${typeof value === "object" ? JSON.stringify(value) : String(value)}`;
+  const known = hrefs.get(key);
+  if (known !== undefined) return known;
+  const href = `${path}${defaultStringifySearch(Object.fromEntries(kept))}`;
+  if (hrefs.size >= HREF_LIMIT) hrefs.clear();
+  hrefs.set(key, href);
+  return href;
 }
+
+/** withSearch's answers, by entries. A console visit builds a few hundred distinct hrefs. */
+const hrefs = new Map<string, string>();
+const HREF_LIMIT = 2_000;
 
 // ── The Observability panel's views, as console pages ──────────────────────
 

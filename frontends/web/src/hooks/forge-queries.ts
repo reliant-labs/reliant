@@ -34,7 +34,14 @@
  */
 
 import { useCallback, useMemo } from "react";
-import { useMutation, useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 
 import { ForgeDeployJobStatus, ForgeService } from "../gen/reliant/v1/forge_pb";
 import { connectClient } from "../lib/connect";
@@ -696,17 +703,66 @@ export function useForgeRoster(projectId: string | null | undefined, forgeProjec
     [live.data, topology.data, localKey]
   );
 
-  return {
-    envs,
-    live,
-    topology,
-    projectName,
-    daemon: daemonSideOf(topology.data, topology.error),
-    /** Nothing from the backend yet. The daemon's half never blocks. */
-    isLoading: !!projectName.name && live.isLoading && !live.data,
-    /** No forge project name is known at all — neither persisted nor reported yet. */
-    resolvingName: !projectName.name && topology.isLoading,
-  };
+  // One object while neither read has moved. The console hands the roster to
+  // every page through its context (ConsoleLayout), and a fresh object on
+  // every render re-rendered every page on any URL change (a tour step, a
+  // filter): react-query's results are new objects each render, so the memo
+  // is keyed on the state they carry instead.
+  const daemon = daemonSideOf(topology.data, topology.error);
+  return useMemo(
+    () => ({
+      envs,
+      live,
+      topology,
+      projectName,
+      daemon,
+      /** Nothing from the backend yet. The daemon's half never blocks. */
+      isLoading: !!projectName.name && live.isLoading && !live.data,
+      /** No forge project name is known at all — neither persisted nor reported yet. */
+      resolvingName: !projectName.name && topology.isLoading,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `live` and `topology` are new objects every render; their state is the key.
+    [envs, daemon, projectName.name, projectName.source, ...queryStateKey(live), ...queryStateKey(topology)]
+  );
+}
+
+/**
+ * Every value a query result carries. Its functions (`refetch`) are stable, and
+ * `promise` is read only by React's `use()`. A caller may read any of the rest
+ * (`isFetching` and `isStale` move while `status` holds still), so a memo that
+ * hands the result on is keyed on all of them. hooks/__tests__/queryStateKey.test.tsx
+ * fails when TanStack adds a field this list lacks.
+ */
+export const QUERY_RESULT_STATE_FIELDS = [
+  "data",
+  "dataUpdatedAt",
+  "error",
+  "errorUpdatedAt",
+  "errorUpdateCount",
+  "failureCount",
+  "failureReason",
+  "fetchStatus",
+  "isError",
+  "isFetched",
+  "isFetchedAfterMount",
+  "isFetching",
+  "isInitialLoading",
+  "isLoading",
+  "isLoadingError",
+  "isPaused",
+  "isPending",
+  "isPlaceholderData",
+  "isRefetchError",
+  "isRefetching",
+  "isStale",
+  "isSuccess",
+  "isEnabled",
+  "status",
+] as const satisfies readonly (keyof UseQueryResult)[];
+
+/** What changes when a query result does: the memo key for a hook that returns one. */
+export function queryStateKey(result: Pick<UseQueryResult, (typeof QUERY_RESULT_STATE_FIELDS)[number]>): unknown[] {
+  return QUERY_RESULT_STATE_FIELDS.map((field) => result[field]);
 }
 
 /** Invalidate everything the control plane reports for a project after a write moved it. */

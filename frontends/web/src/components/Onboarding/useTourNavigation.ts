@@ -19,7 +19,7 @@
  * journey ends without its own `finish` target in the Reliant shell.
  */
 
-import { useCallback } from "react";
+import { startTransition, useCallback } from "react";
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { useTourStore } from "../../store/tourStore";
 import { dropLandingJourney } from "../../lib/landingAttribution";
@@ -144,10 +144,14 @@ export function useTourNavigation(): TourNavigation {
   // With `to` omitted the router can't resolve which route's search schema
   // applies, so it types the reducer's return as `never`; the runtime
   // contract (merge into the current search) is route-agnostic.
+  // Each step's navigation is a transition: the step's page renders as
+  // non-urgent work, so the Next tap itself is not held behind it.
   const setTourParam = useCallback(
     (value: string | undefined) => {
-      void navigate({
-        search: ((prev: Search) => ({ ...prev, tour: value })) as never,
+      startTransition(() => {
+        void navigate({
+          search: ((prev: Search) => ({ ...prev, tour: value })) as never,
+        });
       });
     },
     [navigate],
@@ -159,14 +163,16 @@ export function useTourNavigation(): TourNavigation {
         encodeURIComponent(target.params?.[name] ?? ""),
       );
       const here = router.history.location.pathname === path;
-      void navigate({
-        to: target.to,
-        params: target.params,
-        // Already on the page: merge, so params the page keeps (a project,
-        // an open trace) survive. Elsewhere: the target's own search.
-        search: ((prev: Search) =>
-          here ? { ...prev, ...target.search, tour: tourValue } : { ...target.search, tour: tourValue }) as never,
-      } as never);
+      startTransition(() => {
+        void navigate({
+          to: target.to,
+          params: target.params,
+          // Already on the page: merge, so params the page keeps (a project,
+          // an open trace) survive. Elsewhere: the target's own search.
+          search: ((prev: Search) =>
+            here ? { ...prev, ...target.search, tour: tourValue } : { ...target.search, tour: tourValue }) as never,
+        } as never);
+      });
     },
     [navigate, router],
   );

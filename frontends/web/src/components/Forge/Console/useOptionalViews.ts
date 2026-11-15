@@ -1,5 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
+import { useMemo } from "react";
+
 import { useServiceSignals } from "@/hooks/observability-queries";
 import type { ObsScope, ServiceSignalsResult } from "@/services/controlPlane/observability/types";
 
@@ -15,6 +17,8 @@ export function optionalViews(signals: ServiceSignalsResult | undefined) {
 }
 
 export function useOptionalViews(scope: ObsScope | null) {
-  const profiles = useServiceSignals(scope, "7d");
-  return optionalViews(scope && profiles.isSuccess && !profiles.isFetching ? profiles.data : undefined);
+  const signals = useServiceSignals(scope, "7d");
+  const { profiles } = optionalViews(scope && signals.isSuccess && !signals.isFetching ? signals.data : undefined);
+  // The same object while the answer stands: it is a prop of the console's memoized chrome.
+  return useMemo(() => ({ profiles }), [profiles]);
 }

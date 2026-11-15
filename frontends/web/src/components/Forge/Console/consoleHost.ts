@@ -12,7 +12,7 @@
  * Keep the two files' exports the same.
  */
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 import { useProjects } from "@/hooks/project-queries";
 import { isForgeShell } from "@/lib/shell";
@@ -69,13 +69,19 @@ export interface ConsoleUser {
 /** The signed-in user, as the console's rail shows them. */
 export function useConsoleUser(): ConsoleUser | undefined {
   const authUser = useAuthStore((state) => state.user);
-  if (!authUser) return undefined;
-  return {
-    name:
-      (authUser.user_metadata?.full_name as string | undefined) ??
-      (authUser.user_metadata?.name as string | undefined) ??
-      authUser.email?.split("@")[0] ??
-      "You",
-    email: authUser.email ?? undefined,
-  };
+  // One object per signed-in user: it is a prop of the console's memoized chrome.
+  return useMemo(
+    () =>
+      authUser
+        ? {
+            name:
+              (authUser.user_metadata?.full_name as string | undefined) ??
+              (authUser.user_metadata?.name as string | undefined) ??
+              authUser.email?.split("@")[0] ??
+              "You",
+            email: authUser.email ?? undefined,
+          }
+        : undefined,
+    [authUser]
+  );
 }
