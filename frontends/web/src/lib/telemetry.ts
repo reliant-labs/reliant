@@ -223,7 +223,8 @@ export function buildTelemetryConfig(
     // GPC / DNT browsers never get here (demoTelemetry() is "off").
     ...(demo && input.demoTelemetry && input.demoTelemetry !== "off" ? { analytics: "full" as const } : {}),
     // The demo records replays by its own switch (DEMO_TELEMETRY, owner
-    // default on); the runtime masks all text and inputs whenever replay runs.
+    // default on; never on a phone, demoTelemetry.ts DEMO_REPLAY_ON_PHONES);
+    // the runtime masks all text and inputs whenever replay runs.
     replay: demo ? input.demoTelemetry === "replay" : config.OTEL_REPLAY === "true",
     replaySampleRate: input.replayRate,
   };

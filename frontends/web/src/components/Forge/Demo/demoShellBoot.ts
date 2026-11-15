@@ -18,11 +18,18 @@
 import { memoryTourStorage, setTourShell, setTourStorage } from "@/components/Onboarding/tourShell";
 import { installShellTransport } from "@/lib/connect";
 import { initTelemetry } from "@/lib/telemetry";
+import { yieldToMain } from "@/lib/yieldToMain";
 
 export function bootDemoShell(): void {
   setTourShell("forge");
   setTourStorage(memoryTourStorage());
   // Lazily: the scenario carries the sample data, which only the console needs.
-  installShellTransport(import("./demoData/demoTransport").then(({ createDemoTransport }) => createDemoTransport()));
+  // Built in a task of its own, after the chunk has evaluated, so neither blocks the first paint for long.
+  installShellTransport(
+    import("./demoData/demoTransport").then(async ({ createDemoTransport }) => {
+      await yieldToMain();
+      return createDemoTransport();
+    }),
+  );
   void initTelemetry();
 }

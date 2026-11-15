@@ -16,7 +16,7 @@
 
 import type { Panel, PanelResult, QueryPanelRequest, TimeWindow } from "@/services/controlPlane/observability/types";
 
-import { DAY, DEMO_ENV_IDS, DEMO_INCIDENT, demoLedger, demoStats, incidentStartMs, type DemoEnvKey } from "../shopStory";
+import { DAY, DEMO_ENV_IDS, DEMO_INCIDENT, demoCounts, demoLedger, demoStats, incidentStartMs, type DemoEnvKey } from "../shopStory";
 import { shopIssueFirstSeen } from "./issues";
 
 /** A version's run in one environment: from its promotion to the next whole-release one (or now). */
@@ -49,14 +49,14 @@ const utc = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace("T",
 
 /** shop-web sessions in a window: one per ~2 product views (the storefront's entry), as the sessions model reads them. */
 const sessionsIn = (envId: DemoEnvKey, w: TimeWindow, now: number) =>
-  Math.round(demoStats({ ...w, envIds: [envId], service: "api", op: "GET /products/{slug}", now }).requests * 0.5);
+  Math.round(demoCounts({ ...w, envIds: [envId], service: "api", op: "GET /products/{slug}", now }).requests * 0.5);
 
 /** Sessions that hit an error: only the incident's failed checkouts (prod, v1.8.3, since its promotion). */
 function erroredSessionsIn(run: Run, now: number): number {
   if (run.envId !== DEMO_INCIDENT.envId || run.version !== DEMO_INCIDENT.release) return 0;
   const startMs = Math.max(run.startMs, incidentStartMs(now));
   if (run.endMs <= startMs) return 0;
-  return demoStats({ startMs, endMs: run.endMs, envIds: [run.envId], service: "api", op: "checkout.v1.CheckoutService/Checkout", now }).errors;
+  return demoCounts({ startMs, endMs: run.endMs, envIds: [run.envId], service: "api", op: "checkout.v1.CheckoutService/Checkout", now }).errors;
 }
 
 /** A bucket width that draws ~42 points over the window: 4 hours over a week. */
@@ -127,7 +127,7 @@ export function shopReleasesSqlPanel(panel: Panel, req: QueryPanelRequest, now: 
   switch (panel.id) {
     case "backend-version-share": {
       const stepSeconds = stepOf(window, req.stepSeconds);
-      const series = shareSeries(runs, window, stepSeconds, "Share of requests", (run, w) => demoStats({ ...w, envIds: [run.envId], now }).requests);
+      const series = shareSeries(runs, window, stepSeconds, "Share of requests", (run, w) => demoCounts({ ...w, envIds: [run.envId], now }).requests);
       return { ...base, stepSeconds, bucketSeconds: stepSeconds, series };
     }
     case "browser-version-share": {

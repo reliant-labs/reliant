@@ -14,7 +14,8 @@
  * `replay`): page and tour analytics plus session replay, which the runtime
  * records with all text and inputs masked, media blocked and no canvas. A
  * browser that sends Do Not Track or Global Privacy Control is never recorded,
- * whatever the config says: telemetry does not start at all.
+ * whatever the config says: telemetry does not start at all. A phone gets
+ * analytics without the replay (DEMO_REPLAY_ON_PHONES).
  *
  * Dependency-free beyond the generated config, like telemetryEndpoint.ts:
  * telemetry.ts and the demo banner both read it.
@@ -51,9 +52,38 @@ export function configuredDemoTelemetry(): DemoTelemetry {
   return value === "analytics" || value === "off" ? value : "replay";
 }
 
-/** What the demo records for THIS browser: the config, unless it opted out. */
-export function demoTelemetry(optedOut: boolean = browserOptedOut()): DemoTelemetry {
-  return optedOut ? "off" : configuredDemoTelemetry();
+/**
+ * Whether the demo records session replay on phones (owner, 2026-11-15: no).
+ * On a phone the replay recorder cost every tap 15-45%, froze scrolling for
+ * 300-400 ms every few seconds and kept the main thread busy seconds longer
+ * after load (research/2026-11-10-demo-errors/mobile-perf-findings.md), so a
+ * phone records analytics only; desktops still record replays. `true` records
+ * phones again.
+ */
+export const DEMO_REPLAY_ON_PHONES = false;
+
+/** The widest viewport (CSS px) counted as a phone. */
+export const PHONE_MAX_WIDTH = 768;
+
+type MediaQueries = { matchMedia?: (query: string) => { matches: boolean } };
+
+/** A phone: a coarse (touch) primary pointer on a viewport no wider than PHONE_MAX_WIDTH. */
+export function isPhone(win: MediaQueries | undefined = typeof window !== "undefined" ? window : undefined): boolean {
+  const matches = (query: string) => win?.matchMedia?.(query)?.matches ?? false;
+  return matches("(pointer: coarse)") && matches(`(max-width: ${PHONE_MAX_WIDTH}px)`);
+}
+
+let phoneAtLoad: boolean | null = null;
+/** isPhone() as of the page load: a phone turned sideways mid-visit is still a phone. */
+function isPhoneAtLoad(): boolean {
+  return (phoneAtLoad ??= isPhone());
+}
+
+/** What the demo records for THIS browser: the config, unless it opted out; analytics in place of replay on a phone. */
+export function demoTelemetry(optedOut: boolean = browserOptedOut(), phone: boolean = isPhoneAtLoad()): DemoTelemetry {
+  if (optedOut) return "off";
+  const level = configuredDemoTelemetry();
+  return level === "replay" && phone && !DEMO_REPLAY_ON_PHONES ? "analytics" : level;
 }
 
 /** The demo banner's one-line notice for a level, and whether the browser opted out. */

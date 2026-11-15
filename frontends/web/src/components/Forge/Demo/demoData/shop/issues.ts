@@ -34,6 +34,7 @@ import {
   DEMO_TOURED_TRACE,
   demoLedger,
   demoPerson,
+  demoCounts,
   demoStats,
   HOUR,
   incidentStartMs,
@@ -175,7 +176,7 @@ function trendOf(seed: Seed, window: TimeWindow, now: number): IssueTrendPoint[]
       continue;
     }
     const events = isIncident(seed)
-      ? demoStats({ startMs: from, endMs: to, envIds: [seed.envId], service: seed.service, now }).errors
+      ? demoCounts({ startMs: from, endMs: to, envIds: [seed.envId], service: seed.service, now }).errors
       : Math.max(1, Math.round((seed.rate * (to - from)) / HOUR));
     out.push({ hourMs: hour, events });
   }
