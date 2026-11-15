@@ -116,12 +116,15 @@ interface EnvUsers {
   sessions: Session[];
 }
 /**
- * Each env's accounts and sessions, with history back far enough for the window: its start, less the 30 days
- * a monthly-active count looks back from its first day (dauWauMau). Narrower windows read the default history.
+ * How far back the Users panels read activity for a window starting at from: its start, less the 30 days a
+ * monthly-active count looks back from its first day (dauWauMau). Narrower windows read the default history.
  */
+export const usersHistoryStart = (from: number) => from - 30 * DAY;
+
+/** Each env's accounts and sessions, with history back to usersHistoryStart. */
 const usersOf = (q: Pick<Q, "envs" | "now" | "from">): EnvUsers[] =>
   q.envs.map((env) => {
-    const { people, sessions } = demoActivity(env, q.now, q.from - 30 * DAY);
+    const { people, sessions } = demoActivity(env, q.now, usersHistoryStart(q.from));
     return { env, accounts: people, sessions };
   });
 
