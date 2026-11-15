@@ -18,10 +18,29 @@
 import { hasControlPlane } from "@/services/controlPlane/config";
 import { controlPlaneObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { isDemoShell } from "@/lib/shell";
+import { yieldToMain } from "@/lib/yieldToMain";
 
 import { createShopApi } from "./shop/shopApi";
 import { withReadOnly } from "../../Observability/readOnlyApi";
 import { DEMO_SCENARIO_RPCS, type DemoScenarioMethod } from "./demoScenario";
+
+/**
+ * The fixtures answer in the browser, synchronously: each read waits for a new
+ * task first, so a page's burst of reads is many short tasks, not one long one.
+ */
+function yielding(api: ObservabilityApi): ObservabilityApi {
+  const out: Record<string, unknown> = {};
+  for (const [key, member] of Object.entries(api)) {
+    out[key] =
+      typeof member === "function"
+        ? async (...args: unknown[]) => {
+            await yieldToMain();
+            return (member as (...a: unknown[]) => unknown)(...args);
+          }
+        : member;
+  }
+  return out as unknown as ObservabilityApi;
+}
 
 export interface DemoApiOptions {
   /** Read the scenario's RPCs over the Connect transport. Default: on the demo host with a control-plane URL configured. */
@@ -29,7 +48,7 @@ export interface DemoApiOptions {
 }
 
 export function createDemoApi({ wire = isDemoShell() && hasControlPlane }: DemoApiOptions = {}): ObservabilityApi {
-  const fixtures = createShopApi();
+  const fixtures = yielding(createShopApi());
   if (!wire) return withReadOnly(fixtures);
   const overWire = Object.fromEntries(
     (Object.keys(DEMO_SCENARIO_RPCS) as DemoScenarioMethod[]).map((method) => [method, controlPlaneObservabilityApi[method]]),

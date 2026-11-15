@@ -24,10 +24,10 @@ import {
   DEMO_INCIDENT,
   DEMO_ROUTES,
   DEMO_RPC_METHODS,
+  demoCounts,
   demoLedger,
-  demoStats,
+  demoQuantile,
   type DemoEnvKey,
-  type DemoStats,
   type DemoStatsQuery,
 } from "../shopStory";
 import { shopDatabase } from "./database";
@@ -117,8 +117,20 @@ function scopeOf(where: Predicate[], req: Pick<QueryPanelRequest, "envIds" | "se
 
 const CHARGING = DEMO_ROUTES.filter((r) => r.charges).map((r) => r.op as string);
 
+type LatencyKey = "p50Ms" | "p95Ms" | "p99Ms";
+const QUANTILE: Record<LatencyKey, number> = { p50Ms: 0.5, p95Ms: 0.95, p99Ms: 0.99 };
+
+/** A scope's RED over a window. Its latency is read per quantile, so a count-only series never pays for one. */
+interface PanelStats {
+  requests: number;
+  errors: number;
+  errorRate: number;
+  ratePerSecond: number;
+  latency(k: LatencyKey): number;
+}
+
 /** RED for a scope over a window: sums over its services × ops. */
-function statsOf(scope: Scope, window: TimeWindow, now: number): DemoStats {
+function statsOf(scope: Scope, window: TimeWindow, now: number): PanelStats {
   const end = Math.min(window.endMs, now);
   const base: DemoStatsQuery = { startMs: window.startMs, endMs: Math.max(window.startMs + 1, end), envIds: scope.envIds, now };
   const queries: DemoStatsQuery[] = [];
@@ -126,31 +138,35 @@ function statsOf(scope: Scope, window: TimeWindow, now: number): DemoStats {
   const services = scope.services.filter((s) => s !== DEMO_FRONTEND);
   if (services.length) for (const service of services) for (const op of ops ?? [undefined]) queries.push({ ...base, service, op });
   else for (const op of ops ?? [undefined]) queries.push({ ...base, op });
-  const all = queries.map(demoStats);
+  const all = queries.map(demoCounts);
   const requests = all.reduce((a, s) => a + s.requests, 0);
   const errors = all.reduce((a, s) => a + s.errors, 0);
-  const heaviest = all.reduce((a, s) => (s.requests > a.requests ? s : a), all[0] ?? { requests: 0, errors: 0, errorRate: 0, ratePerSecond: 0, p50Ms: 0, p95Ms: 0, p99Ms: 0 });
+  const heaviest = all.reduce((a, s, i) => (s.requests > all[a].requests ? i : a), 0);
   // Latency of a mixed scope: the weighted mean of its parts' quantiles (close enough for a panel).
-  const weighted = (k: "p50Ms" | "p95Ms" | "p99Ms") => (requests ? all.reduce((a, s) => a + s[k] * s.requests, 0) / requests : heaviest[k]);
-  const dbScale = scope.database ? 0.12 : 1;
+  const weighted = (k: LatencyKey) =>
+    requests ? all.reduce((a, s, i) => a + demoQuantile(queries[i], QUANTILE[k]) * s.requests, 0) / requests : queries.length ? demoQuantile(queries[heaviest], QUANTILE[k]) : 0;
+  const scale: Record<LatencyKey, number> = { p50Ms: scope.database ? 0.12 : 1, p95Ms: scope.database ? 0.04 : 1, p99Ms: scope.database ? 0.03 : 1 };
   const mult = scope.logs ? 2.6 : scope.database ? 2.2 : 1;
+  const latency = new Map<LatencyKey, number>();
   return {
     requests: Math.round(requests * mult),
     errors: Math.round(errors * (scope.logs ? 1 : mult)),
     errorRate: requests ? errors / requests : 0,
     ratePerSecond: (requests * mult) / Math.max(1, (base.endMs - base.startMs) / 1000),
-    p50Ms: Math.round(weighted("p50Ms") * dbScale * 10) / 10,
-    p95Ms: Math.round(weighted("p95Ms") * (scope.database ? 0.04 : 1) * 10) / 10,
-    p99Ms: Math.round(weighted("p99Ms") * (scope.database ? 0.03 : 1) * 10) / 10,
+    latency: (k) => {
+      let v = latency.get(k);
+      if (v === undefined) latency.set(k, (v = Math.round(weighted(k) * scale[k] * 10) / 10));
+      return v;
+    },
   };
 }
 
 /** One intent's value from a scope's stats. */
-function valueOf(intent: SeriesIntent, stats: DemoStats, scope: Scope): number {
+function valueOf(intent: SeriesIntent, stats: PanelStats, scope: Scope): number {
   const errorIntent = scope.errorsOnly || (intent.where ?? []).some((p) => p.value === "error");
   if (intent.agg === "quantile") {
     const q = intent.quantile ?? 0.5;
-    return q >= 0.99 ? stats.p99Ms : q >= 0.95 ? stats.p95Ms : q >= 0.9 ? (stats.p50Ms + stats.p95Ms) / 2 : stats.p50Ms;
+    return q >= 0.99 ? stats.latency("p99Ms") : q >= 0.95 ? stats.latency("p95Ms") : q >= 0.9 ? (stats.latency("p50Ms") + stats.latency("p95Ms")) / 2 : stats.latency("p50Ms");
   }
   if (intent.agg === "count_distinct") return Math.round(stats.requests * 0.18);
   return errorIntent ? stats.errors : stats.requests;
@@ -239,8 +255,8 @@ function tracesPanel(panel: Panel, req: QueryPanelRequest, now: number): PanelRe
       return bounds.slice(0, -1).map((low, b) => {
         const high = bounds[b + 1];
         // Share of requests in [low, high): a log-normal around the median, plus the slow tail the p95/p99 say is there.
-        const z = (x: number) => (x <= 0 ? 0 : 1 / (1 + Math.exp(-2.2 * Math.log(x / Math.max(1, stats.p50Ms)))));
-        const tail = (x: number) => (x <= 0 ? 0 : 1 / (1 + Math.exp(-6 * Math.log(x / Math.max(1, stats.p99Ms)))));
+        const z = (x: number) => (x <= 0 ? 0 : 1 / (1 + Math.exp(-2.2 * Math.log(x / Math.max(1, stats.latency("p50Ms"))))));
+        const tail = (x: number) => (x <= 0 ? 0 : 1 / (1 + Math.exp(-6 * Math.log(x / Math.max(1, stats.latency("p99Ms"))))));
         const cdf = (x: number) => 0.95 * z(x) + 0.05 * tail(x);
         return { timeSec: Math.round(from / 1000), low, high, count: Math.round(stats.requests * Math.max(0, cdf(high) - cdf(low))) };
       });
