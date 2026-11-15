@@ -2195,9 +2195,9 @@
           "section": "auth",
           "id": "signins-by-method",
           "title": "Sign-ins by method",
-          "description": "Sign-ins that verified a credential (auth_signed_in with kind = credential) each day, by method. Events, not users: the sign-in attempts that succeeded.",
+          "description": "Sign-ins that verified a credential (auth_signed_in with kind = credential) each day, by method. Events, not users: the sign-in attempts that succeeded. A sign-in recorded as a state event (a synthetic monitor's, under observe.WithStateEvents) and an excluded user's are left out.",
           "kind": "sql",
-          "sql": "SELECT toDate(Timestamp) AS day, if(Props['method'] = '', 'unknown', Props['method']) AS method, count() AS \"Sign-ins\"\nFROM product_events\nWHERE EventName = 'auth_signed_in' AND Props['kind'] = 'credential' AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\nGROUP BY day, method ORDER BY day, method",
+          "sql": "SELECT toDate(Timestamp) AS day, if(Props['method'] = '', 'unknown', Props['method']) AS method, count() AS \"Sign-ins\"\nFROM product_events\nWHERE EventName = 'auth_signed_in' AND Props['kind'] = 'credential' AND UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Props['forge.kind'] != 'state' AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\nGROUP BY day, method ORDER BY day, method",
           "minStep": "1d",
           "display": {
             "style": "bars",

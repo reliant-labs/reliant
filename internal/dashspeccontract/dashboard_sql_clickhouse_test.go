@@ -210,7 +210,49 @@ func TestShippedAnalyticsSQLOnClickHouse(t *testing.T) {
 	if got := run(events); got != "6" {
 		t.Errorf("product events over every environment = %q, want 6", got)
 	}
+
+	// The shipped Users "Sign-ins by method" panel counts a person's
+	// credential sign-ins only: a synthetic monitor's (recorded as a state
+	// event, forge.kind = state, under observe.WithStateEvents) and one with
+	// no user are left out (forge #2206). Its own database, so the figures
+	// above keep their seed.
+	ch("default", signInsSeed)
+	signIns := shippedSQL(t, "users", "signins-by-method", false)
+	sc := obsquery.Scope{Database: "t_org_a", Start: end.Add(-30 * 24 * time.Hour), End: end,
+		EnvRestricted: true, EnvIDs: []string{"e1"}, Envs: []obsquery.Env{{ID: "e1", Name: "e1"}}}
+	st, err := obsquery.SQLPanel{Scope: sc, SQL: signIns, StepSeconds: 86400}.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var args []string
+	for k, v := range st.Params {
+		args = append(args, "--param_"+k+"="+v)
+	}
+	if got, want := ch("forge_signins_test", st.SQL, args...), "2026-03-15\tpassword\t2"; got != want {
+		t.Errorf("shipped users/signins-by-method in e1 =\n%s\nwant\n%s\n(a state event's or a userless sign-in was counted)", got, want)
+	}
 }
+
+// signInsSeed is a day of sign-ins in env e1, 2026-03-15: two people's
+// credential sign-ins (u1, u2), a synthetic monitor's credential sign-in
+// recorded as a state event (um), a credential sign-in with no user, a
+// resumed session (not a credential sign-in), and one sign-in in e2.
+const signInsSeed = `
+DROP DATABASE IF EXISTS forge_signins_test;
+CREATE DATABASE forge_signins_test;
+CREATE TABLE forge_signins_test.product_events (
+    Timestamp DateTime64(9), ServiceName LowCardinality(String), EnvId LowCardinality(String),
+    SessionId String, UserId String, EventName LowCardinality(String), Props Map(LowCardinality(String), String),
+    Client LowCardinality(String), VisitorId String
+) ENGINE = MergeTree ORDER BY (ServiceName, EventName, Timestamp);
+INSERT INTO forge_signins_test.product_events VALUES
+    ('2026-03-15 10:00:00', 'api', 'e1', 's1', 'u1', 'auth_signed_in', {'kind': 'credential', 'method': 'password'}, 'web', ''),
+    ('2026-03-15 10:01:00', 'api', 'e1', 's2', 'u2', 'auth_signed_in', {'kind': 'credential', 'method': 'password'}, 'web', ''),
+    ('2026-03-15 10:02:00', 'api', 'e1', 's3', 'um', 'auth_signed_in', {'kind': 'credential', 'method': 'password', 'forge.kind': 'state'}, 'backend', ''),
+    ('2026-03-15 10:03:00', 'api', 'e1', 's4', '', 'auth_signed_in', {'kind': 'credential', 'method': 'password'}, 'web', ''),
+    ('2026-03-15 10:04:00', 'api', 'e1', 's5', 'u3', 'auth_signed_in', {'kind': 'resumed'}, 'web', ''),
+    ('2026-03-15 10:05:00', 'api', 'e2', 's6', 'u9', 'auth_signed_in', {'kind': 'credential', 'method': 'password'}, 'web', '');
+`
 
 // releasesSeed is a week of one project's telemetry in env e1 (and one stray
 // row of each kind in e2), over the tables the Releases dashboard's sql panels
