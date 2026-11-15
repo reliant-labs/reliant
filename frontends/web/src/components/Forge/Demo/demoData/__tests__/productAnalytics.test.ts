@@ -18,7 +18,7 @@ import type { Dashboard, Panel, PanelResult } from "@/services/controlPlane/obse
 
 import { demoAudience, demoAudienceTotals } from "../shop/audience";
 import { demoActivity, weekStart } from "../shop/audienceActivity";
-import { PRODUCT_ANALYTICS_ANSWERS } from "../shop/productAnalytics";
+import { PRODUCT_ANALYTICS_ANSWERS, usersHistoryStart } from "../shop/productAnalytics";
 import { createShopApi } from "../shop/shopApi";
 import { DAY, DEMO_ENV_IDS, demoNow, HOUR, resetDemoNowForTests } from "../shopStory";
 
@@ -114,16 +114,18 @@ describe.each(WHEN)("the product analytics dashboards, %s", (_when, at) => {
     expect(figure(await read("users", "active", window))).toBe(active);
     expect(figure(await read("users", "new", window))).toBe(fresh);
     expect(figure(await read("users", "returning", window))).toBe(active - fresh);
-    // An old sign-up's sign-up session is there: its day's active users count it.
-    const { sessions } = demoActivity("env-prod", NOW, window.startMs);
+    // An old sign-up's sign-up session is there, in the history the panels above read: its day's active users
+    // count it. (The same arguments as the panels' read hit demoActivity's cache instead of building it again.)
+    const { sessions } = demoActivity("env-prod", NOW, usersHistoryStart(window.startMs));
     const prodOld = demoAudience("env-prod").find((a) => a.lastSignInAtMs !== null && a.createdAtMs >= window.startMs && a.createdAtMs < NOW - 100 * DAY);
     if (prodOld) expect(sessions.some((s) => s.signUp && s.start === prodOld.createdAtMs)).toBe(true);
-    // A wider history only adds older sessions: the default one's are all still there, unchanged.
+    // A wider history only adds older sessions: the default one's are all still there, unchanged. toEqual over
+    // these thousands of sessions took ~0.5s; equal JSON means equal plain data, and a mismatch still gets its diff.
     const defaultFirst = Math.floor(NOW / DAY) * DAY - 99 * DAY;
-    expect(sessions.filter((s) => s.start >= defaultFirst)).toEqual(demoActivity("env-prod", NOW).sessions);
-    // A year of every env's activity, read by three panels and rebuilt twice here: 2-4s on an idle
-    // 31-core box, 5s+ on one core, so the 5s default timed the 365-day case out in the merge queue.
-  }, 30_000);
+    const kept = sessions.filter((s) => s.start >= defaultFirst);
+    const defaults = demoActivity("env-prod", NOW).sessions;
+    if (JSON.stringify(kept) !== JSON.stringify(defaults)) expect(kept).toEqual(defaults);
+  });
 
   it("splits sign-ups the same way everywhere: by channel, method, country and device, all equal to new (rule 2)", async () => {
     const fresh = figure(await read("users", "new", week));
