@@ -34,7 +34,14 @@
  */
 
 import { useCallback, useMemo } from "react";
-import { useMutation, useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 
 import { ForgeDeployJobStatus, ForgeService } from "../gen/reliant/v1/forge_pb";
 import { connectClient } from "../lib/connect";
@@ -719,18 +726,43 @@ export function useForgeRoster(projectId: string | null | undefined, forgeProjec
   );
 }
 
+/**
+ * Every value a query result carries. Its functions (`refetch`) are stable, and
+ * `promise` is read only by React's `use()`. A caller may read any of the rest
+ * (`isFetching` and `isStale` move while `status` holds still), so a memo that
+ * hands the result on is keyed on all of them. hooks/__tests__/queryStateKey.test.tsx
+ * fails when TanStack adds a field this list lacks.
+ */
+export const QUERY_RESULT_STATE_FIELDS = [
+  "data",
+  "dataUpdatedAt",
+  "error",
+  "errorUpdatedAt",
+  "errorUpdateCount",
+  "failureCount",
+  "failureReason",
+  "fetchStatus",
+  "isError",
+  "isFetched",
+  "isFetchedAfterMount",
+  "isFetching",
+  "isInitialLoading",
+  "isLoading",
+  "isLoadingError",
+  "isPaused",
+  "isPending",
+  "isPlaceholderData",
+  "isRefetchError",
+  "isRefetching",
+  "isStale",
+  "isSuccess",
+  "isEnabled",
+  "status",
+] as const satisfies readonly (keyof UseQueryResult)[];
+
 /** What changes when a query result does: the memo key for a hook that returns one. */
-function queryStateKey(result: {
-  data: unknown;
-  error: unknown;
-  status: string;
-  fetchStatus: string;
-  dataUpdatedAt: number;
-  errorUpdatedAt: number;
-  failureCount: number;
-  isPlaceholderData: boolean;
-}): unknown[] {
-  return [result.data, result.error, result.status, result.fetchStatus, result.dataUpdatedAt, result.errorUpdatedAt, result.failureCount, result.isPlaceholderData];
+export function queryStateKey(result: Pick<UseQueryResult, (typeof QUERY_RESULT_STATE_FIELDS)[number]>): unknown[] {
+  return QUERY_RESULT_STATE_FIELDS.map((field) => result[field]);
 }
 
 /** Invalidate everything the control plane reports for a project after a write moved it. */
