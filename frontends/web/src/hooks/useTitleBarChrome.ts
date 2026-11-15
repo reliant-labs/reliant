@@ -43,6 +43,15 @@ export interface UseTitleBarChromeResult {
   showWindowControls: boolean;
 }
 
+// One object each, so a caller can memoize on them.
+const DRAG_REGION: CSSProperties = Object.freeze({
+  WebkitAppRegion: "drag",
+  WebkitUserSelect: "none",
+  userSelect: "none",
+} as CSSProperties);
+const NO_DRAG_REGION: CSSProperties = Object.freeze({ WebkitAppRegion: "no-drag" } as CSSProperties);
+const NO_REGION: CSSProperties = Object.freeze({});
+
 export function useTitleBarChrome(
   options: UseTitleBarChromeOptions = {},
 ): UseTitleBarChromeResult {
@@ -83,17 +92,8 @@ export function useTitleBarChrome(
   const trafficLightPadding =
     !isFullscreen && isMac && alignedToWindowEdge ? "80px" : collapsedPadding;
 
-  const dragRegionStyle: CSSProperties = isElectron
-    ? ({
-        WebkitAppRegion: "drag",
-        WebkitUserSelect: "none",
-        userSelect: "none",
-      } as CSSProperties)
-    : {};
-
-  const noDragRegionStyle: CSSProperties = isElectron
-    ? ({ WebkitAppRegion: "no-drag" } as CSSProperties)
-    : {};
+  const dragRegionStyle = isElectron ? DRAG_REGION : NO_REGION;
+  const noDragRegionStyle = isElectron ? NO_DRAG_REGION : NO_REGION;
 
   const showWindowControls = isElectron && !isMac;
 

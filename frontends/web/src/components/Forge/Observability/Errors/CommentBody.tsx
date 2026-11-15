@@ -15,8 +15,11 @@
  * a worktree and opens the embedded browser, neither of which a comment has.
  */
 
+import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+const REMARK_PLUGINS = [remarkGfm];
 
 const COMPONENTS: Components = {
   a: ({ href, children }) => (
@@ -44,12 +47,16 @@ const COMPONENTS: Components = {
   h6: ({ children }) => <p className="my-1 font-semibold">{children}</p>,
 };
 
-export function CommentBody({ body }: { body: string }) {
+/**
+ * Memoized on the body: react-markdown parses on every render, and an issue
+ * page re-renders its timeline each time one of its reads lands.
+ */
+export const CommentBody = memo(function CommentBody({ body }: { body: string }) {
   return (
     <div className="min-w-0 break-words text-sm text-ink" data-testid="obs-comment-body">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS} skipHtml>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS} skipHtml>
         {body}
       </ReactMarkdown>
     </div>
   );
-}
+});

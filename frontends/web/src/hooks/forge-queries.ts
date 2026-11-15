@@ -696,17 +696,41 @@ export function useForgeRoster(projectId: string | null | undefined, forgeProjec
     [live.data, topology.data, localKey]
   );
 
-  return {
-    envs,
-    live,
-    topology,
-    projectName,
-    daemon: daemonSideOf(topology.data, topology.error),
-    /** Nothing from the backend yet. The daemon's half never blocks. */
-    isLoading: !!projectName.name && live.isLoading && !live.data,
-    /** No forge project name is known at all — neither persisted nor reported yet. */
-    resolvingName: !projectName.name && topology.isLoading,
-  };
+  // One object while neither read has moved. The console hands the roster to
+  // every page through its context (ConsoleLayout), and a fresh object on
+  // every render re-rendered every page on any URL change (a tour step, a
+  // filter): react-query's results are new objects each render, so the memo
+  // is keyed on the state they carry instead.
+  const daemon = daemonSideOf(topology.data, topology.error);
+  return useMemo(
+    () => ({
+      envs,
+      live,
+      topology,
+      projectName,
+      daemon,
+      /** Nothing from the backend yet. The daemon's half never blocks. */
+      isLoading: !!projectName.name && live.isLoading && !live.data,
+      /** No forge project name is known at all — neither persisted nor reported yet. */
+      resolvingName: !projectName.name && topology.isLoading,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `live` and `topology` are new objects every render; their state is the key.
+    [envs, daemon, projectName.name, projectName.source, ...queryStateKey(live), ...queryStateKey(topology)]
+  );
+}
+
+/** What changes when a query result does: the memo key for a hook that returns one. */
+function queryStateKey(result: {
+  data: unknown;
+  error: unknown;
+  status: string;
+  fetchStatus: string;
+  dataUpdatedAt: number;
+  errorUpdatedAt: number;
+  failureCount: number;
+  isPlaceholderData: boolean;
+}): unknown[] {
+  return [result.data, result.error, result.status, result.fetchStatus, result.dataUpdatedAt, result.errorUpdatedAt, result.failureCount, result.isPlaceholderData];
 }
 
 /** Invalidate everything the control plane reports for a project after a write moved it. */
