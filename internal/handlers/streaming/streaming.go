@@ -213,7 +213,8 @@ func (s *Service) sendHeartbeat(stream *connect.ServerStream[reliantv1.UserStrea
 		},
 	}
 	if err := stream.Send(event); err != nil {
-		logging.Error(LOG_PREFIX_STREAM_USER+" Failed to send heartbeat", "error", err)
+		// See sendSingleUserUpdate: reported once, at the RPC edge.
+		logging.Debug(LOG_PREFIX_STREAM_USER+" Failed to send heartbeat", "error", err)
 		return err
 	}
 	return nil
@@ -267,7 +268,12 @@ func (s *Service) sendSingleUserUpdate(update db.UserUpdate, latestSeq int64, st
 		},
 	}
 	if err := stream.Send(event); err != nil {
-		logging.Error(LOG_PREFIX_STREAM_USER+" Failed to send user update", "error", err)
+		// A send fails when the client went away or stopped reading (a
+		// frozen tab's write deadline: "i/o timeout"). The error ends the
+		// stream and the RPC edge logs it once, at the level its code calls
+		// for, as ChatStream's sends do. At ERROR here it was an issue per
+		// stalled tab (prod 2026-10-23..11-02: db2f8294, ebf7efb4, 7fc34d56).
+		logging.Debug(LOG_PREFIX_STREAM_USER+" Failed to send user update", "error", err)
 		return err
 	}
 	return nil
