@@ -335,7 +335,10 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 				defer func() { _ = recover() }() // safe outside activity context (tests)
 				attempt = activity.GetInfo(ctx).Attempt
 			}()
-			logging.ErrorContext(ctx, "[GenerateTitle] LLM generation failed",
+			// WARN: the workflow retries this attempt and, once its
+			// attempts run out, writes the fallback title and says so
+			// (GenerateTitleWorkflow). One provider error is not a fault.
+			logging.WarnContext(ctx, "[GenerateTitle] LLM generation failed",
 				"error", err, "chatID", input.ChatID, "attempt", attempt)
 			return GenerateTitleOutput{}, fmt.Errorf("generate title for chat %s: %w", input.ChatID, err)
 		}

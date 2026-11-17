@@ -140,7 +140,11 @@ func StreamAndAccumulateObserving(
 			case llm.EventError:
 				// Error during streaming
 				streamError = event.Error
-				logging.ErrorContext(ctx, "[ACCUMULATOR] Stream error", "error", event.Error)
+				// Returned to the caller below, which retries or reports it
+				// and owns the verdict. At ERROR here every provider hiccup
+				// was an issue of its own beside the caller's (prod
+				// 3c3f4f6e, 57c5b16d).
+				logging.WarnContext(ctx, "[ACCUMULATOR] Stream error", "error", event.Error)
 
 			case llm.EventRetryWait:
 				if onRetry != nil && event.Retry != nil {
