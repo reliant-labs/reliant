@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/run.proto.
  */
 export const file_reliant_v1_run: GenFile = /*@__PURE__*/
-  fileDesc("ChRyZWxpYW50L3YxL3J1bi5wcm90bxIKcmVsaWFudC52MSKYBQoDUnVuEgoKAmlkGAEgASgJEhUKDXdvcmtmbG93X25hbWUYAiABKAkSDgoGdGhyZWFkGAMgASgJEhIKCnNlc3Npb25faWQYBCABKAkSEQoJcGFyZW50X2lkGAUgASgJEhoKEnNwYXduZWRfYnlfbm9kZV9pZBgGIAEoCRIWCg5sb29wX2l0ZXJhdGlvbhgHIAEoAxIoCgVzdGF0ZRgIIAEoDjIZLnJlbGlhbnQudjEuV29ya2Zsb3dTdGF0ZRIzCgtzdG9wX3JlYXNvbhgJIAEoDjIeLnJlbGlhbnQudjEuV29ya2Zsb3dTdG9wUmVhc29uEg8KB291dGNvbWUYCiABKAkSFQoNY3JlYXRlZF9hdF9tcxgLIAEoAxIXCg9jb21wbGV0ZWRfYXRfbXMYDCABKAMSDQoFdGl0bGUYDSABKAkSEgoKcHJvamVjdF9pZBgOIAEoCRITCgtsYXVuY2hfa2luZBgPIAEoCRISCgp0cmlnZ2VyX2lkGBAgASgJEhQKDHRyaWdnZXJfbmFtZRgRIAEoCRIRCglkYWVtb25faWQYEiABKAkSKgoIYWN0aXZpdHkYEyABKA4yGC5yZWxpYW50LnYxLkNoYXRBY3Rpdml0eRIyCg1kaXNwbGF5X3N0YXRlGBQgASgOMhsucmVsaWFudC52MS5SdW5EaXNwbGF5U3RhdGUSGwoOcGFyZW50X2NoYXRfaWQYFSABKAlIAIgBARIeChFwYXJlbnRfY2hhdF90aXRsZRgWIAEoCUgBiAEBEhAKCGFyY2hpdmVkGBcgASgIEhYKDmZhaWx1cmVfZGV0YWlsGBggASgJQhEKD19wYXJlbnRfY2hhdF9pZEIUChJfcGFyZW50X2NoYXRfdGl0bGUiHwoNR2V0UnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkidAoOR2V0UnVuUmVzcG9uc2USHAoDcnVuGAEgASgLMg8ucmVsaWFudC52MS5SdW4SKwoFbm9kZXMYAiADKAsyHC5yZWxpYW50LnYxLlJ1bk5vZGVFeGVjdXRpb24SFwoPbm9kZXNfdHJ1bmNhdGVkGAMgASgIIoMDChBSdW5Ob2RlRXhlY3V0aW9uEgoKAmlkGAEgASgJEhMKC3dvcmtmbG93X2lkGAIgASgJEg8KB25vZGVfaWQYAyABKAkSEQoJbm9kZV9wYXRoGAQgASgJEhAKCGFjdGl2aXR5GAUgASgJEg4KBnN0YXR1cxgGIAEoCRIYCgtkdXJhdGlvbl9tcxgHIAEoA0gAiAEBEg0KBWVycm9yGAggASgJEhYKCWV4aXRfY29kZRgJIAEoBUgBiAEBEhMKC3N0ZG91dF90YWlsGAogASgJEhMKC3N0ZGVycl90YWlsGAsgASgJEhIKCnN0YXJ0ZWRfYXQYDCABKAkSFAoMY29tcGxldGVkX2F0GA0gASgJEg8KB2F0dGVtcHQYDiABKAUSFAoMbG9vcF9ub2RlX2lkGA8gASgJEhsKDmxvb3BfaXRlcmF0aW9uGBAgASgFSAKIAQFCDgoMX2R1cmF0aW9uX21zQgwKCl9leGl0X2NvZGVCEQoPX2xvb3BfaXRlcmF0aW9uIiIKEENhbmNlbFJ1blJlcXVlc3QSDgoGcnVuX2lkGAEgASgJIjUKEUNhbmNlbFJ1blJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCSq9AgoPUnVuRGlzcGxheVN0YXRlEiEKHVJVTl9ESVNQTEFZX1NUQVRFX1VOU1BFQ0lGSUVEEAASHAoYUlVOX0RJU1BMQVlfU1RBVEVfUVVFVUVEEAESHQoZUlVOX0RJU1BMQVlfU1RBVEVfUlVOTklORxACEiEKHVJVTl9ESVNQTEFZX1NUQVRFX05FRURTX0lOUFVUEAMSHAoYUlVOX0RJU1BMQVlfU1RBVEVfUEFVU0VEEAQSHwobUlVOX0RJU1BMQVlfU1RBVEVfQ09NUExFVEVEEAUSHAoYUlVOX0RJU1BMQVlfU1RBVEVfRkFJTEVEEAYSHwobUlVOX0RJU1BMQVlfU1RBVEVfQ0FOQ0VMTEVEEAcSKQolUlVOX0RJU1BMQVlfU1RBVEVfV0FJVElOR19GT1JfTUFDSElORRAIMrYBCgpSdW5TZXJ2aWNlEj8KBkdldFJ1bhIZLnJlbGlhbnQudjEuR2V0UnVuUmVxdWVzdBoaLnJlbGlhbnQudjEuR2V0UnVuUmVzcG9uc2USZwoJQ2FuY2VsUnVuEhwucmVsaWFudC52MS5DYW5jZWxSdW5SZXF1ZXN0Gh0ucmVsaWFudC52MS5DYW5jZWxSdW5SZXNwb25zZSIdorsYGToXCgZjYW5jZWwSDQoDcnVuEgZydW5faWRCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge, file_reliant_v1_chat]);
+  fileDesc("ChRyZWxpYW50L3YxL3J1bi5wcm90bxIKcmVsaWFudC52MSLFBQoDUnVuEgoKAmlkGAEgASgJEhUKDXdvcmtmbG93X25hbWUYAiABKAkSDgoGdGhyZWFkGAMgASgJEhIKCnNlc3Npb25faWQYBCABKAkSEQoJcGFyZW50X2lkGAUgASgJEhoKEnNwYXduZWRfYnlfbm9kZV9pZBgGIAEoCRIWCg5sb29wX2l0ZXJhdGlvbhgHIAEoAxIoCgVzdGF0ZRgIIAEoDjIZLnJlbGlhbnQudjEuV29ya2Zsb3dTdGF0ZRIzCgtzdG9wX3JlYXNvbhgJIAEoDjIeLnJlbGlhbnQudjEuV29ya2Zsb3dTdG9wUmVhc29uEg8KB291dGNvbWUYCiABKAkSFQoNY3JlYXRlZF9hdF9tcxgLIAEoAxIXCg9jb21wbGV0ZWRfYXRfbXMYDCABKAMSDQoFdGl0bGUYDSABKAkSEgoKcHJvamVjdF9pZBgOIAEoCRITCgtsYXVuY2hfa2luZBgPIAEoCRISCgp0cmlnZ2VyX2lkGBAgASgJEhQKDHRyaWdnZXJfbmFtZRgRIAEoCRIRCglkYWVtb25faWQYEiABKAkSKgoIYWN0aXZpdHkYEyABKA4yGC5yZWxpYW50LnYxLkNoYXRBY3Rpdml0eRIyCg1kaXNwbGF5X3N0YXRlGBQgASgOMhsucmVsaWFudC52MS5SdW5EaXNwbGF5U3RhdGUSGwoOcGFyZW50X2NoYXRfaWQYFSABKAlIAIgBARIeChFwYXJlbnRfY2hhdF90aXRsZRgWIAEoCUgBiAEBEhAKCGFyY2hpdmVkGBcgASgIEhYKDmZhaWx1cmVfZGV0YWlsGBggASgJEisKC3J1bl9vdXRjb21lGBkgASgOMhYucmVsaWFudC52MS5SdW5PdXRjb21lQhEKD19wYXJlbnRfY2hhdF9pZEIUChJfcGFyZW50X2NoYXRfdGl0bGUiHwoNR2V0UnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkidAoOR2V0UnVuUmVzcG9uc2USHAoDcnVuGAEgASgLMg8ucmVsaWFudC52MS5SdW4SKwoFbm9kZXMYAiADKAsyHC5yZWxpYW50LnYxLlJ1bk5vZGVFeGVjdXRpb24SFwoPbm9kZXNfdHJ1bmNhdGVkGAMgASgIIoMDChBSdW5Ob2RlRXhlY3V0aW9uEgoKAmlkGAEgASgJEhMKC3dvcmtmbG93X2lkGAIgASgJEg8KB25vZGVfaWQYAyABKAkSEQoJbm9kZV9wYXRoGAQgASgJEhAKCGFjdGl2aXR5GAUgASgJEg4KBnN0YXR1cxgGIAEoCRIYCgtkdXJhdGlvbl9tcxgHIAEoA0gAiAEBEg0KBWVycm9yGAggASgJEhYKCWV4aXRfY29kZRgJIAEoBUgBiAEBEhMKC3N0ZG91dF90YWlsGAogASgJEhMKC3N0ZGVycl90YWlsGAsgASgJEhIKCnN0YXJ0ZWRfYXQYDCABKAkSFAoMY29tcGxldGVkX2F0GA0gASgJEg8KB2F0dGVtcHQYDiABKAUSFAoMbG9vcF9ub2RlX2lkGA8gASgJEhsKDmxvb3BfaXRlcmF0aW9uGBAgASgFSAKIAQFCDgoMX2R1cmF0aW9uX21zQgwKCl9leGl0X2NvZGVCEQoPX2xvb3BfaXRlcmF0aW9uIiIKEENhbmNlbFJ1blJlcXVlc3QSDgoGcnVuX2lkGAEgASgJIjUKEUNhbmNlbFJ1blJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCSp9CgpSdW5PdXRjb21lEhsKF1JVTl9PVVRDT01FX1VOU1BFQ0lGSUVEEAASGQoVUlVOX09VVENPTUVfU1VDQ0VFREVEEAESFgoSUlVOX09VVENPTUVfRkFJTEVEEAISHwobUlVOX09VVENPTUVfRkFJTFVSRV9IQU5ETEVEEAMqvQIKD1J1bkRpc3BsYXlTdGF0ZRIhCh1SVU5fRElTUExBWV9TVEFURV9VTlNQRUNJRklFRBAAEhwKGFJVTl9ESVNQTEFZX1NUQVRFX1FVRVVFRBABEh0KGVJVTl9ESVNQTEFZX1NUQVRFX1JVTk5JTkcQAhIhCh1SVU5fRElTUExBWV9TVEFURV9ORUVEU19JTlBVVBADEhwKGFJVTl9ESVNQTEFZX1NUQVRFX1BBVVNFRBAEEh8KG1JVTl9ESVNQTEFZX1NUQVRFX0NPTVBMRVRFRBAFEhwKGFJVTl9ESVNQTEFZX1NUQVRFX0ZBSUxFRBAGEh8KG1JVTl9ESVNQTEFZX1NUQVRFX0NBTkNFTExFRBAHEikKJVJVTl9ESVNQTEFZX1NUQVRFX1dBSVRJTkdfRk9SX01BQ0hJTkUQCDK2AQoKUnVuU2VydmljZRI/CgZHZXRSdW4SGS5yZWxpYW50LnYxLkdldFJ1blJlcXVlc3QaGi5yZWxpYW50LnYxLkdldFJ1blJlc3BvbnNlEmcKCUNhbmNlbFJ1bhIcLnJlbGlhbnQudjEuQ2FuY2VsUnVuUmVxdWVzdBodLnJlbGlhbnQudjEuQ2FuY2VsUnVuUmVzcG9uc2UiHaK7GBk6FwoGY2FuY2VsEg0KA3J1bhIGcnVuX2lkQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_forge_v1_forge, file_reliant_v1_chat]);
 
 /**
  * Run is one workflow execution.
@@ -218,6 +218,19 @@ export type Run = Message<"reliant.v1.Run"> & {
    * @generated from field: string failure_detail = 24;
    */
   failureDetail: string;
+
+  /**
+   * RunOutcome is how the run ended, for whoever judges whether it worked:
+   * trigger health, failure streaks, a run list's verdict. Unlike state it
+   * tells a run that completed cleanly from one that completed only because
+   * its own failure path handled a node that failed (reliant#2753). Unlike
+   * outcome it is never declared: the runtime derives it when the run ends.
+   * UNSPECIFIED while the run is live, when it was cancelled, and for a run
+   * that ended before the field existed. Filled by GetRun and every list.
+   *
+   * @generated from field: reliant.v1.RunOutcome run_outcome = 25;
+   */
+  runOutcome: RunOutcome;
 };
 
 /**
@@ -410,6 +423,50 @@ export const CancelRunResponseSchema: GenMessage<CancelRunResponse> = /*@__PURE_
   messageDesc(file_reliant_v1_run, 5);
 
 /**
+ * RunOutcome is how a run ended (Run.run_outcome). The lifecycle (state,
+ * stop_reason) is unchanged by it: a FAILURE_HANDLED run is still COMPLETED.
+ *
+ * @generated from enum reliant.v1.RunOutcome
+ */
+export enum RunOutcome {
+  /**
+   * @generated from enum value: RUN_OUTCOME_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * SUCCEEDED: the run completed, and no node's last attempt failed.
+   *
+   * @generated from enum value: RUN_OUTCOME_SUCCEEDED = 1;
+   */
+  SUCCEEDED = 1,
+
+  /**
+   * FAILED: the run failed, or completed into a node that declares
+   * outcome: failure.
+   *
+   * @generated from enum value: RUN_OUTCOME_FAILED = 2;
+   */
+  FAILED = 2,
+
+  /**
+   * FAILURE_HANDLED: the run completed, but a node's last attempt failed and
+   * the run went on past it: a parallel loop iteration that failed under
+   * on_failure: continue, a node whose failure the workflow tolerates, a
+   * finally handler's node that failed. Health counts it as a failure.
+   *
+   * @generated from enum value: RUN_OUTCOME_FAILURE_HANDLED = 3;
+   */
+  FAILURE_HANDLED = 3,
+}
+
+/**
+ * Describes the enum reliant.v1.RunOutcome.
+ */
+export const RunOutcomeSchema: GenEnum<RunOutcome> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_run, 0);
+
+/**
  * RunDisplayState is the single status vocabulary the UI shows for a run
  * (research/WORKFLOW_UI.md section 0). It folds the (state, stop_reason,
  * activity) triple into one value so a filter and a label can never disagree.
@@ -484,7 +541,7 @@ export enum RunDisplayState {
  * Describes the enum reliant.v1.RunDisplayState.
  */
 export const RunDisplayStateSchema: GenEnum<RunDisplayState> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_run, 0);
+  enumDesc(file_reliant_v1_run, 1);
 
 /**
  * RunService is the engine's execution API: start a workflow, control it while

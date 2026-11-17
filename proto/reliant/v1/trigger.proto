@@ -446,6 +446,12 @@ message TriggerEventRun {
   // when the run has no root workflow row yet.
   WorkflowState state = 3;
   WorkflowStopReason stop_reason = 4;
+
+  // How the run the trigger fired ended (Run.run_outcome), as recorded on
+  // this firing when that run reached a terminal status. UNSPECIFIED while
+  // it runs, when it was cancelled, and for a firing recorded before the
+  // field existed.
+  RunOutcome run_outcome = 5;
 }
 
 // ScheduleSource is the trigger.source arm for schedule triggers.
