@@ -368,6 +368,21 @@ const triggerFiringRunColumns = `c.id AS run_chat_id,
 	rw.stop_reason AS run_root_stop_reason,
 	COALESCE(c.display_state, 1)::integer AS run_display_state`
 
+// triggerFiringRunJoin joins each firing e to the run it launched, as c (its
+// chat) and rw (the chat's root workflow), for triggerFiringRunColumns.
+//
+// The chat is a LATERAL probe of chats_with_activity by id, LIMIT 1 (id is
+// the key, so it is the same row), never a join the planner may turn into a
+// hash: hashing the view computes every chat's activity in the database. In
+// prod (reliant#2736) the episode read hashed all 42,738 chats, three Seq
+// Scans and 230-330ms on every Inbox read, to join 1,100 firings.
+const triggerFiringRunJoin = `LEFT JOIN LATERAL (
+	SELECT r.id, r.title, r.workflow_id, r.display_state FROM chats_with_activity r
+	WHERE r.id = e.chat_id AND r.user_id = e.user_id
+	LIMIT 1
+) c ON true
+LEFT JOIN workflows rw ON rw.id = c.workflow_id`
+
 // listTriggerEventsSQL is one page of a trigger's firings, newest first,
 // keyset on (occurred_at, id) so a firing recorded mid-pagination can neither
 // repeat nor be skipped; two fires can share an occurred_at, and id breaks the
@@ -376,8 +391,7 @@ const triggerFiringRunColumns = `c.id AS run_chat_id,
 var listTriggerEventsSQL = `SELECT ` + columnsOf[TriggerEvent]("e") + `,
 	` + triggerFiringRunColumns + `
 FROM trigger_events e
-LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
-LEFT JOIN workflows rw ON rw.id = c.workflow_id
+` + triggerFiringRunJoin + `
 WHERE e.trigger_id = ?0::text
 	AND e.user_id = ?1::text
 	AND (cardinality(?2::text[]) = 0 OR e.outcome = ANY(?2::text[]))
@@ -432,18 +446,21 @@ var triggerEventBodyColumns = map[string]bool{"payload": true, "sender": true, "
 // prod: one user's 250-firing episode was 1.8 MB of JSON, transferred and
 // unmarshalled into maps on every read (2026-10-23). The columns are still
 // named, so the row shape — and every prepared statement — is unchanged.
+//
+// The match is on the field's bare name: SQLName is quoted (`"payload"`), so
+// matching it never nulled anything, and every Inbox read shipped the bodies
+// anyway until reliant#2736 (4.7 MB per episode read for one user).
 func triggerOutcomeColumns(alias string) string {
 	var b strings.Builder
 	for i, f := range modelTables.Get(reflect.TypeFor[TriggerEvent]()).Fields {
 		if i > 0 {
 			b.WriteString(", ")
 		}
-		name := string(f.SQLName)
-		if triggerEventBodyColumns[name] {
-			b.WriteString("NULL::jsonb AS " + name)
+		if triggerEventBodyColumns[f.Name] {
+			b.WriteString("NULL::jsonb AS " + string(f.SQLName))
 			continue
 		}
-		b.WriteString(alias + "." + name)
+		b.WriteString(alias + "." + string(f.SQLName))
 	}
 	return b.String()
 }
@@ -471,8 +488,7 @@ CROSS JOIN LATERAL (
 	ORDER BY x.occurred_at DESC, x.id DESC
 	LIMIT ?2::integer
 ) e
-LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
-LEFT JOIN workflows rw ON rw.id = c.workflow_id
+` + triggerFiringRunJoin + `
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 }
 
@@ -515,34 +531,52 @@ func RecentTriggerOutcomes(ctx context.Context, db orm.Context, userID string, t
 // person's later reply in the chat neither ends nor extends the episode.
 //
 // Per trigger, both halves walk idx_trigger_events_trigger_occurred_id newest
-// first: the newest success stops at the first one found, and the episode at
-// it or at ?2 rows. Finding them with DISTINCT ON and row_number() over the
-// whole history judged every firing the triggers ever had (each joined to its
-// run's display state) on every Inbox read.
+// first, and each reads at most ?2 firings:
+//
+//   - The newest success is looked for only among the newest ?2 firings. A
+//     success older than those changes nothing: the episode is then the
+//     newest ?2 firings either way. Unbounded, the search walked the whole
+//     history of a trigger that had not succeeded lately, probing the run of
+//     every launched firing on the way.
+//   - The episode's lower bound is an index condition, so its walk stops at
+//     the success. Written as `ls.id IS NULL OR (…) > (…)` it was a filter
+//     instead: the walk passed the success and read the rest of the history
+//     only to discard it. In prod (reliant#2736) that was 5,161 firings per
+//     trigger, every trigger_events row the user had, 164k buffers, on every
+//     Inbox read. With no success the bound is (-infinity, ”), below every
+//     firing (occurred_at is NOT NULL, ids are not empty).
+//
+// Finding the success and the episode with DISTINCT ON and row_number() over
+// the whole history judged every firing the triggers ever had (each joined to
+// its run's display state) on every Inbox read.
 var firingsSinceLastSuccessSQL = `SELECT ` + triggerOutcomeColumns("e") + `,
 	` + triggerFiringRunColumns + `
 FROM (SELECT DISTINCT unnest(?1::text[]) AS id) t
 LEFT JOIN LATERAL (
-	SELECT s.occurred_at, s.id
-	FROM trigger_events s
-	LEFT JOIN chats_with_activity sc ON sc.id = s.chat_id AND sc.user_id = s.user_id
-	WHERE s.trigger_id = t.id
-		AND s.user_id = ?0::text
-		AND s.outcome = 'launched'
-		AND (s.run_status = 'completed' OR (s.run_status IS NULL AND sc.display_state = 5))
-	ORDER BY s.occurred_at DESC, s.id DESC
+	SELECT w.occurred_at, w.id
+	FROM (
+		SELECT s.occurred_at, s.id, s.outcome, s.run_status, s.chat_id, s.user_id
+		FROM trigger_events s
+		WHERE s.trigger_id = t.id AND s.user_id = ?0::text
+		ORDER BY s.occurred_at DESC, s.id DESC
+		LIMIT ?2::integer
+	) w
+	WHERE w.outcome = 'launched'
+		AND (w.run_status = 'completed' OR (w.run_status IS NULL AND (
+			SELECT sc.display_state FROM chats_with_activity sc
+			WHERE sc.id = w.chat_id AND sc.user_id = w.user_id) = 5))
+	ORDER BY w.occurred_at DESC, w.id DESC
 	LIMIT 1
 ) ls ON true
 CROSS JOIN LATERAL (
 	SELECT ` + triggerOutcomeColumns("x") + ` FROM trigger_events x
 	WHERE x.trigger_id = t.id
 		AND x.user_id = ?0::text
-		AND (ls.id IS NULL OR (x.occurred_at, x.id) > (ls.occurred_at, ls.id))
+		AND (x.occurred_at, x.id) > (COALESCE(ls.occurred_at, '-infinity'::timestamptz), COALESCE(ls.id, ''))
 	ORDER BY x.occurred_at DESC, x.id DESC
 	LIMIT ?2::integer
 ) e
-LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
-LEFT JOIN workflows rw ON rw.id = c.workflow_id
+` + triggerFiringRunJoin + `
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 
 // FiringsSinceLastSuccess returns, per named trigger, every firing after its
