@@ -9,8 +9,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// maxPlanAncestorWalk bounds the parent walk. Spawn depth is capped at 1 today
-// (MaxSpawnDepth), so a sub-agent's plan is at most one hop up —
+// maxPlanAncestorWalk bounds the parent walk. Spawn depth is capped at 2
+// (MaxSpawnDepth), so a sub-agent's plan is at most two hops up —
 // but thread parentage is a general tree and this must not become a way for a
 // cycle in the data to hang a tool call.
 const maxPlanAncestorWalk = 8

@@ -486,6 +486,9 @@ type ChildWorkflowTracker struct {
 	// capacitySlot is the run's workflow-capacity slot (capacity_slot.go),
 	// read by a continue-as-new handoff so a parked slot stays parked.
 	capacitySlot *capacitySlot
+	// spawnLimits are the run's sub-agent concurrency caps, read once from
+	// the root run's inputs (spawn_limits.go). The zero value is the defaults.
+	spawnLimits types.SpawnLimits
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -1743,6 +1746,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// own to cancel, so the request arrives here as a signal on the PARENT and
 	// is recorded for the spawn's loop to observe.
 	setupCancelThreadHandler(ctx, cancelledThreads, workflowID)
+
+	// Sub-agent concurrency caps (spawn_limits.go): one setting for the run,
+	// read from the root run's inputs, whatever depth spawns.
+	childTracker.spawnLimits = types.SpawnLimitsFromInputs(input.Inputs)
 
 	// Continue-as-new handoff state (continue_as_new.go).
 	childTracker.chatID = input.ChatID
@@ -4864,6 +4871,8 @@ func executeToolsWithSpawnSupport(
 		workflowInputs = copyMap(workflowInputs)
 		workflowInputs[ambientMemoryInput] = true
 	}
+	// The sub-agents this agent starts sit one level below it.
+	workflowInputs = withSpawnerDepth(workflowInputs, rtx.SpawnDepth)
 	var spawnConfigs []*spawnChildWorkflowConfig
 	var spawnParseErrors []interface{}
 	spawnToolCalls := split.spawnToolCalls
@@ -4883,6 +4892,9 @@ func executeToolsWithSpawnSupport(
 		}
 		spawnConfigs = append(spawnConfigs, config)
 	}
+	// A spawn past the run's concurrency caps is refused, not started.
+	spawnConfigs, capRefusals := childTracker.admitSpawns(ctx, rtx.Thread, spawnConfigs)
+	spawnParseErrors = append(spawnParseErrors, capRefusals...)
 
 	// Create a future that runs all spawns inline and combines results
 	resultFuture, resultSettable := workflow.NewFuture(ctx)
