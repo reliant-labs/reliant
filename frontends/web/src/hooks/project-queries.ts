@@ -51,6 +51,7 @@ import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
 import { queryClient } from "../lib/query-client";
 import { toast } from "../lib/toast-manager";
+import { getOrgScope, orgRequest, useOrgScope, whenOrgScopeReady } from "../lib/orgScope";
 import { useAuthStore } from "../store/authStore";
 import {
   projectServiceKeys,
@@ -230,10 +231,20 @@ function useHasSession(): boolean {
 
 // ── The project list ────────────────────────────────────────────────────────
 
-/** The one project-list read the app makes; every list caller shares its entry. */
+/**
+ * The one project-list read the app makes, in an org; every list caller
+ * shares its entry. It names the org (lib/orgScope), so the key does too: one
+ * org's list is never served as another's, nor an every-org answer as one's.
+ */
 export const LIST_PROJECTS_REQUEST = { limit: 100, offset: 0 } as const;
 
-export const projectsKey = () => projectServiceKeys.listProjects(LIST_PROJECTS_REQUEST);
+export function listProjectsRequest(orgId: string | null = getOrgScope().orgId) {
+  return orgRequest(LIST_PROJECTS_REQUEST, orgId);
+}
+
+/** The project list's key in `orgId`, by default the tab's active org. */
+export const projectsKey = (orgId: string | null = getOrgScope().orgId) =>
+  projectServiceKeys.listProjects(listProjectsRequest(orgId));
 
 /**
  * How long a project list is fresh. Writes made here invalidate it, and a
@@ -267,14 +278,17 @@ export interface ProjectListView {
   refetch: () => void;
 }
 
-/** Every project the caller can open, from the shared list entry. */
+/** Every project the caller can open in the tab's org, from the shared list entry. */
 export function useProjects(): ProjectListView {
   const hasSession = useHasSession();
+  const org = useOrgScope();
   // The forge shell (lib/shell.ts) has no Reliant projects: its apps are the
   // control plane's forge projects, keyed by name. Disabled there, the list
   // reads empty and settled for every caller.
-  const enabled = hasSession && !isForgeShell();
-  const query = useListProjects(LIST_PROJECTS_REQUEST, {
+  const wanted = hasSession && !isForgeShell();
+  // Not before the tab's org is known: a list naming no org is every org's.
+  const enabled = wanted && org.ready;
+  const query = useListProjects(listProjectsRequest(org.orgId), {
     enabled,
     staleTime: PROJECTS_STALE_TIME_MS,
     select: projectsOf,
@@ -285,7 +299,8 @@ export function useProjects(): ProjectListView {
   }, [refetch]);
   return {
     projects: query.data ?? EMPTY_PROJECTS,
-    isLoading: enabled && query.isPending,
+    // Waiting on the org is loading, not an empty list.
+    isLoading: wanted && query.isPending,
     error: query.error,
     refetch: refetchList,
   };
@@ -308,8 +323,11 @@ export function useProject(projectId: string | null | undefined): Project | unde
  * opened from another device).
  */
 export async function fetchProjects(options: { fresh?: boolean } = {}): Promise<Project[]> {
+  // Waits for the tab's org, like the hook: never every org's projects.
+  const scope = getOrgScope();
+  const { orgId } = scope.ready ? scope : await whenOrgScopeReady();
   const response = await queryClient.fetchQuery(
-    projectServiceQueries.listProjects(LIST_PROJECTS_REQUEST, {
+    projectServiceQueries.listProjects(listProjectsRequest(orgId), {
       staleTime: options.fresh ? 0 : PROJECTS_STALE_TIME_MS,
     }),
   );

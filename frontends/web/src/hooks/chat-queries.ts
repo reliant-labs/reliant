@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Chat } from "../api/client";
 import type { Chat as ProtoChat, ChatSelection, ListArchivedChatsResponse } from "../gen/reliant/v1/chat_pb";
 import type { WorktreeSummary } from "../gen/reliant/v1/worktree_pb";
+import { getOrgScope, orgRequest, useOrgScope } from "../lib/orgScope";
 import { queryClient } from "../lib/query-client";
 import { chatServiceKeys, useListArchivedChats } from "./chat-service-hooks_gen";
 import type { StartChatRequest, UpdateChatRequest } from "../types/api";
@@ -16,11 +17,19 @@ import * as chatActions from "./chat-actions";
  */
 export const ALL_PROJECTS_SCOPE = "*all-projects*";
 
+/** The org segment of a list read that names no org (no control plane, no orgs). */
+export const NO_ORG_SCOPE = "*no-org*";
+
 export const chatKeys = {
   all: ["chats"] as const,
   lists: () => [...chatKeys.all, "list"] as const,
-  /** One project's list, or every project's when `projectId` is null/undefined. */
-  list: (projectId?: string | null) => [...chatKeys.lists(), projectId ?? ALL_PROJECTS_SCOPE] as const,
+  /**
+   * One project's list, or every project's when `projectId` is null/undefined,
+   * in `orgId` (by default the tab's org, lib/orgScope). The org is part of
+   * the key: one org's list is never served as another's.
+   */
+  list: (projectId?: string | null, orgId: string | null = getOrgScope().orgId) =>
+    [...chatKeys.lists(), projectId ?? ALL_PROJECTS_SCOPE, orgId ?? NO_ORG_SCOPE] as const,
   details: () => [...chatKeys.all, "detail"] as const,
   detail: (chatId?: string) => [...chatKeys.details(), chatId] as const,
   // The chat's server-side selection: a ChatSelection, or null when it has none.
@@ -273,10 +282,11 @@ export function removeChatFromListCache(
 // ── Query hooks ─────────────────────────────────────────────────────────────
 
 export function useChatList(projectId?: string) {
+  const org = useOrgScope();
   return useQuery({
-    queryKey: chatKeys.list(projectId),
-    queryFn: ({ signal }) => chatActions.listChats(projectId, { signal }),
-    enabled: !!projectId,
+    queryKey: chatKeys.list(projectId, org.orgId),
+    queryFn: ({ signal }) => chatActions.listChats(projectId, { signal, orgId: org.orgId }),
+    enabled: !!projectId && org.ready,
     select: (data) => data.chats,
   });
 }
@@ -286,12 +296,16 @@ export function useChatList(projectId?: string) {
  * null — together with each project's main workspace: everything the sidebar
  * and the mobile list need to group chats by project and workspace, from the
  * one ListChats response. The full worktree list is not involved.
+ *
+ * In the tab's org, and not before it is known (lib/orgScope): every
+ * project's list naming no org is every org's chats.
  */
 export function useChatListWithWorkspaces(scope: string | null, options: { enabled?: boolean } = {}) {
+  const org = useOrgScope();
   return useQuery({
-    queryKey: chatKeys.list(scope),
-    queryFn: ({ signal }) => chatActions.listChats(scope ?? undefined, { signal }),
-    enabled: options.enabled ?? true,
+    queryKey: chatKeys.list(scope, org.orgId),
+    queryFn: ({ signal }) => chatActions.listChats(scope ?? undefined, { signal, orgId: org.orgId }),
+    enabled: (options.enabled ?? true) && org.ready,
   });
 }
 
@@ -398,7 +412,8 @@ function toArchivedChats(response: ListArchivedChatsResponse): Chat[] {
  * writes over stream-maintained chat state.
  */
 export function useArchivedChats() {
-  return useListArchivedChats({}, { select: toArchivedChats });
+  const org = useOrgScope();
+  return useListArchivedChats(orgRequest({}, org.orgId), { enabled: org.ready, select: toArchivedChats });
 }
 
 // ── Mutation hooks ──────────────────────────────────────────────────────────

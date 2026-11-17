@@ -93,6 +93,7 @@ import { useModalStore } from "./modalStore";
 import type { Attachment } from "../api/client";
 import { logger } from "../lib/logger";
 import { singleflight } from "../lib/singleflight";
+import { getOrgScope, whenOrgScopeReady } from "../lib/orgScope";
 import { queryClient } from "../lib/query-client";
 import { notifyManager } from "@tanstack/react-query";
 import { initEventBus } from "../lib/events";
@@ -1276,7 +1277,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     return singleflight(`loadChats:${scope ?? "*"}`, async () => {
       set({ error: null });
       try {
-        const response = await chatActions.listChats(scope ?? undefined);
+        // In the tab's org, once it is known: with no org, every org's chats.
+        const org = getOrgScope();
+        const { orgId } = org.ready ? org : await whenOrgScopeReady();
+        const response = await chatActions.listChats(scope ?? undefined, { orgId });
         const chatList = response.chats;
         const lastUserUpdateSequence = response.lastUserUpdateSequence;
 

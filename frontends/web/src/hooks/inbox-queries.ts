@@ -22,6 +22,7 @@ import { persist } from "zustand/middleware";
 
 import type { ListInboxResponse } from "../gen/reliant/v1/inbox_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
+import { orgRequest, useOrgScope } from "../lib/orgScope";
 import { queryClient as appQueryClient } from "../lib/query-client";
 import { useProjectStore } from "../store/projectStore";
 import {
@@ -109,14 +110,18 @@ export interface InboxCounts {
 
 // ── Query hooks ─────────────────────────────────────────────────────────────
 
-/** The one Inbox read: items (default limit, 100) and the counts. */
-function inboxRequest(projectId?: string) {
-  return { projectId };
+/**
+ * The one Inbox read: items (default limit, 100) and the counts, in the tab's
+ * org (lib/orgScope), which the request and so the key name.
+ */
+function inboxRequest(projectId: string | undefined, orgId: string | null) {
+  return orgRequest({ projectId }, orgId);
 }
 
 /** The Inbox's items in the server's priority order (default limit, 100). */
 export function useInbox(projectId?: string) {
-  return useListInbox(inboxRequest(projectId), { refetchOnWindowFocus: "always" });
+  const org = useOrgScope();
+  return useListInbox(inboxRequest(projectId, org.orgId), { enabled: org.ready, refetchOnWindowFocus: "always" });
 }
 
 function countsOf(response: ListInboxResponse): InboxCounts {
@@ -130,7 +135,12 @@ function countsOf(response: ListInboxResponse): InboxCounts {
  * refetch for a few KB of items saved.
  */
 export function useInboxCounts(projectId?: string) {
-  return useListInbox(inboxRequest(projectId), { refetchOnWindowFocus: "always", select: countsOf });
+  const org = useOrgScope();
+  return useListInbox(inboxRequest(projectId, org.orgId), {
+    enabled: org.ready,
+    refetchOnWindowFocus: "always",
+    select: countsOf,
+  });
 }
 
 // ── Cache helpers ───────────────────────────────────────────────────────────

@@ -41,6 +41,7 @@ import {
   type DraftStatus,
 } from "../components/workflow/workflowDraftStatus";
 import { connectClient } from "../lib/connect";
+import { getOrgScope, orgRequest, useOrgScope, whenOrgScopeReady } from "../lib/orgScope";
 import { queryClient } from "../lib/query-client";
 import { toWorkflowMessage } from "../lib/workflowProto";
 import { useProjectStore } from "../store/projectStore";
@@ -345,6 +346,14 @@ export function isOfferedInChatPicker(workflow: {
 // ============================================
 
 /**
+ * A project's workflow list in `orgId`: the request names the tab's org
+ * (lib/orgScope), so every cache entry of it says which org it was read in.
+ */
+export function workflowListRequest(projectId: string, includeHidden: boolean, orgId: string | null) {
+  return orgRequest({ projectId, includeHidden }, orgId);
+}
+
+/**
  * A project's workflows and the ones that failed to load. `includeHidden` is
  * for management views (the Library, the builder, the Run form); the chat
  * pickers read without it (useWorkflows).
@@ -353,10 +362,11 @@ export function useWorkflowList(
   projectId: string | undefined,
   options: { includeHidden?: boolean; enabled?: boolean } = {},
 ) {
+  const org = useOrgScope();
   return useListWorkflows(
-    { projectId: projectId ?? "", includeHidden: options.includeHidden ?? false },
+    workflowListRequest(projectId ?? "", options.includeHidden ?? false, org.orgId),
     {
-      enabled: !!projectId && (options.enabled ?? true),
+      enabled: !!projectId && (options.enabled ?? true) && org.ready,
       staleTime: WORKFLOW_STALE_TIME_MS,
       select: workflowListFromProto,
     },
@@ -370,17 +380,22 @@ const selectListedWorkflows = (response: ListWorkflowsResponse) => workflowListF
  * picks a workflow in the project it has selected: the automation form.
  */
 export function useProjectWorkflowList(projectId: string | undefined) {
+  const org = useOrgScope();
   return useListWorkflows(
-    { projectId: projectId ?? "", includeHidden: false },
-    { enabled: !!projectId, staleTime: WORKFLOW_STALE_TIME_MS, select: selectListedWorkflows },
+    workflowListRequest(projectId ?? "", false, org.orgId),
+    { enabled: !!projectId && org.ready, staleTime: WORKFLOW_STALE_TIME_MS, select: selectListedWorkflows },
   );
 }
 
 /** A project's workflows for an imperative caller, from cache while fresh. */
 export async function fetchWorkflowList(projectId: string, includeHidden = false): Promise<ListWorkflowsResult> {
+  const scope = getOrgScope();
+  const { orgId } = scope.ready ? scope : await whenOrgScopeReady();
   return workflowListFromProto(
     await queryClient.fetchQuery(
-      workflowServiceQueries.listWorkflows({ projectId, includeHidden }, { staleTime: WORKFLOW_STALE_TIME_MS }),
+      workflowServiceQueries.listWorkflows(workflowListRequest(projectId, includeHidden, orgId), {
+        staleTime: WORKFLOW_STALE_TIME_MS,
+      }),
     ),
   );
 }
@@ -393,9 +408,10 @@ const NO_WORKFLOW_DEFS: WorkflowDef[] = [];
  */
 export function useWorkflows(): { workflows: WorkflowDef[]; loading: boolean; error: string | null } {
   const projectId = useProjectStore((state) => state.currentProject?.id);
+  const org = useOrgScope();
   const query = useListWorkflows(
-    { projectId: projectId ?? "", includeHidden: false },
-    { enabled: !!projectId, staleTime: WORKFLOW_STALE_TIME_MS, select: workflowDefsFromProto },
+    workflowListRequest(projectId ?? "", false, org.orgId),
+    { enabled: !!projectId && org.ready, staleTime: WORKFLOW_STALE_TIME_MS, select: workflowDefsFromProto },
   );
   return {
     workflows: query.data ?? NO_WORKFLOW_DEFS,
@@ -411,8 +427,9 @@ export function useWorkflows(): { workflows: WorkflowDef[]; loading: boolean; er
  */
 export function useCachedWorkflows(): WorkflowDef[] {
   const projectId = useProjectStore((state) => state.currentProject?.id);
+  const org = useOrgScope();
   const query = useListWorkflows(
-    { projectId: projectId ?? "", includeHidden: false },
+    workflowListRequest(projectId ?? "", false, org.orgId),
     { enabled: false, select: workflowDefsFromProto },
   );
   return query.data ?? NO_WORKFLOW_DEFS;
@@ -423,7 +440,7 @@ export function getCachedWorkflows(): WorkflowDef[] {
   const projectId = useProjectStore.getState().currentProject?.id;
   if (!projectId) return NO_WORKFLOW_DEFS;
   const data = queryClient.getQueryData<ListWorkflowsResponse>(
-    workflowServiceKeys.listWorkflows({ projectId, includeHidden: false }),
+    workflowServiceKeys.listWorkflows(workflowListRequest(projectId, false, getOrgScope().orgId)),
   );
   return data ? workflowDefsFromProto(data) : NO_WORKFLOW_DEFS;
 }

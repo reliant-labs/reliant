@@ -7,6 +7,7 @@ import { setTelemetryUserId } from '@/lib/telemetry'
 import { trackEvent } from '@/lib/analytics'
 import { queryClient } from '@/lib/query-client'
 import { setSessionOwner } from '@/lib/auth/sessionOwner'
+import { bindActiveOrgUser } from '@/store/activeOrgStore'
 import { getReaderSession, setReaderPrincipal } from '@/components/Forge/AuditedAccess/readerSession'
 import {
   startOAuthSignIn,
@@ -1190,3 +1191,10 @@ setReaderPrincipal(readerId(useAuthStore.getState()))
 useAuthStore.subscribe((state, previous) => {
   if (readerId(state) !== readerId(previous) || readerId(state) === 'apikey-user') setReaderPrincipal(readerId(state))
 })
+
+// The active org is the signed-in person's (store/activeOrgStore). Bound here,
+// at the same synchronous boundary, so no read between a sign-in and the
+// ActiveOrgBinding's next render sees the previous person's org, or no person
+// at all (lib/orgScope would take that for "signed out: nothing to wait for").
+bindActiveOrgUser(useAuthStore.getState().user?.id ?? null)
+useAuthStore.subscribe((state) => bindActiveOrgUser(state.user?.id ?? null))
