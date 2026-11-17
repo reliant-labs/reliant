@@ -114,6 +114,7 @@ import { AlertFromPanelDialog, CREATE_ALERT_LABEL } from "./AlertFromPanelDialog
 import { useAskReliant } from "../AskReliant/AskReliant";
 import { PromoteDialog, SaveCopyDialog, envScopeOf, writeErrorMessage } from "./dialogs";
 import { useUnmountSafeTimeout } from "@/hooks/useUnmountSafeTimeout";
+import { toast } from "@/lib/toast-manager";
 import { dashboardPivot, useExploreHref } from "../Metrics/pivots";
 import { drillSearches, type ExploreHrefs } from "./drill";
 import { duplicatePanel, starterPanel, upsertPanel } from "./panelBuilder";
@@ -1042,10 +1043,16 @@ function VariablesBar({
   const share = () => {
     const url = new URL(window.location.href);
     url.searchParams.delete("tv");
-    void navigator.clipboard?.writeText(url.toString()).then(() => {
-      setCopied(true);
-      later(() => setCopied(false), 2000);
-    });
+    // The browser refuses the write when the document is not focused or the
+    // permission is denied (NotAllowedError). Say so instead of leaving an
+    // unhandled rejection: prod 1c42e505.
+    navigator.clipboard?.writeText(url.toString()).then(
+      () => {
+        setCopied(true);
+        later(() => setCopied(false), 2000);
+      },
+      () => toast.warning("Couldn't copy the link: the browser refused clipboard access. Copy it from the address bar."),
+    );
   };
 
   return (
