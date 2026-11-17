@@ -30,20 +30,30 @@ describe("isPhone", () => {
 });
 
 describe("demoTelemetry on a phone", () => {
-  it("records analytics but no replay on a phone, and replay elsewhere", () => {
-    expect(DEMO_REPLAY_ON_PHONES).toBe(false);
+  it("records replay on phones by default", () => {
+    expect(DEMO_REPLAY_ON_PHONES).toBe(true);
     config.DEMO_TELEMETRY = "replay";
-    expect(demoTelemetry(false, true)).toBe("analytics");
+    expect(demoTelemetry(false, true)).toBe("replay");
     expect(demoTelemetry(false, false)).toBe("replay");
   });
 
-  it("leaves a lower configured level, and an opted-out browser, as they are", () => {
-    config.DEMO_TELEMETRY = "analytics";
-    expect(demoTelemetry(false, true)).toBe("analytics");
-    config.DEMO_TELEMETRY = "off";
-    expect(demoTelemetry(false, true)).toBe("off");
+  it("the switch turns replay off on a phone only, and back on", () => {
     config.DEMO_TELEMETRY = "replay";
-    expect(demoTelemetry(true, true)).toBe("off");
-    expect(demoTelemetry(true, false)).toBe("off");
+    expect(demoTelemetry(false, true, false)).toBe("analytics");
+    expect(demoTelemetry(false, false, false)).toBe("replay");
+    expect(demoTelemetry(false, true, true)).toBe("replay");
+    expect(demoTelemetry(false, false, true)).toBe("replay");
+  });
+
+  it("leaves a lower configured level, and an opted-out browser, as they are", () => {
+    for (const replayOnPhones of [true, false]) {
+      config.DEMO_TELEMETRY = "analytics";
+      expect(demoTelemetry(false, true, replayOnPhones)).toBe("analytics");
+      config.DEMO_TELEMETRY = "off";
+      expect(demoTelemetry(false, true, replayOnPhones)).toBe("off");
+      config.DEMO_TELEMETRY = "replay";
+      expect(demoTelemetry(true, true, replayOnPhones)).toBe("off");
+      expect(demoTelemetry(true, false, replayOnPhones)).toBe("off");
+    }
   });
 });
