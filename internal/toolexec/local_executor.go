@@ -191,18 +191,7 @@ func (e *LocalToolExecutor) executeTool(
 
 	// Decode the project's nested repos so tools with a `repo` param can
 	// resolve it to a workspace-relative path. Absent when single-repo.
-	if reposRaw, ok := contextMap["repos"].([]interface{}); ok {
-		repos := make([]*core.Repo, 0, len(reposRaw))
-		for _, item := range reposRaw {
-			obj, ok := item.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			id, _ := obj["id"].(string)
-			name, _ := obj["name"].(string)
-			rel, _ := obj["relative_path"].(string)
-			repos = append(repos, &core.Repo{ID: id, Name: name, RelativePath: rel})
-		}
+	if repos, ok := reposFromContext(contextMap); ok {
 		toolContext.Repos = repos
 	}
 	if daemonClient != nil {
@@ -332,6 +321,38 @@ func boundParamsFrom(contextMap map[string]interface{}) []string {
 		}
 	}
 	return out
+}
+
+// reposFromContext is the project's nested repos as the server recorded them in
+// the context map (ToolRequest.Repos), and whether the map carries any. Like
+// boundParamsFrom it reads both shapes: a []interface{} once the map has
+// crossed JSON on the way to a daemon, and the []map[string]interface{}
+// toolContextMap built when it stays in process — a server-placed tool (view,
+// edit, write). Reading only the first left every server-placed call with no
+// repos, so its `repo` param failed "not found in project (available: root)"
+// while shell and code_context resolved it (reliant#2755).
+func reposFromContext(contextMap map[string]interface{}) ([]*core.Repo, bool) {
+	var objs []map[string]interface{}
+	switch raw := contextMap["repos"].(type) {
+	case []map[string]interface{}:
+		objs = raw
+	case []interface{}:
+		for _, item := range raw {
+			if obj, ok := item.(map[string]interface{}); ok {
+				objs = append(objs, obj)
+			}
+		}
+	default:
+		return nil, false
+	}
+	repos := make([]*core.Repo, 0, len(objs))
+	for _, obj := range objs {
+		id, _ := obj["id"].(string)
+		name, _ := obj["name"].(string)
+		rel, _ := obj["relative_path"].(string)
+		repos = append(repos, &core.Repo{ID: id, Name: name, RelativePath: rel})
+	}
+	return repos, true
 }
 
 // orgMCPRefusal is the result of an MCP tool call the run's org does not allow.

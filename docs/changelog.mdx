@@ -13,6 +13,25 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.21.3" description="November 17, 2026">
+### 5 fixes and 1 other change
+
+Every pull request merged since v1.21.2, grouped by its conventional-commit type.
+
+#### Changed
+
+- **pin: forge@0ab7c562e817 + @reliantlabs/forge-web-runtime@0.13.17, as promoted in v1.21.0-rc.6** [#2814](https://github.com/reliant-labs/reliant/pull/2814)
+
+#### Fixed
+
+- **demo: keep session replay on phones until the cheaper recorder ships** [#2809](https://github.com/reliant-labs/reliant/pull/2809)
+- **observability: a refused clipboard write on dashboard Share warns instead of an unhandled rejection** [#2810](https://github.com/reliant-labs/reliant/pull/2810)
+- **logging: a gone stream client and a retried provider error are not ERROR issues** [#2811](https://github.com/reliant-labs/reliant/pull/2811)
+- **gitignore: a pnpm store inside a checkout is ignored, so the affected planner no longer runs every lane over it** [#2813](https://github.com/reliant-labs/reliant/pull/2813)
+- **integrations: http/request@1 keeps a step's own User-Agent instead of overwriting it** [#2815](https://github.com/reliant-labs/reliant/pull/2815)
+
+</Update>
+
 <Update label="v1.21.2" description="November 15, 2026">
 ### 1 fix and 1 other change
 

@@ -267,12 +267,24 @@ func scanRootOperand(cmd string, argv []string) (root string, explicit bool) {
 		return root, explicit
 	}
 
-	// grep/rg/ag/ack/fd/ls: operands are the non-flag tokens. For grep-likes the
-	// first operand is the pattern, so any path-looking operand after it counts;
-	// checking every operand is safe because a broad root is never a pattern
-	// anyone means literally.
-	for _, a := range argv[1:] {
+	// grep/rg/ag/ack/fd/ls: operands are the non-flag tokens. A grep-like's
+	// first operand is its pattern, unless -e/-f gave one, and a pattern is
+	// never a root: `rg '~/' internal/` searches internal/ for the text "~/",
+	// and refusing it as a home-directory scan was a false positive. The
+	// values of the flags that take one are skipped too (`-g '!x'`, `-m 20`).
+	// Anything left unrecognised is still checked, so an unknown flag shape
+	// can only refuse more, never less.
+	patternPending := grepLike[cmd] && !patternGivenByFlag(argv[1:])
+	for i := 1; i < len(argv); i++ {
+		a := argv[i]
 		if strings.HasPrefix(a, "-") {
+			if grepLike[cmd] && flagTakesValue(cmd, a) && i+1 < len(argv) {
+				i++ // the flag's value, not an operand
+			}
+			continue
+		}
+		if patternPending {
+			patternPending = false
 			continue
 		}
 		if _, broad := isScanRoot(a); broad {
@@ -283,6 +295,62 @@ func scanRootOperand(cmd string, argv []string) (root string, explicit bool) {
 		}
 	}
 	return root, explicit
+}
+
+// grepLike are the searches whose first operand is a pattern, not a path.
+var grepLike = map[string]bool{
+	"grep": true, "egrep": true, "fgrep": true, "rgrep": true,
+	"rg": true, "ag": true, "ack": true,
+}
+
+// patternGivenByFlag reports whether the pattern comes from -e/--regexp or
+// -f/--file, which leaves every operand a path. A short-flag cluster holding e
+// or f counts, which can only make the guard stricter.
+func patternGivenByFlag(args []string) bool {
+	for _, a := range args {
+		switch {
+		case a == "--":
+			return false
+		case strings.HasPrefix(a, "--"):
+			name, _, _ := strings.Cut(a[2:], "=")
+			if name == "regexp" || name == "file" {
+				return true
+			}
+		case len(a) > 1 && a[0] == '-':
+			if strings.ContainsAny(a[1:], "ef") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// valueShortFlags are, per command, the short flags whose value is the next
+// token when the flag ends its cluster: -m 20, -A 3, -g '*.go', -t go. Per
+// command because a letter differs between them (grep -T and -E take no value;
+// rg's do).
+var valueShortFlags = map[string]string{
+	"grep": "mABCdD", "egrep": "mABCdD", "fgrep": "mABCdD", "rgrep": "mABCdD",
+	"rg":  "mABCgtTjMdE",
+	"ag":  "mABCG",
+	"ack": "mABC",
+}
+
+// valueLongFlags are the long flags written `--flag value` whose value is the
+// next token. `--flag=value` is one token and needs no entry.
+var valueLongFlags = map[string]bool{
+	"glob": true, "iglob": true, "type": true, "type-not": true,
+	"max-count": true, "max-depth": true, "context": true,
+	"after-context": true, "before-context": true, "threads": true,
+	"max-columns": true, "include": true, "exclude": true, "exclude-dir": true,
+}
+
+// flagTakesValue reports whether cmd's flag consumes the token after it.
+func flagTakesValue(cmd, flag string) bool {
+	if strings.HasPrefix(flag, "--") {
+		return !strings.Contains(flag, "=") && valueLongFlags[flag[2:]]
+	}
+	return len(flag) > 1 && strings.IndexByte(valueShortFlags[cmd], flag[len(flag)-1]) >= 0
 }
 
 // absoluteCdTarget returns the absolute directory a `cd` moves to, or "" when

@@ -227,6 +227,34 @@ func TestSpawnSend_NilNotifier_StillQueues(t *testing.T) {
 	require.Len(t, queued, 1)
 }
 
+// A sub-agent that was never told its parent's id still reaches it:
+// agent_id "parent" names the caller's own parent (agent bug reports
+// ee4d601f, fa74b909). A top-level chat has none, and is told so.
+func TestSpawnSend_ParentAlias(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+
+	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
+	tool := NewSpawnSendTool(repo, nil)
+
+	resp := runSpawnSend(t, tool, rctx.NewToolContext(ctx, chatID, childID, nil, nil),
+		SpawnSendParams{AgentID: " Parent ", Subject: "Blocked", Message: "need the DB URL"})
+	require.False(t, resp.IsError, "response: %+v", resp)
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, parentID)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+	require.Equal(t, childID, queued[0].FromThreadID)
+
+	resp = runSpawnSend(t, tool, rctx.NewToolContext(ctx, chatID, parentID, nil, nil),
+		SpawnSendParams{AgentID: "parent", Subject: "Hi", Message: "anyone there?"})
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "top-level chat")
+}
+
 // TestSpawnSend_ToFinishedAgent_FailsWithGuidance is the spec §7.4
 // regression: messaging a finished agent must fail loudly with a pointer to
 // spawn(agent_id=...), never silently no-op or resurrect the thread.

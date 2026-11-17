@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
+	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 )
 
 // Resume outcome classes for metrics/alerting. These are the label values of
@@ -250,7 +251,7 @@ func isWorkflowAlreadyDoneErr(err error) bool {
 func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID string) {
 	reason := db.StopReasonCompleted // default if we can't determine
 
-	descResp, err := ps.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "") //nolint:staticcheck // SA1019 (sdk v1.51): DescribeWorkflow routes through the client interceptors and decodes memo/search attributes with the data converter; this path needs only the raw response, unchanged (migration: reliant#2780)
+	descResp, err := rtemporal.DescribeExecution(ctx, ps.temporalClient, workflowID, "")
 	if err == nil && descResp != nil && descResp.WorkflowExecutionInfo != nil {
 		switch descResp.WorkflowExecutionInfo.Status {
 		case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED:
@@ -616,7 +617,7 @@ func (ps *PauseService) ResumeInterruptedWorkflow(ctx context.Context, workflowI
 // run. Returns ErrNoReplayableHistory (ghost / not eligible) or
 // ErrResetAttemptsExhausted (guard gave up) for the caller to fall back on.
 func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowID, chatID string) (ResetResult, error) {
-	desc, err := ps.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "") //nolint:staticcheck // SA1019 (sdk v1.51): DescribeWorkflow routes through the client interceptors and decodes memo/search attributes with the data converter; this path needs only the raw response, unchanged (migration: reliant#2780)
+	desc, err := rtemporal.DescribeExecution(ctx, ps.temporalClient, workflowID, "")
 	if err != nil {
 		if isWorkflowAlreadyDoneErr(err) { // includes not-found
 			recordResumeOutcome(resumeOutcomeNoReplayableHistory, workflowID, chatID, err)
