@@ -281,7 +281,13 @@ func (r *Runner) request(ctx context.Context, env callEnv, req *reliantv1.HttpRe
 	if body != nil && headers.Get("Content-Type") == "" {
 		headers.Set("Content-Type", bodyType)
 	}
-	headers.Set("User-Agent", userAgent)
+	// The default User-Agent only fills a gap: a step (or a connection) that
+	// names its own keeps it. Some APIs require a descriptive one with contact
+	// details (Reddit), and overwriting it after the step's headers were
+	// applied dropped it silently.
+	if headers.Get("User-Agent") == "" {
+		headers.Set("User-Agent", userAgent)
+	}
 
 	allowed := allowedHosts(m, base)
 	anyHost := m.GetConnection().GetAllowAnyPublicHost()

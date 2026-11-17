@@ -85,6 +85,38 @@ func TestRendersRequestFromParams(t *testing.T) {
 	}
 }
 
+// A step's own User-Agent is sent as written; only a request without one gets
+// the default. Some APIs require a descriptive one (Reddit asks for contact
+// details), and it used to be overwritten after the step's headers applied.
+func TestUserAgentDefaultsButNeverOverrides(t *testing.T) {
+	var got []string
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("User-Agent"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	for _, tc := range []struct {
+		name, headers, want string
+	}{
+		{"step header", `      headers: { User-Agent: "community-watch/1 (ops@example.com)" }` + "\n", "community-watch/1 (ops@example.com)"},
+		{"headers_expr", `      headers_expr: "{'user-agent': 'expr-agent/2'}"` + "\n", "expr-agent/2"},
+		{"none", "", userAgent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got = nil
+			m, a := mustParse(t, manifestFor(srv.URL, "    params: { type: object }\n    request:\n      method: GET\n      path: /x\n"+tc.headers))
+			r := newRunner()
+			r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig
+			if _, err := r.Run(context.Background(), m, a, map[string]any{}); err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 1 || got[0] != tc.want {
+				t.Errorf("User-Agent sent = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // output.select sees the validated params — defaults applied — so an action
 // can shape its output by what was asked, on every page of a paginated one.
 func TestSelectSeesTheParams(t *testing.T) {
