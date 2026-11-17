@@ -1973,6 +1973,9 @@ AUTOMATIC STOP:
 Usage notes:
 - By default, shows only running processes in the current workspace
 - Use 'all: true' to include completed, failed, and killed processes
+- Running processes come first, newest first, then finished ones, newest first
+- At most 50 processes per call (limit, up to 200); offset pages through the rest, and the last line says what is left
+- A long command is shortened to its first 200 bytes
 - Process IDs can be used with shell_output and shell_kill tools
 
 Example outputs:

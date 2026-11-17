@@ -4,8 +4,10 @@ package tools
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -16,6 +18,8 @@ type ShellListParams struct {
 	SessionID string `json:"session_id,omitempty" jsonschema:"description=Filter by session ID (optional)"`
 	ChatID    string `json:"chat_id,omitempty" jsonschema:"description=Filter by chat ID (optional)"`
 	All       bool   `json:"all,omitempty" jsonschema:"description=Show all processes including completed ones (default: false - show only running)"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"description=Maximum processes to show (default: 50; at most 200)"`
+	Offset    int    `json:"offset,omitempty" jsonschema:"description=Skip this many processes before showing any (default: 0), to page through a long list"`
 	// WorktreeID is set implicitly from the tool context - not exposed to users
 	WorktreeID string `json:"-"`
 }
@@ -35,7 +39,24 @@ type ProcessInfo struct {
 type ShellListResponseMetadata struct {
 	TotalProcesses   int `json:"total_processes"`
 	RunningProcesses int `json:"running_processes"`
+	// ShownProcesses is how many of TotalProcesses this page shows, from
+	// Offset on.
+	ShownProcesses int `json:"shown_processes"`
+	Offset         int `json:"offset"`
 }
+
+// shell_list's page bounds. A listing is a tool result in the model's
+// context, so it has to stay small however many processes a machine has run:
+// one with workflow runs (each command a multi-KB inline script) and
+// all=true answered ~930 KB, truncated before it could say whether a given
+// process was still running (reliant#2751).
+const (
+	shellListDefaultLimit = 50
+	shellListMaxLimit     = 200
+	// shellListMaxCommand bounds one process's command, in bytes: enough to
+	// recognise it, and its ID is what shell_output and shell_kill take.
+	shellListMaxCommand = 200
+)
 
 type shellListTool struct {
 	// clock reads the time idle durations are measured to; nil is time.Now.
@@ -59,6 +80,9 @@ AUTOMATIC STOP:
 Usage notes:
 - By default, shows only running processes in the current workspace
 - Use 'all: true' to include completed, failed, and killed processes
+- Running processes come first, newest first, then finished ones, newest first
+- At most 50 processes per call (limit, up to 200); offset pages through the rest, and the last line says what is left
+- A long command is shortened to its first 200 bytes
 - Process IDs can be used with shell_output and shell_kill tools
 
 Example outputs:
@@ -111,7 +135,6 @@ func (b *shellListTool) Execute(rctx *rctx.ToolContext, params ShellListParams) 
 
 	// Filter out non-running processes if not showing all
 	var filteredProcesses []*filteredProcess
-	var touched []string
 	runningCount := 0
 	for _, p := range processes {
 		if !inWorkspace(workspace, p.WorkingDir) {
@@ -119,7 +142,6 @@ func (b *shellListTool) Execute(rctx *rctx.ToolContext, params ShellListParams) 
 		}
 		if p.Status == "running" {
 			runningCount++
-			touched = append(touched, p.ID)
 		}
 		if params.All || p.Status == "running" {
 			filteredProcesses = append(filteredProcesses, &filteredProcess{
@@ -134,7 +156,6 @@ func (b *shellListTool) Execute(rctx *rctx.ToolContext, params ShellListParams) 
 			})
 		}
 	}
-	touchProcesses(rctx, touched...)
 
 	// Format the output
 	if len(filteredProcesses) == 0 {
@@ -145,17 +166,49 @@ func (b *shellListTool) Execute(rctx *rctx.ToolContext, params ShellListParams) 
 		return NewTextResponse(msg), nil
 	}
 
+	// Running first, so "is X still running" is answered on the first page,
+	// then newest first within each group.
+	sort.SliceStable(filteredProcesses, func(i, j int) bool {
+		ri, rj := filteredProcesses[i].Status == "running", filteredProcesses[j].Status == "running"
+		if ri != rj {
+			return ri
+		}
+		return filteredProcesses[i].StartTime.After(filteredProcesses[j].StartTime)
+	})
+	total := len(filteredProcesses)
+	limit := params.Limit
+	if limit <= 0 {
+		limit = shellListDefaultLimit
+	}
+	limit = min(limit, shellListMaxLimit)
+	offset := min(max(params.Offset, 0), total)
+	page := filteredProcesses[offset:min(offset+limit, total)]
+
+	// A running process the agent sees counts as used. One on another page
+	// was not seen, so it is not touched: a long list cannot keep everything
+	// alive by being listed.
+	var touched []string
+	for _, p := range page {
+		if p.Status == "running" {
+			touched = append(touched, p.ID)
+		}
+	}
+	touchProcesses(rctx, touched...)
+
 	var output strings.Builder
 	output.WriteString("=== Background Processes ===\n\n")
+	if len(page) == 0 {
+		fmt.Fprintf(&output, "Nothing at offset %d.\n", offset)
+	}
 
-	for i, p := range filteredProcesses {
+	for i, p := range page {
 		if i > 0 {
 			output.WriteString("\n---\n\n")
 		}
 
 		fmt.Fprintf(&output, "Process ID: %s\n", p.ID)
 		fmt.Fprintf(&output, "Status: %s\n", p.Status)
-		fmt.Fprintf(&output, "Command: %s\n", p.Command)
+		fmt.Fprintf(&output, "Command: %s\n", shortCommand(p.Command))
 		fmt.Fprintf(&output, "Started: %s\n", p.StartTime.Format(time.RFC3339))
 
 		if p.Status == "running" {
@@ -181,14 +234,47 @@ func (b *shellListTool) Execute(rctx *rctx.ToolContext, params ShellListParams) 
 		}
 	}
 
-	fmt.Fprintf(&output, "\n\nTotal: %d processes (%d running)\n", len(filteredProcesses), runningCount)
+	fmt.Fprintf(&output, "\n\nTotal: %d processes (%d running)\n", total, runningCount)
+	if len(page) > 0 && len(page) < total {
+		fmt.Fprintf(&output, "Showing %d-%d of %d.", offset+1, offset+len(page), total)
+		if rest := offset + len(page); rest < total {
+			more := fmt.Sprintf("offset=%d", rest)
+			if params.All {
+				more += ", all=true"
+			}
+			fmt.Fprintf(&output, " %d more: shell_list(%s).", total-rest, more)
+		}
+		output.WriteString("\n")
+	}
 
 	metadata := ShellListResponseMetadata{
-		TotalProcesses:   len(filteredProcesses),
+		TotalProcesses:   total,
 		RunningProcesses: runningCount,
+		ShownProcesses:   len(page),
+		Offset:           offset,
 	}
 
 	return WithResponseMetadata(NewTextResponse(output.String()), metadata), nil
+}
+
+// shortCommand is a command as a listing shows it: its first line, at most
+// shellListMaxCommand bytes (cut on a rune boundary), marked when shortened.
+func shortCommand(command string) string {
+	short := command
+	if i := strings.IndexByte(short, '\n'); i >= 0 {
+		short = short[:i]
+	}
+	if len(short) > shellListMaxCommand {
+		cut := shellListMaxCommand
+		for cut > 0 && !utf8.RuneStart(short[cut]) {
+			cut--
+		}
+		short = short[:cut]
+	}
+	if len(short) < len(command) {
+		short += fmt.Sprintf(" … (%d bytes in all)", len(command))
+	}
+	return short
 }
 
 // filteredProcess is a local type for formatting daemon process info
