@@ -48,6 +48,7 @@ import { bootForgeTour } from './components/ForgeShell/forgeTourBoot'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
 import { AuthGuard } from './components/AuthGuard'
 import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
+import { AskAgentModeProvider } from './components/Forge/Observability/AskReliant/askAgentMode'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { PageVisitTracker } from './components/PageVisitTracker'
 import { ModalLayer } from './components/Modals/ModalLayer'
@@ -86,18 +87,23 @@ function ForgeRootShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   return (
     <SurfaceProvider surface="desktop">
-      <div data-shell="forge" data-pathname={pathname} className="contents">
-        <ActiveOrgBinding />
-        <PageVisitTracker firstVisitProps={entry} />
-        <Outlet />
-        <ModalLayer />
-        <Toaster />
-        <NewBuildPrompt />
-        {/* The journeys (Onboarding/JOURNEYS.md): at the root, so a step
-            follows the visitor between the public demo and signed-in pages. */}
-        <JourneyTour />
-        <ForgeLandingJourney />
-      </div>
+      {/* No daemon, no Reliant projects here: every "Ask Reliant" is the
+          handoff sheet (askAgentMode.tsx), never a chat this shell cannot
+          start. The public demo nests its own provider, with demo set. */}
+      <AskAgentModeProvider mode="handoff" cli="forge">
+        <div data-shell="forge" data-pathname={pathname} className="contents">
+          <ActiveOrgBinding />
+          <PageVisitTracker firstVisitProps={entry} />
+          <Outlet />
+          <ModalLayer />
+          <Toaster />
+          <NewBuildPrompt />
+          {/* The journeys (Onboarding/JOURNEYS.md): at the root, so a step
+              follows the visitor between the public demo and signed-in pages. */}
+          <JourneyTour />
+          <ForgeLandingJourney />
+        </div>
+      </AskAgentModeProvider>
     </SurfaceProvider>
   )
 }
