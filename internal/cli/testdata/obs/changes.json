@@ -1,0 +1,56 @@
+{
+  "schema": "forge.obs.changes/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "prod",
+    "backend": "cloud",
+    "env_id": "env-prod",
+    "from": "2026-10-22T10:00:00Z",
+    "to": "2026-10-22T12:00:00Z"
+  },
+  "query_mode": "structured",
+  "changes": [
+    {
+      "kind": "activity",
+      "at": "2026-10-22T11:50:00Z",
+      "summary": "rotate secret db-pass",
+      "verb": "rotate",
+      "target": "secret db-pass",
+      "actor": "alice",
+      "via": "cli"
+    },
+    {
+      "kind": "failed_deploy",
+      "at": "2026-10-22T11:35:00Z",
+      "summary": "deploy of v2 failed ImagePullBackOff",
+      "version": "v2",
+      "promotion_id": "p2",
+      "actor": "ci",
+      "via": "ci"
+    },
+    {
+      "kind": "promotion",
+      "at": "2026-10-22T11:30:00Z",
+      "summary": "promoted v2",
+      "version": "v2",
+      "promotion_id": "p2",
+      "direction": "unknown",
+      "actor": "ci",
+      "via": "ci"
+    },
+    {
+      "kind": "promotion",
+      "at": "2026-10-22T10:30:00Z",
+      "summary": "promoted v1",
+      "version": "v1",
+      "promotion_id": "p1",
+      "direction": "initial"
+    }
+  ],
+  "truncated": false,
+  "suggested": [
+    "forge obs check prod --promotion p2",
+    "forge env releases show prod p2"
+  ]
+}

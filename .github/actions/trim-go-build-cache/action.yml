@@ -1,0 +1,61 @@
+name: Trim the Go build cache
+description: >-
+  Deletes every Go build cache entry the current job did not use, so the
+  cache main saves next holds only what this job needs.
+
+# WHY. A job restores its scope's newest cache, adds what it compiles, and on
+# main saves the union under a new key. Nothing ever removed an entry, so each
+# scope grew with every push (go-build-test-cli reached 3.5 GB) until the
+# repository's 10 GB cache budget held only some of them: on 2026-10-21 the
+# wincross, test-guards, build and licenses scopes had all been evicted, and
+# their jobs compiled from cold. Trimmed, each scope is what one run of its job
+# actually used.
+#
+# HOW. Go refreshes an entry's mtime whenever it uses one that is more than an
+# hour old (cmd/go/internal/cache), so every entry this job touched is newer
+# than (the moment it restored the cache - 1h); five minutes of slack on top.
+# That moment is GOCACHE_RESTORED_AT (Unix seconds), which the job records in
+# a step right before its restore:
+#
+#   - name: Note when the Go build cache was restored
+#     run: echo "GOCACHE_RESTORED_AT=$(date +%s)" >> "$GITHUB_ENV"
+#
+# Unset is an error, not a default: a guessed start would delete entries the
+# job used. (The event payload's mtime is not it: the runner rewrites that
+# file for every step, so it reads as "now".)
+#
+# Run it after the job's real work and right before its `actions/cache/save`,
+# under the same condition (main only).
+
+inputs:
+  path:
+    description: The GOCACHE directory (`go env GOCACHE`).
+    required: false
+    default: ~/.cache/go-build
+
+runs:
+  using: composite
+  steps:
+    - name: Trim the Go build cache to what this job used
+      shell: bash
+      env:
+        GOCACHE_DIR: ${{ inputs.path }}
+      run: |
+        set -euo pipefail
+        dir="${GOCACHE_DIR/#\~/$HOME}"
+        # Windows (Git Bash): GOCACHE is a C:\ path.
+        if command -v cygpath >/dev/null 2>&1; then
+          dir="$(cygpath -u "${dir}")"
+        fi
+        if [ ! -d "${dir}" ]; then
+          echo "no Go build cache at ${dir}: nothing to trim"
+          exit 0
+        fi
+        if [ -z "${GOCACHE_RESTORED_AT:-}" ]; then
+          echo "::error::GOCACHE_RESTORED_AT is not set: record it in a step right before this job restores its Go build cache (see this action's header). Nothing was trimmed."
+          exit 1
+        fi
+        before="$(du -sh "${dir}" | cut -f1)"
+        stale_minutes=$(( ($(date +%s) - GOCACHE_RESTORED_AT) / 60 + 65 ))
+        find "${dir}" -type f -mmin +"${stale_minutes}" -delete
+        echo "Go build cache: ${before} -> $(du -sh "${dir}" | cut -f1) (dropped entries unused for ${stale_minutes}+ minutes)"

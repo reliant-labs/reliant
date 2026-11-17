@@ -1,0 +1,224 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// RouteGuard — what an anonymous visitor sees.
+//
+// Without it, a signed-out visitor gets the full app shell and then a wall of
+// failed fetches: the pages render fine (they are just markup), every RPC
+// behind them answers 401, and the result looks like a broken app rather than
+// one that is asking you to sign in. The server is behaving correctly; it is
+// the browser that has not been told what to do about it. This component is
+// that instruction.
+//
+// ── It gates on what the SERVER says ─────────────────────────────────
+//
+// Auth state comes from this app's own API (GET /auth/session), not from
+// an identity provider the browser talks to. The session cookie is
+// HttpOnly, so the server is the only thing that can answer the question at
+// all — which is exactly the property that keeps the token away from
+// scripts.
+//
+// ── Why a component and not middleware ────────────────────────────────
+//
+// The session cookie IS visible to a server-side middleware, so a Next.js
+// middleware guard is now possible — it just cannot be shared. This file is
+// rendered byte-for-byte into both the Next.js and the Vite scaffolds, and
+// a Vite SPA has no server to run middleware on. One component that both
+// trees mount at the top of the tree beats two divergent implementations of
+// the same rule. Add middleware on top if you want the redirect to happen
+// before the bundle is even served; keep this as the backstop.
+//
+// ── Yours to change ───────────────────────────────────────────────────
+//
+// Common edits, all local to this file:
+//
+//   - PUBLIC ROUTES: add paths to `publicPaths` below (a marketing page, a
+//     pricing page, a public share link).
+//   - INVERT IT: if most of your product is public and only a section is
+//     gated, drop this from the layout and wrap just that section instead.
+//   - DELETE IT: if a proxy authenticates before the app ever loads, this
+//     check is redundant — remove the import from the layout and this file.
+
+import { useEffect, useSyncExternalStore } from "react";
+
+import { useAuth } from "./use-auth";
+
+/**
+ * A store that never changes, for the hydration flag below.
+ *
+ * Module scope, not inline: `useSyncExternalStore` re-subscribes whenever
+ * `subscribe` changes identity, so a fresh arrow per render would tear down
+ * and re-establish the subscription on every render.
+ */
+const subscribeToNothing = () => () => {};
+
+/** Where an anonymous visitor is sent. Matches the scaffolded sign-in route. */
+const SIGN_IN_PATH = "/auth/sign-in";
+
+/**
+ * The password-reset screens. Public for the same reason sign-in is: the
+ * person using them has no session — that is why they are resetting.
+ */
+const FORGOT_PATH = "/auth/forgot";
+const RESET_PATH = "/auth/reset";
+
+/**
+ * The pages an emailed link opens (a magic link, an invitation, an address
+ * confirmation) and the page a Google or GitHub sign-in returns to. Public
+ * for the same reason: whoever opens them has no session yet.
+ */
+const EMAIL_LINK_PATHS = ["/auth/magic", "/auth/invite", "/auth/verify", "/auth/social/callback"];
+
+/**
+ * Paths that render without a session.
+ *
+ * The sign-in route MUST be here: sending an anonymous visitor from the
+ * sign-in page to the sign-in page is a redirect loop.
+ *
+ * There is no `/auth/callback` in this list because there is no OIDC callback
+ * in this architecture. The browser never receives an authorization code to
+ * trade — it posts credentials to this app's own API and the server does the
+ * exchange — so a callback path would be a public hole guarding nothing.
+ * (/auth/social/callback is not one: it receives no code, only a handle the
+ * server checks against the sign-in this browser started.)
+ */
+const publicPaths = [SIGN_IN_PATH, FORGOT_PATH, RESET_PATH, ...EMAIL_LINK_PATHS];
+
+function isPublicPath(pathname: string): boolean {
+  return publicPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+/**
+ * Gates its children on a session, sending anonymous visitors to sign in.
+ *
+ * `navigate` and `pathname` are injected rather than imported from a router,
+ * for the same reason the sign-in and callback SCREENS take them: this file is
+ * shared byte-for-byte between the Next.js and Vite scaffolds, which disagree
+ * about routing and about nothing else here. It also means this component can
+ * be tested with no router mounted at all.
+ */
+export function RouteGuard({
+  pathname,
+  navigate,
+  children,
+}: {
+  pathname: string;
+  navigate: (path: string) => void;
+  children: React.ReactNode;
+}) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  // Native sign-in is ALWAYS enforced. This used to ask whether an OIDC
+  // issuer had reached the browser — a question that no longer exists,
+  // because the browser has no issuer config: the server holds it and
+  // answers "who is signed in?" over this app's own API.
+  const enforcing = true;
+  const blocked = enforcing && !isLoading && !isAuthenticated && !isPublicPath(pathname);
+
+  // Redirect from an effect, not during render: navigating while rendering is
+  // a side effect in the render phase, which React is entitled to run twice
+  // (and does, under StrictMode in development).
+  useEffect(() => {
+    if (!blocked) return;
+    // Where to come back to. The sign-in screen reads `returnTo` and lands the
+    // user on the page they actually asked for instead of the home page.
+    //
+    // The QUERY STRING is part of that page: a generated detail route is
+    // /<slug>/view?id=…, and coming back without the id lands on "which
+    // row?" instead of the row. It is read here, in the effect, rather than
+    // injected like `pathname`: an effect only runs in the browser, and a
+    // useSearchParams() in the router adapter would push the whole app under
+    // a Suspense boundary in a static export.
+    const returnTo = encodeURIComponent(pathname + window.location.search);
+    navigate(`${SIGN_IN_PATH}?returnTo=${returnTo}`);
+  }, [blocked, navigate, pathname]);
+
+  // ── Why the render output cannot depend on any of the above ──────────
+  //
+  // `isLoading` and `isAuthenticated` are browser-only facts here: the
+  // answer arrives from GET /auth/session after mount, so during a server
+  // render this component has not asked yet. Returning null on the
+  // client where the server returned children is a hydration mismatch, and
+  // React does not repair one by re-rendering — it abandons the
+  // server-streamed markup and mounts a SECOND copy beside it. That is two
+  // full app shells stacked down the page, two theme toggles, and a nav
+  // whose Collapse button is wired to a tree nothing listens to.
+  //
+  // So the first client render must reproduce the server's output exactly.
+  // What it renders is a PLACEHOLDER, not the app: the server emits the same
+  // placeholder for every visitor (it cannot know who they are), the client's
+  // first render emits it too, and the two agree — no mismatch — while the
+  // protected tree stays hidden until the session is known.
+  //
+  // This used to render `children` on that first pass, which showed a frame
+  // of the DASHBOARD to a signed-out visitor before the effect below bounced
+  // them to sign-in. It hydrated correctly and leaked nothing (the markup is
+  // inert and its queries 401), but it read as a glitch — the app flashing
+  // something you are not allowed to see — and "briefly showing the logged-in
+  // UI to a logged-out person" is the wrong default however harmless the
+  // bytes are.
+  //
+  // `useSyncExternalStore` is how that "am I on the client yet?" question is
+  // asked without a state update: it returns the SERVER snapshot (false)
+  // during SSR and the first hydrating render, then the client snapshot
+  // (true) once mounted. The store never actually emits, so `subscribe` is a
+  // no-op returning a no-op unsubscribe — React still flips the value on
+  // mount. The older `useState(false)` + `useEffect(setHydrated(true))` pair
+  // expressed the same thing by rendering twice on every mount.
+  const hydrated = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  );
+
+  // A PUBLIC path is never gated, so it must render immediately — before
+  // hydration, and without waiting on a session it does not need.
+  //
+  // This check has to come FIRST. Showing the pending spinner on the
+  // sign-in route delays the one screen whose job is to END the signed-out
+  // state, and hides the form behind a spinner that never resolves —
+  // nothing on that route establishes the session the spinner waits for,
+  // because the form is what establishes it.
+  //
+  // It is safe to skip the hydration dance here for the same reason the
+  // route is public: the output does not depend on identity, so the server
+  // and the client render the same thing either way.
+  if (isPublicPath(pathname)) return <>{children}</>;
+
+  if (!hydrated) return <AuthPending />;
+
+  // While the provider is restoring a session, show the pending state rather
+  // than the signed-out view: showing the sign-in screen to a user who IS
+  // signed in, for the one frame it takes to find out, is a worse flicker.
+  if (enforcing && isLoading) return <AuthPending />;
+
+  // Already redirecting — do not render the protected tree, or its queries
+  // fire the 401s this component exists to prevent.
+  if (blocked) return <AuthPending />;
+
+  return <>{children}</>;
+}
+
+/**
+ * What renders while the guard is deciding.
+ *
+ * Deliberately a quiet spinner and not a skeleton of the app: a skeleton
+ * promises the shape of a page the visitor may not be entitled to see, and a
+ * signed-out visitor is about to be sent elsewhere. It is also what the
+ * SERVER renders for every visitor, so it must not depend on identity.
+ *
+ * `role="status"` with a label so a screen reader announces the wait instead
+ * of reading an empty document.
+ */
+function AuthPending() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-surface-muted">
+      <div
+        className="h-8 w-8 animate-spin motion-reduce:[animation-duration:3s] rounded-full border-2 border-border border-t-accent"
+        role="status"
+        aria-label="Checking your session"
+      />
+    </div>
+  );
+}

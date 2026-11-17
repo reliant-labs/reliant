@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noUncheckedIndexedAccess": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+{{- if .Workspaces}}
+      "@/components/ui/*": ["../../packages/ui-web/src/components/ui/*"],
+{{- end}}
+{{- $hoisted := .WebRuntimePinsHoisted}}
+{{- range .WebRuntimeTypePins}}
+      "{{.}}": ["{{typePinPath . $hoisted}}"],
+{{- end}}
+      "@/*": ["./src/*"]
+    }
+  },
+  "// peer dedupe note": "The @connectrpc/@bufbuild/@opentelemetry/@tanstack entries in paths pin @reliantlabs/forge-web-runtime's peerDependencies to THIS app's copy, for the same reason next.config.ts redirects them in the webpack resolver. @tanstack/react-query is listed because the generated hooks EXPOSE its types (UseQueryOptions, ThrowOnError, Query) in their own signatures, so two copies fail with 'Property #private in type Query refers to a different member'; query-core is listed with it because react-query re-exports those types FROM it, and pinning only the wrapper leaves the underlying copy split. A dev build of forge bridges the runtime with a `file:` specifier, which npm materialises as a symlink into the forge checkout; that checkout carries its own node_modules, so the runtime's bare imports resolve there while this app's resolve here. The bundler fix in next.config.ts does not help `tsc --noEmit`, which does not run webpack: typecheck saw two nominally-distinct copies of the same package and failed with TS2322 'Type Transport is not assignable to type Transport' in src/lib/mock-transport_gen.ts. The list is DERIVED from the runtime's declared peerDependencies (internal/webruntimepeers) and rendered from WebRuntimeTypePins, so there is no list here to keep in step. Each value is a package DIRECTORY only until `npm install` has run: forge then points it at the package's installed DECLARATION FILE (e.g. .../build/modern/index.d.ts), because Next's webpack resolver also applies these paths to app code, and a resolving directory target skips the package's `exports` map, bundling a second copy of it (prerender: 'No QueryClient set'). A .d.ts target is skipped by that resolver and ignored by Vite, so bundles resolve through `exports` while tsc still binds one copy of the types. This note sits at the top level, NOT inside compilerOptions, because tsc validates that object and rejects an unknown key there with TS5023.",
+  "// include note": "The four .next* globs are here so Next has nothing to add. `next dev` and `next build` check this file on every run and REWRITE it, reformatted, when it lacks a value they want: \"jsx\": \"react-jsx\" (mandatory since Next 16) and <distDir>/types plus <distDir>/dev/types in include, for .next (dev) and .next-prod (build, see next.config.ts). Shipping exactly that keeps this committed file byte-identical across dev runs. The globs add nothing to what tsc reads: exclude below drops everything they match.",
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    ".next-prod/types/**/*.ts",
+    ".next-prod/dev/types/**/*.ts"
+  ],
+  "// exclude note": "Exclude the Next build dirs wholesale (not just subpaths). Next writes per-route type stubs under .next{,-prod}/types that import the route module by path; deleting a scaffolded route leaves a STALE stub whose import now dangles, so `tsc --noEmit` would spew TS2307 for a route that no longer exists. .next-prod is forge's production distDir (see next.config.ts). Excluding both wins over the .next* globs in include (TypeScript's exclude filters what include's globs match).",
+  "exclude": ["node_modules", ".next", ".next-prod"]
+}

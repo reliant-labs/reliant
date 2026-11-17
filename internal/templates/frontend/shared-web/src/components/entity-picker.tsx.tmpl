@@ -1,0 +1,398 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}import { userMessage } from "@reliantlabs/forge-web-runtime";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useEffect, useId, useRef, useState } from "react";
+
+import { useDebouncedValue } from "@/hooks/use-query-resource";
+
+import type { ConnectClientError } from "@reliantlabs/forge-web-runtime";
+import type { UseQueryOptions, UseQueryResult } from "@tanstack/react-query";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+
+/**
+ * EntityPicker — the foreign-key picker: search another entity's list, pick
+ * one, hand its id back.
+ *
+ * Every relational app needs this the moment a form carries an FK field
+ * (`order.patient_id`), and the shape it needs is NOT "a <select> over a
+ * preloaded array" — the referenced table is paged and filtered SERVER-SIDE and
+ * may hold a million rows. So this drives a GENERATED LIST HOOK directly: pass
+ * the hook, say how to build its request from the search text, and say how to
+ * read rows out of its response. The picker owns the debounce, the open/close
+ * state, keyboard navigation, and the loading / error / empty ladder.
+ *
+ *   <EntityPicker
+ *     useList={useListPatients}
+ *     buildRequest={(search) => ({ pageSize: 20, nameContains: search || undefined })}
+ *     itemsOf={(res) => res.patients}
+ *     hasMoreOf={(res) => Boolean(res.nextPageToken)}
+ *     optionValue={(p) => p.id}
+ *     optionLabel={(p) => p.fullName}
+ *     optionHint={(p) => p.email}
+ *     value={patientId}
+ *     onChange={(id) => setPatientId(id ?? "")}
+ *     placeholder="Select a patient"
+ *   />
+ *
+ * The list query only runs while the popover is OPEN, so a form with five
+ * pickers costs zero requests until one is used. A closed picker therefore has
+ * no row to read the selected name from: it shows the label of whatever the
+ * user picked this session, and otherwise falls back to `selectedLabel` — hand
+ * it an `<EntityName …/>` to resolve an id loaded from the server.
+ *
+ * ONE page is fetched — never a "load more" that silently walks a whole table.
+ * Set `pageSize` in `buildRequest` to cover the browsable case and let search
+ * cover the rest; when the server reports more rows, `hasMoreOf` renders a
+ * "keep typing to narrow" hint instead of a dead end.
+ *
+ * With react-hook-form this is a custom control, not a native input, so
+ * `register()` has nothing to attach to — drive it through a `<Controller>`.
+ */
+
+/**
+ * EntityListHook — the shape `forge generate` gives every List RPC:
+ * `use<ListThing>(request, options?)`. Taking it as a prop is what lets the
+ * picker stay generic over the entity without importing a single service.
+ *
+ * The error is ConnectClientError, not React Query's default `Error`, and it
+ * is NOT a type parameter. This seam accepts a GENERATED hook, and every
+ * generated hook is bound to the transport whose error-normalize interceptor
+ * throws exactly this shape — so the error type is a fact here, not a choice.
+ * Leaving it to default to `Error` made a generated hook fail to satisfy this
+ * type outright (`Error` is missing code/status/retryable/reason), and it hid
+ * those four fields from anything this component wants to do with a failure.
+ *
+ * It is generic in TData, defaulting to the response, because a generated
+ * query hook is (`select` maps the response to TData, the way useQuery's
+ * does). A non-generic seam cannot be matched against a generic hook: the
+ * compiler infers TReq and TRes as `unknown` and rejects the hook outright.
+ */
+export type EntityListHook<TReq, TRes> = <TData = TRes>(
+  req: TReq,
+  options?: Partial<UseQueryOptions<TRes, ConnectClientError, TData>>,
+) => UseQueryResult<TData, ConnectClientError>;
+
+export interface EntityPickerProps<TItem, TReq, TRes> {
+  /** Currently selected id, or undefined/"" when nothing is picked. */
+  value: string | undefined;
+  /** Called with the picked id, or undefined when the selection is cleared. */
+  onChange: (value: string | undefined) => void;
+
+  /** The generated list hook, e.g. `useListPatients`. */
+  useList: EntityListHook<TReq, TRes>;
+  /** Build the list request from the (debounced) search text. */
+  buildRequest: (search: string) => TReq;
+  /** Read the rows out of the list response. */
+  itemsOf: (data: TRes) => readonly TItem[] | undefined;
+  /** True when the server holds more rows than this page — renders the narrow hint. */
+  hasMoreOf?: (data: TRes) => boolean;
+
+  /** The id an option resolves to (usually the primary key). */
+  optionValue: (item: TItem) => string;
+  /** The option's display name. */
+  optionLabel: (item: TItem) => string;
+  /** Optional secondary line (email, MRN, city) to disambiguate same-name rows. */
+  optionHint?: (item: TItem) => string | undefined;
+
+  /** What the closed picker shows for a value it hasn't seen a row for. */
+  selectedLabel?: ReactNode;
+  /** Shown when nothing is selected. */
+  placeholder?: string;
+  searchPlaceholder?: string;
+  /**
+   * Offer the search box. Defaults to true. Set false when the List RPC
+   * declares no free-text filter — `buildRequest` then has nowhere to put
+   * the text, and a search box that silently does nothing is worse than no
+   * search box. The popover still browses one page.
+   */
+  searchable?: boolean;
+  emptyMessage?: string;
+  /** Offer the ✕ that clears the selection. Defaults to true. */
+  clearable?: boolean;
+  disabled?: boolean;
+  /** Mark the control as invalid; toggles the red ring (matches <Input>). */
+  invalid?: boolean;
+  debounceMs?: number;
+  /** id of the trigger, so a sibling <Label htmlFor> can point at it. */
+  id?: string;
+  "aria-label"?: string;
+  /** id of the element describing the control — its error message. */
+  "aria-describedby"?: string;
+}
+
+export function EntityPicker<TItem, TReq, TRes>({
+  value,
+  onChange,
+  useList,
+  buildRequest,
+  itemsOf,
+  hasMoreOf,
+  optionValue,
+  optionLabel,
+  optionHint,
+  selectedLabel,
+  placeholder = "Select…",
+  searchPlaceholder = "Search…",
+  searchable = true,
+  emptyMessage = "No matches.",
+  clearable = true,
+  disabled = false,
+  invalid = false,
+  debounceMs = 300,
+  id,
+  "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
+}: EntityPickerProps<TItem, TReq, TRes>) {
+  const generatedId = useId();
+  const triggerId = id ?? `${generatedId}-trigger`;
+  const listboxId = `${generatedId}-listbox`;
+
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  // Labels for ids the user has picked this session, so a closed picker keeps
+  // showing a name instead of falling back to a raw id.
+  const [pickedLabels, setPickedLabels] = useState<Record<string, string>>({});
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const debouncedSearch = useDebouncedValue(search, debounceMs);
+
+  // Only query while open: a form with several pickers stays free until used.
+  // keepPreviousData holds the prior rows while a new search resolves, so the
+  // list dims instead of collapsing to a spinner on every keystroke.
+  const query = useList(buildRequest(debouncedSearch), {
+    enabled: open,
+    placeholderData: keepPreviousData,
+  });
+
+  const items = query.data === undefined ? [] : (itemsOf(query.data) ?? []);
+  const hasMore = query.data !== undefined && hasMoreOf !== undefined && hasMoreOf(query.data);
+
+  // A new page of rows invalidates the highlight — never leave it past the end.
+  //
+  // Adjusted DURING render, comparing against the data this component last
+  // rendered, rather than reset from an effect. React supports this directly
+  // for derived state: a setState while rendering re-runs this component
+  // immediately, before the DOM is touched and before children render, so
+  // nothing ever sees the stale index. Resetting from an effect instead
+  // commits the stale highlight first and corrects it in a second render
+  // pass, which is a visible flash of the wrong row on every search.
+  const [lastData, setLastData] = useState(query.data);
+  if (lastData !== query.data) {
+    setLastData(query.data);
+    setActiveIndex(0);
+  }
+
+  // Close on an outside click.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open]);
+
+  // Focus the search box when the popover opens — or the list itself when
+  // this picker has no search box to focus.
+  useEffect(() => {
+    if (!open) return;
+    if (searchable) searchRef.current?.focus();
+    else listRef.current?.focus();
+  }, [open, searchable]);
+
+  function commit(item: TItem) {
+    const picked = optionValue(item);
+    setPickedLabels((prev) => ({ ...prev, [picked]: optionLabel(item) }));
+    onChange(picked);
+    setOpen(false);
+    setSearch("");
+    // Focus was in the popover, which just unmounted: hand it back to the
+    // trigger, or the next Tab starts again from the top of the document.
+    triggerRef.current?.focus();
+  }
+
+  // Typed on HTMLElement, not HTMLInputElement: the same handler drives the
+  // search box AND the listbox (which takes focus when searchable is false).
+  function onSearchKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        setActiveIndex((i) => (items.length === 0 ? 0 : (i + 1) % items.length));
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setActiveIndex((i) => (items.length === 0 ? 0 : (i - 1 + items.length) % items.length));
+        break;
+      case "Home":
+        event.preventDefault();
+        setActiveIndex(0);
+        break;
+      case "End":
+        event.preventDefault();
+        setActiveIndex(Math.max(0, items.length - 1));
+        break;
+      case "Enter": {
+        const item = items[activeIndex];
+        if (item !== undefined) {
+          event.preventDefault();
+          commit(item);
+        }
+        break;
+      }
+      case "Escape":
+        event.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+        break;
+      default:
+        break;
+    }
+  }
+
+  const selected = value !== undefined && value !== "";
+  const triggerLabel: ReactNode = selected
+    ? (pickedLabels[value] ?? selectedLabel ?? value)
+    : placeholder;
+
+  return (
+    <div ref={rootRef} className="relative">
+      <div className="flex items-stretch gap-1">
+        <button
+          ref={triggerRef}
+          type="button"
+          id={triggerId}
+          // The error is announced through aria-describedby (the message's
+          // id). aria-invalid is not a supported state of the button role,
+          // so jsx-a11y rejects it here and assistive tech may ignore it.
+          aria-describedby={ariaDescribedBy}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-label={ariaLabel}
+          disabled={disabled}
+          onClick={() => setOpen((o) => !o)}
+          className={[
+            "flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-surface px-3",
+            "text-left text-sm focus:outline-none focus:ring-1",
+            "disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-ink-muted",
+            invalid
+              ? "border-danger focus:border-danger focus:ring-danger"
+              : "border-border-strong focus:border-accent focus:ring-accent",
+            selected ? "text-ink" : "text-ink-subtle",
+          ].join(" ")}
+        >
+          <span className="truncate">{triggerLabel}</span>
+          <svg
+            aria-hidden
+            className="h-4 w-4 shrink-0 text-ink-subtle"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        </button>
+        {clearable && selected && !disabled ? (
+          <button
+            type="button"
+            aria-label="Clear selection"
+            onClick={() => onChange(undefined)}
+            className="rounded-md border border-border px-2 text-ink-subtle hover:bg-surface-muted hover:text-ink-muted"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={2}
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        ) : null}
+      </div>
+
+      {open ? (
+        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-border bg-surface shadow-lg">
+          {searchable ? (
+            <div className="border-b border-border p-2">
+              <input
+                ref={searchRef}
+                type="text"
+                role="combobox"
+                aria-expanded={true}
+                aria-controls={listboxId}
+                aria-autocomplete="list"
+                aria-activedescendant={
+                  items[activeIndex] === undefined ? undefined : `${listboxId}-${activeIndex}`
+                }
+                aria-label={searchPlaceholder}
+                value={search}
+                placeholder={searchPlaceholder}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={onSearchKeyDown}
+                className="block h-9 w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+          ) : null}
+
+          {/* Without the search box the listbox itself takes focus, so arrow
+              keys / Enter / Escape keep working. */}
+          <ul
+            id={listboxId}
+            role="listbox"
+            ref={listRef}
+            tabIndex={searchable ? undefined : -1}
+            onKeyDown={searchable ? undefined : onSearchKeyDown}
+            className="max-h-60 overflow-y-auto py-1 focus:outline-none"
+          >
+            {query.isError ? (
+              <li className="px-3 py-2 text-sm text-danger">{userMessage(query.error)}</li>
+            ) : query.isPending ? (
+              <li className="px-3 py-2 text-sm text-ink-subtle">Loading…</li>
+            ) : items.length === 0 ? (
+              <li className="px-3 py-2 text-sm text-ink-subtle">{emptyMessage}</li>
+            ) : (
+              items.map((item, index) => {
+                const key = optionValue(item);
+                const hint = optionHint?.(item);
+                return (
+                  <li
+                    key={key}
+                    id={`${listboxId}-${index}`}
+                    role="option"
+                    aria-selected={key === value}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => commit(item)}
+                    className={[
+                      "cursor-pointer px-3 py-2 text-sm text-ink",
+                      index === activeIndex ? "bg-surface-muted" : "",
+                    ].join(" ")}
+                  >
+                    <span className="block truncate">{optionLabel(item)}</span>
+                    {hint ? (
+                      <span className="block truncate text-xs text-ink-subtle">{hint}</span>
+                    ) : null}
+                  </li>
+                );
+              })
+            )}
+          </ul>
+
+          {hasMore ? (
+            <p className="border-t border-border px-3 py-2 text-xs text-ink-subtle">
+              More matches than fit — keep typing to narrow.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}

@@ -1,0 +1,205 @@
+{
+  "version": "forge.dashboards/v1",
+  "sections": [
+    {
+      "id": "glance",
+      "title": "At a glance",
+      "description": "The range's runs and model calls. Each figure opens beside its change against the previous period."
+    },
+    {
+      "id": "daily",
+      "title": "By day",
+      "description": "Runs by outcome, model calls and tokens per UTC day."
+    }
+  ],
+  "id": "ai",
+  "title": "shop: AI overview",
+  "description": "Workflow runs, how many succeeded and how long they took, model calls, tokens and the gateway-reported cost, and each by day. From the GenAI spans in the environment's traces, so the range is bounded by their retention.",
+  "group": "ai",
+  "tags": [
+    "ai"
+  ],
+  "filters": [
+    {
+      "id": "env",
+      "label": "deployment.environment.name",
+      "field": "deployment.environment.name"
+    }
+  ],
+  "defaultRange": "7d",
+  "defaultCompare": "period",
+  "panels": [
+    {
+      "section": "glance",
+      "id": "runs",
+      "title": "Runs",
+      "description": "Distinct workflow runs (forge.ai.run.id) with any span in the range. A run that continues in a new trace stays one run. The trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "WITH ai AS (\n  SELECT Timestamp AS ts, TraceId, SpanName, StatusCode, StatusMessage, Duration,\n         SpanAttributes['gen_ai.operation.name'] AS op, SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AS is_call, SpanAttributes['gen_ai.operation.name'] = 'execute_tool' AS is_tool, (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled') AS failed,\n         if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS model, if(SpanAttributes['gen_ai.provider.name'] != '', SpanAttributes['gen_ai.provider.name'], SpanAttributes['gen_ai.system']) AS provider,\n         toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) AS in_tok, toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) AS out_tok, toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens'])) AS cache_read_tok,\n         toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd'])) AS cost, SpanAttributes['forge.ai.workflow.name'] AS workflow, SpanAttributes['forge.ai.run.id'] AS run_id,\n         SpanAttributes['error.type'] AS error_type, SpanAttributes['gen_ai.tool.name'] AS tool,\n         SpanAttributes['user.id'] AS user_id, SpanAttributes['org.id'] AS org_id\n  FROM otel_traces\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (SpanAttributes['gen_ai.operation.name'] != '' OR SpanAttributes['forge.ai.node.id'] != '' OR SpanAttributes['forge.ai.run.id'] != '')),\nruns AS (\n  SELECT run_id, anyIf(workflow, workflow != '') AS wf,\n         min(ts) AS started, max(addNanoseconds(ts, Duration)) AS ended,\n         (toUnixTimestamp64Nano(ended) - toUnixTimestamp64Nano(started)) / 1e9 AS seconds,\n         countIf(op = 'invoke_workflow') AS segments,\n         multiIf(segments = 0, 'In progress',\n                 argMaxIf(error_type, ts, op = 'invoke_workflow') = 'canceled', 'Cancelled',\n                 argMaxIf(failed, ts, op = 'invoke_workflow'), 'Failed', 'Succeeded') AS outcome,\n         countIf(is_call) AS calls, countIf(is_tool) AS tools,\n         sumIf(in_tok, is_call) AS run_in, sumIf(out_tok, is_call) AS run_out, sumIf(cost, is_call) AS run_cost\n  FROM ai WHERE run_id != '' GROUP BY run_id)\nSELECT count() AS \"Runs\" FROM runs",
+      "trendSql": "WITH ai AS (\n  SELECT Timestamp AS ts, TraceId, SpanName, StatusCode, StatusMessage, Duration,\n         SpanAttributes['gen_ai.operation.name'] AS op, SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AS is_call, SpanAttributes['gen_ai.operation.name'] = 'execute_tool' AS is_tool, (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled') AS failed,\n         if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS model, if(SpanAttributes['gen_ai.provider.name'] != '', SpanAttributes['gen_ai.provider.name'], SpanAttributes['gen_ai.system']) AS provider,\n         toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) AS in_tok, toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) AS out_tok, toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens'])) AS cache_read_tok,\n         toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd'])) AS cost, SpanAttributes['forge.ai.workflow.name'] AS workflow, SpanAttributes['forge.ai.run.id'] AS run_id,\n         SpanAttributes['error.type'] AS error_type, SpanAttributes['gen_ai.tool.name'] AS tool,\n         SpanAttributes['user.id'] AS user_id, SpanAttributes['org.id'] AS org_id\n  FROM otel_traces\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (SpanAttributes['gen_ai.operation.name'] != '' OR SpanAttributes['forge.ai.node.id'] != '' OR SpanAttributes['forge.ai.run.id'] != '')),\nruns AS (\n  SELECT run_id, anyIf(workflow, workflow != '') AS wf,\n         min(ts) AS started, max(addNanoseconds(ts, Duration)) AS ended,\n         (toUnixTimestamp64Nano(ended) - toUnixTimestamp64Nano(started)) / 1e9 AS seconds,\n         countIf(op = 'invoke_workflow') AS segments,\n         multiIf(segments = 0, 'In progress',\n                 argMaxIf(error_type, ts, op = 'invoke_workflow') = 'canceled', 'Cancelled',\n                 argMaxIf(failed, ts, op = 'invoke_workflow'), 'Failed', 'Succeeded') AS outcome,\n         countIf(is_call) AS calls, countIf(is_tool) AS tools,\n         sumIf(in_tok, is_call) AS run_in, sumIf(out_tok, is_call) AS run_out, sumIf(cost, is_call) AS run_cost\n  FROM ai WHERE run_id != '' GROUP BY run_id)\nSELECT toDate(started) AS day, count() AS \"Runs\" FROM runs GROUP BY day ORDER BY day",
+      "display": {
+        "color": "blue",
+        "exact": true
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "success-rate",
+      "title": "Run success rate",
+      "description": "Succeeded runs over finished ones (succeeded or failed), by the status of each run's last workflow segment. Cancelled runs, and runs whose workflow span is not reported yet, are neither.",
+      "kind": "sql",
+      "sql": "WITH ai AS (\n  SELECT Timestamp AS ts, TraceId, SpanName, StatusCode, StatusMessage, Duration,\n         SpanAttributes['gen_ai.operation.name'] AS op, SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AS is_call, SpanAttributes['gen_ai.operation.name'] = 'execute_tool' AS is_tool, (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled') AS failed,\n         if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS model, if(SpanAttributes['gen_ai.provider.name'] != '', SpanAttributes['gen_ai.provider.name'], SpanAttributes['gen_ai.system']) AS provider,\n         toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) AS in_tok, toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) AS out_tok, toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens'])) AS cache_read_tok,\n         toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd'])) AS cost, SpanAttributes['forge.ai.workflow.name'] AS workflow, SpanAttributes['forge.ai.run.id'] AS run_id,\n         SpanAttributes['error.type'] AS error_type, SpanAttributes['gen_ai.tool.name'] AS tool,\n         SpanAttributes['user.id'] AS user_id, SpanAttributes['org.id'] AS org_id\n  FROM otel_traces\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (SpanAttributes['gen_ai.operation.name'] != '' OR SpanAttributes['forge.ai.node.id'] != '' OR SpanAttributes['forge.ai.run.id'] != '')),\nruns AS (\n  SELECT run_id, anyIf(workflow, workflow != '') AS wf,\n         min(ts) AS started, max(addNanoseconds(ts, Duration)) AS ended,\n         (toUnixTimestamp64Nano(ended) - toUnixTimestamp64Nano(started)) / 1e9 AS seconds,\n         countIf(op = 'invoke_workflow') AS segments,\n         multiIf(segments = 0, 'In progress',\n                 argMaxIf(error_type, ts, op = 'invoke_workflow') = 'canceled', 'Cancelled',\n                 argMaxIf(failed, ts, op = 'invoke_workflow'), 'Failed', 'Succeeded') AS outcome,\n         countIf(is_call) AS calls, countIf(is_tool) AS tools,\n         sumIf(in_tok, is_call) AS run_in, sumIf(out_tok, is_call) AS run_out, sumIf(cost, is_call) AS run_cost\n  FROM ai WHERE run_id != '' GROUP BY run_id)\nSELECT round(countIf(outcome = 'Succeeded') / nullIf(countIf(outcome IN ('Succeeded', 'Failed')), 0), 4) AS \"Success rate\" FROM runs",
+      "display": {
+        "color": "blue"
+      },
+      "unit": "percent",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "run-p50",
+      "title": "Run duration (p50)",
+      "description": "The median run's wall time, from its first span to the end of its last, across every segment. Time a run spent paused (an approval, a wait) is included.",
+      "kind": "sql",
+      "sql": "WITH ai AS (\n  SELECT Timestamp AS ts, TraceId, SpanName, StatusCode, StatusMessage, Duration,\n         SpanAttributes['gen_ai.operation.name'] AS op, SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AS is_call, SpanAttributes['gen_ai.operation.name'] = 'execute_tool' AS is_tool, (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled') AS failed,\n         if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS model, if(SpanAttributes['gen_ai.provider.name'] != '', SpanAttributes['gen_ai.provider.name'], SpanAttributes['gen_ai.system']) AS provider,\n         toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) AS in_tok, toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) AS out_tok, toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens'])) AS cache_read_tok,\n         toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd'])) AS cost, SpanAttributes['forge.ai.workflow.name'] AS workflow, SpanAttributes['forge.ai.run.id'] AS run_id,\n         SpanAttributes['error.type'] AS error_type, SpanAttributes['gen_ai.tool.name'] AS tool,\n         SpanAttributes['user.id'] AS user_id, SpanAttributes['org.id'] AS org_id\n  FROM otel_traces\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (SpanAttributes['gen_ai.operation.name'] != '' OR SpanAttributes['forge.ai.node.id'] != '' OR SpanAttributes['forge.ai.run.id'] != '')),\nruns AS (\n  SELECT run_id, anyIf(workflow, workflow != '') AS wf,\n         min(ts) AS started, max(addNanoseconds(ts, Duration)) AS ended,\n         (toUnixTimestamp64Nano(ended) - toUnixTimestamp64Nano(started)) / 1e9 AS seconds,\n         countIf(op = 'invoke_workflow') AS segments,\n         multiIf(segments = 0, 'In progress',\n                 argMaxIf(error_type, ts, op = 'invoke_workflow') = 'canceled', 'Cancelled',\n                 argMaxIf(failed, ts, op = 'invoke_workflow'), 'Failed', 'Succeeded') AS outcome,\n         countIf(is_call) AS calls, countIf(is_tool) AS tools,\n         sumIf(in_tok, is_call) AS run_in, sumIf(out_tok, is_call) AS run_out, sumIf(cost, is_call) AS run_cost\n  FROM ai WHERE run_id != '' GROUP BY run_id)\nSELECT round(quantile(0.5)(seconds), 1) AS \"p50\" FROM runs WHERE outcome != 'In progress'",
+      "display": {
+        "color": "slate"
+      },
+      "unit": "s",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "run-p95",
+      "title": "Run duration (p95)",
+      "description": "The 95th percentile run's wall time, measured as the p50.",
+      "kind": "sql",
+      "sql": "WITH ai AS (\n  SELECT Timestamp AS ts, TraceId, SpanName, StatusCode, StatusMessage, Duration,\n         SpanAttributes['gen_ai.operation.name'] AS op, SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AS is_call, SpanAttributes['gen_ai.operation.name'] = 'execute_tool' AS is_tool, (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled') AS failed,\n         if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS model, if(SpanAttributes['gen_ai.provider.name'] != '', SpanAttributes['gen_ai.provider.name'], SpanAttributes['gen_ai.system']) AS provider,\n         toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) AS in_tok, toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) AS out_tok, toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens'])) AS cache_read_tok,\n         toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd'])) AS cost, SpanAttributes['forge.ai.workflow.name'] AS workflow, SpanAttributes['forge.ai.run.id'] AS run_id,\n         SpanAttributes['error.type'] AS error_type, SpanAttributes['gen_ai.tool.name'] AS tool,\n         SpanAttributes['user.id'] AS user_id, SpanAttributes['org.id'] AS org_id\n  FROM otel_traces\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (SpanAttributes['gen_ai.operation.name'] != '' OR SpanAttributes['forge.ai.node.id'] != '' OR SpanAttributes['forge.ai.run.id'] != '')),\nruns AS (\n  SELECT run_id, anyIf(workflow, workflow != '') AS wf,\n         min(ts) AS started, max(addNanoseconds(ts, Duration)) AS ended,\n         (toUnixTimestamp64Nano(ended) - toUnixTimestamp64Nano(started)) / 1e9 AS seconds,\n         countIf(op = 'invoke_workflow') AS segments,\n         multiIf(segments = 0, 'In progress',\n                 argMaxIf(error_type, ts, op = 'invoke_workflow') = 'canceled', 'Cancelled',\n                 argMaxIf(failed, ts, op = 'invoke_workflow'), 'Failed', 'Succeeded') AS outcome,\n         countIf(is_call) AS calls, countIf(is_tool) AS tools,\n         sumIf(in_tok, is_call) AS run_in, sumIf(out_tok, is_call) AS run_out, sumIf(cost, is_call) AS run_cost\n  FROM ai WHERE run_id != '' GROUP BY run_id)\nSELECT round(quantile(0.95)(seconds), 1) AS \"p95\" FROM runs WHERE outcome != 'In progress'",
+      "display": {
+        "color": "slate"
+      },
+      "unit": "s",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "calls",
+      "title": "Model calls",
+      "description": "Model calls (gen_ai.operation.name chat, text_completion, generate_content or embeddings) in the range, in a run or not. The trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "SELECT count() AS \"Model calls\" FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']",
+      "trendSql": "SELECT toDate(Timestamp) AS day, count() AS \"Model calls\" FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] GROUP BY day ORDER BY day",
+      "display": {
+        "color": "blue",
+        "exact": true
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "tokens",
+      "title": "Tokens",
+      "description": "Input and output tokens of the range's model calls (gen_ai.usage.input_tokens + output_tokens). The trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "SELECT sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) + toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])) AS \"Tokens\" FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']",
+      "trendSql": "SELECT toDate(Timestamp) AS day, sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) + toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])) AS \"Tokens\" FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] GROUP BY day ORDER BY day",
+      "display": {
+        "color": "cyan"
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "cache-hit",
+      "title": "Prompt cache hit ratio",
+      "description": "Input tokens read from the provider's prompt cache over all input tokens. Providers that report no cache reads count as 0.",
+      "kind": "sql",
+      "sql": "SELECT round(sum(toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens']))) / nullIf(sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens'])), 0), 4) AS \"Cache hit\" FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']",
+      "display": {
+        "color": "violet"
+      },
+      "unit": "percent",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "reported-cost",
+      "title": "Gateway-reported cost (USD)",
+      "description": "The sum of the cost the provider or gateway reported on each model call (forge.ai.cost.usd), in US dollars. Calls with no reported cost (a provider called directly with your own key) add nothing, and a range with none shows no figure. Never an estimate, and not an invoice.",
+      "kind": "sql",
+      "sql": "SELECT round(sum(toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd']))), 4) AS \"Reported cost\" FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']",
+      "display": {
+        "color": "fuchsia"
+      },
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "daily",
+      "id": "runs-by-outcome",
+      "title": "Runs by outcome",
+      "description": "Runs by the UTC day they started and how they ended: succeeded, failed, cancelled, or in progress (the workflow span is not reported yet).",
+      "kind": "sql",
+      "sql": "WITH ai AS (\n  SELECT Timestamp AS ts, TraceId, SpanName, StatusCode, StatusMessage, Duration,\n         SpanAttributes['gen_ai.operation.name'] AS op, SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AS is_call, SpanAttributes['gen_ai.operation.name'] = 'execute_tool' AS is_tool, (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled') AS failed,\n         if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS model, if(SpanAttributes['gen_ai.provider.name'] != '', SpanAttributes['gen_ai.provider.name'], SpanAttributes['gen_ai.system']) AS provider,\n         toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) AS in_tok, toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) AS out_tok, toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens'])) AS cache_read_tok,\n         toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd'])) AS cost, SpanAttributes['forge.ai.workflow.name'] AS workflow, SpanAttributes['forge.ai.run.id'] AS run_id,\n         SpanAttributes['error.type'] AS error_type, SpanAttributes['gen_ai.tool.name'] AS tool,\n         SpanAttributes['user.id'] AS user_id, SpanAttributes['org.id'] AS org_id\n  FROM otel_traces\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (SpanAttributes['gen_ai.operation.name'] != '' OR SpanAttributes['forge.ai.node.id'] != '' OR SpanAttributes['forge.ai.run.id'] != '')),\nruns AS (\n  SELECT run_id, anyIf(workflow, workflow != '') AS wf,\n         min(ts) AS started, max(addNanoseconds(ts, Duration)) AS ended,\n         (toUnixTimestamp64Nano(ended) - toUnixTimestamp64Nano(started)) / 1e9 AS seconds,\n         countIf(op = 'invoke_workflow') AS segments,\n         multiIf(segments = 0, 'In progress',\n                 argMaxIf(error_type, ts, op = 'invoke_workflow') = 'canceled', 'Cancelled',\n                 argMaxIf(failed, ts, op = 'invoke_workflow'), 'Failed', 'Succeeded') AS outcome,\n         countIf(is_call) AS calls, countIf(is_tool) AS tools,\n         sumIf(in_tok, is_call) AS run_in, sumIf(out_tok, is_call) AS run_out, sumIf(cost, is_call) AS run_cost\n  FROM ai WHERE run_id != '' GROUP BY run_id)\nSELECT toDate(started) AS day, outcome, count() AS \"Runs\"\nFROM runs GROUP BY day, outcome ORDER BY day, outcome",
+      "minStep": "1d",
+      "display": {
+        "style": "bars",
+        "stack": true,
+        "colors": {
+          "Cancelled": "slate",
+          "Failed": "danger",
+          "In progress": "violet",
+          "Succeeded": "blue"
+        }
+      },
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "daily",
+      "id": "calls-by-day",
+      "title": "Model calls by provider",
+      "description": "Model calls each UTC day by provider (gen_ai.provider.name).",
+      "kind": "sql",
+      "sql": "SELECT toDate(Timestamp) AS day, if(SpanAttributes['gen_ai.provider.name'] != '', SpanAttributes['gen_ai.provider.name'], SpanAttributes['gen_ai.system']) AS provider, count() AS \"Calls\"\nFROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']\nGROUP BY day, provider ORDER BY day, provider",
+      "minStep": "1d",
+      "display": {
+        "style": "bars",
+        "stack": true
+      },
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "daily",
+      "id": "tokens-by-day",
+      "title": "Tokens by day",
+      "description": "Each UTC day's input tokens (less cache reads), cache reads and output tokens.",
+      "kind": "sql",
+      "sql": "SELECT toDate(Timestamp) AS day,\n       sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens'])) - least(sum(toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens']))), sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']))) AS \"Input\",\n       sum(toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens']))) AS \"Cache read\", sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])) AS \"Output\"\nFROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']\nGROUP BY day ORDER BY day",
+      "minStep": "1d",
+      "display": {
+        "style": "bars",
+        "stack": true,
+        "colors": {
+          "Cache read": "violet",
+          "Input": "cyan",
+          "Output": "amber"
+        }
+      },
+      "width": 24,
+      "height": 8
+    }
+  ]
+}
