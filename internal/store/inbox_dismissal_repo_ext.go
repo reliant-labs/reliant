@@ -282,7 +282,21 @@ SELECT * FROM (
         COALESCE(f.error_message, ''),
         '',
         0
-    FROM chats_with_activity c
+    FROM (
+        -- display_state 4 is exactly a root run with state 3 and stop
+        -- reason 3, and paused runs are few in the whole database: find the
+        -- caller's from idx_workflows_state, then read only those chats
+        -- through the view (a root run is a run of its own chat). Fenced
+        -- like the approval branch: joined directly, the planner walked all
+        -- of the caller's chats, computing each one's launch kind and
+        -- display state, 45-60ms for 2,000 automation chats (reliant#2736).
+        SELECT ch.id FROM workflows pw
+        JOIN chats ch ON ch.id = pw.chat_id AND ch.workflow_id = pw.id
+        WHERE pw.state = 3 AND pw.stop_reason = 3
+          AND ch.user_id = $1::text AND ch.state IS DISTINCT FROM 3
+        OFFSET 0
+    ) pc
+    JOIN chats_with_activity c ON c.id = pc.id
     JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
     JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
     LEFT JOIN LATERAL (
@@ -330,6 +344,11 @@ SELECT * FROM (
       AND c.state IS DISTINCT FROM 3
 ) inbox
 ORDER BY kind, waiting_since, item_key`
+
+// InboxPendingSQL returns ListInboxPending's statement, with $1 the user and
+// $2 the unattended launch kinds, so a plan test runs the exact statement the
+// Inbox does.
+func InboxPendingSQL() string { return listInboxPendingSQL }
 
 // ListInboxPending returns the user's pending approvals, questions,
 // waiting-for-machine runs, launch-failed automations and paused automation

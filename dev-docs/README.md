@@ -13,6 +13,7 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 - `action-pins.md` — the reviewed action-to-commit pins in privileged workflows, how to change one, and the live verification after a change.
 - `observability.md` — how reliant's own server binaries export traces, metrics and logs, and the known gaps.
 - `redundant-index-drop-rollout.md` — the post-deploy plan check for the 2026-11-10 `chat_updates`/`messages` index drops, and the fix-forward migration that recreates one.
+- `inbox-firings-rollout.md` — post-deploy ListInbox latency check for reliant#2736's bounded Inbox reads and `idx_chats_daemon_blocked`, its failure criteria, and the application rollback (the index stays).
 - `machine-plan-change-rollout.md` — the machine plan change's live check, and how to stop confirmations and reconcile Stripe if it misbehaves.
 - `integration-manifests.md` — authoring an integration manifest: the generated JSON Schema, fragment layout, `$ref`, event conformance.
 - `backlog.md` — product proposals and deferred designs moved out of the issue tracker (2026-11-04), each under its original issue number.
