@@ -208,6 +208,7 @@ export const DAEMON_CONNECTING_REASONS = [
   "daemon_suspended",
   "daemon_waking",
   "daemon_not_connected",
+  "daemon_reconnecting",
 ] as const satisfies readonly ErrorReason[];
 
 /**
