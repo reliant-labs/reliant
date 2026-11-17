@@ -500,8 +500,17 @@ function PRODUCT_OVERVIEW_ANSWERS(): Record<string, (q: Q) => Answer> {
   };
 }
 
+// The New and Returning figures' subtitles (subtitleSql: "since <date>" while
+// sign-ups are reported only from inside the range). shop has reported its
+// sign-ups for its whole history, so none applies: an empty answer draws none.
+const NO_SUBTITLE = (): Answer => ({ columns: [], rows: [] });
+const SUBTITLE_ANSWERS: Record<string, (q: Q) => Answer> = Object.fromEntries(
+  ["users/new", "users/returning", "overview/new-7d", "overview/returning-7d", "product-overview/active-new-returning"].map((key) => [`${key}.subtitle`, NO_SUBTITLE])
+);
+
 const ANSWERS: Record<string, (q: Q) => Answer> = {
   ...PRODUCT_OVERVIEW_ANSWERS(),
+  ...SUBTITLE_ANSWERS,
   // Overview: Traffic.
   "overview/live-visitors": (q) => figures(["Visitors now", Math.round(visitorMix(q.envs, q.to - 7 * MINUTE, q.to).visitors)]),
   "overview/visitors": (q) => figures(["Visitors", traffic(q).visitors]),

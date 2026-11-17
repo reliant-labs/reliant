@@ -22,9 +22,9 @@
 # conflict stops the script: resolve it in the printed worktree, commit there,
 # and rerun with RESUME=<that worktree>. The file this repo carries was made with
 #
-#   scripts/demo/regen-forge-dashboards.sh ../../../forge fe64733d8
+#   scripts/demo/regen-forge-dashboards.sh ../../../forge 4bed911a4
 #
-# (forge #2289 at fe64733d8: the Product analytics Overview, bar lists, KPI
+# (forge #2289 at 4bed911a4, rebased on #2288: the Product analytics Overview, bar lists, KPI
 # cards, steps funnels, drill links and Needs attention on the built-in
 # product dashboards). Earlier it was made from #2075 (the built-in dashboards)
 # merged with #2111 (the Releases dashboard); both are on forge's main since.

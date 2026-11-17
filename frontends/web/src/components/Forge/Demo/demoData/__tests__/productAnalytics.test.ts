@@ -73,6 +73,8 @@ describe.each(WHEN)("the product analytics dashboards, %s", (_when, at) => {
         const result = await read(id, panel.id, week);
         // A flag nobody evaluated would be empty; shop's express-checkout is evaluated every day.
         expect(result.rows.length + result.series.length, `${id}/${panel.id}`).toBeGreaterThan(0);
+        // A subtitle is answered, and empty: shop reports sign-ups for its whole history.
+        if (panel.subtitleSql) expect(PRODUCT_ANALYTICS_ANSWERS, `${id}/${panel.id} subtitle`).toContain(`${id}/${panel.id}.subtitle`);
         if (panel.trendSql) {
           expect(PRODUCT_ANALYTICS_ANSWERS).toContain(`${id}/${panel.id}.trend`);
           expect((await read(id, panel.id, week, [], true)).series.length, `${id}/${panel.id} trend`).toBeGreaterThan(0);
