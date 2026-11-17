@@ -143,6 +143,52 @@ func TestComputeHealth_RecoveredFailureSaysWhenAndThatLaterRunsSucceeded(t *test
 	assert.Equal(t, "trader-bot.yaml does not parse", current.LastFailureDetail)
 }
 
+// A run that completed only because its own failure path ran is a failure to
+// its trigger's health, not a recovery (reliant#2753): community-watch's runs
+// whose failure-reporting node failed with channel_not_found read as
+// "degraded, 2 later run(s) succeeded" while every one of them had failed.
+func TestComputeHealth_AHandledFailureIsAFailureNotARecovery(t *testing.T) {
+	handled := func() *core.TriggerEventWithRun {
+		f := launched(core.RunDisplayCompleted)
+		f.Event.RunStatus = core.TriggerRunCompleted
+		f.Event.RunOutcome = core.RunOutcomeFailureHandled
+		f.Event.OutcomeDetail = `the run completed, but node "post_failed" failed and its failure path ran: channel_not_found`
+		return f
+	}
+	clean := func() *core.TriggerEventWithRun {
+		f := launched(core.RunDisplayCompleted)
+		f.Event.RunStatus = core.TriggerRunCompleted
+		f.Event.RunOutcome = core.RunOutcomeSucceeded
+		return f
+	}
+
+	got, detail := resolveFiring(handled())
+	assert.Equal(t, resultFailure, got)
+	assert.Contains(t, detail, "channel_not_found")
+
+	got, _ = resolveFiring(clean())
+	assert.Equal(t, resultSuccess, got)
+
+	// A completed run recorded before run_outcome existed is a success, as it was.
+	legacy := launched(core.RunDisplayCompleted)
+	legacy.Event.RunStatus = core.TriggerRunCompleted
+	got, _ = resolveFiring(legacy)
+	assert.Equal(t, resultSuccess, got)
+
+	// The prod shape: an old launch failure, then two runs whose failure
+	// path ran. That is a trigger failing now, not one that recovered.
+	health := ComputeHealth([]*core.TriggerEventWithRun{handled(), handled(), outcomeOnly(core.TriggerEventFailed, "channel_not_found")})
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING, health.Status)
+	assert.Equal(t, int32(3), health.ConsecutiveFailures)
+	assert.NotContains(t, health.LastFailureDetail, "later run(s) succeeded")
+	assert.Contains(t, health.LastFailureDetail, "post_failed")
+
+	// And a clean run after a handled one does recover it.
+	recovered := ComputeHealth([]*core.TriggerEventWithRun{clean(), handled()})
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED, recovered.Status)
+	assert.Zero(t, recovered.ConsecutiveFailures)
+}
+
 func TestComputeHealth_OnlyReadsTheWindow(t *testing.T) {
 	// A failure just outside the 10-firing window must not count.
 	firings := make([]*core.TriggerEventWithRun, 0, HealthWindow+1)

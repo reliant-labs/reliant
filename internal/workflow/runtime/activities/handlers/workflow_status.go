@@ -67,6 +67,10 @@ type WorkflowStatusInput struct {
 	// newest attempt is marked failed (MarkDeclaredFailureNode), so the run's
 	// diagnostics name where it ended instead of finding no failed node.
 	OutcomeNode string `json:"outcome_node,omitempty"`
+	// RunStartedAtMs is when the run began (unix ms), on a "completed"
+	// status: its outcome is judged from the node attempts since then
+	// (run_outcome.go). Zero reads every attempt the run has.
+	RunStartedAtMs int64 `json:"run_started_at_ms,omitempty"`
 	// Error is why the run failed, on a "failed" status. It becomes the
 	// source run's error in a workflow-event trigger's payload.
 	Error string `json:"error,omitempty"`
@@ -81,6 +85,10 @@ type WorkflowStatusInput struct {
 	// machine connects. A pause without it is someone else's and clears the
 	// mark.
 	PausedForMachine bool `json:"paused_for_machine,omitempty"`
+
+	// resolved is the run's outcome, judged by Execute before anything is
+	// written (resolveRunOutcome). Never sent.
+	resolved runOutcome
 }
 
 // WorkflowStatusOutput is the output from WorkflowStatus activity
@@ -116,6 +124,9 @@ func (a *WorkflowStatusActivity) Name() string {
 
 // Execute writes workflow status to chat_updates table, updates chat state, and tracks workflow hierarchy
 func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStatusInput) (WorkflowStatusOutput, error) {
+	// How the run ended, judged before the status write it lands with.
+	input.resolved = a.resolveRunOutcome(ctx, input)
+
 	// Track workflow in database for parent-child hierarchy
 	if err := a.trackWorkflow(ctx, input); err != nil {
 		if terminalWriteMustRetry(input.Status, err) {
@@ -349,6 +360,29 @@ func (a *WorkflowStatusActivity) recordLaunchRunStatus(ctx context.Context, inpu
 	if err := a.repo.SetLaunchEventRunStatus(ctx, input.ChatID, status); err != nil {
 		logging.WarnContext(ctx, "[WorkflowStatus] Failed to record the launch run's status", "chat_id", input.ChatID, "status", status, "error", err)
 	}
+	// Beside the status, how the run ended for the trigger's health: a run
+	// that completed only because its failure path ran is not a success
+	// (reliant#2753), and the node it went on past is the failure's detail.
+	if input.resolved.outcome == "" {
+		return
+	}
+	if err := a.repo.SetLaunchEventRunOutcome(ctx, input.ChatID, input.resolved.outcome); err != nil {
+		logging.WarnContext(ctx, "[WorkflowStatus] Failed to record the launch run's outcome", "chat_id", input.ChatID, "outcome", input.resolved.outcome, "error", err)
+	}
+	if detail := handledFailureDetail(input.resolved.handled); detail != "" {
+		if err := a.repo.SetLaunchEventRunFailureDetail(ctx, input.ChatID, detail); err != nil {
+			logging.WarnContext(ctx, "[WorkflowStatus] Failed to record the launch run's handled failure", "chat_id", input.ChatID, "error", err)
+		}
+	}
+}
+
+// setRunOutcome writes the run's judged outcome on its row, in the terminal
+// status's transaction. Nothing to write for a status with no outcome.
+func (a *WorkflowStatusActivity) setRunOutcome(ctx context.Context, input WorkflowStatusInput) error {
+	if input.resolved.outcome == "" {
+		return nil
+	}
+	return a.repo.SetWorkflowRunOutcome(ctx, input.WorkflowID, input.resolved.outcome)
 }
 
 // policyTriggerPauser pauses a trigger with a system reason; paused is false
@@ -532,6 +566,9 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 			// carry it (no node attempt), and every surface that reads the
 			// run (GetRun, get_run, the run page) reads it from here.
 			if err := a.repo.SetWorkflowFailureDetail(txCtx, input.WorkflowID, rundiagnostics.ErrorText(input.Error)); err != nil {
+				return err
+			}
+			if err := a.setRunOutcome(txCtx, input); err != nil {
 				return err
 			}
 			if err := a.cascadeTerminalStatus(txCtx, input.WorkflowID, db.StopReasonFailed); err != nil {
@@ -747,6 +784,10 @@ func (a *WorkflowStatusActivity) markWorkflowCompleted(ctx context.Context, inpu
 			if err := a.repo.SetWorkflowOutcome(txCtx, input.WorkflowID, input.Outcome); err != nil {
 				return err
 			}
+		}
+		// So does how it ended for its health (run_outcome.go).
+		if err := a.setRunOutcome(txCtx, input); err != nil {
+			return err
 		}
 		// Only the chat's active root workflow transitions the chat; a
 		// completing child (spawn/fork) must never switch the chat out from

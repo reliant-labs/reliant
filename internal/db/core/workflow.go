@@ -56,7 +56,26 @@ type Workflow struct {
 	// the only record of a run that failed before any node ran, which has no
 	// node attempt to carry its error. nil when the run did not fail.
 	FailureDetail *string `json:"failure_detail,omitempty"`
+
+	// RunOutcome is how the run ended for whoever judges whether it worked
+	// (a RunOutcome* value): written with the terminal status by the
+	// WorkflowStatus activity, and never declared. Unlike Status it tells a
+	// clean completion from one where the run's own failure path handled a
+	// node that failed (reliant#2753). nil while the run is live, when it was
+	// cancelled, and on a run that ended before the column existed.
+	RunOutcome *string `json:"run_outcome,omitempty"`
 }
+
+// How a run ended (Workflow.RunOutcome, TriggerEvent.RunOutcome).
+const (
+	// RunOutcomeSucceeded: completed, and no node's last attempt failed.
+	RunOutcomeSucceeded = "succeeded"
+	// RunOutcomeFailed: failed, or completed into a declared outcome: failure.
+	RunOutcomeFailed = "failed"
+	// RunOutcomeFailureHandled: completed, but a node's last attempt failed
+	// and the run went on past it.
+	RunOutcomeFailureHandled = "failure_handled"
+)
 
 // WorkflowCheckpoint records the position a workflow run has reached: the last
 // top-level node it entered and, for loop nodes, the loop iteration in flight.

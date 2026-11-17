@@ -199,6 +199,55 @@ ORDER BY se.created_at DESC, se.id DESC`, workflowID, limit).Scan(ctx, &rows)
 	return stepExecutionsToCore(rows), nil
 }
 
+// HandledNodeFailure is a node of a completed run whose last attempt failed:
+// the run went on past it, so its failure was handled (core.RunOutcomeFailureHandled).
+type HandledNodeFailure struct {
+	// Node is the node's path in the run (its step id at the top level).
+	Node string `bun:"node"`
+	// Error is the error its last attempt recorded.
+	Error string `bun:"error"`
+}
+
+// FirstHandledNodeFailure returns a node of run workflowID, or of a run under
+// it, whose LAST attempt since since failed, or nil when there is none. A
+// root run's workflow id is reused by every run of its chat, so since (the
+// run's start) keeps an earlier run's attempts out; the zero time reads every
+// attempt. A node retried to
+// success has a successful last attempt and is not one. Each node is told
+// apart by its path and loop iteration, so one failed iteration of a parallel
+// loop counts even when its siblings passed. The runtime's own bookkeeping
+// steps, and a step that was skipped, are not nodes of the run's work.
+//
+// It reads the run when it has ended, so the node it finds is one the run went
+// on past: a run that a node failure ended is FAILED, not handled. Newest
+// failure first.
+func FirstHandledNodeFailure(ctx context.Context, db orm.Context, workflowID string, since time.Time) (*HandledNodeFailure, error) {
+	var rows []HandledNodeFailure
+	err := db.Bun().NewRaw(`WITH RECURSIVE tree AS (
+    SELECT id, chat_id FROM workflows WHERE id = ?0
+    UNION ALL SELECT w.id, w.chat_id FROM workflows w JOIN tree t ON w.parent_id = t.id AND w.chat_id = t.chat_id
+), last_attempt AS (
+    SELECT DISTINCT ON (se.workflow_id, coalesce(se.node_path, se.step_id), coalesce(se.loop_node_id, ''), coalesce(se.loop_iteration, -1))
+           coalesce(se.node_path, se.step_id) AS node, se.success, se.error_message, se.created_at, se.id
+    FROM step_executions se JOIN tree t ON t.id = se.workflow_id
+    WHERE se.activity_name <> ALL(ARRAY['WorkflowStatus', 'FetchThreadResult', 'Cleanup', 'WorkflowError', 'SkippedStep']::text[])
+      AND se.created_at >= ?1
+    ORDER BY se.workflow_id, coalesce(se.node_path, se.step_id), coalesce(se.loop_node_id, ''), coalesce(se.loop_iteration, -1),
+             se.created_at DESC, se.id DESC
+)
+SELECT node, coalesce(error_message, '') AS error FROM last_attempt
+WHERE success = 0 AND coalesce(error_message, '') <> ''
+ORDER BY created_at DESC, id DESC
+LIMIT 1`, workflowID, since).Scan(ctx, &rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return &rows[0], nil
+}
+
 // DeclaredFailureError is the error MarkDeclaredFailureNode records on the
 // node a run ended at with outcome: failure. rundiagnostics appends the text
 // a save_message node wrote.

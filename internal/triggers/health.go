@@ -259,9 +259,21 @@ func resolveFiring(f *core.TriggerEventWithRun) (firingResult, string) {
 }
 
 // resolveRecordedRun reads a launched firing whose fired run has ended.
+//
+// A run that completed only because its own failure path ran — a node failed
+// and the run went on past it (core.RunOutcomeFailureHandled) — is a failure
+// here, not a success: the automation's work did not all happen, and counting
+// it as a recovery is how a trigger whose every run failed delivery read as
+// "degraded, 2 later run(s) succeeded" (reliant#2753).
 func resolveRecordedRun(f *core.TriggerEventWithRun) (firingResult, string) {
 	switch f.Event.RunStatus {
 	case core.TriggerRunCompleted:
+		if f.Event.RunOutcome == core.RunOutcomeFailureHandled {
+			if f.Event.OutcomeDetail != "" {
+				return resultFailure, f.Event.OutcomeDetail
+			}
+			return resultFailure, "the run completed, but a node in it failed and its failure path ran"
+		}
 		return resultSuccess, ""
 	case core.TriggerRunFailed:
 		if f.Event.OutcomeDetail != "" {

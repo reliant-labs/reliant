@@ -91,6 +91,8 @@ type RunListItem struct {
 	LastActive   time.Time
 	CompletedAt  *time.Time
 	Outcome      string
+	// RunOutcome is the root workflow's Workflow.RunOutcome, "" when unset.
+	RunOutcome string
 
 	// RootStatus is the root workflow's lifecycle; the zero value when the chat
 	// has no root workflow row yet.

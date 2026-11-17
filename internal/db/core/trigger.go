@@ -562,6 +562,12 @@ type TriggerEvent struct {
 	// chat going with turns of their own; the trigger's health, streak and
 	// overlap rules are about its own run, so they read this, not the chat.
 	RunStatus string
+	// RunOutcome is that run's Workflow.RunOutcome (a RunOutcome* value),
+	// recorded with RunStatus. It is what tells a run that completed cleanly
+	// from one that completed only because its failure path ran. Empty
+	// wherever RunStatus is, for a cancelled run, and on a firing recorded
+	// before it existed.
+	RunOutcome string
 	// Sender is who or what the event came from, as the source authenticated
 	// it: set once at intake and never from the payload. Nil for a start a
 	// person made themselves (a chat, a builder test).

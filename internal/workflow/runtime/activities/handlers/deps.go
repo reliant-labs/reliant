@@ -459,6 +459,9 @@ type WorkflowStatusStore interface {
 	CreateWorkflow(ctx context.Context, workflow *db.Workflow) error
 	UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error
 	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
+	SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error
+	FirstHandledNodeFailure(ctx context.Context, workflowID string, since time.Time) (*db.HandledNodeFailure, error)
+	SetLaunchEventRunOutcome(ctx context.Context, chatID, outcome string) error
 	SetWorkflowFailureDetail(ctx context.Context, id, detail string) error
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
 	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason db.WorkflowStopReason) error

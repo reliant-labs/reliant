@@ -348,6 +348,9 @@ func newContinueAsNewError(ctx workflow.Context, input WorkflowInput, nodeID str
 		// the user set on single threads (subagent_resume.go).
 		resume.StoppedSpawns = childTracker.stoppedSpawnHandoffs()
 		resume.ThreadInputs = childTracker.threadInputOverridesHandoff()
+		// The successor continues this run, so its outcome is judged from
+		// this run's start (run_outcome.go).
+		resume.RunStartedAtMs = childTracker.startedAtMs()
 		resume.CapacityParked = childTracker.capacitySlot.isParked()
 	}
 	return workflow.NewContinueAsNewError(ctx, DynamicWorkflow, WorkflowInput{

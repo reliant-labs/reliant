@@ -2389,7 +2389,7 @@ NOTES:
 
 Check on one top-level run: its state, title, workflow, when it was created and last active, an excerpt of the last thing its agent said, and a nodes section with per-attempt status, timing and errors. Command nodes include exit codes and redacted stdout/stderr tails (up to 50 lines each). The newest 200 attempts are shown; older attempts are explicitly marked omitted.
 
-The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
+The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. An ended run also has an outcome: succeeded, failed, or failure_handled when it completed only because a node failed and its failure path ran. A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
 
 Only runs the user owns can be inspected. To check on a sub-agent you spawned, use spawn_status.
 

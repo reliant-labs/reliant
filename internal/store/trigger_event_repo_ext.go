@@ -228,6 +228,17 @@ func SetLaunchEventRunStatus(ctx context.Context, db orm.Context, chatID, status
 	return nil
 }
 
+// SetLaunchEventRunOutcome records outcome (a core.RunOutcome* value) on
+// chatID's launch event, beside its run_status (the same earliest-event rule).
+// A chat with no launch event is not an error.
+func SetLaunchEventRunOutcome(ctx context.Context, db orm.Context, chatID, outcome string) error {
+	if _, err := db.Bun().NewRaw(`UPDATE trigger_events SET run_outcome = ?0::text
+WHERE id = (SELECT id FROM trigger_events WHERE chat_id = ?1::text ORDER BY created_at ASC, id ASC LIMIT 1)`, outcome, chatID).Exec(ctx); err != nil {
+		return fmt.Errorf("failed to record launch event run outcome: %w", err)
+	}
+	return nil
+}
+
 // The pending-event statements below spell `outcome = 'pending'` into the SQL
 // rather than binding it: it is idx_trigger_events_pending's partial-index
 // predicate, which the planner must see at plan time, and for the claim and
@@ -738,6 +749,9 @@ func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
 	}
 	if row.RunStatus != nil {
 		ev.RunStatus = *row.RunStatus
+	}
+	if row.RunOutcome != nil {
+		ev.RunOutcome = *row.RunOutcome
 	}
 	return ev, nil
 }
