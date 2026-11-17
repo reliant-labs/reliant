@@ -215,11 +215,11 @@ importers:
         specifier: 5.10.0
         version: 5.10.0
       '@supabase/auth-js':
-        specifier: ^2.92.0
-        version: 2.92.0
+        specifier: 2.93.0
+        version: 2.93.0
       '@supabase/supabase-js':
-        specifier: ^2.92.0
-        version: 2.92.0
+        specifier: 2.93.0
+        version: 2.93.0
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.19(tailwindcss@4.1.18)
@@ -1359,28 +1359,28 @@ packages:
     resolution: {integrity: sha512-PTigkxMdMUP6B5ISS7jMqJAKhgrhZwjprDqR1eATtFfh0OpKVNp110xiH+goeVdrJ29/4LeZJR4FaHHWstsu0A==}
     engines: {node: '>=12.16'}
 
-  '@supabase/auth-js@2.92.0':
-    resolution: {integrity: sha512-lzkE2oaGj94vGa6gJfxSF0c1OcGkAuj1JHL/RqJ0vZuV1j575DhBOVjqk5YkUbVBGK0O1qssAkTxwh1WEiCulA==}
+  '@supabase/auth-js@2.93.0':
+    resolution: {integrity: sha512-cKbYoaFOKa0fE5/PMEd2vvJpvzkOrVFkaMUWaz9lG+bORzzEpUQnMlgBdL8j0VEpMXGkvMgbvvGXVm4UhtCB6g==}
     engines: {node: '>=20.0.0'}
 
-  '@supabase/functions-js@2.92.0':
-    resolution: {integrity: sha512-TwtkoANIAOSvEysJwX8p9R/ymKzj1bJV2DFghc8IBYxYaVKXU3kHgFINyFxBkA+QN4/9U0p1FErpDMEIuqE6Ew==}
+  '@supabase/functions-js@2.93.0':
+    resolution: {integrity: sha512-bg6AFBMCeznBNC6VEZXI7ztnjwmxS6SvI+gtkkjhg0+tiYe0ZucBy56x0c9v9WKbXUXfKgSGAZtaZRSycvz10g==}
     engines: {node: '>=20.0.0'}
 
-  '@supabase/postgrest-js@2.92.0':
-    resolution: {integrity: sha512-46AahNEnS0PpRiZpbnHCTZIPTBxczWFa+p1PcE58Vhd67XKLSQS7f5UwX8RAtx5xG7T9FQl4N7TLfEl+sAWHjg==}
+  '@supabase/postgrest-js@2.93.0':
+    resolution: {integrity: sha512-Bg1FVyjJFHbdN2lwcY7p6GgMGYEbY8Zbsqe5VyQOU8RS5KdudN/HB+XfnB5Ov936klZMtm/e3znkBKnqPUaftg==}
     engines: {node: '>=20.0.0'}
 
-  '@supabase/realtime-js@2.92.0':
-    resolution: {integrity: sha512-bcsSAo8Omx2YrqiEvNn5UIrp3yTipwGfobpcki6nkOfedLIyOqDgm2jyea7eZgzewJLe1j0J7u6ftO4YMN1Pqg==}
+  '@supabase/realtime-js@2.93.0':
+    resolution: {integrity: sha512-q1PERmJ8j2wrKgO+D5wbXmrI/5LPXMgTRBGEZjiiutqG7fiCVpKc4hUjNudstxoMOh6GO+leBA8s/0HFAzvUJQ==}
     engines: {node: '>=20.0.0'}
 
-  '@supabase/storage-js@2.92.0':
-    resolution: {integrity: sha512-t404yGdpGyFgS6yBq2lpG0L7w8D8kFeagd2EN7l9gnVSRn94oX+Lvh4g3Jlijr9nnkMYnG+nZXjTeooAxVAjRQ==}
+  '@supabase/storage-js@2.93.0':
+    resolution: {integrity: sha512-hUA6dncn+hq9yq9YTj3t4TceL8pDOgIuPkr2BKlnvc/XGnKLV0tb6CAjmNuKPQmHHNSTLP8DwTr4GpsvhDIjrQ==}
     engines: {node: '>=20.0.0'}
 
-  '@supabase/supabase-js@2.92.0':
-    resolution: {integrity: sha512-hZlOgRvx0zRwPsIXaScWY7JqTvo6rGjrMeia5J4d7Y8cKphBd+cEdot7wnHvQwhZfWqoZVzQRL1m/+VrNiRnwQ==}
+  '@supabase/supabase-js@2.93.0':
+    resolution: {integrity: sha512-95kw2w+TC2Gy03BlA/s5tAZh9+cofcCvXzZ0DJfMbkGkjv7eGhQJh43sz7803Q1uo2i98jrttWB8ct9kqZ3OPQ==}
     engines: {node: '>=20.0.0'}
 
   '@tailwindcss/node@4.1.18':
@@ -4399,19 +4399,19 @@ snapshots:
 
   '@stripe/stripe-js@5.10.0': {}
 
-  '@supabase/auth-js@2.92.0':
+  '@supabase/auth-js@2.93.0':
     dependencies:
       tslib: 2.8.1
 
-  '@supabase/functions-js@2.92.0':
+  '@supabase/functions-js@2.93.0':
     dependencies:
       tslib: 2.8.1
 
-  '@supabase/postgrest-js@2.92.0':
+  '@supabase/postgrest-js@2.93.0':
     dependencies:
       tslib: 2.8.1
 
-  '@supabase/realtime-js@2.92.0':
+  '@supabase/realtime-js@2.93.0':
     dependencies:
       '@types/phoenix': 1.6.7
       '@types/ws': 8.18.1
@@ -4421,18 +4421,18 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@supabase/storage-js@2.92.0':
+  '@supabase/storage-js@2.93.0':
     dependencies:
       iceberg-js: 0.8.1
       tslib: 2.8.1
 
-  '@supabase/supabase-js@2.92.0':
+  '@supabase/supabase-js@2.93.0':
     dependencies:
-      '@supabase/auth-js': 2.92.0
-      '@supabase/functions-js': 2.92.0
-      '@supabase/postgrest-js': 2.92.0
-      '@supabase/realtime-js': 2.92.0
-      '@supabase/storage-js': 2.92.0
+      '@supabase/auth-js': 2.93.0
+      '@supabase/functions-js': 2.93.0
+      '@supabase/postgrest-js': 2.93.0
+      '@supabase/realtime-js': 2.93.0
+      '@supabase/storage-js': 2.93.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
