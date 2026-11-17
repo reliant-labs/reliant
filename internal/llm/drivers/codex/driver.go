@@ -50,10 +50,14 @@ const (
 	// (gpt-6.1-sol, gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-sol/terra/luna,
 	// gpt-5.5) streamed a reply with tools attached.
 	//
+	// 0.169.0 (2026-11-17): the backend lists gpt-6.2-sol (Codex's new
+	// default) from this version, and not at 0.162.1 — the same server-side
+	// gate, for a model no bundled catalog carried yet.
+	//
 	// testdata/codex_models.json is the catalog bundled with a release, and
 	// TestCodexVersionServesEveryListedModel holds this at or above that
 	// release: refresh the two together.
-	CodexVersion = "0.162.1"
+	CodexVersion = "0.169.0"
 
 	// CodexOriginator identifies the client to the Codex backend.
 	CodexOriginator = "codex-tui"

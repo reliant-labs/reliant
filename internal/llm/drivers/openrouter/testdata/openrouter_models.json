@@ -255,6 +255,22 @@
     "context_length": 1050000,
     "max_completion_tokens": 128000
    }
+  },
+  {
+   "id": "openai/gpt-6.2-astra",
+   "context_length": 1050000,
+   "top_provider": {
+    "context_length": 1050000,
+    "max_completion_tokens": 128000
+   }
+  },
+  {
+   "id": "openai/gpt-6.2-sol",
+   "context_length": 1050000,
+   "top_provider": {
+    "context_length": 1050000,
+    "max_completion_tokens": 128000
+   }
   }
  ]
 }

@@ -57,13 +57,13 @@ import (
 //
 // Codex's catalog states it per model as use_responses_lite (openai/codex
 // codex-rs/core/tests/suite/responses_lite.rs: no top-level instructions or
-// tools, input[0] is additional_tools). gpt-6.1-sol, gpt-6-sol and gpt-6-luna
-// set it like astra; TestCodexEnvelopeFollowsResponsesLite keeps this list in
+// tools, input[0] is additional_tools). gpt-6.2-sol, gpt-6.1-sol,
+// gpt-6.1-terra, gpt-6-sol and gpt-6-luna set it like astra; TestCodexEnvelopeFollowsResponsesLite keeps this list in
 // step with testdata/codex_models.json.
 func usesAdditionalToolsEnvelope(id models.ModelID) bool {
 	switch id {
 	case models.GPT56Sol, models.GPT56Luna, models.GPT56Terra,
-		models.GPT6Astra, models.GPT61Sol, models.GPT6Sol, models.GPT6Luna:
+		models.GPT6Astra, models.GPT62Sol, models.GPT61Sol, models.GPT61Terra, models.GPT6Sol, models.GPT6Luna:
 		return true
 	default:
 		return false
@@ -125,11 +125,12 @@ func routingHint(id models.ModelID, apiModel string) string {
 // To flip this once tested, give the model a reasoning_summary_mode in
 // models.yaml and drop it from this list — no other code needs to change.
 //
-// gpt-6.1-sol, gpt-6-sol and gpt-6-luna follow astra, for the same reason.
+// gpt-6.2-sol, gpt-6.1-sol, gpt-6.1-terra, gpt-6-sol and gpt-6-luna follow
+// astra, for the same reason.
 func modelSupportsReasoningSummaries(id models.ModelID) bool {
 	switch id {
 	case models.GPT56Sol, models.GPT56Luna, models.GPT56Terra,
-		models.GPT6Astra, models.GPT61Sol, models.GPT6Sol, models.GPT6Luna:
+		models.GPT6Astra, models.GPT62Sol, models.GPT61Sol, models.GPT61Terra, models.GPT6Sol, models.GPT6Luna:
 		return false
 	default:
 		return true

@@ -647,14 +647,15 @@ func TestResolve_BySingleTag(t *testing.T) {
 	}
 }
 
-// gpt-6.1-sol is Codex's default ("Latest workhorse model for coding and
-// everyday work", priority 1 in Codex CLI's catalog), so it is a codex user's
-// flagship AND moderate model.
-func TestResolve_CodexFlagshipAndModerateUseGPT61Sol(t *testing.T) {
+// gpt-6.2-sol is Codex's default ("Fast, go-to model for coding and everyday
+// work", priority 1 in the live /codex/models), so it is a codex user's
+// flagship. Codex serves gpt-6.1-terra too, so [moderate] lands there exactly
+// as it does for an OpenAI key; the Sols back it up for a plan without Terra.
+func TestResolve_CodexFlagshipIsGPT62SolAndModerateIsGPT61Terra(t *testing.T) {
 	reg := MustGetRegistry()
 
-	assert.Contains(t, reg.TagsOf("gpt-6.1-sol"), TagFlagship)
-	assert.Contains(t, reg.TagsOf("gpt-6.1-sol"), TagModerate)
+	assert.Contains(t, reg.TagsOf("gpt-6.2-sol"), TagFlagship)
+	assert.Contains(t, reg.TagsOf("gpt-6.2-sol"), TagModerate)
 
 	moderate, err := reg.Resolve(ModelSelector{Tags: []string{TagModerate}}, []string{"codex"})
 	require.NoError(t, err)
@@ -662,8 +663,8 @@ func TestResolve_CodexFlagshipAndModerateUseGPT61Sol(t *testing.T) {
 	flagship, err := reg.Resolve(ModelSelector{Tags: []string{TagFlagship}}, []string{"codex"})
 	require.NoError(t, err)
 
-	assert.Equal(t, "gpt-6.1-sol", moderate.Definition.ID)
-	assert.Equal(t, flagship.Definition.ID, moderate.Definition.ID)
+	assert.Equal(t, "gpt-6.2-sol", flagship.Definition.ID)
+	assert.Equal(t, "gpt-6.1-terra", moderate.Definition.ID)
 	assert.Equal(t, "codex", moderate.Provider.Driver)
 	assert.Equal(t, flagship.Provider.Driver, moderate.Provider.Driver)
 }
@@ -684,9 +685,9 @@ func TestResolve_CodexTagTargetsArePinned(t *testing.T) {
 	// OpenAI or Copilot user's pick moves.
 	for tag, want := range map[string]string{
 		TagPowerful:  "gpt-6-astra",
-		TagFlagship:  "gpt-6.1-sol",
-		TagModerate:  "gpt-6.1-sol",
-		TagReasoning: "gpt-6.1-sol",
+		TagFlagship:  "gpt-6.2-sol",
+		TagModerate:  "gpt-6.1-terra",
+		TagReasoning: "gpt-6.2-sol",
 		TagFast:      "gpt-6-luna",
 		TagCheap:     "gpt-6-luna",
 		TagMeta:      "gpt-6-luna",

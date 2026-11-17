@@ -280,7 +280,7 @@ func TestAggregateAvailableModels_CodexUserIsOfferedGPT61Sol(t *testing.T) {
 			enabled[info.ID] = true
 		}
 	}
-	for _, id := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol"} {
+	for _, id := range []string{"gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol"} {
 		assert.Truef(t, enabled[id], "a Codex user's picker must offer %s; got %v", id, enabled)
 	}
 }
