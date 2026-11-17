@@ -14,10 +14,13 @@ import (
 )
 
 type SpawnSendParams struct {
-	AgentID string `json:"agent_id" jsonschema:"required,description=The agent_id (thread id) to send a message to: one of your sub-agents or your own parent. An unambiguous prefix of at least 4 characters is accepted."`
+	AgentID string `json:"agent_id" jsonschema:"required,description=The agent_id (thread id) to send a message to: one of your sub-agents or your own parent. An unambiguous prefix of at least 4 characters is accepted. 'parent' names your own parent."`
 	Subject string `json:"subject" jsonschema:"required,description=A one-line summary of the message (at most 100 characters\\, no line breaks). The transcript shows the message collapsed to this line\\, so say what it is about: 'Auth refactor done: 3 files changed' or 'Blocked: need the staging DB URL'"`
 	Message string `json:"message" jsonschema:"required,description=The full message to deliver"`
 }
+
+// spawnSendParentAlias is the agent_id that names the caller's own parent.
+const spawnSendParentAlias = "parent"
 
 // spawnSendMaxSubjectRunes caps spawn_send's subject: it is rendered as one
 // line in the transcript, so anything longer belongs in the message.
@@ -35,8 +38,9 @@ need to know whether it landed, check back with spawn_status or wait for a
 response.
 
 v1 is parent ↔ child only: you may message a direct sub-agent (a spawn of
-this thread) or your own parent. Messaging a sibling or unrelated agent is
-rejected.
+this thread) or your own parent. agent_id "parent" always names your parent,
+even when you were never given its id. Messaging a sibling or unrelated agent
+is rejected.
 
 A sub-agent of yours that stopped on an error is not finished: your message
 resumes it where it stopped, and it reads the message at its first turn.
@@ -111,6 +115,14 @@ func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) 
 	parentID := ""
 	if caller, callerErr := s.repo.GetThread(rctx.Context, threadID); callerErr == nil && caller != nil && caller.ParentThreadID != nil {
 		parentID = *caller.ParentThreadID
+	}
+	// "parent" names the caller's own parent: a sub-agent is not always told
+	// its parent's id, and without the alias it had no way to answer.
+	if strings.EqualFold(strings.TrimSpace(params.AgentID), spawnSendParentAlias) {
+		if parentID == "" {
+			return NewTextErrorResponse(`agent_id "parent" names this agent's parent, and this agent has none: it is a top-level chat, not a sub-agent.`), nil
+		}
+		params.AgentID = parentID
 	}
 	resolved, err := resolveSpawnAgentID(rctx, s.repo, threadID, params.AgentID, parentID)
 	if err != nil {
