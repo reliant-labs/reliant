@@ -91,6 +91,12 @@ Dockerfile.local
 
 # Node.js dependencies
 node_modules/
+# pnpm's content-addressable store, which pnpm puts at the root of a checkout
+# that cannot hard-link from the user's store (a sandboxed clone, another
+# filesystem). Tens of thousands of untracked files: unignored, the affected
+# planner read every one as a change and ran every lane in full (pr-fix on
+# reliant #2807 timed out its gate), and `git add -A` would commit them.
+.pnpm-store/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
