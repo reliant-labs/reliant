@@ -1,0 +1,720 @@
+package identity
+
+import (
+	"errors"
+	"fmt"
+	"net/url"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+)
+
+// Spec is the DECLARED content of one Zitadel instance. Reconcile makes the
+// instance match it. Objects are matched by natural key (project name, role
+// key, application name, username, email), never by internal id.
+type Spec struct {
+	Project      ProjectSpec
+	Roles        []Role
+	Applications []Application
+	MachineUsers []MachineUser
+	Policies     Policies
+	// SMTP is the instance mail relay. SMTP, EmailHTTP and EmailNone are
+	// exclusive; all three unset leaves the instance's mail configuration
+	// alone.
+	SMTP *SMTP
+	// EmailHTTP points the instance's mail at an HTTP endpoint (Zitadel's HTTP
+	// email provider): every notification is POSTed there as JSON, signed with
+	// a key the instance generates and the KeyStore keeps (KeyMailSigning).
+	EmailHTTP *HTTPEmail
+	// EmailNone deactivates the mail provider this library manages, if one is
+	// active: the instance then sends nothing. A provider someone else made is
+	// left alone.
+	EmailNone bool
+	// IdPs are the social sign-in providers (the app's own OAuth apps). Each is
+	// created or updated by name and linked into the login policy. One that is
+	// no longer declared is unlinked from the policy, never deleted: deleting
+	// it would destroy every user's link to it.
+	IdPs []IdP
+	// Owners are people who must be able to get in. Unlike Role.Members they
+	// are ADDITIVE AND STICKY: each is created and granted on every pass, and
+	// invited while they hold no credential, but an owner removed from the
+	// declaration keeps their account and their roles.
+	Owners []Owner
+	// SignIn is what the app's sign-in screen offers. It is PUBLISHED as
+	// Output.LoginPolicy for the login broker to enforce; what the instance
+	// itself is told is Policies.Login, which LoginPolicyFor derives from it.
+	// Nil publishes no document, and the broker keeps its legacy policy.
+	SignIn *SignIn
+	// SeedUsers are throwaway accounts for local and ephemeral environments.
+	// Reconcile refuses them unless Options.AllowSeedUsers is set.
+	SeedUsers []SeedUser
+}
+
+// HTTPEmail is Zitadel's HTTP email provider.
+type HTTPEmail struct {
+	// Endpoint receives every notification as a signed JSON POST.
+	Endpoint string
+}
+
+// IdPType is a social sign-in provider kind.
+type IdPType string
+
+const (
+	IdPGoogle IdPType = "google"
+	IdPGitHub IdPType = "github"
+)
+
+// IdPNamePrefix marks the identity providers this library manages. An IdP
+// whose name lacks it is someone else's and is never touched.
+const IdPNamePrefix = "forge:"
+
+// IdPName is the natural key of the managed IdP of type t: "forge:google".
+func IdPName(t IdPType) string { return IdPNamePrefix + string(t) }
+
+// IdP is a social sign-in provider backed by the app's own OAuth app.
+type IdP struct {
+	// Name is the natural key; it must start with IdPNamePrefix (IdPName).
+	Name string
+	Type IdPType
+	// ClientID is the OAuth app's client id.
+	ClientID string
+	// ClientSecret is never readable back from Zitadel, so a digest of the
+	// last value applied is kept in the KeyStore to detect a rotation.
+	ClientSecret string `json:"-"`
+	Scopes       []string
+}
+
+// Owner is a person who must be able to get in.
+type Owner struct {
+	Email string
+	// Roles are granted ADDITIVELY and never revoked. They must not be
+	// Declared roles: a declared role's holders are a converged set, which
+	// would revoke an owner who is not also a listed member.
+	Roles []string
+	// Invite, when set, sends ONE invitation (Zitadel's invite code) to an
+	// owner who has no credential, re-sent only after OwnerInviteInterval and
+	// at most OwnerInviteLimit times. Nil creates and grants only: use it
+	// where nothing can deliver mail.
+	Invite *Invite
+}
+
+// Invite configures the invitation mail.
+type Invite struct {
+	// URLTemplate is the link the mail carries. Zitadel fills {{.UserID}},
+	// {{.OrgID}} and {{.Code}}. At most 200 characters (Zitadel's limit).
+	URLTemplate string
+	// ApplicationName names the app in the mail. At most 200 characters.
+	ApplicationName string
+}
+
+const (
+	// OwnerInviteInterval is how long an unanswered owner invitation is left
+	// before another is sent.
+	OwnerInviteInterval = 7 * 24 * time.Hour
+	// OwnerInviteLimit caps the invitations one owner is ever sent: an
+	// address nobody reads must not be mailed forever.
+	OwnerInviteLimit = 3
+)
+
+// SignupMode is who may create an account from the sign-in screen.
+type SignupMode string
+
+const (
+	// SignupInvite: only owners, declared members and invitations.
+	SignupInvite SignupMode = "invite"
+	// SignupOpen: anyone, once their address is verified.
+	SignupOpen SignupMode = "open"
+	// SignupDomain: anyone whose VERIFIED address is in SignupDomains.
+	SignupDomain SignupMode = "domain"
+)
+
+// Method is a first-factor sign-in method.
+type Method string
+
+const (
+	MethodPassword  Method = "password"
+	MethodPasskey   Method = "passkey"
+	MethodMagicLink Method = "magic_link"
+)
+
+// SignIn is the sign-in declaration the app's login broker enforces.
+type SignIn struct {
+	// Signup is who may create an account. Empty means SignupInvite.
+	Signup        SignupMode
+	SignupDomains []string
+	// SignupRole is the role a self-signed-up account gets; "" leaves it to
+	// the app. Like an owner role it must not be Declared.
+	SignupRole string
+	// Methods are the first factors offered. Empty offers none, which is
+	// valid only with an IdP to sign in through (social sign-in only).
+	Methods []Method
+	// PasskeyRPID is the WebAuthn relying-party id; "" means the host of the
+	// app's sign-in origin, which the broker knows and this library does not.
+	PasskeyRPID string
+}
+
+func (s SignIn) has(m Method) bool {
+	for _, x := range s.Methods {
+		if x == m {
+			return true
+		}
+	}
+	return false
+}
+
+func (s SignIn) mode() SignupMode {
+	if s.Signup == "" {
+		return SignupInvite
+	}
+	return s.Signup
+}
+
+// LoginPolicyFor is the instance login policy a sign-in declaration implies.
+// Both halves of managed identity (dev and the control plane) derive
+// Policies.Login through it, so the two cannot disagree on the mapping.
+// social reports whether any IdP is declared.
+func LoginPolicyFor(s SignIn, social bool) LoginPolicy {
+	otpEmail := s.has(MethodMagicLink)
+	lp := LoginPolicy{
+		AllowUsernamePassword: s.has(MethodPassword),
+		AllowRegister:         s.mode() != SignupInvite,
+		AllowExternalIDP:      social,
+		HidePasswordReset:     !s.has(MethodPassword),
+		PasswordlessType:      "PASSWORDLESS_TYPE_NOT_ALLOWED",
+		OTPEmail:              &otpEmail,
+	}
+	if s.has(MethodPasskey) {
+		lp.PasswordlessType = "PASSWORDLESS_TYPE_ALLOWED"
+	}
+	return lp
+}
+
+// ProjectSpec is the Zitadel project. Its generated id is the token audience,
+// which is why it is an OUTPUT (Result.Audience) and not something a spec can
+// choose.
+type ProjectSpec struct {
+	// Name is the project's natural key.
+	Name string
+	// AdoptID pins the id the project must have. See the package comment.
+	AdoptID string
+	// MustHoldRole makes Zitadel refuse tokens for users who hold no role in the
+	// project; ProjectCheck refuses tokens for users whose org was not granted
+	// the project. Both default to off.
+	MustHoldRole bool
+	ProjectCheck bool
+}
+
+// Role is a project role. Roles are only ever created and relabelled, never
+// deleted: a role may have grants, and removing it silently strips them.
+type Role struct {
+	Key         string
+	DisplayName string
+	Group       string
+	// Declared makes the holders of this role a SET converged from the spec:
+	// the humans in Members plus the machine users that list the role. A holder
+	// not in that set loses THIS role (other roles in the same grant are kept).
+	// Leave it false for a role whose members are managed in a console.
+	Declared bool
+	// Members are the emails that hold the role when Declared is set.
+	Members []string
+}
+
+// AppKind selects the OIDC application shape.
+type AppKind string
+
+const (
+	// AppSPA is a browser single-page app: a public client using PKCE.
+	AppSPA AppKind = "spa"
+	// AppWeb is a confidential server-side web app with a client secret,
+	// which is generated once and held in the KeyStore.
+	AppWeb AppKind = "web"
+	// AppNative is a mobile or desktop app: a public client using PKCE.
+	AppNative AppKind = "native"
+	// AppNativeBroker is the app behind native sign-in: the product's own
+	// login form, with a server-side broker that drives the OIDC flow. It is a
+	// public PKCE client whose login pages are LoginURI, plus a broker machine
+	// account holding IAM_LOGIN_CLIENT and an expiring access token.
+	AppNativeBroker AppKind = "native_broker"
+)
+
+// Application is an OIDC application registered in the project.
+type Application struct {
+	// Name is the application's natural key.
+	Name string
+	Kind AppKind
+
+	// RedirectURIs and PostLogoutURIs are compared LITERALLY by the issuer, so
+	// a changed host silently breaks the callback until this converges. With
+	// DevMode they are globs.
+	RedirectURIs   []string
+	PostLogoutURIs []string
+
+	// LoginURI is the app's own sign-in route. When set the issuer redirects
+	// /oauth/v2/authorize INTO the app (login V2) instead of rendering its own
+	// pages. It is set per application, so two apps sharing an instance each
+	// point at their own route. Empty restores the issuer-hosted login.
+	LoginURI string
+
+	// DevMode permits plain-http redirect URIs and turns them into globs. Only
+	// for a loopback dev IdP.
+	DevMode bool
+
+	// IDTokenRoleAssertion / IDTokenUserinfoAssertion put the project roles
+	// and the profile claims into the ID token. The access token always
+	// carries the roles claim.
+	IDTokenRoleAssertion     bool
+	IDTokenUserinfoAssertion bool
+
+	// AdoptClientID pins the client id the application must have; see the
+	// package comment.
+	AdoptClientID string
+
+	// RegenerateSecret mints a new client secret for an AppWeb whose secret is
+	// not in the KeyStore. It invalidates the previous secret, so it is never
+	// done implicitly for an application that already existed.
+	RegenerateSecret bool
+
+	// Broker configures the broker account of an AppNativeBroker.
+	Broker *BrokerAccount
+}
+
+// BrokerAccount is the machine account the login broker authenticates as. It is
+// a privileged credential (IAM_LOGIN_CLIENT can complete an authorization
+// request for any user of the instance), kept apart from the provisioning
+// credential so the busiest surface of an app never holds the credential that
+// administers the instance.
+type BrokerAccount struct {
+	// Username defaults to "broker-" plus a slug of the application name.
+	Username string
+}
+
+// MachineUser is a service account.
+type MachineUser struct {
+	// Username is the natural key and a DNS-label-shaped name: it is part of a
+	// secret name downstream.
+	Username    string
+	Name        string
+	Description string
+	// Roles are the project roles the account holds.
+	Roles []string
+	// InstanceRoles are instance-level memberships (for example
+	// IAM_LOGIN_CLIENT). They are only ever added, never removed.
+	InstanceRoles []string
+	// Key issues a JSON machine key into the KeyStore and keeps it rotated.
+	Key bool
+	// Token issues an expiring personal access token into the KeyStore.
+	Token bool
+}
+
+// Policies are the instance-level login policies. A nil policy is left alone.
+type Policies struct {
+	Login              *LoginPolicy
+	PasswordComplexity *PasswordComplexity
+	Lockout            *Lockout
+}
+
+// LoginPolicy is the instance login policy. Fields not exposed here (check
+// lifetimes, factor lists) keep their current values.
+type LoginPolicy struct {
+	AllowUsernamePassword bool
+	AllowRegister         bool
+	AllowExternalIDP      bool
+	ForceMFA              bool
+	HidePasswordReset     bool
+	AllowDomainDiscovery  bool
+	// PasswordlessType is "PASSWORDLESS_TYPE_ALLOWED" or
+	// "PASSWORDLESS_TYPE_NOT_ALLOWED"; empty means not allowed.
+	PasswordlessType string
+	// MFAInitSkipLifetime is how long a user may skip enrolling a second
+	// factor; zero never prompts.
+	MFAInitSkipLifetime time.Duration
+	// OTPEmail adds (true) or removes (false) the OTP-email factor in the
+	// policy's second-factor list; nil leaves the list alone. The session
+	// OTP-email check is what a magic link redeems, so true also converges
+	// the OTP-email code generator (OTPEmailCodeLength, OTPEmailCodeExpiry).
+	OTPEmail *bool
+}
+
+const (
+	// OTPEmailCodeLength and OTPEmailCodeExpiry are the instance's OTP-email
+	// code generator settings when OTPEmail is on: digits only, so the code
+	// a magic-link mail shows can be typed on another device.
+	OTPEmailCodeLength = 8
+	OTPEmailCodeExpiry = 10 * time.Minute
+)
+
+// PasswordComplexity is the instance password complexity policy.
+type PasswordComplexity struct {
+	MinLength        int
+	RequireUppercase bool
+	RequireLowercase bool
+	RequireNumber    bool
+	RequireSymbol    bool
+}
+
+// Lockout is the instance lockout policy; zero disables that lockout.
+type Lockout struct {
+	MaxPasswordAttempts int
+	MaxOTPAttempts      int
+}
+
+// SMTP is the instance mail relay.
+type SMTP struct {
+	// Host is host:port.
+	Host          string
+	User          string
+	Password      string `json:"-"`
+	SenderAddress string
+	SenderName    string
+	ReplyTo       string
+	TLS           bool
+}
+
+// SeedUser is a throwaway account. Its password is set when the account is
+// created and never again, so a user who changed it is not reset.
+type SeedUser struct {
+	Email      string
+	Password   string `json:"-"`
+	GivenName  string
+	FamilyName string
+	Roles      []string
+}
+
+// Rotation tunes credential lifetimes. Zero values take the defaults.
+type Rotation struct {
+	// BrokerTokenTTL is the lifetime of a minted broker token (default 30d); a
+	// new one is minted once less than BrokerRenewWithin (default 10d) is left.
+	BrokerTokenTTL    time.Duration
+	BrokerRenewWithin time.Duration
+	// BrokerOverlap is how long a superseded token keeps working (default 10d).
+	BrokerOverlap time.Duration
+	// MachineKeyTTL (default 90d), MachineKeyRenewWithin (default 30d) and
+	// MachineKeyOverlap (default 7d) are the same three for machine keys.
+	MachineKeyTTL         time.Duration
+	MachineKeyRenewWithin time.Duration
+	MachineKeyOverlap     time.Duration
+}
+
+const day = 24 * time.Hour
+
+func (r Rotation) withDefaults() Rotation {
+	def := func(v *time.Duration, d time.Duration) {
+		if *v <= 0 {
+			*v = d
+		}
+	}
+	def(&r.BrokerTokenTTL, 30*day)
+	def(&r.BrokerRenewWithin, 10*day)
+	def(&r.BrokerOverlap, 10*day)
+	def(&r.MachineKeyTTL, 90*day)
+	def(&r.MachineKeyRenewWithin, 30*day)
+	def(&r.MachineKeyOverlap, 7*day)
+	return r
+}
+
+var (
+	roleKeyRE  = regexp.MustCompile(`^[a-z][a-z0-9_.:-]{0,63}$`)
+	usernameRE = regexp.MustCompile(`^[a-z][a-z0-9-]{1,61}[a-z0-9]$`)
+	emailRE    = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+	// dnsNameRE is a lower-case DNS name with at least two labels and no
+	// wildcard.
+	dnsNameRE = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$|^localhost$`)
+)
+
+// ValidMachineUsername reports why name cannot be a machine user's username.
+// It is deliberately narrower than Zitadel: the name becomes part of a secret
+// name, must be a DNS-label fragment, and starting with a letter keeps it from
+// ever equalling one of Zitadel's numeric ids.
+func ValidMachineUsername(name string) error {
+	if !usernameRE.MatchString(name) {
+		return fmt.Errorf("machine username %q is invalid: 3-63 characters, starting with a letter, ending with a letter or digit, only lowercase letters, digits and '-'", name)
+	}
+	return nil
+}
+
+// BrokerUsername is the machine username of an application's broker account.
+func (a Application) BrokerUsername() string {
+	if a.Broker != nil && a.Broker.Username != "" {
+		return a.Broker.Username
+	}
+	s := strings.Trim(nonAlnum.ReplaceAllString(strings.ToLower(a.Name), "-"), "-")
+	if len(s) > 50 {
+		s = strings.Trim(s[:50], "-")
+	}
+	return "broker-" + s
+}
+
+var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
+
+// Validate checks the spec offline and reports every problem, each naming the
+// object it concerns.
+func (s Spec) Validate() error {
+	var errs []error
+	bad := func(kind, name, format string, args ...any) {
+		errs = append(errs, objErr(kind, name, fmt.Errorf(format, args...)))
+	}
+
+	if strings.TrimSpace(s.Project.Name) == "" {
+		bad("project", "", "a name is required")
+	}
+
+	roles := map[string]Role{}
+	for _, r := range s.Roles {
+		switch {
+		case !roleKeyRE.MatchString(r.Key):
+			bad("role", r.Key, "key must match %s", roleKeyRE)
+		case roles[r.Key].Key != "":
+			bad("role", r.Key, "declared twice")
+		}
+		roles[r.Key] = r
+		if len(r.Members) > 0 && !r.Declared {
+			bad("role", r.Key, "members are listed but the role is not Declared; set Declared or drop the members")
+		}
+		for _, m := range r.Members {
+			if !emailRE.MatchString(m) {
+				bad("role", r.Key, "member %q is not an email address", m)
+			}
+		}
+	}
+	knownRole := func(kind, name, role string) {
+		if _, ok := roles[role]; !ok {
+			bad(kind, name, "refers to role %q, which is not declared in Spec.Roles", role)
+		}
+	}
+
+	apps := map[string]bool{}
+	brokers := map[string]string{}
+	for _, a := range s.Applications {
+		if strings.TrimSpace(a.Name) == "" {
+			bad("application", "", "a name is required")
+			continue
+		}
+		if apps[a.Name] {
+			bad("application", a.Name, "declared twice")
+		}
+		apps[a.Name] = true
+		switch a.Kind {
+		case AppSPA, AppWeb, AppNative, AppNativeBroker:
+		default:
+			bad("application", a.Name, "kind %q is not one of spa, web, native, native_broker", a.Kind)
+		}
+		if len(a.RedirectURIs) == 0 {
+			bad("application", a.Name, "at least one redirect URI is required")
+		}
+		for _, u := range append(append([]string{}, a.RedirectURIs...), a.PostLogoutURIs...) {
+			if !strings.Contains(u, "://") && !strings.Contains(u, ":/") {
+				bad("application", a.Name, "uri %q is not absolute", u)
+			}
+		}
+		if a.LoginURI != "" {
+			if u, err := url.Parse(a.LoginURI); err != nil || u.Scheme == "" || u.Host == "" {
+				bad("application", a.Name, "login URI %q is not an absolute URL", a.LoginURI)
+			}
+		}
+		if a.Kind == AppNativeBroker {
+			if a.LoginURI == "" {
+				bad("application", a.Name, "a native_broker application needs a LoginURI: it is the app's own sign-in route")
+			}
+			bu := a.BrokerUsername()
+			if err := ValidMachineUsername(bu); err != nil {
+				bad("application", a.Name, "%v", err)
+			}
+			if other, dup := brokers[bu]; dup {
+				bad("application", a.Name, "broker account %q is already the broker of %q", bu, other)
+			}
+			brokers[bu] = a.Name
+		} else if a.Broker != nil {
+			bad("application", a.Name, "a broker account is only for kind native_broker")
+		}
+		if a.RegenerateSecret && a.Kind != AppWeb {
+			bad("application", a.Name, "RegenerateSecret is only for kind web")
+		}
+	}
+
+	users := map[string]bool{}
+	for _, m := range s.MachineUsers {
+		if err := ValidMachineUsername(m.Username); err != nil {
+			errs = append(errs, objErr("machine user", m.Username, err))
+			continue
+		}
+		if users[m.Username] {
+			bad("machine user", m.Username, "declared twice")
+		}
+		if _, clash := brokers[m.Username]; clash {
+			bad("machine user", m.Username, "is also the broker account of application %q", brokers[m.Username])
+		}
+		users[m.Username] = true
+		for _, r := range m.Roles {
+			knownRole("machine user", m.Username, r)
+		}
+	}
+
+	if p := s.Policies.PasswordComplexity; p != nil && (p.MinLength < 1 || p.MinLength > 72) {
+		bad("password complexity policy", "", "minimum length %d is outside 1-72", p.MinLength)
+	}
+	if l := s.Policies.Lockout; l != nil && (l.MaxPasswordAttempts < 0 || l.MaxOTPAttempts < 0) {
+		bad("lockout policy", "", "attempt limits cannot be negative")
+	}
+	if l := s.Policies.Login; l != nil {
+		switch l.PasswordlessType {
+		case "", "PASSWORDLESS_TYPE_ALLOWED", "PASSWORDLESS_TYPE_NOT_ALLOWED":
+		default:
+			bad("login policy", "", "passwordless type %q is not PASSWORDLESS_TYPE_ALLOWED or PASSWORDLESS_TYPE_NOT_ALLOWED", l.PasswordlessType)
+		}
+	}
+	if m := s.SMTP; m != nil {
+		if !strings.Contains(m.Host, ":") {
+			bad("smtp", m.Host, "host must be host:port")
+		}
+		if !emailRE.MatchString(m.SenderAddress) {
+			bad("smtp", m.Host, "sender address %q is not an email address", m.SenderAddress)
+		}
+		if m.ReplyTo != "" && !emailRE.MatchString(m.ReplyTo) {
+			bad("smtp", m.Host, "reply-to %q is not an email address", m.ReplyTo)
+		}
+	}
+	mailModes := 0
+	for _, set := range []bool{s.SMTP != nil, s.EmailHTTP != nil, s.EmailNone} {
+		if set {
+			mailModes++
+		}
+	}
+	if mailModes > 1 {
+		bad("mail provider", "", "SMTP, EmailHTTP and EmailNone are exclusive; set one")
+	}
+	if h := s.EmailHTTP; h != nil {
+		if u, err := url.Parse(h.Endpoint); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			bad("mail provider", h.Endpoint, "the HTTP endpoint must be an absolute http(s) URL")
+		}
+	}
+
+	idps := map[string]bool{}
+	for _, p := range s.IdPs {
+		switch {
+		case !strings.HasPrefix(p.Name, IdPNamePrefix) || len(p.Name) == len(IdPNamePrefix):
+			bad("identity provider", p.Name, "the name must start with %q (IdPName)", IdPNamePrefix)
+		case idps[p.Name]:
+			bad("identity provider", p.Name, "declared twice")
+		}
+		idps[p.Name] = true
+		if p.Type != IdPGoogle && p.Type != IdPGitHub {
+			bad("identity provider", p.Name, "type %q is not one of google, github", p.Type)
+		}
+		if strings.TrimSpace(p.ClientID) == "" || p.ClientSecret == "" {
+			bad("identity provider", p.Name, "a client id and a client secret are required")
+		}
+		if len(p.Scopes) == 0 {
+			bad("identity provider", p.Name, "at least one scope is required")
+		}
+	}
+
+	// A role granted additively (owners, self-signups) must not be a Declared
+	// one: its holders are a converged set, so the next pass would revoke it.
+	additiveRole := func(kind, name, role string) {
+		r, ok := roles[role]
+		switch {
+		case !ok:
+			bad(kind, name, "refers to role %q, which is not declared in Spec.Roles", role)
+		case r.Declared:
+			bad(kind, name, "role %q is Declared, so its holders are a converged set and this grant would be revoked on the next pass; use a role managed in the console", role)
+		}
+	}
+	owners := map[string]bool{}
+	for _, o := range s.Owners {
+		key := strings.ToLower(strings.TrimSpace(o.Email))
+		switch {
+		case !emailRE.MatchString(o.Email):
+			bad("owner", o.Email, "not an email address")
+		case owners[key]:
+			bad("owner", o.Email, "declared twice")
+		}
+		owners[key] = true
+		for _, r := range o.Roles {
+			additiveRole("owner", o.Email, r)
+		}
+		if inv := o.Invite; inv != nil {
+			if !strings.Contains(inv.URLTemplate, "://") || len(inv.URLTemplate) > 200 {
+				bad("owner", o.Email, "the invitation URL template must be an absolute URL of at most 200 characters")
+			}
+			if len(inv.ApplicationName) > 200 {
+				bad("owner", o.Email, "the invitation application name is longer than 200 characters")
+			}
+		}
+	}
+
+	if si := s.SignIn; si != nil {
+		switch si.mode() {
+		case SignupInvite, SignupOpen:
+			if len(si.SignupDomains) > 0 {
+				bad("sign-in", "signup", "signup domains are listed but the mode is %q, not domain", si.mode())
+			}
+		case SignupDomain:
+			if len(si.SignupDomains) == 0 {
+				bad("sign-in", "signup", "domain signup needs at least one signup domain")
+			}
+		default:
+			bad("sign-in", "signup", "mode %q is not one of invite, open, domain", si.Signup)
+		}
+		seenDomain := map[string]bool{}
+		for _, d := range si.SignupDomains {
+			if !dnsNameRE.MatchString(d) || seenDomain[d] {
+				bad("sign-in", "signup", "signup domain %q is not a unique lower-case DNS name", d)
+			}
+			seenDomain[d] = true
+		}
+		if si.SignupRole != "" {
+			additiveRole("sign-in", "signup", si.SignupRole)
+		}
+		seenMethod := map[Method]bool{}
+		for _, m := range si.Methods {
+			switch m {
+			case MethodPassword, MethodPasskey, MethodMagicLink:
+			default:
+				bad("sign-in", "methods", "method %q is not one of password, passkey, magic_link", m)
+			}
+			if seenMethod[m] {
+				bad("sign-in", "methods", "method %q is listed twice", m)
+			}
+			seenMethod[m] = true
+		}
+		if len(si.Methods) == 0 && len(s.IdPs) == 0 {
+			bad("sign-in", "methods", "no method and no identity provider is declared, so nobody could sign in")
+		}
+		if si.PasskeyRPID != "" {
+			if !dnsNameRE.MatchString(si.PasskeyRPID) {
+				bad("sign-in", "passkey", "relying-party id %q is not a lower-case DNS name", si.PasskeyRPID)
+			}
+			if !si.has(MethodPasskey) {
+				bad("sign-in", "passkey", "a relying-party id is set but passkey is not a method")
+			}
+		}
+	}
+
+	seeds := map[string]bool{}
+	for _, u := range s.SeedUsers {
+		key := strings.ToLower(u.Email)
+		switch {
+		case !emailRE.MatchString(u.Email):
+			bad("seed user", u.Email, "not an email address")
+		case seeds[key]:
+			bad("seed user", u.Email, "declared twice")
+		case u.Password == "":
+			bad("seed user", u.Email, "a password is required")
+		}
+		seeds[key] = true
+		for _, r := range u.Roles {
+			knownRole("seed user", u.Email, r)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}

@@ -1,0 +1,253 @@
+[dry-run] would connect "prod-us" for env "prod"
+  auth         scoped ServiceAccount token, minted in your cluster
+  address      https://34.1.2.3
+  caPem        9 bytes
+  token        minted on apply, sent write-only, never printed
+  issuer       none sent: not read: --live-from reviews offline
+  selector     app.kubernetes.io/managed-by=forge,forge.dev/connected-cluster=prod-us,forge.dev/binding-env=prod
+
+Grant diff  forge-connect-prod-us-prod  on context gke_acme_us-central1_prod
+scope      cluster  (a ClusterRole of 9 rule(s) over 6 rendered object(s))
+subject    ServiceAccount forge-system/forge-connect-prod-us-prod (this binding's own token identity)
+live       capture <live>
+
++ ClusterRole forge-connect-prod-us-prod  new
+      + rule     apps/deployments: create,delete,get,list,patch,update,watch
+      + rule     apps/replicasets: get,list,watch
+      + rule     core/configmaps: create,delete,get,list,patch,update,watch
+      + rule     core/namespaces: create,delete,get,list,patch,update,watch
+      + rule     core/pods: get,list,watch
+      + rule     core/services: create,delete,get,list,patch,update,watch
+      + rule     rbac.authorization.k8s.io/clusterroles: bind,escalate  only acme-reader
+      + rule     rbac.authorization.k8s.io/clusterroles: create,delete,get,list,patch,update,watch
+      + rule     rbac.authorization.k8s.io/rolebindings: create,delete,get,list,patch,update,watch
+      + rule     url /openid/v1/jwks: get
++ ClusterRoleBinding forge-connect-prod-us-prod  new
+      + roleRef  ClusterRole/forge-connect-prod-us-prod
+      + subject  ServiceAccount forge-system/forge-connect-prod-us-prod
+
+newly granted permissions (51):
+  cluster: bind rbac.authorization.k8s.io/clusterroles [acme-reader]
+  cluster: create apps/deployments
+  cluster: create core/configmaps
+  cluster: create core/namespaces
+  cluster: create core/services
+  cluster: create rbac.authorization.k8s.io/clusterroles
+  cluster: create rbac.authorization.k8s.io/rolebindings
+  cluster: delete apps/deployments
+  cluster: delete core/configmaps
+  cluster: delete core/namespaces
+  cluster: delete core/services
+  cluster: delete rbac.authorization.k8s.io/clusterroles
+  cluster: delete rbac.authorization.k8s.io/rolebindings
+  cluster: escalate rbac.authorization.k8s.io/clusterroles [acme-reader]
+  cluster: get apps/deployments
+  cluster: get apps/replicasets
+  cluster: get core/configmaps
+  cluster: get core/namespaces
+  cluster: get core/pods
+  cluster: get core/services
+  cluster: get rbac.authorization.k8s.io/clusterroles
+  cluster: get rbac.authorization.k8s.io/rolebindings
+  cluster: get url /openid/v1/jwks
+  cluster: list apps/deployments
+  cluster: list apps/replicasets
+  cluster: list core/configmaps
+  cluster: list core/namespaces
+  cluster: list core/pods
+  cluster: list core/services
+  cluster: list rbac.authorization.k8s.io/clusterroles
+  cluster: list rbac.authorization.k8s.io/rolebindings
+  cluster: patch apps/deployments
+  cluster: patch core/configmaps
+  cluster: patch core/namespaces
+  cluster: patch core/services
+  cluster: patch rbac.authorization.k8s.io/clusterroles
+  cluster: patch rbac.authorization.k8s.io/rolebindings
+  cluster: update apps/deployments
+  cluster: update core/configmaps
+  cluster: update core/namespaces
+  cluster: update core/services
+  cluster: update rbac.authorization.k8s.io/clusterroles
+  cluster: update rbac.authorization.k8s.io/rolebindings
+  cluster: watch apps/deployments
+  cluster: watch apps/replicasets
+  cluster: watch core/configmaps
+  cluster: watch core/namespaces
+  cluster: watch core/pods
+  cluster: watch core/services
+  cluster: watch rbac.authorization.k8s.io/clusterroles
+  cluster: watch rbac.authorization.k8s.io/rolebindings
+summary    +2 new  ~0 changed  -0 removed  =0 unchanged
+
+WARNING: --apply-scope cluster grants write on every kind the env renders, in every namespace. Where the render
+carries RBAC, escalate and bind are held only on the exact Role/ClusterRole names it declares, so the identity cannot mint a
+role the render does not name, but it can still rewrite those named roles and bind them. Prefer --apply-scope namespace:<ns>
+where the env fits.
+
+[dry-run] would apply to gke_acme_us-central1_prod:
+
+    apiVersion: v1
+    kind: Namespace
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: identity
+        forge.dev/connected-cluster: prod-us
+      name: forge-system
+    ---
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: identity
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod
+      namespace: forge-system
+    ---
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      annotations:
+        kubernetes.io/service-account.name: forge-connect-prod-us-prod
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: identity
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod-token
+      namespace: forge-system
+    type: kubernetes.io/service-account-token
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: apply
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod
+    rules:
+    - apiGroups:
+      - apps
+      resources:
+      - deployments
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - apiGroups:
+      - apps
+      resources:
+      - replicasets
+      verbs:
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - ""
+      resources:
+      - configmaps
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - apiGroups:
+      - ""
+      resources:
+      - namespaces
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - apiGroups:
+      - ""
+      resources:
+      - pods
+      verbs:
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - ""
+      resources:
+      - services
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - apiGroups:
+      - rbac.authorization.k8s.io
+      resources:
+      - clusterroles
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - apiGroups:
+      - rbac.authorization.k8s.io
+      resourceNames:
+      - acme-reader
+      resources:
+      - clusterroles
+      verbs:
+      - bind
+      - escalate
+    - apiGroups:
+      - rbac.authorization.k8s.io
+      resources:
+      - rolebindings
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - nonResourceURLs:
+      - /openid/v1/jwks
+      verbs:
+      - get
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: apply
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: forge-connect-prod-us-prod
+    subjects:
+    - kind: ServiceAccount
+      name: forge-connect-prod-us-prod
+      namespace: forge-system

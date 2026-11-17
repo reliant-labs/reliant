@@ -1,0 +1,65 @@
+"use client";
+
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// MockModeBanner renders a loud, always-visible reminder when the app is
+// running against mock data instead of the real backend. Mock mode is
+// opt-in (the forge.Frontend `config.mock` KCL knob); the banner exists so a
+// working-looking UI can never silently masquerade as a working stack.
+//
+// It is loud through the SEMANTIC warning tokens (`bg-warning` /
+// `text-on-warning` from globals.css), not a raw palette color — the same
+// rule every other surface in this app follows, so rebranding moves the
+// banner too.
+{{- if .HasMockAPI}}
+//
+// ── Why this is a client component ────────────────────────────────────
+//
+// The mode is read through the typed config module — the same source
+// src/lib/connect.ts selects its transport from, so the banner cannot
+// disagree with the transport about whether this is mock data. That module
+// reads window.__FORGE_CONFIG__ (config.js), which exists only in the
+// browser. Rendered in the server layout, the read happened at BUILD time,
+// found no config, and compiled the banner out of every static export while
+// the transport went on serving fixtures. So the banner reads the config
+// after hydration: the prerendered HTML carries no banner (the server
+// snapshot), and the browser renders it from the config.js it actually
+// loaded. Reading NEXT_PUBLIC_MOCK_API instead would inline the mode at build
+// time, which is what makes a bundle unpromotable between environments.
+
+import { useSyncExternalStore } from "react";
+
+import { loadConfig } from "@/lib/config_gen";
+
+// The config is fixed for the page's lifetime, so there is nothing to
+// subscribe to; useSyncExternalStore is here for its hydration contract
+// (server snapshot first, then the client's), not for updates.
+const noSubscription = () => () => {};
+
+function useMockMode(): string | undefined {
+  return useSyncExternalStore(
+    noSubscription,
+    () => loadConfig().MOCK_API,
+    () => undefined,
+  );
+}
+
+export function MockModeBanner() {
+  const mode = useMockMode();
+{{- else}}
+
+export function MockModeBanner() {
+  const mode = process.env.NEXT_PUBLIC_MOCK_API;
+{{- end}}
+  if (mode !== "true" && mode !== "hybrid") return null;
+  return (
+    <div
+      role="status"
+      className="bg-warning px-4 py-1.5 text-center text-sm font-semibold text-on-warning"
+    >
+      {mode === "true"
+        ? "MOCK DATA — backend not connected (unset mock_api in deploy/kcl/<env>/config.k to use the real backend)"
+        : "HYBRID MOCK MODE — ?scenario= overlays active; unmatched RPCs hit the real backend"}
+    </div>
+  );
+}

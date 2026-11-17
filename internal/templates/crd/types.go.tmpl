@@ -1,0 +1,104 @@
+//go:build ignore
+
+package {{.APIPackage}}
+
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+)
+
+func init() {
+	SchemeBuilder.Register(addKnown{{.TypeName}}Types)
+}
+
+func addKnown{{.TypeName}}Types(scheme *runtime.Scheme) error {
+	scheme.AddKnownTypes(GroupVersion,
+		&{{.TypeName}}{},
+		&{{.TypeName}}List{},
+	)
+	return nil
+}
+
+// {{.TypeName}} is the Schema for the {{.PluralLower}} API.
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+type {{.TypeName}} struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   {{.TypeName}}Spec   `json:"spec,omitempty"`
+	Status {{.TypeName}}Status `json:"status,omitempty"`
+}
+
+// {{.TypeName}}Spec defines the desired state of a {{.TypeName}}.
+type {{.TypeName}}Spec struct {
+{{- if eq .Shape "state-machine" }}
+	// State is the desired lifecycle state. Set by the user; the
+	// reconciler observes it and drives Status.Phase to converge.
+	// Valid values: "Running", "Suspended", "Deleting".
+	State {{.TypeName}}State `json:"state,omitempty"`
+{{ end }}
+	// TODO: Add your spec fields here.
+}
+{{- if eq .Shape "state-machine" }}
+
+// {{.TypeName}}State is the desired state set by the user.
+type {{.TypeName}}State string
+
+// {{.TypeName}}StateRunning, {{.TypeName}}StateSuspended and {{.TypeName}}StateDeleting are
+// the lifecycle states a user may ask for in Spec.State. The reconciler
+// reads them and drives Status.Phase toward the match.
+const (
+	{{.TypeName}}StateRunning   {{.TypeName}}State = "Running"
+	{{.TypeName}}StateSuspended {{.TypeName}}State = "Suspended"
+	{{.TypeName}}StateDeleting  {{.TypeName}}State = "Deleting"
+)
+{{- end }}
+
+// {{.TypeName}}Status defines the observed state of a {{.TypeName}}.
+type {{.TypeName}}Status struct {
+{{- if eq .Shape "state-machine" }}
+	// Phase is the observed lifecycle phase. The reconciler writes
+	// this in response to changes in Spec.State.
+	Phase {{.TypeName}}Phase `json:"phase,omitempty"`
+
+	// Message holds a human-readable status message — typically the
+	// last reconcile error, if any.
+	Message string `json:"message,omitempty"`
+
+	// ObservedGeneration is metadata.generation at the time of the
+	// last successful reconcile. Used to detect drift.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+{{ end }}
+	// Conditions reports the current state.
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+{{- if eq .Shape "state-machine" }}
+
+// {{.TypeName}}Phase is the observed phase set by the reconciler.
+type {{.TypeName}}Phase string
+
+// {{.TypeName}}PhasePending, {{.TypeName}}PhaseReady, {{.TypeName}}PhaseFailed and
+// {{.TypeName}}PhaseDeleted are the phases the reconciler writes to
+// Status.Phase as it converges on Spec.State.
+const (
+	{{.TypeName}}PhasePending {{.TypeName}}Phase = "Pending"
+	{{.TypeName}}PhaseReady   {{.TypeName}}Phase = "Ready"
+	{{.TypeName}}PhaseFailed  {{.TypeName}}Phase = "Failed"
+	{{.TypeName}}PhaseDeleted {{.TypeName}}Phase = "Deleted"
+)
+{{- end }}
+
+// {{.TypeName}}List contains a list of {{.TypeName}}.
+// +kubebuilder:object:root=true
+type {{.TypeName}}List struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []{{.TypeName}} `json:"items"`
+}
+
+// DeepCopy / DeepCopyInto / DeepCopyObject for both types above are GENERATED:
+// `forge generate` writes this package's zz_generated.deepcopy.go from the
+// +kubebuilder:object:root markers. Do not hand-write them here — a second
+// declaration stops the package compiling, and a hand-written copy goes
+// shallow the moment a pointer, map or slice field is added to the spec.

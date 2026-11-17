@@ -1,0 +1,52 @@
+version: v2
+# Default: local plugins resolved from $PATH. Anonymous users can
+# `forge generate` without ever touching the BSR. Run `forge tools
+# install` (or `go install` the two binaries listed below) once to
+# put them on PATH.
+#
+# To opt back into BSR-hosted plugins (no install required, latest
+# version always), replace `local:` with `remote:` and the binary
+# name with the BSR plugin path, e.g.
+#   - remote: buf.build/protocolbuffers/go
+#   - remote: buf.build/connectrpc/go
+# and drop `strategy: all` (buf accepts it on local plugins only).
+#
+# `strategy: all` runs each plugin once over every proto file. buf's
+# default, `directory`, runs it once per proto directory, every process at
+# once up to NumCPU; on a many-core machine that is thousands of threads
+# from one generate. These plugins write one file per proto either way.
+#
+# OpenAPI specs: set `api.openapi: true` in forge.yaml. Forge will
+# invoke protoc-gen-connect-openapi via a synthesized template; you
+# do NOT need to add it here. Install with:
+#   go install github.com/sudorandom/protoc-gen-connect-openapi@latest
+# forge/v1/forge.proto is a COMPILE input only — its annotations are imported
+# by the project's other protos, but its Go is NOT generated here. Forge ships
+# the generated descriptor as the shared `github.com/reliant-labs/forge/pkg/forgepb`
+# package, and proto/forge/v1/forge.proto declares
+# `option go_package = ".../forgepb;forgepb"`. Generating a project-local
+# gen/forge/v1 copy too would register the descriptor file
+# "forge/v1/forge.proto" twice at init and panic every binary with
+# "proto: file ... is already registered". Excluding it at the input level
+# suppresses output for every plugin while keeping it available as an import.
+inputs:
+  - directory: proto
+    exclude_paths:
+      - proto/forge/v1
+      # buf/validate/validate.proto is protovalidate's option-definition
+      # file, vendored so buf.validate field rules compile offline. It is a
+      # COMPILE input only — the protovalidate runtime library supplies the
+      # Go/TS types, so no code is generated from it (a local copy would
+      # double-register the descriptor and panic every binary at init).
+      - proto/buf/validate
+plugins:
+  - local: protoc-gen-go
+    out: gen
+    strategy: all
+    opt:
+      - paths=source_relative
+  - local: protoc-gen-connect-go
+    out: gen
+    strategy: all
+    opt:
+      - paths=source_relative

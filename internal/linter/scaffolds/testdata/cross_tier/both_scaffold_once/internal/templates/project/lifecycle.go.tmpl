@@ -1,0 +1,9 @@
+// forge-scaffold (USER-OWNED): forge writes this file ONCE (write-if-absent),
+// then NEVER regenerates or overwrites it.
+package app
+
+{{range .Widgets}}
+func (c *Components) Widget{{.FieldName}}() Widget {
+	return wrap("{{.Name}}", c.{{.FieldName}})
+}
+{{end}}

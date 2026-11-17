@@ -1,0 +1,41 @@
+import type { Metadata } from "next";
+
+import { DevLogging } from "./dev-logging";
+import "./globals.css";
+
+// Credit link, shown at the bottom of every page. Yours to edit or delete:
+// remove this constant and the footer element below. Forge never re-adds it.
+const BUILT_WITH_FORGE_URL =
+  "https://reliantlabs.io/?utm_source=forge&utm_medium=app-footer&utm_campaign=built-with-forge";
+
+export const metadata: Metadata = {
+  title: "{{.ProjectName}}",
+  description: "{{.ProjectName}}",
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        {/* Blocking: the runtime document must precede client SDK initialization. */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src="/config.js" />
+      </head>
+      <body className="flex min-h-screen flex-col">
+        <DevLogging />
+        <div className="flex-1">{children}</div>
+        <footer className="px-6 pt-2 pb-6 text-center text-xs opacity-70">
+          Built with ❤️ using{" "}
+          <a
+            href={BUILT_WITH_FORGE_URL}
+            target="_blank"
+            rel="noopener"
+            className="underline underline-offset-2 hover:opacity-100"
+          >
+            Forge
+          </a>
+        </footer>
+      </body>
+    </html>
+  );
+}

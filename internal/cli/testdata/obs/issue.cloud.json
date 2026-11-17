@@ -1,0 +1,90 @@
+{
+  "schema": "forge.obs.issue/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "prod",
+    "backend": "cloud",
+    "env_id": "env-prod",
+    "from": "2026-10-19T12:00:00Z",
+    "to": "2026-10-22T12:00:00Z"
+  },
+  "query_mode": "structured",
+  "issue": {
+    "id": "ISS-7f3a",
+    "platform": "server",
+    "service": "api",
+    "title": "boom",
+    "culprit": "internal/store/db.go in store.Exec",
+    "status": "regressed",
+    "first_seen": "2026-10-20T10:00:00Z",
+    "last_seen": "2026-10-22T11:00:00Z",
+    "first_version": "v1.3.0",
+    "last_version": "v1.4.0",
+    "events": 42,
+    "affected": 9,
+    "affected_unit": "traces",
+    "latest_trace_id": "0af7651916cd43dd8448eb211c80319c",
+    "regressed_at": "2026-10-22T09:00:00Z"
+  },
+  "latest_event": {
+    "time": "2026-10-22T11:00:00Z",
+    "trace_id": "0af7651916cd43dd8448eb211c80319c",
+    "version": "v1.4.0",
+    "message": "insert failed"
+  },
+  "events": [
+    {
+      "time": "2026-10-22T11:00:00Z",
+      "trace_id": "0af7651916cd43dd8448eb211c80319c",
+      "message": "insert failed"
+    }
+  ],
+  "frames": [
+    {
+      "function": "store.Exec",
+      "file": "internal/store/db.go",
+      "line": 88,
+      "in_app": true
+    }
+  ],
+  "by_version": [
+    {
+      "version": "v1.4.0",
+      "events": 30,
+      "affected": 6,
+      "affected_unit": "traces"
+    }
+  ],
+  "co_occurring_issue_ids": [
+    "ISS-1"
+  ],
+  "release": {
+    "version": "v1.4.0",
+    "promotion_id": "p-14",
+    "promoted_at": "2026-10-22T09:00:00Z"
+  },
+  "first_release": {
+    "version": "v1.3.0",
+    "git_commit": "abc1234",
+    "commit_range": "aaa1111..abc1234",
+    "promoted_at": "2026-10-20T09:00:00Z"
+  },
+  "suspect_commits": [
+    {
+      "sha": "abc1234def5678abc1234def5678abc1234def56",
+      "subject": "retry on conflict (#12)",
+      "author": "Ada",
+      "time": "2026-10-21T09:00:00Z",
+      "files": [
+        "internal/store/db.go"
+      ],
+      "pr": 12
+    }
+  ],
+  "suggested": [
+    "forge obs trace 0af7651916cd43dd8448eb211c80319c prod",
+    "forge obs logs prod --trace 0af7651916cd43dd8448eb211c80319c",
+    "forge obs issue resolve ISS-7f3a prod --in next"
+  ]
+}
