@@ -56,7 +56,7 @@ beforeEach(() => {
   setDefaultOrganization.mockReset().mockResolvedValue(undefined);
   useAuthStore.setState({ user: { id: "alice" } as never });
   // Unbound, so the binding loads what each test saved before it renders.
-  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false });
+  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
   setTransport(null);
 });
 
@@ -194,12 +194,13 @@ describe("OrgSwitcher", () => {
     onSwitch.mockClear();
 
     // Another tab picks Side Project: the browser writes the shared last
-    // choice and fires `storage` in every other tab of the origin.
+    // choice and fires `storage` in every other tab of the origin. A listener
+    // runs synchronously inside dispatchEvent, and act() flushes any store
+    // update and effect it causes, so the outcome is settled when act returns.
     act(() => {
       localStorage.setItem("reliant.activeOrg.alice", "org-b");
       window.dispatchEvent(new StorageEvent("storage", { key: "reliant.activeOrg.alice", newValue: "org-b" }));
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(getActiveOrgId()).toBe("org-a");
     expect(onSwitch).not.toHaveBeenCalled();
   });

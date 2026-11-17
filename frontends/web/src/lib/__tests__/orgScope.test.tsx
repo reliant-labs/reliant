@@ -8,6 +8,7 @@
  * that named no org, and kept serving that every-org answer as the active
  * org's: projects and chats of other orgs showed up in the sidebar.
  */
+import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -81,7 +82,7 @@ beforeEach(() => {
   listMyOrganizations.mockReset();
   useAuthStore.setState({ user: { id: "alice" } as never, session: { access_token: "t" } as never });
   // Unbound, so each test's binding loads what it saved first.
-  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false });
+  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
 });
 
 afterEach(() => {
@@ -89,7 +90,7 @@ afterEach(() => {
   queryClient.clear();
   setTransport(null);
   useAuthStore.setState({ user: null, session: null });
-  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false });
+  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
 });
 
 describe("org-scoped product lists", () => {
@@ -100,12 +101,14 @@ describe("org-scoped product lists", () => {
     const projects = renderHook(() => useProjects(), { wrapper });
     const chats = renderHook(() => useChatListWithWorkspaces(null), { wrapper });
 
-    // The org is not known yet: the lists wait (loading), and nothing went out.
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // The org is not known yet: the membership list is in flight, the lists
+    // wait (loading, their queries disabled), and nothing went out.
+    await waitFor(() => expect(listMyOrganizations).toHaveBeenCalledTimes(1));
     expect(projects.result.current.isLoading).toBe(true);
+    expect(chats.result.current.fetchStatus).toBe("idle");
     expect(projectOrgs).toEqual([]);
     expect(chatOrgs).toEqual([]);
-    expect(getOrgScope()).toEqual({ ready: false, orgId: null });
+    expect(getOrgScope()).toMatchObject({ ready: false, orgId: null, error: null });
 
     await answer({ orgs: [ACME, SIDE], defaultOrgId: "org-a" });
 
@@ -147,13 +150,10 @@ describe("org-scoped product lists", () => {
   it("an imperative read waits for the org too", async () => {
     const { projectOrgs } = server();
     bindActiveOrgUser("alice");
-    let settled = false;
-    const read = fetchProjects().then((projects) => {
-      settled = true;
-      return projects;
-    });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(settled).toBe(false);
+    const read = fetchProjects();
+    // Still waiting: it settles only on an org-store change, which has not
+    // happened, so it loses a race against an already-resolved promise.
+    expect(await Promise.race([read.then(() => "settled"), Promise.resolve("waiting")])).toBe("waiting");
     expect(projectOrgs).toEqual([]);
 
     act(() => setEffectiveOrg("org-a"));
@@ -173,10 +173,51 @@ describe("org-scoped product lists", () => {
 
   it("wait from the moment someone signs in, before any binding renders", () => {
     useAuthStore.setState({ user: null, session: null });
-    expect(getOrgScope()).toEqual({ ready: true, orgId: null }); // signed out: nothing to list
+    expect(getOrgScope()).toMatchObject({ ready: true, orgId: null }); // signed out: nothing to list
     useAuthStore.setState({ user: { id: "bob" } as never, session: { access_token: "t" } as never });
     expect(useActiveOrgStore.getState().userId).toBe("bob");
-    expect(getOrgScope()).toEqual({ ready: false, orgId: null });
+    expect(getOrgScope()).toMatchObject({ ready: false, orgId: null });
+  });
+
+  it("an API-key session proceeds at once, naming no org, without the person's membership list", async () => {
+    const { projectOrgs } = server();
+    // The control plane refuses a machine credential's membership list.
+    listMyOrganizations.mockRejectedValue(new ConnectError("human sessions only", Code.PermissionDenied));
+    useAuthStore.getState().setApiKeySession("rk_test");
+    render(<ActiveOrgBinding onSwitch={followActiveOrg} />, { wrapper });
+    const projects = renderHook(() => useProjects(), { wrapper });
+
+    await waitFor(() => expect(projects.result.current.projects.map((p) => p.id)).toEqual(["p-every-org"]));
+    // No org named: the server acts in the credential's own org.
+    expect(projectOrgs).toEqual([undefined]);
+    expect(listMyOrganizations).not.toHaveBeenCalled();
+    expect(getOrgScope()).toMatchObject({ ready: true, orgId: null, error: null });
+    await expect(fetchProjects()).resolves.toHaveLength(1);
+  });
+
+  it("an org list that fails is the lists' error with a Retry, never a load forever or every org's rows", async () => {
+    const { projectOrgs, chatOrgs } = server();
+    const refused = new ConnectError("control plane unavailable", Code.PermissionDenied);
+    listMyOrganizations.mockRejectedValue(refused);
+    render(<ActiveOrgBinding onSwitch={followActiveOrg} />, { wrapper });
+    const projects = renderHook(() => useProjects(), { wrapper });
+    const chats = renderHook(() => useChatListWithWorkspaces(null), { wrapper });
+
+    await waitFor(() => expect(projects.result.current.error).toBe(refused));
+    expect(projects.result.current.isLoading).toBe(false);
+    await waitFor(() => expect(chats.result.current.isError).toBe(true));
+    await expect(fetchProjects()).rejects.toBe(refused);
+    // Nothing went out naming no org.
+    expect(projectOrgs).toEqual([]);
+    expect(chatOrgs).toEqual([]);
+
+    // Retry re-reads the membership list; once it answers, the lists load in the org.
+    listMyOrganizations.mockResolvedValue({ orgs: [ACME], defaultOrgId: "org-a" });
+    act(() => projects.result.current.refetch());
+    await waitFor(() => expect(projects.result.current.projects.map((p) => p.id)).toEqual(["p-org-a"]));
+    expect(projects.result.current.error).toBeNull();
+    await waitFor(() => expect(chatOrgs).toEqual(["org-a"]));
+    expect(projectOrgs).toEqual(["org-a"]);
   });
 
   it("the first org of a tab drops a list read with no org, and keeps the org's", () => {

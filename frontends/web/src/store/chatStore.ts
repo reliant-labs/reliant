@@ -1231,16 +1231,18 @@ function withdrawFromQueueStrip(chatId: string, thread: string, rowId: string): 
 // Shared by startChat and startExistingChat: home the chat the server returned,
 // flip activity to RUNNING. The optimistic first message is
 // each caller's job, because the two must write it at different times.
-function applyFirstSend(chat: Chat, projectId: string): void {
+// `orgId` is the org the send began in (captured before StartChat was
+// awaited): the chat goes into that org's lists, whatever the tab shows now.
+function applyFirstSend(chat: Chat, projectId: string, orgId: string | null): void {
   const chatId = chat.id;
 
   // Home the new chat into the React Query caches immediately so both
   // useChat / useActiveChat and list readers (sidebar/search/worktree views)
   // show it without waiting for a stream-triggered list refetch.
   seedChatDetail(chat);
-  upsertChatInListCache(projectId, chat);
-  void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId) });
-  void queryClient.invalidateQueries({ queryKey: chatKeys.list(null) });
+  upsertChatInListCache(projectId, chat, orgId);
+  void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId, orgId) });
+  void queryClient.invalidateQueries({ queryKey: chatKeys.list(null, orgId) });
 
   // Initialize state for the new chat
   useChatStore.getState().initChatState(chat);
@@ -1358,6 +1360,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (!projectId) {
       throw new Error("No project selected");
     }
+    // The org this start is in: the request names it (orgInterceptor, at the
+    // call below), and the answer goes into its lists even after a switch.
+    const orgId = getOrgScope().orgId;
 
     const effectiveWorkflowParams: Record<string, unknown> = workflowParams ?? {};
 
@@ -1396,7 +1401,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
     endAttempt(attemptKey);
 
-    applyFirstSend(chat, projectId);
+    applyFirstSend(chat, projectId, orgId);
     // Safe to seed after the request: a brand-new chat has no id until
     // StartChat returns, so nothing is subscribed to it yet and no echo can
     // beat this write. It replaces the empty list initChatState seeded.
@@ -1421,6 +1426,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   ) => {
     const { clientMessageId: givenId, ...sendOptions } = options ?? {};
     const workflowParams = sendOptions.workflowParams ?? {};
+    // The org this start is in, before anything is awaited (see startChat).
+    const orgId = getOrgScope().orgId;
     const clientMessageId = givenId ?? newClientMessageId();
     const optimisticId = optimisticSendId(clientMessageId);
     sendPayloads.set(clientMessageId, {
@@ -1471,7 +1478,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
     sendPayloads.delete(clientMessageId);
 
-    applyFirstSend(chat, chat.projectId);
+    applyFirstSend(chat, chat.projectId, orgId);
     return chat;
   },
 
@@ -2939,12 +2946,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   branchChatWithoutMachine: async (chatId: string, messageId: string) => {
+    // The org the branch began in: its lists, even after a switch.
+    const orgId = getOrgScope().orgId;
     const { chat: newChat } = await chatActions.branchChat(chatId, {
       messageId,
       noMachine: true,
     });
     seedChatDetail(newChat);
-    upsertChatInListCache(newChat.projectId, newChat);
+    upsertChatInListCache(newChat.projectId, newChat, orgId);
     get().initChatState(newChat);
 
     get().selectChat(newChat);

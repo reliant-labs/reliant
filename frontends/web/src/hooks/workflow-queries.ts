@@ -27,6 +27,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { useQuery } from "@tanstack/react-query";
 import {
   WorkflowService,
   GetWorkflowRequestSchema,
@@ -41,7 +42,7 @@ import {
   type DraftStatus,
 } from "../components/workflow/workflowDraftStatus";
 import { connectClient } from "../lib/connect";
-import { getOrgScope, orgRequest, useOrgScope, whenOrgScopeReady } from "../lib/orgScope";
+import { getOrgScope, orgQueryEnabled, orgRequest, useOrgScope, whenOrgScopeReady, withOrgFailure } from "../lib/orgScope";
 import { queryClient } from "../lib/query-client";
 import { toWorkflowMessage } from "../lib/workflowProto";
 import { useProjectStore } from "../store/projectStore";
@@ -363,13 +364,18 @@ export function useWorkflowList(
   options: { includeHidden?: boolean; enabled?: boolean } = {},
 ) {
   const org = useOrgScope();
-  return useListWorkflows(
-    workflowListRequest(projectId ?? "", options.includeHidden ?? false, org.orgId),
-    {
-      enabled: !!projectId && (options.enabled ?? true) && org.ready,
-      staleTime: WORKFLOW_STALE_TIME_MS,
-      select: workflowListFromProto,
-    },
+  return useQuery(
+    withOrgFailure(
+      workflowServiceQueries.listWorkflows(
+        workflowListRequest(projectId ?? "", options.includeHidden ?? false, org.orgId),
+        {
+          enabled: !!projectId && (options.enabled ?? true) && orgQueryEnabled(org),
+          staleTime: WORKFLOW_STALE_TIME_MS,
+          select: workflowListFromProto,
+        },
+      ),
+      org,
+    ),
   );
 }
 
@@ -381,9 +387,15 @@ const selectListedWorkflows = (response: ListWorkflowsResponse) => workflowListF
  */
 export function useProjectWorkflowList(projectId: string | undefined) {
   const org = useOrgScope();
-  return useListWorkflows(
-    workflowListRequest(projectId ?? "", false, org.orgId),
-    { enabled: !!projectId && org.ready, staleTime: WORKFLOW_STALE_TIME_MS, select: selectListedWorkflows },
+  return useQuery(
+    withOrgFailure(
+      workflowServiceQueries.listWorkflows(workflowListRequest(projectId ?? "", false, org.orgId), {
+        enabled: !!projectId && orgQueryEnabled(org),
+        staleTime: WORKFLOW_STALE_TIME_MS,
+        select: selectListedWorkflows,
+      }),
+      org,
+    ),
   );
 }
 
@@ -409,9 +421,15 @@ const NO_WORKFLOW_DEFS: WorkflowDef[] = [];
 export function useWorkflows(): { workflows: WorkflowDef[]; loading: boolean; error: string | null } {
   const projectId = useProjectStore((state) => state.currentProject?.id);
   const org = useOrgScope();
-  const query = useListWorkflows(
-    workflowListRequest(projectId ?? "", false, org.orgId),
-    { enabled: !!projectId && org.ready, staleTime: WORKFLOW_STALE_TIME_MS, select: workflowDefsFromProto },
+  const query = useQuery(
+    withOrgFailure(
+      workflowServiceQueries.listWorkflows(workflowListRequest(projectId ?? "", false, org.orgId), {
+        enabled: !!projectId && orgQueryEnabled(org),
+        staleTime: WORKFLOW_STALE_TIME_MS,
+        select: workflowDefsFromProto,
+      }),
+      org,
+    ),
   );
   return {
     workflows: query.data ?? NO_WORKFLOW_DEFS,

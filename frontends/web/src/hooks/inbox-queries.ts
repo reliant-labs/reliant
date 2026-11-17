@@ -16,23 +16,23 @@
  * focus, even while fresh.
  */
 
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { create as createStore } from "zustand";
 import { persist } from "zustand/middleware";
 
 import type { ListInboxResponse } from "../gen/reliant/v1/inbox_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
-import { orgRequest, useOrgScope } from "../lib/orgScope";
+import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
 import { queryClient as appQueryClient } from "../lib/query-client";
 import { useProjectStore } from "../store/projectStore";
 import {
   inboxServiceKeys,
+  inboxServiceQueries,
   useCleanupStorage as useCleanupStorageRpc,
   useForgetStorageWorktree as useForgetStorageWorktreeRpc,
   useKeepMarkedWorktree as useKeepMarkedWorktreeRpc,
   useReclaimMarkedWorktreeNow as useReclaimMarkedWorktreeNowRpc,
   useDismissInboxItem,
-  useListInbox,
   useRestoreInboxItem,
 } from "./inbox-service-hooks_gen";
 import { useDecideWorktreeReclaim as useDecideWorktreeReclaimRpc } from "./worktree-reclaim-service-hooks_gen";
@@ -121,7 +121,15 @@ function inboxRequest(projectId: string | undefined, orgId: string | null) {
 /** The Inbox's items in the server's priority order (default limit, 100). */
 export function useInbox(projectId?: string) {
   const org = useOrgScope();
-  return useListInbox(inboxRequest(projectId, org.orgId), { enabled: org.ready, refetchOnWindowFocus: "always" });
+  return useQuery(
+    withOrgFailure(
+      inboxServiceQueries.listInbox(inboxRequest(projectId, org.orgId), {
+        enabled: orgQueryEnabled(org),
+        refetchOnWindowFocus: "always",
+      }),
+      org,
+    ),
+  );
 }
 
 function countsOf(response: ListInboxResponse): InboxCounts {
@@ -136,11 +144,16 @@ function countsOf(response: ListInboxResponse): InboxCounts {
  */
 export function useInboxCounts(projectId?: string) {
   const org = useOrgScope();
-  return useListInbox(inboxRequest(projectId, org.orgId), {
-    enabled: org.ready,
-    refetchOnWindowFocus: "always",
-    select: countsOf,
-  });
+  return useQuery(
+    withOrgFailure(
+      inboxServiceQueries.listInbox(inboxRequest(projectId, org.orgId), {
+        enabled: orgQueryEnabled(org),
+        refetchOnWindowFocus: "always",
+        select: countsOf,
+      }),
+      org,
+    ),
+  );
 }
 
 // ── Cache helpers ───────────────────────────────────────────────────────────

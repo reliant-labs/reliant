@@ -28,61 +28,115 @@ import { useActiveOrgStore } from "@/store/activeOrgStore";
 export interface OrgScope {
   ready: boolean;
   orgId: string | null;
+  /**
+   * The tab's org could not be resolved: the membership list failed with
+   * nothing saved to act in. Not ready, and not loading either: lists show
+   * this error, and their Retry runs `retry` (re-reads the membership list).
+   * Never a fallback to naming no org, which is every org's rows.
+   */
+  error: Error | null;
+  retry: () => void;
 }
 
-const NO_ORGS: OrgScope = { ready: true, orgId: null };
-const UNRESOLVED: OrgScope = { ready: false, orgId: null };
+const noRetry = () => {};
+const NO_ORGS: OrgScope = { ready: true, orgId: null, error: null, retry: noRetry };
+const UNRESOLVED: OrgScope = { ready: false, orgId: null, error: null, retry: noRetry };
 
-function scopeOf(userId: string | null, effectiveId: string | null, resolved: boolean): OrgScope {
+type Failure = ReturnType<typeof useActiveOrgStore.getState>["failure"];
+
+function scopeOf(userId: string | null, effectiveId: string | null, resolved: boolean, failure: Failure): OrgScope {
   if (!hasControlPlane || userId === null) return NO_ORGS;
-  if (effectiveId === null) return resolved ? NO_ORGS : UNRESOLVED;
-  return { ready: true, orgId: effectiveId };
+  if (effectiveId === null) {
+    if (resolved) return NO_ORGS;
+    return failure ? failedScope(failure) : UNRESOLVED;
+  }
+  return stableScope(effectiveId);
 }
 
 /** The org scope right now, for code outside React. */
 export function getOrgScope(): OrgScope {
-  const { userId, effectiveId, resolved } = useActiveOrgStore.getState();
-  return scopeOf(userId, effectiveId, resolved);
+  const { userId, effectiveId, resolved, failure } = useActiveOrgStore.getState();
+  return scopeOf(userId, effectiveId, resolved, failure);
 }
 
-/** The org scope, re-rendering when it changes. */
+/** The org scope, re-rendering when it changes. The same object for an unchanged scope. */
 export function useOrgScope(): OrgScope {
   const userId = useActiveOrgStore((s) => s.userId);
   const effectiveId = useActiveOrgStore((s) => s.effectiveId);
   const resolved = useActiveOrgStore((s) => s.resolved);
-  const scope = scopeOf(userId, effectiveId, resolved);
-  // The same object for an unchanged scope, so it can sit in a dependency list.
-  return scope.orgId === null ? scope : stableScope(scope.orgId);
+  const failure = useActiveOrgStore((s) => s.failure);
+  return scopeOf(userId, effectiveId, resolved, failure);
 }
 
 const scopes = new Map<string, OrgScope>();
 function stableScope(orgId: string): OrgScope {
   let scope = scopes.get(orgId);
   if (!scope) {
-    scope = { ready: true, orgId };
+    scope = { ready: true, orgId, error: null, retry: noRetry };
     scopes.set(orgId, scope);
+  }
+  return scope;
+}
+
+const failedScopes = new WeakMap<NonNullable<Failure>, OrgScope>();
+function failedScope(failure: NonNullable<Failure>): OrgScope {
+  let scope = failedScopes.get(failure);
+  if (!scope) {
+    scope = { ready: false, orgId: null, error: failure.error, retry: failure.retry };
+    failedScopes.set(failure, scope);
   }
   return scope;
 }
 
 /**
  * Resolves with the org scope once it is ready, for an imperative read that
- * must not go out unscoped (fetchProjects). Never rejects; it waits as long as
- * the tab's org is unknown. A caller on a hot path checks `getOrgScope()`
+ * must not go out unscoped (fetchProjects). Rejects with the scope's error
+ * when the org cannot be resolved (the caller reports it like a failed read),
+ * rather than waiting forever. A caller on a hot path checks `getOrgScope()`
  * first and awaits this only when it is not ready, so the common case takes
  * no extra promise hop.
  */
 export function whenOrgScopeReady(): Promise<OrgScope> {
   const now = getOrgScope();
   if (now.ready) return Promise.resolve(now);
-  return new Promise((resolve) => {
+  if (now.error) return Promise.reject(now.error);
+  return new Promise((resolve, reject) => {
     const unsubscribe = useActiveOrgStore.subscribe(() => {
       const scope = getOrgScope();
-      if (!scope.ready) return;
-      unsubscribe();
-      resolve(scope);
+      if (scope.ready) {
+        unsubscribe();
+        resolve(scope);
+      } else if (scope.error) {
+        unsubscribe();
+        reject(scope.error);
+      }
     });
   });
+}
+
+/** Whether a list may run its query: the org is known, or its failure is to be shown. */
+export function orgQueryEnabled(org: OrgScope): boolean {
+  return org.ready || org.error !== null;
+}
+
+/**
+ * Query options for a list in `org`: unchanged while the org is known. While
+ * it failed to resolve, the query runs a fetch that asks for the membership
+ * list again and fails with the org's error, so the list shows an error state
+ * whose Retry (a refetch) retries the org, and never sends a request naming no
+ * org. Once the org resolves, the request (and so the key) names it and the
+ * real fetch runs.
+ */
+export function withOrgFailure<O extends { queryFn?: unknown }>(options: O, org: OrgScope): O {
+  if (!org.error) return options;
+  const { error, retry } = org;
+  return {
+    ...options,
+    queryFn: () => {
+      retry();
+      throw error;
+    },
+  };
 }
 
 /**

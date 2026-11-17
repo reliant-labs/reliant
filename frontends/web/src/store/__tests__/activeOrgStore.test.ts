@@ -15,7 +15,7 @@ const org = (id: string, isDefault = false) => ({ id, name: id, slug: id, role: 
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
-  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false });
+  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
 });
 
 describe("the choice is per user", () => {
@@ -46,7 +46,7 @@ describe("the choice is per tab", () => {
   /** A fresh page in a new tab: its own sessionStorage, the browser's localStorage. */
   function openNewTab() {
     sessionStorage.clear();
-    useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false });
+    useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
   }
 
   it("a new tab starts in the org last chosen in any tab", () => {
@@ -67,7 +67,7 @@ describe("the choice is per tab", () => {
     chooseActiveOrg("org-b");
     // Back in the first tab, which still has its own session, and reloads.
     sessionStorage.setItem("reliant.activeOrg.alice", thisTab!);
-    useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false });
+    useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
     bindActiveOrgUser("alice");
     expect(getActiveOrgId()).toBe("org-a");
     // And a tab opened now starts in the latest choice.
@@ -80,7 +80,7 @@ describe("the choice is per tab", () => {
     bindActiveOrgUser("alice");
     chooseActiveOrg("org-a");
     localStorage.setItem("reliant.activeOrg.alice", "org-b");
-    useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false });
+    useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
     bindActiveOrgUser("alice");
     expect(getActiveOrgId()).toBe("org-a");
   });

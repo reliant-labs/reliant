@@ -29,7 +29,7 @@ import { isForgeShell } from "@/lib/shell";
 import { useCallback, useMemo } from "react";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
-import { partialMatchKey, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { partialMatchKey, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import {
   GetProjectPromptsResponseSchema,
@@ -51,7 +51,7 @@ import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
 import { queryClient } from "../lib/query-client";
 import { toast } from "../lib/toast-manager";
-import { getOrgScope, orgRequest, useOrgScope, whenOrgScopeReady } from "../lib/orgScope";
+import { getOrgScope, orgQueryEnabled, orgRequest, useOrgScope, whenOrgScopeReady, withOrgFailure } from "../lib/orgScope";
 import { useAuthStore } from "../store/authStore";
 import {
   projectServiceKeys,
@@ -59,7 +59,6 @@ import {
   useGetProjectGitInfo,
   useGetProjectPrompts,
   useListProjectDaemons,
-  useListProjects,
   useSaveProjectPrompts as useSaveProjectPromptsRpc,
 } from "./project-service-hooks_gen";
 
@@ -287,12 +286,17 @@ export function useProjects(): ProjectListView {
   // reads empty and settled for every caller.
   const wanted = hasSession && !isForgeShell();
   // Not before the tab's org is known: a list naming no org is every org's.
-  const enabled = wanted && org.ready;
-  const query = useListProjects(listProjectsRequest(org.orgId), {
-    enabled,
-    staleTime: PROJECTS_STALE_TIME_MS,
-    select: projectsOf,
-  });
+  // An org that failed to resolve is the list's error, with a Retry.
+  const query = useQuery(
+    withOrgFailure(
+      projectServiceQueries.listProjects(listProjectsRequest(org.orgId), {
+        enabled: wanted && orgQueryEnabled(org),
+        staleTime: PROJECTS_STALE_TIME_MS,
+        select: projectsOf,
+      }),
+      org,
+    ),
+  );
   const { refetch } = query;
   const refetchList = useCallback(() => {
     void refetch();
@@ -339,9 +343,13 @@ export function getCachedProjects(): Project[] {
   return projectsOf(queryClient.getQueryData<ListProjectsResponse>(projectsKey()));
 }
 
-/** Patch one row of the cached list in place (no refetch). */
+/**
+ * Patch one row in place (no refetch), in whichever org's list holds it: the
+ * row is found by id, so a write that lands after an org switch patches the
+ * list the project is in, never the tab's current one.
+ */
 function patchCachedProject(id: string, patch: (row: ProtoProject) => ProtoProject): void {
-  queryClient.setQueryData<ListProjectsResponse>(projectsKey(), (prev) => {
+  queryClient.setQueriesData<ListProjectsResponse>({ queryKey: projectServiceKeys.listProjects.all }, (prev) => {
     if (!prev || !prev.projects.some((row) => row.id === id)) return prev;
     return { ...prev, projects: prev.projects.map((row) => (row.id === id ? patch(row) : row)) };
   });
@@ -420,6 +428,9 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
  * "Added <machine> to existing project <name>" for an attach.
  */
 export async function createProjectWithResult(input: CreateProjectInput): Promise<CreateProjectResult> {
+  // The org the create began in (the request names it): the new row goes
+  // into that org's list, even if the tab switched org while it ran.
+  const orgId = getOrgScope().orgId;
   try {
     const response = await client.createProject({
       name: input.name,
@@ -430,11 +441,16 @@ export async function createProjectWithResult(input: CreateProjectInput): Promis
     });
     if (!response.project) throw new Error("No project in response");
     const created = response.project;
-    queryClient.setQueryData<ListProjectsResponse>(projectsKey(), (prev) =>
-      prev && !prev.projects.some((row) => row.id === created.id)
-        ? { ...prev, projects: [...prev.projects, created], total: prev.total + 1 }
-        : prev,
-    );
+    // An attach can answer with an existing project of another org: it is
+    // not this org's list's to show.
+    const inOrg = !orgId || !created.orgId || created.orgId === orgId;
+    if (inOrg) {
+      queryClient.setQueryData<ListProjectsResponse>(projectsKey(orgId), (prev) =>
+        prev && !prev.projects.some((row) => row.id === created.id)
+          ? { ...prev, projects: [...prev.projects, created], total: prev.total + 1 }
+          : prev,
+      );
+    }
     await invalidateProjects();
     const project = projectFromProto(created);
     const projectDaemon = response.projectDaemon ? projectDaemonFromProto(response.projectDaemon) : undefined;
@@ -490,7 +506,8 @@ export async function updateProject(projectId: string, input: UpdateProjectInput
 
 export async function deleteProject(projectId: string): Promise<void> {
   await client.deleteProject({ projectId });
-  queryClient.setQueryData<ListProjectsResponse>(projectsKey(), (prev) =>
+  // From whichever org's list holds it, not only the tab's current one.
+  queryClient.setQueriesData<ListProjectsResponse>({ queryKey: projectServiceKeys.listProjects.all }, (prev) =>
     prev && prev.projects.some((row) => row.id === projectId)
       ? { ...prev, projects: prev.projects.filter((row) => row.id !== projectId), total: Math.max(0, prev.total - 1) }
       : prev,

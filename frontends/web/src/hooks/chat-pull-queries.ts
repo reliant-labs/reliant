@@ -14,13 +14,13 @@
  */
 
 import { useMemo } from "react";
-import { keepPreviousData, type QueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, type QueryClient } from "@tanstack/react-query";
 import type { Chat } from "../types/chat";
 import type { SearchChatsResponse } from "../gen/reliant/v1/chat_pb";
 import { protoValueToJs } from "../api/proto-utils";
-import { orgRequest, useOrgScope } from "../lib/orgScope";
+import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
 import { queryClient as appQueryClient } from "../lib/query-client";
-import { chatServiceQueries, useSearchChats } from "./chat-service-hooks_gen";
+import { chatServiceQueries } from "./chat-service-hooks_gen";
 import { useChatListWithWorkspaces } from "./chat-queries";
 import { useDebounce } from "./useDebounce";
 
@@ -118,16 +118,18 @@ export function useChatSearch(scope: string | null, query: string, enabled = tru
   const term = useDebounce(query.trim(), CHAT_SEARCH_DEBOUNCE_MS);
   const searchesServer = enabled && term !== "";
   const org = useOrgScope();
-  const search = useSearchChats(
-    orgRequest({ projectId: scope ?? "", query: term }, org.orgId),
-    {
-      // Not before the tab's org is known: a search naming no org is every org's.
-      enabled: searchesServer && org.ready,
-      select: hitsOf,
-      // A failed search falls back to the title match at once.
-      retry: false,
-      placeholderData: keepPreviousData,
-    },
+  const search = useQuery(
+    withOrgFailure(
+      chatServiceQueries.searchChats(orgRequest({ projectId: scope ?? "", query: term }, org.orgId), {
+        // Not before the tab's org is known: a search naming no org is every org's.
+        enabled: searchesServer && orgQueryEnabled(org),
+        select: hitsOf,
+        // A failed search falls back to the title match at once.
+        retry: false,
+        placeholderData: keepPreviousData,
+      }),
+      org,
+    ),
   );
   const serverHits = search.data;
   const failed = search.isError;

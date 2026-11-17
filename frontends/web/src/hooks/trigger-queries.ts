@@ -17,7 +17,7 @@
  */
 
 import { create, isMessage } from "@bufbuild/protobuf";
-import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 import {
@@ -31,7 +31,7 @@ import {
   type TriggerFundingWarning,
 } from "../gen/reliant/v1/trigger_pb";
 import { connectClient } from "../lib/connect";
-import { orgRequest, useOrgScope } from "../lib/orgScope";
+import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
 import { toast } from "../lib/toast-manager";
 import {
   automationDraftFromProto,
@@ -62,7 +62,6 @@ import {
   useGetTrigger,
   useListReplayEvents,
   useListTriggerEvents,
-  useListTriggers,
   useRotateWebhookToken as useRotateWebhookTokenRpc,
   useSetTriggerEnabled as useSetTriggerEnabledRpc,
   useUpdateTrigger as useUpdateTriggerRpc,
@@ -117,14 +116,16 @@ const eventsRequest = (triggerId: string) => ({ triggerId, limit: EVENTS_LIMIT }
 export function useTriggers(projectId?: string, options: { enabled?: boolean } = {}) {
   // In the tab's org, and not before it is known (lib/orgScope).
   const org = useOrgScope();
-  return useListTriggers(
-    orgRequest({ projectId }, org.orgId),
-    {
-      enabled: (options.enabled ?? true) && org.ready,
-      // A page left open should not show a stale "next run" indefinitely.
-      refetchInterval: TRIGGER_POLL_MS,
-      select: triggersOf,
-    },
+  return useQuery(
+    withOrgFailure(
+      triggerServiceQueries.listTriggers(orgRequest({ projectId }, org.orgId), {
+        enabled: (options.enabled ?? true) && orgQueryEnabled(org),
+        // A page left open should not show a stale "next run" indefinitely.
+        refetchInterval: TRIGGER_POLL_MS,
+        select: triggersOf,
+      }),
+      org,
+    ),
   );
 }
 
@@ -145,11 +146,14 @@ export function useTriggerName(triggerId: string | undefined): string | undefine
  */
 export function useTriggerById(triggerId: string | undefined): Trigger | undefined {
   const org = useOrgScope();
-  const { data } = useListTriggers(orgRequest({}, org.orgId), {
-    enabled: !!triggerId && org.ready,
-    staleTime: 5 * 60_000,
-    select: triggersOf,
-  });
+  // A label: it waits for the org and shows nothing on failure (no Retry here).
+  const { data } = useQuery(
+    triggerServiceQueries.listTriggers(orgRequest({}, org.orgId), {
+      enabled: !!triggerId && org.ready,
+      staleTime: 5 * 60_000,
+      select: triggersOf,
+    }),
+  );
   return triggerId ? data?.find((trigger) => trigger.id === triggerId) : undefined;
 }
 

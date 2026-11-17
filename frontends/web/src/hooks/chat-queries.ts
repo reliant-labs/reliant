@@ -2,9 +2,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Chat } from "../api/client";
 import type { Chat as ProtoChat, ChatSelection, ListArchivedChatsResponse } from "../gen/reliant/v1/chat_pb";
 import type { WorktreeSummary } from "../gen/reliant/v1/worktree_pb";
-import { getOrgScope, orgRequest, useOrgScope } from "../lib/orgScope";
+import { getOrgScope, orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
 import { queryClient } from "../lib/query-client";
-import { chatServiceKeys, useListArchivedChats } from "./chat-service-hooks_gen";
+import { chatServiceKeys, chatServiceQueries } from "./chat-service-hooks_gen";
 import type { StartChatRequest, UpdateChatRequest } from "../types/api";
 import * as chatActions from "./chat-actions";
 
@@ -154,20 +154,28 @@ function upsertInto(prev: ChatListEnvelope, chat: Chat): ChatListEnvelope {
  * project list gets a minimal envelope when it has not loaded yet; the
  * all-projects list is only upserted into once it has (a one-chat envelope
  * would stand in for every other project's chats until the refetch).
+ *
+ * `orgId` is the org the write began in, captured by the caller BEFORE it
+ * awaited anything (`getOrgScope().orgId`), never the tab's org when the
+ * answer lands: a StartChat begun in org A that resolves after a switch to B
+ * writes A's lists, never B's. A chat that names another org is not written
+ * at all (`chatInOrg`).
  */
 export function upsertChatInListCache(
   projectId: string | undefined,
-  chat: Chat
+  chat: Chat,
+  orgId: string | null,
 ): void {
   const resolvedProjectId = projectId ?? chat.projectId;
   if (!resolvedProjectId) return;
+  if (!chatInOrg(chat, orgId)) return;
 
   queryClient.setQueryData(
-    chatKeys.list(null),
+    chatKeys.list(null, orgId),
     (prev: ChatListEnvelope | undefined) => (prev ? upsertInto(prev, chat) : prev),
   );
   queryClient.setQueryData(
-    chatKeys.list(resolvedProjectId),
+    chatKeys.list(resolvedProjectId, orgId),
     (prev: ChatListEnvelope | undefined): ChatListEnvelope => {
       if (!prev) {
         return {
@@ -180,6 +188,15 @@ export function upsertChatInListCache(
       return upsertInto(prev, chat);
     }
   );
+}
+
+/**
+ * Whether `chat` may be listed in `orgId`'s lists: a chat names the org it
+ * belongs to, and one of another org never goes in. An unstamped chat (from
+ * before orgs) and a list that names no org take any.
+ */
+export function chatInOrg(chat: Pick<Chat, "orgId">, orgId: string | null): boolean {
+  return !orgId || !chat.orgId || chat.orgId === orgId;
 }
 
 /**
@@ -283,12 +300,17 @@ export function removeChatFromListCache(
 
 export function useChatList(projectId?: string) {
   const org = useOrgScope();
-  return useQuery({
-    queryKey: chatKeys.list(projectId, org.orgId),
-    queryFn: ({ signal }) => chatActions.listChats(projectId, { signal, orgId: org.orgId }),
-    enabled: !!projectId && org.ready,
-    select: (data) => data.chats,
-  });
+  return useQuery(
+    withOrgFailure(
+      {
+        queryKey: chatKeys.list(projectId, org.orgId),
+        queryFn: ({ signal }: { signal: AbortSignal }) => chatActions.listChats(projectId, { signal, orgId: org.orgId }),
+        enabled: !!projectId && orgQueryEnabled(org),
+        select: (data: ChatListEnvelope) => data.chats,
+      },
+      org,
+    ),
+  );
 }
 
 /**
@@ -302,11 +324,17 @@ export function useChatList(projectId?: string) {
  */
 export function useChatListWithWorkspaces(scope: string | null, options: { enabled?: boolean } = {}) {
   const org = useOrgScope();
-  return useQuery({
-    queryKey: chatKeys.list(scope, org.orgId),
-    queryFn: ({ signal }) => chatActions.listChats(scope ?? undefined, { signal, orgId: org.orgId }),
-    enabled: (options.enabled ?? true) && org.ready,
-  });
+  return useQuery(
+    withOrgFailure(
+      {
+        queryKey: chatKeys.list(scope, org.orgId),
+        queryFn: ({ signal }: { signal: AbortSignal }): Promise<ChatListEnvelope> =>
+          chatActions.listChats(scope ?? undefined, { signal, orgId: org.orgId }),
+        enabled: (options.enabled ?? true) && orgQueryEnabled(org),
+      },
+      org,
+    ),
+  );
 }
 
 /**
@@ -413,7 +441,15 @@ function toArchivedChats(response: ListArchivedChatsResponse): Chat[] {
  */
 export function useArchivedChats() {
   const org = useOrgScope();
-  return useListArchivedChats(orgRequest({}, org.orgId), { enabled: org.ready, select: toArchivedChats });
+  return useQuery(
+    withOrgFailure(
+      chatServiceQueries.listArchivedChats(orgRequest({}, org.orgId), {
+        enabled: orgQueryEnabled(org),
+        select: toArchivedChats,
+      }),
+      org,
+    ),
+  );
 }
 
 // ── Mutation hooks ──────────────────────────────────────────────────────────

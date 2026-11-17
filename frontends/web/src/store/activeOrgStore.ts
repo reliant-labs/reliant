@@ -2,6 +2,8 @@
 
 import { create } from "zustand";
 
+import { API_KEY_USER_ID } from "@/lib/auth/apiKeyUser";
+
 /**
  * The org this tab acts in: the one `org_id` every org-scoped request carries
  * (api/orgInterceptor.ts) and the org the product's lists name in their
@@ -31,7 +33,8 @@ import { create } from "zustand";
  * org-scoped lists wait for it rather than ask with no org (which the server
  * answers with every org's rows).
  *
- * This module imports nothing from the auth store on purpose: the transport
+ * This module imports nothing from the auth store on purpose (only the
+ * import-free lib/auth/apiKeyUser constant): the transport
  * reads it, and the auth store sits on the transport's import cycle. The auth
  * store hands it the user id on every sign-in and sign-out, and so does the
  * binding component (components/Orgs/ActiveOrgBinding).
@@ -53,9 +56,17 @@ interface ActiveOrgState {
   effectiveId: string | null;
   /**
    * The membership list has answered for `userId`, so `effectiveId` is the
-   * org to act in, even when it is null (the person has none).
+   * org to act in, even when it is null (the person has none). A machine
+   * credential is resolved from the start: it has no list to wait for.
    */
   resolved: boolean;
+  /**
+   * The membership list failed (after its retries) while nothing was saved to
+   * act in: the org is unknown. The product's lists show `error` with a Retry
+   * that runs `retry` (re-reads the list), never every org's rows. Cleared by
+   * the next answer.
+   */
+  failure: { error: Error; retry: () => void } | null;
 }
 
 export const useActiveOrgStore = create<ActiveOrgState>(() => ({
@@ -63,6 +74,7 @@ export const useActiveOrgStore = create<ActiveOrgState>(() => ({
   chosenId: null,
   effectiveId: null,
   resolved: false,
+  failure: null,
 }));
 
 function read(storage: () => Storage, key: string): string | null {
@@ -106,8 +118,20 @@ function readPersisted(userId: string): string | null {
  */
 export function bindActiveOrgUser(userId: string | null): void {
   if (useActiveOrgStore.getState().userId === userId) return;
+  if (userId === API_KEY_USER_ID) {
+    // A machine credential has no orgs to choose between (ListMyOrganizations
+    // refuses it): it names none, and the server acts in the credential's own
+    // org. Nothing to wait for.
+    useActiveOrgStore.setState({ userId, chosenId: null, effectiveId: null, resolved: true, failure: null });
+    return;
+  }
   const chosen = userId ? readPersisted(userId) : null;
-  useActiveOrgStore.setState({ userId, chosenId: chosen, effectiveId: chosen, resolved: false });
+  useActiveOrgStore.setState({ userId, chosenId: chosen, effectiveId: chosen, resolved: false, failure: null });
+}
+
+/** Whether `userId` is a machine credential's session (no membership list). */
+export function isMachineCredentialUser(userId: string | null | undefined): boolean {
+  return userId === API_KEY_USER_ID;
 }
 
 /** The org requests act in right now, or null to name none. */
@@ -133,7 +157,21 @@ export function chooseActiveOrg(orgId: string): void {
  */
 export function setEffectiveOrg(orgId: string | null): void {
   const state = useActiveOrgStore.getState();
-  if (state.effectiveId !== orgId || !state.resolved) useActiveOrgStore.setState({ effectiveId: orgId, resolved: true });
+  if (state.effectiveId !== orgId || !state.resolved || state.failure) {
+    useActiveOrgStore.setState({ effectiveId: orgId, resolved: true, failure: null });
+  }
+}
+
+/**
+ * The membership list failed. Only matters while there is nothing to act in
+ * (no saved choice, no earlier answer): the org is then unknown, and the
+ * product's lists show the error with `retry` instead of loading forever.
+ */
+export function failOrgResolution(error: Error, retry: () => void): void {
+  const { effectiveId, resolved, failure } = useActiveOrgStore.getState();
+  if (resolved || effectiveId !== null) return;
+  if (failure?.error === error) return;
+  useActiveOrgStore.setState({ failure: { error, retry } });
 }
 
 /** The remembered choice no longer names an org the person is in: forget it. */

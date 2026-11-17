@@ -28,7 +28,7 @@ import {
   WORKFLOW_STALE_TIME_MS,
   type ListWorkflowsResult,
 } from "./workflow-queries";
-import { useOrgScope } from "../lib/orgScope";
+import { orgQueryEnabled, useOrgScope, withOrgFailure } from "../lib/orgScope";
 import { workflowServiceQueries } from "./workflow-service-hooks_gen";
 
 /** Every workflow in the project and every one that failed to load. */
@@ -60,9 +60,13 @@ export function useProjectLibraries(projectIds: readonly string[], enabled = tru
   const org = useOrgScope();
   return useQueries({
     queries: projectIds.map((projectId) =>
-      workflowServiceQueries.listWorkflows(
-        workflowListRequest(projectId, true, org.orgId),
-        { enabled: enabled && org.ready, staleTime: WORKFLOW_STALE_TIME_MS, select: workflowListFromProto },
+      withOrgFailure(
+        workflowServiceQueries.listWorkflows(workflowListRequest(projectId, true, org.orgId), {
+          enabled: enabled && orgQueryEnabled(org),
+          staleTime: WORKFLOW_STALE_TIME_MS,
+          select: workflowListFromProto,
+        }),
+        org,
       ),
     ),
     combine,

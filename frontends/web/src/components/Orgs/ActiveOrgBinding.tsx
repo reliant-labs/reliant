@@ -9,6 +9,7 @@ import {
   ORG_SCOPED_QUERY_ROOTS,
   bindActiveOrgUser,
   useActiveOrgStore,
+  failOrgResolution,
   forgetChosenOrg,
   setEffectiveOrg,
 } from "@/store/activeOrgStore";
@@ -56,7 +57,7 @@ export function ActiveOrgBinding({
   bindActiveOrgUser(userId);
 
   const qc = useQueryClient();
-  const { activeOrgId, orgs, isLoading, error } = useActiveOrg();
+  const { activeOrgId, orgs, isLoading, error, refetch } = useActiveOrg();
   const chosenId = useActiveOrgStore((s) => s.chosenId);
   // The org the last answer settled on; undefined until the first answer.
   const settled = useRef<string | null | undefined>(undefined);
@@ -73,7 +74,13 @@ export function ActiveOrgBinding({
   }, [userId, qc]);
 
   useEffect(() => {
-    if (!userId || isLoading || error) return;
+    if (!userId || isLoading) return;
+    if (error) {
+      // With nothing saved to act in, the org is unknown: the product's lists
+      // show this error with a Retry (lib/orgScope), never every org's rows.
+      failOrgResolution(error, refetch);
+      return;
+    }
     // What the transport has been naming up to now: the saved choice, or
     // nothing. If that is not where we land, what it already fetched is stale.
     const used = useActiveOrgStore.getState().effectiveId;
@@ -92,7 +99,7 @@ export function ActiveOrgBinding({
       onSwitch?.(activeOrgId, qc, { firstLoad: true });
     }
     settled.current = activeOrgId;
-  }, [userId, activeOrgId, chosenId, orgs.length, isLoading, error, qc, onSwitch]);
+  }, [userId, activeOrgId, chosenId, orgs.length, isLoading, error, refetch, qc, onSwitch]);
 
   return null;
 }
