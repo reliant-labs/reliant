@@ -8,6 +8,7 @@ import {
 } from "../../lib/settingsPersistence";
 import { cn } from "../../lib/utils";
 import { localSourceGroupLabel, pinnedRefOf, pinRefFor } from "./localModels";
+import { providerName } from "./providers/providerCatalog";
 
 // ---------------------------------------------------------------------------
 // Types & constants
@@ -42,6 +43,9 @@ export interface TagModelConfig {
   /** Mirrors ModelSelector.providers; ["local:<daemonId>"] pins a local model to its machine. */
   providers?: string[];
 }
+
+/** Settings key for the default provider auto tier selections prefer. */
+const PROVIDER_PREFERENCE_KEY = "model.provider_preference";
 
 const LOCAL_CHOICE_SEP = "||";
 
@@ -108,6 +112,29 @@ export async function loadTagModelConfigs(): Promise<
   return result;
 }
 
+/** The saved default provider's driver id; null is Auto (missing, empty or unparseable). */
+export async function loadProviderPreference(): Promise<string | null> {
+  try {
+    const read = await readSetting(PROVIDER_PREFERENCE_KEY);
+    if (read.status !== "found" || !read.value) return null;
+    const parsed = JSON.parse(read.value) as { providers?: unknown };
+    const first = Array.isArray(parsed?.providers) ? parsed.providers[0] : undefined;
+    return typeof first === "string" && first !== "" ? first : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Save the default provider (null = Auto, which deletes the setting) and refresh the tier table. */
+export async function saveProviderPreference(driverId: string | null) {
+  if (driverId) {
+    await upsertStringSetting(PROVIDER_PREFERENCE_KEY, JSON.stringify({ providers: [driverId] }));
+  } else {
+    await deleteSettingIfExists(PROVIDER_PREFERENCE_KEY);
+  }
+  await useGlobalDataStore.getState().refetchModels();
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -147,7 +174,9 @@ interface ModelPreferencesProps {
 }
 
 export function ModelPreferences({ providers }: ModelPreferencesProps) {
-  const { models, loading: modelsLoading } = useModels();
+  const { models, tiers, loading: modelsLoading } = useModels();
+  const [providerPref, setProviderPref] = useState<string | null>(null);
+  const [providerSaving, setProviderSaving] = useState(false);
   const [configs, setConfigs] = useState<Record<string, TagModelConfig>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
@@ -165,11 +194,39 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
 
   // Load configs
   useEffect(() => {
-    loadTagModelConfigs()
-      .then(setConfigs)
+    Promise.all([loadTagModelConfigs(), loadProviderPreference()])
+      .then(([loaded, pref]) => {
+        setConfigs(loaded);
+        setProviderPref(pref);
+      })
       .catch((e) => console.error("Failed to load tag configs:", e))
       .finally(() => setLoading(false));
   }, []);
+
+  // Providers that serve models for this user, in catalog order (local endpoints are not providers).
+  const providerOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const m of models) {
+      if (m.local || !m.driverId || m.driverId === "local" || seen.has(m.driverId)) continue;
+      seen.set(m.driverId, providerName(m.driverId, m.provider));
+    }
+    return [...seen.entries()].map(([id, name]) => ({ id, name }));
+  }, [models]);
+
+  const handleProviderChange = async (value: string) => {
+    const previous = providerPref;
+    const next = value || null;
+    setProviderPref(next);
+    setProviderSaving(true);
+    try {
+      await saveProviderPreference(next);
+    } catch (e) {
+      console.error("Failed to save default provider:", e);
+      setProviderPref(previous);
+    } finally {
+      setProviderSaving(false);
+    }
+  };
 
   const isConfiguredModel = useCallback(
     (m: { provider: string; driverId?: string }) =>
@@ -262,7 +319,7 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
     }
   };
 
-  if (modelsLoading || loading) {
+  if ((modelsLoading && models.length === 0) || loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -278,6 +335,46 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
         chats, sub-agents and scheduled runs. A model value set explicitly in a
         chat's model settings popover or by a workflow takes precedence.
       </p>
+
+      {(providerOptions.length >= 2) && (
+        <div className="mb-4" data-testid="default-provider-control">
+          <div className="flex items-center gap-3">
+            <label
+              htmlFor="default-provider-select"
+              className="text-xs font-medium text-muted-foreground w-24 shrink-0"
+            >
+              Default provider
+            </label>
+            <div className="relative flex-1">
+              <select
+                id="default-provider-select"
+                value={providerPref ?? ""}
+                onChange={(e) => handleProviderChange(e.target.value)}
+                className="w-full px-2.5 py-1.5 pr-8 border border-input bg-background rounded-md appearance-none cursor-pointer text-xs disabled:opacity-50"
+              >
+                <option value="">Auto (Reliant's order)</option>
+                {providerOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+                {providerPref && !providerOptions.some((p) => p.id === providerPref) && (
+                  <option value={providerPref} disabled>
+                    {providerName(providerPref)} (not connected)
+                  </option>
+                )}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            </div>
+            {providerSaving && (
+              <Loader2 className="w-3 h-3 animate-spin text-muted-foreground shrink-0" />
+            )}
+          </div>
+          <p className="mt-1.5 text-2xs text-muted-foreground ml-[6.75rem]">
+            Auto tiers use this provider's best model. A tier it can't serve uses the next available provider.
+          </p>
+        </div>
+      )}
 
       <div className="space-y-1">
         {PREFERENCE_TAGS.map((tag) => {
@@ -297,18 +394,33 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
             : undefined;
           const localOffline =
             !!pinnedLocalDaemon && !(pinnedLocalModel?.local?.online ?? false);
+          // The server resolves tiers (pins, default provider, Reliant's order);
+          // the local guess below only covers a tag the tier table lacks.
+          const tierModelId = tiers?.[tag]?.modelId;
+          const serverModel = tierModelId
+            ? models.find((m) => m.id === tierModelId)
+            : undefined;
           const resolvedModel = pinnedLocalDaemon
             ? localOffline
-              ? resolveTag(tag)
+              ? (serverModel ?? resolveTag(tag))
               : pinnedLocalModel
-            : config.model_id
-              ? models.find(
-                  (m) =>
-                    m.id === config.model_id ||
-                    m.id.split("@")[0] === config.model_id
-                )
-              : resolveTag(tag);
-          const displayName = resolvedModel?.name ?? "auto";
+            : (serverModel ??
+              (config.model_id
+                ? models.find(
+                    (m) =>
+                      m.id === config.model_id ||
+                      m.id.split("@")[0] === config.model_id
+                  )
+                : resolveTag(tag)));
+          const resolvedProvider =
+            providerOptions.length >= 2 && resolvedModel?.driverId
+              ? providerName(resolvedModel.driverId, resolvedModel.provider)
+              : undefined;
+          const displayName = resolvedModel
+            ? resolvedProvider
+              ? `${resolvedModel.name} · ${resolvedProvider}`
+              : resolvedModel.name
+            : "auto";
           const hasOverrides =
             !!config.model_id ||
             !!config.thinking_level ||

@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/modelprefs"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -71,6 +72,16 @@ type DraftAutomationActivity struct {
 	// usage records the draft's model request in the usage ledger; nil
 	// records nothing.
 	usage LLMUsageRecorder
+	// providerPrefs reads the user's Settings default provider; nil drafts
+	// in the tier's own order.
+	providerPrefs modelprefs.SettingsReader
+}
+
+// WithProviderPreferences makes drafting honor the user's Settings default
+// provider (llmCallSpec.ProviderPrefsReader).
+func (a *DraftAutomationActivity) WithProviderPreferences(r modelprefs.SettingsReader) *DraftAutomationActivity {
+	a.providerPrefs = r
+	return a
 }
 
 // WithUsageRecorder wires the usage ledger into drafting.
@@ -126,6 +137,7 @@ func (a *DraftAutomationActivity) Execute(ctx context.Context, input DraftAutoma
 		spec.Selector = titleModelSelector()
 		spec.FallbackSelector = titleModelFallbackSelector()
 	}
+	spec.ProviderPrefsReader = a.providerPrefs
 	// No ThreadID: a draft belongs to no thread, so it reads and writes no
 	// sticky account assignment. A refused account is benched below, so the
 	// workflow's retry re-resolves to another one.

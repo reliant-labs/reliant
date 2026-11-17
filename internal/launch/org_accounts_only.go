@@ -8,6 +8,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/modelprefs"
 )
 
 // orgSources reads the accounts a scope may draw on. drivers.LookupAvailableDrivers
@@ -59,7 +60,9 @@ func UnservedModel(ctx context.Context, lookup func(context.Context, drivers.Sco
 	if err != nil {
 		return "", false, err
 	}
-	if resolveSelector(selector, available) != nil {
+	// Whether it resolves at all: the default provider only ranks, so it is
+	// left out.
+	if resolveSelector(selector, available, modelprefs.ProviderPreference{}) != nil {
 		return "", false, nil
 	}
 	return selectorLabel(selector), true, nil
