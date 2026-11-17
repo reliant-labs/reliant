@@ -10,7 +10,16 @@ import React, {
 import { ChatState } from "../../gen/reliant/v1/chat_pb";
 import type { WorktreeSummary } from "../../gen/reliant/v1/worktree_pb";
 import { workspaceOfChat } from "../../lib/chatWorkspace";
-import { activeWorkspaceChats, groupByProject, groupByWorkspace, type WorkspaceGroup } from "../../lib/sidebarGroups";
+import {
+  activeWorkspaceChats,
+  groupByProject,
+  groupByWorkspace,
+  isProjectHiddenFromSidebar,
+  listProjectGroups,
+  type WorkspaceGroup,
+} from "../../lib/sidebarGroups";
+import { useSidebarProjectPrefs } from "../../hooks/sidebar-project-queries";
+import { ProjectListToggle } from "./ProjectListToggle";
 import {
   Plus,
   Trash2,
@@ -43,6 +52,11 @@ import {
   Loader2,
   FolderInput,
   Server,
+  Pin,
+  PinOff,
+  Eye,
+  EyeOff,
+  MoreHorizontal,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -1032,6 +1046,18 @@ function SidebarComponent({
     (filter: MachineFilter) => setMachineFilterIds(filter),
     [setMachineFilterIds],
   );
+  // Which project sections All projects lists: the active ones and the
+  // pinned ones, the rest under "More projects", hidden ones left out; or,
+  // with show-all, every one. Per person and per org (the user setting
+  // sidebar.projects). The project the main pane works in always shows.
+  const {
+    prefs: projectPrefs,
+    setPinned: setProjectPinned,
+    setHidden: setProjectHidden,
+    setShowAll: setShowAllProjects,
+  } = useSidebarProjectPrefs();
+  const currentProjectId = useProjectStore((state) => state.currentProject?.id);
+  const [moreProjectsOpen, setMoreProjectsOpen] = useState(false);
   const releasedChatId = useSidebarPinStore((state) => state.releasedChatId);
   const forgetReleasedUnless = useSidebarPinStore((state) => state.forgetUnless);
   useEffect(() => {
@@ -1194,12 +1220,27 @@ function SidebarComponent({
   );
 
   // Filtered and sorted chats grouped by project → workspace (or flat list)
-  const { projectGroups, activeGroups, flatList, archivedChats: filteredArchivedChats, archivedGroups, hiddenByMachine } = useMemo(() => {
+  const {
+    projectGroups,
+    foldedProjectGroups,
+    hiddenProjectCount,
+    activeGroups,
+    flatList,
+    archivedChats: filteredArchivedChats,
+    archivedGroups,
+    hiddenByMachine,
+  } = useMemo(() => {
     // ONLY active (non-archived) chats from the main list; a chat on a closed
     // workspace is not listed as active (chatsWithActivity already dropped the
     // archived ones).
     const allActiveWorktreeChats = activeWorkspaceChats(chatsWithActivity, mainWorktrees);
-    const activeWorktreeChats = filterChatsByMachine(allActiveWorktreeChats, machineFilter, machineContext);
+    const listing = { ...projectPrefs, currentProjectId, now: Date.now() };
+    // Across projects, a hidden project's chats are left out with it, in the
+    // flat view too (the navigation store filters the same way).
+    const machineActiveChats = filterChatsByMachine(allActiveWorktreeChats, machineFilter, machineContext);
+    const activeWorktreeChats = projectFilterId
+      ? machineActiveChats
+      : machineActiveChats.filter((chat) => !isProjectHiddenFromSidebar(chat.projectId, listing));
     const machineArchivedChats = filterChatsByMachine(projectArchivedChats, machineFilter, machineContext);
 
     // Convert archived chats from store to ChatWithActivity format
@@ -1224,9 +1265,14 @@ function SidebarComponent({
     // A project is a section only if the machine filter would list something
     // in it: a checkout on a selected machine, or a chat it lists.
     const machineProjects = filterProjectsByMachine(scopedProjects, machineFilter, projectCheckouts, activeWorktreeChats);
-    const projectGroups = projectFilterId
-      ? []
-      : groupByProject(activeWorktreeChats, mainWorktrees, machineProjects, groupOptions);
+    const projectListing = projectFilterId
+      ? { listed: [], folded: [], hiddenCount: 0 }
+      : listProjectGroups(
+          groupByProject(activeWorktreeChats, mainWorktrees, machineProjects, groupOptions),
+          machineProjects,
+          listing,
+        );
+    const projectGroups = projectListing.listed;
     const groupsArray: ChatGroup[] = projectFilterId
       ? groupByWorkspace(projectFilterId, activeWorktreeChats, mainWorktrees, groupOptions)
       : projectGroups.flatMap((group) => group.workspaces);
@@ -1282,16 +1328,20 @@ function SidebarComponent({
 
     return {
       projectGroups,
+      foldedProjectGroups: projectListing.folded,
+      hiddenProjectCount: projectListing.hiddenCount,
       activeGroups: groupsArray,
       flatList,
       archivedChats: sortChatList([...archivedList]),
       archivedGroups: archivedGroupsArray,
       hiddenByMachine: {
-        active: allActiveWorktreeChats.length - activeWorktreeChats.length,
+        active: allActiveWorktreeChats.length - machineActiveChats.length,
         archived: projectArchivedChats.length - machineArchivedChats.length,
       },
     };
   }, [
+    projectPrefs,
+    currentProjectId,
     machineFilter,
     machineContext,
     chatsWithActivity,
@@ -1805,6 +1855,27 @@ function SidebarComponent({
   const renderProjectSection = (group: (typeof projectGroups)[number]) => {
     const isExpanded = expandedProjects[group.projectId] ?? group.chats.length > 0;
     const hasActiveChat = group.chats.some((chat) => chat.id === activeChatId);
+    const isPinned = projectPrefs.pinned.has(group.projectId);
+    // Listed while hidden: under show-all, or as the current project.
+    const isHidden = projectPrefs.hidden.has(group.projectId);
+    const projectActions: MenuGroup[] = [
+      {
+        items: [
+          {
+            label: isPinned ? "Unpin" : "Pin to sidebar",
+            icon: isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />,
+            onClick: () => setProjectPinned(group.projectId, !isPinned),
+            testId: `sidebar-project-pin-${group.projectId}`,
+          },
+          {
+            label: isHidden ? "Unhide" : "Hide from sidebar",
+            icon: isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />,
+            onClick: () => setProjectHidden(group.projectId, !isHidden),
+            testId: `sidebar-project-hide-${group.projectId}`,
+          },
+        ],
+      },
+    ];
     const toggle = () =>
       setExpandedProjects((prev) => ({ ...prev, [group.projectId]: !isExpanded }));
     const onlyMain = group.workspaces.length === 1 && group.workspaces[0]?.isMain === true;
@@ -1837,7 +1908,23 @@ function SidebarComponent({
             )}
           >
             <ProjectMark name={group.projectName} active={hasActiveChat} />
-            <span className="min-w-0 truncate">{group.projectName}</span>
+            <span className={cn("min-w-0 truncate", isHidden && "text-muted-foreground")}>{group.projectName}</span>
+            {isPinned && (
+              <span className="shrink-0" title="Pinned" data-testid={`sidebar-project-pinned-${group.projectId}`}>
+                <Pin className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+                <span className="sr-only">Pinned</span>
+              </span>
+            )}
+            {isHidden && (
+              <span
+                className="shrink-0"
+                title={projectPrefs.showAll ? "Hidden" : "Hidden, shown while you are in it"}
+                data-testid={`sidebar-project-hidden-${group.projectId}`}
+              >
+                <EyeOff className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+                <span className="sr-only">Hidden</span>
+              </span>
+            )}
             {isExpanded ? (
               <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             ) : (
@@ -1865,6 +1952,25 @@ function SidebarComponent({
               <Plus className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           </Tooltip>
+          <DropdownMenu
+            align="right"
+            density="compact"
+            label={`${group.projectName} actions`}
+            menuClassName="min-w-[170px]"
+            groups={projectActions}
+            trigger={(props) => (
+              <button
+                type="button"
+                {...props}
+                aria-label={`${group.projectName} actions`}
+                data-testid={`sidebar-project-actions-${group.projectId}`}
+                // Out of the layout until hover or focus, like New chat beside it.
+                className="hidden flex-shrink-0 rounded p-1 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/project:inline-flex group-focus-within/project:inline-flex aria-expanded:inline-flex"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            )}
+          />
         </div>
         {isExpanded && (
           <div className="ml-3.5 space-y-0.5 border-l border-border/60 pb-1 pl-2 pt-0.5">
@@ -2047,6 +2153,12 @@ function SidebarComponent({
             />
           </div>
 
+          {/* Across projects, and only while it would change something. */}
+          {!projectFilterId &&
+            (projectPrefs.showAll || foldedProjectGroups.length > 0 || hiddenProjectCount > 0) && (
+              <ProjectListToggle showAll={projectPrefs.showAll} onChange={setShowAllProjects} />
+            )}
+
           {/* Hidden while there is one machine: nothing to choose between. */}
           {showMachineFilter && (
             <MachineFilterMenu
@@ -2186,9 +2298,33 @@ function SidebarComponent({
                   </div>
                 )
               ) : (
-                projectGroups.length > 0 && (
+                (projectGroups.length > 0 || foldedProjectGroups.length > 0) && (
                   <div className="space-y-2">
                     {projectGroups.map((group) => renderProjectSection(group))}
+                    {/* Projects with no chats, unused for a while and unpinned. */}
+                    {foldedProjectGroups.length > 0 && (
+                      <div data-testid="sidebar-more-projects">
+                        <button
+                          type="button"
+                          onClick={() => setMoreProjectsOpen((open) => !open)}
+                          aria-expanded={moreProjectsOpen}
+                          data-testid="sidebar-more-projects-toggle"
+                          className="-mx-1 flex h-7 w-[calc(100%+0.5rem)] items-center gap-1.5 rounded-md px-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {moreProjectsOpen ? (
+                            <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          )}
+                          <span className="min-w-0 truncate">More projects ({foldedProjectGroups.length})</span>
+                        </button>
+                        {moreProjectsOpen && (
+                          <div className="mt-1 space-y-2">
+                            {foldedProjectGroups.map((group) => renderProjectSection(group))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               )

@@ -37,7 +37,14 @@ import { useWorktreeStore } from "./worktreeStore";
 import type { Chat } from "../api/client";
 import { useActivityStore, activityToDotState, ChatActivity } from "./activityStore";
 import { getCachedChatList, getCachedListMainWorktrees, getChatFromCache } from "../hooks/chat-queries";
-import { groupByProject, groupByWorkspace } from "../lib/sidebarGroups";
+import {
+  groupByProject,
+  groupByWorkspace,
+  isProjectHiddenFromSidebar,
+  listProjectGroups,
+  type ProjectListing,
+} from "../lib/sidebarGroups";
+import { DEFAULT_SIDEBAR_PROJECT_PREFS, sidebarProjectPrefsFor } from "../lib/sidebarProjectPrefs";
 import { sortChats } from "../lib/chatListOrder";
 import { effectiveMachineFilter, filterChatsByMachine, machineResolver } from "../lib/sidebarMachineFilter";
 
@@ -123,6 +130,24 @@ async function getOrderedChatList(): Promise<Chat[]> {
     activeChats = filterChatsByMachine(activeChats, machineFilter, machineResolver(machines, getCachedWorktrees()));
   }
 
+  // Across projects, the sidebar leaves hidden projects' chats out and lists
+  // pinned projects first (listProjectGroups).
+  let listing: ProjectListing | undefined;
+  if (!scope) {
+    const [{ cachedSidebarProjectSettings }, { getOrgScope }] = await Promise.all([
+      import("../hooks/sidebar-project-queries"),
+      import("../lib/orgScope"),
+    ]);
+    const org = getOrgScope();
+    // The sidebar shows the defaults until the tab's org is known (useSidebarProjectPrefs).
+    const prefs = org.ready
+      ? sidebarProjectPrefsFor(cachedSidebarProjectSettings(queryClient), org.orgId)
+      : DEFAULT_SIDEBAR_PROJECT_PREFS;
+    const sidebarListing = { ...prefs, currentProjectId: useProjectStore.getState().currentProject?.id, now: Date.now() };
+    listing = sidebarListing;
+    activeChats = activeChats.filter((chat) => !isProjectHiddenFromSidebar(chat.projectId, sidebarListing));
+  }
+
   // Apply state filters (matching Sidebar.tsx logic)
   if (filters.states && filters.states.length > 0) {
     activeChats = activeChats.filter((chat) => {
@@ -157,7 +182,9 @@ async function getOrderedChatList(): Promise<Chat[]> {
     return groupByWorkspace(scope, activeChats, mainWorktrees, groupOptions).flatMap((group) => group.chats);
   }
   const projects = (await import("../hooks/project-queries")).getCachedProjects();
-  return groupByProject(activeChats, mainWorktrees, projects, groupOptions).flatMap((group) => group.chats);
+  const groups = groupByProject(activeChats, mainWorktrees, projects, groupOptions);
+  const listed = listing ? listProjectGroups(groups, projects, listing).listed : groups;
+  return listed.flatMap((group) => group.chats);
 }
 
 interface ChatNavigationState {
