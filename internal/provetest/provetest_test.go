@@ -117,20 +117,27 @@ func readFile(t *testing.T, dir, rel string) string {
 
 // observingRunner fails while calc.go holds the bug and passes once it holds
 // the fix, recording what each run saw — the behaviour of a real regression
-// test, minus the compiler.
+// test, minus the compiler. It reads calc.go in dir, or, when dir is unset, in
+// the directory Prove runs it in.
 type observingRunner struct {
 	dir  string
 	mu   sync.Mutex
 	seen []string
+	ran  []string
 }
 
-func (o *observingRunner) run(ctx context.Context) RunOutcome {
-	content, err := os.ReadFile(filepath.Join(o.dir, "calc.go"))
+func (o *observingRunner) run(ctx context.Context, runDir string) RunOutcome {
+	dir := o.dir
+	if dir == "" {
+		dir = runDir
+	}
+	content, err := os.ReadFile(filepath.Join(dir, "calc.go"))
 	if err != nil {
 		return RunOutcome{Err: err}
 	}
 	o.mu.Lock()
 	o.seen = append(o.seen, string(content))
+	o.ran = append(o.ran, runDir)
 	o.mu.Unlock()
 	if strings.Contains(string(content), "a - b") {
 		return RunOutcome{ExitCode: 1, Output: "--- FAIL: TestAdd\n    calc_test.go:6: Add(1, 2) = -1, want 3\nFAIL"}
@@ -176,7 +183,7 @@ func TestProve_PassesWithoutFix(t *testing.T) {
 	t.Parallel()
 
 	dir := gitRepo(t)
-	report, err := prove(t, dir, func(context.Context) RunOutcome { return RunOutcome{Output: "ok"} }, "calc.go")
+	report, err := prove(t, dir, func(context.Context, string) RunOutcome { return RunOutcome{Output: "ok"} }, "calc.go")
 	require.NoError(t, err)
 	assert.Equal(t, VerdictPassesWithoutFix, report.Verdict)
 	assert.Equal(t, fixedCalc, readFile(t, dir, "calc.go"))
@@ -187,7 +194,7 @@ func TestProve_FailsWithFix(t *testing.T) {
 	t.Parallel()
 
 	dir := gitRepo(t)
-	report, err := prove(t, dir, func(context.Context) RunOutcome { return RunOutcome{ExitCode: 1, Output: "FAIL"} }, "calc.go")
+	report, err := prove(t, dir, func(context.Context, string) RunOutcome { return RunOutcome{ExitCode: 1, Output: "FAIL"} }, "calc.go")
 	require.NoError(t, err)
 	assert.Equal(t, VerdictFailsWithFix, report.Verdict)
 	assert.Equal(t, fixedCalc, readFile(t, dir, "calc.go"))
@@ -198,7 +205,7 @@ func TestProve_BaselineCompileFailureIsNotProof(t *testing.T) {
 	t.Parallel()
 
 	dir := gitRepo(t)
-	run := func(context.Context) RunOutcome {
+	run := func(context.Context, string) RunOutcome {
 		if strings.Contains(readFile(t, dir, "calc.go"), "a - b") {
 			return RunOutcome{ExitCode: 1, Output: "# example.com/calc\n./calc_test.go:6:9: undefined: Mul\nFAIL\texample.com/calc [build failed]"}
 		}
@@ -217,7 +224,7 @@ func TestProve_RestoresWhenTheRunnerTimesOut(t *testing.T) {
 	t.Parallel()
 
 	dir := gitRepo(t)
-	run := func(context.Context) RunOutcome {
+	run := func(context.Context, string) RunOutcome {
 		return RunOutcome{ExitCode: -1, TimedOut: true, Output: "still compiling..."}
 	}
 	report, err := prove(t, dir, run, "calc.go")
@@ -237,7 +244,7 @@ func TestProve_RestoresWhenTheRunnerHangs(t *testing.T) {
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
 	var runnerReturned atomic.Bool
-	run := func(context.Context) RunOutcome {
+	run := func(context.Context, string) RunOutcome {
 		<-release
 		runnerReturned.Store(true)
 		return RunOutcome{}
@@ -266,7 +273,7 @@ func TestProve_RestoresOnCancellation(t *testing.T) {
 	defer cancel()
 	started := make(chan struct{})
 	var sawBaseline atomic.Bool
-	run := func(ctx context.Context) RunOutcome {
+	run := func(ctx context.Context, _ string) RunOutcome {
 		sawBaseline.Store(strings.Contains(readFile(t, dir, "calc.go"), "a - b"))
 		close(started)
 		<-ctx.Done()
@@ -294,7 +301,7 @@ func TestProve_RestoresWhenTheRunnerPanics(t *testing.T) {
 
 	dir := gitRepo(t)
 	calls := 0
-	run := func(context.Context) RunOutcome {
+	run := func(context.Context, string) RunOutcome {
 		calls++
 		if calls == 1 {
 			panic("runner exploded")
@@ -337,7 +344,7 @@ func TestProve_ConcurrentModificationKeepsTheirContent(t *testing.T) {
 	const theirs = "package calc\n\n// another agent's edit\nfunc Add(a, b int) int { return b + a }\n"
 	dir := gitRepo(t)
 	afterRuns := 0
-	run := func(context.Context) RunOutcome {
+	run := func(context.Context, string) RunOutcome {
 		if strings.Contains(readFile(t, dir, "calc.go"), "a - b") {
 			writeFile(t, dir, "calc.go", theirs)
 			return RunOutcome{ExitCode: 1}
@@ -371,7 +378,7 @@ func TestProve_IdenticalRewriteIsStillAConflict(t *testing.T) {
 	t.Parallel()
 
 	dir := gitRepo(t)
-	run := func(context.Context) RunOutcome {
+	run := func(context.Context, string) RunOutcome {
 		path := filepath.Join(dir, "calc.go")
 		if content := readFile(t, dir, "calc.go"); strings.Contains(content, "a - b") {
 			require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
@@ -415,14 +422,14 @@ func TestProve_RefusesPathsOutsideTheWorkspace(t *testing.T) {
 	for name, path := range cases {
 		t.Run(name, func(t *testing.T) {
 			called := false
-			_, err := prove(t, workspace, func(context.Context) RunOutcome { called = true; return RunOutcome{} }, path)
+			_, err := prove(t, workspace, func(context.Context, string) RunOutcome { called = true; return RunOutcome{} }, path)
 			require.Error(t, err)
 			assert.False(t, called, "a refused call must not run anything")
 		})
 	}
 
 	t.Run("inside .git", func(t *testing.T) {
-		_, err := prove(t, repoRoot, func(context.Context) RunOutcome { return RunOutcome{} }, ".git/config")
+		_, err := prove(t, repoRoot, func(context.Context, string) RunOutcome { return RunOutcome{} }, ".git/config")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), ".git")
 	})
@@ -473,7 +480,7 @@ func TestProve_AdmitsAFileInAnotherWorktreeOfAWorkspaceRepo(t *testing.T) {
 			Workspace: workspace,
 			Repos:     []string{workspace, repo},
 			Files:     []string{filepath.Join(otherBranch, "calc.go")},
-			Run:       func(context.Context) RunOutcome { called = true; return RunOutcome{} },
+			Run:       func(context.Context, string) RunOutcome { called = true; return RunOutcome{} },
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "outside the workspace")
@@ -486,10 +493,60 @@ func TestProve_AdmitsAFileInAnotherWorktreeOfAWorkspaceRepo(t *testing.T) {
 			Workspace: workspace,
 			Repos:     []string{workspace, repo},
 			Files:     []string{filepath.Join(branch, ".git")},
-			Run:       func(context.Context) RunOutcome { return RunOutcome{} },
+			Run:       func(context.Context, string) RunOutcome { return RunOutcome{} },
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), ".git")
+	})
+}
+
+// An agent bound to the project's main checkout names the files by absolute
+// path in a branch worktree of it. Run in the main checkout, the command tests
+// code holding neither the fix nor the new test: both runs pass and the
+// verdict is a misleading passes_without_fix. It runs in the worktree instead.
+func TestProve_RunsTheCommandInTheWorktreeThatHoldsTheFiles(t *testing.T) {
+	testkit.Slow(t, "creates git worktrees and runs git as real subprocesses")
+	t.Parallel()
+
+	workspace := t.TempDir()
+	repo := filepath.Join(workspace, "app")
+	require.NoError(t, os.Rename(gitRepo(t), repo))
+	git(t, repo, "checkout", "-q", "--", "calc.go") // the main checkout holds no fix
+	branch := filepath.Join(t.TempDir(), "app-branch")
+	git(t, repo, "worktree", "add", "-q", "-b", "fix/add", branch)
+	writeFile(t, branch, "calc.go", fixedCalc)
+	realBranch, err := filepath.EvalSymlinks(branch)
+	require.NoError(t, err)
+
+	obs := &observingRunner{}
+	report, err := Prove(context.Background(), Options{
+		Workspace: workspace,
+		Repos:     []string{workspace, repo},
+		Dir:       repo,
+		Files:     []string{filepath.Join(branch, "calc.go")},
+		Run:       obs.run,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, VerdictProven, report.Verdict, "both runs saw the worktree, where the fix is")
+	assert.Equal(t, []string{realBranch, realBranch}, obs.ran)
+	assert.Equal(t, realBranch, report.RunDir)
+	assert.Contains(t, strings.Join(report.Warnings, "\n"), "another git worktree of the same repository")
+	assert.Equal(t, buggyCalc, readFile(t, repo, "calc.go"), "the main checkout is never touched")
+
+	t.Run("a directory outside the repository is where the caller chose to run", func(t *testing.T) {
+		var ran []string
+		report, err := Prove(context.Background(), Options{
+			Workspace: workspace,
+			Repos:     []string{workspace, repo},
+			Files:     []string{filepath.Join(branch, "calc.go")},
+			Run: func(_ context.Context, dir string) RunOutcome {
+				ran = append(ran, dir)
+				return RunOutcome{ExitCode: 1}
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{workspace, workspace}, ran)
+		assert.Equal(t, workspace, report.RunDir)
 	})
 }
 
@@ -499,7 +556,7 @@ func TestProve_SerializesConcurrentCallsOnTheSameFile(t *testing.T) {
 
 	dir := gitRepo(t)
 	var active, maxActive atomic.Int32
-	run := func(context.Context) RunOutcome {
+	run := func(context.Context, string) RunOutcome {
 		n := active.Add(1)
 		for {
 			m := maxActive.Load()
@@ -652,7 +709,7 @@ func TestProve_RecoveryNeverClobbersALaterEdit(t *testing.T) {
 	const edited = "package calc\n\n// edited after the crash\nfunc Add(a, b int) int { return a + b }\n"
 	writeFile(t, dir, "calc.go", edited)
 
-	report, err := prove(t, dir, func(context.Context) RunOutcome { return RunOutcome{ExitCode: 1} }, "calc.go")
+	report, err := prove(t, dir, func(context.Context, string) RunOutcome { return RunOutcome{ExitCode: 1} }, "calc.go")
 	require.NoError(t, err)
 	require.Len(t, report.Recovered, 1)
 	assert.Equal(t, RestoreConflict, report.Recovered[0].Outcome)
@@ -670,7 +727,7 @@ func TestProve_FileAddedByTheFixIsRemovedForTheBeforeRun(t *testing.T) {
 	writeFile(t, dir, "internal/helper/helper.go", "package helper\n")
 	var existedBefore, existedAfter bool
 	calls := 0
-	run := func(context.Context) RunOutcome {
+	run := func(context.Context, string) RunOutcome {
 		_, err := os.Stat(filepath.Join(dir, "internal/helper/helper.go"))
 		calls++
 		if calls == 1 {
@@ -701,7 +758,7 @@ func TestProve_FileDeletedByTheFixIsRecreatedForTheBeforeRun(t *testing.T) {
 
 	var sawIt bool
 	calls := 0
-	run := func(context.Context) RunOutcome {
+	run := func(context.Context, string) RunOutcome {
 		calls++
 		if calls == 1 {
 			_, err := os.Stat(filepath.Join(dir, "legacy/override/override.go"))
@@ -820,7 +877,7 @@ func TestProve_RefusesBadRequests(t *testing.T) {
 	t.Parallel()
 
 	dir := gitRepo(t)
-	noop := func(context.Context) RunOutcome { return RunOutcome{} }
+	noop := func(context.Context, string) RunOutcome { return RunOutcome{} }
 
 	_, err := Prove(context.Background(), Options{Workspace: dir, Files: []string{"calc.go"}, Baseline: "no-such-rev", Run: noop})
 	require.Error(t, err)
@@ -891,7 +948,7 @@ func TestProve_RealGoTestBaselineDoesNotCompile(t *testing.T) {
 }
 
 func goTestRunner(goBin, dir string) Runner {
-	return func(ctx context.Context) RunOutcome {
+	return func(ctx context.Context, _ string) RunOutcome {
 		cmd := exec.CommandContext(ctx, goBin, "test", "-count=1", "./...")
 		cmd.Dir = dir
 		cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")

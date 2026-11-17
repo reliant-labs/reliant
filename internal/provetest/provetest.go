@@ -77,9 +77,10 @@ const (
 )
 
 // Runner executes the test command once and reports how it ended. Prove calls
-// it twice: once with the fix reverted, once with it in place. It must honour
-// ctx: a cancelled ctx means the tool call was abandoned.
-type Runner func(ctx context.Context) RunOutcome
+// it twice: once with the fix reverted, once with it in place, both times in
+// dir (see [Options.Dir] for which directory that is). It must honour ctx: a
+// cancelled ctx means the tool call was abandoned.
+type Runner func(ctx context.Context, dir string) RunOutcome
 
 // RunOutcome is one execution of the test command.
 type RunOutcome struct {
@@ -111,7 +112,12 @@ type Options struct {
 	// worktree of one of them (a branch worktree made beside the project).
 	// Empty means the workspace is the only repository.
 	Repos []string
-	// Dir is what relative Files resolve against. Defaults to Workspace.
+	// Dir is what relative Files resolve against, and where the command runs.
+	// Defaults to Workspace. When the files lie in ANOTHER git worktree of
+	// Dir's repository (a branch checkout named by absolute path), the
+	// command runs in the same directory of that worktree instead: run in
+	// Dir, it would test a checkout the fix is not in, and both runs would
+	// see the same code (see commandDir).
 	Dir string
 	// Files are the implementation files whose changes constitute the fix.
 	Files []string
@@ -182,7 +188,9 @@ type Report struct {
 	BaselineCommit string
 	// RepoRoot is the repository the files belong to.
 	RepoRoot string
-	Files    []FileChange
+	// RunDir is the directory the command ran in.
+	RunDir string
+	Files  []FileChange
 	// Skipped lists named files identical at baseline. They are not part of
 	// the fix, so they were left alone.
 	Skipped []string
@@ -252,12 +260,24 @@ func Prove(ctx context.Context, opts Options) (report *Report, err error) {
 	}
 	defer held.release()
 
+	dir := opts.Dir
+	if dir == "" {
+		dir = opts.Workspace
+	}
+	runDir, moved := commandDir(ctx, dir, repo.top)
 	report = &Report{
 		Baseline:       baseline,
 		BaselineCommit: commit,
 		RepoRoot:       repo.top,
+		RunDir:         runDir,
 		Warnings:       testFileWarnings(files),
 	}
+	if moved {
+		report.Warnings = append(report.Warnings, fmt.Sprintf(
+			"The command ran in %s, not in %s: the files are in %s, another git worktree of the same repository, and a run outside it would not test the fix.",
+			runDir, dir, repo.top))
+	}
+	run := func(ctx context.Context) RunOutcome { return opts.Run(ctx, runDir) }
 	// Recover BEFORE snapshotting: an earlier proof that died mid-run leaves a
 	// file holding its baseline, and snapshotting that would make the baseline
 	// the thing restored — losing the fix for good.
@@ -294,7 +314,7 @@ func Prove(ctx context.Context, opts Options) (report *Report, err error) {
 		}
 	}()
 
-	report.Before, err = p.swapAndRun(ctx, opts.Run, opts.RunTimeout)
+	report.Before, err = p.swapAndRun(ctx, run, opts.RunTimeout)
 	if err != nil {
 		// Nothing was run. Any file already swapped has been restored, and
 		// report.Restored says how that went.
@@ -308,7 +328,7 @@ func Prove(ctx context.Context, opts Options) (report *Report, err error) {
 	} else if ctx.Err() != nil {
 		report.AfterSkipped = "the tool call was cancelled"
 	} else {
-		after := runGuarded(ctx, opts.Run, opts.RunTimeout)
+		after := runGuarded(ctx, run, opts.RunTimeout)
 		report.After = &after
 		report.Warnings = append(report.Warnings, p.changedSinceRestore()...)
 	}
@@ -350,7 +370,7 @@ func restoreSummary(results []RestoreResult) string {
 // a panic in a goroutine of its own would kill the process without running the
 // caller's deferred restore. A Runner that ignores cancellation or overruns
 // the backstop is abandoned so the restore can proceed.
-func runGuarded(ctx context.Context, run Runner, backstop time.Duration) RunOutcome {
+func runGuarded(ctx context.Context, run func(context.Context) RunOutcome, backstop time.Duration) RunOutcome {
 	start := time.Now()
 	done := make(chan RunOutcome, 1)
 	go func() {

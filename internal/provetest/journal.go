@@ -243,7 +243,7 @@ var testHookAfterSwap func()
 // swapAndRun swaps every target to its baseline, runs the command, and
 // restores. The restore is deferred, so it happens however this returns —
 // including by panic, which unwinds through here before anything recovers it.
-func (p *proof) swapAndRun(ctx context.Context, run Runner, backstop time.Duration) (*RunOutcome, error) {
+func (p *proof) swapAndRun(ctx context.Context, run func(context.Context) RunOutcome, backstop time.Duration) (*RunOutcome, error) {
 	var swapped []*target
 	defer func() {
 		p.report.Restored = p.restoreAll(swapped)

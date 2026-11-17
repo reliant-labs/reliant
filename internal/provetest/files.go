@@ -105,6 +105,63 @@ func resolveFiles(ctx context.Context, workspace, dir string, repos, paths []str
 	return files, nil
 }
 
+// commandDir is where the command runs for files in the checkout filesTop,
+// asked to run in dir, and whether that moved it out of dir.
+//
+// It is dir, except when dir is in ANOTHER git worktree of the repository
+// filesTop belongs to: an agent bound to the project's main checkout names
+// files by absolute path in a branch worktree of it. Run in dir, the command
+// tests the main checkout, which holds neither the fix nor (usually) the new
+// test, so both runs pass and the verdict says the test does not test the
+// fix. The command then runs in the same directory of filesTop's worktree
+// (its root, when that worktree lacks the directory).
+//
+// A dir outside any repository, in another repository, or containing
+// filesTop keeps the command where it was asked to run: there the caller
+// chose the directory ("cd sub && go test" from the project root).
+func commandDir(ctx context.Context, dir, filesTop string) (string, bool) {
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return dir, false
+	}
+	if _, inside := relInside(realDir, filesTop); inside || realDir == filesTop {
+		return dir, false
+	}
+	out, err := runGit(ctx, realDir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return dir, false
+	}
+	dirTop, err := filepath.EvalSymlinks(strings.TrimSpace(string(out)))
+	if err != nil || dirTop == filesTop {
+		return dir, false
+	}
+	if common := commonDir(ctx, dirTop); common == "" || common != commonDir(ctx, filesTop) {
+		return dir, false
+	}
+	rel, err := filepath.Rel(dirTop, realDir)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return filesTop, true
+	}
+	if info, err := os.Stat(filepath.Join(filesTop, rel)); err == nil && info.IsDir() {
+		return filepath.Join(filesTop, rel), true
+	}
+	return filesTop, true
+}
+
+// commonDir is the real path of the git common directory top's checkout
+// shares with its other worktrees, or "" when git cannot say.
+func commonDir(ctx context.Context, top string) string {
+	out, err := runGit(ctx, top, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return ""
+	}
+	real, err := filepath.EvalSymlinks(strings.TrimSpace(string(out)))
+	if err != nil {
+		return ""
+	}
+	return real
+}
+
 // relInside returns path relative to root, and whether path is strictly
 // inside root. Both are real paths.
 func relInside(root, path string) (string, bool) {

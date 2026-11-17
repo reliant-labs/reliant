@@ -158,10 +158,10 @@ func (t *proveTestTool) Execute(tc *rctx.ToolContext, params ProveTestParams) (T
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	run := func(ctx context.Context) provetest.RunOutcome {
+	run := func(ctx context.Context, runDir string) provetest.RunOutcome {
 		res, runErr := tc.Daemon.RunCommand(ctx, &daemon.RunCommandRequest{
 			Command:    command,
-			WorkingDir: dir,
+			WorkingDir: runDir,
 			TimeoutMs:  int(timeout.Milliseconds()),
 		})
 		if runErr != nil {
