@@ -226,8 +226,9 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 	regAck := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_RegistrationAck{
 			RegistrationAck: &reliantv1.RegistrationAck{
-				Accepted: true,
-				DaemonId: daemonID,
+				Accepted:     true,
+				DaemonId:     daemonID,
+				Capabilities: tools_daemon.GatewayCapabilities(),
 			},
 		},
 	}

@@ -411,6 +411,7 @@ func (s *Service) ConnectDaemon(
 				DaemonId:              daemonID,
 				UserId:                userID,
 				AccountEmail:          accountEmail(ctx),
+				Capabilities:          GatewayCapabilities(),
 			},
 		},
 	}

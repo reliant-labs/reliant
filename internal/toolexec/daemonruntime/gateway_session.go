@@ -67,6 +67,32 @@ type gatewaySession struct {
 	// cannot be ended early (the gateway-dials-daemon server mode).
 	retire     func()
 	retireOnce sync.Once
+
+	// processEvents is set when this stream's RegistrationAck listed the
+	// "process_events" capability: its gateway handles
+	// DaemonMessage.process_event (process_events.go). An older gateway logs
+	// every message it does not know, so none is sent to one.
+	processEvents atomic.Bool
+}
+
+// trySend queues msg only if the writer has room now, and reports whether it
+// did. For a message that is a hint rather than a reply (a process lifecycle
+// event): a full queue drops it instead of making its producer wait.
+func (s *gatewaySession) trySend(msg *reliantv1.DaemonMessage) bool {
+	if s == nil {
+		return false
+	}
+	select {
+	case <-s.done:
+		return false
+	default:
+	}
+	select {
+	case s.sendCh <- msg:
+		return true
+	default:
+		return false
+	}
 }
 
 // sessionSendBuffer is how many messages may queue for one session's writer.

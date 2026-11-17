@@ -378,6 +378,11 @@ func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection,
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to handle daemon command failure", "error", err)
 		}
 
+	case *reliantv1.DaemonMessage_ProcessEvent:
+		if err := s.handleProcessEvent(ctx, conn, m.ProcessEvent); err != nil {
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to handle process event", "error", err, "daemonID", conn.daemonID)
+		}
+
 	default:
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Unknown message type", "userID", conn.userID)
 	}

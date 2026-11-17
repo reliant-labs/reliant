@@ -430,6 +430,10 @@ func Start(ctx context.Context, opts StartOptions) error {
 	idleReap := opts.Guards.IdleReapWindow()
 	logging.InfoContext(ctx, logPrefix+" Background process idle reaper", "idle_after", idleReap.String())
 	go shell.GetBackgroundManager().RunReaper(ctx, shell.ReaperConfig{IdleAfter: idleReap})
+	// Tell the gateway when a background process starts, ends or changes its
+	// ports, so the owner's process lists update without polling
+	// (process_events.go).
+	shell.GetBackgroundManager().SetEventCallback(client.sendProcessEvent)
 
 	// Repair what a crash left in the shared clones (empty objects, torn
 	// indexes, stale gc.log, dead registrations) before agents run git there.
@@ -1413,6 +1417,9 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 			// any predecessor, and receives every result still waiting for
 			// a gateway.
 			if s != nil {
+				// Before activation, so the stream is never current without
+				// knowing what its gateway accepts.
+				s.processEvents.Store(gatewayAcceptsProcessEvents(m.RegistrationAck))
 				d.activateSession(s)
 			}
 			// The account first: the connected notice names it, so a daemon
