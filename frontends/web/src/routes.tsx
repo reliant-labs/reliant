@@ -33,6 +33,7 @@ import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundar
 import { lazyRoute } from './lib/lazyRoute'
 import { watchRoutedChatOpens } from './lib/routedChatOpen'
 import { AuthGuard } from './components/AuthGuard'
+import { OnboardingGate } from './components/OnboardingFlow/OnboardingGate'
 import { ModalLayer } from './components/Modals/ModalLayer'
 import { AddProjectDialogHost } from './components/Projects/AddProjectDialog'
 import { AutomationDialogHost } from './components/Automations/dialog/AutomationDialogHost'
@@ -435,7 +436,11 @@ const proxyAuthRoute = createRoute({
 })
 
 // Pathless layout route that gates the settings + workflow group on auth +
-// email verification. Avoids re-declaring <AuthGuard requireAuth requireEmailVerification>
+// email verification, and every app route in it on finished onboarding
+// (OnboardingGate; the exemptions — /onboarding, /settings, /m, … — are in
+// OnboardingFlow/onboardingGate.ts). A signed-out deep link keeps where it was
+// going across sign-in (returnHere), and the gate across the wizard.
+// Avoids re-declaring <AuthGuard requireAuth requireEmailVerification>
 // on every one of those routes. The `_app` layout below has its own AuthGuard
 // (kept separate so its full route id remains '/_app' — production code uses
 // useSearch({ from: '/_app' }) and that id collapses if we nest it here).
@@ -445,8 +450,10 @@ const authenticatedLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: '_authenticated',
   component: () => (
-    <AuthGuard requireAuth={true} requireEmailVerification={true}>
-      <Outlet />
+    <AuthGuard requireAuth={true} requireEmailVerification={true} returnHere>
+      <OnboardingGate>
+        <Outlet />
+      </OnboardingGate>
     </AuthGuard>
   ),
 })

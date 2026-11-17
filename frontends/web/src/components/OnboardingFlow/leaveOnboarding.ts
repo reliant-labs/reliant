@@ -30,6 +30,7 @@ import { trackEvent } from "@/lib/analytics";
 import { TOUR_PICKER } from "@/components/Onboarding/tourParam";
 import { startForIntent } from "@/components/Apps/appStart";
 import { stepsViewedCount } from "./analytics";
+import { isOnboardingReturnTo } from "./onboardingGate";
 import type { OnboardingIntent } from "./types";
 
 /**
@@ -124,28 +125,71 @@ export function onboardingExitTarget(
   }
 }
 
+/** An exit back to the page the user was going to (`returnTo`), by href. */
+export interface OnboardingReturnTarget {
+  href: string;
+  replace?: boolean;
+}
+
+/** Every reason that leaves for the app, as opposed to signing out. */
+const RETURNS_TO_APP: ReadonlySet<OnboardingExitReason> = new Set([
+  "completed_local",
+  "completed_cloud_gate_continue",
+  "already_complete",
+  "returning_user_heal",
+]);
+
+/**
+ * Where an exit actually goes: back to `returnTo` when OnboardingGate sent the
+ * user here from a page they asked for (a deep link into the forge console,
+ * say) and the reason leaves for the app; otherwise the reason's destination
+ * (onboardingExitTarget). The page they asked for wins over the new-chat
+ * landing: they came for it, and the composer is one click away from there.
+ * `returnTo` comes off the address bar, so it is re-checked here
+ * (isOnboardingReturnTo: same-origin, never /onboarding or /auth).
+ */
+export function onboardingExitNavigation(
+  reason: OnboardingExitReason,
+  landing?: OnboardingLanding,
+  returnTo?: string,
+): OnboardingExitTarget | OnboardingReturnTarget {
+  if (RETURNS_TO_APP.has(reason) && isOnboardingReturnTo(returnTo)) {
+    return { href: returnTo, replace: true };
+  }
+  return onboardingExitTarget(reason, landing);
+}
+
 /** Navigates. Satisfied by tanstack-router's `useNavigate` result. */
-export type NavigateFn = (options: OnboardingExitTarget) => Promise<void> | void;
+export type NavigateFn = (options: OnboardingExitTarget | OnboardingReturnTarget) => Promise<void> | void;
 
 /**
  * Leave `/onboarding`, recording why.
  *
  * Takes the navigate function rather than importing the router, so the caller
  * always drives the router it is actually mounted under — the thing the old
- * singleton path got wrong.
+ * singleton path got wrong. `returnTo` is the route's `returnTo` search param
+ * (OnboardingGate), when there is one.
  */
 export async function leaveOnboarding(
   reason: OnboardingExitReason,
   navigate: NavigateFn,
   landing?: OnboardingLanding,
+  returnTo?: string,
 ): Promise<void> {
   const stepsViewed = stepsViewedCount();
+  const target = onboardingExitNavigation(reason, landing, returnTo);
 
-  logger.info("[Onboarding] exit", { reason, landing, steps_viewed_count: stepsViewed });
+  logger.info("[Onboarding] exit", {
+    reason,
+    landing,
+    steps_viewed_count: stepsViewed,
+    ...("href" in target ? { return_to: target.href } : {}),
+  });
   trackEvent("onboarding_exited", {
     reason,
     steps_viewed_count: stepsViewed,
+    returned_to_deep_link: "href" in target,
   });
 
-  await navigate(onboardingExitTarget(reason, landing));
+  await navigate(target);
 }
