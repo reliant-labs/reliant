@@ -10,7 +10,7 @@ import (
 )
 
 // maxPlanAncestorWalk bounds the parent walk. Spawn depth is capped at 1 today
-// (maxSpawnDepth in call_llm.go), so a sub-agent's plan is at most one hop up —
+// (MaxSpawnDepth), so a sub-agent's plan is at most one hop up —
 // but thread parentage is a general tree and this must not become a way for a
 // cycle in the data to hang a tool call.
 const maxPlanAncestorWalk = 8

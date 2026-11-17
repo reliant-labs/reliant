@@ -48076,6 +48076,10 @@
               "name": "approval_required",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "spawn_depth_exhausted",
+              "kind": "bool"
             }
           ],
           "reliant.v1.ToolResultMsg": [

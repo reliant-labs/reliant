@@ -1913,6 +1913,10 @@ message ToolCapabilities {
   // (runtime/action_approval_legacy.go). Reserve the tag when that branch and
   // its version gate are retired.
   repeated string approval_required = 12 [deprecated = true];
+  // SpawnDepthExhausted: the agent is a sub-agent whose spawn depth has
+  // reached the maximum, so it is never offered spawn. load_tool and the
+  // execution refusal say so instead of "not found".
+  bool spawn_depth_exhausted = 13;
 }
 
 // ToolBoundParams are one tool's bound parameters, keyed by parameter name.

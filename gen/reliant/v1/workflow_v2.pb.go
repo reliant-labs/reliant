@@ -6433,8 +6433,12 @@ type ToolCapabilities struct {
 	//
 	// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 	ApprovalRequired []string `protobuf:"bytes,12,rep,name=approval_required,json=approvalRequired,proto3" json:"approval_required,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// SpawnDepthExhausted: the agent is a sub-agent whose spawn depth has
+	// reached the maximum, so it is never offered spawn. load_tool and the
+	// execution refusal say so instead of "not found".
+	SpawnDepthExhausted bool `protobuf:"varint,13,opt,name=spawn_depth_exhausted,json=spawnDepthExhausted,proto3" json:"spawn_depth_exhausted,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ToolCapabilities) Reset() {
@@ -6550,6 +6554,13 @@ func (x *ToolCapabilities) GetApprovalRequired() []string {
 		return x.ApprovalRequired
 	}
 	return nil
+}
+
+func (x *ToolCapabilities) GetSpawnDepthExhausted() bool {
+	if x != nil {
+		return x.SpawnDepthExhausted
+	}
+	return false
 }
 
 // ToolBoundParams are one tool's bound parameters, keyed by parameter name.
@@ -9508,7 +9519,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x13provider_account_id\x18\x14 \x01(\tB\x0e\x82\xb5\x18\n" +
 	"Z\badvancedR\x11providerAccountId\x121\n" +
 	"\ftrace_parent\x18\x15 \x01(\tB\x0e\x82\xb5\x18\n" +
-	"Z\badvancedR\vtraceParent\"\xce\x05\n" +
+	"Z\badvancedR\vtraceParent\"\x82\x06\n" +
 	"\x10ToolCapabilities\x12\x18\n" +
 	"\aoffered\x18\x01 \x03(\tR\aoffered\x12!\n" +
 	"\floadable_all\x18\x02 \x01(\bR\vloadableAll\x12\x1a\n" +
@@ -9527,7 +9538,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	" \x01(\bR\n" +
 	"unattended\x12*\n" +
 	"\x11unattended_opt_in\x18\v \x03(\tR\x0funattendedOptIn\x12/\n" +
-	"\x11approval_required\x18\f \x03(\tB\x02\x18\x01R\x10approvalRequired\x1aG\n" +
+	"\x11approval_required\x18\f \x03(\tB\x02\x18\x01R\x10approvalRequired\x122\n" +
+	"\x15spawn_depth_exhausted\x18\r \x01(\bR\x13spawnDepthExhausted\x1aG\n" +
 	"\x19WithheldIntegrationsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a[\n" +
