@@ -645,18 +645,12 @@ func historyStartsTurn(history []message.Message) bool {
 	return tail >= 0 && (history[tail].Role == message.User || history[tail].Role == message.Agent)
 }
 
-// endsWithCutOffAssistantTurn reports whether history, past any trailing
-// system framing, ends with an assistant message that requested no tools:
-// on a resumed loop's first turn, the turn that was cut off (reasoning only,
-// or a partial reply). One with tool calls is not: the orphan repair already
-// gave its calls results, and the provider can be called as it is.
-func endsWithCutOffAssistantTurn(history []message.Message) bool {
-	_, ok := cutOffAssistantTail(history)
-	return ok
-}
-
-// cutOffAssistantTail returns the assistant message endsWithCutOffAssistantTurn
-// matches, if history ends with one.
+// cutOffAssistantTail returns the assistant message history ends with, past
+// any trailing system framing, when it requested no tools: on a turn that
+// knows its tail was cut off (continuesCutOffTurn), the cut-off turn itself
+// (reasoning only, or a partial reply). One with tool calls is not: the
+// orphan repair already gave its calls results, and the provider can be
+// called as it is.
 func cutOffAssistantTail(history []message.Message) (message.Message, bool) {
 	tail := len(history) - 1
 	for tail >= 0 && history[tail].Role == message.System {
