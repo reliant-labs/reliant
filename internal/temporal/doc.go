@@ -2,8 +2,8 @@
 //
 // Package temporal is reliant's Temporal SDK wiring: client construction
 // (NewExternalClient), the payload data converter, the SDK logger adapter,
-// and the two signal senders built on a client.Client (AgentMessageNotifier,
-// SpawnStopper).
+// the two signal senders built on a client.Client (AgentMessageNotifier,
+// SpawnStopper), and the raw workflow describe (DescribeExecution).
 //
 // The package's contract opt-out is declared here, once: forge reads a package
 // directive from any file, and refuses two that disagree.
