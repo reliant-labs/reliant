@@ -101,7 +101,10 @@ export function ReleasesPage() {
         promote={control}
         scopeIsLocal={roster.envs.some((candidate) => candidate.name === env && candidate.lifecycle === "local")}
       />
-      {!led && <DeployRunsPanel
+      {/* The led console leaves the deploy log out, but not when the URL names a
+          deploy: the Overview's "See the output" links here, and a deploy that
+          failed before it cut a release is recorded nowhere else. */}
+      {(!led || !!search.deploy) && <DeployRunsPanel
         project={forgeProject}
         env={env === ENV_ALL ? null : env}
         names={names}
