@@ -14,7 +14,10 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // levelRecord is one line a levelLogger received.
@@ -81,21 +84,30 @@ func TestReportExpectedStop_WarnsOnceAndMarks(t *testing.T) {
 	assert.Equal(t, "DEBUG", logger.records[1].level, "an outer layer must not report it again")
 }
 
-// activityFailure returns the error a workflow really observes when an activity
-// fails with cause, from the Temporal test environment (the SDK does not
-// export NewActivityError). One attempt: the retry ladder is not under test.
-func activityFailure(t *testing.T, cause error) error {
+// wrappedActivityFailure returns the error a workflow really observes when an
+// activity run through the ActivityWrapper and wrapActivity's outbound path
+// fails with cause, in the Temporal test environment (the SDK does not export
+// NewActivityError). name picks the wrapper's verdict: FailStep's terminal
+// failures are reported on the run, at WARN.
+func wrappedActivityFailure(t *testing.T, name string, cause error) error {
 	t.Helper()
+	wrapper := NewActivityWrapper(name,
+		func(context.Context, types.DrainAgentMessagesInput) (types.DrainAgentMessagesOutput, error) {
+			return types.DrainAgentMessagesOutput{}, cause
+		}, nil)
 	var ts temporaltest.WorkflowTestSuite
 	env := ts.NewTestWorkflowEnvironment()
-	env.RegisterActivityWithOptions(func(context.Context) error { return cause }, activity.RegisterOptions{Name: "Fails"})
+	env.RegisterActivityWithOptions(func(ctx context.Context, in types.DrainAgentMessagesInput) (types.DrainAgentMessagesOutput, error) {
+		out, err := wrapper.Execute(ctx, in)
+		return out, flattenForTemporal(classifyError(err))
+	}, activity.RegisterOptions{Name: name})
 	var got error
 	env.ExecuteWorkflow(func(ctx workflow.Context) error {
 		actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			StartToCloseTimeout: time.Second,
 			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
 		})
-		got = workflow.ExecuteActivity(actCtx, "Fails").Get(ctx, nil)
+		got = workflow.ExecuteActivity(actCtx, name, types.DrainAgentMessagesInput{}).Get(ctx, nil)
 		return nil
 	})
 	require.True(t, env.IsWorkflowCompleted())
@@ -104,23 +116,28 @@ func activityFailure(t *testing.T, cause error) error {
 	return got
 }
 
-// A terminal activity failure is logged once, by the ActivityWrapper, where it
-// happened. The workflow layers it passes through (InlineLoop, SpawnInline,
-// the run) log it at DEBUG: one failed call_llm was three ERROR issues on
-// 2026-11-17 (prod d25b380e, cc984602, 965eb91e). A retryable failure whose
-// retries ran out was only ever logged at WARN, so it stays an ERROR here.
-func TestLogFailure_TerminalActivityFailureIsAlreadyReported(t *testing.T) {
+// A failure the ActivityWrapper logged at ERROR is that failure's one report:
+// the workflow layers it passes through (InlineLoop, SpawnInline, the run) log
+// it at DEBUG. One failed activity in a sub-agent was three ERROR issues on
+// 2026-11-17 (prod d25b380e, cc984602, 965eb91e). A failure the wrapper logged
+// below ERROR carries no marker, so the layer returning it still reports it:
+// a verdict the run reports (WARN), a user's error (lowered to INFO), a
+// deadline (WARN), and a retryable failure out of retries (WARN per attempt).
+func TestLogFailure_OnlyAnActivityFailureLoggedAtErrorIsAlreadyReported(t *testing.T) {
 	t.Parallel()
-	terminal := activityFailure(t, temporal.NewNonRetryableApplicationError("provider rejected the request", "TerminalError", nil))
-	exhausted := activityFailure(t, temporal.NewApplicationError("429 Too Many Requests", "RateLimitError"))
+	terminal := func(msg string) error { return temporal.NewNonRetryableApplicationError(msg, "TerminalError", nil) }
+	serverFault := wrappedActivityFailure(t, "DrainAgentMessages", terminal("the provider rejected the request"))
 
 	for name, tc := range map[string]struct {
 		err  error
 		want string
 	}{
-		"a terminal activity failure":                     {terminal, "DEBUG"},
-		"a terminal activity failure, wrapped by a layer": {fmt.Errorf("inline workflow agent failed: %w", terminal), "DEBUG"},
-		"a retryable activity failure out of retries":     {exhausted, "ERROR"},
+		"a terminal server fault the wrapper logged at ERROR": {serverFault, "DEBUG"},
+		"the same, wrapped by a workflow layer":               {fmt.Errorf("inline workflow agent failed: %w", serverFault), "DEBUG"},
+		"a terminal verdict the run reports (wrapper: WARN)":  {wrappedActivityFailure(t, failStepActivityName, terminal("missing key in {{ }}")), "ERROR"},
+		"a terminal user error (wrapper: lowered to INFO)":    {wrappedActivityFailure(t, "DrainAgentMessages", svcerr.WithClass(&TerminalError{Message: "your key was rejected"}, svcerr.ClassUser)), "ERROR"},
+		"a terminal deadline (wrapper: WARN)":                 {wrappedActivityFailure(t, "DrainAgentMessages", &TerminalError{Message: "machine timed out", Cause: svcerr.DeadlineExceeded("the machine did not answer in time")}), "ERROR"},
+		"a retryable failure out of retries (wrapper: WARN)":  {wrappedActivityFailure(t, "DrainAgentMessages", temporal.NewApplicationError("429 Too Many Requests", "RateLimitError")), "ERROR"},
 	} {
 		logger := &levelLogger{}
 		logFailure(logger, tc.err, "[SpawnInline] Inline execution failed", "error", tc.err)

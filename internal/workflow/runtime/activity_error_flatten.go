@@ -47,10 +47,19 @@ func flattenForTemporal(err error) error {
 	// Temporal itself that nobody has to act on it.
 	category := errclass.TemporalCategory(err)
 
+	// The ActivityWrapper's ERROR is the failure's one report; the marker
+	// crosses the activity boundary as a detail so the workflow layers it
+	// passes through do not report it again (alreadyReported).
+	var details []interface{}
+	if activityReportedAtError(err) {
+		details = []interface{}{activityReportedDetail}
+	}
+
 	var appErr *temporal.ApplicationError
 	if !errors.As(err, &appErr) {
 		return temporal.NewApplicationErrorWithOptions(flatMessage(err), temporalErrType(err), temporal.ApplicationErrorOptions{
 			Category: category,
+			Details:  details,
 		})
 	}
 	if appErr.HasDetails() {
@@ -63,6 +72,7 @@ func flattenForTemporal(err error) error {
 		NonRetryable:   appErr.NonRetryable(),
 		NextRetryDelay: appErr.NextRetryDelay(),
 		Category:       category,
+		Details:        details,
 	})
 }
 

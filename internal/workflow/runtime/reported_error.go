@@ -4,8 +4,12 @@ package runtime
 import (
 	"errors"
 
+	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
+
+	"github.com/reliant-labs/reliant/internal/errclass"
 )
 
 // reportedError marks an error that was already logged at ERROR, with its full
@@ -27,21 +31,66 @@ func markReported(err error) error {
 }
 
 // alreadyReported reports whether err, or an error it wraps, is marked, or is
-// a terminal activity failure. The ActivityWrapper logs a terminal failure
-// once, where it happened (registry.go: ERROR, or WARN when the run reports
-// it), and the marker cannot cross the activity boundary, so the workflow
-// layers recognise it by its shape: one failed call_llm was three ERROR
-// issues, ActivityWrapper, InlineLoop and SpawnInline (prod d25b380e,
-// cc984602, 965eb91e on 2026-11-17). A retryable failure whose retries ran out
-// was logged at WARN per attempt, so it is not reported yet: the layer
-// returning it still logs it at ERROR.
+// an activity failure the ActivityWrapper already logged at ERROR. The
+// wrapper's line is that failure's one report (registry.go), and its marker
+// crosses the activity boundary as a detail (activityReportedDetail), so the
+// workflow layers it passes through do not report it again: one failed
+// activity in a sub-agent was three ERROR issues, ActivityWrapper, InlineLoop
+// and SpawnInline (prod d25b380e, cc984602, 965eb91e on 2026-11-17). A failure
+// the wrapper logged below ERROR (a context that ended, a verdict the run
+// reports, a user's error, a retryable attempt) carries no marker, so the
+// layer that returns it still reports it.
 func alreadyReported(err error) bool {
 	var r reportedError
 	if errors.As(err, &r) {
 		return true
 	}
 	var activityErr *temporal.ActivityError
-	return errors.As(err, &activityErr) && isTerminalError(activityErr)
+	if !errors.As(err, &activityErr) {
+		return false
+	}
+	var appErr *temporal.ApplicationError
+	if !errors.As(activityErr, &appErr) || !appErr.HasDetails() {
+		return false
+	}
+	var detail string
+	return appErr.Details(&detail) == nil && detail == activityReportedDetail
+}
+
+// activityReportedDetail is the detail flattenForTemporal puts on an activity
+// failure the ActivityWrapper logged at ERROR.
+const activityReportedDetail = "reliant:activity-failure-reported-at-error"
+
+// reportedAtError marks, on the activity side, a failure the ActivityWrapper
+// logged at ERROR. It is invisible otherwise: same text, and Unwrap.
+type reportedAtError struct{ error }
+
+func (e reportedAtError) Unwrap() error { return e.error }
+
+func markReportedAtError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return reportedAtError{err}
+}
+
+// keepsErrorLevel reports whether a record logged at ERROR with err stays at
+// ERROR under the process logger's class policy: a server fault, except the
+// codes it lowers to WARN (a deadline, a conflict, an unimplemented rpc).
+func keepsErrorLevel(err error) bool {
+	if !errclass.IsServerError(err) {
+		return false
+	}
+	switch svcerr.Code(err) {
+	case connect.CodeDeadlineExceeded, connect.CodeAborted, connect.CodeUnimplemented:
+		return false
+	}
+	return true
+}
+
+func activityReportedAtError(err error) bool {
+	var r reportedAtError
+	return errors.As(err, &r)
 }
 
 // logFailure logs a failure a layer is returning: at ERROR; at DEBUG when an
