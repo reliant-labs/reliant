@@ -1062,6 +1062,11 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		// text. This is the one line that reports the failure, so it judges
 		// by the same verdict; wrapActivity does not log it again.
 		terminal := isTerminal(execErr) || isTerminal(classifyError(execErr))
+		// Whether this line is the failure's ERROR report, which the
+		// workflow layers it passes through then do not repeat
+		// (alreadyReported). A user's or a canceled error is lowered from
+		// ERROR by the logger's class policy, so it is not one.
+		reportedAtErr := false
 		switch {
 		case ctxEnded:
 			logging.WarnContext(ctx, "[ActivityWrapper] Activity context ended before it finished",
@@ -1096,6 +1101,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			// error-class policy (logging.withReporting, errclass.Library)
 			// lowers to INFO from the "error" attribute. Pinned by
 			// logging's TestWithReporting_TerminalActivityFailureLevelFollowsClass.
+			reportedAtErr = keepsErrorLevel(execErr)
 			logging.ErrorContext(ctx, "[ActivityWrapper] Activity execution failed",
 				"activityType", activityType,
 				"activityID", activityID,
@@ -1127,6 +1133,9 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		errMsg := execErr.Error()
 		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
 
+		if reportedAtErr {
+			return zeroOutput, markReportedAtError(execErr)
+		}
 		return zeroOutput, execErr
 	}
 

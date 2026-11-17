@@ -4229,7 +4229,7 @@ func runSpawnInlineChild(
 	}
 
 	if execErr != nil {
-		logger.Error("[SpawnInline] Inline execution failed",
+		logFailure(logger, execErr, "[SpawnInline] Inline execution failed",
 			"toolCallID", config.toolCallID,
 			"childWorkflowID", config.childWorkflowID,
 			"error", execErr,
