@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"go.temporal.io/sdk/log"
+	"go.temporal.io/sdk/temporal"
 )
 
 // reportedError marks an error that was already logged at ERROR, with its full
@@ -25,10 +26,22 @@ func markReported(err error) error {
 	return reportedError{err}
 }
 
-// alreadyReported reports whether err, or an error it wraps, is marked.
+// alreadyReported reports whether err, or an error it wraps, is marked, or is
+// a terminal activity failure. The ActivityWrapper logs a terminal failure
+// once, where it happened (registry.go: ERROR, or WARN when the run reports
+// it), and the marker cannot cross the activity boundary, so the workflow
+// layers recognise it by its shape: one failed call_llm was three ERROR
+// issues, ActivityWrapper, InlineLoop and SpawnInline (prod d25b380e,
+// cc984602, 965eb91e on 2026-11-17). A retryable failure whose retries ran out
+// was logged at WARN per attempt, so it is not reported yet: the layer
+// returning it still logs it at ERROR.
 func alreadyReported(err error) bool {
 	var r reportedError
-	return errors.As(err, &r)
+	if errors.As(err, &r) {
+		return true
+	}
+	var activityErr *temporal.ActivityError
+	return errors.As(err, &activityErr) && isTerminalError(activityErr)
 }
 
 // logFailure logs a failure a layer is returning: at ERROR; at DEBUG when an

@@ -2,12 +2,19 @@
 package runtime
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // levelRecord is one line a levelLogger received.
@@ -72,4 +79,52 @@ func TestReportExpectedStop_WarnsOnceAndMarks(t *testing.T) {
 	logFailure(logger, fmt.Errorf("loop agent failed: %w", err), "[Workflow Runtime] Failed with error")
 	require.Len(t, logger.records, 2)
 	assert.Equal(t, "DEBUG", logger.records[1].level, "an outer layer must not report it again")
+}
+
+// activityFailure returns the error a workflow really observes when an activity
+// fails with cause, from the Temporal test environment (the SDK does not
+// export NewActivityError). One attempt: the retry ladder is not under test.
+func activityFailure(t *testing.T, cause error) error {
+	t.Helper()
+	var ts temporaltest.WorkflowTestSuite
+	env := ts.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(func(context.Context) error { return cause }, activity.RegisterOptions{Name: "Fails"})
+	var got error
+	env.ExecuteWorkflow(func(ctx workflow.Context) error {
+		actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: time.Second,
+			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
+		})
+		got = workflow.ExecuteActivity(actCtx, "Fails").Get(ctx, nil)
+		return nil
+	})
+	require.True(t, env.IsWorkflowCompleted())
+	var activityErr *temporal.ActivityError
+	require.True(t, errors.As(got, &activityErr), "want *ActivityError, got %T", got)
+	return got
+}
+
+// A terminal activity failure is logged once, by the ActivityWrapper, where it
+// happened. The workflow layers it passes through (InlineLoop, SpawnInline,
+// the run) log it at DEBUG: one failed call_llm was three ERROR issues on
+// 2026-11-17 (prod d25b380e, cc984602, 965eb91e). A retryable failure whose
+// retries ran out was only ever logged at WARN, so it stays an ERROR here.
+func TestLogFailure_TerminalActivityFailureIsAlreadyReported(t *testing.T) {
+	t.Parallel()
+	terminal := activityFailure(t, temporal.NewNonRetryableApplicationError("provider rejected the request", "TerminalError", nil))
+	exhausted := activityFailure(t, temporal.NewApplicationError("429 Too Many Requests", "RateLimitError"))
+
+	for name, tc := range map[string]struct {
+		err  error
+		want string
+	}{
+		"a terminal activity failure":                     {terminal, "DEBUG"},
+		"a terminal activity failure, wrapped by a layer": {fmt.Errorf("inline workflow agent failed: %w", terminal), "DEBUG"},
+		"a retryable activity failure out of retries":     {exhausted, "ERROR"},
+	} {
+		logger := &levelLogger{}
+		logFailure(logger, tc.err, "[SpawnInline] Inline execution failed", "error", tc.err)
+		require.Len(t, logger.records, 1, name)
+		assert.Equal(t, tc.want, logger.records[0].level, name)
+	}
 }
