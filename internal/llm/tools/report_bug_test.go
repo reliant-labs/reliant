@@ -25,9 +25,20 @@ import (
 // fakeBugReportLookup answers the three reads report_bug makes to describe
 // where a report came from.
 type fakeBugReportLookup struct {
-	chat    *db.Chat
-	latest  *db.Message
-	daemons map[string]*db.Daemon
+	chat        *db.Chat
+	latest      *db.Message
+	daemons     map[string]*db.Daemon
+	attachments []*db.DaemonAttachment
+}
+
+func (f *fakeBugReportLookup) ListFreshDaemonAttachmentsForUser(_ context.Context, userID string, _ time.Duration) ([]*db.DaemonAttachment, error) {
+	var out []*db.DaemonAttachment
+	for _, a := range f.attachments {
+		if a.UserID == userID {
+			out = append(out, a)
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeBugReportLookup) GetChat(_ context.Context, id string) (*db.Chat, error) {
@@ -178,6 +189,11 @@ func TestReportBug_FilesReportDescribingWhereItCameFrom(t *testing.T) {
 		},
 		latest:  &db.Message{Model: &model},
 		daemons: map[string]*db.Daemon{worktreeDaemon: {ID: worktreeDaemon, DaemonType: &managed, Hostname: &pod}},
+		attachments: []*db.DaemonAttachment{
+			// Another of the user's machines, on another build: not this report's.
+			{DaemonID: chatDaemon, UserID: "user-from-request", Build: db.DaemonBuild{Version: "v1.21.1", Commit: "be314546eaa1"}},
+			{DaemonID: worktreeDaemon, UserID: "user-from-request", Build: db.DaemonBuild{Version: "v1.13.0", Commit: "19d01dcae1a0"}},
+		},
 	}
 	h := newReportBugHarness(lookup)
 	tc := reportBugContext("chat-1")
@@ -211,6 +227,10 @@ func TestReportBug_FilesReportDescribingWhereItCameFrom(t *testing.T) {
 
 		ReliantVersion: version.Version,
 		ForgeVersion:   version.Forge(),
+		// The daemon's own build, which a stale machine keeps for days after
+		// the server moved on (reliant#2761).
+		DaemonVersion: "v1.13.0",
+		DaemonCommit:  "19d01dcae1a0",
 	}, filed[0], "the worktree's daemon is the one that ran the call, so it outranks the chat's")
 
 	assert.Equal(t, "repa", meta.ReportID)
