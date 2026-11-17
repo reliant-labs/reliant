@@ -69,7 +69,7 @@ describe("ModelPreferences default provider", () => {
     renderPrefs();
     const select = (await screen.findByLabelText("Default provider")) as HTMLSelectElement;
     expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
-      ["", "Auto (Reliant's order)"],
+      ["", "Auto"],
       ["claude", "Claude"],
       ["codex", "ChatGPT"],
     ]);

@@ -352,7 +352,7 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
                 onChange={(e) => handleProviderChange(e.target.value)}
                 className="w-full px-2.5 py-1.5 pr-8 border border-input bg-background rounded-md appearance-none cursor-pointer text-xs disabled:opacity-50"
               >
-                <option value="">Auto (Reliant's order)</option>
+                <option value="">Auto</option>
                 {providerOptions.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
