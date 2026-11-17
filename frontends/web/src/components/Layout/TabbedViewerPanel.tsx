@@ -434,6 +434,7 @@ function ViewerContent({ viewer, isActive }: ViewerContentProps) {
         <CommandsViewerTab
           worktreeId={commandsViewer.worktreeId}
           processId={commandsViewer.processId}
+          processRequestKey={commandsViewer.processRequestedAt}
         />
       </div>
     );

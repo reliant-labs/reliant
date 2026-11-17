@@ -892,7 +892,6 @@ export const ChatPresenter = memo(function ChatPresenter({
                 <StatusSlotItem id="background">
                   <BackgroundWorkPill
                     chatId={chatId || undefined}
-                    worktreeId={worktreeId ?? undefined}
                     selectedThreadId={selectedThreadId}
                     mainThreadId={chatForQueue?.workflowId}
                     onSelectThread={setSelectedThreadId}

@@ -56,6 +56,9 @@ export interface CommandsViewer {
   projectId: string;
   worktreeId?: string;
   processId?: string; // Optional: if set, shows logs for this process
+  // When processId was last asked for: asking for the same process again
+  // (after going back to the list) must open it again. Not persisted.
+  processRequestedAt?: number;
 }
 
 export interface BrowserViewer {
@@ -323,7 +326,12 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
           set((state) => ({
             viewers: state.viewers.map((v) =>
               v.id === existing.id && v.type === "commands"
-                ? { ...v, worktreeId: worktreeId ?? (v as CommandsViewer).worktreeId, processId: processId ?? (v as CommandsViewer).processId }
+                ? {
+                    ...v,
+                    worktreeId: worktreeId ?? (v as CommandsViewer).worktreeId,
+                    processId: processId ?? (v as CommandsViewer).processId,
+                    processRequestedAt: processId ? Date.now() : (v as CommandsViewer).processRequestedAt,
+                  }
                 : v
             ),
             activeViewerId: existing.id,
@@ -338,6 +346,7 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
           projectId,
           worktreeId,
           processId,
+          processRequestedAt: processId ? Date.now() : undefined,
         };
         set((state) => ({
           viewers: [...state.viewers, newViewer],

@@ -96,18 +96,32 @@ func (x *PortInfo) GetAddress() string {
 
 // BackgroundProcess represents a background process
 type BackgroundProcess struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	Id            string                     `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Command       string                     `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
-	Status        v1.BackgroundProcessStatus `protobuf:"varint,3,opt,name=status,proto3,enum=reliant.v1.BackgroundProcessStatus" json:"status,omitempty"`
-	StartTime     string                     `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime       *string                    `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3,oneof" json:"end_time,omitempty"`
-	ExitCode      *int32                     `protobuf:"varint,6,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
-	WorkingDir    string                     `protobuf:"bytes,7,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
-	WorktreeId    *string                    `protobuf:"bytes,8,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
-	SessionId     string                     `protobuf:"bytes,9,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	ChatId        *string                    `protobuf:"bytes,10,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
-	Ports         []*PortInfo                `protobuf:"bytes,11,rep,name=ports,proto3" json:"ports,omitempty"`
+	state      protoimpl.MessageState     `protogen:"open.v1"`
+	Id         string                     `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Command    string                     `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
+	Status     v1.BackgroundProcessStatus `protobuf:"varint,3,opt,name=status,proto3,enum=reliant.v1.BackgroundProcessStatus" json:"status,omitempty"`
+	StartTime  string                     `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime    *string                    `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3,oneof" json:"end_time,omitempty"`
+	ExitCode   *int32                     `protobuf:"varint,6,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
+	WorkingDir string                     `protobuf:"bytes,7,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
+	WorktreeId *string                    `protobuf:"bytes,8,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	SessionId  string                     `protobuf:"bytes,9,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	ChatId     *string                    `protobuf:"bytes,10,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	Ports      []*PortInfo                `protobuf:"bytes,11,rep,name=ports,proto3" json:"ports,omitempty"`
+	// The thread of chat_id whose tool call started it (a sub-agent's thread,
+	// or the chat's main thread). Unset for a Commands-panel process.
+	ThreadId *string `protobuf:"bytes,12,opt,name=thread_id,json=threadId,proto3,oneof" json:"thread_id,omitempty"`
+	// The machine the process runs on. GetProcessOutput, KillProcess and
+	// StreamProcessOutput take it back as daemon_id.
+	DaemonId *string `protobuf:"bytes,13,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
+	// The agent asked for it to outlive the idle reaper (shell keep_alive).
+	KeepAlive bool `protobuf:"varint,14,opt,name=keep_alive,json=keepAlive,proto3" json:"keep_alive,omitempty"`
+	// When the machine's idle reaper stops it if nothing touches it (RFC3339);
+	// unset when it never will, and stop_exempt then says why.
+	StopsAfter *string `protobuf:"bytes,15,opt,name=stops_after,json=stopsAfter,proto3,oneof" json:"stops_after,omitempty"`
+	StopExempt *string `protobuf:"bytes,16,opt,name=stop_exempt,json=stopExempt,proto3,oneof" json:"stop_exempt,omitempty"`
+	// When it last wrote output or an agent used it (RFC3339).
+	LastActive    *string `protobuf:"bytes,17,opt,name=last_active,json=lastActive,proto3,oneof" json:"last_active,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -219,6 +233,48 @@ func (x *BackgroundProcess) GetPorts() []*PortInfo {
 	return nil
 }
 
+func (x *BackgroundProcess) GetThreadId() string {
+	if x != nil && x.ThreadId != nil {
+		return *x.ThreadId
+	}
+	return ""
+}
+
+func (x *BackgroundProcess) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
+	}
+	return ""
+}
+
+func (x *BackgroundProcess) GetKeepAlive() bool {
+	if x != nil {
+		return x.KeepAlive
+	}
+	return false
+}
+
+func (x *BackgroundProcess) GetStopsAfter() string {
+	if x != nil && x.StopsAfter != nil {
+		return *x.StopsAfter
+	}
+	return ""
+}
+
+func (x *BackgroundProcess) GetStopExempt() string {
+	if x != nil && x.StopExempt != nil {
+		return *x.StopExempt
+	}
+	return ""
+}
+
+func (x *BackgroundProcess) GetLastActive() string {
+	if x != nil && x.LastActive != nil {
+		return *x.LastActive
+	}
+	return ""
+}
+
 // ProcessOutput contains stdout and stderr from a process
 type ProcessOutput struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -275,8 +331,11 @@ func (x *ProcessOutput) GetStderr() string {
 type ListBackgroundProcessesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Optional filters - if none specified, returns all processes
-	WorktreeId    *string `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
-	SessionId     *string `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3,oneof" json:"session_id,omitempty"`
+	WorktreeId *string `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	SessionId  *string `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3,oneof" json:"session_id,omitempty"`
+	// Keeps only the processes that chat's agents started (its main thread and
+	// every sub-agent), read from the machine the chat runs on. The chat must
+	// be the caller's; another is not found.
 	ChatId        *string `protobuf:"bytes,3,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -378,8 +437,11 @@ func (x *ListBackgroundProcessesResponse) GetProcesses() []*BackgroundProcess {
 }
 
 type GetProcessOutputRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProcessId     string                 `protobuf:"bytes,1,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProcessId string                 `protobuf:"bytes,1,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	// The machine the process runs on (BackgroundProcess.daemon_id). Unset
+	// asks the default machine. It must be one of the caller's machines.
+	DaemonId      *string `protobuf:"bytes,2,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -417,6 +479,13 @@ func (*GetProcessOutputRequest) Descriptor() ([]byte, []int) {
 func (x *GetProcessOutputRequest) GetProcessId() string {
 	if x != nil {
 		return x.ProcessId
+	}
+	return ""
+}
+
+func (x *GetProcessOutputRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
 	}
 	return ""
 }
@@ -474,8 +543,11 @@ func (x *GetProcessOutputResponse) GetStderr() string {
 }
 
 type KillProcessRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProcessId     string                 `protobuf:"bytes,1,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProcessId string                 `protobuf:"bytes,1,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	// The machine the process runs on (BackgroundProcess.daemon_id). Unset
+	// asks the default machine. It must be one of the caller's machines.
+	DaemonId      *string `protobuf:"bytes,2,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -513,6 +585,13 @@ func (*KillProcessRequest) Descriptor() ([]byte, []int) {
 func (x *KillProcessRequest) GetProcessId() string {
 	if x != nil {
 		return x.ProcessId
+	}
+	return ""
+}
+
+func (x *KillProcessRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
 	}
 	return ""
 }
@@ -933,7 +1012,7 @@ const file_reliant_v1_background_proto_rawDesc = "" +
 	"\x04port\x18\x01 \x01(\x05R\x04port\x12\x1a\n" +
 	"\bprotocol\x18\x02 \x01(\tR\bprotocol\x12\x14\n" +
 	"\x05state\x18\x03 \x01(\tR\x05state\x12\x18\n" +
-	"\aaddress\x18\x04 \x01(\tR\aaddress\"\xc2\x03\n" +
+	"\aaddress\x18\x04 \x01(\tR\aaddress\"\xe3\x05\n" +
 	"\x11BackgroundProcess\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\tR\acommand\x12;\n" +
@@ -950,13 +1029,30 @@ const file_reliant_v1_background_proto_rawDesc = "" +
 	"session_id\x18\t \x01(\tR\tsessionId\x12\x1c\n" +
 	"\achat_id\x18\n" +
 	" \x01(\tH\x03R\x06chatId\x88\x01\x01\x12*\n" +
-	"\x05ports\x18\v \x03(\v2\x14.reliant.v1.PortInfoR\x05portsB\v\n" +
+	"\x05ports\x18\v \x03(\v2\x14.reliant.v1.PortInfoR\x05ports\x12 \n" +
+	"\tthread_id\x18\f \x01(\tH\x04R\bthreadId\x88\x01\x01\x12 \n" +
+	"\tdaemon_id\x18\r \x01(\tH\x05R\bdaemonId\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"keep_alive\x18\x0e \x01(\bR\tkeepAlive\x12$\n" +
+	"\vstops_after\x18\x0f \x01(\tH\x06R\n" +
+	"stopsAfter\x88\x01\x01\x12$\n" +
+	"\vstop_exempt\x18\x10 \x01(\tH\aR\n" +
+	"stopExempt\x88\x01\x01\x12$\n" +
+	"\vlast_active\x18\x11 \x01(\tH\bR\n" +
+	"lastActive\x88\x01\x01B\v\n" +
 	"\t_end_timeB\f\n" +
 	"\n" +
 	"_exit_codeB\x0e\n" +
 	"\f_worktree_idB\n" +
 	"\n" +
-	"\b_chat_id\"?\n" +
+	"\b_chat_idB\f\n" +
+	"\n" +
+	"_thread_idB\f\n" +
+	"\n" +
+	"_daemon_idB\x0e\n" +
+	"\f_stops_afterB\x0e\n" +
+	"\f_stop_exemptB\x0e\n" +
+	"\f_last_active\"?\n" +
 	"\rProcessOutput\x12\x16\n" +
 	"\x06stdout\x18\x01 \x01(\tR\x06stdout\x12\x16\n" +
 	"\x06stderr\x18\x02 \x01(\tR\x06stderr\"\xb3\x01\n" +
@@ -971,16 +1067,22 @@ const file_reliant_v1_background_proto_rawDesc = "" +
 	"\n" +
 	"\b_chat_id\"^\n" +
 	"\x1fListBackgroundProcessesResponse\x12;\n" +
-	"\tprocesses\x18\x01 \x03(\v2\x1d.reliant.v1.BackgroundProcessR\tprocesses\"8\n" +
+	"\tprocesses\x18\x01 \x03(\v2\x1d.reliant.v1.BackgroundProcessR\tprocesses\"h\n" +
 	"\x17GetProcessOutputRequest\x12\x1d\n" +
 	"\n" +
-	"process_id\x18\x01 \x01(\tR\tprocessId\"J\n" +
+	"process_id\x18\x01 \x01(\tR\tprocessId\x12 \n" +
+	"\tdaemon_id\x18\x02 \x01(\tH\x00R\bdaemonId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_daemon_id\"J\n" +
 	"\x18GetProcessOutputResponse\x12\x16\n" +
 	"\x06stdout\x18\x01 \x01(\tR\x06stdout\x12\x16\n" +
-	"\x06stderr\x18\x02 \x01(\tR\x06stderr\"3\n" +
+	"\x06stderr\x18\x02 \x01(\tR\x06stderr\"c\n" +
 	"\x12KillProcessRequest\x12\x1d\n" +
 	"\n" +
-	"process_id\x18\x01 \x01(\tR\tprocessId\"/\n" +
+	"process_id\x18\x01 \x01(\tR\tprocessId\x12 \n" +
+	"\tdaemon_id\x18\x02 \x01(\tH\x00R\bdaemonId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_daemon_id\"/\n" +
 	"\x13KillProcessResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\"\x86\x01\n" +
 	"\x1aStreamProcessOutputRequest\x12\x1d\n" +
@@ -1085,6 +1187,8 @@ func file_reliant_v1_background_proto_init() {
 	}
 	file_reliant_v1_background_proto_msgTypes[1].OneofWrappers = []any{}
 	file_reliant_v1_background_proto_msgTypes[3].OneofWrappers = []any{}
+	file_reliant_v1_background_proto_msgTypes[5].OneofWrappers = []any{}
+	file_reliant_v1_background_proto_msgTypes[7].OneofWrappers = []any{}
 	file_reliant_v1_background_proto_msgTypes[9].OneofWrappers = []any{}
 	file_reliant_v1_background_proto_msgTypes[10].OneofWrappers = []any{
 		(*ProcessOutputEvent_Line)(nil),

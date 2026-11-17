@@ -3197,6 +3197,11 @@
               "Name": "process_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "GetProcessOutputResponse": [
@@ -3216,6 +3221,11 @@
               "Name": "process_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "KillProcessResponse": [
@@ -3341,12 +3351,46 @@
               "kind": "message",
               "type_name": "reliant.v1.PortInfo",
               "repeated": true
+            },
+            {
+              "name": "thread_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "keep_alive",
+              "kind": "bool"
+            },
+            {
+              "name": "stops_after",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "stop_exempt",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "last_active",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GetProcessOutputRequest": [
             {
               "name": "process_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GetProcessOutputResponse": [
@@ -3363,6 +3407,11 @@
             {
               "name": "process_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.KillProcessResponse": [
@@ -40012,6 +40061,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.LocalModelInventory"
+            },
+            {
+              "Name": "process_event",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProcessLifecycleEvent"
             }
           ],
           "ReportToolResultRequest": [
@@ -40488,6 +40543,12 @@
               "name": "local_model_inventory",
               "kind": "message",
               "type_name": "reliant.v1.LocalModelInventory",
+              "oneof": "message"
+            },
+            {
+              "name": "process_event",
+              "kind": "message",
+              "type_name": "reliant.v1.ProcessLifecycleEvent",
               "oneof": "message"
             }
           ],
@@ -41046,6 +41107,86 @@
               "kind": "int64"
             }
           ],
+          "reliant.v1.ProcessLifecycleEvent": [
+            {
+              "name": "type",
+              "kind": "string"
+            },
+            {
+              "name": "process_id",
+              "kind": "string"
+            },
+            {
+              "name": "command",
+              "kind": "string"
+            },
+            {
+              "name": "working_dir",
+              "kind": "string"
+            },
+            {
+              "name": "status",
+              "kind": "string"
+            },
+            {
+              "name": "exit_code",
+              "kind": "int32",
+              "optional": true
+            },
+            {
+              "name": "start_time_unix_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "end_time_unix_ms",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "thread_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string"
+            },
+            {
+              "name": "package_command",
+              "kind": "bool"
+            },
+            {
+              "name": "ports",
+              "kind": "message",
+              "type_name": "reliant.v1.ProcessLifecyclePort",
+              "repeated": true
+            },
+            {
+              "name": "keep_alive",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.ProcessLifecyclePort": [
+            {
+              "name": "port",
+              "kind": "int32"
+            },
+            {
+              "name": "protocol",
+              "kind": "string"
+            },
+            {
+              "name": "state",
+              "kind": "string"
+            },
+            {
+              "name": "address",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.ProcessOutputChunkMessage": [
             {
               "name": "process_id",
@@ -41264,6 +41405,11 @@
             {
               "name": "account_email",
               "kind": "string"
+            },
+            {
+              "name": "capabilities",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ReportToolResultRequest": [
@@ -41807,6 +41953,8 @@
           "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelRefresh": "reliant/v1/tools_daemon.proto",
           "reliant.v1.MachineHealth": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.ProcessLifecycleEvent": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.ProcessLifecyclePort": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputChunkMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputSubscribeMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputUnsubscribeMessage": "reliant/v1/tools_daemon.proto",
@@ -53676,6 +53824,19 @@
       ],
       "providers": [
         "Trigger"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Background",
+      "field": "Repo",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/background.Repository",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },

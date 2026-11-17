@@ -130,7 +130,6 @@ function renderPill(props: Partial<React.ComponentProps<typeof BackgroundWorkPil
   return renderWithQuery(
     <BackgroundWorkPill
       chatId={CHAT_ID}
-      worktreeId={WORKTREE_ID}
       {...props}
     />,
   );
@@ -487,6 +486,67 @@ describe("BackgroundWorkPill", () => {
     expect(onSelectCommand).toHaveBeenCalledWith("proc-mine");
   });
 
+  // A command an agent left running is stopped from its row, on the machine
+  // it runs on — the person's shell_kill.
+  it("stops a running command on its machine", async () => {
+    const killProcess = vi.fn(() => ({ message: "ok" }));
+    daemonProcesses = [
+      {
+        id: "proc-dev",
+        command: "npm run dev",
+        status: BackgroundProcessStatus.RUNNING,
+        startTime: new Date().toISOString(),
+        workingDir: "/tmp",
+        chatId: CHAT_ID,
+        daemonId: "machine-2",
+      },
+    ];
+    setTransport(
+      mockTransport({
+        "BackgroundService.ListProcesses": () => ({ processes: daemonProcesses }),
+        "BackgroundService.KillProcess": (req: unknown) => killProcess(req as never),
+      }),
+    );
+
+    renderPill();
+    fireEvent.click(await screen.findByTestId("background-work-pill"));
+    fireEvent.click(screen.getByLabelText("Stop npm run dev"));
+
+    await waitFor(() => expect(killProcess).toHaveBeenCalled());
+    expect(killProcess.mock.calls[0]![0]).toMatchObject({ processId: "proc-dev", daemonId: "machine-2" });
+  });
+
+  // A command with no chat attribution is a Commands-panel one (or another
+  // chat's from before attribution): the workspace it shares does not make it
+  // this chat's.
+  it("does not claim an unattributed command in the same workspace", async () => {
+    daemonProcesses = [
+      {
+        id: "proc-panel",
+        command: "make build",
+        status: BackgroundProcessStatus.RUNNING,
+        startTime: new Date().toISOString(),
+        workingDir: "/tmp",
+        worktreeId: WORKTREE_ID,
+      },
+      {
+        id: "proc-agent",
+        command: "go test ./...",
+        status: BackgroundProcessStatus.RUNNING,
+        startTime: new Date().toISOString(),
+        workingDir: "/tmp",
+        chatId: CHAT_ID,
+      },
+    ];
+
+    renderPill();
+
+    expect(await screen.findByTestId("background-work-pill")).toHaveTextContent("1 command");
+    fireEvent.click(screen.getByTestId("background-work-pill"));
+    expect(screen.getByTestId("background-work-command-proc-agent")).toBeTruthy();
+    expect(screen.queryByTestId("background-work-command-proc-panel")).toBeNull();
+  });
+
   describe("failed agents", () => {
     // The chat's root run with one spawned agent under it. parentThread is the
     // thread that spawned the agent — the one Retry must address.
@@ -631,7 +691,7 @@ describe("BackgroundWorkPill", () => {
           approvals={null}
           lower={
             <StatusSlotItem id="background">
-              <BackgroundWorkPill chatId={CHAT_ID} worktreeId={WORKTREE_ID} {...props} />
+              <BackgroundWorkPill chatId={CHAT_ID} {...props} />
             </StatusSlotItem>
           }
         />,

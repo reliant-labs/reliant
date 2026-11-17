@@ -354,6 +354,7 @@ type DaemonMessage struct {
 	//	*DaemonMessage_DaemonCommandFailed
 	//	*DaemonMessage_LocalModelHttpChunk
 	//	*DaemonMessage_LocalModelInventory
+	//	*DaemonMessage_ProcessEvent
 	Message       isDaemonMessage_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -531,6 +532,15 @@ func (x *DaemonMessage) GetLocalModelInventory() *LocalModelInventory {
 	return nil
 }
 
+func (x *DaemonMessage) GetProcessEvent() *ProcessLifecycleEvent {
+	if x != nil {
+		if x, ok := x.Message.(*DaemonMessage_ProcessEvent); ok {
+			return x.ProcessEvent
+		}
+	}
+	return nil
+}
+
 type isDaemonMessage_Message interface {
 	isDaemonMessage_Message()
 }
@@ -606,6 +616,13 @@ type DaemonMessage_LocalModelInventory struct {
 	LocalModelInventory *LocalModelInventory `protobuf:"bytes,15,opt,name=local_model_inventory,json=localModelInventory,proto3,oneof"`
 }
 
+type DaemonMessage_ProcessEvent struct {
+	// A background process started, finished, was stopped or changed its
+	// listening ports. Sent only to a gateway whose RegistrationAck lists
+	// the "process_events" capability. See ProcessLifecycleEvent.
+	ProcessEvent *ProcessLifecycleEvent `protobuf:"bytes,16,opt,name=process_event,json=processEvent,proto3,oneof"`
+}
+
 func (*DaemonMessage_Register) isDaemonMessage_Message() {}
 
 func (*DaemonMessage_ToolResponse) isDaemonMessage_Message() {}
@@ -635,6 +652,8 @@ func (*DaemonMessage_DaemonCommandFailed) isDaemonMessage_Message() {}
 func (*DaemonMessage_LocalModelHttpChunk) isDaemonMessage_Message() {}
 
 func (*DaemonMessage_LocalModelInventory) isDaemonMessage_Message() {}
+
+func (*DaemonMessage_ProcessEvent) isDaemonMessage_Message() {}
 
 // LocalModelInventory is a daemon's complete, current view of the local model
 // servers it can reach.
@@ -3333,7 +3352,12 @@ type RegistrationAck struct {
 	// connect (WhoAmIResponse.account_email). The daemon names it in its
 	// connected banner, so a machine signed in as the wrong person is obvious.
 	// Empty when the authority names none.
-	AccountEmail  string `protobuf:"bytes,5,opt,name=account_email,json=accountEmail,proto3" json:"account_email,omitempty"`
+	AccountEmail string `protobuf:"bytes,5,opt,name=account_email,json=accountEmail,proto3" json:"account_email,omitempty"`
+	// What this gateway accepts beyond the original protocol, so a newer
+	// daemon sends a newer message only to a gateway that handles it (an
+	// older one logs every unknown message). "process_events":
+	// DaemonMessage.process_event.
+	Capabilities  []string `protobuf:"bytes,6,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3401,6 +3425,13 @@ func (x *RegistrationAck) GetAccountEmail() string {
 		return x.AccountEmail
 	}
 	return ""
+}
+
+func (x *RegistrationAck) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
 }
 
 type LoadProjectConfigsRequest struct {
@@ -5714,6 +5745,233 @@ func (x *ProcessOutputUnsubscribeMessage) GetProcessId() string {
 	return ""
 }
 
+// ProcessLifecycleEvent is a background process's lifecycle on the daemon
+// (daemon -> server): it started, completed, failed, was killed, or its
+// listening ports changed. The gateway turns it into a PROCESS_* user update
+// for the machine's owner, so their clients' process lists stay live without
+// polling. Every field is the daemon's word: the gateway addresses the update
+// from the stream's own identity, never from these.
+type ProcessLifecycleEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "started", "completed", "failed", "killed" or "port_changed".
+	Type       string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	ProcessId  string `protobuf:"bytes,2,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	Command    string `protobuf:"bytes,3,opt,name=command,proto3" json:"command,omitempty"`
+	WorkingDir string `protobuf:"bytes,4,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
+	// The process status after the event ("running", "completed", ...).
+	Status          string `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	ExitCode        *int32 `protobuf:"varint,6,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
+	StartTimeUnixMs int64  `protobuf:"varint,7,opt,name=start_time_unix_ms,json=startTimeUnixMs,proto3" json:"start_time_unix_ms,omitempty"`
+	EndTimeUnixMs   *int64 `protobuf:"varint,8,opt,name=end_time_unix_ms,json=endTimeUnixMs,proto3,oneof" json:"end_time_unix_ms,omitempty"`
+	// The chat and thread whose tool call started it; empty for a
+	// Commands-panel process.
+	ChatId   string `protobuf:"bytes,9,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	ThreadId string `protobuf:"bytes,10,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+	// The workspace a Commands-panel process was started for.
+	WorktreeId     string                  `protobuf:"bytes,11,opt,name=worktree_id,json=worktreeId,proto3" json:"worktree_id,omitempty"`
+	PackageCommand bool                    `protobuf:"varint,12,opt,name=package_command,json=packageCommand,proto3" json:"package_command,omitempty"`
+	Ports          []*ProcessLifecyclePort `protobuf:"bytes,13,rep,name=ports,proto3" json:"ports,omitempty"`
+	KeepAlive      bool                    `protobuf:"varint,14,opt,name=keep_alive,json=keepAlive,proto3" json:"keep_alive,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ProcessLifecycleEvent) Reset() {
+	*x = ProcessLifecycleEvent{}
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProcessLifecycleEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProcessLifecycleEvent) ProtoMessage() {}
+
+func (x *ProcessLifecycleEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProcessLifecycleEvent.ProtoReflect.Descriptor instead.
+func (*ProcessLifecycleEvent) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *ProcessLifecycleEvent) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *ProcessLifecycleEvent) GetProcessId() string {
+	if x != nil {
+		return x.ProcessId
+	}
+	return ""
+}
+
+func (x *ProcessLifecycleEvent) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
+func (x *ProcessLifecycleEvent) GetWorkingDir() string {
+	if x != nil {
+		return x.WorkingDir
+	}
+	return ""
+}
+
+func (x *ProcessLifecycleEvent) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *ProcessLifecycleEvent) GetExitCode() int32 {
+	if x != nil && x.ExitCode != nil {
+		return *x.ExitCode
+	}
+	return 0
+}
+
+func (x *ProcessLifecycleEvent) GetStartTimeUnixMs() int64 {
+	if x != nil {
+		return x.StartTimeUnixMs
+	}
+	return 0
+}
+
+func (x *ProcessLifecycleEvent) GetEndTimeUnixMs() int64 {
+	if x != nil && x.EndTimeUnixMs != nil {
+		return *x.EndTimeUnixMs
+	}
+	return 0
+}
+
+func (x *ProcessLifecycleEvent) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+func (x *ProcessLifecycleEvent) GetThreadId() string {
+	if x != nil {
+		return x.ThreadId
+	}
+	return ""
+}
+
+func (x *ProcessLifecycleEvent) GetWorktreeId() string {
+	if x != nil {
+		return x.WorktreeId
+	}
+	return ""
+}
+
+func (x *ProcessLifecycleEvent) GetPackageCommand() bool {
+	if x != nil {
+		return x.PackageCommand
+	}
+	return false
+}
+
+func (x *ProcessLifecycleEvent) GetPorts() []*ProcessLifecyclePort {
+	if x != nil {
+		return x.Ports
+	}
+	return nil
+}
+
+func (x *ProcessLifecycleEvent) GetKeepAlive() bool {
+	if x != nil {
+		return x.KeepAlive
+	}
+	return false
+}
+
+type ProcessLifecyclePort struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Port          int32                  `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
+	Protocol      string                 `protobuf:"bytes,2,opt,name=protocol,proto3" json:"protocol,omitempty"`
+	State         string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	Address       string                 `protobuf:"bytes,4,opt,name=address,proto3" json:"address,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProcessLifecyclePort) Reset() {
+	*x = ProcessLifecyclePort{}
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProcessLifecyclePort) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProcessLifecyclePort) ProtoMessage() {}
+
+func (x *ProcessLifecyclePort) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProcessLifecyclePort.ProtoReflect.Descriptor instead.
+func (*ProcessLifecyclePort) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *ProcessLifecyclePort) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *ProcessLifecyclePort) GetProtocol() string {
+	if x != nil {
+		return x.Protocol
+	}
+	return ""
+}
+
+func (x *ProcessLifecyclePort) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *ProcessLifecyclePort) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
 // ProcessOutputChunkMessage sends a chunk of process output (daemon -> server)
 type ProcessOutputChunkMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -5729,7 +5987,7 @@ type ProcessOutputChunkMessage struct {
 
 func (x *ProcessOutputChunkMessage) Reset() {
 	*x = ProcessOutputChunkMessage{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[61]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5741,7 +5999,7 @@ func (x *ProcessOutputChunkMessage) String() string {
 func (*ProcessOutputChunkMessage) ProtoMessage() {}
 
 func (x *ProcessOutputChunkMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[61]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5754,7 +6012,7 @@ func (x *ProcessOutputChunkMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessOutputChunkMessage.ProtoReflect.Descriptor instead.
 func (*ProcessOutputChunkMessage) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{61}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *ProcessOutputChunkMessage) GetProcessId() string {
@@ -5808,7 +6066,8 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\rWhoAmIRequest\"N\n" +
 	"\x0eWhoAmIResponse\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12#\n" +
-	"\raccount_email\x18\x02 \x01(\tR\faccountEmail\"\xf4\t\n" +
+	"\raccount_email\x18\x02 \x01(\tR\faccountEmail\"\xbe\n" +
+	"\n" +
 	"\rDaemonMessage\x128\n" +
 	"\bregister\x18\x01 \x01(\v2\x1a.reliant.v1.DaemonRegisterH\x00R\bregister\x12?\n" +
 	"\rtool_response\x18\x02 \x01(\v2\x18.reliant.v1.ToolResponseH\x00R\ftoolResponse\x12;\n" +
@@ -5825,7 +6084,8 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x13file_system_changed\x18\f \x01(\v2\x1d.reliant.v1.FileSystemChangedH\x00R\x11fileSystemChanged\x12U\n" +
 	"\x15daemon_command_failed\x18\r \x01(\v2\x1f.reliant.v1.DaemonCommandFailedH\x00R\x13daemonCommandFailed\x12V\n" +
 	"\x16local_model_http_chunk\x18\x0e \x01(\v2\x1f.reliant.v1.LocalModelHTTPChunkH\x00R\x13localModelHttpChunk\x12U\n" +
-	"\x15local_model_inventory\x18\x0f \x01(\v2\x1f.reliant.v1.LocalModelInventoryH\x00R\x13localModelInventoryB\t\n" +
+	"\x15local_model_inventory\x18\x0f \x01(\v2\x1f.reliant.v1.LocalModelInventoryH\x00R\x13localModelInventory\x12H\n" +
+	"\rprocess_event\x18\x10 \x01(\v2!.reliant.v1.ProcessLifecycleEventH\x00R\fprocessEventB\t\n" +
 	"\amessage\"p\n" +
 	"\x13LocalModelInventory\x12<\n" +
 	"\tendpoints\x18\x01 \x03(\v2\x1e.reliant.v1.LocalModelEndpointR\tendpoints\x12\x1b\n" +
@@ -6059,13 +6319,14 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"e\n" +
 	"\x0fServerHeartbeat\x12\x1c\n" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x124\n" +
-	"\x16acked_daemon_heartbeat\x18\x02 \x01(\x03R\x14ackedDaemonHeartbeat\"\xc0\x01\n" +
+	"\x16acked_daemon_heartbeat\x18\x02 \x01(\x03R\x14ackedDaemonHeartbeat\"\xe4\x01\n" +
 	"\x0fRegistrationAck\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x126\n" +
 	"\x17requested_project_paths\x18\x02 \x03(\tR\x15requestedProjectPaths\x12\x1b\n" +
 	"\tdaemon_id\x18\x03 \x01(\tR\bdaemonId\x12\x17\n" +
 	"\auser_id\x18\x04 \x01(\tR\x06userId\x12#\n" +
-	"\raccount_email\x18\x05 \x01(\tR\faccountEmail\"]\n" +
+	"\raccount_email\x18\x05 \x01(\tR\faccountEmail\x12\"\n" +
+	"\fcapabilities\x18\x06 \x03(\tR\fcapabilities\"]\n" +
 	"\x19LoadProjectConfigsRequest\x12!\n" +
 	"\fproject_path\x18\x01 \x01(\tR\vprojectPath\x12\x1d\n" +
 	"\n" +
@@ -6277,7 +6538,35 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\bnew_only\x18\x02 \x01(\bR\anewOnly\"@\n" +
 	"\x1fProcessOutputUnsubscribeMessage\x12\x1d\n" +
 	"\n" +
-	"process_id\x18\x01 \x01(\tR\tprocessId\"\xc0\x01\n" +
+	"process_id\x18\x01 \x01(\tR\tprocessId\"\x94\x04\n" +
+	"\x15ProcessLifecycleEvent\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1d\n" +
+	"\n" +
+	"process_id\x18\x02 \x01(\tR\tprocessId\x12\x18\n" +
+	"\acommand\x18\x03 \x01(\tR\acommand\x12\x1f\n" +
+	"\vworking_dir\x18\x04 \x01(\tR\n" +
+	"workingDir\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\x12 \n" +
+	"\texit_code\x18\x06 \x01(\x05H\x00R\bexitCode\x88\x01\x01\x12+\n" +
+	"\x12start_time_unix_ms\x18\a \x01(\x03R\x0fstartTimeUnixMs\x12,\n" +
+	"\x10end_time_unix_ms\x18\b \x01(\x03H\x01R\rendTimeUnixMs\x88\x01\x01\x12\x17\n" +
+	"\achat_id\x18\t \x01(\tR\x06chatId\x12\x1b\n" +
+	"\tthread_id\x18\n" +
+	" \x01(\tR\bthreadId\x12\x1f\n" +
+	"\vworktree_id\x18\v \x01(\tR\n" +
+	"worktreeId\x12'\n" +
+	"\x0fpackage_command\x18\f \x01(\bR\x0epackageCommand\x126\n" +
+	"\x05ports\x18\r \x03(\v2 .reliant.v1.ProcessLifecyclePortR\x05ports\x12\x1d\n" +
+	"\n" +
+	"keep_alive\x18\x0e \x01(\bR\tkeepAliveB\f\n" +
+	"\n" +
+	"_exit_codeB\x13\n" +
+	"\x11_end_time_unix_ms\"v\n" +
+	"\x14ProcessLifecyclePort\x12\x12\n" +
+	"\x04port\x18\x01 \x01(\x05R\x04port\x12\x1a\n" +
+	"\bprotocol\x18\x02 \x01(\tR\bprotocol\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\x12\x18\n" +
+	"\aaddress\x18\x04 \x01(\tR\aaddress\"\xc0\x01\n" +
 	"\x19ProcessOutputChunkMessage\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x12\n" +
@@ -6319,7 +6608,7 @@ func file_reliant_v1_tools_daemon_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_tools_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_reliant_v1_tools_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 70)
+var file_reliant_v1_tools_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 72)
 var file_reliant_v1_tools_daemon_proto_goTypes = []any{
 	(FileChangeType)(0),                     // 0: reliant.v1.FileChangeType
 	(MachineHealthState)(0),                 // 1: reliant.v1.MachineHealthState
@@ -6386,15 +6675,17 @@ var file_reliant_v1_tools_daemon_proto_goTypes = []any{
 	(*TerminalOutputSubscribeMessage)(nil),  // 62: reliant.v1.TerminalOutputSubscribeMessage
 	(*ProcessOutputSubscribeMessage)(nil),   // 63: reliant.v1.ProcessOutputSubscribeMessage
 	(*ProcessOutputUnsubscribeMessage)(nil), // 64: reliant.v1.ProcessOutputUnsubscribeMessage
-	(*ProcessOutputChunkMessage)(nil),       // 65: reliant.v1.ProcessOutputChunkMessage
-	nil,                                     // 66: reliant.v1.LocalModelHTTPRequest.HeadersEntry
-	nil,                                     // 67: reliant.v1.LocalModelHTTPChunk.HeadersEntry
-	nil,                                     // 68: reliant.v1.DaemonRegister.LabelsEntry
-	nil,                                     // 69: reliant.v1.ToolRequest.TraceContextEntry
-	nil,                                     // 70: reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
-	nil,                                     // 71: reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
-	nil,                                     // 72: reliant.v1.IndexedSkill.MetadataEntry
-	nil,                                     // 73: reliant.v1.DaemonCommandRequest.TraceContextEntry
+	(*ProcessLifecycleEvent)(nil),           // 65: reliant.v1.ProcessLifecycleEvent
+	(*ProcessLifecyclePort)(nil),            // 66: reliant.v1.ProcessLifecyclePort
+	(*ProcessOutputChunkMessage)(nil),       // 67: reliant.v1.ProcessOutputChunkMessage
+	nil,                                     // 68: reliant.v1.LocalModelHTTPRequest.HeadersEntry
+	nil,                                     // 69: reliant.v1.LocalModelHTTPChunk.HeadersEntry
+	nil,                                     // 70: reliant.v1.DaemonRegister.LabelsEntry
+	nil,                                     // 71: reliant.v1.ToolRequest.TraceContextEntry
+	nil,                                     // 72: reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
+	nil,                                     // 73: reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
+	nil,                                     // 74: reliant.v1.IndexedSkill.MetadataEntry
+	nil,                                     // 75: reliant.v1.DaemonCommandRequest.TraceContextEntry
 }
 var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	14, // 0: reliant.v1.DaemonMessage.register:type_name -> reliant.v1.DaemonRegister
@@ -6407,78 +6698,80 @@ var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	57, // 7: reliant.v1.DaemonMessage.daemon_command_response:type_name -> reliant.v1.DaemonCommandResponse
 	60, // 8: reliant.v1.DaemonMessage.terminal_output:type_name -> reliant.v1.TerminalOutputMessage
 	61, // 9: reliant.v1.DaemonMessage.terminal_session_event:type_name -> reliant.v1.TerminalSessionEvent
-	65, // 10: reliant.v1.DaemonMessage.process_output_chunk:type_name -> reliant.v1.ProcessOutputChunkMessage
+	67, // 10: reliant.v1.DaemonMessage.process_output_chunk:type_name -> reliant.v1.ProcessOutputChunkMessage
 	41, // 11: reliant.v1.DaemonMessage.file_system_changed:type_name -> reliant.v1.FileSystemChanged
 	42, // 12: reliant.v1.DaemonMessage.daemon_command_failed:type_name -> reliant.v1.DaemonCommandFailed
 	13, // 13: reliant.v1.DaemonMessage.local_model_http_chunk:type_name -> reliant.v1.LocalModelHTTPChunk
 	7,  // 14: reliant.v1.DaemonMessage.local_model_inventory:type_name -> reliant.v1.LocalModelInventory
-	8,  // 15: reliant.v1.LocalModelInventory.endpoints:type_name -> reliant.v1.LocalModelEndpoint
-	9,  // 16: reliant.v1.LocalModelEndpoint.models:type_name -> reliant.v1.LocalModelInfo
-	66, // 17: reliant.v1.LocalModelHTTPRequest.headers:type_name -> reliant.v1.LocalModelHTTPRequest.HeadersEntry
-	67, // 18: reliant.v1.LocalModelHTTPChunk.headers:type_name -> reliant.v1.LocalModelHTTPChunk.HeadersEntry
-	68, // 19: reliant.v1.DaemonRegister.labels:type_name -> reliant.v1.DaemonRegister.LabelsEntry
-	16, // 20: reliant.v1.ToolResponse.media:type_name -> reliant.v1.ToolResponseMedia
-	18, // 21: reliant.v1.DaemonHeartbeat.disk:type_name -> reliant.v1.DiskReport
-	23, // 22: reliant.v1.DaemonHeartbeat.health:type_name -> reliant.v1.MachineHealth
-	24, // 23: reliant.v1.DiskReport.volumes:type_name -> reliant.v1.DiskVolume
-	21, // 24: reliant.v1.DiskReport.processes:type_name -> reliant.v1.ProcessReport
-	19, // 25: reliant.v1.DiskReport.worktree_reclaim:type_name -> reliant.v1.WorktreeReclaimProposals
-	20, // 26: reliant.v1.WorktreeReclaimProposals.proposals:type_name -> reliant.v1.WorktreeReclaimProposal
-	22, // 27: reliant.v1.ProcessReport.top:type_name -> reliant.v1.ProcessTree
-	1,  // 28: reliant.v1.MachineHealth.state:type_name -> reliant.v1.MachineHealthState
-	25, // 29: reliant.v1.DiskVolume.consumers:type_name -> reliant.v1.DiskConsumer
-	2,  // 30: reliant.v1.DiskVolume.guard:type_name -> reliant.v1.DiskGuardState
-	30, // 31: reliant.v1.ServerMessage.tool_request:type_name -> reliant.v1.ToolRequest
-	31, // 32: reliant.v1.ServerMessage.heartbeat:type_name -> reliant.v1.ServerHeartbeat
-	32, // 33: reliant.v1.ServerMessage.registration_ack:type_name -> reliant.v1.RegistrationAck
-	49, // 34: reliant.v1.ServerMessage.tool_cancel:type_name -> reliant.v1.ToolExecutionCancel
-	33, // 35: reliant.v1.ServerMessage.load_project_configs:type_name -> reliant.v1.LoadProjectConfigsRequest
-	35, // 36: reliant.v1.ServerMessage.watch_project_configs:type_name -> reliant.v1.WatchProjectConfigsRequest
-	36, // 37: reliant.v1.ServerMessage.unwatch_project_configs:type_name -> reliant.v1.UnwatchProjectConfigsRequest
-	53, // 38: reliant.v1.ServerMessage.kill_process:type_name -> reliant.v1.DaemonKillProcessRequest
-	55, // 39: reliant.v1.ServerMessage.daemon_command:type_name -> reliant.v1.DaemonCommandRequest
-	58, // 40: reliant.v1.ServerMessage.terminal_input:type_name -> reliant.v1.TerminalInputMessage
-	59, // 41: reliant.v1.ServerMessage.terminal_resize:type_name -> reliant.v1.TerminalResizeMessage
-	63, // 42: reliant.v1.ServerMessage.process_output_subscribe:type_name -> reliant.v1.ProcessOutputSubscribeMessage
-	64, // 43: reliant.v1.ServerMessage.process_output_unsubscribe:type_name -> reliant.v1.ProcessOutputUnsubscribeMessage
-	62, // 44: reliant.v1.ServerMessage.terminal_output_subscribe:type_name -> reliant.v1.TerminalOutputSubscribeMessage
-	27, // 45: reliant.v1.ServerMessage.hello:type_name -> reliant.v1.GatewayHello
-	50, // 46: reliant.v1.ServerMessage.tool_background:type_name -> reliant.v1.ToolExecutionBackground
-	11, // 47: reliant.v1.ServerMessage.local_model_http_request:type_name -> reliant.v1.LocalModelHTTPRequest
-	12, // 48: reliant.v1.ServerMessage.local_model_http_cancel:type_name -> reliant.v1.LocalModelHTTPCancel
-	10, // 49: reliant.v1.ServerMessage.local_model_refresh:type_name -> reliant.v1.LocalModelRefresh
-	28, // 50: reliant.v1.ServerMessage.drain:type_name -> reliant.v1.GatewayDrain
-	29, // 51: reliant.v1.ServerMessage.tool_result_ack:type_name -> reliant.v1.ToolResultAck
-	69, // 52: reliant.v1.ToolRequest.trace_context:type_name -> reliant.v1.ToolRequest.TraceContextEntry
-	37, // 53: reliant.v1.LoadProjectConfigsResponse.snapshot:type_name -> reliant.v1.ProjectConfigSnapshot
-	70, // 54: reliant.v1.ProjectConfigSnapshot.mcp_configs:type_name -> reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
-	43, // 55: reliant.v1.ProjectConfigSnapshot.workflows:type_name -> reliant.v1.IndexedWorkflow
-	44, // 56: reliant.v1.ProjectConfigSnapshot.presets:type_name -> reliant.v1.IndexedPreset
-	45, // 57: reliant.v1.ProjectConfigSnapshot.scenarios:type_name -> reliant.v1.IndexedScenario
-	46, // 58: reliant.v1.ProjectConfigSnapshot.skills:type_name -> reliant.v1.IndexedSkill
-	71, // 59: reliant.v1.ProjectConfigSnapshot.repo_memories_md:type_name -> reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
-	38, // 60: reliant.v1.ProjectConfigSnapshot.repo_states:type_name -> reliant.v1.SyncedRepoState
-	40, // 61: reliant.v1.ProjectConfigDelta.changed_files:type_name -> reliant.v1.ChangedFile
-	37, // 62: reliant.v1.ProjectConfigDelta.snapshot_if_compacted:type_name -> reliant.v1.ProjectConfigSnapshot
-	0,  // 63: reliant.v1.ChangedFile.change_type:type_name -> reliant.v1.FileChangeType
-	72, // 64: reliant.v1.IndexedSkill.metadata:type_name -> reliant.v1.IndexedSkill.MetadataEntry
-	48, // 65: reliant.v1.ProjectDiscovery.projects:type_name -> reliant.v1.DiscoveredProject
-	56, // 66: reliant.v1.DaemonCommandRequest.policy:type_name -> reliant.v1.ConnectorPolicy
-	73, // 67: reliant.v1.DaemonCommandRequest.trace_context:type_name -> reliant.v1.DaemonCommandRequest.TraceContextEntry
-	3,  // 68: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
-	6,  // 69: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
-	26, // 70: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
-	51, // 71: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
-	4,  // 72: reliant.v1.ToolsDaemonService.WhoAmI:input_type -> reliant.v1.WhoAmIRequest
-	26, // 73: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
-	6,  // 74: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
-	52, // 75: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
-	5,  // 76: reliant.v1.ToolsDaemonService.WhoAmI:output_type -> reliant.v1.WhoAmIResponse
-	73, // [73:77] is the sub-list for method output_type
-	69, // [69:73] is the sub-list for method input_type
-	69, // [69:69] is the sub-list for extension type_name
-	69, // [69:69] is the sub-list for extension extendee
-	0,  // [0:69] is the sub-list for field type_name
+	65, // 15: reliant.v1.DaemonMessage.process_event:type_name -> reliant.v1.ProcessLifecycleEvent
+	8,  // 16: reliant.v1.LocalModelInventory.endpoints:type_name -> reliant.v1.LocalModelEndpoint
+	9,  // 17: reliant.v1.LocalModelEndpoint.models:type_name -> reliant.v1.LocalModelInfo
+	68, // 18: reliant.v1.LocalModelHTTPRequest.headers:type_name -> reliant.v1.LocalModelHTTPRequest.HeadersEntry
+	69, // 19: reliant.v1.LocalModelHTTPChunk.headers:type_name -> reliant.v1.LocalModelHTTPChunk.HeadersEntry
+	70, // 20: reliant.v1.DaemonRegister.labels:type_name -> reliant.v1.DaemonRegister.LabelsEntry
+	16, // 21: reliant.v1.ToolResponse.media:type_name -> reliant.v1.ToolResponseMedia
+	18, // 22: reliant.v1.DaemonHeartbeat.disk:type_name -> reliant.v1.DiskReport
+	23, // 23: reliant.v1.DaemonHeartbeat.health:type_name -> reliant.v1.MachineHealth
+	24, // 24: reliant.v1.DiskReport.volumes:type_name -> reliant.v1.DiskVolume
+	21, // 25: reliant.v1.DiskReport.processes:type_name -> reliant.v1.ProcessReport
+	19, // 26: reliant.v1.DiskReport.worktree_reclaim:type_name -> reliant.v1.WorktreeReclaimProposals
+	20, // 27: reliant.v1.WorktreeReclaimProposals.proposals:type_name -> reliant.v1.WorktreeReclaimProposal
+	22, // 28: reliant.v1.ProcessReport.top:type_name -> reliant.v1.ProcessTree
+	1,  // 29: reliant.v1.MachineHealth.state:type_name -> reliant.v1.MachineHealthState
+	25, // 30: reliant.v1.DiskVolume.consumers:type_name -> reliant.v1.DiskConsumer
+	2,  // 31: reliant.v1.DiskVolume.guard:type_name -> reliant.v1.DiskGuardState
+	30, // 32: reliant.v1.ServerMessage.tool_request:type_name -> reliant.v1.ToolRequest
+	31, // 33: reliant.v1.ServerMessage.heartbeat:type_name -> reliant.v1.ServerHeartbeat
+	32, // 34: reliant.v1.ServerMessage.registration_ack:type_name -> reliant.v1.RegistrationAck
+	49, // 35: reliant.v1.ServerMessage.tool_cancel:type_name -> reliant.v1.ToolExecutionCancel
+	33, // 36: reliant.v1.ServerMessage.load_project_configs:type_name -> reliant.v1.LoadProjectConfigsRequest
+	35, // 37: reliant.v1.ServerMessage.watch_project_configs:type_name -> reliant.v1.WatchProjectConfigsRequest
+	36, // 38: reliant.v1.ServerMessage.unwatch_project_configs:type_name -> reliant.v1.UnwatchProjectConfigsRequest
+	53, // 39: reliant.v1.ServerMessage.kill_process:type_name -> reliant.v1.DaemonKillProcessRequest
+	55, // 40: reliant.v1.ServerMessage.daemon_command:type_name -> reliant.v1.DaemonCommandRequest
+	58, // 41: reliant.v1.ServerMessage.terminal_input:type_name -> reliant.v1.TerminalInputMessage
+	59, // 42: reliant.v1.ServerMessage.terminal_resize:type_name -> reliant.v1.TerminalResizeMessage
+	63, // 43: reliant.v1.ServerMessage.process_output_subscribe:type_name -> reliant.v1.ProcessOutputSubscribeMessage
+	64, // 44: reliant.v1.ServerMessage.process_output_unsubscribe:type_name -> reliant.v1.ProcessOutputUnsubscribeMessage
+	62, // 45: reliant.v1.ServerMessage.terminal_output_subscribe:type_name -> reliant.v1.TerminalOutputSubscribeMessage
+	27, // 46: reliant.v1.ServerMessage.hello:type_name -> reliant.v1.GatewayHello
+	50, // 47: reliant.v1.ServerMessage.tool_background:type_name -> reliant.v1.ToolExecutionBackground
+	11, // 48: reliant.v1.ServerMessage.local_model_http_request:type_name -> reliant.v1.LocalModelHTTPRequest
+	12, // 49: reliant.v1.ServerMessage.local_model_http_cancel:type_name -> reliant.v1.LocalModelHTTPCancel
+	10, // 50: reliant.v1.ServerMessage.local_model_refresh:type_name -> reliant.v1.LocalModelRefresh
+	28, // 51: reliant.v1.ServerMessage.drain:type_name -> reliant.v1.GatewayDrain
+	29, // 52: reliant.v1.ServerMessage.tool_result_ack:type_name -> reliant.v1.ToolResultAck
+	71, // 53: reliant.v1.ToolRequest.trace_context:type_name -> reliant.v1.ToolRequest.TraceContextEntry
+	37, // 54: reliant.v1.LoadProjectConfigsResponse.snapshot:type_name -> reliant.v1.ProjectConfigSnapshot
+	72, // 55: reliant.v1.ProjectConfigSnapshot.mcp_configs:type_name -> reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
+	43, // 56: reliant.v1.ProjectConfigSnapshot.workflows:type_name -> reliant.v1.IndexedWorkflow
+	44, // 57: reliant.v1.ProjectConfigSnapshot.presets:type_name -> reliant.v1.IndexedPreset
+	45, // 58: reliant.v1.ProjectConfigSnapshot.scenarios:type_name -> reliant.v1.IndexedScenario
+	46, // 59: reliant.v1.ProjectConfigSnapshot.skills:type_name -> reliant.v1.IndexedSkill
+	73, // 60: reliant.v1.ProjectConfigSnapshot.repo_memories_md:type_name -> reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
+	38, // 61: reliant.v1.ProjectConfigSnapshot.repo_states:type_name -> reliant.v1.SyncedRepoState
+	40, // 62: reliant.v1.ProjectConfigDelta.changed_files:type_name -> reliant.v1.ChangedFile
+	37, // 63: reliant.v1.ProjectConfigDelta.snapshot_if_compacted:type_name -> reliant.v1.ProjectConfigSnapshot
+	0,  // 64: reliant.v1.ChangedFile.change_type:type_name -> reliant.v1.FileChangeType
+	74, // 65: reliant.v1.IndexedSkill.metadata:type_name -> reliant.v1.IndexedSkill.MetadataEntry
+	48, // 66: reliant.v1.ProjectDiscovery.projects:type_name -> reliant.v1.DiscoveredProject
+	56, // 67: reliant.v1.DaemonCommandRequest.policy:type_name -> reliant.v1.ConnectorPolicy
+	75, // 68: reliant.v1.DaemonCommandRequest.trace_context:type_name -> reliant.v1.DaemonCommandRequest.TraceContextEntry
+	3,  // 69: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
+	66, // 70: reliant.v1.ProcessLifecycleEvent.ports:type_name -> reliant.v1.ProcessLifecyclePort
+	6,  // 71: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
+	26, // 72: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
+	51, // 73: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
+	4,  // 74: reliant.v1.ToolsDaemonService.WhoAmI:input_type -> reliant.v1.WhoAmIRequest
+	26, // 75: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
+	6,  // 76: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
+	52, // 77: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
+	5,  // 78: reliant.v1.ToolsDaemonService.WhoAmI:output_type -> reliant.v1.WhoAmIResponse
+	75, // [75:79] is the sub-list for method output_type
+	71, // [71:75] is the sub-list for method input_type
+	71, // [71:71] is the sub-list for extension type_name
+	71, // [71:71] is the sub-list for extension extendee
+	0,  // [0:71] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_tools_daemon_proto_init() }
@@ -6502,6 +6795,7 @@ func file_reliant_v1_tools_daemon_proto_init() {
 		(*DaemonMessage_DaemonCommandFailed)(nil),
 		(*DaemonMessage_LocalModelHttpChunk)(nil),
 		(*DaemonMessage_LocalModelInventory)(nil),
+		(*DaemonMessage_ProcessEvent)(nil),
 	}
 	file_reliant_v1_tools_daemon_proto_msgTypes[22].OneofWrappers = []any{
 		(*ServerMessage_ToolRequest)(nil),
@@ -6527,13 +6821,14 @@ func file_reliant_v1_tools_daemon_proto_init() {
 		(*ServerMessage_ToolResultAck)(nil),
 	}
 	file_reliant_v1_tools_daemon_proto_msgTypes[51].OneofWrappers = []any{}
+	file_reliant_v1_tools_daemon_proto_msgTypes[61].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_tools_daemon_proto_rawDesc), len(file_reliant_v1_tools_daemon_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   70,
+			NumMessages:   72,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -124,6 +124,11 @@ message DaemonMessage {
     // serve. Sent after registration, whenever detection changes, and on
     // request (LocalModelRefresh). Replaces the daemon's previous inventory.
     LocalModelInventory local_model_inventory = 15;
+
+    // A background process started, finished, was stopped or changed its
+    // listening ports. Sent only to a gateway whose RegistrationAck lists
+    // the "process_events" capability. See ProcessLifecycleEvent.
+    ProcessLifecycleEvent process_event = 16;
   }
 }
 
@@ -714,6 +719,11 @@ message RegistrationAck {
   // connected banner, so a machine signed in as the wrong person is obvious.
   // Empty when the authority names none.
   string account_email = 5;
+  // What this gateway accepts beyond the original protocol, so a newer
+  // daemon sends a newer message only to a gateway that handles it (an
+  // older one logs every unknown message). "process_events":
+  // DaemonMessage.process_event.
+  repeated string capabilities = 6;
 }
 
 message LoadProjectConfigsRequest {
@@ -1081,6 +1091,41 @@ message ProcessOutputSubscribeMessage {
 // ProcessOutputUnsubscribeMessage unsubscribes from a process's output (server -> daemon)
 message ProcessOutputUnsubscribeMessage {
   string process_id = 1;
+}
+
+// ProcessLifecycleEvent is a background process's lifecycle on the daemon
+// (daemon -> server): it started, completed, failed, was killed, or its
+// listening ports changed. The gateway turns it into a PROCESS_* user update
+// for the machine's owner, so their clients' process lists stay live without
+// polling. Every field is the daemon's word: the gateway addresses the update
+// from the stream's own identity, never from these.
+message ProcessLifecycleEvent {
+  // "started", "completed", "failed", "killed" or "port_changed".
+  string type = 1;
+  string process_id = 2;
+  string command = 3;
+  string working_dir = 4;
+  // The process status after the event ("running", "completed", ...).
+  string status = 5;
+  optional int32 exit_code = 6;
+  int64 start_time_unix_ms = 7;
+  optional int64 end_time_unix_ms = 8;
+  // The chat and thread whose tool call started it; empty for a
+  // Commands-panel process.
+  string chat_id = 9;
+  string thread_id = 10;
+  // The workspace a Commands-panel process was started for.
+  string worktree_id = 11;
+  bool package_command = 12;
+  repeated ProcessLifecyclePort ports = 13;
+  bool keep_alive = 14;
+}
+
+message ProcessLifecyclePort {
+  int32 port = 1;
+  string protocol = 2;
+  string state = 3;
+  string address = 4;
 }
 
 // ProcessOutputChunkMessage sends a chunk of process output (daemon -> server)

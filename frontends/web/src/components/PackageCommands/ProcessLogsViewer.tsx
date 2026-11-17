@@ -1,23 +1,23 @@
 /**
- * Process Logs Viewer for Package Commands
- * 
- * A wrapper around TerminalOutput for a package command's process.
- * Uses gRPC streaming for real-time output instead of polling.
+ * Process Logs Viewer
+ *
+ * The live log of one background process — a Commands-panel command or a
+ * command an agent ran in the background — streamed from the machine it runs
+ * on (useProcessOutputStream), with Stop while it runs.
  */
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import { usePackageProcesses, useKillPackageProcess, type ProcessLogsResponse } from "../../hooks/package-queries";
+import { useMemo } from "react";
+import { ArrowLeft, Loader2, SearchX } from "lucide-react";
+import { useKillPackageProcess } from "../../hooks/package-queries";
+import { BackgroundProcessStatus, useStopBackgroundProcess } from "../../hooks/background-queries";
+import { useUnifiedProcesses } from "../../hooks/useUnifiedProcesses";
+import { useProcessOutputStream } from "../../hooks/useProcessOutputStream";
 import { TerminalOutput, type ProcessInfo } from "../shared/TerminalOutput";
 import { cn } from "../../lib/utils";
-import {
-  ProcessOutputStreamingService,
-  type OutputLine,
-} from "../../api/process-output-streaming";
-import { logger } from "../../lib/logger";
-import { BackgroundProcessStatus } from "../../hooks/background-queries";
 
 interface ProcessLogsViewerProps {
   processId: string;
+  /** Ports to show when the process record names none (a package process). */
   ports?: { port: number; protocol?: string }[];
   onClose?: () => void;
   onBack?: () => void;
@@ -33,161 +33,63 @@ export function ProcessLogsViewer({
   onOpenPort,
   className,
 }: ProcessLogsViewerProps) {
-  const { data: processes } = usePackageProcesses();
-  const killProcessMutation = useKillPackageProcess();
-
-  // Local state for streamed output
-  const [logs, setLogs] = useState<ProcessLogsResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const streamingServiceRef = useRef<ProcessOutputStreamingService | null>(null);
-
+  const { processes, isLoading: isLoadingProcesses } = useUnifiedProcesses();
   const process = processes.find((p) => p.id === processId);
-  // The output streams from the machine the process runs on.
-  const processDaemonId = process?.daemon_id;
+  const killPackageProcess = useKillPackageProcess();
+  const { stop: stopBackgroundProcess } = useStopBackgroundProcess();
 
-  // Build combined text from output lines for stdout/stderr fields
-  const buildLogsFromLines = useCallback((lines: OutputLine[]): ProcessLogsResponse => {
-    const stdout: string[] = [];
-    const stderr: string[] = [];
-    const combined: Array<{ type: "stdout" | "stderr"; text: string }> = [];
-
-    for (const line of lines) {
-      if (line.type === "stdout") {
-        stdout.push(line.text);
-      } else {
-        stderr.push(line.text);
-      }
-      combined.push({ type: line.type, text: line.text });
-    }
-
-    return {
-      stdout: stdout.join("\n"),
-      stderr: stderr.join("\n"),
-      combined,
-    };
-  }, []);
-
-  // Set up streaming on mount
-  useEffect(() => {
-    // Create streaming service with callbacks
-    const service = new ProcessOutputStreamingService(processId, {
-      onSnapshot: (lines, _latestSequence) => {
-        logger.debug("[ProcessLogsViewer] Received snapshot", {
-          processId: processId.slice(0, 8),
-          lineCount: lines.length,
-        });
-        setLogs(buildLogsFromLines(lines));
-        setIsLoading(false);
-      },
-      onLine: (line) => {
-        setLogs((prev) => {
-          if (!prev) {
-            // First line, create new logs
-            return buildLogsFromLines([line]);
-          }
-          // Append to existing logs
-          const newStdout = line.type === "stdout"
-            ? prev.stdout + (prev.stdout ? "\n" : "") + line.text
-            : prev.stdout;
-          const newStderr = line.type === "stderr"
-            ? prev.stderr + (prev.stderr ? "\n" : "") + line.text
-            : prev.stderr;
-          return {
-            stdout: newStdout,
-            stderr: newStderr,
-            combined: [...prev.combined, { type: line.type, text: line.text }],
-          };
-        });
-      },
-      onComplete: (status, exitCode, _endTime) => {
-        logger.info("[ProcessLogsViewer] Process complete", {
-          processId: processId.slice(0, 8),
-          status,
-          exitCode,
-        });
-        // Stream will close automatically, no action needed
-      },
-      onError: (error) => {
-        logger.error("[ProcessLogsViewer] Stream error", {
-          processId: processId.slice(0, 8),
-          error,
-        });
-        setIsLoading(false);
-      },
-      onStatusChange: (status) => {
-        logger.debug("[ProcessLogsViewer] Stream status", {
-          processId: processId.slice(0, 8),
-          status,
-        });
-        if (status === "connected") {
-          setIsLoading(false);
-        }
-      },
-    }, processDaemonId);
-
-    streamingServiceRef.current = service;
-    service.start();
-
-    return () => {
-      service.stop();
-      streamingServiceRef.current = null;
-    };
-  }, [processId, processDaemonId, buildLogsFromLines]);
-
-  // Manual refresh - restart stream to get fresh data
-  const handleRefresh = useCallback(() => {
-    if (streamingServiceRef.current) {
-      streamingServiceRef.current.stop();
-    }
-    setLogs(null);
-    setIsLoading(true);
-    
-    // Create new service to restart stream
-    const service = new ProcessOutputStreamingService(processId, {
-      onSnapshot: (lines) => {
-        setLogs(buildLogsFromLines(lines));
-        setIsLoading(false);
-      },
-      onLine: (line) => {
-        setLogs((prev) => {
-          if (!prev) return buildLogsFromLines([line]);
-          const newStdout = line.type === "stdout"
-            ? prev.stdout + (prev.stdout ? "\n" : "") + line.text
-            : prev.stdout;
-          const newStderr = line.type === "stderr"
-            ? prev.stderr + (prev.stderr ? "\n" : "") + line.text
-            : prev.stderr;
-          return {
-            stdout: newStdout,
-            stderr: newStderr,
-            combined: [...prev.combined, { type: line.type, text: line.text }],
-          };
-        });
-      },
-      onComplete: () => {},
-      onError: () => setIsLoading(false),
-      onStatusChange: (status) => {
-        if (status === "connected") setIsLoading(false);
-      },
-    }, processDaemonId);
-    streamingServiceRef.current = service;
-    service.start();
-  }, [processId, processDaemonId, buildLogsFromLines]);
+  // The output streams from the machine the process runs on. Wait for the
+  // record when the list is still loading, so the stream is not opened on
+  // the default machine and then again on the right one.
+  const stream = useProcessOutputStream(processId, {
+    daemonId: process?.daemon_id,
+    enabled: !!process || !isLoadingProcesses,
+  });
+  const output = useMemo(
+    () => ({
+      stdout: "",
+      stderr: stream.error && stream.lines.length === 0 ? `Could not stream the output: ${stream.error}` : "",
+      combined: stream.lines,
+    }),
+    [stream.lines, stream.error],
+  );
 
   if (!process) {
     return (
-      <div
-        className={cn(
-          "flex items-center justify-center p-8 text-muted-foreground",
-          className
+      <div className={cn("flex h-full flex-col bg-background", className)}>
+        {onBack && (
+          <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="rounded p-1.5 transition-colors hover:bg-muted"
+              aria-label="Back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          </div>
         )}
-      >
-        Process not found
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted-foreground">
+          {isLoadingProcesses ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Finding the process…
+            </>
+          ) : (
+            <>
+              <SearchX className="h-6 w-6 opacity-60" />
+              <p className="font-medium text-foreground">This process is no longer tracked</p>
+              <p className="max-w-xs text-xs">
+                Its machine restarted or cleared it from its list, so its output is gone. The command&apos;s tool call
+                in the chat still shows what the agent read.
+              </p>
+            </>
+          )}
+        </div>
       </div>
     );
   }
 
-  // Convert to ProcessInfo format
   const processInfo: ProcessInfo = {
     id: process.id,
     command: process.command,
@@ -196,22 +98,29 @@ export function ProcessLogsViewer({
     end_time: process.end_time,
     exit_code: process.exit_code,
     working_dir: process.working_dir,
-    ports,
+    ports: process.ports ?? ports,
   };
+
+  const handleKill =
+    process.status === BackgroundProcessStatus.RUNNING
+      ? async () => {
+          if (process.source === "package") {
+            await killPackageProcess.mutateAsync({ processId, daemonId: process.daemon_id });
+          } else {
+            await stopBackgroundProcess(process);
+          }
+        }
+      : undefined;
 
   return (
     <TerminalOutput
       process={processInfo}
-      output={logs || null}
-      isLoading={isLoading}
+      output={output}
+      isLoading={stream.isLoading}
       onBack={onBack}
       onClose={onClose}
-      onRefresh={handleRefresh}
-      onKill={
-        process.status === BackgroundProcessStatus.RUNNING
-          ? () => killProcessMutation.mutate({ processId, daemonId: process.daemon_id })
-          : undefined
-      }
+      onRefresh={stream.restart}
+      onKill={handleKill}
       onOpenPort={onOpenPort}
       className={className}
     />

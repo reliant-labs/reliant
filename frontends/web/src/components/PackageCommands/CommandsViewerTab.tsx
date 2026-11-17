@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext, type ReactNode } from "react";
 import Tooltip from "../forge-ui/tooltip";
-import { useQueryClient } from "@tanstack/react-query";
-import { Play, Square, ChevronDown, ChevronRight, RefreshCw, Terminal, Loader2, CheckCircle, XCircle, ExternalLink, Hammer, Package, Zap, Clock, Activity, RotateCw, Star, X, Globe, Layers } from "lucide-react";
+import { Play, Square, ChevronDown, ChevronRight, RefreshCw, Terminal, Loader2, CheckCircle, XCircle, ExternalLink, Hammer, Package, Zap, Clock, Activity, RotateCw, Star, X, Globe, Layers, Bot } from "lucide-react";
 import { useContainerWidth } from "../../hooks/useContainerWidth";
-import { useUnifiedProcessCounts } from "../../hooks/useUnifiedProcesses";
+import { mergeProcesses, useUnifiedProcessCounts, type UnifiedProcess } from "../../hooks/useUnifiedProcesses";
 import {
   runCommandRequest,
   useCommandFavorites,
@@ -14,17 +13,15 @@ import {
   useToggleCommandFavorite,
   type PackageCommand,
   type PackageType,
-  type PackageProcess,
 } from "../../hooks/package-queries";
 import {
   BackgroundProcessStatus,
   useBackgroundProcesses,
-  useBackgroundProcessOutput,
-  useKillBackgroundProcess,
-  type BackgroundProcess,
+  useChatBackgroundProcesses,
+  useStopBackgroundProcess,
 } from "../../hooks/background-queries";
-import { backgroundServiceKeys } from "../../hooks/background-service-hooks_gen";
-import { hasErrorReason } from "../../lib/errorReasons";
+import Status from "../forge-ui/status";
+import { processStatusView } from "../../lib/processStatus";
 import { useProjectStore } from "../../store/projectStore";
 import { useBrowserStore } from "../../store/browserStore";
 import { useViewerStore } from "../../store/viewerStore";
@@ -34,7 +31,6 @@ import { embeddedBrowserUrl, openExternalLink } from "../../lib/open-link";
 import { devServerUrl, isSameDevPage } from "../../lib/dev-preview";
 import { useActiveDaemonPreviewTemplate } from "../../hooks/useActiveDaemonPreviewTemplate";
 import { ProcessLogsViewer } from "./ProcessLogsViewer";
-import { TerminalOutput, type ProcessInfo } from "../shared/TerminalOutput";
 import { PortsDisplay } from "../shared/PortsDisplay";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
@@ -50,6 +46,8 @@ import { useCachedWorktrees, useWorktreeById, ALL_PROJECTS } from "../../hooks/w
 interface CommandsViewerTabProps {
   worktreeId?: string;
   processId?: string;
+  /** Changes each time processId is asked for, so asking again reopens it. */
+  processRequestKey?: number;
 }
 
 // Responsive layout context for child components
@@ -70,46 +68,6 @@ const packageTypeIcons: Record<PackageType, ReactNode> = {
   npm: <Package className="w-3.5 h-3.5" />,
   taskfile: <Zap className="w-3.5 h-3.5" />,
 };
-
-// Unified process type that combines PackageProcess and BackgroundProcess
-interface UnifiedProcess {
-  id: string;
-  command: string;
-  status: BackgroundProcessStatus;
-  start_time: string;
-  end_time?: string;
-  exit_code?: number;
-  working_dir: string;
-  worktree_id?: string;
-  ports?: { port: number; protocol?: string }[];
-  // Source tracking
-  source: "package" | "background";
-}
-
-// Convert PackageProcess to UnifiedProcess
-function toUnifiedProcess(p: PackageProcess): UnifiedProcess {
-  return {
-    ...p,
-    ports: undefined,
-    source: "package" as const,
-  };
-}
-
-// Convert BackgroundProcess to UnifiedProcess
-function backgroundToUnified(p: BackgroundProcess): UnifiedProcess {
-  return {
-    id: p.id,
-    command: p.command,
-    status: p.status,
-    start_time: p.start_time,
-    end_time: p.end_time,
-    exit_code: p.exit_code,
-    working_dir: p.working_dir,
-    worktree_id: p.worktree_id,
-    ports: p.ports?.map(port => ({ port: port.port, protocol: port.protocol })),
-    source: "background" as const,
-  };
-}
 
 // Helper to generate a unique key for a command (includes relative_path for uniqueness)
 function getCommandKey(cmd: PackageCommand): string {
@@ -364,21 +322,19 @@ function useLiveDuration(startTime: string, endTime?: string, isRunning?: boolea
   return duration;
 }
 
-export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: CommandsViewerTabProps) {
+export function CommandsViewerTab({ worktreeId, processId: initialProcessId, processRequestKey }: CommandsViewerTabProps) {
   // Container width tracking for responsive layouts
   const { width, containerRef } = useContainerWidth();
   const responsiveCtx = useMemo<ResponsiveContext>(() => ({
     isCompact: width > 0 && width < 320, // Compact mode for narrow containers
   }), [width]);
 
-  const queryClient = useQueryClient();
-
   // Background processes (BackgroundService, kept live by the stream)
   const backgroundQuery = useBackgroundProcesses();
   const backgroundProcesses = backgroundQuery.data;
   const isLoadingBackground = backgroundQuery.isLoading;
   const backgroundError = backgroundQuery.error?.message ?? null;
-  const killBackgroundProcess = useKillBackgroundProcess();
+  const { stop: stopBackgroundProcess } = useStopBackgroundProcess();
 
   // Get project path as fallback when no worktree is selected
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -404,8 +360,12 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   // as it serves that chat's Files tab and terminal.
   const activeChatId = useActiveChatId() ?? undefined;
   const commandsQuery = usePackageCommands(effectiveWorktreeId, projectPath, activeChatId);
-  const commands = commandsQuery.data?.commands ?? ({} as Record<PackageType, PackageCommand[]>);
-  const detectedTypes = commandsQuery.data?.detected_types ?? [];
+  // Memoized so the effects and memos keyed on them do not re-run every render.
+  const commands = useMemo(
+    () => commandsQuery.data?.commands ?? ({} as Record<PackageType, PackageCommand[]>),
+    [commandsQuery.data],
+  );
+  const detectedTypes = useMemo(() => commandsQuery.data?.detected_types ?? [], [commandsQuery.data]);
   const isLoadingCommands = commandsQuery.isLoading;
   const packageError = commandsQuery.error?.message ?? null;
 
@@ -420,21 +380,16 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   const toggleFavoriteMutation = useToggleCommandFavorite();
 
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(initialProcessId || null);
-  const [selectedProcessSource, setSelectedProcessSource] = useState<"package" | "background" | null>(null);
   const [expandedTypes, setExpandedTypes] = useState<Set<PackageType>>(() => getExpandedTypes());
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(() => getCollapsedDirs());
   const [runningCommandKey, setRunningCommandKey] = useState<string | null>(null);
   const [favoritesExpanded, setFavoritesExpanded] = useState(() => getFavoritesExpanded());
   const [recentExpanded, setRecentExpanded] = useState(() => getRecentExpanded());
   const [runningExpanded, setRunningExpanded] = useState(() => getRunningExpanded());
+  const [chatExpanded, setChatExpanded] = useState(true);
   const [dismissedProcesses, setDismissedProcesses] = useState<Set<string>>(() => getDismissedProcesses());
   const [searchQuery, setSearchQuery] = useState("");
   const [showAllWorkspaces, setShowAllWorkspaces] = useState(false);
-
-  // A background process's captured output, while one is open.
-  const outputQuery = useBackgroundProcessOutput(selectedProcessSource === "background" ? selectedProcessId : null);
-  const processOutput = outputQuery.data ?? (outputQuery.isError ? { stdout: "", stderr: "Failed to fetch output" } : null);
-  const isLoadingOutput = outputQuery.isLoading;
 
   // The project's favorite commands.
   const favoritesQuery = useCommandFavorites(currentProject?.id);
@@ -509,43 +464,23 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   const isLoading = isLoadingCommands || isLoadingPackageProcesses || isLoadingBackground;
   const error = packageError || backgroundError || null;
 
-  // Merge and deduplicate processes
+  // The processes the active chat's agents started. They belong to no
+  // workspace (an agent's command is not a package command), so they get a
+  // section of their own rather than vanishing from the workspace view.
+  const chatBackground = useChatBackgroundProcesses(activeChatId);
+  const chatProcesses = useMemo(
+    () => mergeProcesses([], [...chatBackground.running, ...chatBackground.recent]),
+    [chatBackground.running, chatBackground.recent],
+  );
+  const chatProcessIds = useMemo(() => new Set(chatProcesses.map((p) => p.id)), [chatProcesses]);
+
+  // Every process, newest first; outside "all workspaces" only this workspace's.
   const allProcesses = useMemo(() => {
-    const packageIds = new Set(packageProcesses.map(p => p.id));
-    // Create a map of background process IDs to their port info
-    const backgroundPortsMap = new Map(
-      backgroundProcesses.map(bp => [bp.id, bp.ports])
-    );
-    
-    // Convert package processes, enriching with port info from background processes
-    const unified = packageProcesses.map(p => {
-      const unifiedProcess = toUnifiedProcess(p);
-      // Enrich with ports from matching background process if available
-      const ports = backgroundPortsMap.get(p.id);
-      if (ports && ports.length > 0) {
-        unifiedProcess.ports = ports.map(port => ({ port: port.port, protocol: port.protocol }));
-      }
-      return unifiedProcess;
-    });
-    
-    // Add background processes that aren't already in package processes
-    for (const bp of backgroundProcesses) {
-      if (!packageIds.has(bp.id)) {
-        unified.push(backgroundToUnified(bp));
-      }
-    }
-    
-    // Sort by start time (newest first)
-    let sorted = unified.sort((a, b) => 
-      new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
-    );
-    
-    // Filter by worktree if not showing all
+    const merged = mergeProcesses(packageProcesses, backgroundProcesses);
     if (!showAllWorkspaces && effectiveWorktreeId) {
-      sorted = sorted.filter(p => p.worktree_id === effectiveWorktreeId);
+      return merged.filter((p) => p.worktree_id === effectiveWorktreeId);
     }
-    
-    return sorted;
+    return merged;
   }, [packageProcesses, backgroundProcesses, showAllWorkspaces, effectiveWorktreeId]);
 
   // Build a map of command keys to their associated processes
@@ -579,15 +514,13 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   // Process list updates are now handled via WebSocket events in globalUpdatesStore
   // No polling needed - process_started/completed/failed events update the stores in real-time
 
-  // Update selected process if initial processId changes
+  // Open the process the viewer was asked for, each time it is asked for
+  // (asking for the same one again after Back must reopen it).
   useEffect(() => {
     if (initialProcessId) {
       setSelectedProcessId(initialProcessId);
-      // Determine source
-      const isPackage = packageProcesses.some(p => p.id === initialProcessId);
-      setSelectedProcessSource(isPackage ? "package" : "background");
     }
-  }, [initialProcessId, packageProcesses]);
+  }, [initialProcessId, processRequestKey]);
 
   const handleRunCommand = useCallback(async (cmd: PackageCommand) => {
     const key = `${cmd.package_type}:${cmd.name}:${cmd.relative_path || ''}`;
@@ -611,10 +544,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
           duration: 4000,
           action: {
             label: "View Logs",
-            onClick: () => {
-              setSelectedProcessId(result.processId);
-              setSelectedProcessSource("package");
-            },
+            onClick: () => setSelectedProcessId(result.processId),
           },
         });
       }
@@ -623,28 +553,17 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     }
   }, [runCommandMutation, effectiveWorktreeId, projectPath, activeChatId]);
 
-  const handleKillProcess = useCallback(async (processId: string, source: "package" | "background", _processWorktreeId?: string) => {
-    if (source === "package") {
-      // Stopped on the machine it runs on, which is not always the default.
-      const daemonId = processesQuery.data.find((p) => p.id === processId)?.daemon_id;
-      await killProcessMutation.mutateAsync({ processId, daemonId });
+  const handleKillProcess = useCallback(async (process: UnifiedProcess) => {
+    // Stopped on the machine it runs on, which is not always the default.
+    if (process.source === "package") {
+      await killProcessMutation.mutateAsync({ processId: process.id, daemonId: process.daemon_id });
       return;
     }
-    try {
-      await killBackgroundProcess.mutateAsync({ processId });
-    } catch (error) {
-      // Already stopped is not a failure: refetch so the list says so.
-      if (hasErrorReason(error, "process_not_running")) {
-        void queryClient.invalidateQueries({ queryKey: backgroundServiceKeys.all });
-        return;
-      }
-      throw error;
-    }
-  }, [killProcessMutation, killBackgroundProcess, queryClient, processesQuery.data]);
+    await stopBackgroundProcess(process);
+  }, [killProcessMutation, stopBackgroundProcess]);
 
   const handleSelectProcess = useCallback((process: UnifiedProcess) => {
     setSelectedProcessId(process.id);
-    setSelectedProcessSource(process.source);
   }, []);
 
   const toggleType = (type: PackageType) => {
@@ -719,6 +638,8 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     });
   };
 
+  const toggleChatExpanded = () => setChatExpanded((prev) => !prev);
+
   const toggleRunningExpanded = () => {
     setRunningExpanded((prev) => {
       const next = !prev;
@@ -790,16 +711,22 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     }
   }, [currentProject?.id, effectiveWorktreeId, createBrowserTab, openBrowserViewer, previewTemplate]);
 
+  // The chat's own processes are listed in their section, not again here.
   const runningProcesses = allProcesses.filter(
-    (p) => p.status === BackgroundProcessStatus.RUNNING,
+    (p) => p.status === BackgroundProcessStatus.RUNNING && !chatProcessIds.has(p.id),
   );
   const recentProcesses = allProcesses
     .filter(
       (p) =>
         p.status !== BackgroundProcessStatus.RUNNING &&
+        !chatProcessIds.has(p.id) &&
         !dismissedProcesses.has(p.id),
     )
     .slice(0, 5);
+  const visibleChatProcesses = chatProcesses.filter(
+    (p) => p.status === BackgroundProcessStatus.RUNNING || !dismissedProcesses.has(p.id),
+  );
+  const chatRunningCount = visibleChatProcesses.filter((p) => p.status === BackgroundProcessStatus.RUNNING).length;
 
   // Get favorited commands
   const favoriteCommands = useMemo(() => {
@@ -986,58 +913,15 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     return () => clearTimeout(timeoutId);
   }, [searchQuery, allProcesses, detectedTypes, commands, matchesSearch, commandProcessMap, currentProject?.id, getWorktreeTabs, createBrowserTab, openBrowserViewer, previewTemplate]);
 
-  // If a process is selected, show logs
+  // A selected process shows its live log, whichever service started it.
   if (selectedProcessId) {
-    // For package processes, use ProcessLogsViewer
-    if (selectedProcessSource === "package") {
-      // Try to find ports from unified processes (which may have port info from background process)
-      const unifiedProcess = allProcesses.find(p => p.id === selectedProcessId);
-      return (
-        <ProcessLogsViewer
-          processId={selectedProcessId}
-          ports={unifiedProcess?.ports}
-          onBack={() => {
-            setSelectedProcessId(null);
-            setSelectedProcessSource(null);
-          }}
-          onOpenPort={handleOpenPort}
-        />
-      );
-    }
-    
-    // For background processes, use TerminalOutput with the GetProcessOutput read
-    const selectedProcess = backgroundProcesses.find(p => p.id === selectedProcessId);
-    if (selectedProcess) {
-      const processInfo: ProcessInfo = {
-        id: selectedProcess.id,
-        command: selectedProcess.command,
-        status: selectedProcess.status,
-        start_time: selectedProcess.start_time,
-        end_time: selectedProcess.end_time,
-        exit_code: selectedProcess.exit_code,
-        working_dir: selectedProcess.working_dir,
-        ports: selectedProcess.ports,
-      };
-      
-      return (
-        <TerminalOutput
-          process={processInfo}
-          output={processOutput}
-          isLoading={isLoadingOutput}
-          onBack={() => {
-            setSelectedProcessId(null);
-            setSelectedProcessSource(null);
-          }}
-          onRefresh={() => void outputQuery.refetch()}
-          onKill={
-            selectedProcess.status === BackgroundProcessStatus.RUNNING
-              ? () => handleKillProcess(selectedProcessId, "background")
-              : undefined
-          }
-          onOpenPort={handleOpenPort}
-        />
-      );
-    }
+    return (
+      <ProcessLogsViewer
+        processId={selectedProcessId}
+        onBack={() => setSelectedProcessId(null)}
+        onOpenPort={handleOpenPort}
+      />
+    );
   }
 
   return (
@@ -1059,10 +943,14 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
           )
         }
         statusBadge={
-          runningProcesses.length > 0 ? (
-            <span className="px-1.5 py-0.5 text-xs rounded-full bg-green-500/20 text-green-500 font-medium">
-              {runningProcesses.length} running
-            </span>
+          runningProcesses.length + chatRunningCount > 0 ? (
+            <Status
+              tone="neutral"
+              pulse
+              size="sm"
+              label={`${runningProcesses.length + chatRunningCount} running`}
+              className="text-xs text-muted-foreground"
+            />
           ) : undefined
         }
         actions={
@@ -1078,7 +966,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
                     <Layers className={cn("w-4 h-4", showAllWorkspaces && "text-primary-ink")} />
                     {/* Show indicator when other workspaces have running processes */}
                     {!showAllWorkspaces && hasRunningInOtherWorkspaces && (
-                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-info animate-pulse" />
                     )}
                   </span>
                 }
@@ -1103,112 +991,85 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
           </div>
         )}
 
+        {/* This chat's processes: what its agents started in the background */}
+        {visibleChatProcesses.length > 0 && (
+          <ProcessSection
+            icon={<Bot className="h-3.5 w-3.5" />}
+            title="This chat"
+            count={visibleChatProcesses.length}
+            noun="process"
+            live={chatRunningCount > 0}
+            expanded={chatExpanded}
+            onToggle={toggleChatExpanded}
+            testId="commands-chat-processes"
+          >
+            {visibleChatProcesses.map((process) => (
+              <ProcessRow
+                key={process.id}
+                process={process}
+                onViewLogs={() => handleSelectProcess(process)}
+                onKill={() => handleKillProcess(process)}
+                onDismiss={() => dismissProcess(process.id)}
+                onOpenPort={handleOpenPort}
+              />
+            ))}
+          </ProcessSection>
+        )}
+
         {/* Running Processes - Collapsible */}
         {runningProcesses.length > 0 && (
-          <div className="border-b border-border">
-            <button
-              onClick={toggleRunningExpanded}
-              className={cn(
-                "w-full flex items-center bg-green-500/5 hover:bg-green-500/10 transition-colors",
-                responsiveCtx.isCompact ? "gap-1.5 px-2 py-1.5" : "gap-2 px-4 py-2"
-              )}
-            >
-              {runningExpanded ? (
-                <ChevronDown className="w-3 h-3 text-green-600 dark:text-green-400" />
-              ) : (
-                <ChevronRight className="w-3 h-3 text-green-600 dark:text-green-400" />
-              )}
-              <Activity className={cn(
-                "text-green-600 dark:text-green-400",
-                responsiveCtx.isCompact ? "w-3 h-3" : "w-3.5 h-3.5"
-              )} />
-              <span className={cn(
-                "font-medium text-green-600 dark:text-green-400 uppercase tracking-wider",
-                responsiveCtx.isCompact ? "text-2xs" : "text-xs"
-              )}>
-                {responsiveCtx.isCompact ? "Run" : "Running"}
-              </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className={cn(
-                "text-green-600 dark:text-green-400 ml-auto",
-                responsiveCtx.isCompact ? "text-2xs" : "text-xs"
-              )}>
-                {runningProcesses.length}{!responsiveCtx.isCompact && (runningProcesses.length === 1 ? ' process' : ' processes')}
-              </span>
-            </button>
-            {runningExpanded && (
-              <div className="divide-y divide-border">
-                {runningProcesses.map((process) => (
-                  <ProcessRow
-                    key={process.id}
-                    process={process}
-                    onViewLogs={() => handleSelectProcess(process)}
-                    onKill={() => handleKillProcess(process.id, process.source, process.worktree_id)}
-                    onOpenPort={handleOpenPort}
-                    showWorktree={showAllWorkspaces}
-                    worktreeName={getWorktreeName(process.worktree_id)}
-                    relativePath={getProcessRelativePath(process)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+          <ProcessSection
+            icon={<Activity className="h-3.5 w-3.5" />}
+            title="Running"
+            count={runningProcesses.length}
+            noun="process"
+            live
+            expanded={runningExpanded}
+            onToggle={toggleRunningExpanded}
+          >
+            {runningProcesses.map((process) => (
+              <ProcessRow
+                key={process.id}
+                process={process}
+                onViewLogs={() => handleSelectProcess(process)}
+                onKill={() => handleKillProcess(process)}
+                onOpenPort={handleOpenPort}
+                showWorktree={showAllWorkspaces}
+                worktreeName={getWorktreeName(process.worktree_id)}
+                relativePath={getProcessRelativePath(process)}
+              />
+            ))}
+          </ProcessSection>
         )}
 
         {/* Recent Processes - Collapsible - only show when not viewing all workspaces */}
         {!showAllWorkspaces && recentProcesses.length > 0 && (
-          <div className="border-b border-border">
-            <button
-              onClick={toggleRecentExpanded}
-              className={cn(
-                "w-full flex items-center bg-muted/30 hover:bg-muted/50 transition-colors",
-                responsiveCtx.isCompact ? "gap-1.5 px-2 py-1.5" : "gap-2 px-4 py-2"
-              )}
-            >
-              {recentExpanded ? (
-                <ChevronDown className="w-3 h-3 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="w-3 h-3 text-muted-foreground" />
-              )}
-              <Clock className={cn(
-                "text-muted-foreground",
-                responsiveCtx.isCompact ? "w-3 h-3" : "w-3.5 h-3.5"
-              )} />
-              <span className={cn(
-                "font-medium text-muted-foreground uppercase tracking-wider",
-                responsiveCtx.isCompact ? "text-2xs" : "text-xs"
-              )}>
-                Recent
-              </span>
-              <span className={cn(
-                "text-muted-foreground ml-auto",
-                responsiveCtx.isCompact ? "text-2xs" : "text-xs"
-              )}>
-                {recentProcesses.length}{!responsiveCtx.isCompact && (recentProcesses.length === 1 ? ' process' : ' processes')}
-              </span>
-            </button>
-            {recentExpanded && (
-              <div className="divide-y divide-border">
-                {recentProcesses.map((process) => {
-                  const canRerun = !!findCommandForProcess(process);
-                  return (
-                    <ProcessRow
-                      key={process.id}
-                      process={process}
-                      onViewLogs={() => handleSelectProcess(process)}
-                      canRerun={canRerun}
-                      onRerun={canRerun ? () => handleRerunProcess(process) : undefined}
-                      onDismiss={() => dismissProcess(process.id)}
-                      onOpenPort={handleOpenPort}
-                      showWorktree={showAllWorkspaces}
-                      worktreeName={getWorktreeName(process.worktree_id)}
-                      relativePath={getProcessRelativePath(process)}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <ProcessSection
+            icon={<Clock className="h-3.5 w-3.5" />}
+            title="Recent"
+            count={recentProcesses.length}
+            noun="process"
+            expanded={recentExpanded}
+            onToggle={toggleRecentExpanded}
+          >
+            {recentProcesses.map((process) => {
+              const canRerun = !!findCommandForProcess(process);
+              return (
+                <ProcessRow
+                  key={process.id}
+                  process={process}
+                  onViewLogs={() => handleSelectProcess(process)}
+                  canRerun={canRerun}
+                  onRerun={canRerun ? () => handleRerunProcess(process) : undefined}
+                  onDismiss={() => dismissProcess(process.id)}
+                  onOpenPort={handleOpenPort}
+                  showWorktree={showAllWorkspaces}
+                  worktreeName={getWorktreeName(process.worktree_id)}
+                  relativePath={getProcessRelativePath(process)}
+                />
+              );
+            })}
+          </ProcessSection>
         )}
 
         {/* Favorite Commands - Collapsible - only show when not viewing all workspaces */}
@@ -1459,7 +1320,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
   const getStatusIndicator = (compact = false) => {
     if (isStarting) {
       return (
-        <span className="flex items-center gap-1 text-xs text-blue-500 flex-shrink-0">
+        <span className="flex items-center gap-1 text-xs text-primary-ink flex-shrink-0">
           <Loader2 className="w-3 h-3 animate-spin" />
           {!compact && <span>Starting...</span>}
         </span>
@@ -1468,10 +1329,14 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
     
     if (isRunning) {
       return (
-        <span className="flex items-center gap-1 text-xs text-green-500 flex-shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-          {!compact && <span>Running</span>}
-        </span>
+        <Status
+          tone="neutral"
+          pulse
+          size="sm"
+          label="Running"
+          hideLabel={compact}
+          className="flex-shrink-0 text-xs text-muted-foreground"
+        />
       );
     }
     
@@ -1492,7 +1357,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
       if (isSuccess) {
         return (
           <span className="flex items-center gap-1 text-xs text-muted-foreground flex-shrink-0" title={`Completed ${relativeTime}`}>
-            <CheckCircle className="w-3 h-3 text-green-500" />
+            <CheckCircle className="w-3 h-3 text-success-ink" />
             {!compact && <span className="hidden group-hover:inline">{relativeTime}</span>}
           </span>
         );
@@ -1501,16 +1366,16 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
       if (isFailed) {
         return (
           <span className="flex items-center gap-1 text-xs text-muted-foreground flex-shrink-0" title={`Failed ${relativeTime} (exit ${recentProcess.exit_code})`}>
-            <XCircle className="w-3 h-3 text-red-500" />
+            <XCircle className="w-3 h-3 text-danger-ink" />
             {!compact && <span className="hidden group-hover:inline">{relativeTime}</span>}
           </span>
         );
       }
       
-      // Killed or other status - show as neutral (yellow/stopped)
+      // Stopped or another state: neutral
       return (
         <span className="flex items-center gap-1 text-xs text-muted-foreground flex-shrink-0" title={`${isKilled ? 'Stopped' : recentProcess.status} ${relativeTime}`}>
-          <Square className="w-3 h-3 text-yellow-500" />
+          <Square className="w-3 h-3 text-muted-foreground" />
           {!compact && <span className="hidden group-hover:inline">{relativeTime}</span>}
         </span>
       );
@@ -1528,8 +1393,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
   // Compact/Wide layout
   return (
     <div className={cn(
-      "flex items-center hover:bg-muted/30 transition-colors group",
-      isRunning && "bg-green-500/5 hover:bg-green-500/10",
+      "flex items-center hover:bg-foreground/5 transition-colors group",
       isCompact ? "gap-2 py-1.5" : "gap-3 py-2",
       getLeftPadding()
     )}>
@@ -1540,7 +1404,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
         disabled={isDisabled}
         className={cn(
           "rounded transition-colors flex-shrink-0",
-          isRunning ? "bg-green-500/20 text-green-500" : "bg-primary/10 hover:bg-primary/20 text-primary-ink",
+          isRunning ? "bg-foreground/5 text-foreground" : "bg-primary/10 hover:bg-primary/20 text-primary-ink",
           isDisabled && "opacity-50 cursor-not-allowed",
           isCompact ? "p-1" : "p-1.5"
         )} aria-label={isRunning ? `${command.name} is running` : `Run ${command.name}`}>
@@ -1548,7 +1412,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
           <Loader2 className="w-3 h-3 animate-spin" />
         ) : isRunning ? (
           <span className="w-3 h-3 flex items-center justify-center">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <Status tone="neutral" pulse size="sm" />
           </span>
         ) : (
           <Play className="w-3 h-3" />
@@ -1609,9 +1473,9 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
             onClick={() => onViewLogs(runningProcess || recentProcess!)}
             className={cn(
               "rounded transition-colors flex items-center gap-1",
-              runningProcess 
-                ? "bg-green-500/20 hover:bg-green-500/30 text-green-500" 
-                : "hover:bg-muted text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100",
+              runningProcess
+                ? "text-foreground hover:bg-foreground/5"
+                : "hover:bg-foreground/5 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100",
               isCompact ? "p-1" : "p-1.5"
             )} aria-label="View logs">
             <ExternalLink className="w-3 h-3" />
@@ -1629,6 +1493,48 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
           </code>
         )}
       </div>
+    </div>
+  );
+}
+
+interface ProcessSectionProps {
+  icon: ReactNode;
+  title: string;
+  count: number;
+  /** What count counts, singular: "process" reads "3 processes". */
+  noun: string;
+  /** Something in it is running: the count carries a pulsing dot. */
+  live?: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  testId?: string;
+  children: ReactNode;
+}
+
+/** A collapsible group of process rows: a sentence-case label and a count. */
+function ProcessSection({ icon, title, count, noun, live, expanded, onToggle, testId, children }: ProcessSectionProps) {
+  const { isCompact } = useResponsive();
+  return (
+    <div className="border-b border-border" data-testid={testId}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className={cn(
+          "flex w-full items-center text-muted-foreground transition-colors hover:bg-foreground/5",
+          isCompact ? "gap-1.5 px-2 py-1.5" : "gap-2 px-4 py-2",
+        )}
+      >
+        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        {icon}
+        <span className="text-xs font-medium text-foreground">{title}</span>
+        <span className="ml-auto flex items-center gap-1.5 text-xs tabular-nums">
+          {live && <Status tone="neutral" pulse size="sm" />}
+          {count}
+          {!isCompact && ` ${count === 1 ? noun : `${noun}es`}`}
+        </span>
+      </button>
+      {expanded && <div className="divide-y divide-border">{children}</div>}
     </div>
   );
 }
@@ -1685,58 +1591,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
     return cmd.length > 30 ? cmd.substring(0, 30) + "..." : cmd;
   };
 
-  const getStatusConfig = () => {
-    switch (process.status) {
-      case BackgroundProcessStatus.RUNNING:
-        return {
-          bg: "bg-green-500/10",
-          border: "border-green-500/30",
-          dot: "bg-green-500 animate-pulse",
-          text: "text-green-500",
-          label: "Running",
-          shortLabel: "Run",
-        };
-      case BackgroundProcessStatus.COMPLETED:
-        return {
-          bg: "bg-muted/30",
-          border: "border-border",
-          dot: "bg-muted-foreground",
-          text: "text-muted-foreground",
-          label: process.exit_code === 0 ? "Completed" : `Exit ${process.exit_code}`,
-          shortLabel: process.exit_code === 0 ? "OK" : `E${process.exit_code}`,
-        };
-      case BackgroundProcessStatus.FAILED:
-        return {
-          bg: "bg-red-500/5",
-          border: "border-red-500/20",
-          dot: "bg-red-500",
-          text: "text-red-500",
-          label: `Failed (${process.exit_code})`,
-          shortLabel: `Fail`,
-        };
-      case BackgroundProcessStatus.KILLED:
-      case BackgroundProcessStatus.KILLED_EXTERNALLY:
-        return {
-          bg: "bg-yellow-500/5",
-          border: "border-yellow-500/20",
-          dot: "bg-yellow-500",
-          text: "text-yellow-500",
-          label: "Killed",
-          shortLabel: "Kill",
-        };
-      default:
-        return {
-          bg: "bg-muted/30",
-          border: "border-border",
-          dot: "bg-muted-foreground",
-          text: "text-muted-foreground",
-          label: "Unknown",
-          shortLabel: "Unk",
-        };
-    }
-  };
-
-  const config = getStatusConfig();
+  const statusView = processStatusView(process.status, process.exit_code);
   const shortCommand = getShortCommand(process.command);
 
   // Single unified layout that adapts to compact mode
@@ -1744,15 +1599,14 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
     <div 
       onClick={onViewLogs}
       className={cn(
-        "flex items-center cursor-pointer transition-all group",
-        "border-l-2 hover:bg-muted/50",
-        config.bg,
-        isRunning ? "border-l-green-500" : "border-l-transparent hover:border-l-primary/50",
-        isCompact ? "gap-2 px-2 py-2" : "gap-3 px-4 py-3"
+        "flex items-center cursor-pointer transition-colors group",
+        "border-l-2 hover:bg-foreground/5",
+        isRunning ? "border-l-info" : "border-l-transparent",
+        isCompact ? "gap-2 px-2 py-2" : "gap-3 px-4 py-2.5"
       )}
     >
       {/* Status dot */}
-      <div className={cn("rounded-full flex-shrink-0", config.dot, isCompact ? "w-2 h-2" : "w-2.5 h-2.5")} />
+      <Status tone={statusView.tone} pulse={statusView.running} size={isCompact ? "sm" : "md"} />
       
       {/* Process info */}
       <div className="flex-1 min-w-0">
@@ -1778,11 +1632,11 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
             </span>
           )}
           <span className={cn(
-            "rounded flex-shrink-0",
-            config.text, config.bg,
-            isCompact ? "text-2xs px-1 py-0.5" : "text-xs px-1.5 py-0.5"
+            "flex-shrink-0",
+            statusView.tone === "danger" ? "text-danger-ink" : statusView.tone === "warning" ? "text-warning-ink" : "text-muted-foreground",
+            isCompact ? "text-2xs" : "text-xs"
           )}>
-            {isCompact ? config.shortLabel : config.label}
+            {isCompact ? statusView.shortLabel : statusView.label}
           </span>
           {process.ports && process.ports.length > 0 && onOpenPort && (
             <PortsDisplay 
@@ -1824,8 +1678,8 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
 <button
           onClick={(e) => { e.stopPropagation(); onViewLogs(); }}
           className={cn(
-            "rounded transition-colors flex items-center gap-1",
-            isRunning ? "bg-green-500/20 hover:bg-green-500/30 text-green-500" : "hover:bg-muted text-muted-foreground",
+            "rounded transition-colors flex items-center gap-1 hover:bg-foreground/5",
+            isRunning ? "text-foreground" : "text-muted-foreground",
             isCompact ? "p-1" : "p-1.5"
           )} aria-label="View logs">
           <ExternalLink className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
@@ -1839,7 +1693,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
             disabled={isCanceling}
             className={cn(
               "rounded transition-colors",
-              isCanceling ? "text-yellow-500 cursor-wait" : "hover:bg-destructive/20 text-destructive-ink",
+              isCanceling ? "text-warning-ink cursor-wait" : "hover:bg-destructive/10 text-destructive-ink",
               isCompact ? "p-1" : "p-1.5"
             )} aria-label={isCanceling ? "Stopping..." : "Stop process"}>
             {isCanceling ? (

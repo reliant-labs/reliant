@@ -999,6 +999,7 @@ func (g *Graph) newBackground() (*background.Service, error) {
 		Logger: g.Log,
 		Config: g.Cfg,
 		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:   g.Database(),
 	})
 }
 

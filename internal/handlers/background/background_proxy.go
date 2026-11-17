@@ -2,9 +2,12 @@
 package background
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -13,8 +16,13 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/errreason"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/processproto"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -40,13 +48,20 @@ func (s *Service) getUserID(ctx context.Context) (string, error) {
 	return userID, nil
 }
 
-func (s *Service) sendCommand(ctx context.Context, userID, commandType string, req any, resp any, timeoutMs int32) error {
+// sendCommand sends one command to daemonID, or by default resolution when
+// it is "".
+func (s *Service) sendCommand(ctx context.Context, userID, daemonID, commandType string, req any, resp any, timeoutMs int32) error {
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("marshal request"))
 	}
 
-	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+	var respBytes []byte
+	if daemonID == "" {
+		respBytes, err = s.deps.Router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+	} else {
+		respBytes, err = s.deps.Router.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payload, timeoutMs)
+	}
 	if err != nil {
 		return daemonFailure("daemon command "+commandType, err)
 	}
@@ -98,7 +113,13 @@ func processNotRunning(err error) error {
 		errreason.ProcessNotRunning)
 }
 
-// ListProcesses returns all background processes.
+// ListProcesses returns the caller's background processes.
+//
+// With chat_id it is the processes that chat's agents started, read from the
+// machine the chat runs on. Without it, every connected machine of the
+// caller's is asked at once (as the package-command list does), so the one
+// list a client keeps covers every machine and each row names the machine to
+// send its output and kill requests to.
 func (s *Service) ListProcesses(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListBackgroundProcessesRequest],
@@ -108,27 +129,26 @@ func (s *Service) ListProcesses(
 		return nil, err
 	}
 
-	var cmdResp []daemonProcessInfo
-	if err := s.sendCommand(ctx, userID, "exec.bg_list", struct{}{}, &cmdResp, bgListTimeoutMs); err != nil {
-		return nil, err
+	var processes []*reliantv1.BackgroundProcess
+	if chatID := req.Msg.GetChatId(); chatID != "" {
+		processes, err = s.listForChat(ctx, userID, chatID)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		processes, err = s.listEverywhere(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
 	}
-
-	processes := make([]*reliantv1.BackgroundProcess, len(cmdResp))
-	for i, p := range cmdResp {
-		proc := &reliantv1.BackgroundProcess{
-			Id:        p.ID,
-			Command:   p.Command,
-			Status:    processproto.Status(p.Status),
-			StartTime: p.StartTime.Format(time.RFC3339),
+	if worktreeID := req.Msg.GetWorktreeId(); worktreeID != "" {
+		kept := processes[:0]
+		for _, p := range processes {
+			if p.GetWorktreeId() == worktreeID {
+				kept = append(kept, p)
+			}
 		}
-		if p.ExitCode != nil {
-			proc.ExitCode = proto.Int32(int32(*p.ExitCode))
-		}
-		if p.EndTime != nil {
-			endTime := p.EndTime.Format(time.RFC3339)
-			proc.EndTime = &endTime
-		}
-		processes[i] = proc
+		processes = kept
 	}
 
 	return connect.NewResponse(&reliantv1.ListBackgroundProcessesResponse{
@@ -136,14 +156,189 @@ func (s *Service) ListProcesses(
 	}), nil
 }
 
-// daemonProcessInfo mirrors daemon.ProcessInfo for JSON deserialization.
-type daemonProcessInfo struct {
-	ID        string     `json:"id"`
-	Command   string     `json:"command"`
-	Status    string     `json:"status"`
-	ExitCode  *int       `json:"exit_code,omitempty"`
-	StartTime time.Time  `json:"start_time"`
-	EndTime   *time.Time `json:"end_time,omitempty"`
+// listForChat lists the processes chatID's agents started, on the machine
+// the chat runs on. Another user's chat reads like a missing one, a shared
+// chat's viewer included: the processes run on the owner's machine.
+func (s *Service) listForChat(ctx context.Context, userID, chatID string) ([]*reliantv1.BackgroundProcess, error) {
+	chat, err := s.deps.Repo.GetChat(ctx, chatID)
+	if errors.Is(err, core.ErrChatNotFound) || (err == nil && !authz.CanWriteChat(ctx, userID, chat)) {
+		return nil, svcerr.NotFound("chat")
+	}
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
+	}
+	// A list never wakes a machine: one that is asleep has no running process.
+	if daemonID != "" && !s.online(ctx, userID, daemonID) {
+		return nil, nil
+	}
+	listed, err := s.listOn(ctx, userID, daemonID)
+	if err != nil {
+		return nil, err
+	}
+	var out []*reliantv1.BackgroundProcess
+	for _, p := range listed {
+		if p.GetChatId() == chatID {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+// listOn lists every background process of one machine ("" for default
+// resolution).
+func (s *Service) listOn(ctx context.Context, userID, daemonID string) ([]*reliantv1.BackgroundProcess, error) {
+	var infos []*daemon.ProcessInfo
+	if err := s.sendCommand(ctx, userID, daemonID, "exec.bg_list", struct{}{}, &infos, bgListTimeoutMs); err != nil {
+		return nil, err
+	}
+	out := make([]*reliantv1.BackgroundProcess, 0, len(infos))
+	for _, info := range infos {
+		if info != nil {
+			out = append(out, backgroundProcessFromDaemon(info, daemonID))
+		}
+	}
+	return out, nil
+}
+
+// livenessProbe is the router's answer to "is this machine connected".
+// *toolexec.NATSDaemonRouter implements it; a router that does not (a test
+// double) is treated as having every machine connected, and an unscoped list
+// then asks the default machine alone.
+type livenessProbe interface {
+	IsDaemonOnline(ctx context.Context, userID string, selector *toolexec.DaemonSelector) (bool, error)
+}
+
+func (s *Service) online(ctx context.Context, userID, daemonID string) bool {
+	probe, ok := s.deps.Router.(livenessProbe)
+	if !ok {
+		return true
+	}
+	online, err := probe.IsDaemonOnline(ctx, userID, &toolexec.DaemonSelector{ID: daemonID})
+	return err == nil && online
+}
+
+// listEverywhere lists the processes of every connected machine of the
+// caller's, asking them at once. An asleep machine is skipped, and one that
+// fails is left out and logged: the list shows what it can. Only when no
+// machine could be asked at all does the default machine's answer (and its
+// error, which says why) stand, as it did before lists spanned machines.
+func (s *Service) listEverywhere(ctx context.Context, userID string) ([]*reliantv1.BackgroundProcess, error) {
+	if _, ok := s.deps.Router.(livenessProbe); !ok {
+		return s.listOn(ctx, userID, "")
+	}
+	daemons, err := s.deps.Repo.ListDaemonsByUserID(ctx, userID)
+	if err != nil {
+		logging.WarnContext(ctx, "[Background] could not list the user's machines; asking the default one", "error", err)
+		return s.listOn(ctx, userID, "")
+	}
+	var targets []string
+	for _, d := range daemons {
+		if d != nil && authz.CanReadMachine(ctx, userID, d) && s.online(ctx, userID, d.ID) {
+			targets = append(targets, d.ID)
+		}
+	}
+	if len(targets) == 0 {
+		return s.listOn(ctx, userID, "")
+	}
+	var (
+		mu  sync.Mutex
+		all []*reliantv1.BackgroundProcess
+		wg  sync.WaitGroup
+	)
+	for _, daemonID := range targets {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			listed, err := s.listOn(ctx, userID, daemonID)
+			if err != nil {
+				logging.WarnContext(ctx, "[Background] could not list a machine's processes", "daemonID", daemonID, "error", err)
+				return
+			}
+			mu.Lock()
+			all = append(all, listed...)
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	return all, nil
+}
+
+// backgroundProcessFromDaemon is a daemon's process as the rpc returns it.
+// asked is the machine the list was asked of; the daemon's own stamp wins.
+func backgroundProcessFromDaemon(p *daemon.ProcessInfo, asked string) *reliantv1.BackgroundProcess {
+	proc := &reliantv1.BackgroundProcess{
+		Id:         p.ID,
+		Command:    p.Command,
+		Status:     processproto.Status(p.Status),
+		StartTime:  p.StartTime.Format(time.RFC3339),
+		WorkingDir: p.WorkingDir,
+		KeepAlive:  p.KeepAlive,
+		Ports:      portsFromDaemon(p.Ports),
+	}
+	if p.ExitCode != nil {
+		proc.ExitCode = proto.Int32(int32(*p.ExitCode))
+	}
+	if p.EndTime != nil {
+		proc.EndTime = proto.String(p.EndTime.Format(time.RFC3339))
+	}
+	if daemonID := cmp.Or(p.DaemonID, asked); daemonID != "" {
+		proc.DaemonId = proto.String(daemonID)
+	}
+	if p.WorktreeID != "" {
+		proc.WorktreeId = proto.String(p.WorktreeID)
+	}
+	if p.ChatID != "" {
+		proc.ChatId = proto.String(p.ChatID)
+	}
+	if p.ThreadID != "" {
+		proc.ThreadId = proto.String(p.ThreadID)
+	}
+	if p.StopsAfter != nil {
+		proc.StopsAfter = proto.String(p.StopsAfter.Format(time.RFC3339))
+	}
+	if p.StopExempt != "" {
+		proc.StopExempt = proto.String(p.StopExempt)
+	}
+	if !p.LastActive.IsZero() {
+		proc.LastActive = proto.String(p.LastActive.Format(time.RFC3339))
+	}
+	return proc
+}
+
+func portsFromDaemon(ports []daemon.PortInfo) []*reliantv1.PortInfo {
+	if len(ports) == 0 {
+		return nil
+	}
+	out := make([]*reliantv1.PortInfo, len(ports))
+	for i, p := range ports {
+		out[i] = &reliantv1.PortInfo{Port: int32(p.Port), Protocol: p.Protocol, State: p.State, Address: p.Address}
+	}
+	return out
+}
+
+// requestedMachine checks a machine a request names (a process's daemon_id,
+// from a list): it must be one the caller may act on (write) or see (read).
+// "" is default resolution.
+func (s *Service) requestedMachine(ctx context.Context, userID, daemonID string, write bool) (string, error) {
+	if daemonID == "" {
+		return "", nil
+	}
+	d, err := s.deps.Repo.GetDaemon(ctx, daemonID)
+	if err != nil || d == nil {
+		return "", svcerr.NotFound("machine")
+	}
+	allowed := authz.CanReadMachine(ctx, userID, d)
+	if write {
+		allowed = authz.CanWriteMachine(ctx, userID, d)
+	}
+	if !allowed {
+		return "", svcerr.NotFound("machine")
+	}
+	return daemonID, nil
 }
 
 // GetProcessOutput returns the stdout/stderr output of a process.
@@ -159,6 +354,10 @@ func (s *Service) GetProcessOutput(
 	if req.Msg.ProcessId == "" {
 		return nil, svcerr.InvalidArgument("process_id is required")
 	}
+	daemonID, err := s.requestedMachine(ctx, userID, req.Msg.GetDaemonId(), false)
+	if err != nil {
+		return nil, err
+	}
 
 	cmdReq := map[string]any{
 		"process_id": req.Msg.ProcessId,
@@ -170,7 +369,7 @@ func (s *Service) GetProcessOutput(
 		NextOffset int    `json:"next_offset"`
 		TotalBytes int    `json:"total_bytes"`
 	}
-	if err := s.sendCommand(ctx, userID, "exec.bg_output", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, daemonID, "exec.bg_output", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -192,13 +391,17 @@ func (s *Service) KillProcess(
 	if req.Msg.ProcessId == "" {
 		return nil, svcerr.InvalidArgument("process_id is required")
 	}
+	daemonID, err := s.requestedMachine(ctx, userID, req.Msg.GetDaemonId(), true)
+	if err != nil {
+		return nil, err
+	}
 
 	cmdReq := map[string]any{
 		"process_id": req.Msg.ProcessId,
 	}
 
 	var cmdResp struct{}
-	if err := s.sendCommand(ctx, userID, "exec.bg_kill", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, daemonID, "exec.bg_kill", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, processNotRunning(err)
 	}
 
@@ -223,9 +426,12 @@ func (s *Service) StreamProcessOutput(
 		return svcerr.InvalidArgument("process_id is required")
 	}
 
-	// A process lives on one machine. The router resolves a named one among
-	// the caller's own machines only, so another user's id is not found.
-	if daemonID := req.Msg.GetDaemonId(); daemonID != "" {
+	// A process lives on one machine, which must be one the caller may see.
+	daemonID, err := s.requestedMachine(ctx, userID, req.Msg.GetDaemonId(), false)
+	if err != nil {
+		return err
+	}
+	if daemonID != "" {
 		ctx = toolexec.WithDaemonSelector(ctx, &toolexec.DaemonSelector{ID: daemonID})
 	}
 	outputCh, unsub, err := s.deps.Router.SubscribeProcessOutput(ctx, userID, req.Msg.ProcessId, req.Msg.NewOnly)
