@@ -14,8 +14,8 @@
  * `replay`): page and tour analytics plus session replay, which the runtime
  * records with all text and inputs masked, media blocked and no canvas. A
  * browser that sends Do Not Track or Global Privacy Control is never recorded,
- * whatever the config says: telemetry does not start at all. A phone gets
- * analytics without the replay (DEMO_REPLAY_ON_PHONES).
+ * whatever the config says: telemetry does not start at all. Phones record
+ * replays too, unless DEMO_REPLAY_ON_PHONES turns them off.
  *
  * Dependency-free beyond the generated config, like telemetryEndpoint.ts:
  * telemetry.ts and the demo banner both read it.
@@ -53,14 +53,16 @@ export function configuredDemoTelemetry(): DemoTelemetry {
 }
 
 /**
- * Whether the demo records session replay on phones (owner, 2026-11-15: no).
- * On a phone the replay recorder cost every tap 15-45%, froze scrolling for
+ * Whether the demo records session replay on phones. On by default (owner,
+ * 2026-11-15: ship forge's cheaper replay recorder first, then decide).
+ *
+ * The switch exists to turn phone recording OFF if the cheaper recorder is not
+ * enough: on a phone the recorder cost every tap 15-45%, froze scrolling for
  * 300-400 ms every few seconds and kept the main thread busy seconds longer
- * after load (research/2026-11-10-demo-errors/mobile-perf-findings.md), so a
- * phone records analytics only; desktops still record replays. `true` records
- * phones again.
+ * after load (research/2026-11-10-demo-errors/mobile-perf-findings.md).
+ * `false` gives a phone analytics without replay; desktops record either way.
  */
-export const DEMO_REPLAY_ON_PHONES = false;
+export const DEMO_REPLAY_ON_PHONES = true;
 
 /** The widest viewport (CSS px) counted as a phone. */
 export const PHONE_MAX_WIDTH = 768;
@@ -79,11 +81,18 @@ function isPhoneAtLoad(): boolean {
   return (phoneAtLoad ??= isPhone());
 }
 
-/** What the demo records for THIS browser: the config, unless it opted out; analytics in place of replay on a phone. */
-export function demoTelemetry(optedOut: boolean = browserOptedOut(), phone: boolean = isPhoneAtLoad()): DemoTelemetry {
+/**
+ * What the demo records for THIS browser: the config, unless it opted out;
+ * analytics in place of replay on a phone when replayOnPhones is off.
+ */
+export function demoTelemetry(
+  optedOut: boolean = browserOptedOut(),
+  phone: boolean = isPhoneAtLoad(),
+  replayOnPhones: boolean = DEMO_REPLAY_ON_PHONES,
+): DemoTelemetry {
   if (optedOut) return "off";
   const level = configuredDemoTelemetry();
-  return level === "replay" && phone && !DEMO_REPLAY_ON_PHONES ? "analytics" : level;
+  return level === "replay" && phone && !replayOnPhones ? "analytics" : level;
 }
 
 /** The demo banner's one-line notice for a level, and whether the browser opted out. */
