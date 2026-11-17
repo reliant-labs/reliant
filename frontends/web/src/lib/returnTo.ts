@@ -23,3 +23,15 @@ export const isSafeReturnTo = (
   }
   return url.origin === origin && !url.pathname.startsWith('//')
 }
+
+/**
+ * The `redirect` to send a signed-out visitor at `href` to sign in with, so
+ * they come back to it: none for `/` (the default landing), the sign-in
+ * screen itself, or a path isSafeReturnTo refuses.
+ */
+export const signInRedirectFor = (href: string): string | undefined => {
+  if (!isSafeReturnTo(href)) return undefined
+  const pathname = href.split(/[?#]/, 1)[0]
+  if (pathname === '/' || pathname === '/auth' || pathname.startsWith('/auth/')) return undefined
+  return href
+}

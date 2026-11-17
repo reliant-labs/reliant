@@ -167,6 +167,8 @@ export interface StepProps {
   updatePlan: (updates: Partial<LaunchPlan>) => Promise<void> | void;
   onNext: () => void;
   onBack: () => void;
+  /** Where OnboardingGate found the user; the terminal steps' exit lands there (leaveOnboarding). */
+  returnTo?: string;
 }
 
 export type OnboardingState = "not_started" | "in_progress" | "completed";

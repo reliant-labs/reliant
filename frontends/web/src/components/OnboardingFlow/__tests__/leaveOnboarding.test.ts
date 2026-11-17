@@ -44,6 +44,7 @@ vi.mock("@/lib/logger", () => ({
 import {
   ONBOARDING_EXIT_REASONS,
   leaveOnboarding,
+  onboardingExitNavigation,
   onboardingExitTarget,
   type OnboardingExitReason,
 } from "../leaveOnboarding";
@@ -130,6 +131,38 @@ describe("onboardingExitTarget — where each reason lands the user", () => {
 
   it("sends a signed-out user to auth, not into the app", () => {
     expect(onboardingExitTarget("signed_out").to).toBe("/auth");
+  });
+});
+
+describe("onboardingExitNavigation — back to the page OnboardingGate found the user on", () => {
+  const DEEP_LINK = "/forge/p/simplebutton/releases?env=prod";
+
+  it("returns every exit to the app to the deep link, ahead of the new-chat landing", () => {
+    for (const reason of ["completed_local", "completed_cloud_gate_continue", "already_complete", "returning_user_heal"] as const) {
+      expect(onboardingExitNavigation(reason, "build_app", DEEP_LINK)).toEqual({ href: DEEP_LINK, replace: true });
+    }
+  });
+
+  it("never sends a signed-out user to the deep link", () => {
+    expect(onboardingExitNavigation("signed_out", undefined, DEEP_LINK)).toEqual(onboardingExitTarget("signed_out"));
+  });
+
+  it("ignores a returnTo that is off-origin, or would loop", () => {
+    for (const returnTo of ["//evil.com", "https://evil.com/", "/onboarding?plan=%7B%7D", "/auth", "/"]) {
+      expect(onboardingExitNavigation("completed_local", undefined, returnTo)).toEqual(onboardingExitTarget("completed_local"));
+    }
+  });
+
+  it("is the reason's destination when there is no returnTo", () => {
+    for (const reason of ONBOARDING_EXIT_REASONS) {
+      expect(onboardingExitNavigation(reason)).toEqual(onboardingExitTarget(reason));
+    }
+  });
+
+  it("leaveOnboarding navigates there", async () => {
+    const nav = vi.fn();
+    await leaveOnboarding("completed_cloud_gate_continue", nav, "chat", DEEP_LINK);
+    expect(nav).toHaveBeenCalledWith({ href: DEEP_LINK, replace: true });
   });
 });
 

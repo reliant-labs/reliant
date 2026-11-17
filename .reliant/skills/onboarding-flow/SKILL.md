@@ -26,3 +26,17 @@ When debugging this flow, read `../control-plane/.forge/logs/dev/admin-server.lo
 first — the RPC sequence (`RedeemCoupon` → `CreateDaemon` → `CompleteOnboarding`)
 tells you what actually happened server-side, independent of any frontend
 logging.
+
+## Who gets sent to /onboarding, and where they come back to
+
+Three places redirect a signed-in user whose `onboardingCompleted` is false:
+ModernApp (`/`, `/project/$projectId`), MobileShell (`/m/*`), and
+`OnboardingGate` on the `_authenticated` layout (every other app route —
+`/forge/*`, `/inbox`, `/workflows`, … — except the exemptions listed in
+`OnboardingFlow/onboardingGate.ts`: `/onboarding`, `/settings`, `/m`,
+`/forge/demo`, `/apps`). The gate carries the page as `?returnTo=` and
+`leaveOnboarding` lands every exit to the app there instead of `/`.
+
+The forge shell (forge.reliantlabs.io, `forgeShellRoutes.tsx`) has NO
+onboarding at all, by design: `forge login`, claim links and every console link
+forge prints land there. "Why wasn't a forge user onboarded?" starts there.

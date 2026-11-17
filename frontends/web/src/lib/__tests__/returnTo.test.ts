@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { isSafeReturnTo } from '@/lib/returnTo'
+import { isSafeReturnTo, signInRedirectFor } from '@/lib/returnTo'
 
 describe('isSafeReturnTo', () => {
   it.each([
@@ -33,5 +33,19 @@ describe('isSafeReturnTo', () => {
     ['a dot segment to //, backslashed', '/a/..\\/evil.com'],
   ])('refuses %s', (_name, path) => {
     expect(isSafeReturnTo(path)).toBe(false)
+  })
+})
+
+describe('signInRedirectFor', () => {
+  it.each([
+    ['/forge/p/simplebutton/releases?env=prod', '/forge/p/simplebutton/releases?env=prod'],
+    ['/inbox', '/inbox'],
+    ['/', undefined],
+    ['/?start=chat', undefined],
+    ['/auth', undefined],
+    ['/auth/callback?code=x', undefined],
+    ['//evil.com/x', undefined],
+  ])('%s → %s', (href, expected) => {
+    expect(signInRedirectFor(href)).toBe(expected)
   })
 })
