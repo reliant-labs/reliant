@@ -24,9 +24,10 @@ var specPath = filepath.Join("..", "..", "deploy", "observability", "spec", "pro
 
 // analyticsDashboardIDs are forge's built-in product-analytics dashboards
 // (forge pkg/obsbuiltin, since forge #2075, which replaced the generated
-// "usage" dashboard): the Users, Product and Acquisition dashboards, and the
-// sql panels the Overview gains from them.
-var analyticsDashboardIDs = []string{"overview", "users", "product", "acquisition"}
+// "usage" dashboard): the Product analytics hub's Overview (since forge
+// #2289), Users, Product and Acquisition dashboards, and the sql panels the
+// project Overview gains from them.
+var analyticsDashboardIDs = []string{"overview", "product-overview", "users", "product", "acquisition"}
 
 // tenantTables are the hosted tables a product-analytics statement may read:
 // unqualified, so they resolve in the org's own database.
@@ -97,7 +98,15 @@ func analyticsStatements(t *testing.T) []statement {
 			t.Errorf("the %q dashboard has no env filter; the console binds it to {env_ids}", id)
 		}
 		sqlPanels := 0
+		var panels []dashspec.Panel
 		for _, p := range d.Panels {
+			panels = append(panels, p)
+			// A Needs-attention panel runs none of its own, but reads figures only it holds.
+			if p.Attention != nil {
+				panels = append(panels, p.Attention.Figures...)
+			}
+		}
+		for _, p := range panels {
 			if p.Kind != dashspec.KindSQL {
 				continue
 			}

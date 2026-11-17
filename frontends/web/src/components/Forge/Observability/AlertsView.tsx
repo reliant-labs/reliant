@@ -33,7 +33,7 @@ import { CommandLine, DOCS } from "@/components/Forge/GettingStarted";
 import { useAlertHistory, useAlerts } from "@/hooks/observability-queries";
 import type { AlertEvent, AlertInstance, DeclaredAlertRule } from "@/services/controlPlane/observability/alertingTypes";
 import { alertingErrorKind } from "@/services/controlPlane/observability/errors";
-import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { RANGE_LABELS, rangeMs, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { AlertReceivers } from "./AlertReceivers";
@@ -513,7 +513,7 @@ function HistoryTab({
       <Frame icon={<ShieldCheck className="h-4 w-4" />} title={`No alert changed state in the ${RANGE_LABELS[range].toLowerCase()}`} testId="obs-alert-history-empty">
         <p>
           Every time an alert starts pending, fires, or resolves it is recorded here.{" "}
-          {range !== "7d" && (
+          {rangeMs(range) < rangeMs("7d") && (
             <button type="button" onClick={() => navigate({ range: "7d" })} className="rounded-sm text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               Look at the last 7 days
             </button>

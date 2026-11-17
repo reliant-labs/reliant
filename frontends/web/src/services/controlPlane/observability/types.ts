@@ -439,7 +439,7 @@ export type PanelKind = string;
  * kind's default, so a spec from a newer forge still renders.
  */
 export interface PanelDisplay {
-  /** line/sql: line | area | bars; bar: bar | pie | donut; number: stat | gauge; sql also: funnel, heatmap. */
+  /** line/sql: line | area | bars; bar: bar | pie | donut | barlist; number: stat | gauge | kpi; sql also: funnel, heatmap, barlist, kpi. */
   style?: string;
   /** Stack the series (area or bars; a bar panel's bars). */
   stack?: boolean;
@@ -456,7 +456,52 @@ export interface PanelDisplay {
   colors?: Record<string, string>;
   /** number and sql panels: draw each figure in full (1,284), never abbreviated (1.3k). */
   exact?: boolean;
+  /**
+   * Which way is better for this figure (forge dashspec Display.Good), "up" or "down". A change is then drawn as good or
+   * bad, and a "Needs attention" panel watches it. Absent: neutral, as today.
+   */
+  good?: "up" | "down";
+  /**
+   * "barlist": the value column a bar list draws as its bar;
+   * absent is the first numeric column.
+   */
+  bar?: string;
+  /** "barlist" and "kpi": a unit per value column, for a list whose columns differ ("Visitors" count, "Conversion %" percent). */
+  units?: Record<string, Unit>;
+  /** "barlist": follow each bar's value with its share of the rows' total. */
+  share?: boolean;
+  /** A funnel drawn as columns of steps with the conversion between them ("steps"), or as bars (absent). */
+  layout?: "steps";
 }
+
+/**
+ * Where a panel's detail lives (forge dashspec PanelDrill), drawn as a link in its header ("Acquisition →").
+ */
+export interface PanelDrill {
+  /** A dashboard id of the same project ("acquisition"). */
+  dashboard: string;
+  /** Its label in the link; absent is the dashboard's tab label. */
+  label?: string;
+  /** A panel of that dashboard to scroll to. */
+  panel?: string;
+}
+
+/**
+ * The figures a Needs-attention panel ("attention" kind) watches.
+ * Each must declare display.good; the panel lists the ones whose change
+ * against the comparison is at least `threshold` (a fraction; absent is
+ * DEFAULT_ATTENTION_THRESHOLD, 5%).
+ */
+export interface PanelAttention {
+  /** Panel ids on the same dashboard; absent is every figure with display.good. */
+  watch?: string[];
+  /** Figures only this panel reads (sql figure panels with display.good), beside the watched cards. */
+  figures?: Panel[];
+  threshold?: number;
+}
+
+/** forge dashspec DefaultAttentionThreshold: a 5% change. */
+export const DEFAULT_ATTENTION_THRESHOLD = 0.05;
 
 /**
  * What a funnel panel draws (forge.Funnel): product event names in order,
@@ -539,12 +584,22 @@ export interface Panel {
   minStep?: string;
   /** sql panels only: a second SELECT returning a time series, drawn as the sparkline under the figure `sql` returns. */
   trendSql?: string;
+  /**
+   * sql panels only: a SELECT whose first cell is drawn under the panel's
+   * title ("since 14 Nov"); an empty result, an empty string or a NULL draws
+   * nothing (forge dashspec Panel.SubtitleSQL).
+   */
+  subtitleSql?: string;
   /** text panels only: Markdown, drawn with no query. */
   markdown?: string;
   /** postgres panels only: the statement and how its result is drawn. */
   postgres?: PanelPostgres;
   /** How the panel's data is drawn; absent is the kind's default. */
   display?: PanelDisplay;
+  /** Where the panel's detail lives: a link in its header. */
+  drill?: PanelDrill;
+  /** attention panels only. */
+  attention?: PanelAttention;
   unit?: Unit;
   /** Grid columns out of 24. */
   width?: number;

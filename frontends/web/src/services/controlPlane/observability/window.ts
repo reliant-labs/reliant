@@ -10,7 +10,8 @@
 
 import type { TimeWindow } from "./types";
 
-export const RANGE_PRESETS = ["15m", "1h", "6h", "24h", "7d"] as const;
+// "30d": the product dashboards declare 30 days (forge dashspec MaxDefaultRange), which the console used to round down to 7.
+export const RANGE_PRESETS = ["15m", "1h", "6h", "24h", "7d", "30d"] as const;
 export type RangePreset = (typeof RANGE_PRESETS)[number];
 
 const RANGE_MS: Record<RangePreset, number> = {
@@ -19,6 +20,7 @@ const RANGE_MS: Record<RangePreset, number> = {
   "6h": 6 * 60 * 60_000,
   "24h": 24 * 60 * 60_000,
   "7d": 7 * 24 * 60 * 60_000,
+  "30d": 30 * 24 * 60 * 60_000,
 };
 
 export const RANGE_LABELS: Record<RangePreset, string> = {
@@ -27,9 +29,53 @@ export const RANGE_LABELS: Record<RangePreset, string> = {
   "6h": "Last 6 hours",
   "24h": "Last 24 hours",
   "7d": "Last 7 days",
+  "30d": "Last 30 days",
 };
 
 export const DEFAULT_RANGE: RangePreset = "1h";
+
+/** A preset's length in ms. */
+export function rangeMs(range: RangePreset): number {
+  return RANGE_MS[range];
+}
+
+/**
+ * The longest window each kind of read serves (forge obsquery.MaxRange*):
+ * traces, logs and what is computed from them (the service overview,
+ * workloads, signals, exemplars) are kept 7 days; metrics, profiles,
+ * dashboards' sql panels, issues and sessions 30. Every picker offers every
+ * preset ("Last 30 days" included), so a view reading something kept for
+ * less reads what there is (readRange) and says so (rangeCapNote).
+ */
+export type RangeRead = "traces" | "logs" | "overview" | "metrics" | "profiles" | "sql" | "issues" | "sessions";
+
+export const READ_MAX_RANGE: Record<RangeRead, RangePreset> = {
+  traces: "7d",
+  logs: "7d",
+  overview: "7d",
+  metrics: "30d",
+  profiles: "30d",
+  sql: "30d",
+  issues: "30d",
+  sessions: "30d",
+};
+
+/** The range a read is asked for: the picked one, or the longest the read keeps when that is shorter. */
+export function readRange(range: RangePreset, read: RangeRead): RangePreset {
+  const max = READ_MAX_RANGE[read];
+  return RANGE_MS[range] > RANGE_MS[max] ? max : range;
+}
+
+/**
+ * What a capped view says beside its picker: "Logs are kept for 7 days, so
+ * this shows the last 7 days." `subject` names what the view reads ("Logs
+ * are"). Null when the picked range is covered.
+ */
+export function rangeCapNote(range: RangePreset, read: RangeRead, subject: string): string | null {
+  const capped = readRange(range, read);
+  if (capped === range) return null;
+  return `${subject} kept for ${RANGE_LABELS[capped].replace(/^Last /, "")}, so this shows the ${RANGE_LABELS[capped].toLowerCase()}.`;
+}
 
 /** The window a preset names, ending at `now`. */
 export function resolveWindow(preset: RangePreset, now: number = Date.now()): TimeWindow {

@@ -26,7 +26,7 @@ import {
 import { useObsQuotaState } from "@/services/controlPlane/observability/ObsQuotaContext";
 import { formatClock, quotaOf } from "@/services/controlPlane/observability/quota";
 import type { Provenance } from "@/services/controlPlane/observability/types";
-import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { RANGE_LABELS, rangeMs, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import { DeployWithAgentButton } from "./AskReliant/AskReliant";
 import type { ObsView } from "./obsSearch";
@@ -316,7 +316,7 @@ export function ObsNoData({
               Clear filters
             </Button>
           )}
-          {onWiden && range !== "7d" && (
+          {onWiden && rangeMs(range) < rangeMs("7d") && (
             <Button variant="ghost" size="sm" onClick={onWiden} data-testid="obs-widen">
               Look at the last 7 days
             </Button>
@@ -365,7 +365,7 @@ export function ObsNoCustomerMetadata({
               Clear filters
             </Button>
           )}
-          {onWiden && range !== "7d" && (
+          {onWiden && rangeMs(range) < rangeMs("7d") && (
             <Button variant="ghost" size="sm" onClick={onWiden} data-testid="obs-widen">
               Look at the last 7 days
             </Button>

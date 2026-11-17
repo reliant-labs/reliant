@@ -10,8 +10,8 @@
  * repo's own. The page now leads with HUBS and single cards, and lists one
  * row per dashboard only for what the team wrote:
  *
- *   product    "Product analytics": forge's Users, Product and Acquisition
- *              dashboards (in that order), then a generated or built-in
+ *   product    "Product analytics": forge's Overview, Users, Product and
+ *              Acquisition dashboards (in that order), then a generated or built-in
  *              frontend one — one tab each. control-plane's older built-in
  *              "Product usage" (`usage`) is the same story told once more, so
  *              it is hidden whenever forge's set is there, and is the hub's
@@ -31,7 +31,7 @@
 
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 
-import { BUILTIN_PRODUCT_ORDER, groupOf, workloadOf, type DashboardGroup } from "./dashboardGroups";
+import { BUILTIN_PRODUCT_ORDER, groupOf, PRODUCT_OVERVIEW_KEY, workloadOf, type DashboardGroup } from "./dashboardGroups";
 import { isOrganizationViewKey } from "./dashboardModel";
 
 export type HubId = "product" | "services";
@@ -137,7 +137,8 @@ function productTabs(dashboards: readonly DashboardSummary[], project: string | 
   const forge = onePerKey(PRODUCT_KEYS.flatMap((key) => dashboards.filter((d) => isProductAnalytics(d) && d.ref.key === key)));
   const usage = forge.length ? [] : dashboards.filter(isLegacyUsage);
   const frontend = onePerKey(dashboards.filter(isProvidedFrontend));
-  return [...forge, ...usage, ...frontend].map((d) => ({ ref: d.ref, summary: d, label: displayTitle(d.title, project) }));
+  // forge titles the hub's first tab "<project>: product overview"; inside the Product analytics hub it is the Overview.
+  return [...forge, ...usage, ...frontend].map((d) => ({ ref: d.ref, summary: d, label: d.ref.key === PRODUCT_OVERVIEW_KEY ? "Overview" : displayTitle(d.title, project) }));
 }
 
 function serviceTabs(dashboards: readonly DashboardSummary[]): HubTab[] {
