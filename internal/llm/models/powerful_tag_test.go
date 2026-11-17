@@ -130,6 +130,7 @@ func TestPowerfulTagMembership(t *testing.T) {
 	assert.Equal(t, []string{
 		"claude-5.2-fable",
 		"claude-5.1-fable",
+		"gpt-6.2-astra",
 		"gpt-6.1-astra",
 		"gpt-6-astra",
 		"gpt-5.6-sol",

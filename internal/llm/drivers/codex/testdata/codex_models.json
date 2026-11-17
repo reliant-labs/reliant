@@ -1,6 +1,6 @@
 {
- "client_version": "0.162.1",
- "source": "openai/codex rust-v0.162.1 (7a078f6bb4) codex-rs/models-manager/models.json, fetched 2026-10-11",
+ "client_version": "0.169.0",
+ "source": "openai/codex rust-v0.169.0 (d32063f96c) codex-rs/models-manager/models.json, fetched 2026-11-17",
  "models": [
   {
    "slug": "gpt-6-astra",
@@ -75,6 +75,46 @@
     {
      "effort": "ultra",
      "description": "Maximum reasoning with automatic task delegation"
+    }
+   ],
+   "supported_in_api": true,
+   "tool_mode": "code_mode_only",
+   "use_responses_lite": true,
+   "default_service_tier": null
+  },
+  {
+   "slug": "gpt-6.1-terra",
+   "display_name": "GPT-6.1 Terra",
+   "description": "GPT-6.1 Terra Codex model.",
+   "visibility": "list",
+   "priority": 7,
+   "context_window": 500000,
+   "max_context_window": 872000,
+   "default_reasoning_level": "low",
+   "supported_reasoning_levels": [
+    {
+     "description": "Fast responses with lighter reasoning",
+     "effort": "low"
+    },
+    {
+     "description": "Balances speed and reasoning depth for everyday tasks",
+     "effort": "medium"
+    },
+    {
+     "description": "Greater reasoning depth for complex problems",
+     "effort": "high"
+    },
+    {
+     "description": "Extra high reasoning depth for complex problems",
+     "effort": "xhigh"
+    },
+    {
+     "description": "Maximum reasoning depth for the hardest problems",
+     "effort": "max"
+    },
+    {
+     "description": "Maximum reasoning with automatic task delegation",
+     "effort": "ultra"
     }
    ],
    "supported_in_api": true,
