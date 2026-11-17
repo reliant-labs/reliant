@@ -80,6 +80,7 @@ var catalogContextLimits = []struct {
 	{"gpt-5.5", "codex", 400000, 128000, "/codex/models 272,000 + 128,000 output (#663)"},
 	{"gpt-5.5", "openai", 1050000, 128000, "OpenAI gpt-5.5"},
 	{"gpt-5.5", "openrouter", 1050000, 128000, "OpenRouter"},
+	{"gpt-6.2-astra", "codex", 1050000, 128000, "OpenAI gpt-6.2-astra; /codex/models 872,000 caps the ceiling"},
 	{"gpt-6.2-astra", "openai", 1050000, 128000, "OpenAI gpt-6.2-astra (2026-11-17)"},
 	{"gpt-6.2-astra", "openrouter", 1050000, 128000, "OpenRouter"},
 	{"gpt-6.2-sol", "codex", 1050000, 128000, "OpenAI gpt-6.2-sol; /codex/models 872,000 caps the ceiling"},

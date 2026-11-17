@@ -684,7 +684,7 @@ func TestResolve_CodexTagTargetsArePinned(t *testing.T) {
 	// cheap tiers; it sits below gpt-5.4-mini and gpt-5-mini there, so no
 	// OpenAI or Copilot user's pick moves.
 	for tag, want := range map[string]string{
-		TagPowerful:  "gpt-6-astra",
+		TagPowerful:  "gpt-6.2-astra",
 		TagFlagship:  "gpt-6.2-sol",
 		TagModerate:  "gpt-6.1-terra",
 		TagReasoning: "gpt-6.2-sol",

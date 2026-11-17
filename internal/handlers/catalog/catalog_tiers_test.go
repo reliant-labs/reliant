@@ -36,7 +36,7 @@ func TestTierResolutions_ReportModelAndEffortPerTag(t *testing.T) {
 func TestTierResolutions_CodexUserGetsCurrentCodexModels(t *testing.T) {
 	tiers := tiersByTag(tierResolutions(models.MustGetRegistry(), []string{"codex"}, nil, nil))
 	for tag, want := range map[string]string{
-		"powerful": "gpt-6-astra@codex",
+		"powerful": "gpt-6.2-astra@codex",
 		"flagship": "gpt-6.2-sol@codex",
 		"moderate": "gpt-6.1-terra@codex",
 		"fast":     "gpt-6-luna@codex",

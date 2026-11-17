@@ -90,13 +90,13 @@ func TestGPT61ModelProviderMappings(t *testing.T) {
 	}
 }
 
-// GPT-6.2 (2026-11-17). Both are on the OpenAI API and OpenRouter. Only Sol is
-// on Codex: the live /codex/models lists gpt-6.2-sol and not gpt-6.2-astra,
-// and a codex mapping the backend does not serve 400s every request.
+// GPT-6.2 (2026-11-17). Both are on the OpenAI API, OpenRouter and Codex (the
+// live /codex/models at codex-tui 0.169.0 lists both).
 func TestGPT62ModelProviderMappings(t *testing.T) {
 	reg := MustGetRegistry()
 
 	assert.Equal(t, map[string]string{
+		"codex":      "gpt-6.2-astra",
 		"openai":     "gpt-6.2-astra",
 		"openrouter": "openai/gpt-6.2-astra",
 	}, providerAPIModels(t, reg, "gpt-6.2-astra"))
@@ -159,8 +159,7 @@ func TestSept2026ModelsPinTierWinners(t *testing.T) {
 		{TagPowerful, []string{"openai"}, "gpt-6.2-astra"},
 		{TagPowerful, []string{"openrouter"}, "claude-5.1-fable"},
 		{TagFlagship, []string{"codex"}, "gpt-6.2-sol"},
-		// No codex mapping for 6.2 Astra: codex [powerful] stays on 6 Astra.
-		{TagPowerful, []string{"codex"}, "gpt-6-astra"},
+		{TagPowerful, []string{"codex"}, "gpt-6.2-astra"},
 		{TagFast, []string{"openai"}, "gpt-5.4-mini"},
 		{TagCheap, []string{"openai"}, "gpt-5.4-mini"},
 

@@ -29,6 +29,7 @@ const Family models.Family = "codex"
 // every chat.
 var SupportedModels = []models.ModelID{
 	models.GPT62Sol,
+	models.GPT62Astra,
 	models.GPT61Sol,
 	models.GPT61Terra,
 	models.GPT6Astra,

@@ -86,7 +86,7 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 | `gpt-6.1-astra` | GPT-6.1 Astra | powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai |
 | `gpt-6.1-sol` | GPT-6.1 Sol | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex, openai |
 | `gpt-6.1-terra` | GPT-6.1 Terra | moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex, openai |
-| `gpt-6.2-astra` | GPT-6.2 Astra | powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai, openrouter |
+| `gpt-6.2-astra` | GPT-6.2 Astra | powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex, openai, openrouter |
 | `gpt-6.2-sol` | GPT-6.2 Sol | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex, openai, openrouter |
 
 **Note:** OpenAI's GPT models with varying context windows and capabilities.
