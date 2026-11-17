@@ -1,0 +1,33 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Event-bus contract; canonical pattern in `forge skill load contracts`.
+package {{.Name}}
+
+import "context"
+
+// Event is the base event envelope.
+type Event struct {
+	// ID uniquely identifies this event instance.
+	ID string
+	// Type identifies the kind of event (e.g. "order.created").
+	Type string
+	// Source identifies the origin of the event.
+	Source string
+	// Payload contains the event data.
+	Payload []byte
+}
+
+// Publisher publishes events to topics.
+type Publisher interface {
+	Publish(ctx context.Context, topic string, event Event) error
+}
+
+// Subscriber subscribes to events on topics.
+type Subscriber interface {
+	Subscribe(ctx context.Context, topic string, handler func(ctx context.Context, event Event) error) error
+}
+
+// Service combines Publisher and Subscriber for components that need both.
+type Service interface {
+	Publisher
+	Subscriber
+}

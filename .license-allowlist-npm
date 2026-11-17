@@ -1,0 +1,26 @@
+# Per-package license exceptions for scripts/check-npm-licenses.sh.
+#
+# The gate is an ALLOWLIST: only the permissive licenses named in the script
+# pass, and anything unrecognized FAILS. This file records the deliberate
+# exceptions. It is the npm twin of .license-allowlist, which covers Go.
+#
+# Format:  <package name>   # why this is acceptable
+#
+# Rules for adding an entry:
+#   - One package per line. Never exempt a whole license family here — if a
+#     license should be broadly acceptable, add it to ALLOWED in the script
+#     so the decision is visible in one place.
+#   - Say WHY, not just what. "MPL-2.0" is not a reason; "build-time only,
+#     does not link into the bundle" is.
+#   - Prefer REMOVING the dependency to exempting it. An exception is a
+#     standing obligation to re-check; an uninstalled package is not.
+#
+# LGPL IS NOT EXEMPTABLE HERE. We avoid that family outright rather than
+# reason case by case about whether a native addon triggers its linking
+# obligations. If an LGPL package appears, the answer is to exclude it (see
+# the .npmrc in each frontend, which is how sharp's libvips binaries are kept
+# off disk), not to add a line to this file.
+#
+# The scope is PRODUCTION dependencies (`npm ls --omit=dev`), so build tooling
+# does not need entries. lightningcss and axe-core are MPL-2.0 and are not
+# listed here precisely because they are dev-tree only.

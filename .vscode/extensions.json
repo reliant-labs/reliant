@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "golang.go",
+    "bufbuild.vscode-buf",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "bradlc.vscode-tailwindcss",
+    "ms-azuretools.vscode-docker",
+    "task.vscode-task",
+    "kcl.vscode-kcl",
+    "zxh404.vscode-proto3"
+  ]
+}

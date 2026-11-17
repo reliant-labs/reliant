@@ -1,0 +1,239 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}// yours: scaffolded once, never touched again — forge will not overwrite this file
+{{- if eq .Platform "react-native"}}
+//
+// The app's auth state.
+//
+// ── This tree ships a MOCK, on purpose ────────────────────────────────
+//
+// The browser frontends sign in NATIVELY: they POST credentials to the
+// app's own API, the server runs the whole OIDC flow against the identity
+// provider, and the answer comes back as an HttpOnly session cookie. React
+// Native has neither half of what makes that work — no automatic cookie
+// jar on fetch, and no same-origin — so this tree wires the mock session
+// provider instead and leaves the real one to you. See the note at the
+// import below for where to plug yours in.
+//
+// ── The context value is the same on every platform ───────────────────
+//
+// Deliberately: a component written against `useAuth()` moves between the
+// mobile and browser trees unchanged. What it exposes is an IDENTITY — who
+// is signed in, for rendering — and never a token. Use it to decide what to
+// SHOW. Never to decide what is ALLOWED: the server validates the real
+// credential on every request, and a caller who edits anything here changes
+// the UI and nothing else.
+{{- else}}
+//
+// The app's auth state, read from THIS APP'S API.
+//
+// ── What changed, and why it is simpler than it used to be ────────────
+//
+// Sign-in is native: the browser POSTs credentials to this app's server,
+// the server runs the whole OIDC flow against the identity provider, and
+// the answer comes back as an HttpOnly session cookie. See
+// src/lib/auth/native-login.ts and internal/app/login_broker.go.
+//
+// So there is no OIDC provider object in the browser to hold state for, no
+// token to keep in memory, no refresh timer, and no silent-restore dance.
+// There is one question — "who is signed in?" — and one way to answer it:
+// ask the server.
+//
+// ── The token is deliberately unreachable ─────────────────────────────
+//
+// The session cookie is HttpOnly, so nothing here can read it. That is the
+// property the design exists for: a token no script can reach is a token
+// an XSS cannot steal. The cookie is attached automatically to same-origin
+// requests, so no code has to set an Authorization header.
+//
+// What this context exposes is an IDENTITY — who is signed in, for
+// rendering. Use it to decide what to SHOW. Never to decide what is
+// ALLOWED: the server validates the real token on every request, and a
+// caller who edits anything here changes the UI and nothing else.
+//
+// ── Mock mode is the one exception ────────────────────────────────────
+//
+// With MOCK_API set ("true" or "hybrid") the identity is the FIXTURE user
+// from ./session-provider, and GET /auth/session is never sent. Pure mock
+// has no server to ask: the request failed, the context read signed-out,
+// and the route guard bounced every page to a sign-in form that posts to a
+// server that is not there.
+//
+// Hybrid renders the same fixture user, and that is a statement about the
+// UI ONLY. Nothing here becomes a credential — the fixture token is handed
+// out in pure mock alone, where only the mock transport sees it. A
+// forwarded hybrid RPC carries whatever real session cookie the browser
+// already holds and nothing more, so an identity-gated RPC that no
+// scenario stubs still answers 401 until you sign in to the real server at
+// /auth/sign-in (that form still posts to it).
+{{- end}}
+//
+// ── This file exports one component ───────────────────────────────────
+//
+// The context object and useAuth() live in ./use-auth, so React Fast Refresh
+// can hot-swap this provider when you edit it. Import the hook from there.
+
+{{if ne .Platform "react-native"}}import { identifyUser } from "@reliantlabs/forge-web-runtime";
+{{end}}import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+
+import { EventBusContext } from "../use-event";
+
+{{if eq .Platform "react-native"}}// React Native does not share the web's cookie model — there is no cookie
+// jar on fetch by default and no same-origin to be same as — so native
+// sign-in does not apply as-is, and this tree deliberately ships the MOCK
+// instead. Shipping the web flow here would produce code that typechecks
+// (RN's tsconfig includes the DOM lib) and silently never authenticates:
+// login returns 200 and the next request is anonymous.
+//
+// To give this app a real session, replace the provider below with your own
+// implementation of AuthProvider (./provider) over the IdP's native SDK or a
+// token you store yourself. Nothing else in the app changes: the context
+// value under it is the same on every platform.
+import { createSessionAuthProvider } from "./session-provider";
+import { AuthContext, type AuthContextValue, type Identity } from "./use-auth";{{else}}import { fetchIdentity, signOut as apiSignOut, type Identity } from "./native-login";
+import { createSessionAuthProvider, isMockMode } from "./session-provider";
+import { AuthContext, type AuthContextValue } from "./use-auth";{{end}}
+
+{{- if ne .Platform "react-native"}}
+// The runtime config's IDENTIFY_USER (config.js, window.__FORGE_CONFIG__):
+// anything but "false" lets the signed-in user be named to telemetry.
+function identifyUserAllowed(): boolean {
+  if (typeof window === "undefined") return false;
+  const cfg = (window as unknown as { __FORGE_CONFIG__?: Record<string, unknown> })
+    .__FORGE_CONFIG__;
+  return cfg?.IDENTIFY_USER !== "false";
+}
+
+{{- end}}
+export function AuthContextProvider({ children }: { children: ReactNode }) {
+  const [identity, setIdentity] = useState<Identity>({ authenticated: false });
+  const [isLoading, setIsLoading] = useState(true);
+
+{{- if eq .Platform "react-native"}}
+  // Held in state so it is constructed ONCE. Building it in the render body
+  // makes a fresh provider on every render, and the callbacks below close
+  // over whichever one they were created with — so a logout would move a
+  // session object that nothing subsequently reads.
+  const [provider] = useState(createSessionAuthProvider);
+{{- else}}
+  // The fixture session, in mock mode only — see "Mock mode is the one
+  // exception" above. Decided once, at mount: the mode is runtime config,
+  // and it does not change under a running page. Held in state for the same
+  // reason the React Native tree holds its provider there — a logout must
+  // move the one session the callbacks below read.
+  const [mockSession] = useState(() => (isMockMode() ? createSessionAuthProvider() : null));
+{{- end}}
+  const refresh = useCallback(async () => {
+{{- if eq .Platform "react-native"}}
+    const user = provider.getUser();
+    setIdentity({
+      authenticated: user !== null,
+      email: user?.email,
+      name: user?.name,
+      subject: user?.id,
+    });
+    setIsLoading(false);
+  }, [provider]);
+{{- else}}
+    if (mockSession) {
+      const user = mockSession.getUser();
+      setIdentity({
+        authenticated: user !== null,
+        email: user?.email,
+        name: user?.name,
+        subject: user?.id,
+      });
+    } else {
+      setIdentity(await fetchIdentity());
+    }
+    setIsLoading(false);
+  }, [mockSession]);
+{{- end}}
+
+{{- if eq .Platform "react-native"}}
+  // Reads the mock's session once on mount. A real provider wired in above
+  // would do its own restore here instead.
+{{- else}}
+  // ONE request on mount, to this app's own origin — none in mock mode.
+  // Compare with what this replaced: a discovery fetch, an authorize
+  // redirect, and a hidden iframe that sat on a five-second timeout whenever
+  // there was no session to restore.
+{{- end}}
+  //
+  // Awaited inside an async IIFE rather than called bare. `refresh` sets
+  // state, and an effect body that updates state synchronously forces a
+  // second render pass before the browser paints. Awaiting first moves both
+  // setState calls into a continuation — the effect body itself only starts
+  // the work, which is what an effect is for.
+  useEffect(() => {
+    void (async () => {
+      await refresh();
+    })();
+  }, [refresh]);
+
+{{- if ne .Platform "react-native"}}
+  // Tell telemetry who is signed in: identifyUser attaches the opaque
+  // subject to every span and replay (the Sessions view, `forge obs sessions
+  // --user`) and sends one daily `auth_signed_in {kind: "resumed"}`. The
+  // server already counted the sign-in itself; this joins sessions to users.
+  // Not in mock mode, whose user is a fixture, and not when the runtime
+  // config says IDENTIFY_USER = "false" (telemetry.identify_user = False),
+  // which turns off this path as it does otel_gen.ts's session watcher: then
+  // any id attached earlier is cleared and no auth event is sent.
+  useEffect(() => {
+    if (mockSession || isLoading) return;
+    if (!identifyUserAllowed()) {
+      identifyUser(null);
+      return;
+    }
+    identifyUser(identity.authenticated ? (identity.subject ?? null) : null);
+  }, [mockSession, isLoading, identity.authenticated, identity.subject]);
+
+{{- end}}
+  // A session can lapse mid-use: the cookie expires, or the server revokes it.
+  // The transport emits `auth:expired` when an RPC fails Unauthenticated (HTTP
+  // 401; see src/lib/connect.ts). Re-ask the server who is signed in rather
+  // than trusting the one failure: when the session really is gone, identity
+  // flips to signed-out and RouteGuard sends the user to sign-in with a
+  // returnTo; when it is not (one rpc's own auth rule), nothing changes. A
+  // burst of failing queries shares one check.
+  const bus = useContext(EventBusContext);
+  const expiryCheck = useRef<Promise<void> | null>(null);
+  useEffect(() => {
+    if (!bus) return;
+    return bus.on("auth:expired", () => {
+      expiryCheck.current ??= refresh().finally(() => {
+        expiryCheck.current = null;
+      });
+    });
+  }, [bus, refresh]);
+
+  const logout = useCallback(async () => {
+{{- if eq .Platform "react-native"}}
+    await provider.logout();
+    setIdentity({ authenticated: false });
+  }, [provider]);
+{{- else}}
+    if (mockSession) {
+      // Ends the FIXTURE session, locally, so a signed-out state can be
+      // built against. There is no server session to end in pure mock, and
+      // in hybrid the fixture was never what the server saw. A reload
+      // restores it.
+      await mockSession.logout();
+      setIdentity({ authenticated: false });
+      return;
+    }
+    setIdentity(await apiSignOut());
+  }, [mockSession]);
+{{- end}}
+
+  const value: AuthContextValue = {
+    identity,
+    isAuthenticated: identity.authenticated,
+    isLoading,
+    refresh,
+    logout,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}

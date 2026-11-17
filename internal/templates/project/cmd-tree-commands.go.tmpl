@@ -1,0 +1,73 @@
+// What extra subcommands this binary ships is code, not config.
+//
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// cmd/{{.Name}}/cmd/commands.go is the user-owned cobra extension point —
+// the twin of internal/app/providers.go: you write it, forge calls it, and
+// forge never writes over it. newRootCmd (cmd/{{.Name}}/cmd/root.go)
+// calls userCommands(deps) and registers every returned command. Generated
+// per-service subcommands live in the cmd/{{.Name}}/cmd/services/ subpackage
+// (a projection of the proto services); never list services here.
+//
+// Use this file for NON-SERVER SHAPES: CLI tools (reports, backfills,
+// one-shot admin jobs) and second binaries that ship in the same image as
+// the server but are not Connect services. Don't hand-roll a parallel
+// main() — compose the paved-path pieces instead:
+//
+//   - Typed config: config.RegisterFlags(cmd) at construction, then
+//     `cfg, err := config.Load(cmd)` in RunE.
+//   - forge/pkg/cmdkit for everything a CLI re-invents (Logger, OpenDB,
+//     ContextWithTimeout, PrintJSON).
+//   - OTel + lifecycle: a server-shaped sidecar reuses the Serve() pipeline
+//     (cmd/{{.Name}}/cmd/serve.go); a non-HTTP loop derives a signal context
+//     via signal.NotifyContext and blocks on it.
+//
+// Example — a one-shot report command:
+//
+//	func reportCmd(deps Deps) *cobra.Command {
+//		cmd := &cobra.Command{
+//			Use:   "report",
+//			Short: "Print a JSON report from the database",
+//			RunE: func(cmd *cobra.Command, _ []string) error {
+//				cfg, err := config.Load(cmd)
+//				if err != nil {
+//					return err
+//				}
+//				ctx, log := cmdkit.ContextWithLogger(cmd.Context(), cmdkit.LoggerOptions{
+//					Name:   "report",
+//					Format: cfg.LogFormat,
+//					Level:  cmdkit.ParseLevel(cfg.LogLevel),
+//				})
+//				db, err := cmdkit.OpenDB(ctx, cmdkit.DBOptions{DSN: cfg.DatabaseUrl})
+//				if err != nil {
+//					return err
+//				}
+//				defer func() { _ = db.Close() }()
+//				report, err := buildReport(ctx, db)
+//				if err != nil {
+//					return err
+//				}
+//				log.Info("report complete", "rows", len(report.Rows))
+//				return cmdkit.PrintJSON(cmd.OutOrStdout(), report)
+//			},
+//		}
+//		config.RegisterFlags(cmd)
+//		return cmd
+//	}
+//
+//	func userCommands(deps Deps) []*cobra.Command {
+//		return []*cobra.Command{reportCmd(deps)}
+//	}
+package cmd
+
+import (
+	"github.com/spf13/cobra"
+)
+
+// userCommands returns additional top-level subcommands for this binary.
+// cmd/{{.Name}}/cmd/root.go consumes it; forge never edits this file. Return
+// nil (the default) for no extra commands.
+func userCommands(deps Deps) []*cobra.Command {
+	_ = deps
+	return nil
+}

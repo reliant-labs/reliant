@@ -1,0 +1,522 @@
+version: "3"
+
+# ┌─────────────────────────────────────────────────────────┐
+# │ Tests are Task targets — this file is the ONE place     │
+# │ that decides how the suite runs, so the local loop and  │
+# │ CI cannot drift apart:                                  │
+# │                                                         │
+# │   task test:short        Inner loop: Go, -short, cached │
+# │   task test              Go unit + every frontend       │
+# │   task test:integration  `integration`-tagged tests     │
+# │   task test:e2e          End-to-end tests               │
+# │   task test:all          Unit + frontend + integration  │
+# │   task ci                The whole PR gate, locally     │
+# │   task ci:checks         Static + build lane of it      │
+# │                                                         │
+# │ Everything that needs forge's own orchestration stays   │
+# │ a forge command (run the PINNED one: see FORGE below):  │
+# │                                                         │
+# │   forge env up dev       Dev loop (hot-reload)          │
+# │   forge build            Build production binary        │
+# │   forge build --debug    Build with debug symbols       │
+# │   forge lint             Run linters                    │
+# │   forge env deploy       Deploy to k3d / cloud          │
+# │   forge debug start api  Run api under Delve            │
+# │   forge db migrate up    Run database migrations        │
+# │   forge generate         Codegen from proto files       │
+# │                                                         │
+# │ `task lint`, `generate`, `ci` and `db-seed` run the     │
+# │ forge this project pins (FORGE), never whichever forge  │
+# │ is first on PATH; the rest are plain go/npm/docker.     │
+# └─────────────────────────────────────────────────────────┘
+
+env:
+  # GOFLAGS gets -trimpath, merged into whatever GOFLAGS you already use (from
+  # the environment, `go env -w` or the toolchain's go.env). Without it Go
+  # hashes each package's ABSOLUTE directory into its build-cache key, so every
+  # worktree and scratch copy of this module (forge ci verify-generated
+  # regenerates in a fresh one every run) compiles the whole module again and
+  # re-runs every test instead of reusing what a sibling already built.
+  # Measured: a second worktree of one commit compiled 267 packages and cached
+  # 0 of 73 test packages without it; 0 and 58 with it. A GOFLAGS already in
+  # your environment wins over this block (Task never overrides one), and
+  # -trimpath=false in it, or in `go env -w GOFLAGS`, opts out.
+  GOFLAGS:
+    sh: 'f="$(go env GOFLAGS 2>/dev/null)"; case " $f " in *" -trimpath"*|*" --trimpath"*) echo "$f" ;; *) echo "${f:+$f }-trimpath" ;; esac'
+
+vars:
+  GEN_DIR: gen
+  # FORGE runs the forge THIS PROJECT pins: forge.yaml's forge_version, which
+  # `forge generate` keeps equal to go.mod's forge require. It is never
+  # whatever `forge` is first on PATH — that is routinely another version (a
+  # bundled forge, a months-old `go install`), and an older forge rejects a
+  # newer forge.yaml ("unknown key") or lints, gates and generates with
+  # templates the project did not pin. `go run module@version` builds the
+  # pinned forge once and then reuses the cached executable.
+  #
+  # Overrides, for forge developers and pins no proxy serves:
+  #   FORGE_BIN=/path/to/forge task lint   (environment), or
+  #   task lint FORGE=forge                (command line).
+  # A bridged project (go.work, below) runs the bridged checkout instead.
+  # A pin that names no published forge (a +dirty build, `dev`) falls back to
+  # the forge on PATH, which then hands the command to the pin when it can.
+  FORGE_YAML:
+    sh: cat forge.yaml
+  # A project bridged to a local forge checkout (a gitignored go.work `use`,
+  # written by `forge project new --link-forge`) compiles against that
+  # checkout, and so do its templates: this very file can call a verb newer
+  # than the release forge_version names (that is the floor a build from a
+  # checkout may pin, not the forge that wrote this project). Run the forge the
+  # workspace resolves instead: `go list -m -json` says `"Main": true` for a
+  # module that is a workspace's main module and omits the key for a version it
+  # downloaded. The test is Task's own `contains`, not grep: this file runs on
+  # Windows too.
+  FORGE_BRIDGED:
+    sh: "go list -m -json github.com/reliant-labs/forge 2>/dev/null || true"
+  FORGE: '{{`{{$pin := index (fromYaml .FORGE_YAML) "forge_version" | default "" | toString}}{{if .FORGE_BIN}}{{.FORGE_BIN}}{{else if contains "Main\": true" .FORGE_BRIDGED}}go run github.com/reliant-labs/forge/cmd/forge{{else if or (eq $pin "") (eq $pin "dev") (contains "+" $pin)}}forge{{else}}go run github.com/reliant-labs/forge/cmd/forge@{{$pin}}{{end}}`}}'
+  # GOTESTRACE is a TOP-LEVEL var on purpose: only global vars can be
+  # overridden from the command line (`task test GOTESTRACE=`), which is how
+  # the generated CI workflow passes through forge.yaml's `ci.test.race`.
+  # Declared on the task itself it would silently win over the override.
+  # Clearing it drops the race detector for one run; leave it set otherwise.
+  GOTESTRACE: "-race"
+  # SLOT runs the heavy lanes (`test`, `test:integration`) inside one of this
+  # machine's host-wide heavy slots: `forge slot run` waits while N other heavy
+  # jobs (builds, test lanes, codegen, lints — from any agent, worktree or
+  # terminal) are running, because past a handful every one of them slows
+  # down. N comes from the machine (min(CPUs/2, memory GiB/8)); set
+  # FORGE_HEAVY_SLOTS=<n> to change it or =off to switch it off. Inside a
+  # slot already (a gate check, a parent `forge slot run`) it does not wait.
+  # Empty when forge is absent or predates `forge slot` (the probe fails), so
+  # these tasks still run without it; `task test SLOT=` skips the slot for
+  # one run. `--class heavy` is spelled out on purpose: a forge without the
+  # verb rejects the flag loudly instead of printing its help and exiting 0
+  # without running the tests. `test:short` takes no slot: the scoped inner
+  # loop is not heavy and must not queue.
+  #
+  # The one deliberate use of the forge on PATH rather than FORGE: slots are
+  # machine-wide (every project and forge version shares one queue), and this
+  # probe runs on every `task` invocation, so it must cost nothing — never a
+  # `go run`.
+  SLOT:
+    sh: forge slot status --class heavy >/dev/null 2>&1 && echo 'forge slot run --class heavy --' || true
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  deps:
+    desc: Install Go and frontend dependencies
+    cmds:
+      - go mod download
+      - task: deps:frontend
+
+  deps:frontend:
+    desc: Install every frontend's dependencies
+    cmds:
+      - task: frontends
+        vars: { SCRIPT: "$PM install" }
+
+  build:
+    desc: Build Go binaries and every frontend's bundle
+    cmds:
+      # -trimpath strips local filesystem paths so builds are reproducible
+      # across machines; -buildvcs=true embeds the commit/dirty flag for
+      # runtime correlation. Keep these flags in lockstep with the
+      # Dockerfile and CI workflow so locally-built, CI-built, and
+      # Docker-built binaries all hash identically from the same source.
+      - go build -trimpath -buildvcs=true ./...
+      - task: build:frontend
+
+  build:frontend:
+    desc: Build every frontend's bundle
+    cmds:
+      - task: frontends
+        vars: { SCRIPT: "$PM run build" }
+
+  test:
+    # Everything after `--` REPLACES the default `./...`, so it takes both
+    # flags and package patterns:
+    #
+    #   task test                                  whole module + frontends
+    #   task test -- ./internal/lifecycle/...       only those Go packages
+    #   task test -- -v ./...                       verbose
+    #   task test -- -run TestFoo ./internal/...    one test
+    #   task test GOTESTRACE=                       without the race detector
+    #
+    # A scoped run skips the frontend lane — a Go package pattern says nothing
+    # about a frontend. An unmatched pattern fails in `go test` itself, so a
+    # scoped run can never quietly widen into a whole-module run that still
+    # reports success.
+    desc: Run Go unit tests and every frontend's tests (excludes integration + e2e)
+    cmds:
+      # Integration and e2e tests are guarded by the `integration` and `e2e`
+      # build tags respectively, so they are physically excluded from this
+      # default test run (no compile, no skip-at-runtime).
+      #
+      # -timeout 120s surfaces hangs (subprocess loops, deadlocks, accidental
+      # network calls) as fast test failures instead of CI-stalling 10-minute
+      # waits. It is not 30s because the born CRUD tests boot an embedded
+      # postgres on first use: a cold boot alone can eat most of a 30s budget,
+      # so the tighter bound failed the suite for being slow rather than wrong.
+      - "{{`{{.SLOT}}`}} go test {{`{{.GOTESTRACE}}`}} -count=1 -timeout 120s {{`{{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}`}}"
+      - task: test:frontend
+
+  test:short:
+    # The inner loop: run this after each edit, scoped to the packages you
+    # touched (`task test:short -- ./internal/lifecycle/...`), and `task test`
+    # once before you finish. Every flag difference from `task test` is on
+    # purpose:
+    #
+    #   -short        slow paths sit behind `if testing.Short() { t.Skip() }`;
+    #                 the full lane still runs them.
+    #   no -count=1   Go's test cache keys on the test binary, its flags, and
+    #                 the files and env vars the test reads, so a cached pass
+    #                 is a real pass for any test that builds its own state
+    #                 (t.TempDir, a fresh testkit database). Re-running
+    #                 unchanged packages is most of what an edit loop spends.
+    #                 Tests that read shared outside state (a running stack)
+    #                 live behind the `integration` / `e2e` tags instead.
+    #                 The cache sees only what the TEST PROCESS reads: a test
+    #                 that execs a child (forge, kcl, go build, npm, git) which
+    #                 reads repo files must read those inputs itself or skip
+    #                 under -short, or this tier can report a stale pass.
+    #   no -race      the race detector rebuilds every package under its own
+    #                 cache key and slows tests 2-10x; `task test` and CI
+    #                 keep it on.
+    #   -timeout 60s  a test that needs longer under -short wants a
+    #                 testing.Short() gate, not a bigger budget.
+    #
+    # Go only — frontends run in `task test` / `task test:frontend`.
+    desc: "Inner-loop Go tests: -short, cached, no race. Scope it: task test:short -- ./internal/foo/..."
+    cmds:
+      - go test -short -timeout 60s {{`{{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}`}}
+
+  test:frontend:
+    desc: Run every frontend's tests
+    cmds:
+      # A scoped run (`task test -- ./some/pkg/...`) selected Go packages,
+      # which says nothing about any frontend — running the JS suites anyway
+      # is how a "just this package" run ends up executing tests in a
+      # frontend someone else is editing, and reporting on them.
+      - cmd: echo "Go package patterns given — skipping the frontend lane."
+        silent: true
+        if: '[ -n "{{`{{.CLI_ARGS}}`}}" ]'
+      - task: frontends
+        if: '[ -z "{{`{{.CLI_ARGS}}`}}" ]'
+        vars:
+          SCRIPT: '{{`{{.SLOT}}`}} $PM test $([ "$PM" != npm ] || printf %s --) --passWithNoTests'
+
+  frontends:
+    # Runs SCRIPT in every frontend of this project in turn, stopping at the
+    # first failure. Every frontend lane (deps, build, test, lint, fmt) goes
+    # through it.
+    #
+    # The frontends are DISCOVERED when it runs, by `forge project frontends`:
+    # the inventory `forge ci gate` and the CI workflows use — every in-repo
+    # frontend any env's KCL declares, at whatever path (`web/`,
+    # `apps/console`), plus frontends/<name> on disk. They are never baked in
+    # at scaffold time (this file is written once, so a second
+    # `forge scaffold frontend` would go untested while the suite stayed
+    # green) and never globbed from frontends/* (which skipped every frontend
+    # declared anywhere else). A backend-only project runs nothing.
+    #
+    # SCRIPT names the package manager as $PM, which is the one that owns
+    # each frontend. `project frontends --with-package-manager` uses forge's
+    # shared resolver, including the declared manager's own-lock tie-break
+    # during migrations. There is no second lockfile algorithm in this shell.
+    # An npm frontend beside a scaffolded one keeps its own manager.
+    internal: true
+    silent: true
+    vars:
+      FRONTENDS:
+        sh: "{{`{{.FORGE}}`}} project frontends --with-package-manager"
+    env:
+      FRONTENDS: "{{`{{.FRONTENDS}}`}}"
+    cmds:
+      - cmd: |
+          ran=0
+          for frontend in $FRONTENDS; do
+            PM="${frontend%%:*}"
+            dir="${frontend#*:}"
+            export PM
+            echo "==> {{`{{.SCRIPT}}`}} ($dir, $PM)"
+            (cd "$dir" && {{`{{.SCRIPT}}`}}) || exit 1
+            ran=$((ran + 1))
+          done
+          [ "$ran" -gt 0 ] || echo "This project has no frontends — nothing to run."
+
+  test:integration:
+    desc: Run integration tests (uses -tags=integration; may require docker compose)
+    cmds:
+      # Integration tests are guarded by the `integration` build tag and are
+      # therefore excluded from `task test`. They typically need a real
+      # database / running infra (see docker-compose.yml). -timeout=10m gives
+      # heavy DB-backed scenarios room while still surfacing hangs.
+      - "{{`{{.SLOT}}`}} go test {{`{{.GOTESTRACE}}`}} -tags=integration -count=1 -timeout=10m {{`{{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}`}}"
+
+  test:e2e:
+    # `--` args replace the default `./e2e/...`, same as `task test`, so
+    # `task test:e2e -- ./e2e/users/...` targets one service's suite. Every
+    # lane accepts them for the same reason: a target that ACCEPTS arguments
+    # and ignores them reports success for a run the caller never asked for.
+    # Already verbose (-v) — e2e failures are unreadable without it.
+    desc: Run end-to-end tests (requires docker compose; uses -tags=e2e)
+    cmds:
+      - go test -tags=e2e -v -count=1 -timeout=20m {{`{{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./e2e/...{{end}}`}}
+
+  test:all:
+    # The full-suite gate. `task test` (unit + frontend) is what the CI test
+    # job runs and what you run before finishing — the edit loop runs
+    # `task test:short` — and this target adds the integration lane for a
+    # pre-merge sweep.
+    #
+    # e2e is deliberately NOT here: it needs a deployed stack (cluster,
+    # ingress, seeded database), so it has its own target and its own CI job.
+    # Folding it in would make `task test:all` unrunnable on a fresh checkout,
+    # which is exactly when people reach for it.
+    desc: Run the unit + frontend and integration suites (e2e has its own target)
+    cmds:
+      - task: test
+      - task: test:integration
+
+  ci:
+    # The whole PR gate, locally: ci:checks, then test, then test:integration,
+    # in ONE summary table. The scaffolded .github/workflows/ci.yml is a thin
+    # wrapper around the same three lanes (`task ci:checks`, `task test`,
+    # `task test:integration`), so this is the verdict CI would give, on your
+    # machine, before you push. It runs everything: change detection (skipping
+    # jobs a docs-only change cannot affect) is a CI cost optimization and lives
+    # in the workflow; locally you scope by running one lane.
+    #
+    # The gate lives in forge (`forge ci gate`), not in a script copied here, so
+    # it improves with forge and carries the same tool pins as CI. Rules, all
+    # enforced by it:
+    #   - every check runs even if an earlier one failed, then one table;
+    #   - exit non-zero if anything failed;
+    #   - a check that could not run (missing tool, dirty tree) is SKIPPED, not
+    #     PASS, and fails the gate unless named: CI_SKIP=vuln-go task ci
+    #   - tools run at the versions CI pins, from forge's tool cache.
+    # Add your own checks under `ci.gate.extra_checks` in forge.yaml.
+    #
+    # Not run under SLOT: the gate schedules host slots itself, one per
+    # heavy check, so one slot around the whole run would let every check
+    # inside it skip the queue (they would all be "inside a slot").
+    desc: "The whole PR gate locally (what CI runs): ci:checks + test + test:integration, one summary"
+    cmds:
+      - "{{`{{.FORGE}}`}} ci gate all"
+
+  ci:checks:
+    # The static and build lane — what the `checks` CI job runs after its one
+    # shared setup: verify-generated, lint, build, vulnerability and license
+    # scans, KCL validation and deployability, plus your ci.gate.extra_checks.
+    # See `task ci` for the semantics; `forge ci gate --list` names every check.
+    desc: "Static + build lane of the CI gate: verify-generated, lint, build, vuln-scan, KCL (what the CI `checks` job runs)"
+    cmds:
+      - "{{`{{.FORGE}}`}} ci gate checks"
+
+  lint:
+    desc: Run all linters via the pinned forge (Go + proto + every frontend)
+    cmds:
+      # Delegate to `forge lint` so this task inherits forge's full linter
+      # suite (golangci-lint with skip-on-missing, buf lint, frontend lint
+      # & typecheck via the configured Next.js workspace, plus the
+      # contract / db / migration-safety / convention sub-linters when
+      # they're enabled in forge.yaml). Pre-fix this task hard-coded
+      # `golangci-lint run`, which exited 127 when the binary wasn't
+      # installed locally — losing the lint signal entirely instead of
+      # the warn-and-skip forge does.
+      - "{{`{{.FORGE}}`}} lint"
+
+  lint:frontend:
+    desc: Run every frontend's linter and TypeScript typecheck (sub-task; `task lint` already covers this)
+    cmds:
+      # Lint catches style and rule violations; typecheck verifies the
+      # program is well-typed. We run both because `next lint` (now
+      # deprecated) skipped typechecking, and CI has historically
+      # shipped type errors that only surfaced at build time. Kept as a
+      # standalone task for fast iteration on frontend-only lint runs;
+      # `task lint` above goes through `forge lint`, which already
+      # includes this step.
+      - task: frontends
+        vars: { SCRIPT: "$PM run lint && $PM run typecheck" }
+
+  dev:
+    desc: Run the app with hot-reload ({{if .FrontendName}}Air + Next dev{{else}}Air{{end}})
+    deps:
+      - dev-up
+    # ENVIRONMENT=development turns the server's CORS layer on for the
+    # frontend's dev origin (see .air.toml). `forge env up` sets it on the
+    # air process; this is the same default for a bare `task dev`. Set here,
+    # not as a `VAR=val cmd` prefix, so it works on Windows too.
+    env:
+      ENVIRONMENT: development
+{{- if .FrontendName}}
+    cmds:
+      - cmd: air
+        ignore_error: true
+{{- else}}
+    cmds:
+      - air
+{{- end}}
+
+  dev-up:
+    # Developers iterating on the app want Delve attached; launching the
+    # plain `app` service runs a production-style binary that makes
+    # breakpoints impossible. `docker-compose.yml` gates `app-debug`
+    # behind the `debug` profile, so we enable it here. Infra services
+    # (postgres, jaeger) have no profile and come up regardless.
+    desc: Start local dev infrastructure with app-debug (Delve on :2345)
+    cmds:
+      - docker compose --profile debug up -d --wait
+
+  dev-up-prod:
+    # Escape hatch: run the production-mode `app` service locally (no
+    # Delve, smaller image). Useful for smoke-testing the release build
+    # or reproducing prod-only behaviour.
+    desc: Start local dev infrastructure with the production app image
+    cmds:
+      - docker compose up -d --wait
+
+  dev-down:
+    # `--profile '*'` ensures we tear down app-debug too, even if the
+    # caller used `dev-up-prod`; otherwise the debug container would be
+    # left running when no profile is active.
+    desc: Stop local dev infrastructure (docker compose down)
+    cmds:
+      - docker compose --profile '*' down
+
+  fmt:
+    desc: Format Go and every frontend's source
+    cmds:
+      # goimports handles both gofmt and import ordering; fail loudly if the
+      # binary is missing instead of silently skipping formatting.
+      - cmd: |
+          if ! command -v goimports >/dev/null 2>&1; then
+            echo "goimports not installed — run: go install golang.org/x/tools/cmd/goimports@latest" >&2
+            exit 1
+          fi
+          goimports -w .
+      - go mod tidy
+      - task: fmt:frontend
+
+  fmt:frontend:
+    desc: Format every frontend's source with prettier
+    cmds:
+      - task: frontends
+        vars: { SCRIPT: "npx --no-install prettier --write ." }
+
+  generate:
+    # The whole codegen, through the pinned forge: buf (at forge's pinned
+    # version, with the pinned protoc plugins it installs into its own tool
+    # cache), the ORM and CRUD projections, every frontend's client, mocks and
+    # go mod tidy. Never a bare `buf generate`: that runs whichever buf and
+    # plugins PATH has and skips everything forge projects.
+    desc: Regenerate everything forge generates (protos, ORM, frontend clients, mocks), with the pinned forge
+    cmds:
+      - "{{`{{.FORGE}}`}} generate"
+
+  verify-generate:
+    # The generated-code drift guard CI runs: regenerate in a scratch copy of
+    # the committed tree and fail on any difference, naming the files.
+    desc: Verify generated code is committed up to date (forge ci verify-generated)
+    cmds:
+      - "{{`{{.FORGE}}`}} ci verify-generated"
+
+  coverage:
+    # HTML coverage report at coverage.html. We deliberately omit -race
+    # here (race + coverage requires -covermode=atomic, which in turn
+    # needs the `covdata` tool — not always present in auto-installed
+    # toolchains). Race testing happens in `task test`; this task is for
+    # measuring exercised code. Skips integration / e2e (those have their
+    # own tasks) so coverage reflects unit tests.
+    desc: Run unit tests with coverage and emit coverage.html
+    cmds:
+      - go test -coverprofile=coverage.out -timeout 60s ./...
+      - go tool cover -html=coverage.out -o coverage.html
+      - cmd: echo "Coverage report written to coverage.html"
+        silent: true
+
+  migrate:
+    desc: Apply pending database migrations (wraps `{{.Name}} db migrate up`)
+    cmds:
+      # The generated CLI exposes migrations via a dedicated subcommand; keep
+      # this task as the CI/docs-friendly entrypoint.
+      # TODO: if your project does not use the generated `db migrate up`
+      # subcommand (e.g. you run migrations from infra), replace this with
+      # the equivalent command for your stack.
+      - go run ./cmd/{{.Name}} db migrate up
+
+  db-seed:
+    # Materializes the deterministic dev dataset (introspected from the applied
+    # schema, FK-coherent, idempotent) and then applies your db/seeds/custom/
+    # overlay. Runs via the forge CLI — the applier is intentionally NOT in
+    # your server binary, so seeding capability is absent from production. Dev
+    # only; refuses non-dev environments.
+    desc: Seed the dev database (`forge db seed apply`)
+    cmds:
+      - cmd: |
+          : "${DATABASE_URL:?DATABASE_URL must be set (in your shell env or config.<env>.yaml)}"
+          {{`{{.FORGE}}`}} db seed apply
+
+  db-snapshot-restore:
+    # Restore a sanitized snapshot dump (custom-format pg_dump, optionally
+    # gzip-compressed) into a local Postgres database. The default target
+    # database name is "<project>_snapshot" so it doesn't clobber dev data.
+    #
+    # Usage: task db-snapshot-restore DUMP=path/to/snapshot.dump.gz
+    #
+    # TODO: if your project uses a remote/managed snapshot store (GCS, S3),
+    # add a sibling `db-snapshot` task that downloads + sanitizes from
+    # there and writes the dump file this task expects.
+    desc: Restore a DB snapshot dump to local postgres (DUMP=path/to/file.dump[.gz])
+    cmds:
+      - cmd: |
+          DUMP="${DUMP:-snapshot.dump.gz}"
+          DB="${SNAPSHOT_DB:-{{.ProjectName}}_snapshot}"
+          PGHOST="${PGHOST:-127.0.0.1}"
+          PGUSER="${PGUSER:-postgres}"
+          if [ ! -f "$DUMP" ]; then
+            echo "ERROR: Dump file '$DUMP' not found." >&2
+            echo "Usage: task db-snapshot-restore DUMP=/path/to/snapshot.dump[.gz]" >&2
+            exit 1
+          fi
+          for cmd in pg_restore createdb dropdb; do
+            command -v "$cmd" >/dev/null 2>&1 || { echo "$cmd not installed — install postgresql-client" >&2; exit 1; }
+          done
+          echo "==> Restoring $DUMP into $DB (host=$PGHOST user=$PGUSER)..."
+          dropdb --if-exists -h "$PGHOST" -U "$PGUSER" "$DB" 2>/dev/null || true
+          createdb -h "$PGHOST" -U "$PGUSER" "$DB"
+          if [[ "$DUMP" == *.gz ]]; then
+            gunzip -c "$DUMP" | pg_restore -h "$PGHOST" -U "$PGUSER" -d "$DB" \
+              --no-owner --no-privileges --clean --if-exists || true
+          else
+            pg_restore -h "$PGHOST" -U "$PGUSER" -d "$DB" \
+              --no-owner --no-privileges --clean --if-exists "$DUMP" || true
+          fi
+          echo "==> Restore complete. Connect with: psql -h $PGHOST -U $PGUSER -d $DB"
+
+  bench:
+    # Go microbenchmarks live under benchmarks/. Extra packages with
+    # Benchmark* functions are picked up automatically thanks to the
+    # `./...` scope.
+    desc: Run Go benchmarks (go test -bench=. across the module)
+    cmds:
+      - go test -bench=. -benchmem -run=^$ ./...
+
+  clean:
+    desc: Clean generated files and build artifacts
+    cmds:
+      - rm -rf {{`{{.GEN_DIR}}`}}
+      - rm -rf bin
+      - rm -f coverage.out coverage.html
+      - rm -rf .forge/debug
+
+  dev-psql:
+    desc: Open psql shell to development database (uses $POSTGRES_USER/$POSTGRES_DB, defaults match docker-compose.yml)
+    cmds:
+      # POSTGRES_USER / POSTGRES_DB fall back to the same defaults as the
+      # docker-compose service so `task dev-psql` works with zero env setup.
+      - docker compose exec postgres psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-{{.ProjectName}}}"

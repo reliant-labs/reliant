@@ -1,0 +1,716 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// The browser half of NATIVE SIGN-IN — and it is deliberately small.
+//
+// ── What this file does NOT do ────────────────────────────────────────
+//
+// It does not know what OIDC is. There is no issuer URL here, no client
+// id, no PKCE, no discovery document, no redirect to a provider, no hidden
+// iframe, no token parsing, and no token storage. The browser never
+// contacts the identity provider at all.
+//
+// Everything below is an ordinary POST to this app's own API. Your server
+// runs the whole OIDC flow (internal/app/login_broker.go) and answers with
+// an HttpOnly session cookie.
+//
+//	sign in  →  POST /auth/login     → cookie set, identity returned
+//	sign up  →  POST /auth/register  → cookie set, identity returned
+//	who am I →  GET  /auth/session   → identity, or not authenticated
+//	sign out →  POST /auth/logout    → cookie cleared
+//
+//	what must a password contain →  GET  /auth/password-policy
+//	forgot password              →  POST /auth/forgot  → reset link requested
+//	reset password               →  POST /auth/reset   → password set, signed in
+//
+// And the methods a LOGIN_POLICY turns on (GET /auth/options says which):
+//
+//	passkey        →  POST /auth/passkey/begin, /finish  (navigator.credentials.get)
+//	add a passkey  →  POST /auth/passkey/register/begin, /finish  (…credentials.create)
+//	magic link     →  POST /auth/magic/request, then /auth/magic/consume
+//	Google/GitHub  →  POST /auth/social/start → the provider → /auth/social/callback
+//	invitation     →  POST /auth/invite/accept
+//	verify address →  POST /auth/verify, /auth/verify/resend
+//
+// ── Why the token is not here ─────────────────────────────────────────
+//
+// The session cookie is HttpOnly, so this code CANNOT read it — and that
+// is the point rather than a limitation. A token no script can reach is a
+// token an XSS cannot steal. The cookie rides along automatically on
+// same-origin requests, so nothing here has to attach an Authorization
+// header.
+//
+// What you get instead is an `Identity`: who is signed in, for rendering.
+// Use it to decide what to SHOW. Never to decide what is ALLOWED — the
+// server validates the real token on every request.
+//
+// ── Where these requests go ───────────────────────────────────────────
+//
+// Wherever src/lib/connect.ts sends RPCs: both ask src/lib/api-base.ts. In
+// the dev loop that is this page's own origin (`/_api`, proxied to the API
+// by the dev server), so the cookie the API sets is first-party to whatever
+// host the page was opened on — localhost, or a workspace preview URL.
+{{if .HasTypedConfig}}
+import { apiBase } from "@/lib/api-base";
+import { loadConfig } from "@/lib/config_gen";
+{{else}}
+import { apiBase } from "@/lib/api-base";
+{{end}}
+{{- if .HasTypedConfig}}
+/**
+ * Where the API lives. Empty means same-origin, which is the common case.
+ *
+ * Read through the generated typed config module rather than from
+ * process.env: the module already resolves window.__FORGE_CONFIG__ in the
+ * browser and the process environment during server rendering, so routing
+ * through it removes a second, hand-maintained copy of that same fallback
+ * chain — and removes the build-time-inlined env read that would freeze
+ * this bundle to the environment it was built against. apiBase() swaps in
+ * this page's own origin while the dev server proxies the API.
+ */
+function apiOrigin(): string {
+  return apiBase(String(loadConfig().API_URL || ""));
+}
+{{- else}}
+/**
+ * Where the API lives. Empty means same-origin, which is the common case.
+ * apiBase() swaps in this page's own origin while the dev server proxies
+ * the API.
+ */
+function apiOrigin(): string {
+  const fromRuntime =
+    typeof window !== "undefined"
+      ? (window as { __FORGE_CONFIG__?: { API_URL?: unknown } })
+          .__FORGE_CONFIG__?.API_URL
+      : undefined;
+  const configured =
+    fromRuntime ||
+    (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) ||
+    "";
+  return apiBase(String(configured));
+}
+{{- end}}
+
+/** Who is signed in. Presentation only — see the file header. */
+export interface Identity {
+  authenticated: boolean;
+  email?: string;
+  name?: string;
+  subject?: string;
+}
+
+export interface Credentials {
+  email: string;
+  password: string;
+  /** Only meaningful for an account with TOTP enrolled. */
+  totp?: string;
+}
+
+export interface Registration {
+  email: string;
+  /** Optional where passkeys or magic links are offered (GET /auth/options). */
+  password?: string;
+  givenName?: string;
+  familyName?: string;
+}
+
+/** One clause of the password policy. The names are the server's wire spelling. */
+export type PasswordRule = "min_length" | "uppercase" | "lowercase" | "number" | "symbol";
+
+/**
+ * What a password must contain, as the identity provider enforces it.
+ *
+ * Served by GET /auth/password-policy. The provider is the authority: this is
+ * what the forms SHOW and check while the person types, and a password that
+ * passes every check here can still be refused.
+ */
+export interface PasswordPolicy {
+  min_length: number;
+  has_uppercase: boolean;
+  has_lowercase: boolean;
+  has_number: boolean;
+  has_symbol: boolean;
+}
+
+/**
+ * Thrown when the API refuses a request. `status` lets a screen tell
+ * "wrong credentials" (401) from "the service is down" (5xx), which are
+ * very different things to tell a user.
+ *
+ * `unmet` is set when the PASSWORD was what was refused: every policy rule it
+ * breaks, as the server evaluated them. A screen can mark exactly those.
+ */
+export class AuthError extends Error {
+  readonly status: number;
+  readonly unmet: PasswordRule[];
+  /**
+   * The server's machine-readable reason, when it gave one: "email_unverified"
+   * (offer to resend the link), "magic_other_browser", "invalid_code",
+   * "social_link_required", "social_no_account", "signup_not_allowed", …
+   */
+  readonly code: string;
+
+  constructor(message: string, status: number, unmet: PasswordRule[] = [], code = "") {
+    super(message);
+    this.name = "AuthError";
+    this.status = status;
+    this.unmet = unmet;
+    this.code = code;
+  }
+}
+
+/** The server accepted a sign-up and mailed a link to confirm the address. No session yet. */
+export interface VerifySent {
+  verify: "sent";
+  message: string;
+}
+
+/** True when a sign-up (or social sign-in) answer is "check your email", not a session. */
+export function isVerifySent(value: unknown): value is VerifySent {
+  return (
+    typeof value === "object" && value !== null && (value as { verify?: unknown }).verify === "sent"
+  );
+}
+
+/** Signs in. Resolves with the identity; the session cookie is already set. */
+export async function signIn(credentials: Credentials): Promise<Identity> {
+  return post("/auth/login", {
+    email: credentials.email,
+    password: credentials.password,
+    ...(credentials.totp ? { totp: credentials.totp } : {}),
+  });
+}
+
+/**
+ * Creates an account.
+ *
+ * Without a LOGIN_POLICY (development, or auth_self_signup) the server also
+ * signs in, so there is no bouncing back to a login form to retype the
+ * password just chosen, and this resolves with the identity. Under an open or
+ * domain sign-up it resolves with VerifySent instead: the address must be
+ * confirmed from the email first, and the answer is the same whether or not
+ * the address already had an account. Check with isVerifySent.
+ */
+export async function signUp(details: Registration): Promise<Identity | VerifySent> {
+  return (await request("/auth/register", {
+    email: details.email,
+    ...(details.password ? { password: details.password } : {}),
+    ...(details.givenName ? { givenName: details.givenName } : {}),
+    ...(details.familyName ? { familyName: details.familyName } : {}),
+  })) as Identity | VerifySent;
+}
+
+/** Clears the session cookie. */
+export async function signOut(): Promise<Identity> {
+  return post("/auth/logout", {});
+}
+
+/**
+ * Asks the server who is signed in.
+ *
+ * This is how the app learns its own auth state at load: the cookie is
+ * unreadable to scripts, so the server is the only thing that can answer.
+ * One cheap same-origin request, and no provider round trip.
+ */
+export async function fetchIdentity(): Promise<Identity> {
+  try {
+    const response = await fetch(`${apiOrigin()}/auth/session`, {
+      // See the note in post(): the cookie only travels to an API on
+      // another origin with "include".
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return { authenticated: false };
+    return (await response.json()) as Identity;
+  } catch {
+    // A transport failure is not a signed-out user, but it is the safe
+    // answer to render: closed rather than open.
+    return { authenticated: false };
+  }
+}
+
+async function post(path: string, body: unknown): Promise<Identity> {
+  return (await request(path, body)) as Identity;
+}
+
+async function request(path: string, body: unknown): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiOrigin()}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // "include", not "same-origin": whenever the API is on another origin
+      // — a deployed API_URL naming its own host, or the dev loop with
+      // FORGE_DEV_API_PROXY=off — "same-origin" silently DROPS the session
+      // cookie: login returns 200 and the user stays signed out, with
+      // nothing in the console to explain it. The server pairs this with
+      // cors_allow_credentials. Through the dev proxy it costs nothing.
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+  } catch {
+    // Distinguished from a credential failure so a user does not retype a
+    // correct password at a server that is simply unreachable.
+    throw new AuthError("Could not reach the sign-in service.", 0);
+  }
+
+  if (!response.ok) {
+    throw await rejection(response);
+  }
+  return response.json();
+}
+
+/**
+ * Asks the server to email a password-reset link.
+ *
+ * Resolves with the server's message, which is the same whether or not the
+ * address has an account. THAT IS NOT A PROMISE THAT MAIL ARRIVES: the link is
+ * sent by the identity provider, which sends mail only when the app's
+ * identity has SMTP configured (forge.ManagedIdentity.smtp). See
+ * src/app/auth/forgot (Next.js) or the /auth/forgot route (Vite).
+ */
+export async function forgotPassword(email: string): Promise<string> {
+  const body = (await request("/auth/forgot", { email })) as { message?: string };
+  return body.message ?? "If that address has an account, a reset link is on its way.";
+}
+
+/** The three values the reset link carries (userID and code), plus the new password. */
+export interface PasswordReset {
+  userID: string;
+  code: string;
+  password: string;
+}
+
+/**
+ * Sets a new password with the code from a reset link.
+ *
+ * Resolves with the identity: `authenticated` is true when the server also
+ * signed the person in (the common case) and false when the password was set
+ * but that follow-up sign-in failed, in which case send them to sign in.
+ */
+export async function resetPassword(reset: PasswordReset): Promise<Identity> {
+  return post("/auth/reset", reset);
+}
+
+/** A first-factor method the sign-in screen may offer. */
+export type SignInMethod = "password" | "passkey" | "magic_link";
+
+/** Which optional sign-in routes and methods this deployment serves (GET /auth/options). */
+export interface AuthOptions {
+  /**
+   * Whether POST /auth/register is served. Off in every deployed environment
+   * unless its identity declares an open or domain sign-up (or, without
+   * one, its config sets auth_self_signup), so an app is invite-only until
+   * it opts in.
+   */
+  selfSignup: boolean;
+  /** "invite" | "open" | "domain". */
+  signup: string;
+  /** The methods to offer, in the order to offer them. */
+  methods: SignInMethod[];
+  /** One button each. */
+  social: { type: string; label: string }[];
+  /** Whether the app's mail reaches anyone (magic links, verification). */
+  mail: boolean;
+}
+
+/** What the screen assumes until the server says otherwise: password only, invite-only. */
+export const LEGACY_AUTH_OPTIONS: AuthOptions = {
+  selfSignup: false,
+  signup: "invite",
+  methods: ["password"],
+  social: [],
+  mail: false,
+};
+
+/**
+ * Reads which optional sign-in routes the server serves.
+ *
+ * FAILS CLOSED: an older server with no /auth/options, a network error, or
+ * any answer but `selfSignup: true` reads as "sign-up is not offered". A
+ * hidden button costs an invited user nothing; a shown one that answers 404
+ * is a broken screen.
+ */
+export async function fetchAuthOptions(): Promise<AuthOptions> {
+  try {
+    const response = await fetch(`${apiOrigin()}/auth/options`, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return LEGACY_AUTH_OPTIONS;
+    const body = (await response.json()) as Partial<AuthOptions> | null;
+    // An older server answers only {selfSignup}; everything else stays legacy.
+    const known = new Set<string>(["password", "passkey", "magic_link"]);
+    const methods = Array.isArray(body?.methods)
+      ? body.methods.filter((m): m is SignInMethod => known.has(m))
+      : LEGACY_AUTH_OPTIONS.methods;
+    const social = Array.isArray(body?.social)
+      ? body.social.filter((s) => typeof s?.type === "string" && typeof s?.label === "string")
+      : [];
+    return {
+      selfSignup: body?.selfSignup === true,
+      signup: typeof body?.signup === "string" ? body.signup : "invite",
+      methods,
+      social,
+      mail: body?.mail === true,
+    };
+  } catch {
+    return LEGACY_AUTH_OPTIONS;
+  }
+}
+
+/**
+ * Reads what a password must contain, or null when the server cannot say.
+ *
+ * Null is a normal answer, not an error to show: the requirements are
+ * guidance, the server checks the password regardless, and a form with no
+ * checklist still works. The checklist is an upgrade, never a dependency.
+ * A 204 is the server saying so outright: the identity provider does not
+ * publish its policy (a hosted instance), so there is no checklist to draw.
+ */
+export async function fetchPasswordPolicy(): Promise<PasswordPolicy | null> {
+  try {
+    const response = await fetch(`${apiOrigin()}/auth/password-policy`, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok || response.status === 204) return null;
+    return (await response.json()) as PasswordPolicy;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Every rule of the policy `password` breaks, in display order.
+ *
+ * The character classes match the identity provider's: A-Z, a-z, 0-9, and a
+ * symbol is anything else (a space counts). GUIDANCE ONLY — the server
+ * decides.
+ */
+export function unmetRules(policy: PasswordPolicy, password: string): PasswordRule[] {
+  const unmet: PasswordRule[] = [];
+  if (policy.min_length > 0 && [...password].length < policy.min_length) {
+    unmet.push("min_length");
+  }
+  if (policy.has_uppercase && !/[A-Z]/.test(password)) unmet.push("uppercase");
+  if (policy.has_lowercase && !/[a-z]/.test(password)) unmet.push("lowercase");
+  if (policy.has_number && !/[0-9]/.test(password)) unmet.push("number");
+  if (policy.has_symbol && !/[^A-Za-z0-9]/.test(password)) unmet.push("symbol");
+  return unmet;
+}
+
+/** The rules the policy actually has, in display order. */
+export function activeRules(policy: PasswordPolicy): PasswordRule[] {
+  const rules: PasswordRule[] = [];
+  if (policy.min_length > 0) rules.push("min_length");
+  if (policy.has_uppercase) rules.push("uppercase");
+  if (policy.has_lowercase) rules.push("lowercase");
+  if (policy.has_number) rules.push("number");
+  if (policy.has_symbol) rules.push("symbol");
+  return rules;
+}
+
+/** One rule as the phrase a checklist shows: "At least 8 characters". */
+export function describeRule(policy: PasswordPolicy, rule: PasswordRule): string {
+  switch (rule) {
+    case "min_length":
+      return `At least ${policy.min_length} characters`;
+    case "uppercase":
+      return "An uppercase letter";
+    case "lowercase":
+      return "A lowercase letter";
+    case "number":
+      return "A number";
+    case "symbol":
+      return "A symbol";
+  }
+}
+
+/**
+ * The refusal as an AuthError.
+ *
+ * The server's message is already safe to display: sign-in failures are
+ * deliberately generic (a form that distinguishes "no such user" from "wrong
+ * password" is a user-enumeration oracle), while sign-up and reset failures
+ * are specific because the person filling in the form has to read them to fix
+ * it — a rejected password names the rules it breaks.
+ */
+async function rejection(response: Response): Promise<AuthError> {
+  try {
+    const body = (await response.json()) as {
+      error?: string;
+      unmet?: PasswordRule[];
+      code?: string;
+    };
+    if (body.error) {
+      return new AuthError(
+        body.error,
+        response.status,
+        Array.isArray(body.unmet) ? body.unmet : [],
+        typeof body.code === "string" ? body.code : "",
+      );
+    }
+  } catch {
+    // Fall through.
+  }
+  return new AuthError(
+    response.status >= 500
+      ? "The sign-in service is unavailable. Please try again."
+      : "Those credentials were not accepted.",
+    response.status,
+  );
+}
+
+// ── Passkeys, magic links, social sign-in, invitations ──────────────────
+//
+// Each is an ordinary POST to this app's API, like everything above. A
+// passkey's WebAuthn ceremony runs in the browser (it has to: the
+// authenticator is here), but the challenge comes from, and the answer goes
+// back to, this app's server, which checks the origin before the identity
+// provider sees it. The base64url conversions are inline: no dependency.
+
+/** base64url (padding optional) → bytes, for the WebAuthn options the server sends. */
+export function fromBase64url(value: string): ArrayBuffer {
+  const b64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob(padded);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bytes.buffer;
+}
+
+/** bytes → base64url without padding, for the credential the browser returns. */
+export function toBase64url(value: ArrayBuffer | ArrayBufferView): string {
+  const bytes = ArrayBuffer.isView(value)
+    ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+    : new Uint8Array(value);
+  let raw = "";
+  for (const b of bytes) raw += String.fromCharCode(b);
+  return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+interface JSONCredentialDescriptor {
+  type: PublicKeyCredentialType;
+  id: string;
+  transports?: AuthenticatorTransport[];
+}
+
+function descriptors(list: unknown): PublicKeyCredentialDescriptor[] {
+  return ((list as JSONCredentialDescriptor[] | undefined) ?? []).map((c) => ({
+    ...c,
+    id: fromBase64url(c.id),
+  }));
+}
+
+/** The server's request options (`{publicKey: {...}}`, base64url fields) as WebAuthn wants them. */
+export function toRequestOptions(options: unknown): CredentialRequestOptions {
+  const pk = (options as { publicKey: Record<string, unknown> }).publicKey;
+  return {
+    publicKey: {
+      ...pk,
+      challenge: fromBase64url(String(pk.challenge)),
+      allowCredentials: descriptors(pk.allowCredentials),
+    } as PublicKeyCredentialRequestOptions,
+  };
+}
+
+/** The server's creation options as WebAuthn wants them. */
+export function toCreationOptions(options: unknown): CredentialCreationOptions {
+  const pk = (options as { publicKey: Record<string, unknown> }).publicKey;
+  const user = pk.user as { id: string; name: string; displayName: string };
+  return {
+    publicKey: {
+      ...pk,
+      challenge: fromBase64url(String(pk.challenge)),
+      user: { ...user, id: fromBase64url(user.id) },
+      excludeCredentials: descriptors(pk.excludeCredentials),
+    } as PublicKeyCredentialCreationOptions,
+  };
+}
+
+/** A PublicKeyCredential as the JSON the server expects (every buffer base64url). */
+export function credentialToJSON(credential: PublicKeyCredential): Record<string, unknown> {
+  const response = credential.response as unknown as Record<string, unknown>;
+  const out: Record<string, string> = {};
+  for (const key of [
+    "clientDataJSON",
+    "authenticatorData",
+    "signature",
+    "userHandle",
+    "attestationObject",
+  ]) {
+    const v = response[key];
+    // Not `instanceof ArrayBuffer`: a buffer from another realm (an iframe, a
+    // test environment) fails it.
+    if (ArrayBuffer.isView(v) || Object.prototype.toString.call(v) === "[object ArrayBuffer]") {
+      out[key] = toBase64url(v as ArrayBuffer);
+    }
+  }
+  return {
+    id: credential.id,
+    rawId: toBase64url(credential.rawId),
+    type: credential.type,
+    response: out,
+  };
+}
+
+/** Whether this browser can do passkeys at all. */
+export function passkeysSupported(): boolean {
+  return typeof window !== "undefined" && typeof window.PublicKeyCredential === "function";
+}
+
+/**
+ * Signs in with a passkey. `email` may be omitted right after an invitation
+ * or a verification enrolled one: the server remembers whom, in this browser.
+ */
+export async function passkeySignIn(email?: string): Promise<Identity> {
+  const begin = (await request("/auth/passkey/begin", email ? { email } : {})) as {
+    options: unknown;
+  };
+  let credential: PublicKeyCredential | null;
+  try {
+    credential = (await navigator.credentials.get(
+      toRequestOptions(begin.options),
+    )) as PublicKeyCredential | null;
+  } catch {
+    // The person cancelled, or this device holds no passkey for the account.
+    credential = null;
+  }
+  if (!credential) throw new AuthError("No passkey was used.", 0, [], "passkey_cancelled");
+  return post("/auth/passkey/finish", { credential: credentialToJSON(credential) });
+}
+
+/** Adds a passkey to the signed-in (or just-invited) account. */
+export async function registerPasskey(name?: string): Promise<void> {
+  const begin = (await request("/auth/passkey/register/begin", {})) as { options: unknown };
+  let credential: PublicKeyCredential | null;
+  try {
+    credential = (await navigator.credentials.create(
+      toCreationOptions(begin.options),
+    )) as PublicKeyCredential | null;
+  } catch {
+    credential = null;
+  }
+  if (!credential) throw new AuthError("No passkey was created.", 0, [], "passkey_cancelled");
+  await request("/auth/passkey/register/finish", {
+    credential: credentialToJSON(credential),
+    name: name ?? "",
+  });
+}
+
+/** One registered passkey. */
+export interface PasskeySummary {
+  id: string;
+  name: string;
+}
+
+/** The signed-in account's passkeys. */
+export async function listPasskeys(): Promise<PasskeySummary[]> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiOrigin()}/auth/passkeys`, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new AuthError("Could not reach the sign-in service.", 0);
+  }
+  if (!response.ok) throw await rejection(response);
+  const body = (await response.json()) as { passkeys?: PasskeySummary[] };
+  return body.passkeys ?? [];
+}
+
+/**
+ * Emails a sign-in link that works in THIS browser only. Resolves with the
+ * server's message, which is the same whether or not the address can sign in.
+ */
+export async function requestMagicLink(email: string): Promise<string> {
+  const body = (await request("/auth/magic/request", { email })) as { message?: string };
+  return body.message ?? "If that address can sign in, a sign-in link is on its way.";
+}
+
+/**
+ * Redeems the code from a magic link: clicked, or typed from the email on
+ * another device into the tab that asked. Rejects with code
+ * "magic_other_browser" when this browser did not ask for the link.
+ */
+export async function consumeMagicLink(code: string): Promise<Identity> {
+  return post("/auth/magic/consume", { code });
+}
+
+/** Starts a social sign-in and leaves for the provider. */
+export async function socialStart(provider: string, returnTo?: string): Promise<void> {
+  const body = (await request("/auth/social/start", {
+    provider,
+    ...(returnTo ? { returnTo } : {}),
+  })) as { redirect: string };
+  window.location.assign(body.redirect);
+}
+
+/** What a social sign-in came back to: a session, or "confirm your address first". */
+export type SocialResult = { identity: Identity; returnTo: string } | VerifySent;
+
+/** Completes a social sign-in with the id and token the provider round trip appended. */
+export async function socialComplete(id: string, token: string): Promise<SocialResult> {
+  return (await request("/auth/social/callback", { id, token })) as SocialResult;
+}
+
+/**
+ * An invitation being accepted, with the method the invitee chose. "social"
+ * connects one of the deployment's social accounts (`provider` is its type).
+ */
+export interface InviteAcceptance {
+  userID: string;
+  code: string;
+  orgID?: string;
+  method: SignInMethod | "social";
+  password?: string;
+  provider?: string;
+}
+
+/** What accepting an invitation led to. */
+export type InviteResult = Identity | { enroll: true } | { message: string } | { redirect: string };
+
+/**
+ * Accepts an invitation. With a password: signed in (an Identity). With a
+ * passkey: `{enroll: true}`, then registerPasskey() and passkeySignIn().
+ * With a magic link: `{message}`, and the link is on its way to this browser.
+ * With a social account: `{redirect}`, and this leaves for the provider; the
+ * invitation is redeemed when the provider comes back to
+ * /auth/social/callback, in this browser.
+ */
+export async function acceptInvite(invite: InviteAcceptance): Promise<InviteResult> {
+  const result = (await request("/auth/invite/accept", invite)) as InviteResult;
+  if ("redirect" in result) window.location.assign(result.redirect);
+  return result;
+}
+
+/**
+ * What confirming an address answers. `enroll`: a passkey may be added now.
+ * `password: "not_set"`: the address is confirmed, but the password chosen at
+ * sign-up could not be saved; `reset`, when present, is a reset code for
+ * choosing one again right away (resetPassword).
+ */
+export interface VerifyResult {
+  verified: boolean;
+  enroll: boolean;
+  password?: "not_set";
+  reset?: { userID: string; code: string };
+  /**
+   * Sign-in methods the account held from before the address was confirmed
+   * were removed: nothing proves the address owner set them. Choose a
+   * password ("Forgot password") or add a passkey.
+   */
+  credentialsReset?: boolean;
+}
+
+/** Confirms an address from its verification link. */
+export async function verifyEmail(userID: string, code: string): Promise<VerifyResult> {
+  return (await request("/auth/verify", { userID, code })) as VerifyResult;
+}
+
+/** Mails a fresh verification link. The same answer for every address. */
+export async function resendVerification(email: string): Promise<string> {
+  const body = (await request("/auth/verify/resend", { email })) as { message?: string };
+  return body.message ?? "If that address is waiting to be confirmed, a new link is on its way.";
+}
