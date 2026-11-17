@@ -489,7 +489,7 @@ describe("BackgroundWorkPill", () => {
   // A command an agent left running is stopped from its row, on the machine
   // it runs on — the person's shell_kill.
   it("stops a running command on its machine", async () => {
-    const killProcess = vi.fn(() => ({ message: "ok" }));
+    const killProcess = vi.fn((_req: unknown) => ({ message: "ok" }));
     daemonProcesses = [
       {
         id: "proc-dev",
@@ -504,7 +504,7 @@ describe("BackgroundWorkPill", () => {
     setTransport(
       mockTransport({
         "BackgroundService.ListProcesses": () => ({ processes: daemonProcesses }),
-        "BackgroundService.KillProcess": (req: unknown) => killProcess(req as never),
+        "BackgroundService.KillProcess": (req: unknown) => killProcess(req),
       }),
     );
 
