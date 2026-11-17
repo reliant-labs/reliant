@@ -158,7 +158,14 @@ func (s *Service) ListProcesses(
 
 // listForChat lists the processes chatID's agents started, on the machine
 // the chat runs on. Another user's chat reads like a missing one, a shared
-// chat's viewer included: the processes run on the owner's machine.
+// chat's viewer included.
+//
+// CanWriteChat, not CanReadChat, on purpose: org sharing makes a viewer an
+// outsider here (viewertest.Matrix: BackgroundService/ListProcesses is
+// AsOutsider, beside GetToolResult). A process's command line and output are
+// the run's tool activity on the owner's machine, which a viewer of the
+// shared transcript is not given, and the owner's machine is not one a
+// viewer may ask anything of. TestBackgroundServiceViewerMatrix holds it.
 func (s *Service) listForChat(ctx context.Context, userID, chatID string) ([]*reliantv1.BackgroundProcess, error) {
 	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if errors.Is(err, core.ErrChatNotFound) || (err == nil && !authz.CanWriteChat(ctx, userID, chat)) {

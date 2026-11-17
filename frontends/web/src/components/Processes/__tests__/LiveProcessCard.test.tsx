@@ -22,6 +22,10 @@ vi.mock("../../../hooks/useProcessOutputStream", () => ({
 
 import { LiveProcessCard, LIVE_CARD_TAIL_LINES } from "../LiveProcessCard";
 
+// Fixed instants: nothing here may depend on when the test runs.
+const STARTED = "2026-11-17T10:00:00Z";
+const ENDED = "2026-11-17T10:05:00Z";
+
 let processes: MessageInitShape<typeof BackgroundProcessSchema>[] = [];
 const killProcess = vi.fn((_req: unknown) => ({ message: "ok" }));
 
@@ -57,7 +61,7 @@ describe("LiveProcessCard", () => {
         id: "proc-1",
         command: "npm run dev",
         status: BackgroundProcessStatus.RUNNING,
-        startTime: new Date().toISOString(),
+        startTime: STARTED,
         chatId: "chat-1",
         daemonId: "machine-2",
         ports: [{ port: 5173, protocol: "tcp", state: "LISTEN", address: "" }],
@@ -85,7 +89,7 @@ describe("LiveProcessCard", () => {
 
   it("stops the process on the machine it runs on", async () => {
     processes = [
-      { id: "proc-1", command: "npm run dev", status: BackgroundProcessStatus.RUNNING, startTime: new Date().toISOString(), daemonId: "machine-2" },
+      { id: "proc-1", command: "npm run dev", status: BackgroundProcessStatus.RUNNING, startTime: STARTED, daemonId: "machine-2" },
     ];
 
     renderCard();
@@ -102,8 +106,8 @@ describe("LiveProcessCard", () => {
         command: "go test ./...",
         status: BackgroundProcessStatus.COMPLETED,
         exitCode: 1,
-        startTime: new Date().toISOString(),
-        endTime: new Date().toISOString(),
+        startTime: STARTED,
+        endTime: ENDED,
       },
     ];
 

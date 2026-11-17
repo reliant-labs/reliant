@@ -36,6 +36,9 @@ import type { WorkflowExecutionData } from "../../../types/chat";
 import type { QuestionInfo } from "../../../gen/reliant/v1/question_pb";
 
 const CHAT_ID = "chat-abc";
+// A fixed start for the background commands below: no assertion may depend on
+// when the test runs.
+const PROCESS_STARTED = "2026-11-17T10:00:00Z";
 const WORKTREE_ID = "wt-1";
 
 const { usePendingQuestionsMock, useWorkflowExecutionsMock } = vi.hoisted(() => ({
@@ -495,7 +498,7 @@ describe("BackgroundWorkPill", () => {
         id: "proc-dev",
         command: "npm run dev",
         status: BackgroundProcessStatus.RUNNING,
-        startTime: new Date().toISOString(),
+        startTime: PROCESS_STARTED,
         workingDir: "/tmp",
         chatId: CHAT_ID,
         daemonId: "machine-2",
@@ -525,7 +528,7 @@ describe("BackgroundWorkPill", () => {
         id: "proc-panel",
         command: "make build",
         status: BackgroundProcessStatus.RUNNING,
-        startTime: new Date().toISOString(),
+        startTime: PROCESS_STARTED,
         workingDir: "/tmp",
         worktreeId: WORKTREE_ID,
       },
@@ -533,7 +536,7 @@ describe("BackgroundWorkPill", () => {
         id: "proc-agent",
         command: "go test ./...",
         status: BackgroundProcessStatus.RUNNING,
-        startTime: new Date().toISOString(),
+        startTime: PROCESS_STARTED,
         workingDir: "/tmp",
         chatId: CHAT_ID,
       },
