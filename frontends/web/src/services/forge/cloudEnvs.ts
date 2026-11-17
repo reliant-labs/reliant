@@ -427,13 +427,80 @@ export async function restartWorkload(environmentId: string, workload: string): 
   };
 }
 
+export interface DeleteEnvironmentOptions {
+  /**
+   * Retain the managed databases instead of deleting them. They keep running
+   * and billing as storage, and are listed by listRetainedDatabases until
+   * purged. A later deploy creates a NEW environment and does not reattach
+   * them.
+   */
+  keepData?: boolean;
+}
+
 /**
  * Tear the environment down. `force` removes its deployments with it, and
- * (keep_data unset, the control plane's default) its managed databases' data
+ * (keepData unset, the control plane's default) its managed databases' data
  * too, irreversibly: the caller's confirm must say so.
+ *
+ * Refused (FailedPrecondition) while a custom domain is bound to it, force or
+ * not: see isDomainBoundRefusal.
  */
-export async function deleteEnvironment(environmentId: string): Promise<void> {
-  await client().deleteEnvironment({ environmentId, force: true });
+export async function deleteEnvironment(environmentId: string, options: DeleteEnvironmentOptions = {}): Promise<void> {
+  await client().deleteEnvironment({ environmentId, force: true, keepData: options.keepData ?? false });
+}
+
+/**
+ * True when DeleteEnvironment refused because a custom domain still points at
+ * the environment. The control plane says so in its message (deploy
+ * handlers' errors.go, ErrEnvironmentDomainBound) and carries no reason code
+ * for it, so the message is what is matched; the remedy is to unbind first.
+ */
+export function isDomainBoundRefusal(err: unknown): boolean {
+  if (!(err instanceof ConnectError) || err.code !== Code.FailedPrecondition) return false;
+  return /still the target of (a )?custom domain/i.test(err.rawMessage || err.message);
+}
+
+// ── Retained databases ──────────────────────────────────────────────────────
+
+/**
+ * A managed database whose environment was deleted with keep data. Its data
+ * still exists and still bills as storage until it is purged.
+ */
+export interface RetainedDatabase {
+  id: string;
+  environmentId: string;
+  environmentName: string;
+  /** The forge project (app) it belonged to. */
+  project: string;
+  databaseName: string;
+  /** Provisioned storage across all instances, in GiB. */
+  storageGib: number;
+  retainedAt?: string;
+}
+
+/** Every retained database of the caller's org, across its apps. */
+export async function listRetainedDatabases(): Promise<RetainedDatabase[]> {
+  const res = await client().listRetainedDatabases({});
+  return (res.retainedDatabases ?? [])
+    .filter((row) => row.id !== "")
+    .map((row) => ({
+      id: row.id,
+      environmentId: row.environmentId,
+      environmentName: row.environmentName,
+      project: row.project,
+      databaseName: row.databaseName,
+      storageGib: Number(row.storageGib),
+      retainedAt: toISO(row.retainedAt),
+    }));
+}
+
+/**
+ * Destroy one retained database's cluster and volumes. IRREVERSIBLE. The
+ * control plane records the request and its converger performs it; the row
+ * stays listed until the volumes are actually gone.
+ */
+export async function purgeRetainedDatabase(id: string): Promise<void> {
+  await client().deleteRetainedDatabase({ id });
 }
 
 /** True when the control plane refused for a reason the user can act on (billing, permission). */

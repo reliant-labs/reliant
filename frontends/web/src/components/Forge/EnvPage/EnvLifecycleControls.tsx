@@ -5,31 +5,39 @@
  *
  * Only rendered for environments the control plane places (persistent,
  * preview): local and self-managed environments have nothing here for it to
- * stop. The UI does not know the caller's role, so a non-admin's click is
- * answered by the server's PermissionDenied, shown inline, rather than hidden.
+ * stop.
+ *
+ * WHO MAY (orgAuthority.ts, D19): Stop and Start need deploy:write on the
+ * environment, which a member may hold bound to it, so they are never
+ * disabled on the role alone. Delete needs an org owner or admin, so the menu
+ * item is disabled for a known member. Either way the server decides, and a
+ * PermissionDenied is shown inline, in words.
  *
  * START is not confirmed — it only costs what the plan already allows — but it
  * can be REFUSED (billing), and that refusal is shown verbatim, inline, not as
- * a generic toast. STOP gets a one-line confirm. DELETE needs the environment
- * name typed, and says plainly that its databases are deleted with it, data
- * included (the control plane's default since control-plane #1541), naming
- * `forge env delete <env> --keep-data` as the way to keep them.
+ * a generic toast. STOP gets a confirm that says what keeps billing: storage
+ * (D16). DELETE (DeleteEnvironmentDialog.tsx) needs the environment name
+ * typed, says what is deleted and what is kept, and asks whether to keep the
+ * databases.
  */
 
 import { useState } from "react";
 import { MoreHorizontal, Play, Square, Trash2 } from "lucide-react";
 
 import DropdownMenu from "@/components/forge-ui/dropdown_menu";
-import { FormField } from "@/components/forge-ui/form";
-import Input from "@/components/forge-ui/input";
-import Label from "@/components/forge-ui/label";
 import Modal from "@/components/forge-ui/modal";
 import Button from "@/components/forge-ui/button";
-import { useDeleteEnvironment, useSetEnvironmentRunState } from "@/hooks/forge-queries";
-import { cloudErrorDetail, type CloudEnvStatus } from "@/services/forge/cloudEnvs";
+import { useSetEnvironmentRunState } from "@/hooks/forge-queries";
+import type { CloudEnvStatus } from "@/services/forge/cloudEnvs";
 
 import { useObsReadOnly } from "../Observability/obsReadOnly";
+import { DELETE_ENV_NEEDS_ADMIN, refusalText, useOrgAuthority } from "../orgAuthority";
 import { environmentStopped } from "../runStateVocabulary";
+import { DeleteEnvironmentDialog } from "./DeleteEnvironmentDialog";
+
+export { DeleteEnvironmentDialog };
+
+const stopNeeds = (envName: string) => `Stopping or starting ${envName} needs deploy:write on it.`;
 
 export function EnvLifecycleControls({
   environmentId,
@@ -50,6 +58,8 @@ export function EnvLifecycleControls({
   const stopped = environmentStopped(workloads);
   const startError = setRunState.isError && setRunState.variables === "running" ? setRunState.error : null;
   const lock = useObsReadOnly();
+  const authority = useOrgAuthority();
+  const canDelete = authority !== "member";
 
   // The demo console: the controls show, off, saying why (obsReadOnly.tsx); no danger menu.
   if (lock.readOnly) {
@@ -114,6 +124,8 @@ export function EnvLifecycleControls({
                   icon: <Trash2 className="h-3.5 w-3.5" />,
                   variant: "danger",
                   testId: "env-action-delete",
+                  disabled: !canDelete,
+                  hint: canDelete ? undefined : <span title={DELETE_ENV_NEEDS_ADMIN}>Owner or admin</span>,
                   onClick: () => setDeleteOpen(true),
                 },
               ],
@@ -128,7 +140,7 @@ export function EnvLifecycleControls({
           className="max-w-md text-right text-xs text-ink"
           data-testid="env-start-refused"
         >
-          Couldn&apos;t start {envName}: {cloudErrorDetail(startError)}
+          Couldn&apos;t start {envName}: {refusalText(startError, stopNeeds(envName))}
         </p>
       )}
 
@@ -136,7 +148,11 @@ export function EnvLifecycleControls({
         isOpen={stopOpen}
         envName={envName}
         pending={setRunState.isPending}
-        error={setRunState.isError && setRunState.variables === "suspended" ? cloudErrorDetail(setRunState.error) : null}
+        error={
+          setRunState.isError && setRunState.variables === "suspended"
+            ? refusalText(setRunState.error, stopNeeds(envName))
+            : null
+        }
         onClose={() => setStopOpen(false)}
         onConfirm={() => setRunState.mutate("suspended", { onSuccess: () => setStopOpen(false) })}
       />
@@ -144,6 +160,7 @@ export function EnvLifecycleControls({
         isOpen={deleteOpen}
         environmentId={environmentId}
         envName={envName}
+        workloads={workloads.map((workload) => workload.name ?? "").filter((name) => name !== "")}
         onClose={() => setDeleteOpen(false)}
         onDeleted={onDeleted}
       />
@@ -170,7 +187,17 @@ export function StopEnvironmentDialog({
     <Modal open={isOpen} onClose={onClose} size="sm" title={`Stop ${envName}?`}>
       <div className="space-y-4" data-testid="stop-environment-dialog">
         <p className="text-sm text-ink">
-          Compute stops. Data and URLs are kept. Start brings it back.
+          Compute stops: workloads scale to zero, databases hibernate and static sites are unpublished. Data, URLs,
+          secrets and domains are kept. Start brings it back.
+        </p>
+        {/* D16: Stop is not zero cost. No API reports one environment's
+            storage cost on its own (GetProjectCost files database volumes
+            under "databases" together with database compute), so this says
+            so instead of showing a derived number. */}
+        <p className="text-sm text-ink-muted" data-testid="stop-environment-storage-note">
+          Storage keeps billing while it is stopped: database volumes and the site&apos;s files are kept. Reliant
+          can&apos;t show that amount for one environment yet. Deleting the environment without keeping its data stops
+          its charges.
         </p>
         {error && (
           <p role="alert" className="text-xs text-ink" data-testid="stop-environment-error">
@@ -190,89 +217,6 @@ export function StopEnvironmentDialog({
             data-testid="stop-environment-confirm"
           >
             Stop environment
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-export function DeleteEnvironmentDialog({
-  isOpen,
-  environmentId,
-  envName,
-  onClose,
-  onDeleted,
-}: {
-  isOpen: boolean;
-  environmentId: string;
-  envName: string;
-  onClose: () => void;
-  onDeleted?: () => void;
-}) {
-  const del = useDeleteEnvironment(environmentId);
-  const [typed, setTyped] = useState("");
-  const matches = typed === envName;
-
-  const close = () => {
-    setTyped("");
-    del.reset();
-    onClose();
-  };
-
-  return (
-    <Modal open={isOpen} onClose={close} size="md" title={`Delete ${envName}?`}>
-      <div className="space-y-4" data-testid="delete-environment-dialog">
-        <div className="space-y-2 text-sm text-ink">
-          <p>
-            This tears down <span className="font-mono">{envName}</span>: every deployment in it, its
-            running workloads, its URLs, and its namespaces.
-          </p>
-          <p data-testid="delete-environment-data-note">
-            Its databases are <strong>deleted</strong> with it, data included. This cannot be undone. To
-            keep the databases, delete from the CLI with{" "}
-            <code className="font-mono">reliant forge env delete {envName} --keep-data</code>.
-          </p>
-          <p>
-            To bring the environment back (empty), run <code className="font-mono">reliant forge env deploy {envName}</code>{" "}
-            or use the Deploy button.
-          </p>
-        </div>
-        <FormField className="forge-ui">
-          <Label>Type {envName} to confirm</Label>
-          <Input
-            value={typed}
-            onChange={(event) => setTyped(event.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            data-testid="delete-environment-confirm-input"
-          />
-        </FormField>
-        {del.isError && (
-          <p role="alert" className="text-xs text-ink" data-testid="delete-environment-error">
-            {cloudErrorDetail(del.error)}
-          </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={close} disabled={del.isPending}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            loading={del.isPending}
-            disabled={!matches || del.isPending}
-            onClick={() =>
-              del.mutate(undefined, {
-                onSuccess: () => {
-                  close();
-                  onDeleted?.();
-                },
-              })
-            }
-            data-testid="delete-environment-confirm"
-          >
-            Delete environment
           </Button>
         </div>
       </div>

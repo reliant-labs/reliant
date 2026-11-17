@@ -68,7 +68,8 @@ describe("environment controls", () => {
     wrap(<EnvLifecycleControls environmentId="env_1" envName="prod" status={status("running")} />);
     await userEvent.click(screen.getByTestId("env-action-stop"));
     expect(setEnvironmentRunState).not.toHaveBeenCalled();
-    expect(screen.getByText(/Compute stops\. Data and URLs are kept\. Start brings it back\./)).toBeTruthy();
+    expect(screen.getByTestId("stop-environment-dialog").textContent).toContain("Start brings it back.");
+    expect(screen.getByTestId("stop-environment-storage-note").textContent).toContain("Storage keeps billing while it is stopped");
     await userEvent.click(screen.getByTestId("stop-environment-confirm"));
     await waitFor(() => expect(setEnvironmentRunState).toHaveBeenCalledWith("env_1", "suspended"));
   });
@@ -90,9 +91,9 @@ describe("environment controls", () => {
     await userEvent.click(screen.getByTestId("env-danger-menu"));
     await userEvent.click(await screen.findByTestId("env-action-delete"));
     const note = screen.getByTestId("delete-environment-data-note").textContent ?? "";
-    expect(note).toContain("deleted");
+    expect(note).toContain("deleted with it, data included");
     expect(note).toContain("cannot be undone");
-    expect(note).toContain("forge env delete prod --keep-data");
+    expect(note).toContain("Keep data");
     expect(screen.getByTestId("delete-environment-dialog").textContent).toContain("forge env deploy prod");
 
     const confirm = screen.getByTestId("delete-environment-confirm") as HTMLButtonElement;
@@ -102,7 +103,7 @@ describe("environment controls", () => {
     await userEvent.type(screen.getByTestId("delete-environment-confirm-input"), "d");
     expect(confirm.disabled).toBe(false);
     await userEvent.click(confirm);
-    await waitFor(() => expect(deleteEnvironment).toHaveBeenCalledWith("env_1"));
+    await waitFor(() => expect(deleteEnvironment).toHaveBeenCalledWith("env_1", { keepData: false }));
   });
 });
 
