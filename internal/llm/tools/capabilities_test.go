@@ -268,6 +268,34 @@ func TestCapabilities_ExplainSaysWhyAToolWasNotOffered(t *testing.T) {
 	assert.Contains(t, caps.Explain("spawn"), "Spawning sub-agents is not available")
 }
 
+// reliant#2757: a sub-agent told to fan out asked load_tool for spawn and got
+// "not found in the registry". The refusal names the depth limit and what to
+// do instead, at load_tool and at execution, and survives the trip through
+// workflow history.
+func TestCapabilities_SpawnRefusalNamesTheDepthLimit(t *testing.T) {
+	t.Parallel()
+
+	sub := ResolveCapabilities(CapabilityInputs{
+		Access:              ResolveToolAccess([]string{ToolView}, []string{LoadableWildcard}, nil),
+		Permission:          PermissionOrchestrator,
+		SpawnDepthExhausted: true,
+	})
+	require.True(t, sub.SpawnDepthExhausted)
+	assert.False(t, sub.Offers(ToolSpawn))
+	for _, why := range []string{sub.LoadRefusal(ToolSpawn), sub.Explain(ToolSpawn)} {
+		assert.Contains(t, why, "cannot spawn sub-agents of its own")
+		assert.Contains(t, why, "spawn_send")
+		assert.NotContains(t, why, "not found in the registry")
+	}
+	back := CapabilitiesFromProto(sub.Proto())
+	require.NotNil(t, back)
+	assert.True(t, back.SpawnDepthExhausted, "the reason must reach execute_tools, where load_tool runs")
+
+	root := declaredCaps(PermissionOrchestrator, []string{ToolView}, []string{LoadableWildcard}, nil)
+	assert.Contains(t, root.LoadRefusal(ToolSpawn), "declares spawn presets",
+		"a root agent whose node declares no spawn is told why, not that the tool does not exist")
+}
+
 func TestCapabilities_ProtoRoundTrip(t *testing.T) {
 	t.Parallel()
 

@@ -1205,8 +1205,7 @@ func (a *CallLLMActivity) mcpRuntimeFromContext(ctx context.Context) tools.MCPRu
 func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, thread string, history []message.Message, rtx RuntimeContext, args *reliantv1.CallLLMArgs) (*reliantv1.CallLLMOutput, error) {
 	// Extract options from runtime context
 	// Check if this workflow has reached the maximum spawn depth (prevents unbounded recursive spawn)
-	const maxSpawnDepth = 1
-	spawnDisabled := rtx.SpawnDepth >= maxSpawnDepth
+	spawnDisabled := rtx.SpawnDepth >= tools.MaxSpawnDepth
 
 	// Resolve tools configuration. There is no separate "are tools enabled"
 	// switch: the expanded list IS the answer, and a node that declares nothing
@@ -1495,6 +1494,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			Grants:           rtx.ToolGrants,
 			MailboxReachable: mailboxReachable,
 			CanSpawnChildren: canSpawnChildren,
+			SpawnDepthMaxed:  spawnDisabled,
 			SpawnPresets:     spawnPresets,
 			ResponseTool:     responseToolName,
 			Unattended:       rtx.Unattended,
@@ -2441,6 +2441,7 @@ type toolRequest struct {
 	Grants           []string // load_tool grants recorded for this thread (rtx.ToolGrants)
 	MailboxReachable bool
 	CanSpawnChildren bool
+	SpawnDepthMaxed  bool // the agent's spawn depth reached tools.MaxSpawnDepth: it is offered no spawn
 	SpawnPresets     []string
 	ResponseTool     string
 	Unattended       bool // rtx.Unattended: nobody is attending the run
@@ -2624,19 +2625,20 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 	ownChildren, inheritedChildren := a.spawnHistory(ctx, chat, req.Thread)
 
 	caps := tools.ResolveCapabilities(tools.CapabilityInputs{
-		Access:             access,
-		Permission:         req.Permission,
-		NoMachine:          noMachine,
-		Grants:             req.Grants,
-		MCPTools:           mcpToolNames,
-		MailboxReachable:   req.MailboxReachable,
-		CanSpawnChildren:   req.CanSpawnChildren,
-		OwnChildren:        ownChildren,
-		InheritedChildren:  inheritedChildren,
-		SpawnPresets:       req.SpawnPresets,
-		ResponseTool:       req.ResponseTool,
-		UsableIntegrations: usable,
-		Unattended:         req.Unattended,
+		Access:              access,
+		Permission:          req.Permission,
+		NoMachine:           noMachine,
+		Grants:              req.Grants,
+		MCPTools:            mcpToolNames,
+		MailboxReachable:    req.MailboxReachable,
+		CanSpawnChildren:    req.CanSpawnChildren,
+		OwnChildren:         ownChildren,
+		InheritedChildren:   inheritedChildren,
+		SpawnPresets:        req.SpawnPresets,
+		SpawnDepthExhausted: req.SpawnDepthMaxed,
+		ResponseTool:        req.ResponseTool,
+		UsableIntegrations:  usable,
+		Unattended:          req.Unattended,
 	})
 
 	logDebug("[CallLLM] Tool capabilities resolved",
@@ -2820,6 +2822,8 @@ KEEP ABOUT 6 SUB-AGENTS OUTSTANDING AT ONCE. Past that the provider starts throt
 While a spawned agent runs you can steer, observe and stop it: spawn_status(agent_id, wait: true) to block until it finishes when you genuinely cannot proceed without the answer, or without wait to just check progress; spawn_send to give it new instructions mid-flight; spawn_stop(agent_id) to abandon work you no longer need — note that the stop takes effect at that agent's next step boundary, so confirm it with spawn_status(agent_id, wait: true) rather than assuming. Prefer spawn_send to REDIRECT an agent whose work is still useful; stopping discards whatever it has not reported. spawn_status with no agent_id lists your children and their states, which is how you count what is outstanding before spawning more.
 
 If an agent fails for good (its provider keeps erroring, say), only that agent stops — you keep running — and you are notified with status="failed", the error and its agent_id. Deciding what happens next is yours: resume it where it stopped with spawn(agent_id, prompt), retry the work with a fresh agent, or continue without it.
+
+A sub-agent you spawn CANNOT spawn sub-agents of its own (spawning nests one level deep). Do the fanning out yourself: give each sub-agent one unit of work, and never tell one to "use sub-agents" or "fan out" — it will have no spawn tool and will do the work serially.
 
 Available presets:
 %s
