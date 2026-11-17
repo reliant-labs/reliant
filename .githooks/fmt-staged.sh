@@ -35,11 +35,23 @@ NC='\033[0m'
 
 cd "$(git rev-parse --show-toplevel)"
 
+# A merge commit stages everything the merged branch brought in: merging
+# origin/main into a long-lived branch staged ~900 files and took ~15 minutes
+# here. A file whose staged content is exactly the merged branch's is that
+# branch's, already formatted as it is there, so only files that differ from
+# it are formatted: this branch's own changes and the conflict resolutions. An
+# octopus merge (several MERGE_HEADs) keeps the plain staged set.
+compare_to=()
+merge_head_file="$(git rev-parse --git-path MERGE_HEAD)"
+if [ -f "$merge_head_file" ] && [ "$(grep -c . "$merge_head_file")" = 1 ]; then
+    compare_to=("$(head -n 1 "$merge_head_file")")
+fi
+
 # Added, copied, modified or renamed: a deletion has nothing to format.
 staged=()
 while IFS= read -r -d '' f; do
     [ -f "$f" ] && staged+=("$f") # staged, then deleted from the work tree: nothing to format
-done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+done < <(git diff --cached --name-only --diff-filter=ACMR -z "${compare_to[@]+"${compare_to[@]}"}")
 
 # Files with unstaged edits too (bash 3.2 has no associative arrays, so this
 # is a newline-joined list matched with a case pattern).
