@@ -58,7 +58,7 @@ import (
 // testSeedSQL seeds the shared "test-project" that many tests reference by ID
 // to satisfy the projects FK on chats. Its path is a unique sentinel (not the
 // common "/tmp/test") so it never collides with tests that create their own
-// project at that path via the projects_user_id_path_key unique index.
+// project at that path via the projects_org_user_path_key unique index.
 const testSeedSQL = `INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active)
 	VALUES ('test-project', 'test-user', 'Test Project', '/tmp/reliant-test-seed-project', NOW(), NOW(), NOW())
 	ON CONFLICT (id) DO NOTHING`

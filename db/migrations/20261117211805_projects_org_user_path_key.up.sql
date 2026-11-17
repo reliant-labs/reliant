@@ -1,0 +1,34 @@
+-- forge:backward-compatible — a new unique index whose key (user_id, path, org) is finer than the existing UNIQUE (user_id, path): every row the previous release can write satisfies both, and no statement of it names the index.
+
+-- Migration: projects_org_user_path_key
+-- Created: 2026-11-17T21:18:05Z
+--
+-- A project is unique per (org, user, path), not per (user, path): the same
+-- folder may be a project in two organizations (owner decision, 2026-11-17).
+-- This is the expand half; 20261117211839_projects_drop_user_path_key drops
+-- the old UNIQUE (user_id, path).
+--
+-- HOW A ROW WITH NO ORG IS KEYED. projects.org_id is NULL for a row written
+-- before orgs, or by a create that could not resolve an org; the lazy
+-- backfill (internal/orgs ListScope -> store.AssignUnassignedOrg) stamps it
+-- with its owner's default org later. COALESCE(org_id, '') puts every such
+-- row in one "no org yet" bucket per user (projects_org_id_not_blank keeps ''
+-- from ever naming a real org): two unassigned rows at one path still
+-- collide, exactly as before. An unassigned row and an org's row at the same
+-- path do not collide here; the create-time checks refuse that pair when the
+-- org is the user's default (the unassigned row is its, lazily), and the
+-- backfill leaves such a row unassigned rather than stamp it into a
+-- collision. COALESCE, not NULLS NOT DISTINCT, so the index builds on every
+-- Postgres a self-hosted deployment may run (NULLS NOT DISTINCT is 15+).
+--
+-- user_id and path lead, so a lookup by (user_id, path) — every org's, the
+-- behaviour of a request that names no org — is served by this index once the
+-- old one is gone.
+--
+-- CONCURRENTLY cannot run in a transaction block, so this is the only
+-- statement in the file. A build that fails leaves an INVALID index that IF
+-- NOT EXISTS then skips: drop it with DROP INDEX CONCURRENTLY
+-- projects_org_user_path_key and re-run. It cannot fail on existing rows: any
+-- two rows the old key let coexist differ in (user_id, path) already.
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS projects_org_user_path_key
+    ON public.projects (user_id, path, (COALESCE(org_id, '')));

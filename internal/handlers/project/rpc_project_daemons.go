@@ -176,6 +176,33 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 	// A project of an org the user has left is not theirs to put on a
 	// machine any more.
 	projects = authz.Visible(ctx, userID, projects, authz.CanWriteProject)
+	// Nor is a project of another org than the machine's: a machine holds
+	// only its organization's projects. Unknown, nothing is healed —
+	// creating a directory is the irreversible direction.
+	machine, err := s.deps.Repo.GetDaemon(ctx, daemonID)
+	if err != nil && !svcerr.IsNotFound(err) {
+		logging.Warn("project-dir-heal: failed to read the machine", "error", err, "userID", userID, "daemonID", daemonID)
+		return nil
+	}
+	if err != nil {
+		// No registry row: a machine of no known org, healed as before
+		// machines had orgs (machineScope of nil is every org's).
+		machine = nil
+	}
+	scope, err := s.machineScope(ctx, machine)
+	if err != nil {
+		logging.Warn("project-dir-heal: could not tell which organization's projects the machine holds", "error", err, "userID", userID, "daemonID", daemonID)
+		return nil
+	}
+	if scope != nil {
+		inScope := projects[:0]
+		for _, project := range projects {
+			if project != nil && scope.Includes(project.OrgID) {
+				inScope = append(inScope, project)
+			}
+		}
+		projects = inScope
+	}
 	if len(projects) == 0 {
 		return nil
 	}

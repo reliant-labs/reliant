@@ -38,7 +38,10 @@ type Repository interface {
 	// Projects a daemon reports, the installs it finishes, and the project
 	// config it pushes. GetProjectMachineCatalogPushedAt reads the one column
 	// the staleness check needs, never the whole (large) record.
-	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*db.Project, error)
+	// GetProjectByPathAndUserInScope resolves a reported path in the
+	// machine's org (nil scope: any org): the same path may be a project in
+	// each of the user's orgs.
+	GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*db.Project, error)
 	// GetProjectWithUserCheck resolves the project of the machine's own
 	// checkout at a path (ensureOwnedProjectForPath).
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
@@ -82,7 +85,13 @@ type ProjectReconcileStore interface {
 	// settles one from the machine's filesystem announcement.
 	MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error
 	FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error
-	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*db.Project, error)
+	// GetProjectByRemoteURLAndUserInScope finds the user's project of a
+	// remote in one org (nil scope: any): the remote backfill's uniqueness
+	// check, per (org, user, remote_url).
+	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*db.Project, error)
+	// DeleteProjectDaemon removes a checkout row only: the reconcile's
+	// detach of another org's project from the machine.
+	DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error
 	// ListProjectDaemonDetachmentsForDaemon is what the user detached from
 	// the machine: a folder there is left unrecorded (DetachProjectFromDaemon).
 	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)

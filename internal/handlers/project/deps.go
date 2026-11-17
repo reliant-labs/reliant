@@ -29,6 +29,11 @@ type Repository interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*db.Project, error)
 	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*db.Project, error)
+	// GetProjectByPathAndUserInScope and GetProjectByRemoteURLAndUserInScope
+	// find the user's project in one org (nil scope: any org). Projects are
+	// unique per (org, user, path) and (org, user, remote_url).
+	GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*db.Project, error)
+	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*db.Project, error)
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
 	UpdateProject(ctx context.Context, project *db.Project, userID string) error

@@ -26,6 +26,8 @@ import (
 // expect it to succeed with no round trip to the machine.
 //
 // Refused as well:
+//   - a project of another org than the machine's (FailedPrecondition): a
+//     machine holds only its organization's projects;
 //   - a folder that is already ANOTHER project's checkout on the machine
 //     (AlreadyExists): one folder is one project per machine;
 //   - a clone of the project still landing on the machine (FailedPrecondition):
@@ -60,10 +62,19 @@ func (s *Service) AttachProjectToDaemon(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
-	if _, err := s.ownedMachine(ctx, userID, daemonID); err != nil {
+	machine, err := s.ownedMachine(ctx, userID, daemonID)
+	if err != nil {
 		return nil, err
 	}
-	if other, err := s.projectAtPathOn(ctx, userID, daemonID, path); err != nil {
+	// A machine holds its own org's projects only.
+	if err := s.requireMachineHolds(ctx, machine, project); err != nil {
+		return nil, err
+	}
+	scope, err := s.machineScope(ctx, machine)
+	if err != nil {
+		return nil, err
+	}
+	if other, err := s.projectAtPathOn(ctx, userID, daemonID, path, scope); err != nil {
 		return nil, err
 	} else if other != nil && other.ID != project.ID {
 		return nil, svcerr.AlreadyExists(fmt.Sprintf("%s is already the project %q on %s", path, other.Name, s.machineName(ctx, daemonID)))

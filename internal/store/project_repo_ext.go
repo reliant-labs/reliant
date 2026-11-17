@@ -94,10 +94,33 @@ func GetProjectByPath(ctx context.Context, db orm.Context, path string) (*core.P
 	return p, nil
 }
 
-// GetProjectByPathAndUser returns the user's project at path, or an error
-// naming the path when there is none.
+// GetProjectByPathAndUser returns the user's project at path in any org (the
+// oldest, when the path is a project in several), or an error naming the
+// path when there is none.
 func GetProjectByPathAndUser(ctx context.Context, db orm.Context, path, userID string) (*core.Project, error) {
-	p, err := firstProject(ctx, db, orm.WhereEq(ProjectFieldPath, path), orm.WhereEq(ProjectFieldUserID, userID))
+	return GetProjectByPathAndUserInScope(ctx, db, path, userID, nil)
+}
+
+// GetProjectByRemoteURLAndUser returns the user's project cloned from
+// remoteURL (compared without credentials) in any org (the oldest, when the
+// repo is a project in several), or an error naming the URL when there is
+// none.
+func GetProjectByRemoteURLAndUser(ctx context.Context, db orm.Context, remoteURL, userID string) (*core.Project, error) {
+	return GetProjectByRemoteURLAndUserInScope(ctx, db, remoteURL, userID, nil)
+}
+
+// GetProjectByPathAndUserInScope is GetProjectByPathAndUser kept to scope:
+// the user's project at path in that org (and, when the scope includes them,
+// one with no org yet). A nil scope is every org's, as GetProjectByPathAndUser.
+// Projects are unique per (org, user, path), so the same path may be a
+// project in several orgs; when more than one matches, the oldest is
+// returned, so the answer never depends on the plan.
+func GetProjectByPathAndUserInScope(ctx context.Context, db orm.Context, path, userID string, scope *core.OrgScope) (*core.Project, error) {
+	opts := []orm.QueryOption{orm.WhereEq(ProjectFieldPath, path), orm.WhereEq(ProjectFieldUserID, userID)}
+	if scope != nil {
+		opts = append(opts, whereOrg(ProjectFieldOrgID, scope))
+	}
+	p, err := firstProject(ctx, db, append(opts, oldestProjectFirst...)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project by path and user: %w", err)
 	}
@@ -107,13 +130,17 @@ func GetProjectByPathAndUser(ctx context.Context, db orm.Context, path, userID s
 	return p, nil
 }
 
-// GetProjectByRemoteURLAndUser returns the user's project cloned from
-// remoteURL (compared without credentials), or an error naming the URL when
-// there is none.
-func GetProjectByRemoteURLAndUser(ctx context.Context, db orm.Context, remoteURL, userID string) (*core.Project, error) {
-	p, err := firstProject(ctx, db,
+// GetProjectByRemoteURLAndUserInScope is GetProjectByRemoteURLAndUser kept
+// to scope, as GetProjectByPathAndUserInScope is to its path.
+func GetProjectByRemoteURLAndUserInScope(ctx context.Context, db orm.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error) {
+	opts := []orm.QueryOption{
 		orm.WhereEq(ProjectFieldRemoteURL, gitremote.StripCredentials(remoteURL)),
-		orm.WhereEq(ProjectFieldUserID, userID))
+		orm.WhereEq(ProjectFieldUserID, userID),
+	}
+	if scope != nil {
+		opts = append(opts, whereOrg(ProjectFieldOrgID, scope))
+	}
+	p, err := firstProject(ctx, db, append(opts, oldestProjectFirst...)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project by remote_url and user: %w", err)
 	}
@@ -121,6 +148,12 @@ func GetProjectByRemoteURLAndUser(ctx context.Context, db orm.Context, remoteURL
 		return nil, fmt.Errorf("%w for remote_url: %s", svcerr.NotFound("project"), remoteURL)
 	}
 	return p, nil
+}
+
+// oldestProjectFirst orders a lookup that may match one project per org.
+var oldestProjectFirst = []orm.QueryOption{
+	orm.WithOrderBy(ProjectFieldCreatedAt, orm.Asc),
+	orm.WithOrderBy(ProjectFieldID, orm.Asc),
 }
 
 // GetProjectWithUserCheck returns the project when it is the user's, else

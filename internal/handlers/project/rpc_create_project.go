@@ -49,12 +49,36 @@ func (s *Service) CreateProject(
 		return nil, err
 	}
 
+	// "Already a project" is asked in one org: the request's. Projects are
+	// unique per (org, user, path), so a folder that is a project in another
+	// of the caller's orgs is a new project here.
+	scope, err := s.orgScope(ctx, userID, orgID)
+	if err != nil {
+		return nil, err
+	}
+
 	// pinned is the machine the request names (daemon_id); "" is today's
 	// default resolution. A named machine is resolved, and an existing
 	// project attached, before anything below (findOrAttachOn).
 	pinned := req.Msg.GetDaemonId()
 	if pinned != "" {
-		resp, err := s.findOrAttachOn(ctx, userID, pinned, req.Msg.Path)
+		machine, err := s.ownedMachine(ctx, userID, pinned)
+		if err != nil {
+			return nil, err
+		}
+		// A machine holds its own org's projects only: a project made, or
+		// found, in another org is not recorded on it.
+		if err := s.requireMachineInOrg(ctx, machine, orgID); err != nil {
+			return nil, err
+		}
+		if scope == nil {
+			// The request acts in no org: the machine's keeps the find
+			// half from attaching another org's project to it.
+			if scope, err = s.machineScope(ctx, machine); err != nil {
+				return nil, err
+			}
+		}
+		resp, err := s.findOrAttachOn(ctx, userID, pinned, req.Msg.Path, scope)
 		if err != nil || resp != nil {
 			return resp, err
 		}
@@ -67,15 +91,17 @@ func (s *Service) CreateProject(
 		return s.sendProjectDaemonCommand(ctx, userID, commandType, payload, resp)
 	}
 
-	// Check if project already exists for this user and path. Path-only
-	// lookups are nondeterministic in multi-user setups (the projects table
-	// allows the same path under different user_ids), so scope the check.
+	// Check if project already exists for this user and path, in the org
+	// the request acts in. Path-only lookups are nondeterministic in
+	// multi-user setups (the projects table allows the same path under
+	// different user_ids), so scope the check; projects are unique per
+	// (org, user, path), so scope it to the org too.
 	//
 	// AlreadyExists is the "find" half of find-or-create: every --project-path
 	// resolution lands here on the second and later runs. A row is not a
 	// directory, so before handing the caller an id to bind a run to, confirm
 	// the directory the row names is still there.
-	if existing, err := s.deps.Repo.GetProjectByPathAndUser(ctx, req.Msg.Path, userID); pinned == "" && err == nil && existing != nil {
+	if existing, err := s.deps.Repo.GetProjectByPathAndUserInScope(ctx, req.Msg.Path, userID, scope); pinned == "" && err == nil && existing != nil {
 		if err := reusableProject(ctx, userID, existing); err != nil {
 			return nil, err
 		}
@@ -85,7 +111,7 @@ func (s *Service) CreateProject(
 		if verr := s.verifyProjectDirectoryExists(ctx, userID, existing.ID, req.Msg.Path, machine); verr != nil {
 			return nil, verr
 		}
-		return nil, svcerr.AlreadyExists("a project already exists at this path")
+		return nil, svcerr.AlreadyExists("a project already exists at this path" + inOrg(existing))
 	}
 
 	// Ensure the project directory exists on the daemon. The cloud
@@ -177,7 +203,7 @@ func (s *Service) CreateProject(
 	// same rule CreateProjectFromRepo applies (existingProjectForRepo).
 	if pinned != "" {
 		if root, ok := rootRepo(discoverResp.Discovered); ok && strings.TrimSpace(root.RemoteURL) != "" {
-			if existing, err := s.deps.Repo.GetProjectByRemoteURLAndUser(ctx, strings.TrimSpace(root.RemoteURL), userID); err == nil && existing != nil {
+			if existing, err := s.deps.Repo.GetProjectByRemoteURLAndUserInScope(ctx, strings.TrimSpace(root.RemoteURL), userID, scope); err == nil && existing != nil {
 				if err := reusableProject(ctx, userID, existing); err != nil {
 					return nil, err
 				}
@@ -294,12 +320,12 @@ func (s *Service) CreateProject(
 
 	if err := s.deps.Repo.CreateProject(ctx, project); err != nil {
 		// Race-window safety: if a concurrent request inserted the same
-		// (user_id, path) pair after our check above, the DB rejects with a
+		// (org, user_id, path) key after our check above, the DB rejects with a
 		// UNIQUE violation. Surface that as AlreadyExists so the client can
 		// open the existing project instead of seeing an opaque Internal.
 		if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "duplicate key") {
 			logging.InfoContext(ctx, "Project already exists at path (unique constraint)", "userID", userID, "path", req.Msg.Path)
-			return nil, svcerr.AlreadyExists("a project already exists at this path")
+			return nil, svcerr.AlreadyExists("a project already exists at this path" + inOrg(project))
 		}
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create project"))
 	}
@@ -311,7 +337,7 @@ func (s *Service) CreateProject(
 	// for later) is the "pending" case, where the reconcile-on-connect flow
 	// creates the row once the daemon comes up. A failure here is logged but
 	// never fails creation; the reconcile path heals it.
-	if daemonConnected && resolvedDaemonID != "" {
+	if daemonConnected && resolvedDaemonID != "" && s.defaultMachineHolds(ctx, resolvedDaemonID, project) {
 		if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, resolvedDaemonID, project.Path, project.DefaultBranch); err != nil {
 			logging.WarnContext(ctx, "Failed to record project_daemons row at creation; reconcile will heal it",
 				"error", err, "project_id", project.ID, "daemon_id", resolvedDaemonID, "path", project.Path)
@@ -482,19 +508,21 @@ func (s *Service) CreateProject(
 //
 // The third rule, a git checkout of a project's remote, needs the folder's
 // remote, which repo.discover reads in CreateProject itself.
-func (s *Service) findOrAttachOn(ctx context.Context, userID, daemonID, path string) (*connect.Response[reliantv1.CreateProjectResponse], error) {
-	if _, err := s.ownedMachine(ctx, userID, daemonID); err != nil {
-		return nil, err
-	}
-	if here, err := s.projectAtPathOn(ctx, userID, daemonID, path); err != nil {
+//
+// Every match is a project in scope (the request's org, else the machine's;
+// nil, every org's, when neither is known): projects are unique per (org,
+// user, path), and a machine holds its own org's projects only. The caller
+// has already resolved the machine as the caller's (ownedMachine).
+func (s *Service) findOrAttachOn(ctx context.Context, userID, daemonID, path string, scope *core.OrgScope) (*connect.Response[reliantv1.CreateProjectResponse], error) {
+	if here, err := s.projectAtPathOn(ctx, userID, daemonID, path, scope); err != nil {
 		return nil, err
 	} else if here != nil {
 		if verr := s.verifyProjectDirectoryExists(ctx, userID, here.ID, path, daemonID); verr != nil {
 			return nil, verr
 		}
-		return nil, svcerr.AlreadyExists(fmt.Sprintf("a project already exists at this path: %q on %s", here.Name, s.machineName(ctx, daemonID)))
+		return nil, svcerr.AlreadyExists(fmt.Sprintf("a project already exists at this path: %q on %s%s", here.Name, s.machineName(ctx, daemonID), inOrg(here)))
 	}
-	existing, err := s.deps.Repo.GetProjectByPathAndUser(ctx, path, userID)
+	existing, err := s.deps.Repo.GetProjectByPathAndUserInScope(ctx, path, userID, scope)
 	if err != nil || existing == nil {
 		return nil, nil
 	}
@@ -510,9 +538,40 @@ func (s *Service) findOrAttachOn(ctx context.Context, userID, daemonID, path str
 	return s.attachExisting(ctx, userID, daemonID, existing, path)
 }
 
+// defaultMachineHolds reports whether the machine a create without daemon_id
+// ran on (default resolution) may record project as its checkout: not when
+// it belongs to an org the project is not in. The folder is still made there
+// (the create's commands already ran); only the cross-org record is skipped,
+// and logged. A machine that cannot be read has no known org, and records
+// the checkout as before. One whose scope cannot be told (the default org
+// could not be read) records nothing: its next connect's reconcile records
+// the checkout once it can tell.
+func (s *Service) defaultMachineHolds(ctx context.Context, daemonID string, project *db.Project) bool {
+	machine, err := s.deps.Repo.GetDaemon(ctx, daemonID)
+	if err != nil {
+		// No row to read an org from: a machine of no known org
+		// (machineScope of nil is every org's).
+		logging.InfoContext(ctx, "Could not read the machine a project was created on; recording its checkout there as before machines had orgs",
+			"error", err, "project_id", project.ID, "daemon_id", daemonID)
+		machine = nil
+	}
+	scope, err := s.machineScope(ctx, machine)
+	if err != nil {
+		logging.WarnContext(ctx, "Could not tell which organization's projects the machine holds; not recording the new project's checkout there",
+			"error", err, "project_id", project.ID, "daemon_id", daemonID)
+		return false
+	}
+	if !scope.Includes(project.OrgID) {
+		logging.InfoContext(ctx, "Not recording a project on a machine of another organization",
+			"project_id", project.ID, "daemon_id", daemonID, "machine_org_id", authz.MachineOrg(machine))
+		return false
+	}
+	return true
+}
+
 // reusableProject refuses a find-or-create's found project that the caller
 // may no longer act in (an org they have left, a credential's other org). It
-// still holds its (user_id, path) and (user_id, remote_url) keys, so a new
+// still holds its (org, user_id, path) and (org, user_id, remote_url) keys, so a new
 // project cannot take them either: AlreadyExists, naming nothing of it.
 //
 // A project of the caller's that is scheduled for deletion holds them too,

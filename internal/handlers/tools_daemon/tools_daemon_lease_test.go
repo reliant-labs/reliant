@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -213,7 +214,7 @@ type leaseRecordingRepo struct {
 
 var _ Repository = (*leaseRecordingRepo)(nil)
 
-func (r *leaseRecordingRepo) GetProjectByPathAndUser(context.Context, string, string) (*db.Project, error) {
+func (r *leaseRecordingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*db.Project, error) {
 	r.stateEntered <- struct{}{}
 	<-r.release
 	return nil, nil

@@ -97,8 +97,12 @@ func (s *outboundStream) abort() {
 
 // daemonConnection represents an active daemon connection
 type daemonConnection struct {
-	userID     string
-	daemonID   string
+	userID   string
+	daemonID string
+	// orgID is the org the machine belongs to (machineOrgAtConnect), "" when
+	// not known. It keeps the machine's project checkouts in that org: the
+	// reconcile and the by-path project resolution match only its projects.
+	orgID      string
 	name       string
 	hostname   string
 	platform   string

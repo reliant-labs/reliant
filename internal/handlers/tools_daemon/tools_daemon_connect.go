@@ -171,6 +171,24 @@ func (s *Service) rejectReservedDaemon(ctx context.Context, userID, daemonID str
 	return bootstrap.NewReservedDaemonIDError()
 }
 
+// machineOrgAtConnect is the org of the machine connecting as daemonID: the
+// one its credential named (credentialOrg, just recorded on its row), else the
+// one its row already holds from an earlier connect. "" when neither knows,
+// which is logged: the machine then matches its owner's projects of every org,
+// as before machines had orgs.
+func (s *Service) machineOrgAtConnect(ctx context.Context, userID, daemonID, credentialOrg string) string {
+	if credentialOrg != "" {
+		return credentialOrg
+	}
+	if d, err := s.deps.Repo.GetDaemon(ctx, daemonID); err == nil && d != nil && d.OrgID != nil && *d.OrgID != "" {
+		return *d.OrgID
+	}
+	logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" machine has no known organization (its credential or the control plane names none); "+
+		"its reconcile and attach match the owner's projects of every organization, as before machines had orgs",
+		"userID", userID, "daemonID", daemonID)
+	return ""
+}
+
 // accountEmail is the email of the account the daemon credential acts as, as
 // the token authority named it when the daemon auth interceptor resolved the
 // credential — "" when it named none. It is told only to that credential's
@@ -270,6 +288,14 @@ func (s *Service) ConnectDaemon(
 		},
 	)
 
+	// The machine's org, as its daemon-bound credential's introspection
+	// named it (control-plane's daemons.org_id). Only a bound credential
+	// speaks for the machine: the bound id is this daemonID (resolveDaemonID).
+	credentialOrg := ""
+	if boundCredential {
+		credentialOrg = auth.GetDaemonOrgIDFromContext(ctx)
+	}
+
 	requestedProjectPaths, err := s.daemonProjectPaths(ctx, daemonID)
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to list project paths"))
@@ -296,6 +322,7 @@ func (s *Service) ConnectDaemon(
 		// Reserves the id for bound credentials; an unbound registration on a
 		// reserved id writes nothing and is refused below.
 		RequiresBoundToken: boundCredential,
+		OrgID:              daemonStringPtrOrNil(credentialOrg),
 	}); err != nil {
 		if errors.Is(err, db.ErrDaemonOwnedByAnotherUser) {
 			return s.rejectForeignDaemon(ctx, userID, daemonID)
@@ -333,6 +360,7 @@ func (s *Service) ConnectDaemon(
 	conn := &daemonConnection{
 		userID:              userID,
 		daemonID:            daemonID,
+		orgID:               s.machineOrgAtConnect(ctx, userID, daemonID, credentialOrg),
 		name:                reg.GetName(),
 		hostname:            reg.GetHostname(),
 		platform:            reg.GetPlatform(),
@@ -518,6 +546,7 @@ func (s *Service) RegisterOutboundConnection(
 	conn := &daemonConnection{
 		userID:              userID,
 		daemonID:            daemonID,
+		orgID:               s.machineOrgAtConnect(ctx, userID, daemonID, ""),
 		name:                reg.GetName(),
 		hostname:            reg.GetHostname(),
 		platform:            reg.GetPlatform(),

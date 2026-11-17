@@ -1060,6 +1060,32 @@ func (r *Repo) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, user
 	return store.GetProjectByRemoteURLAndUser(ctx, r.ORM(), remoteURL, userID)
 }
 
+// GetProjectByPathAndUserInScope is the user's project at path in scope (an
+// org, with its unassigned rows when it is the user's default); nil scope is
+// every org's. Projects are unique per (org, user, path).
+func (r *Repo) GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*Project, error) {
+	if path == "" {
+		return nil, fmt.Errorf("project path cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.GetProjectByPathAndUserInScope(ctx, r.ORM(), path, userID, scope)
+}
+
+// GetProjectByRemoteURLAndUserInScope is the user's project cloned from
+// remoteURL in scope; nil scope is every org's. Projects are unique per (org,
+// user, remote_url).
+func (r *Repo) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*Project, error) {
+	if remoteURL == "" {
+		return nil, fmt.Errorf("remote URL cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.GetProjectByRemoteURLAndUserInScope(ctx, r.ORM(), remoteURL, userID, scope)
+}
+
 func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error) {
 	if id == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
