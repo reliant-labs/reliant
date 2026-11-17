@@ -15,4 +15,10 @@
 -- statement in the file. A build that fails leaves an INVALID index that
 -- IF NOT EXISTS then skips: drop it with DROP INDEX CONCURRENTLY
 -- idx_chats_daemon_blocked and re-run.
+--
+-- Rollback: none needed for the index. An extra index changes no result; the
+-- previous release ignores it, so it stays when the application is rolled
+-- back. The post-deploy ListInbox check, its failure criteria and the
+-- application rollback (redeploy the previous release) are in
+-- dev-docs/inbox-firings-rollout.md.
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_chats_daemon_blocked ON public.chats (user_id) WHERE daemon_blocked_at IS NOT NULL;
