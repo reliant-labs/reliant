@@ -11,8 +11,9 @@
  * getting the code is a confirmation rather than a search.
  *
  * Best effort: a site with no running workload, a deploy from a folder with no
- * remote, or a remote off GitHub records nothing usable, and the reader picks
- * the repository themselves, as before.
+ * remote, a remote off GitHub, or workloads deployed from different
+ * repositories give no single answer, and the reader picks the repository
+ * themselves, as before.
  */
 
 import { useMemo } from "react";
@@ -23,23 +24,36 @@ import type { ObsScope, Workload } from "@/services/controlPlane/observability/t
 
 import { githubRepoOf } from "../../Workloads/workloadModel";
 
-/** The GitHub repository the first workload with a recorded source was deployed from. */
+/**
+ * The GitHub repository the app was deployed from, only when it is
+ * unambiguous: every workload with a recorded source names the same GitHub
+ * repository. A project's workloads can be built from different repositories,
+ * and offering one of them as "the app's code" would clone the wrong thing, so
+ * any disagreement, a remote off GitHub included, means no answer. Workloads
+ * with no recorded source say nothing either way. Repositories compare as
+ * GitHub names, case-insensitively (https, ssh and `.git` forms are one).
+ */
 export function sourceRepoOf(workloads: readonly Pick<Workload, "declared">[]): GitRepo | null {
+  let fullName: string | null = null;
   for (const workload of workloads) {
-    const fullName = workload.declared ? githubRepoOf(workload.declared.sourceRepo) : null;
-    if (!fullName) continue;
-    return {
-      fullName,
-      cloneUrl: `https://github.com/${fullName}.git`,
-      // The default branch is not recorded; the clone forms default to it as well.
-      defaultBranch: "main",
-      description: "",
-      private: false,
-      language: "",
-      updatedAt: "",
-    };
+    const recorded = workload.declared?.sourceRepo.trim() ?? "";
+    if (!recorded) continue;
+    const repo = githubRepoOf(recorded);
+    if (!repo) return null;
+    if (fullName === null) fullName = repo;
+    else if (fullName.toLowerCase() !== repo.toLowerCase()) return null;
   }
-  return null;
+  if (fullName === null) return null;
+  return {
+    fullName,
+    cloneUrl: `https://github.com/${fullName}.git`,
+    // The default branch is not recorded; the clone forms default to it as well.
+    defaultBranch: "main",
+    description: "",
+    private: false,
+    language: "",
+    updatedAt: "",
+  };
 }
 
 /** The forge app's GitHub repository, once read; null while reading or when none is recorded. */
