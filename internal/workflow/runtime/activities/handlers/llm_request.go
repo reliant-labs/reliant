@@ -148,6 +148,17 @@ type llmCallSpec struct {
 	// user chose for conversation. Ignored when a resolver is injected.
 	TagPrefsReader modelprefs.SettingsReader
 
+	// ProviderPrefsReader, when set, applies the user's Settings → "Default
+	// provider" (modelprefs.ProviderPreference) to a selector that names no
+	// provider, on a run that has none of its own. Unlike a tag preference it
+	// brings no model, effort or temperature, only which connected provider a
+	// tier runs on, so the housekeeping calls (titling, drafting) set it
+	// without TagPrefsReader: a user who chose ChatGPT expects their titles
+	// there too, not on the provider they deprioritized. A call that sets
+	// TagPrefsReader gets it as well; this field is for the calls that do not.
+	// Ignored when a resolver is injected.
+	ProviderPrefsReader modelprefs.SettingsReader
+
 	// Local, when set, lets a selector name a model served by one of the
 	// user's daemons ("<name>@local", provider "local:<daemonID>"). Local
 	// models never come from the registry: they are synthesized per request
@@ -539,19 +550,27 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		if availableDrivers.DriverRank != nil {
 			registry = registry.WithDriverRank(availableDrivers.TierFor)
 		}
+		var runProviders []string
+		fallbackSelector := spec.FallbackSelector
+		if runPinned {
+			runProviders = selector.Providers
+		} else {
+			// Not pinned: the run has no provider of its own, so the user's
+			// default provider ranks the selector's (a no-op for a selector
+			// naming its own). The tag preference's model_id below still wins.
+			defaultProvider := loadProviderPreference(ctx, spec)
+			selector = defaultProvider.Apply(selector)
+			fallbackSelector = defaultProvider.Apply(fallbackSelector)
+		}
 		resolve := registry.Resolve
-		if len(spec.FallbackSelector.Tags) > 0 || spec.FallbackSelector.ID != "" {
+		if len(fallbackSelector.Tags) > 0 || fallbackSelector.ID != "" {
 			resolve = func(selector models.ModelSelector, providers []string) (*models.ResolvedModel, error) {
-				return registry.ResolveWithFallback(selector, spec.FallbackSelector, providers)
+				return registry.ResolveWithFallback(selector, fallbackSelector, providers)
 			}
 		}
 
 		prefs := loadTagPrefs(ctx, spec, registry)
 		var resolved *models.ResolvedModel
-		var runProviders []string
-		if runPinned {
-			runProviders = selector.Providers
-		}
 		if preferred := prefs.PreferredModelOn(registry, selector, availableProviders, runProviders); preferred != nil {
 			resolved = preferred
 		} else {
@@ -887,6 +906,22 @@ func loadTagPrefs(ctx context.Context, spec llmCallSpec, registry *models.ModelR
 			"userID", spec.UserID, "error", err)
 	}
 	return all[tag]
+}
+
+// loadProviderPreference is the user's default provider order for a call, from
+// ProviderPrefsReader, else TagPrefsReader (a call layering tag preferences
+// layers this too). An unreadable row resolves as Auto.
+func loadProviderPreference(ctx context.Context, spec llmCallSpec) modelprefs.ProviderPreference {
+	reader := spec.ProviderPrefsReader
+	if reader == nil {
+		reader = spec.TagPrefsReader
+	}
+	pref, err := modelprefs.LoadProviderPreference(ctx, reader, spec.UserID)
+	if err != nil {
+		logging.WarnContext(ctx, "[LLMRequest] Default provider preference unreadable; resolving in the tier's own order",
+			"userID", spec.UserID, "error", err)
+	}
+	return pref
 }
 
 // resolveFailure is a model resolution that failed, worded for the user. Its

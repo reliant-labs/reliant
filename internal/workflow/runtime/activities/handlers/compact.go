@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/modelprefs"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -247,6 +248,16 @@ type GenerateTitleActivity struct {
 	// routing picks which account of the resolved provider titles the chat,
 	// and benches or retires one the provider refuses; nil routes nothing.
 	routing *AccountRouting
+	// providerPrefs reads the user's Settings default provider, so a title
+	// runs on the provider they chose; nil titles in the tier's own order.
+	providerPrefs modelprefs.SettingsReader
+}
+
+// WithProviderPreferences makes titling honor the user's Settings default
+// provider (llmCallSpec.ProviderPrefsReader).
+func (a *GenerateTitleActivity) WithProviderPreferences(r modelprefs.SettingsReader) *GenerateTitleActivity {
+	a.providerPrefs = r
+	return a
 }
 
 // WithAccountRouting wires multi-account routing into titling. Without it the
@@ -710,6 +721,7 @@ func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, chat *
 		spec.Selector = titleModelSelector()
 		spec.FallbackSelector = titleModelFallbackSelector()
 	}
+	spec.ProviderPrefsReader = a.providerPrefs
 	// The account comes from the same router a chat turn's does, so a limited,
 	// benched or signed-out account is skipped before any request. ThreadID
 	// stays empty: a title belongs to no thread, so it reads and writes no
