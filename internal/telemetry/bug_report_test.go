@@ -47,6 +47,8 @@ func sampleBugReport() BugReport {
 
 		ReliantVersion: "v0.9.3",
 		ForgeVersion:   "v0.1.28-0.20261009201500-abcdef123456",
+		DaemonVersion:  "v0.9.1",
+		DaemonCommit:   "19d01dcae1a0",
 	}
 }
 
@@ -98,6 +100,9 @@ func TestFileBugReport_WritesOneGroupedIssueEvent(t *testing.T) {
 		"pod":             "ws-ws-2aab1465",
 		"reliant_version": "v0.9.3",
 		"forge_version":   "v0.1.28-0.20261009201500-abcdef123456",
+		// The daemon's own build, distinct from the server's above.
+		"daemon_version": "v0.9.1",
+		"daemon_commit":  "19d01dcae1a0",
 	} {
 		assert.Equal(t, want, record[key], "attribute %s", key)
 	}

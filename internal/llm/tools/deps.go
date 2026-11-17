@@ -251,6 +251,10 @@ type bugReportLookup interface {
 	GetLatestMessageInThread(ctx context.Context, threadID string) (*db.Message, error)
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
+	// ListFreshDaemonAttachmentsForUser names the build each of the user's
+	// attached daemons registered with: the daemon's own version, which is
+	// not the server's.
+	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
 }
 
 // --- workflow tools ---------------------------------------------------------

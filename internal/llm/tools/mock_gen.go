@@ -2284,7 +2284,7 @@ func (m *MockgetRunStore) GetChat(ctx context.Context, id string) (*db.Chat, err
 var _ getRunStore = (*MockgetRunStore)(nil)
 
 // forge:section MockbugReportLookup
-// forge:hash=15d65bdf0720016861774406068c518df42dfa7f068e128df2fe2fddaafe7c53
+// forge:hash=8cf55e6345018ee950b0ec291e95f3a925a8cd266e3811c51308437464763b7c
 
 // MockbugReportLookup is a test mock for the bugReportLookup interface.
 //
@@ -2294,10 +2294,11 @@ var _ getRunStore = (*MockgetRunStore)(nil)
 // "MockbugReportLookup.<Method>Func not set" error.
 type MockbugReportLookup struct {
 	contractkit.Recorder
-	GetChatFunc                  func(context.Context, string) (*db.Chat, error)
-	GetLatestMessageInThreadFunc func(context.Context, string) (*db.Message, error)
-	GetDaemonFunc                func(context.Context, string) (*db.Daemon, error)
-	ListDaemonsByUserIDFunc      func(context.Context, string) ([]*db.Daemon, error)
+	GetChatFunc                           func(context.Context, string) (*db.Chat, error)
+	GetLatestMessageInThreadFunc          func(context.Context, string) (*db.Message, error)
+	GetDaemonFunc                         func(context.Context, string) (*db.Daemon, error)
+	ListDaemonsByUserIDFunc               func(context.Context, string) ([]*db.Daemon, error)
+	ListFreshDaemonAttachmentsForUserFunc func(context.Context, string, time.Duration) ([]*db.DaemonAttachment, error)
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -2334,6 +2335,15 @@ func (m *MockbugReportLookup) ListDaemonsByUserID(ctx context.Context, userID st
 		return m.ListDaemonsByUserIDFunc(ctx, userID)
 	}
 	return nil, contractkit.MockNotSet("MockbugReportLookup", "ListDaemonsByUserID")
+}
+
+// ListFreshDaemonAttachmentsForUser records the call and delegates to ListFreshDaemonAttachmentsForUserFunc when set.
+func (m *MockbugReportLookup) ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error) {
+	m.Recorder.Record("ListFreshDaemonAttachmentsForUser", ctx, userID, staleThreshold)
+	if m.ListFreshDaemonAttachmentsForUserFunc != nil {
+		return m.ListFreshDaemonAttachmentsForUserFunc(ctx, userID, staleThreshold)
+	}
+	return nil, contractkit.MockNotSet("MockbugReportLookup", "ListFreshDaemonAttachmentsForUser")
 }
 
 // Compile-time check.
