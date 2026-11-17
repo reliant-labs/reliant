@@ -68,6 +68,10 @@ type subAgentFailureEnv struct {
 	// hold, when it returns a non-empty milestone, parks that CallLLM stub
 	// until the milestone is reached. toolCallID is "" for the parent.
 	hold func(toolCallID string, turn int) string
+	// streamUntilCancelled, when it returns true, parks that CallLLM stub
+	// until its activity context is cancelled: a call streaming when a pause
+	// lands. toolCallID is "" for the parent.
+	streamUntilCancelled func(toolCallID string, turn int) bool
 
 	mu                sync.Mutex
 	threadForToolCall map[string]string
@@ -340,6 +344,24 @@ func (e *subAgentFailureEnv) callLLM(ctx context.Context, input types.ActivityIn
 			e.mu.Lock()
 			e.cancelledCalls = append(e.cancelledCalls, fmt.Sprintf("%s#%d", who, turn))
 			e.mu.Unlock()
+		}
+	}
+	if e.streamUntilCancelled != nil && e.streamUntilCancelled(toolCallIDOrEmpty(isParent, toolCallID), turn) {
+		// Heartbeating as a real stream does: that is how an activity
+		// learns it was cancelled.
+	streaming:
+		for {
+			select {
+			case <-ctx.Done():
+				e.mu.Lock()
+				e.cancelledCalls = append(e.cancelledCalls, fmt.Sprintf("%s#%d", who, turn))
+				e.mu.Unlock()
+				break streaming
+			case <-e.testDone:
+				break streaming
+			case <-time.After(5 * time.Millisecond):
+				activity.RecordHeartbeat(ctx, "streaming")
+			}
 		}
 	}
 
