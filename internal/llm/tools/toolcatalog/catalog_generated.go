@@ -907,6 +907,8 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"all":        {},
 			"chat_id":    {},
+			"limit":      {},
+			"offset":     {},
 			"session_id": {},
 		},
 		Unbindable: map[string]string{},
