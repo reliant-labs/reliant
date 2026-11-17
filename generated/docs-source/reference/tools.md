@@ -2915,8 +2915,9 @@ need to know whether it landed, check back with spawn_status or wait for a
 response.
 
 v1 is parent ↔ child only: you may message a direct sub-agent (a spawn of
-this thread) or your own parent. Messaging a sibling or unrelated agent is
-rejected.
+this thread) or your own parent. agent_id "parent" always names your parent,
+even when you were never given its id. Messaging a sibling or unrelated agent
+is rejected.
 
 A sub-agent of yours that stopped on an error is not finished: your message
 resumes it where it stopped, and it reads the message at its first turn.
