@@ -42,6 +42,9 @@ describe("settingsPersistence strict read and write", () => {
   beforeEach(() => {
     for (const mock of Object.values(mocks)) mock.mockReset();
     mocks.getToken.mockResolvedValue("token-abc");
+    // Signed in: a write captured with nobody is refused (lib/auth/sessionOwner).
+    resetSessionOwnerForTests();
+    setSessionOwner("user-a");
     mocks.batchUpsertSettings.mockResolvedValue([]);
   });
 
@@ -78,6 +81,17 @@ describe("settingsPersistence strict read and write", () => {
     expect(await readSettingFromServer("sidebar.projects")).toEqual({ status: "missing" });
     mocks.listSettings.mockRejectedValue(new Error("unavailable"));
     expect(await readSettingFromServer("sidebar.projects")).toEqual({ status: "error" });
+  });
+
+  it("refuses a read or write captured with nobody, with an opaque key, and publishes nothing", async () => {
+    resetSessionOwnerForTests();
+    const nobody = currentSessionOwner();
+    expect(nobody.userId).toBeNull();
+    await expect(writeStringSetting("sidebar.projects", "{}", nobody)).rejects.toBeInstanceOf(SettingWriteError);
+    expect(await readSettingFromServer("sidebar.projects", nobody)).toEqual({ status: "error" });
+    expect(mocks.batchUpsertSettings).not.toHaveBeenCalled();
+    expect(mocks.listSettings).not.toHaveBeenCalled();
+    expect(mocks.updateCache).not.toHaveBeenCalled();
   });
 
   describe("when the account switches mid-flight", () => {

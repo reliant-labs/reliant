@@ -6,7 +6,8 @@ import { getAppURL } from '@/lib/constants'
 import { setTelemetryUserId } from '@/lib/telemetry'
 import { trackEvent } from '@/lib/analytics'
 import { queryClient } from '@/lib/query-client'
-import { setSessionOwner } from '@/lib/auth/sessionOwner'
+import { beginSessionTransition, setSessionOwner } from '@/lib/auth/sessionOwner'
+import { resetAccountScopedStateSync } from '@/lib/auth/accountScopedState'
 import { bindActiveOrgUser } from '@/store/activeOrgStore'
 import { API_KEY_USER_ID } from '@/lib/auth/apiKeyUser'
 import { getReaderSession, setReaderPrincipal } from '@/components/Forge/AuditedAccess/readerSession'
@@ -157,6 +158,10 @@ const adoptIdentity = async (
   // tab's own signOut(), which must leave nothing behind whatever the store
   // last believed. Ignored for a sign-in, whose clearing follows the rule above.
   forceClear = false,
+  // Runs once the previous account's state is cleared, just before this
+  // identity's owner is installed, and only if it is: where a credential the
+  // transport reads on its own (an API key in storage) becomes visible.
+  beforeInstall?: () => void,
 ): Promise<boolean> => {
   // Transitions run one at a time, in the order they were requested, and one
   // requested later supersedes any still waiting: adopting B awaits a cleanup,
@@ -171,16 +176,22 @@ const adoptIdentity = async (
   // identity is.
   const nextReader = user && !user.is_anonymous ? user.id : null
   if (getReaderSession().principalId !== nextReader) setReaderPrincipal(null)
-  // Work captured for the current account stops the moment another is
-  // requested, for the same reason: requests may already carry the next
-  // credential. For a person the transport would also see the token's
-  // subject change, but an API key is opaque, so the epoch is all that tells
-  // A's key from B's (lib/auth/sessionOwner credentialBelongsTo).
-  if (!samePrincipal(scopedStatePrincipal, principalOf(user, session))) setSessionOwner(null)
+  // The account changes the moment another is requested, for the same reason:
+  // requests may already carry the next credential. For a person the
+  // transport would also see the token's subject change, but an API key is
+  // opaque, so the owner is all that tells A's key from B's
+  // (lib/auth/sessionOwner credentialBelongsTo).
+  const next = principalOf(user, session)
+  if ((scopedStatePrincipal !== null && !samePrincipal(scopedStatePrincipal, next)) || (forceClear && !user)) {
+    beginAccountTransition(set)
+  } else if (!samePrincipal(scopedStatePrincipal, next)) {
+    // Nothing held yet (a first sign-in): nobody until this one installs.
+    beginSessionTransition()
+  }
   const ticket = ++adoptionSeq
   adoptionsPending++
   const run = adoptionTail
-    .then(() => commitIdentity(set, user, session, ticket, forceClear))
+    .then(() => commitIdentity(set, user, session, ticket, forceClear, beforeInstall))
     .catch((): AdoptOutcome => 'refused')
     .finally(() => {
       adoptionsPending--
@@ -197,6 +208,7 @@ const commitIdentity = async (
   session: Session | null,
   ticket: number,
   forceClear: boolean,
+  beforeInstall?: () => void,
 ): Promise<AdoptOutcome> => {
   if (ticket !== adoptionSeq) return 'superseded'
   const nextUserId = user?.id ?? null
@@ -207,12 +219,20 @@ const commitIdentity = async (
   ) {
     // From here on the page acts for nobody: writes queued for the previous
     // user that are still waiting to send are dropped (lib/auth/sessionOwner).
+    // adoptIdentity already began this transition; a transition that
+    // superseded another lands here with the owner still nobody.
     setSessionOwner(null)
     try {
       await clearUserScopedState()
     } catch (error) {
       logger.error('[AuthStore] Clearing the previous user\'s state failed; staying signed out:', error)
-      set({ user: null, session: null, authError: CLEANUP_FAILED_MESSAGE })
+      set({
+        user: null,
+        session: null,
+        authError: CLEANUP_FAILED_MESSAGE,
+        ...(uiHiddenForTransition ? { loading: false } : {}),
+      })
+      uiHiddenForTransition = false
       setTelemetryUserId(null)
       return 'refused'
     }
@@ -220,10 +240,33 @@ const commitIdentity = async (
     scopedStatePrincipal = null
   }
   if (ticket !== adoptionSeq) return 'superseded'
+  beforeInstall?.()
   scopedStatePrincipal = nextPrincipal
   setSessionOwner(nextUserId)
-  set({ user, session })
+  set({ user, session, ...(uiHiddenForTransition ? { loading: false } : {}) })
+  uiHiddenForTransition = false
   return 'installed'
+}
+
+// Whether an account transition put the store into `loading` to hide the
+// previous account's UI; the commit that ends it takes it back out.
+let uiHiddenForTransition = false
+
+/**
+ * An account change has begun: make it atomic for everything synchronous.
+ * In one step, before any credential of the next account can be read, the
+ * page acts for nobody (work captured before or during the change is refused:
+ * lib/auth/sessionOwner), the previous account's queries and settings cache
+ * are emptied, and its UI is taken down (AuthGuard shows loading). The full
+ * cleanup (clearUserScopedState, asynchronous) follows in commitIdentity.
+ */
+const beginAccountTransition = (set: SetAuthState): void => {
+  beginSessionTransition()
+  // Removed queries take their in-flight answers with them.
+  queryClient.clear()
+  resetAccountScopedStateSync()
+  uiHiddenForTransition = true
+  set({ user: null, session: null, loading: true })
 }
 
 // What the auth listener last saw supabase's storage hold, and how many
@@ -1097,23 +1140,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const session = { access_token: apiKey } as Session
     const next = principalOf(user, session)
     // Nothing of another account's is held and no transition is in line:
-    // install now, as before. The owner moves on unless this is the same key.
+    // install now, all in one synchronous step. The owner moves on unless
+    // this is the same key.
     if (adoptionsPending === 0 && (scopedStatePrincipal === null || samePrincipal(scopedStatePrincipal, next))) {
-      if (!samePrincipal(scopedStatePrincipal, next)) setSessionOwner(null)
+      if (!samePrincipal(scopedStatePrincipal, next)) beginSessionTransition()
+      localStorage.setItem('reliant-api-key', apiKey)
       scopedStatePrincipal = next
       setSessionOwner(user.id)
-      localStorage.setItem('reliant-api-key', apiKey)
       set({ user, session, loading: false, initialized: true })
       return
     }
     // A different key (or a person's session before it) is a different
-    // account. The transport reads the key from storage on its next request,
-    // so work captured for the previous account must stop before the key is
-    // stored: adoptIdentity bumps the session owner synchronously, then
-    // clears the previous account's settings and queries before installing
-    // this one, as for any other sign-in.
-    const adopted = adoptIdentity(set, user, session)
-    localStorage.setItem('reliant-api-key', apiKey)
+    // account, and the transport reads the key from storage on its own. So:
+    //   1. synchronously, the page acts for nobody, the previous account's
+    //      caches are emptied and its UI taken down (adoptIdentity →
+    //      beginAccountTransition), and the previous key leaves storage;
+    //   2. the asynchronous cleanup of the previous account runs;
+    //   3. only then is this key stored, immediately before its owner is
+    //      installed (beforeInstall). A cleanup that fails, or a later
+    //      transition that supersedes this one, never stores it.
+    // Work started at any point before 3 captured nobody and is refused.
+    const adopted = adoptIdentity(set, user, session, false, () =>
+      localStorage.setItem('reliant-api-key', apiKey),
+    )
+    localStorage.removeItem('reliant-api-key')
     void adopted.then((installed) => {
       if (installed) set({ loading: false, initialized: true })
     })
@@ -1137,6 +1187,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Mock mode: skip auth entirely and set a mock user
     const isMockMode = (window as unknown as { __MOCK_MODE__?: boolean }).__MOCK_MODE__;
     if (isMockMode) {
+      // The mock user is the page's owner like any signed-in account: a write
+      // captured with nobody is refused (lib/auth/sessionOwner).
+      scopedStatePrincipal = { userId: 'mock-user' }
+      setSessionOwner('mock-user')
       set({
         user: { id: 'mock-user', email: 'mock@example.com' } as User,
         session: { access_token: 'mock-token' } as Session,

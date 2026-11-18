@@ -17,7 +17,12 @@
  * read it without an import cycle.
  */
 
-/** The owner a writer captured: compare it later with credentialBelongsTo. */
+/**
+ * The owner a writer captured: compare it later with credentialBelongsTo.
+ * `userId` null is NOBODY: signed out, or an identity change still in
+ * progress. Work captured with it is refused everywhere, whatever credential
+ * is current when it would send.
+ */
 export interface SessionOwner {
   readonly userId: string | null;
   readonly epoch: number;
@@ -25,18 +30,23 @@ export interface SessionOwner {
 
 let owner: SessionOwner = { userId: null, epoch: 0 };
 
-/** The account the page acts for now. Synchronous, so a writer can capture it as it queues. */
+/**
+ * The account the page acts for now. Synchronous, so a writer can capture it
+ * as it queues. During an identity change it is nobody (userId null), an
+ * owner no write and no cache publication accepts.
+ */
 export function currentSessionOwner(): SessionOwner {
   return owner;
 }
 
 /**
- * Whether the page still acts for `captured`: no identity was installed or
- * cleared since it was captured. Work started for an account checks this
- * before it publishes a result into a cache another account now reads.
+ * Whether the page still acts for `captured`: someone, and no identity was
+ * installed or cleared since it was captured. Work started for an account
+ * checks this before it publishes a result into a cache another account now
+ * reads. An owner captured as nobody is never current.
  */
 export function isCurrentSessionOwner(captured: SessionOwner): boolean {
-  return captured.epoch === owner.epoch;
+  return captured.userId !== null && captured.epoch === owner.epoch;
 }
 
 /**
@@ -47,6 +57,15 @@ export function isCurrentSessionOwner(captured: SessionOwner): boolean {
 export function setSessionOwner(userId: string | null): void {
   if (userId === owner.userId) return;
   owner = { userId, epoch: owner.epoch + 1 };
+}
+
+/**
+ * An identity change has begun (authStore): from now until the next
+ * setSessionOwner the page acts for nobody. Always bumps the epoch, even
+ * from nobody, so work captured at any point before this is stale.
+ */
+export function beginSessionTransition(): void {
+  owner = { userId: null, epoch: owner.epoch + 1 };
 }
 
 /** The `sub` claim of a JWT, or undefined for a credential that is not one (an API key). */
@@ -72,6 +91,10 @@ function jwtSubject(token: string): string | null | undefined {
  * the owner alone.
  */
 export function credentialBelongsTo(captured: SessionOwner, token: string): boolean {
+  // Nobody's work never sends: an opaque key would otherwise be judged by the
+  // epoch alone, and work captured while an identity change is in progress
+  // would go out with whichever credential the change installs.
+  if (captured.userId === null) return false;
   if (captured.epoch !== owner.epoch) return false;
   const subject = jwtSubject(token);
   if (subject === undefined) return true;

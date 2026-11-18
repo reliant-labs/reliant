@@ -41,7 +41,12 @@ vi.mock("../../lib/settingsPersistence", () => ({
   writeStringSetting: (key: string, value: string, owner?: SessionOwner) => writeStringSetting(key, value, owner),
 }));
 
-import { currentSessionOwner, resetSessionOwnerForTests, setSessionOwner } from "@/lib/auth/sessionOwner";
+import {
+  beginSessionTransition,
+  currentSessionOwner,
+  resetSessionOwnerForTests,
+  setSessionOwner,
+} from "@/lib/auth/sessionOwner";
 import { bindActiveOrgUser, setEffectiveOrg, useActiveOrgStore } from "@/store/activeOrgStore";
 import { SIDEBAR_PROJECTS_KEY, type SidebarProjectSettings } from "../../lib/sidebarProjectPrefs";
 import { sidebarProjectPrefsKey, useSidebarProjectPrefs } from "../sidebar-project-queries";
@@ -91,6 +96,23 @@ describe("useSidebarProjectPrefs", () => {
     setSessionOwner("alice");
     useActiveOrgStore.setState(useActiveOrgStore.getInitialState(), true);
     bindActiveOrgUser("user-1");
+  });
+
+  it("refuses a change made while the page acts for nobody (an identity change in progress)", async () => {
+    act(() => setEffectiveOrg("org-a"));
+    const { qc, result } = setup();
+    await waitFor(() => expect(result.current.writable).toBe(true));
+    const before = qc.getQueryData<SidebarProjectSettings>(sidebarProjectPrefsKey);
+    readSettingFromServer.mockClear();
+    // The still-visible sidebar is clicked after the change began, before it cleared anything.
+    act(() => beginSessionTransition());
+    act(() => result.current.setPinned("p1", true));
+    await waitFor(() => expect(settled(qc)).toBe(true));
+    expect(qc.getMutationCache().getAll()).toHaveLength(1);
+    expect(readSettingFromServer).not.toHaveBeenCalled();
+    expect(writeStringSetting).not.toHaveBeenCalled();
+    // Not even the optimistic update was published.
+    expect(qc.getQueryData<SidebarProjectSettings>(sidebarProjectPrefsKey)).toBe(before);
   });
 
   it("drops a change whose re-read answers after the account switched: nothing written or published", async () => {

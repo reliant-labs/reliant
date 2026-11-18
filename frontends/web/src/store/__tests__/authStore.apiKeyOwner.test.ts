@@ -119,6 +119,55 @@ describe('replacing the credential changes the session owner', () => {
     expect(reset).toHaveBeenCalled()
   })
 
+  it('refuses every change started while the previous account is still being cleared, and publishes nothing', async () => {
+    await signInWithKey('key-a')
+    queryClient.setQueryData(['sidebar-project-prefs'], { a: { pinned: ['p1'] } })
+    settingsSync.updateCache(KEY, '{"a":{"pinned":["p1"]}}')
+    // Hold the asynchronous cleanup of key A's account (clearUserScopedState
+    // awaits cancelQueries) so the test can act inside the window.
+    const cleanup = deferred<void>()
+    vi.spyOn(queryClient, 'cancelQueries').mockReturnValue(cleanup.promise)
+    const updateCache = vi.spyOn(settingsSync, 'updateCache')
+
+    useAuthStore.getState().setApiKeySession('key-b')
+
+    // Synchronously: neither key is visible to the transport, the page acts
+    // for nobody, A's caches are empty and A's UI is down.
+    expect(window.localStorage.getItem('reliant-api-key')).toBeNull()
+    expect(currentSessionOwner().userId).toBeNull()
+    expect(queryClient.getQueryData(['sidebar-project-prefs'])).toBeUndefined()
+    expect(settingsSync.getSettingFromCache(KEY)).toBeNull()
+    expect(useAuthStore.getState()).toMatchObject({ user: null, session: null, loading: true })
+
+    // Changes started now capture nobody, and none of them goes out.
+    const during = currentSessionOwner()
+    const write = writeStringSetting(KEY, '{"a":{"hidden":["p2"]}}')
+    const read = readSettingFromServer(KEY)
+    await expect(write).rejects.toThrow()
+    expect(await read).toEqual({ status: 'error' })
+
+    cleanup.resolve()
+    await waitFor(() => expect(useAuthStore.getState().session?.access_token).toBe('key-b'))
+    expect(window.localStorage.getItem('reliant-api-key')).toBe('key-b')
+    expect(useAuthStore.getState().loading).toBe(false)
+    // Installed: B is someone, and what was captured during the window is still nobody's.
+    expect(currentSessionOwner().userId).toBe(API_KEY_USER_ID)
+    expect(isCurrentSessionOwner(during)).toBe(false)
+    expect(backend.batchUpsertSettings).not.toHaveBeenCalled()
+    expect(backend.fetchSettingsFor).not.toHaveBeenCalled()
+    expect(updateCache).not.toHaveBeenCalled()
+  })
+
+  it('never stores the replacement key when clearing the previous account fails', async () => {
+    await signInWithKey('key-a')
+    vi.spyOn(queryClient, 'cancelQueries').mockRejectedValue(new Error('cleanup failed'))
+    useAuthStore.getState().setApiKeySession('key-b')
+    await waitFor(() => expect(useAuthStore.getState().authError).toBeTruthy())
+    expect(window.localStorage.getItem('reliant-api-key')).toBeNull()
+    expect(useAuthStore.getState()).toMatchObject({ user: null, session: null, loading: false })
+    expect(currentSessionOwner().userId).toBeNull()
+  })
+
   it('keeps the owner when the same key is set again', async () => {
     await signInWithKey('key-a')
     const a = currentSessionOwner()
