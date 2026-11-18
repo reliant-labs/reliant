@@ -35,6 +35,8 @@ const (
 )
 
 // Reasons, one per failure message (Reason): what a caller attaches to its InvalidArgument.
+//
+//nolint:gosec // G101: reason codes that name the API-key check's outcome, not credentials.
 const (
 	ReasonInvalid     = "api_key_invalid"
 	ReasonNoCredit    = "api_key_no_credit"
