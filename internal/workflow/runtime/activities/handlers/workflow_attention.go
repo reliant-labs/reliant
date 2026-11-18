@@ -31,11 +31,12 @@ func (a *WorkflowStatusActivity) recordAttention(ctx context.Context, input Work
 	}
 	update := *input.Attention
 	update.ChatID = input.ChatID
-	if input.Status == "started" {
+	switch input.Status {
+	case "started":
 		update.Phase = "start"
-	} else if input.Status == "completed" || input.Status == "failed" || input.Status == "cancelled" {
+	case "completed", "failed", "cancelled":
 		update.Phase = "finish"
-	} else {
+	default:
 		return core.AttentionResult{}, nil
 	}
 	return a.repo.ApplyAttentionUpdate(ctx, update)

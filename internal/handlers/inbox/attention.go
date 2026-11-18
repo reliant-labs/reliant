@@ -7,6 +7,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"golang.org/x/sync/errgroup"
@@ -15,8 +16,10 @@ import (
 // failingAutomations combines actionable incident episodes with legacy trigger
 // streaks. Only registered attention actors leave legacy streaks; diagnostic
 // health still sees every firing. Incidents outlive paused/deleted triggers.
-// Independent reads run together, each holding one of lim's tokens.
-func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userID string, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
+// Independent reads run together, each holding one of lim's tokens. Incidents
+// are decided through reads like every other item about a chat: ownership
+// alone never lists one of an org the caller may no longer read.
+func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads *itemReads, userID string, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
 	ids := make([]string, 0, len(stored))
 	for _, t := range stored {
 		if t.Enabled {
@@ -74,6 +77,7 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userI
 	g.Go(func() error {
 		return lim.do(gctx, func() (err error) {
 			incidents, err = s.deps.Repo.ListAttentionIncidents(gctx, userID)
+			incidents = authz.Visible(gctx, userID, incidents, reads.incident)
 			return err
 		})
 	})

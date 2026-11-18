@@ -1757,7 +1757,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// PausedForMachine marks the chat so the api-server resumes it when
 		// the machine connects (internal/queueddelivery) — and only this pause:
 		// a user's own pause must stay paused.
-		notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, &workflowStatusOpts{PausedForMachine: true})
+		_ = notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, &workflowStatusOpts{PausedForMachine: true})
 
 		// Signal-based pause: arm the pause and block until resume.
 		// Mirrors the retry-exhaustion self-pause. We deliberately do NOT
@@ -1772,7 +1772,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// Resumed — update DB status back to running. The breaker's streak is
 		// NOT reset here: if the machine is still down, the next offline step
 		// re-pauses after a single round-trip; any daemon success resets it.
-		notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
+		_ = notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
 	})
 
 	// makeThreadPauseCtrl creates a per-thread PauseController that inherits
@@ -2915,7 +2915,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 					// Update DB status to paused so the UI reflects it and SendMessage
 					// routes through the resume path instead of starting a new workflow.
-					notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, nil)
+					_ = notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, nil)
 
 					// Signal-based pause: arm the pause directly and block until resume.
 					// A pause on a provider-capacity failure is also released by a
@@ -2933,7 +2933,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					_ = workflow.Sleep(ctx, 0)
 
 					// Resumed! Update DB status back to running.
-					notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
+					_ = notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
 
 					logger.Info("[Workflow Runtime] Resumed after pause, retrying step",
 						"stepID", running.StepID,
@@ -4115,7 +4115,7 @@ func prepareSpawnInline(
 
 	// Notify workflow status "started" for UI swim lane
 	// Thread and workflow already created by parent via initChildWorkflow/V2_CreateWorkflowWithThread
-	notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "started", parentWorkflowID, config.childThread, &workflowStatusOpts{
+	_ = notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "started", parentWorkflowID, config.childThread, &workflowStatusOpts{
 		Title:               config.presetName,
 		ThreadTitle:         threadTitle,
 		Origin:              model.ThreadOriginSpawn,
@@ -4147,7 +4147,7 @@ func prepareSpawnInline(
 // (db.UpsertToolCallStatus pins the first outcome); the agent's card reads the
 // child row, which is what moves.
 func notifySpawnTerminal(ctx workflow.Context, chatID string, config *spawnChildWorkflowConfig, prep *spawnPrepResult, parentWorkflowID, status string) {
-	notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, prep.targetWorkflow, status, parentWorkflowID, config.childThread, &workflowStatusOpts{
+	_ = notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, prep.targetWorkflow, status, parentWorkflowID, config.childThread, &workflowStatusOpts{
 		SpawnedByToolCallID: config.toolCallID,
 	})
 	if config.reportID != "" {
@@ -5605,8 +5605,9 @@ func workflowStatusActivityOptions(status string) workflow.ActivityOptions {
 
 // notifyWorkflowStatus sends workflow status updates to chat_updates for UI notifications
 // and tracks workflow hierarchy in the database.
-// This is a fire-and-forget notification - errors are logged but don't fail the workflow
-// opts can include agent info for UI swim lanes and fork metadata for context inheritance
+// This is a fire-and-forget notification - errors are logged but don't fail the workflow;
+// the returned error matters only to callers that persist an attention transition
+// (the rest discard it with _ =). opts can include agent info for UI swim lanes and fork metadata for context inheritance
 func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName, status, parentWorkflowID, thread string, opts *workflowStatusOpts) error {
 	logger := workflow.GetLogger(ctx)
 
@@ -5951,7 +5952,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		terminalDrainDetachedSpawns(cleanupCtx, chatID, childTracker)
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		notifyWorkflowPanic(cleanupCtx, chatID, workflowID, workflowName, thread, panicErr)
-		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
+		_ = notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
 			&workflowStatusOpts{Error: failureText(retErr), LaunchRun: launchRun})
 		return runFailureForPanic(retErr)
 	}
@@ -6013,7 +6014,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		// Run cleanup activities for failed workflows
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow failed and update workflow record
-		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
+		_ = notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
 			&workflowStatusOpts{Error: failureText(retErr), LaunchRun: launchRun})
 		return nil
 	}
