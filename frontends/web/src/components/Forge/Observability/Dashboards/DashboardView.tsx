@@ -82,7 +82,7 @@ import { ObsAsOf, ObsError } from "../ObsStates";
 import { useReleaseMarkers } from "../releaseMarkers";
 import { DashboardHeader } from "./DashboardHeader";
 import { ViewerFilters, ViewOptions } from "./ViewerControls";
-import { displayTitle, isTabOf, type DashboardHub, type HubTab } from "./dashboardHubs";
+import { displayTitle, drillTarget, isTabOf, type DashboardHub, type HubTab } from "./dashboardHubs";
 import { OrganizationCostsView } from "./OrganizationCostsView";
 import { OrganizationUsageView } from "./OrganizationUsageView";
 import { OrganizationBillingView } from "./OrganizationBillingView";
@@ -128,7 +128,7 @@ import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, StarButton, VariableSelect, type MenuEntry } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
 import { DataPanelBody, type PanelDataContext } from "./DataPanel";
-import { AttentionPanel } from "./AttentionPanel";
+import { AttentionPanel, type WatchedFigure } from "./AttentionPanel";
 
 /** A panel card's element id: the anchor a drill link (panel.drill.panel) scrolls to. */
 export const panelAnchor = (panelId: string) => `panel-${panelId}`;
@@ -381,12 +381,11 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   };
 
   // panel.drill: where a panel's detail lives, a dashboard of the same project,
-  // opened on the same range, comparison and environments, at the named panel.
+  // opened on the range and comparison this one shows (its defaults included,
+  // so a 30-day figure drills to 30 days, not to the target's own default)
+  // and at the named panel.
   const drillHrefOf = (panel: Panel): string | null =>
-    panel.drill
-      ? hrefs.dashboard({ ...dashRef, key: panel.drill.dashboard }, { range: search.range, compare: search.compare, refresh: search.refresh }) +
-        (panel.drill.panel ? `#${panelAnchor(panel.drill.panel)}` : "")
-      : null;
+    panel.drill ? hrefs.dashboard(drillTarget(dashRef, panel.drill.dashboard, hub), { range, compare, refresh: search.refresh }) + (panel.drill.panel ? `#${panelAnchor(panel.drill.panel)}` : "") : null;
   const card = (panel: Panel, index: number) => (
           // One panel's bad definition stops at its own cell (PanelErrorBoundary).
           <PanelErrorBoundary
@@ -400,7 +399,15 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
             dashboardId={spec.id}
             queryPanel={viewerQuery(spec, panel, search).panel}
             drillHrefOf={drillHrefOf}
-            watched={panel.kind === "attention" ? watchedBy(spec, panel).map((p) => viewerQuery(spec, p, search).panel) : undefined}
+            watched={
+              panel.kind === "attention"
+                ? watchedBy(spec, panel).map((p) => {
+                    // Read as its card reads it: the same panel and services, so the same data and cache entry.
+                    const q = viewerQuery(spec, p, search);
+                    return { panel: q.panel, services: q.services };
+                  })
+                : undefined
+            }
             layout={
               layout
                 ? {
@@ -1238,7 +1245,7 @@ function DashboardPanelCard({
   /** Where a panel's detail lives (panel.drill). */
   drillHrefOf?: (panel: Panel) => string | null;
   /** An attention panel's watched figures, as their cards query them. */
-  watched?: Panel[];
+  watched?: WatchedFigure[];
   scope: ObsScope | null;
   dataContext?: PanelDataContext;
   /** What a delivery-kind panel (release_health, promotions, delivery) reads. */

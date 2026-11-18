@@ -1,16 +1,19 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * "Needs attention" (kind: "attention", forge dashspec KindAttention): the figures on this dashboard
- * that moved the wrong way against the comparison, one line each, worst
- * first, each linking to where the detail is; then the ones that moved the
- * right way. It runs no query of its own: it reads the same panel queries
- * the figures' cards read (one React Query cache entry each, so nothing is
- * fetched twice), and a figure says which way is better by display.good.
+ * "Needs attention" (kind: "attention", forge dashspec KindAttention): the
+ * figures on this dashboard that moved the wrong way against the comparison,
+ * one line each, worst first, each linking to where the detail is; then the
+ * ones that moved the right way. It runs no query of its own: it reads each
+ * watched figure exactly as its card does (the same panel, the same services,
+ * so the same React Query cache entry: nothing is fetched twice, and nothing
+ * different is judged), and a figure says which way is better by display.good.
  *
  * A figure counts when its change is at least the panel's threshold (5% by
  * default; a percent figure's change is relative too, so 0.30% → 0.25% is a
- * 17% fall). Nothing is invented: with no comparison on, it says so.
+ * 17% fall). Nothing is invented: with no comparison on, it says so; a figure
+ * it could not compare (a failed read, no figure, no or a zero earlier
+ * figure) is named as not compared, and never counted toward an all-clear.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -30,10 +33,16 @@ export interface AttentionCompare {
   label: string;
 }
 
+/** A watched figure as its card reads it: the panel and the services the viewer's filter narrows it to. */
+export interface WatchedFigure {
+  panel: Panel;
+  services: string[];
+}
+
 export interface AttentionPanelProps {
   panel: Panel;
   /** The watched figures, as their cards query them. */
-  watched: Panel[];
+  watched: WatchedFigure[];
   scope: ObsScope | null;
   range: RangePreset;
   dashboardId: string;
@@ -42,86 +51,96 @@ export interface AttentionPanelProps {
   drillHref: (panel: Panel) => string | null;
 }
 
-interface Verdict {
-  id: string;
-  title: string;
-  now: number;
-  before: number;
-  change: number;
-  bad: boolean;
-  unit: Unit;
-  href: string | null;
-}
+/** Why a figure was not compared. */
+type Unavailable = "failed" | "no-figure" | "no-baseline" | "zero-baseline";
+
+type Verdict =
+  | { state: "compared"; id: string; title: string; now: number; before: number; change: number; bad: boolean; unit: Unit; href: string | null }
+  | { state: "unavailable"; id: string; title: string; reason: Unavailable };
+
+type Compared = Extract<Verdict, { state: "compared" }>;
+
+const UNAVAILABLE: Record<Unavailable, string> = {
+  failed: "its read failed",
+  "no-figure": "no figure for this range",
+  "no-baseline": "no earlier figure",
+  "zero-baseline": "the earlier figure is zero",
+};
 
 const figureOf = (data: PanelResult | undefined): number | null => {
   const v = data?.rows.length === 1 ? data.rows[0].values[0] : (data?.series[0]?.value ?? null);
   return v === null || v === undefined || !Number.isFinite(v) ? null : v;
 };
 
-function Watch({ panel, scope, range, dashboardId, compare, enabled, href, onVerdict }: {
-  panel: Panel;
+function Watch({ figure, scope, range, dashboardId, compare, enabled, href, onVerdict }: {
+  figure: WatchedFigure;
   scope: ObsScope | null;
   range: RangePreset;
   dashboardId: string;
   compare: AttentionCompare;
   enabled: boolean;
   href: string | null;
-  onVerdict: (id: string, verdict: Verdict | null | undefined) => void;
+  onVerdict: (id: string, verdict: Verdict | undefined) => void;
 }) {
-  const now = usePanelQuery(scope, range, panel, [], [], { enabled, dashboardId });
-  const before = usePanelQuery(scope, range, panel, [], [], { offsetKey: compare.offsetKey, offsetMs: compare.offsetMs, enabled, dashboardId });
+  const { panel, services } = figure;
+  const now = usePanelQuery(scope, range, panel, services, [], { enabled, dashboardId });
+  const before = usePanelQuery(scope, range, panel, services, [], { offsetKey: compare.offsetKey, offsetMs: compare.offsetMs, enabled, dashboardId });
+  const loading = now.isLoading || before.isLoading;
+  const failed = !!now.error || !!before.error;
   const a = figureOf(now.data);
   const b = figureOf(before.data);
-  const loading = now.isLoading || before.isLoading;
   useEffect(() => {
+    const unavailable = (reason: Unavailable) => onVerdict(panel.id, { state: "unavailable", id: panel.id, title: panel.title, reason });
+    if (failed) return unavailable("failed");
     if (loading) return onVerdict(panel.id, undefined);
-    if (a === null || b === null || b === 0) return onVerdict(panel.id, null);
+    if (a === null) return unavailable("no-figure");
+    if (b === null) return unavailable("no-baseline");
+    if (b === 0) return unavailable("zero-baseline");
     const change = (a - b) / Math.abs(b);
     const good = panel.display?.good;
-    onVerdict(panel.id, { id: panel.id, title: panel.title, now: a, before: b, change, bad: good === "up" ? change < 0 : change > 0, unit: (panel.unit ?? "") as Unit, href });
-  }, [loading, a, b, panel, href, onVerdict]);
+    onVerdict(panel.id, { state: "compared", id: panel.id, title: panel.title, now: a, before: b, change, bad: good === "up" ? change < 0 : change > 0, unit: (panel.unit ?? "") as Unit, href });
+  }, [loading, failed, a, b, panel, href, onVerdict]);
   return null;
 }
 
-function sentence(v: Verdict, label: string): string {
+function sentence(v: Compared, label: string): string {
   const moved = v.change > 0 ? "rose" : "fell";
   return `${v.title} ${moved} ${formatPercent(Math.abs(v.change))} vs ${label} (${formatValue(v.before, v.unit)} → ${formatValue(v.now, v.unit)})`;
 }
 
 export function AttentionPanel({ panel, watched, scope, range, dashboardId, compare, enabled, drillHref }: AttentionPanelProps) {
-  const [verdicts, setVerdicts] = useState<Record<string, Verdict | null | undefined>>({});
-  const onVerdict = useCallback((id: string, v: Verdict | null | undefined) => setVerdicts((prev) => (prev[id] === v ? prev : { ...prev, [id]: v })), []);
+  const [verdicts, setVerdicts] = useState<Record<string, Verdict | undefined>>({});
+  const onVerdict = useCallback((id: string, v: Verdict | undefined) => setVerdicts((prev) => (prev[id] === v ? prev : { ...prev, [id]: v })), []);
   const threshold = panel.attention?.threshold || DEFAULT_ATTENTION_THRESHOLD;
-  const settled = watched.every((p) => verdicts[p.id] !== undefined);
-  const moved = useMemo(
-    () =>
-      Object.values(verdicts)
-        .filter((v): v is Verdict => !!v && Math.abs(v.change) >= threshold)
-        .sort((x, y) => Math.abs(y.change) - Math.abs(x.change)),
-    [verdicts, threshold]
-  );
+  const current = watched.map((w) => verdicts[w.panel.id]);
+  const settled = current.every((v) => v !== undefined);
+  const compared = useMemo(() => current.filter((v): v is Compared => v?.state === "compared"), [current]);
+  const notCompared = current.filter((v): v is Extract<Verdict, { state: "unavailable" }> => v?.state === "unavailable");
+  const moved = useMemo(() => compared.filter((v) => Math.abs(v.change) >= threshold).sort((x, y) => Math.abs(y.change) - Math.abs(x.change)), [compared, threshold]);
   if (!compare) {
     return <p className="text-xs text-ink-muted">Turn on Compare (previous period) to see which figures moved.</p>;
   }
   const bad = moved.filter((v) => v.bad);
   const good = moved.filter((v) => !v.bad);
+  const headline =
+    bad.length > 0
+      ? `${bad.length} of ${compared.length} compared figures moved the wrong way vs ${compare.label}.`
+      : compared.length === 0
+        ? `None of the ${watched.length} watched figures could be compared with ${compare.label}.`
+        : `Nothing moved the wrong way by ${formatPercent(threshold)} or more vs ${compare.label}.${good.length ? " Improved:" : ""}`;
   return (
     <div data-testid="obs-panel-attention">
-      {watched.map((p) => (
-        <Watch key={p.id} panel={p} scope={scope} range={range} dashboardId={dashboardId} compare={compare} enabled={enabled} href={drillHref(p)} onVerdict={onVerdict} />
+      {watched.map((w) => (
+        <Watch key={w.panel.id} figure={w} scope={scope} range={range} dashboardId={dashboardId} compare={compare} enabled={enabled} href={drillHref(w.panel)} onVerdict={onVerdict} />
       ))}
       {!settled ? (
         <div className="h-16 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-busy="true" aria-label="Loading" />
       ) : (
         <>
-          <p className="mb-2 text-sm text-ink">
-            {bad.length === 0
-              ? `Nothing moved the wrong way by ${formatPercent(threshold)} or more vs ${compare.label}.${good.length ? " Improved:" : ""}`
-              : `${bad.length} of ${watched.length} watched figures moved the wrong way vs ${compare.label}.`}
-          </p>
+          <p className="mb-2 text-sm text-ink">{headline}</p>
           <ul className="space-y-1.5">
             {[...bad, ...good].map((v) => {
-              const Icon = v.bad ? (v.change < 0 ? ArrowDownRight : ArrowUpRight) : v.change < 0 ? ArrowDownRight : ArrowUpRight;
+              const Icon = v.change < 0 ? ArrowDownRight : ArrowUpRight;
               const body = (
                 <>
                   <Icon className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", v.bad ? "text-danger-ink" : "text-success-ink")} aria-hidden="true" />
@@ -141,10 +160,15 @@ export function AttentionPanel({ panel, watched, scope, range, dashboardId, comp
               );
             })}
           </ul>
-          {moved.length === 0 && (
+          {compared.length > 0 && moved.length === 0 && (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-muted">
               <CheckCircle2 className="h-3.5 w-3.5 text-success-ink" aria-hidden="true" />
-              Every watched figure is within {formatPercent(threshold)} of {compare.label}.
+              {notCompared.length ? `Every compared figure is within ${formatPercent(threshold)} of ${compare.label}.` : `Every watched figure is within ${formatPercent(threshold)} of ${compare.label}.`}
+            </p>
+          )}
+          {notCompared.length > 0 && (
+            <p className="mt-1 text-xs text-ink-muted" data-testid="obs-attention-not-compared">
+              Not compared: {notCompared.map((v) => `${v.title} (${UNAVAILABLE[v.reason]})`).join(", ")}.
             </p>
           )}
         </>

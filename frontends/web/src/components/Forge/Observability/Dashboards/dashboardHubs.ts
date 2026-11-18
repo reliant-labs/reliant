@@ -222,3 +222,17 @@ export function landingOf(dashboards: readonly DashboardSummary[], project: stri
   cards.sort((a, b) => cardRank(a) - cardRank(b));
   return { cards, own: shown.filter((d) => !isProvided(d)) };
 }
+
+/**
+ * The dashboard a drill link (panel.drill.dashboard, an id of the same
+ * project) opens: the hub's tab of that id when there is one (its ref names
+ * where that dashboard really lives: the release, or a built-in standing in
+ * for one); else a built-in's sibling built-in, and from anything else (a
+ * release, a workspace copy, a template) the project's own dashboard, never a
+ * copy that does not exist.
+ */
+export function drillTarget(from: DashboardRef, key: string, hub: Pick<DashboardHub, "tabs"> | null): DashboardRef {
+  const tab = hub?.tabs.find((t) => t.ref.key === key);
+  if (tab) return tab.ref;
+  return { kind: from.kind === "builtin" ? "builtin" : "release", projectId: from.projectId, key };
+}

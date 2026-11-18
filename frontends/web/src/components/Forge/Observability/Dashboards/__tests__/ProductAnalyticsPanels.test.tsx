@@ -18,14 +18,18 @@ import { StepFunnel } from "../StepFunnel";
 vi.mock("../../charts/UPlotChart", () => ({ UPlotChart: vi.fn(() => <div data-testid="sql-chart" />) }));
 vi.mock("@/components/forge-ui/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }));
 
-// The figures an attention panel reads, by panel id: [now, before].
-const figuresById: Record<string, [number | null, number | null]> = {};
+// The figures an attention panel reads, by panel id: [now, before], or "failed".
+const figuresById: Record<string, [number | null, number | null] | "failed"> = {};
+// The services each read was made with, by panel id.
+const servicesRead: Record<string, unknown> = {};
 vi.mock("@/hooks/observability-queries", () => ({
-  usePanelQuery: (_scope: unknown, _range: unknown, panel: Panel, _s: unknown, _g: unknown, options: { offsetKey?: string } = {}) => {
+  usePanelQuery: (_scope: unknown, _range: unknown, panel: Panel, services: unknown, _g: unknown, options: { offsetKey?: string } = {}) => {
+    servicesRead[panel.id] = services;
     const pair = figuresById[panel.id];
-    if (!pair) return { data: undefined, isLoading: true };
+    if (!pair) return { data: undefined, isLoading: true, error: null };
+    if (pair === "failed") return { data: undefined, isLoading: false, error: new Error("quota") };
     const value = options.offsetKey ? pair[1] : pair[0];
-    return { data: result({ columns: [panel.title], rows: value === null ? [] : [{ group: {}, values: [value] }] }), isLoading: false };
+    return { data: result({ columns: [panel.title], rows: value === null ? [] : [{ group: {}, values: [value] }] }), isLoading: false, error: null };
   },
 }));
 
@@ -84,6 +88,13 @@ describe("bar list (display.style: barlist)", () => {
     expect(screen.getAllByTestId("sql-chart")).toHaveLength(1);
   });
 
+  it("is what a bar panel drawn as barlist draws, from its groups", () => {
+    const bar: Panel = { id: "routes", title: "Routes", kind: "bar", signal: "traces", series: [{ label: "requests", agg: "count" }], groupBy: ["span.name"], display: { style: "barlist" } };
+    render(<PanelBody panel={bar} query={ready(result({ kind: "bar", columns: ["requests"], rows: [row({ "span.name": "GET /" }, [30]), row({ "span.name": "POST /orders" }, [10])] }))} />);
+    expect(screen.getByTestId("obs-panel-barlist")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem").map((li) => li.getAttribute("data-row"))).toEqual(["GET /", "POST /orders"]);
+  });
+
   it("is what a sql panel with rows and no time column draws as barlist, and stays a table otherwise", () => {
     const { unmount } = render(<PanelBody panel={sql("channels", { display: { style: "barlist" } })} query={ready(channels)} />);
     expect(screen.getByTestId("obs-panel-barlist")).toBeInTheDocument();
@@ -122,6 +133,12 @@ describe("funnel in steps (display.layout: steps)", () => {
     render(<StepFunnel steps={[{ event: "Visited", count: 10 }]} />);
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.queryAllByTestId("obs-step-funnel-rate")).toHaveLength(0);
+  });
+
+  it("is what a funnel panel with layout steps draws", () => {
+    const funnel: Panel = { id: "f", title: "F", kind: "funnel", signal: "traces", series: [], funnel: { steps: ["a", "b"] }, display: { layout: "steps" } };
+    render(<PanelBody panel={funnel} query={ready(result({ kind: "funnel", funnelSteps: [{ event: "a", count: 10, rateFromFirst: 1, rateFromPrevious: 1 }, { event: "b", count: 4, rateFromFirst: 0.4, rateFromPrevious: 0.4 }] as PanelResult["funnelSteps"] }))} />);
+    expect(screen.getByTestId("obs-panel-step-funnel")).toBeInTheDocument();
   });
 
   it("is what a sql funnel with layout steps draws", () => {
@@ -164,15 +181,21 @@ describe("Needs attention (kind: attention)", () => {
     sql("bounce", { title: "Bounce rate", unit: "percent", display: { good: "down" } }),
     sql("signups", { title: "Sign-ups", unit: "count", display: { good: "up" } }),
     sql("active", { title: "Active users", unit: "count", display: { good: "up" } }),
-  ];
+  ].map((panel) => ({ panel, services: ["api"] }));
+  const reset = () => {
+    for (const key of Object.keys(figuresById)) delete figuresById[key];
+  };
   const attention: Panel = { id: "attention", title: "Needs attention", kind: "attention", signal: "", series: [], attention: { threshold: 0.05 } };
   const compare = { offsetKey: "period:30d", offsetMs: () => 0, label: "previous period" };
   const draw = (c: typeof compare | null = compare) =>
     render(<AttentionPanel panel={attention} watched={watched} scope={null} range="30d" dashboardId="product-overview" compare={c} enabled drillHref={(p) => `/to/${p.id}`} />);
 
   it("lists the figures that moved the wrong way first, then the ones that improved, and links each to its detail", () => {
+    reset();
     Object.assign(figuresById, { visitors: [80, 100], bounce: [0.6, 0.5], signups: [130, 100], active: [101, 100] });
     draw();
+    // Each figure is read as its card reads it, with the viewer's services.
+    expect(servicesRead.visitors).toEqual(["api"]);
     const items = screen.getAllByRole("listitem");
     expect(items.map((li) => li.getAttribute("data-attention"))).toEqual(["bad", "bad", "good"]);
     expect(items[0]).toHaveTextContent("Visitors fell 20%");
@@ -181,10 +204,11 @@ describe("Needs attention (kind: attention)", () => {
     expect(within(items[0]).getByRole("link")).toHaveAttribute("href", "/to/visitors");
     // Active users moved 1%, under the 5% threshold.
     expect(screen.queryByText(/Active users/)).not.toBeInTheDocument();
-    expect(screen.getByTestId("obs-panel-attention")).toHaveTextContent("2 of 4 watched figures moved the wrong way");
+    expect(screen.getByTestId("obs-panel-attention")).toHaveTextContent("2 of 4 compared figures moved the wrong way");
   });
 
   it("says so when nothing moved", () => {
+    reset();
     Object.assign(figuresById, { visitors: [100, 100], bounce: [0.5, 0.5], signups: [101, 100], active: [100, 100] });
     draw();
     expect(screen.getByTestId("obs-panel-attention")).toHaveTextContent("Nothing moved the wrong way by 5% or more");
@@ -196,16 +220,38 @@ describe("Needs attention (kind: attention)", () => {
     expect(screen.getByText(/Turn on Compare/)).toBeInTheDocument();
   });
 
-  it("waits while a figure loads, and leaves out a figure with nothing to compare", () => {
-    for (const key of Object.keys(figuresById)) delete figuresById[key];
+  it("waits while a figure loads, and names the figures it could not compare", () => {
+    reset();
     Object.assign(figuresById, { visitors: [80, 100], bounce: [0.6, null], signups: [50, 0] });
     const { rerender } = draw();
     // Active users is still loading.
     expect(screen.getByLabelText("Loading")).toBeInTheDocument();
     figuresById.active = [100, 100];
     rerender(<AttentionPanel panel={attention} watched={watched} scope={null} range="30d" dashboardId="product-overview" compare={{ ...compare }} enabled drillHref={() => null} />);
-    // Bounce has no earlier figure and sign-ups grew from zero: neither is judged.
+    // Bounce has no earlier figure and sign-ups grew from zero: neither is judged, and both are named.
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.getByRole("listitem")).toHaveTextContent("Visitors fell 20%");
+    expect(screen.getByTestId("obs-attention-not-compared")).toHaveTextContent("Not compared: Bounce rate (no earlier figure), Sign-ups (the earlier figure is zero).");
+  });
+
+  it("gives no all-clear for figures it could not compare", () => {
+    reset();
+    Object.assign(figuresById, { visitors: "failed", bounce: [0.5, null], signups: [10, 0], active: [100, 100] });
+    draw();
+    const panel = screen.getByTestId("obs-panel-attention");
+    // Only Active users was compared: the all-clear is about it alone, and the rest are named.
+    expect(panel).toHaveTextContent("Every compared figure is within 5%");
+    expect(panel).not.toHaveTextContent("Every watched figure");
+    expect(screen.getByTestId("obs-attention-not-compared")).toHaveTextContent("Visitors (its read failed)");
+  });
+
+  it("says nothing could be compared when nothing could", () => {
+    reset();
+    Object.assign(figuresById, { visitors: "failed", bounce: "failed", signups: [10, null], active: [null, 3] });
+    draw();
+    const panel = screen.getByTestId("obs-panel-attention");
+    expect(panel).toHaveTextContent("None of the 4 watched figures could be compared with previous period.");
+    expect(panel).not.toHaveTextContent("within 5%");
+    expect(panel).not.toHaveTextContent("Nothing moved the wrong way");
   });
 });

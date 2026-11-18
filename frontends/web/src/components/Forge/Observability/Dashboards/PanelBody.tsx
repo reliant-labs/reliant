@@ -269,6 +269,8 @@ export function PanelBody({ panel, query, compare, trend, groupBy, bands, links,
         </>
       );
     case "funnel":
+      // The funnel kind takes a layout too (dashspec funnelDisplay).
+      if (panel.display?.layout === "steps") return <StepFunnel steps={data.funnelSteps} compact={compact} />;
       return <FunnelChart steps={data.funnelSteps} compact={compact} />;
     case "sql-funnel":
       if (panel.display?.layout === "steps") return <StepFunnel steps={sqlFunnel ?? []} compact={compact} label={funnelUnit(data.columns[0])} />;
@@ -288,6 +290,15 @@ export function PanelBody({ panel, query, compare, trend, groupBy, bands, links,
         </>
       );
     case "bar":
+      // A bar panel's groups drawn as a ranking (style barlist): its rows are the bar list's rows.
+      if (panel.kind === "bar" && panel.display?.style === "barlist") {
+        return (
+          <>
+            <BarList panel={panel} data={data} unit={unit} keys={keys} compact={compact} />
+            {truncated}
+          </>
+        );
+      }
       return (
         <>
           <CategoryChart

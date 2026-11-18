@@ -13,7 +13,7 @@ import type { DashboardSummary } from "@/services/controlPlane/observability/das
 import type { Dashboard, Panel } from "@/services/controlPlane/observability/types";
 import { dashboardDefaultRange, RANGE_LABELS, RANGE_PRESETS, rangeCapNote, readRange } from "@/services/controlPlane/observability/window";
 import { dashboardProblems, panelProblems } from "../../obsdashSpec";
-import { hubsOf } from "../dashboardHubs";
+import { drillTarget, hubsOf } from "../dashboardHubs";
 import { sqlSubtitlePanel, subtitleOf } from "../viewerModel";
 
 const sql = (id: string, extra: Partial<Panel> = {}): Panel => ({ id, title: id, kind: "sql", signal: "", series: [], sql: "SELECT 1", ...extra });
@@ -74,6 +74,17 @@ describe("the Product analytics hub", () => {
       ["product", "Product"],
       ["acquisition", "Acquisition"],
     ]);
+  });
+
+  it("drills to where the target dashboard lives, whatever this one is", () => {
+    const hub = hubsOf([summary("product-overview", "shop: product overview"), summary("users", "shop: users")], "shop").find((h) => h.id === "product")!;
+    // A workspace copy of the Overview drills to the project's own Users, not to a copy.
+    expect(drillTarget({ kind: "workspace", projectId: "shop", key: "my-overview" }, "users", hub)).toEqual({ kind: "release", projectId: "shop", key: "users" });
+    expect(drillTarget({ kind: "workspace", projectId: "shop", key: "my-overview" }, "acquisition", null)).toEqual({ kind: "release", projectId: "shop", key: "acquisition" });
+    // A built-in drills to the built-in standing in for the target, and a hub tab's ref wins.
+    expect(drillTarget({ kind: "builtin", projectId: "shop", key: "product-overview" }, "users", null)).toEqual({ kind: "builtin", projectId: "shop", key: "users" });
+    const builtinHub = { tabs: [{ ref: { kind: "builtin" as const, projectId: "shop", key: "users" }, label: "Users", summary: summary("users", "Users") }] };
+    expect(drillTarget({ kind: "release", projectId: "shop", key: "product-overview" }, "users", builtinHub)).toEqual({ kind: "builtin", projectId: "shop", key: "users" });
   });
 
   it("keeps an older project's tabs when it has no Overview", () => {
