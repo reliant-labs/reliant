@@ -574,7 +574,7 @@ func describeProcessExit(err error) string {
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) && exitErr.ProcessState != nil {
-		return exitErr.ProcessState.String()
+		return exitErr.String()
 	}
 	return err.Error()
 }
