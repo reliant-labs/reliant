@@ -32,6 +32,7 @@ import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useGlobalUpdatesStore } from "@/store/globalUpdatesStore";
 import { processOomKillNotice } from "@/lib/machineMemory";
 import { statusBannerFrame, useStatusSlotCollapsed, useStatusSlotSummary } from "./ComposerStatusSlot";
+import { settingsPath } from "@/lib/paths";
 
 const DISMISS_KEY = "reliant.oomKillBanner.dismissed";
 
@@ -159,8 +160,7 @@ export function OomKillBanner() {
             type="button"
             onClick={() =>
               navigate({
-                to: "/settings/$section",
-                params: { section: "machines" },
+                to: settingsPath("machines"),
               })
             }
             className="inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/20 px-3 py-1 text-xs font-medium transition-colors hover:bg-warning/30 pointer-coarse:min-h-11"

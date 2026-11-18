@@ -47,70 +47,8 @@ const ALLOWED_NAVIGATION: Record<string, string> = {
   "components/forge-ui/ForgeTokenSandbox.tsx": "A dev-only harness whose links point at its own dev-only route; never org-scoped.",
 };
 
-/**
- * Files U1's codemod PRs ("refactor(web): typed paths for every destination
- * (codemod N/M)") move onto the builders. Each PR deletes its lines; the last
- * deletes the list. Never add to it.
- */
-const PENDING_CODEMOD = new Set<string>([
-  "ModernApp.tsx",
-  "components/Apps/AppsPage.tsx",
-  "components/Apps/DeployedAppCard.tsx",
-  "components/Apps/SidebarApps.tsx",
-  "components/Apps/startBuilding.ts",
-  "components/Chat/OomKillBanner.tsx",
-  "components/Chat/PersonalFundingPrompt.tsx",
-  "components/Chat/WorkflowErrorMessage.tsx",
-  "components/Chat/settings/ModelSettingsPage.tsx",
-  "components/Chat/tool-renderers/RunToolRenderer.tsx",
-  "components/Forge/Console/ForgeEntryRoutes.tsx",
-  "components/Forge/Demo/DemoBanner.tsx",
-  "components/Forge/Demo/demoEntry.ts",
-  "components/Forge/Demo/demoPath.ts",
-  "components/Forge/Observability/AskReliant/AskReliant.tsx",
-  "components/Forge/Observability/Dashboards/LLMUsageView.tsx",
-  "components/Forge/Observability/Dashboards/OrganizationBillingView.tsx",
-  "components/Forge/Observability/Dashboards/OrganizationUsageView.tsx",
-  "components/Forge/Observability/ObsStates.tsx",
-  "components/Forge/Observability/UsageView.tsx",
-  "components/Forge/Org/OrgConsoleLayout.tsx",
-  "components/ForgeShell/ForgeAuthGuard.tsx",
-  "components/ForgeShell/ForgeSettingsPage.tsx",
-  "components/ForgeShell/ForgeShellLayout.tsx",
-  "components/Layout/DaemonStatusDot.tsx",
-  "components/Layout/Header.tsx",
-  "components/Mobile/MobileAccountScreen.tsx",
-  "components/Mobile/MobileAutomationRedirect.tsx",
-  "components/Mobile/MobileBillingScreen.tsx",
-  "components/Mobile/MobileChatList.tsx",
-  "components/Mobile/MobileChatSearchTab.tsx",
-  "components/Mobile/MobileChatSheet.tsx",
-  "components/Mobile/MobileChatTopBar.tsx",
-  "components/Mobile/MobileComingSoon.tsx",
-  "components/Mobile/MobileDaemonList.tsx",
-  "components/Mobile/MobileDaemonScreen.tsx",
-  "components/Mobile/MobileDiagnosticsRoute.tsx",
-  "components/Mobile/MobileNavDrawer.tsx",
-  "components/Mobile/MobileNewChat.tsx",
-  "components/Mobile/MobileProjectList.tsx",
-  "components/Mobile/MobileRunsScreen.tsx",
-  "components/Mobile/MobileSearchScreen.tsx",
-  "components/Mobile/MobileSettingsScreen.tsx",
-  "components/Mobile/MobileShell.tsx",
-  "components/Mobile/MobileSplitLayout.tsx",
-  "components/Mobile/MobileWorkflowCatalog.tsx",
-  "components/Mobile/MobileWorkflowDetailRoute.tsx",
-  "components/Mobile/MobileWorkflowScreen.tsx",
-  "components/Shortcuts/ShortcutHost.tsx",
-  "components/inbox/InboxItem.tsx",
-  "components/inbox/InboxPage.tsx",
-  "forgeShellRoutes.tsx",
-  "routes.tsx",
-  "store/projectStore.ts",
-]);
-
 const { sites, roots } = findPathSites(SRC);
-const outside = sites.filter((site) => !BUILDERS.has(site.file) && !PENDING_CODEMOD.has(site.file));
+const outside = sites.filter((site) => !BUILDERS.has(site.file));
 
 const describeSite = (site: PathSite) => `  ${site.where}: ${site.text}`;
 
@@ -191,8 +129,8 @@ describe("app paths", () => {
   });
 
   it("allows nothing it no longer needs", () => {
-    const used = new Set(sites.map((site) => site.file));
-    const stale = [...Object.keys(ALLOWED_ROUTE), ...Object.keys(ALLOWED_NAVIGATION), ...PENDING_CODEMOD].filter((file) => !used.has(file));
+    const used = new Set(outside.map((site) => site.file));
+    const stale = [...Object.keys(ALLOWED_ROUTE), ...Object.keys(ALLOWED_NAVIGATION)].filter((file) => !used.has(file));
     expect(stale, "allowlist entries with nothing left to allow").toEqual([]);
   });
 });

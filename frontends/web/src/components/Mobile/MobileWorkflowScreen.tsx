@@ -19,6 +19,7 @@ import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { MobileScreenHeader } from "./MobileChrome";
 import type { RunStatusDisplay } from "../../lib/runStatus";
 import { RunStatusBadge } from "../runs/RunStatusIndicator";
+import { mobileWorkflowsPath } from "@/lib/paths";
 
 interface MobileWorkflowScreenProps {
   workflow: Workflow;
@@ -40,7 +41,7 @@ export function MobileWorkflowScreen({
   execution,
   runStatus,
   chatId,
-  backTo = "/m/workflows",
+  backTo = mobileWorkflowsPath(),
 }: MobileWorkflowScreenProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 

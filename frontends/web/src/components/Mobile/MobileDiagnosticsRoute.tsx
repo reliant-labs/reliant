@@ -6,8 +6,9 @@
 
 import { useNavigate } from "@tanstack/react-router";
 import { MobileDiagnosticsScreen } from "./MobileDiagnosticsScreen";
+import { mobileSettingsPath } from "@/lib/paths";
 
 export function MobileDiagnosticsRoute() {
   const navigate = useNavigate();
-  return <MobileDiagnosticsScreen onBack={() => void navigate({ to: "/m/settings" })} />;
+  return <MobileDiagnosticsScreen onBack={() => void navigate({ to: mobileSettingsPath() })} />;
 }

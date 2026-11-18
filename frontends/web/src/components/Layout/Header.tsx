@@ -32,6 +32,7 @@ import { openExternalLink } from "../../lib/open-link";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 import { useCurrentWorktree, useMainWorktree } from "../../hooks/worktree-queries";
 import { BrandMark } from "../icons/BrandMark";
+import { homePath } from "@/lib/paths";
 
 interface HeaderProps {
   /** Home (`/`). When set, the header leads with the Reliant mark linking there. */
@@ -169,7 +170,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
           {onNavigateHome && (
             <Tooltip content="Home" side="bottom" delay={300}>
               <a
-                href="/"
+                href={homePath()}
                 onClick={(e) => {
                   if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
                   e.preventDefault();
