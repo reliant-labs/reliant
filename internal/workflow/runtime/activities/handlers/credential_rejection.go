@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -83,5 +85,56 @@ func (r *AccountRouting) credentialRejection(ctx context.Context, err error, uc 
 			Err: fmt.Errorf("the saved API key was rejected: %w", err),
 		},
 		Facts: facts,
+	}
+}
+
+// OAuthSessionRejectedError is a provider refusing an OAuth session's access
+// token (401/403) after the driver already recovered what it could: it
+// reloaded the stored tokens and refreshed through the token coordinator once
+// (anthropic tokenRefreshTransport; reliant#2833). Nothing the system does
+// next can fix it: the user reconnects the account. A refresh the provider
+// refused has also marked the account needs-sign-in (CoordinatedAccountRefresh),
+// so the router no longer offers it.
+//
+// It is a USER error (svcerr.ClassUser): it logs at INFO and crosses the
+// activity boundary as Benign, so it is not an ERROR issue, and its message
+// tells the person what to do.
+type OAuthSessionRejectedError struct {
+	// Provider is the provider's display name ("Claude"); Account names the
+	// account, when it has a name.
+	Provider, Account string
+	Err               error
+}
+
+func (e *OAuthSessionRejectedError) Error() string {
+	account := ""
+	if e.Account != "" {
+		account = " (" + e.Account + ")"
+	}
+	return fmt.Sprintf("%s rejected this account's sign-in%s, and refreshing it did not help: reconnect %s in Settings → Providers to continue: %v",
+		e.Provider, account, e.Provider, e.Err)
+}
+
+func (e *OAuthSessionRejectedError) Unwrap() error { return e.Err }
+
+// ErrorClass: only the user can reconnect the account.
+func (e *OAuthSessionRejectedError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
+
+// oauthSessionRejection marks a routed OAuth session's credential refusal as
+// the user's to fix (OAuthSessionRejectedError), or returns nil when err is not
+// one. API keys are credentialRejection's; the managed Reliant key and local
+// models are never an OAuth session.
+func oauthSessionRejection(err error, uc usageLimitContext) error {
+	if uc.Account == nil {
+		return nil
+	}
+	cfg := uc.Account.Config
+	if cfg.RefreshToken == "" || cfg.DriverID == "reliant" || cfg.DriverID == "local" || !drivers.CredentialRejected(err) {
+		return nil
+	}
+	return &OAuthSessionRejectedError{
+		Provider: models.ProviderDisplayName(string(uc.Driver)),
+		Account:  accountName(cfg),
+		Err:      err,
 	}
 }

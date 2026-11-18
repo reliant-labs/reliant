@@ -164,7 +164,9 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 // header in lowercaseHeaders so subsequent requests use the new token. It also
 // recovers from a 401 by reloading the persisted tokens once and retrying —
 // covering the residual window where another process rotated the tokens after
-// this request was sent.
+// this request was sent — and, when the store holds the very token that was
+// refused, by refreshing through the coordinator once and retrying
+// (reliant#2833).
 type tokenRefreshTransport struct {
 	base             http.RoundTripper
 	opts             *llm.DriverOptions
@@ -202,8 +204,16 @@ func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, er
 		}
 		t.mu.Unlock()
 		if !changed {
-			// The store agrees with the token we just used: this is a genuine
-			// auth failure, not a rotation race.
+			// The store agrees with the token we just used. Before giving up,
+			// refresh once: the provider can consider an access token expired
+			// or revoked while its stored expiry still calls it valid (the
+			// subscription signed in again elsewhere, or clocks that disagree),
+			// and then only a new token helps. A refresh the provider refuses
+			// marks the account needs-sign-in (CoordinatedAccountRefresh).
+			changed = t.refreshAfterUnauthorized()
+		}
+		if !changed {
+			// A genuine auth failure, not a stale token.
 			return resp, nil
 		}
 		retryReq := cloneRequestForRetry(req)
@@ -211,7 +221,7 @@ func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, er
 			// Body not replayable; the adopted token still fixes future requests.
 			return resp, nil
 		}
-		logging.WarnContext(req.Context(), "Claude API returned 401 but the store has newer OAuth tokens; retrying once with rotated token",
+		logging.WarnContext(req.Context(), "Claude API returned 401 but newer OAuth tokens are available; retrying once with them",
 			"user_id", t.opts.UserID)
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		_ = resp.Body.Close()
@@ -256,6 +266,42 @@ func (t *tokenRefreshTransport) refreshIfNeeded() {
 	t.adoptLocked(newState)
 	t.mu.Unlock()
 	logging.Info("Claude OAuth token state updated", "new_expiry", newState.ExpiresAt, "user_id", t.opts.UserID)
+}
+
+// refreshAfterUnauthorized forces a refresh in response to a 401 that the store
+// could not explain. It reports whether a genuinely different access token was
+// adopted, which is the only case where retrying is worthwhile.
+func (t *tokenRefreshTransport) refreshAfterUnauthorized() bool {
+	if t.opts.TokenRefresher == nil {
+		return false
+	}
+
+	t.mu.RLock()
+	held := llm.OAuthTokens{
+		AccessToken:  t.opts.ApiKey,
+		RefreshToken: t.opts.RefreshToken,
+		ExpiresAt:    t.opts.TokenExpiresAt,
+	}
+	t.mu.RUnlock()
+
+	if held.RefreshToken == "" {
+		return false
+	}
+
+	newState, err := t.opts.TokenRefresher(held)
+	if err != nil {
+		logging.Warn("Claude token refresh after 401 failed", "error", err, "user_id", t.opts.UserID)
+		return false
+	}
+	if newState.AccessToken == "" || newState.AccessToken == held.AccessToken {
+		return false
+	}
+
+	t.mu.Lock()
+	t.adoptLocked(newState)
+	t.mu.Unlock()
+	logging.Info("Claude OAuth token refreshed after a 401", "new_expiry", newState.ExpiresAt, "user_id", t.opts.UserID)
+	return true
 }
 
 // adoptLocked installs a new token state on the options and rewrites the

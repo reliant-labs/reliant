@@ -9,10 +9,12 @@ import (
 	"testing"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -164,4 +166,39 @@ func TestCredentialRejection_MarksARejectedOrgManagedKeyForReminting(t *testing.
 	uc.Account = &orgless
 	assert.NoError(t, env.routing.credentialRejection(ctx, rejectedKey(), uc))
 	assert.Equal(t, []string{"managed-org-1"}, marker.marked, "the org-less key is its healer's")
+}
+
+// reliant#2833: a Claude subscription's 401 that the driver's reload and
+// refresh did not cure is the user's to fix. It is a user-class error that
+// says to reconnect the account, and keeps the provider's error on its chain;
+// anything else, and API keys, are left to the other paths.
+func TestProviderFailure_OAuthSessionRejectionIsTheUsersToReconnect(t *testing.T) {
+	sub := claudeAccount("a", "alice@acme.com", 0)
+	sub.RefreshToken = "refresh"
+	withAvailableDrivers(t, driversWith(sub))
+	env := newRoutingEnv(t)
+	env.routing.Credentials = &markerFake{store: env.store}
+	res, err := resolveLLMCall(context.Background(), nil, llmCallSpec{
+		UserID: "u1", Attended: true, SessionID: "s", ThreadID: "t",
+		Selector: models.ModelSelector{ID: routeModel + "@claude"}, Routing: env.routing,
+	})
+	require.NoError(t, err)
+	uc := usageLimitContext{Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: res.Account}
+
+	got := env.routing.providerFailure(context.Background(), rejectedKey(), uc)
+	var rejected *OAuthSessionRejectedError
+	require.ErrorAs(t, got, &rejected)
+	assert.Contains(t, got.Error(), "reconnect Claude")
+	assert.Contains(t, got.Error(), "alice@acme.com")
+	assert.Equal(t, svcerr.ClassUser, errclass.Classify(got), "not an ERROR issue")
+	var anth *anthropic.Error
+	assert.ErrorAs(t, got, &anth, "the provider's error stays on the chain")
+
+	assert.Nil(t, oauthSessionRejection(errors.New("dial tcp: connection refused"), uc), "not a credential verdict")
+	apiKey := uc
+	acct := *uc.Account
+	acct.Config.RefreshToken = ""
+	apiKey.Account = &acct
+	assert.Nil(t, oauthSessionRejection(rejectedKey(), apiKey), "API keys are credentialRejection's")
+	assert.Nil(t, oauthSessionRejection(rejectedKey(), usageLimitContext{}), "an unrouted call has no session to judge")
 }

@@ -155,6 +155,99 @@ func TestTokenRefreshTransport_401WithoutNewerTokensPassesThrough(t *testing.T) 
 	assert.Len(t, upstream.requests, 1, "no retry when the store has nothing newer")
 }
 
+// reliant#2833: the provider answered 401 "OAuth access token has expired"
+// while the stored expiry still called the token valid, and the store held the
+// same token. The transport refreshes through the coordinator once and retries
+// once with the new token, instead of failing the run terminally.
+func TestTokenRefreshTransport_401TheStoreCannotExplainRefreshesAndRetriesOnce(t *testing.T) {
+	upstream := &scriptedRoundTripper{statuses: []int{http.StatusUnauthorized, http.StatusOK}}
+
+	var refreshedWith []llm.OAuthTokens
+	opts := &llm.DriverOptions{
+		ApiKey:         "current-token",
+		UserID:         "user-1",
+		RefreshToken:   "rt-1",
+		TokenExpiresAt: time.Now().Add(time.Hour), // looks valid: no pre-flight refresh
+		TokenReloader: func() (*llm.OAuthTokens, error) {
+			return &llm.OAuthTokens{AccessToken: "current-token", RefreshToken: "rt-1", ExpiresAt: time.Now().Add(time.Hour)}, nil
+		},
+		TokenRefresher: func(held llm.OAuthTokens) (llm.OAuthTokens, error) {
+			refreshedWith = append(refreshedWith, held)
+			return llm.OAuthTokens{AccessToken: "refreshed-token", RefreshToken: "rt-2", ExpiresAt: time.Now().Add(8 * time.Hour)}, nil
+		},
+	}
+	transport := newTestTokenRefreshTransport(opts, upstream)
+
+	resp, err := transport.RoundTrip(newMessagesRequest(t))
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "the retry with the refreshed token succeeds")
+	require.Len(t, refreshedWith, 1, "refreshed exactly once")
+	assert.Equal(t, "current-token", refreshedWith[0].AccessToken, "the coordinator is told which token was refused")
+	require.Len(t, upstream.requests, 2)
+	assert.Equal(t, "Bearer refreshed-token", upstream.requests[1].authorization)
+	assert.Equal(t, `{"model":"claude-fable-5"}`, upstream.requests[1].body, "retry must replay the body")
+	assert.Equal(t, "refreshed-token", opts.ApiKey, "the refreshed token sticks for future requests")
+	assert.Equal(t, "rt-2", opts.RefreshToken)
+}
+
+// A refresh that fails (the provider refused it: the coordinator then marks
+// the account needs-sign-in), or that returns the same token, leaves the 401 to
+// surface, with no retry. A retry that is refused again surfaces too: one
+// refresh and one retry per request, never a loop.
+func TestTokenRefreshTransport_401RefreshThatCannotHelpPassesThrough(t *testing.T) {
+	sameStore := func() (*llm.OAuthTokens, error) {
+		return &llm.OAuthTokens{AccessToken: "current-token", RefreshToken: "rt-1", ExpiresAt: time.Now().Add(time.Hour)}, nil
+	}
+	cases := []struct {
+		name     string
+		statuses []int
+		refresh  func(llm.OAuthTokens) (llm.OAuthTokens, error)
+		requests int
+	}{
+		{
+			name:     "refresh refused",
+			statuses: []int{http.StatusUnauthorized},
+			refresh: func(llm.OAuthTokens) (llm.OAuthTokens, error) {
+				return llm.OAuthTokens{}, fmt.Errorf("claude token refresh failed: %w", llm.ErrRefreshRejected)
+			},
+			requests: 1,
+		},
+		{
+			name:     "same token back",
+			statuses: []int{http.StatusUnauthorized},
+			refresh: func(h llm.OAuthTokens) (llm.OAuthTokens, error) {
+				return h, nil
+			},
+			requests: 1,
+		},
+		{
+			name:     "refused again after the refresh",
+			statuses: []int{http.StatusUnauthorized, http.StatusUnauthorized},
+			refresh: func(llm.OAuthTokens) (llm.OAuthTokens, error) {
+				return llm.OAuthTokens{AccessToken: "refreshed-token", RefreshToken: "rt-2", ExpiresAt: time.Now().Add(time.Hour)}, nil
+			},
+			requests: 2,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			upstream := &scriptedRoundTripper{statuses: tc.statuses}
+			refreshes := 0
+			opts := &llm.DriverOptions{
+				ApiKey: "current-token", UserID: "user-1", RefreshToken: "rt-1",
+				TokenExpiresAt: time.Now().Add(time.Hour),
+				TokenReloader:  sameStore,
+				TokenRefresher: func(h llm.OAuthTokens) (llm.OAuthTokens, error) { refreshes++; return tc.refresh(h) },
+			}
+			resp, err := newTestTokenRefreshTransport(opts, upstream).RoundTrip(newMessagesRequest(t))
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+			assert.Equal(t, 1, refreshes, "one refresh per refused request")
+			assert.Len(t, upstream.requests, tc.requests)
+		})
+	}
+}
+
 // TestTokenRefreshTransport_401WithEmptyStorePassesThrough: no persisted
 // tokens at all (user disconnected Claude) — surface the 401.
 func TestTokenRefreshTransport_401WithEmptyStorePassesThrough(t *testing.T) {
