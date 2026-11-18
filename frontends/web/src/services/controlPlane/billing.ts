@@ -12,6 +12,7 @@ import type {
   ReliantEntitlement,
   ManagedReliantAccess,
 } from "@/gen/controlplane/controlplane/v1/shared_pb";
+import { orgRequest } from "@/lib/orgScope";
 import { getControlPlaneClient } from "./client";
 
 export type { ReliantEntitlement, ManagedReliantAccess };
@@ -68,10 +69,11 @@ export interface ComputeEligibility {
  * compute minutes from a redeemed coupon) so the UI can predict it instead
  * of gating on the unrelated LLM wallet entitlement.
  */
-export async function getComputeEligibility(): Promise<ComputeEligibility> {
+export async function getComputeEligibility(orgId: string | null): Promise<ComputeEligibility> {
+  // Read in `orgId`; null names none and the active org is filled on the wire.
   const res = await getControlPlaneClient(
     BillingService,
-  ).getCurrentUserComputeEligibility({});
+  ).getCurrentUserComputeEligibility(orgRequest({}, orgId));
   return {
     eligible: res.eligible,
     reason: res.reason,

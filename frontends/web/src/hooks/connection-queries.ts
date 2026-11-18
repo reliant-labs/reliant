@@ -17,7 +17,7 @@
  */
 
 import { useMemo } from "react";
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ConnectError } from "@connectrpc/connect";
 
 import {
@@ -34,14 +34,13 @@ import {
   type ListIntegrationsResponse,
 } from "../gen/reliant/v1/connection_pb";
 import { unavailableIntegrationIds } from "../lib/integrationAvailability";
-import { useActiveOrgStore } from "../store/activeOrgStore";
+import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
 import { catalogServiceKeys } from "./catalog-service-hooks_gen";
 import {
   connectionServiceKeys,
+  connectionServiceQueries,
   useCreateApiKeyConnection as useCreateApiKeyConnectionRpc,
   useDeleteConnection as useDeleteConnectionRpc,
-  useListConnections,
-  useListIntegrations,
   useRenameConnection as useRenameConnectionRpc,
   useSetDefaultConnection as useSetDefaultConnectionRpc,
   useTestConnection as useTestConnectionRpc,
@@ -224,9 +223,28 @@ export function connectionErrorMessage(error: unknown): string {
 
 // ── Reads ───────────────────────────────────────────────────────────────────
 
+/**
+ * ListConnections in the tab's org: the org's connections join the caller's
+ * own (ListConnectionsRequest.org_id), so the request names the org and the
+ * key does too, and nothing is read before the org is known (lib/orgScope).
+ */
+function useConnectionList(integrationId: string | undefined, enabled: boolean) {
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      connectionServiceQueries.listConnections(orgRequest({ integrationId }, org.orgId), {
+        enabled: enabled && orgQueryEnabled(org),
+        staleTime: 30_000,
+        select: connectionsOf,
+      }),
+      org,
+    ),
+  );
+}
+
 /** The caller's connections to one integration. */
 export function useConnections(integrationId: string | undefined) {
-  return useListConnections({ integrationId }, { enabled: !!integrationId, staleTime: 30_000, select: connectionsOf });
+  return useConnectionList(integrationId, !!integrationId);
 }
 
 // Module-level, so React Query re-maps only when the response changes.
@@ -234,21 +252,30 @@ const connectionsOf = (response: ListConnectionsResponse) => response.connection
 
 /** Every connection the caller has, to any integration (Settings → Integrations). */
 export function useAllConnections() {
-  return useListConnections({}, { staleTime: 30_000, select: connectionsOf });
+  return useConnectionList(undefined, true);
 }
 
 const integrationsOf = (response: ListIntegrationsResponse) => response.integrations.map(integrationFromProto);
 
 /**
- * ListIntegrations for the active org, named in the request itself: each
+ * ListIntegrations for the tab's org, named in the request itself: each
  * integration's `orgPolicy` is that org's, so the org belongs in the query key
  * (the request) — filled in on the wire alone, a switch would show the
- * previous org's markers from the cache under the new org's name. Until the
- * active org is known the request names none, and nothing is marked.
+ * previous org's markers from the cache under the new org's name. Nothing is
+ * read until the org is known (lib/orgScope).
  */
 function useActiveOrgListIntegrations<T = ListIntegrationsResponse>(select?: (r: ListIntegrationsResponse) => T) {
-  const orgId = useActiveOrgStore((s) => s.effectiveId);
-  return useListIntegrations(orgId ? { orgId } : {}, { staleTime: 5 * 60_000, ...(select ? { select } : {}) });
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      connectionServiceQueries.listIntegrations(orgRequest({}, org.orgId), {
+        enabled: orgQueryEnabled(org),
+        staleTime: 5 * 60_000,
+        ...(select ? { select } : {}),
+      }),
+      org,
+    ),
+  );
 }
 
 /** Every integration this deployment lists, with the ways to connect each (ListIntegrations). */

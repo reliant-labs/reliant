@@ -3,7 +3,8 @@
  * (CatalogService ListModels / ListAvailableModels org_id): the org's accounts
  * and seats, narrowed by its policy. So the list names the active org, and a
  * change of it (a switch, a reconcile onto the default, another tab) re-lists,
- * never showing the org that was left.
+ * never showing the org that was left. Nothing is listed before the tab's org
+ * is known (lib/orgScope).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,6 +12,8 @@ const fetchModelList = vi.hoisted(() => vi.fn());
 const waitForConfig = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("../../hooks/catalog-models", () => ({ fetchModelList }));
 vi.mock("../../lib/configReady", () => ({ waitForConfig }));
+// A control plane, so the org scope follows the active org store (lib/orgScope).
+vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
 import { useActiveOrgStore } from "../activeOrgStore";
 import { useGlobalDataStore } from "../globalDataStore";
@@ -31,7 +34,7 @@ beforeEach(() => {
   fetchModelList.mockReset();
   fetchModelList.mockImplementation(async (org: string | null) => modelsOf(org));
   useGlobalDataStore.getState().reset();
-  useActiveOrgStore.setState({ userId: "u1", chosenId: null, effectiveId: "acme" });
+  useActiveOrgStore.setState({ userId: "u1", chosenId: null, effectiveId: "acme", resolved: true, failure: null });
 });
 
 describe("globalDataStore and the active org", () => {
@@ -86,6 +89,20 @@ describe("globalDataStore and the active org", () => {
     expect(state.models.map((m) => m.id)).toEqual(["m@globex"]);
     expect(state.modelsOrgId).toBe("globex");
     expect(state.modelsLoading || state.isPrefetching, "no loading flag is left set").toBe(false);
+  });
+
+  it("lists nothing until the tab's org is known, then lists it", async () => {
+    useActiveOrgStore.setState({ effectiveId: null, resolved: false });
+    const prefetch = useGlobalDataStore.getState().prefetch();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fetchModelList, "a list naming no org is not this org's").not.toHaveBeenCalled();
+
+    useActiveOrgStore.setState({ effectiveId: "acme", resolved: true });
+    await prefetch;
+    expect(fetchModelList).toHaveBeenCalledWith("acme");
+    expect(fetchModelList).not.toHaveBeenCalledWith(null);
+    expect(useGlobalDataStore.getState().modelsOrgId).toBe("acme");
   });
 
   it("does nothing before the first load, which reads the org itself", () => {

@@ -31,22 +31,22 @@ export function useObsBillingUsage(orgId: string | null) {
 }
 export function useObsBillingLimits(orgId: string) {
   const api = useObservabilityBillingApi();
-  return useQuery({ queryKey: [...obsBillingKey(orgId), "limits"], queryFn: () => api.getObservabilityLimits({ orgId }), retry: retryObsBilling });
+  return useQuery({ queryKey: [...obsBillingKey(orgId), "limits"], enabled: !!orgId, queryFn: () => api.getObservabilityLimits({ orgId }), retry: retryObsBilling });
 }
 export function useObsBillingStorage(orgId: string) {
   const api = useObservabilityBillingApi();
-  return useQuery({ queryKey: [...obsBillingKey(orgId), "storage"], queryFn: () => api.getObservabilityStorage({ orgId }), retry: retryObsBilling, staleTime: 60_000 });
+  return useQuery({ queryKey: [...obsBillingKey(orgId), "storage"], enabled: !!orgId, queryFn: () => api.getObservabilityStorage({ orgId }), retry: retryObsBilling, staleTime: 60_000 });
 }
 export function useObsBillingDays(orgId: string, month: string) {
   const api = useObservabilityBillingApi();
   const start = new Date(`${month}-01T00:00:00Z`);
   const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
-  return useInfiniteQuery({ queryKey: [...obsBillingKey(orgId), "days", month], initialPageParam: "",
+  return useInfiniteQuery({ queryKey: [...obsBillingKey(orgId), "days", month], initialPageParam: "", enabled: !!orgId,
     queryFn: ({ pageParam }) => api.listObservabilityUsage({ orgId, start: timestampFromDate(start), end: timestampFromDate(end), granularity: 2, groupBy: 2, pageSize: 5000, pageToken: pageParam }),
     getNextPageParam: (last) => last.nextPageToken || undefined, retry: retryObsBilling });
 }
 export function useObsLimitHistory(orgId: string) {
-  return useInfiniteQuery({ queryKey: [...obsBillingKey(orgId), "history"], initialPageParam: "",
+  return useInfiniteQuery({ queryKey: [...obsBillingKey(orgId), "history"], initialPageParam: "", enabled: !!orgId,
     queryFn: ({ pageParam }) => getControlPlaneClient(BillingService).listOrgLimitChanges({ orgId, pageSize: 50, pageToken: pageParam }),
     getNextPageParam: (last) => last.nextPageToken || undefined, retry: retryObsBilling });
 }

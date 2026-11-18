@@ -37,7 +37,7 @@ export function MachineSaleConsent({ planId, children, onUseOwnComputer, onPlanC
   return <OrgMachineSale key={`${org.active.id}:${planId}`} orgId={org.active.id} planId={planId} canManage={["owner", "admin"].includes(org.active.role)} onUseOwnComputer={onUseOwnComputer} onPlanChanged={onPlanChanged}>{children}</OrgMachineSale>;
 }
 function OrgMachineSale({ orgId, planId, canManage, children, onUseOwnComputer, onPlanChanged }: { orgId: string; planId: string; canManage: boolean; children: (monthlyPriceCents?: number) => ReactNode; onUseOwnComputer?: () => void; onPlanChanged?: () => void }) {
-  const readiness = useQuery({ queryKey: ["machine-pricing-readiness", orgId, planId], queryFn: () => getControlPlaneClient(BillingService).getMachinePricingReadiness({ orgId, planId, pricingVersion: "" }), retry: false, staleTime: 0 });
+  const readiness = useQuery({ queryKey: ["machine-pricing-readiness", orgId, planId], queryFn: () => getControlPlaneClient(BillingService).getMachinePricingReadiness({ orgId, planId, pricingVersion: "" }), enabled: !!orgId, retry: false, staleTime: 0 });
   const retry = () => void readiness.refetch();
   if (readiness.error) return <CheckoutUnavailable role="alert" message="We couldn't load machine pricing just now." onRetry={retry} onUseOwnComputer={onUseOwnComputer} />;
   if (readiness.isPending) return <p role="status" className="text-sm text-muted-foreground">Loading machine pricing…</p>;

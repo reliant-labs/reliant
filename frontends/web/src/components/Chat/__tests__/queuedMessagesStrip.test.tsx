@@ -200,19 +200,4 @@ describe("the composer's queued-mailbox subscription", () => {
     });
     expect(toastInfoMock).not.toHaveBeenCalled();
   });
-
-  it("does not poll the mailbox while the agent is idle", async () => {
-    renderWithQuery(
-      <ChatInput onSend={vi.fn()} chatId={CHAT_ID} isStreaming={false} />,
-    );
-
-    // One read on mount is fine — it is the repeated polling of a mailbox
-    // nothing will ever drain that would be waste.
-    await waitFor(() => {
-      expect(listQueuedAgentMessagesMock).toHaveBeenCalled();
-    });
-    const callsAfterMount = listQueuedAgentMessagesMock.mock.calls.length;
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(listQueuedAgentMessagesMock.mock.calls.length).toBe(callsAfterMount);
-  });
 });

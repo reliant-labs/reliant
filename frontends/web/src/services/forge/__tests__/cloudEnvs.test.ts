@@ -55,8 +55,14 @@ beforeEach(() => {
 describe("listProjectEnvironments", () => {
   it("asks for ONE project's environments", async () => {
     listEnvironments.mockResolvedValue({ environments: [] });
-    await listProjectEnvironments("barksocial");
+    await listProjectEnvironments("barksocial", null);
     expect(listEnvironments).toHaveBeenCalledWith({ project: "barksocial" });
+  });
+
+  it("names the org it is read in, so the answer is that org's", async () => {
+    listEnvironments.mockResolvedValue({ environments: [] });
+    await listProjectEnvironments("barksocial", "org-a");
+    expect(listEnvironments).toHaveBeenCalledWith({ project: "barksocial", orgId: "org-a" });
   });
 
   it("drops rows for another project — an old control plane ignores the filter", async () => {
@@ -69,7 +75,7 @@ describe("listProjectEnvironments", () => {
         create(DeployEnvironmentSchema, { id: "d", name: "dev", project: "barksocial", kind: DeployEnvironmentKind.LOCAL }),
       ],
     });
-    const envs = await listProjectEnvironments("barksocial");
+    const envs = await listProjectEnvironments("barksocial", null);
     expect(envs.map((e) => [e.id, e.name, e.kind])).toEqual([
       ["d", "dev", "local"],
       ["a", "prod", "persistent"],
@@ -80,7 +86,7 @@ describe("listProjectEnvironments", () => {
     listEnvironments.mockResolvedValue({
       environments: [create(DeployEnvironmentSchema, { id: "cp", name: "prod", project: "control-plane", kind: DeployEnvironmentKind.SELF_MANAGED })],
     });
-    const envs = await listProjectEnvironments("control-plane");
+    const envs = await listProjectEnvironments("control-plane", null);
     expect(envs.map((e) => e.kind)).toEqual(["self_managed"]);
   });
 });
@@ -104,7 +110,7 @@ describe("getEnvironmentStatus: a hosted frontend", () => {
         ],
       })
     );
-    const status = await getEnvironmentStatus("env-prod");
+    const status = await getEnvironmentStatus("env-prod", null);
     expect(status.workloads[0]).toMatchObject({
       name: "web",
       tier: "static",
@@ -148,7 +154,7 @@ describe("getEnvironmentStatus", () => {
       })
     );
 
-    const status = await getEnvironmentStatus("env-1");
+    const status = await getEnvironmentStatus("env-1", null);
     expect(getStatus).toHaveBeenCalledWith({ environmentId: "env-1" });
     expect(status.verdict).toBe("degraded");
     expect(status.workloads).toEqual([
@@ -179,7 +185,7 @@ describe("getEnvironmentStatus", () => {
 
   it("reports an empty environment as unknown — never healthy", async () => {
     getStatus.mockResolvedValue(create(GetDeploymentStatusResponseSchema, {}));
-    const status = await getEnvironmentStatus("env-1");
+    const status = await getEnvironmentStatus("env-1", null);
     expect(status.verdict).toBe("unknown");
     expect(status.workloads).toEqual([]);
     expect(status.currentPromotion).toBeNull();

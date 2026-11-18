@@ -38,6 +38,7 @@ import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 
 import { buildUsageSummary, timestampToDate } from "./usageModel";
@@ -67,12 +68,17 @@ export interface DeployUsageState {
 /** Raw meter ticks are retained this long (control-plane migration 00071). */
 export const USAGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Every read here is the org's (each request has an org_id), so each key names
+ * the org it was read in ("" for none), the request names it too, and nothing
+ * is read before the tab's org is known (lib/orgScope).
+ */
 export const deployUsageKeys = {
   all: ["deploy-usage"] as const,
-  overage: ["deploy-usage", "infra-overage"] as const,
-  rows: (startMs: number, endMs: number) =>
-    ["deploy-usage", "rows", startMs, endMs] as const,
-  names: ["deploy-usage", "names"] as const,
+  overage: (orgId: string | null) => ["deploy-usage", "infra-overage", orgId ?? ""] as const,
+  rows: (orgId: string | null, startMs: number, endMs: number) =>
+    ["deploy-usage", "rows", orgId ?? "", startMs, endMs] as const,
+  names: (orgId: string | null) => ["deploy-usage", "names", orgId ?? ""] as const,
 };
 
 /**
@@ -116,13 +122,20 @@ function floorToMinute(d: Date): Date {
 
 export function useDeployUsage(): DeployUsageState {
   const queryClient = useQueryClient();
+  const org = useOrgScope();
 
-  const overage = useQuery({
-    queryKey: deployUsageKeys.overage,
-    queryFn: () =>
-      getControlPlaneClient(BillingService).getCurrentUserInfraOverage({}),
-    staleTime: 60_000,
-  });
+  const overage = useQuery(
+    withOrgFailure(
+      {
+        queryKey: deployUsageKeys.overage(org.orgId),
+        queryFn: () =>
+          getControlPlaneClient(BillingService).getCurrentUserInfraOverage(orgRequest({}, org.orgId)),
+        enabled: orgQueryEnabled(org),
+        staleTime: 60_000,
+      },
+      org,
+    ),
+  );
 
   const window = useMemo(
     () =>
@@ -134,31 +147,42 @@ export function useDeployUsage(): DeployUsageState {
     [overage.data?.periodStart, overage.data?.periodEnd],
   );
 
-  const rows = useQuery({
-    queryKey: deployUsageKeys.rows(window.start.getTime(), window.end.getTime()),
-    queryFn: () =>
-      getControlPlaneClient(DeployService).listUsage(listUsageRequest(window)),
-    // Wait for the period: asking before it is known would fetch the fallback
-    // window and then immediately refetch the real one.
-    enabled: overage.isSuccess || overage.isError,
-    staleTime: 60_000,
-  });
+  const rows = useQuery(
+    withOrgFailure(
+      {
+        queryKey: deployUsageKeys.rows(org.orgId, window.start.getTime(), window.end.getTime()),
+        queryFn: () =>
+          getControlPlaneClient(DeployService).listUsage(orgRequest(listUsageRequest(window), org.orgId)),
+        // Wait for the period: asking before it is known would fetch the fallback
+        // window and then immediately refetch the real one.
+        enabled: (overage.isSuccess || overage.isError) && orgQueryEnabled(org),
+        staleTime: 60_000,
+      },
+      org,
+    ),
+  );
 
-  const names = useQuery({
-    queryKey: deployUsageKeys.names,
-    queryFn: async () => {
-      const client = getControlPlaneClient(DeployService);
-      const [deployments, environments] = await Promise.all([
-        client.listDeployments({}),
-        client.listEnvironments({}),
-      ]);
-      return {
-        deployments: new Map(deployments.deployments.map((d) => [d.id, d.name])),
-        environments: new Map(environments.environments.map((e) => [e.id, e.name])),
-      };
-    },
-    staleTime: 5 * 60_000,
-  });
+  const names = useQuery(
+    withOrgFailure(
+      {
+        queryKey: deployUsageKeys.names(org.orgId),
+        queryFn: async () => {
+          const client = getControlPlaneClient(DeployService);
+          const [deployments, environments] = await Promise.all([
+            client.listDeployments(orgRequest({}, org.orgId)),
+            client.listEnvironments(orgRequest({}, org.orgId)),
+          ]);
+          return {
+            deployments: new Map(deployments.deployments.map((d) => [d.id, d.name])),
+            environments: new Map(environments.environments.map((e) => [e.id, e.name])),
+          };
+        },
+        enabled: orgQueryEnabled(org),
+        staleTime: 5 * 60_000,
+      },
+      org,
+    ),
+  );
 
   const summary = useMemo(
     () =>

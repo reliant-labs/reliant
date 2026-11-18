@@ -204,7 +204,7 @@ describe("review edge cases", () => {
     const index = ledger.findIndex((p) => p.releaseVersion === V[1]);
     const late = { ...ledger[index]!, gates: [...ledger[index]!.gates, { name: "smoke", status: "failed" as const, rawStatus: "", summary: "", url: "", recordedBy: "", finishedAt: new Date().toISOString(), source: "recorded" as const }] };
     act(() => {
-      harness.client.setQueryData(releaseKeys.promotions("env-prod"), ledger.map((p, i) => (i === index ? late : p)));
+      harness.client.setQueryData(releaseKeys.promotions(null, "env-prod"), ledger.map((p, i) => (i === index ? late : p)));
     });
     await waitFor(() => expect(row(V[1]!)).toHaveTextContent("2/3"));
   });

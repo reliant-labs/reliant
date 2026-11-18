@@ -31,6 +31,8 @@ import {
   type CloudEnv,
 } from "@/services/forge/cloudEnvs";
 
+import { orgQueryEnabled, useOrgScope, withOrgFailure } from "@/lib/orgScope";
+
 import { forgeCloudKeys, useCloudEnvStatuses } from "./forge-queries";
 import { useProjects } from "./project-queries";
 
@@ -49,20 +51,27 @@ export interface AppsState {
   detail: string;
 }
 
+/** Every hosted environment in the tab's org, read in it and keyed by it (lib/orgScope). */
 export function useOrgEnvironments() {
-  return useQuery<OrgEnvsResult>({
-    queryKey: forgeCloudKeys.orgEnvs(),
-    queryFn: async () => {
-      try {
-        return { availability: "available" as const, envs: await listOrgEnvironments(), detail: "" };
-      } catch (err) {
-        return { availability: cloudAvailabilityFromError(err), envs: [], detail: cloudErrorDetail(err) };
-      }
-    },
-    enabled: hasCloudControlPlane(),
-    staleTime: 30_000,
-    retry: false,
-  });
+  const org = useOrgScope();
+  return useQuery<OrgEnvsResult>(
+    withOrgFailure(
+      {
+        queryKey: forgeCloudKeys.orgEnvs(org.orgId),
+        queryFn: async () => {
+          try {
+            return { availability: "available" as const, envs: await listOrgEnvironments(org.orgId), detail: "" };
+          } catch (err) {
+            return { availability: cloudAvailabilityFromError(err), envs: [], detail: cloudErrorDetail(err) };
+          }
+        },
+        enabled: hasCloudControlPlane() && orgQueryEnabled(org),
+        staleTime: 30_000,
+        retry: false,
+      },
+      org,
+    ),
+  );
 }
 
 /** Every app the user can see, newest deploy first. */
