@@ -6,6 +6,7 @@ package credsandbox
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,7 +41,9 @@ func stepRoot(t *testing.T) string {
 	last := stepSweep.last
 	stepSweep.last = testNow
 	stepSweep.Unlock()
+	fsys := procFS
 	t.Cleanup(func() {
+		procFS = fsys
 		stepScratchSettleTries, stepScratchSettleEvery, stepScratchLingerEvery, stepScratchMinAge, stepScratchNow, stepScratchProcRoot = tries, every, linger, age, now, proc
 		stepSweep.Lock()
 		stepSweep.last = last
@@ -238,7 +241,7 @@ func TestSweepStepScratch_RemovesOrphansAndSparesALiveStepsDir(t *testing.T) {
 		13: {env: []string{"TMPDIR=/mnt/workspace-disk/home/u/.reliant/cred-scratch/step-999999-tmpdir/t"}},
 	})
 
-	assert.Equal(t, 1, sweepStepScratch(root))
+	assert.Equal(t, 1, sweepRemoved(t, root))
 	assert.NoDirExists(t, dead, "nothing holds it: its daemon and its command are gone")
 	for _, d := range []string{byEnv, byCwd, byFD, byTmpdir} {
 		assert.DirExists(t, d, "a live step's directory is spared")
@@ -260,7 +263,7 @@ func TestSweepStepScratch_NeverTakesADirectoryThisDaemonHandedOut(t *testing.T) 
 	require.NoError(t, os.Chtimes(dir, old, old))
 	orphan := stepDir(t, root, "step-999999-orphan", time.Hour)
 
-	assert.Equal(t, 1, sweepStepScratch(root))
+	assert.Equal(t, 1, sweepRemoved(t, root))
 	assert.DirExists(t, dir, "registered: its command is about to start")
 	assert.NoDirExists(t, orphan)
 
@@ -283,11 +286,11 @@ func TestSweepStepScratch_ADirectoryMadeDuringTheSweepSurvivesIt(t *testing.T) {
 		require.NoError(t, os.Chtimes(made, old, old))
 	}
 
-	assert.Equal(t, 1, sweepStepScratch(root))
+	assert.Equal(t, 1, sweepRemoved(t, root))
 	require.NotEmpty(t, made)
 	assert.DirExists(t, made, "made after the listing: never a candidate")
 	assert.NoDirExists(t, orphan)
-	assert.Equal(t, 0, sweepStepScratch(root), "nor in the next sweep: it is registered")
+	assert.Equal(t, 0, sweepRemoved(t, root), "nor in the next sweep: it is registered")
 	assert.DirExists(t, made)
 }
 
@@ -306,7 +309,9 @@ func TestSweepStepScratch_RemovesNothingWhenAProcessCannotBeRead(t *testing.T) {
 			dead := stepDir(t, root, "step-999999-dead", time.Hour)
 			stepScratchProcRoot = fakeProc(t, map[int]fakeProcess{20: p})
 
-			assert.Equal(t, 0, sweepStepScratch(root))
+			removed, complete := sweepStepScratch(root)
+			assert.Equal(t, 0, removed)
+			assert.False(t, complete, "an incomplete walk is reported, so the next sweep comes soon")
 			assert.DirExists(t, dead)
 			_, err := stepScratchRefs(stepScratchProcRoot)
 			assert.Error(t, err, "the scan reports itself incomplete")
@@ -367,6 +372,152 @@ func TestRelease_ReclaimsAScratchNoTreeTook(t *testing.T) {
 	require.Eventually(t, func() bool { return !stepScratchRegistered(dir) }, 10*time.Second, 10*time.Millisecond)
 	assert.NoDirExists(t, dir)
 	assert.Nil(t, TakeStepScratch(cmd))
+}
+
+// sweepRemoved runs a sweep whose walk of /proc must be complete and returns
+// how many directories it removed.
+func sweepRemoved(t *testing.T, root string) int {
+	t.Helper()
+	removed, complete := sweepStepScratch(root)
+	require.True(t, complete, "the walk of the fake /proc is complete")
+	return removed
+}
+
+// failRead makes reads of path, under the fake /proc, fail with err until the
+// returned func is called: what the kernel does to a process mid-exit (ESRCH),
+// or to one whose pid was taken over between the listing and the read.
+func failRead(t *testing.T, path string, err error) (heal func()) {
+	t.Helper()
+	failing := true
+	fsys := procFS
+	wrap := func(p string) error {
+		if failing && p == path {
+			return &fs.PathError{Op: "read", Path: p, Err: err}
+		}
+		return nil
+	}
+	procFS.readFile = func(p string) ([]byte, error) {
+		if e := wrap(p); e != nil {
+			return nil, e
+		}
+		return fsys.readFile(p)
+	}
+	procFS.readlink = func(p string) (string, error) {
+		if e := wrap(p); e != nil {
+			return "", e
+		}
+		return fsys.readlink(p)
+	}
+	procFS.readDir = func(p string) ([]os.DirEntry, error) {
+		if e := wrap(p); e != nil {
+			return nil, e
+		}
+		return fsys.readDir(p)
+	}
+	procFS.lstat = func(p string) (os.FileInfo, error) {
+		if e := wrap(p); e != nil {
+			return nil, e
+		}
+		return fsys.lstat(p)
+	}
+	return func() { failing = false }
+}
+
+// R2.B2/R3.B1: ESRCH (or ENOENT) on any read of a listed process does not
+// prove it holds nothing: it may be exiting, its pid may already be another
+// process's, or it may run in another pid namespace. The pass removes nothing
+// and says it was incomplete; the next pass, with a clean walk, removes them.
+func TestSweepStepScratch_AnESRCHMidWalkRemovesNothingUntilAWalkIsClean(t *testing.T) {
+	for _, tc := range []struct {
+		name, file string
+		err        error
+	}{
+		{"environment ESRCH", "environ", syscall.ESRCH},
+		{"working directory ESRCH", "cwd", syscall.ESRCH},
+		{"descriptors ESRCH", "fd", syscall.ESRCH},
+		{"one descriptor ESRCH", "fd/0", syscall.ESRCH},
+		{"environment ENOENT (the pid went away)", "environ", fs.ErrNotExist},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := stepRoot(t)
+			dead1 := stepDir(t, root, "step-999999-a", time.Hour)
+			dead2 := stepDir(t, root, "step-999999-b", time.Hour)
+			held := stepDir(t, root, "step-999999-held", time.Hour)
+			// The process the read fails on is listed after one that reads fine.
+			stepScratchProcRoot = fakeProc(t, map[int]fakeProcess{
+				30: {env: []string{StepScratchEnv + "=" + held}},
+				31: {fds: []string{"/dev/null"}},
+			})
+			heal := failRead(t, filepath.Join(stepScratchProcRoot, "31", tc.file), tc.err)
+
+			removed, complete := sweepStepScratch(root)
+			assert.Equal(t, 0, removed)
+			assert.False(t, complete)
+			for _, d := range []string{dead1, dead2, held} {
+				assert.DirExists(t, d, "every candidate stays on an incomplete walk")
+			}
+			_, err := stepScratchRefs(stepScratchProcRoot)
+			require.ErrorIs(t, err, tc.err, "the scan reports which read failed")
+
+			heal()
+			assert.Equal(t, 2, sweepRemoved(t, root), "the next pass, with a clean walk, removes them")
+			assert.NoDirExists(t, dead1)
+			assert.NoDirExists(t, dead2)
+			assert.DirExists(t, held, "still held by the process that reads fine")
+		})
+	}
+}
+
+// An incomplete pass brings the next one forward: it is due
+// stepScratchRetryEvery after it, not a whole stepScratchSweepEvery.
+func TestMaybeSweepStepScratch_RetriesSoonAfterAnIncompleteWalk(t *testing.T) {
+	root := stepRoot(t)
+	dead := stepDir(t, root, "step-999999-dead", time.Hour)
+	stepScratchProcRoot = fakeProc(t, map[int]fakeProcess{40: {}})
+	heal := failRead(t, filepath.Join(stepScratchProcRoot, "40", "environ"), syscall.ESRCH)
+	stepSweep.Lock()
+	stepSweep.last = time.Time{}
+	stepSweep.Unlock()
+	clock := testNow
+	stepScratchNow = func() time.Time { return clock }
+	waitIdle := func() {
+		require.Eventually(t, func() bool { stepSweep.Lock(); defer stepSweep.Unlock(); return !stepSweep.running }, 10*time.Second, 5*time.Millisecond)
+	}
+
+	maybeSweepStepScratch(root)
+	waitIdle()
+	assert.DirExists(t, dead)
+	heal()
+
+	clock = testNow.Add(stepScratchRetryEvery - time.Second)
+	maybeSweepStepScratch(root)
+	waitIdle()
+	assert.DirExists(t, dead, "not due yet")
+
+	clock = testNow.Add(stepScratchRetryEvery)
+	maybeSweepStepScratch(root)
+	waitIdle()
+	assert.NoDirExists(t, dead, "due a retry interval after the incomplete pass, not a sweep interval")
+}
+
+// Done, for a command whose cgroup proves it gone, removes its scratch without
+// reading /proc at all, so an ESRCH there cannot hold it back or decide it.
+func TestStepScratch_DoneWithAnEmptyCgroupNeverReadsProc(t *testing.T) {
+	root := stepRoot(t)
+	cmd, s := stepCommand(t, context.Background(), root, `true`)
+	require.NoError(t, cmd.Run())
+	read := false
+	procFS.readDir = func(string) ([]os.DirEntry, error) { read = true; return nil, syscall.ESRCH }
+	procFS.lstat = func(string) (os.FileInfo, error) { read = true; return nil, syscall.ESRCH }
+
+	assert.True(t, s.tryReclaim(func() bool { return true }))
+	assert.NoDirExists(t, s.Dir())
+	assert.False(t, read, "the cgroup is the proof; /proc is not read")
+
+	// Without a cgroup, the same ESRCH is no proof: it stays.
+	_, s2 := stepCommand(t, context.Background(), root, `true`)
+	assert.False(t, s2.tryReclaim(nil))
+	assert.DirExists(t, s2.Dir())
 }
 
 // An inherited StepScratchEnv names another daemon's step's scratch: no

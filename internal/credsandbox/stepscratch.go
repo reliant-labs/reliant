@@ -71,6 +71,9 @@ var (
 	// stepScratchSweepEvery is how often the sweep runs while credentialed
 	// commands start.
 	stepScratchSweepEvery = 10 * time.Minute
+	// stepScratchRetryEvery is how soon the sweep runs again after a pass
+	// whose walk of /proc was incomplete and removed nothing.
+	stepScratchRetryEvery = time.Minute
 	// stepScratchMinAge spares a directory made this recently: the moment
 	// between its making and its command's start, when nothing holds it yet.
 	stepScratchMinAge = time.Minute
@@ -174,8 +177,11 @@ func (s *StepScratch) reclaim(gone func() bool) {
 	}
 }
 
-// tryReclaim removes the directory if the command's processes are proven gone
-// (gone, or no live process holds it), and reports whether it is gone.
+// tryReclaim removes the directory if the command's processes are proven gone,
+// and reports whether it is gone. gone (the command's cgroup is empty) is the
+// proof whenever the command has one, and then /proc is not read at all;
+// otherwise the proof is a complete walk of /proc in which no process holds
+// it, and a walk with any read error is no proof.
 func (s *StepScratch) tryReclaim(gone func() bool) bool {
 	if gone == nil || !gone() {
 		refs, err := stepScratchRefs(stepScratchProcRoot)

@@ -62,7 +62,12 @@ func maybeSweepStepScratch(root string) {
 			stepSweep.running = false
 			stepSweep.Unlock()
 		}()
-		sweepStepScratch(root)
+		if _, complete := sweepStepScratch(root); !complete {
+			// Walk again soon rather than a whole interval later.
+			stepSweep.Lock()
+			stepSweep.last = stepSweep.last.Add(stepScratchRetryEvery - stepScratchSweepEvery)
+			stepSweep.Unlock()
+		}
 	}()
 }
 
@@ -88,11 +93,13 @@ var stepSweepListed = func() {}
 // registry, read after the listing, so one made during the sweep is never a
 // candidate), and every one younger than stepScratchMinAge (another daemon's
 // command may not have started yet). When /proc cannot be read completely,
-// nothing is removed and the directories it would have judged are logged.
-func sweepStepScratch(root string) (removed int) {
+// nothing is removed and the directories it would have judged are logged;
+// complete is false then, and the next sweep comes after
+// stepScratchRetryEvery instead of stepScratchSweepEvery.
+func sweepStepScratch(root string) (removed int, complete bool) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		return 0
+		return 0, true
 	}
 	now := stepScratchNow()
 	var candidates []string
@@ -108,14 +115,14 @@ func sweepStepScratch(root string) (removed int) {
 		candidates = append(candidates, path)
 	}
 	if len(candidates) == 0 {
-		return 0
+		return 0, true
 	}
 	stepSweepListed()
 	refs, err := stepScratchRefs(stepScratchProcRoot)
 	if err != nil {
 		logging.Info("credsandbox: not sweeping credentialed commands' scratch directories: the live processes could not all be read, so none is proven unheld",
-			"root", root, "kept", len(candidates), "first_kept", candidates[0], "error", err)
-		return 0
+			"root", root, "kept", len(candidates), "first_kept", candidates[0], "retry_in", stepScratchRetryEvery, "error", err)
+		return 0, false
 	}
 	for _, path := range candidates {
 		if refs[filepath.Base(path)] {
@@ -130,12 +137,22 @@ func sweepStepScratch(root string) (removed int) {
 	if removed > 0 {
 		logging.Info("credsandbox: removed credentialed commands' scratch directories no live process holds", "root", root, "removed", removed)
 	}
-	return removed
+	return removed, true
 }
 
 // credScratchMarker is how CredScratchDir appears inside a path: the scratch
 // directory named after it is the one a path holds.
 var credScratchMarker = "/" + filepath.Base(CredScratchRel) + "/"
+
+// procFS is how the scan reads /proc; tests replace it to make a read fail
+// the way the kernel's do (ESRCH from a process mid-exit, or one in another pid
+// namespace).
+var procFS = struct {
+	readDir  func(string) ([]os.DirEntry, error)
+	lstat    func(string) (os.FileInfo, error)
+	readFile func(string) ([]byte, error)
+	readlink func(string) (string, error)
+}{os.ReadDir, os.Lstat, os.ReadFile, os.Readlink}
 
 // stepScratchRefs lists the command scratch directories (by name) that a live
 // process of this user holds: in a value of its environment (StepScratchEnv,
@@ -144,16 +161,21 @@ var credScratchMarker = "/" + filepath.Base(CredScratchRel) + "/"
 // path counts a process that reaches the directory through another mount of
 // the disk.
 //
-// It is a proof only when complete: a process of this user whose environment,
-// working directory or descriptors cannot be read, for any reason but its
-// having exited, fails it, wherever it runs. A process in a container whose
-// user shares our uid (k3d's coredns runs as 65532, a cloud workspace's user)
-// is withheld from us that way, and nothing proves it holds no scratch: it may
-// have been handed a descriptor, or a bind mount of one. Only another user's
-// process, and a non-dumpable one of ours (the kernel hands its /proc files to
-// root: a sandbox's init, which holds no credentialed scratch), is skipped.
+// It is a proof only when every read of every listed process succeeded. Any
+// read error fails it, whatever the error: ENOENT and ESRCH included. Neither
+// proves that the process no longer holds a scratch. A process that is exiting
+// reports them, but by then its pid may be another process's, which the
+// listing named and the read never saw, and ESRCH from a process in another pid
+// namespace says nothing about what it holds. So a walk that met one proves
+// nothing: the caller removes nothing and walks again later. A process in a
+// container whose user shares our uid (k3d's coredns runs as 65532, a cloud
+// workspace's user) whose files are withheld from us fails it the same way.
+// Only another user's process, and a non-dumpable one of ours (the kernel
+// hands its /proc files to root: a sandbox's init, which holds no
+// credentialed scratch), is skipped: by the owner of its environ file, which
+// the same Lstat that must succeed reports.
 func stepScratchRefs(procRoot string) (map[string]bool, error) {
-	entries, err := os.ReadDir(procRoot)
+	entries, err := procFS.readDir(procRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -164,17 +186,14 @@ func stepScratchRefs(procRoot string) (map[string]bool, error) {
 			continue
 		}
 		dir := filepath.Join(procRoot, e.Name())
-		fi, err := os.Lstat(filepath.Join(dir, "environ"))
-		if procGone(err) {
-			continue
-		}
+		fi, err := procFS.lstat(filepath.Join(dir, "environ"))
 		if err != nil {
 			return nil, fmt.Errorf("pid %s: %w", e.Name(), err)
 		}
 		if st, ok := fi.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != uid {
 			continue
 		}
-		if err := readStepScratchRefs(dir, refs); err != nil && !procGone(err) {
+		if err := readStepScratchRefs(dir, refs); err != nil {
 			return nil, fmt.Errorf("pid %s %w", e.Name(), err)
 		}
 	}
@@ -182,7 +201,7 @@ func stepScratchRefs(procRoot string) (map[string]bool, error) {
 }
 
 // readStepScratchRefs adds the command scratch directories the process at dir
-// holds to refs.
+// holds to refs. Every read must succeed (stepScratchRefs).
 func readStepScratchRefs(dir string, refs map[string]bool) error {
 	add := func(v string) {
 		for {
@@ -196,33 +215,28 @@ func readStepScratchRefs(dir string, refs map[string]bool) error {
 			}
 		}
 	}
-	env, err := os.ReadFile(filepath.Join(dir, "environ"))
+	env, err := procFS.readFile(filepath.Join(dir, "environ"))
 	if err != nil {
 		return fmt.Errorf("environment: %w", err)
 	}
 	for _, kv := range strings.Split(string(env), "\x00") {
 		add(kv)
 	}
-	cwd, err := os.Readlink(filepath.Join(dir, "cwd"))
-	if err != nil && !procGone(err) {
+	cwd, err := procFS.readlink(filepath.Join(dir, "cwd"))
+	if err != nil {
 		return fmt.Errorf("working directory: %w", err)
 	}
 	add(cwd)
-	fds, err := os.ReadDir(filepath.Join(dir, "fd"))
-	if err != nil && !procGone(err) {
+	fds, err := procFS.readDir(filepath.Join(dir, "fd"))
+	if err != nil {
 		return fmt.Errorf("descriptors: %w", err)
 	}
 	for _, fd := range fds {
-		target, err := os.Readlink(filepath.Join(dir, "fd", fd.Name()))
-		if err != nil && !procGone(err) {
+		target, err := procFS.readlink(filepath.Join(dir, "fd", fd.Name()))
+		if err != nil {
 			return fmt.Errorf("descriptor %s: %w", fd.Name(), err)
 		}
 		add(target)
 	}
 	return nil
-}
-
-// procGone reports whether err says the process (or the descriptor) is gone.
-func procGone(err error) bool {
-	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH)
 }
