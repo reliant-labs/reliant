@@ -384,6 +384,130 @@ describe("calls that hang together", () => {
   });
 });
 
+// The stall is one incident until every call in it has settled: a member that
+// times out after the first was aborted, or after another member was answered,
+// is part of the incident already reported, not a report of its own.
+describe("a reported stall", () => {
+  async function stallHarness(budgets: Record<string, number> = {}) {
+    const { createDeadlineInterceptor } = await import("../rpcDeadline");
+    const { pageActivity } = await import("../../lib/pageActivity");
+    const onTimeout = vi.fn();
+    const onStall = vi.fn();
+    const deadline = createDeadlineInterceptor({
+      timeoutFor: (_service, method) => budgets[method] ?? 10_000,
+      activity: pageActivity,
+      onTimeout,
+      onStall,
+    });
+    const { calls, wire } = makeWire();
+    const run = deadline.interceptor(wire);
+    const call = (method: string, signal = new AbortController().signal) => {
+      const result = run({
+        stream: false,
+        service: { typeName: "reliant.v1.X" },
+        method: { name: method },
+        header: new Headers(),
+        signal,
+        message: {},
+      } as unknown as Req);
+      result.catch(() => {});
+      return result;
+    };
+    return { deadline, calls, call, onTimeout, onStall };
+  }
+
+  it("is not reported again when another member's deadline passes", async () => {
+    // D has the longer budget, so its deadline passes well after the stall
+    // was reported, the timed-out call aborted and B answered.
+    const { deadline, calls, call, onTimeout, onStall } = await stallHarness({ UpdateD: 20_000 });
+    for (const method of ["UpdateA", "UpdateB", "UpdateC", "UpdateD"]) {
+      call(method);
+      await vi.advanceTimersByTimeAsync(300);
+    }
+    await flush();
+    expect(calls).toHaveLength(4);
+
+    // A runs out of budget first: one stall, all four calls in it.
+    await vi.advanceTimersByTimeAsync(10_000 - 1_200 + 50);
+    expect(onStall).toHaveBeenCalledTimes(1);
+    expect(onStall.mock.calls[0][0].methods).toEqual(["UpdateA", "UpdateB", "UpdateC", "UpdateD"]);
+
+    calls[1].resolve({});
+    await flush();
+    // C's and then D's deadlines pass.
+    await vi.advanceTimersByTimeAsync(11_000);
+    expect(onStall).toHaveBeenCalledTimes(1);
+    expect(onTimeout).not.toHaveBeenCalled();
+    expect(deadline.describeInFlight()).toBe("0 in flight");
+  });
+
+  it("is released once every member settled, so a new hang is reported", async () => {
+    const { call, onTimeout, onStall } = await stallHarness();
+    call("UpdateA");
+    call("UpdateB");
+    await vi.advanceTimersByTimeAsync(10_100);
+    expect(onStall).toHaveBeenCalledTimes(1);
+
+    call("UpdateA");
+    await vi.advanceTimersByTimeAsync(10_100);
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+    expect(onTimeout.mock.calls[0][0]).toBe("UpdateA");
+
+    call("UpdateA");
+    call("UpdateB");
+    await vi.advanceTimersByTimeAsync(10_100);
+    expect(onStall).toHaveBeenCalledTimes(2);
+  });
+
+  it("is not reported again by hedged reads or by members that failed or were aborted", async () => {
+    const { deadline, calls, call, onTimeout, onStall } = await stallHarness({ UpdateA: 10_000 });
+    // Fast reads are hedged at 4s: a second request of the same call.
+    const fast = (method: string, signal?: AbortSignal) => {
+      const result = deadline.interceptor(((req: Req) => {
+        return new Promise((resolve, reject) => {
+          calls.push({ req, resolve: () => resolve({}), reject });
+          req.signal.addEventListener("abort", () => reject(req.signal.reason));
+        });
+      }) as unknown as Next)({
+        stream: false,
+        service: { typeName: "reliant.v1.ChatService" },
+        method: { name: method },
+        header: new Headers(),
+        signal: signal ?? new AbortController().signal,
+        message: {},
+      } as unknown as Req);
+      result.catch(() => {});
+      return result;
+    };
+    const callerOfE = new AbortController();
+    call("UpdateA");
+    await vi.advanceTimersByTimeAsync(300);
+    fast("ListChats");
+    fast("GetChat");
+    call("UpdateD");
+    call("UpdateE", callerOfE.signal);
+    await vi.advanceTimersByTimeAsync(9_800);
+    expect(onStall).toHaveBeenCalledTimes(1);
+    expect(onStall.mock.calls[0][0].methods).toEqual([
+      "GetChat",
+      "ListChats",
+      "UpdateA",
+      "UpdateD",
+      "UpdateE",
+    ]);
+
+    // A member fails, another is aborted by its caller, the rest time out.
+    const updateD = calls.find((c) => c.req.method.name === "UpdateD");
+    updateD?.reject(new ConnectError("gone", Code.Unavailable));
+    callerOfE.abort();
+    await flush();
+    await vi.advanceTimersByTimeAsync(11_000);
+    expect(onStall).toHaveBeenCalledTimes(1);
+    expect(onTimeout).not.toHaveBeenCalled();
+    expect(deadline.describeInFlight()).toBe("0 in flight");
+  });
+});
+
 describe("a connection the update stream saw die", () => {
   it("replaces every read in flight on it, and only reads", async () => {
     const { calls, call } = await loadChain();
