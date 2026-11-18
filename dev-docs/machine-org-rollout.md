@@ -36,17 +36,23 @@ control-plane named.
 ## The cleanup and its kill switch
 
 On each connect, for a machine of a known org, the reconcile detaches the
-checkout records (`project_daemons` rows) of projects in another org.
+checkouts of projects in another org from the machine.
 
-- **When:** the delete re-reads the project's org under the project row's
-  lock, the same lock an org move takes. It removes the record only if the
-  project is still in another org, so a project moved into the machine's org
-  meanwhile keeps its checkout. A project with no org yet is never detached.
-- **What is detached:** only the record. No project is deleted, no file is
-  touched, and no user detachment is recorded.
-- **Audit:** each removed row is written whole to
-  `project_daemon_org_cleanups.detached_row`, in the same statement as the
-  delete.
+- **When:** the cleanup re-reads the project's org under the project row's
+  lock, the same lock an org move takes. It detaches only if the project is
+  still in another org, so a project moved into the machine's org meanwhile
+  keeps its checkout. A project with no org yet is never detached.
+- **What is detached:** what a user's detach removes, through the same code
+  (`db.Repo.DetachProjectDaemonOfOtherOrg` and `DetachProjectFromDaemon` share
+  their locks and their removal): the checkout record (`project_daemons`), the
+  machine's synced config of the project (its `project_machine_catalogs` row:
+  workflows, presets, skills, memories, config), and that config's share of
+  the project's config union, which is rewritten from the machines left. No
+  project is deleted, no file is touched, and no user detachment is recorded,
+  so a project moved back into the machine's org is found on it again.
+- **Audit:** both rows are written whole to `project_daemon_org_cleanups`
+  (`detached_row`, and `detached_catalog`, NULL when the machine had synced no
+  config of the project), in the same transaction as their delete.
 - **Logs:** each removal logs `machine-org cleanup detached another
   organization's project` with `projectID`, `projectOrgID`, `machineOrgID`
   and `path`.
@@ -104,10 +110,11 @@ folders were never removed.
    gateway and roll it. Otherwise the next connect detaches the rows again.
 2. Restore. Narrow the `WHERE` to the machines, users or time window you need:
 
+   <!-- machine-org-restore-sql: TestMachineOrgCleanup_DocumentedRestoreBringsTheCheckoutBack runs this block -->
    ```sql
    BEGIN;
    WITH todo AS (
-       SELECT id, detached_row FROM project_daemon_org_cleanups
+       SELECT id, detached_row, detached_catalog FROM project_daemon_org_cleanups
        WHERE restored_at IS NULL
          AND detached_at >= '<from>'          -- narrow as needed
        FOR UPDATE
@@ -117,14 +124,33 @@ folders were never removed.
        FROM todo
        ON CONFLICT (project_id, daemon_id) DO NOTHING
        RETURNING project_id, daemon_id
+   ), put_config AS (
+       INSERT INTO project_machine_catalogs
+       SELECT (jsonb_populate_record(NULL::project_machine_catalogs, todo.detached_catalog)).*
+       FROM todo
+       WHERE todo.detached_catalog IS NOT NULL
+       ON CONFLICT (project_id, daemon_id) DO NOTHING
+       RETURNING project_id, daemon_id
    )
    UPDATE project_daemon_org_cleanups c SET restored_at = now()
    FROM todo WHERE c.id = todo.id;
    COMMIT;
    ```
 
-   `ON CONFLICT DO NOTHING` keeps a record the machine has re-created since
-   the cleanup. The row of a project or machine deleted since then fails its
-   foreign key. Drop it from the narrowed set and re-run.
-3. Leave the kill switch off until the cause is fixed. Turning it back on
+   `ON CONFLICT DO NOTHING` keeps a record, or a synced config, the machine
+   has re-created since the cleanup. The row of a project or machine deleted
+   since then fails its foreign key. Drop it from the narrowed set and re-run.
+3. The restored checkout and the machine's synced config are back as soon as
+   step 2 commits: the machine's own runs, and workflow provenance, read them
+   directly. The project's config **union** (`project_configs`: the workflows,
+   presets and skills every run of the project sees) is derived in Go, not
+   SQL. It is rewritten from every machine's synced config whenever a machine
+   pushes the project's config, and a machine pushes it on connect for each
+   checkout it holds. A restore is for a cleanup that misjudged, such as a
+   machine whose org control-plane named wrongly: fix that cause, then roll
+   the gateway so the machine reconnects. Its restored checkout is then a
+   project of its org, it pushes the project's config, and the union has its
+   files again. (A checkout restored onto a machine of another org stays
+   outside what that machine resolves, so nothing re-pushes it.)
+4. Leave the kill switch off until the cause is fixed. Turning it back on
    cleans up again on the next connect, and records it again.

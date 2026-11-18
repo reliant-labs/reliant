@@ -4,6 +4,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -69,8 +70,13 @@ func (s *Service) orgScope(ctx context.Context, userID string, org *string) (*co
 // (authz.MachineScopeFor). nil only in a deployment with no orgs.
 func (s *Service) machineScope(ctx context.Context, userID string, machine *db.Daemon) (*core.OrgScope, error) {
 	scope, known, err := authz.MachineProjectScope(ctx, userID, machine)
+	if errors.Is(err, authz.ErrMachineOwnerNotMember) {
+		return nil, svcerr.FailedPrecondition(fmt.Sprintf(
+			"the machine belongs to organization %s, and you are no longer a member of it: it holds none of its projects for you",
+			authz.MachineOrg(machine)))
+	}
 	if err != nil {
-		return nil, orgs.LookupFailed(ctx, "could not resolve your default organization; try again", err)
+		return nil, orgs.LookupFailed(ctx, "could not check the machine's organization; try again", err)
 	}
 	if !known && scope != nil {
 		id := ""

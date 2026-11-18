@@ -535,7 +535,10 @@ func (e *lostProjectCreateError) Unwrap() error { return e.err }
 // Every match, and the project created, is in the machine's org (scope; its
 // owner's default org's when the machine's org is not known): the same path
 // may be a project in each of the user's orgs, and a machine holds only its
-// own org's.
+// own org's. The scope, and with it the owner's live membership of the
+// machine's org, is decided here, inside the locked transaction the create
+// runs in: an owner who left the org resolves and creates nothing
+// (authz.ErrMachineOwnerNotMember).
 func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnection, path string, discovered *reliantv1.DiscoveredProject) (*db.Project, bool, error) {
 	scope, _, err := s.machineProjectScope(ctx, conn)
 	if err != nil {
@@ -654,6 +657,14 @@ var errMachineOrgUnresolved = errors.New("the machine's organization could not b
 // holds (authz.MachineScopeFor): its org's, or its owner's default org's when
 // its org is not known; known reports which. A connection whose machine's
 // org could not be read is errMachineOrgUnresolved.
+//
+// A machine of a known org holds that org's projects only while its owner is
+// a live member of it, asked now (authz.MachineScopeFor), never kept from the
+// connect: a machine stays connected after its owner leaves the org, and then
+// it is authz.ErrMachineOwnerNotMember here — no scope at all, so nothing it
+// reports creates, finds or records a project. Every caller asks it where it
+// is about to act; resolveProjectForPath asks it inside the transaction its
+// create runs in.
 func (s *Service) machineProjectScope(ctx context.Context, conn *daemonConnection) (*core.OrgScope, bool, error) {
 	if conn.orgUnresolved {
 		return nil, false, errMachineOrgUnresolved

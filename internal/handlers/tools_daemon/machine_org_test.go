@@ -2,6 +2,7 @@ package tools_daemon
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -353,4 +354,62 @@ func TestReconcile_LostCloneOfAProjectMovedOutDuringTheProbeIsNotSettled(t *test
 			assert.Equal(t, tc.wantState, rows[0].InstallState)
 		})
 	}
+}
+
+// leavingMembership is defaultOrgMembership with one org its user can leave
+// while their machine stays connected: IsMember answers from left, read on
+// every call, as the live membership is.
+type leavingMembership struct {
+	defaultOrgMembership
+	org  string
+	left atomic.Bool
+}
+
+func (m *leavingMembership) IsMember(_ context.Context, _, orgID string) (bool, bool, error) {
+	return orgID != m.org || !m.left.Load(), true, nil
+}
+
+// Review round 6 (B1): a machine of org globex stays connected after its
+// owner leaves globex. From then on nothing it reports creates, resolves or
+// records a globex project: its connection has no org scope at all.
+func TestMachineOfAnOrgItsOwnerLeft_CreatesAndResolvesNothing(t *testing.T) {
+	f := newOrgMachinesFixture(t)
+	membership := &leavingMembership{defaultOrgMembership: defaultOrgMembership{def: "acme"}, org: "globex"}
+	ctx := authz.WithMembership(context.Background(), membership)
+	svc := newTestService(f.repo)
+	conn := newTestConn(f.userID, f.globexMachine, nil)
+	conn.orgID = "globex"
+
+	// A member: the machine resolves its org's project at the path.
+	got, err := svc.ensureOwnedProjectForPath(ctx, conn, f.path, nil)
+	require.NoError(t, err)
+	assert.Equal(t, f.globex.ID, got.ID)
+
+	membership.left.Store(true)
+
+	// The folder of an existing globex project resolves to nothing.
+	got, err = svc.ensureOwnedProjectForPath(ctx, conn, f.path, nil)
+	require.ErrorIs(t, err, authz.ErrNotOrgMember)
+	assert.Nil(t, got, "a machine whose owner left its org resolved one of the org's projects")
+
+	// A new folder creates nothing.
+	newPath := "/home/workspace/projects/new-" + uuid.NewString()
+	got, err = svc.ensureOwnedProjectForPath(ctx, conn, newPath, nil)
+	require.ErrorIs(t, err, authz.ErrNotOrgMember)
+	assert.Nil(t, got)
+	_, err = f.repo.GetProjectByPathAndUserInScope(ctx, newPath, f.userID, nil)
+	assert.Error(t, err, "a machine whose owner left its org created a project")
+
+	// The connect reconcile records and detaches nothing, folder or not.
+	require.NoError(t, f.repo.UpsertProjectDaemon(ctx, f.acme.ID, f.globexMachine, f.path, nil))
+	_, err = svc.reconcileAndWatch(ctx, conn, f.everythingHere)
+	require.NoError(t, err)
+	assert.Empty(t, f.machinesOf(t, f.globex.ID), "the reconcile recorded a checkout for an owner outside the org")
+	assert.Equal(t, []string{f.globexMachine}, f.machinesOf(t, f.acme.ID), "nothing is detached either")
+
+	// Back in the org: resolved again.
+	membership.left.Store(false)
+	got, err = svc.ensureOwnedProjectForPath(ctx, conn, f.path, nil)
+	require.NoError(t, err)
+	assert.Equal(t, f.globex.ID, got.ID)
 }

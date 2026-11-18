@@ -32,6 +32,12 @@ import (
 // nothing, and a create refuses rather than risk a duplicate.
 var ErrDefaultOrgUnavailable = errors.New("authz: could not read the default organization")
 
+// ErrMachineOwnerNotMember is MachineScopeFor's answer for a machine of a
+// known org whose owner is no longer a live member of it (or acts with a
+// credential bound to another org): the machine holds none of that org's
+// projects, and none of anyone else's.
+var ErrMachineOwnerNotMember = errors.New("authz: the machine's owner is not a live member of the machine's organization")
+
 // OrgScopeFor is the scope of userID's rows in org: the rows of org, and,
 // when org is userID's default org, the rows with no org yet (they are its,
 // lazily: internal/orgs ListScope stamps them). nil when org is "" — no org
@@ -53,15 +59,34 @@ func OrgScopeFor(ctx context.Context, userID, org string) (*core.OrgScope, error
 // MachineScopeFor is the scope of the projects a machine of userID's, of
 // machineOrg ("" when not known), may hold, and whether that org is known.
 //
-//   - A known org: OrgScopeFor it; known is true.
+//   - A known org: OrgScopeFor it; known is true — but only while the
+//     machine's owner is a live member of that org, decided by the rule
+//     every org resource is held to (deny: the owner, while a live member).
+//     A machine stays connected after its owner leaves its org, and nothing
+//     it reports may then create, find or record that org's projects: a
+//     non-member is ErrMachineOwnerNotMember (wrapping ErrNotOrgMember), an
+//     unanswerable membership ErrMembershipUnavailable. Either way the
+//     caller acts as for a machine whose org it cannot tell: nothing
+//     org-scoped.
 //   - An unknown org: the owner's default org's scope (its rows and the
 //     unassigned ones); known is false. In a deployment with no orgs (no
 //     default org) it is nil, every row, which there carries no org anyway.
 //
 // An unreadable default org is ErrDefaultOrgUnavailable: the caller records
 // nothing.
+//
+// Membership is asked on every call, never kept from the connect: a caller
+// about to write asks it inside the write's transaction.
 func MachineScopeFor(ctx context.Context, userID, machineOrg string) (scope *core.OrgScope, known bool, err error) {
 	if machineOrg != "" {
+		if err := deny(ctx, userID, resource{present: true, ownerUserID: userID, orgID: machineOrg}); err != nil {
+			if errors.Is(err, ErrNotOrgMember) || errors.Is(err, ErrDenied) {
+				logging.WarnContext(ctx, "[authz] the machine's owner is not a live member of the machine's organization; the machine holds none of its projects",
+					"user_id", userID, "org_id", machineOrg, "reason", err)
+				return nil, false, errors.Join(ErrMachineOwnerNotMember, err)
+			}
+			return nil, false, err
+		}
 		scope, err = OrgScopeFor(ctx, userID, machineOrg)
 		return scope, err == nil, err
 	}

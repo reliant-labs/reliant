@@ -4,10 +4,14 @@ package db
 import (
 	"context"
 	"database/sql"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -351,4 +355,107 @@ func TestRecordFailedProjectDaemonRestoreInScope_LeavesADetachedPairAlone(t *tes
 	detached, err := f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.machine)
 	require.NoError(t, err)
 	assert.Len(t, detached, 1, "the detachment stands")
+}
+
+// documentedRestoreSQL is the restore statement of
+// dev-docs/machine-org-rollout.md, as an operator runs it, with its time
+// window opened to every row. BEGIN and COMMIT are dropped: the test runs the
+// one statement between them.
+func documentedRestoreSQL(t *testing.T) string {
+	t.Helper()
+	doc, err := os.ReadFile(filepath.Join("..", "..", "dev-docs", "machine-org-rollout.md"))
+	require.NoError(t, err)
+	text := string(doc)
+	at := strings.Index(text, "<!-- machine-org-restore-sql:")
+	require.GreaterOrEqual(t, at, 0, "the restore block lost its marker")
+	text = text[at:]
+	start := strings.Index(text, "```sql\n")
+	require.GreaterOrEqual(t, start, 0)
+	text = text[start+len("```sql\n"):]
+	text = text[:strings.Index(text, "```")]
+	var stmt []string
+	for _, line := range strings.Split(text, "\n") {
+		switch strings.TrimSpace(line) {
+		case "BEGIN;", "COMMIT;", "":
+			continue
+		}
+		stmt = append(stmt, line)
+	}
+	require.Contains(t, text, "'<from>'")
+	return strings.ReplaceAll(strings.Join(stmt, "\n"), "'<from>'", "'-infinity'")
+}
+
+// Review round 6 (B2): the machine-org cleanup detaches as a user's detach
+// does. The machine's synced config of the project goes with its checkout
+// record, so the project's config union no longer carries the other org's
+// machine's workflows, and both are audited whole. The documented restore
+// puts both back exactly, and the machine's next push (its org fixed, it
+// reconnects) brings its files back into the union.
+func TestMachineOrgCleanup_DocumentedRestoreBringsTheCheckoutBack(t *testing.T) {
+	p := newTwoMachineProject(t)
+	ctx := context.Background()
+	machine, other := p.defaultID, p.cicdID
+	_, err := p.repo.ORM().Bun().ExecContext(ctx, `UPDATE projects SET org_id = 'acme' WHERE id = ?`, p.projectID)
+	require.NoError(t, err)
+	require.NoError(t, p.repo.UpsertProjectDaemon(ctx, p.projectID, machine, "/work/"+machine, nil))
+	require.NoError(t, p.repo.UpsertProjectDaemon(ctx, p.projectID, other, "/work/"+other, nil))
+	release := config.StoredWorkflow{Slug: "release", Name: "release", RelativePath: p.releasePath, YAMLContent: releaseYAML}
+	deploy := config.StoredWorkflow{Slug: "deploy", Name: "deploy", RelativePath: "deploy.yaml", YAMLContent: releaseYAML}
+	require.True(t, p.push(t, machine, 1000, []config.StoredWorkflow{release}, nil))
+	require.True(t, p.push(t, other, 2000, []config.StoredWorkflow{deploy}, nil))
+	paths := func() []string {
+		var out []string
+		for _, w := range p.unionWorkflows(t) {
+			out = append(out, w.RelativePath)
+		}
+		return out
+	}
+	require.ElementsMatch(t, []string{p.releasePath, "deploy.yaml"}, paths())
+	catalogBefore := machineCatalogJSON(t, p.repo, p.projectID, machine)
+	require.NotEmpty(t, catalogBefore)
+
+	// The machine is globex's; the project is acme's.
+	gone, err := p.repo.DetachProjectDaemonOfOtherOrg(ctx, p.projectID, machine, "test-user", "globex")
+	require.NoError(t, err)
+	require.True(t, gone)
+
+	assert.Equal(t, []string{"deploy.yaml"}, paths(), "the other org's machine's workflows are still in the project's config")
+	catalogs, err := p.repo.ProjectMachineCatalogs(ctx, p.projectID)
+	require.NoError(t, err)
+	require.Len(t, catalogs, 1)
+	assert.Equal(t, other, catalogs[0].DaemonID)
+	_, synced, err := p.repo.GetProjectMachineConfigRecord(ctx, p.projectID, machine)
+	require.NoError(t, err)
+	assert.False(t, synced, "the machine's synced config of the project is still there")
+	detached, err := p.repo.ListProjectDaemonDetachmentsForDaemon(ctx, machine)
+	require.NoError(t, err)
+	assert.Empty(t, detached, "the cleanup is the platform's, not a user's detach")
+
+	// The documented restore: the checkout and the machine's config, exactly.
+	_, err = p.repo.ORM().Bun().ExecContext(ctx, documentedRestoreSQL(t))
+	require.NoError(t, err)
+	rows, err := p.repo.ListProjectDaemonsForProject(ctx, p.projectID)
+	require.NoError(t, err)
+	assert.Len(t, rows, 2, "the checkout record is back")
+	assert.JSONEq(t, catalogBefore, machineCatalogJSON(t, p.repo, p.projectID, machine), "the machine's config came back other than it was")
+	record, synced, err := p.repo.GetProjectMachineConfigRecord(ctx, p.projectID, machine)
+	require.NoError(t, err)
+	require.True(t, synced)
+	assert.Equal(t, "from "+machine, *record.UserConfigYAML)
+
+	// The machine's next push rewrites the union from every machine's.
+	require.True(t, p.push(t, machine, 3000, []config.StoredWorkflow{release}, nil))
+	assert.ElementsMatch(t, []string{p.releasePath, "deploy.yaml"}, paths())
+}
+
+// machineCatalogJSON is the machine's project_machine_catalogs row, whole.
+func machineCatalogJSON(t *testing.T, repo *Repo, projectID, daemonID string) string {
+	t.Helper()
+	var out []string
+	require.NoError(t, repo.ORM().Bun().NewRaw(`SELECT to_jsonb(c)::text FROM project_machine_catalogs c WHERE project_id = ? AND daemon_id = ?`,
+		projectID, daemonID).Scan(context.Background(), &out))
+	if len(out) == 0 {
+		return ""
+	}
+	return out[0]
 }
