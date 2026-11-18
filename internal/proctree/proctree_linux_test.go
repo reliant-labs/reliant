@@ -134,6 +134,41 @@ func TestSweepSparesTheCgroupsOfUnreleasedTrees(t *testing.T) {
 	}
 }
 
+// A command cgroup a killed slot wrapper left its two cgroups in
+// (internal/heavyjob) is still removed, by drop and by a sweep: a cgroup with
+// children cannot be removed until they are. Plain directories stand in for
+// cgroups.
+func TestDropAndSweepRemoveTheCgroupsLeftInACommandCgroup(t *testing.T) {
+	dir := t.TempDir()
+	l := &Limiter{commands: dir}
+	own := func(seq int) string { return filepath.Join(dir, fmt.Sprintf("%s%d-%d", cmdPrefix, os.Getpid(), seq)) }
+	leave := func(cg string) {
+		for _, child := range []string{"heavy-9-caller", "heavy-9-command"} {
+			if err := os.Mkdir(filepath.Join(cg, child), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := l.hold(own(1)); err != nil {
+		t.Fatal(err)
+	}
+	leave(own(1))
+	l.drop(own(1))
+	if _, err := os.Stat(own(1)); err == nil {
+		t.Fatalf("drop left %s, whose wrapper's cgroups are empty", own(1))
+	}
+
+	// Released while a leftover process kept it, emptied since.
+	if err := os.Mkdir(own(2), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	leave(own(2))
+	l.sweepOwn()
+	if _, err := os.Stat(own(2)); err == nil {
+		t.Fatalf("the sweep left %s, whose wrapper's cgroups are empty", own(2))
+	}
+}
+
 // A limiter built while another of this process holds a cgroup for a command
 // not yet started (a daemon runtime that starts again) leaves that cgroup
 // alone: New sweeps only the leftovers of daemons that have exited, no

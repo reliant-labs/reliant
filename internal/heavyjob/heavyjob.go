@@ -72,12 +72,15 @@
 // command — so a command waiting for a slot costs a handful of threads, not
 // the 15–19 a waiter at the machine's width holds.
 //
-// The share is also a hard cap: the wrapper sets its command cgroup's cpu.max
-// to it once it holds a slot (cpumax_linux.go; internal/proctree enables the
-// cpu controller for command cgroups). GOMAXPROCS bounds the Go processes and
-// therefore the go command's -p; cpu.max bounds the rest (cgo's cc1 and ld, a
-// command that set its own GOMAXPROCS), so past the slots' total the machine
-// queues work instead of running it all slower until it times out.
+// The share is also a hard cap: once it holds a slot, the wrapper starts the
+// command in a cgroup of its own making under the daemon's command cgroup,
+// with cpu.max set to the share (cpumax_linux.go; internal/proctree enables
+// the cpu controller for command cgroups). It never writes the cgroup it runs
+// in, and neither the cap nor the share it exports goes above the tightest
+// cpu.max it inherited. GOMAXPROCS bounds the Go processes and therefore the
+// go command's -p; cpu.max bounds the rest (cgo's cc1 and ld, a command that
+// set its own GOMAXPROCS), so past the slots' total the machine queues work
+// instead of running it all slower until it times out.
 //
 //forge:exclude-contract: one concrete policy over exec.Cmd values (classify, rewrite) plus the slot wrapper this binary runs as; the slots themselves are forge/pkg/hostslot, and there is no second implementation to substitute
 package heavyjob

@@ -88,16 +88,21 @@ func RunWrapper(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "▶ reliant: running `%s` in %s after %s waiting\n", opt.Label, slot, slot.Waited().Round(time.Second))
 	}
 
-	share := shareOf(slot, w.share)
 	// A hard cap, not only GOMAXPROCS: it binds what GOMAXPROCS does not
-	// reach (cpumax_linux.go). Set before the child starts, so nothing of
-	// the command runs uncapped.
-	_ = limitCPU(share)
-	c := exec.Command(argv[0], argv[1:]...)
-	c.Env = append(childEnv(os.Environ(), w.childGOMAXPROCS), slot.Env()...) //nolint:forbidigo // passes this process environment to a child process; not configuration
-	c.Env = append(c.Env, shareEnv(c.Env, share)...)
-	c.Stdin, c.Stdout, c.Stderr = stdin, stdout, stderr
-	if err := c.Start(); err != nil {
+	// reach, in a cgroup of the wrapper's own that the command starts in, so
+	// nothing of it runs uncapped (cpumax_linux.go). Never above the cap this
+	// wrapper inherited, and neither is the share exported to the command.
+	cpu := limitCPU(shareOf(slot, w.share))
+	defer cpu.release()
+	command := func() *exec.Cmd {
+		c := exec.Command(argv[0], argv[1:]...)
+		c.Env = append(childEnv(os.Environ(), w.childGOMAXPROCS), slot.Env()...) //nolint:forbidigo // passes this process environment to a child process; not configuration
+		c.Env = append(c.Env, shareEnv(c.Env, cpu.share)...)
+		c.Stdin, c.Stdout, c.Stderr = stdin, stdout, stderr
+		return c
+	}
+	c, err := startCapped(cpu, command)
+	if err != nil {
 		fmt.Fprintf(stderr, "reliant: %v\n", err)
 		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
 			return 127
@@ -123,6 +128,22 @@ func RunWrapper(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	signal.Stop(sigs)
 	close(done)
 	return exitStatus(err)
+}
+
+// startCapped starts the command command() builds in cpu's capped cgroup, or
+// without it when the kernel refuses that (CLONE_INTO_CGROUP needs Linux
+// 5.7): the cap is not a reason to refuse the command.
+func startCapped(cpu *cpuCap, command func() *exec.Cmd) (*exec.Cmd, error) {
+	c := command()
+	if !cpu.into(c) {
+		return c, c.Start()
+	}
+	if err := c.Start(); err == nil {
+		return c, nil
+	}
+	cpu.release()
+	c = command()
+	return c, c.Start()
 }
 
 // exitStatus is the shell's view of how a child ended: its exit code, or
