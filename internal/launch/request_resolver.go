@@ -54,6 +54,46 @@ type pinnedResult struct {
 	found   bool
 }
 
+// workflowDraftsReader reads many of a user's drafts in one query
+// (db.Repo.GetWorkflowDraftsBySlugs).
+type workflowDraftsReader interface {
+	GetWorkflowDraftsBySlugs(ctx context.Context, userID string, slugs []string) (*db.WorkflowDraftsBySlug, error)
+}
+
+// PrefetchWorkflowDrafts reads userID's drafts of slugs in ONE query, when
+// resolver is a NewRequestResolver over a store that can, and answers every
+// later GetWorkflowDraftBySlug and GetUsableWorkflowBySlug of those slugs
+// through resolver from it; any other resolver is left as it is. A list that
+// knows up front which workflows it resolves (each activation's) asks for
+// them together instead of reading each name's draft one round trip at a
+// time: ListInbox made 32 such reads a call in prod (trace ed2301a0…,
+// 2026-11-18), almost all of them misses, because automations run project
+// workflows. A slug nobody prefetched (a child a workflow runs) is still read
+// on its own, once.
+//
+// A failed read seeds nothing, so each lookup then reads, and fails, on its
+// own as before.
+func PrefetchWorkflowDrafts(ctx context.Context, resolver WorkflowResolver, userID string, slugs []string) error {
+	r, ok := resolver.(*requestResolver)
+	if !ok || len(slugs) == 0 {
+		return nil
+	}
+	batch, ok := r.inner.(workflowDraftsReader)
+	if !ok {
+		return nil
+	}
+	got, err := batch.GetWorkflowDraftsBySlugs(ctx, userID, slugs)
+	if err != nil {
+		return err
+	}
+	for _, slug := range slugs {
+		key := [2]string{userID, slug}
+		r.drafts.put(key, func() (*db.WorkflowDraft, error) { return got.Draft(ctx, slug) })
+		r.usable.put(key, func() (*db.WorkflowDraft, error) { return got.Usable(ctx, slug) })
+	}
+	return nil
+}
+
 func (r *requestResolver) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error) {
 	return r.drafts.get([2]string{userID, slug}, func() (*db.WorkflowDraft, error) {
 		return r.inner.GetWorkflowDraftBySlug(ctx, userID, slug)
@@ -183,4 +223,10 @@ func (m *memo[K, V]) get(key K, load func() (V, error)) (V, error) {
 	}
 	m.seen[key] = memoAnswer[V]{v, err}
 	return v, err
+}
+
+// put records key's answer from load unless key already has one: an answer a
+// read already gave this request is never replaced.
+func (m *memo[K, V]) put(key K, load func() (V, error)) {
+	_, _ = m.get(key, load)
 }

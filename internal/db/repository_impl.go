@@ -4241,10 +4241,61 @@ func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string)
 	if err != nil {
 		return nil, err
 	}
+	return nil, notRunnableWorkflow(slug, draft)
+}
+
+// notRunnableWorkflow is GetUsableWorkflowBySlug's answer when no usable
+// workflow has the slug and draft (visible to the caller, or nil) does: a
+// visible draft that is not complete is reported, anything else is nothing.
+func notRunnableWorkflow(slug string, draft *WorkflowDraft) error {
 	if draft != nil && !draft.IsHidden && draft.Status != WorkflowDraftStatusComplete {
-		return nil, &WorkflowDraftNotRunnableError{Slug: slug}
+		return &WorkflowDraftNotRunnableError{Slug: slug}
 	}
-	return nil, nil
+	return nil
+}
+
+// WorkflowDraftsBySlug is one user's drafts of a set of slugs, read in one
+// query (GetWorkflowDraftsBySlugs). For each slug it was read for, it gives
+// exactly what GetWorkflowDraftBySlug and GetUsableWorkflowBySlug give, so a
+// reader that resolves many workflows (ListInbox: 32 lookups a call in prod,
+// trace ed2301a0…) asks once instead of twice per name.
+type WorkflowDraftsBySlug struct {
+	userID string
+	bySlug map[string]*WorkflowDraft
+}
+
+// GetWorkflowDraftsBySlugs reads userID's drafts of slugs in one query.
+func (r *Repo) GetWorkflowDraftsBySlugs(ctx context.Context, userID string, slugs []string) (*WorkflowDraftsBySlug, error) {
+	rows, err := store.ListWorkflowDraftsBySlugs(ctx, r.ORM(), userID, slugs)
+	if err != nil {
+		return nil, err
+	}
+	out := &WorkflowDraftsBySlug{userID: userID, bySlug: make(map[string]*WorkflowDraft, len(rows))}
+	for _, row := range rows {
+		out.bySlug[row.Slug] = row
+	}
+	return out, nil
+}
+
+// Draft is GetWorkflowDraftBySlug's answer for slug, which must be one of the
+// slugs b was read for.
+func (b *WorkflowDraftsBySlug) Draft(ctx context.Context, slug string) (*WorkflowDraft, error) {
+	return visibleWorkflowDraft(ctx, b.userID, b.bySlug[slug], nil)
+}
+
+// Usable is GetUsableWorkflowBySlug's answer for slug, which must be one of
+// the slugs b was read for. The usable row is the slug's one row when it is
+// complete and not hidden (store.FindUsableWorkflowBySlug's predicate).
+func (b *WorkflowDraftsBySlug) Usable(ctx context.Context, slug string) (*WorkflowDraft, error) {
+	row := b.bySlug[slug]
+	if row != nil && row.Status == WorkflowDraftStatusComplete && !row.IsHidden {
+		return visibleWorkflowDraft(ctx, b.userID, row, nil)
+	}
+	draft, err := b.Draft(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	return nil, notRunnableWorkflow(slug, draft)
 }
 
 // ListWorkflowDraftsByUser is the drafts userID owns and may still see: a

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -21,7 +22,12 @@ import (
 // countingRepo counts the reads a workflow resolution makes.
 type countingRepo struct {
 	*db.Repo
-	catalogs, drafts atomic.Int64
+	catalogs, drafts, draftBatches atomic.Int64
+}
+
+func (r *countingRepo) GetWorkflowDraftsBySlugs(ctx context.Context, userID string, slugs []string) (*db.WorkflowDraftsBySlug, error) {
+	r.draftBatches.Add(1)
+	return r.Repo.GetWorkflowDraftsBySlugs(ctx, userID, slugs)
 }
 
 func (r *countingRepo) GetProjectMachineWorkflowsJSON(ctx context.Context, projectID, daemonID string) (*string, bool, error) {
@@ -85,10 +91,72 @@ func TestListInbox_ReadsEachCatalogOnce(t *testing.T) {
 	counting := &countingRepo{Repo: f.repo}
 	f.inbox = NewTestInbox(t, WithInboxDeps(Deps{Repo: counting}))
 	got := f.list(t, nil)
-	t.Logf("reads: catalogs=%d drafts=%d", counting.catalogs.Load(), counting.drafts.Load())
+	t.Logf("reads: catalogs=%d drafts=%d draft batches=%d", counting.catalogs.Load(), counting.drafts.Load(), counting.draftBatches.Load())
 	require.EqualValues(t, 1, counting.catalogs.Load(),
 		"every activation resolves against the one machine catalog; one ListInbox must read it once")
-	require.LessOrEqual(t, counting.drafts.Load(), int64(2*(workflows+1)),
-		"each account-draft lookup (one per workflow name and method) is read once")
+	// Prod (2026-11-18, trace ed2301a0…): 32 draft reads a call, one at a
+	// time. Every activation's workflow is looked up in one batch; only the
+	// child no activation names is read on its own.
+	require.EqualValues(t, 1, counting.draftBatches.Load(), "the activations' account workflows are read in one query")
+	require.EqualValues(t, 1, counting.drafts.Load(), "only shared-step, which no activation names, is read alone")
 	require.Equal(t, len(direct.Items), len(got.Items), "reading once changes nothing about what is listed")
 }
+
+// The batched draft read lists exactly what reading each draft alone lists:
+// an activation whose account workflow of the same name is complete (the
+// project's still wins, shadowing it), one whose account workflow is
+// unfinished, one whose workflow no machine has (broken, with where it
+// lives), and plain ones.
+func TestListInbox_BatchedDraftReadListsTheSame(t *testing.T) {
+	f := newInboxFixture(t)
+	daemonID := uuid.NewString()
+	host := "default"
+	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID, Hostname: &host}))
+
+	var stored []config.StoredWorkflow
+	for _, slug := range []string{"release", "deploy", "triage"} {
+		yaml := strings.Replace(releaseWorkflow, "name: release\n", "name: "+slug+"\n", 1)
+		stored = append(stored, config.StoredWorkflow{Slug: slug, Name: slug, RelativePath: ".reliant/workflows/" + slug + ".yaml", YAMLContent: yaml})
+	}
+	wj, err := config.EncodeCatalogJSON(stored)
+	require.NoError(t, err)
+	_, err = f.repo.SyncProjectConfigSnapshot(f.ctx, &db.ProjectConfigRecord{
+		ProjectID: f.project(), DaemonID: daemonID, ProjectWorkflowsJSON: wj, PushedAt: time.Now().UTC(),
+	}, false)
+	require.NoError(t, err)
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	for slug, status := range map[string]db.WorkflowDraftStatus{"release": db.WorkflowDraftStatusComplete, "deploy": db.WorkflowDraftStatusDraft} {
+		require.NoError(t, f.repo.CreateWorkflowDraft(f.ctx, &db.WorkflowDraft{
+			ID: uuid.NewString(), UserID: f.userID, Name: slug, Slug: slug, Status: status,
+			Definition: strings.Replace(releaseWorkflow, "name: release\n", "name: "+slug+"\n", 1), CreatedAt: now, UpdatedAt: now,
+		}))
+	}
+	cfg, _ := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})
+	for i, workflow := range []string{"release", "deploy", "triage", "gone", "release"} {
+		name := "merged"
+		require.NoError(t, f.repo.CreateTrigger(f.ctx, &core.Trigger{
+			ID: fmt.Sprintf("act-%d", i), UserID: f.userID, ProjectID: f.project(), Name: fmt.Sprintf("%s %d", workflow, i),
+			Kind: core.TriggerKindSchedule, Enabled: true, Workflow: workflow, WorkflowTrigger: &name,
+			DaemonID: daemonID, Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,
+			CreatedAt: now, UpdatedAt: now,
+		}))
+	}
+
+	f.inbox = NewTestInbox(t, WithInboxDeps(Deps{Repo: noDraftBatchRepo{f.repo}}))
+	alone := f.list(t, nil)
+	counting := &countingRepo{Repo: f.repo}
+	f.inbox = NewTestInbox(t, WithInboxDeps(Deps{Repo: counting}))
+	batched := f.list(t, nil)
+
+	require.EqualValues(t, 1, counting.draftBatches.Load())
+	require.Zero(t, counting.drafts.Load(), "every slug an activation names was in the batch")
+	require.NotEmpty(t, batched.Items, "the activation of a workflow no machine has is listed")
+	require.True(t, proto.Equal(alone, batched), "batched:\n%v\nalone:\n%v", batched, alone)
+}
+
+// noDraftBatchRepo is the repository without its batched draft read: the
+// method of that name does not match, so resolution reads each draft alone.
+type noDraftBatchRepo struct{ *db.Repo }
+
+func (noDraftBatchRepo) GetWorkflowDraftsBySlugs() {}

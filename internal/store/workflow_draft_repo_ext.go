@@ -158,6 +158,29 @@ func FindUsableWorkflowBySlug(ctx context.Context, db orm.Context, userID, slug 
 	})
 }
 
+// ListWorkflowDraftsBySlugs is the user's drafts with any of slugs, in one
+// read: (user_id, slug) is unique, so at most one per slug, and a slug the
+// user has no draft of is simply absent. It answers FindWorkflowDraftBySlug
+// and FindUsableWorkflowBySlug for every slug at once, for a reader that
+// resolves many workflows (ListInbox).
+func ListWorkflowDraftsBySlugs(ctx context.Context, db orm.Context, userID string, slugs []string) ([]*core.WorkflowDraft, error) {
+	if len(slugs) == 0 {
+		return nil, nil
+	}
+	var rows []*WorkflowDraft
+	if err := db.Bun().NewSelect().Model(&rows).
+		Where("user_id = ?", userID).
+		Where("slug = ANY(?::text[])", orm.Arg(slugs)).
+		Scan(ctx); err != nil {
+		return nil, err
+	}
+	out := make([]*core.WorkflowDraft, len(rows))
+	for i, row := range rows {
+		out[i] = workflowDraftToCore(row)
+	}
+	return out, nil
+}
+
 // findWorkflowDraft is the one row the predicate selects, or nil. Every
 // lookup it serves is on a unique key.
 func findWorkflowDraft(ctx context.Context, db orm.Context, where func(*bun.SelectQuery) *bun.SelectQuery) (*core.WorkflowDraft, error) {

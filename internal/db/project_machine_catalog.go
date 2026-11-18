@@ -285,41 +285,43 @@ func (r *Repo) projectMachineCatalogs(ctx context.Context, projectID string) ([]
 // GetProjectMachineCatalogPushedAt is when daemonID last pushed its catalog
 // of a project, or svcerr.NotFound when it never has.
 func (r *Repo) GetProjectMachineCatalogPushedAt(ctx context.Context, projectID, daemonID string) (time.Time, error) {
-	row, err := r.machineCatalogRow(ctx, projectID, daemonID)
+	if err := requireMachineCatalogKey(projectID, daemonID); err != nil {
+		return time.Time{}, err
+	}
+	pushedAt, found, err := store.GetProjectMachineCatalogPushedAt(ctx, r.ORM(), projectID, daemonID)
 	if err != nil {
 		return time.Time{}, err
 	}
-	if row == nil {
+	if !found {
 		return time.Time{}, svcerr.NotFound("project machine catalog")
 	}
-	return row.PushedAt, nil
+	return pushedAt, nil
 }
 
 // GetProjectMachineWorkflowsJSON reads one machine's synced workflows of a
-// project. synced is false when that machine has never synced the project,
-// which is not the same as having synced none.
+// project, and no other column of its catalog row. synced is false when that
+// machine has never synced the project, which is not the same as having
+// synced none.
 func (r *Repo) GetProjectMachineWorkflowsJSON(ctx context.Context, projectID, daemonID string) (*string, bool, error) {
-	row, err := r.machineCatalogRow(ctx, projectID, daemonID)
-	if err != nil || row == nil {
+	if err := requireMachineCatalogKey(projectID, daemonID); err != nil {
 		return nil, false, err
 	}
-	return row.WorkflowsJSON, true, nil
+	return store.GetProjectMachineWorkflowsJSON(ctx, r.ORM(), projectID, daemonID)
 }
 
 // GetProjectMachinePresetsJSON is GetProjectMachineWorkflowsJSON for presets.
 func (r *Repo) GetProjectMachinePresetsJSON(ctx context.Context, projectID, daemonID string) (*string, bool, error) {
-	row, err := r.machineCatalogRow(ctx, projectID, daemonID)
-	if err != nil || row == nil {
+	if err := requireMachineCatalogKey(projectID, daemonID); err != nil {
 		return nil, false, err
 	}
-	return row.PresetsJSON, true, nil
+	return store.GetProjectMachinePresetsJSON(ctx, r.ORM(), projectID, daemonID)
 }
 
-func (r *Repo) machineCatalogRow(ctx context.Context, projectID, daemonID string) (*store.ProjectMachineCatalog, error) {
+func requireMachineCatalogKey(projectID, daemonID string) error {
 	if projectID == "" || daemonID == "" {
-		return nil, fmt.Errorf("project ID and daemon ID are required")
+		return fmt.Errorf("project ID and daemon ID are required")
 	}
-	return store.GetProjectMachineCatalog(ctx, r.ORM(), projectID, daemonID)
+	return nil
 }
 
 func machineCatalogFromRow(row *store.ProjectMachineCatalog) (config.MachineCatalog, []config.RemovedCatalogFile, error) {
@@ -338,20 +340,47 @@ func machineCatalogFromRow(row *store.ProjectMachineCatalog) (config.MachineCata
 	return c, removed, err
 }
 
-// projectMachineRemovals reads every machine's removal history of a project,
-// keyed by daemon id.
-func (r *Repo) projectMachineRemovals(ctx context.Context, projectID string) (map[string][]config.RemovedCatalogFile, error) {
-	rows, err := store.ListProjectMachineCatalogs(ctx, r.ORM(), projectID)
+// machineWorkflowFiles is every machine's workflow files of a project:
+// what says where a workflow lives, read in one row read per machine.
+type machineWorkflowFiles struct {
+	// catalogs carry each machine's workflows only: no presets.
+	catalogs []config.MachineCatalog
+	// removals is each machine's removal history, keyed by daemon id.
+	removals map[string][]config.RemovedCatalogFile
+	// repoStates is the git state each machine synced its files from, keyed
+	// by daemon id; a machine that reported none is absent.
+	repoStates map[string][]config.SyncedRepoState
+}
+
+// projectMachineWorkflowFiles reads every machine's workflow files of a
+// project (store.ListProjectMachineWorkflowFiles): its workflows, removal
+// history and git state, never its presets or config.
+func (r *Repo) projectMachineWorkflowFiles(ctx context.Context, projectID string) (*machineWorkflowFiles, error) {
+	rows, err := store.ListProjectMachineWorkflowFiles(ctx, r.ORM(), projectID)
 	if err != nil {
 		return nil, err
 	}
-	out := map[string][]config.RemovedCatalogFile{}
+	out := &machineWorkflowFiles{
+		catalogs:   make([]config.MachineCatalog, 0, len(rows)),
+		removals:   map[string][]config.RemovedCatalogFile{},
+		repoStates: map[string][]config.SyncedRepoState{},
+	}
 	for _, row := range rows {
-		removed, err := config.ParseRemovedCatalogFiles(row.RemovedJSON)
+		workflows, err := config.ParseStoredWorkflows(row.WorkflowsJSON)
 		if err != nil {
 			return nil, err
 		}
-		out[row.DaemonID] = removed
+		out.catalogs = append(out.catalogs, config.MachineCatalog{DaemonID: row.DaemonID, Workflows: workflows})
+		if out.removals[row.DaemonID], err = config.ParseRemovedCatalogFiles(row.RemovedJSON); err != nil {
+			return nil, err
+		}
+		states, err := config.ParseSyncedRepoStates(row.RepoStatesJSON)
+		if err != nil {
+			return nil, err
+		}
+		if len(states) > 0 {
+			out.repoStates[row.DaemonID] = states
+		}
 	}
 	return out, nil
 }
@@ -360,14 +389,14 @@ func (r *Repo) projectMachineRemovals(ctx context.Context, projectID string) (ma
 // workflow of a project, which machine and file it is and the git state it
 // was synced at, ordered by workflow path and then machine.
 func (r *Repo) ProjectWorkflowProvenance(ctx context.Context, projectID string) ([]config.WorkflowProvenance, error) {
-	catalogs, err := r.ProjectMachineCatalogs(ctx, projectID)
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	files, err := r.projectMachineWorkflowFiles(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	states, err := r.ProjectMachineRepoStates(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
+	catalogs, states := files.catalogs, files.repoStates
 	names := r.machineNames(ctx, catalogs)
 	var out []config.WorkflowProvenance
 	for _, c := range catalogs {
