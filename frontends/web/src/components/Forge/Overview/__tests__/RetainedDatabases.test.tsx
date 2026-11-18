@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -16,6 +16,16 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import type { RetainedDatabase } from "@/services/forge/cloudEnvs";
 
 const listRetainedDatabases = vi.fn();
+
+// One test runs with a control plane, so the org scope follows the active org
+// store (lib/orgScope); the rest run without one (no org, ready at once).
+const cp = vi.hoisted(() => ({ on: false }));
+vi.mock("@/services/controlPlane/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/config")>()),
+  get hasControlPlane() {
+    return cp.on;
+  },
+}));
 const purgeRetainedDatabase = vi.fn();
 let role: string | null = "owner";
 
@@ -45,6 +55,8 @@ vi.mock("@/hooks/useOrgs", async (importOriginal) => {
     }),
   };
 });
+
+import { useActiveOrgStore } from "@/store/activeOrgStore";
 
 import { RetainedDatabases } from "../RetainedDatabases";
 import { CONFIRM_WINDOW_MS, keptDataProgress, startKeptDataCheck, useKeptDataChecks } from "../keptDataChecks";
@@ -86,9 +98,24 @@ beforeEach(() => {
   ]);
   purgeRetainedDatabase.mockReset().mockResolvedValue(undefined);
   useKeptDataChecks.setState({ checks: [] });
+  cp.on = false;
+  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
 });
 
 describe("kept databases", () => {
+  it("reads in the tab's org, and not before the org is known", async () => {
+    cp.on = true;
+    useActiveOrgStore.setState({ userId: "u1", chosenId: null, effectiveId: null, resolved: false, failure: null });
+    wrap();
+    // Unresolved: nothing is sent, so no unscoped (every-org) list is asked for.
+    expect(listRetainedDatabases).not.toHaveBeenCalled();
+    act(() => {
+      useActiveOrgStore.setState({ chosenId: "org-a", effectiveId: "org-a", resolved: true });
+    });
+    expect(await screen.findByTestId("retained-databases")).toBeTruthy();
+    expect(listRetainedDatabases.mock.calls).toEqual([["org-a"]]);
+  });
+
   it("lists this app's kept databases only, with size and where they came from", async () => {
     wrap();
     const card = await screen.findByTestId("retained-databases");

@@ -488,9 +488,9 @@ export interface RetainedDatabase {
   retainedAt?: string;
 }
 
-/** Every retained database of the caller's org, across its apps. */
-export async function listRetainedDatabases(): Promise<RetainedDatabase[]> {
-  const res = await client().listRetainedDatabases({});
+/** Every retained database of the org (`orgId`, null for none), across its apps. */
+export async function listRetainedDatabases(orgId: string | null): Promise<RetainedDatabase[]> {
+  const res = await client().listRetainedDatabases(orgRequest({}, orgId));
   return (res.retainedDatabases ?? [])
     .filter((row) => row.id !== "")
     .map((row) => ({

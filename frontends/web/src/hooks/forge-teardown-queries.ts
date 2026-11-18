@@ -28,6 +28,7 @@ import {
   type RetainedDatabase,
 } from "@/services/forge/cloudEnvs";
 import { listDomains, unbindDomain } from "@/services/forge/domains";
+import { orgQueryEnabled, useOrgScope, whenOrgScopeReady, withOrgFailure } from "@/lib/orgScope";
 
 import { domainKeys } from "./forge-domain-queries";
 import { forgeRetry } from "./forge-model";
@@ -35,22 +36,32 @@ import { forgeCloudKeys, useInvalidateAfterEnvironmentDelete, type DeleteEnviron
 
 // ── Retained databases ──────────────────────────────────────────────────────
 
-/** Every database the org kept from a deleted environment. A refusal (no access, an older control plane) is the query's error. */
+/**
+ * Every database the tab's org kept from a deleted environment: read in that
+ * org, keyed by it, and not before it is known (lib/orgScope). A refusal (no
+ * access, an older control plane) is the query's error.
+ */
 export function useRetainedDatabases({
   enabled = true,
   refetchInterval = false,
 }: { enabled?: boolean; refetchInterval?: number | false } = {}) {
-  return useQuery<RetainedDatabase[]>({
-    queryKey: forgeCloudKeys.retainedDatabases(),
-    queryFn: listRetainedDatabases,
-    enabled: enabled && hasCloudControlPlane(),
-    staleTime: 30_000,
-    // While a keep-data delete is being confirmed (keptDataChecks.ts).
-    refetchInterval,
-    // A control plane without the rpc answers the same on a retry.
-    retry: (failureCount, error) =>
-      !(error instanceof ConnectError && error.code === Code.Unimplemented) && forgeRetry(failureCount, error),
-  });
+  const org = useOrgScope();
+  return useQuery<RetainedDatabase[]>(
+    withOrgFailure(
+      {
+        queryKey: forgeCloudKeys.retainedDatabases(org.orgId),
+        queryFn: () => listRetainedDatabases(org.orgId),
+        enabled: enabled && hasCloudControlPlane() && orgQueryEnabled(org),
+        staleTime: 30_000,
+        // While a keep-data delete is being confirmed (keptDataChecks.ts).
+        refetchInterval,
+        // A control plane without the rpc answers the same on a retry.
+        retry: (failureCount: number, error: Error) =>
+          !(error instanceof ConnectError && error.code === Code.Unimplemented) && forgeRetry(failureCount, error),
+      },
+      org
+    )
+  );
 }
 
 /** Purge one kept database. The row stays listed until the control plane has destroyed its volumes. */
@@ -109,7 +120,9 @@ export function useUnbindDomainsAndDelete(environmentId: string, envName: string
       setSteps([read]);
       let bound: { id: string; hostname: string }[] = [];
       await run("read", async () => {
-        bound = (await listDomains())
+        // In the tab's org, never unscoped: an unscoped list is every org's.
+        const scope = await whenOrgScopeReady();
+        bound = (await listDomains(scope.orgId))
           .filter((domain) => domain.binding?.environmentId === environmentId)
           .sort((a, b) => a.hostname.localeCompare(b.hostname));
       });
