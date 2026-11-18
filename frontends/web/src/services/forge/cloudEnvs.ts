@@ -460,6 +460,26 @@ export function isUnimplemented(err: unknown): boolean {
 }
 
 /**
+ * Why the kept-databases list could not be read, as a class the UI words:
+ *
+ *   unsupported  the control plane does not serve the rpc (Unimplemented)
+ *   no-access    the caller may not read it (PermissionDenied, Unauthenticated)
+ *   unavailable  anything else: transient, or unknown; worth asking again
+ *
+ * ANY of them means the UI cannot list (so cannot confirm or purge) a kept
+ * database, so none of them may offer Keep data or let a check stay pending.
+ */
+export type RetainedReadFailure = "unsupported" | "no-access" | "unavailable";
+
+export function retainedReadFailureOf(err: unknown): RetainedReadFailure {
+  if (err instanceof ConnectError) {
+    if (err.code === Code.Unimplemented) return "unsupported";
+    if (err.code === Code.PermissionDenied || err.code === Code.Unauthenticated) return "no-access";
+  }
+  return "unavailable";
+}
+
+/**
  * True when DeleteEnvironment refused because a custom domain still points at
  * the environment. The control plane says so in its message (deploy
  * handlers' errors.go, ErrEnvironmentDomainBound) and carries no reason code

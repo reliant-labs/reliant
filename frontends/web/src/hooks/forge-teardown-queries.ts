@@ -17,7 +17,6 @@
 
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
   cloudErrorDetail,
@@ -25,16 +24,24 @@ import {
   hasCloudControlPlane,
   listRetainedDatabases,
   purgeRetainedDatabase,
+  retainedReadFailureOf,
   type RetainedDatabase,
 } from "@/services/forge/cloudEnvs";
 import { listDomains, unbindDomain } from "@/services/forge/domains";
 import { orgQueryEnabled, useOrgScope, whenOrgScopeReady, withOrgFailure } from "@/lib/orgScope";
 
 import { domainKeys } from "./forge-domain-queries";
-import { forgeRetry } from "./forge-model";
 import { forgeCloudKeys, useInvalidateAfterEnvironmentDelete, type DeleteEnvironmentVars } from "./forge-queries";
 
 // ── Retained databases ──────────────────────────────────────────────────────
+
+/**
+ * Retries of a transient failure of the kept-databases read before it is
+ * reported. A refusal (no access, no rpc) is never retried: asking again
+ * gets the same answer. Each poll (refetchInterval) asks afresh, so a failure
+ * that clears is picked up on the next one.
+ */
+export const RETAINED_READ_RETRIES = 2;
 
 /**
  * Every database the tab's org kept from a deleted environment: read in that
@@ -55,9 +62,9 @@ export function useRetainedDatabases({
         staleTime: 30_000,
         // While a keep-data delete is being confirmed (keptDataChecks.ts).
         refetchInterval,
-        // A control plane without the rpc answers the same on a retry.
         retry: (failureCount: number, error: Error) =>
-          !(error instanceof ConnectError && error.code === Code.Unimplemented) && forgeRetry(failureCount, error),
+          retainedReadFailureOf(error) === "unavailable" && failureCount < RETAINED_READ_RETRIES,
+        retryDelay: (attempt: number) => Math.min(500 * 2 ** attempt, 2_000),
       },
       org
     )

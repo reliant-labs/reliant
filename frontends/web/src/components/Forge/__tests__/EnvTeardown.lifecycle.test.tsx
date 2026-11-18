@@ -174,6 +174,7 @@ describe("delete: what goes, what stays, and Keep data", () => {
     wrap();
     await openDelete();
     const note = await screen.findByTestId("delete-environment-keep-unavailable");
+    expect(note.getAttribute("data-reason")).toBe("unsupported");
     expect(note.textContent).toContain("deleted with it, data included");
     expect(note.textContent).toContain("Keep data isn't offered");
     expect(screen.queryByTestId("delete-environment-data-keep")).toBeNull();
@@ -181,6 +182,54 @@ describe("delete: what goes, what stays, and Keep data", () => {
     await userEvent.click(screen.getByTestId("delete-environment-confirm"));
     await waitFor(() => expect(deleteEnvironment).toHaveBeenCalledWith("env_1", { keepData: false }));
     expect(useKeptDataChecks.getState().checks).toEqual([]);
+  });
+
+  // Any failed read hides Keep data, not only a missing rpc: a kept database
+  // this person cannot list could be neither confirmed nor purged here.
+  it.each([
+    ["PermissionDenied", Code.PermissionDenied, "no-access", "You can't view kept databases here."],
+    ["Unauthenticated", Code.Unauthenticated, "no-access", "You can't view kept databases here."],
+    ["Unavailable", Code.Unavailable, "unavailable", "Reliant couldn't check the kept databases. Try again."],
+  ])("offers no Keep data when the kept-databases read fails with %s", async (_name, code, reason, copy) => {
+    listRetainedDatabases.mockRejectedValue(new ConnectError("refused", code));
+    wrap();
+    await openDelete();
+    // Unavailable is asked again a bounded number of times first.
+    const note = await screen.findByTestId("delete-environment-keep-unavailable", {}, { timeout: 10_000 });
+    expect(note.getAttribute("data-reason")).toBe(reason);
+    expect(note.textContent).toContain("Keep data isn't offered");
+    expect(note.textContent).toContain(copy);
+    expect(screen.queryByTestId("delete-environment-data-keep")).toBeNull();
+    // A refusal is the same answer on a retry: asked once. A transient failure: three times.
+    expect(listRetainedDatabases).toHaveBeenCalledTimes(reason === "unavailable" ? 3 : 1);
+    expect(!!screen.queryByTestId("delete-environment-keep-retry")).toBe(reason === "unavailable");
+
+    await typeName();
+    await userEvent.click(screen.getByTestId("delete-environment-confirm"));
+    await waitFor(() => expect(deleteEnvironment).toHaveBeenCalledWith("env_1", { keepData: false }));
+    expect(useKeptDataChecks.getState().checks).toEqual([]);
+  });
+
+  it("offers Keep data again once an unavailable read succeeds on Check again", async () => {
+    listRetainedDatabases.mockRejectedValue(new ConnectError("busy", Code.Unavailable));
+    wrap();
+    await openDelete();
+    const note = await screen.findByTestId("delete-environment-keep-unavailable", {}, { timeout: 10_000 });
+    expect(note.textContent).toContain("(busy)");
+    listRetainedDatabases.mockResolvedValue([]);
+    await userEvent.click(screen.getByTestId("delete-environment-keep-retry"));
+    await keepOffered();
+    expect(screen.queryByTestId("delete-environment-keep-unavailable")).toBeNull();
+  });
+
+  it("keeps Keep data disabled while the kept-databases read is loading", async () => {
+    listRetainedDatabases.mockReturnValue(new Promise(() => {}));
+    wrap();
+    await openDelete();
+    await waitFor(() => expect(listRetainedDatabases).toHaveBeenCalled());
+    const keep = screen.getByTestId("delete-environment-data-keep") as HTMLInputElement;
+    expect(keep.disabled).toBe(true);
+    expect(screen.getByTestId("delete-environment-data-note").textContent).toContain("Checking whether");
   });
 
   it("asks nothing about data for an environment that runs no database", async () => {

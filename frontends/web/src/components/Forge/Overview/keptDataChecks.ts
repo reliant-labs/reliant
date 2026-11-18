@@ -18,6 +18,19 @@
 
 import { create } from "zustand";
 
+import type { RetainedReadFailure } from "@/services/forge/cloudEnvs";
+
+/**
+ * Why a kept database cannot be listed here, by failure class, for the delete
+ * dialog (which then offers no Keep data) and for an outstanding check (which
+ * then cannot be confirmed).
+ */
+export const RETAINED_READ_FAILURE_COPY: Record<RetainedReadFailure, string> = {
+  unsupported: "This control plane can't list kept databases.",
+  "no-access": "You can't view kept databases here.",
+  unavailable: "Reliant couldn't check the kept databases. Try again.",
+};
+
 /** How long a teardown may take to list its kept databases before the page warns. */
 export const CONFIRM_WINDOW_MS = 10 * 60_000;
 

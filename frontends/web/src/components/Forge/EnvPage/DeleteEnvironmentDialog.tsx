@@ -23,8 +23,11 @@
  * disabled for a known member; a PermissionDenied is still shown in words.
  *
  * KEEP DATA IS OFFERED ONLY WHERE IT CAN BE CHECKED. The dialog asks
- * ListRetainedDatabases first: a control plane that does not serve it
- * (Unimplemented) gets no Keep data option, and the dialog says why. A
+ * ListRetainedDatabases first and offers Keep data only once that read has
+ * SUCCEEDED: a kept database this person cannot list could be neither
+ * confirmed nor purged here. While it loads the option is disabled; any
+ * failure (no rpc, no access, unavailable) hides it with the reason, and an
+ * unavailable read can be asked again. A
  * keep-data delete that succeeds leaves a check (Overview/keptDataChecks.ts)
  * that confirms the databases are listed as kept, and warns if they are not.
  */
@@ -40,14 +43,14 @@ import Modal from "@/components/forge-ui/modal";
 import { useForgeDomains } from "@/hooks/forge-domain-queries";
 import { useDeleteEnvironment } from "@/hooks/forge-queries";
 import { useRetainedDatabases, useUnbindDomainsAndDelete, type TeardownStep } from "@/hooks/forge-teardown-queries";
-import { isDomainBoundRefusal, isUnimplemented } from "@/services/forge/cloudEnvs";
+import { cloudErrorDetail, isDomainBoundRefusal, retainedReadFailureOf, type RetainedReadFailure } from "@/services/forge/cloudEnvs";
 import { cn } from "@/lib/utils";
 
-import { startKeptDataCheck } from "../Overview/keptDataChecks";
+import { RETAINED_READ_FAILURE_COPY, startKeptDataCheck } from "../Overview/keptDataChecks";
 import { DELETE_ENV_NEEDS_ADMIN, refusalText } from "../orgAuthority";
 
 type DataChoice = "delete" | "keep";
-type KeepSupport = "checking" | "supported" | "unsupported";
+type KeepSupport = "checking" | "supported" | RetainedReadFailure;
 
 export function DeleteEnvironmentDialog({
   isOpen,
@@ -76,11 +79,11 @@ export function DeleteEnvironmentDialog({
   const domains = useForgeDomains({ enabled: isOpen });
   // Whether this control plane can keep (and list) databases at all.
   const keepProbe = useRetainedDatabases({ enabled: isOpen });
-  const keepSupport: KeepSupport = isUnimplemented(keepProbe.error)
-    ? "unsupported"
-    : keepProbe.isLoading
-      ? "checking"
-      : "supported";
+  const keepSupport: KeepSupport = keepProbe.isSuccess
+    ? "supported"
+    : keepProbe.isError
+      ? retainedReadFailureOf(keepProbe.error)
+      : "checking";
   const [typed, setTyped] = useState("");
   const [data, setData] = useState<DataChoice>("delete");
   const matches = typed === envName;
@@ -157,14 +160,29 @@ export function DeleteEnvironmentDialog({
           <p className="text-ink-muted" data-testid="delete-environment-no-databases">
             It runs no databases, so there is no data to keep.
           </p>
-        ) : keepSupport === "unsupported" ? (
-          <div className="space-y-1" data-testid="delete-environment-keep-unavailable">
+        ) : keepSupport !== "supported" && keepSupport !== "checking" ? (
+          <div className="space-y-1" data-testid="delete-environment-keep-unavailable" data-reason={keepSupport}>
             <p className="font-medium">Databases</p>
             <p>Its databases are deleted with it, data included. This cannot be undone.</p>
             <p className="text-ink-muted">
-              Keep data isn&apos;t offered: this control plane can&apos;t list kept databases, so a kept one could not be
+              Keep data isn&apos;t offered: {RETAINED_READ_FAILURE_COPY[keepSupport]} A kept database could not be
               confirmed or purged here.
+              {keepSupport === "unavailable" && cloudErrorDetail(keepProbe.error) && (
+                <> ({cloudErrorDetail(keepProbe.error)})</>
+              )}
             </p>
+            {keepSupport === "unavailable" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void keepProbe.refetch()}
+                disabled={pending || keepProbe.isFetching}
+                loading={keepProbe.isFetching}
+                data-testid="delete-environment-keep-retry"
+              >
+                Check again
+              </Button>
+            )}
           </div>
         ) : (
           <DataChoiceField value={data} onChange={setData} disabled={pending} keepChecking={keepSupport === "checking"} />

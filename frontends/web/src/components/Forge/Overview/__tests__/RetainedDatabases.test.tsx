@@ -181,7 +181,7 @@ describe("kept databases", () => {
   it("says so when the list could not be read", async () => {
     listRetainedDatabases.mockRejectedValue(new ConnectError("database unavailable", Code.Unavailable));
     wrap();
-    // Unavailable is retried once before it is shown.
+    // Unavailable is retried a bounded number of times before it is shown.
     const notice = await screen.findByTestId("retained-databases-unavailable", {}, { timeout: 10_000 });
     expect(notice.textContent).toContain("database unavailable");
   });
@@ -235,8 +235,43 @@ describe("confirming a keep-data delete", () => {
     listRetainedDatabases.mockRejectedValue(new ConnectError("not configured", Code.Unimplemented));
     wrap();
     const warning = await screen.findByTestId("kept-data-warning-env_gone");
+    expect(warning.getAttribute("data-reason")).toBe("unsupported");
     expect(warning.textContent).toContain("can't list kept databases");
     expect(screen.queryByTestId("retained-databases")).toBeNull();
+  });
+
+  // Any failed read makes an outstanding check unverifiable, naming why;
+  // none leaves it pending on a list it cannot read.
+  it.each([
+    ["PermissionDenied", Code.PermissionDenied, "no-access", "You can't view kept databases here."],
+    ["Unauthenticated", Code.Unauthenticated, "no-access", "You can't view kept databases here."],
+    ["Unavailable", Code.Unavailable, "unavailable", "Reliant couldn't check the kept databases."],
+  ])("warns that a check cannot be confirmed when the read fails with %s", async (_name, code, reason, copy) => {
+    check();
+    listRetainedDatabases.mockRejectedValue(new ConnectError("refused", code));
+    wrap();
+    const warning = await screen.findByTestId("kept-data-warning-env_gone", {}, { timeout: 10_000 });
+    expect(warning).toHaveAttribute("role", "alert");
+    expect(warning.getAttribute("data-reason")).toBe(reason);
+    expect(warning.textContent).toContain("can't confirm shop-db was kept");
+    expect(warning.textContent).toContain(copy);
+    expect(warning.textContent).toContain("Whether the data was kept is unknown");
+    expect(screen.queryByTestId("kept-data-pending-env_gone")).toBeNull();
+    // Bounded: a refusal is asked once, a transient failure three times, before the warning.
+    expect(listRetainedDatabases).toHaveBeenCalledTimes(reason === "unavailable" ? 3 : 1);
+    expect(useKeptDataChecks.getState().checks).toHaveLength(1);
+  });
+
+  it("goes back to confirming when an unavailable read recovers, and ends the check", async () => {
+    check();
+    listRetainedDatabases.mockRejectedValue(new ConnectError("busy", Code.Unavailable));
+    wrap();
+    const warning = await screen.findByTestId("kept-data-warning-env_gone", {}, { timeout: 10_000 });
+    expect(warning.textContent).toContain("(busy)");
+    listRetainedDatabases.mockResolvedValue([kept("r9", "shop-db")]);
+    // The poll asks again; the listed database ends the check.
+    await waitFor(() => expect(useKeptDataChecks.getState().checks).toEqual([]), { timeout: 15_000 });
+    expect(screen.queryByTestId("kept-data-warning-env_gone")).toBeNull();
   });
 
   it("keeps confirming while only some of several databases are listed", async () => {

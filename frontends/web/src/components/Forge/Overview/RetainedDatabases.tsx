@@ -22,9 +22,11 @@
  *
  * KEEP DATA IS CONFIRMED HERE (keptDataChecks.ts). After a keep-data delete
  * this page re-reads the list until the environment's databases appear, and
- * warns when they do not within the window, or at once when the control
- * plane cannot list kept databases (Unimplemented), rather than let a
- * dropped keep_data pass as kept.
+ * warns when they do not within the window, or as soon as the list read
+ * fails for any reason (no rpc, no access, unavailable after its bounded
+ * retries), naming why, rather than let a check sit pending on a list it
+ * cannot read. The poll keeps asking, so a failure that clears goes back to
+ * confirming.
  */
 
 import { useEffect, useState } from "react";
@@ -38,12 +40,18 @@ import Input from "@/components/forge-ui/input";
 import Label from "@/components/forge-ui/label";
 import Modal from "@/components/forge-ui/modal";
 import { usePurgeRetainedDatabase, useRetainedDatabases } from "@/hooks/forge-teardown-queries";
-import { cloudErrorDetail, isUnimplemented, type RetainedDatabase } from "@/services/forge/cloudEnvs";
+import {
+  cloudErrorDetail,
+  retainedReadFailureOf,
+  type RetainedDatabase,
+  type RetainedReadFailure,
+} from "@/services/forge/cloudEnvs";
 
 import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { PURGE_NEEDS_ADMIN, refusalText, useOrgAuthority } from "../orgAuthority";
 import {
   CONFIRM_WINDOW_MS,
+  RETAINED_READ_FAILURE_COPY,
   endKeptDataCheck,
   keptDataProgress,
   useKeptDataChecks,
@@ -85,6 +93,9 @@ export function RetainedDatabases({ project }: { project: string }) {
   // Read on every refetch, so a check crosses its window between answers.
   const now = Math.max(retained.dataUpdatedAt, retained.errorUpdatedAt, Date.now());
   const open = checks.filter((check) => !confirmed.includes(check));
+  // The read's failure, once its bounded retries are spent. A refetch that is
+  // failing again keeps the last failure: only a success clears it.
+  const failure: RetainedReadFailure | null = retained.isError ? retainedReadFailureOf(retained.error) : null;
   const checkNotices = open.length > 0 && (
     <div className="space-y-2" data-testid="kept-data-checks">
       {open.map((check) => (
@@ -92,8 +103,10 @@ export function RetainedDatabases({ project }: { project: string }) {
           key={check.environmentId}
           check={check}
           progress={progress.get(check.environmentId) ?? { kept: [], missing: check.databases, done: false }}
+          failure={failure}
+          failureDetail={cloudErrorDetail(retained.error)}
           state={
-            isUnimplemented(retained.error)
+            failure
               ? "unverifiable"
               : // Only an answered list can show a database missing: while
                 // the read is loading (or failing) the check stays pending.
@@ -188,15 +201,19 @@ export function RetainedDatabases({ project }: { project: string }) {
 /**
  * One keep-data delete not yet confirmed. `pending` while the teardown may
  * still be running; `missing` once the window has passed with nothing
- * listed; `unverifiable` when the control plane cannot list kept databases.
+ * listed; `unverifiable` when the list read failed (`failure` says why).
  */
 function KeptDataNotice({
   check,
   progress,
   state,
+  failure,
+  failureDetail,
 }: {
   check: KeptDataCheck;
   progress: KeptDataProgress;
+  failure: RetainedReadFailure | null;
+  failureDetail: string;
   state: "pending" | "missing" | "unverifiable";
 }) {
   // The databases not confirmed: by name when the check recorded them.
@@ -217,6 +234,7 @@ function KeptDataNotice({
       role="alert"
       className="flex items-start gap-2 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-ink"
       data-testid={`kept-data-warning-${check.environmentId}`}
+      data-reason={state === "unverifiable" ? (failure ?? "unavailable") : "missing"}
     >
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-ink" aria-hidden="true" />
       <div className="min-w-0 space-y-1">
@@ -226,7 +244,9 @@ function KeptDataNotice({
         </p>
         <p className="text-ink-muted">
           {state === "unverifiable"
-            ? "This control plane can't list kept databases, so whether the data was kept is unknown."
+            ? `${RETAINED_READ_FAILURE_COPY[failure ?? "unavailable"]}${
+                failure === "unavailable" && failureDetail ? ` (${failureDetail})` : ""
+              } Whether the data was kept is unknown${failure === "unavailable" ? " until the list can be read" : ""}.`
             : `${
                 progress.kept.length > 0
                   ? `Only ${progress.kept.join(", ")} ${progress.kept.length === 1 ? "is" : "are"} listed as kept`
