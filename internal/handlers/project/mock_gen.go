@@ -56,7 +56,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=5302d23b43f8df7b154fd8e041d3874fb5664bae6a242565d1a40a48a41ac034
+// forge:hash=58d7831afcc1c1186dfbd30f78f8a37bfacaef73484916b41ae553801af2ffa9
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -77,6 +77,10 @@ type MockRepository struct {
 	SetProjectForgeNameFunc                   func(context.Context, string, string, string) (bool, error)
 	TouchProjectFunc                          func(context.Context, string, string) error
 	DeleteProjectFunc                         func(context.Context, string, string) error
+	ScheduleProjectDeletionFunc               func(context.Context, string, string, time.Time, core.ProjectDecision) (core.ProjectDeletion, error)
+	RestoreProjectFunc                        func(context.Context, string, core.ProjectDecision) ([]string, error)
+	PurgeProjectNowFunc                       func(context.Context, string, core.ProjectDecision, func(ctx context.Context)) ([]string, error)
+	ListDeletedProjectsFunc                   func(context.Context, string, *core.OrgScope, bool) ([]*core.Project, error)
 	ProjectOrgMoveBlockersFunc                func(context.Context, string) (*core.ProjectOrgMoveBlockers, error)
 	ProjectOrgMoveEffectsFunc                 func(context.Context, string, string) (*core.ProjectOrgMoveEffects, error)
 	InsertProjectOrgMoveFunc                  func(context.Context, *core.ProjectOrgMove) (*core.ProjectOrgMove, bool, error)
@@ -205,6 +209,42 @@ func (m *MockRepository) DeleteProject(ctx context.Context, id string, userID st
 		return m.DeleteProjectFunc(ctx, id, userID)
 	}
 	return contractkit.MockNotSet("MockRepository", "DeleteProject")
+}
+
+// ScheduleProjectDeletion records the call and delegates to ScheduleProjectDeletionFunc when set.
+func (m *MockRepository) ScheduleProjectDeletion(ctx context.Context, id string, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error) {
+	m.Recorder.Record("ScheduleProjectDeletion", ctx, id, by, deleteAfter, decided)
+	if m.ScheduleProjectDeletionFunc != nil {
+		return m.ScheduleProjectDeletionFunc(ctx, id, by, deleteAfter, decided)
+	}
+	return *new(core.ProjectDeletion), contractkit.MockNotSet("MockRepository", "ScheduleProjectDeletion")
+}
+
+// RestoreProject records the call and delegates to RestoreProjectFunc when set.
+func (m *MockRepository) RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error) {
+	m.Recorder.Record("RestoreProject", ctx, id, decided)
+	if m.RestoreProjectFunc != nil {
+		return m.RestoreProjectFunc(ctx, id, decided)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "RestoreProject")
+}
+
+// PurgeProjectNow records the call and delegates to PurgeProjectNowFunc when set.
+func (m *MockRepository) PurgeProjectNow(p0 context.Context, id string, decided core.ProjectDecision, afterClaim func(ctx context.Context)) ([]string, error) {
+	m.Recorder.Record("PurgeProjectNow", p0, id, decided, afterClaim)
+	if m.PurgeProjectNowFunc != nil {
+		return m.PurgeProjectNowFunc(p0, id, decided, afterClaim)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "PurgeProjectNow")
+}
+
+// ListDeletedProjects records the call and delegates to ListDeletedProjectsFunc when set.
+func (m *MockRepository) ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error) {
+	m.Recorder.Record("ListDeletedProjects", ctx, userID, org, includePurging)
+	if m.ListDeletedProjectsFunc != nil {
+		return m.ListDeletedProjectsFunc(ctx, userID, org, includePurging)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListDeletedProjects")
 }
 
 // ProjectOrgMoveBlockers records the call and delegates to ProjectOrgMoveBlockersFunc when set.
@@ -592,6 +632,32 @@ func (m *MockMachineConfigSync) SendWatchProjectConfigsToDaemon(ctx context.Cont
 
 // Compile-time check.
 var _ MachineConfigSync = (*MockMachineConfigSync)(nil)
+
+// forge:section MockTriggerSchedules
+// forge:hash=0f16007294e174c13b77cdf34dd2bc343842e61fefddc14f78b4970fd5424e77
+
+// MockTriggerSchedules is a test mock for the TriggerSchedules interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockTriggerSchedules.<Method>Func not set" error.
+type MockTriggerSchedules struct {
+	contractkit.Recorder
+	SyncFunc func(context.Context, string) error
+}
+
+// Sync records the call and delegates to SyncFunc when set.
+func (m *MockTriggerSchedules) Sync(ctx context.Context, triggerID string) error {
+	m.Recorder.Record("Sync", ctx, triggerID)
+	if m.SyncFunc != nil {
+		return m.SyncFunc(ctx, triggerID)
+	}
+	return contractkit.MockNotSet("MockTriggerSchedules", "Sync")
+}
+
+// Compile-time check.
+var _ TriggerSchedules = (*MockTriggerSchedules)(nil)
 
 // forge:section MockCloneDispatcher
 // forge:hash=6eea8aa99689d047cd90ab65a435856dde67dac29704779135521c377b1493d2

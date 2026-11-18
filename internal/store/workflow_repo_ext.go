@@ -55,7 +55,9 @@ func InsertWorkflowIfAbsent(ctx context.Context, db orm.Context, w *core.Workflo
 		On("CONFLICT (id) DO NOTHING").
 		Returning("NULL").
 		Exec(ctx)
-	return err
+	// A new run in a project scheduled for deletion is refused
+	// (project_schedule.go).
+	return projectDeletedError(err)
 }
 
 // LoadWorkflow reads one workflow by id.

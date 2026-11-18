@@ -472,14 +472,16 @@ func ReadProjectAccess(ctx context.Context, userID string, project *core.Project
 	return readAccess(ctx, userID, projectResource(project))
 }
 
+// chatResource is the chat as every decision reads it. A chat of a project
+// scheduled for deletion is absent, as the project is (project_delete.go).
 func chatResource[C chatRecord](chat C) resource {
 	switch c := any(chat).(type) {
 	case *core.Chat:
-		if c != nil {
+		if c != nil && !c.ProjectDeleted {
 			return resource{present: true, ownerUserID: c.UserID, orgID: orgOf(c.OrgID), visibility: c.Visibility}
 		}
 	case *core.ChatRow:
-		if c != nil {
+		if c != nil && !c.ProjectDeleted {
 			return resource{present: true, ownerUserID: c.UserID, orgID: orgOf(c.OrgID), visibility: c.Visibility}
 		}
 	}
@@ -514,11 +516,13 @@ func CanWriteChat[C chatRecord](ctx context.Context, userID string, chat C) bool
 	return decide(ctx, userID, chatResource(chat))
 }
 
+// projectResource is the project as every decision reads it. A project
+// scheduled for deletion is absent (project_delete.go).
 func projectResource(p *core.Project) resource {
-	if p == nil {
+	if p == nil || p.DeleteAfter != nil {
 		return resource{}
 	}
-	return resource{present: true, ownerUserID: p.UserID, orgID: orgOf(p.OrgID), visibility: p.Visibility}
+	return liveProjectResource(p)
 }
 
 // CanReadProject reports whether userID may see project: its owner, or, once

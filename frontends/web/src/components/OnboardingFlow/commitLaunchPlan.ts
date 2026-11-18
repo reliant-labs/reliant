@@ -271,7 +271,8 @@ function defaultDeps(): CommitDeps {
           import("@/services/controlPlane/billing"),
           import("@/hooks/useOnboardingQueries"),
         ]);
-      const result = await getComputeEligibility();
+      // Onboarding acts in the org it is provisioning: the active org on the wire.
+      const result = await getComputeEligibility(null);
       return {
         eligible: result.eligible,
         allowedDaemonSizes: result.allowedDaemonSizes,

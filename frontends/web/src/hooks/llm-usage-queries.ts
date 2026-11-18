@@ -12,9 +12,11 @@
  * `refresh` refetches every read in any state, ready included.
  */
 
+import type { MessageInitShape } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
+import { useQuery } from "@tanstack/react-query";
 
-import { LLMUsageGroupBy, type GetLLMUsageResponse } from "@/gen/reliant/v1/usage_pb";
+import { LLMUsageGroupBy, type GetLLMUsageRequestSchema, type GetLLMUsageResponse } from "@/gen/reliant/v1/usage_pb";
 import {
   AUTH_MODES,
   llmUsageDates,
@@ -25,8 +27,8 @@ import {
   type LLMBucket,
   type OwnLLMUsageRead,
 } from "@/components/Forge/Observability/Dashboards/llmUsageModel";
-
-import { useGetLLMUsage } from "./usage-service-hooks_gen";
+import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure, type OrgScope } from "@/lib/orgScope";
+import { usageServiceQueries } from "./usage-service-hooks_gen";
 
 export interface OwnLLMUsageRequest {
   /** Inclusive UTC day start, epoch ms. */
@@ -37,18 +39,33 @@ export interface OwnLLMUsageRequest {
 
 const OPTIONS = { retry: false, staleTime: 60_000 } as const;
 
+type UsageRequest = MessageInitShape<typeof GetLLMUsageRequestSchema>;
+
+/**
+ * One GetLLMUsage read in the tab's org. The interceptor would name the active
+ * org on the wire anyway (unset means every org), so the request names it here,
+ * where the key sees it: one org's usage is never served as another's, and
+ * nothing is read before the org is known (lib/orgScope).
+ */
+function useUsage(org: OrgScope, req: UsageRequest, enabled = true) {
+  return useQuery(
+    withOrgFailure(usageServiceQueries.getLLMUsage(orgRequest(req, org.orgId), { ...OPTIONS, enabled: enabled && orgQueryEnabled(org) }), org),
+  );
+}
+
 const unimplemented = (error: unknown) => error instanceof ConnectError && error.code === Code.Unimplemented;
 
 export function useOwnLLMUsage(req: OwnLLMUsageRequest): OwnLLMUsageRead {
+  const org = useOrgScope();
   const dates = llmUsageDates(req.startMs, req.endMs);
-  const byDay = useGetLLMUsage({ ...dates, groupBy: LLMUsageGroupBy.LLM_USAGE_GROUP_BY_DAY }, OPTIONS);
-  const byModel = useGetLLMUsage({ ...dates, groupBy: LLMUsageGroupBy.LLM_USAGE_GROUP_BY_MODEL }, OPTIONS);
-  const byPurpose = useGetLLMUsage({ ...dates, groupBy: LLMUsageGroupBy.LLM_USAGE_GROUP_BY_PURPOSE }, OPTIONS);
+  const byDay = useUsage(org, { ...dates, groupBy: LLMUsageGroupBy.LLM_USAGE_GROUP_BY_DAY });
+  const byModel = useUsage(org, { ...dates, groupBy: LLMUsageGroupBy.LLM_USAGE_GROUP_BY_MODEL });
+  const byPurpose = useUsage(org, { ...dates, groupBy: LLMUsageGroupBy.LLM_USAGE_GROUP_BY_PURPOSE });
   const day = LLMUsageGroupBy.LLM_USAGE_GROUP_BY_DAY;
-  const managed = useGetLLMUsage({ ...dates, groupBy: day, authMode: WIRE_AUTH_MODE.managed }, OPTIONS);
-  const byok = useGetLLMUsage({ ...dates, groupBy: day, authMode: WIRE_AUTH_MODE.byok }, OPTIONS);
-  const subscription = useGetLLMUsage({ ...dates, groupBy: day, authMode: WIRE_AUTH_MODE.subscription }, OPTIONS);
-  const local = useGetLLMUsage({ ...dates, groupBy: day, authMode: WIRE_AUTH_MODE.local }, OPTIONS);
+  const managed = useUsage(org, { ...dates, groupBy: day, authMode: WIRE_AUTH_MODE.managed });
+  const byok = useUsage(org, { ...dates, groupBy: day, authMode: WIRE_AUTH_MODE.byok });
+  const subscription = useUsage(org, { ...dates, groupBy: day, authMode: WIRE_AUTH_MODE.subscription });
+  const local = useUsage(org, { ...dates, groupBy: day, authMode: WIRE_AUTH_MODE.local });
   const byMode = { managed, byok, subscription, local };
   const all = [byDay, byModel, byPurpose, managed, byok, subscription, local];
   const control = { refresh: () => all.forEach((q) => void q.refetch()), fetching: all.some((q) => q.isFetching) };
@@ -73,7 +90,8 @@ export function useOwnManagedPurposeUsage(
   req: OwnLLMUsageRequest,
   { enabled = true }: { enabled?: boolean } = {},
 ): OwnPurposeUsage & { refresh: () => void; fetching: boolean } {
-  const q = useGetLLMUsage({ ...llmUsageDates(req.startMs, req.endMs), groupBy: LLMUsageGroupBy.LLM_USAGE_GROUP_BY_PURPOSE, authMode: WIRE_AUTH_MODE.managed }, { ...OPTIONS, enabled });
+  const org = useOrgScope();
+  const q = useUsage(org, { ...llmUsageDates(req.startMs, req.endMs), groupBy: LLMUsageGroupBy.LLM_USAGE_GROUP_BY_PURPOSE, authMode: WIRE_AUTH_MODE.managed }, enabled);
   const control = { refresh: () => void q.refetch(), fetching: q.isFetching };
   if (unimplemented(q.error)) return { status: "not-deployed", ...control };
   if (q.isError) return { status: "error", ...control };

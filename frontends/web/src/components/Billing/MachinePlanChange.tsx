@@ -126,6 +126,7 @@ function OrgMachinePlanChange({
   const quote = useQuery({
     queryKey: ["machine-plan-change", orgId, planId],
     queryFn: () => getControlPlaneClient(BillingService).previewMachinePlanChange({ orgId, planId }),
+    enabled: !!orgId,
     retry: false,
     staleTime: 0,
     // A quote binds for ten minutes; refresh it well inside that.

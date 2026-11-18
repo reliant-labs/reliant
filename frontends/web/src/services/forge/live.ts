@@ -95,6 +95,7 @@ import {
   type DeploySourceProvenance,
 } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { orgRequest } from "@/lib/orgScope";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 
@@ -965,8 +966,9 @@ export function hasLiveControlPlane(): boolean {
  * An empty list is an EMPTY LIST, never an error: a project nobody has
  * deployed yet is a normal state.
  */
-export async function getLiveView(project: string): Promise<LiveEnv[]> {
-  const res = await getControlPlaneClient(DeployService).getLiveView({ project });
+export async function getLiveView(project: string, orgId: string | null): Promise<LiveEnv[]> {
+  // Read in `orgId` (null: none), named in the request so the cached answer is that org's.
+  const res = await getControlPlaneClient(DeployService).getLiveView(orgRequest({ project }, orgId));
   return (res.environments ?? [])
     .map(toLiveEnv)
     .filter((env): env is LiveEnv => env !== null && env.project === project)
@@ -983,8 +985,8 @@ export async function getLiveView(project: string): Promise<LiveEnv[]> {
  * for a real environment, read only by the pages that show one environment's
  * secrets, workloads or alerts.
  */
-export async function getEnvironmentShape(environmentId: string): Promise<LiveShape | null> {
-  const res = await getControlPlaneClient(DeployService).getEnvironmentShape({ environmentId });
+export async function getEnvironmentShape(environmentId: string, orgId: string | null): Promise<LiveShape | null> {
+  const res = await getControlPlaneClient(DeployService).getEnvironmentShape(orgRequest({ environmentId }, orgId));
   return toLiveShape(res.declaredShape);
 }
 
@@ -1014,8 +1016,9 @@ export function toLiveConvergence(msg: DeployConvergence): LiveConvergence {
  */
 export async function listEnvironmentConvergences(
   environmentId: string,
+  orgId: string | null,
   limit = 25
 ): Promise<LiveConvergence[]> {
-  const res = await getControlPlaneClient(DeployService).listConvergences({ environmentId, limit });
+  const res = await getControlPlaneClient(DeployService).listConvergences(orgRequest({ environmentId, limit }, orgId));
   return (res.convergences ?? []).map(toLiveConvergence);
 }

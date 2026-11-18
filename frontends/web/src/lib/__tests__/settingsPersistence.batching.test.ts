@@ -5,6 +5,7 @@ import {
   readSetting,
   deleteSettingIfExists,
 } from '../settingsPersistence';
+import { resetSessionOwnerForTests, setSessionOwner } from '../auth/sessionOwner';
 
 const mocks = vi.hoisted(() => ({
   batchUpsertSettings: vi.fn(),
@@ -46,6 +47,9 @@ describe('settingsPersistence batching and auth gating', () => {
     for (const mock of Object.values(mocks)) mock.mockReset();
     // Signed in by default.
     mocks.getToken.mockResolvedValue('token-abc');
+    // Signed in: a write captured with nobody is refused (lib/auth/sessionOwner).
+    resetSessionOwnerForTests();
+    setSessionOwner('user-a');
     mocks.batchUpsertSettings.mockResolvedValue([]);
     mocks.isInitialized.mockReturnValue(true);
     mocks.getSettingFromCache.mockReturnValue(null);
