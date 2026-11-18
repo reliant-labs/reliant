@@ -9,6 +9,7 @@ import { openAddProject } from "@/store/addProjectDialogStore";
 import { logger } from "@/lib/logger";
 import { toast } from "@/lib/toast-manager";
 import { useProjects } from "@/hooks/project-queries";
+import { useSidebarProjectPrefs } from "@/hooks/sidebar-project-queries";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
@@ -49,6 +50,12 @@ export function ProjectsSection() {
   const [movingProject, setMovingProject] = useState<Project | null>(null);
   // Moving a project needs a second org to move it to.
   const { canSwitch: canSwitchOrg } = useActiveOrg();
+  // Hiding a project only takes it out of the sidebar: it stays listed here,
+  // marked, with the way back.
+  // Hide/Unhide is offered once the choices have been read: a change saved
+  // before then would write over them.
+  const { prefs: sidebarProjectPrefs, setHidden: setSidebarHidden, writable } = useSidebarProjectPrefs();
+  const sidebarPrefs = { hidden: sidebarProjectPrefs.hidden, setHidden: writable ? setSidebarHidden : undefined };
 
   const sortedProjects = useMemo(
     () => sortProjectsForSettings(projects, currentProject?.id),
@@ -204,6 +211,8 @@ export function ProjectsSection() {
                 onRemove={setPendingRemoval}
                 onRename={(project, name) => void renameProject(project, name)}
                 openingProjectId={openingProjectId}
+                hiddenProjectIds={sidebarPrefs.hidden}
+                onSetHidden={sidebarPrefs.setHidden}
               />
             )}
             {visibleProjects.map((project) => <ProjectMachines key={project.id} project={project} />)}

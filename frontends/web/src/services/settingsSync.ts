@@ -9,6 +9,7 @@
 import { create } from "@bufbuild/protobuf";
 import { SettingSchema, type Setting } from "../gen/reliant/v1/settings_pb";
 import { deleteSetting as deleteStoredSetting, fetchSettings } from "../hooks/settings-queries";
+import { onAccountChange } from "../lib/auth/accountScopedState";
 import { waitForConfig } from "../lib/configReady";
 import { logger } from "../lib/logger";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../lib/rootFontSize";
@@ -509,3 +510,5 @@ export class SettingsSyncService {
 
 // Export singleton instance
 export const settingsSync = new SettingsSyncService();
+// Emptied in the same synchronous step as an account change (store/authStore).
+onAccountChange(() => settingsSync.reset());

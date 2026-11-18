@@ -51,11 +51,15 @@ vi.mock('../../lib/logger', () => ({
 }))
 
 const { settingsSync, SETTINGS_KEYS } = await import('../settingsSync')
+const { resetSessionOwnerForTests, setSessionOwner } = await import('../../lib/auth/sessionOwner')
 
 describe('settings write-back', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.clearAllMocks()
+    // Signed in: a write captured with nobody is refused (lib/auth/sessionOwner).
+    resetSessionOwnerForTests()
+    setSessionOwner('user-a')
   })
 
   it('does not write when the value already matches what is stored', async () => {

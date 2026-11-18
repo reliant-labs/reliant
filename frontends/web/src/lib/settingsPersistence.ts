@@ -1,10 +1,11 @@
-import { batchUpsertSettings, deleteSetting } from "../hooks/settings-queries";
+import { batchUpsertSettings, deleteSetting, fetchSettingsFor } from "../hooks/settings-queries";
 import { getAuthTokenProvider } from "../api/authProvider";
 import { isWriteOwnerMismatch } from "../api/writeOwner";
 import { settingsSync } from "../services/settingsSync";
 import {
   credentialBelongsTo,
   currentSessionOwner,
+  isCurrentSessionOwner,
   type SessionOwner,
 } from "./auth/sessionOwner";
 import { logger } from "./logger";
@@ -173,6 +174,81 @@ export function upsertStringSetting(key: string, value: string): Promise<void> {
   return new Promise<void>((resolve) => {
     batch.waiters.push(resolve);
   });
+}
+
+/**
+ * The setting as the server holds it now: one ListSettings, never the
+ * in-memory cache. "error" when it cannot be read (signed out, or the request
+ * failed), so a caller about to rewrite a whole document never mistakes a
+ * failed read for "nothing stored". A found or missing answer also brings the
+ * cache up to date.
+ *
+ * The read is `owner`'s (by default the account the page acts for when it is
+ * called), start to finish: it goes out only with their credential (the
+ * transport checks the header it attaches), and when the page acts for
+ * someone else by the time it answers, it is "error" and nothing is
+ * published to the cache.
+ */
+export async function readSettingFromServer(
+  key: string,
+  owner: SessionOwner = currentSessionOwner(),
+): Promise<SettingRead> {
+  const token = await currentToken();
+  if (token === null || !credentialBelongsTo(owner, token)) return { status: "error" };
+  try {
+    const response = await fetchSettingsFor(owner);
+    if (!isCurrentSessionOwner(owner)) {
+      logger.warn("[settingsPersistence] Dropped a setting read made for a previous identity", { key });
+      return { status: "error" };
+    }
+    const setting = response.settings.find((s) => s.key === key && !s.projectId);
+    if (!setting) {
+      settingsSync.removeFromCache(key);
+      return { status: "missing" };
+    }
+    settingsSync.updateCache(key, setting.value);
+    return { status: "found", value: setting.value };
+  } catch (error) {
+    logger.warn("[settingsPersistence] Failed to read setting from the server", { key, error });
+    return { status: "error" };
+  }
+}
+
+/** A setting write that did not reach the server (writeStringSetting). */
+export class SettingWriteError extends Error {
+  constructor(key: string, options?: { cause?: unknown }) {
+    super(`Could not save setting ${key}`, options);
+    this.name = "SettingWriteError";
+  }
+}
+
+/**
+ * Upsert one setting and say whether it landed: resolves once the server
+ * stored it, and rejects (SettingWriteError) when it did not — signed out, a
+ * credential that moved to another account, or a refused or failed request.
+ * The cache changes only after the server has stored the value. For a caller
+ * that must recover from a refused write; upsertStringSetting is the
+ * fire-and-forget, batched writer every other setting uses.
+ *
+ * The write is `owner`'s: pass the owner captured when the user made the
+ * change, so work queued for them can never land in another account. It is
+ * refused before it is sent when the credential is no longer theirs (here,
+ * and again by the transport against the header it attaches), and when the
+ * page acts for someone else by the time the server answers, the stored
+ * value is not published to the cache that account now reads.
+ */
+export async function writeStringSetting(
+  key: string,
+  value: string,
+  owner: SessionOwner = currentSessionOwner(),
+): Promise<void> {
+  if (!(await mayWriteFor(owner, [key]))) throw new SettingWriteError(key);
+  try {
+    await batchUpsertSettings([{ key, value, valueType: "string" }], undefined, owner);
+  } catch (error) {
+    throw new SettingWriteError(key, { cause: error });
+  }
+  if (isCurrentSessionOwner(owner)) settingsSync.updateCache(key, value);
 }
 
 export async function deleteSettingIfExists(key: string): Promise<void> {
