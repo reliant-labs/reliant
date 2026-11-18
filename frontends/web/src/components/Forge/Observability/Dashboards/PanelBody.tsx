@@ -69,7 +69,9 @@ import { formatAgo, formatCount, formatDuration, formatFigure, formatPercent, fo
 import { groupLabel } from "../obsFilters";
 import { sessionTitle } from "../Sessions/sessionModel";
 import { CategoryChart } from "./CategoryChart";
+import { BarList } from "./BarList";
 import { FunnelChart, funnelFromRows } from "./FunnelChart";
+import { StepFunnel } from "./StepFunnel";
 import { HeatmapChart } from "./HeatmapChart";
 import { pointOf, TimeSeriesChart, type DrillTarget } from "./SeriesChart";
 import { CHART_PALETTE, DANGER_PALETTE, intentOf, namedToken, seriesKey, seriesLabel, tokenColor } from "./seriesModel";
@@ -216,11 +218,15 @@ export function PanelBody({ panel, query, compare, trend, groupBy, bands, links,
   // "bars" on a sql panel draws its time series as bars; on rows with no time
   // column (a histogram's buckets, a top N) it draws the rows as bars.
   const sqlBars = panel.kind === "sql" && panel.display?.style === "bars" && data.series.length === 0 && data.rows.length > 0 && !sqlAggregate(data);
+  // A ranking drawn as a bar list (BarList), rows with no time column.
+  const sqlBarList = panel.kind === "sql" && panel.display?.style === "barlist" && data.series.length === 0 && data.rows.length > 0 && !sqlAggregate(data);
   const draw = panel.postgres?.draw;
   const kind = statement
     ? sqlFunnel
       ? "sql-funnel"
-      : sqlHeatmap
+      : sqlBarList
+        ? "barlist"
+        : sqlHeatmap
         ? "sql-heatmap"
         : data.series.length > 0
         ? "line"
@@ -263,9 +269,19 @@ export function PanelBody({ panel, query, compare, trend, groupBy, bands, links,
         </>
       );
     case "funnel":
+      // The funnel kind takes a layout too (dashspec funnelDisplay).
+      if (panel.display?.layout === "steps") return <StepFunnel steps={data.funnelSteps} compact={compact} />;
       return <FunnelChart steps={data.funnelSteps} compact={compact} />;
     case "sql-funnel":
+      if (panel.display?.layout === "steps") return <StepFunnel steps={sqlFunnel ?? []} compact={compact} label={funnelUnit(data.columns[0])} />;
       return <FunnelChart steps={sqlFunnel ?? []} compact={compact} label={funnelUnit(data.columns[0])} />;
+    case "barlist":
+      return (
+        <>
+          <BarList panel={panel} data={data} unit={unit} keys={keys} trend={trend?.data} compact={compact} />
+          {truncated}
+        </>
+      );
     case "sql-heatmap":
       return (
         <>
@@ -274,6 +290,15 @@ export function PanelBody({ panel, query, compare, trend, groupBy, bands, links,
         </>
       );
     case "bar":
+      // A bar panel's groups drawn as a ranking (style barlist): its rows are the bar list's rows.
+      if (panel.kind === "bar" && panel.display?.style === "barlist") {
+        return (
+          <>
+            <BarList panel={panel} data={data} unit={unit} keys={keys} compact={compact} />
+            {truncated}
+          </>
+        );
+      }
       return (
         <>
           <CategoryChart
@@ -449,6 +474,9 @@ function NumberFigures({
   const many = data.series.length > 1;
   const gauge = panel.display?.style === "gauge" && !compact;
   const exact = !!panel.display?.exact;
+  if (panel.display?.style === "kpi" && !compact && data.series.length > 0) {
+    return <KpiFigure panel={panel} data={data} unit={unit} keys={keys} compare={compare} compareLabel={compareLabel} />;
+  }
   return (
     <dl
       className={cn("grid gap-3", many ? (gauge ? "grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]" : "grid-cols-[repeat(auto-fill,minmax(7rem,1fr))]") : "grid-cols-1")}
@@ -475,7 +503,7 @@ function NumberFigures({
               <dd className={cn("font-semibold tabular-nums", gradeInk(s.value, thresholds), compact ? "text-base" : many ? "text-lg" : "text-2xl")}>{formatFigure(s.value, unit, exact)}</dd>
             )}
             {change && (
-              <dd className={cn("text-xs text-ink-muted", gauge && "text-center")} data-testid="obs-panel-change">
+              <dd className={cn("text-xs", toneOf(panel.display?.good, s.value, before), gauge && "text-center")} data-testid="obs-panel-change">
                 {change}
               </dd>
             )}
@@ -495,6 +523,59 @@ function NumberFigures({
         );
       })}
     </dl>
+  );
+}
+
+/**
+ * display.good: a change's ink. Up is good or bad only where the
+ * panel says which; otherwise it stays muted, as before.
+ */
+export function toneOf(good: "up" | "down" | undefined, now: number | null, before: number | null): string {
+  // A change under 2% is noise, not news: it stays muted whichever way it went.
+  if (!good || now === null || before === null || now === before || (before !== 0 && Math.abs(now - before) / Math.abs(before) < 0.02)) return "text-ink-muted";
+  return (now > before) === (good === "up") ? "text-success-ink" : "text-danger-ink";
+}
+
+/**
+ * display.style "kpi": a headline card. The first figure large,
+ * its change in the panel's polarity, its sparkline across the card, and the
+ * panel's other figures as one small row under it ("DAU 412 · WAU 731 ·
+ * MAU 991"), each in its own unit (display.units).
+ */
+function KpiFigure({ panel, data, unit, keys, compare, compareLabel }: { panel: Panel; data: PanelResult; unit: Unit; keys: string[]; compare?: PanelResult; compareLabel?: string }) {
+  const [lead, ...rest] = data.series;
+  const exact = !!panel.display?.exact;
+  const unitOfSeries = (label: string): Unit => panel.display?.units?.[label] ?? unit;
+  const before = compare?.series.find((p) => seriesKey(p) === seriesKey(lead))?.value ?? null;
+  const change = compareLabel ? describeChange(lead.value, before, unitOfSeries(lead.label), compareLabel, exact) : null;
+  const token = namedToken(panel.display, [lead.label], true) ?? CHART_PALETTE[0];
+  const trend = lead.values.filter((v) => v !== null).length > 1;
+  return (
+    <div className="flex h-full flex-col" data-testid="obs-panel-kpi">
+      <p className="sr-only">{seriesLabel(lead, panel, keys)}</p>
+      <p className="text-2xl font-semibold tabular-nums text-ink" data-testid="obs-kpi-value">
+        {formatFigure(lead.value, unitOfSeries(lead.label), exact)}
+      </p>
+      {change && (
+        <p className={cn("text-xs", toneOf(panel.display?.good, lead.value, before))} data-testid="obs-panel-change">
+          {change}
+        </p>
+      )}
+      {rest.length > 0 && (
+        <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-ink-muted" data-testid="obs-kpi-sub">
+          {rest.map((s) => (
+            <span key={s.label} className="whitespace-nowrap">
+              {s.label} <span className="font-medium tabular-nums text-ink">{formatFigure(s.value, unitOfSeries(s.label), exact)}</span>
+            </span>
+          ))}
+        </p>
+      )}
+      {trend && (
+        <div className="mt-auto pt-2" data-testid="obs-panel-sparkline">
+          <UPlotChart height={32} timestamps={lead.timestamps} series={[{ label: lead.label, values: lead.values, color: token }]} unit={unitOfSeries(lead.label)} label={`${lead.label}, over the window`} compact />
+        </div>
+      )}
+    </div>
   );
 }
 

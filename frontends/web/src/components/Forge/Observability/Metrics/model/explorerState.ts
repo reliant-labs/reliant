@@ -203,7 +203,7 @@ function shellQuote(word: string): string {
 
 /** Go's time.ParseDuration has no days: a range or compare offset is spelled in hours past a day. */
 export function durationOf(range: RangePreset): string {
-  return range === "7d" ? "168h" : range;
+  return range === "7d" ? "168h" : range === "30d" ? "720h" : range;
 }
 
 const FLAG_KINDS = ["line", "number", "table"];

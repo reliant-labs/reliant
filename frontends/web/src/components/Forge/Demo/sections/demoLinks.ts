@@ -12,7 +12,7 @@ import { DEMO_INCIDENT } from "../demoData/shopStory";
 const at = (page: Parameters<typeof consolePath>[1], search?: Record<string, unknown>) => withSearch(consolePath(FIXTURE_PROJECT, page), search);
 
 /** The Product analytics hub's first tab (Users · Product · Acquisition). */
-const PEOPLE_DASHBOARD = { kind: "dashboard", dashKind: "release", key: "users" } as const;
+const PEOPLE_DASHBOARD = { kind: "dashboard", dashKind: "release", key: "product-overview" } as const;
 
 export const DEMO_LINKS = {
   happening: at({ kind: "overview" }),
@@ -28,4 +28,4 @@ export const DEMO_LINKS = {
 } as const;
 
 /** The dashboards that are "People" in the simple view: the Product analytics hub's tabs. */
-export const PEOPLE_DASHBOARD_KEYS: readonly string[] = ["users", "product", "acquisition"];
+export const PEOPLE_DASHBOARD_KEYS: readonly string[] = ["product-overview", "users", "product", "acquisition"];
