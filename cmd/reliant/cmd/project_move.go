@@ -2,7 +2,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -184,30 +183,7 @@ func (m projectMove) run(ctx context.Context, ref, toOrg string) error {
 
 // findProject resolves ref as a project id, then a name, then a path.
 func (m projectMove) findProject(ctx context.Context, ref string) (*reliantv1.Project, error) {
-	resp, err := m.client.ListProjects(ctx, connect.NewRequest(&reliantv1.ListProjectsRequest{}))
-	if err != nil {
-		return nil, fmt.Errorf("listing projects: %w", err)
-	}
-	projects := resp.Msg.GetProjects()
-	for _, p := range projects {
-		if p.GetId() == ref {
-			return p, nil
-		}
-	}
-	var named []*reliantv1.Project
-	for _, p := range projects {
-		if p.GetName() == ref || p.GetPath() == ref {
-			named = append(named, p)
-		}
-	}
-	switch len(named) {
-	case 1:
-		return named[0], nil
-	case 0:
-		return nil, fmt.Errorf("no project of yours is named %q: pass its id ('reliant project list')", ref)
-	default:
-		return nil, fmt.Errorf("%d projects are named %q: pass its id ('reliant project list')", len(named), ref)
-	}
+	return findProjectRef(ctx, m.client, ref)
 }
 
 // follow reads an unsettled move again until it settles or the wait runs out.
@@ -294,13 +270,5 @@ func printMovePreview(w io.Writer, project *reliantv1.Project, p *reliantv1.Prev
 
 // confirmProjectName asks for the project's name, typed.
 func confirmProjectName(in io.Reader, out io.Writer, name string) error {
-	fmt.Fprintf(out, "\nType %s to move it: ", name)
-	line, err := bufio.NewReader(in).ReadString('\n')
-	if err != nil && line == "" {
-		return errors.New("not confirmed: type the project's name, or pass --yes")
-	}
-	if strings.TrimSpace(line) != name {
-		return errors.New("not confirmed: that is not the project's name; nothing moved")
-	}
-	return nil
+	return confirmTypedName(in, out, name, "move it", "moved")
 }
