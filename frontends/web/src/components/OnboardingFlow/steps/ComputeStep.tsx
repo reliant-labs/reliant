@@ -226,6 +226,7 @@ export function ComputeStep({
   // without removing the question.
   const showPlanChoice = HAS_CLOUD_DAEMONS && !loading;
   const showCloudRows = showPlanChoice && (!showLocal || cloudExpanded);
+  const hostedRowsAvailable = plansQ.isLoading || planOptions.length > 0;
   const cheapestMonthlyCents = planOptions.length
     ? Math.min(...planOptions.map((option) => option.monthlyPriceCents))
     : null;
@@ -611,7 +612,19 @@ export function ComputeStep({
           {showPlanChoice && showLocal && (
             <button
               type="button"
-              onClick={() => setCloudExpanded((open) => !open)}
+              onClick={() => {
+                // No catalog (it failed to load, or sells nothing) means no
+                // rows to unfold, so the disclosure would open onto nothing
+                // and the hosted path would be unreachable under the
+                // preselected free row. Choosing it here selects hosted
+                // instead, the same degraded path "Prices didn't load"
+                // describes: continue without a size, or redeem a code.
+                if (!hostedRowsAvailable) {
+                  setShowLocal(false);
+                  return;
+                }
+                setCloudExpanded((open) => !open);
+              }}
               aria-expanded={cloudExpanded}
               aria-controls={
                 cloudExpanded ? "compute-cloud-options" : undefined

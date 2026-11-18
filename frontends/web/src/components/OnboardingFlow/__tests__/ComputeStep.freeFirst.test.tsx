@@ -30,23 +30,21 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
   }),
   computeIneligibleCopy: () => "",
 }));
+const PLAN_M = {
+  id: "plan_compute_m",
+  name: "M",
+  displayOrder: 1,
+  priceCents: 2000n,
+  structuredLimits: {
+    allowedDaemonSizes: ["m"],
+    includedSmallDaemonHours: 17n,
+  },
+};
+const mockPlans = vi.fn((): unknown[] => [PLAN_M]);
 vi.mock("@/hooks/useCloudBillingQueries", () => ({
   usePlans: () => ({
     isLoading: false,
-    data: {
-      plans: [
-        {
-          id: "plan_compute_m",
-          name: "M",
-          displayOrder: 1,
-          priceCents: 2000n,
-          structuredLimits: {
-            allowedDaemonSizes: ["m"],
-            includedSmallDaemonHours: 17n,
-          },
-        },
-      ],
-    },
+    data: { plans: mockPlans() },
   }),
 }));
 vi.mock("@/components/RedeemCouponForm", () => ({
@@ -91,6 +89,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockIsPhone.mockReturnValue(false);
   mockEligible.mockReturnValue(false);
+  mockPlans.mockReturnValue([PLAN_M]);
   mockDaemons.mockReturnValue(NO_DAEMON);
 });
 
@@ -147,6 +146,20 @@ describe("ComputeStep — your own computer leads on a computer", () => {
   it("keeps a size picked before a reload, even before compute is committed", () => {
     renderStep({ computePlanId: "plan_compute_m" });
     expect(ownComputer()).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("keeps the hosted path reachable when the catalog is empty or failed to load", () => {
+    mockPlans.mockReturnValue([]);
+    const updatePlan = renderStep();
+
+    fireEvent.click(screen.getByTestId("compute-cloud-toggle"));
+
+    expect(ownComputer()).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("compute-step-plans-unavailable")).toBeVisible();
+    expect(screen.queryByTestId("self-hosted-connect")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue with a Reliant machine" }));
+    expect(updatePlan).toHaveBeenCalledWith(expect.objectContaining({ compute: "cloud_paid" }));
+    expect(screen.getByTestId("redeem-coupon")).toBeVisible();
   });
 
   it("lets the user pick cloud from the folded list", () => {

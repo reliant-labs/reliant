@@ -176,6 +176,35 @@ async function mockGrpcRoutes(page: Page) {
       }),
   );
 
+  // The plan catalog. The Compute step builds its hosted machine rows (and the
+  // "from $X/mo" on the cloud disclosure) from ListPlans; the `{}` fallback
+  // above is an empty catalog, which offers no size to pick. Production always
+  // sells plans, so the mock does too.
+  await page.route('**/controlplane.v1.BillingService/ListPlans', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        plans: [
+          {
+            id: 'plan_compute_m',
+            name: 'Compute M',
+            displayOrder: 1,
+            priceCents: '2000',
+            structuredLimits: { allowedDaemonSizes: ['m'], machineIncludedHours: '160' },
+          },
+          {
+            id: 'plan_compute_l',
+            name: 'Compute L',
+            displayOrder: 2,
+            priceCents: '4000',
+            structuredLimits: { allowedDaemonSizes: ['m', 'l'], machineIncludedHours: '160' },
+          },
+        ],
+      }),
+    }),
+  );
+
   // Wallet overview — `requiresPayment`'s other leg (see
   // useOnboardingFacts.ts). Funded by default, matching the funded compute
   // eligibility above: a fresh, not-yet-onboarded, entitled user. A funded
