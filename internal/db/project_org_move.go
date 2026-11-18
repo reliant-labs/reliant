@@ -108,6 +108,11 @@ func (r *Repo) ListProjectTriggersResumedSince(ctx context.Context, projectID st
 func (r *Repo) ResumeTriggerPausedBy(ctx context.Context, id, reason string, seen time.Time) (bool, error) {
 	var resumed bool
 	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		// Its project before its row: a resume is refused while the project
+		// is scheduled for deletion (store.LockProjectsForWrite).
+		if err := r.lockTriggerProjects(ctx, id, "", true); err != nil {
+			return err
+		}
 		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
 			return err
 		}

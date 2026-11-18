@@ -92,6 +92,13 @@ type ProjectDeletion struct {
 	PausedTriggerIDs []string
 }
 
+// ErrProjectScheduledForDeletion refuses a write that would add to a project
+// scheduled for deletion: a chat, workspace, run, or a trigger created in it,
+// moved into it or turned on in it. The database refuses each of them, under
+// a lock the deletion serializes with (migration
+// 20261118103211_project_delete_write_admission).
+var ErrProjectScheduledForDeletion = svcerr.FailedPrecondition("this project was deleted; restore it to work in it again")
+
 // ErrProjectPurgeStarted refuses restoring a project whose purge has begun.
 var ErrProjectPurgeStarted = svcerr.FailedPrecondition("this project is already being deleted, so it can no longer be restored")
 

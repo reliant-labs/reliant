@@ -81,7 +81,8 @@ func nameTakenOr(err error) error {
 	if errors.As(err, &pg) && pg.Code == "23505" && pg.ConstraintName == liveNameIndex {
 		return core.ErrWorktreeNameTaken
 	}
-	return err
+	// A workspace in a project scheduled for deletion (project_schedule.go).
+	return projectDeletedError(err)
 }
 
 // InsertWorktree stores a new worktree with the timestamps the caller set.

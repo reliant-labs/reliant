@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -25,10 +27,19 @@ import (
 // because the batches delete the project's chats a few at a time and a
 // restore between two of them would bring back a project missing some.
 //
-// Every function here that writes takes the project row FOR NO KEY UPDATE
-// first: it never changes a key, so it does not wait for (or block) the key
-// share every chat, worktree and trigger insert takes on the row, while two
-// of these on the same project still wait for each other.
+// Scheduling takes the project row FOR UPDATE first. Every write that would
+// add to the project (a chat, worktree or run, or a trigger created, moved in
+// or turned on) takes a key share on the row and reads delete_after under it
+// (the project_delete_admission triggers, migration
+// 20261118103211_project_delete_write_admission). The two conflict, so a
+// write either commits before the schedule scans the project's triggers (and
+// a trigger it left on is paused with the rest), or waits for the schedule
+// and is refused (core.ErrProjectScheduledForDeletion). Restoring takes the
+// row FOR NO KEY UPDATE: it waits for a schedule, and the triggers it turns
+// on read the delete_after it cleared.
+//
+// Lock order, with the trigger writers' (LockProjectsForWrite): the project
+// row before any trigger row.
 
 // TriggerChangeProjectRestored is the trigger_changes operation recording a
 // trigger turned back on because its project was restored.
@@ -45,20 +56,28 @@ func whereProjectLive(column string) orm.QueryOption {
 
 // ScheduleProjectDeletion schedules the project for purge at deleteAfter,
 // recording by as who did, and pauses its enabled triggers. A project already
-// scheduled keeps its first date and nothing is written (AlreadyScheduled). A
-// missing project is core.ErrProjectNotFound. Run it in a transaction.
+// scheduled keeps its first date (AlreadyScheduled); any of its triggers found
+// on (turned on by a writer that bypassed the admission, which no release
+// has) is paused again. A missing project is core.ErrProjectNotFound. Run it
+// in a transaction.
 func ScheduleProjectDeletion(ctx context.Context, db orm.Context, id, by string, deleteAfter time.Time) (core.ProjectDeletion, error) {
 	var rows []struct {
 		DeleteAfter *time.Time `bun:"delete_after"`
 	}
-	if err := db.Bun().NewRaw(`SELECT delete_after FROM projects WHERE id = ?0 FOR NO KEY UPDATE`, id).Scan(ctx, &rows); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	// FOR UPDATE, not FOR NO KEY UPDATE: it must conflict with the key share
+	// each admitted write holds on the row (see the top of this file).
+	if err := db.Bun().NewRaw(`SELECT delete_after FROM projects WHERE id = ?0 FOR UPDATE`, id).Scan(ctx, &rows); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return core.ProjectDeletion{}, fmt.Errorf("lock the project: %w", err)
 	}
 	if len(rows) == 0 {
 		return core.ProjectDeletion{}, core.ErrProjectNotFound
 	}
 	if rows[0].DeleteAfter != nil {
-		return core.ProjectDeletion{DeleteAfter: rows[0].DeleteAfter.UTC(), AlreadyScheduled: true}, nil
+		paused, err := pauseProjectTriggers(ctx, db, id)
+		if err != nil {
+			return core.ProjectDeletion{}, err
+		}
+		return core.ProjectDeletion{DeleteAfter: rows[0].DeleteAfter.UTC(), AlreadyScheduled: true, PausedTriggerIDs: paused}, nil
 	}
 	if _, err := db.Bun().NewRaw(`UPDATE projects SET delete_after = ?1, deleted_by = ?2, purge_started_at = NULL, updated_at = NOW() WHERE id = ?0`,
 		id, deleteAfter.UTC(), by).Exec(ctx); err != nil {
@@ -158,6 +177,62 @@ func RestoreProjectDeletion(ctx context.Context, db orm.Context, id string) ([]s
 		}
 	}
 	return ids, nil
+}
+
+// projectDeletedConstraint is the constraint name the project_delete_admission
+// triggers raise with (SQLSTATE 55000).
+const projectDeletedConstraint = "project_scheduled_for_deletion"
+
+// projectDeletedError maps the database's refusal of a write to a project
+// scheduled for deletion to core.ErrProjectScheduledForDeletion.
+func projectDeletedError(err error) error {
+	var pg *pgconn.PgError
+	if errors.As(err, &pg) && pg.Code == "55000" && pg.ConstraintName == projectDeletedConstraint {
+		return core.ErrProjectScheduledForDeletion
+	}
+	return err
+}
+
+// LockProjectsForWrite takes a key share on each project in ids (in id
+// order; "" is skipped) and refuses with core.ErrProjectScheduledForDeletion
+// when one is scheduled for deletion. A trigger write takes it before its
+// trigger's row lock: the database's admission takes the same share later in
+// the statement, and taking it after the trigger lock would order the two
+// locks against a schedule's (project, then triggers). A project that is gone
+// is left to the write's own foreign key.
+func LockProjectsForWrite(ctx context.Context, db orm.Context, ids ...string) error {
+	var want []string
+	for _, id := range ids {
+		if id != "" {
+			want = append(want, id)
+		}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	var scheduled []string
+	if err := db.Bun().NewRaw(`SELECT id FROM (SELECT id, delete_after FROM projects WHERE id = ANY(?0) ORDER BY id FOR KEY SHARE) p
+WHERE delete_after IS NOT NULL`, pgdialect.Array(want)).Scan(ctx, &scheduled); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("lock the project: %w", err)
+	}
+	if len(scheduled) > 0 {
+		return core.ErrProjectScheduledForDeletion
+	}
+	return nil
+}
+
+// TriggerProjectID reads the trigger's project, unlocked: what a trigger
+// write locks (LockProjectsForWrite) before the trigger's own row. "" for a
+// trigger that is gone (its write then finds it missing).
+func TriggerProjectID(ctx context.Context, db orm.Context, triggerID string) (string, error) {
+	var ids []string
+	if err := db.Bun().NewRaw(`SELECT project_id FROM triggers WHERE id = ?0`, triggerID).Scan(ctx, &ids); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("read the trigger's project: %w", err)
+	}
+	if len(ids) == 0 {
+		return "", nil
+	}
+	return ids[0], nil
 }
 
 // ListProjectTriggerIDs lists the ids of the project's triggers.

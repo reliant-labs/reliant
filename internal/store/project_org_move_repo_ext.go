@@ -749,6 +749,9 @@ func ListProjectTriggersPausedBy(ctx context.Context, db orm.Context, projectID,
 func ResumeTriggerPausedBy(ctx context.Context, db orm.Context, id, reason string, seen time.Time) (bool, error) {
 	res, err := db.Bun().NewRaw(`UPDATE triggers SET enabled = true, paused_reason = NULL, updated_at = NOW()
 WHERE id = ? AND NOT enabled AND paused_reason = ? AND updated_at = ?`, id, reason, seen).Exec(ctx)
+	if err := projectDeletedError(err); errors.Is(err, core.ErrProjectScheduledForDeletion) {
+		return false, err
+	}
 	if err != nil {
 		return false, fmt.Errorf("resume trigger %s: %w", id, err)
 	}

@@ -3194,6 +3194,11 @@ func (r *Repo) CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ..
 		if err := store.LockUserOrgs(ctx, r.ORM(), t.UserID, reads...); err != nil {
 			return err
 		}
+		// Then its project: refused while scheduled for deletion, and a
+		// schedule waits for this insert (store.LockProjectsForWrite).
+		if err := store.LockProjectsForWrite(ctx, r.ORM(), t.ProjectID); err != nil {
+			return err
+		}
 		if err := store.InsertTrigger(ctx, r.ORM(), t); err != nil {
 			return mapTriggerNameConflict(err, t.Name)
 		}
@@ -3251,8 +3256,14 @@ func (r *Repo) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ..
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		// The org lock first, then the trigger's row (store/org_lock.go).
+		// The org lock first, then the projects the trigger is in and moves
+		// to, then the trigger's row (store/org_lock.go,
+		// store.LockProjectsForWrite). A trigger left on, or moved, in a
+		// project scheduled for deletion is refused.
 		if err := store.LockUserOrgs(ctx, r.ORM(), t.UserID, reads...); err != nil {
+			return err
+		}
+		if err := r.lockTriggerProjects(ctx, t.ID, t.ProjectID, t.Enabled); err != nil {
 			return err
 		}
 		if err := store.LockTrigger(ctx, r.ORM(), t.ID); err != nil {
@@ -3288,6 +3299,13 @@ func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) e
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		// Turning a trigger on locks its project first: refused while the
+		// project is scheduled for deletion (store.LockProjectsForWrite).
+		if enabled {
+			if err := r.lockTriggerProjects(ctx, id, "", true); err != nil {
+				return err
+			}
+		}
 		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
 			return err
 		}
@@ -3311,6 +3329,24 @@ func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) e
 		}
 		return store.RecordTriggerChange(ctx, r.ORM(), op, before, after)
 	})
+}
+
+// lockTriggerProjects takes the key share a trigger write needs on its
+// projects before the trigger's own row lock (store.LockProjectsForWrite):
+// the project it is in now and, when it moves, toProjectID. Only a write
+// that leaves the trigger on, or moves it, is admitted against a deletion;
+// one that leaves it off, in place, locks nothing. The database's admission
+// re-decides under the same lock in the write itself, so a trigger that moved
+// between this read and its row lock is still refused.
+func (r *Repo) lockTriggerProjects(ctx context.Context, triggerID, toProjectID string, enabled bool) error {
+	current, err := store.TriggerProjectID(ctx, r.ORM(), triggerID)
+	if err != nil {
+		return err
+	}
+	if !enabled && (toProjectID == "" || toProjectID == current) {
+		return nil
+	}
+	return store.LockProjectsForWrite(ctx, r.ORM(), current, toProjectID)
 }
 
 // PauseTrigger is the system pausing a trigger that can no longer launch as

@@ -56,6 +56,11 @@ func (r *Repo) AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner,
 		if err := store.LockUserOrgs(ctx, r.ORM(), t.UserID, reads...); err != nil {
 			return err
 		}
+		// The project it is adopted into, before its row: refused while
+		// that project is scheduled for deletion.
+		if err := store.LockProjectsForWrite(ctx, r.ORM(), t.ProjectID); err != nil {
+			return err
+		}
 		if err := store.LockTrigger(ctx, r.ORM(), t.ID); err != nil {
 			return err
 		}

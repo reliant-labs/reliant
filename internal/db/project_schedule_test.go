@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -285,4 +286,200 @@ func claimPurge(f *deleteFixture, now time.Time) (string, bool, error) {
 		return "", false, err
 	}
 	return store.ClaimProjectPurge(f.ctx, f.repo.ORM(), ids[0], now, time.Hour)
+}
+
+// awaitLockWait returns once another backend of this test's database is
+// waiting on a lock: the write a test started in a goroutine has reached the
+// lock the transaction it races holds. Deterministic: it reads the server's
+// own state, never a sleep.
+func awaitLockWait(t *testing.T, repo *Repo) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		var waiting int
+		require.NoError(t, repo.ORM().Bun().NewRaw(`SELECT count(*) FROM pg_stat_activity
+WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()`).Scan(context.Background(), &waiting))
+		if waiting > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the racing write never waited on the lock")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// holdTx runs write in a transaction it keeps open until release is closed,
+// and reports write's error, then the commit's, on the returned channel.
+// ready closes once write has run.
+func holdTx(f *deleteFixture, write func(ctx context.Context) error) (ready chan struct{}, release chan struct{}, done chan error) {
+	ready, release, done = make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() {
+		done <- f.repo.RunTx(f.ctx, orm.ReadCommitted, func(ctx context.Context) error {
+			err := write(ctx)
+			close(ready)
+			<-release
+			return err
+		})
+	}()
+	return ready, release, done
+}
+
+func (f *deleteFixture) newTrigger(id string, enabled bool) *core.Trigger {
+	return &core.Trigger{
+		ID: id, UserID: f.owner, ProjectID: f.project, Name: id, Kind: core.TriggerKindSchedule, Enabled: enabled,
+		Workflow: "builtin://agent", Config: []byte(`{"interval":"1h"}`), CreatedAt: deleteClock, UpdatedAt: deleteClock,
+	}
+}
+
+// Scheduling a deletion and a trigger write that would leave an automation
+// on in the project serialize on the project row (store/project_schedule.go,
+// migration 20261118103211): whichever commits second sees the first. So a
+// deleted project never keeps an enabled trigger.
+func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
+	after := deleteClock.Add(core.ProjectDeleteWindow)
+
+	t.Run("a create that commits first is paused by the schedule", func(t *testing.T) {
+		f := newDeleteFixture(t)
+		created := "trig-new-" + uuid.NewString()[:8]
+		ready, release, done := holdTx(f, func(ctx context.Context) error {
+			return store.InsertTrigger(ctx, f.repo.ORM(), f.newTrigger(created, true))
+		})
+		<-ready
+		scheduled := make(chan core.ProjectDeletion, 1)
+		go func() {
+			d, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after)
+			assert.NoError(t, err)
+			scheduled <- d
+		}()
+		awaitLockWait(t, f.repo)
+		close(release)
+		require.NoError(t, <-done)
+		got := <-scheduled
+		assert.ElementsMatch(t, []string{f.enabledTrigger, created}, got.PausedTriggerIDs)
+		tr := f.trigger(t, created)
+		assert.False(t, tr.Enabled)
+		assert.Equal(t, core.TriggerPausedProjectDeleted, tr.PausedReason)
+	})
+
+	t.Run("a create that comes after the schedule is refused", func(t *testing.T) {
+		f := newDeleteFixture(t)
+		ready, release, done := holdTx(f, func(ctx context.Context) error {
+			_, err := store.ScheduleProjectDeletion(ctx, f.repo.ORM(), f.project, f.owner, after)
+			return err
+		})
+		<-ready
+		created := "trig-new-" + uuid.NewString()[:8]
+		creating := make(chan error, 1)
+		go func() { creating <- f.repo.CreateTrigger(f.ctx, f.newTrigger(created, true)) }()
+		awaitLockWait(t, f.repo)
+		close(release)
+		require.NoError(t, <-done)
+		assert.ErrorIs(t, <-creating, core.ErrProjectScheduledForDeletion)
+		_, err := f.repo.GetTrigger(f.ctx, created)
+		assert.ErrorIs(t, err, core.ErrTriggerNotFound)
+	})
+
+	t.Run("an enable that commits first is paused by the schedule, and restored with it", func(t *testing.T) {
+		f := newDeleteFixture(t)
+		ready, release, done := holdTx(f, func(ctx context.Context) error {
+			return store.SetTriggerEnabled(ctx, f.repo.ORM(), f.userPaused, true)
+		})
+		<-ready
+		scheduled := make(chan core.ProjectDeletion, 1)
+		go func() {
+			d, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after)
+			assert.NoError(t, err)
+			scheduled <- d
+		}()
+		awaitLockWait(t, f.repo)
+		close(release)
+		require.NoError(t, <-done)
+		assert.ElementsMatch(t, []string{f.enabledTrigger, f.userPaused}, (<-scheduled).PausedTriggerIDs)
+		assert.False(t, f.trigger(t, f.userPaused).Enabled)
+
+		resumed, err := f.repo.RestoreProject(f.ctx, f.project)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{f.enabledTrigger, f.userPaused}, resumed, "both were on when the delete paused them")
+	})
+
+	t.Run("an enable that comes after the schedule is refused, and restore leaves it off", func(t *testing.T) {
+		f := newDeleteFixture(t)
+		ready, release, done := holdTx(f, func(ctx context.Context) error {
+			_, err := store.ScheduleProjectDeletion(ctx, f.repo.ORM(), f.project, f.owner, after)
+			return err
+		})
+		<-ready
+		enabling := make(chan error, 1)
+		go func() { enabling <- f.repo.SetTriggerEnabled(f.ctx, f.userPaused, true) }()
+		awaitLockWait(t, f.repo)
+		close(release)
+		require.NoError(t, <-done)
+		assert.ErrorIs(t, <-enabling, core.ErrProjectScheduledForDeletion)
+		assert.False(t, f.trigger(t, f.userPaused).Enabled)
+
+		// An edit that would turn it on is refused too; one that leaves it
+		// off is not.
+		edit := f.trigger(t, f.userPaused)
+		edit.Enabled = true
+		assert.ErrorIs(t, f.repo.UpdateTrigger(f.ctx, edit), core.ErrProjectScheduledForDeletion)
+		edit.Enabled = false
+		edit.Name = "renamed"
+		require.NoError(t, f.repo.UpdateTrigger(f.ctx, edit))
+
+		resumed, err := f.repo.RestoreProject(f.ctx, f.project)
+		require.NoError(t, err)
+		assert.Equal(t, []string{f.enabledTrigger}, resumed, "restore turns on only what the delete paused")
+		assert.False(t, f.trigger(t, f.userPaused).Enabled)
+		require.NoError(t, f.repo.SetTriggerEnabled(f.ctx, f.userPaused, true), "after the restore it can be turned on again")
+	})
+}
+
+// Nothing new is added to a deleted project, whichever writer tries: a chat,
+// a workspace, a run, a chat moved into it, a trigger. A run that already
+// exists stays idempotent, and everything is admitted again after a restore.
+func TestADeletedProjectAdmitsNothingNew(t *testing.T) {
+	f := newDeleteFixture(t)
+	other := "proj-other-" + uuid.NewString()[:8]
+	require.NoError(t, f.repo.CreateProject(f.ctx, &Project{ID: other, UserID: f.owner, Name: "other", Path: "/home/me/" + other,
+		CreatedAt: deleteClock, UpdatedAt: deleteClock, LastActive: deleteClock}))
+	elsewhere := "chat-elsewhere-" + uuid.NewString()[:8]
+	require.NoError(t, f.repo.CreateChat(f.ctx, &Chat{ID: elsewhere, UserID: f.owner, ProjectID: other, Title: "elsewhere",
+		CreatedAt: deleteClock, UpdatedAt: deleteClock, LastActive: deleteClock}))
+	existingRun := &Workflow{ID: "run-" + uuid.NewString()[:8], ChatID: f.chat, WorkflowName: "agent", Thread: "main", CreatedAt: deleteClock}
+	require.NoError(t, f.repo.CreateWorkflow(f.ctx, existingRun))
+
+	_, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, f.owner, deleteClock.Add(core.ProjectDeleteWindow))
+	require.NoError(t, err)
+
+	writes := map[string]func() error{
+		"a new chat": func() error {
+			return f.repo.CreateChat(f.ctx, &Chat{ID: "chat-new-" + uuid.NewString()[:8], UserID: f.owner, ProjectID: f.project, Title: "new",
+				CreatedAt: deleteClock, UpdatedAt: deleteClock, LastActive: deleteClock})
+		},
+		"a new workspace": func() error {
+			return f.repo.CreateWorktree(f.ctx, &Worktree{ID: "wt-" + uuid.NewString()[:8], Name: "wt-" + uuid.NewString()[:8], Path: "/w",
+				Branch: "b", ProjectID: f.project, CreatedAt: deleteClock, UpdatedAt: deleteClock, LastActive: deleteClock})
+		},
+		"a new run": func() error {
+			return f.repo.CreateWorkflow(f.ctx, &Workflow{ID: "run-" + uuid.NewString()[:8], ChatID: f.chat, WorkflowName: "agent", Thread: "t2", CreatedAt: deleteClock})
+		},
+		"a chat moved into it": func() error {
+			_, err := f.repo.MoveChatToProject(f.ctx, ChatMove{UserID: f.owner, ChatID: elsewhere, FromProjectID: other, ToProjectID: f.project})
+			return err
+		},
+		"a new trigger": func() error {
+			return f.repo.CreateTrigger(f.ctx, f.newTrigger("trig-new-"+uuid.NewString()[:8], false))
+		},
+	}
+	for name, write := range writes {
+		assert.ErrorIs(t, write(), core.ErrProjectScheduledForDeletion, "%s is refused", name)
+	}
+	require.NoError(t, f.repo.CreateWorkflow(f.ctx, existingRun), "a retried insert of a run that exists stays a no-op")
+
+	_, err = f.repo.RestoreProject(f.ctx, f.project)
+	require.NoError(t, err)
+	for name, write := range writes {
+		assert.NoError(t, write(), "%s is admitted after the restore", name)
+	}
 }

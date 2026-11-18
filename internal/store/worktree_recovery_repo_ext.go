@@ -45,7 +45,9 @@ func recoveryAdmissionError(err error) error {
 	if errors.As(err, &pg) && pg.Code == "55P03" {
 		return core.ErrWorktreeFinalizing
 	}
-	return err
+	// A chat created in, or moved into, a project scheduled for deletion
+	// (project_schedule.go).
+	return projectDeletedError(err)
 }
 
 func recoveryTx(ctx context.Context, db orm.Context, fn func(context.Context) error) error {

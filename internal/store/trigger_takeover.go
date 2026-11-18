@@ -79,7 +79,9 @@ func AdoptTrigger(ctx context.Context, db orm.Context, t *core.Trigger) error {
 	row.WebhookTokenHash, row.WebhookSecretSealed, row.PausedReason = nil, nil, nil
 	err = UpdateTriggerMasked(ctx, db, row, adoptedTriggerColumns, crud.NoReadBack())
 	if err != nil {
-		return err
+		// Adopted into a project scheduled for deletion: refused
+		// (project_schedule.go).
+		return projectDeletedError(err)
 	}
 	return nil
 }
