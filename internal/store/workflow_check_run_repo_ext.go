@@ -142,7 +142,7 @@ SET claimed_by = ?0, claimed_until = ?1, lease_generation = c.lease_generation +
 WHERE c.id IN (?2)
   AND c.finished_at IS NULL
   AND (c.claimed_until IS NULL OR c.claimed_until < ?3)
-RETURNING c.*`, holder, leaseUntil, ids, now).Scan(ctx, &rows)
+RETURNING `+columnsOf[WorkflowCheckRun]("c"), holder, leaseUntil, ids, now).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to claim workflow check runs: %w", err)
 	}
