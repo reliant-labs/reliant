@@ -281,6 +281,14 @@ func TestForRequest_LargeStaticGIFStaysGIF(t *testing.T) {
 	if w != ManyImageMaxDimension || h != 19 || format != "gif" || fitted[0].MIMEType != "image/gif" {
 		t.Fatalf("downscaled to %dx%d %s (%s), want %dx19 gif", w, h, format, fitted[0].MIMEType, ManyImageMaxDimension)
 	}
+	// The source's transparent color is kept: its untouched rows stay clear.
+	img, err := gif.Decode(bytes.NewReader(fitted[0].Data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, a := img.At(0, h-1).RGBA(); a != 0 {
+		t.Fatalf("a transparent pixel has alpha %d", a)
+	}
 }
 
 func TestTargetSize(t *testing.T) {

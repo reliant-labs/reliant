@@ -412,24 +412,19 @@ func encode(img image.Image, format string, pal color.Palette) ([]byte, error) {
 		}
 		return fits(), nil
 	case "gif":
-		opts := &gif.Options{NumColors: 256, Drawer: draw.FloydSteinberg}
 		if len(pal) > 0 {
-			// Keep the source's colors, its transparent one included.
-			opts.Quantizer = fixedPalette(pal)
+			// Keep the source's colors, its transparent one included: a
+			// paletted image is written with its own palette.
+			pm := image.NewPaletted(img.Bounds(), pal)
+			draw.FloydSteinberg.Draw(pm, pm.Bounds(), img, img.Bounds().Min)
+			img = pm
 		}
-		if err := gif.Encode(&buf, img, opts); err != nil {
+		if err := gif.Encode(&buf, img, &gif.Options{NumColors: 256, Drawer: draw.FloydSteinberg}); err != nil {
 			return nil, fmt.Errorf("encode gif: %w", err)
 		}
 		return fits(), nil
 	}
 	return nil, errors.New("no encoder for " + format)
-}
-
-// fixedPalette quantizes to a palette chosen in advance.
-type fixedPalette color.Palette
-
-func (p fixedPalette) Quantize(dst color.Palette, _ image.Image) color.Palette {
-	return append(dst[:0], p...)
 }
 
 // targetSize scales w x h to fit within limit on both sides, keeping the
