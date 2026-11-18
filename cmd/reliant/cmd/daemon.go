@@ -949,6 +949,10 @@ To switch back to an account whose token is already stored:
 			if err != nil {
 				return err
 			}
+			// Before this daemon writes anything into the directory.
+			if err := refuseHeldDataDir(dataDir); err != nil {
+				return err
+			}
 
 			// Keep the foreground stdout stream used by Electron/task while also
 			// persisting an independently rotated tools-daemon log. Do not share
@@ -1432,6 +1436,35 @@ func refuseToStop(state daemonstate.State, dataDir string) error {
 			state.PID, daemonstate.Path(dataDir))
 	}
 	return nil
+}
+
+// refuseHeldDataDir is `daemon start`'s check that no live daemon holds
+// dataDir, made before the new daemon logs into the directory or touches its
+// runtime record.
+//
+// The runtime claims the directory too (daemonstate.Acquire), but only once it
+// starts, and `daemon start` writes first: its log, and the awaiting-credentials
+// record while it waits to sign in. So a second daemon pointed at a running
+// one's directory overwrote that daemon's record with awaiting_credentials
+// while it was still connected (#2823). The probe is not a claim, so the
+// runtime's Acquire still settles a race between two starting daemons; a probe
+// that cannot run is logged and left to that Acquire.
+func refuseHeldDataDir(dataDir string) error {
+	locked, err := daemonstate.ProbeLocked(dataDir)
+	if err != nil {
+		logging.Warn("Could not check whether another daemon holds the data directory", "data_dir", dataDir, "error", err)
+		return nil
+	}
+	if !locked {
+		return nil
+	}
+	who := "a running daemon"
+	if state, readErr := daemonstate.Read(dataDir); readErr == nil && state.PID != 0 {
+		who = fmt.Sprintf("daemon PID %d", state.PID)
+	}
+	return fmt.Errorf("refusing to start: %s already runs in data directory %s (%w). "+
+		"Stop it with `reliant daemon stop` first, or start this daemon in a directory of its own with --data-dir",
+		who, dataDir, daemonstate.ErrLocked)
 }
 
 // clearDaemonRecord removes the runtime record of a process confirmed dead.

@@ -268,6 +268,16 @@ describe("a fast read whose answer was lost (ELECTRON-B0, BA)", () => {
     await vi.advanceTimersByTimeAsync(9_000);
     expect(calls).toHaveLength(1);
   });
+
+  // Prod obs 16122d5e (2026-11-18): ListMessages' slow tail is the chat's
+  // message count on the server; a hedge only ran the same count twice.
+  it("does not hedge ListMessages", async () => {
+    const { calls, call } = await loadChain();
+    void call("reliant.v1.ChatService", "ListMessages").catch(() => {});
+    await flush();
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(calls).toHaveLength(1);
+  });
 });
 
 describe("a connection the update stream saw die", () => {

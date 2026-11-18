@@ -198,8 +198,11 @@ jobs:
           free-disk: "true"
           buf: "true"
       # MG_LOGDIR keeps the phase logs where the upload below finds them.
+      # --skip-golangci: the golangci job below lints the changed packages on
+      # its own runner (with golangci-lint installed), as the merge queue's
+      # does, so this runner neither installs it nor lints twice.
       - name: task ci:merge
-        run: MG_LOGDIR="${RUNNER_TEMP}/merge-gate" task ci:merge -- --base "${BASE}"
+        run: MG_LOGDIR="${RUNNER_TEMP}/merge-gate" task ci:merge -- --base "${BASE}" --skip-golangci
       - name: task test:flake (each new or changed test, three times)
         if: ${{ !cancelled() }}
         run: task test:flake -- --base "${BASE}"

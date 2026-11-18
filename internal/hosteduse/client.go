@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/observe"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.temporal.io/sdk/activity"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -169,6 +171,9 @@ func (c *Client) ExecuteAction(ctx context.Context, runID, nodeID, grantID strin
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
+		if err := secretRefusal(response, grantID); err != nil {
+			return nil, err
+		}
 		return nil, errors.New("hosted HTTP controller refused execution; request will not be repeated")
 	}
 	payload, err := io.ReadAll(io.LimitReader(response.Body, (8<<20)+1))
@@ -187,4 +192,42 @@ func (c *Client) ExecuteAction(ctx context.Context, runID, nodeID, grantID strin
 	// No hosted mutation is automatically retried, including upstream 429/5xx.
 	result.Retryable = false
 	return &result, nil
+}
+
+// refusalHeader is the controller's closed reason for a 403 on the execute
+// route (control-plane#2765). A controller that predates it sends none.
+const refusalHeader = "X-Hosted-Refusal"
+
+// SecretRefusedError is the controller's refusal because the grant's secret is
+// missing, empty or no longer readable by the workflow: the user's to fix by
+// re-saving it, so it is a user error, never a prod ERROR. Its text is
+// app-authored from the closed refusal and the workflow's own grant id.
+type SecretRefusedError struct {
+	// Refusal is "secret_not_found" or "secret_denied".
+	Refusal string
+	GrantID string
+}
+
+func (e *SecretRefusedError) Error() string {
+	return fmt.Sprintf("the workflow's hosted secret (grant %s) is missing, empty or no longer granted; re-save it and run the workflow again", e.GrantID)
+}
+
+// ErrorClass implements svcerr.Classed.
+func (e *SecretRefusedError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
+
+// PublicRefusal is the text the Action shows in the run's history.
+func (e *SecretRefusedError) PublicRefusal() string { return e.Error() }
+
+// secretRefusal is the user error a 403's refusal header names, or nil: a
+// store outage (secret_unavailable), an unknown value and no header at all keep
+// the generic server-fault refusal.
+func secretRefusal(response *http.Response, grantID string) error {
+	if response.StatusCode != http.StatusForbidden {
+		return nil
+	}
+	switch refusal := response.Header.Get(refusalHeader); refusal {
+	case "secret_not_found", "secret_denied":
+		return &SecretRefusedError{Refusal: refusal, GrantID: grantID}
+	}
+	return nil
 }

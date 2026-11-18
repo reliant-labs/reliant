@@ -2,12 +2,42 @@
 package handlers
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/temporal"
 	structpb "google.golang.org/protobuf/types/known/structpb"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
+
+// TestInvokeToolRefusesUnexposedToolAsStepConfigFailure pins how a node naming
+// a tool that is not exposed fails: once, as the definition's error. A plain
+// error was retried, paused the run, and an unattended run self-resumed into
+// it for 33 minutes before giving up (prod 23295ad3). StepConfigFailed ends
+// the run instead, and Benign keeps a user's workflow out of the ERROR log.
+func TestInvokeToolRefusesUnexposedToolAsStepConfigFailure(t *testing.T) {
+	t.Parallel()
+
+	activity := &InvokeToolActivity{}
+	_, err := activity.Execute(context.Background(), ActivityInput{
+		Runtime: activitytypes.RuntimeContext{StepID: "look"},
+		Node: &reliantv1.Node{Id: "look", Type: "invoke_tool", Args: &reliantv1.Node_InvokeTool{InvokeTool: &reliantv1.InvokeToolArgs{
+			Tool: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "shell_output"}},
+		}}},
+	})
+	require.Error(t, err)
+	var appErr *temporal.ApplicationError
+	require.True(t, errors.As(err, &appErr), "want a temporal application error, got %T", err)
+	assert.Equal(t, activitytypes.StepConfigFailedErrType, appErr.Type())
+	assert.True(t, appErr.NonRetryable(), "no retry can expose the tool")
+	assert.Equal(t, temporal.ApplicationErrorCategoryBenign, appErr.Category())
+	assert.Contains(t, appErr.Message(), `tool "shell_output" is not exposed as a node`)
+}
 
 // TestStructuredToolDataParsesTypedOutput is the behavioral core of
 // tool-as-node: a tool's typed output is JSON-encoded into the Metadata string

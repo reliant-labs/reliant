@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -24,6 +25,13 @@ import (
 // vet but keeps the scoped forge lint, --optional-deps-guard among its lanes:
 // it once implied --skip-lint, and #2696 and #2662 turned main red on findings
 // that lint names.
+//
+// golangci (scripts/golangci-changed.sh, the merge queue's golangci (changed)
+// job) runs with the gate's diff base in the merge tier and under --skip-lint,
+// whose PR would otherwise be ejected by that job, but never under --queue or
+// --skip-golangci (ci.yml's ci:run gate), where such a job runs beside the gate
+// and the gate marks golangci-elsewhere for gate-verify; nor on a diff without
+// a .go file.
 func TestMergeGateSkipLint(t *testing.T) {
 	testkit.Slow(t, "runs merge-gate.sh's phase launch under bash over throwaway git repositories",
 		testkit.Inputs("scripts/merge-gate.sh"))
@@ -44,16 +52,18 @@ func TestMergeGateSkipLint(t *testing.T) {
 		}
 		return start + body
 	}
-	// The heavy-slot re-exec must hand the flag on, or the gate drops it.
-	if !strings.Contains(src, `$([ "$skip_lint" = 1 ] && echo --skip-lint)`) {
-		t.Fatal("merge-gate.sh's heavy-slot re-exec does not forward --skip-lint")
+	// The heavy-slot re-exec must hand the flags on, or the gate drops them.
+	for _, flag := range []string{"skip-lint", "skip-golangci"} {
+		if !strings.Contains(src, `$([ "$`+strings.ReplaceAll(flag, "-", "_")+`" = 1 ] && echo --`+flag+`)`) {
+			t.Fatalf("merge-gate.sh's heavy-slot re-exec does not forward --%s", flag)
+		}
 	}
 	harness := strings.Join([]string{
 		`set -uo pipefail`,
 		`phase() { printf '%s|%s\n' "$1" "${*:2}" >>"$L/phases"; }`,
 		`build_check() { :; }`,
 		`fail=0 typecheck=false gofull=false half=2 quarter=2 test_lanes=go webdemo=${WEBDEMO:-false}`,
-		`forge=(forge) notes=() pids=() run_plan=$PLAN`,
+		`forge=(forge) notes=() pids=() run_plan=$PLAN MG_IN_SLOT=${TEST_IN_SLOT:-}`,
 		extract(`lint_lanes=(`, "\n# The whole vitest suite"),
 		extract(`base="" amend=0`, "\nexport GOFLAGS"),
 		extract(`[ -n "$base" ] || base=$(git merge-base`, "\nL=${MG_LOGDIR"),
@@ -75,17 +85,23 @@ func TestMergeGateSkipLint(t *testing.T) {
 		noPhases   []string
 		queueEntry string // CI_QUEUE_ENTRY the compat phases get
 		webDemo    bool   // the plan selected the forge demo build
+		noGo       bool   // the branch changes no .go file
+		inSlot     bool   // the gate took the heavy slot itself (MG_IN_SLOT)
 	}{
-		{"merge tier", true, nil, "", []string{"build", "test", "lint", "vet", "proto", "migsafety", "migorder"}, []string{"demo"}, "0", false},
-		{"skip-lint", true, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "proto", "migsafety", "migorder"}, []string{"vet", "lint"}, "0", false},
-		{"skip-lint keeps buf lint without a proto change", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "proto", "migsafety"}, []string{"vet", "lint"}, "0", false},
-		{"queue", true, []string{"--queue"}, "queue", []string{"build", "test", "lint", "proto", "migsafety", "migorder"}, []string{"vet"}, "1", false},
-		{"queue skips buf lint without a proto change", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "migsafety"}, []string{"vet", "proto"}, "1", false},
-		{"queue builds a selected demo bundle", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "demo"}, []string{"vet"}, "1", true},
-		{"queue with --skip-lint lints nothing", false, []string{"--queue", "--skip-lint"}, "skip-lint", []string{"build", "test"}, []string{"vet", "lint"}, "1", false},
+		{"merge tier", true, nil, "", []string{"build", "test", "golangci", "lint", "vet", "proto", "migsafety", "migorder"}, []string{"demo"}, "0", false, false, false},
+		{"merge tier in its own slot drops golangci's lock", false, nil, "", []string{"golangci"}, nil, "0", false, false, true},
+		{"merge tier without a Go change skips golangci", true, nil, "", []string{"build", "test", "lint", "proto", "migsafety", "migorder"}, []string{"golangci"}, "0", false, true, false},
+		{"skip-lint", true, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "golangci", "proto", "migsafety", "migorder"}, []string{"vet", "lint"}, "0", false, false, false},
+		{"skip-lint without a Go change skips golangci", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "proto"}, []string{"vet", "lint", "golangci"}, "0", false, true, false},
+		{"skip-lint keeps buf lint without a proto change", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "golangci", "proto", "migsafety"}, []string{"vet", "lint"}, "0", false, false, false},
+		{"queue", true, []string{"--queue"}, "queue", []string{"build", "test", "lint", "proto", "migsafety", "migorder"}, []string{"vet", "golangci"}, "1", false, false, false},
+		{"queue skips buf lint without a proto change", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "migsafety"}, []string{"vet", "proto", "golangci"}, "1", false, false, false},
+		{"queue builds a selected demo bundle", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "demo"}, []string{"vet", "golangci"}, "1", true, false, false},
+		{"queue with --skip-lint lints nothing", false, []string{"--queue", "--skip-lint"}, "skip-lint", []string{"build", "test"}, []string{"vet", "lint", "golangci"}, "1", false, false, false},
+		{"skip-golangci", true, []string{"--skip-golangci"}, "", []string{"build", "test", "lint", "vet", "proto"}, []string{"golangci"}, "0", false, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			repo, mergeBase := branchWithMergeOfMain(t, tc.proto)
+			repo, mergeBase := branchWithMergeOfMain(t, tc.proto, !tc.noGo)
 			logs := t.TempDir()
 			plan := filepath.Join(logs, "plan.json")
 			if err := os.WriteFile(plan, []byte(`{"go":{"build":["./internal/x"],"packages":["./internal/x"]}}`), 0o644); err != nil {
@@ -93,7 +109,10 @@ func TestMergeGateSkipLint(t *testing.T) {
 			}
 			cmd := exec.Command("bash", append([]string{"-c", harness, "merge-gate"}, tc.flags...)...)
 			cmd.Dir = repo
-			cmd.Env = append(os.Environ(), "LOGDIR="+logs, "PLAN="+plan, fmt.Sprintf("WEBDEMO=%v", tc.webDemo))
+			cmd.Env = append(os.Environ(), "LOGDIR="+logs, "PLAN="+plan, fmt.Sprintf("WEBDEMO=%v", tc.webDemo), "TEST_IN_SLOT=")
+			if tc.inSlot {
+				cmd.Env = append(cmd.Env, "TEST_IN_SLOT=1")
+			}
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("harness: %v\n%s", err, out)
 			}
@@ -106,6 +125,11 @@ func TestMergeGateSkipLint(t *testing.T) {
 			}
 			if got := read("tier"); got != tc.tier {
 				t.Fatalf("tier %q, want %q", got, tc.tier)
+			}
+			// gate-verify obliges golangci unless a job beside the gate runs it.
+			elsewhere := slices.Contains(tc.flags, "--queue") || slices.Contains(tc.flags, "--skip-golangci")
+			if _, err := os.Stat(filepath.Join(logs, "golangci-elsewhere")); (err == nil) != elsewhere {
+				t.Errorf("golangci-elsewhere marker present=%v, want %v", err == nil, elsewhere)
 			}
 			phases := map[string]string{}
 			for _, line := range strings.Split(read("phases"), "\n") {
@@ -130,6 +154,18 @@ func TestMergeGateSkipLint(t *testing.T) {
 					}
 				}
 			}
+			if args, ok := phases["golangci"]; ok {
+				// The queue job's own command (task ci:golangci -- --base),
+				// with the gate's base; the slot flag only when the gate
+				// took a heavy slot itself.
+				want := "env GOMAXPROCS=2 scripts/golangci-changed.sh --base " + mergeBase
+				if tc.inSlot {
+					want += " --in-slot"
+				}
+				if args != want {
+					t.Errorf("golangci runs %q, want %q", args, want)
+				}
+			}
 			for _, n := range []string{"proto", "migsafety"} {
 				args, ok := phases[n]
 				if !ok {
@@ -146,8 +182,10 @@ func TestMergeGateSkipLint(t *testing.T) {
 
 // branchWithMergeOfMain builds a repository whose HEAD is a PR branch: a
 // commit, a merge of a main that moved on, and another commit (adding a
-// migration). It returns the checkout and the merge-base with origin/main.
-func branchWithMergeOfMain(t *testing.T, proto bool) (string, string) {
+// migration). Its first commit adds internal/x/x.go when goFile is set, and
+// internal/x/README.md otherwise. It returns the checkout and the merge-base
+// with origin/main.
+func branchWithMergeOfMain(t *testing.T, proto, goFile bool) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	git := func(args ...string) string {
@@ -170,7 +208,11 @@ func branchWithMergeOfMain(t *testing.T, proto bool) (string, string) {
 	git("add", "-A")
 	git("commit", "-q", "-m", "base")
 	git("checkout", "-q", "-b", "feature")
-	write("internal/x/x.go", "package x\n")
+	if goFile {
+		write("internal/x/x.go", "package x\n")
+	} else {
+		write("internal/x/README.md", "x\n")
+	}
 	if proto {
 		write("proto/x/v1/x.proto", "syntax = \"proto3\";\n")
 	}
