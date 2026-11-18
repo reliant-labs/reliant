@@ -323,17 +323,22 @@ jobs:
       # app://bundle/assets/main-<hash>.js, the content hash changes every
       # build, so every desktop release re-opens a copy of every browser issue
       # (reliant#2535). The `sourcemaps` job below files them from this
-      # artifact (a release tag only: a prebuild publishes nothing). A tag that
-      # reuses a prebuild ships the prebuild's renderer; this run's build of the
-      # same commit and RELEASE_VERSION is the same bytes (content-hashed
-      # chunks), so these maps are that renderer's maps.
+      # artifact, on a release tag only: a prebuild publishes nothing.
+      #
+      # MAPS AND INSTALLERS COME FROM ONE BUILD. A tag that reuses a prebuild
+      # ships the PREBUILD's renderer, and a rebuild is not the same bytes (the
+      # bundle embeds its build time, vite-plugin-version-json.ts
+      # __RELIANT_BUILD__, so every content-hashed chunk differs). So a
+      # prebuild uploads its maps too, kept as long as its marker, and the
+      # sourcemaps job files the prebuild's when the tag publishes the
+      # prebuild's installers (internal/version/release_sourcemaps_test.go).
       - name: Upload the renderer's source maps
-        if: github.ref_type == 'tag' && startsWith(steps.version.outputs.version, 'v')
+        if: startsWith(steps.version.outputs.version, 'v') && (github.ref_type == 'tag' || inputs.prebuild_version != '')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: web-dist-sourcemaps
           path: frontends/web/dist
-          retention-days: 1
+          retention-days: 7
           compression-level: 6
 
       # The installers ship the bundle without its maps: they serve nothing
@@ -422,7 +427,7 @@ jobs:
     environment: release
     permissions:
       contents: read
-      actions: read # download this run's web-dist-sourcemaps artifact
+      actions: read # download web-dist-sourcemaps, from this run or the prebuild's
     steps:
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -434,11 +439,23 @@ jobs:
         with:
           postgres-cache: "false"
 
+      # The maps of the renderer this release ships: this run's build, or,
+      # when the tag publishes a prebuild's installers, that prebuild's.
       - name: Download the renderer's source maps
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: web-dist-sourcemaps
           path: frontends/web/dist
+
+      - name: Download the prebuild renderer's source maps
+        if: needs.prepare.outputs.prebuilt_run != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: web-dist-sourcemaps
+          path: frontends/web/dist
+          run-id: ${{ needs.prepare.outputs.prebuilt_run }}
+          github-token: ${{ github.token }}
 
       - name: File the source maps
         env:

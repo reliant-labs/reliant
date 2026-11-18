@@ -8,10 +8,16 @@ re-opened a copy of every browser issue, each with its own `NewIssue` alert (rel
 
 ## What runs
 
-- **`prepare`.** On a release tag, the job uploads the built renderer as `web-dist-sourcemaps`. On every
-  release build (tag or prebuild), it then deletes the `*.map` files from `frontends/web/dist`, so the
-  installers ship without them.
-- **`sourcemaps`.** This job runs on release tags only. It downloads that artifact and runs:
+- **`prepare`.** On a release tag and on a prebuild, the job uploads the built renderer as
+  `web-dist-sourcemaps`, kept 7 days like the prebuild marker. It then deletes the `*.map` files from
+  `frontends/web/dist`, so the installers ship without them.
+- **`sourcemaps`.** This job runs on release tags only. It downloads the maps of the renderer the release
+  ships:
+  - When the tag publishes a prebuild's installers (`prebuilt_run`), it takes that prebuild's artifact.
+    A rebuild would not match: the bundle embeds its build time, so its chunk hashes differ.
+  - Otherwise it takes this run's artifact.
+
+  `internal/version/release_sourcemaps_test.go` holds this. The job then runs:
 
   ```sh
   task release:sourcemaps DIST=frontends/web/dist BUILD_ID=<version without the v>
