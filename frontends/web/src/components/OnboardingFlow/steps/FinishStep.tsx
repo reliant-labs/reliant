@@ -20,7 +20,7 @@ import type { StepProps } from "../types";
  * Runs once on mount. Failures stop and show Retry; billable work is never
  * retried automatically.
  */
-export function FinishStep({ plan, updatePlan, onBack }: StepProps) {
+export function FinishStep({ plan, updatePlan, onBack, returnTo }: StepProps) {
   const navigate = useNavigate();
   const completeOnboardingMutation = useCompleteOnboarding();
   const { commit, runCommit, retry } = useCommitLaunchPlan(updatePlan);
@@ -59,8 +59,8 @@ export function FinishStep({ plan, updatePlan, onBack }: StepProps) {
   }, []);
 
   const goToChat = useCallback(() => {
-    void leaveOnboarding("completed_cloud_gate_continue", navigate, plan.intent);
-  }, [navigate, plan.intent]);
+    void leaveOnboarding("completed_cloud_gate_continue", navigate, plan.intent, returnTo);
+  }, [navigate, plan.intent, returnTo]);
 
   if (commit) {
     return (

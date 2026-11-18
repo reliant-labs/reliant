@@ -11,7 +11,8 @@ import (
 // Claude Sonnet 5.5 (2026-09-28) and the GPT-6 model families.
 // Every figure below is taken from the vendor's own model page —
 // platform.claude.com/docs/en/models/sonnet-5-5 and
-// developers.openai.com/api/docs/models/{gpt-6-astra,gpt-6-sol,gpt-6-terra,gpt-6-luna}
+// developers.openai.com/api/docs/models/{gpt-6-astra,gpt-6-sol,gpt-6-terra,gpt-6-luna,
+// gpt-6.2-astra,gpt-6.2-sol}
 // — not from a neighbouring catalog entry, because the entries they sit next to
 // differ from them in exactly the fields that are easy to copy by mistake.
 
@@ -76,17 +77,34 @@ func TestClaude55SonnetCapabilities(t *testing.T) {
 	}
 }
 
-// GPT-6.1 models reach users through OpenAI, and gpt-6.1-sol through Codex too
-// (Codex CLI's catalog lists it as the default). Provider availability is
-// model-specific and must be added only once verified: Codex lists neither
-// gpt-6.1-astra nor gpt-6.1-terra.
+// GPT-6.1 models reach users through OpenAI, and gpt-6.1-sol and
+// gpt-6.1-terra through Codex too (Codex CLI's catalog lists both). Provider
+// availability is model-specific and must be added only once verified: Codex
+// does not list gpt-6.1-astra.
 func TestGPT61ModelProviderMappings(t *testing.T) {
 	reg := MustGetRegistry()
 
-	for _, id := range []string{"gpt-6.1-astra", "gpt-6.1-terra"} {
-		assert.Equal(t, map[string]string{"openai": id}, providerAPIModels(t, reg, id), "%s providers", id)
+	assert.Equal(t, map[string]string{"openai": "gpt-6.1-astra"}, providerAPIModels(t, reg, "gpt-6.1-astra"))
+	for _, id := range []string{"gpt-6.1-sol", "gpt-6.1-terra"} {
+		assert.Equal(t, map[string]string{"codex": id, "openai": id}, providerAPIModels(t, reg, id), "%s providers", id)
 	}
-	assert.Equal(t, map[string]string{"codex": "gpt-6.1-sol", "openai": "gpt-6.1-sol"}, providerAPIModels(t, reg, "gpt-6.1-sol"))
+}
+
+// GPT-6.2 (2026-11-17). Both are on the OpenAI API, OpenRouter and Codex (the
+// live /codex/models at codex-tui 0.169.0 lists both).
+func TestGPT62ModelProviderMappings(t *testing.T) {
+	reg := MustGetRegistry()
+
+	assert.Equal(t, map[string]string{
+		"codex":      "gpt-6.2-astra",
+		"openai":     "gpt-6.2-astra",
+		"openrouter": "openai/gpt-6.2-astra",
+	}, providerAPIModels(t, reg, "gpt-6.2-astra"))
+	assert.Equal(t, map[string]string{
+		"codex":      "gpt-6.2-sol",
+		"openai":     "gpt-6.2-sol",
+		"openrouter": "openai/gpt-6.2-sol",
+	}, providerAPIModels(t, reg, "gpt-6.2-sol"))
 }
 
 // These models take tools only on the Responses API (Chat Completions refuses
@@ -96,7 +114,7 @@ func TestGPT61ModelProviderMappings(t *testing.T) {
 func TestGPT6NewModelCapabilities(t *testing.T) {
 	reg := MustGetRegistry()
 
-	for _, id := range []string{"gpt-6.1-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-terra", "gpt-6-luna"} {
+	for _, id := range []string{"gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.1-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-terra", "gpt-6-luna"} {
 		t.Run(id, func(t *testing.T) {
 			def, ok := reg.GetDefinition(id)
 			require.True(t, ok)
@@ -135,10 +153,13 @@ func TestSept2026ModelsPinTierWinners(t *testing.T) {
 		{TagModerate, []string{"vertexai"}, "vertex-claude-5.5-sonnet"},
 		{TagFlagship, []string{"vertexai"}, "claude-5.5-opus"},
 
-		{TagFlagship, []string{"openai"}, "gpt-6.1-sol"},
+		{TagFlagship, []string{"openai"}, "gpt-6.2-sol"},
 		{TagModerate, []string{"openai"}, "gpt-6.1-terra"},
-		{TagReasoning, []string{"openai"}, "gpt-6.1-sol"},
-		{TagPowerful, []string{"openai"}, "gpt-6.1-astra"},
+		{TagReasoning, []string{"openai"}, "gpt-6.2-sol"},
+		{TagPowerful, []string{"openai"}, "gpt-6.2-astra"},
+		{TagPowerful, []string{"openrouter"}, "claude-5.1-fable"},
+		{TagFlagship, []string{"codex"}, "gpt-6.2-sol"},
+		{TagPowerful, []string{"codex"}, "gpt-6.2-astra"},
 		{TagFast, []string{"openai"}, "gpt-5.4-mini"},
 		{TagCheap, []string{"openai"}, "gpt-5.4-mini"},
 
@@ -182,6 +203,11 @@ func TestSept2026ModelsAreReachableThroughTheirTiers(t *testing.T) {
 		{"vertex-claude-5.5-sonnet", TagReasoning, "high"},
 
 		// GPT-6 tiers: Astra is powerful, Sol is flagship, Terra is moderate.
+		{"gpt-6.2-astra", TagPowerful, "xhigh"},
+		{"gpt-6.2-astra", TagReasoning, "high"},
+		{"gpt-6.2-sol", TagFlagship, "high"},
+		{"gpt-6.2-sol", TagModerate, "high"},
+		{"gpt-6.2-sol", TagReasoning, "high"},
 		{"gpt-6-astra", TagPowerful, "xhigh"},
 		{"gpt-6-sol", TagFlagship, "xhigh"},
 		{"gpt-6-sol", TagReasoning, "xhigh"},

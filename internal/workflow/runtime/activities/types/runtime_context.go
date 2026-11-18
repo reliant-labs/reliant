@@ -157,6 +157,17 @@ type RuntimeContext struct {
 	// nodes only, for one turn.
 	ResumeTurn bool `json:"resume_turn,omitempty"`
 
+	// CutOffMessageID is set on a call_llm step re-dispatched after a pause
+	// cancelled its previous dispatch mid-stream: the pre-allocated id that
+	// dispatch streamed under, and so the id its partial assistant message
+	// was persisted under (persistInterruptedTurn). When history ends with
+	// that message and nothing new arrived, the partial is this turn's own
+	// cut-off output, not an answer: call_llm continues it, as on a
+	// ResumeTurn, instead of yielding it as the agent's last word. Matched
+	// by id, so an assistant tail that is a finished answer still yields.
+	// Set on call_llm nodes only, for one dispatch (reliant #2759).
+	CutOffMessageID string `json:"cut_off_message_id,omitempty"`
+
 	// CatalogPin is the workflow catalog the run started with
 	// (db.Repo.PinProjectCatalog). call_llm reads the presets its spawn tool
 	// describes from it, so the model is offered the presets a spawn then

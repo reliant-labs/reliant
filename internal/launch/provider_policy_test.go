@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/modelprefs"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -86,4 +88,23 @@ func TestEffectiveProviderPolicy_Funding(t *testing.T) {
 	assert.Equal(t, types.FundingPersonalFirst, got.Funding, "the preset's when the chat inherits")
 	got = EffectiveProviderPolicy(claudeRun(), chatselection.ProviderPolicy{}, nil, "claude")
 	assert.Empty(t, got.Funding)
+}
+
+// The launcher predicts a run's provider (whose on-limit policy it gets) the
+// way the run will resolve it: with the user's Settings default provider.
+// Without it, a ChatGPT-preferring user's flagship run was predicted on Claude
+// and handed Claude's policy.
+func TestResolvedDriverAppliesTheDefaultProvider(t *testing.T) {
+	t.Parallel()
+	available := models.AvailableDrivers{Drivers: map[models.DriverID]models.DriverConfig{
+		"claude": {DriverID: "claude", APIKey: "k", Enabled: true},
+		"codex":  {DriverID: "codex", APIKey: "k", Enabled: true},
+	}}
+	flagship := map[string]interface{}{"tags": []string{models.TagFlagship}}
+	codexFirst := modelprefs.ProviderPreference{Providers: []string{"codex"}}
+
+	assert.Equal(t, "claude", resolvedDriver(flagship, available, modelprefs.ProviderPreference{}))
+	assert.Equal(t, "codex", resolvedDriver(flagship, available, codexFirst))
+	assert.Equal(t, "claude", resolvedDriver(map[string]interface{}{"id": claudeOpus}, available, codexFirst),
+		"a model pinned to its provider keeps it")
 }

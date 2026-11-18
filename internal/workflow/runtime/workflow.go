@@ -2740,7 +2740,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						}
 						// Yield to scheduler after pause/resume to prevent deadlock detection during replay.
 						_ = workflow.Sleep(ctx, 0)
-						// Resumed - re-start the step with fresh activity context
+						// Resumed - re-start the step with fresh activity
+						// context. A call_llm the pause cut off continues its
+						// partial.
+						executor.noteCancelledForPause(running)
 						triggeredNode := &core.TriggeredNode{
 							Node:  running.Node,
 							Event: running.Event,

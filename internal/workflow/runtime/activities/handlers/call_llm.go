@@ -645,17 +645,42 @@ func historyStartsTurn(history []message.Message) bool {
 	return tail >= 0 && (history[tail].Role == message.User || history[tail].Role == message.Agent)
 }
 
-// endsWithCutOffAssistantTurn reports whether history, past any trailing
-// system framing, ends with an assistant message that requested no tools:
-// on a resumed loop's first turn, the turn that was cut off (reasoning only,
-// or a partial reply). One with tool calls is not: the orphan repair already
-// gave its calls results, and the provider can be called as it is.
-func endsWithCutOffAssistantTurn(history []message.Message) bool {
+// cutOffAssistantTail returns the assistant message history ends with, past
+// any trailing system framing, when it requested no tools: on a turn that
+// knows its tail was cut off (continuesCutOffTurn), the cut-off turn itself
+// (reasoning only, or a partial reply). One with tool calls is not: the
+// orphan repair already gave its calls results, and the provider can be
+// called as it is.
+func cutOffAssistantTail(history []message.Message) (message.Message, bool) {
 	tail := len(history) - 1
 	for tail >= 0 && history[tail].Role == message.System {
 		tail--
 	}
-	return tail >= 0 && history[tail].Role == message.Assistant && len(history[tail].ToolCalls()) == 0
+	if tail >= 0 && history[tail].Role == message.Assistant && len(history[tail].ToolCalls()) == 0 {
+		return history[tail], true
+	}
+	return message.Message{}, false
+}
+
+// continuesCutOffTurn reports whether this turn continues the cut-off
+// assistant turn history ends with, rather than yielding it.
+//
+// Two turns know their tail was cut off. A resumed loop's first turn
+// (ResumeTurn) knows it from the loop having stopped mid-work. A call_llm
+// re-dispatched after a pause knows it by id: the pause cancelled its previous
+// dispatch mid-stream, which persisted its partial under CutOffMessageID.
+// Without the second, a pause whose resume brought no new input re-entered on
+// that partial and yielded it as the agent's answer: a sub-agent streaming
+// when its root's provider failed for good (which pauses the run) finished
+// with half a reply when the user resumed (reliant #2759, chat e1041795). The
+// id match keeps it exact: a tail that is any other assistant message, such as
+// a finished answer the dispatch never got past, still yields.
+func continuesCutOffTurn(rtx RuntimeContext, history []message.Message) bool {
+	tail, ok := cutOffAssistantTail(history)
+	if !ok {
+		return false
+	}
+	return rtx.ResumeTurn || (rtx.CutOffMessageID != "" && tail.ID == rtx.CutOffMessageID)
 }
 
 // resumeCutOffTurn saves the hidden "continue" user message for a resumed
@@ -684,6 +709,11 @@ func (a *CallLLMActivity) resumeCutOffTurn(ctx context.Context, rtx RuntimeConte
 		key = info.WorkflowExecution.ID + "-" + info.ActivityID
 	}
 	key += "|resume-continue"
+	// Each pause can cut the same position's turn off again, and each cut-off
+	// partial needs its own continue message after it, not the first one's.
+	if rtx.CutOffMessageID != "" {
+		key += "|" + rtx.CutOffMessageID
+	}
 	var workflowID *string
 	if rtx.WorkflowID != "" {
 		workflowID = &rtx.WorkflowID
@@ -707,7 +737,7 @@ func (a *CallLLMActivity) resumeCutOffTurn(ctx context.Context, rtx RuntimeConte
 		continued.ID = saved.MessageID
 	}
 	logging.InfoContext(ctx, "[CallLLM] Resumed loop's history ends with its cut-off turn; continuing it with a hidden message",
-		"chatID", chatID, "thread", thread)
+		"chatID", chatID, "thread", thread, "resumeTurn", rtx.ResumeTurn, "cutOffMessageID", rtx.CutOffMessageID)
 	return continued
 }
 
@@ -1772,9 +1802,10 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			"count", len(args.GetMessages()))
 	}
 
-	// A loop resumed mid-work with nothing new to read: continue its cut-off
-	// turn rather than yield it as the agent's last word (resumeCutOffTurn).
-	if rtx.ResumeTurn && !model.CelBoolValue(args.GetContinueTurn()) && endsWithCutOffAssistantTurn(history) {
+	// A loop resumed mid-work, or a turn re-dispatched after a pause cut it
+	// off, with nothing new to read: continue the cut-off turn rather than
+	// yield it as the agent's last word (resumeCutOffTurn).
+	if !model.CelBoolValue(args.GetContinueTurn()) && continuesCutOffTurn(rtx, history) {
 		history = append(history, a.resumeCutOffTurn(ctx, rtx, chat.ID, thread))
 	}
 

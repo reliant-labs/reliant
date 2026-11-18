@@ -26,7 +26,7 @@ export function intentForJourney(journey: JourneyId | undefined): "build_app" | 
   return journey === "workflows" ? "chat" : "build_app";
 }
 
-export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
+export function ProjectChoiceStep({ plan, updatePlan, returnTo }: StepProps) {
   const navigate = useNavigate();
   const completeOnboardingMutation = useCompleteOnboarding();
   const { hasToken: hasGithubCredential, isLoading: credentialLoading } = useGitHubCredential();
@@ -46,8 +46,8 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
   // Where it lands follows the choice: "Build an app" opens the app-building
   // composer, "Just chat" the plain new chat (leaveOnboarding).
   const leave = useCallback(() => {
-    void leaveOnboarding("completed_cloud_gate_continue", navigate, plan.intent);
-  }, [navigate, plan.intent]);
+    void leaveOnboarding("completed_cloud_gate_continue", navigate, plan.intent, returnTo);
+  }, [navigate, plan.intent, returnTo]);
 
   // Both start in the default project (ensureProject); they differ only in where the user lands.
   const handleStartNew = useCallback(async (intent: "build_app" | "chat") => {

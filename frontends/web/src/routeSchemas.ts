@@ -1036,4 +1036,7 @@ export const onboardingSearchSchema = z.object({
   github_error_msg: z.string().optional(),
   devForceShow: z.boolean().optional(),
   "onboarding-credits": z.string().optional(),
+  // Where the user was going when OnboardingGate sent them here (a same-origin
+  // path; leaveOnboarding re-checks it). Finishing lands there instead of `/`.
+  returnTo: z.string().optional().catch(undefined),
 });

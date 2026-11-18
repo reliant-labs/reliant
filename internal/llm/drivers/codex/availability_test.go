@@ -12,9 +12,10 @@ import (
 )
 
 // testdata/codex_models.json is the model catalog bundled with codex-tui
-// 0.162.1 — openai/codex codex-rs/models-manager/models.json at tag
-// rust-v0.162.1 (7a078f6bb4, fetched 2026-10-11; byte-identical to main's
-// d63a9b8344 that day; gpt-6.1-sol arrived in b1e72963c3 on 2026-09-29) —
+// 0.169.0 — openai/codex codex-rs/models-manager/models.json at tag
+// rust-v0.169.0 (d32063f96c, fetched 2026-11-17; gpt-6.1-terra arrived in
+// 126a0ee9 on 2026-10-26; gpt-6.2-sol is served by the backend at 0.169.0 but
+// is in no bundled catalog yet, see its note in models.yaml) —
 // projected onto the fields this package and its tests read, plus the
 // release's client_version. Codex CLI deserializes that file and GET
 // /codex/models into the same type (codex_protocol::openai_models::
@@ -46,7 +47,7 @@ func TestParseCodexModels_ReasoningLevelsAreIntersectedWithAcceptedSet(t *testin
 	report := recordedReport(t)
 
 	// The catalog advertises `ultra` for astra/sol/terra; the API 400s on it.
-	for _, slug := range []string{"gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra"} {
+	for _, slug := range []string{"gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra"} {
 		got := report.Models[slug].ThinkingLevels
 		assert.NotContains(t, got, "ultra", slug)
 		assert.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, got, slug)
@@ -60,7 +61,7 @@ func TestParseCodexModels_ReasoningLevelsAreIntersectedWithAcceptedSet(t *testin
 // accepted 698,604-token gpt-5.6-terra prompts.
 func TestParseCodexModels_ReadsMaxContextWindow(t *testing.T) {
 	report := recordedReport(t)
-	for _, slug := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
+	for _, slug := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna"} {
 		assert.Equal(t, 872000, report.Models[slug].ContextWindow, slug)
 	}
 	assert.Equal(t, 272000, report.Models["gpt-5.5"].ContextWindow)

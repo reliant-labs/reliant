@@ -1949,6 +1949,8 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 						// that paused it. Re-dispatch with that, not the
 						// inputs this iteration started with.
 						e.syncIterationInputs(iterInputs)
+						// A call_llm the pause cut off continues its partial.
+						iterExecutor.noteCancelledForPause(running)
 						newRunning := iterExecutor.Start(&core.TriggeredNode{
 							Node:  running.Node,
 							Event: running.Event,

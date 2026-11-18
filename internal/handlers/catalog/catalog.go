@@ -139,7 +139,7 @@ func (s *Service) ListModels(
 	resp := &reliantv1.ListModelsResponse{
 		Models: modelList,
 		Total:  int32(len(modelList)),
-		Tiers:  tierResolutions(registry, configuredProviderIDs(availableDrivers), s.loadTagPrefs(ctx, userID), localModels),
+		Tiers:  tierResolutions(registry, configuredProviderIDs(availableDrivers), s.loadTagPrefs(ctx, userID), s.loadProviderPreference(ctx, userID), localModels),
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -276,20 +276,28 @@ func (s *Service) loadTagPrefs(ctx context.Context, userID string) map[string]mo
 	return prefs
 }
 
+func (s *Service) loadProviderPreference(ctx context.Context, userID string) modelprefs.ProviderPreference {
+	pref, err := modelprefs.LoadProviderPreference(ctx, s.deps.TagPrefs, userID)
+	if err != nil {
+		logging.WarnContext(ctx, "[ListModels] Default provider preference unreadable; tiers use the built-in order", "error", err)
+	}
+	return pref
+}
+
 // tierResolutions resolves every declared tag against the given providers,
 // yielding the model and effort a `{tags: [tag]}` selector runs at — INCLUDING
-// the user's tag preference (model_id when still available, thinking_level),
-// exactly as resolveLLMCall applies it, so the UI never shows a tier the
-// server will not run. Tags that do not resolve to a text model
+// the user's default provider and tag preference (model_id when still
+// available, thinking_level), exactly as resolveLLMCall applies them, so the
+// UI never shows a tier the server will not run. Tags that do not resolve to a text model
 // (unconfigured providers, image-gen) are skipped.
-func tierResolutions(registry *models.ModelRegistry, providers []string, prefs map[string]modelprefs.TagPrefs, localModels []local.Model) []*reliantv1.TierResolution {
+func tierResolutions(registry *models.ModelRegistry, providers []string, prefs map[string]modelprefs.TagPrefs, defaultProvider modelprefs.ProviderPreference, localModels []local.Model) []*reliantv1.TierResolution {
 	tags := registry.ListAllTags()
 	tiers := make([]*reliantv1.TierResolution, 0, len(tags))
 	for _, tag := range tags {
-		selector := models.ModelSelector{
+		selector := defaultProvider.Apply(models.ModelSelector{
 			Tags:                  []string{tag},
 			RequireOutputModality: models.ModalityText,
-		}
+		})
 		tagPrefs := prefs[tag]
 		if pinned, err := local.Resolve(localModels, tagPrefs.LocalSelector(), ""); tagPrefs.IsLocalModel() && err == nil {
 			tiers = append(tiers, &reliantv1.TierResolution{

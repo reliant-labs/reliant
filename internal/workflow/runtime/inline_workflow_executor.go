@@ -1122,6 +1122,8 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 						}
 						// Yield so replay does not trip deadlock detection.
 						_ = workflow.Sleep(e.ctx, 0)
+						// A call_llm the pause cut off continues its partial.
+						executor.noteCancelledForPause(running)
 						newRunning := executor.Start(&core.TriggeredNode{
 							Node:  running.Node,
 							Event: running.Event,

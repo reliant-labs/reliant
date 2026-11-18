@@ -21,7 +21,16 @@ vi.mock("@/lib/toast", () => ({ Toaster: () => null }));
 vi.mock("@/components/Onboarding/JourneyTour", () => ({ JourneyTour: () => <div data-testid="journey-tour" /> }));
 vi.mock("@/components/ForgeShell/ForgeLandingJourney", () => ({ ForgeLandingJourney: () => null }));
 vi.mock("@/components/Forge/Demo/DemoConsole", () => ({ DemoConsole: () => <div data-testid="demo-console" /> }));
-vi.mock("@/components/ForgeShell/ForgeAppsPage", () => ({ ForgeAppsPage: () => <div data-testid="apps-page" /> }));
+// Reports the "Ask Reliant" mode its page is rendered in.
+vi.mock("@/components/ForgeShell/ForgeAppsPage", async () => {
+  const { useAskAgentMode } = await import("@/components/Forge/Observability/AskReliant/askAgentMode");
+  return {
+    ForgeAppsPage: () => {
+      const ask = useAskAgentMode();
+      return <div data-testid="apps-page" data-ask-mode={ask.mode} data-ask-cli={ask.cli} data-ask-demo={String(ask.demo)} />;
+    },
+  };
+});
 vi.mock("@/components/ForgeShell/ForgeShellLayout", async () => {
   const { Outlet } = await import("@tanstack/react-router");
   return { ForgeShellLayout: () => <Outlet /> };
@@ -36,9 +45,14 @@ function Locked(_: { children: ReactNode }) {
   return <div data-testid="guard-locked" />;
 }
 
-function renderShell(path: string) {
+/** A guard that lets everyone through: what the signed-in pages render. */
+function Open({ children }: { children: ReactNode }) {
+  return <>{children}</>;
+}
+
+function renderShell(path: string, Guard: (props: { children: ReactNode }) => ReactNode = Locked) {
   const router = createRouter({
-    routeTree: buildForgeShellTree({ Guard: Locked }),
+    routeTree: buildForgeShellTree({ Guard }),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
   render(<RouterProvider router={router} />);
@@ -112,6 +126,15 @@ describe("the forge shell's routes", () => {
     renderShell("/forge/demo");
     expect(await screen.findByTestId("demo-console")).toBeInTheDocument();
     expect(screen.getByTestId("journey-tour")).toBeInTheDocument();
+  });
+
+  it("puts every signed-in page's Ask Reliant in handoff mode: this shell has no daemon and no Reliant projects", async () => {
+    renderShell("/apps", Open);
+    const page = await screen.findByTestId("apps-page");
+    expect(page).toHaveAttribute("data-ask-mode", "handoff");
+    expect(page).toHaveAttribute("data-ask-cli", "forge");
+    // Real data: the sheet offers "Open in Reliant", not the demo's sample-data note.
+    expect(page).toHaveAttribute("data-ask-demo", "false");
   });
 
   it("mounts the journey tour on guarded pages too", async () => {

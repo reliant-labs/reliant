@@ -313,6 +313,7 @@ func TestTriggerFiringQueries(t *testing.T) {
 	write(newStoreTriggerEvent("f1-fail-b", "trg-f1", core.TriggerEventSkipped, tied))
 	live := newStoreTriggerEvent("f1-live", "trg-f1", core.TriggerEventLaunched, base.Add(3*time.Minute))
 	live.ChatID = strp("chat-f-live")
+	live.Sender = &core.TriggerSender{Kind: core.TriggerSenderKind("user"), ID: "u-1", DisplayName: "Ada"}
 	write(live)
 	foreign := newStoreTriggerEvent("f2-foreign", "trg-f2", core.TriggerEventFailed, base)
 	foreign.UserID = "someone-else"
@@ -407,6 +408,24 @@ func TestTriggerFiringQueries(t *testing.T) {
 	since, _ := store.FiringsSinceLastSuccess(ctx, env.ORM, storetest.SeedUserID, triggerIDs, 50)
 	if !reflect.DeepEqual(pageIDs(since["trg-f1"]), []string{"f1-live", "f1-fail-b", "f1-fail-a"}) {
 		t.Fatalf("FiringsSinceLastSuccess = %v, want everything after f1-ok", pageIDs(since["trg-f1"]))
+	}
+	// The Inbox's reads judge outcomes and never show an event, so they carry
+	// no bodies (triggerOutcomeColumns): until reliant#2736 they shipped
+	// every one, 4.7 MB a read for one user.
+	full, _ := store.RecentTriggerFirings(ctx, env.ORM, storetest.SeedUserID, triggerIDs, 50)
+	if f := full["trg-f1"][0].Event; f.Payload["n"] != float64(1) || f.Sender == nil {
+		t.Fatalf("RecentTriggerFirings(f1-live) = %+v, want its payload and sender", f)
+	}
+	outcomes, _ := store.RecentTriggerOutcomes(ctx, env.ORM, storetest.SeedUserID, triggerIDs, 50)
+	for name, read := range map[string]map[string][]*core.TriggerEventWithRun{"RecentTriggerOutcomes": outcomes, "FiringsSinceLastSuccess": since} {
+		if len(read["trg-f1"]) == 0 {
+			t.Fatalf("%s read no firing of trg-f1", name)
+		}
+		for _, f := range read["trg-f1"] {
+			if len(f.Event.Payload) != 0 || f.Event.Sender != nil || f.Event.Origin != nil {
+				t.Fatalf("%s(%s) = payload %v, sender %v, origin %v; want no body", name, f.Event.ID, f.Event.Payload, f.Event.Sender, f.Event.Origin)
+			}
+		}
 	}
 	if empty, err := store.RecentTriggerFirings(ctx, env.ORM, storetest.SeedUserID, nil, 10); err != nil || len(empty) != 0 {
 		t.Fatalf("RecentTriggerFirings(no ids) = %v, %v", empty, err)
