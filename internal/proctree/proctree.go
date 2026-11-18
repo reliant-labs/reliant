@@ -74,6 +74,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/procledger"
@@ -181,17 +182,14 @@ type Limiter struct {
 	// nproc is the RLIMIT_NPROC a command with no cgroup gets; 0 leaves it
 	// alone.
 	nproc uint64
-
-	mu  sync.Mutex
-	seq uint64
-	// held is the command cgroups of the trees prepared and not yet
-	// released, which the sweep of this process's empty command cgroups
-	// leaves alone: a tree's cgroup is empty from Prepare until its command
-	// starts in it, and a start into a removed cgroup fails ENOENT, which
-	// os/exec reports as "fork/exec <path>: no such file or directory"
-	// (reliant #2416). Guarded by mu.
-	held map[string]struct{}
 }
+
+// cgroupSeq numbers this process's command cgroups, cmd-<pid>-<n>. The names
+// are the process's, not one limiter's: a daemon whose runtime starts again
+// (re-registration) builds a second limiter while the first one's trees may
+// still be prepared or running, and a sequence of each limiter's own would
+// name the second's cgroups after the first's (reliant #2826).
+var cgroupSeq atomic.Uint64
 
 // Config is the limiter's policy. The zero value detects everything.
 type Config struct {
@@ -374,11 +372,7 @@ func (l *Limiter) Prepare(cmd *exec.Cmd, owner Owner) *Tree {
 	if l == nil || l.commands == "" {
 		return t
 	}
-	l.mu.Lock()
-	l.seq++
-	seq := l.seq
-	l.mu.Unlock()
-	t.prepareCgroup(cmd, seq)
+	t.prepareCgroup(cmd, cgroupSeq.Add(1))
 	return t
 }
 
