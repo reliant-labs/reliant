@@ -1,0 +1,71 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// forge writes it ONCE (write-if-absent). The command tree + component wiring is
+// owned code — add a component by hand-editing here (or via `forge scaffold`), never a
+// re-derivation. Deleting it sticks; `forge project rescaffold <path>` re-creates it from template.
+// Source: internal/templates/project/cmd-main.go.tmpl.
+//
+{{- if .Graph}}
+// The COMPOSITION ROOT: all command logic lives under cmd/{{.Bin}}/cmd
+// (package cmd — root.go assembles the tree), and cmd.Execute builds it.
+// What a process RUNS is a root of the composition graph
+// (internal/app/graph_gen.go): `{{.Bin}} server` runs the server root — every
+// service, worker and operator in one process. Splitting a process is a new
+// root (a `//forge:root` struct in internal/app), and each root's command is
+// generated (cmd/{{.Bin}}/cmd/roots_gen.go).
+{{- else}}
+// The COMPOSITION ROOT (devspace idiom): all command logic lives under
+// cmd/{{.Bin}}/cmd (package cmd — root.go assembles the tree) and its
+// command-group SUBPACKAGES (services/, workers/, operators/). This main names
+// EVERY group constructor explicitly and passes them to cmd.Execute, which
+// builds the root command tree. The tree is therefore READABLE HERE — no init()
+// self-registration and no dynamic registry. Because main.go (not package cmd)
+// imports the group subpackages, and the groups import cmd only for the shared
+// Deps/Serve helpers, there is no cmd↔group import cycle.
+//
+// The command tree is IDENTICAL in both binary modes; binary=shared changes only
+// the DEPLOY story. This binary is a monolith by default: the image's CMD is
+// `{{.Bin}} server`, which mounts every service and runs every worker in one
+// process. Splitting a service into its own Deployment is a manifest change, not
+// a rewrite — set that component's `command` in deploy/kcl/<env>/main.k (which is
+// what the binary=shared scaffold pre-wires: `command = ["/app/<project>", c.name]`).
+//
+// To run a specific service: `{{.Bin}} <service>`. To list services:
+// `{{.Bin}} --help`.
+{{- end}}
+package main
+
+import (
+	"{{.Module}}/cmd/{{.Bin}}/cmd"
+{{- if .Operators}}
+	"{{.Module}}/cmd/{{.Bin}}/cmd/operators"
+{{- end}}
+{{- if .Services}}
+	"{{.Module}}/cmd/{{.Bin}}/cmd/services"
+{{- end}}
+{{- if .Workers}}
+	"{{.Module}}/cmd/{{.Bin}}/cmd/workers"
+{{- end}}
+)
+
+func main() {
+	cmd.Execute(
+{{- if .Services}}
+		// services
+{{- range .Services}}
+		services.{{.Ctor}},
+{{- end}}
+{{- end}}
+{{- if .Workers}}
+		// workers
+{{- range .Workers}}
+		workers.{{.Ctor}},
+{{- end}}
+{{- end}}
+{{- if .Operators}}
+		// operators
+{{- range .Operators}}
+		operators.{{.Ctor}},
+{{- end}}
+{{- end}}
+	)
+}

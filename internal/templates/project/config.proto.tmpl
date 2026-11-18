@@ -1,0 +1,566 @@
+syntax = "proto3";
+
+package {{.ConfigPackage}};
+
+import "forge/v1/forge.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "{{.ConfigGoPackage}}";
+
+// AppConfig defines the application's runtime configuration.
+// Each field maps to an environment variable and/or CLI flag via
+// forge.v1.config annotations. Running `forge generate`
+// produces a typed Go config loader in pkg/config/config_gen.go.
+//
+// Component config blocks: a component (worker/service/operator) that
+// needs configuration declares its own message — conventionally
+// `<Component>Config` — and composes it as a field on AppConfig:
+//
+//   message TraderConfig {
+//     int32 max_per_tick = 1 [(forge.v1.config) = {
+//       env_var: "TRADER_MAX_PER_TICK", default_value: "10",
+//       description: "Maximum persists per tick"
+//     }];
+//   }
+//   // inside AppConfig (no annotation needed on the field):
+//   //   TraderConfig trader = <next tag>;
+//
+// The component then takes `Cfg *config.TraderConfig` in its Deps and
+// internal/app/compose.go (NewComponents) fills it from the loaded Config by
+// type (infra.Cfg.GetTrader()). `forge scaffold adapter <name>` writes this
+// shape for you: a <Name>Config block with a base_url leaf, composed here.
+// Per-env values go in deploy/kcl/<env>/config.k under the leaf name (max_per_tick = 50).
+// Never put scalars (string/int/bool/duration) directly in Deps.
+//
+// PER-BINARY CONFIGS. AppConfig below is ONE config every binary loads,
+// which is the right shape for a single-binary project. Once a project has
+// several binaries, that means every process links every field — including
+// credentials it has no business reading — and removing a field for one
+// binary removes it for all of them.
+//
+// To give a binary its own surface, annotate a config message with the
+// cmd/<name> that loads it:
+//
+//   message BaseConfig {                 // a shared DEFINITION, not a binary
+//     int32 port = 1 [(forge.v1.config) = {env_var: "PORT", flag: "port", default_value: "8080"}];
+//     string log_level = 2 [(forge.v1.config) = {env_var: "LOG_LEVEL", flag: "log-level", default_value: "info"}];
+//   }
+//
+//   message AdminConfig {
+//     option (forge.v1.binary_config) = {binary: "admin"};
+//     BaseConfig base = 1;               // composed: admin resolves its OWN values
+//     string admin_api_key = 2 [(forge.v1.config) = {env_var: "ADMIN_API_KEY", sensitive: true}];
+//   }
+//
+// Ownership is then DISJOINT — deleting a field from AdminConfig touches no
+// other binary — while DEFINITIONS stay shared: every binary having a log
+// level is not duplication, they are separate values on separate processes.
+//
+// What forge generates per binary: a typed config + Load in pkg/config, a
+// KCL schema + env projection, and a per-env instance in config.k. Every
+// leaf — composed blocks included — registers as a PERSISTENT flag on the
+// binary's root command (config.Register<Msg>Flags(root)), so every
+// subcommand inherits it. Precedence is unchanged
+// (flags > env > config file > proto defaults), and the binary's Deployment
+// carries only ITS env vars. `binary` must name a cmd/<name> directory;
+// anything else is a generate-time error.
+//
+// ONE BINARY, SEVERAL PROCESSES. When a binary's subcommands run as separate
+// processes (`app server api`, `app server worker`), scope a config to one
+// with `command` — the cobra path below the binary:
+//
+//   message ApiServerConfig {
+//     option (forge.v1.binary_config) = {binary: "app", command: ["server", "api"]};
+//     string auth_api_key = 1 [(forge.v1.config) = {env_var: "AUTH_API_KEY", sensitive: true}];
+//   }
+//
+// A binary's ROOT config (no `command`, like AdminConfig above) stays the
+// binary-wide surface every one of its processes loads; the process running
+// `app server api` loads app's root config AND ApiServerConfig. A command
+// config's leaves register as LOCAL flags on its subcommand (call
+// config.RegisterApiServerConfigFlags on it), config.LoadApiServerConfig
+// refuses to load from any other command, and the worker's Deployment never
+// carries AUTH_API_KEY. Command configs do not nest (`server`'s config is not
+// `server api`'s); a config several commands read is a SUBTREE config
+// (`subtrees: [{path: ["daemon"]}, {path: ["open"]}]`), loaded at or below
+// each path. Two configs one process loads may not declare the same env var,
+// flag, or top-level field name: the process reads them from one config
+// file, whose keys are flat across them. In KCL,
+// config_gen.<bin>ProcessEnvMap projects a
+// workload's env from its own `command + args`: the root config plus the
+// matching command config, with config_secrets routed to whichever declares
+// each name.
+//
+// Selection is by ANNOTATION, never by message name — renaming AdminConfig
+// does not re-point it at a different binary.
+message AppConfig {
+  int32 port = 1 [(forge.v1.config) = {
+    env_var: "PORT"
+    flag: "port"
+    default_value: "8080"
+    description: "HTTP server port"
+  }];
+
+  string log_level = 2 [(forge.v1.config) = {
+    env_var: "LOG_LEVEL"
+    flag: "log-level"
+    default_value: "info"
+    description: "Log level (debug, info, warn, error)"
+  }];
+
+  string database_url = 3 [(forge.v1.config) = {
+    env_var: "DATABASE_URL"
+    flag: "database-url"
+    required: true
+    sensitive: true
+    description: "PostgreSQL connection string. SENSITIVE — it embeds the database password, so it is NEVER an inline value in a rendered manifest: the deploy projection binds it to valueFrom.secretKeyRef (the project's <name>-secrets Secret, key database_url) in every environment. Values come from the env's secret provider (dev: the gitignored secrets/dev/ store, from which forge renders the Secret for local clusters; staging/prod: an out-of-band Secret forge never sees). Required: the server refuses to start without it (config.checkRequired fires before bind)."
+  }];
+
+  string cors_origins = 4 [(forge.v1.config) = {
+    env_var: "CORS_ORIGINS"
+    flag: "cors-origins"
+    role: CONFIG_FIELD_ROLE_CORS_ORIGINS
+    description: "Comma-separated list of allowed CORS origins, applied in every DEPLOYED environment — empty there means no CORS layer at all. Leave it empty for local development: ENVIRONMENT=development already runs an origin-reflecting dev policy that ignores this list, so a scaffolded frontend needs nothing set here. The CONFIG_FIELD_ROLE_CORS_ORIGINS annotation — not this field's name — is what makes config.Validate reject a wildcard ('*') combined with credentials."
+  }];
+
+  bool cors_allow_credentials = 15 [(forge.v1.config) = {
+    env_var: "CORS_ALLOW_CREDENTIALS"
+    flag: "cors-allow-credentials"
+    default_value: "false"
+    role: CONFIG_FIELD_ROLE_CORS_ALLOW_CREDENTIALS
+    description: "Set Access-Control-Allow-Credentials: true on CORS responses. MUST NOT be combined with a wildcard origin ('*') — that combination is spec-invalid and config.Validate rejects it at startup (via the CORS role annotations, not field names)."
+  }];
+
+  string cors_allow_headers = 38 [(forge.v1.config) = {
+    env_var: "CORS_ALLOW_HEADERS"
+    flag: "cors-allow-headers"
+    description: "Comma-separated request headers a browser client may send cross-origin, ADDED to forge's defaults (Content-Type, Connect-Protocol-Version, Connect-Timeout-Ms, Authorization, Traceparent, Tracestate, Baggage, X-Request-Id, Forge-Via). The CORS preflight is answered before any other middleware runs, so a header the web client attaches that is not listed here makes the browser refuse every RPC. Applies in development too, so dev refuses what production would."
+  }];
+
+  string cors_expose_headers = 39 [(forge.v1.config) = {
+    env_var: "CORS_EXPOSE_HEADERS"
+    flag: "cors-expose-headers"
+    description: "Comma-separated response headers a browser client may READ cross-origin, ADDED to forge's defaults (Connect-Protocol-Version, x-forge-error-reason). A header the client reads that is not exposed is hidden by the browser, and the code keyed on it silently never runs."
+  }];
+
+  string tls_cert_path = 16 [(forge.v1.config) = {
+    env_var: "TLS_CERT_PATH"
+    flag: "tls-cert-path"
+    role: CONFIG_FIELD_ROLE_TLS_CERT
+    description: "Path to the TLS certificate (PEM). When both this and TLS_KEY_PATH are set, the server listens over HTTPS; otherwise it serves plaintext. config.Validate enforces both-or-neither (via the TLS role annotations); setting only one is a configuration error."
+  }];
+
+  string tls_key_path = 17 [(forge.v1.config) = {
+    env_var: "TLS_KEY_PATH"
+    flag: "tls-key-path"
+    role: CONFIG_FIELD_ROLE_TLS_KEY
+    description: "Path to the TLS private key (PEM). See TLS_CERT_PATH."
+  }];
+
+  // Duration-shaped fields are declared as google.protobuf.Duration, so the
+  // config object IS the proto type with native *durationpb.Duration values
+  // (consume via .AsDuration()). The descriptor-driven loader parses a Go
+  // duration string ("5s", "30m") from flag/env/default into the message.
+  google.protobuf.Duration pre_stop_delay = 18 [(forge.v1.config) = {
+    env_var: "PRE_STOP_DELAY"
+    flag: "pre-stop-delay"
+    default_value: "5s"
+    description: "Duration to wait after flipping readiness to false before beginning HTTP shutdown. Gives load balancers time to observe the failing probe and stop routing new traffic (Go duration; 0 is the default, negative is no pause)."
+  }];
+
+  google.protobuf.Duration shutdown_timeout = 19 [(forge.v1.config) = {
+    env_var: "SHUTDOWN_TIMEOUT"
+    flag: "shutdown-timeout"
+    default_value: "30s"
+    description: "Maximum time to wait for in-flight requests and workers to drain during graceful shutdown (Go duration; 0 is the default, negative is no window)."
+  }];
+
+  string log_format = 20 [(forge.v1.config) = {
+    env_var: "LOG_FORMAT"
+    flag: "log-format"
+    default_value: "json"
+    allowed_values: "json"
+    allowed_values: "text"
+    description: "Log output format. One of 'json' (structured, machine-readable) or 'text' (human-friendly). config.Validate rejects any other value at startup (via allowed_values, not a name match)."
+  }];
+
+  // Success-log sampling, OFF by default: every successful RPC writes an
+  // "rpc completed" record. Lower it per environment in
+  // deploy/kcl/<env>/config.k (log_success_sample_window = "1m") where an
+  // access log's volume — which is the traffic's volume — outgrows its
+  // value. Failures and calls slower than 1s are always logged, whatever
+  // this says.
+  //
+  // serve.go passes the loaded value to the RPC edge's logging interceptor
+  // (observe.WithSuccessSampling in observe.Deps' LogOptions), so every
+  // source the loader reads applies: flag, env, --config file, default.
+  // forge's observe package reads no environment of its own. Component-call
+  // logs (each package's observe_chain.go) log at DEBUG and do not follow
+  // this field; sample one with a trailing observe.WithSuccessSampling there.
+  google.protobuf.Duration log_success_sample_window = 37 [(forge.v1.config) = {
+    env_var: "LOG_SUCCESS_SAMPLE_WINDOW"
+    flag: "log-success-sample-window"
+    default_value: "0s"
+    description: "Success-log sampling window for RPCs (Go duration). 0s, the default, logs every successful RPC. A positive window logs at most one success per RPC procedure per window — the first, then one carrying suppressed=<n>, the successes it stands for — so volume is bounded by the number of procedures, not by traffic. Failures and successes slower than 1s are always logged. serve.go passes it to the logging interceptor as observe.WithSuccessSampling."
+  }];
+
+  bool auto_migrate = 5 [(forge.v1.config) = {
+    env_var: "AUTO_MIGRATE"
+    flag: "auto-migrate"
+    default_value: "false"
+    description: "Run database migrations on startup"
+  }];
+
+  string environment = 6 [(forge.v1.config) = {
+    env_var: "ENVIRONMENT"
+    flag: "environment"
+    default_value: "production"
+    role: CONFIG_FIELD_ROLE_MODE
+    description: "Runtime environment (production, development). Exactly \"development\" (not \"dev\", not \"Development\") relaxes two things, and nothing else: CORS runs with an origin-reflecting allow-all policy even when CORS_ORIGINS is empty, so this app's own browser frontend reaches its API with no manual step; and HSTS is not emitted. Every other value — including unset — is a deployed environment and stays closed. NEVER use development in production. The CONFIG_FIELD_ROLE_MODE annotation — NOT this field's name — is what makes config.Mode() read it; rename freely, the behavior follows the annotation."
+  }];
+
+  int32 rate_limit_rps = 7 [(forge.v1.config) = {
+    env_var: "RATE_LIMIT_RPS"
+    flag: "rate-limit-rps"
+    default_value: "100"
+    description: "Per-key request rate limit (requests per second). 0 or negative disables rate limiting."
+  }];
+
+  int32 rate_limit_burst = 8 [(forge.v1.config) = {
+    env_var: "RATE_LIMIT_BURST"
+    flag: "rate-limit-burst"
+    default_value: "200"
+    description: "Per-key rate limit burst size. Must be >= rate_limit_rps."
+  }];
+
+  int32 db_max_open_conns = 9 [(forge.v1.config) = {
+    env_var: "DB_MAX_OPEN_CONNS"
+    flag: "db-max-open-conns"
+    default_value: "25"
+    description: "Maximum number of open database connections."
+  }];
+
+  int32 db_max_idle_conns = 10 [(forge.v1.config) = {
+    env_var: "DB_MAX_IDLE_CONNS"
+    flag: "db-max-idle-conns"
+    default_value: "5"
+    description: "Maximum number of idle database connections kept in the pool."
+  }];
+
+  google.protobuf.Duration db_conn_max_idle_time = 11 [(forge.v1.config) = {
+    env_var: "DB_CONN_MAX_IDLE_TIME"
+    flag: "db-conn-max-idle-time"
+    default_value: "5m"
+    description: "Maximum amount of time a connection may be idle before being closed (Go duration, e.g. 5m)."
+  }];
+
+  google.protobuf.Duration db_conn_max_lifetime = 12 [(forge.v1.config) = {
+    env_var: "DB_CONN_MAX_LIFETIME"
+    flag: "db-conn-max-lifetime"
+    default_value: "30m"
+    description: "Maximum amount of time a connection may be reused before being closed (Go duration, e.g. 30m)."
+  }];
+
+  google.protobuf.Duration db_connect_timeout = 40 [(forge.v1.config) = {
+    env_var: "DB_CONNECT_TIMEOUT"
+    flag: "db-connect-timeout"
+    default_value: "5m"
+    description: "Total time to keep retrying the database connection at startup (capped exponential backoff with jitter) before the process exits non-zero. While retrying, the process stays up: /healthz passes and /readyz fails naming the database. The rendered startup probe window covers the 5m default; raise this only together with the probe window."
+  }];
+
+  // The pprof side-listener, ON BY DEFAULT.
+  //
+  // A process that is being OOMKilled can tell you HOW MUCH it is holding
+  // (cgroup memory.stat) but never WHAT — only a heap profile can, and a
+  // profiler you have to redeploy to switch on is a profiler you do not have
+  // at the moment you need it. So this is wired up out of the box and bound
+  // to LOOPBACK, which is what makes "always on" safe: the listener exists in
+  // every environment and is routable from none of them. Nothing in the
+  // scaffolded manifests gives it a Service, a route, or a published port.
+  //
+  //   go tool pprof http://localhost:6060/debug/pprof/heap     # host process
+  //   kubectl port-forward <pod> 6060:6060                     # then the above
+  //
+  // Set 0.0.0.0:6060 where the profile must cross a container boundary (the
+  // scaffolded docker-compose.yml does exactly that, so Alloy/Pyroscope can
+  // scrape it over the compose network), or pass --pprof-addr= to switch pprof
+  // off entirely (an empty PPROF_ADDR counts as unset, so it keeps the default).
+  string pprof_addr = 13 [(forge.v1.config) = {
+    env_var: "PPROF_ADDR"
+    flag: "pprof-addr"
+    default_value: "127.0.0.1:6060"
+    description: "Address of the always-on net/http/pprof side-listener — never the app's public port. Defaults to loopback (127.0.0.1:6060), which is what makes it safe to leave on: reachable from inside the machine or pod running the process and from nowhere else, and never given a k8s Service. Grab a profile with: go tool pprof http://localhost:6060/debug/pprof/heap (in a cluster, kubectl port-forward <pod> 6060:6060 first). Set 0.0.0.0:6060 when a profile must cross a container boundary; --pprof-addr= (empty) disables pprof."
+  }];
+
+  bool security_headers_enabled = 14 [(forge.v1.config) = {
+    env_var: "SECURITY_HEADERS_ENABLED"
+    flag: "security-headers-enabled"
+    default_value: "true"
+    description: "Set OWASP security response headers (CSP, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, HSTS in production). Disable only if a dedicated edge proxy already sets them."
+  }];
+
+  // The probe paths, on the server port. The deploy reads these same values:
+  // forge's KCL lowering writes a forge-built workload's default probe from
+  // LIVENESS_PATHS / READINESS_PATHS (the first path of each), so the pod is
+  // probed where the process answers. Keep this pair in step with the same
+  // fields in internal/codegen/config_gen.go.
+  string liveness_paths = 46 [(forge.v1.config) = {
+    env_var: "LIVENESS_PATHS"
+    flag: "liveness-paths"
+    default_value: "/healthz"
+    description: "Comma-separated paths the liveness probe answers on (200 while the process runs). The first is the one the deploy probes; the rest are aliases, for a platform that probes a fixed path (/health)."
+  }];
+
+  string readiness_paths = 47 [(forge.v1.config) = {
+    env_var: "READINESS_PATHS"
+    flag: "readiness-paths"
+    default_value: "/readyz"
+    description: "Comma-separated paths the readiness probe answers on (503 while booting, draining, or a dependency is down). The first is the one the deploy probes; the rest are aliases (/ready)."
+  }];
+
+  string otlp_endpoint = 21 [(forge.v1.config) = {
+    env_var: "OTEL_EXPORTER_OTLP_ENDPOINT"
+    flag: "otlp-endpoint"
+    description: "Base OTLP collector endpoint for traces and metrics (e.g. http://localhost:4318). The protocol (http/protobuf by default, or grpc) comes from OTEL_EXPORTER_OTLP_PROTOCOL and auth headers from OTEL_EXPORTER_OTLP_HEADERS. Empty disables OTLP export unless the SDK finds an endpoint in the environment; the always-on Prometheus /metrics endpoint is unaffected."
+  }];
+
+  // Connect payload caps. These are a SECURITY control, not a tuning knob:
+  // the server buffers and decodes an entire request body before any
+  // interceptor (auth, rate limit, protovalidate) can reject it, so an
+  // uncapped handler lets one anonymous request allocate several times the
+  // body size and OOMKill the pod. Rate limiting does not help — it counts
+  // requests, not bytes. Raise these only for endpoints that genuinely
+  // accept large payloads, and prefer a dedicated upload path instead.
+  int32 read_max_bytes = 23 [(forge.v1.config) = {
+    env_var: "READ_MAX_BYTES"
+    flag: "read-max-bytes"
+    default_value: "4194304"
+    description: "Maximum size in bytes of a single inbound Connect request payload (default 4 MiB). Requests larger than this are rejected before the handler runs. 0 is not 'unlimited' here: it is replaced by the 4 MiB default at startup."
+  }];
+
+  int32 send_max_bytes = 24 [(forge.v1.config) = {
+    env_var: "SEND_MAX_BYTES"
+    flag: "send-max-bytes"
+    default_value: "4194304"
+    description: "Maximum size in bytes of a single outbound Connect response payload (default 4 MiB). A handler that would exceed it fails rather than streaming an unbounded body. 0 is replaced by the 4 MiB default at startup."
+  }];
+
+  // ── Authentication ────────────────────────────────────────────────────
+  //
+  // The bearer-token validator internal/app/auth.go (SetupAuth) builds reads
+  // these five and nothing else. They are ordinary config fields on purpose:
+  // WHICH validator to build is code (swap auth.NewValidator for auth.Clerk
+  // and this block goes unread), but WHERE this deployment's issuer lives is
+  // a per-environment value, and every per-environment value in a forge app
+  // is declared here. Pin them in deploy/kcl/<env>/config.k; the secret
+  // rides the env's secret provider.
+
+  string jwt_signing_method = 25 [(forge.v1.config) = {
+    env_var: "JWT_SIGNING_METHOD"
+    flag: "jwt-signing-method"
+    default_value: "RS256"
+    description: "Expected JWT `alg` — HS256/HS384/HS512 (shared secret), RS256/RS384/RS512 or ES256/ES384/ES512 (public key or JWKS). A token whose alg differs is rejected however good its signature is, so this must AGREE with the key material: jwt_secret holding a shared secret means HS*, jwt_secret holding a PEM public key or a jwt_jwks_url means RS*/ES*."
+  }];
+
+  string jwt_issuer = 26 [(forge.v1.config) = {
+    env_var: "JWT_ISSUER"
+    flag: "jwt-issuer"
+    description: "Token issuer (`iss`) to enforce. Empty accepts any issuer — set it in every deployed environment so a token minted by a DIFFERENT instance of the same IdP is rejected."
+  }];
+
+  string jwt_audience = 27 [(forge.v1.config) = {
+    env_var: "JWT_AUDIENCE"
+    flag: "jwt-audience"
+    description: "Audience (`aud`) to enforce. Empty accepts any audience — set it so a token minted for another API of the same issuer cannot be replayed against this one."
+  }];
+
+  string jwt_jwks_url = 28 [(forge.v1.config) = {
+    env_var: "JWT_JWKS_URL"
+    flag: "jwt-jwks-url"
+    description: "The issuer's JWKS endpoint (e.g. https://<issuer>/.well-known/jwks.json). This is the standard OIDC path — Auth0, Keycloak, Zitadel, Okta, Supabase, Clerk, Firebase. Keys are fetched at boot (an unreachable endpoint REFUSES TO START, with the URL in the message) and refreshed in the background, so issuer key rotation needs no redeploy. Mutually exclusive with jwt_secret: two key sources for one validator is a configuration error, not a precedence puzzle."
+  }];
+
+  string jwt_secret = 29 [(forge.v1.config) = {
+    env_var: "JWT_SECRET"
+    flag: "jwt-secret"
+    sensitive: true
+    description: "The static signing key: an HS* SHARED SECRET, or a PEM-encoded RS*/ES* PUBLIC key. SENSITIVE — an HS* value verifies AND mints, so it is never an inline manifest value: the deploy projection binds it to valueFrom.secretKeyRef in every environment (dev: the gitignored secrets/dev/ store; staging/prod: an out-of-band Secret forge never sees). Leave it empty when jwt_jwks_url is set. Empty in both means the service can verify nothing and every credential it is shown is rejected — which is the correct closed state, not a bug."
+  }];
+
+  // ── OIDC browser sign-in (the PUBLIC/PKCE client) ─────────────────────
+  //
+  // These describe the client that runs in a BROWSER and obtains tokens
+  // (forge/pkg/oauth2: RFC 7636 PKCE + authorization-code exchange). They
+  // are read by whatever performs the flow — the frontend, or a CLI — and
+  // are NOT read by the token validator above: this server validates
+  // bearer tokens statelessly and is not a participant in the flow.
+  //
+  // NONE of them is a secret, and none is marked sensitive. A PUBLIC PKCE
+  // client HAS no client secret — that is the entire point of PKCE, which
+  // replaces the secret with a per-attempt code verifier so a credential
+  // that cannot be kept secret in a browser is not needed at all. There is
+  // deliberately no oidc_client_secret field here: a confidential client
+  // (a server-side web app) would add one AS SENSITIVE, but the browser
+  // flow these fields describe would not use it.
+  //
+  // These are the whole set — the token endpoint, the authorization
+  // endpoint and the JWKS URI are DERIVED, not configured: one issuer plus
+  // oauth2.Discover(ctx, client, issuer) yields all three from
+  // /.well-known/openid-configuration, so three more fields would be three
+  // more things to keep consistent with each other.
+
+  string oidc_client_id = 30 [(forge.v1.config) = {
+    env_var: "OIDC_CLIENT_ID"
+    flag: "oidc-client-id"
+    description: "The OIDC client (application) ID of the browser client, as registered with the issuer. NOT a secret and deliberately NOT `sensitive`: it ships inside the JS bundle and travels in the query string of every authorization request, so it is public by construction. Binding it to a secretKeyRef would claim a confidentiality it does not have and demand a Secret entry to boot. It is an IDENTIFIER, not a credential — a caller who knows it still cannot obtain a token, because PKCE requires the code verifier and the issuer requires a registered redirect URI."
+  }];
+
+  string oidc_redirect_uri = 31 [(forge.v1.config) = {
+    env_var: "OIDC_REDIRECT_URI"
+    flag: "oidc-redirect-uri"
+    description: "Where the issuer sends the user agent back with the authorization code (e.g. http://localhost:8081/callback in dev). It must match a redirect URI registered with the issuer EXACTLY — the comparison is literal, so a trailing slash or an unexpected port is a login rejected after the user has already typed a password. This is a security control, not a routing detail: the registered-URI allow-list is what stops an attacker redirecting a code to a host they own. The scaffolded DEV IdP is the one exception, and only because it is local: its app runs in dev mode, where the registered URI is matched as a glob, so forge registers http://localhost:*/auth/callback and a dev frontend keeps its kernel-assigned port. Never carry a wildcard to a real issuer."
+  }];
+
+  string oidc_scopes = 32 [(forge.v1.config) = {
+    env_var: "OIDC_SCOPES"
+    flag: "oidc-scopes"
+    default_value: "openid,profile,email,offline_access"
+    description: "Comma-separated scopes to request in the authorization request. `openid` is what makes the request OIDC rather than bare OAuth 2.0 and must be present. `offline_access` is what earns a refresh token, and without it the access token simply dies after its hour and signs the user out mid-session — so it is a default, not an add-on. Note that the scope ALONE is not enough: OIDC Core §11 requires `prompt=consent` alongside it, and a server that does not see the prompt drops the scope SILENTLY (no error, no refresh token). The frontend derives that prompt from these scopes, so the two cannot drift; see promptFor() in src/lib/auth/oidc-provider.ts. Drop `offline_access` if you want sessions to end hard at token expiry. Comma-separated here because that is how this config system carries lists; the flow joins them with SPACES, which is what RFC 6749 §3.3 puts on the wire."
+  }];
+
+  // ── API-only sign-in (the app renders its OWN login screen) ───────────
+  //
+  // OPTIONAL, and OFF unless idp_login_uri is set. Left empty, sign-in is
+  // the standard OIDC redirect above: the browser goes to the issuer, types
+  // a password on the issuer's page, and comes back with a code.
+  //
+  // Set them to keep the user inside the app. The issuer then redirects the
+  // authorization request INTO this app, the app collects credentials on a
+  // screen it owns, and a small server endpoint completes the flow through
+  // the issuer's session API (internal/app/login_broker.go).
+  //
+  // NOTE THE ASYMMETRY WITH THE BLOCK ABOVE. Those fields are public
+  // because a PKCE client has no secret to keep. idp_broker_token IS a
+  // secret, and marked sensitive, because this flow needs something the
+  // browser flow does not: a confidential credential permitted to complete
+  // an authorization request on a user's behalf. That is exactly why it
+  // lives on the SERVER and never reaches the bundle — the browser half of
+  // this flow still uses PKCE and still holds no secret.
+  //
+  // TREAT idp_broker_token AS HIGHLY PRIVILEGED. It carries the issuer's
+  // login-client role, which can complete a sign-in for ANY user in the
+  // instance. It belongs to the one service that brokers logins: not in a
+  // frontend, not in a build environment, not shared with the provisioning
+  // credential (the identity converge creates a separate account for it, so
+  // the two can be rotated and revoked independently).
+
+  string idp_login_uri = 33 [(forge.v1.config) = {
+    env_var: "IDP_LOGIN_URI"
+    flag: "idp-login-uri"
+    description: "The app's OWN sign-in route (e.g. http://localhost:3000/auth/login). Set it to run the API-only sign-in flow, where the issuer redirects the authorization request back into this app instead of rendering its own login pages; the managed identity converges the issuer's login-UI setting to this value. EMPTY (the default) keeps the issuer-hosted login pages, which is the standard OIDC redirect flow and needs no extra credential. Setting this ALSO changes the shape of the auth request the issuer mints (v2 rather than v1), which is what the finalize call requires — so it is not a cosmetic redirect target, it is the switch that makes the whole flow available."
+  }];
+
+  string idp_base = 34 [(forge.v1.config) = {
+    env_var: "IDP_BASE"
+    flag: "idp-base"
+    description: "The issuer origin the SERVER dials for the session and finalize calls. Often differs from the browser-facing issuer URL: a server inside a cluster or compose network reaches the IdP by service DNS, while the browser reaches it by a published address. Only read by the login broker; the token validator uses jwt_issuer / jwt_jwks_url."
+  }];
+
+  string idp_host = 35 [(forge.v1.config) = {
+    env_var: "IDP_HOST"
+    flag: "idp-host"
+    description: "Host header to present when idp_base differs from the address the issuer instance is REGISTERED under. An issuer that hosts several instances resolves which one a request belongs to from this header, not from the socket it arrived on — so a server dialing an in-network address gets `Instance not found` on an otherwise valid, correctly authenticated request unless this names the browser-facing host. Leave empty when idp_base already names the registered host."
+  }];
+
+  string idp_broker_token = 36 [(forge.v1.config) = {
+    env_var: "IDP_BROKER_TOKEN"
+    flag: "idp-broker-token"
+    sensitive: true
+    description: "The login broker's service-account token. SENSITIVE and HIGHLY PRIVILEGED: it holds the issuer's login-client role, which can complete an authorization request for ANY user in the instance, so a leak is an impersonation capability rather than a data exposure. Provisioned by `auth idp-provision` as a DEDICATED account, separate from the provisioning credential, so the login path and the deploy path have independent blast radii and can be rotated separately. The deploy projection binds it to valueFrom.secretKeyRef in every environment; it must never appear in a frontend bundle or a build environment. Required only when idp_login_uri is set."
+  }];
+
+  string idp_broker_token_file = 41 [(forge.v1.config) = {
+    env_var: "IDP_BROKER_TOKEN_FILE"
+    flag: "idp-broker-token-file"
+    description: "Path to a file holding the login broker's token, read on every use so the issuer-side credential can rotate WITHOUT a restart (a mounted Secret volume updates in place). Takes precedence over idp_broker_token while the file yields a token; idp_broker_token stays supported and is the fallback. A missing or empty file never stops the app: the last token read keeps being used and a warning is logged. The path is not a secret, so this field is not sensitive — the file's content is."
+  }];
+
+  // ── The sign-in methods and sign-up mode the broker enforces ──────────
+  //
+  // DELIVERED, never hand-written: whoever converges the identity instance
+  // (the control plane for a hosted one, `forge env up` for the dev one)
+  // writes it from forge.ManagedIdentity's signup / methods / social fields.
+  // EMPTY is normal and means the legacy policy: password only, sign-up as
+  // auth_self_signup and development decide.
+
+  string idp_login_policy = 49 [(forge.v1.config) = {
+    env_var: "IDP_LOGIN_POLICY"
+    flag: "idp-login-policy"
+    sensitive: true
+    description: "The LOGIN_POLICY document (JSON, version 1) the login broker enforces: the signup mode (invite, open, domain) and its domains and role, the first-factor methods (password, passkey, magic_link), the passkey relying-party id, the social providers with their issuer ids, the mail state, whether a session requires a verified address, and the password complexity. Delivered by the identity converge from forge.ManagedIdentity; do not write it by hand. EMPTY keeps the legacy policy (password only; sign-up in development or with auth_self_signup). When PRESENT it is the only source, and auth_self_signup is ignored. Malformed or an unknown version also yields the legacy policy, logged at ERROR: the broker fails closed to what it served before. Marked sensitive because it names the instance's identity-provider ids."
+  }];
+
+  // How many reverse proxies in front of this server append the client's
+  // address to X-Forwarded-For. The sign-in routes' per-client rate limits
+  // read the address the outermost of them saw; 0 reads the connection's
+  // peer (with a proxy in front, every client then shares one budget).
+
+  int32 trusted_proxy_hops = 50 [(forge.v1.config) = {
+    env_var: "TRUSTED_PROXY_HOPS"
+    flag: "trusted-proxy-hops"
+    default_value: "0"
+    description: "How many trusted reverse proxies in front of this server each append the address they received a request from to X-Forwarded-For. The login broker's per-client rate limits key on the Nth address from the right (the client as the outermost trusted proxy saw it); entries left of it are the client's to forge and are ignored. 0 (the default) ignores the header and uses the connection's peer, which behind a proxy makes every per-client budget one shared budget. Set it to exactly the number of proxies that append: one too many lets a client pick its own address."
+  }];
+
+  // ── Public sign-up: an explicit opt-in outside development ────────────
+  //
+  // OFF by default. The scaffolded broker serves POST /auth/register in
+  // development, and in a deployed environment only when this is true.
+  // Public sign-up creates accounts under addresses nobody has verified, so
+  // turning it on is safe only once every place the app binds something to a
+  // user BY EMAIL requires the address verified first.
+
+  bool auth_self_signup = 48 [(forge.v1.config) = {
+    env_var: "AUTH_SELF_SIGNUP"
+    flag: "auth-self-signup"
+    default_value: "false"
+    description: "Serve public sign-up (POST /auth/register) in a deployed environment; development always serves it. OFF by default, so a deployed app is invite-only until it opts in. A self-registered account's email is UNVERIFIED — the person typed it, and is signed in before proving it — so before setting this, make every invitation, membership or record the app binds to a user BY EMAIL require the address verified (devidp.User.EmailVerified via FindUserByID); otherwise registering someone else's address claims what was waiting for them. The sign-in screen offers \"Create an account\" only when this deployment serves it (GET /auth/options)."
+  }];
+
+  // ── Roles and key fallback for the token validator ────────────────────
+
+  string jwt_roles_claim = 42 [(forge.v1.config) = {
+    env_var: "JWT_ROLES_CLAIM"
+    flag: "jwt-roles-claim"
+    default_value: "auto"
+    description: "The token claim Claims.Roles is read from. `auto` (the default) reads the flat `roles` array that Clerk, Auth0, Firebase and most issuers emit, and, when a token has none, Zitadel's `urn:zitadel:iam:org:project:<jwt_audience>:roles` map (role -> {orgId: domain}; the map's keys become the roles). With jwt_audience unset, auto merges the roles of every Zitadel project in the token — set jwt_audience so a role in another project cannot pass as one in this one. Name a claim to read exactly that one: a flat array, a space or comma separated string, or a role map. When roles came from a map and there is exactly one, Claims.Role is set to it too."
+  }];
+
+  string jwt_jwks_snapshot_file = 43 [(forge.v1.config) = {
+    env_var: "JWT_JWKS_SNAPSHOT_FILE"
+    flag: "jwt-jwks-snapshot-file"
+    description: "Path to a JWKS snapshot (the issuer's public keys plus a `delivered_at` timestamp, delivered out of band — e.g. a mounted Secret). With it, an issuer that is UNREACHABLE AT BOOT no longer prevents startup: the server starts on the snapshot, retries the issuer in the background with a warning, and switches to live keys on the first success. Only a snapshot no older than jwt_jwks_snapshot_max_age is used; with none usable, an unreachable issuer still refuses to start. Re-read when the file changes. Needs jwt_jwks_url or jwt_issuer. When the issuer IS reachable the snapshot is not consulted, except for a token signed with a key the live set lacks that the snapshot (delivered later than the last live fetch) holds — a rotation overlap."
+  }];
+
+  string jwt_jwks_snapshot = 44 [(forge.v1.config) = {
+    env_var: "JWT_JWKS_SNAPSHOT"
+    flag: "jwt-jwks-snapshot"
+    sensitive: true
+    description: "The same JWKS snapshot as jwt_jwks_snapshot_file, delivered inline as a config value — the shape the secret store (a ManagedSecret / ControlPlaneSecret) carries. Marked sensitive only so it rides the secret path instead of being inlined into a manifest; the keys in it are PUBLIC. It needs `delivered_at`, because an inline value has no file mtime to date it by. If both are set the newer snapshot wins."
+  }];
+
+  google.protobuf.Duration jwt_jwks_snapshot_max_age = 45 [(forge.v1.config) = {
+    env_var: "JWT_JWKS_SNAPSHOT_MAX_AGE"
+    flag: "jwt-jwks-snapshot-max-age"
+    default_value: "168h"
+    description: "How old a JWKS snapshot's `delivered_at` may be and still be trusted (Go duration; default 7 days). JWKS keys carry no expiry of their own, so this is the bound on running with last-known keys. Past it the snapshot is ignored: while the issuer is down the server fails closed on every token and keeps retrying, and an unreachable issuer at boot refuses to start."
+  }];
+
+  // NOTE: there is intentionally NO `service_name` config field. The OTel
+  // service.name is the binary's APP IDENTITY, emitted as the generated
+  // `ServiceName` constant in internal/cli/root.go and passed to serverkit
+  // directly — it is not an operator-tunable runtime knob. Field tag 22 is
+  // reserved so it is never reused for a different meaning.
+  reserved 22;
+  reserved "service_name";
+}

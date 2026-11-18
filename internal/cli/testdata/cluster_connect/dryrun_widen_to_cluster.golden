@@ -1,0 +1,228 @@
+[dry-run] would connect "prod-us" for env "prod"
+  auth         scoped ServiceAccount token, minted in your cluster
+  address      https://34.1.2.3
+  caPem        9 bytes
+  token        minted on apply, sent write-only, never printed
+  issuer       none sent: not read: --live-from reviews offline
+  selector     app.kubernetes.io/managed-by=forge,forge.dev/connected-cluster=prod-us,forge.dev/binding-env=prod
+
+Grant diff  forge-connect-prod-us-prod  on context gke_acme_us-central1_prod
+scope      cluster  (a ClusterRole of 7 rule(s) over 5 rendered object(s))
+subject    ServiceAccount forge-system/forge-connect-prod-us-prod (this binding's own token identity)
+live       capture <live>
+
+~ ClusterRole forge-connect-prod-us-prod  changed
+      - rule     core/namespaces: get,patch,update  only acme-prod
+      + rule     apps/deployments: create,delete,get,list,patch,update,watch
+      + rule     apps/replicasets: get,list,watch
+      + rule     batch/cronjobs: create,delete,get,list,patch,update,watch
+      + rule     core/configmaps: create,delete,get,list,patch,update,watch
+      + rule     core/namespaces: create,delete,get,list,patch,update,watch
+      + rule     core/pods: get,list,watch
+      + rule     core/services: create,delete,get,list,patch,update,watch
+        rule     url /openid/v1/jwks: get
+= ClusterRoleBinding forge-connect-prod-us-prod  unchanged
+- Role acme-prod/forge-connect-prod-us-prod  removed (connect prunes it)
+      - rule     apps/deployments: create,delete,get,list,patch,update,watch
+      - rule     apps/replicasets: get,list,watch
+      - rule     core/configmaps: create,delete,get,list,patch,update,watch
+      - rule     core/pods: get,list,watch
+      - rule     core/services: create,delete,get,list,patch,update,watch
+- RoleBinding acme-prod/forge-connect-prod-us-prod  removed (connect prunes it)
+      - roleRef  Role/forge-connect-prod-us-prod
+      - subject  ServiceAccount forge-system/forge-connect-prod-us-prod
+
+newly granted permissions (41):
+  cluster: create apps/deployments
+  cluster: create batch/cronjobs
+  cluster: create core/configmaps
+  cluster: create core/namespaces
+  cluster: create core/services
+  cluster: delete apps/deployments
+  cluster: delete batch/cronjobs
+  cluster: delete core/configmaps
+  cluster: delete core/namespaces
+  cluster: delete core/services
+  cluster: get apps/deployments
+  cluster: get apps/replicasets
+  cluster: get batch/cronjobs
+  cluster: get core/configmaps
+  cluster: get core/namespaces
+  cluster: get core/pods
+  cluster: get core/services
+  cluster: list apps/deployments
+  cluster: list apps/replicasets
+  cluster: list batch/cronjobs
+  cluster: list core/configmaps
+  cluster: list core/namespaces
+  cluster: list core/pods
+  cluster: list core/services
+  cluster: patch apps/deployments
+  cluster: patch batch/cronjobs
+  cluster: patch core/configmaps
+  cluster: patch core/namespaces
+  cluster: patch core/services
+  cluster: update apps/deployments
+  cluster: update batch/cronjobs
+  cluster: update core/configmaps
+  cluster: update core/namespaces
+  cluster: update core/services
+  cluster: watch apps/deployments
+  cluster: watch apps/replicasets
+  cluster: watch batch/cronjobs
+  cluster: watch core/configmaps
+  cluster: watch core/namespaces
+  cluster: watch core/pods
+  cluster: watch core/services
+summary    +0 new  ~1 changed  -2 removed  =1 unchanged
+
+WARNING: --apply-scope cluster grants write on every kind the env renders, in every namespace. Where the render
+carries RBAC, escalate and bind are held only on the exact Role/ClusterRole names it declares, so the identity cannot mint a
+role the render does not name, but it can still rewrite those named roles and bind them. Prefer --apply-scope namespace:<ns>
+where the env fits.
+
+[dry-run] would apply to gke_acme_us-central1_prod:
+
+    apiVersion: v1
+    kind: Namespace
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: identity
+        forge.dev/connected-cluster: prod-us
+      name: forge-system
+    ---
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: identity
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod
+      namespace: forge-system
+    ---
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      annotations:
+        kubernetes.io/service-account.name: forge-connect-prod-us-prod
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: identity
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod-token
+      namespace: forge-system
+    type: kubernetes.io/service-account-token
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: apply
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod
+    rules:
+    - apiGroups:
+      - apps
+      resources:
+      - deployments
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - apiGroups:
+      - apps
+      resources:
+      - replicasets
+      verbs:
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - batch
+      resources:
+      - cronjobs
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - apiGroups:
+      - ""
+      resources:
+      - configmaps
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - apiGroups:
+      - ""
+      resources:
+      - namespaces
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - apiGroups:
+      - ""
+      resources:
+      - pods
+      verbs:
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - ""
+      resources:
+      - services
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - nonResourceURLs:
+      - /openid/v1/jwks
+      verbs:
+      - get
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: apply
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: forge-connect-prod-us-prod
+    subjects:
+    - kind: ServiceAccount
+      name: forge-connect-prod-us-prod
+      namespace: forge-system

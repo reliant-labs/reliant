@@ -1,0 +1,68 @@
+//go:build ignore
+
+package {{.Package}}
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+{{- if .SplitAPI }}
+
+	apipkg "{{.APIImportPath}}"
+{{- end }}
+)
+
+// Deps contains the dependencies for the {{.TypeName}} controller.
+type Deps struct {
+	Logger *slog.Logger
+}
+
+// Controller reconciles {{.TypeName}} objects.
+type Controller struct {
+	deps   Deps
+	client client.Client
+}
+
+// New creates a new {{.TypeName}} controller.
+func New(deps Deps) *Controller {
+	return &Controller{deps: deps}
+}
+
+// Name returns the controller's identifier.
+func (c *Controller) Name() string { return "{{.Name | kebabCase}}" }
+
+// Reconcile handles a reconciliation request for a {{.TypeName}} resource.
+// +kubebuilder:rbac:groups={{.Group}},resources={{.Name | lower | plural}},verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups={{.Group}},resources={{.Name | lower | plural}}/status,verbs=get;update;patch
+func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+	log := c.deps.Logger.With("name", req.Name, "namespace", req.Namespace)
+	log.Info("reconciling")
+
+	// Fetch the resource.
+	var obj {{ if .SplitAPI }}apipkg.{{.TypeName}}{{ else }}{{.TypeName}}{{ end }}
+	if err := c.client.Get(ctx, req.NamespacedName, &obj); err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("resource not found, likely deleted")
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{}, fmt.Errorf("fetching {{.TypeName}}: %w", err)
+	}
+
+	// TODO: implement reconciliation here (finalizers, owned resources,
+	// status update). See the forge `binaries` skill.
+
+	return reconcile.Result{}, nil
+}
+
+// SetupWithManager registers the controller with the manager and injects the client.
+func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
+	c.client = mgr.GetClient()
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&{{ if .SplitAPI }}apipkg.{{.TypeName}}{{ else }}{{.TypeName}}{{ end }}{}).
+		Complete(c)
+}

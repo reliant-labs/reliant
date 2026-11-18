@@ -1,0 +1,16 @@
+session 91b955b313a1a86644ea53730a92deab  reliant-web 3f9c0e  user user-42
+  2026-10-22T11:44:06Z, 3m12s: 5 pages, 12 interactions, 2 errors, replay recorded (watch it in the console)
+  entry /
+
++00:00.0  navigate  / (documentLoad)
++00:04.2  navigate  /jobs/new (from /)
++00:12.4  click     button //*[@id="save"] on /jobs/new
++00:12.5  request   POST /api.v1.JobService/CreateJob → 500 (230ms)  trace 0af7651916cd43dd8448eb211c80319c
++00:12.6  error     TypeError: Cannot read properties of undefined on /jobs/new → issue ISS-ab12 (fingerprint 0123456789abcdef)  trace 0af7651916cd43dd8448eb211c80319c
++00:30.0  event     checkout_started plan=pro seats=3 on /jobs/new
++00:41.0  request   GET /api.v1.JobService/ListJobs → network failure (network)  trace b7ad6b7169203331b7ad6b7169203331
+
+suggested:
+  forge obs issue ISS-ab12 prod
+  forge obs trace 0af7651916cd43dd8448eb211c80319c prod
+  forge obs trace b7ad6b7169203331b7ad6b7169203331 prod

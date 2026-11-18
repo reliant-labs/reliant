@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1
+# `forge mcp` (stdio) as a container, for MCP catalogs that build from source
+# (docker/mcp-registry, Glama). Build from the repo root:
+#   docker build -f Dockerfile.mcp -t forge:mcp .
+#   docker run -i --rm -v "$PWD:/workspace" forge:mcp
+# The Go version comes from go.mod (toolchain line); CGO is off like the release.
+
+FROM golang:1.27-alpine AS build
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -buildvcs=false \
+      -ldflags "-s -w -X main.Version=$(cat VERSION) -X main.GitCommit=${COMMIT} -X main.BuildDate=${BUILD_DATE}" \
+      -o /out/forge ./cmd/forge
+
+FROM alpine:3.22
+# git: forge reads the project's git state; ca-certificates: deploy_claimable and
+# report_bug call out over HTTPS. lint and generate also need the project's own
+# toolchain (go, buf, ...), which this image does not carry.
+# safe.directory: the bind-mounted /workspace is owned by another uid; git refuses it otherwise.
+RUN apk add --no-cache git ca-certificates \
+    && adduser -D -u 10001 forge \
+    && mkdir /workspace && chown forge /workspace \
+    && git config --system --add safe.directory /workspace
+COPY --from=build /out/forge /usr/local/bin/forge
+USER forge
+WORKDIR /workspace
+ENTRYPOINT ["forge","mcp"]

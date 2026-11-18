@@ -1,0 +1,239 @@
+<!-- forge:version=1 -->
+# shop
+
+This is a **Forge** project managed by the `forge` CLI. Forge here is **Reliant Forge** (github.com/reliant-labs/forge) — not Atlassian Forge, Foundry's `forge` (Solidity) or Laravel Forge; do not use their commands.
+
+This file is auto-loaded into LLM context every session. Treat it as the authoritative quick-reference. For depth, load the named skills.
+
+## Engineering disposition
+
+This is a long-lived product. For consequential decisions — architecture, public APIs, schemas, lifecycle, anything that ships and is hard to change later — reason to the production-grade, durable solution first, not the quick fix. Before building a non-trivial design, name the realistic alternatives and the trade-off, and devil's-advocate the chosen approach **including your own proposals**; bias toward the coherent design that won't hit a ceiling.
+
+**Don't manufacture urgency.** There is almost never real time pressure — user frustration usually means you haven't converged on the right thing, not "go faster / cut corners." Commit to the right design and ship it decisively; never rationalize a hack with invented pressure. When tempted by a shortcut, the question is "is this correct?", not "is this faster?"
+
+Skip this depth for trivial/mechanical work — there, just do it.
+
+## Shipping
+
+Publishing defaults to Reliant hosting (staging/prod are already bound to it): load `deploy`, then `forge env deploy <env>`. One hosted static site per person is free, across every org they own without a plan (1 GiB storage cap), counted across environments: each env's deployed site is one. Anything beyond it — a second env's site, any hosted workload or managed database — needs billing, and until billing is set up the deploy is queued, not refused: `env deploy` exits 7 and prints the billing link. Give the user that link; don't retry. Never ask for `forge login` when running under Reliant.
+
+**No Reliant account** (standalone forge, nothing signed in)? `forge env deploy <env> --claimable` publishes with no signup and prints a live URL plus a **claim link**: hand the link to your user (it expires in 72h; opening it signs them up free and makes the deploy theirs, so treat it like a password). It fits one static site, or one service with one database, and is refused when you are signed in. Exit 4 `claimable_throttled` is a rate limit: wait the printed retry-after (never loop), or `forge login`. Depth: `deploy/hosting`.
+
+## Use forge skills to guide your work
+
+Forge ships an extensive skill catalog (architecture, proto, db, api, services, testing, frontend, deploy, debug, packs, observability, and more). **Prefer loading a forge skill before guessing** — they encode the exact conventions this project relies on, and the rules they describe are enforced by `forge lint`.
+
+- **Start here: `forge skill load forge`** — it names the four commands that print forge's whole surface (`forge project capabilities`, `forge project annotations`, `forge project libraries`, `forge project audit --json`) and the pre-flight checklist for what forge already scaffolds.
+- **Never search the filesystem for forge's own source.** `forge project libraries` lists every `forge/pkg` package and what it is for; **`forge project libraries <pkg>`** prints that package's full exported API — every signature — without opening a file. Prefer it to `go doc <pkg>`, which renders structs and interfaces as `struct{ ... }` and lists no methods. Run it before porting a utility — the equivalent usually already exists.
+- Discover what's available: `forge skill list`
+- Load one: `forge skill load <name>`. Skills are never written to disk; they come from the binary.
+- Upgrading the pinned forge version? `forge project upgrade list` surfaces the one-time migration playbooks that apply to this project (hidden from `forge skill list` by default; pass --include-migrations to see them all).
+- Reach for one whenever you're about to touch proto, handlers, services, the DB layer, the frontend, tests, or anything cross-cutting. The cost of loading is tiny; the cost of writing code that fights the conventions is not.
+
+If a skill's content seems out of date relative to what you observe in this project, trust the project — and flag it. See the **Forge bug rule** below.
+
+## Debugging: load the `debug` skill FIRST
+
+**Before investigating any bug — backend or frontend — run `forge skill load debug`.**
+It is not optional background reading; it names evidence sources you will not
+find by searching the code, and skipping it is how an investigation ends up
+re-deriving something the skill would have handed you in one command.
+
+The one that catches people out: **frontend logs are on disk in dev.** A
+scaffolded frontend mirrors every `console.*` call — plus every uncaught error
+and unhandled promise rejection — into
+`.forge/logs/<env>/frontend_<name>.log`, prefixed `[browser:<level>]`, right
+next to the backend service logs. So "I can't see what the browser did" is
+almost always false:
+
+```bash
+grep '\[browser:error\]' .forge/logs/dev/*.log
+```
+
+An uncaught `TypeError` produces no `console` call anywhere in your source, so
+grepping the codebase for it finds nothing while the stack trace sits in that
+file. The `debug` skill covers this, the backend log layout, and which forge
+tools localize a fault versus which only look green.
+
+## Code navigation: two questions where gopls beats grep
+
+This is a Go project, so `gopls` answers two questions that grep cannot. **Use it for these; do not grep.**
+
+    gopls call_hierarchy path/to/file.go:LINE:COL   # callers AND callees
+    gopls implementation path/to/file.go:LINE:COL   # interface -> concrete types
+
+**Why grep is not an option here.** A call site does not name the receiver's type, and an implementation never mentions the interface it satisfies — Go has no `implements` keyword to search for. A codebase this size has dozens of same-named methods (`Execute`, `Get`, `Handle`), so a grep-based caller walk matches all of them and the error COMPOUNDS at every level. Measured: a depth-3 grep walk returned functions that were not on the call path at all, while gopls returned the one true caller. Depth 1 is usually survivable; depth 2+ is noise, and chasing it costs more turns than gopls ever will.
+
+Get LINE:COL from an `rg -n` hit first (the column is the 1-based offset of the identifier on that line), and CHAIN the lookup and the query into ONE command:
+
+    f=internal/svc/x.go; l=$(rg -n 'func .*executeApproval' $f | cut -d: -f1); \
+      gopls call_hierarchy $f:$l:34
+
+**Everything else stays with `rg`** — finding a definition, listing references to a distinctive name, reading code. Those are correct AND one turn, so paying gopls's cold-start (~9s measured in a large repo) buys nothing. If your harness exposes gopls as an MCP server it is always warm, which removes that cost.
+
+Do NOT use `forge project libraries` and gopls for the same question: `forge project libraries <pkg>` is for forge's OWN packages (see above), gopls is for the code in this repo.
+
+## Architecture in one screen
+
+What `forge scaffold service <svc>` writes, and where an rpc's logic goes:
+
+```
+proto/services/<svc>/v1/<svc>.proto     ← API contract: messages, CRUD + custom rpcs
+                ↓ forge generate
+gen/services/<svc>/v1/...               ← generated stubs (never edit)
+
+internal/handlers/<svc>/                ← THE SERVICE: owned + generated files, one dir
+  service.go                Deps, validateDeps, New — the *Service (yours)
+  rpc_<name>.go             one custom rpc per file: a *Service method — the logic goes HERE
+  handlers_crud.go          owned CRUD shims delegating to forge/pkg/crud (yours)
+  handlers_crud_ops_gen.go  per-entity CRUD wiring (generated)
+
+internal/<pkg>/                         ← OPTIONAL: `forge scaffold package <pkg>`
+  contract.go               Service interface + Deps + New (yours)
+  service.go                implementation (yours)
+  mock_gen.go               mock of every interface in contract.go (generated)
+```
+
+There is no `contract.go` inside a handler package and no `internal/<svc>/`
+business layer behind every service: the `*Service` methods ARE the handlers,
+and they call `internal/db/` and other collaborators through `s.deps`. Load
+`architecture` for the full tree.
+
+## Where logic goes
+
+| Concern | Lives in | See skill |
+|---------|----------|-----------|
+| An rpc's logic: validation, auth checks, state transitions, DB calls | the `*Service` method in `internal/handlers/<svc>/rpc_<name>.go` (CRUD: the shim in `handlers_crud.go`) | `api` |
+| Errors crossing the rpc boundary | `return nil, svcerr.Wrap(err)` — never a per-service `connect.Code` switch (`forgeconv-no-handler-error-mapping`) | `api` |
+| Logic that deserves transport-free tests, or that a worker or another service also calls | a standalone package — `forge scaffold package <name>` writes `internal/<name>/contract.go`, and the handler takes it as a Deps interface | `service-layer`, `interactor` |
+| Read-check-write transactions | `s.deps.DB.RunTx(ctx, orm.Serializable, func(ctx context.Context) error { … })` — every transaction names its level (no default): `orm.Serializable` for lock-free read-check-write, `orm.ReadCommitted` when a lock (`FOR UPDATE`, advisory) is what makes it correct, never both | `service-layer/transactions` |
+| Wiring (constructing services, middleware chains, dep injection) | `internal/app/providers.go` (yours — what fills a Deps field); `internal/app/compose.go` (also yours; forge reconciles the component set and Deps keys) | `services` |
+| DB schema | migrations under `db/migrations/` (the source of truth — entities/ORM are projected FROM the applied schema) | `db` |
+
+Move an rpc's logic into a package when it outgrows the method — a state
+machine several rpcs share, a calculation worth testing without a request, or
+an orchestration a worker repeats — not by default.
+
+## CRUD rpcs and custom rpcs
+
+An rpc is CRUD only when it is unary and named exactly `Create<E>`, `Get<E>`,
+`Update<E>`, `Delete<E>` or `List<Es>`, where `<E>` is an entity: a table in the
+applied schema AND a proto message of that name. Everything else is custom and
+yours — including `UpdateJobStatus`, `CreateInvoiceFromEstimate` and
+`ListJobsByCrew`, so never rename an rpc to dodge CRUD detection. When an rpc
+is CRUD in name only (`CreateTask` also wires dependencies), put `// forge:custom`
+above it: it gets a stub instead of CRUD wiring, and once every CRUD-named rpc of
+a table carries it, the table gets no CRUD wiring or page — but it keeps its
+store: the ORM projects EVERY table, rpcs or not (`COMMENT ON TABLE t IS
+'forge:no-entity'` is the per-table store opt-out). A
+custom mutation's generated hook invalidates every query on its service. Depth:
+`proto`.
+
+Which marker for a field forge must not let clients write — `forge:read-only`,
+`forge:computed`, `forge:generated`, `forge:guards`, `forge:immutable` — is a
+decision table in `db/write-policy`.
+
+## Package boundaries and interfaces
+
+**Package A must be ignorant of package B's internals.** A concept that leaks
+across a package boundary — through a func, a param, a type or a return value —
+is the defect.
+
+1. **Declare interfaces where they are CONSUMED, not where they are
+   implemented.** If package X needs "something that can list Y", X declares
+   that one-method interface locally. **WET over DRY is fine here** — two small
+   local declarations beat one shared exported one.
+2. **The larger the interface, the weaker the abstraction.** Prefer thin. A
+   1–2 method interface is strong; a six-method one is a concrete type in
+   disguise and will leak.
+3. **Accept interfaces, return structs.** Take the narrow interface you need
+   (flexible); return concrete types (explicit). Returning an interface hides
+   what the caller actually got.
+
+**An interface with ONE implementation and no substitution point is
+indirection, not abstraction.** Prefer a concrete type with methods. Go is not
+Java: a `Kind() string` that every caller switches on has relocated a switch,
+not removed it.
+
+## Schema and proto conventions
+
+SQL is the schema language. Entities are PROJECTIONS of the applied `db/migrations` schema — the columns ARE the declaration. The historical proto entity annotations (`(forge.v1.entity)`, `pk:`, `timestamps:` …) are retired and IGNORED; delete leftovers instead of copying them forward.
+
+- Behavior comes from real columns: `created_at`+`updated_at` ⇒ managed timestamps, `deleted_at` ⇒ soft delete (`COMMENT ON COLUMN t.deleted_at IS 'forge:no-soft-delete'` makes it a plain archive stamp), text columns ⇒ generated list search (`db` skill).
+- Access control and row scoping are app-owned handler logic — read the caller via `middleware.GetUser` and add the checks and `WHERE` filters your product needs; forge generates none of it (`auth` + `db` skills).
+- `auth_required` is enforced, fail-closed and per-rpc: unset or `true` needs a valid token, and `auth_required: false` publishes that one rpc (projected into `pkg/middleware/procedures_gen.go`). It decides only WHETHER a caller is signed in; what they may do is the handler logic above.
+- List request filter fields **must** be `optional` — without it, generated filters silently no-op (`forge lint` rejects it: `forgeconv-list-filter-optional`).
+- One service per `.proto` file (`forge lint` rejects multi-service files; see `proto-split`).
+- Cross-service shared messages go in `proto/shared/v1/types.proto`. No service-to-service proto imports.
+
+Load `proto` and `db` for the full rulesets. `forge lint --conventions` enforces the structural ones (`forgeconv-one-service-per-file`, `forgeconv-list-filter-optional`, `forgeconv-internal-package-contract-names`, `forgeconv-no-handler-error-mapping`, `forgeconv-handler-connect-error`).
+
+## The scaffolded frontend is starter code
+
+The UI forge scaffolds has the same status as Rails scaffolding — it proves the stack is wired end to end, and it is not a design. Do not hand it to a user and call the work finished.
+
+Placeholder by construction: the dashboard's entity-tile grid, the sidebar nav, the sign-in screen, and every generated list/detail/create/edit page. These are "yours" files — forge writes them once and then leaves them alone (`nav.tsx` and `dashboard.tsx` keep refreshing only until your first edit, then they are yours too). Rewriting them wholesale is the expected next step, not a deviation from the scaffold.
+
+Ready to show a user means an information hierarchy built around what this product actually does rather than around the entity list, real copy instead of "Manage tasks", and empty/loading/error states that were designed rather than inherited from the default ladder. It also means a brief — what the product should look and feel like — which only the user can give you.
+
+Load `frontend/design` before starting that work. It asks for the brief first and will not let you invent an aesthetic without one.
+
+Forge deliberately does not guess your product's visual identity. A scaffold that shipped an invented one would be harder to replace than one that is obviously neutral, because you would spend the first hour arguing with taste that nobody chose.
+
+## Critical rules
+
+1. **Never edit generated code** — `gen/`, `*_gen.go`, `*-hooks.ts`, and `internal/app/mounts_services_gen.go`. All overwritten by `forge generate`. Edit the input instead: the proto, the migration, config, or a package's `contract.go` (its `mock_gen.go` follows). `internal/app/compose.go` and `lifecycle.go` are NOT in this list: they are yours, written once and then reconciled — forge injects newly discovered components and Deps keys (and drops keys for removed Deps fields) but never touches your value expressions or construction order. `forge project disown internal/app/compose.go` opts out entirely.
+2. **Proto is the API's canonical input** — API contracts and frontend hooks derive from proto definitions.
+3. **Migrations are the DB source of truth** — the schema comes from migrations; entities/ORM are projected from the APPLIED schema, not from proto.
+4. **Always run `forge lint` after `forge generate`.** The triple gate before you call a phase done:
+   ```
+   forge generate && forge lint && go build ./... && task test
+   ```
+   `forge lint` catches contract-gaps (an `internal/<pkg>/` with exported methods but no `contract.go` — handler and scaffolded worker packages are exempt), multi-service proto files, missing-annotation rules, and exported-vars violations. Running it at every phase is cheap; backfilling six phases later is not.
+   Never pipe it through `head` — the verdict is the LAST line. `forge lint --quiet` prints only what failed plus that verdict (a clean run is one line). `--scope <path>` (repeatable) lints just your slice of a shared checkout; whole-project lanes are skipped and named, so run it unscoped before merging. One lane alone: `--read-only-fields`, `--computed-fields`, `--static-export`, `--migration-safety`, … (`forge lint --help`).
+5. **`forge generate` is safe** — it never overwrites hand-written business logic (handler files, `internal/app/providers.go`, `internal/app/auth.go`, etc.). It is also safe for parallel agents in one checkout: concurrent `generate` / `scaffold` runs queue on the project's lock (`.forge/forge.lock`) rather than collide. A re-run on an unchanged tree is cheap: once a full run has changed nothing, the next run that finds every input byte-identical (tree, ignored inputs, forge binary, tools, environment) prints `nothing to do` and stops in seconds. Any change runs every step, and the run right after a change is still full — it is the one that proves the tree converged. `--no-cache` forces a full run.
+6. **`task test` is the test suite** — Go (race detector, `-count=1`) plus every frontend's tests, with the database, build tags and flags already set up. CI runs it; run it once before you finish. There is no `forge test`: a second spelling could disagree with the Taskfile, so it was removed. `task test:integration` and `task test:e2e` are the tagged lanes. **`task ci` is the whole PR gate on your machine** — `task ci:checks` (verify-generated, lint, build, vuln-scan, KCL), then `task test`, then `task test:integration`, one summary table, non-zero if anything failed *or could not run* (`CI_SKIP=<check>` to allow a named skip). The CI workflow is a thin wrapper around the same tasks, so "CI did not run" never has to mean "unverified"; load `ci` for the details. The gate runs checks concurrently, reuses a check's PASS on an unchanged committed tree (`PASS (cached <sha>)`), and on a branch unit-tests only the packages the change reaches (`CI_FULL=1` for all). **Heavy work queues for a host slot**: `task test`, `task test:integration`, `forge generate`, `forge lint` and the gate's heavy checks each hold one of the machine's heavy slots (`forge slot run`; default min(CPUs/2, memory GiB/8), `FORGE_HEAVY_SLOTS` overrides). A `⏳ waiting for a heavy slot` line is a queue, not a hang — `forge slot status` names the holders; never kill them.
+   **While iterating, run the fast tier scoped to what you touched:** `task test:short -- ./internal/<pkg>/...` (`-short`, cached, no race). Do not add `-count=1` or `-race` to inner-loop runs — they defeat Go's test cache, which is correct for hermetic tests. Never set a private `GOCACHE`. A run expected to take more than ~2 minutes goes in the background (`run_in_background` + `shell_wait`), never a long foreground call — and never detached by hand with `nohup`, a trailing `&`, `setsid` or `disown`: the harness can then neither limit nor kill it, and one runaway detached gate can exhaust the machine's process limit for every agent on it.
+   **A slow test says so; an unmarked test is fast.** A test over ~2s under `-short`, or one that execs `go`/`forge`/`kcl`/`node`/`npm`/`git`/`docker`, starts a container or dials an external host, calls `testkit.Slow(t, "<what makes it slow>")` first (`forge/pkg/testkit`; add `testkit.Inputs("deploy/**", …)` to name the files it depends on). It then skips under `-short` and in the integration lane, and runs in `task test`. A plain `if testing.Short() { t.Skip(...) }` also counts. Gate, don't gut — never weaken an assertion. `forge lint --slow-tests` flags unmarked slow work in source; `go test -short -json ./... | forge ci test-budget` flags an unmarked test that ran over budget. Load `testing` for the details.
+
+## When forge itself is wrong — FIX IT
+
+**One of our biggest priorities is dogfooding forge and making sure it is
+incredibly robust for all of our use cases.** When forge is the thing standing
+in your way, improving forge IS the task, not a detour from it.
+
+So if forge emits something wrong — bad codegen, a lint false-positive, a
+scaffold quirk, a missing capability — reproduce it, then **fix it in forge**.
+Do not paper over it with a workaround and a TODO, and do not hand-edit
+generated output to compensate: the next `forge generate` overwrites your
+patch and the defect comes back.
+
+Every workaround is a bug report that never got filed and a defect that ships
+to users instead. Hitting forge's rough edges is the single most valuable
+signal we get about what to fix — routing around them throws that signal away
+and leaves the next person to rediscover it.
+
+Bias toward the durable fix over the minimal one: if a default is wrong, change
+the default; if a behavior needs a knob, add the flag; if the design is wrong,
+redesign it. Forge is semver at major 1, so a fix never breaks the projects
+that pin it: keep the old flag, field, API or default working beside the new
+one, mark it deprecated, and leave its removal to the next major, which only
+forge's owner cuts.
+
+When you cannot fix it here — forge is not this checkout, or the fix is out of
+scope — **report it**, then carry on:
+
+    forge report-bug --severity high --title "<one line naming the defect>" \
+      --actual "<the exact error text>" --evidence "<commands, output, file paths>"
+
+(`forge mcp` exposes the same as its `report_bug` tool.) Use it for defects in
+forge itself — a forge command that fails, hangs or generates something wrong,
+or a lint, skill or doc that is wrong — not for bugs in this project's code,
+its failing tests, or your own mistakes. Never put credentials or file contents
+in a report. A repeat of the same title within 30 minutes returns the first
+report's id and sends nothing. forge sends nothing unless someone runs this;
+`--dry-run` prints exactly what would go.
+
+## Project Notes
+
+<!-- Add project-specific context, conventions, and open questions here. -->
