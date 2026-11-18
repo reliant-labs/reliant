@@ -197,13 +197,13 @@ func TestRepoDiscoverForgeAppsAnswerPartialBeforeTheDeadline(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC))
 	defer cancel()
 	discovered := []repoDiscoverFound{{RelativePath: "api", Name: "api"}}
-	findForgeApps(ctx, root, discovered)
+	discovered = findForgeApps(ctx, root, discovered)
 	assert.True(t, discovered[0].ForgeAppsTruncated, "a walk that did not finish is partial, not empty")
 	assert.Empty(t, discovered[0].ForgeApps)
 
 	// A repo that cannot be walked at all is partial too: unknown, not none.
 	gone := []repoDiscoverFound{{RelativePath: "gone", Name: "gone"}}
-	findForgeApps(context.Background(), root, gone)
+	gone = findForgeApps(context.Background(), root, gone)
 	assert.True(t, gone[0].ForgeAppsTruncated)
 }
 

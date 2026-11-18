@@ -106,7 +106,7 @@ func handleRepoDiscover(ctx context.Context, payload []byte) ([]byte, error) {
 		resp.ForgeProjectName = readForgeProjectName(req.Path)
 	}
 	if req.ForgeApps {
-		findForgeApps(ctx, req.Path, resp.Discovered)
+		resp.Discovered = findForgeApps(ctx, req.Path, resp.Discovered)
 		resp.ForgeAppsScanned = true
 	}
 	return json.Marshal(resp)
@@ -116,27 +116,32 @@ func handleRepoDiscover(ctx context.Context, payload []byte) ([]byte, error) {
 // OS filesystem there. A test replaces it to inject read failures.
 var forgeAppTree = func(root string) fs.FS { return nil }
 
-// findForgeApps fills in each discovered repo's forge apps (repo.FindForgeApps).
-// Every walk answers by the same deadline as the repo scan, so a project of
-// many repos still answers in time, its later repos marked truncated. A repo
-// that cannot be walked is reported truncated with no apps: unknown, not none.
-func findForgeApps(ctx context.Context, projectPath string, discovered []repoDiscoverFound) {
+// findForgeApps returns discovered with each repo's forge apps filled in
+// (repo.FindForgeApps). Every walk answers by the same deadline as the repo
+// scan, so a project of many repos still answers in time, its later repos
+// marked truncated. A repo that cannot be walked is reported truncated with no
+// apps: unknown, not none.
+func findForgeApps(ctx context.Context, projectPath string, discovered []repoDiscoverFound) []repoDiscoverFound {
 	deadline := answerBy(ctx)
-	for i := range discovered {
+	out := make([]repoDiscoverFound, 0, len(discovered))
+	for _, found := range discovered {
 		root := projectPath
-		if rel := discovered[i].RelativePath; rel != "" && rel != "." {
+		if rel := found.RelativePath; rel != "" && rel != "." {
 			root = filepath.Join(projectPath, rel)
 		}
 		scan, err := repo.FindForgeApps(ctx, root, repo.ForgeAppOptions{Deadline: deadline, FS: forgeAppTree(root)})
 		if err != nil {
-			discovered[i].ForgeAppsTruncated = true
+			found.ForgeAppsTruncated = true
+			out = append(out, found)
 			continue
 		}
-		discovered[i].ForgeAppsTruncated = scan.Truncated
+		found.ForgeAppsTruncated = scan.Truncated
 		for _, app := range scan.Apps {
-			discovered[i].ForgeApps = append(discovered[i].ForgeApps, repoDiscoverForgeApp{Subpath: app.Subpath, Name: app.Name})
+			found.ForgeApps = append(found.ForgeApps, repoDiscoverForgeApp{Subpath: app.Subpath, Name: app.Name})
 		}
+		out = append(out, found)
 	}
+	return out
 }
 
 // answerBy is when a scan answering under ctx's deadline stops walking, so its

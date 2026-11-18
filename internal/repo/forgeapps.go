@@ -285,7 +285,8 @@ func readForgeManifest(fsys fs.FS, p string, requireManifest bool) (string, bool
 	if err != nil {
 		return "", false, err
 	}
-	defer f.Close()
+	// Read-only: a failed close loses nothing the read did not already have.
+	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(io.LimitReader(f, forgeManifestMaxBytes+1))
 	if err != nil {
 		return "", false, err
