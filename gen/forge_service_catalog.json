@@ -47132,6 +47132,10 @@
               "kind": "string"
             },
             {
+              "name": "tolerate_failure",
+              "kind": "bool"
+            },
+            {
               "name": "secret_refs",
               "kind": "message",
               "type_name": "reliant.v1.NodeSecretRef",
