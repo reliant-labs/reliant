@@ -10,6 +10,9 @@ import { PHONE } from './mobileMocks';
 // named, with "Create organization"; the phone has the same choice on its Account screen; and the
 // CLI-login approve page makes the org a credential will act in an explicit
 // choice. Screenshots land in e2e/screenshots/org-switcher/.
+//
+// Every test signs in as a person (`person: true`): an API-key session is a
+// machine credential, which has no membership list to choose an org from.
 
 const SHOTS = 'e2e/screenshots/org-switcher';
 const LOADED = { timeout: 15_000 };
@@ -32,6 +35,7 @@ const SIDE_ENVS = [
 
 function twoOrgs(onOrgRequest?: (rpc: string, orgId: string | undefined) => void) {
   return {
+    person: true,
     orgs: [ACME, SIDE],
     environmentsByOrg: { org_acme: ENVIRONMENTS, org_side: SIDE_ENVS },
     // The storefront checkout is Acme's; Side Project has none yet.
@@ -48,10 +52,19 @@ test.describe('org switcher (desktop)', () => {
     await mockAppsBackend(page, twoOrgs((rpc, org) => seen.push([rpc, org])));
     await page.goto('/apps');
 
-    // Starts in the default org: its apps, and its id on the wire.
+    // Starts in the default org: its apps, and never another org on the wire.
+    // A tab with nothing saved may read before the membership list answers,
+    // naming no org, which the control plane answers in the person's default:
+    // the org the tab then resolves to, so that read is not repeated.
     await expect(page.getByTestId('app-row-storefront')).toBeVisible(LOADED);
     await expect(page.getByTestId('org-switcher-name')).toHaveText('Acme');
-    await expect.poll(() => seen.filter(([rpc]) => rpc === 'ListEnvironments').map(([, org]) => org)).toContain('org_acme');
+    const initial = seen.filter(([rpc]) => rpc === 'ListEnvironments').map(([, org]) => org);
+    expect(initial.length).toBeGreaterThan(0);
+    expect(initial.every((org) => org === 'org_acme' || org === undefined)).toBe(true);
+    // The product's lists wait for the tab's org instead (lib/orgScope): with
+    // no org they would be answered with every org's rows.
+    await expect.poll(() => seen.filter(([rpc]) => rpc === 'ListProjects').map(([, org]) => org)).toContain('org_acme');
+    expect(seen.filter(([rpc]) => rpc === 'ListProjects' || rpc === 'ListChats').every(([, org]) => org === 'org_acme')).toBe(true);
 
     await page.getByTestId('org-switcher').click();
     const acme = page.getByRole('menuitemradio', { name: /Acme/ });
@@ -89,7 +102,7 @@ test.describe('org switcher (desktop)', () => {
   });
 
   test('a person in one org sees their org and a way to create another', async ({ page }) => {
-    await mockAppsBackend(page);
+    await mockAppsBackend(page, { person: true });
     await page.goto('/apps');
     await expect(page.getByTestId('app-row-storefront')).toBeVisible(LOADED);
     await page.getByTestId('org-switcher').first().click();
@@ -140,7 +153,7 @@ test.describe('org switcher (phone)', () => {
   });
 
   test('a person in one org has no Organization section', async ({ page }) => {
-    await mockAppsBackend(page);
+    await mockAppsBackend(page, { person: true });
     await page.goto('/m/account');
     await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible(LOADED);
     await expect(page.getByTestId('mobile-org-section')).toHaveCount(0);
@@ -152,15 +165,8 @@ test.describe('CLI login approve page', () => {
     '?response_type=code&client_id=forge-cli&redirect_uri=http%3A%2F%2F127.0.0.1%3A5000%2Fcallback' +
     '&state=st&code_challenge=abc&code_challenge_method=S256&scope=deploy%3Awrite&device=laptop';
 
-  async function signedIn(page: import('@playwright/test').Page, options = twoOrgs()) {
-    await mockAppsBackend(page, options);
-    await page.route('**/supabase/**', (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
-    );
-  }
-
   test('makes the org the credential acts in an explicit choice, and sends it', async ({ page }) => {
-    await signedIn(page);
+    await mockAppsBackend(page, twoOrgs());
     let approved: Record<string, unknown> | undefined;
     await page.route('**/oauth/approve', async (route) => {
       approved = route.request().postDataJSON() as Record<string, unknown>;
@@ -170,21 +176,6 @@ test.describe('CLI login approve page', () => {
         body: JSON.stringify({ redirect_to: 'http://127.0.0.1:1/never', scopes: ['deploy:write'], org_id: 'org_side' }),
       });
     });
-    // A non-expiring mock Supabase session; no provider or live backend is used.
-    const payload = Buffer.from(JSON.stringify({ sub: 'user_apps', exp: 4102444800 })).toString('base64url');
-    const session = {
-      access_token: `e30.${payload}.signature`, refresh_token: 'test-refresh', token_type: 'bearer',
-      expires_at: 4102444800, expires_in: 3600,
-      user: { id: 'user_apps', email: 'dev@example.com', aud: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z' },
-    };
-    await page.addInitScript(({ value, origin }) => {
-      // The callback deliberately leaves the app origin. Seed only app pages,
-      // not the browser's opaque network-error document at the loopback target.
-      if (location.origin === origin) localStorage.setItem('supabase-auth', JSON.stringify(value));
-    }, { value: session, origin: new URL(test.info().project.use.baseURL ?? 'http://localhost:5173').origin });
-    await page.route('**/reliant.v1.SystemService/DevAuthLoad', (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, sessionJson: JSON.stringify(session) }) }),
-    );
     await page.goto(`/oauth/cli${REQUEST}`);
 
     const picker = page.getByTestId('authorize-org');
