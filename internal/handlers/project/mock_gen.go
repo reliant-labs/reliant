@@ -56,7 +56,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=58d7831afcc1c1186dfbd30f78f8a37bfacaef73484916b41ae553801af2ffa9
+// forge:hash=25ab6b8ab3dc7339e9c56734bacc54eba7ac6bdda8acb6823c42abc284bc07ca
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -79,7 +79,8 @@ type MockRepository struct {
 	DeleteProjectFunc                         func(context.Context, string, string) error
 	ScheduleProjectDeletionFunc               func(context.Context, string, string, time.Time, core.ProjectDecision) (core.ProjectDeletion, error)
 	RestoreProjectFunc                        func(context.Context, string, core.ProjectDecision) ([]string, error)
-	PurgeProjectNowFunc                       func(context.Context, string, core.ProjectDecision, func(ctx context.Context)) ([]string, error)
+	ClaimProjectPurgeNowFunc                  func(context.Context, string, core.ProjectDecision) error
+	PurgeClaimedProjectFunc                   func(context.Context, string, string) ([]string, error)
 	ListDeletedProjectsFunc                   func(context.Context, string, *core.OrgScope, bool) ([]*core.Project, error)
 	ProjectOrgMoveBlockersFunc                func(context.Context, string) (*core.ProjectOrgMoveBlockers, error)
 	ProjectOrgMoveEffectsFunc                 func(context.Context, string, string) (*core.ProjectOrgMoveEffects, error)
@@ -229,13 +230,22 @@ func (m *MockRepository) RestoreProject(ctx context.Context, id string, decided 
 	return nil, contractkit.MockNotSet("MockRepository", "RestoreProject")
 }
 
-// PurgeProjectNow records the call and delegates to PurgeProjectNowFunc when set.
-func (m *MockRepository) PurgeProjectNow(p0 context.Context, id string, decided core.ProjectDecision, afterClaim func(ctx context.Context)) ([]string, error) {
-	m.Recorder.Record("PurgeProjectNow", p0, id, decided, afterClaim)
-	if m.PurgeProjectNowFunc != nil {
-		return m.PurgeProjectNowFunc(p0, id, decided, afterClaim)
+// ClaimProjectPurgeNow records the call and delegates to ClaimProjectPurgeNowFunc when set.
+func (m *MockRepository) ClaimProjectPurgeNow(ctx context.Context, id string, decided core.ProjectDecision) error {
+	m.Recorder.Record("ClaimProjectPurgeNow", ctx, id, decided)
+	if m.ClaimProjectPurgeNowFunc != nil {
+		return m.ClaimProjectPurgeNowFunc(ctx, id, decided)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "PurgeProjectNow")
+	return contractkit.MockNotSet("MockRepository", "ClaimProjectPurgeNow")
+}
+
+// PurgeClaimedProject records the call and delegates to PurgeClaimedProjectFunc when set.
+func (m *MockRepository) PurgeClaimedProject(ctx context.Context, id string, owner string) ([]string, error) {
+	m.Recorder.Record("PurgeClaimedProject", ctx, id, owner)
+	if m.PurgeClaimedProjectFunc != nil {
+		return m.PurgeClaimedProjectFunc(ctx, id, owner)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "PurgeClaimedProject")
 }
 
 // ListDeletedProjects records the call and delegates to ListDeletedProjectsFunc when set.
