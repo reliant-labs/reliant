@@ -133,7 +133,11 @@ export interface Additivity {
 const FOLDABLE_AGGS = new Set(["count", "sum", "increase", "rate"]);
 const TOTALABLE_AGGS = new Set(["count", "sum", "increase"]);
 
-export function additivityOf(panel: Pick<Panel, "series" | "ratio" | "formula" | "kind">, unit: Unit): Additivity {
+export function additivityOf(panel: Pick<Panel, "series" | "ratio" | "formula" | "kind"> & Partial<Pick<Panel, "display">>, unit: Unit): Additivity {
+  // A stacked sql panel's author said its series add up (dashspec
+  // Display.Stack: "only additive values add up to a meaningful whole; the
+  // author decides"), so its headline can be their total.
+  if (panel.kind === "sql" && panel.display?.stack && unit !== "percent") return { foldable: true, totalable: true };
   if (panel.ratio || panel.formula || unit === "percent" || panel.kind === "sql" || panel.kind === "postgres" || panel.series.length === 0) {
     // A sql panel declares no aggregate: whether its numbers add up is unknown, so nothing is summed for it.
     return { foldable: false, totalable: false };

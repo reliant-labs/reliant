@@ -19,7 +19,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 const signOut = vi.fn(async () => undefined);
 vi.mock("@/store/authStore", () => ({
-  useAuthStore: (selector: (s: unknown) => unknown) => selector({ signOut }),
+  useAuthStore: (selector: (s: unknown) => unknown) => selector({ signOut, user: { id: "auth-user-1" } }),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -35,14 +35,45 @@ vi.mock("@/lib/constants", async (importOriginal) => ({
   isElectron: () => isElectron(),
 }));
 
-vi.mock("@/lib/shell", () => ({ forgeAppOrigin: () => "https://forge.reliantlabs.io" }));
+const isForgeShell = vi.fn(() => false);
+vi.mock("@/lib/shell", () => ({
+  forgeAppOrigin: () => "https://forge.reliantlabs.io",
+  isForgeShell: () => isForgeShell(),
+}));
 
 import { OnboardingEscapeHatch } from "../OnboardingEscapeHatch";
+import { FORGE_SETUP_SKIP_KEY, forgeSetupSkippedBy } from "../onboardingGate";
 
 describe("OnboardingEscapeHatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     isElectron.mockReturnValue(false);
+    isForgeShell.mockReturnValue(false);
+    localStorage.removeItem(FORGE_SETUP_SKIP_KEY);
+  });
+
+  // On the forge host the wizard runs before the console (OnboardingGate), so
+  // a link to the console would loop straight back here.
+  it("on the forge site, skips to the page the user was going to and remembers the choice", async () => {
+    isForgeShell.mockReturnValue(true);
+    render(<OnboardingEscapeHatch returnTo="/forge/p/simplebutton/releases?env=prod" />);
+    expect(screen.queryByTestId("onboarding-forge-console-link")).toBeNull();
+
+    await userEvent.click(screen.getByTestId("onboarding-forge-console-skip"));
+
+    expect(forgeSetupSkippedBy("auth-user-1")).toBe(true);
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({ href: "/forge/p/simplebutton/releases?env=prod", replace: true }),
+    );
+    // A skip, not a completion: nothing here talks to the server.
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it("on the forge site with nowhere in particular to go, skips to the Apps list", async () => {
+    isForgeShell.mockReturnValue(true);
+    render(<OnboardingEscapeHatch />);
+    await userEvent.click(screen.getByTestId("onboarding-forge-console-skip"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: "/apps", search: {} }));
   });
 
   it("links to the forge console's apps page in a new tab", () => {

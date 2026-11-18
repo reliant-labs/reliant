@@ -78,6 +78,20 @@ var toolHints = map[string]string{
 		"waiting firings that replace each other, e.g. `'{{ trigger.payload.attributes.repository }}'`. Unset: one " +
 		"group for the whole workflow. max_running still bounds the whole workflow. A firing whose key does not " +
 		"render waits FIFO and is never superseded.",
+	"check": "A GitHub check run the engine owns, one per run an event trigger fires, written as the Reliant App: " +
+		"queued when the firing is recorded, in_progress when the first node starts, and concluded on every ending " +
+		"(success, failure, cancelled, timed_out; never neutral or skipped). `check: <name>` or {name, repository, " +
+		"head_sha, output, timeout}. See WorkflowCheck below.",
+	// WorkflowCheck's fields.
+	"repository": "A template over `trigger` naming the repository, owner/name. Unset: the event's " +
+		"(trigger.payload.attributes.repository).",
+	"head_sha": "A template over `trigger` naming the commit. Unset: the event's head commit (a pull request's head, " +
+		"the check suite's or check run's head_sha, the workflow run's head_sha, a push's new commit).",
+	"output": "A template over the ended run's scope (nodes, inputs, trigger, workflow, run.status) evaluating to " +
+		"{title, summary, text?, annotations?}. Unset, or one that fails: the engine's own summary. The conclusion " +
+		"comes from how the run ended, never from this.",
+	"timeout": "A Go duration from 1m to 72h (default 6h), from the firing: a check still not concluded then " +
+		"concludes timed_out.",
 	"on_failure": "A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an " +
 		"unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). " +
 		"Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, " +
@@ -131,6 +145,11 @@ func extractTypesFromProto() []TypeInfo {
 				"a run waiting on a provider holds no slot until it resumes. Example, one release at a time with "+
 				"only the newest waiting merge per repository: `concurrency: {max_running: 1, waiting: latest, key: "+
 				"'{{ trigger.payload.attributes.repository }}'}`.", 4),
+		extractTypeFromMessage("WorkflowCheck",
+			(&reliantv1.WorkflowCheck{}).ProtoReflect().Descriptor(),
+			"A GitHub check run whose lifecycle the engine owns (`check:`): one per firing, posted as the Reliant "+
+				"App on the event's head commit, details_url the run's page. Example: `check: {name: reliant/ci, "+
+				"output: '{{ nodes.report.check }}', timeout: 2h}`.", 5),
 	}
 }
 

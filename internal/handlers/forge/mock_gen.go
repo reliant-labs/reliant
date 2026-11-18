@@ -63,7 +63,7 @@ func (m *MockRouter) PlacementDaemonID(ctx context.Context, userID string, daemo
 var _ Router = (*MockRouter)(nil)
 
 // forge:section MockRepository
-// forge:hash=b34274969ce5e5c83414b92a6694ede3dc60b5bdbcba50a8d228341772e111ff
+// forge:hash=f903ef750f76fb24eecab31ac99fcde2494d00294447b13e30e5451694182c46
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -76,6 +76,8 @@ type MockRepository struct {
 	GetProjectWithUserCheckFunc      func(context.Context, string, string) (*db.Project, error)
 	SetProjectForgeNameFunc          func(context.Context, string, string, string) (bool, error)
 	ListProjectsFunc                 func(context.Context, db.ProjectFilters) ([]*db.Project, error)
+	ListReposByProjectFunc           func(context.Context, string) ([]*core.Repo, error)
+	SetRepoForgeAppsFunc             func(context.Context, string, []core.RepoForgeApp, bool) error
 	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
 }
@@ -105,6 +107,24 @@ func (m *MockRepository) ListProjects(ctx context.Context, filters db.ProjectFil
 		return m.ListProjectsFunc(ctx, filters)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListProjects")
+}
+
+// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
+func (m *MockRepository) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	m.Recorder.Record("ListReposByProject", ctx, projectID)
+	if m.ListReposByProjectFunc != nil {
+		return m.ListReposByProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListReposByProject")
+}
+
+// SetRepoForgeApps records the call and delegates to SetRepoForgeAppsFunc when set.
+func (m *MockRepository) SetRepoForgeApps(ctx context.Context, repoID string, apps []core.RepoForgeApp, complete bool) error {
+	m.Recorder.Record("SetRepoForgeApps", ctx, repoID, apps, complete)
+	if m.SetRepoForgeAppsFunc != nil {
+		return m.SetRepoForgeAppsFunc(ctx, repoID, apps, complete)
+	}
+	return contractkit.MockNotSet("MockRepository", "SetRepoForgeApps")
 }
 
 // GetDaemon records the call and delegates to GetDaemonFunc when set.

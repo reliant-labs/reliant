@@ -24,7 +24,7 @@ service PresetService {
   // ListPresetsForWorkflow returns presets compatible with a specific workflow.
   // A preset is compatible if its tag matches and all params exist in the target's inputs.
   rpc ListPresetsForWorkflow(ListPresetsForWorkflowRequest) returns (ListPresetsForWorkflowResponse) {}
-  
+
   // CreatePreset saves a new preset to the project's .reliant/presets/ directory.
   // Returns an error if a preset with the same name already exists.
   rpc CreatePreset(CreatePresetRequest) returns (CreatePresetResponse) {
@@ -165,7 +165,7 @@ message InvalidPreset {
 message GetPresetRequest {
   // Project ID
   string project_id = 1;
-  
+
   // Preset name to retrieve
   string name = 2;
 }
@@ -200,16 +200,16 @@ message ListPresetsForWorkflowResponse {
 message CreatePresetRequest {
   // Project ID (determines where to save the preset file)
   string project_id = 1;
-  
+
   // Preset name (will become the filename: <name>.yaml)
   string name = 2;
-  
+
   // Human-readable description
   string description = 3;
-  
+
   // Parameter name to value mapping
   map<string, google.protobuf.Value> params = 4;
-  
+
   // Tag this preset targets (e.g., "agent", "orchestration")
   string tag = 5;
 }

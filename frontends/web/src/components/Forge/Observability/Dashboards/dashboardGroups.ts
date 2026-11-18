@@ -112,10 +112,13 @@ export function groupIndex(dashboards: readonly DashboardSummary[]): GroupedDash
 
 /**
  * forge's built-in product analytics dashboards (pkg/obsbuiltin), in the
- * order a reader takes them: who the users are, what they do, where they come
- * from. A server lists them by key, which would put Acquisition first.
+ * order a reader takes them: the product on one screen (the Overview), then
+ * who the users are, what they do, where they come from. A server lists them
+ * by key, which would put Acquisition first. A project on a forge without the
+ * Overview simply has no first tab.
  */
-export const BUILTIN_PRODUCT_ORDER = ["users", "product", "acquisition"] as const;
+export const PRODUCT_OVERVIEW_KEY = "product-overview";
+export const BUILTIN_PRODUCT_ORDER = ["product-overview", "users", "product", "acquisition"] as const;
 const productRank = (d: DashboardSummary) => {
   const at = d.source === "generated" ? (BUILTIN_PRODUCT_ORDER as readonly string[]).indexOf(d.ref.key) : -1;
   return at < 0 ? BUILTIN_PRODUCT_ORDER.length : at;

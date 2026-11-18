@@ -96,7 +96,10 @@ service WorktreeService {
           kind: "worktree_recovery"
           id: "recovery_id"
         }
-        detail: ["response.worktree_id", "target_daemon_id"]
+        detail: [
+          "response.worktree_id",
+          "target_daemon_id"
+        ]
       }
     };
   }
@@ -130,7 +133,10 @@ service WorktreeService {
           id: "response.worktree.id"
           label: "response.worktree.name"
         }
-        detail: ["project_id", "response.worktree.branch"]
+        detail: [
+          "project_id",
+          "response.worktree.branch"
+        ]
       }
     };
   }
@@ -165,7 +171,10 @@ service WorktreeService {
           kind: "worktree"
           id: "worktree_id"
         }
-        detail: ["response.is_permanent_delete", "response.deleted_branch"]
+        detail: [
+          "response.is_permanent_delete",
+          "response.deleted_branch"
+        ]
       }
     };
   }
@@ -192,7 +201,7 @@ service WorktreeService {
       }
     };
   }
-  
+
   // Import/Discovery Operations
   rpc ImportWorktree(ImportWorktreeRequest) returns (ImportWorktreeResponse) {
     option (forge.v1.method) = {
@@ -203,7 +212,10 @@ service WorktreeService {
           id: "response.worktree.id"
           label: "response.worktree.name"
         }
-        detail: ["project_id", "repo_id"]
+        detail: [
+          "project_id",
+          "repo_id"
+        ]
       }
     };
   }
@@ -239,7 +251,7 @@ service WorktreeService {
       }
     };
   }
-  
+
   // Git Read Operations
   rpc GetWorktreeChanges(GetWorktreeChangesRequest) returns (GetWorktreeChangesResponse) {}
   rpc GetWorktreeGitStatus(GetWorktreeGitStatusRequest) returns (GetWorktreeGitStatusResponse) {}
@@ -318,7 +330,10 @@ service WorktreeService {
           kind: "worktree"
           id: "worktree_id"
         }
-        detail: ["repo_id", "response.pr_url"]
+        detail: [
+          "repo_id",
+          "response.pr_url"
+        ]
       }
     };
   }
@@ -344,7 +359,7 @@ message Worktree {
   string created_at = 10;
   string updated_at = 11;
   string last_active = 12;
-  optional string deleted_at = 13;  // Archive timestamp
+  optional string deleted_at = 13; // Archive timestamp
   optional CleanupMetadata cleanup_metadata = 14;
   // Why creation failed, in words the user can act on ("base branch 'x'
   // doesn't exist in reliant — check the name ..."). Set only when status is
@@ -459,7 +474,7 @@ message WorktreeFileChange {
   FileChangeStatus status = 2;
   bool is_new = 3;
   string diff = 4;
-  bool is_binary = 5;  // true if file is binary (diff will be empty or placeholder)
+  bool is_binary = 5; // true if file is binary (diff will be empty or placeholder)
 }
 
 // =============================================================================
@@ -723,7 +738,7 @@ message GetWorktreeChangesResponse {
   int32 total_files = 3;
   int32 ahead = 4;
   int32 behind = 5;
-  string default_branch = 6;  // Repository's default branch (for PR targeting)
+  string default_branch = 6; // Repository's default branch (for PR targeting)
 }
 
 // GetWorktreeGitStatusRequest gets git status for a worktree.
@@ -753,7 +768,7 @@ message GetWorktreeGitStatusResponse {
 // has at most one repo (legacy single-repo behavior).
 message GetWorktreeCommitsRequest {
   string worktree_id = 1;
-  int32 limit = 2;  // Default 20, max 100
+  int32 limit = 2; // Default 20, max 100
   string repo_id = 3;
 }
 
@@ -806,7 +821,7 @@ message GetWorktreeCommitsResponse {
 // has at most one repo. Files are paths relative to the targeted repo.
 message StageFilesRequest {
   string worktree_id = 1;
-  repeated string files = 2;  // Empty or ["."] means stage all
+  repeated string files = 2; // Empty or ["."] means stage all
   string repo_id = 3;
 }
 
@@ -821,7 +836,7 @@ message StageFilesResponse {
 // has at most one repo. Files are paths relative to the targeted repo.
 message UnstageFilesRequest {
   string worktree_id = 1;
-  repeated string files = 2;  // Empty or ["."] means unstage all
+  repeated string files = 2; // Empty or ["."] means unstage all
   string repo_id = 3;
 }
 
@@ -833,11 +848,11 @@ message UnstageFilesResponse {
 
 // RevertFilesRequest reverts/discards file changes
 // For staged files: unstages and discards changes
-// For modified files: discards working tree changes  
+// For modified files: discards working tree changes
 // For untracked files: deletes the file
 message RevertFilesRequest {
   string worktree_id = 1;
-  repeated string files = 2;  // File paths to revert
+  repeated string files = 2; // File paths to revert
   string repo_id = 3;
 }
 
@@ -904,7 +919,7 @@ message GetWorktreePRResponse {
   optional string url = 2;
   optional int32 number = 3;
   optional string title = 4;
-  optional string state = 5;  // "OPEN", "CLOSED", "MERGED"
+  optional string state = 5; // "OPEN", "CLOSED", "MERGED"
 }
 
 // CreateWorktreePRRequest creates a pull request.

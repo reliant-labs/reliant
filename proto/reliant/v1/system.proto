@@ -161,12 +161,12 @@ message DevAuthLoadRequest {}
 // DevAuthLoadResponse returns the auth session
 message DevAuthLoadResponse {
   bool success = 1;
-  optional string session_json = 2;  // JSON-encoded session data, null if no session
+  optional string session_json = 2; // JSON-encoded session data, null if no session
 }
 
 // DevAuthSaveRequest saves the auth session
 message DevAuthSaveRequest {
-  string session_json = 1;          // JSON-encoded session data
+  string session_json = 1; // JSON-encoded session data
 }
 
 // DevAuthSaveResponse confirms session save

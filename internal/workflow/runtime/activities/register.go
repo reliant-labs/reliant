@@ -244,6 +244,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 
 	v2.RegisterActivity(registry, handlers.NewUnknownStepTypeActivity())
 	v2.RegisterActivity(registry, handlers.NewFailStepActivity())
+	v2.RegisterActivity(registry, handlers.NewRecordToleratedFailureActivity())
 	v2.RegisterActivity(registry, handlers.NewSkippedStepActivity())
 	v2.RegisterActivity(registry, handlers.NewFetchThreadResultActivity(deps.Threads))
 	v2.RegisterActivity(registry, handlers.NewValidateThreadOwnershipActivity(deps.Repo))

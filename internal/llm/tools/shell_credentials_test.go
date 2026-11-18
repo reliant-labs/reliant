@@ -66,9 +66,35 @@ func TestShellTool_CredentialsNoneReachesTheDaemon(t *testing.T) {
 
 func TestShellTool_DefaultSendsNoCredentialsSetting(t *testing.T) {
 	d, _ := runShellParams(t, ShellParams{Command: "ls", Env: map[string]string{"A": "b"}})
-	// The caller's env, plus the chat the command runs for (ChatIDEnv).
-	if got := d.reqs[0]; got.Credentials != "" || len(got.Env) != 2 || got.Env["A"] != "b" || got.Env[ChatIDEnv] == "" {
+	// The caller's env, plus the chat the command runs for (ChatIDEnv) and
+	// its project (ProjectIDEnv).
+	if got := d.reqs[0]; got.Credentials != "" || len(got.Env) != 3 || got.Env["A"] != "b" || got.Env[ChatIDEnv] == "" || got.Env[ProjectIDEnv] == "" {
 		t.Fatalf("the default request changed: %+v", got)
+	}
+}
+
+// Every command a chat runs names the chat's project in RELIANT_PROJECT_ID,
+// in the foreground and the background and with credentials none alike: it
+// is not a credential, and forge records it as the source of what it ships.
+func TestShellTool_ChatEnvironmentNamesTheProject(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		p    ShellParams
+	}{
+		{"foreground", ShellParams{Command: "reliant forge env deploy prod"}},
+		{"background", ShellParams{Command: "reliant forge env deploy prod", RunInBackground: true}},
+		{"credentials none", ShellParams{Command: "reliant forge env deploy prod", Credentials: "none"}},
+	} {
+		d, resp := runShellParams(t, tc.p)
+		if resp.IsError || len(d.reqs) != 1 {
+			t.Fatalf("%s: resp=%+v reqs=%d", tc.name, resp, len(d.reqs))
+		}
+		if got := d.reqs[0].Env[ProjectIDEnv]; got != "p" {
+			t.Errorf("%s: %s = %q, want the chat's project id %q", tc.name, ProjectIDEnv, got, "p")
+		}
+		if got := d.reqs[0].Env[ChatIDEnv]; got != "chat-1" {
+			t.Errorf("%s: %s = %q, want chat-1", tc.name, ChatIDEnv, got)
+		}
 	}
 }
 

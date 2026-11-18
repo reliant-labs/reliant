@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -58,6 +59,16 @@ type Deps struct {
 	// identity) previews those facts as unknown.
 	// forge:optional-dep
 	MoveFacts MoveFacts
+	// Schedules pauses and resumes the Temporal Schedules of the triggers a
+	// project delete pauses and a restore resumes, and removes those of a
+	// purged project's triggers. Nil converges only the rows: a paused
+	// trigger's fires skip on its row until the startup sync converges it.
+	// forge:optional-dep
+	Schedules TriggerSchedules
+	// Now is the clock a delete's restore window starts from; nil is
+	// time.Now.
+	// forge:optional-dep
+	Now func() time.Time
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -92,6 +103,14 @@ func New(deps Deps) (*Service, error) {
 		return nil, err
 	}
 	return &Service{deps: deps}, nil
+}
+
+// now is Deps.Now, or time.Now when it is nil.
+func (s *Service) now() time.Time {
+	if s.deps.Now != nil {
+		return s.deps.Now()
+	}
+	return time.Now()
 }
 
 // Name returns the service name for logging and registry.

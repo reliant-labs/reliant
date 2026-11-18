@@ -122,7 +122,7 @@ export function OnboardingPage() {
           <div className="flex-1">
             <ProgressBar steps={progressSteps} currentStepIndex={currentIndex} />
           </div>
-          <OnboardingEscapeHatch className="flex-shrink-0" />
+          <OnboardingEscapeHatch className="flex-shrink-0" returnTo={returnTo} />
         </div>
 
         {/* Step content */}

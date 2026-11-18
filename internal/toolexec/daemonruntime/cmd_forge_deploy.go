@@ -248,6 +248,9 @@ type forgeDeployJob struct {
 	// orgID is the org forge acts in for this job (ForgeOrgEnv). The job
 	// outlives the request that started it, so it carries the org itself.
 	orgID string
+	// projectID is the Reliant project the job runs for (ForgeProjectEnv),
+	// carried the same way.
+	projectID string
 	// grantID is the connector grant that started this job, empty for a
 	// first-party caller. Handles are uuids rather than guessable ids, but
 	// ownership is still checked on every poll — the same stance
@@ -486,7 +489,7 @@ func runForgeDeploySelfExec(ctx context.Context, projectDir string, args []strin
 	// The deploy attempt forge records on the control plane says where it came
 	// from: this path is the console's Deploy dialog. Display only.
 	cmd.Env = append(os.Environ(), "FORGE_DEPLOY_SOURCE=console") //nolint:forbidigo // forwards the first-party forge child's inherited environment with console provenance; not a daemon configuration read
-	cmd.Env = append(cmd.Env, forgeOrgEnv(ctx)...)
+	cmd.Env = append(cmd.Env, forgeScopeEnv(ctx)...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -521,7 +524,10 @@ func runForgeDeploySelfExec(ctx context.Context, projectDir string, args []strin
 type forgeDeployArgs struct {
 	// OrgID is the org forge acts in for this request (the web's active org).
 	// See ForgeOrgEnv. Empty: the daemon session's own org.
-	OrgID       string `json:"org_id,omitempty"`
+	OrgID string `json:"org_id,omitempty"`
+	// ProjectID is the Reliant project the invocation runs for
+	// (ForgeProjectEnv). Empty from a server older than the field: none.
+	ProjectID   string `json:"project_id,omitempty"`
 	ProjectPath string `json:"project_path"`
 	// Env is forge's positional argument.
 	Env string `json:"env"`
@@ -989,7 +995,7 @@ func handleForgeDeployPlan(ctx context.Context, payload []byte) ([]byte, error) 
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	ctx, err := bindForgeScope(ctx, req.OrgID, req.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -1042,7 +1048,7 @@ func handleForgeDeployPlanStart(ctx context.Context, payload []byte) ([]byte, er
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	ctx, err := bindForgeScope(ctx, req.OrgID, req.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -1089,6 +1095,7 @@ func handleForgeDeployPlanStart(ctx context.Context, payload []byte) ([]byte, er
 		projectPath:  req.ProjectPath,
 		checkoutPath: checkout,
 		orgID:        forgeOrgOf(ctx),
+		projectID:    forgeProjectOf(ctx),
 		grantID:      daemonpolicy.GrantIDFromContext(ctx),
 		startedAt:    time.Now(),
 		status:       forgeDeployJobStatusRunning,
@@ -1254,7 +1261,7 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	ctx, err := bindForgeScope(ctx, req.OrgID, req.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -1368,6 +1375,7 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 		projectPath:  req.ProjectPath,
 		checkoutPath: checkout,
 		orgID:        forgeOrgOf(ctx),
+		projectID:    forgeProjectOf(ctx),
 		grantID:      daemonpolicy.GrantIDFromContext(ctx),
 		startedAt:    time.Now(),
 		status:       forgeDeployJobStatusRunning,
@@ -1535,7 +1543,7 @@ func startForgeDeployJob(job *forgeDeployJob, args []string) {
 	// in tests, the following test installing its own stub.
 	run := runForgeDeploy
 	go func() {
-		ctx, cancel := context.WithTimeout(withForgeOrg(context.Background(), job.orgID), forgeDeployInvocationTimeout)
+		ctx, cancel := context.WithTimeout(withForgeProject(withForgeOrg(context.Background(), job.orgID), job.projectID), forgeDeployInvocationTimeout)
 		defer cancel()
 
 		dir := job.checkoutPath

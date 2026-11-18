@@ -233,3 +233,154 @@ func TestNilWatchdog(t *testing.T) {
 		t.Fatal("a nil watchdog reported something")
 	}
 }
+
+// remedies records the self-heal callbacks.
+type remedies struct {
+	mu      sync.Mutex
+	heals   int
+	giveUps []string
+	stopped string
+}
+
+func (r *remedies) heal(context.Context) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.heals++
+	return r.stopped
+}
+
+func (r *remedies) giveUp(reason string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.giveUps = append(r.giveUps, reason)
+}
+
+func (r *remedies) counts() (heals, giveUps int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.heals, len(r.giveUps)
+}
+
+// reliant#1919's self-heal: degraded for HealAfter, Heal runs once and the
+// reason says what it stopped; still refused at the next probe, GiveUp runs
+// once with that reason. Neither runs again in the same spell.
+func TestSelfHealAfterSustainedDegradationThenGivesUp(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := &script{err: eagain}
+		r := &remedies{stopped: "`bash scripts/ci-gate.sh all` (1800 tasks; background process bg-1, chat 2ee014da)"}
+		w := New(Config{Probe: p.probe, Threshold: 3, HealAfter: 5 * time.Minute, Heal: r.heal, GiveUp: r.giveUp})
+		ctx := t.Context()
+
+		for range 3 {
+			w.Check(ctx)
+		}
+		if w.Health().GetState() != reliantv1.MachineHealthState_MACHINE_HEALTH_STATE_DEGRADED {
+			t.Fatal("not degraded after 3 refusals")
+		}
+		changedNow(w)
+
+		// Degraded, but not yet for HealAfter: no remedy.
+		time.Sleep(4 * time.Minute)
+		w.Check(ctx)
+		if h, g := r.counts(); h != 0 || g != 0 {
+			t.Fatalf("remedies before HealAfter: heals=%d giveUps=%d, want none", h, g)
+		}
+
+		time.Sleep(time.Minute)
+		w.Check(ctx)
+		if h, g := r.counts(); h != 1 || g != 0 {
+			t.Fatalf("after HealAfter: heals=%d giveUps=%d, want one heal and no give-up yet", h, g)
+		}
+		reason := w.Health().GetReason()
+		for _, want := range []string{"Self-heal at", "after 5m0s degraded", "stopped the largest background command", "ci-gate.sh all", "1800 tasks"} {
+			if !strings.Contains(reason, want) {
+				t.Errorf("reason after the heal lacks %q: %s", want, reason)
+			}
+		}
+		if !changedNow(w) {
+			t.Error("the heal's new reason did not signal the heartbeat")
+		}
+
+		// Still refused one interval later: give up, once.
+		time.Sleep(30 * time.Second)
+		w.Check(ctx)
+		w.Check(ctx)
+		if h, g := r.counts(); h != 1 || g != 1 {
+			t.Fatalf("after a refused probe past the heal: heals=%d giveUps=%d, want 1 and 1", h, g)
+		}
+		if !strings.Contains(r.giveUps[0], "stopped the largest background command") {
+			t.Errorf("GiveUp's reason does not carry the heal: %s", r.giveUps[0])
+		}
+	})
+}
+
+// A start that succeeds after the heal ends the spell: no give-up, the reason
+// is cleared, and a later spell heals afresh.
+func TestSelfHealThatWorksEndsTheSpell(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := &script{err: eagain}
+		r := &remedies{stopped: "`sleep 9` (900 tasks; background process bg-2, no chat)"}
+		w := New(Config{Probe: p.probe, Threshold: 1, HealAfter: time.Minute, Heal: r.heal, GiveUp: r.giveUp})
+		ctx := t.Context()
+
+		w.Check(ctx)
+		time.Sleep(time.Minute)
+		w.Check(ctx)
+		p.set(nil)
+		w.Check(ctx)
+		if h, g := r.counts(); h != 1 || g != 0 {
+			t.Fatalf("heals=%d giveUps=%d, want one heal and no give-up", h, g)
+		}
+		if h := w.Health(); h.GetState() != reliantv1.MachineHealthState_MACHINE_HEALTH_STATE_OK || h.GetReason() != "" {
+			t.Fatalf("health after a start = %v, want a bare OK", h)
+		}
+
+		p.set(eagain)
+		w.Check(ctx)
+		if strings.Contains(w.Health().GetReason(), "Self-heal") {
+			t.Error("a new spell's reason still names the last spell's heal")
+		}
+		time.Sleep(time.Minute)
+		w.Check(ctx)
+		if h, _ := r.counts(); h != 2 {
+			t.Fatalf("heals after a second spell = %d, want 2", h)
+		}
+	})
+}
+
+// With nothing to stop, the heal says so, and the give-up still follows.
+func TestSelfHealWithNothingToStop(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := &script{err: eagain}
+		r := &remedies{}
+		w := New(Config{Probe: p.probe, Threshold: 1, HealAfter: time.Minute, Heal: r.heal, GiveUp: r.giveUp})
+		ctx := t.Context()
+		w.Check(ctx)
+		time.Sleep(time.Minute)
+		w.Check(ctx)
+		if !strings.Contains(w.Health().GetReason(), "no background command") {
+			t.Errorf("reason = %s, want it to say there was nothing to stop", w.Health().GetReason())
+		}
+		w.Check(ctx)
+		if _, g := r.counts(); g != 1 {
+			t.Fatalf("giveUps = %d, want 1", g)
+		}
+	})
+}
+
+// Without Heal the watchdog only reports, however long the machine stays
+// degraded.
+func TestNoSelfHealWithoutHeal(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := &script{err: eagain}
+		r := &remedies{}
+		w := New(Config{Probe: p.probe, Threshold: 1, GiveUp: r.giveUp})
+		for range 3 {
+			w.Check(t.Context())
+			time.Sleep(time.Hour)
+		}
+		if _, g := r.counts(); g != 0 {
+			t.Fatalf("GiveUp ran %d times without a Heal", g)
+		}
+	})
+}

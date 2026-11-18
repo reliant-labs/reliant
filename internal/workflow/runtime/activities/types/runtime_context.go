@@ -243,4 +243,8 @@ type DaemonSelector struct {
 type SpawnConfig struct {
 	Workflow string   `json:"workflow"`
 	Presets  []string `json:"presets,omitempty"`
+	// SpawnerDepth is the spawn depth of the agent offered this spawn tool:
+	// 0 for a root agent, 1 for a sub-agent. The tool's description tells
+	// the agent whether the sub-agents it starts may spawn their own.
+	SpawnerDepth int `json:"spawner_depth,omitempty"`
 }

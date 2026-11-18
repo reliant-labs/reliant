@@ -3133,6 +3133,10 @@ FILE COPYING:
 - copy_files: exact paths relative to the project root, for gitignored files a fresh checkout lacks (the new worktree mirrors the project's layout)
 - Nothing is searched for: ".env" copies only the root .env; name "frontend/.env" to copy that one
 - A directory is copied whole (e.g. "web/node_modules"); a missing path is skipped
+- A copied node_modules is the SOURCE checkout's install, build caches included
+  (node_modules/.tmp, *.tsbuildinfo). When the new branch's lockfile differs, run
+  its install (e.g. pnpm install --frozen-lockfile) before typechecking, or the
+  errors come from stale packages, not from the branch
 - When you are working inside a worktree, files are copied from that worktree
 
 WORKFLOW DATA:

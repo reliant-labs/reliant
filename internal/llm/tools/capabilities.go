@@ -22,14 +22,23 @@ const ToolSpawn = "spawn"
 
 // MaxSpawnDepth is how deep spawning nests. An agent whose spawn depth has
 // reached it is never offered spawn, whatever its node declares, so recursive
-// spawning stays bounded (#93). At 1, only a root agent spawns: a sub-agent
-// cannot spawn its own.
-const MaxSpawnDepth = 1
+// spawning stays bounded (#93). At 2, a root agent spawns sub-agents, those
+// sub-agents may spawn their own (orchestrator -> worker -> helper), and the
+// helpers cannot spawn (reliant#2757). How many run at once is capped
+// separately, per agent and per run (activitytypes.SpawnLimits).
+const MaxSpawnDepth = 2
+
+// SpawnAllowedAtDepth reports whether an agent at spawn depth depth (0 for a
+// root agent) may be offered spawn: whether the sub-agents it would start are
+// still within MaxSpawnDepth.
+func SpawnAllowedAtDepth(depth int) bool {
+	return depth < MaxSpawnDepth
+}
 
 // spawnDepthRefusal is why a sub-agent at MaxSpawnDepth has no spawn tool. It
 // names the limit and what to do instead, so an agent told to fan out does
 // not search for a tool it cannot have (reliant#2757).
-var spawnDepthRefusal = fmt.Sprintf("Spawning is not available to a sub-agent: spawn nests at most %d level deep, and this agent was itself spawned, so it cannot spawn sub-agents of its own. Do the work yourself, one item after another, or tell your parent (spawn_send) which parts it should fan out.", MaxSpawnDepth)
+var spawnDepthRefusal = fmt.Sprintf("Spawning is not available to this sub-agent: spawn nests at most %d levels deep, and this agent is already at that depth (it was spawned by a sub-agent), so it cannot spawn sub-agents of its own. Do the work yourself, one item after another, or tell your parent (spawn_send) which parts it should fan out.", MaxSpawnDepth)
 
 // Capabilities is one agent turn's tool capability set: what the model was
 // offered, what load_tool may add, and at what tier.

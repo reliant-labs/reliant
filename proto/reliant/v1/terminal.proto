@@ -26,9 +26,9 @@ service TerminalService {
 message TerminalSession {
   string id = 1;
   string working_dir = 2;
-  string created_at = 3;          // ISO 8601 format
-  string last_active = 4;         // ISO 8601 format
-  optional int32 pid = 5;         // Process ID if available
+  string created_at = 3; // ISO 8601 format
+  string last_active = 4; // ISO 8601 format
+  optional int32 pid = 5; // Process ID if available
 }
 
 // ListTerminalSessionsRequest lists terminal sessions
@@ -44,7 +44,7 @@ message ListTerminalSessionsResponse {
 
 // CloseTerminalSessionRequest closes a terminal session
 message CloseTerminalSessionRequest {
-  string session_id = 1;          // Required: session to close
+  string session_id = 1; // Required: session to close
   // The machine the session runs on, as the terminal websocket's "init"
   // reported it. A session lives on one machine; unset sends the close to the
   // default machine, which knows only its own sessions.

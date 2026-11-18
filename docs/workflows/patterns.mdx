@@ -732,6 +732,68 @@ finally:
 
 **Testing.** Name the handler's nodes `finally.<node>` in a scenario, and assert `expect.finally` (`ran`, `status`, `handler_failed`).
 
+## A GitHub check: `check`
+
+A workflow-level `check:` makes each run an event trigger fires post one GitHub check run, written as the Reliant App, whose whole lifecycle Reliant owns. A branch ruleset can require it by name, like any CI check. The workflow does not create, update or conclude the check itself, and nothing has to sweep up a check a lost run left behind.
+
+```yaml
+name: ci
+check:
+  name: reliant/ci
+  output: "{{ nodes.report.check }}"
+triggers:
+  - name: pr
+    integration:
+      integration: github
+      events: [pull_request.opened, pull_request.synchronize, pull_request.reopened]
+entry: [gate]
+nodes:
+  - id: gate
+    type: run
+    timeout: 45m
+    args:
+      credentials: none
+      command: "task ci"
+  - id: report
+    type: compute
+    outputs:
+      check: "{{ {'title': nodes.gate.exit_code == 0 ? 'Passed' : 'Failed', 'summary': 'Exit code ' + string(nodes.gate.exit_code)} }}"
+  - id: red
+    type: save_message
+    condition: "nodes.gate.exit_code != 0"
+    outcome: failure
+    args:
+      role: assistant
+      content: "The gate failed."
+edges:
+  - from: gate
+    default: report
+  - from: report
+    default: red
+```
+
+`check: reliant/ci`, the name alone, is the short form.
+
+**The lifecycle.** The check is created `queued` as soon as the firing is recorded, so a firing that waits for capacity or for a machine to wake already shows on the pull request. It moves to `in_progress` when the run's first node starts, and it is concluded however the run ends:
+
+| The run | The check |
+|---|---|
+| completes | `success` |
+| reaches a node with `outcome: failure` | `failure` |
+| fails, cannot start, or stays paused for 15 minutes | `failure`, titled "Reliant could not run this check" for an engine fault |
+| is cancelled, skipped or superseded (`concurrency: {waiting: latest}`) | `cancelled` |
+| is still going at `timeout` (default 6h) | `timed_out` |
+
+It never concludes `neutral` or `skipped`, which a required check counts as passing. The conclusion comes from how the run ended, never from `output`: to fail the check, route the failing path to a node with `outcome: failure`.
+
+**The output.** `output` is evaluated when the run ends, in the scope a `finally` handler sees (`nodes`, `inputs`, `trigger`, `workflow` and `run.status`). It must be an object with `title` and `summary` (markdown), and may add `text` and `annotations`, a list of `{path, start_line, end_line, annotation_level, message, title}` with `annotation_level` one of `notice`, `warning` or `failure`. Reliant sends annotations 50 at a time, the most GitHub takes per request. A deterministic step (a `run` node) and an agentic one (an agent that reviews code) work the same way: build the object from either's outputs. An output that fails to evaluate falls back to Reliant's own summary, which says why. The check's Details link is always the run.
+
+**Where and as whom.** `repository` and `head_sha` are templates over `trigger`, rendered when the firing is recorded. By default the check goes on the event's repository and head commit: a pull request's head, a check suite's or check run's `head_sha` (a merge group), a workflow run's `head_sha`, or the commit a push moved its branch to. A firing that names no commit posts no check, and the run still runs. The check is written as the activation's GitHub identity, which must be the Reliant bot (the default), because GitHub lets only an App write a check run.
+
+**One check per firing.** A retried or resumed fire, and a run that resumes, update the same check. A re-run is a new firing, so it gets a new check. Only runs an event trigger fires post one: starting the workflow from a chat, a schedule or a builder test posts nothing.
+
+**Several checks.** Put each check in its own workflow, for example a deterministic `lint` and an agentic `review`: each is then required, re-run and cancelled on its own. A per-node `check:`, for several checks from one workflow, is planned.
+
 ## Combining Techniques
 
 These techniques compose naturally. A sophisticated workflow might combine: pipeline (improve prompt → implement → verify), parallel execution in isolated workspaces, retry loops while tests fail, escalation to senior agent on failure, and multi-model review.

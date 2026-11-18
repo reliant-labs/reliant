@@ -8,7 +8,7 @@
  *   profile        the account: email, linked sign-ins, sign-out, deletion
  *   organization   which org you act in
  *   members        who is in the org, invitations, and who holds which permission
- *   tokens         API tokens for the forge CLI and CI
+ *   tokens         API tokens for the forge CLI and CI, and your CLI logins
  *   billing        plans, wallet, usage consent and caps (Reliant's section)
  *
  * The paths match Reliant's where both have a section (`/settings/billing`),
@@ -26,6 +26,7 @@ import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { cn } from "@/lib/utils";
 
+import { CliLoginsSection } from "./CliLoginsSection";
 import { ForgeTokensSection } from "./ForgeTokensSection";
 
 const BillingSection = lazy(() =>
@@ -117,7 +118,12 @@ function renderSection(section: ForgeSettingsSection): ReactNode {
     case "members":
       return <MembersPage />;
     case "tokens":
-      return <ForgeTokensSection />;
+      return (
+        <div className="space-y-6">
+          <ForgeTokensSection />
+          <CliLoginsSection />
+        </div>
+      );
     case "billing":
       return (
         <Suspense fallback={<div className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">Loading…</div>}>

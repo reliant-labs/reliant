@@ -104,6 +104,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
+	"github.com/reliant-labs/reliant/internal/workflowcheck"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
 
@@ -625,6 +626,10 @@ func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 		Ledger: g.WriteLedger(),
 		DB:     g.Database(),
 	})
+}
+
+func (g *Graph) newProjectPurge() (*ProjectPurge, error) {
+	return NewProjectPurge(ProjectPurgeDeps{DB: g.Database()})
 }
 
 func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
@@ -1265,6 +1270,10 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Moves:      projectOrgMoveStarter{c: g.TemporalClient().Client},
 		// The preview's control-plane facts; nil shows them as unknown.
 		MoveFacts: ProjectOrgMoveFacts(g.ServerProcessConfig.GetControlPlane()),
+		// A project delete pauses its triggers' schedules, a restore
+		// resumes them, and a purge removes them.
+		Schedules: g.ScheduleSyncer(),
+		Now:       nil, // optional — no provider
 	})
 }
 
@@ -1532,5 +1541,15 @@ func (g *Graph) newOrgPolicyImpact() (*org_policy_impact.Service, error) {
 func (g *Graph) newOrgPolicyAttendance() (org_policy_impact.ChatAttendance, error) {
 	return NewOrgPolicyAttendance(OrgPolicyAttendanceDeps{
 		Store: g.Database(),
+	})
+}
+
+// newWorkflowCheckSyncer constructs the WorkflowCheckSyncer provider (NewWorkflowCheckSyncer, internal/app/providers_worker.go).
+func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
+	return NewWorkflowCheckSyncer(WorkflowCheckSyncerDeps{
+		DB:          g.Database(),
+		Credentials: g.WorkerIntegrationCredentials(),
+		Policies:    g.OrgPolicyResolver(),
+		Membership:  g.OrgResolver(),
 	})
 }

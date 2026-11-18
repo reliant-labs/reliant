@@ -49,7 +49,15 @@ import { sessionKeys } from "@/hooks/observability-session-queries";
 import type { Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
-import { RANGE_LABELS, RANGE_PRESETS, rangeOf } from "@/services/controlPlane/observability/window";
+import { RANGE_LABELS, RANGE_PRESETS, rangeOf, type RangeRead } from "@/services/controlPlane/observability/window";
+import { RangeCapNote } from "./RangeCapNote";
+
+/** The views that read telemetry kept for less than the longest preset, and what they call it. */
+const VIEW_RANGE_READS: Partial<Record<string, { read: RangeRead; subject: string }>> = {
+  overview: { read: "overview", subject: "Requests and errors are" },
+  logs: { read: "logs", subject: "Logs are" },
+  traces: { read: "traces", subject: "Traces are" },
+};
 import { AlertNotifications } from "./AlertNotifications";
 import { ObsAskContextValue } from "./AskReliant/askReliantContext";
 import { AlertsView } from "./AlertsView";
@@ -201,6 +209,8 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
   // (filters, group-by, time on ONE line); drawn on a row of their own only
   // when there is no scope bar. A row holding three small controls was empty
   // space above every view.
+  // A view whose telemetry is kept for less than the picked range reads what there is, and says so.
+  const capped = VIEW_RANGE_READS[view];
   const controls = (
     <div className="flex items-center gap-2" data-testid="obs-controls">
       {org.orgId && <AlertNotifications orgId={org.orgId} envName={envName} onOpenAlerts={() => selectView("alerts")} />}
@@ -223,6 +233,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
               </option>
             ))}
           </select>
+          {capped && <RangeCapNote range={range} read={capped.read} subject={capped.subject} testId="obs-range-cap" />}
         </>
       )}
       <Button

@@ -28,6 +28,7 @@ import { DomainService } from "@/gen/controlplane/services/domain/v1/domain_pb";
 
 vi.mock("@/services/controlPlane/config", () => ({
   CONTROL_PLANE_API_URL: "http://127.0.0.1:8090",
+  hasControlPlane: true,
 }));
 
 // What the console layout says the page is about (Console/consoleContext.ts).

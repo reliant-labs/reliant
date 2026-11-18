@@ -89,7 +89,12 @@ service SharingService {
 message SetChatVisibilityRequest {
   string chat_id = 1 [(buf.validate.field).string.min_len = 1];
   // ORG or PRIVATE.
-  ResourceVisibility visibility = 2 [(buf.validate.field).enum = {in: [1, 2]}];
+  ResourceVisibility visibility = 2 [(buf.validate.field).enum = {
+    in: [
+      1,
+      2
+    ]
+  }];
 }
 
 message SetChatVisibilityResponse {
@@ -102,7 +107,12 @@ message SetChatVisibilityResponse {
 message SetProjectVisibilityRequest {
   string project_id = 1 [(buf.validate.field).string.min_len = 1];
   // ORG or PRIVATE.
-  ResourceVisibility visibility = 2 [(buf.validate.field).enum = {in: [1, 2]}];
+  ResourceVisibility visibility = 2 [(buf.validate.field).enum = {
+    in: [
+      1,
+      2
+    ]
+  }];
 }
 
 message SetProjectVisibilityResponse {
@@ -120,7 +130,10 @@ message ListSharedChatsRequest {
   // Narrow the list to one project's shared chats.
   optional string project_id = 2;
   // At most this many (default and cap 100).
-  int32 limit = 3 [(buf.validate.field).int32 = {gte: 0, lte: 100}];
+  int32 limit = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
   int32 offset = 4 [(buf.validate.field).int32.gte = 0];
 }
 
@@ -134,7 +147,10 @@ message ListSharedProjectsRequest {
   // organization.
   optional string org_id = 1;
   // At most this many (default and cap 100).
-  int32 limit = 2 [(buf.validate.field).int32 = {gte: 0, lte: 100}];
+  int32 limit = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
   int32 offset = 3 [(buf.validate.field).int32.gte = 0];
 }
 

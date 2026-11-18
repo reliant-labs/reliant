@@ -214,16 +214,16 @@ enum WorkflowDraftStatus {
 // WorkflowListItem represents a workflow in list responses with additional metadata
 message WorkflowListItem {
   string name = 1;
-  string filename = 2;       // Filename without extension (used for API calls)
+  string filename = 2; // Filename without extension (used for API calls)
   string description = 3;
   int32 step_count = 4;
-  string source = 5;         // "builtin", "project", or "user"
+  string source = 5; // "builtin", "project", or "user"
   // Field 6 removed (was status)
   repeated Node nodes = 7;
   repeated Edge edges = 8;
   map<string, Input> inputs = 9; // Workflow inputs
   map<string, string> outputs = 10; // Workflow outputs - CEL expressions
-  optional string updated_at = 11;  // Last update timestamp
+  optional string updated_at = 11; // Last update timestamp
   bool is_hidden = 12; // Whether the workflow is hidden from the hub
   bool has_preset_groups = 14; // True if workflow has any tags (top-level or group) that can have presets
   optional string draft_id = 16; // Draft ID for user workflows (stable ID for lookups, not present for builtin/project)
@@ -258,20 +258,20 @@ message WorkflowListItem {
 
 // HighlightSpan represents a character range to highlight in the condition
 message HighlightSpan {
-  int32 start = 1;   // Starting character position (0-based)
-  int32 end = 2;     // Ending character position (exclusive)
+  int32 start = 1; // Starting character position (0-based)
+  int32 end = 2; // Ending character position (exclusive)
   string reason = 3; // Why this span is highlighted
 }
 
 // ValidationError represents a structured validation error
 message ValidationError {
-  string type = 1;       // "syntax_error", "anti_pattern", "schema_violation"
-  string message = 2;    // Human-readable error message
+  string type = 1; // "syntax_error", "anti_pattern", "schema_violation"
+  string message = 2; // Human-readable error message
   string suggestion = 3; // Suggested fix
-  int32 edge_index = 4;  // Which edge has the error
-  string edge_from = 5;  // Edge source
-  string case_to = 6;    // Case target (identifies which case in the edge)
-  string condition = 7;  // The problematic condition
+  int32 edge_index = 4; // Which edge has the error
+  string edge_from = 5; // Edge source
+  string case_to = 6; // Case target (identifies which case in the edge)
+  string condition = 7; // The problematic condition
   repeated HighlightSpan highlights = 8; // Character positions to highlight
   // Where the finding is, structured, so an editor can put it on the step and
   // field it is about instead of parsing `message`.
@@ -341,13 +341,13 @@ message GetWorkflowRequest {
 
 message GetWorkflowResponse {
   Workflow workflow = 1;
-  string source = 2;             // Source of the workflow: "builtin", "project", or "user"
+  string source = 2; // Source of the workflow: "builtin", "project", or "user"
   optional string draft_id = 3; // Draft ID for this workflow (if user-owned)
   optional string parse_error = 6; // If the stored YAML couldn't be parsed, contains the error message
   optional string raw_definition = 7; // Raw YAML definition (only set when parse_error is present)
-  int64 version = 8;             // Current version number for OCC (0 for builtins)
-  optional string source_path = 9;  // File path for project workflows (enables save-back-to-file)
-  string yaml_definition = 10;     // Canonical YAML definition of the workflow (always populated)
+  int64 version = 8; // Current version number for OCC (0 for builtins)
+  optional string source_path = 9; // File path for project workflows (enables save-back-to-file)
+  string yaml_definition = 10; // Canonical YAML definition of the workflow (always populated)
   // Lifecycle of a user workflow; COMPLETE for builtin and project workflows.
   WorkflowDraftStatus status = 11;
   // Current validation findings for a user workflow, computed on read (errors,
@@ -390,14 +390,14 @@ message ValidateWorkflowResponse {
 // ============================================
 
 message SaveWorkflowRequest {
-  string project_id = 1;             // Required: project ID
-  Workflow workflow = 2;             // Workflow definition to save
+  string project_id = 1; // Required: project ID
+  Workflow workflow = 2; // Workflow definition to save
   // Field 3 removed (was publish)
-  ConfigScope scope = 4;             // Where to save: global, project, or worktree
-  optional string worktree_id = 5;   // Required if scope is worktree
+  ConfigScope scope = 4; // Where to save: global, project, or worktree
+  optional string worktree_id = 5; // Required if scope is worktree
   optional int64 expected_version = 8; // OCC: expected version number - fails if workflow was modified since
-  optional string source_path = 9;   // If set, write YAML back to this file (for project workflow edits)
-  optional string draft_id = 10;     // If provided, update this draft by ID (allows renames)
+  optional string source_path = 9; // If set, write YAML back to this file (for project workflow edits)
+  optional string draft_id = 10; // If provided, update this draft by ID (allows renames)
   // Intent. DRAFT stores as-is; COMPLETE validates and rejects on errors;
   // UNSPECIFIED keeps the current status (new workflows start as drafts), so
   // re-saving a complete workflow is gated like COMPLETE.
@@ -413,17 +413,17 @@ message SaveWorkflowRequest {
 }
 
 message SaveWorkflowResponse {
-  bool success = 1;                  // True if operation succeeded
-  string message = 2;                // Status message
-  Workflow workflow = 3;             // Saved workflow
+  bool success = 1; // True if operation succeeded
+  string message = 2; // Status message
+  Workflow workflow = 3; // Saved workflow
   // Field 4 removed (was published)
-  bool is_valid = 5;                 // True if this request's definition passed validation
+  bool is_valid = 5; // True if this request's definition passed validation
   repeated ValidationError validation_errors = 6; // This request's validation findings (errors, then warnings)
-  string id = 7;                     // Database ID of the saved workflow
-  string slug = 8;                   // Runtime reference slug
-  int64 version = 11;                // Current version number for OCC
-  string yaml_definition = 12;       // Canonical YAML definition of the saved workflow
-  WorkflowDraftStatus status = 13;   // Resulting status (unset when nothing was stored)
+  string id = 7; // Database ID of the saved workflow
+  string slug = 8; // Runtime reference slug
+  int64 version = 11; // Current version number for OCC
+  string yaml_definition = 12; // Canonical YAML definition of the saved workflow
+  WorkflowDraftStatus status = 13; // Resulting status (unset when nothing was stored)
 }
 
 // ============================================
@@ -431,25 +431,25 @@ message SaveWorkflowResponse {
 // ============================================
 
 message ImportWorkflowRequest {
-  string project_id = 1;             // Required: project ID
-  bytes yaml_content = 2;            // YAML file content
-  ConfigScope scope = 3;             // Where to import: global, project, or worktree
-  optional string worktree_id = 4;   // Required if scope is worktree
-  bool overwrite = 5;                // If true, overwrite existing workflow with same slug
-  WorkflowDraftStatus status = 6;    // Intent; same semantics as SaveWorkflowRequest.status
+  string project_id = 1; // Required: project ID
+  bytes yaml_content = 2; // YAML file content
+  ConfigScope scope = 3; // Where to import: global, project, or worktree
+  optional string worktree_id = 4; // Required if scope is worktree
+  bool overwrite = 5; // If true, overwrite existing workflow with same slug
+  WorkflowDraftStatus status = 6; // Intent; same semantics as SaveWorkflowRequest.status
 }
 
 message ImportWorkflowResponse {
   bool success = 1;
   string message = 2;
-  Workflow workflow = 3;             // Imported workflow
-  string id = 4;                     // Database ID
-  string slug = 5;                   // Runtime reference slug
-  bool is_valid = 6;                 // Whether this request's definition passed validation
+  Workflow workflow = 3; // Imported workflow
+  string id = 4; // Database ID
+  string slug = 5; // Runtime reference slug
+  bool is_valid = 6; // Whether this request's definition passed validation
   repeated ValidationError validation_errors = 7;
-  bool conflict = 8;                 // True if slug already exists (when overwrite=false)
-  string existing_id = 9;            // ID of existing workflow (if conflict)
-  WorkflowDraftStatus status = 10;   // Resulting status (unset when nothing was stored)
+  bool conflict = 8; // True if slug already exists (when overwrite=false)
+  string existing_id = 9; // ID of existing workflow (if conflict)
+  WorkflowDraftStatus status = 10; // Resulting status (unset when nothing was stored)
 }
 
 // ============================================
@@ -457,16 +457,16 @@ message ImportWorkflowResponse {
 // ============================================
 
 message ExportWorkflowRequest {
-  string project_id = 1;             // Required: project ID
-  string slug = 2;                   // Workflow slug to export
-  optional string worktree_id = 3;   // Optional: worktree context for resolution
+  string project_id = 1; // Required: project ID
+  string slug = 2; // Workflow slug to export
+  optional string worktree_id = 3; // Optional: worktree context for resolution
 }
 
 message ExportWorkflowResponse {
   bool success = 1;
-  bytes yaml_content = 2;            // YAML file content
-  string filename = 3;               // Suggested filename (e.g., "my-workflow.yaml")
-  Workflow workflow = 4;             // The exported workflow definition
+  bytes yaml_content = 2; // YAML file content
+  string filename = 3; // Suggested filename (e.g., "my-workflow.yaml")
+  Workflow workflow = 4; // The exported workflow definition
 }
 
 // ============================================
@@ -475,8 +475,8 @@ message ExportWorkflowResponse {
 
 message SetWorkflowVisibilityRequest {
   string project_id = 1; // Required: project ID
-  string slug = 2;       // Workflow slug
-  bool is_hidden = 3;    // True to hide, false to show
+  string slug = 2; // Workflow slug
+  bool is_hidden = 3; // True to hide, false to show
 }
 
 message SetWorkflowVisibilityResponse {
@@ -486,18 +486,18 @@ message SetWorkflowVisibilityResponse {
 }
 
 message CopyWorkflowRequest {
-  string project_id = 1;             // Required: project ID
-  string source_slug = 2;            // Slug of the workflow to copy
-  optional string new_name = 3;      // Optional: custom name for the copy (auto-generated if not provided)
-  optional string worktree_id = 4;   // Optional: worktree context for source resolution
+  string project_id = 1; // Required: project ID
+  string source_slug = 2; // Slug of the workflow to copy
+  optional string new_name = 3; // Optional: custom name for the copy (auto-generated if not provided)
+  optional string worktree_id = 4; // Optional: worktree context for source resolution
 }
 
 message CopyWorkflowResponse {
   bool success = 1;
   string message = 2;
-  Workflow workflow = 3;              // The copied workflow
-  string slug = 4;                    // Slug of the new workflow
-  string id = 5;                      // ID of the new workflow draft
+  Workflow workflow = 3; // The copied workflow
+  string slug = 4; // Slug of the new workflow
+  string id = 5; // ID of the new workflow draft
 }
 
 // ============================================
@@ -507,7 +507,7 @@ message CopyWorkflowResponse {
 // CreateWorkflowDraftRequest creates an empty draft for the workflow builder.
 // Called when user clicks "New Workflow" to get a draft ID before any chat starts.
 message CreateWorkflowDraftRequest {
-  string project_id = 1;              // Required: project context
+  string project_id = 1; // Required: project context
   // Intent; UNSPECIFIED and DRAFT create a draft. COMPLETE validates the
   // starting template first.
   WorkflowDraftStatus status = 2;
@@ -528,26 +528,25 @@ message CreateWorkflowDraftRequest {
 }
 
 message CreateWorkflowDraftResponse {
-  string draft_id = 1;                // UUID of the created draft
-  string slug = 2;                    // Generated slug for the draft
-  string name = 3;                    // The workflow's `name:` (equal to the slug)
-  WorkflowDraftStatus status = 4;     // Status the workflow was created with
-  string title = 5;                   // The title it was created with
+  string draft_id = 1; // UUID of the created draft
+  string slug = 2; // Generated slug for the draft
+  string name = 3; // The workflow's `name:` (equal to the slug)
+  WorkflowDraftStatus status = 4; // Status the workflow was created with
+  string title = 5; // The title it was created with
 }
 
 message SetWorkflowStatusRequest {
-  string project_id = 1;              // Required: project context
-  string draft_id = 2;                // Required: the stored workflow
-  WorkflowDraftStatus status = 3;     // Required: DRAFT or COMPLETE
+  string project_id = 1; // Required: project context
+  string draft_id = 2; // Required: the stored workflow
+  WorkflowDraftStatus status = 3; // Required: DRAFT or COMPLETE
   optional int64 expected_version = 4; // OCC: fails if the workflow changed since it was loaded
 }
 
 message SetWorkflowStatusResponse {
-  bool success = 1;                   // False when COMPLETE was rejected by validation
+  bool success = 1; // False when COMPLETE was rejected by validation
   string message = 2;
-  WorkflowDraftStatus status = 3;     // Status after the call
+  WorkflowDraftStatus status = 3; // Status after the call
   repeated ValidationError validation_errors = 4; // Current findings (errors, then warnings)
-  int64 version = 5;                  // Version after the call (for OCC)
-  string slug = 6;                    // The workflow's slug
+  int64 version = 5; // Version after the call (for OCC)
+  string slug = 6; // The workflow's slug
 }
-

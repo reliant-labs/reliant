@@ -56,6 +56,11 @@ export const ONBOARDING_EXIT_REASONS = [
   "returning_user_heal",
   /** The user signed out from the escape hatch. */
   "signed_out",
+  /**
+   * On the forge site, the user took the escape hatch's "Only here to deploy
+   * apps?" skip. Onboarding stays unfinished on the server (markForgeSetupSkipped).
+   */
+  "skipped_to_forge_console",
 ] as const;
 
 export type OnboardingExitReason = (typeof ONBOARDING_EXIT_REASONS)[number];
@@ -122,6 +127,9 @@ export function onboardingExitTarget(
       // the user straight back here.
       // `tour: undefined`: the root route otherwise carries `?tour=` along.
       return { to: "/auth", search: { redirect: undefined, tour: undefined } };
+    case "skipped_to_forge_console":
+      // The forge site's home: its Apps list.
+      return { to: "/apps", search: {} };
   }
 }
 
@@ -137,6 +145,7 @@ const RETURNS_TO_APP: ReadonlySet<OnboardingExitReason> = new Set([
   "completed_cloud_gate_continue",
   "already_complete",
   "returning_user_heal",
+  "skipped_to_forge_console",
 ]);
 
 /**

@@ -255,6 +255,19 @@ func (e *InlineLoopExecutor) WithNodePathPrefix(prefix string) *InlineLoopExecut
 	return e
 }
 
+// toleratedScope is where the body node nodeID of iteration sits, scoped as
+// the iteration's steps are, for the failed attempt a tolerated failure
+// records (tolerate_failure.go).
+func (e *InlineLoopExecutor) toleratedScope(nodeID string, iteration int) toleratedScope {
+	return toleratedScope{
+		WorkflowID:    e.workflowID,
+		StepID:        nodeID,
+		NodePath:      joinNodePath(e.nodePath(), nodeID),
+		LoopNodeID:    e.loopID,
+		LoopIteration: iteration,
+	}
+}
+
 // nodePath is this loop node's own fully-qualified path, and the prefix its
 // body nodes compose against.
 func (e *InlineLoopExecutor) nodePath() string {
@@ -1599,11 +1612,21 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 					WithInvocationContract(nestedContract)
 
 				nestedOutput, err := nestedExecutor.Execute()
+				var toleratedLoop map[string]interface{}
 				if err != nil {
-					return nil, fmt.Errorf("nested loop %s failed: %w", step.Node.GetId(), err)
+					out, ok := toleratedFailure(step.Node, err)
+					if !ok {
+						return nil, fmt.Errorf("nested loop %s failed: %w", step.Node.GetId(), err)
+					}
+					logToleratedFailure(e.logger, step.Node.GetId(), err)
+					recordToleratedFailure(e.ctx, e.toleratedScope(step.Node.GetId(), e.iteration), err)
+					toleratedLoop = out
 				}
 
 				nestedOutputMap := model.ProtoLoopOutputToMap(nestedOutput)
+				if toleratedLoop != nil {
+					nestedOutputMap = toleratedLoop
+				}
 
 				// Store nested loop output
 				iterNodeOutputs[step.Node.GetId()] = nestedOutputMap
@@ -1776,25 +1799,34 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 
 				// Execute workflow inline
 				inlineOutput, err := inlineExecutor.Execute()
+				tolerated := false
 				if err != nil {
-					logFailure(e.logger, err, "[InlineLoop] Inline workflow execution failed",
-						"stepID", step.Node.GetId(),
-						"error", err,
-					)
-					// Propagate the error - let the loop handle retry/failure
-					return nil, fmt.Errorf("inline workflow %s failed: %w", step.Node.GetId(), err)
+					out, ok := toleratedFailure(step.Node, err)
+					if !ok {
+						logFailure(e.logger, err, "[InlineLoop] Inline workflow execution failed",
+							"stepID", step.Node.GetId(),
+							"error", err,
+						)
+						// Propagate the error - let the loop handle retry/failure
+						return nil, fmt.Errorf("inline workflow %s failed: %w", step.Node.GetId(), err)
+					}
+					logToleratedFailure(e.logger, step.Node.GetId(), err)
+					recordToleratedFailure(e.ctx, e.toleratedScope(step.Node.GetId(), e.iteration), err)
+					inlineOutput, tolerated = out, true
 				}
 
 				// Store output for edge routing
-				inlineOutput = publishWorkflowNodeOutputs(e.ctx, step.Node, inlineOutput)
+				if !tolerated {
+					inlineOutput = publishWorkflowNodeOutputs(e.ctx, step.Node, inlineOutput)
+				}
 				iterNodeOutputs[step.Node.GetId()] = inlineOutput
 
 				// Execute save_message if configured on the inline workflow node
 				// IMPORTANT: Use iterExecContext (the loop iteration's context), not childExecCtx,
 				// so that save_message saves to the loop's thread, not the forked child's thread.
 				// The save_message is declared on the node in the loop's inline workflow, so it
-				// should act in the loop's context.
-				if step.Node.GetSaveMessage() != nil {
+				// should act in the loop's context. Not for a tolerated failure.
+				if step.Node.GetSaveMessage() != nil && !tolerated {
 					_, err := ExecuteSaveMessageForNode(
 						e.ctx,
 						step.Node,

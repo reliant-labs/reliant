@@ -48,20 +48,39 @@ service RepoService {
 message Repo {
   string id = 1;
   string project_id = 2;
-  string name = 3;             // display name; defaults to dir basename
-  string relative_path = 4;    // path relative to project root; "" means project root itself
-  string remote_url = 5;       // remote.origin.url, "" if no remote
+  string name = 3; // display name; defaults to dir basename
+  string relative_path = 4; // path relative to project root; "" means project root itself
+  string remote_url = 5; // remote.origin.url, "" if no remote
   string created_at = 6;
   string updated_at = 7;
+  // forge_apps are the forge apps in this repo: one per forge.yaml a daemon
+  // found in it (depth <= 4 below the repo root), ordered by subpath. Read it
+  // with forge_apps_scanned_at. ListRepos fills it; DiscoverRepos does not.
+  repeated RepoForgeApp forge_apps = 8;
+  // forge_apps_scanned_at (RFC 3339) is when a daemon last finished scanning
+  // this repo for forge apps. Unset means unknown: no daemon has scanned it
+  // yet (one older than the scan never does), and forge_apps, if any, may be
+  // partial. Set with no forge_apps: the repo has no forge app.
+  optional string forge_apps_scanned_at = 9;
+}
+
+// RepoForgeApp is one forge app found in a repo: a forge.yaml and the `name`
+// it declares, which is the app's name in the project's org.
+message RepoForgeApp {
+  // name is forge.yaml's `name`.
+  string name = 1;
+  // subpath is the forge.yaml's directory relative to the repo root,
+  // "/"-separated; "" is the repo root itself.
+  string subpath = 2;
 }
 
 message DiscoverReposRequest {
   string project_id = 1;
-  int32 max_depth = 2;  // default 2; how many dirs deep to scan
+  int32 max_depth = 2; // default 2; how many dirs deep to scan
 }
 
 message DiscoverReposResponse {
-  repeated Repo discovered = 1;  // repos found on disk (not yet persisted)
+  repeated Repo discovered = 1; // repos found on disk (not yet persisted)
   // truncated is set when the machine's scan stopped before covering the
   // project (its entry budget or deadline): discovered is then what it found
   // until then, and truncated_reason says why ("it ran out of time"). Show the
@@ -80,8 +99,8 @@ message ListReposResponse {
 
 message AddRepoRequest {
   string project_id = 1;
-  string relative_path = 2;     // required; "" means project root
-  optional string name = 3;     // defaults to basename of relative_path
+  string relative_path = 2; // required; "" means project root
+  optional string name = 3; // defaults to basename of relative_path
 }
 
 message AddRepoResponse {
@@ -104,7 +123,7 @@ message GetRepoGitInfoResponse {
   string repo_id = 1;
   string current_branch = 2;
   bool has_changes = 3;
-  string status = 4;            // "clean" or "dirty"
+  string status = 4; // "clean" or "dirty"
   repeated string staged_files = 5;
   repeated string unstaged_files = 6;
   repeated string untracked_files = 7;

@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=8e1cb0a3c402d8f52d8c79b7005af20694a9421e03f491e347020cfc64a9b1f6
+// forge:hash=eac5c97d939a4591e5d5066b0ddf7a126acffb34b8f73b32297cc6b156dae321
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -58,8 +58,9 @@ type MockRepository struct {
 	GetProjectByRemoteURLAndUserFunc          func(context.Context, string, string) (*db.Project, error)
 	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
 	UpdateProjectFunc                         func(context.Context, *db.Project, string) error
-	ListMachinePoolsForUserFunc               func(context.Context, string) ([]*db.MachinePool, error)
 	ListReposByProjectFunc                    func(context.Context, string) ([]*core.Repo, error)
+	SetRepoForgeAppsFunc                      func(context.Context, string, []core.RepoForgeApp, bool) error
+	ListMachinePoolsForUserFunc               func(context.Context, string) ([]*db.MachinePool, error)
 	UpsertQueuedProjectDaemonFunc             func(context.Context, string, string, string, *string, string) error
 	ListDaemonsByUserIDFunc                   func(context.Context, string) ([]*db.Daemon, error)
 }
@@ -334,15 +335,6 @@ func (m *MockRepository) UpdateProject(ctx context.Context, project *db.Project,
 	return contractkit.MockNotSet("MockRepository", "UpdateProject")
 }
 
-// ListMachinePoolsForUser records the call and delegates to ListMachinePoolsForUserFunc when set.
-func (m *MockRepository) ListMachinePoolsForUser(ctx context.Context, userID string) ([]*db.MachinePool, error) {
-	m.Recorder.Record("ListMachinePoolsForUser", ctx, userID)
-	if m.ListMachinePoolsForUserFunc != nil {
-		return m.ListMachinePoolsForUserFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListMachinePoolsForUser")
-}
-
 // ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
 func (m *MockRepository) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
 	m.Recorder.Record("ListReposByProject", ctx, projectID)
@@ -350,6 +342,24 @@ func (m *MockRepository) ListReposByProject(ctx context.Context, projectID strin
 		return m.ListReposByProjectFunc(ctx, projectID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListReposByProject")
+}
+
+// SetRepoForgeApps records the call and delegates to SetRepoForgeAppsFunc when set.
+func (m *MockRepository) SetRepoForgeApps(ctx context.Context, repoID string, apps []core.RepoForgeApp, complete bool) error {
+	m.Recorder.Record("SetRepoForgeApps", ctx, repoID, apps, complete)
+	if m.SetRepoForgeAppsFunc != nil {
+		return m.SetRepoForgeAppsFunc(ctx, repoID, apps, complete)
+	}
+	return contractkit.MockNotSet("MockRepository", "SetRepoForgeApps")
+}
+
+// ListMachinePoolsForUser records the call and delegates to ListMachinePoolsForUserFunc when set.
+func (m *MockRepository) ListMachinePoolsForUser(ctx context.Context, userID string) ([]*db.MachinePool, error) {
+	m.Recorder.Record("ListMachinePoolsForUser", ctx, userID)
+	if m.ListMachinePoolsForUserFunc != nil {
+		return m.ListMachinePoolsForUserFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListMachinePoolsForUser")
 }
 
 // UpsertQueuedProjectDaemon records the call and delegates to UpsertQueuedProjectDaemonFunc when set.
@@ -374,7 +384,7 @@ func (m *MockRepository) ListDaemonsByUserID(ctx context.Context, userID string)
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockProjectReconcileStore
-// forge:hash=3a5bb5cd942c7aec59e6d25a754f575862187e3329c728dd6746bc40721a59de
+// forge:hash=acaae450c299217af0a2e7d750056e5a72b97c850907b9c4e976e042a42efbcf
 
 // MockProjectReconcileStore is a test mock for the ProjectReconcileStore interface.
 //
@@ -393,6 +403,8 @@ type MockProjectReconcileStore struct {
 	GetProjectByRemoteURLAndUserFunc          func(context.Context, string, string) (*db.Project, error)
 	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
 	UpdateProjectFunc                         func(context.Context, *db.Project, string) error
+	ListReposByProjectFunc                    func(context.Context, string) ([]*core.Repo, error)
+	SetRepoForgeAppsFunc                      func(context.Context, string, []core.RepoForgeApp, bool) error
 }
 
 // ListProjects records the call and delegates to ListProjectsFunc when set.
@@ -474,6 +486,24 @@ func (m *MockProjectReconcileStore) UpdateProject(ctx context.Context, project *
 		return m.UpdateProjectFunc(ctx, project, userID)
 	}
 	return contractkit.MockNotSet("MockProjectReconcileStore", "UpdateProject")
+}
+
+// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
+func (m *MockProjectReconcileStore) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	m.Recorder.Record("ListReposByProject", ctx, projectID)
+	if m.ListReposByProjectFunc != nil {
+		return m.ListReposByProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ListReposByProject")
+}
+
+// SetRepoForgeApps records the call and delegates to SetRepoForgeAppsFunc when set.
+func (m *MockProjectReconcileStore) SetRepoForgeApps(ctx context.Context, repoID string, apps []core.RepoForgeApp, complete bool) error {
+	m.Recorder.Record("SetRepoForgeApps", ctx, repoID, apps, complete)
+	if m.SetRepoForgeAppsFunc != nil {
+		return m.SetRepoForgeAppsFunc(ctx, repoID, apps, complete)
+	}
+	return contractkit.MockNotSet("MockProjectReconcileStore", "SetRepoForgeApps")
 }
 
 // Compile-time check.

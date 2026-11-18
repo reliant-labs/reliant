@@ -81,6 +81,14 @@ type EventFirer struct {
 	wake      *capacityWake
 	pools     Placer
 	pause     *AutoPause
+	checks    CheckOpener
+}
+
+// WithChecks lets the firer open the GitHub check a workflow's `check:`
+// block declares (workflowcheck). Without it, no firing opens one.
+func (f *EventFirer) WithChecks(c CheckOpener) *EventFirer {
+	f.checks = c
+	return f
 }
 
 // WithAutoPause lets the firer pause a trigger whose creator left its org
@@ -221,6 +229,12 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if def != nil {
 		// The run loads the definition this fire recorded (FiringDefinition).
 		spec.CatalogPin = def.CatalogPin
+	}
+	// The workflow's GitHub check is opened before the run launches or waits
+	// for capacity, so a queued firing already shows on GitHub. Idempotent:
+	// a retried or redriven fire finds the check it opened.
+	if err := openCheck(ctx, f.checks, workflows, f.repo, trigger, decl, ev); err != nil {
+		return nil, err
 	}
 	policy, err := capacityPolicy(ctx, workflows, trigger)
 	if err != nil {

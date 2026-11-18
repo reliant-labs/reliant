@@ -13,6 +13,7 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -139,6 +140,55 @@ func TestExecuteNeverResendsUncertainMutation(t *testing.T) {
 		return nil
 	})
 	require.EqualValues(t, 1, calls.Load())
+}
+
+// The controller's X-Hosted-Refusal tells a user's missing or revoked secret
+// from a store outage (control-plane#2765). The former is a user error that
+// says to re-save the secret; an outage, an unknown value and an old
+// controller's missing header keep today's server-fault refusal.
+func TestExecuteSecretRefusalClass(t *testing.T) {
+	const generic = "hosted HTTP controller refused execution; request will not be repeated"
+	for _, tc := range []struct {
+		name, header string
+		status       int
+		user         bool
+	}{
+		{"not found", "secret_not_found", http.StatusForbidden, true},
+		{"denied", "secret_denied", http.StatusForbidden, true},
+		{"store outage", "secret_unavailable", http.StatusForbidden, false},
+		{"old controller", "", http.StatusForbidden, false},
+		{"unknown value", "secret_other", http.StatusForbidden, false},
+		{"not a 403", "secret_not_found", http.StatusServiceUnavailable, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if tc.header != "" {
+					w.Header().Set("X-Hosted-Refusal", tc.header)
+				}
+				http.Error(w, "hosted HTTP use denied or unavailable", tc.status)
+			}))
+			defer server.Close()
+			c := newTestClient(t, &memoryStore{}, server.URL)
+			actionTest(t, "Action", func(ctx context.Context) error {
+				_, err := c.ExecuteAction(ctx, activity.GetInfo(ctx).WorkflowExecution.ID, "node", "grant-1", sampleRequest)
+				require.Error(t, err)
+				var refused *SecretRefusedError
+				if tc.user {
+					require.ErrorAs(t, err, &refused)
+					require.Equal(t, tc.header, refused.Refusal)
+					require.Equal(t, svcerr.ClassUser, svcerr.Classify(err))
+					require.Contains(t, err.Error(), "grant-1")
+					require.Contains(t, err.Error(), "re-save it")
+					require.Equal(t, err.Error(), refused.PublicRefusal())
+				} else {
+					require.False(t, errors.As(err, &refused))
+					require.Equal(t, svcerr.ClassServer, svcerr.Classify(err))
+					require.EqualError(t, err, generic)
+				}
+				return nil
+			})
+		})
+	}
 }
 
 func TestExecuteRedirectRefusedAndNativeResult(t *testing.T) {

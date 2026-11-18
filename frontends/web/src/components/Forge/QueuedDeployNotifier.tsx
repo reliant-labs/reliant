@@ -52,11 +52,13 @@ export function QueuedDeployNotifier() {
 
   // Keep every watched project's Live reading fresh — slowly while its deploy
   // waits on a person, quickly once it is on its way out.
+  // Each in the org it was read in, not the tab's current one: a deploy seen
+  // queued in one org still settles after the tab moved to another.
   useQueries({
-    queries: projects.map((project) => ({
-      ...liveViewQuery(project),
-      enabled: hasLiveControlPlane(),
-      refetchInterval: watchPollInterval(watched, project),
+    queries: projects.map(({ orgId, forgeProject }) => ({
+      ...liveViewQuery(forgeProject, orgId || null),
+      enabled: hasLiveControlPlane() && forgeProject !== "",
+      refetchInterval: watchPollInterval(watched, forgeProject, orgId),
     })),
   });
 
@@ -64,12 +66,14 @@ export function QueuedDeployNotifier() {
     const cache = queryClient.getQueryCache();
     const observe = (query: Query) => {
       if (!isLiveViewKey(query.queryKey)) return;
-      const project = String(query.queryKey[LIVE_VIEW_PREFIX.length] ?? "");
+      // forgeCloudKeys.liveView(orgId, project): the org, then the project.
+      const orgId = String(query.queryKey[LIVE_VIEW_PREFIX.length] ?? "");
+      const project = String(query.queryKey[LIVE_VIEW_PREFIX.length + 1] ?? "");
       const reading = query.state.data as LiveViewResult | undefined;
       // Only an ANSWER may be folded in: an unavailable reading lists no
       // environments, which would read as every watched one deleted.
       if (project === "" || !reading || reading.availability !== "available") return;
-      for (const settled of useQueuedDeployStore.getState().observe(project, reading.envs)) {
+      for (const settled of useQueuedDeployStore.getState().observe(project, reading.envs, orgId)) {
         notifySettled(settled, pathnameRef.current, () =>
           void navigateRef.current({
             href: withSearch(
@@ -115,7 +119,7 @@ export function notifySettled(settled: SettledDeploy, pathname: string, openEnvi
           ? `${release} is running. The deploy that was queued went out on its own.`
           : `${release} was released from the queue, but its rollout failed. Open the environment to see why.`,
       // One per environment: a later outcome replaces an unread earlier one.
-      tag: `forge-queued-deploy-${settled.deploy.envId}`,
+      tag: `forge-queued-deploy-${settled.deploy.orgId}-${settled.deploy.envId}`,
       onClick: () => {
         window.focus();
         openEnvironment();

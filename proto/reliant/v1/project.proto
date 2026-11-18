@@ -26,15 +26,15 @@ service ProjectService {
       }
     };
   }
-  
+
   // ListProjects lists all projects for the current user
   // forge:custom — scoped to the calling user's projects
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {}
-  
+
   // GetProject retrieves a project by ID
   // forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {}
-  
+
   // UpdateProject updates an existing project
   // forge:custom — a partial update the caller's ownership check gates
   rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {
@@ -49,9 +49,27 @@ service ProjectService {
       }
     };
   }
-  
-  // DeleteProject deletes a project
-  // forge:custom — the caller's ownership check gates the delete
+
+  // DeleteProject schedules a project's deletion with a 7-day restore window
+  // (control-plane docs/design/unified-shell-and-projects.md §11.3, D18).
+  // The project is hidden at once: it leaves every list (its chats, inbox
+  // items and automations too) and every read or write of it answers
+  // NOT_FOUND. Its enabled triggers are paused (paused_reason
+  // "project_deleted"). After delete_after it is purged: its chats, runs,
+  // triggers, workspaces, repos and settings are deleted, in batches, by a
+  // worker. Until then RestoreProject brings it back.
+  //
+  // Compatibility: before the restore window this rpc deleted at once, and
+  // an old client calling it now gets the scheduled delete. Its response
+  // still says success. A caller that needs the old, immediate delete calls
+  // PurgeProjectNow.
+  //
+  // Files on machines are kept unless remove_from_machines is set (D20).
+  // A repeated delete of a scheduled project keeps its first delete_after.
+  //
+  // The project's owner may delete it; so may an admin of its organization
+  // once the owner has left it (D19).
+  // forge:custom — schedules the delete; owner, or an org admin for a departed member's project
   rpc DeleteProject(DeleteProjectRequest) returns (DeleteProjectResponse) {
     option (forge.v1.method) = {
       activity: {
@@ -63,17 +81,61 @@ service ProjectService {
       }
     };
   }
-  
+
+  // RestoreProject cancels a project's scheduled deletion: the project shows
+  // again, and the triggers the delete paused (and only those) are turned
+  // back on. Whoever may delete the project may restore it. Once the purge
+  // has begun the project can no longer be restored (FAILED_PRECONDITION).
+  // Restoring a project that is not scheduled for deletion is a no-op.
+  rpc RestoreProject(RestoreProjectRequest) returns (RestoreProjectResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "restore"
+        target: {
+          kind: "project"
+          id: "project_id"
+          label: "response.project.name"
+        }
+      }
+    };
+  }
+
+  // PurgeProjectNow deletes a project immediately and irreversibly, scheduled
+  // or not: the path for a person who means it, and for anything that relied
+  // on DeleteProject deleting at once. Only the project's owner may, and
+  // confirm_name must be the project's name. The delete runs in batches; one
+  // that stops part way leaves the project hidden, and running it again (or
+  // the purge worker) finishes it.
+  rpc PurgeProjectNow(PurgeProjectNowRequest) returns (PurgeProjectNowResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "purge"
+        target: {
+          kind: "project"
+          id: "project_id"
+        }
+      }
+    };
+  }
+
+  // ListDeletedProjects lists the projects scheduled for deletion that the
+  // caller may restore ("Recently deleted"): their own, and those they
+  // deleted as an org admin. A project whose purge has begun is not listed,
+  // unless include_purging asks for the caller's own.
+  rpc ListDeletedProjects(ListDeletedProjectsRequest) returns (ListDeletedProjectsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   // TouchProject updates the project's last_active timestamp
   rpc TouchProject(TouchProjectRequest) returns (TouchProjectResponse) {
     option (forge.v1.method) = {
       activity: {none: "bumps last_active when the project is opened: recency for sorting, not a change to the project"}
     };
   }
-  
+
   // GetProjectMetadata returns detailed project metadata
   rpc GetProjectMetadata(GetProjectMetadataRequest) returns (GetProjectMetadataResponse) {}
-  
+
   // UpdateProjectMetadata updates project metadata
   rpc UpdateProjectMetadata(UpdateProjectMetadataRequest) returns (UpdateProjectMetadataResponse) {
     option (forge.v1.method) = {
@@ -87,29 +149,29 @@ service ProjectService {
       }
     };
   }
-  
+
   // GetProjectGitInfo returns git repository information for a project
   rpc GetProjectGitInfo(GetProjectGitInfoRequest) returns (GetProjectGitInfoResponse) {}
-  
+
   // GetProjectGitBranches lists all git branches for a project
   rpc GetProjectGitBranches(GetProjectGitBranchesRequest) returns (GetProjectGitBranchesResponse) {}
-  
+
   // GetProjectInitStatus returns the initialization status of a project
   rpc GetProjectInitStatus(GetProjectInitStatusRequest) returns (GetProjectInitStatusResponse) {}
-  
+
   // InitializeProject initializes a project (no-op in V2, projects are initialized on creation)
   rpc InitializeProject(InitializeProjectRequest) returns (InitializeProjectResponse) {
     option (forge.v1.method) = {
       activity: {none: "a no-op kept for old clients: projects are initialized when they are created, so it only reports that"}
     };
   }
-  
+
   // GetProjectChanges returns recent git changes for a project
   rpc GetProjectChanges(GetProjectChangesRequest) returns (GetProjectChangesResponse) {}
-  
+
   // GetProjectPrompts retrieves project-scoped prompts
   rpc GetProjectPrompts(GetProjectPromptsRequest) returns (GetProjectPromptsResponse) {}
-  
+
   // SaveProjectPrompts saves project-scoped prompts
   rpc SaveProjectPrompts(SaveProjectPromptsRequest) returns (SaveProjectPromptsResponse) {
     option (forge.v1.method) = {
@@ -122,7 +184,7 @@ service ProjectService {
       }
     };
   }
-  
+
   // InitializeGitRepo initializes a git repository for a project
   rpc InitializeGitRepo(InitializeGitRepoRequest) returns (InitializeGitRepoResponse) {
     option (forge.v1.method) = {
@@ -187,7 +249,10 @@ service ProjectService {
           id: "response.project.id"
           label: "response.project.name"
         }
-        detail: ["daemon_id", "response.queued"]
+        detail: [
+          "daemon_id",
+          "response.queued"
+        ]
       }
     };
   }
@@ -252,7 +317,10 @@ service ProjectService {
           kind: "project"
           id: "project_id"
         }
-        detail: ["daemon_id", "path"]
+        detail: [
+          "daemon_id",
+          "path"
+        ]
       }
     };
   }
@@ -389,6 +457,15 @@ message Project {
   bool viewer_access = 16;
   // When the project was shared (RFC 3339); unset while private.
   optional string shared_at = 17;
+  // When the project's scheduled deletion purges it (RFC 3339); set only on
+  // a project scheduled for deletion, which only ListDeletedProjects lists.
+  optional string delete_after = 18;
+  // Who scheduled the deletion: the owner, or an org admin.
+  optional string deleted_by_user_id = 19;
+  // When a purge began deleting the project (RFC 3339); from then on it
+  // cannot be restored, only purged (PurgeProjectNow resumes it). Set only
+  // by ListDeletedProjects with include_purging.
+  optional string purge_started_at = 20;
 }
 
 // ProjectDaemon records that a daemon has a local clone of a project.
@@ -498,15 +575,100 @@ message UpdateProjectResponse {
   Project project = 1;
 }
 
-// DeleteProjectRequest deletes a project
+// DeleteProjectRequest schedules a project's deletion.
 message DeleteProjectRequest {
   string project_id = 1;
+  // Also remove the project's checkout from each machine that holds one
+  // (RemoveProjectFromDaemon on each), reported per machine in
+  // machine_removals. A machine that is offline, or refuses (a workspace
+  // still open on it), keeps its copy; the delete is scheduled either way.
+  // Off by default: a checkout can hold uncommitted work (D20). Only the
+  // project's owner may set it: the machines are theirs.
+  bool remove_from_machines = 2;
 }
 
-// DeleteProjectResponse confirms deletion
+// DeleteProjectResponse confirms the scheduled deletion.
 message DeleteProjectResponse {
   bool success = 1;
   string message = 2;
+  // When the project will be purged (RFC 3339); RestoreProject brings it
+  // back until then. Unset from a server that predates the restore window,
+  // which deleted the project at once.
+  optional string delete_after = 3;
+  // One entry per machine that held a checkout, when remove_from_machines
+  // was set.
+  repeated ProjectMachineRemoval machine_removals = 4;
+}
+
+// ProjectMachineRemovalStatus is how removing a deleted project's checkout
+// from one machine ended.
+enum ProjectMachineRemovalStatus {
+  PROJECT_MACHINE_REMOVAL_STATUS_UNSPECIFIED = 0;
+  // The checkout was removed from the machine.
+  PROJECT_MACHINE_REMOVAL_STATUS_REMOVED = 1;
+  // The machine is offline, so it keeps its copy.
+  PROJECT_MACHINE_REMOVAL_STATUS_OFFLINE = 2;
+  // The machine refused or the remove failed; message says why. It keeps
+  // its copy.
+  PROJECT_MACHINE_REMOVAL_STATUS_FAILED = 3;
+}
+
+// ProjectMachineRemoval is the outcome of removing a project's checkout from
+// one machine.
+message ProjectMachineRemoval {
+  string daemon_id = 1;
+  // The machine's display name.
+  string machine_name = 2;
+  // The checkout's path on that machine.
+  string path = 3;
+  ProjectMachineRemovalStatus status = 4;
+  // Why, when the status is not REMOVED.
+  string message = 5;
+}
+
+// RestoreProjectRequest cancels a project's scheduled deletion.
+message RestoreProjectRequest {
+  string project_id = 1;
+}
+
+// RestoreProjectResponse is the restored project.
+message RestoreProjectResponse {
+  Project project = 1;
+  // How many triggers the delete had paused that were turned back on.
+  int32 triggers_resumed = 2;
+}
+
+// PurgeProjectNowRequest deletes a project immediately.
+message PurgeProjectNowRequest {
+  string project_id = 1;
+  // The project's name, typed by the person: the purge is refused
+  // (INVALID_ARGUMENT) unless it matches.
+  string confirm_name = 2;
+  // As DeleteProjectRequest.remove_from_machines, done before the purge.
+  bool remove_from_machines = 3;
+}
+
+// PurgeProjectNowResponse confirms the purge.
+message PurgeProjectNowResponse {
+  repeated ProjectMachineRemoval machine_removals = 1;
+}
+
+// ListDeletedProjectsRequest lists the caller's restorable projects.
+message ListDeletedProjectsRequest {
+  // Only this organization's (as ListProjectsRequest.org_id). Unset lists
+  // every org's.
+  optional string org_id = 1;
+  // Also list the caller's own projects whose purge has begun (they carry
+  // purge_started_at): nothing can restore them, but PurgeProjectNow
+  // finishes one a purge left part way. An org admin's are never listed
+  // this way: only the owner purges.
+  bool include_purging = 2;
+}
+
+// ListDeletedProjectsResponse lists projects scheduled for deletion, soonest
+// purge first. Each carries delete_after and deleted_by_user_id.
+message ListDeletedProjectsResponse {
+  repeated Project projects = 1;
 }
 
 // TouchProjectRequest updates the project's last_active timestamp
@@ -565,14 +727,14 @@ message GetProjectGitInfoResponse {
   bool is_git_repo = 2;
   string current_branch = 3;
   bool has_changes = 4;
-  string status = 5;  // "clean" or "dirty"
+  string status = 5; // "clean" or "dirty"
   repeated string staged_files = 6;
   repeated string unstaged_files = 7;
   repeated string untracked_files = 8;
   int32 ahead = 9;
   int32 behind = 10;
   string remote_url = 11;
-  string message = 12;  // Used when not a git repo
+  string message = 12; // Used when not a git repo
 }
 
 // GitBranch represents a git branch
@@ -1036,7 +1198,10 @@ message MoveProjectToOrgRequest {
   // dialog, after the project already left it, is refused (org_changed).
   string expected_from_org_id = 3 [(buf.validate.field).string.min_len = 1];
   // The client's idempotency key: a repeat is the same move.
-  string request_key = 4 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
+  string request_key = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
 }
 
 message MoveProjectToOrgResponse {

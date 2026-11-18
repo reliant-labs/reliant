@@ -273,6 +273,21 @@ func newTriggerCreateCmd() *cobra.Command {
 	return cmd
 }
 
+// keepIdentityOf defaults an update's name and project to the trigger's own,
+// so an update that does not mean to rename or move a trigger does neither.
+// Without it an update with --workflow and no --name renamed the trigger to
+// its workflow's name (create's default), and the next `trigger fire <name>`
+// found nothing by its old name.
+func (f *triggerDefinitionFlags) keepIdentityOf(existing *reliantv1.Trigger) {
+	if f.name == "" {
+		f.name = existing.GetName()
+	}
+	// Updating a schedule from another directory does not relocate it.
+	if f.projectID == "" && f.projectPath == "" {
+		f.projectID = existing.GetProjectId()
+	}
+}
+
 func newTriggerUpdateCmd() *cobra.Command {
 	var flags triggerDefinitionFlags
 	var orgAccountsOnly bool
@@ -283,8 +298,10 @@ func newTriggerUpdateCmd() *cobra.Command {
 		Long: `Replace a trigger's definition.
 
 This is a full replacement, not a patch: every field is written as given, so
-flags you omit are written as their zero value. The exception is enabled,
-which is left as it is unless you pass --disabled or --disabled=false.
+flags you omit are written as their zero value. The exceptions are enabled,
+which is left as it is unless you pass --disabled or --disabled=false, and the
+trigger's name and project, which are kept unless you pass --name or
+--project-id / --project.
 
 --org-accounts-only makes the trigger's runs spend only its organization's AI
 accounts, never your own. Given alone, it changes only that and keeps the rest
@@ -301,11 +318,7 @@ your own accounts is done in the app.`,
 			if err != nil {
 				return conn.annotate(err)
 			}
-			// Default the project to the one the trigger already runs in, so
-			// updating a schedule from another directory does not relocate it.
-			if flags.projectID == "" && flags.projectPath == "" {
-				flags.projectID = existing.GetProjectId()
-			}
+			flags.keepIdentityOf(existing)
 			def, err := updateDefinition(cmd, orgAccountsOnly, existing, func() (*reliantv1.TriggerDefinition, error) {
 				return flags.definition(cmd.Context(), cmd, conn, true)
 			})

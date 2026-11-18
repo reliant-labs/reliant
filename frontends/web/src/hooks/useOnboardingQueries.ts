@@ -1,4 +1,5 @@
-import { computeEligibilityQueryKey } from './computeEligibilityKey';
+import { computeEligibilityQuery, computeEligibilityQueryKey } from './computeEligibilityKey';
+import { useOrgScope } from '@/lib/orgScope';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConnectError, Code } from '@connectrpc/connect';
 import { DAEMON_LIST_FALLBACK_POLL_MS } from '@/hooks/useDaemonStatus';
@@ -10,10 +11,7 @@ import {
   deleteDaemon,
   type CreateDaemonArgs,
 } from '@/services/controlPlane/daemon';
-import {
-  getComputeEligibility,
-  ComputeIneligibleReason,
-} from '@/services/controlPlane/billing';
+import { ComputeIneligibleReason } from '@/services/controlPlane/billing';
 import { isAlreadyResumedError } from '@/lib/daemon-resume';
 import { ENTITLEMENT_REASONS, hasErrorReason } from '@/lib/errorReasons';
 import { gitService } from '@/services/controlPlane/git';
@@ -119,14 +117,13 @@ const INELIGIBLE_REASON_COPY: Partial<Record<ComputeIneligibleReason, string>> =
 
 export function useCloudEligibility() {
   const { data: user, isLoading: userLoading } = useCurrentUser();
+  const org = useOrgScope();
   const {
     data: computeEligibility,
     isLoading: eligibilityLoading,
     refetch,
   } = useQuery({
-    queryKey: computeEligibilityQueryKey,
-    queryFn: () => getComputeEligibility(),
-    staleTime: 30_000,
+    ...computeEligibilityQuery(org),
     // A focus refetch flips isLoading back to true mid-click and re-disables
     // the Start cloud daemon button, eating the first click — same reason
     // useCurrentUser above disables it.

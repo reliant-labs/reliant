@@ -9,10 +9,14 @@ import (
 	"testing"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/openai/openai-go/v3"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/errclass"
+	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -164,4 +168,80 @@ func TestCredentialRejection_MarksARejectedOrgManagedKeyForReminting(t *testing.
 	uc.Account = &orgless
 	assert.NoError(t, env.routing.credentialRejection(ctx, rejectedKey(), uc))
 	assert.Equal(t, []string{"managed-org-1"}, marker.marked, "the org-less key is its healer's")
+}
+
+// refreshedStillRejected is a 401 the Claude driver marked as surviving its
+// own refresh (llm.MarkOAuthRefreshedStillRejected).
+func refreshedStillRejected() error {
+	req, _ := http.NewRequest(http.MethodPost, "https://api.anthropic.com/v1/messages", nil)
+	resp := &http.Response{StatusCode: 401, Header: http.Header{}}
+	llm.MarkOAuthRefreshedStillRejected(resp)
+	return fmt.Errorf("stream llm response: %w", &anthropic.Error{StatusCode: 401, Request: req, Response: resp})
+}
+
+func resolveOAuthSession(t *testing.T, acct models.AccountConfig, driver models.DriverID) (*routingEnv, usageLimitContext) {
+	t.Helper()
+	withAvailableDrivers(t, driversWith(acct))
+	env := newRoutingEnv(t)
+	env.routing.Credentials = &markerFake{store: env.store}
+	res, err := resolveLLMCall(context.Background(), nil, llmCallSpec{
+		UserID: "u1", Attended: true, SessionID: "s", ThreadID: "t",
+		Selector: models.ModelSelector{ID: routeModel + "@" + string(driver)}, Routing: env.routing,
+	})
+	require.NoError(t, err)
+	return env, usageLimitContext{Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: driver, ModelID: routeModel, Account: res.Account}
+}
+
+// reliant#2833: a Claude subscription's 401 that the driver refreshed and was
+// still refused is the user's to fix. It is a user-class error that says to
+// reconnect the account, and keeps the provider's error on its chain.
+func TestProviderFailure_OAuthSessionRefreshedAndStillRejectedIsTheUsersToReconnect(t *testing.T) {
+	sub := claudeAccount("a", "alice@acme.com", 0)
+	sub.RefreshToken = "refresh"
+	env, uc := resolveOAuthSession(t, sub, "claude")
+
+	got := env.routing.providerFailure(context.Background(), refreshedStillRejected(), uc)
+	var rejected *OAuthSessionRejectedError
+	require.ErrorAs(t, got, &rejected)
+	assert.Contains(t, got.Error(), "reconnect Claude")
+	assert.Contains(t, got.Error(), "alice@acme.com")
+	assert.Equal(t, svcerr.ClassUser, errclass.Classify(got), "not an ERROR issue")
+	var anth *anthropic.Error
+	assert.ErrorAs(t, got, &anth, "the provider's error stays on the chain")
+
+	apiKey := uc
+	acct := *uc.Account
+	acct.Config.RefreshToken = ""
+	apiKey.Account = &acct
+	assert.Nil(t, oauthSessionRejection(refreshedStillRejected(), apiKey), "API keys are credentialRejection's")
+	assert.Nil(t, oauthSessionRejection(refreshedStillRejected(), usageLimitContext{}), "an unrouted call has no session to judge")
+	assert.Nil(t, oauthSessionRejection(errors.New("dial tcp: connection refused"), uc), "not a credential verdict")
+}
+
+// Review B1 on reliant#2875: only a refusal the driver marked as surviving its
+// refresh is reclassified. An OAuth session's 401 that carries no mark — any
+// non-Claude OAuth driver (Codex here), or a Claude 401 its recovery never
+// refreshed — comes back from providerFailure exactly as it did before.
+func TestProviderFailure_UnmarkedOAuthRejectionKeepsItsHandling(t *testing.T) {
+	codex := models.AccountConfig{
+		DriverConfig: models.DriverConfig{DriverID: "codex", AccountID: "cx", AccountEmail: "c@x.com", Enabled: true, APIKey: "k", RefreshToken: "refresh"},
+		Status:       models.AccountAvailable,
+	}
+	withAvailableDrivers(t, driversWith(codex))
+	env := newRoutingEnv(t)
+	env.routing.Credentials = &markerFake{store: env.store}
+	uc := usageLimitContext{Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: "codex", ModelID: "gpt-6",
+		Account: &routedAccount{Config: codex, Accounts: []models.AccountConfig{codex}, ModelID: "gpt-6"}}
+	codexErr := fmt.Errorf("stream llm response: %w", &openai.Error{StatusCode: 401, Response: &http.Response{StatusCode: 401, Header: http.Header{}}})
+	got := env.routing.providerFailure(context.Background(), codexErr, uc)
+	assert.Same(t, codexErr, got, "a Codex OAuth 401 is returned unchanged, as before")
+	var rejected *OAuthSessionRejectedError
+	assert.False(t, errors.As(got, &rejected))
+
+	sub := claudeAccount("a", "alice@acme.com", 0)
+	sub.RefreshToken = "refresh"
+	env, uc = resolveOAuthSession(t, sub, "claude")
+	unmarked := rejectedKey()
+	assert.Same(t, unmarked, env.routing.providerFailure(context.Background(), unmarked, uc),
+		"a Claude 401 its recovery did not refresh keeps its old handling")
 }

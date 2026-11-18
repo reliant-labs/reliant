@@ -88,7 +88,10 @@ export function TimeSeriesChart({ panel, data, unit, keys, compare, bands, onDri
   const ranked = useMemo(() => rankEntries(entries, ranking), [entries, ranking]);
   // A host that asks for calmer charts (charts/chartDensity) draws fewer series before "Show all".
   const density = useChartDensity();
-  const topN = density.maxSeries ? Math.min(topNOf(panel), density.maxSeries) : topNOf(panel);
+  // A panel that names its own topN (DAU / WAU / MAU, the four lifecycle
+  // classes) asked for exactly those series: the calmer limit does not cut
+  // them, or it hides the one that matters (Daily active is the smallest).
+  const topN = density.maxSeries && !panel.display?.topN ? Math.min(topNOf(panel), density.maxSeries) : topNOf(panel);
 
   const [showAll, setShowAll] = useState(false);
   const [sort, setSort] = useState<Stat | null>(null);
@@ -120,13 +123,13 @@ export function TimeSeriesChart({ panel, data, unit, keys, compare, bands, onDri
   }, [isolated, entries, shown]);
   const otherValues = useMemo(() => (rest.length && additivity.foldable ? sumSeries(rest, timestamps.length) : null), [rest, additivity.foldable, timestamps.length]);
   const otherErrorValues = useMemo(() => (restErrors.length ? sumSeries(restErrors, timestamps.length) : null), [restErrors, timestamps.length]);
-  // A calmer chart keeps "Other" in the legend, not on the plot: its lines are the ones that matter.
-  const drawOther = isolated.size === 0 && !density.maxSeries;
-
   const style = panel.display?.style;
   const barStyle = style === "bars";
   const areaStyle = style === "area";
   const stack = !!panel.display?.stack && (barStyle || areaStyle);
+  // A calmer chart keeps "Other" in the legend, not on the plot: its lines are the ones that matter.
+  // Except a stack, whose top edge is the total: without "Other" it would draw a smaller total than there is.
+  const drawOther = isolated.size === 0 && (!density.maxSeries || stack);
 
   const previous = compare?.query.data?.series;
   const compareLabel = compare?.label;
@@ -164,7 +167,16 @@ export function TimeSeriesChart({ panel, data, unit, keys, compare, bands, onDri
 
   return (
     <div>
-      {density.headline && !compact && <ChartHeadline entries={ranked} foldable={additivity.foldable} unit={unit} />}
+      {density.headline && !compact && (
+        <ChartHeadline
+          entries={ranked}
+          foldable={additivity.foldable}
+          unit={unit}
+          bucketSeconds={bucketSeconds}
+          // The last bucket is still filling when it ends after the window does (this week, today).
+          partialLast={!!bucketSeconds && !!data.window && timestamps.length > 1 && (timestamps[timestamps.length - 1]! + bucketSeconds) * 1000 > data.window.endMs + 1000}
+        />
+      )}
       <UPlotChart
         height={height}
         timestamps={timestamps}
@@ -234,21 +246,44 @@ export function TimeSeriesChart({ panel, data, unit, keys, compare, bands, onDri
  * series' latest value. Only where a host asked for it (chartDensity).
  */
 function ChartHeadline({
-  entries,
+  entries: all,
   foldable,
   unit,
+  partialLast = false,
+  bucketSeconds,
 }: {
-  entries: readonly { label: string; stats: { last: number | null; avg: number | null } }[];
+  entries: readonly { label: string; values: readonly (number | null)[]; stats: { last: number | null; avg: number | null } }[];
   foldable: boolean;
   unit: Unit;
+  /** The last bucket is still filling (this week, today): the headline reads the last whole one. */
+  partialLast?: boolean;
+  bucketSeconds?: number;
 }) {
+  // A series below zero (churn drawn under the axis) is not part of a total.
+  const entries = foldable ? all.filter((e) => e.values.some((v) => (v ?? 0) > 0)) : all;
   if (entries.length === 0) return null;
+  const at = (e: (typeof entries)[number]) => {
+    if (!partialLast) return e.stats.last;
+    const whole = e.values.slice(0, -1).filter((v): v is number => v !== null);
+    return whole.length ? whole[whole.length - 1] : e.stats.last;
+  };
+  const avgOf = (e: (typeof entries)[number]) => {
+    if (!partialLast) return e.stats.avg;
+    const whole = e.values.slice(0, -1).filter((v): v is number => v !== null);
+    return whole.length ? whole.reduce((a, v) => a + v, 0) / whole.length : e.stats.avg;
+  };
   const sum = (pick: (e: (typeof entries)[number]) => number | null) => entries.reduce((a, e) => a + (pick(e) ?? 0), 0);
   const lead = entries[0];
-  const now = foldable && entries.length > 1 ? sum((e) => e.stats.last) : lead.stats.last;
-  const avg = foldable && entries.length > 1 ? sum((e) => e.stats.avg) : lead.stats.avg;
+  const now = foldable && entries.length > 1 ? sum(at) : at(lead);
+  const avg = foldable && entries.length > 1 ? sum(avgOf) : avgOf(lead);
   if (now === null) return null;
-  const subject = foldable && entries.length > 1 ? `All ${entries.length} series together` : entries.length > 1 ? `${lead.label}, the highest` : "Latest value";
+  const short = (label: string) => label.replace(/ — .*$/, "");
+  const together = entries.length <= 3 ? `${entries.map((e) => short(e.label)).join(entries.length === 2 ? " and " : ", ")} together` : `All ${entries.length} series together`;
+  const period = partialLast ? (bucketSeconds && bucketSeconds >= 7 * 86400 ? "in the last full week" : bucketSeconds && bucketSeconds >= 86400 ? "on the last full day" : "in the last full bucket") : "";
+  const base = foldable && entries.length > 1 ? together : entries.length > 1 ? `${short(lead.label)}, the highest` : "Latest value";
+  const subject = period ? `${base}, ${period}` : base;
+  // Counts read as whole numbers ("659", not "659.17").
+  const show = (v: number) => formatValue(unit === "" || unit === "count" ? Math.round(v) : v, unit);
   // With no average to compare against (nothing earlier in the window), the subject says it all.
   if (avg === null || avg === 0) {
     return (
@@ -260,9 +295,9 @@ function ChartHeadline({
   }
   const compared =
     now > avg * 1.25
-      ? `above its average of ${formatValue(avg, unit)} for this window`
+      ? `above its average of ${show(avg)} for this window`
       : now < avg * 0.75
-        ? `below its average of ${formatValue(avg, unit)} for this window`
+        ? `below its average of ${show(avg)} for this window`
         : "about the same as its average for this window";
   return (
     <div className="mb-2" data-testid="chart-headline">

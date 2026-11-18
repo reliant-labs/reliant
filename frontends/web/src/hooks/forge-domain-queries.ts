@@ -21,7 +21,7 @@
  * but live and conflicted domains is silent.
  */
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
@@ -37,13 +37,15 @@ import {
   type DomainAvailability,
   type ForgeDomain,
 } from "@/services/forge/domains";
+import { orgQueryEnabled, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 
 /** How often to re-read while a domain is still converging. */
 const DOMAIN_POLL_MS = 15_000;
 
 export const domainKeys = {
   all: ["forge", "domains"] as const,
-  list: () => [...domainKeys.all, "list"] as const,
+  /** One org's domains ("" for none named): a domain is an org resource. */
+  list: (orgId: string | null) => [...domainKeys.all, "list", orgId ?? ""] as const,
 };
 
 /**
@@ -80,33 +82,40 @@ export interface DomainsState {
  * that may read domains, has not hit a fault.
  */
 export function useForgeDomains({ enabled = true }: { enabled?: boolean } = {}) {
-  return useQuery<DomainsState>({
-    queryKey: domainKeys.list(),
-    // An environment page asks only while a tab that shows domains is open.
-    enabled,
-    queryFn: async () => {
-      if (!hasControlPlane()) {
-        return { availability: "no-control-plane" as const, domains: [], detail: "" };
-      }
-      try {
-        return { availability: "available" as const, domains: await listDomains(), detail: "" };
-      } catch (err) {
-        return {
-          availability: domainAvailabilityFromError(err),
-          domains: [],
-          detail: err instanceof ConnectError ? err.rawMessage || err.message : "",
-        };
-      }
-    },
-    // Only while something can still move on its own. A list of live and
-    // conflicted domains is a settled list, and polling it would be noise.
-    refetchInterval: (query) =>
-      (query.state.data?.domains ?? []).some((domain) => domainIsConverging(domain.state))
-        ? DOMAIN_POLL_MS
-        : false,
-    staleTime: 5_000,
-    retry: domainRetry,
-  });
+  // The tab's org: read in it, keyed by it, and not before it is known (lib/orgScope).
+  const org = useOrgScope();
+  return useQuery<DomainsState>(
+    withOrgFailure(
+      queryOptions<DomainsState>({
+        queryKey: domainKeys.list(org.orgId),
+        // An environment page asks only while a tab that shows domains is open.
+        enabled: enabled && orgQueryEnabled(org),
+        queryFn: async () => {
+          if (!hasControlPlane()) {
+            return { availability: "no-control-plane" as const, domains: [], detail: "" };
+          }
+          try {
+            return { availability: "available" as const, domains: await listDomains(org.orgId), detail: "" };
+          } catch (err) {
+            return {
+              availability: domainAvailabilityFromError(err),
+              domains: [],
+              detail: err instanceof ConnectError ? err.rawMessage || err.message : "",
+            };
+          }
+        },
+        // Only while something can still move on its own. A list of live and
+        // conflicted domains is a settled list, and polling it would be noise.
+        refetchInterval: (query) =>
+          (query.state.data?.domains ?? []).some((domain) => domainIsConverging(domain.state))
+            ? DOMAIN_POLL_MS
+            : false,
+        staleTime: 5_000,
+        retry: domainRetry,
+      }),
+      org,
+    ),
+  );
 }
 
 /** Re-read the list. Every mutation ends here rather than writing the cache. */

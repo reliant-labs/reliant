@@ -24,6 +24,7 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
   const state = useQuery({
     queryKey: ["usage-billing", orgId],
     queryFn: () => getControlPlaneClient(BillingService).getCurrentUserUsageBilling({ orgId }),
+    enabled: !!orgId,
     staleTime: 10_000,
     refetchOnWindowFocus: true,
     // An older server cannot serve this RPC. Avoid automatic retries, but keep

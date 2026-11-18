@@ -326,6 +326,7 @@ type (
 	RunNodeExecution                         = sdk.RunNodeExecution
 	RunNowRequest                            = sdk.RunNowRequest
 	RunNowResponse                           = sdk.RunNowResponse
+	RunOutcome                               = sdk.RunOutcome
 	ScheduleSource                           = sdk.ScheduleSource
 	SearchChatsRequest                       = sdk.SearchChatsRequest
 	SearchChatsResponse                      = sdk.SearchChatsResponse
@@ -604,6 +605,10 @@ const (
 	RunDisplayState_RUN_DISPLAY_STATE_RUNNING                                  = sdk.RunDisplayState_RUN_DISPLAY_STATE_RUNNING
 	RunDisplayState_RUN_DISPLAY_STATE_UNSPECIFIED                              = sdk.RunDisplayState_RUN_DISPLAY_STATE_UNSPECIFIED
 	RunDisplayState_RUN_DISPLAY_STATE_WAITING_FOR_MACHINE                      = sdk.RunDisplayState_RUN_DISPLAY_STATE_WAITING_FOR_MACHINE
+	RunOutcome_RUN_OUTCOME_FAILED                                              = sdk.RunOutcome_RUN_OUTCOME_FAILED
+	RunOutcome_RUN_OUTCOME_FAILURE_HANDLED                                     = sdk.RunOutcome_RUN_OUTCOME_FAILURE_HANDLED
+	RunOutcome_RUN_OUTCOME_SUCCEEDED                                           = sdk.RunOutcome_RUN_OUTCOME_SUCCEEDED
+	RunOutcome_RUN_OUTCOME_UNSPECIFIED                                         = sdk.RunOutcome_RUN_OUTCOME_UNSPECIFIED
 	StreamingState_STREAMING_STATE_COMPLETE                                    = sdk.StreamingState_STREAMING_STATE_COMPLETE
 	StreamingState_STREAMING_STATE_FAILED                                      = sdk.StreamingState_STREAMING_STATE_FAILED
 	StreamingState_STREAMING_STATE_STREAMING                                   = sdk.StreamingState_STREAMING_STATE_STREAMING
@@ -755,6 +760,8 @@ var (
 	ResourceVisibility_value             = sdk.ResourceVisibility_value
 	RunDisplayState_name                 = sdk.RunDisplayState_name
 	RunDisplayState_value                = sdk.RunDisplayState_value
+	RunOutcome_name                      = sdk.RunOutcome_name
+	RunOutcome_value                     = sdk.RunOutcome_value
 	StreamingState_name                  = sdk.StreamingState_name
 	StreamingState_value                 = sdk.StreamingState_value
 	TerminalSessionEvent_EventType_name  = sdk.TerminalSessionEvent_EventType_name
