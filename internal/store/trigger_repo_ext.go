@@ -57,7 +57,9 @@ func InsertTrigger(ctx context.Context, db orm.Context, t *core.Trigger) error {
 	if err != nil {
 		return err
 	}
-	return CreateTrigger(ctx, db, row)
+	// A trigger in a project scheduled for deletion is refused
+	// (project_schedule.go).
+	return projectDeletedError(CreateTrigger(ctx, db, row))
 }
 
 // namedTrigger is a triggers row with the display names its reads join in.
@@ -262,7 +264,10 @@ func SetTriggerWebhookSecret(ctx context.Context, db orm.Context, id string, sea
 
 // writeTrigger writes the named columns of a trigger and stamps updated_at.
 func writeTrigger(ctx context.Context, db orm.Context, row *Trigger, what string, fields ...string) error {
-	err := UpdateTriggerMasked(ctx, db, row, fields, crud.NoReadBack())
+	err := projectDeletedError(UpdateTriggerMasked(ctx, db, row, fields, crud.NoReadBack()))
+	if errors.Is(err, core.ErrProjectScheduledForDeletion) {
+		return err
+	}
 	if errors.Is(err, svcerr.ErrNotFound) {
 		return core.ErrTriggerNotFound
 	}

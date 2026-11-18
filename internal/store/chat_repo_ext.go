@@ -676,6 +676,9 @@ func GetChatRow(ctx context.Context, db orm.Context, id string) (*core.ChatRow, 
 	if row.State != nil {
 		out.State = *row.State
 	}
+	if out.ProjectDeleted, err = projectScheduledForDeletion(ctx, db, out.ProjectID); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
