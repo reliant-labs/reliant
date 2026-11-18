@@ -2650,6 +2650,11 @@
               "name": "stop_reason",
               "kind": "enum",
               "type_name": "reliant.v1.WorkflowStopReason"
+            },
+            {
+              "name": "run_outcome",
+              "kind": "enum",
+              "type_name": "reliant.v1.RunOutcome"
             }
           ],
           "reliant.v1.TriggerHealth": [
@@ -2905,6 +2910,12 @@
             "RUN_DISPLAY_STATE_CANCELLED",
             "RUN_DISPLAY_STATE_WAITING_FOR_MACHINE"
           ],
+          "reliant.v1.RunOutcome": [
+            "RUN_OUTCOME_UNSPECIFIED",
+            "RUN_OUTCOME_SUCCEEDED",
+            "RUN_OUTCOME_FAILED",
+            "RUN_OUTCOME_FAILURE_HANDLED"
+          ],
           "reliant.v1.TriggerEventKind": [
             "TRIGGER_EVENT_KIND_UNSPECIFIED",
             "TRIGGER_EVENT_KIND_CHAT_START",
@@ -2974,6 +2985,12 @@
             7,
             8
           ],
+          "reliant.v1.RunOutcome": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.TriggerEventKind": [
             0,
             1,
@@ -3034,6 +3051,10 @@
           "reliant.v1.RunDisplayState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "RunDisplayState"
+          },
+          "reliant.v1.RunOutcome": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "RunOutcome"
           },
           "reliant.v1.TriggerEventKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -30417,6 +30438,11 @@
             {
               "name": "failure_detail",
               "kind": "string"
+            },
+            {
+              "name": "run_outcome",
+              "kind": "enum",
+              "type_name": "reliant.v1.RunOutcome"
             }
           ],
           "reliant.v1.RunNodeExecution": [
@@ -30659,6 +30685,12 @@
             "RUN_DISPLAY_STATE_CANCELLED",
             "RUN_DISPLAY_STATE_WAITING_FOR_MACHINE"
           ],
+          "reliant.v1.RunOutcome": [
+            "RUN_OUTCOME_UNSPECIFIED",
+            "RUN_OUTCOME_SUCCEEDED",
+            "RUN_OUTCOME_FAILED",
+            "RUN_OUTCOME_FAILURE_HANDLED"
+          ],
           "reliant.v1.UnlaunchedTriggerEventOutcome": [
             "UNLAUNCHED_TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
             "UNLAUNCHED_TRIGGER_EVENT_OUTCOME_SKIPPED",
@@ -30714,6 +30746,12 @@
             7,
             8
           ],
+          "reliant.v1.RunOutcome": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.UnlaunchedTriggerEventOutcome": [
             0,
             1,
@@ -30749,6 +30787,10 @@
           "reliant.v1.RunDisplayState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "RunDisplayState"
+          },
+          "reliant.v1.RunOutcome": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "RunOutcome"
           },
           "reliant.v1.UnlaunchedTriggerEventOutcome": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -43883,6 +43925,11 @@
               "name": "stop_reason",
               "kind": "enum",
               "type_name": "reliant.v1.WorkflowStopReason"
+            },
+            {
+              "name": "run_outcome",
+              "kind": "enum",
+              "type_name": "reliant.v1.RunOutcome"
             }
           ],
           "reliant.v1.TriggerFailure": [
@@ -44194,6 +44241,12 @@
             "RUN_DISPLAY_STATE_CANCELLED",
             "RUN_DISPLAY_STATE_WAITING_FOR_MACHINE"
           ],
+          "reliant.v1.RunOutcome": [
+            "RUN_OUTCOME_UNSPECIFIED",
+            "RUN_OUTCOME_SUCCEEDED",
+            "RUN_OUTCOME_FAILED",
+            "RUN_OUTCOME_FAILURE_HANDLED"
+          ],
           "reliant.v1.TriggerEventKind": [
             "TRIGGER_EVENT_KIND_UNSPECIFIED",
             "TRIGGER_EVENT_KIND_CHAT_START",
@@ -44273,6 +44326,12 @@
             7,
             8
           ],
+          "reliant.v1.RunOutcome": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.TriggerEventKind": [
             0,
             1,
@@ -44343,6 +44402,10 @@
           "reliant.v1.RunDisplayState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "RunDisplayState"
+          },
+          "reliant.v1.RunOutcome": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "RunOutcome"
           },
           "reliant.v1.TriggerEventKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
