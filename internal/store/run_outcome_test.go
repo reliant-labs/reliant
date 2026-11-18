@@ -3,6 +3,8 @@ package store_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,5 +100,59 @@ func TestFirstHandledNodeFailure(t *testing.T) {
 	}
 	if got == nil || got.Node != "post_failed" || got.Error != "channel_not_found" {
 		t.Fatalf("an action that reported is_error is a handled failure, newest first: %+v", got)
+	}
+}
+
+// reliant#2867: an agent node that tolerates failure, ended by the
+// repeated-tool-error breaker. Every activity the agent ran succeeded — the
+// breaker decided the failure in the workflow — so the only failed attempt is
+// the one the runtime records for the tolerated node
+// (RecordToleratedFailure). That row alone must make the run
+// failure_handled.
+func TestFirstHandledNodeFailure_ToleratedAgentEndedByTheBreaker(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	seedChat(t, env, "chat-tolerated")
+	if err := store.InsertWorkflowIfAbsent(ctx, env.ORM, newWorkflow("wf-t1", "chat-tolerated", nil, core.Active(), l2Base)); err != nil {
+		t.Fatal(err)
+	}
+	at := func(s int) time.Time { return l2Base.Add(time.Duration(s) * time.Second) }
+	insert := func(id, node, activity string, created time.Time, ok bool, errMsg string) {
+		t.Helper()
+		exec := &core.StepExecution{
+			ID: id, WorkflowID: "wf-t1", StepID: node, ActivityName: activity,
+			NodePath: nstr(node), CreatedAt: created, Success: nbool(ok), Attempt: ptr(int32(1)),
+		}
+		if errMsg != "" {
+			exec.ErrorMessage = nstr(errMsg)
+		}
+		if err := store.InsertStepExecution(ctx, env.ORM, exec); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+	// The reader's turns: every activity succeeded.
+	for i := 0; i < 3; i++ {
+		insert(fmt.Sprintf("llm-%d", i), "reader.agent_loop.call_llm", "CallLLM", at(1+2*i), true, "")
+		insert(fmt.Sprintf("tools-%d", i), "reader.agent_loop.execute_tools", "ExecuteTools", at(2+2*i), true, "")
+	}
+	got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-t1", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatalf("without the tolerated node's record, nothing failed: %+v", got)
+	}
+
+	// What the runtime records when it tolerates the reader's failure.
+	insert("tolerated", "reader", "RecordToleratedFailure", at(8), false,
+		"the agent's tool calls failed 3 times in a row with the same error, so the run was ended instead of retrying again: github__repo_get_tree: GitHub returned not found")
+	insert("after", "after", "Compute", at(9), true, "")
+
+	got, err = store.FirstHandledNodeFailure(ctx, env.ORM, "wf-t1", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.Node != "reader" || !strings.Contains(got.Error, "failed 3 times in a row") {
+		t.Fatalf("the tolerated reader's recorded attempt makes the run failure_handled: %+v", got)
 	}
 }
