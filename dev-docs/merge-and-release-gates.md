@@ -184,6 +184,19 @@ The phases:
      Reliant-only module in the bundle, which `tsc -b` cannot see: #2669 made
      `useOrgs.ts` import `authStore.ts`, typechecked clean, and failed the
      v1.17.0-rc.3 cut. 1.8-2.0 minutes on a loaded host.
+   - **webbuild** builds the renderer as a release does,
+     `scripts/web-release-build.sh` (`NODE_ENV=production vite build` into a
+     temporary directory, then `.github/scripts/verify-bundle.mjs` on it: the
+     release gate's `task build:web:verify` without its eslint and the `tsc -b`
+     the typecheck phase runs), when the plan's `web_build` lane is selected:
+     a FULL web lane (`frontends/web/package.json`, `pnpm-lock.yaml`, the
+     tsconfig, a root Node manifest, `sdk/ts`, ...) or the build's own inputs
+     (`vite.config.ts`, `vite-plugin-*.ts`, `index.html`). vitest and `tsc -b`
+     never bundle: #2829's supabase-js bump imported `node:module`, passed
+     both, and failed the release gate (reliant#2850). A web source change
+     alone does not select it; the release gate builds those. 4.2 minutes
+     measured at load average 100 on 31 CPUs (2026-11-18); it runs beside the
+     test and typecheck phases.
    - **migsafety** is `forge lint --migration-safety`, and runs only when a
      migration changed.
    - **migorder** is `go run ./tools/test-affected migration-order`, and runs

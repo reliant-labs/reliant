@@ -14,6 +14,7 @@
     "test": 120,
     "typecheck": 120,
     "demo": 150,
+    "webbuild": 150,
     "lint": 60,
     "proto": 15,
     "vet": 60,

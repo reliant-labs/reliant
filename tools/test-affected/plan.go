@@ -118,6 +118,18 @@ type WebDemoPlan struct {
 	LaneFull
 }
 
+// WebBuildPlan is the renderer's release build lane (all or nothing):
+// frontends/web's production `vite build` must succeed and its bundle pass
+// .github/scripts/verify-bundle.mjs, as the release gate's webbuild step
+// (task build:web:verify) requires. Selected when one of webBuildInputs
+// changed or the web lane is FULL (its dependencies, lockfile or build
+// config changed): a new dependency can import what only the bundler
+// refuses (#2829's `node:module`). A web source change alone does not
+// select it; tsc -b and vitest judge those, the release gate the bundle.
+type WebBuildPlan struct {
+	LaneFull
+}
+
 // Plan is the whole decision.
 type Plan struct {
 	Schema      int          `json:"schema"`
@@ -132,6 +144,7 @@ type Plan struct {
 	DocGen      DocGenPlan   `json:"docs_generate"`
 	MigOrder    MigOrderPlan `json:"migration_order"`
 	WebDemo     WebDemoPlan  `json:"web_demo"`
+	WebBuild    WebBuildPlan `json:"web_build"`
 	// Lockfiles are the npm projects whose manifest or lockfile changed: the
 	// runner checks each still installs from its lockfile (`npm ci`, or pnpm's
 	// --frozen-lockfile) before any test runs.
@@ -297,7 +310,28 @@ func ClassifyReach(changes []Change, g *Graph, reachMode string) *Plan {
 	c.pl.DocGen.LaneFull = laneFull(c.full[laneDocGen])
 	c.pl.MigOrder.LaneFull = laneFull(c.full[laneMigOrder])
 	c.selectWebDemo()
+	c.selectWebBuild()
 	return c.pl
+}
+
+// selectWebBuild decides the renderer's release build: a FULL web lane, for
+// the reasons it is FULL, or a changed build input (attributeToWebBuild).
+func (c *classifier) selectWebBuild() {
+	if c.pl.Web.Full {
+		c.full[laneWebBuild] = append(c.full[laneWebBuild], c.pl.Web.Reasons...)
+	}
+	c.pl.WebBuild.LaneFull = laneFull(c.full[laneWebBuild])
+}
+
+// attributeToWebBuild records why a changed file selects the release build:
+// the build reads it (webBuildInputs).
+func (c *classifier) attributeToWebBuild(ch Change) {
+	for _, pat := range webBuildInputs {
+		if matchGlob(pat, ch.Path) {
+			c.full[laneWebBuild] = append(c.full[laneWebBuild], ch.Path+": the renderer's release build reads it")
+			return
+		}
+	}
 }
 
 // selectWebDemo decides the forge demo bundle's build. A FULL web lane (its
@@ -380,6 +414,7 @@ func (c *classifier) attribute(ch Change) {
 	}
 	c.attributeToReaders(ch)
 	c.attributeToDemo(ch)
+	c.attributeToWebBuild(ch)
 	if why, hook, ok := c.forgeGenInput(ch); ok {
 		rep.Rules = append(rep.Rules, "forge-input")
 		c.full[laneForgeGen] = append(c.full[laneForgeGen], ch.Path+": "+why)
