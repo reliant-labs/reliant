@@ -798,7 +798,7 @@ type pendingPoller struct {
 
 // OnDaemonLinkReady implements DaemonLinkReadyListener: the daemon's stream
 // answered a probe, so the queued commands can go. Starts the poller once.
-func (b *NATSToolBridge) OnDaemonLinkReady(userID, daemonID, _, _, _ string) {
+func (b *NATSToolBridge) OnDaemonLinkReady(userID, daemonID, _, _, _, _ string) {
 	b.cancelsMu.Lock()
 	p := b.pollers[daemonKey(userID, daemonID)]
 	start := p != nil && !p.started && p.ctx.Err() == nil

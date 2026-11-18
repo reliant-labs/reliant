@@ -97,11 +97,15 @@ func (s *outboundStream) abort() {
 
 // daemonConnection represents an active daemon connection
 type daemonConnection struct {
-	userID     string
-	daemonID   string
-	name       string
-	hostname   string
-	platform   string
+	userID   string
+	daemonID string
+	name     string
+	hostname string
+	platform string
+	// orgID is the org the connecting credential acts in, "" for a daemon
+	// the gateway dialed. The connected event names it so the control plane
+	// records a self-hosted machine in the org it was paired in.
+	orgID      string
 	labels     map[string]string
 	daemonType string // "local" or "cloud"
 	// boundCredential: the connection was made with a credential bound to

@@ -96,7 +96,7 @@ type readyRecorder struct {
 
 func (r *readyRecorder) OnDaemonConnected(string, string)    {}
 func (r *readyRecorder) OnDaemonDisconnected(string, string) {}
-func (r *readyRecorder) OnDaemonLinkReady(_, daemonID, _, _, _ string) {
+func (r *readyRecorder) OnDaemonLinkReady(_, daemonID, _, _, _, _ string) {
 	r.mu.Lock()
 	r.ready = append(r.ready, daemonID)
 	r.mu.Unlock()
@@ -106,6 +106,33 @@ func (r *readyRecorder) calls() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]string(nil), r.ready...)
+}
+
+// linkArgsRecorder records the identity OnDaemonLinkReady hands a listener.
+type linkArgsRecorder struct{ userID, daemonID, orgID, name string }
+
+func (r *linkArgsRecorder) OnDaemonConnected(string, string)    {}
+func (r *linkArgsRecorder) OnDaemonDisconnected(string, string) {}
+func (r *linkArgsRecorder) OnDaemonLinkReady(userID, daemonID, orgID, name, _, _ string) {
+	*r = linkArgsRecorder{userID: userID, daemonID: daemonID, orgID: orgID, name: name}
+}
+
+// The link-ready listeners learn the org the connection's credential acts in,
+// so daemonevents names it on the connected event and the control plane
+// records a self-hosted machine in the org it was paired in.
+func TestNotifyLinkReady_NamesTheCredentialOrg(t *testing.T) {
+	svc := newTestService(&MockRepository{})
+	t.Cleanup(svc.Close)
+	rec := &linkArgsRecorder{}
+	svc.AddConnectionListener(rec)
+	conn := newTestConn("u-1", "laptop", nil)
+	conn.orgID, conn.name = "org-b", "My laptop"
+
+	svc.notifyLinkReady(conn)
+
+	if want := (linkArgsRecorder{userID: "u-1", daemonID: "laptop", orgID: "org-b", name: "My laptop"}); *rec != want {
+		t.Fatalf("OnDaemonLinkReady got %+v, want %+v", *rec, want)
+	}
 }
 
 // shrinkLinkTimings makes the link probe and its backoff test-sized.

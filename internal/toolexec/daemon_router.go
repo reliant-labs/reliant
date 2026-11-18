@@ -470,9 +470,12 @@ type DaemonConnectionListener interface {
 //
 // It carries the identity the daemon asserted at registration
 // (name/hostname/platform) for daemonevents.Publisher, which needs a usable
-// machine name for the control plane.
+// machine name for the control plane, and orgID: the org the connecting
+// credential acts in ("" when the gateway dialed the daemon, or the
+// credential named none). A self-hosted machine belongs to the org it was
+// paired in, which is its credential's, and the control plane records it there.
 type DaemonLinkReadyListener interface {
-	OnDaemonLinkReady(userID, daemonID, name, hostname, platform string)
+	OnDaemonLinkReady(userID, daemonID, orgID, name, hostname, platform string)
 }
 
 // DaemonConnectionManager is the subset of ToolsDaemonService needed by NATSToolBridge.

@@ -17,6 +17,9 @@ const (
 	UserRoleContextKey  contextKey = "user_role"
 	UserEmailContextKey contextKey = "user_email"
 	DaemonIDContextKey  contextKey = "daemon_id"
+	// CredentialOrgContextKey is the org a daemon's connecting credential
+	// acts in, set by the daemon auth interceptor.
+	CredentialOrgContextKey contextKey = "credential_org"
 )
 
 // userJWTs stores the latest JWT for each authenticated user.
@@ -111,4 +114,11 @@ func GetUserEmailFromContext(ctx context.Context) (string, bool) {
 func GetDaemonIDFromContext(ctx context.Context) string {
 	daemonID, _ := ctx.Value(DaemonIDContextKey).(string)
 	return daemonID
+}
+
+// GetCredentialOrgFromContext is the org the daemon's connecting credential
+// acts in, or "" when the context carries none.
+func GetCredentialOrgFromContext(ctx context.Context) string {
+	orgID, _ := ctx.Value(CredentialOrgContextKey).(string)
+	return orgID
 }

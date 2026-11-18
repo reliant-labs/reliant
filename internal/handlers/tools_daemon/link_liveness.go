@@ -282,7 +282,7 @@ func (s *Service) notifyLinkReady(conn *daemonConnection) {
 	defer s.listenersMu.RUnlock()
 	for _, l := range s.listeners {
 		if rl, ok := l.(toolexec.DaemonLinkReadyListener); ok {
-			rl.OnDaemonLinkReady(conn.userID, conn.daemonID, conn.name, conn.hostname, conn.platform)
+			rl.OnDaemonLinkReady(conn.userID, conn.daemonID, conn.orgID, conn.name, conn.hostname, conn.platform)
 		}
 	}
 }

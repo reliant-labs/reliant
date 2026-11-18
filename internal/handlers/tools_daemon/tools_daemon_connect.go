@@ -336,6 +336,7 @@ func (s *Service) ConnectDaemon(
 		name:                reg.GetName(),
 		hostname:            reg.GetHostname(),
 		platform:            reg.GetPlatform(),
+		orgID:               auth.GetCredentialOrgFromContext(ctx),
 		labels:              reg.GetLabels(),
 		daemonType:          reg.GetDaemonType(),
 		boundCredential:     boundCredential,

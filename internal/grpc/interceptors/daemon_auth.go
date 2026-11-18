@@ -85,6 +85,9 @@ func (i *DaemonAuthInterceptor) authenticate(ctx context.Context, header func(st
 	if p.Resource != nil {
 		ctx = context.WithValue(ctx, auth.DaemonIDContextKey, p.Resource.ID)
 	}
+	if p.OrgID != "" {
+		ctx = context.WithValue(ctx, auth.CredentialOrgContextKey, p.OrgID)
+	}
 	return ctx, nil
 }
 

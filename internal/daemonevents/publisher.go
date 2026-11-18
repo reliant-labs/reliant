@@ -97,6 +97,12 @@ type Event struct {
 	Name      string    `json:"name,omitempty"`
 	Hostname  string    `json:"hostname,omitempty"`
 	Platform  string    `json:"platform,omitempty"`
+	// OrgID is the org the connecting credential acts in, on a connected
+	// event of a daemon that dialed in: the org its person paired it in. The
+	// control plane records a newly paired self-hosted machine in it, so the
+	// machine and its credential belong to one org. Optional like the three
+	// above: an older consumer drops it and records the person's default org.
+	OrgID string `json:"orgId,omitempty"`
 }
 
 // Publisher implements toolexec.DaemonConnectionListener and writes events
@@ -160,27 +166,28 @@ func (p *Publisher) OnDaemonConnected(userID, daemonID string) {}
 // OnDaemonLinkReady satisfies toolexec.DaemonLinkReadyListener: the daemon's
 // stream answered a probe, so the machine is connected in the sense every
 // consumer of the event means. name/hostname/platform are whatever the daemon
-// asserted in its DaemonRegister message; any of them may be empty.
-func (p *Publisher) OnDaemonLinkReady(userID, daemonID, name, hostname, platform string) {
-	p.publishConnected(userID, daemonID, name, hostname, platform)
+// asserted in its DaemonRegister message; any of them may be empty. orgID is
+// the org its credential acts in, "" when there is none to name.
+func (p *Publisher) OnDaemonLinkReady(userID, daemonID, orgID, name, hostname, platform string) {
+	p.publishConnected(userID, daemonID, orgID, name, hostname, platform)
 }
 
 // OnDaemonDisconnected satisfies toolexec.DaemonConnectionListener.
 func (p *Publisher) OnDaemonDisconnected(userID, daemonID string) {
-	p.publish(EventTypeDisconnected, SubjectDisconnected, userID, daemonID, "", "", "", "")
+	p.publish(Event{Type: EventTypeDisconnected, UserID: userID, DaemonID: daemonID}, SubjectDisconnected)
 }
 
 // OnDaemonDisconnectedWithReason is like OnDaemonDisconnected but carries a
 // human-readable reason that the control plane persists on the daemon row.
 func (p *Publisher) OnDaemonDisconnectedWithReason(userID, daemonID, reason string) {
-	p.publish(EventTypeDisconnected, SubjectDisconnected, userID, daemonID, reason, "", "", "")
+	p.publish(Event{Type: EventTypeDisconnected, UserID: userID, DaemonID: daemonID, Reason: reason}, SubjectDisconnected)
 }
 
 // OnDaemonConnectFailed is called by the connector loop whenever an outbound
 // dial / registration attempt fails. The reason is the wrapped error returned
 // by connectOnce.
 func (p *Publisher) OnDaemonConnectFailed(userID, daemonID, reason string) {
-	p.publish(EventTypeConnectFailed, SubjectConnectFailed, userID, daemonID, reason, "", "", "")
+	p.publish(Event{Type: EventTypeConnectFailed, UserID: userID, DaemonID: daemonID, Reason: reason}, SubjectConnectFailed)
 }
 
 // publishConnected resolves the display name and publishes a connected
@@ -189,7 +196,7 @@ func (p *Publisher) OnDaemonConnectFailed(userID, daemonID, reason string) {
 // wire and every consumer, present or future, can use it as-is without
 // re-deriving the rule. Hostname/Platform still travel unresolved alongside
 // it for consumers (like the control plane) that want the raw value too.
-func (p *Publisher) publishConnected(userID, daemonID, name, hostname, platform string) {
+func (p *Publisher) publishConnected(userID, daemonID, orgID, name, hostname, platform string) {
 	resolvedName := strings.TrimSpace(name)
 	if resolvedName == "" {
 		resolvedName = strings.TrimSpace(hostname)
@@ -197,28 +204,21 @@ func (p *Publisher) publishConnected(userID, daemonID, name, hostname, platform 
 	if resolvedName == "" {
 		resolvedName = daemonID
 	}
-	p.publish(EventTypeConnected, SubjectConnected, userID, daemonID, "", resolvedName, hostname, platform)
+	p.publish(Event{Type: EventTypeConnected, UserID: userID, DaemonID: daemonID,
+		Name: resolvedName, Hostname: hostname, Platform: platform, OrgID: orgID}, SubjectConnected)
 }
 
-func (p *Publisher) publish(t EventType, subject, userID, daemonID, reason, name, hostname, platform string) {
+// publish stamps evt's version and time and publishes it on subject.
+func (p *Publisher) publish(evt Event, subject string) {
 	if p == nil || p.js == nil {
 		return
 	}
-	evt := Event{
-		Version:   CurrentEventVersion,
-		Type:      t,
-		UserID:    userID,
-		DaemonID:  daemonID,
-		Timestamp: time.Now().UTC(),
-		Reason:    reason,
-		Name:      name,
-		Hostname:  hostname,
-		Platform:  platform,
-	}
+	evt.Version = CurrentEventVersion
+	evt.Timestamp = time.Now().UTC()
 	data, err := json.Marshal(evt)
 	if err != nil {
 		logging.Warn(logPrefix+" failed to marshal event",
-			"type", t, "daemonID", daemonID, "error", err)
+			"type", evt.Type, "daemonID", evt.DaemonID, "error", err)
 		return
 	}
 
@@ -227,9 +227,9 @@ func (p *Publisher) publish(t EventType, subject, userID, daemonID, reason, name
 
 	if _, err := p.js.Publish(ctx, subject, data); err != nil {
 		logging.Warn(logPrefix+" failed to publish event",
-			"subject", subject, "daemonID", daemonID, "error", err)
+			"subject", subject, "daemonID", evt.DaemonID, "error", err)
 		return
 	}
 	logging.Debug(logPrefix+" published event",
-		"subject", subject, "daemonID", daemonID, "userID", userID)
+		"subject", subject, "daemonID", evt.DaemonID, "userID", evt.UserID)
 }

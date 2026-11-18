@@ -43,13 +43,14 @@ type controlPlaneDaemonEvent struct {
 	Name      string    `json:"name,omitempty"`
 	Hostname  string    `json:"hostname,omitempty"`
 	Platform  string    `json:"platform,omitempty"`
+	OrgID     string    `json:"orgId,omitempty"`
 }
 
 func TestPublisher_OnDaemonLinkReady_MarshalsNameHostnamePlatform(t *testing.T) {
 	js := &fakeJetStream{}
 	p := &Publisher{js: js}
 
-	p.OnDaemonLinkReady("user-1", "daemon-1", "my-laptop", "my-laptop.local", "darwin")
+	p.OnDaemonLinkReady("user-1", "daemon-1", "org-b", "my-laptop", "my-laptop.local", "darwin")
 
 	require.Len(t, js.published, 1)
 	require.Equal(t, SubjectConnected, js.published[0].subject)
@@ -63,6 +64,7 @@ func TestPublisher_OnDaemonLinkReady_MarshalsNameHostnamePlatform(t *testing.T) 
 	require.Equal(t, "my-laptop", evt.Name)
 	require.Equal(t, "my-laptop.local", evt.Hostname)
 	require.Equal(t, "darwin", evt.Platform)
+	require.Equal(t, "org-b", evt.OrgID, "the org the connecting credential acts in")
 
 	// Round-trip against control-plane's independently-maintained struct:
 	// this is the property that actually matters, since nothing but this
@@ -72,6 +74,7 @@ func TestPublisher_OnDaemonLinkReady_MarshalsNameHostnamePlatform(t *testing.T) 
 	require.Equal(t, evt.Name, cpEvt.Name)
 	require.Equal(t, evt.Hostname, cpEvt.Hostname)
 	require.Equal(t, evt.Platform, cpEvt.Platform)
+	require.Equal(t, evt.OrgID, cpEvt.OrgID)
 }
 
 func TestPublisher_NamePrecedence(t *testing.T) {
@@ -117,7 +120,7 @@ func TestPublisher_NamePrecedence(t *testing.T) {
 			js := &fakeJetStream{}
 			p := &Publisher{js: js}
 
-			p.OnDaemonLinkReady("user-1", tt.daemonID, tt.daemonName, tt.hostname, "darwin")
+			p.OnDaemonLinkReady("user-1", tt.daemonID, "", tt.daemonName, tt.hostname, "darwin")
 
 			require.Len(t, js.published, 1)
 			var evt Event
@@ -137,7 +140,7 @@ func TestPublisher_OnDaemonConnected_PublishesNothingUntilLinkReady(t *testing.T
 	p.OnDaemonConnected("user-1", "daemon-1")
 	require.Empty(t, js.published)
 
-	p.OnDaemonLinkReady("user-1", "daemon-1", "", "", "")
+	p.OnDaemonLinkReady("user-1", "daemon-1", "", "", "", "")
 	require.Len(t, js.published, 1)
 	var evt Event
 	require.NoError(t, json.Unmarshal(js.published[0].data, &evt))
@@ -146,6 +149,9 @@ func TestPublisher_OnDaemonConnected_PublishesNothingUntilLinkReady(t *testing.T
 	// to the daemon id.
 	require.Equal(t, "daemon-1", evt.Name)
 	require.Empty(t, evt.Hostname)
+	// No credential org (a daemon the gateway dialed): the key is omitted,
+	// so the control plane records the person's default org, as before.
+	require.NotContains(t, string(js.published[0].data), "orgId")
 }
 
 // replicaJetStream is a JetStream that holds one stream config and records what
