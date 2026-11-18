@@ -173,11 +173,18 @@ func (c *checkRuns) run(ctx context.Context, uses string, params map[string]any)
 	}
 	if res.IsError {
 		err := fmt.Errorf("%s: GitHub answered %d: %s", uses, res.StatusCode, truncate(res.Content, 1024))
-		if (res.StatusCode == 401 || res.StatusCode == 403) && !res.Retryable {
-			// The App lost the repository between the mint and the write. A
-			// rate limit's 403 is retryable (the catalog's error table) and
-			// is retried.
+		switch {
+		case res.Retryable || res.StatusCode >= 500:
+			// A rate limit (429, or a 403 the catalog's error table reads
+			// as one) or GitHub failing: retried with backoff.
+			return nil, err
+		case res.StatusCode == 401 || res.StatusCode == 403:
+			// The App lost the repository between the mint and the write.
 			return nil, notAuthorized(err.Error(), err)
+		case res.StatusCode >= 400:
+			// GitHub refused the request itself (422 invalid, 404 or 410
+			// gone): sending it again gets the same answer.
+			return nil, &rejectedError{status: res.StatusCode, err: err}
 		}
 		return nil, err
 	}
@@ -253,6 +260,30 @@ func notAuthorized(reason string, cause error) error {
 func (e *notAuthorizedError) Error() string        { return e.reason }
 func (e *notAuthorizedError) Unwrap() error        { return e.cause }
 func (e *notAuthorizedError) Is(target error) bool { return target == ErrNotAuthorized }
+
+// ErrRejected is a write GitHub refused as such: 422 (validation failed: an
+// invalid output or annotation, or a commit the repository does not have) or
+// 404/410 (the repository or the check run is gone, or the App cannot see
+// it). Sending it again gets the same answer, so it is never retried as is:
+// a 422 on a write's details is sent once more without them (the syncer's
+// fallback), and anything else rejected abandons the check.
+var ErrRejected = errors.New("GitHub rejected the check run write")
+
+type rejectedError struct {
+	status int
+	err    error
+}
+
+func (e *rejectedError) Error() string        { return e.err.Error() }
+func (e *rejectedError) Unwrap() error        { return e.err }
+func (e *rejectedError) Is(target error) bool { return target == ErrRejected }
+
+// invalidWrite reports whether err is GitHub's 422: the request was well
+// addressed but what it said was refused.
+func invalidWrite(err error) bool {
+	var r *rejectedError
+	return errors.As(err, &r) && r.status == 422
+}
 
 // ownerMayWrite asks, as a firing does of its trigger's creator, whether the
 // owner may still act for the trigger the check came from: a trigger of no

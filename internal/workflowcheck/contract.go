@@ -77,13 +77,22 @@ type Store interface {
 	// RecordWorkflowCheckRunsEnded records how chatID's launch run ended on
 	// its firing's checks (the first record stands) and makes them due.
 	RecordWorkflowCheckRunsEnded(ctx context.Context, chatID string, ending core.WorkflowCheckEnding, at time.Time) error
-	// ClaimWorkflowCheckRuns leases up to max due, unfinished checks.
-	ClaimWorkflowCheckRuns(ctx context.Context, now, leaseUntil time.Time, max int) ([]*core.WorkflowCheckRun, error)
+	// ClaimWorkflowCheckRuns leases up to max due, unfinished checks whose
+	// lease is free or expired to holder until leaseUntil. Each claim bumps
+	// the row's LeaseGeneration, the fencing token of the lease.
+	ClaimWorkflowCheckRuns(ctx context.Context, holder string, now, leaseUntil time.Time, max int) ([]*core.WorkflowCheckRun, error)
+	// RenewWorkflowCheckRunLeases extends to until the leases holder still
+	// holds (same holder and generation, unfinished) and returns their ids.
+	// A lease missing from the answer is lost.
+	RenewWorkflowCheckRunLeases(ctx context.Context, holder string, leases []core.WorkflowCheckLease, until time.Time) ([]string, error)
 	// ObserveWorkflowCheckRun reads a check's firing and its run;
 	// core.ErrWorkflowCheckRunNotFound when the firing is gone.
 	ObserveWorkflowCheckRun(ctx context.Context, triggerEventID string) (*core.WorkflowCheckObservation, error)
 	// SaveWorkflowCheckRunSync writes a sync's result (the GitHub fields, the
-	// queue fields, paused_since and finished_at) and releases the lease.
+	// queue fields, paused_since and finished_at) and releases the lease. It
+	// is fenced on row.ClaimedBy and row.LeaseGeneration: when the row is no
+	// longer held under them it writes nothing and returns
+	// core.ErrWorkflowCheckLeaseLost.
 	SaveWorkflowCheckRunSync(ctx context.Context, row *core.WorkflowCheckRun) error
 }
 

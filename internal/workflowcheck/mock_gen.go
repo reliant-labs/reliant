@@ -73,7 +73,7 @@ func (m *MockService) SyncOnce(ctx context.Context) (int, error) {
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=38a16fddf592e4eb976ee5b0717e325c7a56e35bd4709794a0c1096192f7df3a
+// forge:hash=c757f55021a51272c8e0338914306516e1b7307204ec9392a6e71a57518b4ed3
 
 // MockStore is a test mock for the Store interface.
 //
@@ -86,7 +86,8 @@ type MockStore struct {
 	CreateWorkflowCheckRunFunc       func(context.Context, *core.WorkflowCheckRun) (bool, error)
 	MarkWorkflowCheckRunsStartedFunc func(context.Context, string, time.Time) error
 	RecordWorkflowCheckRunsEndedFunc func(context.Context, string, core.WorkflowCheckEnding, time.Time) error
-	ClaimWorkflowCheckRunsFunc       func(context.Context, time.Time, time.Time, int) ([]*core.WorkflowCheckRun, error)
+	ClaimWorkflowCheckRunsFunc       func(context.Context, string, time.Time, time.Time, int) ([]*core.WorkflowCheckRun, error)
+	RenewWorkflowCheckRunLeasesFunc  func(context.Context, string, []core.WorkflowCheckLease, time.Time) ([]string, error)
 	ObserveWorkflowCheckRunFunc      func(context.Context, string) (*core.WorkflowCheckObservation, error)
 	SaveWorkflowCheckRunSyncFunc     func(context.Context, *core.WorkflowCheckRun) error
 }
@@ -119,12 +120,21 @@ func (m *MockStore) RecordWorkflowCheckRunsEnded(ctx context.Context, chatID str
 }
 
 // ClaimWorkflowCheckRuns records the call and delegates to ClaimWorkflowCheckRunsFunc when set.
-func (m *MockStore) ClaimWorkflowCheckRuns(ctx context.Context, now time.Time, leaseUntil time.Time, p3 int) ([]*core.WorkflowCheckRun, error) {
-	m.Recorder.Record("ClaimWorkflowCheckRuns", ctx, now, leaseUntil, p3)
+func (m *MockStore) ClaimWorkflowCheckRuns(ctx context.Context, holder string, now time.Time, leaseUntil time.Time, p4 int) ([]*core.WorkflowCheckRun, error) {
+	m.Recorder.Record("ClaimWorkflowCheckRuns", ctx, holder, now, leaseUntil, p4)
 	if m.ClaimWorkflowCheckRunsFunc != nil {
-		return m.ClaimWorkflowCheckRunsFunc(ctx, now, leaseUntil, p3)
+		return m.ClaimWorkflowCheckRunsFunc(ctx, holder, now, leaseUntil, p4)
 	}
 	return nil, contractkit.MockNotSet("MockStore", "ClaimWorkflowCheckRuns")
+}
+
+// RenewWorkflowCheckRunLeases records the call and delegates to RenewWorkflowCheckRunLeasesFunc when set.
+func (m *MockStore) RenewWorkflowCheckRunLeases(ctx context.Context, holder string, leases []core.WorkflowCheckLease, until time.Time) ([]string, error) {
+	m.Recorder.Record("RenewWorkflowCheckRunLeases", ctx, holder, leases, until)
+	if m.RenewWorkflowCheckRunLeasesFunc != nil {
+		return m.RenewWorkflowCheckRunLeasesFunc(ctx, holder, leases, until)
+	}
+	return nil, contractkit.MockNotSet("MockStore", "RenewWorkflowCheckRunLeases")
 }
 
 // ObserveWorkflowCheckRun records the call and delegates to ObserveWorkflowCheckRunFunc when set.

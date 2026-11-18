@@ -40,10 +40,22 @@ func (r *Repo) RecordWorkflowCheckRunsEnded(ctx context.Context, chatID string, 
 	return store.RecordWorkflowCheckRunsEnded(ctx, r.ORM(), chatID, ending, at)
 }
 
-// ClaimWorkflowCheckRuns leases up to max due, unfinished checks until
-// leaseUntil.
-func (r *Repo) ClaimWorkflowCheckRuns(ctx context.Context, now, leaseUntil time.Time, max int) ([]*core.WorkflowCheckRun, error) {
-	return store.ClaimWorkflowCheckRuns(ctx, r.ORM(), now, leaseUntil, max)
+// ClaimWorkflowCheckRuns leases up to max due, unfinished checks to holder
+// until leaseUntil, bumping each one's lease generation.
+func (r *Repo) ClaimWorkflowCheckRuns(ctx context.Context, holder string, now, leaseUntil time.Time, max int) ([]*core.WorkflowCheckRun, error) {
+	if holder == "" {
+		return nil, fmt.Errorf("workflow check run lease holder cannot be empty")
+	}
+	return store.ClaimWorkflowCheckRuns(ctx, r.ORM(), holder, now, leaseUntil, max)
+}
+
+// RenewWorkflowCheckRunLeases extends the leases holder still holds and
+// returns the ids it renewed; a lease not returned is lost.
+func (r *Repo) RenewWorkflowCheckRunLeases(ctx context.Context, holder string, leases []core.WorkflowCheckLease, until time.Time) ([]string, error) {
+	if holder == "" {
+		return nil, fmt.Errorf("workflow check run lease holder cannot be empty")
+	}
+	return store.RenewWorkflowCheckRunLeases(ctx, r.ORM(), holder, leases, until)
 }
 
 // ObserveWorkflowCheckRun reads a check's firing and the run it launched.
@@ -54,7 +66,9 @@ func (r *Repo) ObserveWorkflowCheckRun(ctx context.Context, triggerEventID strin
 	return store.ObserveWorkflowCheckRun(ctx, r.ORM(), triggerEventID)
 }
 
-// SaveWorkflowCheckRunSync writes a sync's result and releases the lease.
+// SaveWorkflowCheckRunSync writes a sync's result and releases the lease,
+// fenced on the lease the sync claimed (core.ErrWorkflowCheckLeaseLost when
+// it is no longer the row's).
 func (r *Repo) SaveWorkflowCheckRunSync(ctx context.Context, row *core.WorkflowCheckRun) error {
 	if row == nil || row.ID == "" {
 		return fmt.Errorf("workflow check run ID cannot be empty")

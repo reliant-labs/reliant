@@ -9,6 +9,19 @@ import (
 // matches.
 var ErrWorkflowCheckRunNotFound = errors.New("workflow check run not found")
 
+// ErrWorkflowCheckLeaseLost is a sync's save refused by its fence: the row is
+// no longer held under the lease (holder and generation) the sync claimed it
+// with, because the lease expired and another syncer took the row, or the row
+// is gone. Nothing was written, so the newer holder's state stands.
+var ErrWorkflowCheckLeaseLost = errors.New("workflow check run lease lost")
+
+// WorkflowCheckLease is one claimed row's lease: its id and the generation
+// the claim gave it, the fencing token every renewal and save must present.
+type WorkflowCheckLease struct {
+	ID         string
+	Generation int64
+}
+
 // The values of WorkflowCheckRun.GitHubStatus: what the check run on GitHub
 // was last written as ("" before it exists).
 const (
@@ -69,10 +82,15 @@ type WorkflowCheckRun struct {
 	// PausedSince is when the syncer first saw the run paused; nil when it
 	// is not.
 	PausedSince *time.Time
-	// NextSyncAt is when the row is next due; ClaimedUntil the lease a
-	// syncer holds on it.
-	NextSyncAt   time.Time
-	ClaimedUntil *time.Time
+	// NextSyncAt is when the row is next due.
+	NextSyncAt time.Time
+	// ClaimedBy, ClaimedUntil and LeaseGeneration are the lease a syncer
+	// holds on the row: who holds it, until when (renewed while it syncs),
+	// and the fencing token its claim bumped. A save lands only while
+	// ClaimedBy and LeaseGeneration are still the row's.
+	ClaimedBy       string
+	ClaimedUntil    *time.Time
+	LeaseGeneration int64
 	// Attempts counts consecutive failed GitHub writes; LastError is the
 	// last one ("" after a success).
 	Attempts  int

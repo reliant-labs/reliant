@@ -17,9 +17,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -109,32 +109,40 @@ WHERE trigger_event_id = `+launchEventOfChatSQL+`
 }
 
 // ClaimWorkflowCheckRuns leases up to max due, unfinished checks whose lease
-// is free or expired, the most overdue first. FOR UPDATE SKIP LOCKED lets
-// every worker's syncer drain the queue at once without two of them writing
-// one check.
-func ClaimWorkflowCheckRuns(ctx context.Context, db orm.Context, now, leaseUntil time.Time, max int) ([]*core.WorkflowCheckRun, error) {
+// is free or expired to holder until leaseUntil, the most overdue first. Each
+// claim bumps the row's lease_generation, the fencing token the holder's
+// renewals and save must present: a holder whose lease expired and was
+// retaken can no longer write the row. FOR UPDATE SKIP LOCKED lets every
+// worker's syncer drain the queue at once, and the outer WHERE repeats the
+// claimable test so a row another claim took between the two is not taken
+// again.
+func ClaimWorkflowCheckRuns(ctx context.Context, db orm.Context, holder string, now, leaseUntil time.Time, max int) ([]*core.WorkflowCheckRun, error) {
 	if max <= 0 {
 		return nil, nil
 	}
-	claimable := db.Bun().NewSelect().
+	if holder == "" {
+		return nil, errors.New("failed to claim workflow check runs: no holder")
+	}
+	claimable := func(q *bun.SelectQuery) *bun.SelectQuery {
+		return q.Where("c.claimed_until IS NULL").WhereOr("c.claimed_until < ?", now)
+	}
+	ids := db.Bun().NewSelect().
 		TableExpr("workflow_check_runs AS c").
 		Column("c.id").
 		Where("c.finished_at IS NULL").
 		Where("c.next_sync_at <= ?", now).
-		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
-			return q.Where("c.claimed_until IS NULL").WhereOr("c.claimed_until < ?", now)
-		}).
+		WhereGroup(" AND ", claimable).
 		OrderExpr("c.next_sync_at, c.id").
 		Limit(int64(max)).
-		For("UPDATE SKIP LOCKED")
+		For("UPDATE OF c SKIP LOCKED")
 
 	var rows []*WorkflowCheckRun
-	err := db.Bun().NewUpdate().
-		Model((*WorkflowCheckRun)(nil)).
-		Set("claimed_until = ?", leaseUntil).
-		Where("id IN (?)", claimable).
-		Returning("?TableColumns").
-		Scan(ctx, &rows)
+	err := db.Bun().NewRaw(`UPDATE workflow_check_runs AS c
+SET claimed_by = ?0, claimed_until = ?1, lease_generation = c.lease_generation + 1
+WHERE c.id IN (?2)
+  AND c.finished_at IS NULL
+  AND (c.claimed_until IS NULL OR c.claimed_until < ?3)
+RETURNING c.*`, holder, leaseUntil, ids, now).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to claim workflow check runs: %w", err)
 	}
@@ -147,6 +155,32 @@ func ClaimWorkflowCheckRuns(ctx context.Context, db orm.Context, now, leaseUntil
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// RenewWorkflowCheckRunLeases extends to until the leases holder still holds
+// among leases (the same holder and generation, the row unfinished) and
+// returns the ids it renewed. A lease missing from the answer is lost: the
+// row was retaken after it expired, finished, or deleted.
+func RenewWorkflowCheckRunLeases(ctx context.Context, db orm.Context, holder string, leases []core.WorkflowCheckLease, until time.Time) ([]string, error) {
+	if len(leases) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, len(leases))
+	gens := make([]int64, len(leases))
+	for i, l := range leases {
+		ids[i], gens[i] = l.ID, l.Generation
+	}
+	var renewed []string
+	err := db.Bun().NewRaw(`UPDATE workflow_check_runs AS c
+SET claimed_until = ?0
+FROM unnest(?1::text[], ?2::bigint[]) AS l(id, generation)
+WHERE c.id = l.id AND c.lease_generation = l.generation
+  AND c.claimed_by = ?3 AND c.finished_at IS NULL
+RETURNING c.id`, until, pgdialect.Array(ids), pgdialect.Array(gens), holder).Scan(ctx, &renewed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to renew workflow check run leases: %w", err)
+	}
+	return renewed, nil
 }
 
 // observeWorkflowCheckRunSQL reads a check's firing and the root workflow row
@@ -194,29 +228,56 @@ func ObserveWorkflowCheckRun(ctx context.Context, db orm.Context, triggerEventID
 }
 
 // SaveWorkflowCheckRunSync writes a sync's result — what GitHub holds, the
-// queue fields, paused_since and finished_at — and releases the lease. The
+// queue fields, paused_since and finished_at — and releases the lease. It is
+// fenced: the write lands only while the row is still held by row.ClaimedBy at
+// row.LeaseGeneration, and is otherwise refused with
+// core.ErrWorkflowCheckLeaseLost, writing nothing, so a syncer whose lease
+// expired and was retaken never overwrites the newer holder's state. The
 // run's own reports (started_at, ended_status and the output) are never
 // written here, so a report that lands during a sync is not lost.
 func SaveWorkflowCheckRunSync(ctx context.Context, db orm.Context, row *core.WorkflowCheckRun) error {
-	return ignoreNotFound(UpdateWorkflowCheckRunMasked(ctx, db, &WorkflowCheckRun{
-		ID:               row.ID,
-		GithubCheckRunID: row.GitHubCheckRunID,
-		GithubStatus:     row.GitHubStatus,
-		GithubConclusion: row.GitHubConclusion,
-		GithubDigest:     row.GitHubDigest,
-		AnnotationsSent:  int32(row.AnnotationsSent),
-		PausedSince:      row.PausedSince,
-		NextSyncAt:       row.NextSyncAt,
-		ClaimedUntil:     nil,
-		Attempts:         int32(row.Attempts),
-		LastError:        row.LastError,
-		FinishedAt:       row.FinishedAt,
-	}, []string{
-		WorkflowCheckRunFieldGithubCheckRunID, WorkflowCheckRunFieldGithubStatus, WorkflowCheckRunFieldGithubConclusion,
-		WorkflowCheckRunFieldGithubDigest, WorkflowCheckRunFieldAnnotationsSent, WorkflowCheckRunFieldPausedSince,
-		WorkflowCheckRunFieldNextSyncAt, WorkflowCheckRunFieldClaimedUntil, WorkflowCheckRunFieldAttempts,
-		WorkflowCheckRunFieldLastError, WorkflowCheckRunFieldFinishedAt,
-	}, crud.NoReadBack()))
+	if row.ClaimedBy == "" {
+		return fmt.Errorf("failed to save workflow check run %s: it was not claimed", row.ID)
+	}
+	res, err := db.Bun().NewUpdate().
+		Model(&WorkflowCheckRun{
+			ID:               row.ID,
+			GithubCheckRunID: row.GitHubCheckRunID,
+			GithubStatus:     row.GitHubStatus,
+			GithubConclusion: row.GitHubConclusion,
+			GithubDigest:     row.GitHubDigest,
+			AnnotationsSent:  int32(row.AnnotationsSent),
+			PausedSince:      row.PausedSince,
+			NextSyncAt:       row.NextSyncAt,
+			ClaimedBy:        "",
+			ClaimedUntil:     nil,
+			Attempts:         int32(row.Attempts),
+			LastError:        row.LastError,
+			FinishedAt:       row.FinishedAt,
+			UpdatedAt:        row.UpdatedAt,
+		}).
+		Column(
+			WorkflowCheckRunFieldGithubCheckRunID, WorkflowCheckRunFieldGithubStatus, WorkflowCheckRunFieldGithubConclusion,
+			WorkflowCheckRunFieldGithubDigest, WorkflowCheckRunFieldAnnotationsSent, WorkflowCheckRunFieldPausedSince,
+			WorkflowCheckRunFieldNextSyncAt, WorkflowCheckRunFieldClaimedBy, WorkflowCheckRunFieldClaimedUntil,
+			WorkflowCheckRunFieldAttempts, WorkflowCheckRunFieldLastError, WorkflowCheckRunFieldFinishedAt,
+			WorkflowCheckRunFieldUpdatedAt,
+		).
+		Where("id = ?", row.ID).
+		Where("claimed_by = ?", row.ClaimedBy).
+		Where("lease_generation = ?", row.LeaseGeneration).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to save workflow check run %s: %w", row.ID, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to save workflow check run %s: %w", row.ID, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("save workflow check run %s (holder %s, generation %d): %w", row.ID, row.ClaimedBy, row.LeaseGeneration, core.ErrWorkflowCheckLeaseLost)
+	}
+	return nil
 }
 
 func workflowCheckRunToCore(row *WorkflowCheckRun) (*core.WorkflowCheckRun, error) {
@@ -235,7 +296,8 @@ func workflowCheckRunToCore(row *WorkflowCheckRun) (*core.WorkflowCheckRun, erro
 		Output: output, OutputError: row.OutputError,
 		GitHubCheckRunID: row.GithubCheckRunID, GitHubStatus: row.GithubStatus, GitHubConclusion: row.GithubConclusion,
 		AnnotationsSent: int(row.AnnotationsSent), GitHubDigest: row.GithubDigest,
-		PausedSince: row.PausedSince, NextSyncAt: row.NextSyncAt, ClaimedUntil: row.ClaimedUntil,
+		PausedSince: row.PausedSince, NextSyncAt: row.NextSyncAt,
+		ClaimedBy: row.ClaimedBy, ClaimedUntil: row.ClaimedUntil, LeaseGeneration: row.LeaseGeneration,
 		Attempts: int(row.Attempts), LastError: row.LastError, FinishedAt: row.FinishedAt,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}, nil

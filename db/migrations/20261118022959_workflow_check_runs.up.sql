@@ -26,8 +26,13 @@
 --   annotations_sent,       of what was last written, so only a change is
 --   github_digest           written again
 --   paused_since            when the syncer first saw the run paused
---   next_sync_at,           the syncer's queue: when the row is next due, and
---   claimed_until           the lease a syncer holds on it
+--   next_sync_at            the syncer's queue: when the row is next due
+--   claimed_by,             the lease: which syncer holds the row, until when
+--   claimed_until,          (renewed by its heartbeat while it syncs), and
+--   lease_generation        the fencing token, bumped by every claim; a
+--                           sync's save lands only while the generation it
+--                           claimed is still the row's, so a syncer whose
+--                           lease expired and was retaken writes nothing
 --   attempts, last_error    consecutive failed GitHub writes, and the last one
 --   finished_at             nothing is left to sync (concluded, or given up)
 --
@@ -65,7 +70,9 @@ CREATE TABLE workflow_check_runs (
     github_digest       text NOT NULL DEFAULT '',
     paused_since        timestamptz,
     next_sync_at        timestamptz NOT NULL,
+    claimed_by          text NOT NULL DEFAULT '',
     claimed_until       timestamptz,
+    lease_generation    bigint NOT NULL DEFAULT 0,
     attempts            integer NOT NULL DEFAULT 0,
     last_error          text NOT NULL DEFAULT '',
     finished_at         timestamptz,
@@ -77,6 +84,10 @@ CREATE TABLE workflow_check_runs (
     CONSTRAINT workflow_check_runs_ended_status_check CHECK (ended_status IN ('', 'completed', 'failed', 'cancelled')),
     CONSTRAINT workflow_check_runs_github_status_check CHECK (github_status IN ('', 'queued', 'in_progress', 'completed'))
 );
+-- The indexes are built in this migration's transaction, not CONCURRENTLY:
+-- the table is created empty just above, so nothing reads or writes it yet
+-- and the build blocks nobody.
+--
 -- The syncer's queue: only rows with something left to sync.
 CREATE INDEX workflow_check_runs_due ON workflow_check_runs (next_sync_at) WHERE finished_at IS NULL;
 CREATE INDEX workflow_check_runs_user ON workflow_check_runs (user_id);

@@ -22,6 +22,8 @@ type fakeStore struct {
 	obs  map[string]*core.WorkflowCheckObservation // by trigger event id; absent: firing gone
 	// chats maps a chat to its launch firing, for Started/Ended.
 	chats map[string]string
+	// renewed, when set, receives each renewal's answer.
+	renewed chan []string
 }
 
 func newFakeStore() *fakeStore {
@@ -67,16 +69,31 @@ func (s *fakeStore) RecordWorkflowCheckRunsEnded(_ context.Context, chatID strin
 	return nil
 }
 
-func (s *fakeStore) ClaimWorkflowCheckRuns(_ context.Context, now, until time.Time, max int) ([]*core.WorkflowCheckRun, error) {
+func (s *fakeStore) ClaimWorkflowCheckRuns(_ context.Context, holder string, now, until time.Time, max int) ([]*core.WorkflowCheckRun, error) {
 	var out []*core.WorkflowCheckRun
 	for _, r := range s.rows {
 		if r.FinishedAt == nil && !r.NextSyncAt.After(now) && (r.ClaimedUntil == nil || r.ClaimedUntil.Before(now)) && len(out) < max {
-			r.ClaimedUntil = &until
+			r.ClaimedBy, r.ClaimedUntil = holder, &until
+			r.LeaseGeneration++
 			c := *r
 			out = append(out, &c)
 		}
 	}
 	return out, nil
+}
+
+func (s *fakeStore) RenewWorkflowCheckRunLeases(_ context.Context, holder string, leases []core.WorkflowCheckLease, until time.Time) ([]string, error) {
+	var renewed []string
+	for _, l := range leases {
+		if r := s.rows[l.ID]; r != nil && r.ClaimedBy == holder && r.LeaseGeneration == l.Generation && r.FinishedAt == nil {
+			r.ClaimedUntil = &until
+			renewed = append(renewed, l.ID)
+		}
+	}
+	if s.renewed != nil {
+		s.renewed <- renewed
+	}
+	return renewed, nil
 }
 
 func (s *fakeStore) ObserveWorkflowCheckRun(_ context.Context, id string) (*core.WorkflowCheckObservation, error) {
@@ -90,6 +107,10 @@ func (s *fakeStore) ObserveWorkflowCheckRun(_ context.Context, id string) (*core
 
 func (s *fakeStore) SaveWorkflowCheckRunSync(_ context.Context, row *core.WorkflowCheckRun) error {
 	r := s.rows[row.ID]
+	if r == nil || r.ClaimedBy != row.ClaimedBy || r.LeaseGeneration != row.LeaseGeneration {
+		return core.ErrWorkflowCheckLeaseLost
+	}
+	r.ClaimedBy = ""
 	r.GitHubCheckRunID, r.GitHubStatus, r.GitHubConclusion, r.GitHubDigest = row.GitHubCheckRunID, row.GitHubStatus, row.GitHubConclusion, row.GitHubDigest
 	r.AnnotationsSent, r.PausedSince, r.NextSyncAt, r.ClaimedUntil = row.AnnotationsSent, row.PausedSince, row.NextSyncAt, nil
 	r.Attempts, r.LastError, r.FinishedAt = row.Attempts, row.LastError, row.FinishedAt
@@ -104,6 +125,17 @@ type fakeGitHub struct {
 	failNext error
 	next     int64
 	identity Identity
+	// hook, when set, runs as a write starts (what is "create" or
+	// "update"), on the syncing goroutine: a test acts mid-sync there. A
+	// write whose context is then done fails with its error.
+	hook func(ctx context.Context, what string)
+}
+
+func (g *fakeGitHub) writing(ctx context.Context, what string) error {
+	if g.hook != nil {
+		g.hook(ctx, what)
+	}
+	return ctx.Err()
 }
 
 func newFakeGitHub() *fakeGitHub {
@@ -124,7 +156,10 @@ func (g *fakeGitHub) Find(_ context.Context, _, _, externalID string) (int64, er
 	return g.external[externalID], nil
 }
 
-func (g *fakeGitHub) Create(_ context.Context, w Write) (int64, error) {
+func (g *fakeGitHub) Create(ctx context.Context, w Write) (int64, error) {
+	if err := g.writing(ctx, "create"); err != nil {
+		return 0, err
+	}
 	g.next++
 	c := w
 	g.runs[g.next] = &c
@@ -133,7 +168,10 @@ func (g *fakeGitHub) Create(_ context.Context, w Write) (int64, error) {
 	return g.next, nil
 }
 
-func (g *fakeGitHub) Update(_ context.Context, id int64, w Write) error {
+func (g *fakeGitHub) Update(ctx context.Context, id int64, w Write) error {
+	if err := g.writing(ctx, "update"); err != nil {
+		return err
+	}
 	run := g.runs[id]
 	if run == nil {
 		return fmt.Errorf("no check run %d", id)
@@ -167,13 +205,23 @@ type harness struct {
 	gh    *fakeGitHub
 	svc   *service
 	clock *clock
+	// beat drives every syncer's heartbeat by hand.
+	beat chan time.Time
 }
 
 func newHarness() *harness {
-	h := &harness{store: newFakeStore(), gh: newFakeGitHub(), clock: &clock{now: t0}}
-	h.svc = newService(Deps{Store: h.store, GitHub: h.gh, RunURL: HostedRunURL})
-	h.svc.now = h.clock.Now
+	h := &harness{store: newFakeStore(), gh: newFakeGitHub(), clock: &clock{now: t0}, beat: make(chan time.Time)}
+	h.svc = h.syncer("syncer-a")
 	return h
+}
+
+// syncer is a service over the harness's store, GitHub and clock, holding
+// leases as holder; its heartbeat beats only when the test sends on beat.
+func (h *harness) syncer(holder string) *service {
+	svc := newService(Deps{Store: h.store, GitHub: h.gh, RunURL: HostedRunURL})
+	svc.now, svc.holder = h.clock.Now, holder
+	svc.ticker = func(time.Duration) (<-chan time.Time, func()) { return h.beat, func() {} }
+	return svc
 }
 
 // open records a check for event "e1", launching chat-1.
