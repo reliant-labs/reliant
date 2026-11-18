@@ -528,16 +528,16 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
   // They are stored ON the message envelope (not in Zustand) so they stay
   // adjacent to the messages they describe and survive the stream's
   // message-only patches — see message-queries.ts.
+  // The stream asks the server not to count the chat (skipTotal), so the
+  // snapshot's total is 0 and is not written: the envelope keeps its own.
   handleChatPaginationInfo: (chatId, pagination) => {
     logger.debug(`${LOG_PREFIX} Chat pagination info`, {
       chatId: chatId.slice(0, 8),
-      total: pagination.total,
       hasMore: pagination.hasMore,
       oldestSeq: pagination.oldestSeq,
     });
 
     setMessagesMetaInCache(chatId, {
-      total: pagination.total,
       hasMore: pagination.hasMore,
       oldestSeq: pagination.oldestSeq,
     });

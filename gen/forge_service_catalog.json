@@ -36620,6 +36620,11 @@
               "Name": "tool_bodies",
               "ProtoType": "enum",
               "IsOptional": true
+            },
+            {
+              "Name": "skip_total",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "StreamOrgUpdatesRequest": [
@@ -37189,6 +37194,10 @@
               "kind": "enum",
               "type_name": "reliant.v1.ToolBodyMode",
               "optional": true
+            },
+            {
+              "name": "skip_total",
+              "kind": "bool"
             }
           ],
           "reliant.v1.StreamOrgUpdatesRequest": [
