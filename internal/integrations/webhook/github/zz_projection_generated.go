@@ -369,6 +369,7 @@ func prObject(v any) map[string]any {
 		"merged":              dig(v, "merged") == true,
 		"html_url":            text(dig(v, "html_url")),
 		"user":                userObject(dig(v, "user")),
+		"author_association":  text(dig(v, "author_association")),
 		"head":                refObject(dig(v, "head")),
 		"base":                refObject(dig(v, "base")),
 		"labels":              names(dig(v, "labels"), "name"),
@@ -699,6 +700,17 @@ func refObject(v any) map[string]any {
 		"ref":   text(dig(v, "ref")),
 		"sha":   text(dig(v, "sha")),
 		"label": text(dig(v, "label")),
+	}
+	if isObject(dig(v, "repo")) {
+		out["repo"] = refObjectRepo(dig(v, "repo"))
+	}
+	return out
+}
+
+func refObjectRepo(v any) map[string]any {
+	out := map[string]any{
+		"full_name": text(dig(v, "full_name")),
+		"fork":      dig(v, "fork") == true,
 	}
 	return out
 }

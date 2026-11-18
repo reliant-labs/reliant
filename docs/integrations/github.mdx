@@ -194,6 +194,24 @@ Boolean-like attributes are the strings `"true"` and `"false"`; quote them in YA
 
 Comments written by **Reliant's own bot** never fire `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments or replies as the bot cannot trigger itself. Comments from any other bot (Dependabot, a CI app, a review tool) do fire them: filter on `trigger.sender` if you want to ignore one. The bot is recognised by its numeric GitHub id, never its login; a deployment with its own App sets `RELIANT_GITHUB_BOT_USER_ID` to that bot's id.
 
+### Pull requests from forks
+
+In a public repository anyone can open a pull request from a fork, and its branch holds code nobody with access to your repository wrote. A trigger that runs that code (a test run, a build) or gives an agent tools on it should refuse such pull requests. Every pull request object says where its branch lives and who opened it:
+
+- `pull_request.head.repo.full_name` (`owner/name`) and `pull_request.head.repo.fork` name the repository the branch is in. GitHub sends no head repository once the fork is deleted, so `head.repo` is then absent: test it with `has()`.
+- `pull_request.author_association` is how the author is associated with your repository: `OWNER`, `MEMBER` and `COLLABORATOR` have access to it; `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, `FIRST_TIMER`, `MANNEQUIN` and `NONE` do not.
+
+Allow what you trust rather than deny what you don't, so an absent field refuses:
+
+```yaml
+filter: >-
+  has(trigger.payload.data.pull_request.head.repo)
+  && trigger.payload.data.pull_request.head.repo.full_name == trigger.payload.data.repository.full_name
+  && trigger.payload.data.pull_request.author_association in ['OWNER', 'MEMBER', 'COLLABORATOR']
+```
+
+`pull_request.base.repo` carries the same two fields for the repository the pull request targets.
+
 ### Your workflow's own writes
 
 Every other event a run can cause (a label it adds, a pull request it opens, a review it submits, a push it makes) does reach your triggers, and a workflow that writes to what it watches would otherwise hear itself. Reliant records each mutating GitHub action a run makes before it makes it, then attributes the webhook that follows. That is `trigger.origin`, and by default a trigger ignores events its own workflow's runs caused:

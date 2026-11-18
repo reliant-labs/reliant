@@ -38,6 +38,8 @@ func TestGitHubAutomationEventPayloadsAcceptWhatRuns(t *testing.T) {
 		"check suite": {"check_suite.completed",
 			"    filter: \"trigger.payload.data.check_suite.conclusion == 'success' && size(trigger.payload.data.check_suite.pull_requests) > 0\"\n" +
 				"    inputs:\n      issue_number: \"{{ trigger.payload.data.check_suite.pull_requests[0] }}\"\n"},
+		"refuse forks and untrusted authors": {"pull_request.opened, pull_request.synchronize",
+			"    filter: \"has(trigger.payload.data.pull_request.head.repo) && !trigger.payload.data.pull_request.head.repo.fork && trigger.payload.data.pull_request.head.repo.full_name == trigger.payload.data.repository.full_name && trigger.payload.data.pull_request.author_association in ['OWNER', 'MEMBER', 'COLLABORATOR']\"\n"},
 		"several new events together": {"issues.unlabeled, issues.reopened",
 			"    filter: \"trigger.payload.data.issue.number > 0\"\n"},
 	}
@@ -78,6 +80,11 @@ func TestGitHubAutomationEventPayloadTypeErrors(t *testing.T) {
 			"check_run.completed",
 			"    filter: \"trigger.payload.data.check_run.app == 'github-actions'\"\n",
 			[]string{"filter", "trigger.payload.data.check_run.app"},
+		},
+		"a fork flag is a boolean": {
+			"pull_request.opened",
+			"    filter: \"trigger.payload.data.pull_request.head.repo.fork == 'true'\"\n",
+			[]string{"filter", "no matching overload", "(bool, string)"},
 		},
 		"a reopened issue has no label": {
 			"issues.reopened",
