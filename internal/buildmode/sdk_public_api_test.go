@@ -3,6 +3,7 @@ package buildmode_test
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -589,7 +590,9 @@ func TestSDKHasOneRegistrationOfEachPublicProto(t *testing.T) {
 // `go install <module>@<version>` refuses a module that has a replace, so
 // release commits drop it: scripts/sdk-release-pin.sh (run by the RC train)
 // requires the SDK at the release's base commit instead, and
-// TestSDKReleasePinDropsTheReplace holds that script.
+// TestSDKReleasePinDropsTheReplace holds that script. The release gate runs this
+// test on that commit too, so go.mod passes in either state: replacing the SDK
+// with exactly ./sdk/go (main), or not replacing it at all (a release commit).
 func TestSDKModuleIsSelfContained(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -634,14 +637,8 @@ func TestSDKModuleIsSelfContained(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`(?m)^\s*(replace\s+)?github\.com/reliant-labs/reliant/sdk/go\s+=>\s+\./sdk/go\s*$`).Match(rootMod) {
-		t.Error("go.mod does not replace github.com/reliant-labs/reliant/sdk/go with ./sdk/go: the app must build against this tree's SDK, or every SDK change needs a pin bump after it merges (reliant#2824)")
-	}
-	if !regexp.MustCompile(`(?m)^\s*(require\s+)?github\.com/reliant-labs/reliant/sdk/go\s+v\S+`).Match(rootMod) {
-		t.Error("go.mod does not require github.com/reliant-labs/reliant/sdk/go at a version: a consumer of this module ignores the replace and resolves the SDK by that line")
-	}
-	if regexp.MustCompile(`(?m)^\s*(require\s+)?github\.com/reliant-labs/reliant/sdk/go\s+v0\.0\.0(\s|$)`).Match(rootMod) {
-		t.Error("go.mod requires github.com/reliant-labs/reliant/sdk/go v0.0.0, which no version provides")
+	for _, p := range rootGoModSDKProblems(rootMod) {
+		t.Error(p)
 	}
 
 	// The license is Apache-2.0, in the module's own LICENSE.
@@ -651,6 +648,61 @@ func TestSDKModuleIsSelfContained(t *testing.T) {
 	}
 	if !strings.Contains(string(lic), "Apache License") || !strings.Contains(string(lic), "Version 2.0") {
 		t.Error("sdk/go/LICENSE is not the Apache License, Version 2.0")
+	}
+}
+
+// rootGoModSDKProblems: what is wrong with how the app's go.mod names the SDK,
+// in either of its two states (TestSDKModuleIsSelfContained). Main replaces the
+// SDK with exactly ./sdk/go; a release commit (scripts/sdk-release-pin.sh)
+// replaces it not at all. In both, the require line names a version the module
+// proxy can serve, which is all a consumer of this module reads.
+func rootGoModSDKProblems(rootMod []byte) []string {
+	var problems []string
+	// Every replace of the SDK, in either spelling (a replace line, or a line of a
+	// replace block), with or without a version on its left.
+	sdkReplaces := regexp.MustCompile(`(?m)^\s*(?:replace\s+)?github\.com/reliant-labs/reliant/sdk/go(?:\s+v\S+)?\s+=>.*$`).FindAll(rootMod, -1)
+	localReplace := regexp.MustCompile(`^\s*(?:replace\s+)?github\.com/reliant-labs/reliant/sdk/go\s+=>\s+\./sdk/go\s*$`)
+	switch {
+	case len(sdkReplaces) > 1:
+		problems = append(problems, fmt.Sprintf("go.mod replaces github.com/reliant-labs/reliant/sdk/go %d times; it may replace it once, with ./sdk/go", len(sdkReplaces)))
+	case len(sdkReplaces) == 1 && !localReplace.Match(sdkReplaces[0]):
+		problems = append(problems, fmt.Sprintf("go.mod replaces github.com/reliant-labs/reliant/sdk/go with something other than ./sdk/go (%s): the app builds against this tree's SDK, or a release commit drops the replace (reliant#2824)", strings.TrimSpace(string(sdkReplaces[0]))))
+	}
+	// The require, never the replace's left side.
+	requires := regexp.MustCompile(`(?m)^\s*(?:require\s+)?github\.com/reliant-labs/reliant/sdk/go\s+(v\S+)\s*(?://.*)?$`).FindAllSubmatch(rootMod, -1)
+	switch {
+	case len(requires) == 0:
+		problems = append(problems, "go.mod does not require github.com/reliant-labs/reliant/sdk/go at a version: a consumer of this module ignores the replace and resolves the SDK by that line")
+	case string(requires[0][1]) == "v0.0.0":
+		problems = append(problems, "go.mod requires github.com/reliant-labs/reliant/sdk/go v0.0.0, which no version provides")
+	}
+	return problems
+}
+
+// TestRootGoModSDKProblems: the app's go.mod passes in both of its states,
+// main's and a release commit's, so the release gate passes the commit the RC
+// train tags (control-plane#2926), and fails anything else.
+func TestRootGoModSDKProblems(t *testing.T) {
+	t.Parallel()
+	const head = "module github.com/reliant-labs/reliant\n\ngo 1.25\n\n"
+	const req = "require (\n\tgithub.com/reliant-labs/reliant/sdk/go v0.0.0-20261118000000-0123456789ab\n\tgolang.org/x/mod v0.20.0\n)\n"
+	for _, tc := range []struct {
+		name, mod string
+		ok        bool
+	}{
+		{"main: the require and the ./sdk/go replace", head + req + "\nreplace github.com/reliant-labs/reliant/sdk/go => ./sdk/go\n", true},
+		{"main: the replace in a block", head + req + "\nreplace (\n\tgithub.com/reliant-labs/reliant/sdk/go => ./sdk/go\n)\n", true},
+		{"a release commit: the require alone", head + req, true},
+		{"a release commit at a tag", head + "require github.com/reliant-labs/reliant/sdk/go v1.4.0\n", true},
+		{"a replace somewhere else", head + req + "\nreplace github.com/reliant-labs/reliant/sdk/go => ../sdk\n", false},
+		{"a versioned replace", head + req + "\nreplace github.com/reliant-labs/reliant/sdk/go v1.4.0 => ./sdk/go\n", false},
+		{"two replaces", head + req + "\nreplace github.com/reliant-labs/reliant/sdk/go => ./sdk/go\nreplace github.com/reliant-labs/reliant/sdk/go => ./sdk/go\n", false},
+		{"no require", head + "replace github.com/reliant-labs/reliant/sdk/go => ./sdk/go\n", false},
+		{"a require of v0.0.0", head + "require github.com/reliant-labs/reliant/sdk/go v0.0.0\n\nreplace github.com/reliant-labs/reliant/sdk/go => ./sdk/go\n", false},
+	} {
+		if got := rootGoModSDKProblems([]byte(tc.mod)); (len(got) == 0) != tc.ok {
+			t.Errorf("%s: problems %q, want ok=%v", tc.name, got, tc.ok)
+		}
 	}
 }
 

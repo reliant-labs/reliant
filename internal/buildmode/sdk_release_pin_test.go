@@ -134,6 +134,10 @@ func TestSDKReleasePinDropsTheReplace(t *testing.T) {
 	if !strings.Contains(string(mod), sdkModule+" "+newVersion) {
 		t.Errorf("go.mod does not require %s %s:\n%s", sdkModule, newVersion, mod)
 	}
+	// The release gate runs TestSDKModuleIsSelfContained on this commit.
+	for _, p := range rootGoModSDKProblems(mod) {
+		t.Errorf("the release commit's go.mod fails the SDK check: %s\n%s", p, mod)
+	}
 	if sum, err := os.ReadFile(filepath.Join(dir, "go.sum")); err != nil || !strings.Contains(string(sum), sdkModule+" "+newVersion+" h1:") {
 		t.Errorf("go.sum has no hash for %s %s (%v):\n%s", sdkModule, newVersion, err, sum)
 	}

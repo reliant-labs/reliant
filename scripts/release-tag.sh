@@ -259,6 +259,21 @@ elif ! git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main; then
     exit 1
 fi
 
+# main's go.mod replaces the Go SDK with ./sdk/go (reliant#2824), and `go install …@<tag>`
+# refuses a module whose go.mod has a replace. The train's pin commit drops it
+# (scripts/sdk-release-pin.sh), so an RC head that still carries it was cut by a train
+# that does not know to: refuse it. A main commit always carries it, so a tag of one
+# (the manual path) is only warned about.
+if git show "$RELEASE_COMMIT:go.mod" 2>/dev/null \
+    | grep -Eq '^[[:space:]]*(replace[[:space:]]+)?github\.com/reliant-labs/reliant/sdk/go([[:space:]]+v[^[:space:]]+)?[[:space:]]+=>'; then
+    if [[ "$RC_MODE" == "true" ]]; then
+        echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9}'s go.mod replaces github.com/reliant-labs/reliant/sdk/go${NC}" >&2
+        echo -e "${YELLOW}  A release commit requires the SDK by version (scripts/sdk-release-pin.sh); the RC train's pin commit drops the replace (control-plane#2926).${NC}" >&2
+        exit 1
+    fi
+    echo -e "${YELLOW}⚠️  ${RELEASE_COMMIT:0:9}'s go.mod replaces the Go SDK: \`go install github.com/reliant-labs/reliant/...@${RELEASE_TAG}\` will refuse this tag. The RC train (--rc) tags a commit without it.${NC}" >&2
+fi
+
 # The changelog for a stable release must be on main too — the tag and the
 # release notes describing it should be the same commit, not two states of the
 # repo that happen to both exist.
