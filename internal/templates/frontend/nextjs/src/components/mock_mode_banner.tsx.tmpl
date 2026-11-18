@@ -1,0 +1,45 @@
+"use client";
+
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// MockModeBanner: a loud reminder whenever the app serves mock data (forge.Frontend `config.mock`), so
+// a working-looking UI never passes for a working stack. Semantic warning tokens only.
+{{- if .HasMockAPI}}
+// A client component on purpose: it reads the mode from config.js after hydration, as the transport
+// does; NEXT_PUBLIC_MOCK_API would bake the mode into the build and make the bundle unpromotable.
+
+import { useSyncExternalStore } from "react";
+
+import { loadConfig } from "@/lib/config_gen";
+
+// The config is fixed for the page's lifetime, so there is nothing to
+// subscribe to; useSyncExternalStore is here for its hydration contract
+// (server snapshot first, then the client's), not for updates.
+const noSubscription = () => () => {};
+
+function useMockMode(): string | undefined {
+  return useSyncExternalStore(
+    noSubscription,
+    () => loadConfig().MOCK_API,
+    () => undefined,
+  );
+}
+
+export function MockModeBanner() {
+  const mode = useMockMode();
+{{- else}}
+
+export function MockModeBanner() {
+  const mode = process.env.NEXT_PUBLIC_MOCK_API;
+{{- end}}
+  if (mode !== "true" && mode !== "hybrid") return null;
+  return (
+    <div
+      role="status"
+      className="bg-warning px-4 py-1.5 text-center text-sm font-semibold text-on-warning"
+    >
+      {mode === "true"
+        ? "MOCK DATA — backend not connected (unset mock_api in deploy/kcl/<env>/config.k to use the real backend)"
+        : "HYBRID MOCK MODE — ?scenario= overlays active; unmatched RPCs hit the real backend"}
+    </div>
+  );
+}

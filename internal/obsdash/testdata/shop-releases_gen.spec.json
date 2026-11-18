@@ -1,0 +1,240 @@
+{
+  "version": "forge.dashboards/v1",
+  "sections": [
+    {
+      "id": "latest",
+      "title": "Latest release",
+      "description": "Each environment's running release against the one it replaced, judged by the release-health rule forge obs check applies: the same windows, thresholds, findings and verdict."
+    },
+    {
+      "id": "delivery",
+      "title": "Delivery",
+      "description": "How often and how safely the team ships, from the release ledger: the four DORA figures over the range, and every promotion and rollback across environments."
+    },
+    {
+      "id": "adoption",
+      "title": "Adoption",
+      "description": "How far each release has rolled out: the share of backend requests and of browser sessions each version served."
+    },
+    {
+      "id": "health",
+      "title": "Health by release",
+      "description": "Each signal split by the release that served it. A regression is the version whose line departs at its promotion marker."
+    }
+  ],
+  "id": "releases",
+  "title": "shop: releases",
+  "description": "Whether the last release was good, how often and how safely the team ships, how far each rollout has got, and how every release behaved against the others. The verdict is release health's (forge obs check); promotions, rollbacks and DORA come from the release ledger; deploy markers are drawn on every chart.",
+  "group": "releases",
+  "filters": [
+    {
+      "id": "service",
+      "label": "Service",
+      "field": "service.name"
+    },
+    {
+      "id": "env",
+      "label": "Environment",
+      "field": "deployment.environment.name"
+    }
+  ],
+  "annotations": [
+    {
+      "source": "releases",
+      "label": "Releases"
+    }
+  ],
+  "defaultRange": "7d",
+  "panels": [
+    {
+      "section": "latest",
+      "id": "release-health",
+      "title": "Latest release by environment",
+      "description": "The running release in each environment against the one before it: error rate, p95 latency and throughput before and after the promotion, new and regressed issues, and the verdict (good, regressed, or not enough data yet). Open a release for its full Health tab.",
+      "kind": "release_health",
+      "width": 24,
+      "height": 10
+    },
+    {
+      "section": "delivery",
+      "id": "delivery",
+      "title": "Delivery performance",
+      "description": "Deployment frequency, lead time (commit to promotion), change failure rate and time to restore over the range, from the release ledger. A change fails when a rollback follows it within 24 hours.",
+      "kind": "delivery",
+      "width": 24,
+      "height": 5
+    },
+    {
+      "section": "delivery",
+      "id": "promotions",
+      "title": "Promotions",
+      "description": "Every promotion and rollback across environments in the range, newest first: the release, its commit, who promoted it and when.",
+      "kind": "promotions",
+      "width": 24,
+      "height": 10
+    },
+    {
+      "section": "adoption",
+      "id": "backend-version-share",
+      "title": "Backend traffic by version",
+      "description": "The share of server requests each service.version served, per bucket: a rollout is one band replacing another.",
+      "kind": "sql",
+      "sql": "SELECT t, version AS \"Version\", round(n / sum(n) OVER (PARTITION BY t), 4) AS \"Share of requests\"\nFROM (\n    SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t, if(ResourceAttributes['service.version'] = '', '(unversioned)', ResourceAttributes['service.version']) AS version,\n           sum(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6))) AS n\n    FROM otel_traces\n    WHERE SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n    GROUP BY t, version\n)\nORDER BY t, version",
+      "display": {
+        "style": "area",
+        "stack": true,
+        "topN": 8
+      },
+      "unit": "percent",
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "adoption",
+      "id": "browser-version-share",
+      "title": "Browser sessions by version",
+      "description": "The share of browser sessions started on each frontend version, per bucket: how fast visitors pick up a new build.",
+      "kind": "sql",
+      "sql": "SELECT t, version AS \"Version\", round(n / sum(n) OVER (PARTITION BY t), 4) AS \"Share of sessions\"\nFROM (\n    SELECT toStartOfInterval(started, toIntervalSecond({step:UInt32})) AS t, version, count() AS n\n    FROM (\n    SELECT ServiceName, SessionId, min(Start) AS started,\n           if(max(ServiceVersion) = '', '(unversioned)', max(ServiceVersion)) AS version, max(EnvId) AS env_id, sum(Errors) AS errors\n    FROM rum_sessions\n    WHERE Day \u003e= subtractDays(toDate({from:DateTime64(9)}), 1) AND Day \u003c= toDate({to:DateTime64(9)}) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n    GROUP BY ServiceName, SessionId\n    HAVING started \u003e= {from:DateTime64(9)} AND started \u003c {to:DateTime64(9)}\n       AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, env_id))\n    )\n    GROUP BY t, version\n)\nORDER BY t, version",
+      "display": {
+        "style": "area",
+        "stack": true,
+        "topN": 8
+      },
+      "unit": "percent",
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "health",
+      "id": "error-rate-by-version",
+      "title": "Error rate by version",
+      "description": "Server errors (not cancellations) over all requests, one line per version.",
+      "kind": "line",
+      "signal": "traces",
+      "series": [
+        {
+          "label": "errors",
+          "agg": "count",
+          "where": [
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            }
+          ]
+        },
+        {
+          "label": "requests",
+          "agg": "count"
+        }
+      ],
+      "ratio": true,
+      "where": [
+        {
+          "field": "span.kind",
+          "op": "eq",
+          "value": "server"
+        }
+      ],
+      "groupBy": [
+        "resource.attr.service.version"
+      ],
+      "unit": "percent",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "health",
+      "id": "p95-by-version",
+      "title": "p95 latency by version",
+      "description": "The 95th percentile of server request time, one line per version.",
+      "kind": "line",
+      "signal": "traces",
+      "series": [
+        {
+          "label": "p95",
+          "agg": "quantile",
+          "quantile": 0.95,
+          "field": "span.duration"
+        }
+      ],
+      "where": [
+        {
+          "field": "span.kind",
+          "op": "eq",
+          "value": "server"
+        }
+      ],
+      "groupBy": [
+        "resource.attr.service.version"
+      ],
+      "unit": "ms",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "health",
+      "id": "request-rate-by-version",
+      "title": "Requests by version",
+      "description": "Throughput: server requests per bucket, one line per version.",
+      "kind": "line",
+      "signal": "traces",
+      "series": [
+        {
+          "label": "requests",
+          "agg": "count"
+        }
+      ],
+      "where": [
+        {
+          "field": "span.kind",
+          "op": "eq",
+          "value": "server"
+        }
+      ],
+      "groupBy": [
+        "resource.attr.service.version"
+      ],
+      "unit": "count",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "health",
+      "id": "new-issues-by-release",
+      "title": "New issues by release",
+      "description": "Server and browser issues first seen in the range, by the version that first raised them, counting those with at least 3 events (release health's new-issue bar). First seen is the first event in the 30 days before the end of the range.",
+      "kind": "sql",
+      "sql": "SELECT first_version AS \"Version\", count() AS \"New issues\"\nFROM (\n    SELECT ServiceName, Fingerprint, min(Timestamp) AS first_seen,\n           argMin(if(ServiceVersion = '', '(unversioned)', ServiceVersion), Timestamp) AS first_version,\n           countIf(Timestamp \u003e= {from:DateTime64(9)}) AS events\n    FROM (\n        SELECT ServiceName, Fingerprint, Timestamp, ServiceVersion\n        FROM server_error_events\n        WHERE Fingerprint != '' AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 30 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n        UNION ALL\n        SELECT e.ServiceName AS ServiceName, s.fp AS Fingerprint, e.Timestamp AS Timestamp, e.ServiceVersion AS ServiceVersion\n        FROM error_events AS e\n        INNER JOIN (\n            SELECT ServiceName, ServiceVersion, RawStackHash, argMax(Fingerprint, UpdatedAt) AS fp\n            FROM error_stacks\n            GROUP BY ServiceName, ServiceVersion, RawStackHash\n        ) AS s ON e.ServiceName = s.ServiceName AND e.ServiceVersion = s.ServiceVersion AND e.RawStackHash = s.RawStackHash\n        WHERE s.fp != '' AND e.Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 30 DAY AND e.Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, e.EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, e.ServiceName))\n    )\n    GROUP BY ServiceName, Fingerprint\n)\nWHERE first_seen \u003e= {from:DateTime64(9)} AND events \u003e= 3\nGROUP BY first_version\nORDER BY min(first_seen), first_version",
+      "display": {
+        "style": "bars",
+        "colors": {
+          "New issues": "danger"
+        }
+      },
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "health",
+      "id": "version-comparison",
+      "title": "Releases side by side",
+      "description": "One row per backend version seen in the range, newest first: when it was first and last seen, its requests, error rate and latency.",
+      "kind": "sql",
+      "sql": "SELECT if(ResourceAttributes['service.version'] = '', '(unversioned)', ResourceAttributes['service.version']) AS \"Version\",\n       formatDateTime(min(Timestamp), '%Y-%m-%d %H:%i') AS \"First seen (UTC)\",\n       formatDateTime(max(Timestamp), '%Y-%m-%d %H:%i') AS \"Last seen (UTC)\",\n       toUInt64(round(sum(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6))))) AS \"Requests\",\n       round(100 * sumIf(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6)), (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND NOT (SpanAttributes['error_class'] = 'canceled' OR SpanAttributes['rpc.connect_rpc.error_code'] = 'canceled' OR SpanAttributes['http.response.status_code'] = '499' OR SpanAttributes['http.status_code'] = '499'))) / nullIf(sum(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6))), 0), 2) AS \"Error rate (%)\",\n       round(quantileExactWeightedIf(0.5)(Duration / 1000000, toUInt64(round(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6)))), NOT (SpanAttributes['forge.rpc.stream_type'] != '' OR match(SpanName, '/Stream[A-Z][^/]*$'))), 1) AS \"p50 (ms)\",\n       round(quantileExactWeightedIf(0.95)(Duration / 1000000, toUInt64(round(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6)))), NOT (SpanAttributes['forge.rpc.stream_type'] != '' OR match(SpanName, '/Stream[A-Z][^/]*$'))), 1) AS \"p95 (ms)\",\n       round(quantileExactWeightedIf(0.99)(Duration / 1000000, toUInt64(round(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6)))), NOT (SpanAttributes['forge.rpc.stream_type'] != '' OR match(SpanName, '/Stream[A-Z][^/]*$'))), 1) AS \"p99 (ms)\"\nFROM otel_traces\nWHERE SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY if(ResourceAttributes['service.version'] = '', '(unversioned)', ResourceAttributes['service.version'])\nORDER BY min(Timestamp) DESC, \"Version\"\nLIMIT 20",
+      "width": 24,
+      "height": 8
+    },
+    {
+      "section": "health",
+      "id": "crash-free-sessions-by-version",
+      "title": "Crash-free sessions by version",
+      "description": "Browser sessions started in the range on each frontend version, newest first, and the share with no browser error (an uncaught exception, an unhandled rejection, or an exception the app recorded or logged).",
+      "kind": "sql",
+      "sql": "SELECT version AS \"Version\",\n       formatDateTime(min(started), '%Y-%m-%d %H:%i') AS \"First session (UTC)\",\n       count() AS \"Sessions\",\n       countIf(errors \u003e 0) AS \"Sessions with an error\",\n       round(100 * countIf(errors = 0) / count(), 2) AS \"Crash-free sessions (%)\"\nFROM (\n    SELECT ServiceName, SessionId, min(Start) AS started,\n           if(max(ServiceVersion) = '', '(unversioned)', max(ServiceVersion)) AS version, max(EnvId) AS env_id, sum(Errors) AS errors\n    FROM rum_sessions\n    WHERE Day \u003e= subtractDays(toDate({from:DateTime64(9)}), 1) AND Day \u003c= toDate({to:DateTime64(9)}) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n    GROUP BY ServiceName, SessionId\n    HAVING started \u003e= {from:DateTime64(9)} AND started \u003c {to:DateTime64(9)}\n       AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, env_id))\n)\nGROUP BY version\nORDER BY min(started) DESC, version\nLIMIT 20",
+      "width": 24,
+      "height": 7
+    }
+  ]
+}

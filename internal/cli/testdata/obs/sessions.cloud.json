@@ -1,0 +1,51 @@
+{
+  "schema": "forge.obs.sessions/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "prod",
+    "backend": "cloud",
+    "env_id": "env-prod",
+    "from": "2026-10-21T12:00:00Z",
+    "to": "2026-10-22T12:00:00Z",
+    "services": [
+      "reliant-web"
+    ]
+  },
+  "query_mode": "structured",
+  "sessions": [
+    {
+      "id": "91b955b313a1a86644ea53730a92deab",
+      "service": "reliant-web",
+      "version": "3f9c0e",
+      "user_id": "user-42",
+      "entry_path": "/",
+      "started": "2026-10-22T11:44:06.285Z",
+      "ended": "2026-10-22T11:47:18.1Z",
+      "duration_ms": 191815,
+      "page_views": 5,
+      "interactions": 12,
+      "errors": 2,
+      "has_replay": true
+    },
+    {
+      "id": "072af6846fd16a702ead77ec49f2408e",
+      "service": "reliant-web",
+      "version": "3f9c0e",
+      "entry_path": "/pricing",
+      "started": "2026-10-22T10:44:06.285Z",
+      "ended": "2026-10-22T10:47:18.285Z",
+      "duration_ms": 192000,
+      "page_views": 1,
+      "interactions": 3,
+      "errors": 0,
+      "has_replay": false
+    }
+  ],
+  "truncated": true,
+  "next_page_token": "fp1.eyJmIjoiMjAyNi0xMC0yMVQxMjowMDowMFoiLCJ0IjoiMjAyNi0xMC0yMlQxMjowMDowMFoiLCJrIjoidG9rMiJ9",
+  "suggested": [
+    "forge obs session 91b955b313a1a86644ea53730a92deab prod",
+    "forge obs session 072af6846fd16a702ead77ec49f2408e prod"
+  ]
+}

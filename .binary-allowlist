@@ -1,0 +1,5 @@
+# Files scripts/check-no-binaries.sh lets a change add even though git cannot
+# diff them as text. One path or glob per line; * also crosses /.
+
+# README screenshots (docs/images/README.md says how they are captured).
+docs/images/*.png
