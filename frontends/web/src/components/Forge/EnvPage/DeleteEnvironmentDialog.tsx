@@ -21,6 +21,12 @@
  *
  * Deleting needs an org owner or admin (orgAuthority.ts). The menu item is
  * disabled for a known member; a PermissionDenied is still shown in words.
+ *
+ * KEEP DATA IS OFFERED ONLY WHERE IT CAN BE CHECKED. The dialog asks
+ * ListRetainedDatabases first: a control plane that does not serve it
+ * (Unimplemented) gets no Keep data option, and the dialog says why. A
+ * keep-data delete that succeeds leaves a check (Overview/keptDataChecks.ts)
+ * that confirms the databases are listed as kept, and warns if they are not.
  */
 
 import { useId, useState } from "react";
@@ -33,19 +39,23 @@ import Label from "@/components/forge-ui/label";
 import Modal from "@/components/forge-ui/modal";
 import { useForgeDomains } from "@/hooks/forge-domain-queries";
 import { useDeleteEnvironment } from "@/hooks/forge-queries";
-import { useUnbindDomainsAndDelete, type TeardownStep } from "@/hooks/forge-teardown-queries";
-import { isDomainBoundRefusal } from "@/services/forge/cloudEnvs";
+import { useRetainedDatabases, useUnbindDomainsAndDelete, type TeardownStep } from "@/hooks/forge-teardown-queries";
+import { isDomainBoundRefusal, isUnimplemented } from "@/services/forge/cloudEnvs";
 import { cn } from "@/lib/utils";
 
+import { startKeptDataCheck } from "../Overview/keptDataChecks";
 import { DELETE_ENV_NEEDS_ADMIN, refusalText } from "../orgAuthority";
 
 type DataChoice = "delete" | "keep";
+type KeepSupport = "checking" | "supported" | "unsupported";
 
 export function DeleteEnvironmentDialog({
   isOpen,
   environmentId,
   envName,
   workloads = [],
+  databases = null,
+  project = "",
   onClose,
   onDeleted,
 }: {
@@ -54,12 +64,23 @@ export function DeleteEnvironmentDialog({
   envName: string;
   /** The workload names the delete stops, when the status read has them. */
   workloads?: string[];
+  /** Its database workloads; null when the status read has not said. */
+  databases?: string[] | null;
+  /** The forge project (app), so the keep-data check shows on its page. */
+  project?: string;
   onClose: () => void;
   onDeleted?: () => void;
 }) {
   const del = useDeleteEnvironment(environmentId);
   const unbindAndDelete = useUnbindDomainsAndDelete(environmentId, envName);
   const domains = useForgeDomains({ enabled: isOpen });
+  // Whether this control plane can keep (and list) databases at all.
+  const keepProbe = useRetainedDatabases({ enabled: isOpen });
+  const keepSupport: KeepSupport = isUnimplemented(keepProbe.error)
+    ? "unsupported"
+    : keepProbe.isLoading
+      ? "checking"
+      : "supported";
   const [typed, setTyped] = useState("");
   const [data, setData] = useState<DataChoice>("delete");
   const matches = typed === envName;
@@ -80,7 +101,10 @@ export function DeleteEnvironmentDialog({
     unbindAndDelete.reset();
     onClose();
   };
-  const done = () => {
+  const done = (keptData: boolean) => {
+    if (keptData && (databases === null || databases.length > 0)) {
+      startKeptDataCheck({ environmentId, envName, project, databases: databases ?? [] });
+    }
     setTyped("");
     setData("delete");
     del.reset();
@@ -88,13 +112,13 @@ export function DeleteEnvironmentDialog({
     onClose();
     onDeleted?.();
   };
-  const keepData = data === "keep";
+  const keepData = data === "keep" && keepSupport === "supported" && databases?.length !== 0;
   const confirm = () => {
     if (unbindFirst) {
       del.reset();
-      unbindAndDelete.mutate({ keepData }, { onSuccess: done });
+      unbindAndDelete.mutate({ keepData }, { onSuccess: () => done(keepData) });
     } else {
-      del.mutate({ keepData }, { onSuccess: done });
+      del.mutate({ keepData }, { onSuccess: () => done(keepData) });
     }
   };
 
@@ -129,7 +153,22 @@ export function DeleteEnvironmentDialog({
           </ul>
         </div>
 
-        <DataChoiceField value={data} onChange={setData} disabled={pending} />
+        {databases?.length === 0 ? (
+          <p className="text-ink-muted" data-testid="delete-environment-no-databases">
+            It runs no databases, so there is no data to keep.
+          </p>
+        ) : keepSupport === "unsupported" ? (
+          <div className="space-y-1" data-testid="delete-environment-keep-unavailable">
+            <p className="font-medium">Databases</p>
+            <p>Its databases are deleted with it, data included. This cannot be undone.</p>
+            <p className="text-ink-muted">
+              Keep data isn&apos;t offered: this control plane can&apos;t list kept databases, so a kept one could not be
+              confirmed or purged here.
+            </p>
+          </div>
+        ) : (
+          <DataChoiceField value={data} onChange={setData} disabled={pending} keepChecking={keepSupport === "checking"} />
+        )}
 
         {bound.length > 0 && (
           <div className="space-y-1.5" data-testid="delete-environment-bound-domains">
@@ -202,18 +241,21 @@ function DataChoiceField({
   value,
   onChange,
   disabled,
+  keepChecking,
 }: {
   value: DataChoice;
   onChange: (value: DataChoice) => void;
   disabled: boolean;
+  /** Keep data waits until the control plane is known to support it. */
+  keepChecking: boolean;
 }) {
   const name = useId();
-  const option = (choice: DataChoice, label: string, detail: string) => (
+  const option = (choice: DataChoice, label: string, detail: string, off = false) => (
     <label
       className={cn(
         "flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2",
         value === choice ? "border-ink/40 bg-ink/5" : "border-border hover:bg-ink/5",
-        disabled && "cursor-not-allowed opacity-60"
+        (disabled || off) && "cursor-not-allowed opacity-60"
       )}
     >
       <input
@@ -221,7 +263,7 @@ function DataChoiceField({
         name={name}
         checked={value === choice}
         onChange={() => onChange(choice)}
-        disabled={disabled}
+        disabled={disabled || off}
         className="mt-0.5 accent-current"
         data-testid={`delete-environment-data-${choice}`}
       />
@@ -238,7 +280,10 @@ function DataChoiceField({
       {option(
         "keep",
         "Keep data",
-        "Its databases are kept and keep billing as storage. They are listed under Kept databases on the Environments page until you purge them. A new deploy does not reattach them."
+        keepChecking
+          ? "Checking whether this control plane can keep them…"
+          : "Its databases are kept and keep billing as storage. They are listed under Kept databases on the Environments page until you purge them. A new deploy does not reattach them.",
+        keepChecking
       )}
     </fieldset>
   );

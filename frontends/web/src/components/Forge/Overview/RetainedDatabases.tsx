@@ -19,11 +19,17 @@
  * The control plane records the purge and its converger destroys the volumes;
  * the row stays listed until they are gone, so a requested purge shows
  * "Purge requested" in place of the button.
+ *
+ * KEEP DATA IS CONFIRMED HERE (keptDataChecks.ts). After a keep-data delete
+ * this page re-reads the list until the environment's databases appear, and
+ * warns when they do not within the window, or at once when the control
+ * plane cannot list kept databases (Unimplemented), rather than let a
+ * dropped keep_data pass as kept.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { Database } from "lucide-react";
+import { AlertTriangle, Database, Loader2 } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card, { CardHeader } from "@/components/forge-ui/card";
@@ -32,10 +38,14 @@ import Input from "@/components/forge-ui/input";
 import Label from "@/components/forge-ui/label";
 import Modal from "@/components/forge-ui/modal";
 import { usePurgeRetainedDatabase, useRetainedDatabases } from "@/hooks/forge-teardown-queries";
-import { cloudErrorDetail, type RetainedDatabase } from "@/services/forge/cloudEnvs";
+import { cloudErrorDetail, isUnimplemented, type RetainedDatabase } from "@/services/forge/cloudEnvs";
 
 import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { PURGE_NEEDS_ADMIN, refusalText, useOrgAuthority } from "../orgAuthority";
+import { CONFIRM_WINDOW_MS, endKeptDataCheck, useKeptDataChecks, type KeptDataCheck } from "./keptDataChecks";
+
+/** How often the list is re-read while a keep-data delete is being confirmed. */
+const CONFIRM_POLL_MS = 5_000;
 
 /** Refusals that mean "nothing to show here", not a fault. */
 const QUIET_CODES: ReadonlySet<Code> = new Set([Code.PermissionDenied, Code.Unimplemented, Code.Unauthenticated]);
@@ -46,25 +56,63 @@ function keptOn(iso: string | undefined): string | null {
 }
 
 export function RetainedDatabases({ project }: { project: string }) {
-  const retained = useRetainedDatabases({ enabled: project !== "" });
+  const allChecks = useKeptDataChecks((state) => state.checks);
+  const checks = allChecks.filter((check) => check.project === "" || check.project === project);
+  const retained = useRetainedDatabases({
+    enabled: project !== "",
+    refetchInterval: checks.length > 0 ? CONFIRM_POLL_MS : false,
+  });
   const authority = useOrgAuthority();
   const lock = useObsReadOnly();
   const [purging, setPurging] = useState<RetainedDatabase | null>(null);
   const [requested, setRequested] = useState<ReadonlySet<string>>(new Set());
 
+  // A check is done once its environment's databases are listed as kept.
+  const listed = retained.data ?? [];
+  const confirmed = checks.filter((check) => listed.some((row) => row.environmentId === check.environmentId));
+  const confirmedKey = confirmed.map((check) => check.environmentId).join(",");
+  useEffect(() => {
+    for (const id of confirmedKey.split(",")) if (id) endKeptDataCheck(id);
+  }, [confirmedKey]);
+  // Read on every refetch, so a check crosses its window between answers.
+  const now = Math.max(retained.dataUpdatedAt, retained.errorUpdatedAt, Date.now());
+  const open = checks.filter((check) => !confirmed.includes(check));
+  const checkNotices = open.length > 0 && (
+    <div className="space-y-2" data-testid="kept-data-checks">
+      {open.map((check) => (
+        <KeptDataNotice
+          key={check.environmentId}
+          check={check}
+          state={
+            isUnimplemented(retained.error)
+              ? "unverifiable"
+              : now - check.since > CONFIRM_WINDOW_MS
+                ? "missing"
+                : "pending"
+          }
+        />
+      ))}
+    </div>
+  );
+
   if (retained.error) {
-    if (retained.error instanceof ConnectError && QUIET_CODES.has(retained.error.code)) return null;
+    if (retained.error instanceof ConnectError && QUIET_CODES.has(retained.error.code)) return checkNotices || null;
     return (
-      <p role="status" className="text-sm text-ink-muted" data-testid="retained-databases-unavailable">
-        Couldn&apos;t read the databases kept from deleted environments: {cloudErrorDetail(retained.error) || "try again later"}.
-      </p>
+      <>
+        {checkNotices}
+        <p role="status" className="text-sm text-ink-muted" data-testid="retained-databases-unavailable">
+          Couldn&apos;t read the databases kept from deleted environments: {cloudErrorDetail(retained.error) || "try again later"}.
+        </p>
+      </>
     );
   }
-  const rows = (retained.data ?? []).filter((row) => row.project === project);
-  if (rows.length === 0) return null;
+  const rows = listed.filter((row) => row.project === project);
+  if (rows.length === 0) return checkNotices || null;
 
   const canPurge = authority !== "member";
   return (
+    <>
+    {checkNotices}
     <Card padding="none" data-testid="retained-databases">
       <div className="px-4 pt-3">
         <CardHeader
@@ -122,6 +170,47 @@ export function RetainedDatabases({ project }: { project: string }) {
         }}
       />
     </Card>
+    </>
+  );
+}
+
+/**
+ * One keep-data delete not yet confirmed. `pending` while the teardown may
+ * still be running; `missing` once the window has passed with nothing
+ * listed; `unverifiable` when the control plane cannot list kept databases.
+ */
+function KeptDataNotice({ check, state }: { check: KeptDataCheck; state: "pending" | "missing" | "unverifiable" }) {
+  const names = check.databases.length > 0 ? check.databases.join(", ") : "its databases";
+  if (state === "pending") {
+    return (
+      <p role="status" className="flex items-center gap-2 text-sm text-ink-muted" data-testid={`kept-data-pending-${check.environmentId}`}>
+        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+        Confirming that {check.envName}&apos;s databases were kept. They are listed here once its teardown finishes.
+      </p>
+    );
+  }
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-2 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-ink"
+      data-testid={`kept-data-warning-${check.environmentId}`}
+    >
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-ink" aria-hidden="true" />
+      <div className="min-w-0 space-y-1">
+        <p className="font-medium">
+          {check.envName} was deleted with Keep data, but Reliant can&apos;t confirm {names} {check.databases.length === 1 ? "was" : "were"} kept.
+        </p>
+        <p className="text-ink-muted">
+          {state === "unverifiable"
+            ? "This control plane can't list kept databases, so whether the data was kept is unknown."
+            : `No kept database from ${check.envName} is listed ${Math.round(CONFIRM_WINDOW_MS / 60_000)} minutes after the delete. If its teardown has finished, the data may have been deleted.`}{" "}
+          Contact support before relying on that data.
+        </p>
+        <Button variant="outline" size="sm" onClick={() => endKeptDataCheck(check.environmentId)} data-testid={`kept-data-dismiss-${check.environmentId}`}>
+          Dismiss
+        </Button>
+      </div>
+    </div>
   );
 }
 

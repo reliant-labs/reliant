@@ -255,6 +255,7 @@ export function ForgeEnvPage() {
             <EnvLifecycleControls
               environmentId={liveEnv.id}
               envName={envName}
+              project={forgeProject}
               status={cloudStatus.data}
               onDeleted={() => void navigate({ href: href({ kind: "environments" }) })}
             />

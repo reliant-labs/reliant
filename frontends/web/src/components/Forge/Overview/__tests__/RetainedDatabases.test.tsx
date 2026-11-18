@@ -47,6 +47,7 @@ vi.mock("@/hooks/useOrgs", async (importOriginal) => {
 });
 
 import { RetainedDatabases } from "../RetainedDatabases";
+import { CONFIRM_WINDOW_MS, startKeptDataCheck, useKeptDataChecks } from "../keptDataChecks";
 
 function row(id: string, project: string, databaseName: string, environmentName = "staging"): RetainedDatabase {
   return {
@@ -84,6 +85,7 @@ beforeEach(() => {
     row("r2", "blog", "blog-db", "prod"),
   ]);
   purgeRetainedDatabase.mockReset().mockResolvedValue(undefined);
+  useKeptDataChecks.setState({ checks: [] });
 });
 
 describe("kept databases", () => {
@@ -155,5 +157,45 @@ describe("kept databases", () => {
     // Unavailable is retried once before it is shown.
     const notice = await screen.findByTestId("retained-databases-unavailable", {}, { timeout: 10_000 });
     expect(notice.textContent).toContain("database unavailable");
+  });
+});
+
+describe("confirming a keep-data delete", () => {
+  const check = (since = Date.now()) =>
+    startKeptDataCheck({ environmentId: "env_gone", envName: "staging", project: "shop", databases: ["shop-db"], since });
+
+  it("says it is confirming, then clears once the databases are listed as kept", async () => {
+    check();
+    listRetainedDatabases.mockResolvedValue([]);
+    wrap();
+    expect(await screen.findByTestId("kept-data-pending-env_gone")).toHaveTextContent("Confirming that staging's databases were kept");
+
+    listRetainedDatabases.mockResolvedValue([{ ...row("r9", "shop", "shop-db"), environmentId: "env_gone" }]);
+    // The page re-reads on its poll; the listed row ends the check.
+    await waitFor(() => expect(useKeptDataChecks.getState().checks).toEqual([]), { timeout: 15_000 });
+    expect(screen.queryByTestId("kept-data-pending-env_gone")).toBeNull();
+    expect(await screen.findByTestId("retained-database-r9")).toBeTruthy();
+  });
+
+  it("warns when a server ignored Keep data: nothing is listed once the window has passed", async () => {
+    check(Date.now() - CONFIRM_WINDOW_MS - 1_000);
+    listRetainedDatabases.mockResolvedValue([row("r2", "blog", "blog-db")]);
+    wrap();
+    const warning = await screen.findByTestId("kept-data-warning-env_gone");
+    expect(warning).toHaveAttribute("role", "alert");
+    expect(warning.textContent).toContain("can't confirm shop-db was kept");
+    expect(warning.textContent).toContain("the data may have been deleted");
+
+    await userEvent.click(screen.getByTestId("kept-data-dismiss-env_gone"));
+    expect(useKeptDataChecks.getState().checks).toEqual([]);
+  });
+
+  it("warns at once when the control plane cannot list kept databases", async () => {
+    check();
+    listRetainedDatabases.mockRejectedValue(new ConnectError("not configured", Code.Unimplemented));
+    wrap();
+    const warning = await screen.findByTestId("kept-data-warning-env_gone");
+    expect(warning.textContent).toContain("can't list kept databases");
+    expect(screen.queryByTestId("retained-databases")).toBeNull();
   });
 });

@@ -36,12 +36,17 @@ import { forgeCloudKeys, useInvalidateAfterEnvironmentDelete, type DeleteEnviron
 // ── Retained databases ──────────────────────────────────────────────────────
 
 /** Every database the org kept from a deleted environment. A refusal (no access, an older control plane) is the query's error. */
-export function useRetainedDatabases({ enabled = true }: { enabled?: boolean } = {}) {
+export function useRetainedDatabases({
+  enabled = true,
+  refetchInterval = false,
+}: { enabled?: boolean; refetchInterval?: number | false } = {}) {
   return useQuery<RetainedDatabase[]>({
     queryKey: forgeCloudKeys.retainedDatabases(),
     queryFn: listRetainedDatabases,
     enabled: enabled && hasCloudControlPlane(),
     staleTime: 30_000,
+    // While a keep-data delete is being confirmed (keptDataChecks.ts).
+    refetchInterval,
     // A control plane without the rpc answers the same on a retry.
     retry: (failureCount, error) =>
       !(error instanceof ConnectError && error.code === Code.Unimplemented) && forgeRetry(failureCount, error),

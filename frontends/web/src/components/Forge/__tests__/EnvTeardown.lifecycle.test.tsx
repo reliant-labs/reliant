@@ -19,6 +19,7 @@ const setEnvironmentRunState = vi.fn();
 const deleteEnvironment = vi.fn();
 const listDomains = vi.fn();
 const unbindDomain = vi.fn();
+const listRetainedDatabases = vi.fn();
 let role: string | null = "admin";
 
 vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => {
@@ -27,6 +28,8 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => {
     ...actual,
     setEnvironmentRunState: (...args: unknown[]) => setEnvironmentRunState(...args),
     deleteEnvironment: (...args: unknown[]) => deleteEnvironment(...args),
+    hasCloudControlPlane: () => true,
+    listRetainedDatabases: (...args: unknown[]) => listRetainedDatabases(...args),
   };
 });
 
@@ -58,14 +61,16 @@ vi.mock("@/hooks/useOrgs", async (importOriginal) => {
 });
 
 import { EnvLifecycleControls } from "../EnvPage/EnvLifecycleControls";
+import { useKeptDataChecks } from "../Overview/keptDataChecks";
 import type { CloudEnvStatus } from "@/services/forge/cloudEnvs";
 
 const STATUS: CloudEnvStatus = {
   verdict: "converged",
   currentPromotion: null,
   workloads: [
-    { name: "api", deployment_id: "dep_1", declared_run_state: "running", observed_state: "ready", verdict: "converged" },
-    { name: "web", deployment_id: "dep_2", declared_run_state: "running", observed_state: "ready", verdict: "converged" },
+    { name: "api", tier: "backend", deployment_id: "dep_1", declared_run_state: "running", observed_state: "ready", verdict: "converged" },
+    { name: "web", tier: "static", deployment_id: "dep_2", declared_run_state: "running", observed_state: "ready", verdict: "converged" },
+    { name: "db", tier: "database", deployment_id: "dep_3", declared_run_state: "running", observed_state: "ready", verdict: "converged" },
   ],
 };
 
@@ -86,11 +91,11 @@ const DOMAIN_REFUSAL = new ConnectError(
   Code.FailedPrecondition
 );
 
-function wrap(onDeleted = vi.fn()) {
+function wrap(onDeleted = vi.fn(), status: CloudEnvStatus = STATUS) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <EnvLifecycleControls environmentId="env_1" envName="prod" status={STATUS} onDeleted={onDeleted} />
+      <EnvLifecycleControls environmentId="env_1" envName="prod" project="shop" status={status} onDeleted={onDeleted} />
     </QueryClientProvider>
   );
   return onDeleted;
@@ -112,14 +117,21 @@ beforeEach(() => {
   deleteEnvironment.mockReset().mockResolvedValue(undefined);
   listDomains.mockReset().mockResolvedValue([domain("d_other", "other.acme.dev", "env_2")]);
   unbindDomain.mockReset().mockResolvedValue(undefined);
+  listRetainedDatabases.mockReset().mockResolvedValue([]);
+  useKeptDataChecks.setState({ checks: [] });
 });
+
+/** The Keep data option is enabled once the control plane is known to list kept databases. */
+async function keepOffered() {
+  await waitFor(() => expect((screen.getByTestId("delete-environment-data-keep") as HTMLInputElement).disabled).toBe(false));
+}
 
 describe("delete: what goes, what stays, and Keep data", () => {
   it("names what is deleted and what is kept", async () => {
     wrap();
     await openDelete();
     const removed = screen.getByTestId("delete-environment-removed").textContent ?? "";
-    expect(removed).toContain("api, web");
+    expect(removed).toContain("api, web, db");
     expect(removed).toContain("namespace");
     expect(removed).toContain("generated hostnames");
     const kept = screen.getByTestId("delete-environment-kept").textContent ?? "";
@@ -144,10 +156,38 @@ describe("delete: what goes, what stays, and Keep data", () => {
     const note = screen.getByTestId("delete-environment-data-note").textContent ?? "";
     expect(note).toContain("keep billing as storage");
     expect(note).toContain("Kept databases");
+    await keepOffered();
     await userEvent.click(screen.getByTestId("delete-environment-data-keep"));
     await typeName();
     await userEvent.click(screen.getByTestId("delete-environment-confirm"));
     await waitFor(() => expect(deleteEnvironment).toHaveBeenCalledWith("env_1", { keepData: true }));
+    // Not trusted: the delete leaves a check that the databases get listed as kept.
+    await waitFor(() =>
+      expect(useKeptDataChecks.getState().checks).toEqual([
+        expect.objectContaining({ environmentId: "env_1", envName: "prod", project: "shop", databases: ["db"] }),
+      ])
+    );
+  });
+
+  it("offers no Keep data when the control plane does not serve kept databases, and says why", async () => {
+    listRetainedDatabases.mockRejectedValue(new ConnectError("not configured", Code.Unimplemented));
+    wrap();
+    await openDelete();
+    const note = await screen.findByTestId("delete-environment-keep-unavailable");
+    expect(note.textContent).toContain("deleted with it, data included");
+    expect(note.textContent).toContain("Keep data isn't offered");
+    expect(screen.queryByTestId("delete-environment-data-keep")).toBeNull();
+    await typeName();
+    await userEvent.click(screen.getByTestId("delete-environment-confirm"));
+    await waitFor(() => expect(deleteEnvironment).toHaveBeenCalledWith("env_1", { keepData: false }));
+    expect(useKeptDataChecks.getState().checks).toEqual([]);
+  });
+
+  it("asks nothing about data for an environment that runs no database", async () => {
+    wrap(vi.fn(), { ...STATUS, workloads: STATUS.workloads.filter((w) => w.tier !== "database") });
+    await openDelete();
+    expect(screen.getByTestId("delete-environment-no-databases")).toBeTruthy();
+    expect(screen.queryByTestId("delete-environment-data-keep")).toBeNull();
   });
 });
 
@@ -167,6 +207,7 @@ describe("delete with a custom domain bound", () => {
 
     const confirm = screen.getByTestId("delete-environment-confirm");
     expect(confirm.textContent).toBe("Unbind domains and delete");
+    await keepOffered();
     await userEvent.click(screen.getByTestId("delete-environment-data-keep"));
     await typeName();
     await userEvent.click(confirm);

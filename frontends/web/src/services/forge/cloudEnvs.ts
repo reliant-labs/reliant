@@ -446,7 +446,17 @@ export interface DeleteEnvironmentOptions {
  * not: see isDomainBoundRefusal.
  */
 export async function deleteEnvironment(environmentId: string, options: DeleteEnvironmentOptions = {}): Promise<void> {
-  await client().deleteEnvironment({ environmentId, force: true, keepData: options.keepData ?? false });
+  // keep_data is sent only to ASK for it. Unset and false are the same
+  // request (delete the data), which is also what a server that does not know
+  // the field does with it. A server that drops a keep=true is caught after
+  // the fact: the caller confirms the databases were kept through
+  // listRetainedDatabases (Overview/keptDataChecks.ts), never trusts it.
+  await client().deleteEnvironment({ environmentId, force: true, ...(options.keepData ? { keepData: true } : {}) });
+}
+
+/** True when the control plane does not serve the rpc at all (an older release, or a deployment without it). */
+export function isUnimplemented(err: unknown): boolean {
+  return err instanceof ConnectError && err.code === Code.Unimplemented;
 }
 
 /**

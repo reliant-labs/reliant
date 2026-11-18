@@ -42,11 +42,14 @@ const stopNeeds = (envName: string) => `Stopping or starting ${envName} needs de
 export function EnvLifecycleControls({
   environmentId,
   envName,
+  project = "",
   status,
   onDeleted,
 }: {
   environmentId: string;
   envName: string;
+  /** The forge project (app) the environment belongs to. */
+  project?: string;
   status: CloudEnvStatus | undefined;
   onDeleted?: () => void;
 }) {
@@ -161,6 +164,14 @@ export function EnvLifecycleControls({
         environmentId={environmentId}
         envName={envName}
         workloads={workloads.map((workload) => workload.name ?? "").filter((name) => name !== "")}
+        databases={
+          // Known only when every workload states its tier: an unstated one
+          // may be a database, and "no data to keep" must never be a guess.
+          status && workloads.every((workload) => !!workload.tier)
+            ? workloads.filter((workload) => workload.tier === "database").map((workload) => workload.name ?? "")
+            : null
+        }
+        project={project}
         onClose={() => setDeleteOpen(false)}
         onDeleted={onDeleted}
       />
