@@ -77,7 +77,11 @@ var userScopedReads = map[string]string{
 	// A project's moves span two orgs: ProjectService decides each with
 	// canReadMove (its owner or actor through authz.CanReadOwn on either org,
 	// or authz.RequireOrgAdmin of either), the list and a retried request alike.
-	"ListProjectOrgMoves":          readCallersFilter,
+	"ListProjectOrgMoves": readCallersFilter,
+	// "Recently deleted": ProjectService decides each row again with
+	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
+	// asked fresh, once the owner left).
+	"ListDeletedProjects":          readCallersFilter,
 	"FindProjectOrgMoveByRequest":  readCallersFilter,
 	"ListUnlaunchedTriggerEvents":  readCallersFilter,
 	"ListWorktreeRecoveries":       readCallersFilter,

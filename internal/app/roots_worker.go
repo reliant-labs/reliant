@@ -20,9 +20,8 @@ import (
 //     heartbeat timeout (workersetup.Worker). It is also the node whose
 //     Ready ("polling") holds the process's readiness until it polls.
 //  2. workflow_event_relay, workflow_check_syncer, account_usage_poller,
-//     write_ledger_prune, ledger_retention: the background loops, which take
-//     no Temporal tasks;
-//     each ends with its context.
+//     write_ledger_prune, ledger_retention, project_purge: the background
+//     loops, which take no Temporal tasks; each ends with its context.
 //  3. account_recorder: after every loop, because the activities record into
 //     it; its Close flushes the rate-limit state they recorded. It is a
 //     field of its own for that: reached only through the Temporal worker,
@@ -68,9 +67,11 @@ type Worker struct {
 	UsagePoller   *accountlimits.Poller
 	LedgerPrune   *WriteLedgerPrune
 	Retention     *LedgerRetention
-	Recorder      *AccountRecorder
-	Streaming     *StreamingHub
-	Temporal      *TemporalClient
+	// ProjectPurge purges deleted projects once their restore window ends.
+	ProjectPurge *ProjectPurge
+	Recorder     *AccountRecorder
+	Streaming    *StreamingHub
+	Temporal     *TemporalClient
 	// Feed publishes the repository's user and chat updates; it has no
 	// lifecycle, and orders the hubs after the Temporal client. NATS starts
 	// before the client, which publishes stop nudges on it (stopnudge).

@@ -50,6 +50,15 @@ const (
 	// ProjectServiceDeleteProjectProcedure is the fully-qualified name of the ProjectService's
 	// DeleteProject RPC.
 	ProjectServiceDeleteProjectProcedure = "/reliant.v1.ProjectService/DeleteProject"
+	// ProjectServiceRestoreProjectProcedure is the fully-qualified name of the ProjectService's
+	// RestoreProject RPC.
+	ProjectServiceRestoreProjectProcedure = "/reliant.v1.ProjectService/RestoreProject"
+	// ProjectServicePurgeProjectNowProcedure is the fully-qualified name of the ProjectService's
+	// PurgeProjectNow RPC.
+	ProjectServicePurgeProjectNowProcedure = "/reliant.v1.ProjectService/PurgeProjectNow"
+	// ProjectServiceListDeletedProjectsProcedure is the fully-qualified name of the ProjectService's
+	// ListDeletedProjects RPC.
+	ProjectServiceListDeletedProjectsProcedure = "/reliant.v1.ProjectService/ListDeletedProjects"
 	// ProjectServiceTouchProjectProcedure is the fully-qualified name of the ProjectService's
 	// TouchProject RPC.
 	ProjectServiceTouchProjectProcedure = "/reliant.v1.ProjectService/TouchProject"
@@ -141,9 +150,44 @@ type ProjectServiceClient interface {
 	// UpdateProject updates an existing project
 	// forge:custom — a partial update the caller's ownership check gates
 	UpdateProject(context.Context, *connect.Request[v1.UpdateProjectRequest]) (*connect.Response[v1.UpdateProjectResponse], error)
-	// DeleteProject deletes a project
-	// forge:custom — the caller's ownership check gates the delete
+	// DeleteProject schedules a project's deletion with a 7-day restore window
+	// (control-plane docs/design/unified-shell-and-projects.md §11.3, D18).
+	// The project is hidden at once: it leaves every list (its chats, inbox
+	// items and automations too) and every read or write of it answers
+	// NOT_FOUND. Its enabled triggers are paused (paused_reason
+	// "project_deleted"). After delete_after it is purged: its chats, runs,
+	// triggers, workspaces, repos and settings are deleted, in batches, by a
+	// worker. Until then RestoreProject brings it back.
+	//
+	// Compatibility: before the restore window this rpc deleted at once, and
+	// an old client calling it now gets the scheduled delete. Its response
+	// still says success. A caller that needs the old, immediate delete calls
+	// PurgeProjectNow.
+	//
+	// Files on machines are kept unless remove_from_machines is set (D20).
+	// A repeated delete of a scheduled project keeps its first delete_after.
+	//
+	// The project's owner may delete it; so may an admin of its organization
+	// once the owner has left it (D19).
+	// forge:custom — schedules the delete; owner, or an org admin for a departed member's project
 	DeleteProject(context.Context, *connect.Request[v1.DeleteProjectRequest]) (*connect.Response[v1.DeleteProjectResponse], error)
+	// RestoreProject cancels a project's scheduled deletion: the project shows
+	// again, and the triggers the delete paused (and only those) are turned
+	// back on. Whoever may delete the project may restore it. Once the purge
+	// has begun the project can no longer be restored (FAILED_PRECONDITION).
+	// Restoring a project that is not scheduled for deletion is a no-op.
+	RestoreProject(context.Context, *connect.Request[v1.RestoreProjectRequest]) (*connect.Response[v1.RestoreProjectResponse], error)
+	// PurgeProjectNow deletes a project immediately and irreversibly, scheduled
+	// or not: the path for a person who means it, and for anything that relied
+	// on DeleteProject deleting at once. Only the project's owner may, and
+	// confirm_name must be the project's name. The delete runs in batches; one
+	// that stops part way leaves the project hidden, and running it again (or
+	// the purge worker) finishes it.
+	PurgeProjectNow(context.Context, *connect.Request[v1.PurgeProjectNowRequest]) (*connect.Response[v1.PurgeProjectNowResponse], error)
+	// ListDeletedProjects lists the projects scheduled for deletion that the
+	// caller may restore ("Recently deleted"): their own, and those they
+	// deleted as an org admin. A project whose purge has begun is not listed.
+	ListDeletedProjects(context.Context, *connect.Request[v1.ListDeletedProjectsRequest]) (*connect.Response[v1.ListDeletedProjectsResponse], error)
 	// TouchProject updates the project's last_active timestamp
 	TouchProject(context.Context, *connect.Request[v1.TouchProjectRequest]) (*connect.Response[v1.TouchProjectResponse], error)
 	// GetProjectMetadata returns detailed project metadata
@@ -316,6 +360,25 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(projectServiceMethods.ByName("DeleteProject")),
 			connect.WithClientOptions(opts...),
 		),
+		restoreProject: connect.NewClient[v1.RestoreProjectRequest, v1.RestoreProjectResponse](
+			httpClient,
+			baseURL+ProjectServiceRestoreProjectProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("RestoreProject")),
+			connect.WithClientOptions(opts...),
+		),
+		purgeProjectNow: connect.NewClient[v1.PurgeProjectNowRequest, v1.PurgeProjectNowResponse](
+			httpClient,
+			baseURL+ProjectServicePurgeProjectNowProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("PurgeProjectNow")),
+			connect.WithClientOptions(opts...),
+		),
+		listDeletedProjects: connect.NewClient[v1.ListDeletedProjectsRequest, v1.ListDeletedProjectsResponse](
+			httpClient,
+			baseURL+ProjectServiceListDeletedProjectsProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("ListDeletedProjects")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		touchProject: connect.NewClient[v1.TouchProjectRequest, v1.TouchProjectResponse](
 			httpClient,
 			baseURL+ProjectServiceTouchProjectProcedure,
@@ -479,6 +542,9 @@ type projectServiceClient struct {
 	getProject                  *connect.Client[v1.GetProjectRequest, v1.GetProjectResponse]
 	updateProject               *connect.Client[v1.UpdateProjectRequest, v1.UpdateProjectResponse]
 	deleteProject               *connect.Client[v1.DeleteProjectRequest, v1.DeleteProjectResponse]
+	restoreProject              *connect.Client[v1.RestoreProjectRequest, v1.RestoreProjectResponse]
+	purgeProjectNow             *connect.Client[v1.PurgeProjectNowRequest, v1.PurgeProjectNowResponse]
+	listDeletedProjects         *connect.Client[v1.ListDeletedProjectsRequest, v1.ListDeletedProjectsResponse]
 	touchProject                *connect.Client[v1.TouchProjectRequest, v1.TouchProjectResponse]
 	getProjectMetadata          *connect.Client[v1.GetProjectMetadataRequest, v1.GetProjectMetadataResponse]
 	updateProjectMetadata       *connect.Client[v1.UpdateProjectMetadataRequest, v1.UpdateProjectMetadataResponse]
@@ -529,6 +595,21 @@ func (c *projectServiceClient) UpdateProject(ctx context.Context, req *connect.R
 // DeleteProject calls reliant.v1.ProjectService.DeleteProject.
 func (c *projectServiceClient) DeleteProject(ctx context.Context, req *connect.Request[v1.DeleteProjectRequest]) (*connect.Response[v1.DeleteProjectResponse], error) {
 	return c.deleteProject.CallUnary(ctx, req)
+}
+
+// RestoreProject calls reliant.v1.ProjectService.RestoreProject.
+func (c *projectServiceClient) RestoreProject(ctx context.Context, req *connect.Request[v1.RestoreProjectRequest]) (*connect.Response[v1.RestoreProjectResponse], error) {
+	return c.restoreProject.CallUnary(ctx, req)
+}
+
+// PurgeProjectNow calls reliant.v1.ProjectService.PurgeProjectNow.
+func (c *projectServiceClient) PurgeProjectNow(ctx context.Context, req *connect.Request[v1.PurgeProjectNowRequest]) (*connect.Response[v1.PurgeProjectNowResponse], error) {
+	return c.purgeProjectNow.CallUnary(ctx, req)
+}
+
+// ListDeletedProjects calls reliant.v1.ProjectService.ListDeletedProjects.
+func (c *projectServiceClient) ListDeletedProjects(ctx context.Context, req *connect.Request[v1.ListDeletedProjectsRequest]) (*connect.Response[v1.ListDeletedProjectsResponse], error) {
+	return c.listDeletedProjects.CallUnary(ctx, req)
 }
 
 // TouchProject calls reliant.v1.ProjectService.TouchProject.
@@ -670,9 +751,44 @@ type ProjectServiceHandler interface {
 	// UpdateProject updates an existing project
 	// forge:custom — a partial update the caller's ownership check gates
 	UpdateProject(context.Context, *connect.Request[v1.UpdateProjectRequest]) (*connect.Response[v1.UpdateProjectResponse], error)
-	// DeleteProject deletes a project
-	// forge:custom — the caller's ownership check gates the delete
+	// DeleteProject schedules a project's deletion with a 7-day restore window
+	// (control-plane docs/design/unified-shell-and-projects.md §11.3, D18).
+	// The project is hidden at once: it leaves every list (its chats, inbox
+	// items and automations too) and every read or write of it answers
+	// NOT_FOUND. Its enabled triggers are paused (paused_reason
+	// "project_deleted"). After delete_after it is purged: its chats, runs,
+	// triggers, workspaces, repos and settings are deleted, in batches, by a
+	// worker. Until then RestoreProject brings it back.
+	//
+	// Compatibility: before the restore window this rpc deleted at once, and
+	// an old client calling it now gets the scheduled delete. Its response
+	// still says success. A caller that needs the old, immediate delete calls
+	// PurgeProjectNow.
+	//
+	// Files on machines are kept unless remove_from_machines is set (D20).
+	// A repeated delete of a scheduled project keeps its first delete_after.
+	//
+	// The project's owner may delete it; so may an admin of its organization
+	// once the owner has left it (D19).
+	// forge:custom — schedules the delete; owner, or an org admin for a departed member's project
 	DeleteProject(context.Context, *connect.Request[v1.DeleteProjectRequest]) (*connect.Response[v1.DeleteProjectResponse], error)
+	// RestoreProject cancels a project's scheduled deletion: the project shows
+	// again, and the triggers the delete paused (and only those) are turned
+	// back on. Whoever may delete the project may restore it. Once the purge
+	// has begun the project can no longer be restored (FAILED_PRECONDITION).
+	// Restoring a project that is not scheduled for deletion is a no-op.
+	RestoreProject(context.Context, *connect.Request[v1.RestoreProjectRequest]) (*connect.Response[v1.RestoreProjectResponse], error)
+	// PurgeProjectNow deletes a project immediately and irreversibly, scheduled
+	// or not: the path for a person who means it, and for anything that relied
+	// on DeleteProject deleting at once. Only the project's owner may, and
+	// confirm_name must be the project's name. The delete runs in batches; one
+	// that stops part way leaves the project hidden, and running it again (or
+	// the purge worker) finishes it.
+	PurgeProjectNow(context.Context, *connect.Request[v1.PurgeProjectNowRequest]) (*connect.Response[v1.PurgeProjectNowResponse], error)
+	// ListDeletedProjects lists the projects scheduled for deletion that the
+	// caller may restore ("Recently deleted"): their own, and those they
+	// deleted as an org admin. A project whose purge has begun is not listed.
+	ListDeletedProjects(context.Context, *connect.Request[v1.ListDeletedProjectsRequest]) (*connect.Response[v1.ListDeletedProjectsResponse], error)
 	// TouchProject updates the project's last_active timestamp
 	TouchProject(context.Context, *connect.Request[v1.TouchProjectRequest]) (*connect.Response[v1.TouchProjectResponse], error)
 	// GetProjectMetadata returns detailed project metadata
@@ -841,6 +957,25 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		connect.WithSchema(projectServiceMethods.ByName("DeleteProject")),
 		connect.WithHandlerOptions(opts...),
 	)
+	projectServiceRestoreProjectHandler := connect.NewUnaryHandler(
+		ProjectServiceRestoreProjectProcedure,
+		svc.RestoreProject,
+		connect.WithSchema(projectServiceMethods.ByName("RestoreProject")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServicePurgeProjectNowHandler := connect.NewUnaryHandler(
+		ProjectServicePurgeProjectNowProcedure,
+		svc.PurgeProjectNow,
+		connect.WithSchema(projectServiceMethods.ByName("PurgeProjectNow")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceListDeletedProjectsHandler := connect.NewUnaryHandler(
+		ProjectServiceListDeletedProjectsProcedure,
+		svc.ListDeletedProjects,
+		connect.WithSchema(projectServiceMethods.ByName("ListDeletedProjects")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	projectServiceTouchProjectHandler := connect.NewUnaryHandler(
 		ProjectServiceTouchProjectProcedure,
 		svc.TouchProject,
@@ -1006,6 +1141,12 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 			projectServiceUpdateProjectHandler.ServeHTTP(w, r)
 		case ProjectServiceDeleteProjectProcedure:
 			projectServiceDeleteProjectHandler.ServeHTTP(w, r)
+		case ProjectServiceRestoreProjectProcedure:
+			projectServiceRestoreProjectHandler.ServeHTTP(w, r)
+		case ProjectServicePurgeProjectNowProcedure:
+			projectServicePurgeProjectNowHandler.ServeHTTP(w, r)
+		case ProjectServiceListDeletedProjectsProcedure:
+			projectServiceListDeletedProjectsHandler.ServeHTTP(w, r)
 		case ProjectServiceTouchProjectProcedure:
 			projectServiceTouchProjectHandler.ServeHTTP(w, r)
 		case ProjectServiceGetProjectMetadataProcedure:
@@ -1083,6 +1224,18 @@ func (UnimplementedProjectServiceHandler) UpdateProject(context.Context, *connec
 
 func (UnimplementedProjectServiceHandler) DeleteProject(context.Context, *connect.Request[v1.DeleteProjectRequest]) (*connect.Response[v1.DeleteProjectResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.DeleteProject is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) RestoreProject(context.Context, *connect.Request[v1.RestoreProjectRequest]) (*connect.Response[v1.RestoreProjectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.RestoreProject is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) PurgeProjectNow(context.Context, *connect.Request[v1.PurgeProjectNowRequest]) (*connect.Response[v1.PurgeProjectNowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.PurgeProjectNow is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) ListDeletedProjects(context.Context, *connect.Request[v1.ListDeletedProjectsRequest]) (*connect.Response[v1.ListDeletedProjectsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.ListDeletedProjects is not implemented"))
 }
 
 func (UnimplementedProjectServiceHandler) TouchProject(context.Context, *connect.Request[v1.TouchProjectRequest]) (*connect.Response[v1.TouchProjectResponse], error) {

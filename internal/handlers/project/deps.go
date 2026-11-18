@@ -35,6 +35,13 @@ type Repository interface {
 	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
 	TouchProject(ctx context.Context, id string, userID string) error
 	DeleteProject(ctx context.Context, id string, userID string) error
+	// A deletion with a restore window (project_delete.go): schedule it
+	// (hiding the project and pausing its triggers), cancel it, purge at
+	// once, and list what the caller may restore.
+	ScheduleProjectDeletion(ctx context.Context, id, by string, deleteAfter time.Time) (core.ProjectDeletion, error)
+	RestoreProject(ctx context.Context, id string) ([]string, error)
+	PurgeProjectNow(ctx context.Context, id, userID string) ([]string, error)
+	ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope) ([]*core.Project, error)
 	// ProjectOrgMoveBlockers and ProjectOrgMoveEffects are a move's preview:
 	// the running work that refuses it now, and what it would change.
 	ProjectOrgMoveBlockers(ctx context.Context, projectID string) (*core.ProjectOrgMoveBlockers, error)
@@ -116,6 +123,12 @@ type Router interface {
 type MachineConfigSync interface {
 	SendLoadProjectConfigsToDaemon(ctx context.Context, userID, daemonID, projectPath, requestID string) error
 	SendWatchProjectConfigsToDaemon(ctx context.Context, userID, daemonID, projectPath string, includeInitial bool) error
+}
+
+// TriggerSchedules converges a trigger's Temporal Schedule onto its row (a
+// missing row removes it). *triggers.Syncer is one.
+type TriggerSchedules interface {
+	Sync(ctx context.Context, triggerID string) error
 }
 
 // CloneDispatcher asks the control plane to clone a repository onto one of

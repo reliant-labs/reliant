@@ -389,27 +389,6 @@ func (s *Service) UpdateProject(
 	}), nil
 }
 
-// DeleteProject deletes a project
-func (s *Service) DeleteProject(
-	ctx context.Context,
-	req *connect.Request[reliantv1.DeleteProjectRequest],
-) (*connect.Response[reliantv1.DeleteProjectResponse], error) {
-	userID := auth.MustGetUserID(ctx)
-
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
-		return nil, err
-	}
-
-	if err := s.deps.Repo.DeleteProject(ctx, req.Msg.ProjectId, userID); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project"))
-	}
-
-	return connect.NewResponse(&reliantv1.DeleteProjectResponse{
-		Success: true,
-		Message: "Project deleted successfully",
-	}), nil
-}
-
 // TouchProject updates the project's last_active timestamp
 func (s *Service) TouchProject(
 	ctx context.Context,

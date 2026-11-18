@@ -231,6 +231,12 @@ func purgeProjectContents(ctx context.Context, db orm.Context, id string, chatBa
 			SELECT id FROM user_updates WHERE project_id = ?0 LIMIT ?1)`, id); err != nil {
 		return fmt.Errorf("delete project: user updates: %w", err)
 	}
+
+	// What names the project with no foreign key, which the project row's
+	// cascade would leave behind (project_schedule.go).
+	if err := purgeProjectOrphans(ctx, db, id); err != nil {
+		return fmt.Errorf("delete project: %w", err)
+	}
 	return nil
 }
 

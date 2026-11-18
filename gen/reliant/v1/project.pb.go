@@ -26,6 +26,64 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ProjectMachineRemovalStatus is how removing a deleted project's checkout
+// from one machine ended.
+type ProjectMachineRemovalStatus int32
+
+const (
+	ProjectMachineRemovalStatus_PROJECT_MACHINE_REMOVAL_STATUS_UNSPECIFIED ProjectMachineRemovalStatus = 0
+	// The checkout was removed from the machine.
+	ProjectMachineRemovalStatus_PROJECT_MACHINE_REMOVAL_STATUS_REMOVED ProjectMachineRemovalStatus = 1
+	// The machine is offline, so it keeps its copy.
+	ProjectMachineRemovalStatus_PROJECT_MACHINE_REMOVAL_STATUS_OFFLINE ProjectMachineRemovalStatus = 2
+	// The machine refused or the remove failed; message says why. It keeps
+	// its copy.
+	ProjectMachineRemovalStatus_PROJECT_MACHINE_REMOVAL_STATUS_FAILED ProjectMachineRemovalStatus = 3
+)
+
+// Enum value maps for ProjectMachineRemovalStatus.
+var (
+	ProjectMachineRemovalStatus_name = map[int32]string{
+		0: "PROJECT_MACHINE_REMOVAL_STATUS_UNSPECIFIED",
+		1: "PROJECT_MACHINE_REMOVAL_STATUS_REMOVED",
+		2: "PROJECT_MACHINE_REMOVAL_STATUS_OFFLINE",
+		3: "PROJECT_MACHINE_REMOVAL_STATUS_FAILED",
+	}
+	ProjectMachineRemovalStatus_value = map[string]int32{
+		"PROJECT_MACHINE_REMOVAL_STATUS_UNSPECIFIED": 0,
+		"PROJECT_MACHINE_REMOVAL_STATUS_REMOVED":     1,
+		"PROJECT_MACHINE_REMOVAL_STATUS_OFFLINE":     2,
+		"PROJECT_MACHINE_REMOVAL_STATUS_FAILED":      3,
+	}
+)
+
+func (x ProjectMachineRemovalStatus) Enum() *ProjectMachineRemovalStatus {
+	p := new(ProjectMachineRemovalStatus)
+	*p = x
+	return p
+}
+
+func (x ProjectMachineRemovalStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProjectMachineRemovalStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_project_proto_enumTypes[0].Descriptor()
+}
+
+func (ProjectMachineRemovalStatus) Type() protoreflect.EnumType {
+	return &file_reliant_v1_project_proto_enumTypes[0]
+}
+
+func (x ProjectMachineRemovalStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProjectMachineRemovalStatus.Descriptor instead.
+func (ProjectMachineRemovalStatus) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{0}
+}
+
 // Where a project's checkout has got to on one daemon.
 type ProjectInstallState int32
 
@@ -66,11 +124,11 @@ func (x ProjectInstallState) String() string {
 }
 
 func (ProjectInstallState) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_project_proto_enumTypes[0].Descriptor()
+	return file_reliant_v1_project_proto_enumTypes[1].Descriptor()
 }
 
 func (ProjectInstallState) Type() protoreflect.EnumType {
-	return &file_reliant_v1_project_proto_enumTypes[0]
+	return &file_reliant_v1_project_proto_enumTypes[1]
 }
 
 func (x ProjectInstallState) Number() protoreflect.EnumNumber {
@@ -79,7 +137,7 @@ func (x ProjectInstallState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ProjectInstallState.Descriptor instead.
 func (ProjectInstallState) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{0}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{1}
 }
 
 // ProjectOrgMoveState is where a move is.
@@ -135,11 +193,11 @@ func (x ProjectOrgMoveState) String() string {
 }
 
 func (ProjectOrgMoveState) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_project_proto_enumTypes[1].Descriptor()
+	return file_reliant_v1_project_proto_enumTypes[2].Descriptor()
 }
 
 func (ProjectOrgMoveState) Type() protoreflect.EnumType {
-	return &file_reliant_v1_project_proto_enumTypes[1]
+	return &file_reliant_v1_project_proto_enumTypes[2]
 }
 
 func (x ProjectOrgMoveState) Number() protoreflect.EnumNumber {
@@ -148,7 +206,7 @@ func (x ProjectOrgMoveState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ProjectOrgMoveState.Descriptor instead.
 func (ProjectOrgMoveState) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{2}
 }
 
 // Project represents a project in the system
@@ -193,9 +251,14 @@ type Project struct {
 	// directory names its owner) and every write answers NOT_FOUND.
 	ViewerAccess bool `protobuf:"varint,16,opt,name=viewer_access,json=viewerAccess,proto3" json:"viewer_access,omitempty"`
 	// When the project was shared (RFC 3339); unset while private.
-	SharedAt      *string `protobuf:"bytes,17,opt,name=shared_at,json=sharedAt,proto3,oneof" json:"shared_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	SharedAt *string `protobuf:"bytes,17,opt,name=shared_at,json=sharedAt,proto3,oneof" json:"shared_at,omitempty"`
+	// When the project's scheduled deletion purges it (RFC 3339); set only on
+	// a project scheduled for deletion, which only ListDeletedProjects lists.
+	DeleteAfter *string `protobuf:"bytes,18,opt,name=delete_after,json=deleteAfter,proto3,oneof" json:"delete_after,omitempty"`
+	// Who scheduled the deletion: the owner, or an org admin.
+	DeletedByUserId *string `protobuf:"bytes,19,opt,name=deleted_by_user_id,json=deletedByUserId,proto3,oneof" json:"deleted_by_user_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Project) Reset() {
@@ -343,6 +406,20 @@ func (x *Project) GetViewerAccess() bool {
 func (x *Project) GetSharedAt() string {
 	if x != nil && x.SharedAt != nil {
 		return *x.SharedAt
+	}
+	return ""
+}
+
+func (x *Project) GetDeleteAfter() string {
+	if x != nil && x.DeleteAfter != nil {
+		return *x.DeleteAfter
+	}
+	return ""
+}
+
+func (x *Project) GetDeletedByUserId() string {
+	if x != nil && x.DeletedByUserId != nil {
+		return *x.DeletedByUserId
 	}
 	return ""
 }
@@ -959,12 +1036,19 @@ func (x *UpdateProjectResponse) GetProject() *Project {
 	return nil
 }
 
-// DeleteProjectRequest deletes a project
+// DeleteProjectRequest schedules a project's deletion.
 type DeleteProjectRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// Also remove the project's checkout from each machine that holds one
+	// (RemoveProjectFromDaemon on each), reported per machine in
+	// machine_removals. A machine that is offline, or refuses (a workspace
+	// still open on it), keeps its copy; the delete is scheduled either way.
+	// Off by default: a checkout can hold uncommitted work (D20). Only the
+	// project's owner may set it: the machines are theirs.
+	RemoveFromMachines bool `protobuf:"varint,2,opt,name=remove_from_machines,json=removeFromMachines,proto3" json:"remove_from_machines,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *DeleteProjectRequest) Reset() {
@@ -1004,13 +1088,27 @@ func (x *DeleteProjectRequest) GetProjectId() string {
 	return ""
 }
 
-// DeleteProjectResponse confirms deletion
+func (x *DeleteProjectRequest) GetRemoveFromMachines() bool {
+	if x != nil {
+		return x.RemoveFromMachines
+	}
+	return false
+}
+
+// DeleteProjectResponse confirms the scheduled deletion.
 type DeleteProjectResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Success bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// When the project will be purged (RFC 3339); RestoreProject brings it
+	// back until then. Unset from a server that predates the restore window,
+	// which deleted the project at once.
+	DeleteAfter *string `protobuf:"bytes,3,opt,name=delete_after,json=deleteAfter,proto3,oneof" json:"delete_after,omitempty"`
+	// One entry per machine that held a checkout, when remove_from_machines
+	// was set.
+	MachineRemovals []*ProjectMachineRemoval `protobuf:"bytes,4,rep,name=machine_removals,json=machineRemovals,proto3" json:"machine_removals,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DeleteProjectResponse) Reset() {
@@ -1057,6 +1155,402 @@ func (x *DeleteProjectResponse) GetMessage() string {
 	return ""
 }
 
+func (x *DeleteProjectResponse) GetDeleteAfter() string {
+	if x != nil && x.DeleteAfter != nil {
+		return *x.DeleteAfter
+	}
+	return ""
+}
+
+func (x *DeleteProjectResponse) GetMachineRemovals() []*ProjectMachineRemoval {
+	if x != nil {
+		return x.MachineRemovals
+	}
+	return nil
+}
+
+// ProjectMachineRemoval is the outcome of removing a project's checkout from
+// one machine.
+type ProjectMachineRemoval struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	DaemonId string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	// The machine's display name.
+	MachineName string `protobuf:"bytes,2,opt,name=machine_name,json=machineName,proto3" json:"machine_name,omitempty"`
+	// The checkout's path on that machine.
+	Path   string                      `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	Status ProjectMachineRemovalStatus `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.ProjectMachineRemovalStatus" json:"status,omitempty"`
+	// Why, when the status is not REMOVED.
+	Message       string `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProjectMachineRemoval) Reset() {
+	*x = ProjectMachineRemoval{}
+	mi := &file_reliant_v1_project_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProjectMachineRemoval) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProjectMachineRemoval) ProtoMessage() {}
+
+func (x *ProjectMachineRemoval) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProjectMachineRemoval.ProtoReflect.Descriptor instead.
+func (*ProjectMachineRemoval) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ProjectMachineRemoval) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+func (x *ProjectMachineRemoval) GetMachineName() string {
+	if x != nil {
+		return x.MachineName
+	}
+	return ""
+}
+
+func (x *ProjectMachineRemoval) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ProjectMachineRemoval) GetStatus() ProjectMachineRemovalStatus {
+	if x != nil {
+		return x.Status
+	}
+	return ProjectMachineRemovalStatus_PROJECT_MACHINE_REMOVAL_STATUS_UNSPECIFIED
+}
+
+func (x *ProjectMachineRemoval) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+// RestoreProjectRequest cancels a project's scheduled deletion.
+type RestoreProjectRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestoreProjectRequest) Reset() {
+	*x = RestoreProjectRequest{}
+	mi := &file_reliant_v1_project_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestoreProjectRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestoreProjectRequest) ProtoMessage() {}
+
+func (x *RestoreProjectRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestoreProjectRequest.ProtoReflect.Descriptor instead.
+func (*RestoreProjectRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RestoreProjectRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+// RestoreProjectResponse is the restored project.
+type RestoreProjectResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Project *Project               `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	// How many triggers the delete had paused that were turned back on.
+	TriggersResumed int32 `protobuf:"varint,2,opt,name=triggers_resumed,json=triggersResumed,proto3" json:"triggers_resumed,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RestoreProjectResponse) Reset() {
+	*x = RestoreProjectResponse{}
+	mi := &file_reliant_v1_project_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestoreProjectResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestoreProjectResponse) ProtoMessage() {}
+
+func (x *RestoreProjectResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestoreProjectResponse.ProtoReflect.Descriptor instead.
+func (*RestoreProjectResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RestoreProjectResponse) GetProject() *Project {
+	if x != nil {
+		return x.Project
+	}
+	return nil
+}
+
+func (x *RestoreProjectResponse) GetTriggersResumed() int32 {
+	if x != nil {
+		return x.TriggersResumed
+	}
+	return 0
+}
+
+// PurgeProjectNowRequest deletes a project immediately.
+type PurgeProjectNowRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// The project's name, typed by the person: the purge is refused
+	// (INVALID_ARGUMENT) unless it matches.
+	ConfirmName string `protobuf:"bytes,2,opt,name=confirm_name,json=confirmName,proto3" json:"confirm_name,omitempty"`
+	// As DeleteProjectRequest.remove_from_machines, done before the purge.
+	RemoveFromMachines bool `protobuf:"varint,3,opt,name=remove_from_machines,json=removeFromMachines,proto3" json:"remove_from_machines,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *PurgeProjectNowRequest) Reset() {
+	*x = PurgeProjectNowRequest{}
+	mi := &file_reliant_v1_project_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PurgeProjectNowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PurgeProjectNowRequest) ProtoMessage() {}
+
+func (x *PurgeProjectNowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PurgeProjectNowRequest.ProtoReflect.Descriptor instead.
+func (*PurgeProjectNowRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *PurgeProjectNowRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *PurgeProjectNowRequest) GetConfirmName() string {
+	if x != nil {
+		return x.ConfirmName
+	}
+	return ""
+}
+
+func (x *PurgeProjectNowRequest) GetRemoveFromMachines() bool {
+	if x != nil {
+		return x.RemoveFromMachines
+	}
+	return false
+}
+
+// PurgeProjectNowResponse confirms the purge.
+type PurgeProjectNowResponse struct {
+	state           protoimpl.MessageState   `protogen:"open.v1"`
+	MachineRemovals []*ProjectMachineRemoval `protobuf:"bytes,1,rep,name=machine_removals,json=machineRemovals,proto3" json:"machine_removals,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PurgeProjectNowResponse) Reset() {
+	*x = PurgeProjectNowResponse{}
+	mi := &file_reliant_v1_project_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PurgeProjectNowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PurgeProjectNowResponse) ProtoMessage() {}
+
+func (x *PurgeProjectNowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PurgeProjectNowResponse.ProtoReflect.Descriptor instead.
+func (*PurgeProjectNowResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *PurgeProjectNowResponse) GetMachineRemovals() []*ProjectMachineRemoval {
+	if x != nil {
+		return x.MachineRemovals
+	}
+	return nil
+}
+
+// ListDeletedProjectsRequest lists the caller's restorable projects.
+type ListDeletedProjectsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Only this organization's (as ListProjectsRequest.org_id). Unset lists
+	// every org's.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDeletedProjectsRequest) Reset() {
+	*x = ListDeletedProjectsRequest{}
+	mi := &file_reliant_v1_project_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeletedProjectsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeletedProjectsRequest) ProtoMessage() {}
+
+func (x *ListDeletedProjectsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeletedProjectsRequest.ProtoReflect.Descriptor instead.
+func (*ListDeletedProjectsRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListDeletedProjectsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
+// ListDeletedProjectsResponse lists projects scheduled for deletion, soonest
+// purge first. Each carries delete_after and deleted_by_user_id.
+type ListDeletedProjectsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Projects      []*Project             `protobuf:"bytes,1,rep,name=projects,proto3" json:"projects,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDeletedProjectsResponse) Reset() {
+	*x = ListDeletedProjectsResponse{}
+	mi := &file_reliant_v1_project_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeletedProjectsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeletedProjectsResponse) ProtoMessage() {}
+
+func (x *ListDeletedProjectsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeletedProjectsResponse.ProtoReflect.Descriptor instead.
+func (*ListDeletedProjectsResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListDeletedProjectsResponse) GetProjects() []*Project {
+	if x != nil {
+		return x.Projects
+	}
+	return nil
+}
+
 // TouchProjectRequest updates the project's last_active timestamp
 type TouchProjectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1067,7 +1561,7 @@ type TouchProjectRequest struct {
 
 func (x *TouchProjectRequest) Reset() {
 	*x = TouchProjectRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[12]
+	mi := &file_reliant_v1_project_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1079,7 +1573,7 @@ func (x *TouchProjectRequest) String() string {
 func (*TouchProjectRequest) ProtoMessage() {}
 
 func (x *TouchProjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[12]
+	mi := &file_reliant_v1_project_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1092,7 +1586,7 @@ func (x *TouchProjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TouchProjectRequest.ProtoReflect.Descriptor instead.
 func (*TouchProjectRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *TouchProjectRequest) GetProjectId() string {
@@ -1113,7 +1607,7 @@ type TouchProjectResponse struct {
 
 func (x *TouchProjectResponse) Reset() {
 	*x = TouchProjectResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[13]
+	mi := &file_reliant_v1_project_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1125,7 +1619,7 @@ func (x *TouchProjectResponse) String() string {
 func (*TouchProjectResponse) ProtoMessage() {}
 
 func (x *TouchProjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[13]
+	mi := &file_reliant_v1_project_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1138,7 +1632,7 @@ func (x *TouchProjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TouchProjectResponse.ProtoReflect.Descriptor instead.
 func (*TouchProjectResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *TouchProjectResponse) GetSuccess() bool {
@@ -1165,7 +1659,7 @@ type GetProjectMetadataRequest struct {
 
 func (x *GetProjectMetadataRequest) Reset() {
 	*x = GetProjectMetadataRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[14]
+	mi := &file_reliant_v1_project_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1177,7 +1671,7 @@ func (x *GetProjectMetadataRequest) String() string {
 func (*GetProjectMetadataRequest) ProtoMessage() {}
 
 func (x *GetProjectMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[14]
+	mi := &file_reliant_v1_project_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1190,7 +1684,7 @@ func (x *GetProjectMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectMetadataRequest.ProtoReflect.Descriptor instead.
 func (*GetProjectMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetProjectMetadataRequest) GetProjectId() string {
@@ -1218,7 +1712,7 @@ type GetProjectMetadataResponse struct {
 
 func (x *GetProjectMetadataResponse) Reset() {
 	*x = GetProjectMetadataResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[15]
+	mi := &file_reliant_v1_project_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1230,7 +1724,7 @@ func (x *GetProjectMetadataResponse) String() string {
 func (*GetProjectMetadataResponse) ProtoMessage() {}
 
 func (x *GetProjectMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[15]
+	mi := &file_reliant_v1_project_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1243,7 +1737,7 @@ func (x *GetProjectMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectMetadataResponse.ProtoReflect.Descriptor instead.
 func (*GetProjectMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetProjectMetadataResponse) GetProjectId() string {
@@ -1320,7 +1814,7 @@ type UpdateProjectMetadataRequest struct {
 
 func (x *UpdateProjectMetadataRequest) Reset() {
 	*x = UpdateProjectMetadataRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[16]
+	mi := &file_reliant_v1_project_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1332,7 +1826,7 @@ func (x *UpdateProjectMetadataRequest) String() string {
 func (*UpdateProjectMetadataRequest) ProtoMessage() {}
 
 func (x *UpdateProjectMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[16]
+	mi := &file_reliant_v1_project_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1345,7 +1839,7 @@ func (x *UpdateProjectMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateProjectMetadataRequest.ProtoReflect.Descriptor instead.
 func (*UpdateProjectMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *UpdateProjectMetadataRequest) GetProjectId() string {
@@ -1372,7 +1866,7 @@ type UpdateProjectMetadataResponse struct {
 
 func (x *UpdateProjectMetadataResponse) Reset() {
 	*x = UpdateProjectMetadataResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[17]
+	mi := &file_reliant_v1_project_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1384,7 +1878,7 @@ func (x *UpdateProjectMetadataResponse) String() string {
 func (*UpdateProjectMetadataResponse) ProtoMessage() {}
 
 func (x *UpdateProjectMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[17]
+	mi := &file_reliant_v1_project_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1397,7 +1891,7 @@ func (x *UpdateProjectMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateProjectMetadataResponse.ProtoReflect.Descriptor instead.
 func (*UpdateProjectMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *UpdateProjectMetadataResponse) GetProject() *Project {
@@ -1422,7 +1916,7 @@ type GetProjectGitInfoRequest struct {
 
 func (x *GetProjectGitInfoRequest) Reset() {
 	*x = GetProjectGitInfoRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[18]
+	mi := &file_reliant_v1_project_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1434,7 +1928,7 @@ func (x *GetProjectGitInfoRequest) String() string {
 func (*GetProjectGitInfoRequest) ProtoMessage() {}
 
 func (x *GetProjectGitInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[18]
+	mi := &file_reliant_v1_project_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1447,7 +1941,7 @@ func (x *GetProjectGitInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectGitInfoRequest.ProtoReflect.Descriptor instead.
 func (*GetProjectGitInfoRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetProjectGitInfoRequest) GetProjectId() string {
@@ -1485,7 +1979,7 @@ type GetProjectGitInfoResponse struct {
 
 func (x *GetProjectGitInfoResponse) Reset() {
 	*x = GetProjectGitInfoResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[19]
+	mi := &file_reliant_v1_project_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1497,7 +1991,7 @@ func (x *GetProjectGitInfoResponse) String() string {
 func (*GetProjectGitInfoResponse) ProtoMessage() {}
 
 func (x *GetProjectGitInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[19]
+	mi := &file_reliant_v1_project_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1510,7 +2004,7 @@ func (x *GetProjectGitInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectGitInfoResponse.ProtoReflect.Descriptor instead.
 func (*GetProjectGitInfoResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetProjectGitInfoResponse) GetProjectId() string {
@@ -1615,7 +2109,7 @@ type GitBranch struct {
 
 func (x *GitBranch) Reset() {
 	*x = GitBranch{}
-	mi := &file_reliant_v1_project_proto_msgTypes[20]
+	mi := &file_reliant_v1_project_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1627,7 +2121,7 @@ func (x *GitBranch) String() string {
 func (*GitBranch) ProtoMessage() {}
 
 func (x *GitBranch) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[20]
+	mi := &file_reliant_v1_project_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1640,7 +2134,7 @@ func (x *GitBranch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitBranch.ProtoReflect.Descriptor instead.
 func (*GitBranch) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GitBranch) GetName() string {
@@ -1705,7 +2199,7 @@ type GetProjectGitBranchesRequest struct {
 
 func (x *GetProjectGitBranchesRequest) Reset() {
 	*x = GetProjectGitBranchesRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[21]
+	mi := &file_reliant_v1_project_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1717,7 +2211,7 @@ func (x *GetProjectGitBranchesRequest) String() string {
 func (*GetProjectGitBranchesRequest) ProtoMessage() {}
 
 func (x *GetProjectGitBranchesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[21]
+	mi := &file_reliant_v1_project_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1730,7 +2224,7 @@ func (x *GetProjectGitBranchesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectGitBranchesRequest.ProtoReflect.Descriptor instead.
 func (*GetProjectGitBranchesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GetProjectGitBranchesRequest) GetProjectId() string {
@@ -1757,7 +2251,7 @@ type GetProjectGitBranchesResponse struct {
 
 func (x *GetProjectGitBranchesResponse) Reset() {
 	*x = GetProjectGitBranchesResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[22]
+	mi := &file_reliant_v1_project_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1769,7 +2263,7 @@ func (x *GetProjectGitBranchesResponse) String() string {
 func (*GetProjectGitBranchesResponse) ProtoMessage() {}
 
 func (x *GetProjectGitBranchesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[22]
+	mi := &file_reliant_v1_project_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1782,7 +2276,7 @@ func (x *GetProjectGitBranchesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectGitBranchesResponse.ProtoReflect.Descriptor instead.
 func (*GetProjectGitBranchesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetProjectGitBranchesResponse) GetBranches() []*GitBranch {
@@ -1802,7 +2296,7 @@ type GetProjectInitStatusRequest struct {
 
 func (x *GetProjectInitStatusRequest) Reset() {
 	*x = GetProjectInitStatusRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[23]
+	mi := &file_reliant_v1_project_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1814,7 +2308,7 @@ func (x *GetProjectInitStatusRequest) String() string {
 func (*GetProjectInitStatusRequest) ProtoMessage() {}
 
 func (x *GetProjectInitStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[23]
+	mi := &file_reliant_v1_project_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1827,7 +2321,7 @@ func (x *GetProjectInitStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectInitStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetProjectInitStatusRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{23}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetProjectInitStatusRequest) GetProjectId() string {
@@ -1849,7 +2343,7 @@ type GetProjectInitStatusResponse struct {
 
 func (x *GetProjectInitStatusResponse) Reset() {
 	*x = GetProjectInitStatusResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[24]
+	mi := &file_reliant_v1_project_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1861,7 +2355,7 @@ func (x *GetProjectInitStatusResponse) String() string {
 func (*GetProjectInitStatusResponse) ProtoMessage() {}
 
 func (x *GetProjectInitStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[24]
+	mi := &file_reliant_v1_project_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1874,7 +2368,7 @@ func (x *GetProjectInitStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectInitStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetProjectInitStatusResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{24}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetProjectInitStatusResponse) GetInitialized() bool {
@@ -1908,7 +2402,7 @@ type InitializeProjectRequest struct {
 
 func (x *InitializeProjectRequest) Reset() {
 	*x = InitializeProjectRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[25]
+	mi := &file_reliant_v1_project_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1920,7 +2414,7 @@ func (x *InitializeProjectRequest) String() string {
 func (*InitializeProjectRequest) ProtoMessage() {}
 
 func (x *InitializeProjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[25]
+	mi := &file_reliant_v1_project_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1933,7 +2427,7 @@ func (x *InitializeProjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitializeProjectRequest.ProtoReflect.Descriptor instead.
 func (*InitializeProjectRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{25}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *InitializeProjectRequest) GetProjectId() string {
@@ -1956,7 +2450,7 @@ type InitializeProjectResponse struct {
 
 func (x *InitializeProjectResponse) Reset() {
 	*x = InitializeProjectResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[26]
+	mi := &file_reliant_v1_project_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1968,7 +2462,7 @@ func (x *InitializeProjectResponse) String() string {
 func (*InitializeProjectResponse) ProtoMessage() {}
 
 func (x *InitializeProjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[26]
+	mi := &file_reliant_v1_project_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1981,7 +2475,7 @@ func (x *InitializeProjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitializeProjectResponse.ProtoReflect.Descriptor instead.
 func (*InitializeProjectResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{26}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *InitializeProjectResponse) GetProjectId() string {
@@ -2027,7 +2521,7 @@ type FileChange struct {
 
 func (x *FileChange) Reset() {
 	*x = FileChange{}
-	mi := &file_reliant_v1_project_proto_msgTypes[27]
+	mi := &file_reliant_v1_project_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2039,7 +2533,7 @@ func (x *FileChange) String() string {
 func (*FileChange) ProtoMessage() {}
 
 func (x *FileChange) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[27]
+	mi := &file_reliant_v1_project_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2052,7 +2546,7 @@ func (x *FileChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileChange.ProtoReflect.Descriptor instead.
 func (*FileChange) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{27}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *FileChange) GetPath() string {
@@ -2110,7 +2604,7 @@ type GetProjectChangesRequest struct {
 
 func (x *GetProjectChangesRequest) Reset() {
 	*x = GetProjectChangesRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[28]
+	mi := &file_reliant_v1_project_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2122,7 +2616,7 @@ func (x *GetProjectChangesRequest) String() string {
 func (*GetProjectChangesRequest) ProtoMessage() {}
 
 func (x *GetProjectChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[28]
+	mi := &file_reliant_v1_project_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2135,7 +2629,7 @@ func (x *GetProjectChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectChangesRequest.ProtoReflect.Descriptor instead.
 func (*GetProjectChangesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{28}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GetProjectChangesRequest) GetProjectId() string {
@@ -2164,7 +2658,7 @@ type GetProjectChangesResponse struct {
 
 func (x *GetProjectChangesResponse) Reset() {
 	*x = GetProjectChangesResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[29]
+	mi := &file_reliant_v1_project_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2176,7 +2670,7 @@ func (x *GetProjectChangesResponse) String() string {
 func (*GetProjectChangesResponse) ProtoMessage() {}
 
 func (x *GetProjectChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[29]
+	mi := &file_reliant_v1_project_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2189,7 +2683,7 @@ func (x *GetProjectChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectChangesResponse.ProtoReflect.Descriptor instead.
 func (*GetProjectChangesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{29}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *GetProjectChangesResponse) GetBranch() string {
@@ -2228,7 +2722,7 @@ type Prompt struct {
 
 func (x *Prompt) Reset() {
 	*x = Prompt{}
-	mi := &file_reliant_v1_project_proto_msgTypes[30]
+	mi := &file_reliant_v1_project_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2240,7 +2734,7 @@ func (x *Prompt) String() string {
 func (*Prompt) ProtoMessage() {}
 
 func (x *Prompt) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[30]
+	mi := &file_reliant_v1_project_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2253,7 +2747,7 @@ func (x *Prompt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Prompt.ProtoReflect.Descriptor instead.
 func (*Prompt) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{30}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *Prompt) GetId() string {
@@ -2308,7 +2802,7 @@ type GetProjectPromptsRequest struct {
 
 func (x *GetProjectPromptsRequest) Reset() {
 	*x = GetProjectPromptsRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[31]
+	mi := &file_reliant_v1_project_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2320,7 +2814,7 @@ func (x *GetProjectPromptsRequest) String() string {
 func (*GetProjectPromptsRequest) ProtoMessage() {}
 
 func (x *GetProjectPromptsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[31]
+	mi := &file_reliant_v1_project_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2333,7 +2827,7 @@ func (x *GetProjectPromptsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectPromptsRequest.ProtoReflect.Descriptor instead.
 func (*GetProjectPromptsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{31}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GetProjectPromptsRequest) GetProjectId() string {
@@ -2353,7 +2847,7 @@ type GetProjectPromptsResponse struct {
 
 func (x *GetProjectPromptsResponse) Reset() {
 	*x = GetProjectPromptsResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[32]
+	mi := &file_reliant_v1_project_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2365,7 +2859,7 @@ func (x *GetProjectPromptsResponse) String() string {
 func (*GetProjectPromptsResponse) ProtoMessage() {}
 
 func (x *GetProjectPromptsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[32]
+	mi := &file_reliant_v1_project_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2378,7 +2872,7 @@ func (x *GetProjectPromptsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectPromptsResponse.ProtoReflect.Descriptor instead.
 func (*GetProjectPromptsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{32}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *GetProjectPromptsResponse) GetPrompts() []*Prompt {
@@ -2399,7 +2893,7 @@ type SaveProjectPromptsRequest struct {
 
 func (x *SaveProjectPromptsRequest) Reset() {
 	*x = SaveProjectPromptsRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[33]
+	mi := &file_reliant_v1_project_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2411,7 +2905,7 @@ func (x *SaveProjectPromptsRequest) String() string {
 func (*SaveProjectPromptsRequest) ProtoMessage() {}
 
 func (x *SaveProjectPromptsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[33]
+	mi := &file_reliant_v1_project_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2424,7 +2918,7 @@ func (x *SaveProjectPromptsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveProjectPromptsRequest.ProtoReflect.Descriptor instead.
 func (*SaveProjectPromptsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{33}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *SaveProjectPromptsRequest) GetProjectId() string {
@@ -2452,7 +2946,7 @@ type SaveProjectPromptsResponse struct {
 
 func (x *SaveProjectPromptsResponse) Reset() {
 	*x = SaveProjectPromptsResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[34]
+	mi := &file_reliant_v1_project_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2464,7 +2958,7 @@ func (x *SaveProjectPromptsResponse) String() string {
 func (*SaveProjectPromptsResponse) ProtoMessage() {}
 
 func (x *SaveProjectPromptsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[34]
+	mi := &file_reliant_v1_project_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2477,7 +2971,7 @@ func (x *SaveProjectPromptsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveProjectPromptsResponse.ProtoReflect.Descriptor instead.
 func (*SaveProjectPromptsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{34}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *SaveProjectPromptsResponse) GetMessage() string {
@@ -2507,7 +3001,7 @@ type InitializeGitRepoRequest struct {
 
 func (x *InitializeGitRepoRequest) Reset() {
 	*x = InitializeGitRepoRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[35]
+	mi := &file_reliant_v1_project_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2519,7 +3013,7 @@ func (x *InitializeGitRepoRequest) String() string {
 func (*InitializeGitRepoRequest) ProtoMessage() {}
 
 func (x *InitializeGitRepoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[35]
+	mi := &file_reliant_v1_project_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2532,7 +3026,7 @@ func (x *InitializeGitRepoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitializeGitRepoRequest.ProtoReflect.Descriptor instead.
 func (*InitializeGitRepoRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{35}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *InitializeGitRepoRequest) GetProjectId() string {
@@ -2576,7 +3070,7 @@ type InitializeGitRepoResponse struct {
 
 func (x *InitializeGitRepoResponse) Reset() {
 	*x = InitializeGitRepoResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[36]
+	mi := &file_reliant_v1_project_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2588,7 +3082,7 @@ func (x *InitializeGitRepoResponse) String() string {
 func (*InitializeGitRepoResponse) ProtoMessage() {}
 
 func (x *InitializeGitRepoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[36]
+	mi := &file_reliant_v1_project_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2601,7 +3095,7 @@ func (x *InitializeGitRepoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitializeGitRepoResponse.ProtoReflect.Descriptor instead.
 func (*InitializeGitRepoResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{36}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *InitializeGitRepoResponse) GetMessage() string {
@@ -2642,7 +3136,7 @@ type ListProjectDaemonsForDaemonRequest struct {
 
 func (x *ListProjectDaemonsForDaemonRequest) Reset() {
 	*x = ListProjectDaemonsForDaemonRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[37]
+	mi := &file_reliant_v1_project_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2654,7 +3148,7 @@ func (x *ListProjectDaemonsForDaemonRequest) String() string {
 func (*ListProjectDaemonsForDaemonRequest) ProtoMessage() {}
 
 func (x *ListProjectDaemonsForDaemonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[37]
+	mi := &file_reliant_v1_project_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2667,7 +3161,7 @@ func (x *ListProjectDaemonsForDaemonRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use ListProjectDaemonsForDaemonRequest.ProtoReflect.Descriptor instead.
 func (*ListProjectDaemonsForDaemonRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{37}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ListProjectDaemonsForDaemonRequest) GetDaemonId() string {
@@ -2687,7 +3181,7 @@ type ListProjectDaemonsForDaemonResponse struct {
 
 func (x *ListProjectDaemonsForDaemonResponse) Reset() {
 	*x = ListProjectDaemonsForDaemonResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[38]
+	mi := &file_reliant_v1_project_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2699,7 +3193,7 @@ func (x *ListProjectDaemonsForDaemonResponse) String() string {
 func (*ListProjectDaemonsForDaemonResponse) ProtoMessage() {}
 
 func (x *ListProjectDaemonsForDaemonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[38]
+	mi := &file_reliant_v1_project_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2712,7 +3206,7 @@ func (x *ListProjectDaemonsForDaemonResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ListProjectDaemonsForDaemonResponse.ProtoReflect.Descriptor instead.
 func (*ListProjectDaemonsForDaemonResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{38}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ListProjectDaemonsForDaemonResponse) GetProjectDaemons() []*ProjectDaemon {
@@ -2732,7 +3226,7 @@ type ListProjectDaemonsRequest struct {
 
 func (x *ListProjectDaemonsRequest) Reset() {
 	*x = ListProjectDaemonsRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[39]
+	mi := &file_reliant_v1_project_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2744,7 +3238,7 @@ func (x *ListProjectDaemonsRequest) String() string {
 func (*ListProjectDaemonsRequest) ProtoMessage() {}
 
 func (x *ListProjectDaemonsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[39]
+	mi := &file_reliant_v1_project_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2757,7 +3251,7 @@ func (x *ListProjectDaemonsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProjectDaemonsRequest.ProtoReflect.Descriptor instead.
 func (*ListProjectDaemonsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{39}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{46}
 }
 
 // ListProjectDaemonsResponse returns every project_daemons row for projects
@@ -2771,7 +3265,7 @@ type ListProjectDaemonsResponse struct {
 
 func (x *ListProjectDaemonsResponse) Reset() {
 	*x = ListProjectDaemonsResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[40]
+	mi := &file_reliant_v1_project_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2783,7 +3277,7 @@ func (x *ListProjectDaemonsResponse) String() string {
 func (*ListProjectDaemonsResponse) ProtoMessage() {}
 
 func (x *ListProjectDaemonsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[40]
+	mi := &file_reliant_v1_project_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2796,7 +3290,7 @@ func (x *ListProjectDaemonsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProjectDaemonsResponse.ProtoReflect.Descriptor instead.
 func (*ListProjectDaemonsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{40}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ListProjectDaemonsResponse) GetProjectDaemons() []*ProjectDaemon {
@@ -2819,7 +3313,7 @@ type MarkProjectInstalledRequest struct {
 
 func (x *MarkProjectInstalledRequest) Reset() {
 	*x = MarkProjectInstalledRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[41]
+	mi := &file_reliant_v1_project_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2831,7 +3325,7 @@ func (x *MarkProjectInstalledRequest) String() string {
 func (*MarkProjectInstalledRequest) ProtoMessage() {}
 
 func (x *MarkProjectInstalledRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[41]
+	mi := &file_reliant_v1_project_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2844,7 +3338,7 @@ func (x *MarkProjectInstalledRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkProjectInstalledRequest.ProtoReflect.Descriptor instead.
 func (*MarkProjectInstalledRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{41}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *MarkProjectInstalledRequest) GetProjectId() string {
@@ -2885,7 +3379,7 @@ type MarkProjectInstalledResponse struct {
 
 func (x *MarkProjectInstalledResponse) Reset() {
 	*x = MarkProjectInstalledResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[42]
+	mi := &file_reliant_v1_project_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2897,7 +3391,7 @@ func (x *MarkProjectInstalledResponse) String() string {
 func (*MarkProjectInstalledResponse) ProtoMessage() {}
 
 func (x *MarkProjectInstalledResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[42]
+	mi := &file_reliant_v1_project_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2910,7 +3404,7 @@ func (x *MarkProjectInstalledResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkProjectInstalledResponse.ProtoReflect.Descriptor instead.
 func (*MarkProjectInstalledResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{42}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *MarkProjectInstalledResponse) GetProjectDaemon() *ProjectDaemon {
@@ -2947,7 +3441,7 @@ type CreateProjectFromRepoRequest struct {
 
 func (x *CreateProjectFromRepoRequest) Reset() {
 	*x = CreateProjectFromRepoRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[43]
+	mi := &file_reliant_v1_project_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2959,7 +3453,7 @@ func (x *CreateProjectFromRepoRequest) String() string {
 func (*CreateProjectFromRepoRequest) ProtoMessage() {}
 
 func (x *CreateProjectFromRepoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[43]
+	mi := &file_reliant_v1_project_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2972,7 +3466,7 @@ func (x *CreateProjectFromRepoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateProjectFromRepoRequest.ProtoReflect.Descriptor instead.
 func (*CreateProjectFromRepoRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{43}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *CreateProjectFromRepoRequest) GetCloneUrl() string {
@@ -3036,7 +3530,7 @@ type CreateProjectFromRepoResponse struct {
 
 func (x *CreateProjectFromRepoResponse) Reset() {
 	*x = CreateProjectFromRepoResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[44]
+	mi := &file_reliant_v1_project_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3048,7 +3542,7 @@ func (x *CreateProjectFromRepoResponse) String() string {
 func (*CreateProjectFromRepoResponse) ProtoMessage() {}
 
 func (x *CreateProjectFromRepoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[44]
+	mi := &file_reliant_v1_project_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3061,7 +3555,7 @@ func (x *CreateProjectFromRepoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateProjectFromRepoResponse.ProtoReflect.Descriptor instead.
 func (*CreateProjectFromRepoResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{44}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *CreateProjectFromRepoResponse) GetProject() *Project {
@@ -3115,7 +3609,7 @@ type DaemonRepository struct {
 
 func (x *DaemonRepository) Reset() {
 	*x = DaemonRepository{}
-	mi := &file_reliant_v1_project_proto_msgTypes[45]
+	mi := &file_reliant_v1_project_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3127,7 +3621,7 @@ func (x *DaemonRepository) String() string {
 func (*DaemonRepository) ProtoMessage() {}
 
 func (x *DaemonRepository) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[45]
+	mi := &file_reliant_v1_project_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3140,7 +3634,7 @@ func (x *DaemonRepository) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonRepository.ProtoReflect.Descriptor instead.
 func (*DaemonRepository) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{45}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *DaemonRepository) GetProjectId() string {
@@ -3195,7 +3689,7 @@ type ListRepositoriesForDaemonRequest struct {
 
 func (x *ListRepositoriesForDaemonRequest) Reset() {
 	*x = ListRepositoriesForDaemonRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[46]
+	mi := &file_reliant_v1_project_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3207,7 +3701,7 @@ func (x *ListRepositoriesForDaemonRequest) String() string {
 func (*ListRepositoriesForDaemonRequest) ProtoMessage() {}
 
 func (x *ListRepositoriesForDaemonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[46]
+	mi := &file_reliant_v1_project_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3220,7 +3714,7 @@ func (x *ListRepositoriesForDaemonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRepositoriesForDaemonRequest.ProtoReflect.Descriptor instead.
 func (*ListRepositoriesForDaemonRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{46}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ListRepositoriesForDaemonRequest) GetDaemonId() string {
@@ -3241,7 +3735,7 @@ type ListRepositoriesForDaemonResponse struct {
 
 func (x *ListRepositoriesForDaemonResponse) Reset() {
 	*x = ListRepositoriesForDaemonResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[47]
+	mi := &file_reliant_v1_project_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3253,7 +3747,7 @@ func (x *ListRepositoriesForDaemonResponse) String() string {
 func (*ListRepositoriesForDaemonResponse) ProtoMessage() {}
 
 func (x *ListRepositoriesForDaemonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[47]
+	mi := &file_reliant_v1_project_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3266,7 +3760,7 @@ func (x *ListRepositoriesForDaemonResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ListRepositoriesForDaemonResponse.ProtoReflect.Descriptor instead.
 func (*ListRepositoriesForDaemonResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{47}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *ListRepositoriesForDaemonResponse) GetRepositories() []*DaemonRepository {
@@ -3287,7 +3781,7 @@ type PullProjectOnDaemonRequest struct {
 
 func (x *PullProjectOnDaemonRequest) Reset() {
 	*x = PullProjectOnDaemonRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[48]
+	mi := &file_reliant_v1_project_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3299,7 +3793,7 @@ func (x *PullProjectOnDaemonRequest) String() string {
 func (*PullProjectOnDaemonRequest) ProtoMessage() {}
 
 func (x *PullProjectOnDaemonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[48]
+	mi := &file_reliant_v1_project_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3312,7 +3806,7 @@ func (x *PullProjectOnDaemonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PullProjectOnDaemonRequest.ProtoReflect.Descriptor instead.
 func (*PullProjectOnDaemonRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{48}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *PullProjectOnDaemonRequest) GetProjectId() string {
@@ -3339,7 +3833,7 @@ type PullProjectOnDaemonResponse struct {
 
 func (x *PullProjectOnDaemonResponse) Reset() {
 	*x = PullProjectOnDaemonResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[49]
+	mi := &file_reliant_v1_project_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3351,7 +3845,7 @@ func (x *PullProjectOnDaemonResponse) String() string {
 func (*PullProjectOnDaemonResponse) ProtoMessage() {}
 
 func (x *PullProjectOnDaemonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[49]
+	mi := &file_reliant_v1_project_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3364,7 +3858,7 @@ func (x *PullProjectOnDaemonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PullProjectOnDaemonResponse.ProtoReflect.Descriptor instead.
 func (*PullProjectOnDaemonResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{49}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *PullProjectOnDaemonResponse) GetOutput() string {
@@ -3386,7 +3880,7 @@ type RemoveProjectFromDaemonRequest struct {
 
 func (x *RemoveProjectFromDaemonRequest) Reset() {
 	*x = RemoveProjectFromDaemonRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[50]
+	mi := &file_reliant_v1_project_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3398,7 +3892,7 @@ func (x *RemoveProjectFromDaemonRequest) String() string {
 func (*RemoveProjectFromDaemonRequest) ProtoMessage() {}
 
 func (x *RemoveProjectFromDaemonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[50]
+	mi := &file_reliant_v1_project_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3411,7 +3905,7 @@ func (x *RemoveProjectFromDaemonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveProjectFromDaemonRequest.ProtoReflect.Descriptor instead.
 func (*RemoveProjectFromDaemonRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{50}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *RemoveProjectFromDaemonRequest) GetProjectId() string {
@@ -3437,7 +3931,7 @@ type RemoveProjectFromDaemonResponse struct {
 
 func (x *RemoveProjectFromDaemonResponse) Reset() {
 	*x = RemoveProjectFromDaemonResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[51]
+	mi := &file_reliant_v1_project_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3449,7 +3943,7 @@ func (x *RemoveProjectFromDaemonResponse) String() string {
 func (*RemoveProjectFromDaemonResponse) ProtoMessage() {}
 
 func (x *RemoveProjectFromDaemonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[51]
+	mi := &file_reliant_v1_project_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3462,7 +3956,7 @@ func (x *RemoveProjectFromDaemonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveProjectFromDaemonResponse.ProtoReflect.Descriptor instead.
 func (*RemoveProjectFromDaemonResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{51}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{58}
 }
 
 // AttachProjectToDaemonRequest names a folder on one of the caller's machines
@@ -3480,7 +3974,7 @@ type AttachProjectToDaemonRequest struct {
 
 func (x *AttachProjectToDaemonRequest) Reset() {
 	*x = AttachProjectToDaemonRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[52]
+	mi := &file_reliant_v1_project_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3492,7 +3986,7 @@ func (x *AttachProjectToDaemonRequest) String() string {
 func (*AttachProjectToDaemonRequest) ProtoMessage() {}
 
 func (x *AttachProjectToDaemonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[52]
+	mi := &file_reliant_v1_project_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3505,7 +3999,7 @@ func (x *AttachProjectToDaemonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachProjectToDaemonRequest.ProtoReflect.Descriptor instead.
 func (*AttachProjectToDaemonRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{52}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *AttachProjectToDaemonRequest) GetProjectId() string {
@@ -3550,7 +4044,7 @@ type AttachProjectToDaemonResponse struct {
 
 func (x *AttachProjectToDaemonResponse) Reset() {
 	*x = AttachProjectToDaemonResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[53]
+	mi := &file_reliant_v1_project_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3562,7 +4056,7 @@ func (x *AttachProjectToDaemonResponse) String() string {
 func (*AttachProjectToDaemonResponse) ProtoMessage() {}
 
 func (x *AttachProjectToDaemonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[53]
+	mi := &file_reliant_v1_project_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3575,7 +4069,7 @@ func (x *AttachProjectToDaemonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachProjectToDaemonResponse.ProtoReflect.Descriptor instead.
 func (*AttachProjectToDaemonResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{53}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *AttachProjectToDaemonResponse) GetProjectDaemon() *ProjectDaemon {
@@ -3603,7 +4097,7 @@ type DetachProjectFromDaemonRequest struct {
 
 func (x *DetachProjectFromDaemonRequest) Reset() {
 	*x = DetachProjectFromDaemonRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[54]
+	mi := &file_reliant_v1_project_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3615,7 +4109,7 @@ func (x *DetachProjectFromDaemonRequest) String() string {
 func (*DetachProjectFromDaemonRequest) ProtoMessage() {}
 
 func (x *DetachProjectFromDaemonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[54]
+	mi := &file_reliant_v1_project_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3628,7 +4122,7 @@ func (x *DetachProjectFromDaemonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DetachProjectFromDaemonRequest.ProtoReflect.Descriptor instead.
 func (*DetachProjectFromDaemonRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{54}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *DetachProjectFromDaemonRequest) GetProjectId() string {
@@ -3654,7 +4148,7 @@ type DetachProjectFromDaemonResponse struct {
 
 func (x *DetachProjectFromDaemonResponse) Reset() {
 	*x = DetachProjectFromDaemonResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[55]
+	mi := &file_reliant_v1_project_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3666,7 +4160,7 @@ func (x *DetachProjectFromDaemonResponse) String() string {
 func (*DetachProjectFromDaemonResponse) ProtoMessage() {}
 
 func (x *DetachProjectFromDaemonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[55]
+	mi := &file_reliant_v1_project_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3679,7 +4173,7 @@ func (x *DetachProjectFromDaemonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DetachProjectFromDaemonResponse.ProtoReflect.Descriptor instead.
 func (*DetachProjectFromDaemonResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{55}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{62}
 }
 
 // RecloneProjectOnDaemonRequest blows away the on-disk clone and re-clones
@@ -3694,7 +4188,7 @@ type RecloneProjectOnDaemonRequest struct {
 
 func (x *RecloneProjectOnDaemonRequest) Reset() {
 	*x = RecloneProjectOnDaemonRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[56]
+	mi := &file_reliant_v1_project_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3706,7 +4200,7 @@ func (x *RecloneProjectOnDaemonRequest) String() string {
 func (*RecloneProjectOnDaemonRequest) ProtoMessage() {}
 
 func (x *RecloneProjectOnDaemonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[56]
+	mi := &file_reliant_v1_project_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3719,7 +4213,7 @@ func (x *RecloneProjectOnDaemonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecloneProjectOnDaemonRequest.ProtoReflect.Descriptor instead.
 func (*RecloneProjectOnDaemonRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{56}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *RecloneProjectOnDaemonRequest) GetProjectId() string {
@@ -3746,7 +4240,7 @@ type RecloneProjectOnDaemonResponse struct {
 
 func (x *RecloneProjectOnDaemonResponse) Reset() {
 	*x = RecloneProjectOnDaemonResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[57]
+	mi := &file_reliant_v1_project_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3758,7 +4252,7 @@ func (x *RecloneProjectOnDaemonResponse) String() string {
 func (*RecloneProjectOnDaemonResponse) ProtoMessage() {}
 
 func (x *RecloneProjectOnDaemonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[57]
+	mi := &file_reliant_v1_project_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3771,7 +4265,7 @@ func (x *RecloneProjectOnDaemonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecloneProjectOnDaemonResponse.ProtoReflect.Descriptor instead.
 func (*RecloneProjectOnDaemonResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{57}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *RecloneProjectOnDaemonResponse) GetPath() string {
@@ -3794,7 +4288,7 @@ type PreviewProjectOrgMoveRequest struct {
 
 func (x *PreviewProjectOrgMoveRequest) Reset() {
 	*x = PreviewProjectOrgMoveRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[58]
+	mi := &file_reliant_v1_project_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3806,7 +4300,7 @@ func (x *PreviewProjectOrgMoveRequest) String() string {
 func (*PreviewProjectOrgMoveRequest) ProtoMessage() {}
 
 func (x *PreviewProjectOrgMoveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[58]
+	mi := &file_reliant_v1_project_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3819,7 +4313,7 @@ func (x *PreviewProjectOrgMoveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewProjectOrgMoveRequest.ProtoReflect.Descriptor instead.
 func (*PreviewProjectOrgMoveRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{58}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *PreviewProjectOrgMoveRequest) GetProjectId() string {
@@ -3854,7 +4348,7 @@ type PreviewProjectOrgMoveResponse struct {
 
 func (x *PreviewProjectOrgMoveResponse) Reset() {
 	*x = PreviewProjectOrgMoveResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[59]
+	mi := &file_reliant_v1_project_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3866,7 +4360,7 @@ func (x *PreviewProjectOrgMoveResponse) String() string {
 func (*PreviewProjectOrgMoveResponse) ProtoMessage() {}
 
 func (x *PreviewProjectOrgMoveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[59]
+	mi := &file_reliant_v1_project_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3879,7 +4373,7 @@ func (x *PreviewProjectOrgMoveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewProjectOrgMoveResponse.ProtoReflect.Descriptor instead.
 func (*PreviewProjectOrgMoveResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{59}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *PreviewProjectOrgMoveResponse) GetFromOrgId() string {
@@ -3931,7 +4425,7 @@ type ProjectOrgMoveBlockers struct {
 
 func (x *ProjectOrgMoveBlockers) Reset() {
 	*x = ProjectOrgMoveBlockers{}
-	mi := &file_reliant_v1_project_proto_msgTypes[60]
+	mi := &file_reliant_v1_project_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3943,7 +4437,7 @@ func (x *ProjectOrgMoveBlockers) String() string {
 func (*ProjectOrgMoveBlockers) ProtoMessage() {}
 
 func (x *ProjectOrgMoveBlockers) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[60]
+	mi := &file_reliant_v1_project_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3956,7 +4450,7 @@ func (x *ProjectOrgMoveBlockers) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectOrgMoveBlockers.ProtoReflect.Descriptor instead.
 func (*ProjectOrgMoveBlockers) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{60}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *ProjectOrgMoveBlockers) GetChats() []*ProjectOrgMoveBlockedChat {
@@ -4000,7 +4494,7 @@ type ProjectOrgMoveBlockedChat struct {
 
 func (x *ProjectOrgMoveBlockedChat) Reset() {
 	*x = ProjectOrgMoveBlockedChat{}
-	mi := &file_reliant_v1_project_proto_msgTypes[61]
+	mi := &file_reliant_v1_project_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4012,7 +4506,7 @@ func (x *ProjectOrgMoveBlockedChat) String() string {
 func (*ProjectOrgMoveBlockedChat) ProtoMessage() {}
 
 func (x *ProjectOrgMoveBlockedChat) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[61]
+	mi := &file_reliant_v1_project_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4025,7 +4519,7 @@ func (x *ProjectOrgMoveBlockedChat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectOrgMoveBlockedChat.ProtoReflect.Descriptor instead.
 func (*ProjectOrgMoveBlockedChat) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{61}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *ProjectOrgMoveBlockedChat) GetChatId() string {
@@ -4096,7 +4590,7 @@ type ProjectOrgMoveEffects struct {
 
 func (x *ProjectOrgMoveEffects) Reset() {
 	*x = ProjectOrgMoveEffects{}
-	mi := &file_reliant_v1_project_proto_msgTypes[62]
+	mi := &file_reliant_v1_project_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4108,7 +4602,7 @@ func (x *ProjectOrgMoveEffects) String() string {
 func (*ProjectOrgMoveEffects) ProtoMessage() {}
 
 func (x *ProjectOrgMoveEffects) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[62]
+	mi := &file_reliant_v1_project_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4121,7 +4615,7 @@ func (x *ProjectOrgMoveEffects) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectOrgMoveEffects.ProtoReflect.Descriptor instead.
 func (*ProjectOrgMoveEffects) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{62}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *ProjectOrgMoveEffects) GetChats() int32 {
@@ -4231,7 +4725,7 @@ type ProjectOrgMoveTriggerSetup struct {
 
 func (x *ProjectOrgMoveTriggerSetup) Reset() {
 	*x = ProjectOrgMoveTriggerSetup{}
-	mi := &file_reliant_v1_project_proto_msgTypes[63]
+	mi := &file_reliant_v1_project_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4243,7 +4737,7 @@ func (x *ProjectOrgMoveTriggerSetup) String() string {
 func (*ProjectOrgMoveTriggerSetup) ProtoMessage() {}
 
 func (x *ProjectOrgMoveTriggerSetup) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[63]
+	mi := &file_reliant_v1_project_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4256,7 +4750,7 @@ func (x *ProjectOrgMoveTriggerSetup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectOrgMoveTriggerSetup.ProtoReflect.Descriptor instead.
 func (*ProjectOrgMoveTriggerSetup) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{63}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *ProjectOrgMoveTriggerSetup) GetTriggerId() string {
@@ -4299,7 +4793,7 @@ type ProjectOrgMoveMachine struct {
 
 func (x *ProjectOrgMoveMachine) Reset() {
 	*x = ProjectOrgMoveMachine{}
-	mi := &file_reliant_v1_project_proto_msgTypes[64]
+	mi := &file_reliant_v1_project_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4311,7 +4805,7 @@ func (x *ProjectOrgMoveMachine) String() string {
 func (*ProjectOrgMoveMachine) ProtoMessage() {}
 
 func (x *ProjectOrgMoveMachine) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[64]
+	mi := &file_reliant_v1_project_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4324,7 +4818,7 @@ func (x *ProjectOrgMoveMachine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectOrgMoveMachine.ProtoReflect.Descriptor instead.
 func (*ProjectOrgMoveMachine) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{64}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *ProjectOrgMoveMachine) GetDaemonId() string {
@@ -4384,7 +4878,7 @@ type ProjectOrgMove struct {
 
 func (x *ProjectOrgMove) Reset() {
 	*x = ProjectOrgMove{}
-	mi := &file_reliant_v1_project_proto_msgTypes[65]
+	mi := &file_reliant_v1_project_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4396,7 +4890,7 @@ func (x *ProjectOrgMove) String() string {
 func (*ProjectOrgMove) ProtoMessage() {}
 
 func (x *ProjectOrgMove) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[65]
+	mi := &file_reliant_v1_project_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4409,7 +4903,7 @@ func (x *ProjectOrgMove) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectOrgMove.ProtoReflect.Descriptor instead.
 func (*ProjectOrgMove) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{65}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *ProjectOrgMove) GetId() string {
@@ -4506,7 +5000,7 @@ type ProjectOrgMoveCounts struct {
 
 func (x *ProjectOrgMoveCounts) Reset() {
 	*x = ProjectOrgMoveCounts{}
-	mi := &file_reliant_v1_project_proto_msgTypes[66]
+	mi := &file_reliant_v1_project_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4518,7 +5012,7 @@ func (x *ProjectOrgMoveCounts) String() string {
 func (*ProjectOrgMoveCounts) ProtoMessage() {}
 
 func (x *ProjectOrgMoveCounts) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[66]
+	mi := &file_reliant_v1_project_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4531,7 +5025,7 @@ func (x *ProjectOrgMoveCounts) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectOrgMoveCounts.ProtoReflect.Descriptor instead.
 func (*ProjectOrgMoveCounts) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{66}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ProjectOrgMoveCounts) GetChats() int32 {
@@ -4605,7 +5099,7 @@ type MoveProjectToOrgRequest struct {
 
 func (x *MoveProjectToOrgRequest) Reset() {
 	*x = MoveProjectToOrgRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[67]
+	mi := &file_reliant_v1_project_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4617,7 +5111,7 @@ func (x *MoveProjectToOrgRequest) String() string {
 func (*MoveProjectToOrgRequest) ProtoMessage() {}
 
 func (x *MoveProjectToOrgRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[67]
+	mi := &file_reliant_v1_project_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4630,7 +5124,7 @@ func (x *MoveProjectToOrgRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveProjectToOrgRequest.ProtoReflect.Descriptor instead.
 func (*MoveProjectToOrgRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{67}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *MoveProjectToOrgRequest) GetProjectId() string {
@@ -4670,7 +5164,7 @@ type MoveProjectToOrgResponse struct {
 
 func (x *MoveProjectToOrgResponse) Reset() {
 	*x = MoveProjectToOrgResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[68]
+	mi := &file_reliant_v1_project_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4682,7 +5176,7 @@ func (x *MoveProjectToOrgResponse) String() string {
 func (*MoveProjectToOrgResponse) ProtoMessage() {}
 
 func (x *MoveProjectToOrgResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[68]
+	mi := &file_reliant_v1_project_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4695,7 +5189,7 @@ func (x *MoveProjectToOrgResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveProjectToOrgResponse.ProtoReflect.Descriptor instead.
 func (*MoveProjectToOrgResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{68}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *MoveProjectToOrgResponse) GetMove() *ProjectOrgMove {
@@ -4714,7 +5208,7 @@ type GetProjectOrgMoveRequest struct {
 
 func (x *GetProjectOrgMoveRequest) Reset() {
 	*x = GetProjectOrgMoveRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[69]
+	mi := &file_reliant_v1_project_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4726,7 +5220,7 @@ func (x *GetProjectOrgMoveRequest) String() string {
 func (*GetProjectOrgMoveRequest) ProtoMessage() {}
 
 func (x *GetProjectOrgMoveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[69]
+	mi := &file_reliant_v1_project_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4739,7 +5233,7 @@ func (x *GetProjectOrgMoveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectOrgMoveRequest.ProtoReflect.Descriptor instead.
 func (*GetProjectOrgMoveRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{69}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *GetProjectOrgMoveRequest) GetMoveId() string {
@@ -4758,7 +5252,7 @@ type GetProjectOrgMoveResponse struct {
 
 func (x *GetProjectOrgMoveResponse) Reset() {
 	*x = GetProjectOrgMoveResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[70]
+	mi := &file_reliant_v1_project_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4770,7 +5264,7 @@ func (x *GetProjectOrgMoveResponse) String() string {
 func (*GetProjectOrgMoveResponse) ProtoMessage() {}
 
 func (x *GetProjectOrgMoveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[70]
+	mi := &file_reliant_v1_project_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4783,7 +5277,7 @@ func (x *GetProjectOrgMoveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectOrgMoveResponse.ProtoReflect.Descriptor instead.
 func (*GetProjectOrgMoveResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{70}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *GetProjectOrgMoveResponse) GetMove() *ProjectOrgMove {
@@ -4805,7 +5299,7 @@ type ListProjectOrgMovesRequest struct {
 
 func (x *ListProjectOrgMovesRequest) Reset() {
 	*x = ListProjectOrgMovesRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[71]
+	mi := &file_reliant_v1_project_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4817,7 +5311,7 @@ func (x *ListProjectOrgMovesRequest) String() string {
 func (*ListProjectOrgMovesRequest) ProtoMessage() {}
 
 func (x *ListProjectOrgMovesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[71]
+	mi := &file_reliant_v1_project_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4830,7 +5324,7 @@ func (x *ListProjectOrgMovesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProjectOrgMovesRequest.ProtoReflect.Descriptor instead.
 func (*ListProjectOrgMovesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{71}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *ListProjectOrgMovesRequest) GetOrgId() string {
@@ -4863,7 +5357,7 @@ type ListProjectOrgMovesResponse struct {
 
 func (x *ListProjectOrgMovesResponse) Reset() {
 	*x = ListProjectOrgMovesResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[72]
+	mi := &file_reliant_v1_project_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4875,7 +5369,7 @@ func (x *ListProjectOrgMovesResponse) String() string {
 func (*ListProjectOrgMovesResponse) ProtoMessage() {}
 
 func (x *ListProjectOrgMovesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[72]
+	mi := &file_reliant_v1_project_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4888,7 +5382,7 @@ func (x *ListProjectOrgMovesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProjectOrgMovesResponse.ProtoReflect.Descriptor instead.
 func (*ListProjectOrgMovesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{72}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *ListProjectOrgMovesResponse) GetMoves() []*ProjectOrgMove {
@@ -4903,7 +5397,7 @@ var File_reliant_v1_project_proto protoreflect.FileDescriptor
 const file_reliant_v1_project_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/project.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x15reliant/v1/chat.proto\x1a\x17reliant/v1/common.proto\"\xa3\x05\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x15reliant/v1/chat.proto\x1a\x17reliant/v1/common.proto\"\xa5\x06\n" +
 	"\aProject\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
@@ -4928,14 +5422,18 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"visibility\x18\x0f \x01(\x0e2\x1e.reliant.v1.ResourceVisibilityR\n" +
 	"visibility\x12#\n" +
 	"\rviewer_access\x18\x10 \x01(\bR\fviewerAccess\x12 \n" +
-	"\tshared_at\x18\x11 \x01(\tH\x05R\bsharedAt\x88\x01\x01B\x0e\n" +
+	"\tshared_at\x18\x11 \x01(\tH\x05R\bsharedAt\x88\x01\x01\x12&\n" +
+	"\fdelete_after\x18\x12 \x01(\tH\x06R\vdeleteAfter\x88\x01\x01\x120\n" +
+	"\x12deleted_by_user_id\x18\x13 \x01(\tH\aR\x0fdeletedByUserId\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x11\n" +
 	"\x0f_default_branchB\r\n" +
 	"\v_remote_urlB\x15\n" +
 	"\x13_forge_project_nameB\t\n" +
 	"\a_org_idB\f\n" +
 	"\n" +
-	"_shared_at\"\xfd\x02\n" +
+	"_shared_atB\x0f\n" +
+	"\r_delete_afterB\x15\n" +
+	"\x13_deleted_by_user_id\"\xfd\x02\n" +
 	"\rProjectDaemon\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
@@ -4990,13 +5488,41 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\f_descriptionB\x11\n" +
 	"\x0f_default_branch\"F\n" +
 	"\x15UpdateProjectResponse\x12-\n" +
-	"\aproject\x18\x01 \x01(\v2\x13.reliant.v1.ProjectR\aproject\"5\n" +
+	"\aproject\x18\x01 \x01(\v2\x13.reliant.v1.ProjectR\aproject\"g\n" +
 	"\x14DeleteProjectRequest\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\"K\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x120\n" +
+	"\x14remove_from_machines\x18\x02 \x01(\bR\x12removeFromMachines\"\xd2\x01\n" +
 	"\x15DeleteProjectResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"4\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12&\n" +
+	"\fdelete_after\x18\x03 \x01(\tH\x00R\vdeleteAfter\x88\x01\x01\x12L\n" +
+	"\x10machine_removals\x18\x04 \x03(\v2!.reliant.v1.ProjectMachineRemovalR\x0fmachineRemovalsB\x0f\n" +
+	"\r_delete_after\"\xc6\x01\n" +
+	"\x15ProjectMachineRemoval\x12\x1b\n" +
+	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12!\n" +
+	"\fmachine_name\x18\x02 \x01(\tR\vmachineName\x12\x12\n" +
+	"\x04path\x18\x03 \x01(\tR\x04path\x12?\n" +
+	"\x06status\x18\x04 \x01(\x0e2'.reliant.v1.ProjectMachineRemovalStatusR\x06status\x12\x18\n" +
+	"\amessage\x18\x05 \x01(\tR\amessage\"6\n" +
+	"\x15RestoreProjectRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\"r\n" +
+	"\x16RestoreProjectResponse\x12-\n" +
+	"\aproject\x18\x01 \x01(\v2\x13.reliant.v1.ProjectR\aproject\x12)\n" +
+	"\x10triggers_resumed\x18\x02 \x01(\x05R\x0ftriggersResumed\"\x8c\x01\n" +
+	"\x16PurgeProjectNowRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12!\n" +
+	"\fconfirm_name\x18\x02 \x01(\tR\vconfirmName\x120\n" +
+	"\x14remove_from_machines\x18\x03 \x01(\bR\x12removeFromMachines\"g\n" +
+	"\x17PurgeProjectNowResponse\x12L\n" +
+	"\x10machine_removals\x18\x01 \x03(\v2!.reliant.v1.ProjectMachineRemovalR\x0fmachineRemovals\"C\n" +
+	"\x1aListDeletedProjectsRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"N\n" +
+	"\x1bListDeletedProjectsResponse\x12/\n" +
+	"\bprojects\x18\x01 \x03(\v2\x13.reliant.v1.ProjectR\bprojects\"4\n" +
 	"\x13TouchProjectRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\"J\n" +
@@ -5305,7 +5831,12 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\x06offset\x18\x03 \x01(\x05R\x06offsetB\t\n" +
 	"\a_org_id\"O\n" +
 	"\x1bListProjectOrgMovesResponse\x120\n" +
-	"\x05moves\x18\x01 \x03(\v2\x1a.reliant.v1.ProjectOrgMoveR\x05moves*\xa9\x01\n" +
+	"\x05moves\x18\x01 \x03(\v2\x1a.reliant.v1.ProjectOrgMoveR\x05moves*\xd0\x01\n" +
+	"\x1bProjectMachineRemovalStatus\x12.\n" +
+	"*PROJECT_MACHINE_REMOVAL_STATUS_UNSPECIFIED\x10\x00\x12*\n" +
+	"&PROJECT_MACHINE_REMOVAL_STATUS_REMOVED\x10\x01\x12*\n" +
+	"&PROJECT_MACHINE_REMOVAL_STATUS_OFFLINE\x10\x02\x12)\n" +
+	"%PROJECT_MACHINE_REMOVAL_STATUS_FAILED\x10\x03*\xa9\x01\n" +
 	"\x13ProjectInstallState\x12%\n" +
 	"!PROJECT_INSTALL_STATE_UNSPECIFIED\x10\x00\x12$\n" +
 	" PROJECT_INSTALL_STATE_INSTALLING\x10\x01\x12#\n" +
@@ -5318,7 +5849,7 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\x1cPROJECT_ORG_MOVE_STATE_MOVED\x10\x03\x12$\n" +
 	" PROJECT_ORG_MOVE_STATE_COMPLETED\x10\x04\x12#\n" +
 	"\x1fPROJECT_ORG_MOVE_STATE_ABORTING\x10\x05\x12\"\n" +
-	"\x1ePROJECT_ORG_MOVE_STATE_ABORTED\x10\x062\xaa!\n" +
+	"\x1ePROJECT_ORG_MOVE_STATE_ABORTED\x10\x062\xb3$\n" +
 	"\x0eProjectService\x12\x9b\x01\n" +
 	"\rCreateProject\x12 .reliant.v1.CreateProjectRequest\x1a!.reliant.v1.CreateProjectResponse\"E\xa2\xbb\x18A:?\n" +
 	"\x06create\x125\n" +
@@ -5333,7 +5864,16 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\rDeleteProject\x12 .reliant.v1.DeleteProjectRequest\x1a!.reliant.v1.DeleteProjectResponse\"%\xa2\xbb\x18!:\x1f\n" +
 	"\x06delete\x12\x15\n" +
 	"\aproject\x12\n" +
-	"project_id\x12\xb9\x01\n" +
+	"project_id\x12\x96\x01\n" +
+	"\x0eRestoreProject\x12!.reliant.v1.RestoreProjectRequest\x1a\".reliant.v1.RestoreProjectResponse\"=\xa2\xbb\x189:7\n" +
+	"\arestore\x12,\n" +
+	"\aproject\x12\n" +
+	"project_id\x1a\x15response.project.name\x12\x80\x01\n" +
+	"\x0fPurgeProjectNow\x12\".reliant.v1.PurgeProjectNowRequest\x1a#.reliant.v1.PurgeProjectNowResponse\"$\xa2\xbb\x18 :\x1e\n" +
+	"\x05purge\x12\x15\n" +
+	"\aproject\x12\n" +
+	"project_id\x12k\n" +
+	"\x13ListDeletedProjects\x12&.reliant.v1.ListDeletedProjectsRequest\x1a'.reliant.v1.ListDeletedProjectsResponse\"\x03\x90\x02\x01\x12\xb9\x01\n" +
 	"\fTouchProject\x12\x1f.reliant.v1.TouchProjectRequest\x1a .reliant.v1.TouchProjectResponse\"f\xa2\xbb\x18b:`:^bumps last_active when the project is opened: recency for sorting, not a change to the project\x12e\n" +
 	"\x12GetProjectMetadata\x12%.reliant.v1.GetProjectMetadataRequest\x1a&.reliant.v1.GetProjectMetadataResponse\"\x00\x12\xb3\x01\n" +
 	"\x15UpdateProjectMetadata\x12(.reliant.v1.UpdateProjectMetadataRequest\x1a).reliant.v1.UpdateProjectMetadataResponse\"E\xa2\xbb\x18A:?\n" +
@@ -5401,186 +5941,205 @@ func file_reliant_v1_project_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_project_proto_rawDescData
 }
 
-var file_reliant_v1_project_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_reliant_v1_project_proto_msgTypes = make([]protoimpl.MessageInfo, 73)
+var file_reliant_v1_project_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_reliant_v1_project_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
 var file_reliant_v1_project_proto_goTypes = []any{
-	(ProjectInstallState)(0),                    // 0: reliant.v1.ProjectInstallState
-	(ProjectOrgMoveState)(0),                    // 1: reliant.v1.ProjectOrgMoveState
-	(*Project)(nil),                             // 2: reliant.v1.Project
-	(*ProjectDaemon)(nil),                       // 3: reliant.v1.ProjectDaemon
-	(*CreateProjectRequest)(nil),                // 4: reliant.v1.CreateProjectRequest
-	(*CreateProjectResponse)(nil),               // 5: reliant.v1.CreateProjectResponse
-	(*ListProjectsRequest)(nil),                 // 6: reliant.v1.ListProjectsRequest
-	(*ListProjectsResponse)(nil),                // 7: reliant.v1.ListProjectsResponse
-	(*GetProjectRequest)(nil),                   // 8: reliant.v1.GetProjectRequest
-	(*GetProjectResponse)(nil),                  // 9: reliant.v1.GetProjectResponse
-	(*UpdateProjectRequest)(nil),                // 10: reliant.v1.UpdateProjectRequest
-	(*UpdateProjectResponse)(nil),               // 11: reliant.v1.UpdateProjectResponse
-	(*DeleteProjectRequest)(nil),                // 12: reliant.v1.DeleteProjectRequest
-	(*DeleteProjectResponse)(nil),               // 13: reliant.v1.DeleteProjectResponse
-	(*TouchProjectRequest)(nil),                 // 14: reliant.v1.TouchProjectRequest
-	(*TouchProjectResponse)(nil),                // 15: reliant.v1.TouchProjectResponse
-	(*GetProjectMetadataRequest)(nil),           // 16: reliant.v1.GetProjectMetadataRequest
-	(*GetProjectMetadataResponse)(nil),          // 17: reliant.v1.GetProjectMetadataResponse
-	(*UpdateProjectMetadataRequest)(nil),        // 18: reliant.v1.UpdateProjectMetadataRequest
-	(*UpdateProjectMetadataResponse)(nil),       // 19: reliant.v1.UpdateProjectMetadataResponse
-	(*GetProjectGitInfoRequest)(nil),            // 20: reliant.v1.GetProjectGitInfoRequest
-	(*GetProjectGitInfoResponse)(nil),           // 21: reliant.v1.GetProjectGitInfoResponse
-	(*GitBranch)(nil),                           // 22: reliant.v1.GitBranch
-	(*GetProjectGitBranchesRequest)(nil),        // 23: reliant.v1.GetProjectGitBranchesRequest
-	(*GetProjectGitBranchesResponse)(nil),       // 24: reliant.v1.GetProjectGitBranchesResponse
-	(*GetProjectInitStatusRequest)(nil),         // 25: reliant.v1.GetProjectInitStatusRequest
-	(*GetProjectInitStatusResponse)(nil),        // 26: reliant.v1.GetProjectInitStatusResponse
-	(*InitializeProjectRequest)(nil),            // 27: reliant.v1.InitializeProjectRequest
-	(*InitializeProjectResponse)(nil),           // 28: reliant.v1.InitializeProjectResponse
-	(*FileChange)(nil),                          // 29: reliant.v1.FileChange
-	(*GetProjectChangesRequest)(nil),            // 30: reliant.v1.GetProjectChangesRequest
-	(*GetProjectChangesResponse)(nil),           // 31: reliant.v1.GetProjectChangesResponse
-	(*Prompt)(nil),                              // 32: reliant.v1.Prompt
-	(*GetProjectPromptsRequest)(nil),            // 33: reliant.v1.GetProjectPromptsRequest
-	(*GetProjectPromptsResponse)(nil),           // 34: reliant.v1.GetProjectPromptsResponse
-	(*SaveProjectPromptsRequest)(nil),           // 35: reliant.v1.SaveProjectPromptsRequest
-	(*SaveProjectPromptsResponse)(nil),          // 36: reliant.v1.SaveProjectPromptsResponse
-	(*InitializeGitRepoRequest)(nil),            // 37: reliant.v1.InitializeGitRepoRequest
-	(*InitializeGitRepoResponse)(nil),           // 38: reliant.v1.InitializeGitRepoResponse
-	(*ListProjectDaemonsForDaemonRequest)(nil),  // 39: reliant.v1.ListProjectDaemonsForDaemonRequest
-	(*ListProjectDaemonsForDaemonResponse)(nil), // 40: reliant.v1.ListProjectDaemonsForDaemonResponse
-	(*ListProjectDaemonsRequest)(nil),           // 41: reliant.v1.ListProjectDaemonsRequest
-	(*ListProjectDaemonsResponse)(nil),          // 42: reliant.v1.ListProjectDaemonsResponse
-	(*MarkProjectInstalledRequest)(nil),         // 43: reliant.v1.MarkProjectInstalledRequest
-	(*MarkProjectInstalledResponse)(nil),        // 44: reliant.v1.MarkProjectInstalledResponse
-	(*CreateProjectFromRepoRequest)(nil),        // 45: reliant.v1.CreateProjectFromRepoRequest
-	(*CreateProjectFromRepoResponse)(nil),       // 46: reliant.v1.CreateProjectFromRepoResponse
-	(*DaemonRepository)(nil),                    // 47: reliant.v1.DaemonRepository
-	(*ListRepositoriesForDaemonRequest)(nil),    // 48: reliant.v1.ListRepositoriesForDaemonRequest
-	(*ListRepositoriesForDaemonResponse)(nil),   // 49: reliant.v1.ListRepositoriesForDaemonResponse
-	(*PullProjectOnDaemonRequest)(nil),          // 50: reliant.v1.PullProjectOnDaemonRequest
-	(*PullProjectOnDaemonResponse)(nil),         // 51: reliant.v1.PullProjectOnDaemonResponse
-	(*RemoveProjectFromDaemonRequest)(nil),      // 52: reliant.v1.RemoveProjectFromDaemonRequest
-	(*RemoveProjectFromDaemonResponse)(nil),     // 53: reliant.v1.RemoveProjectFromDaemonResponse
-	(*AttachProjectToDaemonRequest)(nil),        // 54: reliant.v1.AttachProjectToDaemonRequest
-	(*AttachProjectToDaemonResponse)(nil),       // 55: reliant.v1.AttachProjectToDaemonResponse
-	(*DetachProjectFromDaemonRequest)(nil),      // 56: reliant.v1.DetachProjectFromDaemonRequest
-	(*DetachProjectFromDaemonResponse)(nil),     // 57: reliant.v1.DetachProjectFromDaemonResponse
-	(*RecloneProjectOnDaemonRequest)(nil),       // 58: reliant.v1.RecloneProjectOnDaemonRequest
-	(*RecloneProjectOnDaemonResponse)(nil),      // 59: reliant.v1.RecloneProjectOnDaemonResponse
-	(*PreviewProjectOrgMoveRequest)(nil),        // 60: reliant.v1.PreviewProjectOrgMoveRequest
-	(*PreviewProjectOrgMoveResponse)(nil),       // 61: reliant.v1.PreviewProjectOrgMoveResponse
-	(*ProjectOrgMoveBlockers)(nil),              // 62: reliant.v1.ProjectOrgMoveBlockers
-	(*ProjectOrgMoveBlockedChat)(nil),           // 63: reliant.v1.ProjectOrgMoveBlockedChat
-	(*ProjectOrgMoveEffects)(nil),               // 64: reliant.v1.ProjectOrgMoveEffects
-	(*ProjectOrgMoveTriggerSetup)(nil),          // 65: reliant.v1.ProjectOrgMoveTriggerSetup
-	(*ProjectOrgMoveMachine)(nil),               // 66: reliant.v1.ProjectOrgMoveMachine
-	(*ProjectOrgMove)(nil),                      // 67: reliant.v1.ProjectOrgMove
-	(*ProjectOrgMoveCounts)(nil),                // 68: reliant.v1.ProjectOrgMoveCounts
-	(*MoveProjectToOrgRequest)(nil),             // 69: reliant.v1.MoveProjectToOrgRequest
-	(*MoveProjectToOrgResponse)(nil),            // 70: reliant.v1.MoveProjectToOrgResponse
-	(*GetProjectOrgMoveRequest)(nil),            // 71: reliant.v1.GetProjectOrgMoveRequest
-	(*GetProjectOrgMoveResponse)(nil),           // 72: reliant.v1.GetProjectOrgMoveResponse
-	(*ListProjectOrgMovesRequest)(nil),          // 73: reliant.v1.ListProjectOrgMovesRequest
-	(*ListProjectOrgMovesResponse)(nil),         // 74: reliant.v1.ListProjectOrgMovesResponse
-	(v1.ResourceVisibility)(0),                  // 75: reliant.v1.ResourceVisibility
-	(v1.FileChangeStatus)(0),                    // 76: reliant.v1.FileChangeStatus
-	(v1.ChatActivity)(0),                        // 77: reliant.v1.ChatActivity
+	(ProjectMachineRemovalStatus)(0),            // 0: reliant.v1.ProjectMachineRemovalStatus
+	(ProjectInstallState)(0),                    // 1: reliant.v1.ProjectInstallState
+	(ProjectOrgMoveState)(0),                    // 2: reliant.v1.ProjectOrgMoveState
+	(*Project)(nil),                             // 3: reliant.v1.Project
+	(*ProjectDaemon)(nil),                       // 4: reliant.v1.ProjectDaemon
+	(*CreateProjectRequest)(nil),                // 5: reliant.v1.CreateProjectRequest
+	(*CreateProjectResponse)(nil),               // 6: reliant.v1.CreateProjectResponse
+	(*ListProjectsRequest)(nil),                 // 7: reliant.v1.ListProjectsRequest
+	(*ListProjectsResponse)(nil),                // 8: reliant.v1.ListProjectsResponse
+	(*GetProjectRequest)(nil),                   // 9: reliant.v1.GetProjectRequest
+	(*GetProjectResponse)(nil),                  // 10: reliant.v1.GetProjectResponse
+	(*UpdateProjectRequest)(nil),                // 11: reliant.v1.UpdateProjectRequest
+	(*UpdateProjectResponse)(nil),               // 12: reliant.v1.UpdateProjectResponse
+	(*DeleteProjectRequest)(nil),                // 13: reliant.v1.DeleteProjectRequest
+	(*DeleteProjectResponse)(nil),               // 14: reliant.v1.DeleteProjectResponse
+	(*ProjectMachineRemoval)(nil),               // 15: reliant.v1.ProjectMachineRemoval
+	(*RestoreProjectRequest)(nil),               // 16: reliant.v1.RestoreProjectRequest
+	(*RestoreProjectResponse)(nil),              // 17: reliant.v1.RestoreProjectResponse
+	(*PurgeProjectNowRequest)(nil),              // 18: reliant.v1.PurgeProjectNowRequest
+	(*PurgeProjectNowResponse)(nil),             // 19: reliant.v1.PurgeProjectNowResponse
+	(*ListDeletedProjectsRequest)(nil),          // 20: reliant.v1.ListDeletedProjectsRequest
+	(*ListDeletedProjectsResponse)(nil),         // 21: reliant.v1.ListDeletedProjectsResponse
+	(*TouchProjectRequest)(nil),                 // 22: reliant.v1.TouchProjectRequest
+	(*TouchProjectResponse)(nil),                // 23: reliant.v1.TouchProjectResponse
+	(*GetProjectMetadataRequest)(nil),           // 24: reliant.v1.GetProjectMetadataRequest
+	(*GetProjectMetadataResponse)(nil),          // 25: reliant.v1.GetProjectMetadataResponse
+	(*UpdateProjectMetadataRequest)(nil),        // 26: reliant.v1.UpdateProjectMetadataRequest
+	(*UpdateProjectMetadataResponse)(nil),       // 27: reliant.v1.UpdateProjectMetadataResponse
+	(*GetProjectGitInfoRequest)(nil),            // 28: reliant.v1.GetProjectGitInfoRequest
+	(*GetProjectGitInfoResponse)(nil),           // 29: reliant.v1.GetProjectGitInfoResponse
+	(*GitBranch)(nil),                           // 30: reliant.v1.GitBranch
+	(*GetProjectGitBranchesRequest)(nil),        // 31: reliant.v1.GetProjectGitBranchesRequest
+	(*GetProjectGitBranchesResponse)(nil),       // 32: reliant.v1.GetProjectGitBranchesResponse
+	(*GetProjectInitStatusRequest)(nil),         // 33: reliant.v1.GetProjectInitStatusRequest
+	(*GetProjectInitStatusResponse)(nil),        // 34: reliant.v1.GetProjectInitStatusResponse
+	(*InitializeProjectRequest)(nil),            // 35: reliant.v1.InitializeProjectRequest
+	(*InitializeProjectResponse)(nil),           // 36: reliant.v1.InitializeProjectResponse
+	(*FileChange)(nil),                          // 37: reliant.v1.FileChange
+	(*GetProjectChangesRequest)(nil),            // 38: reliant.v1.GetProjectChangesRequest
+	(*GetProjectChangesResponse)(nil),           // 39: reliant.v1.GetProjectChangesResponse
+	(*Prompt)(nil),                              // 40: reliant.v1.Prompt
+	(*GetProjectPromptsRequest)(nil),            // 41: reliant.v1.GetProjectPromptsRequest
+	(*GetProjectPromptsResponse)(nil),           // 42: reliant.v1.GetProjectPromptsResponse
+	(*SaveProjectPromptsRequest)(nil),           // 43: reliant.v1.SaveProjectPromptsRequest
+	(*SaveProjectPromptsResponse)(nil),          // 44: reliant.v1.SaveProjectPromptsResponse
+	(*InitializeGitRepoRequest)(nil),            // 45: reliant.v1.InitializeGitRepoRequest
+	(*InitializeGitRepoResponse)(nil),           // 46: reliant.v1.InitializeGitRepoResponse
+	(*ListProjectDaemonsForDaemonRequest)(nil),  // 47: reliant.v1.ListProjectDaemonsForDaemonRequest
+	(*ListProjectDaemonsForDaemonResponse)(nil), // 48: reliant.v1.ListProjectDaemonsForDaemonResponse
+	(*ListProjectDaemonsRequest)(nil),           // 49: reliant.v1.ListProjectDaemonsRequest
+	(*ListProjectDaemonsResponse)(nil),          // 50: reliant.v1.ListProjectDaemonsResponse
+	(*MarkProjectInstalledRequest)(nil),         // 51: reliant.v1.MarkProjectInstalledRequest
+	(*MarkProjectInstalledResponse)(nil),        // 52: reliant.v1.MarkProjectInstalledResponse
+	(*CreateProjectFromRepoRequest)(nil),        // 53: reliant.v1.CreateProjectFromRepoRequest
+	(*CreateProjectFromRepoResponse)(nil),       // 54: reliant.v1.CreateProjectFromRepoResponse
+	(*DaemonRepository)(nil),                    // 55: reliant.v1.DaemonRepository
+	(*ListRepositoriesForDaemonRequest)(nil),    // 56: reliant.v1.ListRepositoriesForDaemonRequest
+	(*ListRepositoriesForDaemonResponse)(nil),   // 57: reliant.v1.ListRepositoriesForDaemonResponse
+	(*PullProjectOnDaemonRequest)(nil),          // 58: reliant.v1.PullProjectOnDaemonRequest
+	(*PullProjectOnDaemonResponse)(nil),         // 59: reliant.v1.PullProjectOnDaemonResponse
+	(*RemoveProjectFromDaemonRequest)(nil),      // 60: reliant.v1.RemoveProjectFromDaemonRequest
+	(*RemoveProjectFromDaemonResponse)(nil),     // 61: reliant.v1.RemoveProjectFromDaemonResponse
+	(*AttachProjectToDaemonRequest)(nil),        // 62: reliant.v1.AttachProjectToDaemonRequest
+	(*AttachProjectToDaemonResponse)(nil),       // 63: reliant.v1.AttachProjectToDaemonResponse
+	(*DetachProjectFromDaemonRequest)(nil),      // 64: reliant.v1.DetachProjectFromDaemonRequest
+	(*DetachProjectFromDaemonResponse)(nil),     // 65: reliant.v1.DetachProjectFromDaemonResponse
+	(*RecloneProjectOnDaemonRequest)(nil),       // 66: reliant.v1.RecloneProjectOnDaemonRequest
+	(*RecloneProjectOnDaemonResponse)(nil),      // 67: reliant.v1.RecloneProjectOnDaemonResponse
+	(*PreviewProjectOrgMoveRequest)(nil),        // 68: reliant.v1.PreviewProjectOrgMoveRequest
+	(*PreviewProjectOrgMoveResponse)(nil),       // 69: reliant.v1.PreviewProjectOrgMoveResponse
+	(*ProjectOrgMoveBlockers)(nil),              // 70: reliant.v1.ProjectOrgMoveBlockers
+	(*ProjectOrgMoveBlockedChat)(nil),           // 71: reliant.v1.ProjectOrgMoveBlockedChat
+	(*ProjectOrgMoveEffects)(nil),               // 72: reliant.v1.ProjectOrgMoveEffects
+	(*ProjectOrgMoveTriggerSetup)(nil),          // 73: reliant.v1.ProjectOrgMoveTriggerSetup
+	(*ProjectOrgMoveMachine)(nil),               // 74: reliant.v1.ProjectOrgMoveMachine
+	(*ProjectOrgMove)(nil),                      // 75: reliant.v1.ProjectOrgMove
+	(*ProjectOrgMoveCounts)(nil),                // 76: reliant.v1.ProjectOrgMoveCounts
+	(*MoveProjectToOrgRequest)(nil),             // 77: reliant.v1.MoveProjectToOrgRequest
+	(*MoveProjectToOrgResponse)(nil),            // 78: reliant.v1.MoveProjectToOrgResponse
+	(*GetProjectOrgMoveRequest)(nil),            // 79: reliant.v1.GetProjectOrgMoveRequest
+	(*GetProjectOrgMoveResponse)(nil),           // 80: reliant.v1.GetProjectOrgMoveResponse
+	(*ListProjectOrgMovesRequest)(nil),          // 81: reliant.v1.ListProjectOrgMovesRequest
+	(*ListProjectOrgMovesResponse)(nil),         // 82: reliant.v1.ListProjectOrgMovesResponse
+	(v1.ResourceVisibility)(0),                  // 83: reliant.v1.ResourceVisibility
+	(v1.FileChangeStatus)(0),                    // 84: reliant.v1.FileChangeStatus
+	(v1.ChatActivity)(0),                        // 85: reliant.v1.ChatActivity
 }
 var file_reliant_v1_project_proto_depIdxs = []int32{
-	75, // 0: reliant.v1.Project.visibility:type_name -> reliant.v1.ResourceVisibility
-	0,  // 1: reliant.v1.ProjectDaemon.install_state:type_name -> reliant.v1.ProjectInstallState
-	2,  // 2: reliant.v1.CreateProjectResponse.project:type_name -> reliant.v1.Project
-	3,  // 3: reliant.v1.CreateProjectResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	2,  // 4: reliant.v1.ListProjectsResponse.projects:type_name -> reliant.v1.Project
-	2,  // 5: reliant.v1.GetProjectResponse.project:type_name -> reliant.v1.Project
-	2,  // 6: reliant.v1.UpdateProjectResponse.project:type_name -> reliant.v1.Project
-	2,  // 7: reliant.v1.UpdateProjectMetadataResponse.project:type_name -> reliant.v1.Project
-	22, // 8: reliant.v1.GetProjectGitBranchesResponse.branches:type_name -> reliant.v1.GitBranch
-	76, // 9: reliant.v1.FileChange.status:type_name -> reliant.v1.FileChangeStatus
-	29, // 10: reliant.v1.GetProjectChangesResponse.files:type_name -> reliant.v1.FileChange
-	32, // 11: reliant.v1.GetProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
-	32, // 12: reliant.v1.SaveProjectPromptsRequest.prompts:type_name -> reliant.v1.Prompt
-	32, // 13: reliant.v1.SaveProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
-	3,  // 14: reliant.v1.ListProjectDaemonsForDaemonResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
-	3,  // 15: reliant.v1.ListProjectDaemonsResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
-	3,  // 16: reliant.v1.MarkProjectInstalledResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	2,  // 17: reliant.v1.CreateProjectFromRepoResponse.project:type_name -> reliant.v1.Project
-	3,  // 18: reliant.v1.CreateProjectFromRepoResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	47, // 19: reliant.v1.ListRepositoriesForDaemonResponse.repositories:type_name -> reliant.v1.DaemonRepository
-	3,  // 20: reliant.v1.AttachProjectToDaemonResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	62, // 21: reliant.v1.PreviewProjectOrgMoveResponse.blockers:type_name -> reliant.v1.ProjectOrgMoveBlockers
-	64, // 22: reliant.v1.PreviewProjectOrgMoveResponse.effects:type_name -> reliant.v1.ProjectOrgMoveEffects
-	63, // 23: reliant.v1.ProjectOrgMoveBlockers.chats:type_name -> reliant.v1.ProjectOrgMoveBlockedChat
-	77, // 24: reliant.v1.ProjectOrgMoveBlockedChat.activity:type_name -> reliant.v1.ChatActivity
-	65, // 25: reliant.v1.ProjectOrgMoveEffects.triggers_needing_setup:type_name -> reliant.v1.ProjectOrgMoveTriggerSetup
-	66, // 26: reliant.v1.ProjectOrgMoveEffects.machines:type_name -> reliant.v1.ProjectOrgMoveMachine
-	1,  // 27: reliant.v1.ProjectOrgMove.state:type_name -> reliant.v1.ProjectOrgMoveState
-	68, // 28: reliant.v1.ProjectOrgMove.counts:type_name -> reliant.v1.ProjectOrgMoveCounts
-	67, // 29: reliant.v1.MoveProjectToOrgResponse.move:type_name -> reliant.v1.ProjectOrgMove
-	67, // 30: reliant.v1.GetProjectOrgMoveResponse.move:type_name -> reliant.v1.ProjectOrgMove
-	67, // 31: reliant.v1.ListProjectOrgMovesResponse.moves:type_name -> reliant.v1.ProjectOrgMove
-	4,  // 32: reliant.v1.ProjectService.CreateProject:input_type -> reliant.v1.CreateProjectRequest
-	6,  // 33: reliant.v1.ProjectService.ListProjects:input_type -> reliant.v1.ListProjectsRequest
-	8,  // 34: reliant.v1.ProjectService.GetProject:input_type -> reliant.v1.GetProjectRequest
-	10, // 35: reliant.v1.ProjectService.UpdateProject:input_type -> reliant.v1.UpdateProjectRequest
-	12, // 36: reliant.v1.ProjectService.DeleteProject:input_type -> reliant.v1.DeleteProjectRequest
-	14, // 37: reliant.v1.ProjectService.TouchProject:input_type -> reliant.v1.TouchProjectRequest
-	16, // 38: reliant.v1.ProjectService.GetProjectMetadata:input_type -> reliant.v1.GetProjectMetadataRequest
-	18, // 39: reliant.v1.ProjectService.UpdateProjectMetadata:input_type -> reliant.v1.UpdateProjectMetadataRequest
-	20, // 40: reliant.v1.ProjectService.GetProjectGitInfo:input_type -> reliant.v1.GetProjectGitInfoRequest
-	23, // 41: reliant.v1.ProjectService.GetProjectGitBranches:input_type -> reliant.v1.GetProjectGitBranchesRequest
-	25, // 42: reliant.v1.ProjectService.GetProjectInitStatus:input_type -> reliant.v1.GetProjectInitStatusRequest
-	27, // 43: reliant.v1.ProjectService.InitializeProject:input_type -> reliant.v1.InitializeProjectRequest
-	30, // 44: reliant.v1.ProjectService.GetProjectChanges:input_type -> reliant.v1.GetProjectChangesRequest
-	33, // 45: reliant.v1.ProjectService.GetProjectPrompts:input_type -> reliant.v1.GetProjectPromptsRequest
-	35, // 46: reliant.v1.ProjectService.SaveProjectPrompts:input_type -> reliant.v1.SaveProjectPromptsRequest
-	37, // 47: reliant.v1.ProjectService.InitializeGitRepo:input_type -> reliant.v1.InitializeGitRepoRequest
-	39, // 48: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:input_type -> reliant.v1.ListProjectDaemonsForDaemonRequest
-	41, // 49: reliant.v1.ProjectService.ListProjectDaemons:input_type -> reliant.v1.ListProjectDaemonsRequest
-	43, // 50: reliant.v1.ProjectService.MarkProjectInstalled:input_type -> reliant.v1.MarkProjectInstalledRequest
-	45, // 51: reliant.v1.ProjectService.CreateProjectFromRepo:input_type -> reliant.v1.CreateProjectFromRepoRequest
-	48, // 52: reliant.v1.ProjectService.ListRepositoriesForDaemon:input_type -> reliant.v1.ListRepositoriesForDaemonRequest
-	50, // 53: reliant.v1.ProjectService.PullProjectOnDaemon:input_type -> reliant.v1.PullProjectOnDaemonRequest
-	52, // 54: reliant.v1.ProjectService.RemoveProjectFromDaemon:input_type -> reliant.v1.RemoveProjectFromDaemonRequest
-	54, // 55: reliant.v1.ProjectService.AttachProjectToDaemon:input_type -> reliant.v1.AttachProjectToDaemonRequest
-	56, // 56: reliant.v1.ProjectService.DetachProjectFromDaemon:input_type -> reliant.v1.DetachProjectFromDaemonRequest
-	58, // 57: reliant.v1.ProjectService.RecloneProjectOnDaemon:input_type -> reliant.v1.RecloneProjectOnDaemonRequest
-	60, // 58: reliant.v1.ProjectService.PreviewProjectOrgMove:input_type -> reliant.v1.PreviewProjectOrgMoveRequest
-	69, // 59: reliant.v1.ProjectService.MoveProjectToOrg:input_type -> reliant.v1.MoveProjectToOrgRequest
-	71, // 60: reliant.v1.ProjectService.GetProjectOrgMove:input_type -> reliant.v1.GetProjectOrgMoveRequest
-	73, // 61: reliant.v1.ProjectService.ListProjectOrgMoves:input_type -> reliant.v1.ListProjectOrgMovesRequest
-	5,  // 62: reliant.v1.ProjectService.CreateProject:output_type -> reliant.v1.CreateProjectResponse
-	7,  // 63: reliant.v1.ProjectService.ListProjects:output_type -> reliant.v1.ListProjectsResponse
-	9,  // 64: reliant.v1.ProjectService.GetProject:output_type -> reliant.v1.GetProjectResponse
-	11, // 65: reliant.v1.ProjectService.UpdateProject:output_type -> reliant.v1.UpdateProjectResponse
-	13, // 66: reliant.v1.ProjectService.DeleteProject:output_type -> reliant.v1.DeleteProjectResponse
-	15, // 67: reliant.v1.ProjectService.TouchProject:output_type -> reliant.v1.TouchProjectResponse
-	17, // 68: reliant.v1.ProjectService.GetProjectMetadata:output_type -> reliant.v1.GetProjectMetadataResponse
-	19, // 69: reliant.v1.ProjectService.UpdateProjectMetadata:output_type -> reliant.v1.UpdateProjectMetadataResponse
-	21, // 70: reliant.v1.ProjectService.GetProjectGitInfo:output_type -> reliant.v1.GetProjectGitInfoResponse
-	24, // 71: reliant.v1.ProjectService.GetProjectGitBranches:output_type -> reliant.v1.GetProjectGitBranchesResponse
-	26, // 72: reliant.v1.ProjectService.GetProjectInitStatus:output_type -> reliant.v1.GetProjectInitStatusResponse
-	28, // 73: reliant.v1.ProjectService.InitializeProject:output_type -> reliant.v1.InitializeProjectResponse
-	31, // 74: reliant.v1.ProjectService.GetProjectChanges:output_type -> reliant.v1.GetProjectChangesResponse
-	34, // 75: reliant.v1.ProjectService.GetProjectPrompts:output_type -> reliant.v1.GetProjectPromptsResponse
-	36, // 76: reliant.v1.ProjectService.SaveProjectPrompts:output_type -> reliant.v1.SaveProjectPromptsResponse
-	38, // 77: reliant.v1.ProjectService.InitializeGitRepo:output_type -> reliant.v1.InitializeGitRepoResponse
-	40, // 78: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:output_type -> reliant.v1.ListProjectDaemonsForDaemonResponse
-	42, // 79: reliant.v1.ProjectService.ListProjectDaemons:output_type -> reliant.v1.ListProjectDaemonsResponse
-	44, // 80: reliant.v1.ProjectService.MarkProjectInstalled:output_type -> reliant.v1.MarkProjectInstalledResponse
-	46, // 81: reliant.v1.ProjectService.CreateProjectFromRepo:output_type -> reliant.v1.CreateProjectFromRepoResponse
-	49, // 82: reliant.v1.ProjectService.ListRepositoriesForDaemon:output_type -> reliant.v1.ListRepositoriesForDaemonResponse
-	51, // 83: reliant.v1.ProjectService.PullProjectOnDaemon:output_type -> reliant.v1.PullProjectOnDaemonResponse
-	53, // 84: reliant.v1.ProjectService.RemoveProjectFromDaemon:output_type -> reliant.v1.RemoveProjectFromDaemonResponse
-	55, // 85: reliant.v1.ProjectService.AttachProjectToDaemon:output_type -> reliant.v1.AttachProjectToDaemonResponse
-	57, // 86: reliant.v1.ProjectService.DetachProjectFromDaemon:output_type -> reliant.v1.DetachProjectFromDaemonResponse
-	59, // 87: reliant.v1.ProjectService.RecloneProjectOnDaemon:output_type -> reliant.v1.RecloneProjectOnDaemonResponse
-	61, // 88: reliant.v1.ProjectService.PreviewProjectOrgMove:output_type -> reliant.v1.PreviewProjectOrgMoveResponse
-	70, // 89: reliant.v1.ProjectService.MoveProjectToOrg:output_type -> reliant.v1.MoveProjectToOrgResponse
-	72, // 90: reliant.v1.ProjectService.GetProjectOrgMove:output_type -> reliant.v1.GetProjectOrgMoveResponse
-	74, // 91: reliant.v1.ProjectService.ListProjectOrgMoves:output_type -> reliant.v1.ListProjectOrgMovesResponse
-	62, // [62:92] is the sub-list for method output_type
-	32, // [32:62] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	83, // 0: reliant.v1.Project.visibility:type_name -> reliant.v1.ResourceVisibility
+	1,  // 1: reliant.v1.ProjectDaemon.install_state:type_name -> reliant.v1.ProjectInstallState
+	3,  // 2: reliant.v1.CreateProjectResponse.project:type_name -> reliant.v1.Project
+	4,  // 3: reliant.v1.CreateProjectResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	3,  // 4: reliant.v1.ListProjectsResponse.projects:type_name -> reliant.v1.Project
+	3,  // 5: reliant.v1.GetProjectResponse.project:type_name -> reliant.v1.Project
+	3,  // 6: reliant.v1.UpdateProjectResponse.project:type_name -> reliant.v1.Project
+	15, // 7: reliant.v1.DeleteProjectResponse.machine_removals:type_name -> reliant.v1.ProjectMachineRemoval
+	0,  // 8: reliant.v1.ProjectMachineRemoval.status:type_name -> reliant.v1.ProjectMachineRemovalStatus
+	3,  // 9: reliant.v1.RestoreProjectResponse.project:type_name -> reliant.v1.Project
+	15, // 10: reliant.v1.PurgeProjectNowResponse.machine_removals:type_name -> reliant.v1.ProjectMachineRemoval
+	3,  // 11: reliant.v1.ListDeletedProjectsResponse.projects:type_name -> reliant.v1.Project
+	3,  // 12: reliant.v1.UpdateProjectMetadataResponse.project:type_name -> reliant.v1.Project
+	30, // 13: reliant.v1.GetProjectGitBranchesResponse.branches:type_name -> reliant.v1.GitBranch
+	84, // 14: reliant.v1.FileChange.status:type_name -> reliant.v1.FileChangeStatus
+	37, // 15: reliant.v1.GetProjectChangesResponse.files:type_name -> reliant.v1.FileChange
+	40, // 16: reliant.v1.GetProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
+	40, // 17: reliant.v1.SaveProjectPromptsRequest.prompts:type_name -> reliant.v1.Prompt
+	40, // 18: reliant.v1.SaveProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
+	4,  // 19: reliant.v1.ListProjectDaemonsForDaemonResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
+	4,  // 20: reliant.v1.ListProjectDaemonsResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
+	4,  // 21: reliant.v1.MarkProjectInstalledResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	3,  // 22: reliant.v1.CreateProjectFromRepoResponse.project:type_name -> reliant.v1.Project
+	4,  // 23: reliant.v1.CreateProjectFromRepoResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	55, // 24: reliant.v1.ListRepositoriesForDaemonResponse.repositories:type_name -> reliant.v1.DaemonRepository
+	4,  // 25: reliant.v1.AttachProjectToDaemonResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	70, // 26: reliant.v1.PreviewProjectOrgMoveResponse.blockers:type_name -> reliant.v1.ProjectOrgMoveBlockers
+	72, // 27: reliant.v1.PreviewProjectOrgMoveResponse.effects:type_name -> reliant.v1.ProjectOrgMoveEffects
+	71, // 28: reliant.v1.ProjectOrgMoveBlockers.chats:type_name -> reliant.v1.ProjectOrgMoveBlockedChat
+	85, // 29: reliant.v1.ProjectOrgMoveBlockedChat.activity:type_name -> reliant.v1.ChatActivity
+	73, // 30: reliant.v1.ProjectOrgMoveEffects.triggers_needing_setup:type_name -> reliant.v1.ProjectOrgMoveTriggerSetup
+	74, // 31: reliant.v1.ProjectOrgMoveEffects.machines:type_name -> reliant.v1.ProjectOrgMoveMachine
+	2,  // 32: reliant.v1.ProjectOrgMove.state:type_name -> reliant.v1.ProjectOrgMoveState
+	76, // 33: reliant.v1.ProjectOrgMove.counts:type_name -> reliant.v1.ProjectOrgMoveCounts
+	75, // 34: reliant.v1.MoveProjectToOrgResponse.move:type_name -> reliant.v1.ProjectOrgMove
+	75, // 35: reliant.v1.GetProjectOrgMoveResponse.move:type_name -> reliant.v1.ProjectOrgMove
+	75, // 36: reliant.v1.ListProjectOrgMovesResponse.moves:type_name -> reliant.v1.ProjectOrgMove
+	5,  // 37: reliant.v1.ProjectService.CreateProject:input_type -> reliant.v1.CreateProjectRequest
+	7,  // 38: reliant.v1.ProjectService.ListProjects:input_type -> reliant.v1.ListProjectsRequest
+	9,  // 39: reliant.v1.ProjectService.GetProject:input_type -> reliant.v1.GetProjectRequest
+	11, // 40: reliant.v1.ProjectService.UpdateProject:input_type -> reliant.v1.UpdateProjectRequest
+	13, // 41: reliant.v1.ProjectService.DeleteProject:input_type -> reliant.v1.DeleteProjectRequest
+	16, // 42: reliant.v1.ProjectService.RestoreProject:input_type -> reliant.v1.RestoreProjectRequest
+	18, // 43: reliant.v1.ProjectService.PurgeProjectNow:input_type -> reliant.v1.PurgeProjectNowRequest
+	20, // 44: reliant.v1.ProjectService.ListDeletedProjects:input_type -> reliant.v1.ListDeletedProjectsRequest
+	22, // 45: reliant.v1.ProjectService.TouchProject:input_type -> reliant.v1.TouchProjectRequest
+	24, // 46: reliant.v1.ProjectService.GetProjectMetadata:input_type -> reliant.v1.GetProjectMetadataRequest
+	26, // 47: reliant.v1.ProjectService.UpdateProjectMetadata:input_type -> reliant.v1.UpdateProjectMetadataRequest
+	28, // 48: reliant.v1.ProjectService.GetProjectGitInfo:input_type -> reliant.v1.GetProjectGitInfoRequest
+	31, // 49: reliant.v1.ProjectService.GetProjectGitBranches:input_type -> reliant.v1.GetProjectGitBranchesRequest
+	33, // 50: reliant.v1.ProjectService.GetProjectInitStatus:input_type -> reliant.v1.GetProjectInitStatusRequest
+	35, // 51: reliant.v1.ProjectService.InitializeProject:input_type -> reliant.v1.InitializeProjectRequest
+	38, // 52: reliant.v1.ProjectService.GetProjectChanges:input_type -> reliant.v1.GetProjectChangesRequest
+	41, // 53: reliant.v1.ProjectService.GetProjectPrompts:input_type -> reliant.v1.GetProjectPromptsRequest
+	43, // 54: reliant.v1.ProjectService.SaveProjectPrompts:input_type -> reliant.v1.SaveProjectPromptsRequest
+	45, // 55: reliant.v1.ProjectService.InitializeGitRepo:input_type -> reliant.v1.InitializeGitRepoRequest
+	47, // 56: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:input_type -> reliant.v1.ListProjectDaemonsForDaemonRequest
+	49, // 57: reliant.v1.ProjectService.ListProjectDaemons:input_type -> reliant.v1.ListProjectDaemonsRequest
+	51, // 58: reliant.v1.ProjectService.MarkProjectInstalled:input_type -> reliant.v1.MarkProjectInstalledRequest
+	53, // 59: reliant.v1.ProjectService.CreateProjectFromRepo:input_type -> reliant.v1.CreateProjectFromRepoRequest
+	56, // 60: reliant.v1.ProjectService.ListRepositoriesForDaemon:input_type -> reliant.v1.ListRepositoriesForDaemonRequest
+	58, // 61: reliant.v1.ProjectService.PullProjectOnDaemon:input_type -> reliant.v1.PullProjectOnDaemonRequest
+	60, // 62: reliant.v1.ProjectService.RemoveProjectFromDaemon:input_type -> reliant.v1.RemoveProjectFromDaemonRequest
+	62, // 63: reliant.v1.ProjectService.AttachProjectToDaemon:input_type -> reliant.v1.AttachProjectToDaemonRequest
+	64, // 64: reliant.v1.ProjectService.DetachProjectFromDaemon:input_type -> reliant.v1.DetachProjectFromDaemonRequest
+	66, // 65: reliant.v1.ProjectService.RecloneProjectOnDaemon:input_type -> reliant.v1.RecloneProjectOnDaemonRequest
+	68, // 66: reliant.v1.ProjectService.PreviewProjectOrgMove:input_type -> reliant.v1.PreviewProjectOrgMoveRequest
+	77, // 67: reliant.v1.ProjectService.MoveProjectToOrg:input_type -> reliant.v1.MoveProjectToOrgRequest
+	79, // 68: reliant.v1.ProjectService.GetProjectOrgMove:input_type -> reliant.v1.GetProjectOrgMoveRequest
+	81, // 69: reliant.v1.ProjectService.ListProjectOrgMoves:input_type -> reliant.v1.ListProjectOrgMovesRequest
+	6,  // 70: reliant.v1.ProjectService.CreateProject:output_type -> reliant.v1.CreateProjectResponse
+	8,  // 71: reliant.v1.ProjectService.ListProjects:output_type -> reliant.v1.ListProjectsResponse
+	10, // 72: reliant.v1.ProjectService.GetProject:output_type -> reliant.v1.GetProjectResponse
+	12, // 73: reliant.v1.ProjectService.UpdateProject:output_type -> reliant.v1.UpdateProjectResponse
+	14, // 74: reliant.v1.ProjectService.DeleteProject:output_type -> reliant.v1.DeleteProjectResponse
+	17, // 75: reliant.v1.ProjectService.RestoreProject:output_type -> reliant.v1.RestoreProjectResponse
+	19, // 76: reliant.v1.ProjectService.PurgeProjectNow:output_type -> reliant.v1.PurgeProjectNowResponse
+	21, // 77: reliant.v1.ProjectService.ListDeletedProjects:output_type -> reliant.v1.ListDeletedProjectsResponse
+	23, // 78: reliant.v1.ProjectService.TouchProject:output_type -> reliant.v1.TouchProjectResponse
+	25, // 79: reliant.v1.ProjectService.GetProjectMetadata:output_type -> reliant.v1.GetProjectMetadataResponse
+	27, // 80: reliant.v1.ProjectService.UpdateProjectMetadata:output_type -> reliant.v1.UpdateProjectMetadataResponse
+	29, // 81: reliant.v1.ProjectService.GetProjectGitInfo:output_type -> reliant.v1.GetProjectGitInfoResponse
+	32, // 82: reliant.v1.ProjectService.GetProjectGitBranches:output_type -> reliant.v1.GetProjectGitBranchesResponse
+	34, // 83: reliant.v1.ProjectService.GetProjectInitStatus:output_type -> reliant.v1.GetProjectInitStatusResponse
+	36, // 84: reliant.v1.ProjectService.InitializeProject:output_type -> reliant.v1.InitializeProjectResponse
+	39, // 85: reliant.v1.ProjectService.GetProjectChanges:output_type -> reliant.v1.GetProjectChangesResponse
+	42, // 86: reliant.v1.ProjectService.GetProjectPrompts:output_type -> reliant.v1.GetProjectPromptsResponse
+	44, // 87: reliant.v1.ProjectService.SaveProjectPrompts:output_type -> reliant.v1.SaveProjectPromptsResponse
+	46, // 88: reliant.v1.ProjectService.InitializeGitRepo:output_type -> reliant.v1.InitializeGitRepoResponse
+	48, // 89: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:output_type -> reliant.v1.ListProjectDaemonsForDaemonResponse
+	50, // 90: reliant.v1.ProjectService.ListProjectDaemons:output_type -> reliant.v1.ListProjectDaemonsResponse
+	52, // 91: reliant.v1.ProjectService.MarkProjectInstalled:output_type -> reliant.v1.MarkProjectInstalledResponse
+	54, // 92: reliant.v1.ProjectService.CreateProjectFromRepo:output_type -> reliant.v1.CreateProjectFromRepoResponse
+	57, // 93: reliant.v1.ProjectService.ListRepositoriesForDaemon:output_type -> reliant.v1.ListRepositoriesForDaemonResponse
+	59, // 94: reliant.v1.ProjectService.PullProjectOnDaemon:output_type -> reliant.v1.PullProjectOnDaemonResponse
+	61, // 95: reliant.v1.ProjectService.RemoveProjectFromDaemon:output_type -> reliant.v1.RemoveProjectFromDaemonResponse
+	63, // 96: reliant.v1.ProjectService.AttachProjectToDaemon:output_type -> reliant.v1.AttachProjectToDaemonResponse
+	65, // 97: reliant.v1.ProjectService.DetachProjectFromDaemon:output_type -> reliant.v1.DetachProjectFromDaemonResponse
+	67, // 98: reliant.v1.ProjectService.RecloneProjectOnDaemon:output_type -> reliant.v1.RecloneProjectOnDaemonResponse
+	69, // 99: reliant.v1.ProjectService.PreviewProjectOrgMove:output_type -> reliant.v1.PreviewProjectOrgMoveResponse
+	78, // 100: reliant.v1.ProjectService.MoveProjectToOrg:output_type -> reliant.v1.MoveProjectToOrgResponse
+	80, // 101: reliant.v1.ProjectService.GetProjectOrgMove:output_type -> reliant.v1.GetProjectOrgMoveResponse
+	82, // 102: reliant.v1.ProjectService.ListProjectOrgMoves:output_type -> reliant.v1.ListProjectOrgMovesResponse
+	70, // [70:103] is the sub-list for method output_type
+	37, // [37:70] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_project_proto_init() }
@@ -5593,21 +6152,23 @@ func file_reliant_v1_project_proto_init() {
 	file_reliant_v1_project_proto_msgTypes[2].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[4].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[8].OneofWrappers = []any{}
-	file_reliant_v1_project_proto_msgTypes[15].OneofWrappers = []any{}
-	file_reliant_v1_project_proto_msgTypes[16].OneofWrappers = []any{}
-	file_reliant_v1_project_proto_msgTypes[41].OneofWrappers = []any{}
-	file_reliant_v1_project_proto_msgTypes[43].OneofWrappers = []any{}
-	file_reliant_v1_project_proto_msgTypes[52].OneofWrappers = []any{}
-	file_reliant_v1_project_proto_msgTypes[62].OneofWrappers = []any{}
-	file_reliant_v1_project_proto_msgTypes[64].OneofWrappers = []any{}
+	file_reliant_v1_project_proto_msgTypes[11].OneofWrappers = []any{}
+	file_reliant_v1_project_proto_msgTypes[17].OneofWrappers = []any{}
+	file_reliant_v1_project_proto_msgTypes[22].OneofWrappers = []any{}
+	file_reliant_v1_project_proto_msgTypes[23].OneofWrappers = []any{}
+	file_reliant_v1_project_proto_msgTypes[48].OneofWrappers = []any{}
+	file_reliant_v1_project_proto_msgTypes[50].OneofWrappers = []any{}
+	file_reliant_v1_project_proto_msgTypes[59].OneofWrappers = []any{}
+	file_reliant_v1_project_proto_msgTypes[69].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[71].OneofWrappers = []any{}
+	file_reliant_v1_project_proto_msgTypes[78].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_project_proto_rawDesc), len(file_reliant_v1_project_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   73,
+			NumEnums:      3,
+			NumMessages:   80,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

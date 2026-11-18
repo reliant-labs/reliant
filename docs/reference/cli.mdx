@@ -482,8 +482,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant preview-url`](#reliant-preview-url) | Print the shareable preview URL for a local port |
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
-| [`reliant project delete`](#reliant-project-delete) | Delete a project and its chats |
+| [`reliant project delete`](#reliant-project-delete) | Delete a project and its chats (restorable for 7 days) |
 | [`reliant project list`](#reliant-project-list) | List your projects |
+| [`reliant project restore`](#reliant-project-restore) | Restore a deleted project, within 7 days of deleting it |
 | [`reliant providers`](#reliant-providers) | Show the AI accounts your chats run on, and who pays for each |
 | [`reliant providers list`](#reliant-providers-list) | List your AI accounts and who pays for each |
 | [`reliant server`](#reliant-server) | Run cloud server components |
@@ -20547,8 +20548,9 @@ reliant project
 | Command | Description |
 |---------|-------------|
 | [`create`](#reliant-project-create) | Create a project and print its ID |
-| [`delete`](#reliant-project-delete) | Delete a project and its chats |
+| [`delete`](#reliant-project-delete) | Delete a project and its chats (restorable for 7 days) |
 | [`list`](#reliant-project-list) | List your projects |
+| [`restore`](#reliant-project-restore) | Restore a deleted project, within 7 days of deleting it |
 
 **Flags:**
 
@@ -20590,21 +20592,26 @@ reliant project create [flags]
 
 ### reliant project delete
 
-Delete a project and its chats
+Delete a project and its chats (restorable for 7 days)
 
 Deletes a project from Reliant, as Settings → Projects → Remove does.
 `<project>` is the project's id, name or path ('reliant project list').
 
-The project's chats, runs, worktree records, settings and automations are
-deleted with it. Nothing on disk is deleted: the folder and its git history
-stay where they are, and you can add the folder back at any time.
+The project is hidden at once and its automations are paused. Its chats,
+runs, worktree records, settings and automations are deleted for good 7
+days later; until then 'reliant project restore `<project>`' brings it all
+back. --now deletes it immediately instead, which cannot be undone.
+
+Nothing on disk is deleted: the folder and its git history stay where they
+are. --remove-from-machines also removes the project's checkout from each of
+your machines that holds one, and reports each; a machine that is offline,
+or has a workspace open in the project, keeps its copy. A checkout can hold
+work you have not committed or pushed, so check before you ask for it.
 
 A hosted deployment of the project (reliant forge env deploy) is not deleted
 by this command; 'reliant forge env delete `<env>`' removes an environment.
 
-The command asks you to type the project's name, unless --yes is given. A
-large project is deleted in batches; if the delete stops part way, what is
-left is still there, and running the command again resumes it.
+The command asks you to type the project's name, unless --yes is given.
 
 Targets --server (else RELIANT_SERVER_URL, else the default), authenticated by
 RELIANT_TOKEN or the login 'reliant auth login' stored for that server.
@@ -20618,6 +20625,8 @@ reliant project delete <project> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--json` | `bool` | - | Print the deleted project as JSON (requires --yes) |
+| `--now` | `bool` | - | Delete immediately and for good, with no restore window |
+| `--remove-from-machines` | `bool` | - | Also remove the project's checkout from each of your machines |
 | `--yes` | `bool` | - | Delete without asking to type the project's name |
 
 ---
@@ -20640,6 +20649,35 @@ reliant project list [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--json` | `bool` | - | Output in JSON format |
+
+---
+
+### reliant project restore
+
+Restore a deleted project, within 7 days of deleting it
+
+Restores a project deleted with 'reliant project delete' (or Settings →
+Projects → Remove), with its chats, runs, settings and automations. The
+automations the delete paused are turned back on.
+
+`<project>` is the deleted project's id, name or path. With no argument, lists
+the projects you can restore and when each is deleted for good.
+
+A project can be restored until its restore window ends, 7 days after it was
+deleted; then it is deleted for good. One deleted with --now cannot be.
+
+Targets --server (else RELIANT_SERVER_URL, else the default), authenticated by
+RELIANT_TOKEN or the login 'reliant auth login' stored for that server.
+
+```
+reliant project restore [project] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print the result as JSON |
 
 ---
 

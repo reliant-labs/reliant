@@ -58,6 +58,12 @@ type Deps struct {
 	// identity) previews those facts as unknown.
 	// forge:optional-dep
 	MoveFacts MoveFacts
+	// Schedules pauses and resumes the Temporal Schedules of the triggers a
+	// project delete pauses and a restore resumes, and removes those of a
+	// purged project's triggers. Nil converges only the rows: a paused
+	// trigger's fires skip on its row until the startup sync converges it.
+	// forge:optional-dep
+	Schedules TriggerSchedules
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

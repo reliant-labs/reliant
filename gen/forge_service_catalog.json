@@ -487,6 +487,7 @@
         "PayloadStore",
         "ProcessRuntime",
         "ProcessSettings",
+        "ProjectPurge",
         "RemoteExecutor",
         "RepoUpdateFeed",
         "RunLauncher",
@@ -24852,6 +24853,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ProjectService/ListDeletedProjects",
+          "name": "ListDeletedProjects",
+          "input": "reliant.v1.ListDeletedProjectsRequest",
+          "output": "reliant.v1.ListDeletedProjectsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ProjectService/ListProjectDaemons",
           "name": "ListProjectDaemons",
           "input": "reliant.v1.ListProjectDaemonsRequest",
@@ -24942,6 +24953,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ProjectService/PurgeProjectNow",
+          "name": "PurgeProjectNow",
+          "input": "reliant.v1.PurgeProjectNowRequest",
+          "output": "reliant.v1.PurgeProjectNowResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ProjectService/RecloneProjectOnDaemon",
           "name": "RecloneProjectOnDaemon",
           "input": "reliant.v1.RecloneProjectOnDaemonRequest",
@@ -24956,6 +24977,16 @@
           "name": "RemoveProjectFromDaemon",
           "input": "reliant.v1.RemoveProjectFromDaemonRequest",
           "output": "reliant.v1.RemoveProjectFromDaemonResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.ProjectService/RestoreProject",
+          "name": "RestoreProject",
+          "input": "reliant.v1.RestoreProjectRequest",
+          "output": "reliant.v1.RestoreProjectResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -25108,6 +25139,66 @@
               "Verb": "delete",
               "TargetKind": "project",
               "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "RestoreProject",
+            "InputType": "RestoreProjectRequest",
+            "OutputType": "RestoreProjectResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.RestoreProjectRequest",
+            "OutputTypeFQ": "reliant.v1.RestoreProjectResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "restore",
+              "TargetKind": "project",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "PurgeProjectNow",
+            "InputType": "PurgeProjectNowRequest",
+            "OutputType": "PurgeProjectNowResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.PurgeProjectNowRequest",
+            "OutputTypeFQ": "reliant.v1.PurgeProjectNowResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "purge",
+              "TargetKind": "project",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListDeletedProjects",
+            "InputType": "ListDeletedProjectsRequest",
+            "OutputType": "ListDeletedProjectsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListDeletedProjectsRequest",
+            "OutputTypeFQ": "reliant.v1.ListDeletedProjectsResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": false
             }
           },
           {
@@ -25738,6 +25829,11 @@
               "Name": "project_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "remove_from_machines",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "DeleteProjectResponse": [
@@ -25750,6 +25846,17 @@
               "Name": "message",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "delete_after",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "machine_removals",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectMachineRemoval"
             }
           ],
           "DetachProjectFromDaemonRequest": [
@@ -26085,6 +26192,21 @@
               "IsOptional": false
             }
           ],
+          "ListDeletedProjectsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "ListDeletedProjectsResponse": [
+            {
+              "Name": "projects",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Project"
+            }
+          ],
           "ListProjectDaemonsForDaemonRequest": [
             {
               "Name": "daemon_id",
@@ -26294,6 +26416,31 @@
               "IsOptional": false
             }
           ],
+          "PurgeProjectNowRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "confirm_name",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "remove_from_machines",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "PurgeProjectNowResponse": [
+            {
+              "Name": "machine_removals",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectMachineRemoval"
+            }
+          ],
           "RecloneProjectOnDaemonRequest": [
             {
               "Name": "project_id",
@@ -26326,6 +26473,26 @@
             }
           ],
           "RemoveProjectFromDaemonResponse": null,
+          "RestoreProjectRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "RestoreProjectResponse": [
+            {
+              "Name": "project",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Project"
+            },
+            {
+              "Name": "triggers_resumed",
+              "ProtoType": "int32",
+              "IsOptional": false
+            }
+          ],
           "SaveProjectPromptsRequest": [
             {
               "Name": "project_id",
@@ -26590,6 +26757,10 @@
             {
               "name": "project_id",
               "kind": "string"
+            },
+            {
+              "name": "remove_from_machines",
+              "kind": "bool"
             }
           ],
           "reliant.v1.DeleteProjectResponse": [
@@ -26600,6 +26771,17 @@
             {
               "name": "message",
               "kind": "string"
+            },
+            {
+              "name": "delete_after",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "machine_removals",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectMachineRemoval",
+              "repeated": true
             }
           ],
           "reliant.v1.DetachProjectFromDaemonRequest": [
@@ -26953,6 +27135,21 @@
               "kind": "bool"
             }
           ],
+          "reliant.v1.ListDeletedProjectsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ListDeletedProjectsResponse": [
+            {
+              "name": "projects",
+              "kind": "message",
+              "type_name": "reliant.v1.Project",
+              "repeated": true
+            }
+          ],
           "reliant.v1.ListProjectDaemonsForDaemonRequest": [
             {
               "name": "daemon_id",
@@ -27221,6 +27418,16 @@
               "name": "shared_at",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "delete_after",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "deleted_by_user_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ProjectDaemon": [
@@ -27261,6 +27468,29 @@
             },
             {
               "name": "daemon_name",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ProjectMachineRemoval": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "machine_name",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProjectMachineRemovalStatus"
+            },
+            {
+              "name": "message",
               "kind": "string"
             }
           ],
@@ -27521,6 +27751,28 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.PurgeProjectNowRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "confirm_name",
+              "kind": "string"
+            },
+            {
+              "name": "remove_from_machines",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.PurgeProjectNowResponse": [
+            {
+              "name": "machine_removals",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectMachineRemoval",
+              "repeated": true
+            }
+          ],
           "reliant.v1.RecloneProjectOnDaemonRequest": [
             {
               "name": "project_id",
@@ -27548,6 +27800,23 @@
             }
           ],
           "reliant.v1.RemoveProjectFromDaemonResponse": [],
+          "reliant.v1.RestoreProjectRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.RestoreProjectResponse": [
+            {
+              "name": "project",
+              "kind": "message",
+              "type_name": "reliant.v1.Project"
+            },
+            {
+              "name": "triggers_resumed",
+              "kind": "int32"
+            }
+          ],
           "reliant.v1.SaveProjectPromptsRequest": [
             {
               "name": "project_id",
@@ -27669,6 +27938,8 @@
           "reliant.v1.InitializeGitRepoResponse": "reliant/v1/project.proto",
           "reliant.v1.InitializeProjectRequest": "reliant/v1/project.proto",
           "reliant.v1.InitializeProjectResponse": "reliant/v1/project.proto",
+          "reliant.v1.ListDeletedProjectsRequest": "reliant/v1/project.proto",
+          "reliant.v1.ListDeletedProjectsResponse": "reliant/v1/project.proto",
           "reliant.v1.ListProjectDaemonsForDaemonRequest": "reliant/v1/project.proto",
           "reliant.v1.ListProjectDaemonsForDaemonResponse": "reliant/v1/project.proto",
           "reliant.v1.ListProjectDaemonsRequest": "reliant/v1/project.proto",
@@ -27687,6 +27958,7 @@
           "reliant.v1.PreviewProjectOrgMoveResponse": "reliant/v1/project.proto",
           "reliant.v1.Project": "reliant/v1/project.proto",
           "reliant.v1.ProjectDaemon": "reliant/v1/project.proto",
+          "reliant.v1.ProjectMachineRemoval": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMove": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMoveBlockedChat": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMoveBlockers": "reliant/v1/project.proto",
@@ -27697,10 +27969,14 @@
           "reliant.v1.Prompt": "reliant/v1/project.proto",
           "reliant.v1.PullProjectOnDaemonRequest": "reliant/v1/project.proto",
           "reliant.v1.PullProjectOnDaemonResponse": "reliant/v1/project.proto",
+          "reliant.v1.PurgeProjectNowRequest": "reliant/v1/project.proto",
+          "reliant.v1.PurgeProjectNowResponse": "reliant/v1/project.proto",
           "reliant.v1.RecloneProjectOnDaemonRequest": "reliant/v1/project.proto",
           "reliant.v1.RecloneProjectOnDaemonResponse": "reliant/v1/project.proto",
           "reliant.v1.RemoveProjectFromDaemonRequest": "reliant/v1/project.proto",
           "reliant.v1.RemoveProjectFromDaemonResponse": "reliant/v1/project.proto",
+          "reliant.v1.RestoreProjectRequest": "reliant/v1/project.proto",
+          "reliant.v1.RestoreProjectResponse": "reliant/v1/project.proto",
           "reliant.v1.SaveProjectPromptsRequest": "reliant/v1/project.proto",
           "reliant.v1.SaveProjectPromptsResponse": "reliant/v1/project.proto",
           "reliant.v1.TouchProjectRequest": "reliant/v1/project.proto",
@@ -27733,6 +28009,12 @@
             "PROJECT_INSTALL_STATE_INSTALLING",
             "PROJECT_INSTALL_STATE_INSTALLED",
             "PROJECT_INSTALL_STATE_FAILED"
+          ],
+          "reliant.v1.ProjectMachineRemovalStatus": [
+            "PROJECT_MACHINE_REMOVAL_STATUS_UNSPECIFIED",
+            "PROJECT_MACHINE_REMOVAL_STATUS_REMOVED",
+            "PROJECT_MACHINE_REMOVAL_STATUS_OFFLINE",
+            "PROJECT_MACHINE_REMOVAL_STATUS_FAILED"
           ],
           "reliant.v1.ProjectOrgMoveState": [
             "PROJECT_ORG_MOVE_STATE_UNSPECIFIED",
@@ -27773,6 +28055,12 @@
             2,
             3
           ],
+          "reliant.v1.ProjectMachineRemovalStatus": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.ProjectOrgMoveState": [
             0,
             1,
@@ -27800,6 +28088,10 @@
           "reliant.v1.ProjectInstallState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ProjectInstallState"
+          },
+          "reliant.v1.ProjectMachineRemovalStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProjectMachineRemovalStatus"
           },
           "reliant.v1.ProjectOrgMoveState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -35837,6 +36129,16 @@
             },
             {
               "name": "shared_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "delete_after",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "deleted_by_user_id",
               "kind": "string",
               "optional": true
             }
@@ -52915,6 +53217,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "ProjectPurge",
+      "name": "ProjectPurge",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.ProjectPurge",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewProjectPurge"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "ProviderAccount",
       "name": "ProviderAccount",
       "kind": "component",
@@ -54612,6 +54926,19 @@
       ],
       "providers": [
         "APIDaemonRouter"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Project",
+      "field": "Schedules",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.TriggerSchedules",
+      "methods": [],
+      "candidates": [
+        "ScheduleSyncer"
+      ],
+      "providers": [
+        "ScheduleSyncer"
       ],
       "resolution": "composition_expression"
     },

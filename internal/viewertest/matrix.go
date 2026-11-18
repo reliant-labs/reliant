@@ -170,6 +170,8 @@ var Matrix = map[string]Viewer{
 	"reliant.v1.ProjectService/MoveProjectToOrg":               AsOutsider,
 	"reliant.v1.ProjectService/PreviewProjectOrgMove":          AsOutsider,
 	"reliant.v1.ProjectService/PullProjectOnDaemon":            AsOutsider,
+	"reliant.v1.ProjectService/PurgeProjectNow":                AsOutsider,
+	"reliant.v1.ProjectService/RestoreProject":                 AsOutsider,
 	"reliant.v1.ProjectService/RecloneProjectOnDaemon":         AsOutsider,
 	"reliant.v1.ProjectService/RemoveProjectFromDaemon":        AsOutsider,
 	"reliant.v1.ProjectService/SaveProjectPrompts":             AsOutsider,

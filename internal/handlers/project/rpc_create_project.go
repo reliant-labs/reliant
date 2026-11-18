@@ -514,9 +514,18 @@ func (s *Service) findOrAttachOn(ctx context.Context, userID, daemonID, path str
 // may no longer act in (an org they have left, a credential's other org). It
 // still holds its (user_id, path) and (user_id, remote_url) keys, so a new
 // project cannot take them either: AlreadyExists, naming nothing of it.
+//
+// A project of the caller's that is scheduled for deletion holds them too,
+// until it is purged: it is hidden, so it is not found, and the caller is
+// told how to free the path (FailedPrecondition, ReasonProjectScheduledForDeletion).
 func reusableProject(ctx context.Context, userID string, existing *db.Project) error {
 	if authz.CanWriteProject(ctx, userID, existing) {
 		return nil
+	}
+	if existing.DeleteAfter != nil && ownsDeleted(ctx, userID, existing) {
+		return svcerr.WithReason(svcerr.FailedPrecondition(fmt.Sprintf(
+			"you deleted the project %q that uses this path or repository; it can be restored until %s. Restore it ('reliant project restore %s'), or delete it for good ('reliant project delete --now %s'), to add it again",
+			existing.Name, existing.DeleteAfter.UTC().Format("2006-01-02 15:04 MST"), existing.ID, existing.ID)), ReasonProjectScheduledForDeletion)
 	}
 	return svcerr.AlreadyExists("a project you can no longer access already uses this path or repository")
 }

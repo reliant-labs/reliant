@@ -1057,3 +1057,65 @@ func (l *LedgerRetention) pass(ctx context.Context, now time.Time) {
 		}
 	}
 }
+
+// The project purge (internal/db/project_schedule.go): a deleted project is
+// hidden at once and purged once its restore window (core.ProjectDeleteWindow)
+// has passed. Every replica runs it: each project is claimed for
+// projectPurgeLease before its batches run, so replicas do not purge the same
+// one at once, and a claim a crashed replica left is taken again after it.
+const (
+	// projectPurgeInterval is how often a pass runs: a project is purged at
+	// most this long after its window ends.
+	projectPurgeInterval = 15 * time.Minute
+	// projectPurgeLease is how long a claim holds a project. A purge of the
+	// largest project measured (35k chats) ran 17 minutes in one statement;
+	// in batches each is short, so an hour is generous.
+	projectPurgeLease = time.Hour
+	// projectPurgeBatch bounds the projects a pass purges, and the orphaned
+	// rows per table it sweeps.
+	projectPurgeBatch = 50
+)
+
+// ProjectPurge purges the projects whose scheduled deletion is due, every
+// projectPurgeInterval, until its context ends.
+type ProjectPurge struct {
+	repo *db.Repo
+}
+
+// ProjectPurgeDeps is the repository.
+type ProjectPurgeDeps struct {
+	DB *db.Repo
+}
+
+// NewProjectPurge builds the purge loop.
+//
+//forge:root-only worker
+func NewProjectPurge(d ProjectPurgeDeps) (*ProjectPurge, error) {
+	return &ProjectPurge{repo: d.DB}, nil
+}
+
+// Run runs a pass, then one every projectPurgeInterval, until ctx ends. A
+// purged project's trigger rows go with it; their schedules (paused when the
+// delete paused the triggers) are dropped by the API's startup sync, which
+// removes every schedule whose row is gone.
+func (p *ProjectPurge) Run(ctx context.Context) error {
+	ticker := time.NewTicker(projectPurgeInterval)
+	defer ticker.Stop()
+	for {
+		err := observe.RunRoot(ctx, "worker.project_purge", func(ctx context.Context) error {
+			res, err := p.repo.PurgeDueProjects(ctx, time.Now(), projectPurgeLease, projectPurgeBatch)
+			if res.Purged > 0 || res.Failed > 0 || res.OrphansSwept > 0 {
+				logging.InfoContext(ctx, "project purge: pass done", "purged", res.Purged, "failed", res.Failed, "orphans_swept", res.OrphansSwept)
+			}
+			return err
+		})
+		if err != nil && ctx.Err() == nil {
+			logging.WarnContext(ctx, "project purge: the pass could not list the projects due; the next pass retries", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}

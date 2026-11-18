@@ -61,7 +61,39 @@ type Project struct {
 	// it was shared (nil while private). Read by internal/authz only.
 	Visibility Visibility `json:"visibility,omitempty"`
 	SharedAt   *time.Time `json:"shared_at,omitempty"`
+	// DeleteAfter is set while the project is scheduled for deletion: when
+	// the purge may run. A scheduled project is hidden: internal/authz
+	// treats it as absent, and every list leaves it out. DeletedBy is who
+	// scheduled it; PurgeStartedAt when a purge claimed it, after which it
+	// cannot be restored.
+	DeleteAfter    *time.Time `json:"delete_after,omitempty"`
+	DeletedBy      *string    `json:"deleted_by,omitempty"`
+	PurgeStartedAt *time.Time `json:"purge_started_at,omitempty"`
 }
+
+// ProjectDeleteWindow is how long a deleted project can be restored before
+// it is purged (control-plane docs/design/unified-shell-and-projects.md D18).
+const ProjectDeleteWindow = 7 * 24 * time.Hour
+
+// TriggerPausedProjectDeleted is Trigger.PausedReason of a trigger paused
+// because its project was scheduled for deletion. Restoring the project
+// turns these, and only these, back on.
+const TriggerPausedProjectDeleted = "project_deleted"
+
+// ProjectDeletion is the outcome of scheduling a project's deletion.
+type ProjectDeletion struct {
+	// DeleteAfter is when the purge may run: the first delete's date when
+	// the project was already scheduled.
+	DeleteAfter time.Time
+	// AlreadyScheduled: the project was scheduled before this call, which
+	// changed nothing.
+	AlreadyScheduled bool
+	// PausedTriggerIDs are the triggers this call paused.
+	PausedTriggerIDs []string
+}
+
+// ErrProjectPurgeStarted refuses restoring a project whose purge has begun.
+var ErrProjectPurgeStarted = svcerr.FailedPrecondition("this project is already being deleted, so it can no longer be restored")
 
 // ProjectDaemon records that a daemon has a local clone of a project. A
 // single Project may have rows for multiple daemons (desktop + cloud), each

@@ -90,7 +90,8 @@ func GetChatWithUserCheck(ctx context.Context, db orm.Context, id, userID string
 // sends exactly the predicates it uses. Every caller passes a Limit; a zero
 // Limit lists up to the generated List's default cap.
 func ListChats(ctx context.Context, db orm.Context, f core.ChatFilters) ([]*core.Chat, error) {
-	opts := []orm.QueryOption{orm.WhereEq(ChatsWithActivityFieldUserID, f.UserID)}
+	// A deleted project's chats leave the list with it (project_schedule.go).
+	opts := []orm.QueryOption{orm.WhereEq(ChatsWithActivityFieldUserID, f.UserID), whereProjectLive(ChatsWithActivityFieldProjectID)}
 	if f.ProjectID != nil {
 		opts = append(opts, orm.WhereEq(ChatsWithActivityFieldProjectID, *f.ProjectID))
 	}
@@ -140,7 +141,8 @@ func SearchChats(ctx context.Context, db orm.Context, f core.ChatSearchFilters) 
 		// block_type 1 is CONTENT_BLOCK_TYPE_TEXT.
 		Join("LEFT JOIN message_content_blocks mcb ON m.id = mcb.message_id AND mcb.block_type = 1").
 		Where("chats_with_activity.user_id = ?", f.UserID).
-		Where("chats_with_activity.list_in_sidebar")
+		Where("chats_with_activity.list_in_sidebar").
+		Where("NOT EXISTS (SELECT 1 FROM projects dp WHERE dp.id = chats_with_activity.project_id AND dp.delete_after IS NOT NULL)")
 	if f.ProjectID != "" {
 		q = q.Where("chats_with_activity.project_id = ?", f.ProjectID)
 	}
@@ -197,6 +199,7 @@ WHERE c.state = 3
   AND c.user_id = ?0
   AND c.list_in_sidebar
   AND (?1 = '' OR c.org_id = ?1 OR (?2 AND c.org_id IS NULL))
+  AND (p.id IS NULL OR p.delete_after IS NULL)
 ORDER BY c.updated_at DESC`
 
 // ListArchivedChats lists the user's archived chats, most recently updated

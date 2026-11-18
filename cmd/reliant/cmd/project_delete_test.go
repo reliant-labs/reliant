@@ -19,10 +19,16 @@ import (
 )
 
 // fakeDeleteClient lists fixed projects and records the delete asked for.
+// With deleteAfter unset it answers as a server from before the restore
+// window: DeleteProject deletes, and PurgeProjectNow is unimplemented.
 type fakeDeleteClient struct {
-	projects  []*reliantv1.Project
-	deleted   []string
-	deleteErr error
+	projects    []*reliantv1.Project
+	deleted     []string
+	deleteErr   error
+	deleteAfter string
+	removals    []*reliantv1.ProjectMachineRemoval
+	fromMachine []bool
+	purged      []string
 }
 
 func (f *fakeDeleteClient) ListProjects(context.Context, *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error) {
@@ -34,7 +40,131 @@ func (f *fakeDeleteClient) DeleteProject(_ context.Context, req *connect.Request
 		return nil, f.deleteErr
 	}
 	f.deleted = append(f.deleted, req.Msg.GetProjectId())
-	return connect.NewResponse(&reliantv1.DeleteProjectResponse{Success: true}), nil
+	f.fromMachine = append(f.fromMachine, req.Msg.GetRemoveFromMachines())
+	resp := &reliantv1.DeleteProjectResponse{Success: true}
+	if f.deleteAfter != "" {
+		resp.DeleteAfter = &f.deleteAfter
+		resp.MachineRemovals = f.removals
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (f *fakeDeleteClient) PurgeProjectNow(_ context.Context, req *connect.Request[reliantv1.PurgeProjectNowRequest]) (*connect.Response[reliantv1.PurgeProjectNowResponse], error) {
+	if f.deleteAfter == "" {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("unimplemented"))
+	}
+	f.purged = append(f.purged, req.Msg.GetProjectId()+" as "+req.Msg.GetConfirmName())
+	return connect.NewResponse(&reliantv1.PurgeProjectNowResponse{MachineRemovals: f.removals}), nil
+}
+
+func TestProjectDeleteWithARestoreWindow(t *testing.T) {
+	run := func(f *fakeDeleteClient, d projectDelete, ref string) (string, error) {
+		var out bytes.Buffer
+		d.client, d.out, d.in, d.yes = f, &out, strings.NewReader(""), true
+		err := d.run(context.Background(), ref)
+		return out.String(), err
+	}
+	t.Run("a delete says until when it can be restored, and how", func(t *testing.T) {
+		f := deleteFixture()
+		f.deleteAfter = "2026-11-25T10:00:00Z"
+		out, err := run(f, projectDelete{}, "web")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"p1"}, f.deleted)
+		assert.Equal(t, []bool{false}, f.fromMachine)
+		assert.Contains(t, out, "It can be restored until")
+		assert.Contains(t, out, "reliant project restore p1")
+		assert.Contains(t, out, "Nothing on disk was deleted")
+	})
+	t.Run("--remove-from-machines asks for it and reports each machine", func(t *testing.T) {
+		f := deleteFixture()
+		f.deleteAfter = "2026-11-25T10:00:00Z"
+		f.removals = []*reliantv1.ProjectMachineRemoval{
+			{DaemonId: "d1", MachineName: "laptop", Path: "/home/me/web", Status: reliantv1.ProjectMachineRemovalStatus_PROJECT_MACHINE_REMOVAL_STATUS_REMOVED},
+			{DaemonId: "d2", MachineName: "cloud", Path: "/w/web", Status: reliantv1.ProjectMachineRemovalStatus_PROJECT_MACHINE_REMOVAL_STATUS_OFFLINE},
+		}
+		out, err := run(f, projectDelete{fromMachines: true}, "web")
+		require.NoError(t, err)
+		assert.Equal(t, []bool{true}, f.fromMachine)
+		assert.Contains(t, out, "laptop: removed /home/me/web")
+		assert.Contains(t, out, "cloud: offline, keeps its copy at /w/web")
+	})
+	t.Run("--now purges, naming the project", func(t *testing.T) {
+		f := deleteFixture()
+		f.deleteAfter = "2026-11-25T10:00:00Z"
+		out, err := run(f, projectDelete{now: true}, "web")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"p1 as web"}, f.purged)
+		assert.Empty(t, f.deleted)
+		assert.Contains(t, out, "for good")
+	})
+	t.Run("--now on a server from before the window is its immediate delete", func(t *testing.T) {
+		f := deleteFixture()
+		_, err := run(f, projectDelete{now: true}, "web")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"p1"}, f.deleted)
+	})
+	t.Run("--json carries the restore date", func(t *testing.T) {
+		f := deleteFixture()
+		f.deleteAfter = "2026-11-25T10:00:00Z"
+		out, err := run(f, projectDelete{json: true}, "p1")
+		require.NoError(t, err)
+		var got map[string]any
+		require.NoError(t, json.Unmarshal([]byte(out), &got))
+		assert.Equal(t, "2026-11-25T10:00:00Z", got["delete_after"])
+	})
+}
+
+// fakeRestoreClient lists fixed deleted projects and records the restore.
+type fakeRestoreClient struct {
+	deleted  []*reliantv1.Project
+	restored []string
+}
+
+func (f *fakeRestoreClient) ListDeletedProjects(context.Context, *connect.Request[reliantv1.ListDeletedProjectsRequest]) (*connect.Response[reliantv1.ListDeletedProjectsResponse], error) {
+	return connect.NewResponse(&reliantv1.ListDeletedProjectsResponse{Projects: f.deleted}), nil
+}
+
+func (f *fakeRestoreClient) RestoreProject(_ context.Context, req *connect.Request[reliantv1.RestoreProjectRequest]) (*connect.Response[reliantv1.RestoreProjectResponse], error) {
+	f.restored = append(f.restored, req.Msg.GetProjectId())
+	return connect.NewResponse(&reliantv1.RestoreProjectResponse{TriggersResumed: 2}), nil
+}
+
+func TestProjectRestore(t *testing.T) {
+	after := "2026-11-25T10:00:00Z"
+	fixture := func() *fakeRestoreClient {
+		return &fakeRestoreClient{deleted: []*reliantv1.Project{{Id: "p1", Name: "web", Path: "/home/me/web", DeleteAfter: &after}}}
+	}
+	run := func(f *fakeRestoreClient, ref string) (string, error) {
+		var out bytes.Buffer
+		err := projectRestore{client: f, out: &out}.run(context.Background(), ref)
+		return out.String(), err
+	}
+	t.Run("a deleted project is restored by name", func(t *testing.T) {
+		f := fixture()
+		out, err := run(f, "web")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"p1"}, f.restored)
+		assert.Contains(t, out, "Restored web (p1). 2 automation(s)")
+	})
+	t.Run("no argument lists what can be restored", func(t *testing.T) {
+		f := fixture()
+		out, err := run(f, "")
+		require.NoError(t, err)
+		assert.Empty(t, f.restored)
+		assert.Contains(t, out, "p1  web")
+	})
+	t.Run("a project that is not deleted is refused", func(t *testing.T) {
+		f := fixture()
+		_, err := run(f, "api")
+		require.ErrorContains(t, err, "no deleted project of yours")
+		assert.Empty(t, f.restored)
+	})
+}
+
+func TestProjectRestoreIsRegistered(t *testing.T) {
+	found, _, err := newProjectCmd().Find([]string{"restore"})
+	require.NoError(t, err)
+	assert.Equal(t, "restore", found.Name())
 }
 
 func deleteFixture() *fakeDeleteClient {

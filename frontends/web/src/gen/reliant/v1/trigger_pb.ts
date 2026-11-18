@@ -858,7 +858,8 @@ export type Trigger = Message<"reliant.v1.Trigger"> & {
    * its organization; it fires again once they rejoin and resume it.
    * "org_policy": one of its organization's admin policies refused its run
    * (a model the org does not allow, a spend cap reached); it fires again
-   * once its owner resumes it. Empty
+   * once its owner resumes it. "project_deleted": its project is scheduled
+   * for deletion; restoring the project turns it back on. Empty
    * when the trigger is enabled or a person paused it. Clients show an
    * unknown value as a plain pause.
    *

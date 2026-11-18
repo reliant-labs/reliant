@@ -620,16 +620,27 @@ func (s *Service) RemoveProjectFromDaemon(
 		}
 		return nil, err
 	}
-	machine := s.machineName(ctx, req.Msg.DaemonId)
+	if err := s.removeCheckout(ctx, userID, project, pd); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
+}
+
+// removeCheckout removes project's checkout pd from its machine and, once
+// the machine has, its project_daemons row: RemoveProjectFromDaemon's work,
+// which a project delete's machine fan-out repeats per machine
+// (project_delete.go). The caller has decided userID may.
+func (s *Service) removeCheckout(ctx context.Context, userID string, project *db.Project, pd *core.ProjectDaemon) error {
+	machine := s.machineName(ctx, pd.DaemonID)
 	// Recorded before it is sent, and holding back workspace creation on the
 	// checkout until the machine says how it ended (checkout_teardown.go).
-	op, done, err := s.beginTeardown(ctx, userID, project, pd, req.Msg.DaemonId, db.CheckoutTeardownRemove, machine)
+	op, done, err := s.beginTeardown(ctx, userID, project, pd, pd.DaemonID, db.CheckoutTeardownRemove, machine)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if done {
 		// A retry of a remove the machine has since finished.
-		return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
+		return nil
 	}
 	// The row goes only once the machine has removed the checkout, in the
 	// same step that records the op done (db.Repo.SettleCheckoutTeardown). It
@@ -641,11 +652,8 @@ func (s *Service) RemoveProjectFromDaemon(
 	// its rows when it is removed (db.Repo.RemoveDaemon).
 	var reply teardownReply
 	payload := map[string]string{"path": pd.Path, "op_id": op.ID}
-	sendErr := teardownMachine{s: s, userID: userID, daemonID: req.Msg.DaemonId}.Send(ctx, "git.remove", payload, &reply, teardownTimeoutMs)
-	if err := s.settleTeardown(ctx, userID, op, project, machine, reply, sendErr); err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
+	sendErr := teardownMachine{s: s, userID: userID, daemonID: pd.DaemonID}.Send(ctx, "git.remove", payload, &reply, teardownTimeoutMs)
+	return s.settleTeardown(ctx, userID, op, project, machine, reply, sendErr)
 }
 
 // removeFromOfflineMachine is RemoveProjectFromDaemon's refusal for a machine

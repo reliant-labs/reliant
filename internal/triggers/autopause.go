@@ -71,6 +71,9 @@ const (
 	// noOrgAccountPausedDetail is a fire of a trigger paused for it
 	// (core.TriggerPausedNoOrgAccount).
 	noOrgAccountPausedDetail = "trigger is paused: none of its organization's AI accounts could run its model; resume it once an admin adds one, or change its model"
+	// projectDeletedPausedDetail is a fire of a trigger paused because its
+	// project is scheduled for deletion (core.TriggerPausedProjectDeleted).
+	projectDeletedPausedDetail = "trigger is paused: its project is scheduled for deletion; restoring the project turns it back on"
 )
 
 // noOrgAccountDetail is the detail of a firing refused because none of its
@@ -315,6 +318,8 @@ func pausedDetail(t *core.Trigger) string {
 		return orgPolicyPausedDetail
 	case core.TriggerPausedNoOrgAccount:
 		return noOrgAccountPausedDetail
+	case core.TriggerPausedProjectDeleted:
+		return projectDeletedPausedDetail
 	}
 	return "trigger is disabled"
 }

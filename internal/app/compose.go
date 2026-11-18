@@ -628,6 +628,10 @@ func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 	})
 }
 
+func (g *Graph) newProjectPurge() (*ProjectPurge, error) {
+	return NewProjectPurge(ProjectPurgeDeps{DB: g.Database()})
+}
+
 func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
 	return NewLedgerRetention(LedgerRetentionDeps{
 		DB:                     g.Database(),
@@ -1266,6 +1270,9 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Moves:      projectOrgMoveStarter{c: g.TemporalClient().Client},
 		// The preview's control-plane facts; nil shows them as unknown.
 		MoveFacts: ProjectOrgMoveFacts(g.ServerProcessConfig.GetControlPlane()),
+		// A project delete pauses its triggers' schedules, a restore
+		// resumes them, and a purge removes them.
+		Schedules: g.ScheduleSyncer(),
 	})
 }
 

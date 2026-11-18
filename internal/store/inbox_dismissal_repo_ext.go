@@ -69,7 +69,9 @@ import (
 // requires the same owner. chats.project_id has no foreign key: deleting a
 // project leaves its chats (and their pending questions) behind, and the run
 // page cannot open a chat whose project is gone. A LEFT JOIN here listed those
-// as dead "This run doesn't exist" items. Likewise a blocking item of a run
+// as dead "This run doesn't exist" items. A project scheduled for deletion
+// (delete_after set) is hidden, and cannot be opened either, so the join
+// leaves it out too until it is restored. Likewise a blocking item of a run
 // that completed (stop_reason 1) or was cancelled (4) can never be answered —
 // nothing expires it when the run stops — so it is not listed either, and the
 // same holds for the run that ASKED it (pending_input_gates names it): a
@@ -131,7 +133,7 @@ SELECT * FROM (
         OFFSET 0
     ) a
     JOIN chats_with_activity c ON c.id = a.chat_id
-    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id AND p.delete_after IS NULL
     LEFT JOIN triggers t ON t.id = c.trigger_id
     WHERE a.status = 1
       AND (
@@ -166,7 +168,7 @@ SELECT * FROM (
         OFFSET 0
     ) q
     JOIN chats_with_activity c ON c.id = q.chat_id
-    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id AND p.delete_after IS NULL
     LEFT JOIN triggers t ON t.id = c.trigger_id
     WHERE q.status = 1
       AND c.user_id = $1::text
@@ -199,7 +201,7 @@ SELECT * FROM (
         COALESCE(d.hostname, ''),
         0
     FROM chats_with_activity c
-    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id AND p.delete_after IS NULL
     LEFT JOIN triggers t ON t.id = c.trigger_id
     LEFT JOIN daemons d ON d.id = COALESCE(c.active_daemon_id, t.daemon_id) AND d.user_id = c.user_id
     WHERE c.display_state = 8
@@ -255,7 +257,7 @@ SELECT * FROM (
         WHERE x.trigger_id = t.id AND x.outcome = 'failed'
           AND (lt.id IS NULL OR (x.occurred_at, x.id) > (lt.occurred_at, lt.id))
     ) ep ON true
-    JOIN projects p ON p.id = t.project_id AND p.user_id = t.user_id
+    JOIN projects p ON p.id = t.project_id AND p.user_id = t.user_id AND p.delete_after IS NULL
     WHERE t.user_id = $1::text
       AND t.enabled
       AND ep.failures > 0
@@ -298,7 +300,7 @@ SELECT * FROM (
     ) pc
     JOIN chats_with_activity c ON c.id = pc.id
     JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
-    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id AND p.delete_after IS NULL
     LEFT JOIN LATERAL (
         SELECT se.created_at, se.error_message
         FROM workflows w
@@ -336,7 +338,7 @@ SELECT * FROM (
         0
     FROM chat_personal_funding f
     JOIN chats_with_activity c ON c.id = f.chat_id
-    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id AND p.delete_after IS NULL
     LEFT JOIN triggers t ON t.id = c.trigger_id
     WHERE f.state = 'asked'
       AND f.user_id = $1::text

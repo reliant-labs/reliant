@@ -1,0 +1,283 @@
+package project
+
+import (
+	"context"
+	"sync"
+	"testing"
+	"time"
+
+	"connectrpc.com/connect"
+	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgs"
+)
+
+// Who may delete, restore and purge a project (control-plane
+// docs/design/unified-shell-and-projects.md §11.4, D19): its owner, and an
+// org admin only once the owner has left the org; never a member, an
+// outsider, or a credential bound to another org; an admin only as a person.
+
+const deleteOrg = "acme"
+
+// deleteMembers is control-plane's membership answer: every user in roles is
+// a member of deleteOrg with that role, unless they left.
+type deleteMembers struct {
+	roles map[string]string
+	left  map[string]bool
+}
+
+func (m deleteMembers) ResolveOrgMembership(_ context.Context, userID, orgID string) (accesstokenclient.OrgMembership, error) {
+	if orgID == "" {
+		orgID = deleteOrg
+	}
+	role, ok := m.roles[userID]
+	if !ok || m.left[userID] || orgID != deleteOrg {
+		return accesstokenclient.OrgMembership{OrgID: orgID}, nil
+	}
+	return accesstokenclient.OrgMembership{OrgID: orgID, Member: true, Role: role}, nil
+}
+
+type deleteAuthFixture struct {
+	t                              *testing.T
+	repo                           *db.Repo
+	owner, admin, member, outsider string
+	project, trigger               string
+	members                        deleteMembers
+	schedules                      *recordingSchedules
+}
+
+// recordingSchedules records the triggers whose schedules were converged.
+type recordingSchedules struct {
+	mu  sync.Mutex
+	ids []string
+}
+
+func (r *recordingSchedules) Sync(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ids = append(r.ids, id)
+	return nil
+}
+
+func (r *recordingSchedules) synced() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.ids...)
+}
+
+func newDeleteAuthFixture(t *testing.T) *deleteAuthFixture {
+	t.Helper()
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	s := uuid.NewString()[:8]
+	f := &deleteAuthFixture{
+		t: t, repo: repo,
+		owner: "owner-" + s, admin: "admin-" + s, member: "member-" + s, outsider: "outsider-" + s,
+		project: "proj-" + s, trigger: "trig-" + s,
+		schedules: &recordingSchedules{},
+	}
+	f.members = deleteMembers{
+		roles: map[string]string{f.owner: orgs.RoleMember, f.admin: orgs.RoleAdmin, f.member: orgs.RoleMember},
+		left:  map[string]bool{},
+	}
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	org := deleteOrg
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{ID: f.project, UserID: f.owner, OrgID: &org, Name: "doomed",
+		Path: "/home/owner/doomed-" + s, CreatedAt: now, UpdatedAt: now, LastActive: now}))
+	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{ID: f.trigger, UserID: f.owner, OrgID: &org, ProjectID: f.project,
+		Name: "nightly", Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "builtin://agent",
+		Config: []byte(`{"interval":"1h"}`), CreatedAt: now, UpdatedAt: now}))
+	return f
+}
+
+// service is the project service over the fixture's database, deciding
+// membership as control-plane answers it now (a fresh resolver, so a
+// departure is seen at once).
+func (f *deleteAuthFixture) service() (*Service, *orgs.Resolver) {
+	m := orgs.New(f.members)
+	return NewTestProject(f.t, WithProjectDeps(Deps{Repo: f.repo, Orgs: m, Schedules: f.schedules})), m
+}
+
+// as is a request as userID through credential c; a machine token is also
+// bound to an org.
+func as(m *orgs.Resolver, userID string, c auth.Credential, boundOrg string) context.Context {
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	ctx = authz.WithMembership(ctx, m)
+	ctx = auth.WithCredential(ctx, c)
+	if boundOrg != "" {
+		ctx = authz.WithCredentialOrg(ctx, boundOrg)
+	}
+	return ctx
+}
+
+func (f *deleteAuthFixture) delete(svc *Service, ctx context.Context, fromMachines bool) (*reliantv1.DeleteProjectResponse, error) {
+	resp, err := svc.DeleteProject(ctx, connect.NewRequest(&reliantv1.DeleteProjectRequest{ProjectId: f.project, RemoveFromMachines: fromMachines}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+func (f *deleteAuthFixture) scheduled() bool {
+	f.t.Helper()
+	p, err := f.repo.GetProject(context.Background(), f.project)
+	require.NoError(f.t, err)
+	return p.DeleteAfter != nil
+}
+
+func TestProjectDeleteAuthorityWhileTheOwnerIsAMember(t *testing.T) {
+	f := newDeleteAuthFixture(t)
+	svc, m := f.service()
+	for _, c := range []struct {
+		name     string
+		ctx      context.Context
+		wantCode connect.Code
+		reason   string
+	}{
+		{"a member who is not an admin is not told it exists", as(m, f.member, auth.CredentialSession, ""), connect.CodeNotFound, ""},
+		{"an outsider is not told it exists", as(m, f.outsider, auth.CredentialSession, ""), connect.CodeNotFound, ""},
+		{"an admin may not delete a live member's work", as(m, f.admin, auth.CredentialSession, ""), connect.CodeFailedPrecondition, ReasonProjectOwnerIsMember},
+		{"the owner's machine token bound to another org reaches nothing here", as(m, f.owner, auth.CredentialAccessToken, "globex"), connect.CodeNotFound, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := f.delete(svc, c.ctx, false)
+			require.Error(t, err)
+			assert.Equal(t, c.wantCode, svcerr.Code(err), "error: %v", err)
+			if c.reason != "" {
+				assert.Equal(t, c.reason, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+			}
+			assert.False(t, f.scheduled(), "nothing was scheduled")
+		})
+	}
+
+	t.Run("the owner's machine token in the project's org schedules it, and the owner restores it", func(t *testing.T) {
+		resp, err := f.delete(svc, as(m, f.owner, auth.CredentialAccessToken, deleteOrg), false)
+		require.NoError(t, err)
+		assert.True(t, resp.GetSuccess())
+		require.NotNil(t, resp.DeleteAfter)
+		after, err := time.Parse(time.RFC3339, resp.GetDeleteAfter())
+		require.NoError(t, err)
+		assert.WithinDuration(t, time.Now().Add(core.ProjectDeleteWindow), after, time.Minute)
+		assert.True(t, f.scheduled())
+		assert.Equal(t, []string{f.trigger}, f.schedules.synced(), "the paused trigger's schedule is converged")
+
+		owner := as(m, f.owner, auth.CredentialSession, "")
+		_, err = svc.GetProject(owner, connect.NewRequest(&reliantv1.GetProjectRequest{ProjectId: f.project}))
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "a scheduled project is hidden from its owner")
+		list, err := svc.ListProjects(owner, connect.NewRequest(&reliantv1.ListProjectsRequest{}))
+		require.NoError(t, err)
+		assert.Empty(t, list.Msg.GetProjects())
+		deleted, err := svc.ListDeletedProjects(owner, connect.NewRequest(&reliantv1.ListDeletedProjectsRequest{}))
+		require.NoError(t, err)
+		require.Len(t, deleted.Msg.GetProjects(), 1)
+		assert.NotEmpty(t, deleted.Msg.GetProjects()[0].GetPath(), "the owner sees their own path")
+
+		restored, err := svc.RestoreProject(owner, connect.NewRequest(&reliantv1.RestoreProjectRequest{ProjectId: f.project}))
+		require.NoError(t, err)
+		assert.EqualValues(t, 1, restored.Msg.GetTriggersResumed())
+		assert.Nil(t, restored.Msg.GetProject().DeleteAfter)
+		assert.False(t, f.scheduled())
+		tr, err := f.repo.GetTrigger(context.Background(), f.trigger)
+		require.NoError(t, err)
+		assert.True(t, tr.Enabled, "restore turns the paused trigger back on")
+	})
+}
+
+func TestProjectDeleteAuthorityOnceTheOwnerLeft(t *testing.T) {
+	f := newDeleteAuthFixture(t)
+	f.members.left[f.owner] = true
+	svc, m := f.service()
+	admin := as(m, f.admin, auth.CredentialSession, "")
+
+	for _, c := range []struct {
+		name     string
+		ctx      context.Context
+		machines bool
+		wantCode connect.Code
+	}{
+		{"the departed owner no longer reaches it", as(m, f.owner, auth.CredentialSession, ""), false, connect.CodeNotFound},
+		{"a member who is not an admin still may not", as(m, f.member, auth.CredentialSession, ""), false, connect.CodeNotFound},
+		{"an admin acts only as a person, never through a machine token", as(m, f.admin, auth.CredentialAccessToken, deleteOrg), false, connect.CodePermissionDenied},
+		{"an admin may not remove code from the departed owner's machines", admin, true, connect.CodePermissionDenied},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := f.delete(svc, c.ctx, c.machines)
+			require.Error(t, err)
+			assert.Equal(t, c.wantCode, svcerr.Code(err), "error: %v", err)
+			assert.False(t, f.scheduled())
+		})
+	}
+
+	t.Run("an admin deletes it, finds it under recently deleted, and restores it", func(t *testing.T) {
+		_, err := f.delete(svc, admin, false)
+		require.NoError(t, err)
+		assert.True(t, f.scheduled())
+		p, err := f.repo.GetProject(context.Background(), f.project)
+		require.NoError(t, err)
+		assert.Equal(t, f.admin, *p.DeletedBy)
+
+		deleted, err := svc.ListDeletedProjects(admin, connect.NewRequest(&reliantv1.ListDeletedProjectsRequest{}))
+		require.NoError(t, err)
+		require.Len(t, deleted.Msg.GetProjects(), 1)
+		got := deleted.Msg.GetProjects()[0]
+		assert.Empty(t, got.GetPath(), "an admin is not shown the departed owner's path")
+		assert.Equal(t, f.admin, got.GetDeletedByUserId())
+
+		_, err = svc.PurgeProjectNow(admin, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"}))
+		assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "only the owner purges at once")
+
+		member := as(m, f.member, auth.CredentialSession, "")
+		_, err = svc.RestoreProject(member, connect.NewRequest(&reliantv1.RestoreProjectRequest{ProjectId: f.project}))
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "a member may not restore it either")
+
+		restored, err := svc.RestoreProject(admin, connect.NewRequest(&reliantv1.RestoreProjectRequest{ProjectId: f.project}))
+		require.NoError(t, err)
+		assert.EqualValues(t, 1, restored.Msg.GetTriggersResumed())
+		assert.False(t, f.scheduled())
+	})
+}
+
+// A deleted project still holds its path until it is purged: adding the
+// folder again says how to free it rather than failing on the key.
+func TestCreateProjectAtADeletedProjectsPathSaysHowToFreeIt(t *testing.T) {
+	f := newDeleteAuthFixture(t)
+	svc, m := f.service()
+	owner := as(m, f.owner, auth.CredentialSession, "")
+	_, err := f.delete(svc, owner, false)
+	require.NoError(t, err)
+	p, err := f.repo.GetProject(context.Background(), f.project)
+	require.NoError(t, err)
+
+	_, err = svc.CreateProject(owner, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "again", Path: p.Path}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "error: %v", err)
+	assert.Equal(t, ReasonProjectScheduledForDeletion, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+	assert.Contains(t, err.Error(), "reliant project restore "+f.project)
+}
+
+func TestPurgeProjectNowNeedsTheOwnerAndItsName(t *testing.T) {
+	f := newDeleteAuthFixture(t)
+	svc, m := f.service()
+	owner := as(m, f.owner, auth.CredentialSession, "")
+
+	_, err := svc.PurgeProjectNow(owner, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "wrong"}))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	_, err = f.repo.GetProject(context.Background(), f.project)
+	require.NoError(t, err, "a wrong name deletes nothing")
+
+	_, err = svc.PurgeProjectNow(owner, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"}))
+	require.NoError(t, err)
+	_, err = f.repo.GetProject(context.Background(), f.project)
+	assert.True(t, svcerr.IsNotFound(err), "the project is gone at once")
+	assert.Contains(t, f.schedules.synced(), f.trigger, "the purged trigger's schedule is converged away")
+}
