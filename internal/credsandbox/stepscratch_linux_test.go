@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 )
 
 // A credentialed command's own scratch (stepscratch.go) goes when the command
@@ -49,6 +50,7 @@ func stepRoot(t *testing.T) string {
 		stepSweep.last = last
 		stepSweep.Unlock()
 		stepSweepListed = func() {}
+		stepSweepLocked = func(string) {}
 	})
 	stepScratchProcRoot = fakeProc(t, nil)
 	root := filepath.Join(t.TempDir(), "cred-scratch")
@@ -518,6 +520,162 @@ func TestStepScratch_DoneWithAnEmptyCgroupNeverReadsProc(t *testing.T) {
 	_, s2 := stepCommand(t, context.Background(), root, `true`)
 	assert.False(t, s2.tryReclaim(nil))
 	assert.DirExists(t, s2.Dir())
+}
+
+// orphanWithLock is a scratch directory another daemon made, with its lock
+// file, aged an hour: owned while the returned lock is open, an orphan once it
+// is closed. It is not in this daemon's registry.
+func orphanWithLock(t *testing.T, root string) (string, *os.File) {
+	t.Helper()
+	dir, lock, err := newStepScratch(root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = lock.Close() })
+	assert.False(t, stepScratchRegistered(dir), "another daemon's: not in this registry")
+	old := testNow.Add(-time.Hour)
+	require.NoError(t, os.Chtimes(dir, old, old))
+	return dir, lock
+}
+
+// takeLock takes dir's ownership lock through a descriptor of its own, as its
+// owning daemon holds it.
+func takeLock(t *testing.T, dir string) *os.File {
+	t.Helper()
+	f, err := os.OpenFile(filepath.Join(dir, stepScratchLockName), os.O_RDWR, 0)
+	require.NoError(t, err)
+	require.NoError(t, unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB))
+	t.Cleanup(func() { _ = f.Close() })
+	return f
+}
+
+// A daemon's directory is locked from the moment its step- name exists, and
+// the lock is held by the daemon alone: no command it starts inherits it.
+func TestMakeStepScratch_TheDaemonHoldsTheLockAndNoCommandInheritsIt(t *testing.T) {
+	root := stepRoot(t)
+	dir, err := makeStepScratch(root)
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(dir, stepScratchLockName))
+	_, state, err := tryLockStepScratch(dir)
+	require.NoError(t, err)
+	assert.Equal(t, lockOwned, state, "the daemon holds it")
+	leftovers, _ := filepath.Glob(filepath.Join(root, stepScratchNewPrefix+"*"))
+	assert.Empty(t, leftovers, "the .new- name is gone once the step- name exists")
+
+	cmd := exec.Command("sh", "-c", `echo READY; read x`)
+	cmd.Env = []string{"PATH=/usr/bin:/bin", StepScratchEnv + "=" + dir}
+	startTrapped(t, cmd)
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	fds, err := os.ReadDir(filepath.Join("/proc", strconv.Itoa(cmd.Process.Pid), "fd"))
+	require.NoError(t, err)
+	for _, fd := range fds {
+		target, _ := os.Readlink(filepath.Join("/proc", strconv.Itoa(cmd.Process.Pid), "fd", fd.Name()))
+		assert.NotEqual(t, filepath.Join(dir, stepScratchLockName), target, "descriptor %s of the command is the lock", fd.Name())
+	}
+
+	assert.True(t, (&StepScratch{dir: dir}).tryReclaim(func() bool { return true }))
+	assert.NoDirExists(t, dir)
+}
+
+// Another daemon on the same home (a registry of its own) owns its directory:
+// nothing in /proc names it and it is old, but its lock is held, so the sweep
+// keeps it. Released, the next sweep takes it.
+func TestSweepStepScratch_SparesADirectoryAnotherDaemonOwns(t *testing.T) {
+	root := stepRoot(t)
+	dir, lock := orphanWithLock(t, root)
+
+	assert.Equal(t, 0, sweepRemoved(t, root))
+	assert.DirExists(t, dir, "its daemon holds its lock")
+
+	require.NoError(t, lock.Close())
+	assert.Equal(t, 1, sweepRemoved(t, root))
+	assert.NoDirExists(t, dir)
+	trash, _ := filepath.Glob(filepath.Join(root, stepScratchTrashPrefix+"*"))
+	assert.Empty(t, trash, "moved aside, then removed")
+}
+
+// The kernel drops a flock when the last descriptor of it closes, however the
+// process holding it exits: a SIGKILLed daemon leaves its directories
+// unlocked, and the next sweep takes them.
+func TestSweepStepScratch_TakesADirectoryOnceItsOwningDaemonDies(t *testing.T) {
+	root := stepRoot(t)
+	dir, lock := orphanWithLock(t, root)
+	// The "daemon" is a process of its own that holds the lock's descriptor.
+	daemon := exec.Command("sh", "-c", `echo READY; read x`)
+	daemon.ExtraFiles = []*os.File{lock}
+	startTrapped(t, daemon)
+	require.NoError(t, lock.Close(), "only the daemon process holds it now")
+	t.Cleanup(func() { _ = daemon.Process.Kill(); _ = daemon.Wait() })
+
+	assert.Equal(t, 0, sweepRemoved(t, root))
+	assert.DirExists(t, dir, "its daemon is alive")
+
+	require.NoError(t, daemon.Process.Signal(syscall.SIGKILL))
+	_ = daemon.Wait()
+	assert.Equal(t, 1, sweepRemoved(t, root))
+	assert.NoDirExists(t, dir, "the lock went with its daemon")
+}
+
+// A directory whose owner takes its lock after the sweep listed it (a command
+// started after the listing, through its daemon) is kept: the lock is tried
+// right before the removal, not at the listing.
+func TestSweepStepScratch_KeepsADirectoryLockedAfterTheListing(t *testing.T) {
+	root := stepRoot(t)
+	dir, lock := orphanWithLock(t, root)
+	require.NoError(t, lock.Close())
+	var owner *os.File
+	stepSweepListed = func() { owner = takeLock(t, dir) }
+
+	assert.Equal(t, 0, sweepRemoved(t, root))
+	assert.DirExists(t, dir)
+
+	stepSweepListed = func() {}
+	require.NoError(t, owner.Close())
+	assert.Equal(t, 1, sweepRemoved(t, root))
+	assert.NoDirExists(t, dir)
+}
+
+// The re-check under the lock: a process that starts holding the directory
+// after the sweep listed it, and after it took the lock, is seen by the walk
+// the sweep makes while it holds the lock, and the directory stays.
+func TestSweepStepScratch_ReChecksProcWhileItHoldsTheLock(t *testing.T) {
+	root := stepRoot(t)
+	dir, lock := orphanWithLock(t, root)
+	require.NoError(t, lock.Close())
+	var during lockState
+	stepSweepLocked = func(path string) {
+		require.Equal(t, dir, path)
+		_, during, _ = tryLockStepScratch(path)
+		stepScratchProcRoot = fakeProc(t, map[int]fakeProcess{50: {env: []string{"TMPDIR=" + dir + "/tmp"}}})
+	}
+
+	assert.Equal(t, 0, sweepRemoved(t, root))
+	assert.Equal(t, lockOwned, during, "the sweep holds the lock while it re-checks")
+	assert.DirExists(t, dir, "a process that started after the listing holds it")
+
+	stepSweepLocked = func(string) {}
+	stepScratchProcRoot = fakeProc(t, nil)
+	assert.Equal(t, 1, sweepRemoved(t, root))
+	assert.NoDirExists(t, dir)
+}
+
+// What a crash left: a .trash- directory (already judged) goes; a .new- one
+// (a daemon killed while making it; never handed out) goes once old and
+// unlocked, and stays while young or locked.
+func TestSweepStepScratch_FinishesWhatACrashLeft(t *testing.T) {
+	root := stepRoot(t)
+	trash := stepDir(t, root, stepScratchTrashPrefix+"step-1-a-123", time.Hour)
+	oldNew := stepDir(t, root, stepScratchNewPrefix+"step-1-b", time.Hour)
+	youngNew := stepDir(t, root, stepScratchNewPrefix+"step-1-c", stepScratchMinAge-time.Second)
+	lockedNew := stepDir(t, root, stepScratchNewPrefix+"step-1-d", time.Hour)
+	require.NoError(t, os.WriteFile(filepath.Join(lockedNew, stepScratchLockName), nil, 0o600))
+	takeLock(t, lockedNew)
+	old := testNow.Add(-time.Hour)
+	require.NoError(t, os.Chtimes(lockedNew, old, old))
+
+	assert.Equal(t, 2, sweepRemoved(t, root))
+	assert.NoDirExists(t, trash)
+	assert.NoDirExists(t, oldNew)
+	assert.DirExists(t, youngNew)
+	assert.DirExists(t, lockedNew, "a daemon is making it")
 }
 
 // An inherited StepScratchEnv names another daemon's step's scratch: no

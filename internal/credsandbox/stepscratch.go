@@ -5,6 +5,7 @@ package credsandbox
 import (
 	"errors"
 	"io/fs"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -33,16 +34,23 @@ import (
 // through an open file). One still held then stays until nothing holds it: its
 // own reclaim keeps looking, every stepScratchLingerEvery.
 //
-// Every directory this daemon hands out is in its registry (stepRegistry) from
-// the moment it is made, under the registry's lock and before any command sees
-// its name, until its own reclaim removes it. The sweep, which the daemon runs
+// Every directory a daemon hands out carries an ownership lock, a .lock file
+// inside it on which the daemon holds flock(LOCK_EX), taken before the
+// directory gets its step- name and held until the step's own removal finished
+// (the descriptor is close-on-exec, so no command inherits it). The kernel drops
+// the lock when the daemon exits however it exits. This daemon's directories are
+// also in its registry (stepRegistry), with that descriptor. The sweep, which the daemon runs
 // when it starts and then at most every stepScratchSweepEvery whenever a
-// credentialed command starts, takes only the directories an EARLIER daemon
-// left (it was killed, or restarted under its running commands): never one in
-// the registry, never one younger than stepScratchMinAge (another daemon on
-// this home may have just made it), and only when /proc proves that no live
-// process holds it. A process whose holdings cannot be read makes that proof
-// incomplete, and then the sweep removes nothing and says what it kept.
+// credentialed command starts, takes only the directories no live daemon owns:
+// never one in the registry, never one younger than stepScratchMinAge, never one
+// whose lock another process holds (flock LOCK_NB fails: a daemon, this one or
+// another on the same home, owns it). One whose lock it takes is re-checked
+// while it holds the lock: removed only when a fresh, complete walk of /proc
+// shows nothing holds it, by an atomic rename to a .trash- name and then its
+// removal. A directory with no lock file (made before locks, or a step that
+// removed its own) is judged by that walk and the age gate alone. A process
+// whose holdings cannot be read makes the walk incomplete, and then the sweep
+// removes nothing more and says what it kept.
 //
 // It is an addition: a command that never reads StepScratchEnv keeps working as
 // before, and one written for it falls back to its own `mktemp -d` where the
@@ -53,7 +61,9 @@ import (
 // CredScratchDir that the daemon removes once the command's processes are all
 // gone, on every path: an exit, a kill, a timeout, a cancelled run, a daemon
 // restart. Set only beside SignalEnv: it is as hidden from credentials-none
-// commands as CredScratchDir is.
+// commands as CredScratchDir is. It holds .lock, the daemon's ownership lock
+// (a step that removes it leaves its directory to the age-gated /proc proof
+// alone).
 const StepScratchEnv = "RELIANT_STEP_SCRATCH"
 
 // stepScratchPrefix starts the name of every command's own scratch directory.
@@ -85,29 +95,30 @@ var (
 )
 
 // stepRegistry is every scratch directory this daemon has handed out and not
-// yet removed. A directory enters it when it is made, under mu, before any
-// command can see its name, and leaves it only when its own reclaim removed it
-// (removeStepScratch). The sweep checks it under mu, after it has listed the
+// yet removed, with the descriptor of the ownership lock it holds on each. A
+// directory enters it when it is made, under mu, before any command can see its
+// name, and leaves it only when its own reclaim removed it (removeStepScratch),
+// which then closes the descriptor and so releases the lock. The sweep checks it under mu, after it has listed the
 // root: a directory listed then was made before the listing, so it is either
 // registered already or not this daemon's.
 var stepRegistry struct {
 	mu   sync.Mutex
-	dirs map[string]struct{}
+	dirs map[string]*os.File
 }
 
-// registerStepScratch runs mk, which creates a directory and returns its path,
-// under the registry's lock, and registers what it made.
-func registerStepScratch(mk func() (string, error)) (string, error) {
+// registerStepScratch runs mk, which creates a directory and returns its path
+// and the held lock, under the registry's lock, and registers both.
+func registerStepScratch(mk func() (string, *os.File, error)) (string, error) {
 	stepRegistry.mu.Lock()
 	defer stepRegistry.mu.Unlock()
-	dir, err := mk()
+	dir, lock, err := mk()
 	if err != nil {
 		return "", err
 	}
 	if stepRegistry.dirs == nil {
-		stepRegistry.dirs = map[string]struct{}{}
+		stepRegistry.dirs = map[string]*os.File{}
 	}
-	stepRegistry.dirs[dir] = struct{}{}
+	stepRegistry.dirs[dir] = lock
 	return dir, nil
 }
 
@@ -192,16 +203,21 @@ func (s *StepScratch) tryReclaim(gone func() bool) bool {
 	return removeStepScratch(s.dir)
 }
 
-// removeStepScratch removes dir, one this daemon handed out, and takes it out
-// of the registry once it is gone.
+// removeStepScratch removes dir, one this daemon handed out, and once it is
+// gone takes it out of the registry and releases its ownership lock: the lock
+// is held for the whole removal, so no sweep can judge a half-removed tree.
 func removeStepScratch(dir string) bool {
 	if err := removeTree(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		logging.Warn("credsandbox: cannot remove a command's scratch directory; retrying", "dir", dir, "error", err)
 		return false
 	}
 	stepRegistry.mu.Lock()
+	lock := stepRegistry.dirs[dir]
 	delete(stepRegistry.dirs, dir)
 	stepRegistry.mu.Unlock()
+	if lock != nil {
+		_ = lock.Close()
+	}
 	return true
 }
 
