@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import type { Panel, PanelResult, Series } from "@/services/controlPlane/observability/types";
-import { AttentionPanel } from "../AttentionPanel";
+import { AttentionPanel, type AttentionCompare } from "../AttentionPanel";
 import { BarList } from "../BarList";
 import { PanelBody, toneOf } from "../PanelBody";
 import { StepFunnel } from "../StepFunnel";
@@ -22,9 +22,13 @@ vi.mock("@/components/forge-ui/link", () => ({ default: ({ href, children, ...re
 const figuresById: Record<string, [number | null, number | null] | "failed"> = {};
 // The services each read was made with, by panel id.
 const servicesRead: Record<string, unknown> = {};
+// The range and comparison key each read was made with, by panel id: "<range>" now, "<range> <key>" before.
+const readsMade: Record<string, string[]> = {};
 vi.mock("@/hooks/observability-queries", () => ({
-  usePanelQuery: (_scope: unknown, _range: unknown, panel: Panel, services: unknown, _g: unknown, options: { offsetKey?: string } = {}) => {
+  usePanelQuery: (_scope: unknown, range: string, panel: Panel, services: unknown, _g: unknown, options: { offsetKey?: string } = {}) => {
     servicesRead[panel.id] = services;
+    const made = options.offsetKey ? `${range} ${options.offsetKey}` : range;
+    readsMade[panel.id] = [...new Set([...(readsMade[panel.id] ?? []), made])];
     const pair = figuresById[panel.id];
     if (!pair) return { data: undefined, isLoading: true, error: null };
     if (pair === "failed") return { data: undefined, isLoading: false, error: new Error("quota") };
@@ -186,9 +190,9 @@ describe("Needs attention (kind: attention)", () => {
     for (const key of Object.keys(figuresById)) delete figuresById[key];
   };
   const attention: Panel = { id: "attention", title: "Needs attention", kind: "attention", signal: "", series: [], attention: { threshold: 0.05 } };
-  const compare = { offsetKey: "period:30d", offsetMs: () => 0, label: "previous period" };
-  const draw = (c: typeof compare | null = compare) =>
-    render(<AttentionPanel panel={attention} watched={watched} scope={null} range="30d" dashboardId="product-overview" compare={c} enabled drillHref={(p) => `/to/${p.id}`} />);
+  const compare: AttentionCompare = { label: "previous period", readOf: () => ({ range: "30d", compare: { offsetKey: "period:30d", offsetMs: () => 0 } }) };
+  const draw = (c: AttentionCompare | null = compare) =>
+    render(<AttentionPanel panel={attention} watched={watched} scope={null} dashboardId="product-overview" compare={c} enabled drillHref={(p) => `/to/${p.id}`} />);
 
   it("lists the figures that moved the wrong way first, then the ones that improved, and links each to its detail", () => {
     reset();
@@ -205,6 +209,18 @@ describe("Needs attention (kind: attention)", () => {
     // Active users moved 1%, under the 5% threshold.
     expect(screen.queryByText(/Active users/)).not.toBeInTheDocument();
     expect(screen.getByTestId("obs-panel-attention")).toHaveTextContent("2 of 4 compared figures moved the wrong way");
+  });
+
+  it("reads each figure at its card's range and comparison, not the dashboard's", () => {
+    reset();
+    for (const key of Object.keys(readsMade)) delete readsMade[key];
+    Object.assign(figuresById, { visitors: [100, 100], bounce: [0.5, 0.5], signups: [100, 100], active: [100, 100] });
+    // A traces figure compares with the 7 days it reads; a daily figure on a short range is widened.
+    const readOf: AttentionCompare["readOf"] = (p) =>
+      p.id === "visitors" ? { range: "30d", compare: { offsetKey: "period:30d", offsetMs: () => 7 } } : { range: "7d", compare: { offsetKey: "period:7d", offsetMs: () => 7 } };
+    draw({ label: "previous period", readOf });
+    expect(readsMade.visitors).toEqual(["30d", "30d period:30d"]);
+    expect(readsMade.bounce).toEqual(["7d", "7d period:7d"]);
   });
 
   it("says so when nothing moved", () => {
@@ -227,7 +243,7 @@ describe("Needs attention (kind: attention)", () => {
     // Active users is still loading.
     expect(screen.getByLabelText("Loading")).toBeInTheDocument();
     figuresById.active = [100, 100];
-    rerender(<AttentionPanel panel={attention} watched={watched} scope={null} range="30d" dashboardId="product-overview" compare={{ ...compare }} enabled drillHref={() => null} />);
+    rerender(<AttentionPanel panel={attention} watched={watched} scope={null} dashboardId="product-overview" compare={{ ...compare }} enabled drillHref={() => null} />);
     // Bounce has no earlier figure and sign-ups grew from zero: neither is judged, and both are named.
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.getByRole("listitem")).toHaveTextContent("Visitors fell 20%");

@@ -69,7 +69,7 @@ import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 import type { Dashboard, DashboardSection, ObsScope, Panel } from "@/services/controlPlane/observability/types";
-import { bucketLabel, dashboardDefaultRange, RANGE_LABELS, RANGE_PRESETS, rangeForBucket, readRange, type RangePreset } from "@/services/controlPlane/observability/window";
+import { bucketLabel, dashboardDefaultRange, RANGE_LABELS, RANGE_PRESETS, rangeForBucket, type RangePreset } from "@/services/controlPlane/observability/window";
 import { RangeCapNote } from "../RangeCapNote";
 import { cn } from "@/lib/utils";
 
@@ -129,6 +129,7 @@ import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, 
 import { useObsReadOnly } from "../obsReadOnly";
 import { DataPanelBody, type PanelDataContext } from "./DataPanel";
 import { AttentionPanel, type WatchedFigure } from "./AttentionPanel";
+import { cardRead } from "./cardRead";
 
 /** A panel card's element id: the anchor a drill link (panel.drill.panel) scrolls to. */
 export const panelAnchor = (panelId: string) => `panel-${panelId}`;
@@ -1264,8 +1265,10 @@ function DashboardPanelCard({
   // window shorter than that span: it would return one bucket. Widen it to the
   // smallest range holding two, and say so under the title; the other panels
   // stay on the dashboard's range.
-  const widening = queryPanel.minStep ? rangeForBucket(rangeOfCard, queryPanel.minStep) : null;
-  const range = widening?.range ?? rangeOfCard;
+  // Needs attention reads its watched figures through cardRead too, so a
+  // figure there and its own card ask the same thing.
+  const read = cardRead(rangeOfCard, queryPanel, target);
+  const range = read.range;
   // A panel reads only once it is near the viewport: twenty panels do not all queue at mount.
   const [bodyRef, near] = useNearViewport();
   const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near, dashboardId });
@@ -1277,12 +1280,9 @@ function DashboardPanelCard({
   const comparable =
     (panel.kind === "line" || panel.kind === "number" || (panel.kind === "sql" && drawsSqlFigures(queryPanel, rawQuery.data))) &&
     (target.mode === "period" || target.mode === "release");
-  const offsetKey = target.mode === "release" ? `release:${target.promotion.promotionId}` : target.mode === "period" ? `period:${range}` : "";
   const compareQuery = usePanelQuery(scope, range, queryPanel, services, [], {
-    offsetKey,
-    offsetMs:
-      // The previous period is as long as what the panel reads: a traces panel on "Last 30 days" reads 7.
-      target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : target.mode === "period" ? () => rangeMs(readRange(range, panelRead(queryPanel))) : undefined,
+    offsetKey: read.compare?.offsetKey ?? "",
+    offsetMs: read.compare?.offsetMs,
     refetchInterval: refreshEvery,
     enabled: comparable && near,
     dashboardId,
@@ -1359,7 +1359,7 @@ function DashboardPanelCard({
             {panelRunsQuery(queryPanel.kind) && (
               <RangeCapNote range={range} read={panelRead(queryPanel)} subject={queryPanel.signal === "logs" ? "Logs are" : "Traces are"} testId={`dashboard-panel-capped-${panel.id}`} />
             )}
-            {widening?.widened && (
+            {read.widened && (
               <p className="truncate text-xs text-warning-ink" data-testid={`dashboard-panel-widened-${panel.id}`} title={`This panel groups by a ${bucketLabel(queryPanel.minStep)} bucket, so it shows ${RANGE_LABELS[range].toLowerCase()} instead of ${RANGE_LABELS[rangeOfCard].toLowerCase()}.`}>
                 Window smaller than this panel&apos;s {bucketLabel(queryPanel.minStep)} bucket: showing {RANGE_LABELS[range].toLowerCase()}
               </p>
@@ -1414,16 +1414,15 @@ function DashboardPanelCard({
             panel={panel}
             watched={watched ?? []}
             scope={scope}
-            range={rangeOfCard}
             dashboardId={dashboardId}
             enabled={near}
             drillHref={(p) => drillHrefOf?.(p) ?? null}
             compare={
               target.mode === "release" || target.mode === "period"
                 ? {
-                    offsetKey,
-                    offsetMs: target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : () => rangeMs(rangeOfCard),
                     label: target.mode === "release" ? target.label : "previous period",
+                    // Each figure as its own card reads it: its widened range and its comparison.
+                    readOf: (p) => cardRead(rangeOfCard, p, target),
                   }
                 : null
             }

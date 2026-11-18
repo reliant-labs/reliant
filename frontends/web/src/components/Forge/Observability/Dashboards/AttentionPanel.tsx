@@ -27,10 +27,16 @@ import { cn } from "@/lib/utils";
 
 import { formatPercent, formatValue } from "../format";
 
+/** How a watched figure's card reads it (cardRead): its range, and its comparison read. */
+export interface FigureRead {
+  range: RangePreset;
+  compare: { offsetKey: string; offsetMs: () => number } | null;
+}
+
 export interface AttentionCompare {
-  offsetKey: string;
-  offsetMs: () => number;
   label: string;
+  /** Each figure's reads, exactly as its card makes them, so both share one cache entry. */
+  readOf: (panel: Panel) => FigureRead;
 }
 
 /** A watched figure as its card reads it: the panel and the services the viewer's filter narrows it to. */
@@ -44,7 +50,6 @@ export interface AttentionPanelProps {
   /** The watched figures, as their cards query them. */
   watched: WatchedFigure[];
   scope: ObsScope | null;
-  range: RangePreset;
   dashboardId: string;
   compare: AttentionCompare | null;
   enabled: boolean;
@@ -72,10 +77,9 @@ const figureOf = (data: PanelResult | undefined): number | null => {
   return v === null || v === undefined || !Number.isFinite(v) ? null : v;
 };
 
-function Watch({ figure, scope, range, dashboardId, compare, enabled, href, onVerdict }: {
+function Watch({ figure, scope, dashboardId, compare, enabled, href, onVerdict }: {
   figure: WatchedFigure;
   scope: ObsScope | null;
-  range: RangePreset;
   dashboardId: string;
   compare: AttentionCompare;
   enabled: boolean;
@@ -83,8 +87,9 @@ function Watch({ figure, scope, range, dashboardId, compare, enabled, href, onVe
   onVerdict: (id: string, verdict: Verdict | undefined) => void;
 }) {
   const { panel, services } = figure;
-  const now = usePanelQuery(scope, range, panel, services, [], { enabled, dashboardId });
-  const before = usePanelQuery(scope, range, panel, services, [], { offsetKey: compare.offsetKey, offsetMs: compare.offsetMs, enabled, dashboardId });
+  const read = compare.readOf(panel);
+  const now = usePanelQuery(scope, read.range, panel, services, [], { enabled, dashboardId });
+  const before = usePanelQuery(scope, read.range, panel, services, [], { offsetKey: read.compare?.offsetKey ?? "", offsetMs: read.compare?.offsetMs, enabled: enabled && !!read.compare, dashboardId });
   const loading = now.isLoading || before.isLoading;
   const failed = !!now.error || !!before.error;
   const a = figureOf(now.data);
@@ -108,7 +113,7 @@ function sentence(v: Compared, label: string): string {
   return `${v.title} ${moved} ${formatPercent(Math.abs(v.change))} vs ${label} (${formatValue(v.before, v.unit)} → ${formatValue(v.now, v.unit)})`;
 }
 
-export function AttentionPanel({ panel, watched, scope, range, dashboardId, compare, enabled, drillHref }: AttentionPanelProps) {
+export function AttentionPanel({ panel, watched, scope, dashboardId, compare, enabled, drillHref }: AttentionPanelProps) {
   const [verdicts, setVerdicts] = useState<Record<string, Verdict | undefined>>({});
   const onVerdict = useCallback((id: string, v: Verdict | undefined) => setVerdicts((prev) => (prev[id] === v ? prev : { ...prev, [id]: v })), []);
   const threshold = panel.attention?.threshold || DEFAULT_ATTENTION_THRESHOLD;
@@ -131,7 +136,7 @@ export function AttentionPanel({ panel, watched, scope, range, dashboardId, comp
   return (
     <div data-testid="obs-panel-attention">
       {watched.map((w) => (
-        <Watch key={w.panel.id} figure={w} scope={scope} range={range} dashboardId={dashboardId} compare={compare} enabled={enabled} href={drillHref(w.panel)} onVerdict={onVerdict} />
+        <Watch key={w.panel.id} figure={w} scope={scope} dashboardId={dashboardId} compare={compare} enabled={enabled} href={drillHref(w.panel)} onVerdict={onVerdict} />
       ))}
       {!settled ? (
         <div className="h-16 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-busy="true" aria-label="Loading" />
