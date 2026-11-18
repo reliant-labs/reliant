@@ -213,11 +213,11 @@ func (pc *PauseController) DoRequestPauseFor(err error) {
 // breaker, if one is wired, and returns the error that ends the agent when the
 // same failure has repeated too often. Nil-safe on both the receiver and the
 // breaker.
-func (pc *PauseController) ObserveRepeatedToolErrors(thread, activityName string, stepEvent *StepEvent) error {
+func (pc *PauseController) ObserveRepeatedToolErrors(thread, activityName string, stepEvent *StepEvent, inputs map[string]string, inputAware func() bool) error {
 	if pc == nil {
 		return nil
 	}
-	return pc.RepeatedToolErrors.Observe(thread, activityName, stepEvent)
+	return pc.RepeatedToolErrors.Observe(thread, activityName, stepEvent, inputs, inputAware)
 }
 
 // ObserveDaemonOfflineStep feeds a completed step to the daemon-offline

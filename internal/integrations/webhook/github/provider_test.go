@@ -385,6 +385,8 @@ func TestEmittedEventsMatchTheManifest(t *testing.T) {
 		"check_run.completed":                 "check_run",
 		"check_suite.completed":               "check_suite",
 		"check_suite.requested":               "check_suite",
+		"check_run.rerequested":               "check_run",
+		"check_suite.rerequested":             "check_suite",
 		"pull_request.opened":                 "pull_request",
 		"pull_request.synchronize":            "pull_request",
 		"pull_request.closed":                 "pull_request",
@@ -539,13 +541,56 @@ func TestCheckSuiteRequested(t *testing.T) {
 	assert.Equal(t, "queued", s["status"])
 }
 
+// GitHub's Re-run button sends the App that created the check a re-run
+// request and starts nothing itself, so this is how a Reliant check is re-run.
+// The payload's timestamps are the old run's, so the event is dated when it
+// arrived.
+func TestCheckRunRerequested(t *testing.T) {
+	ev := one(t, parseFixture(t, "check_run", "check_run.rerequested"))
+	assertRepoEvent(t, ev, "check_run.rerequested")
+	assert.Equal(t, "rerequested", ev.Attributes["action"])
+	assert.Equal(t, "fix-save", ev.Attributes["branch"])
+	assert.Equal(t, "reliant/ci", ev.Attributes["name"])
+	assert.Equal(t, "reliant-labs", ev.Attributes["app"])
+	_, hasConclusion := ev.Attributes["conclusion"]
+	assert.False(t, hasConclusion, "a re-run request has no conclusion of its own")
+	r := ev.Data["check_run"].(map[string]any)
+	assert.EqualValues(t, 6106, r["id"])
+	assert.Equal(t, "reliant/ci", r["name"])
+	assert.Equal(t, "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", r["head_sha"])
+	assert.Equal(t, "fix-save", r["head_branch"])
+	assert.EqualValues(t, 7107, r["check_suite_id"])
+	assert.Equal(t, "run-42", r["external_id"])
+	assert.Equal(t, "failure", r["conclusion"], "how the run being re-run ended")
+	assert.Equal(t, map[string]any{"slug": "reliant-labs", "name": "Reliant"}, r["app"])
+	assert.Equal(t, []any{int64(7)}, r["pull_requests"])
+	assert.NotContains(t, r, "output", "the old run's output is not the re-run's")
+	assert.Equal(t, received, ev.OccurredAt, "not the old run's completed_at")
+}
+
+// "Re-run all checks" re-requests the App's whole suite on a commit.
+func TestCheckSuiteRerequested(t *testing.T) {
+	ev := one(t, parseFixture(t, "check_suite", "check_suite.rerequested"))
+	assertRepoEvent(t, ev, "check_suite.rerequested")
+	assert.Equal(t, "rerequested", ev.Attributes["action"])
+	assert.Equal(t, "fix-save", ev.Attributes["branch"])
+	assert.Equal(t, "reliant-labs", ev.Attributes["app"])
+	s := ev.Data["check_suite"].(map[string]any)
+	assert.EqualValues(t, 7107, s["id"])
+	assert.Equal(t, "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", s["head_sha"])
+	assert.Equal(t, "fix-save", s["head_branch"])
+	assert.Equal(t, "failure", s["conclusion"])
+	assert.Equal(t, []any{int64(7)}, s["pull_requests"])
+	assert.Equal(t, received, ev.OccurredAt, "not the old suite's updated_at")
+}
+
 func TestUnmappedActionsOfNewEventsYieldNothing(t *testing.T) {
 	for _, tc := range []struct{ event, name, action string }{
 		{"issues", "issues.opened", "pinned"},
 		{"pull_request", "pull_request.opened", "converted_to_draft"},
 		{"pull_request_review_comment", "pull_request_review_comment.created", "edited"},
 		{"check_run", "check_run.completed", "created"},
-		{"check_suite", "check_suite.completed", "rerequested"},
+		{"check_run", "check_run.completed", "requested_action"},
 	} {
 		var m map[string]any
 		require.NoError(t, json.Unmarshal(fixture(t, tc.name), &m))
@@ -580,6 +625,8 @@ func TestEmittedDataKeysAreDeclaredAndSchemasAreClosed(t *testing.T) {
 		"check_run.completed":                 "check_run",
 		"check_suite.completed":               "check_suite",
 		"check_suite.requested":               "check_suite",
+		"check_run.rerequested":               "check_run",
+		"check_suite.rerequested":             "check_suite",
 	} {
 		ev := one(t, parseFixture(t, header, name))
 		assert.True(t, closed[ev.Type], "%s: data schema must be closed", ev.Type)

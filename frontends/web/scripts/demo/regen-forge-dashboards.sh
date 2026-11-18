@@ -7,7 +7,7 @@
 #   service-orders  kept as the file holds it
 #   workloads       kept as the file holds it
 #   releases        obsdash.BuildReleases("shop") with the release markers
-#   users, product, acquisition
+#   product-overview, users, product, acquisition
 #                   obsbuiltin.Dashboards for shop's declared analytics: goals
 #                   checkout (purchase) and "Viewed the cart" (/cart), activation
 #                   on order_created within 7d, the default channels, and the Buy
@@ -22,14 +22,12 @@
 # conflict stops the script: resolve it in the printed worktree, commit there,
 # and rerun with RESUME=<that worktree>. The file this repo carries was made with
 #
-#   scripts/demo/regen-forge-dashboards.sh ../../../forge \
-#     1f42538fb 963d262a0
+#   scripts/demo/regen-forge-dashboards.sh ../../../forge db9bd739b
 #
-# (forge #2075 at 1f42538fb, the built-in dashboards, merged with #2111 at
-# 963d262a0, the Releases dashboard). That merge conflicts; it was resolved by
-# taking #2075's side everywhere (kcl, skills, testdata, the product_usage files
-# #2075 retires), which keeps both branches' additions in pkg/dashspec (the
-# conflicting hunk there is #2075's display.exact beside #2111's untouched line).
+# (forge #2289 at db9bd739b, rebased on #2288: the Product analytics Overview, bar lists, KPI
+# cards, steps funnels, drill links and Needs attention on the built-in
+# product dashboards). Earlier it was made from #2075 (the built-in dashboards)
+# merged with #2111 (the Releases dashboard); both are on forge's main since.
 set -euo pipefail
 
 web=$(cd "$(dirname "$0")/../.." && pwd)

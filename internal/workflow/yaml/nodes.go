@@ -63,6 +63,15 @@ func unmarshalNode(node *yaml.Node) (*reliantv1.Node, error) {
 			v2node.Daemon = d
 		case yamlKeyOutcome:
 			v2node.Outcome = val.Value
+		case yamlKeyTolerateFailure:
+			if val.Kind != yaml.ScalarNode || (val.Tag != "" && val.Tag != "!!bool") {
+				return nil, fmt.Errorf("node %s: %s must be true or false", v2node.Id, yamlKeyTolerateFailure)
+			}
+			var b bool
+			if err := val.Decode(&b); err != nil {
+				return nil, fmt.Errorf("node %s: %s must be true or false: %w", v2node.Id, yamlKeyTolerateFailure, err)
+			}
+			v2node.TolerateFailure = b
 		}
 	}
 
@@ -912,6 +921,11 @@ func marshalNode(v2node *reliantv1.Node) (*yaml.Node, error) {
 	// outcome (node base level) — the verdict this node stamps on the run.
 	if v2node.Outcome != "" {
 		m.Content = append(m.Content, scalarNode(yamlKeyOutcome, ""), scalarNode(v2node.Outcome, ""))
+	}
+
+	// tolerate_failure (node base level) — the node is optional.
+	if v2node.TolerateFailure {
+		m.Content = append(m.Content, scalarNode(yamlKeyTolerateFailure, ""), scalarNode("true", "!!bool"))
 	}
 
 	// Marshal args based on generated descriptor binding.

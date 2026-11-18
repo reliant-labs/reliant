@@ -503,7 +503,8 @@ prompt against it. Lists of names are strings, not objects: GitHub's ` + bt + `i
 
 GitHub is the fullest integration for automations. Besides ` + bt + `issues.opened` + bt + ` and the like it delivers ` + bt + `issues.labeled` + bt + `/` + bt + `unlabeled` + bt + `/` + bt + `reopened` + bt + `,
 ` + bt + `pull_request.labeled` + bt + `/` + bt + `unlabeled` + bt + `/` + bt + `reopened` + bt + ` (` + bt + `match: {label: ...}` + bt + `), ` + bt + `pull_request_review_comment.created` + bt + ` (inline diff comments; ` + bt + `match` + bt + ` ` + bt + `is_reply` + bt + `
-and ` + bt + `mentions_reliant` + bt + `), and ` + bt + `check_run.completed` + bt + ` / ` + bt + `check_suite.completed` + bt + ` / ` + bt + `workflow_run.completed` + bt + ` (` + bt + `conclusion` + bt + `, ` + bt + `branch` + bt + `, ` + bt + `app` + bt + `).
+and ` + bt + `mentions_reliant` + bt + `), and ` + bt + `check_run.completed` + bt + ` / ` + bt + `check_suite.completed` + bt + ` / ` + bt + `workflow_run.completed` + bt + ` (` + bt + `conclusion` + bt + `, ` + bt + `branch` + bt + `, ` + bt + `app` + bt + `),
+and ` + bt + `check_run.rerequested` + bt + ` / ` + bt + `check_suite.rerequested` + bt + ` (GitHub's Re-run button on the App's own checks; GitHub re-runs nothing itself).
 Its ` + bt + `type: action` + bt + ` nodes cover comments (` + bt + `issue.comment` + bt + `, ` + bt + `.update` + bt + `, ` + bt + `.list` + bt + `), atomic ` + bt + `issue.labels.add` + bt + `/` + bt + `remove` + bt + ` (prefer them to ` + bt + `issue.update` + bt + `,
 which replaces the whole label list and races), ` + bt + `issue.search` + bt + `, ` + bt + `labels.create` + bt + ` (idempotent, for pack setup) / ` + bt + `labels.list` + bt + `, ` + bt + `pr.create` + bt + `/` + bt + `update` + bt + `, ` + bt + `pr.reviews.list` + bt + `, ` + bt + `pr.review_comments.list` + bt + ` and
 ` + bt + `pr.review_comment.reply` + bt + `. There is no merge action, on purpose. Actions that change GitHub are withheld from an unattended run unless the
@@ -570,6 +571,31 @@ so a workflow that must keep going should handle the action's error output. When
 its GitHub writes default to the bot, and that the user can choose to write as themselves instead. A deployment
 without a control plane refuses the bot identity on save; the user must configure the App or explicitly choose owner. Comments written by Reliant's own bot never fire
 ` + bt + `issue_comment.created` + bt + ` or ` + bt + `pull_request_review_comment.created` + bt + `, so a run that comments cannot trigger itself; other bots' comments do.
+
+### An optional node: ` + bt + `tolerate_failure: true` + bt + `
+
+A node whose failure must not fail the run (an auxiliary reader agent, a best-effort notification) declares ` + bt + `tolerate_failure: true` + bt + ` at node level, beside ` + bt + `id` + bt + ` and ` + bt + `type` + bt + `. When it fails, the run goes on instead of failing, and instead of pausing on a step that used up its retries:
+
+` + bt + bt + bt + `yaml
+- id: cp_reader
+  type: workflow
+  ref: builtin://autopilot-agent
+  tolerate_failure: true
+  args: { ... }
+- id: review
+  ...
+edges:
+  - from: cp_reader
+    cases:
+      - condition: "nodes.cp_reader.?failed.orValue(false)"
+        to: [note_reader_failed]
+    default: [review]
+` + bt + bt + bt + `
+
+- **Its outputs when it failed are exactly** ` + bt + `{failed: true, error: "<why, one line>"}` + bt + `: route on them with an edge case or a condition. When it succeeded they are its ordinary outputs, with no ` + bt + `failed` + bt + ` key, so read ` + bt + `nodes.<id>.?failed.orValue(false)` + bt + ` and guard its other fields.
+- **It works on every node type** (an activity, a loop, a sub-workflow or agent, a router), in the main graph, a loop body or a sub-workflow. Its ` + bt + `save_message` + bt + ` is not written when it failed.
+- **Never tolerated:** a cancel, a pause, a panic, and a run that is already ending (a continue-as-new handoff, an unattended run that gave up). Those are not the node failing.
+- **It is not a success.** The failure is logged, and an activity's failed attempt stays in the run's node diagnostics (` + bt + `get_run` + bt + `). Use it for work the run can do without, not to hide a step it needs: a required step that fails should fail the run (and reach ` + bt + `on_failure` + bt + `).
 
 ### When a run fails: ` + bt + `on_failure:` + bt + `
 

@@ -74,7 +74,10 @@ func (g *Guard) sample() (Sample, bool) {
 		}
 	}
 
-	s := Sample{At: time.Now()}
+	s := Sample{At: time.Now(), groups: make(map[int]uint64, len(groups))}
+	for pgid, grp := range groups {
+		s.groups[pgid] = grp.tasks
+	}
 	nproc, threadsMax := g.limits(root)
 	// Whichever measure is nearer its limit is the one that matters.
 	if nproc > 0 {

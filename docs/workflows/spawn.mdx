@@ -19,6 +19,8 @@ Before diving into configuration, understand what sub-agents can and cannot do:
 - **Preset selection only**: The sub-agent must be configured via a preset. You cannot pass arbitrary parameters or override individual settings.
 - **Self-contained tasks**: The sub-agent runs in its own thread with its own context. It cannot access the parent's conversation history or tool results directly—it only receives the prompt you provide.
 - **Results arrive later, not inline**: Because spawn is asynchronous, the parent cannot treat a spawn call as a value it can use in the same turn. It must be written to continue working and react to the result when it lands.
+- **Two levels deep**: A sub-agent can start sub-agents of its own (when its preset declares spawn presets), but those cannot start any. So an orchestrator can hand a worker a slice that the worker fans out once more, and the helpers it starts do their work themselves. A helper that asks for `spawn` is told it is at the depth limit.
+- **A cap on how many run at once**: By default one agent can have at most 8 sub-agents running at once, and a whole run at most 16, counting every depth. A spawn past either limit is refused with a message saying which, and nothing is started; the agent spawns again once one finishes. See [Concurrency limits](#concurrency-limits).
 
 These limitations exist by design. Spawn provides a controlled way to delegate work while maintaining isolation between parent and child workflows.
 
@@ -125,6 +127,23 @@ tools_config:
 ```
 
 The `spawn()` function takes a workflow reference and a list of presets and returns the spec string. If the presets list is empty, it returns an empty string, which disables spawn.
+
+<a id="concurrency-limits" />
+
+### Concurrency limits
+
+Two inputs of the workflow a run starts cap how many sub-agents run at once:
+
+| Input | Default | Caps |
+|-------|---------|------|
+| `max_concurrent_sub_agents` | 8 | The sub-agents one agent has running at once. Each agent's own children count; a sibling's do not. |
+| `max_concurrent_sub_agents_total` | 16 | The sub-agents the whole run has running at once, at every depth. |
+
+Both are read once, from the run's root workflow, and apply to every agent in it. The built-in agent workflow declares them (hidden in the UI); a workflow of your own that wants to set them declares the same input names. A missing or non-positive value keeps the default.
+
+A spawn past either cap is not queued. The spawn call returns an error naming the cap, the input that sets it, and what to do next: wait for a sub-agent to finish (the agent is notified, or calls `spawn_status` with `wait: true`) and spawn again. Spawns in one batch are admitted in order, so a batch that crosses a cap starts the ones that fit and refuses the rest.
+
+The caps are a ceiling, not a target: past roughly six concurrent sub-agents the provider starts throttling (see [Best Practices](#best-practices)).
 
 <a id="disabling-spawn" />
 

@@ -29,7 +29,10 @@ message PreviewConfig {
   string workspace_url_scheme = 3 [(forge.v1.config) = {
     env_var: "WORKSPACE_URL_SCHEME"
     default_value: "https"
-    allowed_values: ["http", "https"]
+    allowed_values: [
+      "http",
+      "https"
+    ]
     description: "Scheme of subdomain-routed preview URLs"
   }];
   // The proxy's port when it is not the scheme's default (dev's host-mapped
@@ -39,6 +42,9 @@ message PreviewConfig {
       env_var: "WORKSPACE_URL_PORT"
       description: "Port of subdomain-routed preview URLs, when not the scheme's default"
     },
-    (buf.validate.field).int32 = {gte: 0, lte: 65535}
+    (buf.validate.field).int32 = {
+      gte: 0
+      lte: 65535
+    }
   ];
 }

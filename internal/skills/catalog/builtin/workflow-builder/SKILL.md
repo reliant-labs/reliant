@@ -389,7 +389,8 @@ prompt against it. Lists of names are strings, not objects: GitHub's `issue.labe
 
 GitHub is the fullest integration for automations. Besides `issues.opened` and the like it delivers `issues.labeled`/`unlabeled`/`reopened`,
 `pull_request.labeled`/`unlabeled`/`reopened` (`match: {label: ...}`), `pull_request_review_comment.created` (inline diff comments; `match` `is_reply`
-and `mentions_reliant`), and `check_run.completed` / `check_suite.completed` / `workflow_run.completed` (`conclusion`, `branch`, `app`).
+and `mentions_reliant`), and `check_run.completed` / `check_suite.completed` / `workflow_run.completed` (`conclusion`, `branch`, `app`),
+and `check_run.rerequested` / `check_suite.rerequested` (GitHub's Re-run button on the App's own checks; GitHub re-runs nothing itself).
 Its `type: action` nodes cover comments (`issue.comment`, `.update`, `.list`), atomic `issue.labels.add`/`remove` (prefer them to `issue.update`,
 which replaces the whole label list and races), `issue.search`, `labels.create` (idempotent, for pack setup) / `labels.list`, `pr.create`/`update`, `pr.reviews.list`, `pr.review_comments.list` and
 `pr.review_comment.reply`. There is no merge action, on purpose. Actions that change GitHub are withheld from an unattended run unless the
@@ -456,6 +457,31 @@ so a workflow that must keep going should handle the action's error output. When
 its GitHub writes default to the bot, and that the user can choose to write as themselves instead. A deployment
 without a control plane refuses the bot identity on save; the user must configure the App or explicitly choose owner. Comments written by Reliant's own bot never fire
 `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments cannot trigger itself; other bots' comments do.
+
+### An optional node: `tolerate_failure: true`
+
+A node whose failure must not fail the run (an auxiliary reader agent, a best-effort notification) declares `tolerate_failure: true` at node level, beside `id` and `type`. When it fails, the run goes on instead of failing, and instead of pausing on a step that used up its retries:
+
+```yaml
+- id: cp_reader
+  type: workflow
+  ref: builtin://autopilot-agent
+  tolerate_failure: true
+  args: { ... }
+- id: review
+  ...
+edges:
+  - from: cp_reader
+    cases:
+      - condition: "nodes.cp_reader.?failed.orValue(false)"
+        to: [note_reader_failed]
+    default: [review]
+```
+
+- **Its outputs when it failed are exactly** `{failed: true, error: "<why, one line>"}`: route on them with an edge case or a condition. When it succeeded they are its ordinary outputs, with no `failed` key, so read `nodes.<id>.?failed.orValue(false)` and guard its other fields.
+- **It works on every node type** (an activity, a loop, a sub-workflow or agent, a router), in the main graph, a loop body or a sub-workflow. Its `save_message` is not written when it failed.
+- **Never tolerated:** a cancel, a pause, a panic, and a run that is already ending (a continue-as-new handoff, an unattended run that gave up). Those are not the node failing.
+- **It is not a success.** The failure is logged, and an activity's failed attempt stays in the run's node diagnostics (`get_run`). Use it for work the run can do without, not to hide a step it needs: a required step that fails should fail the run (and reach `on_failure`).
 
 ### When a run fails: `on_failure:`
 

@@ -29,17 +29,17 @@ enum FileViewerKind {
 service FileSystemService {
   // GetFileTree returns the file tree structure for a project
   rpc GetFileTree(GetFileTreeRequest) returns (GetFileTreeResponse) {}
-  
+
   // GetFileContent returns the content of a specific file
   rpc GetFileContent(GetFileContentRequest) returns (GetFileContentResponse) {}
-  
+
   // SaveFileContent saves content to a specific file
   rpc SaveFileContent(SaveFileContentRequest) returns (SaveFileContentResponse) {
     option (forge.v1.method) = {
       activity: {none: "file edit through the daemon: git records file changes, and editor saves are high-volume"}
     };
   }
-  
+
   // GetFileMetadata returns metadata for a file or directory
   rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse) {}
 
@@ -48,31 +48,31 @@ service FileSystemService {
 
   // GetFilePreview returns the raw binary content of a previewable file (image, PDF, audio, video).
   rpc GetFilePreview(GetFilePreviewRequest) returns (GetFilePreviewResponse) {}
-  
+
   // CreateFileOrFolder creates a new file or folder
   rpc CreateFileOrFolder(CreateFileOrFolderRequest) returns (CreateFileOrFolderResponse) {
     option (forge.v1.method) = {
       activity: {none: "filesystem edit through the daemon: git records the file once it is committed"}
     };
   }
-  
+
   // DeleteFileOrFolder deletes a file or folder
   rpc DeleteFileOrFolder(DeleteFileOrFolderRequest) returns (DeleteFileOrFolderResponse) {
     option (forge.v1.method) = {
       activity: {none: "filesystem edit through the daemon: git records the removal once it is committed"}
     };
   }
-  
+
   // CopyFile copies a file to a new location
   rpc CopyFile(CopyFileRequest) returns (CopyFileResponse) {
     option (forge.v1.method) = {
       activity: {none: "filesystem edit through the daemon: git records the copy once it is committed"}
     };
   }
-  
+
   // SearchFiles searches for text within files in the workspace
   rpc SearchFiles(SearchFilesRequest) returns (SearchFilesResponse) {}
-  
+
   // ReplaceInFiles replaces text in files across the workspace
   rpc ReplaceInFiles(ReplaceInFilesRequest) returns (ReplaceInFilesResponse) {
     option (forge.v1.method) = {
@@ -449,8 +449,8 @@ message GetFilePreviewRequest {
 }
 
 message GetFilePreviewResponse {
-  bytes content = 1;       // Raw binary file content
+  bytes content = 1; // Raw binary file content
   string content_type = 2; // MIME type (e.g. "image/png", "application/pdf")
-  string filename = 3;     // Base filename for Content-Disposition
-  int64 size = 4;          // File size in bytes
+  string filename = 3; // Base filename for Content-Disposition
+  int64 size = 4; // File size in bytes
 }

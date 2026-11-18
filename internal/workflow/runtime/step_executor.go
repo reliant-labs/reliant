@@ -494,6 +494,9 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 		e.pauseCtrl.CapacitySlot.untrackStep(running)
 	}
 	stepEvent := e.handleActivityCompletion(running, eventID)
+	// Whether the step's failure, if any, is the activity's own: the activity
+	// wrapper has then written the failed attempt already.
+	activityFailed := stepEvent != nil && stepEvent.Error != nil
 	if machine, _, _ := machineStepTools(running.Node.GetType(), nil); machine {
 		e.pauseCtrl.MachineStepDone(e.ctx)
 	}
@@ -524,7 +527,10 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// transcript shows exactly what it kept hitting. Attended chats are left
 	// alone: a person is there to redirect them.
 	if IsUnattended(e.workflowInputs) && stepEvent != nil && stepEvent.Error == nil {
-		if err := e.pauseCtrl.ObserveRepeatedToolErrors(e.GetThread(), running.ActivityName, stepEvent); err != nil &&
+		inputAware := func() bool {
+			return workflow.GetVersion(e.ctx, repeatedToolErrorInputChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
+		}
+		if err := e.pauseCtrl.ObserveRepeatedToolErrors(e.GetThread(), running.ActivityName, stepEvent, toolCallInputs(running.EvalResult), inputAware); err != nil &&
 			workflow.GetVersion(e.ctx, repeatedToolErrorChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
 			// Reported here, once, at WARN: the guard working as designed is
 			// an outcome, not a fault. The loop, the inline workflow and the
@@ -532,6 +538,24 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 			stepEvent.Error = reportExpectedStop(e.logger, err,
 				"[StepExecutor] Ending the agent: its tool calls keep failing identically",
 				"stepID", running.StepID, "thread", e.GetThread(), "error", err)
+		}
+	}
+
+	// A node that tolerates failure is optional: its failure becomes outputs
+	// the graph routes on, instead of ending or pausing the run
+	// (tolerate_failure.go). Not once the run has given up: it is ending.
+	if stepEvent != nil && stepEvent.Error != nil && e.pauseCtrl.gaveUp() == nil {
+		if out, ok := toleratedFailure(running.Node, stepEvent.Error); ok {
+			logToleratedFailure(e.logger, running.StepID, stepEvent.Error)
+			// A failure decided here, after the activity succeeded (the
+			// repeated-tool-error breaker), has no failed attempt yet.
+			if !activityFailed {
+				recordToleratedFailure(e.ctx, e.toleratedScope(running.StepID), stepEvent.Error)
+			}
+			if e.nodeOutputs != nil {
+				e.nodeOutputs[running.StepID] = out
+			}
+			stepEvent.Data, stepEvent.Error, stepEvent.RetryExhausted = out, nil, false
 		}
 	}
 
@@ -695,6 +719,18 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 		WorkflowName: e.workflowName,
 		StepID:       running.StepID,
 		Data:         normalizedOutput,
+	}
+}
+
+// toleratedScope is where this executor's node stepID sits, for the failed
+// attempt a tolerated failure records (tolerate_failure.go).
+func (e *StepExecutor) toleratedScope(stepID string) toleratedScope {
+	return toleratedScope{
+		WorkflowID:    e.workflowID,
+		StepID:        stepID,
+		NodePath:      joinNodePath(e.nodePathPrefix, stepID),
+		LoopNodeID:    e.loopNodeID,
+		LoopIteration: e.loopIteration,
 	}
 }
 

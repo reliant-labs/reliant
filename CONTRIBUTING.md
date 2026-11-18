@@ -226,7 +226,7 @@ The [`contributing/`](contributing/) directory has detailed guides for maintaine
 ## Code Style
 
 - **Go:** Follow the project's `golangci-lint` configuration. `task lint` runs the pinned `forge lint` (golangci-lint, buf lint and forge's convention lanes).
-- **TypeScript/React:** Follow the project's ESLint configuration. Run `task lint:web` (and `task lint:electron`) before submitting.
+- **TypeScript/React:** Follow the project's ESLint configuration. Run `task lint:web` before submitting. Electron's main process (`electron/src`) has no linter; `task test:electron` covers it.
 
 ## Commit Messages
 

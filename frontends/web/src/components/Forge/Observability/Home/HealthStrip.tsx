@@ -113,7 +113,7 @@ function Strip({
   range: RangePreset;
   alertsHref: string;
 }) {
-  const label = `previous ${range === "7d" ? "week" : range === "24h" ? "day" : range}`;
+  const label = `previous ${range === "30d" ? "30 days" : range === "7d" ? "week" : range === "24h" ? "day" : range}`;
   const requests = valueOf(totals.data, "requests");
   const errors = valueOf(totals.data, "errors");
   const p95 = valueOf(totals.data, "p95");

@@ -27,6 +27,7 @@ These fields are available on **all** node types. They provide shared functional
 | `save_message` | SaveMessageConfig | No | A message to save to the thread when the node completes, as a template over output.* |
 | `daemon` | CelDaemonSelector | No | Which machine runs this node's tools, overriding the workflow's daemon setting |
 | `outcome` | string | No | The verdict reaching this node stamps on the run: success or failure. The last node that runs with one decides the run's outcome (enum: success\|failure) |
+| `tolerate_failure` | boolean | No | Make the node optional: when it fails the run continues, and nodes.<id>.failed is true with the reason in nodes.<id>.error |
 
 ### Thread Configuration
 

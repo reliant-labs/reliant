@@ -129,17 +129,20 @@ tested in `tools/test-affected/playwright_os_deps_script_test.go`.
 **First main run on a runner image** (after merge, and again weekly when the
 image changes). For **both** suites, `desktop` and `responsive`:
 - The "Restore Playwright system packages" step misses.
-- The "Browser guardrails" log prints
+- The "Install Playwright system packages" log prints
   `playwright-os-deps: installed from the mirror; cached N packages`.
-- "Save Playwright system packages (main only)" runs.
+- "Save Playwright system packages (main only)" runs, before the suite: a
+  failing or timed-out suite still leaves the entry seeded.
 - `gh cache list --repo reliant-labs/reliant --key playwright-os-deps-` shows one
   entry per suite.
 
-This run still downloads from the mirror, so it is as slow as before.
+This run still downloads from the mirror, so it is as slow as before. The
+responsive leg has 30 minutes for that (desktop 15); a slow mirror once took
+14+ minutes for WebKit's set alone (control-plane main-red #2909).
 
 **Every later run on that image**, pull requests included:
 - The restore step hits.
-- The log prints `playwright-os-deps: cache hit, N cached packages installed
+- The install step prints `playwright-os-deps: cache hit, N cached packages installed
   without the mirror`, with no `apt-get update` and no `install-deps` output.
 - The responsive suite finishes well inside its 15 minutes.
 

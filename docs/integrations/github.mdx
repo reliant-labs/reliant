@@ -147,6 +147,8 @@ GitHub lets only an App write a check run, so `check_run.create` and `check_run.
 
 A check is tied to one exact commit (`head_sha` is the full 40-character SHA), so a push leaves the new head with no passing run. A branch ruleset can require a check by name **from the Reliant App**. In a repository with a merge queue, the required check must also be reported on each merge group's commit: trigger on `check_suite.requested` with `branch` starting `gh-readonly-queue/`, and report there.
 
+GitHub's **Re-run** button re-runs nothing for an App's check: it sends the App that created the check `check_run.rerequested` (one check) or `check_suite.rerequested` (**Re-run all checks**), and the App runs it again. Trigger on them, match `name` (or `app`), and report a new check run on the event's `head_sha`; the old run keeps its result. `check_run.external_id` is the id the run was created with, and `conclusion` is how the re-run run ended. The event's time is when it arrived, since the payload carries only the old run's timestamps.
+
 ### Unattended runs
 
 Automation runs have nobody watching them, so an unattended run is not handed an action that changes GitHub (the **yes** rows above) unless the workflow step names it in its `tools`. Read-only actions are always reachable. See [Unattended by design](/automations/overview#unattended-by-design).
@@ -167,6 +169,7 @@ Automation runs have nobody watching them, so an unattended run is not handed an
 | Actions run finished | `workflow_run.completed` |
 | A check finished (one job), or all of a commit's checks | `check_run.completed`, `check_suite.completed` |
 | A commit (a push, or a merge queue's merge group) asks the App for its checks | `check_suite.requested` |
+| Someone clicked Re-run on one of the App's checks, or Re-run all checks | `check_run.rerequested`, `check_suite.rerequested` |
 
 Each event's payload is declared, so `get_integration_schema` lists it and validation checks a trigger's `filter`, `inputs` and `prompt` against it: reading a top-level key the event never carries (`data.issue` on an inline diff comment) is an error before the trigger fires. Lists of names, such as `issue.labels` and `pull_request.labels`, hold strings.
 
@@ -186,9 +189,9 @@ You can narrow a trigger with `match`, either to a fixed value (`repository: acm
 | `branch`, `tag` | `push` (one or the other) |
 | `conclusion`, `branch` | `workflow_run.completed`, `check_run.completed`, `check_suite.completed` |
 | `workflow` | `workflow_run.completed` |
-| `name`, `app` | `check_run.completed` (the check's name, and the slug of the App that ran it, `github-actions` for Actions) |
-| `app` | `check_suite.completed`, `check_suite.requested` |
-| `branch` | `check_suite.requested` (a merge group's is `gh-readonly-queue/<base>/pr-<number>-<sha>`) |
+| `name`, `app` | `check_run.completed` (the check's name, and the slug of the App that ran it, `github-actions` for Actions), `check_run.rerequested` |
+| `app` | `check_suite.completed`, `check_suite.requested`, `check_suite.rerequested` |
+| `branch` | `check_suite.requested` (a merge group's is `gh-readonly-queue/<base>/pr-<number>-<sha>`), `check_run.rerequested`, `check_suite.rerequested` |
 
 Boolean-like attributes are the strings `"true"` and `"false"`; quote them in YAML.
 

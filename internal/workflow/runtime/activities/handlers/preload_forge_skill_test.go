@@ -148,7 +148,8 @@ func TestForgeStartHerePreload_IsWhatTheCLIPrints(t *testing.T) {
 
 	// What `reliant forge skill load forge` prints, run in the project.
 	cli := runEmbeddedForge(t, dir, "skill", "load", "forge")
-	require.Contains(t, cli, "# Forge — start here")
+	// The heading is forge's to word ("# Forge — start here", "# Reliant Forge — start here").
+	require.Regexp(t, `(?m)^# (Reliant )?Forge — start here$`, cli)
 	require.Contains(t, seed, cli, "the preloaded body must be exactly what `reliant forge skill load forge` prints")
 
 	// Commands are spelled for the mount that serves them, so an agent never

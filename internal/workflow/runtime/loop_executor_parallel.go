@@ -457,12 +457,22 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 					WithInvocationContract(nestedContract)
 
 				nestedOutput, err := nestedExecutor.Execute()
+				var toleratedLoop map[string]interface{}
 				if err != nil {
-					result.Error = fmt.Errorf("nested loop %s failed: %w", step.Node.GetId(), err)
-					return result
+					out, ok := toleratedFailure(step.Node, err)
+					if !ok {
+						result.Error = fmt.Errorf("nested loop %s failed: %w", step.Node.GetId(), err)
+						return result
+					}
+					logToleratedFailure(e.logger, step.Node.GetId(), err)
+					recordToleratedFailure(gCtx, e.toleratedScope(step.Node.GetId(), index), err)
+					toleratedLoop = out
 				}
 
 				nestedOutputMap := model.ProtoLoopOutputToMap(nestedOutput)
+				if toleratedLoop != nil {
+					nestedOutputMap = toleratedLoop
+				}
 				iterNodeOutputs[step.Node.GetId()] = nestedOutputMap
 				events = append(events, &core.WorkflowEvent{
 					ID:           fmt.Sprintf("ploop-%s-iter%d-nested-%s", e.loopID, index, step.Node.GetId()),
@@ -583,16 +593,25 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 					WithWorkflowContext(gCtx) // CRITICAL: use goroutine's context
 
 				inlineOutput, err := inlineExecutor.Execute()
+				tolerated := false
 				if err != nil {
-					result.Error = fmt.Errorf("inline workflow %s failed: %w", step.Node.GetId(), err)
-					return result
+					out, ok := toleratedFailure(step.Node, err)
+					if !ok {
+						result.Error = fmt.Errorf("inline workflow %s failed: %w", step.Node.GetId(), err)
+						return result
+					}
+					logToleratedFailure(e.logger, step.Node.GetId(), err)
+					recordToleratedFailure(gCtx, e.toleratedScope(step.Node.GetId(), index), err)
+					inlineOutput, tolerated = out, true
 				}
 
-				inlineOutput = publishWorkflowNodeOutputs(gCtx, step.Node, inlineOutput)
+				if !tolerated {
+					inlineOutput = publishWorkflowNodeOutputs(gCtx, step.Node, inlineOutput)
+				}
 				iterNodeOutputs[step.Node.GetId()] = inlineOutput
 
-				// Execute save_message if configured
-				if step.Node.GetSaveMessage() != nil {
+				// Execute save_message if configured (not for a tolerated failure)
+				if step.Node.GetSaveMessage() != nil && !tolerated {
 					if _, err := ExecuteSaveMessageForNode(
 						gCtx, step.Node, inlineOutput,
 						e.workflowID, e.workflowIdentity(), e.chatID,

@@ -486,6 +486,12 @@ type ChildWorkflowTracker struct {
 	// capacitySlot is the run's workflow-capacity slot (capacity_slot.go),
 	// read by a continue-as-new handoff so a parked slot stays parked.
 	capacitySlot *capacitySlot
+	// spawnLimits are the run's sub-agent concurrency caps, read once from
+	// the root run's inputs (spawn_limits.go). The zero value is the defaults.
+	spawnLimits types.SpawnLimits
+	// spawnReservations are the slots of spawns admitted but not yet
+	// dispatched, tool call id to parent thread (spawn_limits.go).
+	spawnReservations map[string]string
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -900,6 +906,9 @@ type RunningInlineWorkflow struct {
 	EvalResult    *reliantv1.Node        // Resolved config for save_message resolution
 	ChildExecCtx  *ExecutionContext      // Child execution context
 	IsNodeRouting bool                   // True for node-routing routers (no child thread/context)
+	// tolerated: the node failed and tolerates failure, so Output is the
+	// {failed, error} that stands for it (tolerate_failure.go).
+	tolerated bool
 }
 
 // removeRunningInlineWorkflow removes an inline workflow from the slice using pointer comparison.
@@ -1744,6 +1753,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// is recorded for the spawn's loop to observe.
 	setupCancelThreadHandler(ctx, cancelledThreads, workflowID)
 
+	// Sub-agent concurrency caps (spawn_limits.go): one setting for the run,
+	// read from the root run's inputs, whatever depth spawns.
+	childTracker.spawnLimits = types.SpawnLimitsFromInputs(input.Inputs)
+
 	// Continue-as-new handoff state (continue_as_new.go).
 	childTracker.chatID = input.ChatID
 	childTracker.pauseArmed = pauser.PauseArmed
@@ -2132,6 +2145,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 				// Execute loop inline with retry-on-exhaustion support
 				var loopOutput *reliantv1.LoopOutput
+				// toleratedLoop is the loop's outputs when it failed and
+				// tolerates failure (tolerate_failure.go).
+				var toleratedLoop map[string]interface{}
 				childTracker.handoffCapable++
 			retryLoop:
 				for {
@@ -2184,6 +2200,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							return nil, execErr
 						}
 
+						if out, ok := toleratedFailure(step.Node, execErr); ok {
+							logToleratedFailure(logger, step.Node.GetId(), execErr)
+							recordToleratedFailure(ctx, toleratedScope{WorkflowID: workflowID, StepID: step.Node.GetId(), NodePath: step.Node.GetId()}, execErr)
+							toleratedLoop = out
+							break retryLoop
+						}
+
 						logger.Error("[Workflow Runtime] Loop step execution failed",
 							"stepID", step.Node.GetId(),
 							"error", execErr,
@@ -2204,11 +2227,15 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				// Sub-workflow outputs are surfaced directly: nodes.loop_id.field
 				// ProtoLoopOutputToMap handles both sequential and parallel loop output formats.
 				loopOutputMap := model.ProtoLoopOutputToMap(loopOutput)
+				if toleratedLoop != nil {
+					loopOutputMap = toleratedLoop
+				}
 				nodeOutputStore.Set(step.Node.GetId(), loopOutputMap)
 
 				// Execute save_message if configured on the loop node
 				// Consistent with all other node types: save_message fires on completion.
-				if step.Node.GetSaveMessage() != nil {
+				// A tolerated failure did not complete: nothing to say.
+				if step.Node.GetSaveMessage() != nil && toleratedLoop == nil {
 					_, err := ExecuteSaveMessageForNode(
 						ctx,
 						step.Node,
@@ -3028,6 +3055,14 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						continue
 					}
 
+					// A node that tolerates failure is optional: the run goes
+					// on with outputs that say it failed (tolerate_failure.go).
+					if out, ok := toleratedFailure(running.Node, running.Error); ok {
+						logToleratedFailure(logger, running.StepID, running.Error)
+						recordToleratedFailure(ctx, toleratedScope{WorkflowID: workflowID, StepID: running.StepID, NodePath: running.StepID}, running.Error)
+						running.Output, running.Error, running.tolerated = out, nil, true
+					}
+
 					if running.Error != nil {
 						// A panicked node fails the run, and the completion
 						// handler shows the panic; a second card here would
@@ -3048,12 +3083,15 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				}
 
 				// Store output for edge routing
-				running.Output = publishWorkflowNodeOutputs(ctx, running.Node, running.Output)
+				if !running.tolerated {
+					running.Output = publishWorkflowNodeOutputs(ctx, running.Node, running.Output)
+				}
 				nodeOutputStore.Set(running.StepID, running.Output)
 
 				// Execute save_message if configured on the workflow node
 				// Use parent's execCtx so the message is saved to the parent's thread
-				if running.Node.GetSaveMessage() != nil {
+				// (not for a tolerated failure: the node did not complete).
+				if running.Node.GetSaveMessage() != nil && !running.tolerated {
 					_, err := ExecuteSaveMessageForNode(
 						ctx,
 						running.Node,
@@ -4305,6 +4343,9 @@ func dispatchSpawnBackground(
 	makeThreadPauseCtrl func(string) *PauseController,
 	makeThreadInterrupt func(string) *ThreadInterrupt,
 ) *spawnInlineResult {
+	// The slot admitSpawns reserved is held until this returns: by then the
+	// spawn is registered live, or it never started (spawn_limits.go).
+	defer childTracker.settleSpawnReservation(config.toolCallID)
 	// An agent is one loop on one thread. A message can resume a stopped
 	// agent behind its parent's back (subagent_resume.go), so the parent may
 	// ask to resume one that is already running again; a second loop on the
@@ -4867,6 +4908,8 @@ func executeToolsWithSpawnSupport(
 		workflowInputs = copyMap(workflowInputs)
 		workflowInputs[ambientMemoryInput] = true
 	}
+	// The sub-agents this agent starts sit one level below it.
+	workflowInputs = withSpawnerDepth(workflowInputs, rtx.SpawnDepth)
 	var spawnConfigs []*spawnChildWorkflowConfig
 	var spawnParseErrors []interface{}
 	spawnToolCalls := split.spawnToolCalls
@@ -4886,6 +4929,9 @@ func executeToolsWithSpawnSupport(
 		}
 		spawnConfigs = append(spawnConfigs, config)
 	}
+	// A spawn past the run's concurrency caps is refused, not started.
+	spawnConfigs, capRefusals := childTracker.admitSpawns(ctx, rtx.Thread, spawnConfigs)
+	spawnParseErrors = append(spawnParseErrors, capRefusals...)
 
 	// Create a future that runs all spawns inline and combines results
 	resultFuture, resultSettable := workflow.NewFuture(ctx)
@@ -4903,6 +4949,10 @@ func executeToolsWithSpawnSupport(
 		if regularToolsFuture != nil {
 			result, err := processRegularToolsFuture(gCtx, regularToolsFuture, logger)
 			if err != nil {
+				// The admitted spawns never dispatch: free their slots.
+				for _, cfg := range spawnConfigs {
+					childTracker.settleSpawnReservation(cfg.toolCallID)
+				}
 				resultSettable.SetError(err)
 				return
 			}

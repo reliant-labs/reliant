@@ -30,7 +30,12 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
 
 import { OnboardingGate } from "../OnboardingGate";
 import {
+  CLAIM_LANDING_KEY,
+  CLAIM_LANDING_TTL_MS,
+  claimLandingExcuses,
+  FORGE_SHELL_ONBOARDING_EXEMPT_PREFIXES,
   isOnboardingReturnTo,
+  markClaimLanding,
   onboardingGateDecision,
   onboardingGateTarget,
   routeRequiresOnboarding,
@@ -81,6 +86,7 @@ const onboarded = { data: { id: "u1", onboardingCompleted: true }, isLoading: fa
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionStorage.removeItem(CLAIM_LANDING_KEY);
 });
 
 describe("OnboardingGate", () => {
@@ -128,6 +134,49 @@ describe("OnboardingGate", () => {
   });
 });
 
+describe("a claim excuses only the claimed app's console", () => {
+  it("lets the claimant through on the claimed app's pages", async () => {
+    mockUseCurrentUser.mockReturnValue(notOnboarded);
+    // The gate reads the signed-in user from the auth store.
+    const { useAuthStore } = await import("@/store/authStore");
+    useAuthStore.setState({ user: { id: "auth-1" } as never });
+    markClaimLanding("auth-1", "simplebutton");
+    const router = renderAt("/forge/p/simplebutton/releases?env=prod");
+
+    expect(await screen.findByTestId("where")).toHaveTextContent("/forge/p/simplebutton/releases");
+    expect(router.state.location.pathname).toBe("/forge/p/simplebutton/releases");
+    useAuthStore.setState({ user: null });
+  });
+
+  it("gates another app's console, /inbox and /apps-like routes", () => {
+    markClaimLanding("auth-1", "simplebutton", 1_000);
+    expect(claimLandingExcuses("auth-1", "/forge/p/simplebutton", 2_000)).toBe(true);
+    expect(claimLandingExcuses("auth-1", "/forge/p/simplebutton/observability/errors", 2_000)).toBe(true);
+    expect(claimLandingExcuses("auth-1", "/forge/p/simplebuttonx", 2_000)).toBe(false);
+    expect(claimLandingExcuses("auth-1", "/forge/p/other-app", 2_000)).toBe(false);
+    expect(claimLandingExcuses("auth-1", "/apps", 2_000)).toBe(false);
+    expect(claimLandingExcuses("auth-1", "/inbox", 2_000)).toBe(false);
+  });
+
+  it("does not apply to another user", () => {
+    markClaimLanding("auth-1", "simplebutton", 1_000);
+    expect(claimLandingExcuses("auth-2", "/forge/p/simplebutton", 2_000)).toBe(false);
+    expect(claimLandingExcuses(undefined, "/forge/p/simplebutton", 2_000)).toBe(false);
+  });
+
+  it("expires, and is removed when it has", () => {
+    markClaimLanding("auth-1", "simplebutton", 1_000);
+    expect(claimLandingExcuses("auth-1", "/forge/p/simplebutton", 1_000 + CLAIM_LANDING_TTL_MS)).toBe(true);
+    expect(claimLandingExcuses("auth-1", "/forge/p/simplebutton", 1_001 + CLAIM_LANDING_TTL_MS)).toBe(false);
+    expect(sessionStorage.getItem(CLAIM_LANDING_KEY)).toBeNull();
+  });
+
+  it("ignores a malformed mark", () => {
+    sessionStorage.setItem(CLAIM_LANDING_KEY, "auth-1");
+    expect(claimLandingExcuses("auth-1", "/forge/p/simplebutton")).toBe(false);
+  });
+});
+
 describe("routeRequiresOnboarding", () => {
   it.each([
     ["/forge", true],
@@ -147,6 +196,23 @@ describe("routeRequiresOnboarding", () => {
     ["/settingsx", true],
   ])("%s → %s", (pathname, expected) => {
     expect(routeRequiresOnboarding(pathname)).toBe(expected);
+  });
+});
+
+describe("the forge site's exemptions", () => {
+  it.each([
+    ["/apps", true],
+    ["/forge/p/x/releases", true],
+    ["/settings/billing", false],
+    ["/onboarding", false],
+  ])("%s → %s", (pathname, expected) => {
+    expect(routeRequiresOnboarding(pathname, FORGE_SHELL_ONBOARDING_EXEMPT_PREFIXES)).toBe(expected);
+  });
+
+  it("lets an excused user through a gated route", () => {
+    const user = { onboardingCompleted: false };
+    expect(onboardingGateDecision({ pathname: "/inbox", userLoading: false, user, excused: true })).toBe("allow");
+    expect(onboardingGateDecision({ pathname: "/inbox", userLoading: false, user })).toBe("onboard");
   });
 });
 

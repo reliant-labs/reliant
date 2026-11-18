@@ -155,3 +155,5 @@ triggers:
   - $ref: events/check_suite.requested.yaml
   - $ref: events/pull_request.auto_merge_disabled.yaml
   - $ref: events/pull_request.dequeued.yaml
+  - $ref: events/check_run.rerequested.yaml
+  - $ref: events/check_suite.rerequested.yaml

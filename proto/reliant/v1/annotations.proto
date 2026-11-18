@@ -77,12 +77,12 @@ message FieldMeta {
 
 // NodeMeta describes metadata for a workflow node args message.
 message NodeMeta {
-  string node_type = 1;        // e.g., "call_llm" — the node type string
-  string display_name = 2;     // e.g., "Call LLM" — for UI/docs
-  string description = 3;      // Human-readable description
-  bool is_structural = 4;      // true for loop/run/workflow/join
-  string category = 5;         // e.g., "llm", "tools", "flow", "utility"
-  string icon = 6;             // icon identifier for frontend
+  string node_type = 1; // e.g., "call_llm" — the node type string
+  string display_name = 2; // e.g., "Call LLM" — for UI/docs
+  string description = 3; // Human-readable description
+  bool is_structural = 4; // true for loop/run/workflow/join
+  string category = 5; // e.g., "llm", "tools", "flow", "utility"
+  string icon = 6; // icon identifier for frontend
 }
 
 extend google.protobuf.FieldOptions {
