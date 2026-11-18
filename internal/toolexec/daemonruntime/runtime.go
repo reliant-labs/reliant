@@ -2146,14 +2146,15 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		contextMap,
 	)
 
-	if isMCPToolName(req.ToolName) && isMCPAuthError(result) {
+	if isMCPToolName(req.ToolName) {
 		serverName := parseMCPServerName(req.ToolName)
-		if serverName != "" {
+		if restartsMCPServerOnAuthError(serverName, result) {
 			if projectPath == "" {
 				projectPath = resolveProjectPathFromContext(contextMap, "", d.cwd)
 			}
 			if projectPath != "" {
-				if err := d.mcpManager.RemoveProjectServer(projectPath, serverName); err != nil {
+				if err := d.mcpManager.RemoveProjectServer(projectPath, serverName,
+					"restart to reload credentials: the tool result read as an authentication failure"); err != nil {
 					logging.Warn(logPrefix+" Failed removing MCP server before auth retry", "projectPath", projectPath, "server", serverName, "error", err)
 				}
 				d.mcpManager.EnsureProjectServersLoaded(execCtx, projectPath)
@@ -3205,6 +3206,27 @@ func parseMCPServerName(toolName string) string {
 		return ""
 	}
 	return strings.TrimSpace(parts[1])
+}
+
+// restartsMCPServerOnAuthError reports whether a tool result calls for
+// restarting its MCP server so it reloads its credentials.
+//
+// Only a FAILED call qualifies: a successful result is the server answering,
+// so its credentials work, and its text is the tool's output — a web page, a
+// file, a query result — which can say "authentication failed" about anything.
+// And never a server that keeps caller state (the chrome-devtools browser): it
+// holds no credentials to reload, its error text is the page's own, and the
+// restart removes the server for every chat sharing it, taking each one's
+// pages and sign-ins. That is how an agent testing a login form restarted
+// every browser on the machine every minute or two (#2818).
+func restartsMCPServerOnAuthError(serverName string, result *toolexec.ExecutionResult) bool {
+	if serverName == "" || result == nil || mcp.KeepsCallerState(serverName) {
+		return false
+	}
+	if result.Success && !result.IsError {
+		return false
+	}
+	return isMCPAuthError(result)
 }
 
 func isMCPAuthError(result *toolexec.ExecutionResult) bool {
