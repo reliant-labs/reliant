@@ -494,6 +494,15 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 		if err != nil {
 			return nil, fmt.Errorf("failed to create discovered project %s: %w", path, lost.err)
 		}
+		// The winner is usually another machine's discovery of the same
+		// folder, which recorded only its own checkout: this machine holds
+		// the project too, and is recorded below like any it found, so its
+		// config snapshots are stored without waiting for a reconnect.
+		held, err := s.machineHoldsProject(ctx, conn, project.ID)
+		if err != nil {
+			return nil, err
+		}
+		unrecorded = !held
 	} else if err != nil {
 		return nil, err
 	}
