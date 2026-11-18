@@ -490,8 +490,14 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 	// resolution committed: it takes the new project's catalog lock, which
 	// is never taken under the machine's, and no detach can name a project
 	// that had no checkout until now.
+	// Recorded only while the new project is still in the machine's org
+	// (re-read under its row lock): a move right after its create is seen.
 	if created && strings.TrimSpace(conn.daemonID) != "" {
-		if _, err := s.deps.Repo.RecordObservedProjectDaemon(ctx, project.ID, conn.daemonID, path, nil); err != nil {
+		scope, _, scopeErr := s.machineProjectScope(ctx, conn)
+		if scopeErr != nil {
+			return nil, scopeErr
+		}
+		if _, err := s.deps.Repo.RecordObservedProjectDaemonInScope(ctx, project.ID, conn.daemonID, path, nil, scope); err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record the discovering machine's checkout; reconcile will heal it",
 				"error", err, "projectID", project.ID, "daemonID", conn.daemonID)
 		}

@@ -77,12 +77,10 @@ type ProjectReconcileStore interface {
 	// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
 	// clones queued while the machine was away: they run from this connect.
 	StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error
-	// RecordObservedProjectDaemon records a checkout found on the machine,
-	// never over a detachment of the pair (reports false then).
-	RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error)
-	// RecordObservedProjectDaemonInScope is the reconcile's: it also records
-	// nothing unless the project's org, re-read under its row lock, is in
-	// the machine's scope (a move out of it during the probe is seen).
+	// RecordObservedProjectDaemonInScope records a checkout found on the
+	// machine, never over a detachment of the pair, and only while the
+	// project's org, re-read under its row lock, is in the machine's scope
+	// (a move out of it during the probe is seen); false otherwise.
 	RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error)
 	// MarkProjectDaemonInstalled and FailProjectDaemonInstall settle a clone
 	// whose outcome was lost, from the row's own path; the first also

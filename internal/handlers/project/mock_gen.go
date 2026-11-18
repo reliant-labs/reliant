@@ -90,7 +90,7 @@ type MockRepository struct {
 	GetProjectOrgMoveFunc                     func(context.Context, string) (*core.ProjectOrgMove, error)
 	ListProjectOrgMovesFunc                   func(context.Context, core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error)
 	UpsertProjectDaemonFunc                   func(context.Context, string, string, string, *string) error
-	RecordObservedProjectDaemonFunc           func(context.Context, string, string, string, *string) (bool, error)
+	RecordObservedProjectDaemonInScopeFunc    func(context.Context, string, string, string, *string, *core.OrgScope) (bool, error)
 	UpsertQueuedProjectDaemonFunc             func(context.Context, string, string, string, *string, string) error
 	ListProjectDaemonsForProjectFunc          func(context.Context, string) ([]*core.ProjectDaemon, error)
 	ListProjectDaemonsForDaemonFunc           func(context.Context, string) ([]*core.ProjectDaemon, error)
@@ -330,13 +330,13 @@ func (m *MockRepository) UpsertProjectDaemon(ctx context.Context, projectID stri
 	return contractkit.MockNotSet("MockRepository", "UpsertProjectDaemon")
 }
 
-// RecordObservedProjectDaemon records the call and delegates to RecordObservedProjectDaemonFunc when set.
-func (m *MockRepository) RecordObservedProjectDaemon(ctx context.Context, projectID string, daemonID string, path string, defaultBranch *string) (bool, error) {
-	m.Recorder.Record("RecordObservedProjectDaemon", ctx, projectID, daemonID, path, defaultBranch)
-	if m.RecordObservedProjectDaemonFunc != nil {
-		return m.RecordObservedProjectDaemonFunc(ctx, projectID, daemonID, path, defaultBranch)
+// RecordObservedProjectDaemonInScope records the call and delegates to RecordObservedProjectDaemonInScopeFunc when set.
+func (m *MockRepository) RecordObservedProjectDaemonInScope(ctx context.Context, projectID string, daemonID string, path string, defaultBranch *string, scope *core.OrgScope) (bool, error) {
+	m.Recorder.Record("RecordObservedProjectDaemonInScope", ctx, projectID, daemonID, path, defaultBranch, scope)
+	if m.RecordObservedProjectDaemonInScopeFunc != nil {
+		return m.RecordObservedProjectDaemonInScopeFunc(ctx, projectID, daemonID, path, defaultBranch, scope)
 	}
-	return false, contractkit.MockNotSet("MockRepository", "RecordObservedProjectDaemon")
+	return false, contractkit.MockNotSet("MockRepository", "RecordObservedProjectDaemonInScope")
 }
 
 // UpsertQueuedProjectDaemon records the call and delegates to UpsertQueuedProjectDaemonFunc when set.

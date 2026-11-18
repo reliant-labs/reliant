@@ -61,7 +61,10 @@ type Repository interface {
 	ListProjectOrgMoves(ctx context.Context, f core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error)
 
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
-	RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error)
+	// RecordObservedProjectDaemonInScope records a checkout the platform
+	// made or found, only while the project is in the machine's scope
+	// (re-read under its row lock) and not detached from it.
+	RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error)
 	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error)
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)

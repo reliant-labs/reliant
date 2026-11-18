@@ -1178,7 +1178,7 @@ func (r *Repo) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, pat
 	// Recording the checkout ends a detachment of the pair, in the same
 	// transaction: a pair never has both (project_daemon_detachment.go). It
 	// is the USER's choice (attach, create, clone), so it may; a checkout the
-	// platform merely found goes through RecordObservedProjectDaemon. The
+	// platform merely found goes through RecordObservedProjectDaemonInScope. The
 	// catalog lock orders it against a concurrent detach.
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
@@ -1191,49 +1191,26 @@ func (r *Repo) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, pat
 	})
 }
 
-// RecordObservedProjectDaemon records a checkout the platform found on the
-// machine (the connect reconcile, the plain-folder heal, a discovered folder,
-// a pool member's restore), never one the user chose. A detachment of the
-// pair wins: it records nothing and reports false, and it never clears the
-// detachment. The check runs under the catalog lock DetachProjectFromDaemon
-// holds, so a detach that commits while the caller was probing the machine
-// is seen here rather than undone.
-func (r *Repo) RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error) {
-	if projectID == "" {
-		return false, fmt.Errorf("project ID cannot be empty")
-	}
-	if daemonID == "" {
-		return false, fmt.Errorf("daemon ID cannot be empty")
-	}
-	if path == "" {
-		return false, fmt.Errorf("path cannot be empty")
-	}
-	recorded := false
-	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		recorded = false
-		if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
-			return err
-		}
-		detached, err := store.ProjectDaemonDetached(ctx, r.ORM(), projectID, daemonID)
-		if err != nil || detached {
-			return err
-		}
-		if err := store.RecordProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID, path, defaultBranch); err != nil {
-			return err
-		}
-		recorded = true
-		return nil
-	})
-	return recorded, err
-}
-
-// RecordObservedProjectDaemonInScope is RecordObservedProjectDaemon for a
-// machine that holds only scope's projects (its org's; nil, every org's): in
-// the same transaction it locks the project row FOR SHARE — a project's org
-// move takes it FOR NO KEY UPDATE, so the two serialize — and records nothing,
-// reporting false, unless the project's org NOW is in scope. A project moved
-// out of the machine's org while the caller probed the machine is never
-// recorded on it. A project gone since is false, not an error.
+// RecordObservedProjectDaemonInScope records a checkout the platform found
+// on the machine (the connect reconcile, the plain-folder heal, a discovered
+// folder, a pool member's restore), never one the user chose, for a machine
+// that holds only scope's projects (its org's, or its owner's default org's
+// when its org is not known: authz.MachineScopeFor; nil, every org's, only in
+// a deployment with no orgs).
+//
+// Two things win over the write, each re-read in its transaction:
+//   - a detachment of the pair: it records nothing and reports false, and it
+//     never clears the detachment. The check runs under the catalog lock
+//     DetachProjectFromDaemon holds, so a detach that commits while the caller
+//     was probing the machine is seen here rather than undone;
+//   - the project's org: the project row is locked FOR SHARE — a project's
+//     org move takes it FOR NO KEY UPDATE, so the two serialize — and nothing
+//     is recorded unless the project's org NOW is in scope. A project moved
+//     out of the machine's org while the caller probed or cloned is never
+//     recorded on it.
+//
+// A project gone since is false, not an error. There is deliberately no
+// unscoped form: every caller records for one machine, whose scope it has.
 func (r *Repo) RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error) {
 	if projectID == "" {
 		return false, fmt.Errorf("project ID cannot be empty")

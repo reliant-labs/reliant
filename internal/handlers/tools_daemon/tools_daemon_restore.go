@@ -47,7 +47,7 @@ type CheckoutRestoreStore interface {
 	ListMachinePoolsForUser(ctx context.Context, userID string) ([]*db.MachinePool, error)
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
-	RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error)
+	RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error)
 	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
 	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
 }
@@ -70,6 +70,14 @@ func (s *Service) restoreCheckoutsOnConnect(conn *daemonConnection, missing []*d
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), restoreTotalTimeout)
 	defer cancel()
+	// The machine holds only its org's projects; one whose org cannot be
+	// told restores nothing (the next connect tries again).
+	scope, _, err := s.machineProjectScope(ctx, conn)
+	if err != nil {
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" restore: skipped; could not tell which organization's projects the machine holds",
+			"error", err, "daemonID", conn.daemonID)
+		return
+	}
 	go func() {
 		select {
 		case <-conn.done:
@@ -96,18 +104,21 @@ func (s *Service) restoreCheckoutsOnConnect(conn *daemonConnection, missing []*d
 		}
 		return nil
 	}
-	restorePoolMemberCheckouts(ctx, s.deps.Repo, run, conn.daemonID, conn.userID, missing)
+	restorePoolMemberCheckouts(ctx, s.deps.Repo, run, conn.daemonID, conn.userID, scope, missing)
 }
 
 // restorePoolMemberCheckouts is the testable core: when daemonID is a member
 // of one of userID's pools, re-clone every project in missing that the
-// machine's project_daemons rows say is installed.
+// machine's project_daemons rows say is installed and that is in scope (the
+// machine's org's projects). The clone is recorded only while the project is
+// still in scope, re-read under its row lock: a project moved out of the
+// machine's org while the clone ran is not recorded on it.
 //
 // While a restore runs the row stays installed but unverified, which
 // placement reads as "connected; checking its checkout": the member is
 // waited for, not passed over. Success stamps the row verified; a failure
 // marks it failed with the reason, which placement then reports.
-func restorePoolMemberCheckouts(ctx context.Context, store CheckoutRestoreStore, run cloneRunner, daemonID, userID string, missing []*db.Project) {
+func restorePoolMemberCheckouts(ctx context.Context, store CheckoutRestoreStore, run cloneRunner, daemonID, userID string, scope *core.OrgScope, missing []*db.Project) {
 	member, err := isPoolMember(ctx, store, daemonID, userID)
 	if err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" restore: could not tell whether the machine is a pool member",
@@ -134,7 +145,7 @@ func restorePoolMemberCheckouts(ctx context.Context, store CheckoutRestoreStore,
 			return
 		}
 		row := installed[project.ID]
-		if row == nil {
+		if row == nil || !scope.Includes(project.OrgID) {
 			continue
 		}
 		repos, err := store.ListReposByProject(ctx, project.ID)
@@ -159,15 +170,16 @@ func restorePoolMemberCheckouts(ctx context.Context, store CheckoutRestoreStore,
 			failRestore(ctx, store, project, row, daemonID, failure.Error())
 			continue
 		}
-		recorded, err := store.RecordObservedProjectDaemon(ctx, project.ID, daemonID, row.Path, row.DefaultBranch)
+		recorded, err := store.RecordObservedProjectDaemonInScope(ctx, project.ID, daemonID, row.Path, row.DefaultBranch, scope)
 		if err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" restore: cloned, but could not record it",
 				"error", err, "daemonID", daemonID, "projectID", project.ID)
 			continue
 		}
 		if !recorded {
-			// The user detached it from this machine while the clone ran.
-			logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" restore: cloned, but the project was detached from the machine meanwhile; not recorded",
+			// The user detached it from this machine, or it moved out of
+			// the machine's org, while the clone ran.
+			logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" restore: cloned, but the project was detached from the machine or moved out of its organization meanwhile; not recorded",
 				"daemonID", daemonID, "projectID", project.ID, "path", row.Path)
 			continue
 		}

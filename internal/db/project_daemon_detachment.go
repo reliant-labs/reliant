@@ -32,7 +32,7 @@ import (
 // The project's config union is rewritten without the machine's catalog,
 // under the same advisory lock every catalog writer takes
 // (SyncProjectConfigSnapshot) and every checkout writer takes
-// (UpsertProjectDaemon, RecordObservedProjectDaemon). Nothing is sent to the
+// (UpsertProjectDaemon, RecordObservedProjectDaemonInScope). Nothing is sent to the
 // machine.
 //
 // guard, when not nil, runs first inside that transaction, after the lock:
