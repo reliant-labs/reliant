@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -147,4 +148,63 @@ func TestDetachProjectDaemonOfOtherOrg_WaitsForAConcurrentMoveIntoTheMachinesOrg
 	checkouts, audits := f.recorded(t)
 	assert.Equal(t, 1, checkouts)
 	assert.Zero(t, audits)
+}
+
+// Review round 4: the reconcile's insert (RecordObservedProjectDaemonInScope)
+// waits for an org move holding the project row and decides on the org the
+// move committed: a project moved out of the machine's org is not recorded.
+func TestRecordObservedProjectDaemonInScope_WaitsForAMoveOutOfTheMachinesOrg(t *testing.T) {
+	f, exec := newCleanupFixture(t)
+	exec(`DELETE FROM project_daemons WHERE project_id = $1`, f.project)
+	exec(`UPDATE projects SET org_id = 'globex' WHERE id = $1`, f.project) // in the machine's org when listed
+	scope := &core.OrgScope{OrgID: "globex"}
+
+	mover, err := sql.Open("pgx", f.dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mover.Close() })
+	tx, err := mover.BeginTx(f.ctx, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback() })
+	_, err = tx.ExecContext(f.ctx, `SELECT 1 FROM projects WHERE id = $1 FOR NO KEY UPDATE`, f.project)
+	require.NoError(t, err)
+	_, err = tx.ExecContext(f.ctx, `UPDATE projects SET org_id = 'acme' WHERE id = $1`, f.project)
+	require.NoError(t, err)
+
+	type result struct {
+		recorded bool
+		err      error
+	}
+	done := make(chan result, 1)
+	go func() {
+		recorded, err := f.repo.RecordObservedProjectDaemonInScope(f.ctx, f.project, f.machine, f.path, nil, scope)
+		done <- result{recorded, err}
+	}()
+	require.Eventually(t, func() bool {
+		select {
+		case r := <-done:
+			t.Fatalf("the insert finished without waiting on the move's lock: recorded=%v err=%v", r.recorded, r.err)
+		default:
+		}
+		var waiting int
+		_ = tx.QueryRowContext(f.ctx, `SELECT count(*) FROM pg_stat_activity
+			WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()`).Scan(&waiting)
+		return waiting > 0
+	}, 30*time.Second, 20*time.Millisecond, "the insert never waited on the move's lock")
+	require.NoError(t, tx.Commit())
+
+	select {
+	case r := <-done:
+		require.NoError(t, r.err)
+		assert.False(t, r.recorded, "recorded a project the move took out of the machine's org")
+	case <-time.After(30 * time.Second):
+		t.Fatal("the insert never finished")
+	}
+	checkouts, _ := f.recorded(t)
+	assert.Zero(t, checkouts)
+
+	// In scope again (moved back): recorded.
+	exec(`UPDATE projects SET org_id = 'globex' WHERE id = $1`, f.project)
+	recorded, err := f.repo.RecordObservedProjectDaemonInScope(f.ctx, f.project, f.machine, f.path, nil, scope)
+	require.NoError(t, err)
+	assert.True(t, recorded)
 }

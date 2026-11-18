@@ -1227,6 +1227,48 @@ func (r *Repo) RecordObservedProjectDaemon(ctx context.Context, projectID, daemo
 	return recorded, err
 }
 
+// RecordObservedProjectDaemonInScope is RecordObservedProjectDaemon for a
+// machine that holds only scope's projects (its org's; nil, every org's): in
+// the same transaction it locks the project row FOR SHARE — a project's org
+// move takes it FOR NO KEY UPDATE, so the two serialize — and records nothing,
+// reporting false, unless the project's org NOW is in scope. A project moved
+// out of the machine's org while the caller probed the machine is never
+// recorded on it. A project gone since is false, not an error.
+func (r *Repo) RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error) {
+	if projectID == "" {
+		return false, fmt.Errorf("project ID cannot be empty")
+	}
+	if daemonID == "" {
+		return false, fmt.Errorf("daemon ID cannot be empty")
+	}
+	if path == "" {
+		return false, fmt.Errorf("path cannot be empty")
+	}
+	recorded := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		recorded = false
+		// The catalog lock first, as every checkout writer takes it; the
+		// org move takes no catalog lock, so the order cannot deadlock it.
+		if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
+			return err
+		}
+		org, found, err := store.LockProjectOrgForShare(ctx, r.ORM(), projectID)
+		if err != nil || !found || !scope.Includes(org) {
+			return err
+		}
+		detached, err := store.ProjectDaemonDetached(ctx, r.ORM(), projectID, daemonID)
+		if err != nil || detached {
+			return err
+		}
+		if err := store.RecordProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID, path, defaultBranch); err != nil {
+			return err
+		}
+		recorded = true
+		return nil
+	})
+	return recorded, err
+}
+
 // UpsertQueuedProjectDaemon records a clone that is queued but has not run.
 func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error {
 	if projectID == "" {

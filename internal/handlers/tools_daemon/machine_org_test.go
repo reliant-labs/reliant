@@ -279,3 +279,24 @@ func TestMachineOrgAtConnect(t *testing.T) {
 	assert.Equal(t, "", org)
 	assert.True(t, unresolved, "an org the control plane could not read is unresolved, not none")
 }
+
+// Review round 4: a project that moves OUT of the machine's org while the
+// reconcile probes the machine is not recorded on it, and no config watcher
+// starts for it. The move commits from inside the probe; the insert re-reads
+// the project's org under its row lock and refuses.
+func TestReconcile_ProjectMovedOutOfTheMachinesOrgDuringTheProbeIsNotRecorded(t *testing.T) {
+	f := newOrgMachinesFixture(t)
+	moveOutDuringProbe := func(_ context.Context, path string) (projectPathState, error) {
+		// MoveProjectOrg's commit, landing between the list and the write.
+		_, err := f.repo.ORM().Bun().ExecContext(f.ctx, `UPDATE projects SET org_id = 'initech' WHERE id = ?`, f.globex.ID)
+		require.NoError(t, err)
+		return projectPathState{Exists: true}, nil
+	}
+
+	missing, added, err := reconcileProjectDaemons(f.ctx, f.repo, f.globexMachine, f.userID, f.scope(t, "globex"), "globex", moveOutDuringProbe)
+	require.NoError(t, err)
+	assert.Empty(t, added, "a watcher would start for a checkout of another org's project")
+	assert.Empty(t, missing)
+	assert.Empty(t, f.machinesOf(t, f.globex.ID), "the moved project was recorded on the other org's machine")
+	assert.Empty(t, f.machinesOf(t, f.acme.ID))
+}

@@ -291,9 +291,11 @@ func reconcileProjectDaemons(
 		}
 
 		// Recorded only if no detach committed since the detachments were
-		// read above: the probe can take seconds, and the write must not undo
-		// a detach that landed meanwhile.
-		recorded, err := database.RecordObservedProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch)
+		// read above, and only if the project is still in the machine's
+		// scope: the probe can take seconds, and the write must not undo a
+		// detach, or follow an org move out of the machine's org, that
+		// landed meanwhile. The org is re-read under the project's row lock.
+		recorded, err := database.RecordObservedProjectDaemonInScope(ctx, project.ID, daemonID, project.Path, project.DefaultBranch, scope)
 		if err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to upsert project_daemon",
 				"error", err, "userID", userID, "daemonID", daemonID, "projectID", project.ID)
