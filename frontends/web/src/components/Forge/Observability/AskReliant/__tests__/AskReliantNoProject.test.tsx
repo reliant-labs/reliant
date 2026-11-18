@@ -4,8 +4,9 @@
  * "Ask Reliant" for a forge app no Reliant project holds (an app built with
  * standalone forge): the dialog offers the step that gets a project, by what
  * the reader has, and never ends at "add one from the main screen". The
- * machine list, the recorded source remote and the Add machine sheet are
- * mocked at their module edges; the Add project dialog's store is real.
+ * machine list, the recorded source remote, the pairing instructions and the
+ * trip to billing are mocked at their module edges; the Add project dialog's
+ * store is real.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -31,20 +32,50 @@ vi.mock("@/hooks/useDaemonStatus", async (importOriginal) => ({
   useDaemonStatus: () => ({ daemons: machines.daemons, loading: machines.loading, activeDaemon: undefined }),
 }));
 const source = vi.hoisted(() => ({ repo: null as GitRepo | null }));
-vi.mock("../askReliantSource", () => ({ useForgeSourceRepo: () => source.repo }));
-// The sheet's own flow is AddMachineSheet's tests'; here, what it is opened with and what its ready does.
-const sheet = vi.hoisted(() => ({ repo: undefined as GitRepo | null | undefined }));
+const sourceReads = vi.hoisted(() => [] as (string | undefined)[]);
+vi.mock("../askReliantSource", () => ({
+  useForgeSourceRepo: (forgeProject?: string) => {
+    sourceReads.push(forgeProject);
+    return forgeProject ? source.repo : null;
+  },
+}));
+// The pairing instructions are PairMachinePanel's tests'; here, that they are the
+// shared panel, in which mode, and what a connected machine does.
+const pairing = vi.hoisted(() => ({ mode: undefined as string | undefined }));
 vi.mock("@/components/Machines", () => ({
-  AddMachineSheet: ({ open, repo, onReady }: { open: boolean; repo?: GitRepo | null; onReady?: (m: { daemonId: string; name: string }) => void }) => {
-    if (!open) return null;
-    sheet.repo = repo;
+  PairMachinePanel: ({ mode, onConnected }: { mode?: string; onConnected?: (daemonId: string) => void }) => {
+    pairing.mode = mode;
     return (
-      <button type="button" data-testid="machine-ready" onClick={() => onReady?.({ daemonId: "d1", name: "m-1" })}>
-        machine ready
+      <button type="button" data-testid="machine-connected" onClick={() => onConnected?.("d1")}>
+        pairing instructions
       </button>
     );
   },
+  AddMachineSheet: () => {
+    throw new Error("Ask Reliant must not open the Add machine sheet: it can create a paid machine");
+  },
 }));
+const goToBilling = vi.hoisted(() => vi.fn());
+const billingOrigins = vi.hoisted(() => [] as string[]);
+vi.mock("@/hooks/useGoToBilling", () => ({
+  useGoToBilling: (from: string) => {
+    billingOrigins.push(from);
+    return goToBilling;
+  },
+}));
+const caps = vi.hoisted(() => ({ cloud: true }));
+vi.mock("@/services/controlPlane/capabilities", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/services/controlPlane/capabilities")>();
+  return {
+    ...original,
+    capabilities: {
+      ...original.capabilities,
+      get cloudDaemons() {
+        return caps.cloud;
+      },
+    },
+  };
+});
 
 import { AskReliantButton } from "../AskReliant";
 
@@ -86,32 +117,57 @@ beforeEach(() => {
   machines.daemons = [];
   machines.loading = false;
   source.repo = null;
-  sheet.repo = undefined;
+  sourceReads.length = 0;
+  pairing.mode = undefined;
+  goToBilling.mockReset();
+  billingOrigins.length = 0;
+  caps.cloud = true;
 });
 
 describe("Ask Reliant with no project for the forge app", () => {
-  it("with no machine, leads with adding one, and never with the main screen", async () => {
+  it("with no machine, shows both ways to get one as instructions, and never the main screen", async () => {
     const body = await openAsk();
     expect(screen.getByText("Reliant has no project for shop yet")).toBeInTheDocument();
     expect(body).toHaveTextContent(/First, connect a machine/);
     expect(screen.queryByText(/main screen/)).toBeNull();
-    expect(screen.getByTestId("ask-reliant-add-machine")).toBeInTheDocument();
+    // Your own computer: the shared install-and-pair instructions, waiting for the first machine.
+    expect(screen.getByTestId("ask-reliant-pair-machine")).toHaveTextContent(/free/);
+    expect(pairing.mode).toBe("bootstrap");
+    // A cloud machine: needs a plan, so a way to the plans, and no machine created here.
+    expect(screen.getByTestId("ask-reliant-cloud-machine")).toHaveTextContent(/needs a plan/);
     expect(screen.queryByTestId("ask-reliant-add-project")).toBeNull();
     expect(startAskReliantChat).not.toHaveBeenCalled();
   });
 
-  it("starts the new machine on the app's repository, and starts the chat once the machine brings the project", async () => {
+  it("sends the cloud path to the plans, as from Settings › Machines", async () => {
+    await openAsk();
+    await userEvent.click(screen.getByTestId("ask-reliant-see-plans"));
+    expect(goToBilling).toHaveBeenCalledTimes(1);
+    expect(new Set(billingOrigins)).toEqual(new Set(["machines"]));
+    expect(screen.queryByTestId("ask-reliant-no-projects")).toBeNull();
+  });
+
+  it("offers no cloud path where the deployment has no cloud machines", async () => {
+    caps.cloud = false;
+    await openAsk();
+    expect(screen.getByTestId("ask-reliant-pair-machine")).toBeInTheDocument();
+    expect(screen.queryByTestId("ask-reliant-cloud-machine")).toBeNull();
+  });
+
+  it("does not read the app's repository while there is no machine to add it to", async () => {
     source.repo = shopRepo;
     const body = await openAsk();
-    expect(body).toHaveTextContent("acme/shop");
+    expect(body).not.toHaveTextContent("acme/shop");
+    expect(sourceReads.length).toBeGreaterThan(0);
+    expect(sourceReads.every((name) => name === undefined)).toBe(true);
+  });
 
-    await userEvent.click(screen.getByTestId("ask-reliant-add-machine"));
-    expect(sheet.repo).toBe(shopRepo);
-
-    // The machine cloned the repository as a project that declares the app.
+  it("starts the chat once a paired machine brings the project", async () => {
+    await openAsk();
+    // The machine was paired and its checkout added as a project that declares the app.
     const shop = project("p1", "shop");
     projectList.projects = [shop];
-    await userEvent.click(screen.getByTestId("machine-ready"));
+    await userEvent.click(screen.getByTestId("machine-connected"));
     await waitFor(() => expect(startAskReliantChat).toHaveBeenCalledTimes(1));
     expect(startAskReliantChat.mock.calls[0][0].project).toEqual(shop);
     expect(screen.queryByTestId("ask-reliant-no-projects")).toBeNull();
