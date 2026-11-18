@@ -1099,6 +1099,8 @@ func NewProjectPurge(d ProjectPurgeDeps) (*ProjectPurge, error) {
 // delete paused the triggers) are dropped by the API's startup sync, which
 // removes every schedule whose row is gone.
 func (p *ProjectPurge) Run(ctx context.Context) error {
+	// The line dev-docs/project-delete-rollout.md checks for after a deploy.
+	logging.InfoContext(ctx, "project purge: running", "interval", projectPurgeInterval, "lease", projectPurgeLease)
 	ticker := time.NewTicker(projectPurgeInterval)
 	defer ticker.Stop()
 	for {

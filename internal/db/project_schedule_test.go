@@ -288,24 +288,28 @@ func claimPurge(f *deleteFixture, now time.Time) (string, bool, error) {
 	return store.ClaimProjectPurge(f.ctx, f.repo.ORM(), ids[0], now, time.Hour)
 }
 
-// awaitLockWait returns once another backend of this test's database is
-// waiting on a lock: the write a test started in a goroutine has reached the
-// lock the transaction it races holds. Deterministic: it reads the server's
-// own state, never a sleep.
+// awaitLockWait returns once another backend of this test's database waits
+// on an ungranted lock (pg_locks; a row lock's wait is on the holder's
+// transaction id, which names no database, so the backend's is read): the write a test started in a goroutine has
+// reached the lock the transaction it races holds. It polls the server's own
+// state, each poll a round trip, under a deadline; nothing waits a fixed
+// duration, so no ordering rests on timing.
 func awaitLockWait(t *testing.T, repo *Repo) {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	for {
 		var waiting int
-		require.NoError(t, repo.ORM().Bun().NewRaw(`SELECT count(*) FROM pg_stat_activity
-WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()`).Scan(context.Background(), &waiting))
+		err := repo.ORM().Bun().NewRaw(`SELECT count(*) FROM pg_locks l
+JOIN pg_stat_activity a ON a.pid = l.pid
+WHERE NOT l.granted AND a.datname = current_database() AND l.pid <> pg_backend_pid()`).Scan(ctx, &waiting)
+		if ctx.Err() != nil {
+			t.Fatal("the racing write never waited on the lock")
+		}
+		require.NoError(t, err)
 		if waiting > 0 {
 			return
 		}
-		if time.Now().After(deadline) {
-			t.Fatal("the racing write never waited on the lock")
-		}
-		time.Sleep(5 * time.Millisecond)
 	}
 }
 

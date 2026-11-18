@@ -142,6 +142,15 @@ func TestProjectDeleteWithARestoreWindow(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []string{"p1"}, f.deleted)
 	})
+	t.Run("--remove-from-machines against a server from before the window deletes nothing", func(t *testing.T) {
+		for _, now := range []bool{false, true} {
+			f := deleteFixture() // deleteAfter unset: the older server
+			_, err := run(f, projectDelete{fromMachines: true, now: now}, "web")
+			require.ErrorIs(t, err, errMachineRemovalUnsupported, "now=%v", now)
+			assert.Empty(t, f.deleted, "no DeleteProject was sent (now=%v)", now)
+			assert.Empty(t, f.purged, "no PurgeProjectNow succeeded (now=%v)", now)
+		}
+	})
 	t.Run("--json carries the restore date", func(t *testing.T) {
 		f := deleteFixture()
 		f.deleteAfter = "2026-11-25T10:00:00Z"

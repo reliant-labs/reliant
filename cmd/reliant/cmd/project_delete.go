@@ -131,6 +131,15 @@ func (d projectDelete) run(ctx context.Context, ref string) error {
 	if err != nil {
 		return err
 	}
+	if d.fromMachines {
+		// Asked before anything is deleted, or even confirmed: a server from
+		// before the restore window ignores remove_from_machines and deletes
+		// the project at once, so the code on the machines would stay while
+		// the records of where it is go.
+		if err := d.requireMachineRemoval(ctx); err != nil {
+			return err
+		}
+	}
 	if !d.yes {
 		fmt.Fprintf(d.out, "Delete %s (%s) at %s\n\n", project.GetName(), project.GetId(), project.GetPath())
 		fmt.Fprintln(d.out, "  Its chats, runs, settings and automations are deleted with it.")
@@ -196,6 +205,26 @@ func (d projectDelete) run(ctx context.Context, ref string) error {
 	return nil
 }
 
+// errMachineRemovalUnsupported refuses --remove-from-machines against a
+// server that cannot do it.
+var errMachineRemovalUnsupported = errors.New("this server cannot remove a project's code from machines, and would delete the project without doing so: nothing was deleted. Delete it without --remove-from-machines, after removing each checkout from Settings → Machines")
+
+// requireMachineRemoval refuses unless the server can remove a deleted
+// project's code from machines. The probe is ListDeletedProjects, which
+// shipped with the restore window and remove_from_machines alike: a server
+// that answers it Unimplemented predates both. It reads; nothing is changed.
+func (d projectDelete) requireMachineRemoval(ctx context.Context) error {
+	_, err := d.client.ListDeletedProjects(ctx, connect.NewRequest(&reliantv1.ListDeletedProjectsRequest{}))
+	switch {
+	case err == nil:
+		return nil
+	case connect.CodeOf(err) == connect.CodeUnimplemented:
+		return errMachineRemovalUnsupported
+	default:
+		return fmt.Errorf("checking that the server can remove the code from machines: %w", err)
+	}
+}
+
 // purgeNow deletes the project immediately. A server from before the restore
 // window has no PurgeProjectNow, and its DeleteProject is the immediate
 // delete, so that is what it asks there.
@@ -205,7 +234,7 @@ func (d projectDelete) purgeNow(ctx context.Context, project *reliantv1.Project)
 	}))
 	if connect.CodeOf(err) == connect.CodeUnimplemented {
 		if d.fromMachines {
-			return nil, errors.New("this server cannot remove a project's code from machines; delete it without --remove-from-machines, or remove each checkout from Settings → Machines")
+			return nil, errMachineRemovalUnsupported
 		}
 		_, err = d.client.DeleteProject(ctx, connect.NewRequest(&reliantv1.DeleteProjectRequest{ProjectId: project.GetId()}))
 		return nil, err
