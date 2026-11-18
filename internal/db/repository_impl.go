@@ -1030,6 +1030,12 @@ func (r *Repo) GetProject(ctx context.Context, id string) (*Project, error) {
 	return store.GetProject(ctx, r.ORM(), id)
 }
 
+// ListProjectsByIDs returns the projects with these ids in one query; an id
+// with no project is absent. It checks no owner: the caller decides each row.
+func (r *Repo) ListProjectsByIDs(ctx context.Context, ids []string) ([]*Project, error) {
+	return store.ListProjectsByIDs(ctx, r.ORM(), ids)
+}
+
 func (r *Repo) GetProjectByPath(ctx context.Context, path string) (*Project, error) {
 	if path == "" {
 		return nil, fmt.Errorf("project path cannot be empty")
