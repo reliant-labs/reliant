@@ -26197,6 +26197,11 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "include_purging",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "ListDeletedProjectsResponse": [
@@ -27140,6 +27145,10 @@
               "name": "org_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "include_purging",
+              "kind": "bool"
             }
           ],
           "reliant.v1.ListDeletedProjectsResponse": [
@@ -27426,6 +27435,11 @@
             },
             {
               "name": "deleted_by_user_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "purge_started_at",
               "kind": "string",
               "optional": true
             }
@@ -36139,6 +36153,11 @@
             },
             {
               "name": "deleted_by_user_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "purge_started_at",
               "kind": "string",
               "optional": true
             }

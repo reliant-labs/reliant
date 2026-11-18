@@ -186,7 +186,8 @@ type ProjectServiceClient interface {
 	PurgeProjectNow(context.Context, *connect.Request[v1.PurgeProjectNowRequest]) (*connect.Response[v1.PurgeProjectNowResponse], error)
 	// ListDeletedProjects lists the projects scheduled for deletion that the
 	// caller may restore ("Recently deleted"): their own, and those they
-	// deleted as an org admin. A project whose purge has begun is not listed.
+	// deleted as an org admin. A project whose purge has begun is not listed,
+	// unless include_purging asks for the caller's own.
 	ListDeletedProjects(context.Context, *connect.Request[v1.ListDeletedProjectsRequest]) (*connect.Response[v1.ListDeletedProjectsResponse], error)
 	// TouchProject updates the project's last_active timestamp
 	TouchProject(context.Context, *connect.Request[v1.TouchProjectRequest]) (*connect.Response[v1.TouchProjectResponse], error)
@@ -787,7 +788,8 @@ type ProjectServiceHandler interface {
 	PurgeProjectNow(context.Context, *connect.Request[v1.PurgeProjectNowRequest]) (*connect.Response[v1.PurgeProjectNowResponse], error)
 	// ListDeletedProjects lists the projects scheduled for deletion that the
 	// caller may restore ("Recently deleted"): their own, and those they
-	// deleted as an org admin. A project whose purge has begun is not listed.
+	// deleted as an org admin. A project whose purge has begun is not listed,
+	// unless include_purging asks for the caller's own.
 	ListDeletedProjects(context.Context, *connect.Request[v1.ListDeletedProjectsRequest]) (*connect.Response[v1.ListDeletedProjectsResponse], error)
 	// TouchProject updates the project's last_active timestamp
 	TouchProject(context.Context, *connect.Request[v1.TouchProjectRequest]) (*connect.Response[v1.TouchProjectResponse], error)

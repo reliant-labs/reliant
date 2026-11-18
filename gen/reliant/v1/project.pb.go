@@ -257,8 +257,12 @@ type Project struct {
 	DeleteAfter *string `protobuf:"bytes,18,opt,name=delete_after,json=deleteAfter,proto3,oneof" json:"delete_after,omitempty"`
 	// Who scheduled the deletion: the owner, or an org admin.
 	DeletedByUserId *string `protobuf:"bytes,19,opt,name=deleted_by_user_id,json=deletedByUserId,proto3,oneof" json:"deleted_by_user_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// When a purge began deleting the project (RFC 3339); from then on it
+	// cannot be restored, only purged (PurgeProjectNow resumes it). Set only
+	// by ListDeletedProjects with include_purging.
+	PurgeStartedAt *string `protobuf:"bytes,20,opt,name=purge_started_at,json=purgeStartedAt,proto3,oneof" json:"purge_started_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Project) Reset() {
@@ -420,6 +424,13 @@ func (x *Project) GetDeleteAfter() string {
 func (x *Project) GetDeletedByUserId() string {
 	if x != nil && x.DeletedByUserId != nil {
 		return *x.DeletedByUserId
+	}
+	return ""
+}
+
+func (x *Project) GetPurgeStartedAt() string {
+	if x != nil && x.PurgeStartedAt != nil {
+		return *x.PurgeStartedAt
 	}
 	return ""
 }
@@ -1463,9 +1474,14 @@ type ListDeletedProjectsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Only this organization's (as ListProjectsRequest.org_id). Unset lists
 	// every org's.
-	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	OrgId *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// Also list the caller's own projects whose purge has begun (they carry
+	// purge_started_at): nothing can restore them, but PurgeProjectNow
+	// finishes one a purge left part way. An org admin's are never listed
+	// this way: only the owner purges.
+	IncludePurging bool `protobuf:"varint,2,opt,name=include_purging,json=includePurging,proto3" json:"include_purging,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ListDeletedProjectsRequest) Reset() {
@@ -1503,6 +1519,13 @@ func (x *ListDeletedProjectsRequest) GetOrgId() string {
 		return *x.OrgId
 	}
 	return ""
+}
+
+func (x *ListDeletedProjectsRequest) GetIncludePurging() bool {
+	if x != nil {
+		return x.IncludePurging
+	}
+	return false
 }
 
 // ListDeletedProjectsResponse lists projects scheduled for deletion, soonest
@@ -5397,7 +5420,7 @@ var File_reliant_v1_project_proto protoreflect.FileDescriptor
 const file_reliant_v1_project_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/project.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x15reliant/v1/chat.proto\x1a\x17reliant/v1/common.proto\"\xa5\x06\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x15reliant/v1/chat.proto\x1a\x17reliant/v1/common.proto\"\xe9\x06\n" +
 	"\aProject\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
@@ -5424,7 +5447,8 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\rviewer_access\x18\x10 \x01(\bR\fviewerAccess\x12 \n" +
 	"\tshared_at\x18\x11 \x01(\tH\x05R\bsharedAt\x88\x01\x01\x12&\n" +
 	"\fdelete_after\x18\x12 \x01(\tH\x06R\vdeleteAfter\x88\x01\x01\x120\n" +
-	"\x12deleted_by_user_id\x18\x13 \x01(\tH\aR\x0fdeletedByUserId\x88\x01\x01B\x0e\n" +
+	"\x12deleted_by_user_id\x18\x13 \x01(\tH\aR\x0fdeletedByUserId\x88\x01\x01\x12-\n" +
+	"\x10purge_started_at\x18\x14 \x01(\tH\bR\x0epurgeStartedAt\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x11\n" +
 	"\x0f_default_branchB\r\n" +
 	"\v_remote_urlB\x15\n" +
@@ -5433,7 +5457,8 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\n" +
 	"_shared_atB\x0f\n" +
 	"\r_delete_afterB\x15\n" +
-	"\x13_deleted_by_user_id\"\xfd\x02\n" +
+	"\x13_deleted_by_user_idB\x13\n" +
+	"\x11_purge_started_at\"\xfd\x02\n" +
 	"\rProjectDaemon\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
@@ -5517,9 +5542,10 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\fconfirm_name\x18\x02 \x01(\tR\vconfirmName\x120\n" +
 	"\x14remove_from_machines\x18\x03 \x01(\bR\x12removeFromMachines\"g\n" +
 	"\x17PurgeProjectNowResponse\x12L\n" +
-	"\x10machine_removals\x18\x01 \x03(\v2!.reliant.v1.ProjectMachineRemovalR\x0fmachineRemovals\"C\n" +
+	"\x10machine_removals\x18\x01 \x03(\v2!.reliant.v1.ProjectMachineRemovalR\x0fmachineRemovals\"l\n" +
 	"\x1aListDeletedProjectsRequest\x12\x1a\n" +
-	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12'\n" +
+	"\x0finclude_purging\x18\x02 \x01(\bR\x0eincludePurgingB\t\n" +
 	"\a_org_id\"N\n" +
 	"\x1bListDeletedProjectsResponse\x12/\n" +
 	"\bprojects\x18\x01 \x03(\v2\x13.reliant.v1.ProjectR\bprojects\"4\n" +

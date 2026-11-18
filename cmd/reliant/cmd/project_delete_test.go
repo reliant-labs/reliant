@@ -29,6 +29,23 @@ type fakeDeleteClient struct {
 	removals    []*reliantv1.ProjectMachineRemoval
 	fromMachine []bool
 	purged      []string
+	// scheduled lists the projects ListDeletedProjects answers, as a server
+	// with the restore window does once they are deleted (and gone from
+	// ListProjects).
+	scheduled []*reliantv1.Project
+}
+
+func (f *fakeDeleteClient) ListDeletedProjects(_ context.Context, req *connect.Request[reliantv1.ListDeletedProjectsRequest]) (*connect.Response[reliantv1.ListDeletedProjectsResponse], error) {
+	if f.deleteAfter == "" {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("unimplemented"))
+	}
+	var out []*reliantv1.Project
+	for _, p := range f.scheduled {
+		if p.PurgeStartedAt == nil || req.Msg.GetIncludePurging() {
+			out = append(out, p)
+		}
+	}
+	return connect.NewResponse(&reliantv1.ListDeletedProjectsResponse{Projects: out}), nil
 }
 
 func (f *fakeDeleteClient) ListProjects(context.Context, *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error) {
@@ -96,6 +113,28 @@ func TestProjectDeleteWithARestoreWindow(t *testing.T) {
 		assert.Equal(t, []string{"p1 as web"}, f.purged)
 		assert.Empty(t, f.deleted)
 		assert.Contains(t, out, "for good")
+	})
+	t.Run("--now purges a project an ordinary delete already scheduled, by id", func(t *testing.T) {
+		f := deleteFixture()
+		f.deleteAfter = "2026-11-25T10:00:00Z"
+		_, err := run(f, projectDelete{}, "p1")
+		require.NoError(t, err)
+		// Deleted: it leaves ListProjects and is listed as deleted.
+		f.scheduled = []*reliantv1.Project{{Id: "p1", Name: "web", Path: "/home/me/web", DeleteAfter: &f.deleteAfter}}
+		f.projects = f.projects[1:]
+		_, err = run(f, projectDelete{now: true}, "p1")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"p1 as web"}, f.purged)
+	})
+	t.Run("--now finishes a purge that stopped part way", func(t *testing.T) {
+		f := deleteFixture()
+		f.deleteAfter = "2026-11-25T10:00:00Z"
+		started := "2026-11-18T10:00:00Z"
+		f.scheduled = []*reliantv1.Project{{Id: "p1", Name: "web", DeleteAfter: &f.deleteAfter, PurgeStartedAt: &started}}
+		f.projects = f.projects[1:]
+		_, err := run(f, projectDelete{now: true}, "web")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"p1 as web"}, f.purged)
 	})
 	t.Run("--now on a server from before the window is its immediate delete", func(t *testing.T) {
 		f := deleteFixture()

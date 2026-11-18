@@ -75,7 +75,7 @@ func (s *Service) DeleteProject(
 		}
 	}
 
-	deletion, err := s.deps.Repo.ScheduleProjectDeletion(ctx, project.ID, userID, time.Now().Add(core.ProjectDeleteWindow))
+	deletion, err := s.deps.Repo.ScheduleProjectDeletion(ctx, project.ID, userID, s.now().Add(core.ProjectDeleteWindow))
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project"))
 	}

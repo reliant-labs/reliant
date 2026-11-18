@@ -472,14 +472,16 @@ func ReadProjectAccess(ctx context.Context, userID string, project *core.Project
 	return readAccess(ctx, userID, projectResource(project))
 }
 
+// chatResource is the chat as every decision reads it. A chat of a project
+// scheduled for deletion is absent, as the project is (project_delete.go).
 func chatResource[C chatRecord](chat C) resource {
 	switch c := any(chat).(type) {
 	case *core.Chat:
-		if c != nil {
+		if c != nil && !c.ProjectDeleted {
 			return resource{present: true, ownerUserID: c.UserID, orgID: orgOf(c.OrgID), visibility: c.Visibility}
 		}
 	case *core.ChatRow:
-		if c != nil {
+		if c != nil && !c.ProjectDeleted {
 			return resource{present: true, ownerUserID: c.UserID, orgID: orgOf(c.OrgID), visibility: c.Visibility}
 		}
 	}

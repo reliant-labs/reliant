@@ -107,12 +107,13 @@ func (r *Repo) ListDueProjectPurges(ctx context.Context, now time.Time, lease ti
 }
 
 // ListDeletedProjects lists the scheduled, restorable projects userID owns
-// or deleted, in org (nil: every org).
-func (r *Repo) ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope) ([]*core.Project, error) {
+// or deleted, in org (nil: every org); includePurging adds userID's own
+// projects whose purge has begun.
+func (r *Repo) ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error) {
 	if userID == "" {
 		return nil, errors.New("user ID cannot be empty")
 	}
-	return store.ListDeletedProjects(ctx, r.ORM(), userID, org)
+	return store.ListDeletedProjects(ctx, r.ORM(), userID, org, includePurging)
 }
 
 // ProjectPurgeResult is what one pass of PurgeDueProjects did.

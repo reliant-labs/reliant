@@ -1273,6 +1273,7 @@ func (g *Graph) newProject() (*project.Service, error) {
 		// A project delete pauses its triggers' schedules, a restore
 		// resumes them, and a purge removes them.
 		Schedules: g.ScheduleSyncer(),
+		Now:       nil, // optional — no provider
 	})
 }
 

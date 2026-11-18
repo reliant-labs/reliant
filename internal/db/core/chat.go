@@ -271,6 +271,12 @@ type Chat struct {
 	// was shared (nil while private). Read by internal/authz only.
 	Visibility Visibility `json:"visibility,omitempty"`
 	SharedAt   *time.Time `json:"shared_at,omitempty"`
+
+	// ProjectDeleted: the chat's project is scheduled for deletion, so the
+	// chat is hidden with it and internal/authz treats it as absent. Set by
+	// the store's by-id reads (store.GetChat, GetChatWithUserCheck); a list
+	// leaves such chats out instead. Read by internal/authz only.
+	ProjectDeleted bool `json:"-"`
 }
 
 // MainThreadID returns the chat's root thread id, or "" if no root workflow
@@ -310,6 +316,8 @@ type ChatRow struct {
 	// Visibility is who besides UserID may read the chat (see Chat).
 	Visibility Visibility
 	SharedAt   *time.Time
+	// ProjectDeleted is Chat.ProjectDeleted, set by store.GetChatRow.
+	ProjectDeleted bool
 }
 
 // MainThreadID is Chat.MainThreadID for the row's root workflow.

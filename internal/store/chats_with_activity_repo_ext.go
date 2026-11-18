@@ -66,7 +66,7 @@ func GetChat(ctx context.Context, db orm.Context, id string) (*core.Chat, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chat: %w", err)
 	}
-	return chatFromView(row), nil
+	return withProjectDeleted(ctx, db, chatFromView(row))
 }
 
 // GetChatWithUserCheck returns the chat only when userID owns it; any other
@@ -82,7 +82,7 @@ func GetChatWithUserCheck(ctx context.Context, db orm.Context, id, userID string
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chat: %w", err)
 	}
-	return chatFromView(row), nil
+	return withProjectDeleted(ctx, db, chatFromView(row))
 }
 
 // ListChats lists a user's chats, most recently active first. The optional

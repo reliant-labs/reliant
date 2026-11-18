@@ -20,7 +20,7 @@ import (
 )
 
 // forge:section MockOrgResolver
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=49fefceff3fd573ce0fe1a5dab13ae747b61a159385694cc744a52db85e42df5
 
 // MockOrgResolver is a test mock for the OrgResolver interface.
 //
@@ -56,7 +56,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=49fefceff3fd573ce0fe1a5dab13ae747b61a159385694cc744a52db85e42df5
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -80,7 +80,7 @@ type MockRepository struct {
 	ScheduleProjectDeletionFunc               func(context.Context, string, string, time.Time) (core.ProjectDeletion, error)
 	RestoreProjectFunc                        func(context.Context, string) ([]string, error)
 	PurgeProjectNowFunc                       func(context.Context, string, string) ([]string, error)
-	ListDeletedProjectsFunc                   func(context.Context, string, *core.OrgScope) ([]*core.Project, error)
+	ListDeletedProjectsFunc                   func(context.Context, string, *core.OrgScope, bool) ([]*core.Project, error)
 	ProjectOrgMoveBlockersFunc                func(context.Context, string) (*core.ProjectOrgMoveBlockers, error)
 	ProjectOrgMoveEffectsFunc                 func(context.Context, string, string) (*core.ProjectOrgMoveEffects, error)
 	InsertProjectOrgMoveFunc                  func(context.Context, *core.ProjectOrgMove) (*core.ProjectOrgMove, bool, error)
@@ -239,10 +239,10 @@ func (m *MockRepository) PurgeProjectNow(ctx context.Context, id string, userID 
 }
 
 // ListDeletedProjects records the call and delegates to ListDeletedProjectsFunc when set.
-func (m *MockRepository) ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope) ([]*core.Project, error) {
-	m.Recorder.Record("ListDeletedProjects", ctx, userID, org)
+func (m *MockRepository) ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error) {
+	m.Recorder.Record("ListDeletedProjects", ctx, userID, org, includePurging)
 	if m.ListDeletedProjectsFunc != nil {
-		return m.ListDeletedProjectsFunc(ctx, userID, org)
+		return m.ListDeletedProjectsFunc(ctx, userID, org, includePurging)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListDeletedProjects")
 }
@@ -512,7 +512,7 @@ func (m *MockRepository) UpdateSetting(ctx context.Context, setting *db.Setting)
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockRouter
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=49fefceff3fd573ce0fe1a5dab13ae747b61a159385694cc744a52db85e42df5
 
 // MockRouter is a test mock for the Router interface.
 //
@@ -598,7 +598,7 @@ func (m *MockRouter) SendWatchProjectConfigs(ctx context.Context, userID string,
 var _ Router = (*MockRouter)(nil)
 
 // forge:section MockMachineConfigSync
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=49fefceff3fd573ce0fe1a5dab13ae747b61a159385694cc744a52db85e42df5
 
 // MockMachineConfigSync is a test mock for the MachineConfigSync interface.
 //
@@ -634,7 +634,7 @@ func (m *MockMachineConfigSync) SendWatchProjectConfigsToDaemon(ctx context.Cont
 var _ MachineConfigSync = (*MockMachineConfigSync)(nil)
 
 // forge:section MockTriggerSchedules
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=49fefceff3fd573ce0fe1a5dab13ae747b61a159385694cc744a52db85e42df5
 
 // MockTriggerSchedules is a test mock for the TriggerSchedules interface.
 //
@@ -660,7 +660,7 @@ func (m *MockTriggerSchedules) Sync(ctx context.Context, triggerID string) error
 var _ TriggerSchedules = (*MockTriggerSchedules)(nil)
 
 // forge:section MockCloneDispatcher
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=49fefceff3fd573ce0fe1a5dab13ae747b61a159385694cc744a52db85e42df5
 
 // MockCloneDispatcher is a test mock for the CloneDispatcher interface.
 //
@@ -686,7 +686,7 @@ func (m *MockCloneDispatcher) CloneRepoOntoDaemon(ctx context.Context, jwt strin
 var _ CloneDispatcher = (*MockCloneDispatcher)(nil)
 
 // forge:section MockMoveStarter
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=49fefceff3fd573ce0fe1a5dab13ae747b61a159385694cc744a52db85e42df5
 
 // MockMoveStarter is a test mock for the MoveStarter interface.
 //
@@ -712,7 +712,7 @@ func (m *MockMoveStarter) StartProjectOrgMove(ctx context.Context, moveID string
 var _ MoveStarter = (*MockMoveStarter)(nil)
 
 // forge:section MockMoveFacts
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=49fefceff3fd573ce0fe1a5dab13ae747b61a159385694cc744a52db85e42df5
 
 // MockMoveFacts is a test mock for the MoveFacts interface.
 //

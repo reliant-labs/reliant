@@ -190,12 +190,14 @@ RETURNING user_id`, id, now.UTC(), now.Add(-lease).UTC()).Scan(ctx, &owners); er
 }
 
 // ClaimProjectPurgeNow claims userID's project for an immediate purge,
-// scheduled or not: it is hidden (delete_after, if it was not set) and can no
-// longer be restored. It reports false for a project that is missing or
-// another user's.
+// scheduled or not: it is hidden and can no longer be restored, and its
+// delete_after is brought forward to now (LEAST ignores a NULL), so a purge
+// that stops part way is resumed by the worker once the claim's lease runs
+// out, not at the end of a restore window nobody can use any more. It
+// reports false for a project that is missing or another user's.
 func ClaimProjectPurgeNow(ctx context.Context, db orm.Context, id, userID string, now time.Time) (bool, error) {
 	res, err := db.Bun().NewRaw(`UPDATE projects
-SET delete_after = COALESCE(delete_after, ?2), deleted_by = COALESCE(deleted_by, ?1), purge_started_at = ?2
+SET delete_after = LEAST(delete_after, ?2), deleted_by = COALESCE(deleted_by, ?1), purge_started_at = ?2
 WHERE id = ?0 AND user_id = ?1`, id, userID, now.UTC()).Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("claim the project's purge: %w", err)
@@ -219,13 +221,15 @@ ORDER BY delete_after, id LIMIT ?2`, now.UTC(), now.Add(-lease).UTC(), orm.Arg(l
 
 // ListDeletedProjects lists the scheduled projects userID owns or deleted
 // (as an org admin), whose purge has not begun, soonest purge first: those of
-// org's organization, or every one when org is nil. It is a visibility
-// predicate; the caller decides each row (authz.ProjectDelete).
-func ListDeletedProjects(ctx context.Context, db orm.Context, userID string, org *core.OrgScope) ([]*core.Project, error) {
+// org's organization, or every one when org is nil. includePurging also lists
+// userID's own projects whose purge has begun (only PurgeProjectNow can act on
+// those). It is a visibility predicate; the caller decides each row
+// (authz.ProjectDelete).
+func ListDeletedProjects(ctx context.Context, db orm.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error) {
 	var rows []*Project
 	q := db.Bun().NewSelect().Model(&rows).
 		Where("delete_after IS NOT NULL").
-		Where("purge_started_at IS NULL").
+		Where("(purge_started_at IS NULL OR (? AND user_id = ?))", includePurging, userID).
 		Where("(user_id = ? OR deleted_by = ?)", userID, userID).
 		OrderExpr("delete_after ASC, id ASC").
 		Limit(500)
@@ -307,4 +311,31 @@ func SweepOrphanedProjectRows(ctx context.Context, db orm.Context, batch int) (i
 		}
 	}
 	return total, nil
+}
+
+// projectScheduledForDeletion reports whether projectID is scheduled for
+// deletion: a by-id chat read marks the chat with it (core.Chat.
+// ProjectDeleted), so internal/authz hides a deleted project's chats from
+// whoever holds their ids. A project that is gone reads as not scheduled;
+// its chats go with it.
+func projectScheduledForDeletion(ctx context.Context, db orm.Context, projectID string) (bool, error) {
+	if projectID == "" {
+		return false, nil
+	}
+	var scheduled []bool
+	if err := db.Bun().NewRaw(`SELECT delete_after IS NOT NULL FROM projects WHERE id = ?0`, projectID).
+		Scan(ctx, &scheduled); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, fmt.Errorf("read the chat's project: %w", err)
+	}
+	return len(scheduled) == 1 && scheduled[0], nil
+}
+
+// withProjectDeleted marks chat with its project's deletion state.
+func withProjectDeleted(ctx context.Context, db orm.Context, chat *core.Chat) (*core.Chat, error) {
+	deleted, err := projectScheduledForDeletion(ctx, db, chat.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	chat.ProjectDeleted = deleted
+	return chat, nil
 }

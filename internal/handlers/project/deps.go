@@ -41,7 +41,7 @@ type Repository interface {
 	ScheduleProjectDeletion(ctx context.Context, id, by string, deleteAfter time.Time) (core.ProjectDeletion, error)
 	RestoreProject(ctx context.Context, id string) ([]string, error)
 	PurgeProjectNow(ctx context.Context, id, userID string) ([]string, error)
-	ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope) ([]*core.Project, error)
+	ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error)
 	// ProjectOrgMoveBlockers and ProjectOrgMoveEffects are a move's preview:
 	// the running work that refuses it now, and what it would change.
 	ProjectOrgMoveBlockers(ctx context.Context, projectID string) (*core.ProjectOrgMoveBlockers, error)

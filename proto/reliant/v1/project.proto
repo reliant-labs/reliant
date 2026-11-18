@@ -120,7 +120,8 @@ service ProjectService {
 
   // ListDeletedProjects lists the projects scheduled for deletion that the
   // caller may restore ("Recently deleted"): their own, and those they
-  // deleted as an org admin. A project whose purge has begun is not listed.
+  // deleted as an org admin. A project whose purge has begun is not listed,
+  // unless include_purging asks for the caller's own.
   rpc ListDeletedProjects(ListDeletedProjectsRequest) returns (ListDeletedProjectsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -461,6 +462,10 @@ message Project {
   optional string delete_after = 18;
   // Who scheduled the deletion: the owner, or an org admin.
   optional string deleted_by_user_id = 19;
+  // When a purge began deleting the project (RFC 3339); from then on it
+  // cannot be restored, only purged (PurgeProjectNow resumes it). Set only
+  // by ListDeletedProjects with include_purging.
+  optional string purge_started_at = 20;
 }
 
 // ProjectDaemon records that a daemon has a local clone of a project.
@@ -653,6 +658,11 @@ message ListDeletedProjectsRequest {
   // Only this organization's (as ListProjectsRequest.org_id). Unset lists
   // every org's.
   optional string org_id = 1;
+  // Also list the caller's own projects whose purge has begun (they carry
+  // purge_started_at): nothing can restore them, but PurgeProjectNow
+  // finishes one a purge left part way. An org admin's are never listed
+  // this way: only the owner purges.
+  bool include_purging = 2;
 }
 
 // ListDeletedProjectsResponse lists projects scheduled for deletion, soonest

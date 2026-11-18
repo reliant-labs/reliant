@@ -14,7 +14,9 @@ import (
 
 // ListDeletedProjects lists the projects scheduled for deletion that the
 // caller may restore ("Recently deleted", project_delete.go): their own, and
-// those they deleted as an org admin, each decided again now.
+// those they deleted as an org admin, each decided again now. With
+// include_purging, also the caller's own whose purge has begun, which only
+// their owner may finish (PurgeProjectNow).
 func (s *Service) ListDeletedProjects(
 	ctx context.Context,
 	req *connect.Request[pb.ListDeletedProjectsRequest],
@@ -24,7 +26,7 @@ func (s *Service) ListDeletedProjects(
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.deps.Repo.ListDeletedProjects(ctx, userID, scope)
+	rows, err := s.deps.Repo.ListDeletedProjects(ctx, userID, scope, req.Msg.GetIncludePurging())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list deleted projects"))
 	}
@@ -34,7 +36,7 @@ func (s *Service) ListDeletedProjects(
 		if errors.Is(err, authz.ErrMembershipUnavailable) {
 			return nil, projectDeleteRefusal(ctx, err, "list")
 		}
-		if err != nil {
+		if err != nil || (p.PurgeStartedAt != nil && authority != authz.ProjectDeleteOwner) {
 			continue
 		}
 		out = append(out, deletedProjectToProto(p, authority))

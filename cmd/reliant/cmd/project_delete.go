@@ -38,6 +38,7 @@ import (
 type projectDeleteClient interface {
 	ListProjects(context.Context, *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error)
 	DeleteProject(context.Context, *connect.Request[reliantv1.DeleteProjectRequest]) (*connect.Response[reliantv1.DeleteProjectResponse], error)
+	ListDeletedProjects(context.Context, *connect.Request[reliantv1.ListDeletedProjectsRequest]) (*connect.Response[reliantv1.ListDeletedProjectsResponse], error)
 	PurgeProjectNow(context.Context, *connect.Request[reliantv1.PurgeProjectNowRequest]) (*connect.Response[reliantv1.PurgeProjectNowResponse], error)
 }
 
@@ -120,7 +121,13 @@ type projectDelete struct {
 }
 
 func (d projectDelete) run(ctx context.Context, ref string) error {
-	project, err := findProjectRef(ctx, d.client, ref)
+	var project *reliantv1.Project
+	var err error
+	if d.now {
+		project, err = findProjectRefToPurge(ctx, d.client, ref)
+	} else {
+		project, err = findProjectRef(ctx, d.client, ref)
+	}
 	if err != nil {
 		return err
 	}
@@ -259,6 +266,27 @@ func findProjectRef(ctx context.Context, client projectLister, ref string) (*rel
 		return nil, fmt.Errorf("listing projects: %w", err)
 	}
 	return matchProjectRef(resp.Msg.GetProjects(), ref, "no project of yours is named %q: pass its id ('reliant project list')")
+}
+
+// findProjectRefToPurge resolves ref for --now: among the caller's live
+// projects AND those already deleted, including one whose purge stopped part
+// way, so `delete --now` finishes what a plain delete (or an earlier --now)
+// began. A server from before the restore window lists no deleted projects
+// (Unimplemented): there every project is live.
+func findProjectRefToPurge(ctx context.Context, client projectDeleteClient, ref string) (*reliantv1.Project, error) {
+	resp, err := client.ListProjects(ctx, connect.NewRequest(&reliantv1.ListProjectsRequest{}))
+	if err != nil {
+		return nil, fmt.Errorf("listing projects: %w", err)
+	}
+	projects := resp.Msg.GetProjects()
+	deleted, err := client.ListDeletedProjects(ctx, connect.NewRequest(&reliantv1.ListDeletedProjectsRequest{IncludePurging: true}))
+	switch {
+	case err == nil:
+		projects = append(projects, deleted.Msg.GetProjects()...)
+	case connect.CodeOf(err) != connect.CodeUnimplemented:
+		return nil, fmt.Errorf("listing deleted projects: %w", err)
+	}
+	return matchProjectRef(projects, ref, "no project of yours, live or deleted, is named %q: pass its id ('reliant project list', 'reliant project restore')")
 }
 
 // matchProjectRef picks ref out of projects: an id first, then a name or a

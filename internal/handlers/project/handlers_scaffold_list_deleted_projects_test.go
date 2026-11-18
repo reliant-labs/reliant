@@ -26,7 +26,7 @@ func TestListDeletedProjects_Generated(t *testing.T) {
 	store := ownedProjectRepo(t)
 	after := time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
 	by := "test-user"
-	store.ListDeletedProjectsFunc = func(_ context.Context, userID string, _ *core.OrgScope) ([]*core.Project, error) {
+	store.ListDeletedProjectsFunc = func(_ context.Context, userID string, _ *core.OrgScope, _ bool) ([]*core.Project, error) {
 		mine := ownedProject()
 		mine.DeleteAfter, mine.DeletedBy = &after, &by
 		other := &db.Project{ID: "p-9", UserID: "someone-else", Name: "theirs", DeleteAfter: &after, DeletedBy: &userID}

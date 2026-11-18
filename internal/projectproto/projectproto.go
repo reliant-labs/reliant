@@ -51,6 +51,10 @@ func Project(p *core.Project) *reliantv1.Project {
 		at := p.DeleteAfter.UTC().Format(time.RFC3339)
 		proto.DeleteAfter = &at
 		proto.DeletedByUserId = p.DeletedBy
+		if p.PurgeStartedAt != nil {
+			started := p.PurgeStartedAt.UTC().Format(time.RFC3339)
+			proto.PurgeStartedAt = &started
+		}
 	}
 	return proto
 }

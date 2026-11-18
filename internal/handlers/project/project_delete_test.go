@@ -28,6 +28,10 @@ import (
 
 const deleteOrg = "acme"
 
+// deleteNow is the fixed clock the service under test reads (Deps.Now), so
+// a restore window's end is asserted exactly, never against the wall clock.
+var deleteNow = time.Date(2026, time.January, 5, 12, 0, 0, 0, time.UTC)
+
 // deleteMembers is control-plane's membership answer: every user in roles is
 // a member of deleteOrg with that role, unless they left.
 type deleteMembers struct {
@@ -90,7 +94,7 @@ func newDeleteAuthFixture(t *testing.T) *deleteAuthFixture {
 		left:  map[string]bool{},
 	}
 	ctx := context.Background()
-	now := time.Now().UTC().Truncate(time.Second)
+	now := deleteNow
 	org := deleteOrg
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{ID: f.project, UserID: f.owner, OrgID: &org, Name: "doomed",
 		Path: "/home/owner/doomed-" + s, CreatedAt: now, UpdatedAt: now, LastActive: now}))
@@ -105,7 +109,8 @@ func newDeleteAuthFixture(t *testing.T) *deleteAuthFixture {
 // departure is seen at once).
 func (f *deleteAuthFixture) service() (*Service, *orgs.Resolver) {
 	m := orgs.New(f.members)
-	return NewTestProject(f.t, WithProjectDeps(Deps{Repo: f.repo, Orgs: m, Schedules: f.schedules})), m
+	clock := func() time.Time { return deleteNow }
+	return NewTestProject(f.t, WithProjectDeps(Deps{Repo: f.repo, Orgs: m, Schedules: f.schedules, Now: clock})), m
 }
 
 // as is a request as userID through credential c; a machine token is also
@@ -165,9 +170,7 @@ func TestProjectDeleteAuthorityWhileTheOwnerIsAMember(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, resp.GetSuccess())
 		require.NotNil(t, resp.DeleteAfter)
-		after, err := time.Parse(time.RFC3339, resp.GetDeleteAfter())
-		require.NoError(t, err)
-		assert.WithinDuration(t, time.Now().Add(core.ProjectDeleteWindow), after, time.Minute)
+		assert.Equal(t, deleteNow.Add(core.ProjectDeleteWindow).Format(time.RFC3339), resp.GetDeleteAfter())
 		assert.True(t, f.scheduled())
 		assert.Equal(t, []string{f.trigger}, f.schedules.synced(), "the paused trigger's schedule is converged")
 

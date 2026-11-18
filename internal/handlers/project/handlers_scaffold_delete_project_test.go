@@ -37,7 +37,8 @@ func TestDeleteProject_Generated(t *testing.T) {
 
 	store := ownedProjectRepo(t)
 	scheduled := scheduling(store)
-	svc := newService(t, store, nil)
+	now := time.Date(2026, time.January, 5, 12, 0, 0, 0, time.UTC)
+	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Now: func() time.Time { return now }}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteProjectRequest, pb.DeleteProjectResponse]{
 		{
@@ -59,12 +60,8 @@ func TestDeleteProject_Generated(t *testing.T) {
 				if len(*scheduled) != 1 || (*scheduled)[0] != "p-1 by test-user" {
 					t.Fatalf("scheduled = %v, want only p-1 by test-user", *scheduled)
 				}
-				after, err := time.Parse(time.RFC3339, resp.Msg.GetDeleteAfter())
-				if err != nil {
-					t.Fatalf("delete_after %q: %v", resp.Msg.GetDeleteAfter(), err)
-				}
-				if d := time.Until(after) - core.ProjectDeleteWindow; d > time.Minute || d < -time.Minute {
-					t.Fatalf("delete_after %v is not one window from now", after)
+				if want := now.Add(core.ProjectDeleteWindow).Format(time.RFC3339); resp.Msg.GetDeleteAfter() != want {
+					t.Fatalf("delete_after = %q, want one window from now, %q", resp.Msg.GetDeleteAfter(), want)
 				}
 				if len(resp.Msg.GetMachineRemovals()) != 0 {
 					t.Fatalf("machine removals %v without remove_from_machines", resp.Msg.GetMachineRemovals())
