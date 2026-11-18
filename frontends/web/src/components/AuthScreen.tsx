@@ -11,6 +11,8 @@ import { isClaimReturnTo } from '@/lib/claimLink'
 import { describeAuthError } from '@/lib/authErrors'
 import { trackEvent } from '@/lib/analytics'
 import { AuthLayout, AuthHeader, AuthError, AuthDivider, AuthLegalLinks } from './AuthLayout'
+import { devSignInEnabled } from '@/lib/devSignIn'
+import { DevSignInPanel } from './DevSignInPanel'
 
 /**
  * Sign in with an emailed code. One path for everyone, new or returning.
@@ -384,6 +386,8 @@ export function AuthScreen() {
 
           <AuthLegalLinks />
         </form>
+
+        {devSignInEnabled() && <DevSignInPanel />}
       </div>
     </AuthLayout>
   )
