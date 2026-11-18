@@ -1956,7 +1956,7 @@ export const UnstageFilesResponseSchema: GenMessage<UnstageFilesResponse> = /*@_
 /**
  * RevertFilesRequest reverts/discards file changes
  * For staged files: unstages and discards changes
- * For modified files: discards working tree changes  
+ * For modified files: discards working tree changes
  * For untracked files: deletes the file
  *
  * @generated from message reliant.v1.RevertFilesRequest

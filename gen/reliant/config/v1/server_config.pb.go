@@ -532,7 +532,7 @@ var File_reliant_config_v1_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/server_config.proto\x12\x11reliant.config.v1\x1a(reliant/config/v1/analytics_config.proto\x1a,reliant/config/v1/control_plane_config.proto\x1a+reliant/config/v1/integrations_config.proto\x1a\"reliant/config/v1/llm_config.proto\x1a,reliant/config/v1/observability_config.proto\x1a&reliant/config/v1/preview_config.proto\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xf2\a\n" +
+	"%reliant/config/v1/server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a(reliant/config/v1/analytics_config.proto\x1a,reliant/config/v1/control_plane_config.proto\x1a+reliant/config/v1/integrations_config.proto\x1a\"reliant/config/v1/llm_config.proto\x1a,reliant/config/v1/observability_config.proto\x1a&reliant/config/v1/preview_config.proto\"\xf2\a\n" +
 	"\x13ServerProcessConfig\x12J\n" +
 	"\rcontrol_plane\x18\x01 \x01(\v2%.reliant.config.v1.ControlPlaneConfigR\fcontrolPlane\x121\n" +
 	"\x04nats\x18\x02 \x01(\v2\x1d.reliant.config.v1.NatsConfigR\x04nats\x12=\n" +

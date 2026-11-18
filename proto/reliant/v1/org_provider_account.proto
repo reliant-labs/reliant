@@ -59,7 +59,10 @@ service OrgProviderAccountService {
           label: "response.account.account.label"
         }
         scope: "org_id"
-        detail: ["provider", "access"]
+        detail: [
+          "provider",
+          "access"
+        ]
       }
     };
   }
@@ -95,7 +98,10 @@ service OrgProviderAccountService {
           label: "response.account.account.label"
         }
         scope: "org_id"
-        detail: ["paused", "access"]
+        detail: [
+          "paused",
+          "access"
+        ]
       }
     };
   }

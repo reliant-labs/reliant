@@ -2,14 +2,14 @@ syntax = "proto3";
 
 package reliant.config.v1;
 
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 import "reliant/config/v1/analytics_config.proto";
 import "reliant/config/v1/control_plane_config.proto";
 import "reliant/config/v1/integrations_config.proto";
 import "reliant/config/v1/llm_config.proto";
 import "reliant/config/v1/observability_config.proto";
 import "reliant/config/v1/preview_config.proto";
-import "buf/validate/validate.proto";
-import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
 
@@ -31,7 +31,11 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;confi
 message ServerProcessConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
-    subtrees: [{path: ["server"]}]
+    subtrees: [
+      {
+        path: ["server"]
+      }
+    ]
   };
 
   ControlPlaneConfig control_plane = 1;
@@ -88,7 +92,11 @@ message OrgPolicyEnforcementConfig {
   string integrations = 1 [(forge.v1.config) = {
     env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS"
     default_value: "audit"
-    allowed_values: ["off", "audit", "enforce"]
+    allowed_values: [
+      "off",
+      "audit",
+      "enforce"
+    ]
     description: "How the org integrations policy applies: off, audit (count, never refuse) or enforce"
   }];
   // Approval floors (§4.4): the automation-approval floor of an org's
@@ -96,7 +104,11 @@ message OrgPolicyEnforcementConfig {
   string approvals = 2 [(forge.v1.config) = {
     env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS"
     default_value: "audit"
-    allowed_values: ["off", "audit", "enforce"]
+    allowed_values: [
+      "off",
+      "audit",
+      "enforce"
+    ]
     description: "How the org approval floors apply: off, audit (count, change nothing) or enforce"
   }];
   // Machines (§4.6): `credentials: none` forced on the commands of an org's
@@ -104,7 +116,11 @@ message OrgPolicyEnforcementConfig {
   string machines = 3 [(forge.v1.config) = {
     env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES"
     default_value: "audit"
-    allowed_values: ["off", "audit", "enforce"]
+    allowed_values: [
+      "off",
+      "audit",
+      "enforce"
+    ]
     description: "How the org's forced credentials:none on agent commands applies: off, audit (count, change nothing) or enforce"
   }];
   // MCP servers (§4.5): which servers' tools an org's agents are offered
@@ -112,7 +128,11 @@ message OrgPolicyEnforcementConfig {
   string mcp = 4 [(forge.v1.config) = {
     env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP"
     default_value: "audit"
-    allowed_values: ["off", "audit", "enforce"]
+    allowed_values: [
+      "off",
+      "audit",
+      "enforce"
+    ]
     description: "How the org MCP server policy applies: off, audit (count, never refuse) or enforce"
   }];
   // Providers and models at resolution (§4.1 point 3, §4.2): which accounts
@@ -122,7 +142,11 @@ message OrgPolicyEnforcementConfig {
   string providers = 5 [(forge.v1.config) = {
     env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS"
     default_value: "audit"
-    allowed_values: ["off", "audit", "enforce"]
+    allowed_values: [
+      "off",
+      "audit",
+      "enforce"
+    ]
     description: "How the org provider and model policy applies where runs resolve their model and account: off, audit (count, never refuse) or enforce"
   }];
 }
@@ -184,7 +208,10 @@ message TemporalConfig {
       default_value: "7233"
       description: "Temporal server port"
     },
-    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+    (buf.validate.field).int32 = {
+      gte: 1
+      lte: 65535
+    }
   ];
   string namespace = 3 [(forge.v1.config) = {
     env_var: "TEMPORAL_NAMESPACE"

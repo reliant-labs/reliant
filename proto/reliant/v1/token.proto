@@ -185,9 +185,9 @@ enum TokenKind {
 }
 
 message CreateTokenRequest {
-  string name = 1;        // Human-readable label (required)
-  int64 ttl_seconds = 2;  // Lifetime in seconds; 0 means the token never expires
-  TokenKind kind = 3;     // Required
+  string name = 1; // Human-readable label (required)
+  int64 ttl_seconds = 2; // Lifetime in seconds; 0 means the token never expires
+  TokenKind kind = 3; // Required
 }
 
 // TokenInfo is a token's metadata. It never carries the secret or its hash.
@@ -195,12 +195,12 @@ message CreateTokenRequest {
 message TokenInfo {
   string id = 1;
   string name = 2;
-  string token_prefix = 3;  // Display identifier, e.g. "rlat_A3f9Kd2p"
+  string token_prefix = 3; // Display identifier, e.g. "rlat_A3f9Kd2p"
   string created_at = 4;
   string last_used_at = 5;
   string expires_at = 6;
   bool ephemeral = 8;
-  string daemon_id = 9;     // Set when the token is bound to one daemon
+  string daemon_id = 9; // Set when the token is bound to one daemon
   TokenKind kind = 10;
   // scopes are the permissions this credential carries
   // (forge/pkg/accesstoken), e.g. "daemon:connect", "deploy:write". A daemon
@@ -216,11 +216,11 @@ message TokenInfo {
 
 message CreateTokenResponse {
   TokenInfo info = 1;
-  string token = 2;  // Raw rlat_ token — shown once, never retrievable again
+  string token = 2; // Raw rlat_ token — shown once, never retrievable again
 }
 
 message ListTokensRequest {
-  optional TokenKind kind = 1;  // Unset (or UNSPECIFIED) lists every kind
+  optional TokenKind kind = 1; // Unset (or UNSPECIFIED) lists every kind
 }
 
 message ListTokensResponse {
@@ -269,11 +269,11 @@ message ExchangeTokenRequest {
 }
 
 message ExchangeTokenResponse {
-  string token = 1;         // Raw rlat_ token — returned once
-  string token_prefix = 2;  // Display identifier, e.g. "rlat_A3f9Kd2p"
-  string expires_at = 3;    // RFC 3339
-  repeated string scopes = 4;  // What was actually granted
-  string org_id = 5;           // The org the token acts in
+  string token = 1; // Raw rlat_ token — returned once
+  string token_prefix = 2; // Display identifier, e.g. "rlat_A3f9Kd2p"
+  string expires_at = 3; // RFC 3339
+  repeated string scopes = 4; // What was actually granted
+  string org_id = 5; // The org the token acts in
 }
 
 message GetGitTokenRequest {

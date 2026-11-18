@@ -116,7 +116,7 @@ enum ContentBlockType {
   CONTENT_BLOCK_TYPE_IMAGE = 4;
   CONTENT_BLOCK_TYPE_THINKING = 5;
   CONTENT_BLOCK_TYPE_FILE_REFERENCE = 6;
-  CONTENT_BLOCK_TYPE_DOCUMENT = 7;  // Binary document (PDF) - sent natively to supporting LLMs
+  CONTENT_BLOCK_TYPE_DOCUMENT = 7; // Binary document (PDF) - sent natively to supporting LLMs
   // Reasoning the provider's safety system withheld. The block carries an
   // opaque, encrypted payload in `content` with NO readable text — it exists
   // only to be replayed to the provider unchanged on the next turn, which the
@@ -160,7 +160,7 @@ service ChatService {
   // ============================================
   // Phase 3: Core Chat Operations
   // ============================================
-  
+
   // StartChat starts a chat's root run — the ONE door through which a session
   // begins. Either it creates the chat (chat_id unset) or it starts an existing
   // PENDING one, which is what a branched chat's first send is.
@@ -242,11 +242,11 @@ service ChatService {
   // ListChats lists all non-archived chats for a project
   // forge:custom — the caller's non-archived chats in one project, with the user update sequence the stream resumes from
   rpc ListChats(ListChatsRequest) returns (ListChatsResponse) {}
-  
+
   // GetChat retrieves a specific chat by ID
   // forge:custom — owner-checked, and reports the run's live Temporal state alongside the chat row
   rpc GetChat(GetChatRequest) returns (GetChatResponse) {}
-  
+
   // UpdateChat updates chat metadata (title, temperature, etc.)
   // forge:custom — a partial update that resolves the worktree and emits title/config change events
   rpc UpdateChat(UpdateChatRequest) returns (UpdateChatResponse) {
@@ -261,7 +261,7 @@ service ChatService {
       }
     };
   }
-  
+
   // DeleteChat permanently deletes an archived chat. A chat that is not
   // archived is refused (FailedPrecondition): archive it with UpdateChatState
   // first, so a delete can never silently be an archive, or the reverse.
@@ -278,13 +278,13 @@ service ChatService {
       }
     };
   }
-  
+
   // SearchChats searches chats by title and message content
   rpc SearchChats(SearchChatsRequest) returns (SearchChatsResponse) {}
-  
+
   // ListArchivedChats lists all archived chats with worktree info
   rpc ListArchivedChats(ListArchivedChatsRequest) returns (ListArchivedChatsResponse) {}
-  
+
   // SendMessage sends a user message to a chat and continues workflow
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {
     option (forge.v1.method) = {
@@ -346,7 +346,7 @@ service ChatService {
       activity: {none: "per-turn steering of a running thread; each tool call it cancels records its own outcome"}
     };
   }
-  
+
   // ListMessages lists messages for a chat with content blocks
   // forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
   rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse) {}
@@ -363,7 +363,7 @@ service ChatService {
   // not_found, so the response never says whether an id exists elsewhere.
   // forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
   rpc GetContentBlockBodies(GetContentBlockBodiesRequest) returns (GetContentBlockBodiesResponse) {}
-  
+
   // UpdateChatState changes chat state (idle/archived)
   rpc UpdateChatState(UpdateChatStateRequest) returns (UpdateChatStateResponse) {
     option (forge.v1.method) = {
@@ -380,7 +380,7 @@ service ChatService {
       }
     };
   }
-  
+
   // TerminateChat forcefully terminates the running workflow for a chat
   rpc TerminateChat(TerminateChatRequest) returns (TerminateChatResponse) {
     option (forge.v1.method) = {
@@ -430,25 +430,25 @@ service ChatService {
   }
 
   // REMOVED: UpdateChatAgent - agent is now a workflow param, not stored on chat
-  
+
   // ============================================
   // Phase 4: Extended Chat Operations
   // ============================================
-  
+
   // DismissChat clears needs_attention state when user views a chat
   rpc DismissChat(DismissChatRequest) returns (DismissChatResponse) {
     option (forge.v1.method) = {
       activity: {none: "per-user read state: clears needs-attention when the chat is viewed"}
     };
   }
-  
+
   // MarkUnreadChat marks a chat as needing attention (mark as unread)
   rpc MarkUnreadChat(MarkUnreadChatRequest) returns (MarkUnreadChatResponse) {
     option (forge.v1.method) = {
       activity: {none: "per-user read state: marks the chat unread"}
     };
   }
-  
+
   // CompactChat triggers manual context compaction for a chat
   rpc CompactChat(CompactChatRequest) returns (CompactChatResponse) {
     option (forge.v1.method) = {
@@ -462,7 +462,7 @@ service ChatService {
       }
     };
   }
-  
+
   // BranchChat creates a new chat branched from a specific message ordinal
   rpc BranchChat(BranchChatRequest) returns (BranchChatResponse) {
     option (forge.v1.method) = {
@@ -480,10 +480,10 @@ service ChatService {
       }
     };
   }
-  
+
   // ListBranches lists all chats branched from a parent chat
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse) {}
-  
+
   // UpdateWorkflowParams updates workflow parameters for a running chat
   // This signals the running workflow to update its inputs (e.g., mode, temperature)
   rpc UpdateWorkflowParams(UpdateWorkflowParamsRequest) returns (UpdateWorkflowParamsResponse) {
@@ -498,13 +498,13 @@ service ChatService {
       activity: {none: "per-chat runtime selection (what to do when the provider is rate-limited), versioned on the chat's selection like UpdateWorkflowParams"}
     };
   }
-  
+
   // GetChatUpdates fetches chat updates since a sequence number
   rpc GetChatUpdates(GetChatUpdatesRequest) returns (GetChatUpdatesResponse) {}
-  
+
   // ListChatPlans lists plans associated with a chat
   rpc ListChatPlans(ListChatPlansRequest) returns (ListChatPlansResponse) {}
-  
+
   // GetWorkflowExecutions returns the workflow execution tree for a chat
   rpc GetWorkflowExecutions(GetWorkflowExecutionsRequest) returns (GetWorkflowExecutionsResponse) {}
 
@@ -513,7 +513,7 @@ service ChatService {
   // What the builder's Run tab inspects a step from.
   // forge:custom — a chat's step records per attempt, scoped by node_path and bounded to the newest steps
   rpc ListStepExecutions(ListStepExecutionsRequest) returns (ListStepExecutionsResponse) {}
-  
+
   // GetWorkflowNodeExecutions returns the newest node_execution update of each
   // node of one of a chat's workflow runs: the node state a run-status view
   // starts from, before it follows the chat stream's live node events. The
@@ -578,10 +578,10 @@ message Chat {
   string title = 3;
   string project_id = 4;
   optional string worktree_id = 5;
-  optional string workflow_name = 8;   // YAML workflow name
+  optional string workflow_name = 8; // YAML workflow name
   ChatState state = 13;
-  optional string workflow_id = 17;    // Temporal workflow ID
-  optional string run_id = 18;         // Temporal run ID
+  optional string workflow_id = 17; // Temporal workflow ID
+  optional string run_id = 18; // Temporal run ID
   string created_at = 19;
   string updated_at = 20;
   string last_active = 21;
@@ -711,10 +711,10 @@ message ProviderPolicy {
   // docs/design/org-provider-accounts.md §4.4). Sub-agents, loops and
   // sub-workflows inherit it. A server that predates it ignores it.
   enum Funding {
-    FUNDING_UNSPECIFIED = 0;    // inherit the person's setting for the org
-    FUNDING_ORG_FIRST = 1;      // the org's accounts first, then the person's own
+    FUNDING_UNSPECIFIED = 0; // inherit the person's setting for the org
+    FUNDING_ORG_FIRST = 1; // the org's accounts first, then the person's own
     FUNDING_PERSONAL_FIRST = 2; // the person's own accounts first
-    FUNDING_ORG_ONLY = 3;       // never the person's own accounts in this chat
+    FUNDING_ORG_ONLY = 3; // never the person's own accounts in this chat
   }
   Funding funding = 3;
 }
@@ -742,10 +742,10 @@ message Message {
   repeated Attachment attachments = 13;
   string created_at = 14;
   string updated_at = 15;
-  optional string workflow_id = 16;    // Workflow that produced this message (for handoff detection)
+  optional string workflow_id = 16; // Workflow that produced this message (for handoff detection)
   optional DisplayStyle display_style = 17;
-  int64 sequence_number = 18;           // Streaming sync sequence number for tracking
-  optional string node_id = 19;         // Workflow node/step that produced this message (for per-node supervision)
+  int64 sequence_number = 18; // Streaming sync sequence number for tracking
+  optional string node_id = 19; // Workflow node/step that produced this message (for per-node supervision)
   // sender is set when another agent, not the human, wrote this message. Such
   // a message keeps role USER (every provider accepts it) but must not be
   // presented as the user's own words. Unset means the human (or the model).
@@ -781,21 +781,21 @@ enum ToolCallStatus {
 // ContentBlock represents a granular message content piece
 message ContentBlock {
   string id = 1;
-  int32 index = 2;                     // Position in message
+  int32 index = 2; // Position in message
   ContentBlockType type = 3;
-  optional string content = 4;         // Text content or tool result
-  optional string tool_name = 5;       // For tool_call blocks
-  optional string tool_call_id = 6;    // For tool_call and tool_result blocks
-  optional string input = 7;           // Tool input (JSON string)
-  optional bool is_error = 8;          // For tool_result blocks
+  optional string content = 4; // Text content or tool result
+  optional string tool_name = 5; // For tool_call blocks
+  optional string tool_call_id = 6; // For tool_call and tool_result blocks
+  optional string input = 7; // Tool input (JSON string)
+  optional bool is_error = 8; // For tool_result blocks
   // 9 was matched_result: a copy of the tool_result block's content on its
   // tool_call block, which put every tool output on the wire twice. The
   // client joins a call to its result by tool_call_id instead.
   reserved 9;
   reserved "matched_result";
   optional ToolCallStatus tool_call_status = 10; // Durable status, for tool_call blocks
-  optional string started_at = 11;     // Durable status timing, for tool_call blocks
-  optional string completed_at = 12;   // Durable status timing, for tool_call blocks
+  optional string started_at = 11; // Durable status timing, for tool_call blocks
+  optional string completed_at = 12; // Durable status timing, for tool_call blocks
   // The workflow a spawn tool call started, from tool_calls.child_workflow_id.
   // A spawned sub-agent's thread id EQUALS its workflow id, so this is the
   // direct answer to "which thread does this spawn own".
@@ -855,7 +855,7 @@ message Attachment {
 // Supports user and system messages.
 message InputMessage {
   MessageRole role = 1;
-  string content = 2;                  // Message text content
+  string content = 2; // Message text content
   optional DisplayStyle display_style = 3;
 }
 
@@ -864,10 +864,10 @@ message StartChatRequest {
   string project_id = 1;
   optional string title = 3;
   optional string worktree_id = 4;
-  string workflow = 6;                 // Workflow name (optional - defaults to user preference or builtin://agent)
-  repeated string attachments = 12;    // Attachment IDs
-  map<string, google.protobuf.Value> workflow_params = 13;  // Workflow input parameters
-  optional string mode = 14;           // Execution mode; becomes workflow_params.mode
+  string workflow = 6; // Workflow name (optional - defaults to user preference or builtin://agent)
+  repeated string attachments = 12; // Attachment IDs
+  map<string, google.protobuf.Value> workflow_params = 13; // Workflow input parameters
+  optional string mode = 14; // Execution mode; becomes workflow_params.mode
   map<string, string> selected_presets = 15; // Preset selections per target ("" = workflow-level, "Agent A" = group)
   repeated InputMessage messages = 16; // Messages to send (user and system). At least one user message required.
 
@@ -1057,7 +1057,7 @@ message UpdateChatRequest {
   string chat_id = 1;
   optional string title = 2;
   optional string worktree_id = 6;
-  optional string workflow_name = 7;   // Workflow to use - only changeable before chat starts (status=pending)
+  optional string workflow_name = 7; // Workflow to use - only changeable before chat starts (status=pending)
 }
 
 // UpdateChatResponse returns the updated chat
@@ -1090,7 +1090,7 @@ message DeleteChatRequest {
 message DeleteChatResponse {
   bool success = 1;
   string message = 2;
-  bool permanently_deleted = 3;        // True if hard deleted, false if archived
+  bool permanently_deleted = 3; // True if hard deleted, false if archived
 }
 
 // SearchChatsRequest searches the chat list: the same chats ListChats returns
@@ -1100,7 +1100,7 @@ message SearchChatsRequest {
   // The project to search. Empty searches every project the caller owns; each
   // result carries its project_id.
   string project_id = 1;
-  string query = 2;                    // Search query
+  string query = 2; // Search query
   optional int32 limit = 3;
   // Search only this organization's chats. It must be one the caller is a
   // live member of (PERMISSION_DENIED otherwise). Chats created before orgs
@@ -1137,13 +1137,13 @@ message ListArchivedChatsResponse {
 // SendMessageRequest sends messages to a chat
 message SendMessageRequest {
   string chat_id = 1;
-  repeated string attachments = 3;     // Attachment IDs
-  optional string workflow = 5;        // Switch to this workflow (only allowed before chat starts)
-  optional double temperature = 8;     // Per-message temperature
-  optional int64 max_tokens = 9;       // Per-message max tokens
-  map<string, google.protobuf.Value> workflow_params = 11;  // Workflow input parameters
-  optional string mode = 12;           // Execution mode
-  optional string target_thread = 13;  // Target thread ID for the message (defaults to main thread if not specified)
+  repeated string attachments = 3; // Attachment IDs
+  optional string workflow = 5; // Switch to this workflow (only allowed before chat starts)
+  optional double temperature = 8; // Per-message temperature
+  optional int64 max_tokens = 9; // Per-message max tokens
+  map<string, google.protobuf.Value> workflow_params = 11; // Workflow input parameters
+  optional string mode = 12; // Execution mode
+  optional string target_thread = 13; // Target thread ID for the message (defaults to main thread if not specified)
   map<string, string> selected_presets = 14; // Update preset selections (persisted with chat)
   repeated InputMessage messages = 15; // Messages to send (user and system). At least one user message required.
   reserved 17;
@@ -1167,7 +1167,7 @@ message SendMessageResponse {
   string chat_id = 1;
   string workflow_id = 2;
   string run_id = 3;
-  string status = 4;                   // 'processing'
+  string status = 4; // 'processing'
   optional string workflow_status = 5; // Workflow status after operation (running, paused, etc.)
   // ID of the user message: the history row, or — when queued — the queued
   // mailbox row, which becomes history when the thread's next turn drains it.
@@ -1184,9 +1184,9 @@ message SendMessageResponse {
 // without pausing the chat.
 message SendAgentMessageRequest {
   string chat_id = 1;
-  string thread_id = 2;   // The target thread to message. Must belong to chat_id.
+  string thread_id = 2; // The target thread to message. Must belong to chat_id.
   string message = 3;
-  repeated string attachments = 4;  // Attachment IDs
+  repeated string attachments = 4; // Attachment IDs
   // Client-chosen UUID for the queued mailbox row. Lets the client reconcile
   // its optimistic queue entry with the server row without matching message
   // text, and makes the send idempotent: a repeat with the same id returns
@@ -1201,7 +1201,7 @@ message SendAgentMessageRequest {
 // on, mirroring spawn_send's contract.
 message SendAgentMessageResponse {
   bool success = 1;
-  string message = 2;   // Human-readable receipt, or the reason for failure.
+  string message = 2; // Human-readable receipt, or the reason for failure.
 }
 
 // ListQueuedAgentMessagesRequest asks for the still-undelivered mailbox
@@ -1219,7 +1219,7 @@ message QueuedAgentMessage {
   // sender_kind lets the UI distinguish a message the user queued
   // (HUMAN_MESSAGE) from one a peer agent sent (MESSAGE).
   AgentMessageKind sender_kind = 4;
-  repeated string attachments = 5;  // Attachment IDs
+  repeated string attachments = 5; // Attachment IDs
 }
 
 // ListQueuedAgentMessagesResponse lists queued entries in send order.
@@ -1238,7 +1238,7 @@ message CancelQueuedAgentMessageRequest {
 // legitimately be false even for a request the caller was allowed to make.
 message CancelQueuedAgentMessageResponse {
   bool success = 1;
-  string message = 2;   // Human-readable receipt, or the reason it couldn't be cancelled.
+  string message = 2; // Human-readable receipt, or the reason it couldn't be cancelled.
 }
 
 // InterruptThreadRequest stops the work in flight on one thread.
@@ -1266,8 +1266,8 @@ message InterruptThreadResponse {
 // ListMessagesRequest lists messages for a chat
 message ListMessagesRequest {
   string chat_id = 1 [(buf.validate.field).required = true];
-  optional int32 recent = 2;           // Number of most recent messages
-  optional int64 before_seq = 3;       // Load messages before this seq
+  optional int32 recent = 2; // Number of most recent messages
+  optional int64 before_seq = 3; // Load messages before this seq
 
   // Read exactly one thread instead of the whole chat.
   //
@@ -1323,7 +1323,7 @@ message GetToolResultResponse {
   string tool_call_id = 1;
   string content = 2;
   bool is_error = 3;
-  int64 size = 4;                      // Byte length of content
+  int64 size = 4; // Byte length of content
 }
 
 // GetContentBlockBodiesRequest names content blocks of a chat the caller
@@ -1341,10 +1341,10 @@ message GetContentBlockBodiesRequest {
 // (or, with full, as stored).
 message ContentBlockBody {
   string block_id = 1;
-  optional string input = 2;          // tool_call: the stored input, whole
-  optional string content = 3;        // tool_result: display preview (or whole when full); thinking: whole
-  optional bool truncated = 4;        // as ContentBlock.truncated
-  optional int64 original_size = 5;   // as ContentBlock.original_size
+  optional string input = 2; // tool_call: the stored input, whole
+  optional string content = 3; // tool_result: display preview (or whole when full); thinking: whole
+  optional bool truncated = 4; // as ContentBlock.truncated
+  optional int64 original_size = 5; // as ContentBlock.original_size
 }
 
 // GetContentBlockBodiesResponse returns every requested id in exactly one of
@@ -1466,7 +1466,7 @@ message MarkUnreadChatResponse {
 // CompactChatRequest triggers context compaction
 message CompactChatRequest {
   string chat_id = 1;
-  string thread_id = 2;  // Required: thread to compact
+  string thread_id = 2; // Required: thread to compact
 }
 
 // CompactChatResponse returns compaction workflow info
@@ -1474,24 +1474,24 @@ message CompactChatResponse {
   string chat_id = 1;
   string workflow_id = 2;
   string run_id = 3;
-  string status = 4;                   // 'compacting'
+  string status = 4; // 'compacting'
   string message = 5;
 }
 
 // WorkspaceBranchContext provides context about workspace branching
 message WorkspaceBranchContext {
-  optional string source_worktree_id = 1;  // Worktree the chat is being branched FROM
-  repeated string files_copied = 2;        // List of files that were copied to the new workspace
-  bool copy_files_enabled = 3;             // Whether the user enabled copying uncommitted files
+  optional string source_worktree_id = 1; // Worktree the chat is being branched FROM
+  repeated string files_copied = 2; // List of files that were copied to the new workspace
+  bool copy_files_enabled = 3; // Whether the user enabled copying uncommitted files
 }
 
 // BranchChatRequest creates a branch from a specific message
 message BranchChatRequest {
-  string chat_id = 1;                  // Chat ID (can be current chat or original chat for inherited messages)
-  string message_id = 7;               // Message ID to branch from (unique, unambiguous)
-  optional string title = 3;           // Optional title for the new branch
-  optional string worktree_id = 4;     // Optional worktree ID to assign to the branched chat
-  optional WorkspaceBranchContext workspace_context = 5;  // Context about workspace branching
+  string chat_id = 1; // Chat ID (can be current chat or original chat for inherited messages)
+  string message_id = 7; // Message ID to branch from (unique, unambiguous)
+  optional string title = 3; // Optional title for the new branch
+  optional string worktree_id = 4; // Optional worktree ID to assign to the branched chat
+  optional WorkspaceBranchContext workspace_context = 5; // Context about workspace branching
   // no_machine branches into a chat with no machine by design ("Continue
   // without machine"): it carries the conversation, binds to the project's
   // main worktree rather than a machine-bound one, pins no daemon, and never
@@ -1504,7 +1504,7 @@ message BranchChatRequest {
 
 // BranchChatResponse returns the created branch chat
 message BranchChatResponse {
-  Chat chat = 1;                       // The new branched chat
+  Chat chat = 1; // The new branched chat
 }
 
 // BranchInfo contains summary info about a branch
@@ -1530,8 +1530,8 @@ message ListBranchesResponse {
 // UpdateWorkflowParamsRequest updates workflow parameters for a running chat
 message UpdateWorkflowParamsRequest {
   string chat_id = 1;
-  map<string, google.protobuf.Value> params = 2;  // Workflow parameters to update (e.g., mode, temperature)
-  optional string thread_id = 3;  // Optional: target a specific thread's workflow instead of root
+  map<string, google.protobuf.Value> params = 2; // Workflow parameters to update (e.g., mode, temperature)
+  optional string thread_id = 3; // Optional: target a specific thread's workflow instead of root
   // The ChatSelection.version this edit was made against. A stale version is
   // refused with ABORTED and the client refetches. Unset writes unconditionally.
   optional int64 expected_version = 4;
@@ -1558,16 +1558,16 @@ message UpdateChatProviderPolicyResponse {
 // ChatUpdate represents a single update event
 message ChatUpdate {
   int64 sequence_number = 1;
-  string update_type = 2;              // 'message', 'state', 'error', etc.
-  string entity_id = 3;                // ID of the entity (message_id, etc.)
-  string data = 4;                     // JSON data
+  string update_type = 2; // 'message', 'state', 'error', etc.
+  string entity_id = 3; // ID of the entity (message_id, etc.)
+  string data = 4; // JSON data
   string created_at = 5;
 }
 
 // GetChatUpdatesRequest fetches updates since a sequence
 message GetChatUpdatesRequest {
   string chat_id = 1;
-  int64 since_seq = 2;                 // Sequence number to fetch updates after
+  int64 since_seq = 2; // Sequence number to fetch updates after
   // How finished tool calls' bodies are sent in message updates. Unset is
   // TOOL_BODY_MODE_FULL.
   optional ToolBodyMode tool_bodies = 3;
@@ -1613,13 +1613,13 @@ message StepExecution {
   string workflow_id = 2;
   string step_id = 3;
   string activity_name = 4;
-  string output_json = 5;                // Raw CEL output as JSON string
+  string output_json = 5; // Raw CEL output as JSON string
   optional int32 exit_code = 6;
   optional bool success = 7;
   optional int64 duration_ms = 8;
   string created_at = 9;
-  optional string loop_node_id = 10;     // Node ID of the loop that spawned this step
-  optional int32 loop_iteration = 11;    // Iteration index within the loop (0-indexed)
+  optional string loop_node_id = 10; // Node ID of the loop that spawned this step
+  optional int32 loop_iteration = 11; // Iteration index within the loop (0-indexed)
   // The message a "-save" step wrote, when it wrote one.
   //
   // This is the ONE thing clients ever needed from output_json on the
@@ -1658,10 +1658,10 @@ message WorkflowExecution {
   optional string parent_id = 5;
   string created_at = 6;
   optional string completed_at = 7;
-  int32 message_count = 8;               // Number of messages in this workflow's thread
+  int32 message_count = 8; // Number of messages in this workflow's thread
   repeated WorkflowExecution children = 9;
   repeated StepExecution steps = 10;
-  optional int32 iteration = 11;         // For loop iterations
+  optional int32 iteration = 11; // For loop iterations
   optional string spawned_by_node_id = 12; // Node ID that spawned this child workflow
   optional string forked_from_thread = 13; // Thread this was forked from (if fork, not new)
   optional string thread_title = 15; // Human-readable title for the thread
@@ -1690,14 +1690,14 @@ message WorkflowExecution {
 // GetThreadWorkflowInputsRequest fetches workflow inputs for a specific thread
 message GetThreadWorkflowInputsRequest {
   string chat_id = 1;
-  string thread_id = 2;  // Thread ID to look up
+  string thread_id = 2; // Thread ID to look up
 }
 
 // GetThreadWorkflowInputsResponse returns the workflow inputs and metadata for a thread
 message GetThreadWorkflowInputsResponse {
-  string workflow_name = 1;  // The workflow name (e.g., "builtin://agent")
-  map<string, google.protobuf.Value> inputs = 2;  // Current workflow input values
-  bool is_running = 3;  // Whether the workflow is still running
+  string workflow_name = 1; // The workflow name (e.g., "builtin://agent")
+  map<string, google.protobuf.Value> inputs = 2; // Current workflow input values
+  bool is_running = 3; // Whether the workflow is still running
   // The thread is a sub-agent that stopped on an error and is resumed by a
   // message to it. Not running, but its params can still be changed: they are
   // what it resumes with (e.g. a model from another provider after a usage

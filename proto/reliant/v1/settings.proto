@@ -15,7 +15,7 @@ service SettingsService {
   // ============================================
   // Sub-phase 6a: Core Settings CRUD
   // ============================================
-  
+
   // CreateSetting creates a new setting
   // forge:custom — an upsert keyed by the caller, project and key, which notifies config health
   rpc CreateSetting(CreateSettingRequest) returns (CreateSettingResponse) {
@@ -23,15 +23,15 @@ service SettingsService {
       activity: {none: "per-user preference: a key/value upsert into the caller's settings, not product history"}
     };
   }
-  
+
   // ListSettings lists all settings for the current user
   // forge:custom — scoped to the caller and an optional project, never a table-wide list
   rpc ListSettings(ListSettingsRequest) returns (ListSettingsResponse) {}
-  
+
   // GetSetting retrieves a setting by key
   // forge:custom — looks a key up in the caller's scope, and answers an empty response when it is unset
   rpc GetSetting(GetSettingRequest) returns (GetSettingResponse) {}
-  
+
   // UpdateSetting updates an existing setting
   // forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
   rpc UpdateSetting(UpdateSettingRequest) returns (UpdateSettingResponse) {
@@ -39,7 +39,7 @@ service SettingsService {
       activity: {none: "per-user preference: a key/value upsert into the caller's settings, not product history"}
     };
   }
-  
+
   // DeleteSetting deletes a setting by key
   // forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
   rpc DeleteSetting(DeleteSettingRequest) returns (DeleteSettingResponse) {
@@ -59,59 +59,59 @@ service SettingsService {
       activity: {none: "per-user preference: a key/value upsert into the caller's settings, not product history"}
     };
   }
-  
+
   // ============================================
   // Sub-phase 6b: UI Settings (Shortcuts/Preferences)
   // ============================================
-  
+
   // GetShortcuts retrieves user keyboard shortcuts
   rpc GetShortcuts(GetShortcutsRequest) returns (GetShortcutsResponse) {}
-  
+
   // UpdateShortcuts updates user keyboard shortcuts
   rpc UpdateShortcuts(UpdateShortcutsRequest) returns (UpdateShortcutsResponse) {
     option (forge.v1.method) = {
       activity: {none: "per-user UI preference: keyboard shortcuts"}
     };
   }
-  
+
   // GetPreferences retrieves user preferences
   rpc GetPreferences(GetPreferencesRequest) returns (GetPreferencesResponse) {}
-  
+
   // UpdatePreferences updates user preferences
   rpc UpdatePreferences(UpdatePreferencesRequest) returns (UpdatePreferencesResponse) {
     option (forge.v1.method) = {
       activity: {none: "per-user UI preference"}
     };
   }
-  
+
   // SetHiddenItem toggles the hidden state of a workflow or preset
   rpc SetHiddenItem(SetHiddenItemRequest) returns (SetHiddenItemResponse) {
     option (forge.v1.method) = {
       activity: {none: "per-user UI preference: hides a workflow or preset from the pickers"}
     };
   }
-  
+
   // ============================================
   // Sub-phase 6c: Prompts & Active Settings
   // ============================================
-  
+
   // GetPrompts retrieves global user prompts
   rpc GetPrompts(GetPromptsRequest) returns (GetPromptsResponse) {}
-  
+
   // SavePrompts saves global user prompts
   rpc SavePrompts(SavePromptsRequest) returns (SavePromptsResponse) {
     option (forge.v1.method) = {
       activity: {none: "per-user prompt library, stored as one settings key like the other preferences"}
     };
   }
-  
+
   // ============================================
   // Sub-phase 6d: Provider Settings (API Keys)
   // ============================================
-  
+
   // GetProviderStatuses retrieves configuration status of all providers
   rpc GetProviderStatuses(GetProviderStatusesRequest) returns (GetProviderStatusesResponse) {}
-  
+
   // ValidateProviderAPIKey validates an API key for a provider
   rpc ValidateProviderAPIKey(ValidateProviderAPIKeyRequest) returns (ValidateProviderAPIKeyResponse) {
     option (forge.v1.method) = {
@@ -215,17 +215,17 @@ service SettingsService {
   // ============================================
   // Sub-phase 6e: Privacy Settings
   // ============================================
-  
+
   // GetPrivacySettings retrieves user privacy settings
   rpc GetPrivacySettings(GetPrivacySettingsRequest) returns (GetPrivacySettingsResponse) {}
-  
+
   // UpdatePrivacySettings updates user privacy settings
   rpc UpdatePrivacySettings(UpdatePrivacySettingsRequest) returns (UpdatePrivacySettingsResponse) {
     option (forge.v1.method) = {
       activity: {none: "per-user preference: the analytics and crash-reporting opt-ins, like UpdatePreferences"}
     };
   }
-  
+
   // TrackPageVisited tracks a page visit for analytics
   rpc TrackPageVisited(TrackPageVisitedRequest) returns (TrackPageVisitedResponse) {
     option (forge.v1.method) = {
@@ -239,7 +239,7 @@ service SettingsService {
       activity: {none: "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"}
     };
   }
-  
+
   // ============================================
   // Skills Management
   // ============================================
@@ -277,7 +277,7 @@ service SettingsService {
   // ============================================
   // Sub-phase 6g: Configuration Health
   // ============================================
-  
+
   // GetConfigHealth retrieves configuration errors and warnings
   rpc GetConfigHealth(GetConfigHealthRequest) returns (GetConfigHealthResponse) {}
 }
@@ -850,15 +850,15 @@ message UpdatePrivacySettingsResponse {
 message ConfigError {
   // Error type: preset, workflow, mcp, config
   string type = 1;
-  
+
   // Source file or identifier where the error originated
   string source = 2;
-  
+
   // Human-readable error message
   string message = 3;
-  
+
   ConfigSeverity severity = 4;
-  
+
   // Additional details (e.g., missing params, invalid values)
   map<string, string> details = 5;
 }
@@ -866,7 +866,7 @@ message ConfigError {
 message GetConfigHealthRequest {
   // Optional: filter by project
   optional string project_id = 1;
-  
+
   // Optional: filter by error type (preset, workflow, mcp, config)
   optional string type_filter = 2;
 }
@@ -874,7 +874,7 @@ message GetConfigHealthRequest {
 message GetConfigHealthResponse {
   // All configuration errors and warnings
   repeated ConfigError errors = 1;
-  
+
   // Summary counts
   int32 error_count = 2;
   int32 warning_count = 3;
@@ -894,7 +894,7 @@ message TrackPageVisitedResponse {
 }
 
 message TrackOnboardingEventRequest {
-  string event_type = 1;       // onboarding_started, onboarding_step_completed, etc.
+  string event_type = 1; // onboarding_started, onboarding_step_completed, etc.
   optional string step_id = 2;
   optional string step_name = 3;
   int32 total_steps = 4;

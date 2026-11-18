@@ -14,14 +14,14 @@ service MCPService {
   // ListServers returns all configured MCP servers with their status
   // forge:custom — merges the project's three config scopes with the daemon's live server status
   rpc ListServers(ListServersRequest) returns (ListServersResponse) {}
-  
+
   // GetServer returns detailed information about a specific MCP server
   // forge:custom — resolves one server across the project's config scopes and the daemon's live status
   rpc GetServer(GetServerRequest) returns (GetServerResponse) {}
 
   // GetServerTools returns the list of tools exposed by a specific MCP server
   rpc GetServerTools(GetServerToolsRequest) returns (GetServerToolsResponse) {}
-  
+
   // InstallServer installs a new MCP server
   rpc InstallServer(InstallServerRequest) returns (InstallServerResponse) {
     option (forge.v1.method) = {
@@ -31,11 +31,15 @@ service MCPService {
           kind: "mcp_server"
           id: "name"
         }
-        detail: ["project_id", "scope", "response.success"]
+        detail: [
+          "project_id",
+          "scope",
+          "response.success"
+        ]
       }
     };
   }
-  
+
   // UninstallServer removes an MCP server
   rpc UninstallServer(UninstallServerRequest) returns (UninstallServerResponse) {
     option (forge.v1.method) = {
@@ -49,17 +53,17 @@ service MCPService {
       }
     };
   }
-  
+
   // RestartServer restarts an MCP server
   rpc RestartServer(RestartServerRequest) returns (RestartServerResponse) {
     option (forge.v1.method) = {
       activity: {none: "restarts a server process from its unchanged config: runtime recovery, not a configuration change"}
     };
   }
-  
+
   // ListRecommended returns a list of recommended MCP servers
   rpc ListRecommended(ListRecommendedRequest) returns (ListRecommendedResponse) {}
-  
+
   // UpdateServerConfig updates the configuration of an MCP server
   rpc UpdateServerConfig(UpdateServerConfigRequest) returns (UpdateServerConfigResponse) {
     option (forge.v1.method) = {
@@ -83,7 +87,11 @@ service MCPService {
           kind: "mcp_server"
           id: "name"
         }
-        detail: ["project_id", "enabled", "response.success"]
+        detail: [
+          "project_id",
+          "enabled",
+          "response.success"
+        ]
       }
     };
   }
@@ -97,7 +105,11 @@ service MCPService {
           kind: "mcp_server"
           id: "name"
         }
-        detail: ["project_id", "scope", "response.success"]
+        detail: [
+          "project_id",
+          "scope",
+          "response.success"
+        ]
       }
     };
   }
@@ -158,7 +170,7 @@ message MCPServer {
 message ConfigField {
   string key = 1;
   string label = 2;
-  string type = 3;  // text, password, url
+  string type = 3; // text, password, url
   bool required = 4;
   optional string placeholder = 5;
   optional string help_text = 6;

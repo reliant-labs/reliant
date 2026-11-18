@@ -48,20 +48,20 @@ service RepoService {
 message Repo {
   string id = 1;
   string project_id = 2;
-  string name = 3;             // display name; defaults to dir basename
-  string relative_path = 4;    // path relative to project root; "" means project root itself
-  string remote_url = 5;       // remote.origin.url, "" if no remote
+  string name = 3; // display name; defaults to dir basename
+  string relative_path = 4; // path relative to project root; "" means project root itself
+  string remote_url = 5; // remote.origin.url, "" if no remote
   string created_at = 6;
   string updated_at = 7;
 }
 
 message DiscoverReposRequest {
   string project_id = 1;
-  int32 max_depth = 2;  // default 2; how many dirs deep to scan
+  int32 max_depth = 2; // default 2; how many dirs deep to scan
 }
 
 message DiscoverReposResponse {
-  repeated Repo discovered = 1;  // repos found on disk (not yet persisted)
+  repeated Repo discovered = 1; // repos found on disk (not yet persisted)
   // truncated is set when the machine's scan stopped before covering the
   // project (its entry budget or deadline): discovered is then what it found
   // until then, and truncated_reason says why ("it ran out of time"). Show the
@@ -80,8 +80,8 @@ message ListReposResponse {
 
 message AddRepoRequest {
   string project_id = 1;
-  string relative_path = 2;     // required; "" means project root
-  optional string name = 3;     // defaults to basename of relative_path
+  string relative_path = 2; // required; "" means project root
+  optional string name = 3; // defaults to basename of relative_path
 }
 
 message AddRepoResponse {
@@ -104,7 +104,7 @@ message GetRepoGitInfoResponse {
   string repo_id = 1;
   string current_branch = 2;
   bool has_changes = 3;
-  string status = 4;            // "clean" or "dirty"
+  string status = 4; // "clean" or "dirty"
   repeated string staged_files = 5;
   repeated string unstaged_files = 6;
   repeated string untracked_files = 7;

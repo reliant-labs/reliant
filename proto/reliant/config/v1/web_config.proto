@@ -53,13 +53,23 @@ message ReliantWebConfig {
   // ── Endpoints ─────────────────────────────────────────────────────────
   string api_url = 1 [(forge.v1.config) = {
     env_var: "API_URL"
-    required_when: [{field: "auth_mode", equals: "cloud"}]
+    required_when: [
+      {
+        field: "auth_mode"
+        equals: "cloud"
+      }
+    ]
     description: "Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there."
   }];
 
   string control_plane_api_url = 2 [(forge.v1.config) = {
     env_var: "CONTROL_PLANE_API_URL"
-    required_when: [{field: "auth_mode", equals: "cloud"}]
+    required_when: [
+      {
+        field: "auth_mode"
+        equals: "cloud"
+      }
+    ]
     description: "Origin of the control plane's admin-server. Set: the cloud features (billing, managed daemons, coupons, Forge cloud envs) are wired up. Unset: the self-hosted implementations (src/services/controlPlane/config.ts)."
   }];
 
@@ -85,31 +95,44 @@ message ReliantWebConfig {
   // this bundle still honours the key (lib/shell.ts) so a deployment that
   // points the host at reliant-web keeps its demo. Removed only in a future
   // major.
-  string demo_app_host = 24 [deprecated = true, (forge.v1.config) = {
-    env_var: "DEMO_APP_HOST"
-    default_value: "demo.reliantlabs.io"
-    description: "Deprecated: hostname on which this bundle still mounts the public forge demo (the demo shell), read-only on sample data. The supported demo is its own build and env (deploy/kcl/demo, the forge-demo frontend); this key keeps working until a future major."
-  }];
+  string demo_app_host = 24 [
+    deprecated = true,
+    (forge.v1.config) = {
+      env_var: "DEMO_APP_HOST"
+      default_value: "demo.reliantlabs.io"
+      description: "Deprecated: hostname on which this bundle still mounts the public forge demo (the demo shell), read-only on sample data. The supported demo is its own build and env (deploy/kcl/demo, the forge-demo frontend); this key keeps working until a future major."
+    }
+  ];
 
   string demo_telemetry = 25 [(forge.v1.config) = {
     env_var: "DEMO_TELEMETRY"
     default_value: "replay"
     description: "What the demo host records about its anonymous visitors, under service reliant-forge-demo. \"replay\": page and tour analytics and masked session replay. \"analytics\": page and tour analytics only. \"off\": nothing. A browser that sends Do Not Track or Global Privacy Control is never recorded."
-    allowed_values: ["replay", "analytics", "off"]
+    allowed_values: [
+      "replay",
+      "analytics",
+      "off"
+    ]
   }];
 
   string demo_tour = 26 [(forge.v1.config) = {
     env_var: "DEMO_TOUR"
     default_value: "short"
     description: "The forge tour on the demo host. \"short\": at most ten steps (no profile or on-call step; the cross-service, graph and agent steps instead). \"full\": every forge step."
-    allowed_values: ["short", "full"]
+    allowed_values: [
+      "short",
+      "full"
+    ]
   }];
 
   string demo_data_source = 27 [(forge.v1.config) = {
     env_var: "DEMO_DATA_SOURCE"
     default_value: "fixtures"
     description: "Where the demo host's console reads come from. \"fixtures\": built-in sample data, no network. \"remote\": the demo-data gateway at DEMO_DATA_URL (read RPCs only), falling back to the sample data on any failure."
-    allowed_values: ["fixtures", "remote"]
+    allowed_values: [
+      "fixtures",
+      "remote"
+    ]
   }];
 
   string demo_data_url = 28 [(forge.v1.config) = {
@@ -126,19 +149,32 @@ message ReliantWebConfig {
   string auth_mode = 6 [(forge.v1.config) = {
     env_var: "AUTH_MODE"
     description: "\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. \"self-hosted\" or unset: self-hosted or local dev. A document rendered by another project must state one of the two."
-    allowed_values: ["cloud", "self-hosted"]
+    allowed_values: [
+      "cloud",
+      "self-hosted"
+    ]
   }];
 
   string supabase_url = 7 [(forge.v1.config) = {
     env_var: "SUPABASE_URL"
-    required_when: [{field: "auth_mode", equals: "cloud"}]
+    required_when: [
+      {
+        field: "auth_mode"
+        equals: "cloud"
+      }
+    ]
     default_value: "http://127.0.0.1:54321"
     description: "The Supabase project the browser signs in against. Default: a local `supabase start`."
   }];
 
   string supabase_anon_key = 8 [(forge.v1.config) = {
     env_var: "SUPABASE_ANON_KEY"
-    required_when: [{field: "auth_mode", equals: "cloud"}]
+    required_when: [
+      {
+        field: "auth_mode"
+        equals: "cloud"
+      }
+    ]
     description: "The Supabase project's PUBLISHABLE (anon) key. Public by design. Unset: Supabase sign-in is unavailable and the app says so."
   }];
 
@@ -163,8 +199,7 @@ message ReliantWebConfig {
   // three SENTRY_*_SAMPLE_RATE keys) and TELEMETRY_SINKS, which chose between
   // Sentry and ClickStack while both ran. ClickStack is the one sink now.
   reserved 11, 12, 13, 14, 15, 17;
-  reserved "sentry_dsn", "sentry_enabled", "sentry_traces_sample_rate",
-    "sentry_replays_session_sample_rate", "sentry_replays_error_sample_rate", "telemetry_sinks";
+  reserved "sentry_dsn", "sentry_enabled", "sentry_traces_sample_rate", "sentry_replays_session_sample_rate", "sentry_replays_error_sample_rate", "telemetry_sinks";
 
   string otel_endpoint = 16 [(forge.v1.config) = {
     env_var: "OTEL_ENDPOINT"
