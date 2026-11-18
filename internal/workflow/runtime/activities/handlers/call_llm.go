@@ -1235,7 +1235,7 @@ func (a *CallLLMActivity) mcpRuntimeFromContext(ctx context.Context) tools.MCPRu
 func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, thread string, history []message.Message, rtx RuntimeContext, args *reliantv1.CallLLMArgs) (*reliantv1.CallLLMOutput, error) {
 	// Extract options from runtime context
 	// Check if this workflow has reached the maximum spawn depth (prevents unbounded recursive spawn)
-	spawnDisabled := rtx.SpawnDepth >= tools.MaxSpawnDepth
+	spawnDisabled := !tools.SpawnAllowedAtDepth(rtx.SpawnDepth)
 
 	// Resolve tools configuration. There is no separate "are tools enabled"
 	// switch: the expanded list IS the answer, and a node that declares nothing
@@ -1487,8 +1487,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// every request.
 		//
 		// spawn_stop is narrower still: it only acts on a sub-agent the caller
-		// spawned, so it rides canSpawnChildren alone. A depth-1 sub-agent that
-		// cannot spawn has children to report to but none to stop.
+		// spawned, so it rides canSpawnChildren alone. A sub-agent at
+		// tools.MaxSpawnDepth cannot spawn: it has a parent to report to but
+		// no children to stop.
 		canSpawnChildren := !spawnDisabled && len(model.CelStringListValue(tc.GetSpawn())) > 0
 		mailboxReachable := rtx.SpawnDepth > 0 || canSpawnChildren
 		// loadable_tools bounds what load_tool may reach, and declaring nothing
@@ -1543,7 +1544,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 
 		for _, spawnConfig := range spawnConfigs {
-			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, spawnPresetSource{projectID: chat.ProjectID, daemonID: launchRunMachine(chat), pin: rtx.CatalogPin}, spawnConfig); spawnTool != nil {
+			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, spawnPresetSource{projectID: chat.ProjectID, daemonID: launchRunMachine(chat), pin: rtx.CatalogPin}, spawnConfig, rtx.SpawnDepth); spawnTool != nil {
 				availableTools = append(availableTools, spawnTool)
 				activity.GetLogger(ctx).Debug("[CallLLM] Added spawn tool from tools_config",
 					"workflow", spawnConfig.Workflow,
@@ -2779,18 +2780,36 @@ type spawnPresetSource struct {
 
 // getSpawnToolFromFilterConfig creates a spawn tool from a SpawnFilterConfig.
 // Used when spawn configurations come from tool_filter syntax.
-func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, source spawnPresetSource, config tools.SpawnFilterConfig) tools.Tool {
+func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, source spawnPresetSource, config tools.SpawnFilterConfig, spawnerDepth int) tools.Tool {
 	if len(config.Presets) == 0 {
 		return nil
 	}
 
 	// Convert SpawnFilterConfig to SpawnConfig
 	spawnConfig := &SpawnConfig{
-		Workflow: config.Workflow,
-		Presets:  config.Presets,
+		Workflow:     config.Workflow,
+		Presets:      config.Presets,
+		SpawnerDepth: spawnerDepth,
 	}
 
 	return a.getSpawnTool(ctx, source, spawnConfig)
+}
+
+// spawnNestingNote is the spawn tool's paragraph on nesting and concurrency
+// limits, for an agent at spawnerDepth. Spawning nests tools.MaxSpawnDepth
+// levels deep: a root agent's sub-agents may fan out once more, and theirs may
+// not, so the advice differs by depth (reliant#2757).
+func spawnNestingNote(spawnerDepth int) string {
+	limits := fmt.Sprintf("HARD LIMITS: by default at most %d of your sub-agents run at once, and at most %d across the whole run (the run's max_concurrent_sub_agents and max_concurrent_sub_agents_total inputs). A spawn past either limit is refused with nothing started: wait for one to finish (you are notified, or spawn_status(wait: true)), then spawn it again.",
+		activitytypes.DefaultMaxConcurrentSubAgents, activitytypes.DefaultMaxConcurrentSubAgentsTotal)
+	if spawnerDepth+1 >= tools.MaxSpawnDepth {
+		return fmt.Sprintf(`A sub-agent you spawn CANNOT spawn sub-agents of its own (spawning nests %d levels deep, and you are already a sub-agent). Do the fanning out yourself: give each sub-agent one unit of work, and never tell one to "use sub-agents" or "fan out" — it will have no spawn tool and will do the work serially.
+
+%s`, tools.MaxSpawnDepth, limits)
+	}
+	return fmt.Sprintf(`A sub-agent you spawn may spawn sub-agents of its own, if its preset declares spawn presets, but THEIRS cannot (spawning nests %d levels deep). So a sub-agent you hand a large slice may fan it out once more; tell it so when it should, and give the leaf work to its sub-agents, not yours.
+
+%s`, tools.MaxSpawnDepth, limits)
 }
 
 // getSpawnTool returns a spawn tool for orchestration workflows.
@@ -2854,7 +2873,7 @@ While a spawned agent runs you can steer, observe and stop it: spawn_status(agen
 
 If an agent fails for good (its provider keeps erroring, say), only that agent stops — you keep running — and you are notified with status="failed", the error and its agent_id. Deciding what happens next is yours: resume it where it stopped with spawn(agent_id, prompt), retry the work with a fresh agent, or continue without it.
 
-A sub-agent you spawn CANNOT spawn sub-agents of its own (spawning nests one level deep). Do the fanning out yourself: give each sub-agent one unit of work, and never tell one to "use sub-agents" or "fan out" — it will have no spawn tool and will do the work serially.
+%s
 
 Available presets:
 %s
@@ -2865,7 +2884,7 @@ Parameters:
 - title: Optional - Human-readable title for the spawned thread (defaults to preset name)
 - agent_id: Optional - Agent ID to resume existing conversation
 - worktree: Optional - name of a worktree created with the worktree tool; the sub-agent works in that workspace (its own branch) instead of yours
-- providers: Optional - which providers the sub-agent runs on and what it does when they are rate-limited: {"prefer": ["codex", "claude:work@acme.com"], "on_limit": "wait" | "fallback", "fallback": "<model>@<driver>"}. Omit it and the sub-agent follows the chat's own provider policy (a chat pinned to one provider keeps its sub-agents on it, and waits out a limit unless the user chose to fall back). Use it only when this one task should run elsewhere`, presetList)
+- providers: Optional - which providers the sub-agent runs on and what it does when they are rate-limited: {"prefer": ["codex", "claude:work@acme.com"], "on_limit": "wait" | "fallback", "fallback": "<model>@<driver>"}. Omit it and the sub-agent follows the chat's own provider policy (a chat pinned to one provider keeps its sub-agents on it, and waits out a limit unless the user chose to fall back). Use it only when this one task should run elsewhere`, spawnNestingNote(config.SpawnerDepth), presetList)
 
 	return tools.NewSchemaOnlyTool(
 		"spawn",
