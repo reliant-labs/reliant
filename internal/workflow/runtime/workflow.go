@@ -2225,6 +2225,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 						if out, ok := toleratedFailure(step.Node, execErr); ok {
 							logToleratedFailure(logger, step.Node.GetId(), execErr)
+							recordToleratedFailure(ctx, toleratedScope{WorkflowID: workflowID, StepID: step.Node.GetId(), NodePath: step.Node.GetId()}, execErr)
 							toleratedLoop = out
 							break retryLoop
 						}
@@ -3081,6 +3082,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					// on with outputs that say it failed (tolerate_failure.go).
 					if out, ok := toleratedFailure(running.Node, running.Error); ok {
 						logToleratedFailure(logger, running.StepID, running.Error)
+						recordToleratedFailure(ctx, toleratedScope{WorkflowID: workflowID, StepID: running.StepID, NodePath: running.StepID}, running.Error)
 						running.Output, running.Error, running.tolerated = out, nil, true
 					}
 

@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	org_provider_account "github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
+	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/seatmatch"
@@ -130,7 +131,7 @@ func newEnvWith(t *testing.T, rollout *configv1.OrgsConfig) *env {
 		ValidateKey: func(_ context.Context, _ models.Family, key string) (bool, string) {
 			e.keysSeen = append(e.keysSeen, key)
 			if e.reject {
-				return false, "the provider rejected this key"
+				return false, keyvalidate.MsgInvalid
 			}
 			return true, ""
 		},
@@ -475,7 +476,10 @@ func TestAddValidatesAndAnAdminSeesTheHint(t *testing.T) {
 
 	e.reject = true
 	_, err := add(orgKey)
-	requireRefused(t, err, connect.CodeInvalidArgument, "")
+	// The refusal is keyvalidate's fixed message and its reason, never the provider's text.
+	requireRefused(t, err, connect.CodeInvalidArgument, keyvalidate.ReasonInvalid)
+	assert.Contains(t, err.Error(), keyvalidate.MsgInvalid)
+	assert.NotContains(t, err.Error(), orgKey)
 	assert.Equal(t, []string{orgKey}, e.keysSeen, "validated before anything is stored")
 	accounts, err := e.repo.ListOwnedProviderAccounts(context.Background(), core.OrgAccountOwner(org))
 	require.NoError(t, err)

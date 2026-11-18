@@ -375,6 +375,13 @@ func (r *AccountRouting) providerFailure(ctx context.Context, err error, uc usag
 	if rejected := r.credentialRejection(ctx, err, uc); rejected != nil {
 		return rejected
 	}
+	// An OAuth session the provider still refuses after the driver's reload
+	// and refresh is the user's to reconnect: told so, and not an ERROR.
+	if rejected := oauthSessionRejection(err, uc); rejected != nil {
+		logging.InfoContext(ctx, "[Failover] The provider rejected an OAuth session after a refresh; the user must reconnect the account",
+			"userID", uc.Scope.UserID, "provider", string(uc.Driver), "accountID", uc.Account.Config.AccountID)
+		return rejected
+	}
 	return r.usageLimitFailure(ctx, err, uc)
 }
 

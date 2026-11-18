@@ -255,6 +255,19 @@ func (e *InlineLoopExecutor) WithNodePathPrefix(prefix string) *InlineLoopExecut
 	return e
 }
 
+// toleratedScope is where the body node nodeID of iteration sits, scoped as
+// the iteration's steps are, for the failed attempt a tolerated failure
+// records (tolerate_failure.go).
+func (e *InlineLoopExecutor) toleratedScope(nodeID string, iteration int) toleratedScope {
+	return toleratedScope{
+		WorkflowID:    e.workflowID,
+		StepID:        nodeID,
+		NodePath:      joinNodePath(e.nodePath(), nodeID),
+		LoopNodeID:    e.loopID,
+		LoopIteration: iteration,
+	}
+}
+
 // nodePath is this loop node's own fully-qualified path, and the prefix its
 // body nodes compose against.
 func (e *InlineLoopExecutor) nodePath() string {
@@ -1606,6 +1619,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 						return nil, fmt.Errorf("nested loop %s failed: %w", step.Node.GetId(), err)
 					}
 					logToleratedFailure(e.logger, step.Node.GetId(), err)
+					recordToleratedFailure(e.ctx, e.toleratedScope(step.Node.GetId(), e.iteration), err)
 					toleratedLoop = out
 				}
 
@@ -1797,6 +1811,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 						return nil, fmt.Errorf("inline workflow %s failed: %w", step.Node.GetId(), err)
 					}
 					logToleratedFailure(e.logger, step.Node.GetId(), err)
+					recordToleratedFailure(e.ctx, e.toleratedScope(step.Node.GetId(), e.iteration), err)
 					inlineOutput, tolerated = out, true
 				}
 

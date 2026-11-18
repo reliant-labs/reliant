@@ -105,6 +105,32 @@ export function sqlTrendPanel(panel: Panel): Panel | undefined {
   return { ...panel, id: `${panel.id}.trend`, sql: panel.trendSql, trendSql: undefined, display: undefined };
 }
 
+/**
+ * A sql panel's subtitle read (subtitleSql: "since 14 Nov" under the title),
+ * as a sql panel of its own over the same window; undefined when it has none.
+ */
+export function sqlSubtitlePanel(panel: Panel): Panel | undefined {
+  if (panel.kind !== "sql" || !panel.subtitleSql?.trim()) return undefined;
+  return { ...panel, id: `${panel.id}.subtitle`, sql: panel.subtitleSql, trendSql: undefined, subtitleSql: undefined, display: undefined, minStep: undefined };
+}
+
+/**
+ * The subtitle a subtitleSql answer draws: its first cell, text or number. No
+ * row, an empty string or a NULL draws none, so a panel whose qualification
+ * no longer applies loses its subtitle by itself.
+ */
+export function subtitleOf(result: Pick<PanelResult, "rows" | "series"> | undefined): string | null {
+  const row = result?.rows[0];
+  if (row) {
+    const text = Object.values(row.group)[0];
+    if (text !== undefined) return text.trim() && text !== "\\N" ? text.trim() : null;
+    const value = row.values[0];
+    return value === null || value === undefined ? null : String(value);
+  }
+  const value = result?.series[0]?.value;
+  return value === null || value === undefined ? null : String(value);
+}
+
 const GROUPABLE = new Set(["line", "number", "table", "bar"]);
 
 /** Offer only fields already declared by the dashboard, never invented dimensions. */

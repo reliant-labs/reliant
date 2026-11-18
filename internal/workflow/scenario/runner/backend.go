@@ -2141,6 +2141,16 @@ func (r *Runner) registerActivities(
 		},
 		activity.RegisterOptions{Name: "FailStep"},
 	)
+	// A node that tolerates failure records its failed attempt by running an
+	// activity that always fails (handlers.RecordToleratedFailureActivity).
+	// The scenario's verdict comes from the node's {failed, error} outputs.
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
+			msg, _ := in["error"].(string)
+			return nil, temporal.NewNonRetryableApplicationError(msg, "ToleratedFailure", nil)
+		},
+		activity.RegisterOptions{Name: handlers.RecordToleratedFailureActivityName},
+	)
 
 	// Every node-backed activity resolves its mock from the scenario, keyed by
 	// the qualified node id the REAL runtime context reports.

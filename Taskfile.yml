@@ -727,12 +727,6 @@ tasks:
     cmds:
       - npm run lint
 
-  lint:electron:
-    desc: Lint the electron app
-    dir: electron
-    cmds:
-      - npx eslint src/
-
   proto:lint:
     desc: buf lint the protos, at go.mod's buf pin (forge lint's buf-lint lane runs the same)
     cmds:
@@ -750,12 +744,6 @@ tasks:
     dir: frontends/web
     cmds:
       - npm run lint -- --fix
-
-  fmt:electron:
-    desc: Format the electron app (eslint --fix)
-    dir: electron
-    cmds:
-      - npx eslint src/ --fix
 
   proto:fmt:
     desc: buf format -w the protos, at go.mod's buf pin

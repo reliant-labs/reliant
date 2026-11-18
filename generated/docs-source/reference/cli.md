@@ -305,6 +305,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge machine tools install`](#reliant-forge-machine-tools-install) | Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports), or the named tools (golangci-lint, buf) |
 | [`reliant forge machine tools pins`](#reliant-forge-machine-tools-pins) | Print the tool versions this forge pins (golangci-lint, buf, …), for CI to read |
 | [`reliant forge mcp`](#reliant-forge-mcp) | Run forge as an MCP server on stdio, so any agent harness can drive it |
+| [`reliant forge merge-driver`](#reliant-forge-merge-driver) | Install or check the git merge driver for forge-generated files in this checkout |
+| [`reliant forge merge-driver check`](#reliant-forge-merge-driver-check) | Fail unless forge's generated files in this checkout merge through a forge that exists |
+| [`reliant forge merge-driver install`](#reliant-forge-merge-driver-install) | Wire this forge in as the checkout's merge driver, then check it |
 | [`reliant forge obs`](#reliant-forge-obs) | Ask what happened: logs, traces, endpoints, metrics, SQL, profiles and alerts |
 | [`reliant forge obs alerts`](#reliant-forge-obs-alerts) | Alert rules declared for an environment |
 | [`reliant forge obs alerts check`](#reliant-forge-obs-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
@@ -1267,6 +1270,7 @@ reliant forge
 | [`logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
 | [`machine`](#reliant-forge-machine) | This machine's housekeeping: heavy-job slots, storage, and forge's pinned tools |
 | [`mcp`](#reliant-forge-mcp) | Run forge as an MCP server on stdio, so any agent harness can drive it |
+| [`merge-driver`](#reliant-forge-merge-driver) | Install or check the git merge driver for forge-generated files in this checkout |
 | [`obs`](#reliant-forge-obs) | Ask what happened: logs, traces, endpoints, metrics, SQL, profiles and alerts |
 | [`package`](#reliant-forge-package) | Manage internal packages |
 | [`project`](#reliant-forge-project) | Create, evolve, and inspect the project as a whole |
@@ -10364,8 +10368,12 @@ Hooks:
   them, and says so.
   FORGE_NO_GIT_HOOKS=1 is about GIT hooks, not these: it stops forge setting
   core.hooksPath=.githooks in your clone. FORGE_NO_HOOKS=1 is its older name
-  and means the same. Neither stops forge pointing the clone's merge driver
-  for generated files at the pinned forge; FORGE_NO_MERGE_DRIVER=1 does.
+  and means the same. Neither is about the clone's merge driver for
+  generated files: generate leaves git config alone and says once when the
+  clone has no usable driver ('forge merge-driver install' wires it), unless
+  forge.yaml says git: {merge_driver: auto}, or says nothing in a clone that
+  already has forge's driver: then it keeps the driver pointed at the pinned
+  forge ('manual' stops that). FORGE_NO_MERGE_DRIVER=1 silences both.
 
 Skipping:
   A full run that changes nothing records the tree as a verified fixed point
@@ -10387,7 +10395,7 @@ Examples:
   forge generate --check    # Run generate into a tmpdir; exit 1 if it would change the tree (CI guard)
   forge generate --no-cache # Run every step even if nothing changed since the last verified run
   forge generate --explain  # Print per-file provenance log after generate
-  forge generate --verbose  # Print one line per gate-off skipped step
+  forge generate --verbose  # Also print routine lines (skipped steps, pinned-tool resolution)
 
 Additional maintainer/debug flags exist (pipeline narrowing, drift
 forensics, parallel-lane and migration escape hatches); run
@@ -10410,7 +10418,7 @@ reliant forge generate [flags]
 | `--heal` | `bool` | - | Overwrite on-disk content that matches a PRIOR forge render (an older vintage) with the current template. OFF by default: such content is byte-indistinguishable from a deliberate edit, so forge leaves it untouched and tells you how to proceed rather than silently reverting your work. Pass --heal to advance every such file to the current templates. |
 | `--help-dev` | `bool` | - | List maintainer/debug flags hidden from --help |
 | `--no-cache` | `bool` | - | Run every step even when nothing changed since a full run verified this tree (a no-op generate otherwise skips in about a second; see the 'Skipping' section above). FORGE_GENERATE_NO_CACHE=1 does the same. |
-| `--verbose`, `-v` | `bool` | - | Print one line per gate-off skipped step ('⏩ skipped: <step name> (<reason>)'). Default is silent skip. |
+| `--verbose`, `-v` | `bool` | - | Also print routine lines: one per gate-off skipped step ('⏩ skipped: <step name> (<reason>)') and which pinned build each codegen tool resolved to ('📌 <tool> resolved to <version>'). Default prints progress and what needs action only. |
 | `--watch`, `-w` | `bool` | - | Watch for changes and regenerate |
 
 ---
@@ -11957,6 +11965,82 @@ reliant forge mcp
 
 ---
 
+### reliant forge merge-driver
+
+Install or check the git merge driver for forge-generated files in this checkout
+
+forge merges its generated and state files through a git merge driver,
+which keeps fingerprint lines for forge generate to refresh instead of
+conflicting on them. The driver lives in the clone's git config
+(merge.forge-generated.*, and routes in info/attributes when the project
+commits none), which every worktree of the clone shares.
+
+install wires this forge into the checkout (even under FORGE_NO_MERGE_DRIVER=1)
+and fails if the checkout still cannot merge forge's files. Run it once per
+clone, and again after a pin bump if check says so. check reports the same
+without changing anything.
+
+Writing commands (generate, project upgrade, scaffold, ...) do not wire a
+clone that has no forge driver: they say, once per checkout and forge
+version, when it has no usable one. A clone that already has forge's driver
+(an earlier forge wired one, or install did) is kept wired and repaired by
+them, as before v1.8. forge.yaml decides it outright:
+
+  git:
+    merge_driver: auto     # every writing command wires and repairs it
+    merge_driver: manual   # only install writes git config
+
+```
+reliant forge merge-driver [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`check`](#reliant-forge-merge-driver-check) | Fail unless forge's generated files in this checkout merge through a forge that exists |
+| [`install`](#reliant-forge-merge-driver-install) | Wire this forge in as the checkout's merge driver, then check it |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge merge-driver check
+
+Fail unless forge's generated files in this checkout merge through a forge that exists
+
+```
+reliant forge merge-driver check [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge merge-driver install
+
+Wire this forge in as the checkout's merge driver, then check it
+
+```
+reliant forge merge-driver install [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
 ### reliant forge obs
 
 Ask what happened: logs, traces, endpoints, metrics, SQL, profiles and alerts
@@ -12186,12 +12270,22 @@ Exit status:
      min_requests in its release_health (or --threshold min_requests=N) or
      widen --window. window_open (no --wait): check again, or use --wait.
      window_not_live: the release went live (its deploy gates) after the
-     after window ended; suggested[] names the --window that covers it.
-  8  --wait ran out (--timeout) before the after window finished: check
-     again later. Low traffic is never 8.
+     after window ended; suggested[] names the --window that covers it. A
+     current control plane starts the after window when the release went
+     live (subject.live_at), so a retried promotion is judged on what it
+     served; only an older one, which anchors it at promoted_at, gets here.
+  8  check again later; nothing final was learned. Either --wait ran out
+     (--timeout) before the after window finished, or the control plane
+     refused the read because the org's query quota is spent
+     (reason_code quota_exhausted) or this caller is throttled
+     (rate_limited); retry_at says when it refills. --wait waits a refusal
+     out, asking again every few minutes, and exits 8 only when --timeout
+     ends first. Low traffic is never 8.
+     With --wait, an unavailable or timed-out control plane is asked again
+     with a backoff; one that stays down for all of --timeout is exit 2.
 
 Thresholds come from the env's release_health declaration (KCL); --threshold
-name=value overrides one for this call (max_error_rate_increase, max_p95_ratio, min_requests, new_issue_min_events, regressed_issue_min_events, require_baseline, error_rate_min_errors, baseline_window).
+name=value overrides one for this call (max_error_rate_increase, max_p95_ratio, min_requests, new_issue_min_events, regressed_issue_min_events, require_baseline, error_rate_min_errors, baseline_window, alert_baseline_min_firings).
 The document says where each effective threshold came from: release_shape,
 default or request.
 
@@ -12203,6 +12297,7 @@ thin baseline holds the release) or none (compare however thin). New and
 regressed issues, alerts and restarts fail a release whatever the baseline.
 
 JSON schema forge.obs.check/v1. --fields takes dotted paths of:
+  baseline_alerts
   early_pass
   findings
   findings.code
@@ -12221,6 +12316,7 @@ JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   reason
   reason_code
   regressed_issues
+  retry_at
   rollout_incomplete
   scope
   scope.backend
@@ -16669,7 +16765,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--frontend-kind` | `string` | - | With --kind site: the starter a new site gets — nextjs (default; a static export, one HTML file per route) or vite-spa (a single-page app) |
 | `--frontend-workspaces` | `bool` | - | Opt into pnpm-workspaces layout: emit packages/api + packages/hooks + packages/ui-web shared across all frontends. Off by default; recommended once you have 2+ frontends (web + mobile). |
 | `--go-version` | `string` | - | Go version to use in go.mod (e.g., 1.24); defaults to detected version |
-| `--harness` | `string` | - | AI harness to scaffold for: reliant, claude, cursor, copilot, codex, or none (no agent files at all: no AGENTS.md, pointers or .mcp.json). Default: detected from the agent running this command (RELIANT_AGENT_SHELL, CLAUDECODE, CODEX_THREAD_ID, CURSOR_AGENT), else reliant. Every harness gets AGENTS.md, the project guide; claude adds CLAUDE.md (imports AGENTS.md) and a .claude/skills/forge pointer skill, cursor adds .cursorrules and .cursor/rules/forge.mdc, copilot adds .github/copilot-instructions.md, reliant renders the guide in memory from forge.yaml. The pointers hold no skill bodies: skills are read from the forge binary ('forge skill search|load'). Recorded as 'harness:' in forge.yaml and honored by every later generate |
+| `--harness` | `string` | - | AI harness to scaffold for: reliant, claude, cursor, copilot, codex, or none (no agent files at all: no AGENTS.md, pointers or .mcp.json). Default: detected from the agent running this command (RELIANT_AGENT_SHELL, CLAUDECODE, CODEX_THREAD_ID, CURSOR_AGENT), else reliant. Every harness gets AGENTS.md, the project guide; claude adds CLAUDE.md (imports AGENTS.md), a .claude/skills/forge pointer skill and forge's own MCP server in .mcp.json, cursor adds .cursorrules and .cursor/rules/forge.mdc, copilot adds .github/copilot-instructions.md, reliant renders the guide in memory from forge.yaml. The pointers hold no skill bodies: skills are read from the forge binary ('forge skill search|load'). Recorded as 'harness:' in forge.yaml and honored by every later generate |
 | `--in-place` | `bool` | - | Create project in current directory instead of a new subdirectory |
 | `--kind` | `string` | - | Project kind: service (default), cli, library, site (a static site with no backend: a new starter app, or with --in-place the Vite/Next.js app already here), app (with --in-place: the app already here, in any language, deployed from its own Dockerfile — forge.yaml and deploy/kcl only) |
 | `--link-forge` | `bool` | - | Bridge the project to the forge checkout this binary was built from (gitignored go.work 'use' + .forge-link/ for the web runtime). Off by default, except for a service scaffold from an unreleased forge build, which is linked automatically when its checkout is found (--link-forge=false refuses instead; also: FORGE_LINK_FORGE=1) |
@@ -16970,7 +17066,11 @@ upgrade: the phase's detail names each one to run yourself ('forge fix <name>').
 Whatever is left is printed as "Still needs a person" (--json: needs_human): a
 lint error, a playbook whose old shape remains, a codemod that listed what it
 could not decide. Rules still in their warn-first grace are listed under
-"Gating soon" (--json: upcoming) with the release they gate from.
+"Gating soon" (--json: upcoming) with the release they gate from. Rules whose
+grace this pin bump ends (they warned under the old pin and gate under the new
+one) are listed under "Starts gating" (--json: starts_gating), with how many of
+their findings the lint phase now reports as errors. A pseudo-version pin is
+graded as the release it leads to, so moving from one to its tag ends nothing.
 
 EXIT CODES (the contract a pin bot branches on)
   0  converged: every fix applied, nothing left for a person
@@ -16983,7 +17083,8 @@ EXIT CODES (the contract a pin bot branches on)
 
 --json prints exactly one document on stdout (schema forge-project-upgrade/v1:
 ok, exit_code, error, mode, from, to, converged, phases, codemods, locks,
-playbooks, vendored_contracts, needs_human, upcoming, template_drift); progress
+playbooks, vendored_contracts, needs_human, upcoming, starts_gating,
+template_drift); progress
 goes to stderr. ok and exit_code are the process's own. It is also printed for
 a failing run, so a bot can read what was applied before the failure.
 

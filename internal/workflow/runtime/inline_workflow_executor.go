@@ -180,6 +180,23 @@ func (e *InlineWorkflowExecutor) WithNodePathPrefix(prefix string) *InlineWorkfl
 
 // nodePath is this workflow: node's own fully-qualified path, and the prefix
 // its sub-workflow's nodes compose against.
+// toleratedScope is where this sub-workflow's node nodeID sits, scoped as its
+// steps' attempts are (the StepExecutor built for them), for the failed
+// attempt a tolerated failure records (tolerate_failure.go).
+func (e *InlineWorkflowExecutor) toleratedScope(nodeID string) toleratedScope {
+	loopNodeID := e.loopNodeID
+	if loopNodeID == "" {
+		loopNodeID = e.nodeID
+	}
+	return toleratedScope{
+		WorkflowID:    e.workflowID,
+		StepID:        nodeID,
+		NodePath:      joinNodePath(e.nodePath(), nodeID),
+		LoopNodeID:    loopNodeID,
+		LoopIteration: e.loopIteration,
+	}
+}
+
 func (e *InlineWorkflowExecutor) nodePath() string {
 	return joinNodePath(e.nodePathPrefix, e.nodeID)
 }
@@ -946,6 +963,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 						return nil, fmt.Errorf("loop %s failed: %w", node.GetId(), err)
 					}
 					logToleratedFailure(e.logger, node.GetId(), err)
+					recordToleratedFailure(e.ctx, e.toleratedScope(node.GetId()), err)
 					toleratedLoop = out
 				}
 
@@ -991,6 +1009,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 						return nil, err
 					}
 					logToleratedFailure(e.logger, node.GetId(), err)
+					recordToleratedFailure(e.ctx, e.toleratedScope(node.GetId()), err)
 					inlineOutput, tolerated = out, true
 				}
 				nid := node.GetId()
