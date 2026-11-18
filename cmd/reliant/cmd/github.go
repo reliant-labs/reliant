@@ -162,7 +162,7 @@ type githubFlags struct {
 func (f *githubFlags) bind(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.as, "as", githubAsApp, "Who to act as: app (the Reliant bot, reliant-labs[bot]) or user (you)")
 	cmd.Flags().StringVar(&f.repo, "repo", "", "The one repository the bot token is scoped to, as owner/name (required with --as app)")
-	cmd.Flags().StringArrayVar(&f.perms, "permission", nil, "Narrow the bot token: name=level, name one of issues, pull_requests, contents and level read or write; repeatable (default: all three at write)")
+	cmd.Flags().StringArrayVar(&f.perms, "permission", nil, "Narrow the bot token: name=level, name one of issues, pull_requests, contents, actions and level read or write; repeatable (default: issues, pull_requests and contents at write)")
 	cmd.Flags().StringVar(&f.pin.Server, flagForgeCredServer, "", "Use the session of the daemon at this server")
 	cmd.Flags().StringVar(&f.pin.Account, flagForgeCredAccount, "", "Use this daemon account at --daemon-server")
 }

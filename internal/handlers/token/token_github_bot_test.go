@@ -104,6 +104,27 @@ func TestGetGitHubBotToken_RejectsNonDaemonCredentials(t *testing.T) {
 	}
 }
 
+// actions passes through when it is named (the PR pipeline cancels and re-runs
+// workflow runs as the bot, control-plane#2861); the default stays control-plane's.
+func TestGetGitHubBotToken_ActionsPassesThroughWhenNamed(t *testing.T) {
+	src := &fakeBotTokens{tok: mintedBotToken()}
+	svc, authority := botSvc(t, src)
+
+	if _, err := svc.GetGitHubBotToken(context.Background(), botReq(daemonBearer(t, authority), "acme", "api",
+		map[string]string{"Actions": "Write"})); err != nil {
+		t.Fatal(err)
+	}
+	if len(src.got.Permissions) != 1 || src.got.Permissions["actions"] != "write" {
+		t.Errorf("minted with %+v, want actions write only", src.got.Permissions)
+	}
+	if _, err := svc.GetGitHubBotToken(context.Background(), botReq(daemonBearer(t, authority), "acme", "api", nil)); err != nil {
+		t.Fatal(err)
+	}
+	if len(src.got.Permissions) != 0 {
+		t.Errorf("an unnamed request minted with %+v, want control-plane's default (no permissions named)", src.got.Permissions)
+	}
+}
+
 func TestGetGitHubBotToken_InvalidRequestsMintNothing(t *testing.T) {
 	cases := map[string]*connect.Request[reliantv1.GetGitHubBotTokenRequest]{
 		"no owner":         botReq("", "", "api", nil),

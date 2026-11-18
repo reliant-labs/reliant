@@ -31,8 +31,11 @@ const (
 var githubName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 
 // botPermissionNames are the permissions control-plane mints an installation
-// token with; a request names a subset.
-var botPermissionNames = map[string]bool{"issues": true, "pull_requests": true, "contents": true}
+// token with; a request names a subset. actions (cancel and re-run workflow
+// runs) is never in the default: a caller names it, as the PR pipeline does to
+// recover a run stuck on a runner as the bot rather than as a person
+// (control-plane#2861). control-plane mints it only for a user who can push.
+var botPermissionNames = map[string]bool{"issues": true, "pull_requests": true, "contents": true, "actions": true}
 
 // GetGitHubBotToken mints a GitHub App installation token for one repository,
 // for the calling daemon's acting user. It authenticates its own bearer,
@@ -55,7 +58,7 @@ func (s *Service) GetGitHubBotToken(
 	for name, level := range req.Msg.GetPermissions() {
 		name, level = strings.ToLower(strings.TrimSpace(name)), strings.ToLower(strings.TrimSpace(level))
 		if !botPermissionNames[name] {
-			return nil, svcerr.InvalidArgument("permission " + name + " is not available to the bot (allowed: issues, pull_requests, contents)")
+			return nil, svcerr.InvalidArgument("permission " + name + " is not available to the bot (allowed: issues, pull_requests, contents, actions)")
 		}
 		if level != "read" && level != "write" {
 			return nil, svcerr.InvalidArgument("permission " + name + " must be read or write")

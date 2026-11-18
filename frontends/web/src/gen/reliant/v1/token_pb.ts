@@ -438,8 +438,9 @@ export type GetGitHubBotTokenRequest = Message<"reliant.v1.GetGitHubBotTokenRequ
   repo: string;
 
   /**
-   * permissions narrows the token: issues, pull_requests, contents -> read or
-   * write. Empty means all three at write.
+   * permissions narrows the token: issues, pull_requests, contents, actions ->
+   * read or write. Empty means issues, pull_requests and contents at write;
+   * actions (cancel and re-run workflow runs) is never in the default.
    *
    * @generated from field: map<string, string> permissions = 3;
    */

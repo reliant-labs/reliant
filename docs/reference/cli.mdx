@@ -20267,7 +20267,7 @@ reliant github gh [flags] -- <gh arguments>
 | `--as` | `string` | `app` | Who to act as: app (the Reliant bot, reliant-labs[bot]) or user (you) |
 | `--daemon-account` | `string` | - | Use this daemon account at --daemon-server |
 | `--daemon-server` | `string` | - | Use the session of the daemon at this server |
-| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents and level read or write; repeatable (default: all three at write) |
+| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents, actions and level read or write; repeatable (default: issues, pull_requests and contents at write) |
 | `--repo` | `string` | - | The one repository the bot token is scoped to, as owner/name (required with --as app) |
 
 ---
@@ -20288,7 +20288,7 @@ reliant github token [flags]
 | `--daemon-account` | `string` | - | Use this daemon account at --daemon-server |
 | `--daemon-server` | `string` | - | Use the session of the daemon at this server |
 | `--json` | `bool` | - | Print the token with who it speaks as, its repository and its expiry |
-| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents and level read or write; repeatable (default: all three at write) |
+| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents, actions and level read or write; repeatable (default: issues, pull_requests and contents at write) |
 | `--repo` | `string` | - | The one repository the bot token is scoped to, as owner/name (required with --as app) |
 
 ---
