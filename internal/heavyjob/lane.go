@@ -70,9 +70,12 @@ func scopedCommand(words []string) bool {
 	sub, rest := args[0], args[1:]
 	switch {
 	case prog == "go" && (sub == "test" || sub == "vet" || sub == "build" || sub == "install"):
-		// No package argument is the package in the current directory.
+		// No package argument is the package in the current directory,
+		// which the classifier is not given: a module root, or wherever a
+		// `cd` earlier in the line left it. Scope that is not known is
+		// bulk, so a target is required (and `.` is bulk, scopedTarget).
 		targets, ok := goTargets(rest)
-		return ok && len(targets) <= maxScopedTargets && allScoped(targets)
+		return ok && len(targets) > 0 && len(targets) <= maxScopedTargets && allScoped(targets)
 	case prog == "golangci-lint" && sub == "run":
 		// No path argument lints ./..., so a path is required.
 		targets, ok := lintTargets(rest)
@@ -264,11 +267,12 @@ func allScoped(targets []string) bool {
 // directories deep: ./internal/foo/... is one subtree, while ./..., ./internal/...
 // or ./pkg/... are most of a module, and an absolute, parent-relative or
 // import-path wildcard cannot be told apart from a module root. The go
-// command's own patterns (all, std, cmd) and a project root (".", "./" as a
-// scope) are bulk.
+// command's own patterns (all, std, cmd) are bulk, and so is the current
+// directory (".", "./"): the classifier is not given it, and it may be a
+// module or project root.
 func scopedTarget(t string) bool {
 	switch t {
-	case "all", "std", "cmd", "":
+	case "all", "std", "cmd", "", ".", "./":
 		return false
 	}
 	if !strings.Contains(t, "...") {

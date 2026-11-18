@@ -22,9 +22,7 @@ func TestExpressClassification(t *testing.T) {
 		{"go test ./internal/foo/... -run X", true},
 		{"go test -run 'TestA|TestB' -count=3 ./internal/foo", true},
 		{"go test -count 3 -timeout 5m ./internal/foo/", true},
-		{"go test", true}, // the package in the current directory
-		{"go test .", true},
-		{"go test -v -args ./...", true}, // after -args: the test binary's
+		{"go test -v ./internal/foo -args ./...", true}, // after -args: the test binary's
 		{"go vet ./pkg/a ./pkg/b", true},
 		{"go build -o bin/x ./cmd/x", true},
 		{"go test github.com/reliant-labs/reliant/internal/foo", true},
@@ -53,6 +51,18 @@ func TestExpressClassification(t *testing.T) {
 
 		// Bulk: whole module, no targets, or not known to be short.
 		{"go test ./...", false},
+		// The current directory: the classifier is not given it, and it
+		// may be a module root.
+		{"go test", false},
+		{"go test -short -run X", false},
+		{"go vet", false},
+		{"go build", false},
+		{"go install", false},
+		{"go test .", false},
+		{"go test ./", false},
+		{"cd internal/foo && go test", false},
+		{"go test -v -args ./internal/foo", false}, // after -args: not a package
+		{"golangci-lint run .", false},
 		{"go test ...", false},
 		{"go test all", false},
 		{"go test std", false},

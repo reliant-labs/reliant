@@ -39,7 +39,8 @@
 // whole-repo lints and gate steps that each hold a slot for most of an hour
 // (2026-11-18: agents on a 30-minute pr-fix lease pushed after it expired). So
 // a command whose every heavy part is scoped — it names at most
-// maxScopedTargets packages, paths or files, none of them the whole module
+// maxScopedTargets packages, paths or files, none of them the whole module or
+// the current directory, which the classifier is not given
 // (`go test ./internal/foo/...`, `golangci-lint run ./internal/cli/`,
 // `task test:short -- ./internal/x/...`, `forge lint --scope internal/x`,
 // `vitest related a.ts`) — runs with FORGE_SLOT_LANE=express, which
