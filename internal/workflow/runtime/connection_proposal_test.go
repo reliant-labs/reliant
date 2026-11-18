@@ -20,14 +20,21 @@ import (
 // flow, answering each raised card with answer[tool call id] (nil: never).
 func runProposals(t *testing.T, calls []*pb.ToolCallMsg, answer map[string]map[string]interface{}) ([]map[string]interface{}, types.RuntimeContext) {
 	t.Helper()
+	return runProposalsWith(t, calls, answer, func(in types.AutomationApprovalInput) types.AutomationApprovalPreview {
+		p := &core.ConnectionProposal{IntegrationID: "slack", IntegrationName: "Slack", Reason: in.ToolInput}
+		return types.AutomationApprovalPreview{Hash: "hash-" + in.ToolCallID, Title: "The agent asks you to connect Slack.", Kind: types.PreviewKindConnectionProposal, Connection: p}
+	})
+}
+
+func runProposalsWith(t *testing.T, calls []*pb.ToolCallMsg, answer map[string]map[string]interface{}, preview func(types.AutomationApprovalInput) types.AutomationApprovalPreview) ([]map[string]interface{}, types.RuntimeContext) {
+	t.Helper()
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	var mu sync.Mutex
 	var creates []map[string]interface{}
 	var executed types.RuntimeContext
 	env.RegisterActivityWithOptions(func(_ context.Context, in types.AutomationApprovalInput) (types.AutomationApprovalPreview, error) {
-		p := &core.ConnectionProposal{IntegrationID: "slack", IntegrationName: "Slack", Reason: in.ToolInput}
-		return types.AutomationApprovalPreview{Hash: "hash-" + in.ToolCallID, Title: "The agent asks you to connect Slack.", Connection: p}, nil
+		return preview(in), nil
 	}, activity.RegisterOptions{Name: "AutomationApprovalPreview"})
 	env.RegisterActivityWithOptions(func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
 		mu.Lock()
@@ -112,4 +119,34 @@ func TestConnectionProposalDuplicateInATurnIsDeduped(t *testing.T) {
 	require.NotContains(t, creates[0], "batch_id", "a lone card is not a batch")
 	require.Contains(t, executed.ActivationRefusals["b"], "status: already pending")
 	require.Equal(t, map[string]string{"a": "conn-1"}, executed.ApprovedConnections)
+}
+
+// A preview that says it is a connection proposal but carries no proposal is
+// a server fault: the call is refused with that said, no card is raised, and
+// it is never settled as a generic approval (which would drop the connection).
+func TestConnectionProposalPreviewWithoutItsProposalFailsLoudly(t *testing.T) {
+	creates, executed := runProposalsWith(t, []*pb.ToolCallMsg{proposeCall("call")}, nil, func(in types.AutomationApprovalInput) types.AutomationApprovalPreview {
+		return types.AutomationApprovalPreview{Hash: "hash-" + in.ToolCallID, Title: "The agent asks you to connect Slack.", Kind: types.PreviewKindConnectionProposal}
+	})
+	require.Empty(t, creates, "no card is raised")
+	require.Empty(t, executed.ActivationApprovals)
+	require.Equal(t, missingProposalRefusal, executed.ActivationRefusals["call"])
+}
+
+// The kind, not the payload, decides: a proposal-kind card missing its
+// payload at settlement is refused, never approved generically.
+func TestConnectionProposalSettledByKind(t *testing.T) {
+	refusals := map[string]string{}
+	approvals := map[string]string{}
+	ask := activationApprovalAsk{rtx: &types.RuntimeContext{ActivationApprovals: approvals, ActivationRefusals: refusals}, proposals: true}
+	var suite temporaltest.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.ExecuteWorkflow(func(ctx workflow.Context) error {
+		card := activationCard{call: proposeCall("call"), preview: types.AutomationApprovalPreview{Hash: "h", Kind: types.PreviewKindConnectionProposal}}
+		ask.settle(ctx, card, map[string]interface{}{"status": "approved", "connection_id": "conn-1"}, nil)
+		return nil
+	})
+	require.NoError(t, env.GetWorkflowError())
+	require.Empty(t, approvals)
+	require.Equal(t, missingProposalRefusal, refusals["call"])
 }

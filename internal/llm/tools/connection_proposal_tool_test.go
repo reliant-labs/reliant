@@ -15,6 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testNow is the fixed clock the cooldown tests read.
+var testNow = time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+
 type fakeProposer struct {
 	admin       bool
 	adminErr    error
@@ -57,6 +60,7 @@ func TestProposeConnectionRaisesACard(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ask, "a connection proposal always needs its card")
 	require.True(t, preview.CardRequired)
+	require.Equal(t, PreviewKindConnectionProposal, preview.Kind, "the runtime settles the card by its kind")
 	require.Equal(t, &core.ConnectionProposal{IntegrationID: "slack", IntegrationName: "Slack", OrgID: "org-1", Reason: "Post the nightly report to #ops."}, preview.Connection,
 		"the reason is flattened to one line, and an unscoped proposal lets an org admin choose the org")
 	require.Equal(t, connectionProposalHash(*preview.Connection), preview.Hash)
@@ -96,6 +100,9 @@ func TestProposeConnectionRefusesAnOrgConnectionToANonAdmin(t *testing.T) {
 // one the person declined moments ago; a different one, or an old decline,
 // is not.
 func TestProposeConnectionDedupesIdenticalProposals(t *testing.T) {
+	prev := proposalNow
+	proposalNow = func() time.Time { return testNow }
+	t.Cleanup(func() { proposalNow = prev })
 	slack := core.ConnectionProposal{IntegrationID: "slack", IntegrationName: "Slack", OrgID: "org-1", Reason: "an earlier reason"}
 	for _, tc := range []struct {
 		name  string
@@ -103,9 +110,9 @@ func TestProposeConnectionDedupesIdenticalProposals(t *testing.T) {
 		want  string
 	}{
 		{"pending", ConnectionProposalState{Proposal: slack, Pending: true}, "status: already pending"},
-		{"declined just now", ConnectionProposalState{Proposal: slack, Declined: true, ResolvedAt: time.Now().Add(-time.Minute)}, "status: declined"},
-		{"declined long ago", ConnectionProposalState{Proposal: slack, Declined: true, ResolvedAt: time.Now().Add(-time.Hour)}, ""},
-		{"expired", ConnectionProposalState{Proposal: slack, ResolvedAt: time.Now()}, ""},
+		{"declined just now", ConnectionProposalState{Proposal: slack, Declined: true, ResolvedAt: testNow.Add(-time.Minute)}, "status: declined"},
+		{"declined long ago", ConnectionProposalState{Proposal: slack, Declined: true, ResolvedAt: testNow.Add(-time.Hour)}, ""},
+		{"expired", ConnectionProposalState{Proposal: slack, ResolvedAt: testNow}, ""},
 		{"another integration", ConnectionProposalState{Proposal: core.ConnectionProposal{IntegrationID: "gmail", OrgID: "org-1"}, Pending: true}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

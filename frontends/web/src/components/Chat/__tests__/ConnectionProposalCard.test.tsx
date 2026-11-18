@@ -62,6 +62,8 @@ vi.mock("../../../hooks/approval-queries", () => ({
 
 import { PermissionsPanel } from "../PermissionsPanel";
 
+const CREATED_AT = "2026-11-18T12:00:00Z";
+
 const proposalTitle = [
   "The agent asks you to connect Slack.",
   "Reason: Post the nightly report to #ops.",
@@ -82,7 +84,7 @@ function proposal(scope: ConnectionProposalScope, orgId?: string): Approval {
     approvalType: ApprovalType.TOOL_CALL,
     title: proposalTitle,
     status: ApprovalStatus.PENDING,
-    createdAt: new Date().toISOString(),
+    createdAt: CREATED_AT,
     connectionProposal: {
       $typeName: "reliant.v1.ConnectionProposal",
       integrationId: "slack",
@@ -102,7 +104,7 @@ const routine: Approval = {
   approvalType: ApprovalType.WORKFLOW_STEP,
   title: "Deploy to production?",
   status: ApprovalStatus.PENDING,
-  createdAt: new Date().toISOString(),
+  createdAt: CREATED_AT,
 };
 
 function renderPanel(...approvals: Approval[]) {

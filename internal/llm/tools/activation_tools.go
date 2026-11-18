@@ -59,6 +59,9 @@ type ActivationPreview struct {
 	CardRequired bool `json:"card_required,omitempty"`
 	// Reason says why, in one display-safe line.
 	Reason string `json:"reason,omitempty"`
+	// Kind is PreviewKindConnectionProposal for a propose_connection card,
+	// "" for any other. The runtime settles a card by its kind.
+	Kind string `json:"kind,omitempty"`
 	// Connection is set for a propose_connection card: what it asks the
 	// person to connect. Its approval is decided by making the connection.
 	Connection *core.ConnectionProposal `json:"connection,omitempty"`

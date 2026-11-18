@@ -94,5 +94,9 @@ func (a *AutomationApprovalActivity) Execute(ctx context.Context, in types.Autom
 	if err != nil {
 		return refuse(err)
 	}
-	return types.AutomationApprovalPreview{Title: preview.Title, Hash: preview.Hash, NoApproval: !needsApproval, Connection: preview.Connection}, nil
+	out := types.AutomationApprovalPreview{Title: preview.Title, Hash: preview.Hash, NoApproval: !needsApproval, Connection: preview.Connection}
+	if preview.Kind == tools.PreviewKindConnectionProposal {
+		out.Kind = types.PreviewKindConnectionProposal
+	}
+	return out, nil
 }

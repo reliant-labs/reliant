@@ -84,7 +84,7 @@ func createProposalApproval(t *testing.T, repo *db.Repo, chatID, workflowID stri
 	require.NoError(t, repo.CreateApproval(context.Background(), &db.Approval{
 		ID: id, ChatID: chatID, ApprovalType: int32(reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL), EntityID: workflowID + ":" + id,
 		Status: int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING), Title: "The agent asks you to connect Slack.", Metadata: &metadata,
-		TemporalWorkflowID: workflowID, CreatedAt: time.Now().UTC(),
+		TemporalWorkflowID: workflowID, CreatedAt: time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC),
 	}))
 	return id
 }

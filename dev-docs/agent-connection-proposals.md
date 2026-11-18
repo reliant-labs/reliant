@@ -24,6 +24,14 @@ sees the credential.
 
    Identical calls in one turn raise one card, and the rest are answered
    "already pending" (`dedupeConnectionCards`).
+
+   The preview names its kind (`Kind: connection_proposal`), and the runtime
+   settles a card by that kind, never by whether a proposal payload is set. A
+   proposal-kind preview without its payload is refused loudly, and no card is
+   raised. Settling proposals as such, and the per-turn dedupe, are gated by
+   `connectionProposalChangeID` (`workflow.GetVersion`), so histories recorded
+   before the change replay unchanged
+   (`connection_proposal_replay_test.go`).
 3. `ApprovalCreate` records the proposal in the approval's metadata
    (`connection_proposal`). `Approval.connection_proposal` carries it to
    clients.

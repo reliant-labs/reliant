@@ -36,9 +36,16 @@ import (
 
 const ToolProposeConnection = "propose_connection"
 
+// PreviewKindConnectionProposal is ActivationPreview.Kind for a
+// propose_connection card.
+const PreviewKindConnectionProposal = "connection_proposal"
+
 // proposalDeclineCooldown is how long after a person declined a proposal an
 // identical one is refused, so a model cannot ask again in a loop.
 const proposalDeclineCooldown = 10 * time.Minute
+
+// proposalNow is the cooldown's clock; tests fix it.
+var proposalNow = time.Now
 
 // maxProposalReason bounds the reason shown on the card.
 const maxProposalReason = 500
@@ -270,6 +277,7 @@ func (t *proposeConnectionTool) PrepareAutomation(ctx *rctx.ToolContext, call To
 		Title:        connectionProposalTitle(proposal),
 		Hash:         connectionProposalHash(proposal),
 		CardRequired: true,
+		Kind:         PreviewKindConnectionProposal,
 		Connection:   &proposal,
 	}, true, nil
 }
@@ -289,7 +297,7 @@ func (t *proposeConnectionTool) refuseRepeat(ctx context.Context, chatID string,
 		if s.Pending {
 			return RefuseActivation(fmt.Sprintf("status: already pending. An identical proposal to connect %s is already waiting on the person's card in this chat; wait for their answer and do not propose it again.", proposal.IntegrationName), errors.New("duplicate pending proposal"))
 		}
-		if s.Declined && time.Since(s.ResolvedAt) < proposalDeclineCooldown {
+		if s.Declined && proposalNow().Sub(s.ResolvedAt) < proposalDeclineCooldown {
 			return RefuseActivation(fmt.Sprintf("status: declined. The person declined connecting %s a few minutes ago; do not propose it again unless they ask you to.", proposal.IntegrationName), errors.New("recently declined proposal"))
 		}
 	}
