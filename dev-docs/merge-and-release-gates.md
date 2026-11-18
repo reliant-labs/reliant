@@ -37,7 +37,7 @@ Neither gate keeps a second copy of it.
 
 | Tier | Command | What it runs | When |
 |---|---|---|---|
-| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; the web `tsc -b` (incremental on state this checkout wrote; `--force` on a first run or copied state) when a web lane is selected or a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint), in the merge queue too; the forge demo bundle's build when the diff reaches its import graph; migration-safety when a migration or forge.yaml changed; electron's tests when electron reads a changed file; the whole lane when the rules cannot scope a change; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
+| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; golangci-lint over the packages with a changed `.go` file, findings in the changed files (`scripts/golangci-changed.sh`, the merge queue's `golangci (changed)` job, outside the queue); the web `tsc -b` (incremental on state this checkout wrote; `--force` on a first run or copied state) when a web lane is selected or a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint), in the merge queue too; the forge demo bundle's build when the diff reaches its import graph; migration-safety when a migration or forge.yaml changed; electron's tests when electron reads a changed file; the whole lane when the rules cannot scope a change; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
 | **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` as three steps (Go `-race -count=1` without `-short`, so every slow test runs, then web and electron in full), `task test:integration` and `task test:e2e`. CI runs them as parallel parts (below) | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
@@ -46,14 +46,17 @@ Neither gate keeps a second copy of it.
 task ci:merge                    # your branch, against its merge-base with origin/main
 task ci:merge -- --base <rev>    # a stacked branch
 task ci:merge -- --skip-lint     # leave vet and forge lint to the release gate
+task ci:merge -- --skip-golangci # leave golangci to a golangci (changed) job beside the gate (ci.yml's ci:run)
 ```
 
 `--skip-lint` drops `go vet` and the scoped forge lint and changes nothing else:
-the diff base stays the merge-base with origin/main, and buf lint and the
-compat checks (`scripts/check-compat.sh`) run as they do in the merge tier.
+the diff base stays the merge-base with origin/main, and golangci, buf lint and
+the compat checks (`scripts/check-compat.sh`) run as they do in the merge tier.
+golangci stays because the queue's `golangci (changed)` job ejects a PR on its
+findings, where the release gate, which runs vet and forge lint, ejects nothing.
 control-plane's pr-fix gates a PR branch with it (control-plane#2189).
-`--queue` (the merge queue's tier, below) drops `go vet` only (the queue's
-`golangci (changed)` job runs beside it) and keeps the scoped forge lint, plus
+`--queue` (the merge queue's tier, below) drops `go vet`, and golangci, which
+the queue's `golangci (changed)` job runs beside it, and keeps the scoped forge lint, plus
 queue-entry semantics, which are wrong on a PR branch: `CI_QUEUE_ENTRY=1` makes
 `check-compat.sh` require a single-parent HEAD and judge only `HEAD^..HEAD`, so
 a branch with several commits or a merge of main would fail, or pass, on the
@@ -111,8 +114,9 @@ The phases:
    any other file fails the gate.
 3. **docs** runs only if the plan's docs-generate lane is selected. It runs
    `task generate:docs` under the same no-op rule.
-4. **build**, **test**, **typecheck**, **lint** and **migsafety** then run at
-   the same time (after the generators, when they may rewrite the tree; below):
+4. **build**, **test**, **typecheck**, **golangci**, **lint** and **migsafety**
+   then run at the same time (after the generators, when they may rewrite the
+   tree; below):
    - **build** compiles, without linking, every package whose build contains a
      changed package (the plan's `go.build`, at any distance), or `./...` when
      the Go lane is full: `go list -export`, which compiles each package for
@@ -161,6 +165,12 @@ The phases:
      alone do not make cross-checkout state safe: tsc can declare the project
      current before comparing source content. These correctness repairs
      invalidate the earlier shared-cache timing claims.
+   - **golangci** is `scripts/golangci-changed.sh --base <the gate's base>`
+     (`task ci:golangci`), the very command the merge queue's `golangci
+     (changed)` job runs, so the two judge the same packages with the same
+     config and release and cannot disagree ("golangci-lint before the queue",
+     below). Only when the diff adds or changes a `.go` file, and not under
+     `--queue` or `--skip-golangci`.
    - **lint** is forge lint's own lanes, named (`--contract --conventions
      --generated-drift --go-markers --proto-markers --create-nullability
      --computed-fields --read-only-fields --db-grants --column-markers
@@ -214,7 +224,7 @@ The gate fails closed on a phase that never completed. Every phase records
 itself in `$MG_LOGDIR/expected` before it launches and leaves a `<phase>.row`
 only when it finishes. The last step, `go run ./tools/test-affected gate-verify`,
 compares what the plan **obliges** (build, test, plus `generate`, `docs`,
-`migorder`, `typecheck`, `demo`, `migsafety`, `lint` as the plan, the diff and
+`migorder`, `typecheck`, `demo`, `migsafety`, `lint`, `golangci` as the plan, the diff and
 the tier select them) and what the gate **started** against the rows. A phase with no row
 (queued for a slot and cut off, cancelled, timed out, its tool missing) fails
 the gate and is named: `FAILED: docs never completed (no result row; ...)`.
@@ -326,11 +336,11 @@ These are the trade-offs. Each is caught by the release gate:
   or more than one from a hub. A FULL web fallback runs the same reached set,
   so a dependency bump that breaks a test no changed module reaches merges
   green.
-- **golangci-lint and buf lint**, and **link errors**. The merge gate itself
-  runs neither linter; the merge queue lints the changed packages in a job
-  beside it ("golangci-lint in the queue", below), so what reaches main
-  unlinted is a finding in a file the diff did not change, or behind a build
-  tag.
+- **golangci-lint and buf lint**, and **link errors**. The merge gate lints
+  the changed packages with golangci-lint ("golangci-lint before the queue",
+  below), and in the queue a job beside it does, so what reaches main unlinted
+  is a finding in a file the diff did not change, or behind a build tag. buf
+  lint runs only for a proto change.
 - **The race detector.** Nothing before a merge runs `-race`.
 - **Whole-project lint lanes.** golangci over packages the diff did not touch,
   the frontend lint, the graph, component-drift and config-reach lanes cannot
@@ -569,6 +579,65 @@ gate's five minutes:
 - **What it still leaves to the release gate.** Packages the group did not
   change, findings in files it did not change, the build-tagged pass, and buf
   lint.
+
+### golangci-lint before the queue (owner, 2026-11-18)
+
+The queue's job made golangci gate the merge, but nothing ran it before the
+queue: on 2026-11-18 it ejected #2857 and #2873 on findings the merge gate
+had passed, costing each a review round and every entry behind them a rebuilt
+group (Reliant bug 67d80734). So `task ci:merge` runs the same lint as its
+**golangci** phase:
+
+- **The same check.** The phase runs `scripts/golangci-changed.sh --base <the
+  gate's base>`, the script and base the queue's job runs (`task ci:golangci --
+  --base <the group's base>`): the same package selection, root
+  `.golangci.yml`, `--new-from-rev --whole-files` and release. The script
+  reads the release from the pinned forge's `templates.GolangciLintVersion`, as
+  the setup action does, and fails (exit 2, naming the `go install` command)
+  when there is no `golangci-lint` on PATH or it reports another release,
+  because another release reports other findings; the gate's summary prints
+  that message as the failed phase's last lines (`GOLANGCI_LINT_VERSION` overrides the lookup). Its
+  diff is the working tree against the base, untracked `.go` files included,
+  which is what `--new-from-rev` reads; on a clean checkout, as in the queue,
+  that is exactly `<base>..HEAD`.
+- **When.** Only when the diff adds or changes a `.go` file (the job's own
+  "Changed Go files" rule, plus untracked files); otherwise the summary notes
+  `golangci: not run`. It runs in `task ci:merge` and under `--skip-lint`,
+  which control-plane's pr-fix uses, so a fixed PR does not go back into the
+  queue with a finding. It does not run where a `golangci (changed)` job runs
+  beside the gate on its own runner: under `--queue`, and under
+  `--skip-golangci`, which `ci.yml`'s merge gate on a `ci:run` pull request
+  passes. That job installs golangci-lint and the gate's runner does not, and
+  the job lints once instead of twice. The gate then writes
+  `golangci-elsewhere` to its log directory. `gate-verify` obliges the phase on
+  a `.go` change unless that marker is there, so a golangci phase that never
+  completed fails the gate by name. `TestEveryMergeGateCallerProvisionsGolangci`
+  holds every workflow step that runs the gate to either installing the pinned
+  golangci-lint (the setup action's `golangci: "true"`) or delegating to such
+  a job under the same condition.
+- **Slot and lock.** It runs beside build, test and lint inside the gate's one
+  heavy slot, at a quarter of the gate's CPU budget (`GOMAXPROCS`), like lint.
+  golangci-lint takes a machine-wide lock and, given no flag, exits 3 after
+  five seconds ("parallel golangci-lint is running") whenever anything else on
+  the machine is linting: in the gate's own slot it drops the lock
+  (`--in-slot`, `--allow-parallel-runners`), as forge lint does in a slot of
+  its own; anywhere else, the queue's job included, it waits for it
+  (`--allow-serial-runners`). Neither changes a finding.
+- **What it costs.** `golangci` has a 120s step budget in
+  `scripts/merge-gate-budgets.json`. Measured on a 31-CPU host at load 40-50
+  (2026-11-18), at `GOMAXPROCS=4`: 25-32s for a diff on top of a main this
+  host had already linted (17 packages, 50 files; a re-run of one diff 25s),
+  and 90s for a fresh edit to the largest package in the module
+  (`internal/workflow/runtime/activities/handlers`). In this change's own
+  `task ci:merge` (one package, `tools/test-affected`) the phase took 49s and
+  ended at +80s, beside a test phase that ran 306s. golangci-lint caches each
+  package's analysis, so its time is the changed packages and whatever
+  dependencies the cache has not seen. A branch far behind main is the slow
+  case: diffs replayed at their own, older, commits took 106-261s at
+  `GOMAXPROCS=8`, every dependency a cache miss. The test phase (120s budget)
+  is the usual longest phase, so the typical gate's wall time does not grow;
+  the far-behind case can, and the summary's GATE-HEALTH line says so. Merge
+  main to bring it back.
 
 ### Backwards-compatibility checks in the queue
 
