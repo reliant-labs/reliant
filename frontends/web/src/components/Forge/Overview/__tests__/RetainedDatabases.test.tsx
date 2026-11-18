@@ -7,7 +7,7 @@
  * answer (no access, no rpc) shows nothing rather than an error.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -47,7 +47,7 @@ vi.mock("@/hooks/useOrgs", async (importOriginal) => {
 });
 
 import { RetainedDatabases } from "../RetainedDatabases";
-import { CONFIRM_WINDOW_MS, startKeptDataCheck, useKeptDataChecks } from "../keptDataChecks";
+import { CONFIRM_WINDOW_MS, keptDataProgress, startKeptDataCheck, useKeptDataChecks } from "../keptDataChecks";
 
 function row(id: string, project: string, databaseName: string, environmentName = "staging"): RetainedDatabase {
   return {
@@ -161,8 +161,20 @@ describe("kept databases", () => {
 });
 
 describe("confirming a keep-data delete", () => {
-  const check = (since = Date.now()) =>
-    startKeptDataCheck({ environmentId: "env_gone", envName: "staging", project: "shop", databases: ["shop-db"], since });
+  // A fixed clock: the window is measured against it, never the wall clock.
+  // Only Date is faked, so the page's poll and userEvent keep real timers.
+  const NOW = new Date("2026-11-18T12:00:00.000Z").getTime();
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const check = (since = NOW, databases = ["shop-db"]) =>
+    startKeptDataCheck({ environmentId: "env_gone", envName: "staging", project: "shop", databases, since });
+  const kept = (id: string, databaseName: string) => ({ ...row(id, "shop", databaseName), environmentId: "env_gone" });
 
   it("says it is confirming, then clears once the databases are listed as kept", async () => {
     check();
@@ -170,7 +182,7 @@ describe("confirming a keep-data delete", () => {
     wrap();
     expect(await screen.findByTestId("kept-data-pending-env_gone")).toHaveTextContent("Confirming that staging's databases were kept");
 
-    listRetainedDatabases.mockResolvedValue([{ ...row("r9", "shop", "shop-db"), environmentId: "env_gone" }]);
+    listRetainedDatabases.mockResolvedValue([kept("r9", "shop-db")]);
     // The page re-reads on its poll; the listed row ends the check.
     await waitFor(() => expect(useKeptDataChecks.getState().checks).toEqual([]), { timeout: 15_000 });
     expect(screen.queryByTestId("kept-data-pending-env_gone")).toBeNull();
@@ -178,13 +190,14 @@ describe("confirming a keep-data delete", () => {
   });
 
   it("warns when a server ignored Keep data: nothing is listed once the window has passed", async () => {
-    check(Date.now() - CONFIRM_WINDOW_MS - 1_000);
+    check(NOW - CONFIRM_WINDOW_MS - 1_000);
     listRetainedDatabases.mockResolvedValue([row("r2", "blog", "blog-db")]);
     wrap();
     const warning = await screen.findByTestId("kept-data-warning-env_gone");
     expect(warning).toHaveAttribute("role", "alert");
     expect(warning.textContent).toContain("can't confirm shop-db was kept");
-    expect(warning.textContent).toContain("the data may have been deleted");
+    expect(warning.textContent).toContain("No kept database from staging is listed");
+    expect(warning.textContent).toContain("the data of shop-db may have been deleted");
 
     await userEvent.click(screen.getByTestId("kept-data-dismiss-env_gone"));
     expect(useKeptDataChecks.getState().checks).toEqual([]);
@@ -197,5 +210,46 @@ describe("confirming a keep-data delete", () => {
     const warning = await screen.findByTestId("kept-data-warning-env_gone");
     expect(warning.textContent).toContain("can't list kept databases");
     expect(screen.queryByTestId("retained-databases")).toBeNull();
+  });
+
+  it("keeps confirming while only some of several databases are listed", async () => {
+    check(NOW, ["shop-db", "shop-cache"]);
+    listRetainedDatabases.mockResolvedValue([kept("r9", "shop-db")]);
+    wrap();
+    // The kept one is listed, and the check stays open for the other.
+    expect(await screen.findByTestId("retained-database-r9")).toBeTruthy();
+    expect(screen.getByTestId("kept-data-pending-env_gone")).toHaveTextContent("1 of 2 listed so far");
+    expect(useKeptDataChecks.getState().checks).toHaveLength(1);
+  });
+
+  it("warns past the window, naming the databases that were not kept", async () => {
+    check(NOW - CONFIRM_WINDOW_MS - 1_000, ["shop-db", "shop-cache", "shop-search"]);
+    listRetainedDatabases.mockResolvedValue([kept("r9", "shop-db")]);
+    wrap();
+    const warning = await screen.findByTestId("kept-data-warning-env_gone");
+    expect(warning.textContent).toContain("can't confirm shop-cache, shop-search were kept");
+    expect(warning.textContent).toContain("Only shop-db is listed as kept");
+    expect(warning.textContent).toContain("the data of shop-cache, shop-search may have been deleted");
+    expect(useKeptDataChecks.getState().checks).toHaveLength(1);
+  });
+});
+
+describe("keptDataProgress", () => {
+  const base = { environmentId: "env_1", envName: "prod", project: "shop", since: 0 };
+  const listed = [
+    { environmentId: "env_1", databaseName: "a" },
+    { environmentId: "env_2", databaseName: "b" },
+  ];
+
+  it("is done only when every recorded database is listed for that environment", () => {
+    expect(keptDataProgress({ ...base, databases: ["a"] }, listed)).toEqual({ kept: ["a"], missing: [], done: true });
+    // "b" is listed, but for another environment.
+    expect(keptDataProgress({ ...base, databases: ["a", "b"] }, listed)).toEqual({ kept: ["a"], missing: ["b"], done: false });
+    expect(keptDataProgress({ ...base, databases: ["a"] }, [])).toEqual({ kept: [], missing: ["a"], done: false });
+  });
+
+  it("with no names recorded, asks only for some database of the environment", () => {
+    expect(keptDataProgress({ ...base, databases: [] }, listed).done).toBe(true);
+    expect(keptDataProgress({ ...base, environmentId: "env_3", databases: [] }, listed).done).toBe(false);
   });
 });

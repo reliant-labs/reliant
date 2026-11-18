@@ -42,7 +42,14 @@ import { cloudErrorDetail, isUnimplemented, type RetainedDatabase } from "@/serv
 
 import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { PURGE_NEEDS_ADMIN, refusalText, useOrgAuthority } from "../orgAuthority";
-import { CONFIRM_WINDOW_MS, endKeptDataCheck, useKeptDataChecks, type KeptDataCheck } from "./keptDataChecks";
+import {
+  CONFIRM_WINDOW_MS,
+  endKeptDataCheck,
+  keptDataProgress,
+  useKeptDataChecks,
+  type KeptDataCheck,
+  type KeptDataProgress,
+} from "./keptDataChecks";
 
 /** How often the list is re-read while a keep-data delete is being confirmed. */
 const CONFIRM_POLL_MS = 5_000;
@@ -67,9 +74,10 @@ export function RetainedDatabases({ project }: { project: string }) {
   const [purging, setPurging] = useState<RetainedDatabase | null>(null);
   const [requested, setRequested] = useState<ReadonlySet<string>>(new Set());
 
-  // A check is done once its environment's databases are listed as kept.
+  // A check is done once EVERY database it recorded is listed as kept.
   const listed = retained.data ?? [];
-  const confirmed = checks.filter((check) => listed.some((row) => row.environmentId === check.environmentId));
+  const progress = new Map(checks.map((check) => [check.environmentId, keptDataProgress(check, listed)]));
+  const confirmed = checks.filter((check) => progress.get(check.environmentId)?.done);
   const confirmedKey = confirmed.map((check) => check.environmentId).join(",");
   useEffect(() => {
     for (const id of confirmedKey.split(",")) if (id) endKeptDataCheck(id);
@@ -83,10 +91,13 @@ export function RetainedDatabases({ project }: { project: string }) {
         <KeptDataNotice
           key={check.environmentId}
           check={check}
+          progress={progress.get(check.environmentId) ?? { kept: [], missing: check.databases, done: false }}
           state={
             isUnimplemented(retained.error)
               ? "unverifiable"
-              : now - check.since > CONFIRM_WINDOW_MS
+              : // Only an answered list can show a database missing: while
+                // the read is loading (or failing) the check stays pending.
+                retained.isSuccess && now - check.since > CONFIRM_WINDOW_MS
                 ? "missing"
                 : "pending"
           }
@@ -179,13 +190,25 @@ export function RetainedDatabases({ project }: { project: string }) {
  * still be running; `missing` once the window has passed with nothing
  * listed; `unverifiable` when the control plane cannot list kept databases.
  */
-function KeptDataNotice({ check, state }: { check: KeptDataCheck; state: "pending" | "missing" | "unverifiable" }) {
-  const names = check.databases.length > 0 ? check.databases.join(", ") : "its databases";
+function KeptDataNotice({
+  check,
+  progress,
+  state,
+}: {
+  check: KeptDataCheck;
+  progress: KeptDataProgress;
+  state: "pending" | "missing" | "unverifiable";
+}) {
+  // The databases not confirmed: by name when the check recorded them.
+  const unconfirmed = progress.missing.length > 0 ? progress.missing : check.databases;
+  const names = unconfirmed.length > 0 ? unconfirmed.join(", ") : "its databases";
   if (state === "pending") {
     return (
       <p role="status" className="flex items-center gap-2 text-sm text-ink-muted" data-testid={`kept-data-pending-${check.environmentId}`}>
         <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
-        Confirming that {check.envName}&apos;s databases were kept. They are listed here once its teardown finishes.
+        Confirming that {check.envName}&apos;s databases were kept
+        {progress.kept.length > 0 && ` (${progress.kept.length} of ${check.databases.length} listed so far)`}. They are
+        listed here once its teardown finishes.
       </p>
     );
   }
@@ -198,12 +221,17 @@ function KeptDataNotice({ check, state }: { check: KeptDataCheck; state: "pendin
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-ink" aria-hidden="true" />
       <div className="min-w-0 space-y-1">
         <p className="font-medium">
-          {check.envName} was deleted with Keep data, but Reliant can&apos;t confirm {names} {check.databases.length === 1 ? "was" : "were"} kept.
+          {check.envName} was deleted with Keep data, but Reliant can&apos;t confirm {names}{" "}
+          {unconfirmed.length === 1 ? "was" : "were"} kept.
         </p>
         <p className="text-ink-muted">
           {state === "unverifiable"
             ? "This control plane can't list kept databases, so whether the data was kept is unknown."
-            : `No kept database from ${check.envName} is listed ${Math.round(CONFIRM_WINDOW_MS / 60_000)} minutes after the delete. If its teardown has finished, the data may have been deleted.`}{" "}
+            : `${
+                progress.kept.length > 0
+                  ? `Only ${progress.kept.join(", ")} ${progress.kept.length === 1 ? "is" : "are"} listed as kept`
+                  : `No kept database from ${check.envName} is listed`
+              } ${Math.round(CONFIRM_WINDOW_MS / 60_000)} minutes after the delete. If its teardown has finished, the data of ${names} may have been deleted.`}{" "}
           Contact support before relying on that data.
         </p>
         <Button variant="outline" size="sm" onClick={() => endKeptDataCheck(check.environmentId)} data-testid={`kept-data-dismiss-${check.environmentId}`}>

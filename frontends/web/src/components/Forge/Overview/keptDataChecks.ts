@@ -45,6 +45,41 @@ export function startKeptDataCheck(check: Omit<KeptDataCheck, "since"> & { since
   }));
 }
 
+export interface KeptDataProgress {
+  /** Recorded database names listed as kept. */
+  kept: string[];
+  /** Recorded database names not listed (yet). */
+  missing: string[];
+  /** Every recorded database is listed: the check may end. */
+  done: boolean;
+}
+
+/**
+ * How far a check has got against the kept-databases list.
+ *
+ * EVERY recorded database must be listed, by name, before the check ends: an
+ * environment with two databases of which one was kept and one deleted is a
+ * loss, not a success. The names match because a managed database's CNPG
+ * Cluster, which the control plane records as database_name, is named after
+ * the ManagedDatabase, which is the database workload (control-plane
+ * manageddatabase controller.go, cluster.SetName(db.Name)). A mismatch would
+ * err towards a warning, never towards silence.
+ *
+ * With no names recorded (the status read had not said which workloads are
+ * databases) the check can only ask for some database of the environment.
+ */
+export function keptDataProgress(
+  check: KeptDataCheck,
+  listed: readonly { environmentId: string; databaseName: string }[]
+): KeptDataProgress {
+  const fromEnv = listed.filter((row) => row.environmentId === check.environmentId);
+  if (check.databases.length === 0) return { kept: [], missing: [], done: fromEnv.length > 0 };
+  const names = new Set(fromEnv.map((row) => row.databaseName));
+  const kept = check.databases.filter((name) => names.has(name));
+  const missing = check.databases.filter((name) => !names.has(name));
+  return { kept, missing, done: missing.length === 0 };
+}
+
 export function endKeptDataCheck(environmentId: string): void {
   useKeptDataChecks.setState((state) => ({ checks: state.checks.filter((c) => c.environmentId !== environmentId) }));
 }
