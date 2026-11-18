@@ -28,7 +28,7 @@ export const messageKeys = {
 // ── Message-list cache (the single source of truth for a chat's messages) ────
 //
 // messageKeys.list(chatId) stores the ENVELOPE returned by
-// chatActions.listMessages — { messages, total, hasMore, oldestSeq } — NOT
+// chatActions.listMessages — { messages, hasMore, oldestSeq } — NOT
 // a bare array (mirrors the chat-list cache pattern in chat-queries.ts).
 // Readers select `.messages`; the chat stream patches `.messages` live via the
 // helpers below (setQueryData, never invalidate/refetch) so the render path
@@ -43,7 +43,12 @@ export const messageKeys = {
 
 export type MessageListResult = {
   messages: Message[];
-  total: number;
+  /**
+   * The chat snapshot's message count, when one has arrived. Nothing pages by
+   * it (hasMore and oldestSeq are the cursor), and listMessages asks the
+   * server for none.
+   */
+  total?: number;
   hasMore: boolean;
   oldestSeq: number;
 };
