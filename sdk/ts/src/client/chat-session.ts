@@ -306,6 +306,9 @@ export class ChatSession {
         recent: pageSize,
         beforeSeq: BigInt(beforeSeq),
         toolBodies: toolBodyModeOf(this.toolBodies),
+        // Paging is by cursor; the server's count of a long chat cost more
+        // than the page, so the snapshot's total stands.
+        skipTotal: true,
       });
       const messages = response.messages as unknown as Message[];
       // An empty page is the start of history. Otherwise the server says whether
@@ -320,7 +323,7 @@ export class ChatSession {
           return [];
         }
       });
-      this.dispatch({ kind: "olderPage", messages, errors, total: response.total, hasMore });
+      this.dispatch({ kind: "olderPage", messages, errors, total: pagination.total, hasMore });
       return hasMore;
     } finally {
       this.olderInFlight = false;

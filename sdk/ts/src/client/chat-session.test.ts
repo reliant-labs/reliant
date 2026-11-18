@@ -459,6 +459,11 @@ describe("toolBodies", () => {
     expect(page).toMatchObject({ chatId: CHAT, recent: 50, beforeSeq: 6n, toolBodies: ToolBodyMode.STUB });
   });
 
+  it("asks for no total: a page is found by cursor, and counting a long chat cost more than the page", async () => {
+    const { page } = await openWith();
+    expect(page).toMatchObject({ chatId: CHAT, beforeSeq: 6n, skipTotal: true });
+  });
+
   it("is full by default: the field is left unset, which every server reads as FULL", async () => {
     for (const toolBodies of [undefined, "full"] as const) {
       const { stream, page } = await openWith(toolBodies);
