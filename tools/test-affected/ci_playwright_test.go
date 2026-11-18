@@ -508,9 +508,10 @@ func TestPlaywrightRunsInThePinnedImage(t *testing.T) {
 				Options string `yaml:"options"`
 			} `yaml:"container"`
 			Steps []struct {
-				Name string `yaml:"name"`
-				Run  string `yaml:"run"`
-				Uses string `yaml:"uses"`
+				Name string            `yaml:"name"`
+				Run  string            `yaml:"run"`
+				Uses string            `yaml:"uses"`
+				With map[string]string `yaml:"with"`
 			} `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
@@ -545,10 +546,50 @@ func TestPlaywrightRunsInThePinnedImage(t *testing.T) {
 		}
 	}
 	// The image has no jq: the suite's own task must not need it.
+	runsJQ := regexp.MustCompile(`(^|[\s|(])jq\s`)
 	tf := parseTaskfile(t, filepath.Join(repoRoot, "Taskfile.yml"))
 	for _, c := range tf.commands("web:e2e:run") {
-		if regexp.MustCompile(`(^|[\s|(])jq\s`).MatchString(c) {
+		if runsJQ.MatchString(c) {
 			t.Errorf("web:e2e:run runs jq, which the Playwright image lacks: %q", c)
+		}
+	}
+	// Nor may the setup action's steps this job reaches with its inputs.
+	// (fetch-release-asset.sh, which Install Task runs on a cache miss, reads
+	// the API's JSON with node when there is no jq: TestFetchReleaseAsset.)
+	var with map[string]string
+	for _, s := range pw.Steps {
+		if s.Uses == "./"+setupDir {
+			with = s.With
+		}
+	}
+	if with == nil {
+		t.Fatalf("playwright job does not use %s", setupDir)
+	}
+	var action struct {
+		Inputs map[string]struct {
+			Default string `yaml:"default"`
+		} `yaml:"inputs"`
+		Runs struct {
+			Steps []ciStep `yaml:"steps"`
+		} `yaml:"runs"`
+	}
+	if err := yaml.Unmarshal(readRepo(t, filepath.Join(setupDir, "action.yml")), &action); err != nil {
+		t.Fatal(err)
+	}
+	inputCond := regexp.MustCompile(`inputs\.([\w-]+) == '([^']*)'`)
+	for _, s := range action.Runs.Steps {
+		reached := true // every input condition in the action's ifs is a conjunct
+		for _, m := range inputCond.FindAllStringSubmatch(s.If, -1) {
+			v, ok := with[m[1]]
+			if !ok {
+				v = action.Inputs[m[1]].Default
+			}
+			if v != m[2] {
+				reached = false
+			}
+		}
+		if reached && runsJQ.MatchString(s.Run) {
+			t.Errorf("setup step %q runs jq in the playwright job, whose image lacks it", s.Name)
 		}
 	}
 }
