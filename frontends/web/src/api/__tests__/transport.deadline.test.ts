@@ -15,6 +15,7 @@ import type { Interceptor } from "@connectrpc/connect";
 const reporting = vi.hoisted(() => ({
   reportError: vi.fn(),
   reportFailure: vi.fn(),
+  reportTypedFailure: vi.fn(),
 }));
 vi.mock("@/lib/errorReporting", () => reporting);
 
@@ -170,11 +171,13 @@ describe("the budget is active time", () => {
 
     // One report for the incident, with the active age AND the wall age, so
     // a frozen tab is never again read as a slow server.
-    expect(reporting.reportFailure).toHaveBeenCalledTimes(1);
-    const [message, context] = reporting.reportFailure.mock.calls[0];
+    expect(reporting.reportTypedFailure).toHaveBeenCalledTimes(1);
+    const [type, message, context] = reporting.reportTypedFailure.mock.calls[0];
     expect(context["rpc.in_flight"]).toContain("UpdateSetting:10s (70s wall)");
     // The message is the issue's identity: only the method and its budget,
-    // never the in-flight snapshot, which differs on every timeout.
+    // never the in-flight snapshot, which differs on every timeout. The type
+    // tells the control plane it is a client-side timeout.
+    expect(type).toBe("RpcTimeout");
     expect(message).toBe("rpc-timeout: UpdateSetting after 10000ms");
     expect(context["rpc.method"]).toBe("UpdateSetting");
     // The timed-out call is not ALSO an exception report (ELECTRON-8X).
@@ -257,7 +260,8 @@ describe("a fast read whose answer was lost (ELECTRON-B0, BA)", () => {
     expect(calls).toHaveLength(2);
     expect(calls.every((c) => c.req.signal.aborted)).toBe(true);
     // Both requests ran out of the one budget together: one timeout report.
-    expect(reporting.reportFailure).toHaveBeenCalledTimes(1);
+    expect(reporting.reportTypedFailure).toHaveBeenCalledTimes(1);
+    expect(reporting.reportTypedFailure.mock.calls[0][0]).toBe("RpcTimeout");
   });
 
   it("leaves reads the server is genuinely slow on alone", async () => {
@@ -277,6 +281,106 @@ describe("a fast read whose answer was lost (ELECTRON-B0, BA)", () => {
     await flush();
     await vi.advanceTimersByTimeAsync(9_000);
     expect(calls).toHaveLength(1);
+  });
+});
+
+// Prod, 2026-11-18: four calls of one tab hung together on a dead connection,
+// and the first to run out of budget (ListDeployAttempts, which the server had
+// answered in 22ms) opened an issue of its own and paged. Calls that hang
+// together are one stall, reported once, carrying every method.
+describe("calls that hang together", () => {
+  it("are one stall report carrying every method, not a timeout per method", async () => {
+    const { calls, call } = await loadChain();
+    const methods: Array<[string, string]> = [
+      ["reliant.v1.DeployService", "ListDeployAttempts"],
+      ["reliant.v1.ProjectService", "GetProject"],
+      ["reliant.v1.SettingsService", "UpdateSetting"],
+      ["reliant.v1.WorkflowService", "ListWorkflows"],
+    ];
+    const errors: unknown[] = [];
+    for (const [service, method] of methods) {
+      call(service, method).catch((e) => errors.push(e));
+      await vi.advanceTimersByTimeAsync(300);
+    }
+    await flush();
+    expect(calls.length).toBeGreaterThanOrEqual(4);
+
+    // Every budget runs out, one after another.
+    await vi.advanceTimersByTimeAsync(11_000);
+    expect(errors).toHaveLength(4);
+    for (const e of errors) expect((e as ConnectError).code).toBe(Code.DeadlineExceeded);
+
+    expect(reporting.reportTypedFailure).toHaveBeenCalledTimes(1);
+    const [type, message, context] = reporting.reportTypedFailure.mock.calls[0];
+    // One issue for every stall: the message names no method.
+    expect(type).toBe("RpcStall");
+    expect(message).toBe("connection stalled");
+    expect(context["rpc.stalled_methods"]).toBe("GetProject,ListDeployAttempts,ListWorkflows,UpdateSetting");
+    expect(context["rpc.stalled_count"]).toBe(4);
+    expect(context["rpc.first_timeout_method"]).toBe("ListDeployAttempts");
+    expect(context["rpc.classification"]).toBe("client_stall");
+    expect(reporting.reportFailure).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
+  });
+
+  it("leaves out a call that started well after the timed-out one", async () => {
+    const { call } = await loadChain();
+    call("reliant.v1.SettingsService", "UpdateSetting").catch(() => {});
+    await flush();
+    await vi.advanceTimersByTimeAsync(5_000);
+    // Started 5s later: silent for 5s when the first times out, but not part
+    // of its stall (a new request on a fresh connection, say).
+    call("reliant.v1.ProjectService", "UpdateProject").catch(() => {});
+    await flush();
+
+    await vi.advanceTimersByTimeAsync(5_100);
+    expect(reporting.reportTypedFailure).toHaveBeenCalledTimes(1);
+    expect(reporting.reportTypedFailure.mock.calls[0].slice(0, 2)).toEqual([
+      "RpcTimeout",
+      "rpc-timeout: UpdateSetting after 10000ms",
+    ]);
+  });
+
+  it("leaves out a call that was answered", async () => {
+    const { calls, call } = await loadChain();
+    call("reliant.v1.SettingsService", "UpdateSetting").catch(() => {});
+    void call("reliant.v1.ProjectService", "UpdateProject");
+    await flush();
+    calls[1].resolve({});
+    await flush();
+
+    await vi.advanceTimersByTimeAsync(10_100);
+    expect(reporting.reportTypedFailure).toHaveBeenCalledTimes(1);
+    expect(reporting.reportTypedFailure.mock.calls[0][0]).toBe("RpcTimeout");
+  });
+
+  it("can be turned off: every timeout is then its own", async () => {
+    const { createDeadlineInterceptor } = await import("../rpcDeadline");
+    const { pageActivity } = await import("../../lib/pageActivity");
+    const onTimeout = vi.fn();
+    const onStall = vi.fn();
+    const deadline = createDeadlineInterceptor({
+      timeoutFor: () => 10_000,
+      activity: pageActivity,
+      onTimeout,
+      onStall,
+      stallGrouping: false,
+    });
+    const { wire } = makeWire();
+    const run = deadline.interceptor(wire);
+    for (const method of ["A", "B"]) {
+      void run({
+        stream: false,
+        service: { typeName: "reliant.v1.X" },
+        method: { name: method },
+        header: new Headers(),
+        signal: new AbortController().signal,
+        message: {},
+      } as unknown as Req).catch(() => {});
+    }
+    await vi.advanceTimersByTimeAsync(10_100);
+    expect(onStall).not.toHaveBeenCalled();
+    expect(onTimeout.mock.calls.map((c) => c[0]).sort()).toEqual(["A", "B"]);
   });
 });
 
