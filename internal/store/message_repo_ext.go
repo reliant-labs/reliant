@@ -32,6 +32,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // InsertMessage writes msg as a new row. The caller allocates ordinal and
@@ -330,30 +331,100 @@ const CountMessagesOutsideThreadSQL = `SELECT count(*) FROM messages WHERE chat_
 
 // chatMessageCountsSQL reads a chat's message counts from
 // chat_thread_message_counts (migration 20261118210350), which triggers on
-// messages keep exact in the transaction of every message write: how many
-// threads have a row, the chat's total, and the count on thread $2. It is
-// one row per thread of the chat, not one per message.
+// messages move in the transaction of every message write: whether the chat
+// is still pending (its rows are then only the change since the triggers were
+// installed, not counts), the chat's total, and the count on thread $2. It is
+// one row per thread of the chat, not one per message, and one snapshot for
+// the pending flag and the rows.
 //
 // It runs through the raw passthrough with bound $N parameters rather than
 // NewRaw, which would format the ids into the text: it runs on every
 // ListMessages page and every chat snapshot, and a bound statement is
 // prepared once per connection.
-const chatMessageCountsSQL = `SELECT count(*), COALESCE(sum(message_count), 0), COALESCE(sum(message_count) FILTER (WHERE thread_id = $2), 0)
+const chatMessageCountsSQL = `SELECT EXISTS (SELECT 1 FROM chat_message_counts_pending WHERE chat_id = $1),
+       COALESCE(sum(message_count), 0),
+       COALESCE(sum(message_count) FILTER (WHERE thread_id = $2), 0)
 FROM chat_thread_message_counts
 WHERE chat_id = $1`
 
+// initChatMessageCountsSQL turns a pending chat's rows from "the change since
+// the triggers were installed" into counts, once. In one statement, so in one
+// snapshot, it claims the chat's pending row and adds to each thread's row
+// its count(*) less its change. That difference is the thread's count when
+// the triggers were installed — a constant: every later write moves count(*)
+// and the change alike — so the row ends up the thread's count whatever
+// commits concurrently, and the ON CONFLICT add lands on the row as it is
+// when it is written. The pending row makes it happen once:
+// a second initializer waits on the claim, then finds it gone and adds
+// nothing.
+//
+// It costs one count over the chat's messages, the cost every read paid
+// before, once per chat, on its first read after the migration.
+const initChatMessageCountsSQL = `WITH claimed AS (
+    DELETE FROM chat_message_counts_pending WHERE chat_id = $1 RETURNING chat_id
+),
+counted AS MATERIALIZED (
+    SELECT thread_id, count(*) AS n
+    FROM messages
+    WHERE chat_id = $1 AND EXISTS (SELECT 1 FROM claimed)
+    GROUP BY thread_id
+),
+changed AS MATERIALIZED (
+    SELECT thread_id, message_count AS n
+    FROM chat_thread_message_counts
+    WHERE chat_id = $1 AND EXISTS (SELECT 1 FROM claimed)
+)
+INSERT INTO chat_thread_message_counts AS c (chat_id, thread_id, message_count)
+SELECT $1::text, thread_id, COALESCE(counted.n, 0) - COALESCE(changed.n, 0)
+FROM counted FULL JOIN changed USING (thread_id)
+WHERE COALESCE(counted.n, 0) <> COALESCE(changed.n, 0)
+ORDER BY thread_id
+ON CONFLICT (chat_id, thread_id) DO UPDATE
+SET message_count = c.message_count + EXCLUDED.message_count`
+
+// clearZeroChatMessageCountsSQL removes the rows of a chat an initialization
+// brought to zero (a missing row is zero; the triggers keep it that way).
+const clearZeroChatMessageCountsSQL = `DELETE FROM chat_thread_message_counts WHERE chat_id = $1 AND message_count = 0`
+
 // chatMessageCounts returns the chat's total and the count on threadID from
-// chat_thread_message_counts; counted is false when the chat has no row
-// there, which the triggers make mean "no messages" (a row exists exactly
-// while its count is above zero). The caller then counts the messages
-// themselves, which costs nothing on a chat that truly has none and stays
-// correct on a database whose counts were cleared by hand.
+// chat_thread_message_counts. A chat the migration left pending is
+// initialized first (initChatMessageCountsSQL), unless ctx carries a
+// transaction: a write and a count over the chat do not belong inside a
+// caller's transaction, so that read counts instead, and a later one
+// initializes. counted is false when the counts cannot answer — the chat is
+// still pending — and the caller then counts the messages, exactly as every
+// read did before the counts existed.
+//
+// A failed initialization is not the read's failure: it is rolled back
+// whole, the chat stays pending, and the read counts.
 func chatMessageCounts(ctx context.Context, db orm.Context, chatID, threadID string) (total, onThread int, counted bool, err error) {
-	var rows int
-	if err := db.QueryRow(ctx, chatMessageCountsSQL, chatID, threadID).Scan(&rows, &total, &onThread); err != nil {
-		return 0, 0, false, fmt.Errorf("failed to read chat message counts: %w", err)
+	read := func() (pending bool, err error) {
+		if err := db.QueryRow(ctx, chatMessageCountsSQL, chatID, threadID).Scan(&pending, &total, &onThread); err != nil {
+			return false, fmt.Errorf("failed to read chat message counts: %w", err)
+		}
+		return pending, nil
 	}
-	return total, onThread, rows > 0, nil
+	pending, err := read()
+	if err != nil || !pending {
+		return total, onThread, err == nil, err
+	}
+	if orm.InTx(ctx) {
+		return 0, 0, false, nil
+	}
+	if err := db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if _, err := db.Exec(ctx, initChatMessageCountsSQL, chatID); err != nil {
+			return err
+		}
+		_, err := db.Exec(ctx, clearZeroChatMessageCountsSQL, chatID)
+		return err
+	}); err != nil {
+		logging.WarnContext(ctx, "Initializing a chat's message counts failed; counting its messages instead", "chat_id", chatID, "error", err)
+		return 0, 0, false, nil
+	}
+	if pending, err = read(); err != nil || pending {
+		return 0, 0, false, err
+	}
+	return total, onThread, true, nil
 }
 
 // CountMessagesInChat is how many messages the chat holds — exactly

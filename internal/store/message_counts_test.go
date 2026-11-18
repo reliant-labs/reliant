@@ -121,10 +121,10 @@ func TestMessageCounts_EveryInsertWriter(t *testing.T) {
 	// One statement over two threads: one grouped upsert per thread.
 	if _, err := f.env.SQL.ExecContext(ctx, `
 		INSERT INTO messages (id, chat_id, ordinal, seq, thread_id, context_window_id, role, created_at, updated_at)
-		VALUES ('r1', $1, 100, 100, $2, $3, 1, now(), now()),
-		       ('r2', $1, 101, 101, $2, $3, 1, now(), now()),
-		       ('r3', $1, 100, 102, $4, $5, 1, now(), now())`,
-		f.chat, f.spawn, f.spawnCW, f.node, f.nodeCW); err != nil {
+		VALUES ('r1', $1, 100, 100, $2, $3, 1, $6, $6),
+		       ('r2', $1, 101, 101, $2, $3, 1, $6, $6),
+		       ('r3', $1, 100, 102, $4, $5, 1, $6, $6)`,
+		f.chat, f.spawn, f.spawnCW, f.node, f.nodeCW, t0); err != nil {
 		t.Fatal(err)
 	}
 	requireCountsExact(t, f.env, f.chat, 14, f.main, f.node, f.spawn)
@@ -268,10 +268,9 @@ func TestMessageCounts_BranchCountsOnlyItsOwnRows(t *testing.T) {
 	requireCountsExact(t, f.env, f.chat, 8, f.main, f.node, f.spawn)
 }
 
-// TestMessageCounts_ReadFromTheCounts proves the reads come from the counts
-// table and not from a count over messages, and that a chat with no row there
-// falls back to counting its messages (a database whose counts were cleared
-// by hand still answers right).
+// TestMessageCounts_ReadFromTheCounts proves the reads of an initialized chat
+// come from the counts table and not from a count over messages: a bumped row
+// shows through.
 func TestMessageCounts_ReadFromTheCounts(t *testing.T) {
 	f := newMsgFixture(t, "chat-count-source")
 	ctx := context.Background()
@@ -286,42 +285,147 @@ func TestMessageCounts_ReadFromTheCounts(t *testing.T) {
 	if n, err := store.CountMessagesInChatOutsideThread(ctx, f.env.ORM, f.chat, f.main); err != nil || n != 104 {
 		t.Fatalf("CountMessagesInChatOutsideThread = %d, %v; want 104, the counts table's", n, err)
 	}
-
-	if _, err := f.env.SQL.ExecContext(ctx, `DELETE FROM chat_thread_message_counts WHERE chat_id = $1`, f.chat); err != nil {
-		t.Fatal(err)
-	}
-	if n, err := store.CountMessagesInChat(ctx, f.env.ORM, f.chat); err != nil || n != 8 {
-		t.Fatalf("CountMessagesInChat with no counts = %d, %v; want 8, counted", n, err)
-	}
-	if n, err := store.CountMessagesInChatOutsideThread(ctx, f.env.ORM, f.chat, f.main); err != nil || n != 4 {
-		t.Fatalf("CountMessagesInChatOutsideThread with no counts = %d, %v; want 4, counted", n, err)
-	}
 }
 
-// TestMessageCounts_MigrationBackfillIsExact runs the migration's own
-// backfill statement over a database whose counts were lost and holds it to
-// count(*): what prod's existing messages are counted with.
-func TestMessageCounts_MigrationBackfillIsExact(t *testing.T) {
-	f := newMsgFixture(t, "chat-count-backfill")
+// installCountsOverExistingMessages puts the database in the state the
+// migration leaves on prod: messages written before the triggers existed are
+// in no row, and the migration's own last statement marks every chat
+// pending.
+func installCountsOverExistingMessages(t *testing.T, env *storetest.Env) {
+	t.Helper()
 	ctx := context.Background()
-	f.seedTranscript(t)
-
 	migration, err := os.ReadFile("../../db/migrations/20261118210350_chat_thread_message_counts.up.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(migration)
-	i := strings.LastIndex(text, "INSERT INTO chat_thread_message_counts (chat_id, thread_id, message_count)")
+	i := strings.LastIndex(text, "INSERT INTO chat_message_counts_pending (chat_id)")
 	if i < 0 {
-		t.Fatal("the migration's backfill statement is not where this test looks for it")
+		t.Fatal("the migration's pending statement is not where this test looks for it")
 	}
-	backfill := text[i:]
-
-	if _, err := f.env.SQL.ExecContext(ctx, `DELETE FROM chat_thread_message_counts`); err != nil {
+	if _, err := env.SQL.ExecContext(ctx, `DELETE FROM chat_thread_message_counts`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.env.SQL.ExecContext(ctx, backfill); err != nil {
-		t.Fatalf("backfill: %v\n%s", err, backfill)
+	if _, err := env.SQL.ExecContext(ctx, text[i:]); err != nil {
+		t.Fatalf("pending statement: %v\n%s", err, text[i:])
 	}
+}
+
+func requirePending(t *testing.T, env *storetest.Env, chatID string, want bool) {
+	t.Helper()
+	var pending bool
+	if err := env.SQL.QueryRowContext(context.Background(),
+		`SELECT EXISTS (SELECT 1 FROM chat_message_counts_pending WHERE chat_id = $1)`, chatID).Scan(&pending); err != nil {
+		t.Fatal(err)
+	}
+	if pending != want {
+		t.Fatalf("chat %s pending = %v; want %v", chatID, pending, want)
+	}
+}
+
+// TestMessageCounts_PendingChatInitializesOnFirstRead: a chat whose messages
+// predate the triggers is pending. Writes after the triggers only record
+// their change (a negative row for a deleted older message); a read inside a
+// transaction counts the messages and leaves the chat pending; the first read
+// outside one initializes it, after which the rows are its counts.
+func TestMessageCounts_PendingChatInitializesOnFirstRead(t *testing.T) {
+	f := newMsgFixture(t, "chat-count-pending")
+	ctx := context.Background()
+	f.seedTranscript(t)
+	installCountsOverExistingMessages(t, f.env)
+	requirePending(t, f.env, f.chat, true)
+
+	// After the triggers: an older node message goes, a new main one comes.
+	if err := f.env.Repo.DeleteMessage(ctx, "n2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.env.Repo.SaveMessageAtomic(ctx, atomicWrite(f, "after", 1)); err != nil {
+		t.Fatal(err)
+	}
+	if got := groupedRows(t, f.env, `SELECT chat_id, thread_id, message_count FROM chat_thread_message_counts ORDER BY chat_id, thread_id`); got != fmt.Sprintf("%s %s 1\n%s %s -1\n", f.chat, f.main, f.chat, f.node) {
+		t.Fatalf("rows of a pending chat = %q; want only the changes since the triggers", got)
+	}
+
+	if err := f.env.ORM.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		n, err := store.CountMessagesInChat(ctx, f.env.ORM, f.chat)
+		if err != nil || n != 8 {
+			return fmt.Errorf("in-transaction count = %d, %v; want 8, counted", n, err)
+		}
+		n, err = store.CountMessagesInChatOutsideThread(ctx, f.env.ORM, f.chat, f.main)
+		if err != nil || n != 3 {
+			return fmt.Errorf("in-transaction count outside main = %d, %v; want 3, counted", n, err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	requirePending(t, f.env, f.chat, true)
+
 	requireCountsExact(t, f.env, f.chat, 8, f.main, f.node, f.spawn)
+	requirePending(t, f.env, f.chat, false)
+
+	// Initialized: writes now keep counts.
+	if err := f.env.Repo.DeleteMessage(ctx, "s3"); err != nil {
+		t.Fatal(err)
+	}
+	requireCountsExact(t, f.env, f.chat, 7, f.main, f.node, f.spawn)
+}
+
+// TestMessageCounts_ConcurrentInitialization: many reads initializing one
+// pending chat at once, while it is written to, add its older messages once.
+func TestMessageCounts_ConcurrentInitialization(t *testing.T) {
+	f := newMsgFixture(t, "chat-count-init-race")
+	ctx := context.Background()
+	f.seedTranscript(t)
+	installCountsOverExistingMessages(t, f.env)
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 16)
+	for i := 0; i < 8; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if _, err := store.CountMessagesInChatOutsideThread(ctx, f.env.ORM, f.chat, f.main); err != nil {
+				errs <- err
+			}
+		}()
+		go func(i int) {
+			defer wg.Done()
+			w := atomicWrite(f, fmt.Sprintf("init-race%d", i), 1)
+			w.ThreadID, w.ContextWindowID = f.spawn, f.spawnCW
+			if _, err := f.env.Repo.SaveMessageAtomic(ctx, w); err != nil {
+				errs <- err
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	requireCountsExact(t, f.env, f.chat, 16, f.main, f.node, f.spawn)
+	requirePending(t, f.env, f.chat, false)
+}
+
+// TestMessageCounts_TruncateLeavesNothingToCount: emptying messages leaves no
+// counts and no pending chat behind.
+func TestMessageCounts_TruncateLeavesNothingToCount(t *testing.T) {
+	f := newMsgFixture(t, "chat-count-truncate")
+	ctx := context.Background()
+	f.seedTranscript(t)
+	installCountsOverExistingMessages(t, f.env)
+	if err := f.env.Repo.DeleteMessage(ctx, "n2"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.env.SQL.ExecContext(ctx, `TRUNCATE messages CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+	var rows, pending int
+	if err := f.env.SQL.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM chat_thread_message_counts), (SELECT count(*) FROM chat_message_counts_pending)`).Scan(&rows, &pending); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 0 || pending != 0 {
+		t.Fatalf("after TRUNCATE: %d count rows, %d pending chats; want none", rows, pending)
+	}
 }
