@@ -199,9 +199,6 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			if len(contexts[k]) == 0 {
-				contexts[k] = []map[string]any{runtime.ApplyDefaults(map[string]any{}, loaded[k].GetInputs())}
-			}
 			if visited[k] >= len(contexts[k]) {
 				continue
 			}
@@ -522,6 +519,20 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 				return nil, err
 			}
 			snap.Summary = append(snap.Summary, fmt.Sprintf("Workflow dependency: %d nodes; complete definition and its literal privileges fingerprinted (literals withheld)", len(w.Nodes)))
+		}
+		if !progress {
+			// Only once no walk can add a context: a definition the
+			// validator loaded that nothing handed arguments to (a spawn
+			// with no presets, say) is read with its declared defaults.
+			// Seeding them earlier walked a child under defaults it never
+			// runs with whenever its ref sorted before its parent's
+			// (project://pr-review before project://pr-review-main-red).
+			for _, k := range keys {
+				if len(contexts[k]) == 0 {
+					contexts[k] = []map[string]any{runtime.ApplyDefaults(map[string]any{}, loaded[k].GetInputs())}
+					progress = true
+				}
+			}
 		}
 		if !progress {
 			break
