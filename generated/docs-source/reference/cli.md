@@ -20962,8 +20962,10 @@ Replace a trigger's definition
 Replace a trigger's definition.
 
 This is a full replacement, not a patch: every field is written as given, so
-flags you omit are written as their zero value. The exception is enabled,
-which is left as it is unless you pass --disabled or --disabled=false.
+flags you omit are written as their zero value. The exceptions are enabled,
+which is left as it is unless you pass --disabled or --disabled=false, and the
+trigger's name and project, which are kept unless you pass --name or
+--project-id / --project.
 
 --org-accounts-only makes the trigger's runs spend only its organization's AI
 accounts, never your own. Given alone, it changes only that and keeps the rest
