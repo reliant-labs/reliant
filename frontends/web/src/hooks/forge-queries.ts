@@ -1014,16 +1014,14 @@ export function useApplyForgePromote(projectId: string | null | undefined) {
   const queryClient = useQueryClient();
   const { mutateAsync: applyPromote } = useApplyPromote({
     retry: false,
-    onSuccess: () => {
-      invalidateCloudAfterWrite(queryClient);
-      // The Releases pages: every ledger and rollout, and the live view, moved.
-      void queryClient.invalidateQueries({ queryKey: releaseKeys.root });
-      void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.liveView.all });
-    },
+    onSuccess: () => invalidateCloudAfterWrite(queryClient),
   });
 
   return useMutation<ApplyPromoteResult, Error, ForgePromotePlan>({
     mutationFn: async (plan: ForgePromotePlan) => {
+      // The org this promote runs in, taken when it starts: the request names
+      // it, and only its Releases pages and Live view are refetched after.
+      const { orgId } = getOrgScope();
       const token = confirmationTokenFor(plan);
       // Unreachable through the UI, which disables confirm without a token. It
       // throws rather than defaulting because every available default is a claim
@@ -1035,14 +1033,22 @@ export function useApplyForgePromote(projectId: string | null | undefined) {
           "This plan does not say what the environment is currently bound to, so no promote can be authorised from it."
         );
       }
-      const request = applyPromoteRequest({
-        projectId: projectId as string,
-        env: plan.env as string,
-        release: (plan.target?.release ?? plan.release) as string,
-        token,
-      });
+      const request = orgRequest(
+        applyPromoteRequest({
+          projectId: projectId as string,
+          env: plan.env as string,
+          release: (plan.target?.release ?? plan.release) as string,
+          token,
+        }),
+        orgId,
+      );
       try {
-        return appliedPromoteOf(await applyPromote(request));
+        const response = await applyPromote(request);
+        // The Releases pages (every ledger and rollout) and the Live view of
+        // the org it ran in moved; another org's did not.
+        void queryClient.invalidateQueries({ queryKey: releaseKeys.org(orgId) });
+        void queryClient.invalidateQueries({ queryKey: [...forgeCloudKeys.liveView.all, orgId ?? ""] });
+        return appliedPromoteOf(response);
       } catch (error) {
         const refusal = promoteRefusalOf(error);
         if (refusal) return { kind: "refused", refusal };

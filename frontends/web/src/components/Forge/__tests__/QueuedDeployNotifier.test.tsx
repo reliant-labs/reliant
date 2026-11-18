@@ -152,6 +152,6 @@ describe("QueuedDeployNotifier", () => {
     act(() => {
       client.setQueryData(forgeCloudKeys.liveView(null, "hounders"), { availability: "unreachable", envs: [], detail: "" });
     });
-    expect(useQueuedDeployStore.getState().watched).toHaveProperty("cp-prod");
+    expect(Object.values(useQueuedDeployStore.getState().watched).map((d) => d.envId)).toContain("cp-prod");
   });
 });

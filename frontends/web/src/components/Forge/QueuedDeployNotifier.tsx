@@ -119,7 +119,7 @@ export function notifySettled(settled: SettledDeploy, pathname: string, openEnvi
           ? `${release} is running. The deploy that was queued went out on its own.`
           : `${release} was released from the queue, but its rollout failed. Open the environment to see why.`,
       // One per environment: a later outcome replaces an unread earlier one.
-      tag: `forge-queued-deploy-${settled.deploy.envId}`,
+      tag: `forge-queued-deploy-${settled.deploy.orgId}-${settled.deploy.envId}`,
       onClick: () => {
         window.focus();
         openEnvironment();

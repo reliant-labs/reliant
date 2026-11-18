@@ -46,7 +46,19 @@ export interface SettledDeploy {
   release: string;
 }
 
+/** Watched deploys by `watchKey(orgId, envId)`. */
 export type WatchedDeploys = Readonly<Record<string, WatchedDeploy>>;
+
+/**
+ * Where a watched deploy is filed: its org AND its environment id. An
+ * environment id alone is the control plane's, and nothing on this side
+ * proves it unique across orgs, so one org's reading must never overwrite or
+ * settle another org's watch of the same id. The watch lives in memory only
+ * (store/queuedDeployStore.ts), so there is no stored state under an older key.
+ */
+export function watchKey(orgId: string, envId: string): string {
+  return `${orgId}\0${envId}`;
+}
 
 /**
  * Fold one Live reading of `forgeProject` in `orgId` into the watch.
@@ -77,29 +89,30 @@ export function observeQueuedDeploys(
   const byId = new Map(envs.map((env) => [env.id, env]));
   for (const env of envs) {
     if (!isQueued(env)) continue;
-    const current = watched[env.id];
-    if (current?.queued && current.envName === env.name && current.forgeProject === forgeProject && current.orgId === orgId) continue;
-    next[env.id] = { envId: env.id, envName: env.name, forgeProject, orgId, queued: true };
+    const key = watchKey(orgId, env.id);
+    const current = watched[key];
+    if (current?.queued && current.envName === env.name && current.forgeProject === forgeProject) continue;
+    next[key] = { envId: env.id, envName: env.name, forgeProject, orgId, queued: true };
     changed = true;
   }
 
-  for (const deploy of Object.values(watched)) {
+  for (const [key, deploy] of Object.entries(watched)) {
     if (deploy.forgeProject !== forgeProject || deploy.orgId !== orgId) continue;
     const env = byId.get(deploy.envId);
     if (!env) {
-      delete next[deploy.envId];
+      delete next[key];
       changed = true;
       continue;
     }
     if (isQueued(env)) continue;
     if (env.observed.state === "converged" || env.observed.state === "failed") {
       settled.push({ deploy, outcome: env.observed.state === "converged" ? "live" : "failed", release: env.release });
-      delete next[deploy.envId];
+      delete next[key];
       changed = true;
       continue;
     }
     if (deploy.queued) {
-      next[deploy.envId] = { ...deploy, queued: false };
+      next[key] = { ...deploy, queued: false };
       changed = true;
     }
   }

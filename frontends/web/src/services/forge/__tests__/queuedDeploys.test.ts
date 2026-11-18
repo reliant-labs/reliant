@@ -14,6 +14,7 @@ import {
   observeQueuedDeploys,
   watchPollInterval,
   watchedProjects,
+  watchKey,
   type WatchedDeploys,
 } from "../queuedDeploys";
 
@@ -51,7 +52,7 @@ describe("observeQueuedDeploys", () => {
   it("watches a queued environment, and nothing else", () => {
     const { watched, settled } = observeQueuedDeploys({}, "hounders", [env("prod", { queued: true }), env("staging")]);
     expect(watched).toEqual({
-      "cp-prod": { envId: "cp-prod", envName: "prod", forgeProject: "hounders", orgId: "", queued: true },
+      [watchKey("", "cp-prod")]: { envId: "cp-prod", envName: "prod", forgeProject: "hounders", orgId: "", queued: true },
     });
     expect(settled).toEqual([]);
   });
@@ -62,7 +63,7 @@ describe("observeQueuedDeploys", () => {
     // Billing set up: the hold is gone, the release is rolling out.
     const rolling = observeQueuedDeploys(watched, "hounders", [env("prod", { observed: "converging" })]);
     expect(rolling.settled).toEqual([]);
-    expect(rolling.watched["cp-prod"]?.queued).toBe(false);
+    expect(rolling.watched[watchKey("", "cp-prod")]?.queued).toBe(false);
     watched = rolling.watched;
 
     const live = observeQueuedDeploys(watched, "hounders", [env("prod", { observed: "converged" })]);
@@ -121,11 +122,29 @@ describe("observeQueuedDeploys", () => {
     expect(watchedProjects(after)).toEqual([{ orgId: "org-a", forgeProject: "hounders" }]);
   });
 
+  it("keeps the same environment id's watches apart in two orgs", () => {
+    // Org A and org B each read an environment "cp-prod" of a project named "hounders".
+    let watched = observeQueuedDeploys({}, "hounders", [env("prod", { queued: true })], "org-a").watched;
+    watched = observeQueuedDeploys(watched, "hounders", [env("prod", { queued: true })], "org-b").watched;
+    expect(Object.keys(watched).sort()).toEqual([watchKey("org-a", "cp-prod"), watchKey("org-b", "cp-prod")].sort());
+
+    // B's environment goes live: only B's watch settles, and A's is untouched.
+    const b = observeQueuedDeploys(watched, "hounders", [env("prod", { observed: "converged" })], "org-b");
+    expect(b.settled.map((s) => s.deploy.orgId)).toEqual(["org-b"]);
+    expect(b.watched[watchKey("org-a", "cp-prod")]).toBe(watched[watchKey("org-a", "cp-prod")]);
+    expect(b.watched[watchKey("org-b", "cp-prod")]).toBeUndefined();
+
+    // A's reading, still queued, neither overwrites nor settles anything of B's.
+    const a = observeQueuedDeploys(b.watched, "hounders", [env("prod", { queued: true })], "org-a");
+    expect(a.settled).toEqual([]);
+    expect(a.watched).toBe(b.watched);
+  });
+
   it("starts watching again when a newer deploy is queued after a release", () => {
     let watched = observeQueuedDeploys({}, "hounders", [env("prod", { queued: true })]).watched;
     watched = observeQueuedDeploys(watched, "hounders", [env("prod", { observed: "converging" })]).watched;
     watched = observeQueuedDeploys(watched, "hounders", [env("prod", { queued: true, release: "v14" })]).watched;
-    expect(watched["cp-prod"]?.queued).toBe(true);
+    expect(watched[watchKey("", "cp-prod")]?.queued).toBe(true);
   });
 });
 

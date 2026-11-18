@@ -43,6 +43,17 @@ import {
 import { forgeRetry } from "../forge-model";
 import { forgeServiceKeys } from "../forge-service-hooks_gen";
 import { releaseKeys } from "../release-queries";
+import { useActiveOrgStore } from "@/store/activeOrgStore";
+
+// The org-scoped promote test runs with a control plane, so the org scope
+// follows the active org store (lib/orgScope); every other test runs without one.
+const cp = vi.hoisted(() => ({ on: false }));
+vi.mock("@/services/controlPlane/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/config")>()),
+  get hasControlPlane() {
+    return cp.on;
+  },
+}));
 
 const META = { isForgeProject: true, supported: true };
 
@@ -138,6 +149,31 @@ describe("ApplyPromote", () => {
     await waitFor(() => expect(getTopology).toHaveBeenCalledTimes(2));
     // ...and the domain hook named what that invalidation cannot reach.
     expect(cloudInvalidated()).toEqual([true, true, true, true]);
+  });
+
+  it("an applied promote refetches the Releases pages of the org it ran in, and no other org's", async () => {
+    cp.on = true;
+    useActiveOrgStore.setState({ userId: "u1", chosenId: "org-a", effectiveId: "org-a", resolved: true, failure: null });
+    try {
+      const detailA = releaseKeys.detail("org-a", "hounders", "v1.5.15");
+      const detailB = releaseKeys.detail("org-b", "hounders", "v1.5.15");
+      const liveA = forgeCloudKeys.liveView("org-a", "hounders");
+      const liveB = forgeCloudKeys.liveView("org-b", "hounders");
+      for (const key of [detailA, detailB, liveA, liveB]) queryClient.setQueryData(key, {});
+
+      const { result } = renderHook(() => useApplyForgePromote("proj-1"), { wrapper });
+      await act(async () => {
+        await result.current.mutateAsync(PLAN);
+      });
+
+      expect(applyPromote).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-a" }));
+      const invalidated = (key: readonly unknown[]) => queryClient.getQueryState(key)?.isInvalidated ?? false;
+      expect([detailA, liveA].map(invalidated)).toEqual([true, true]);
+      expect([detailB, liveB].map(invalidated), "another org's Releases and Live are untouched").toEqual([false, false]);
+    } finally {
+      cp.on = false;
+      useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
+    }
   });
 
   it("a refusal resolves as data and invalidates nothing", async () => {
