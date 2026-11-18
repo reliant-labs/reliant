@@ -6,7 +6,7 @@
  * under one cache key.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import type { Panel } from "@/services/controlPlane/observability/types";
@@ -25,6 +25,8 @@ describe("cardRead", () => {
     expect(read.widened).toBe(false);
     expect(read.compare?.offsetKey).toBe("period:30d");
     expect(read.compare?.offsetMs()).toBe(rangeMs("7d"));
+    // Its chart shifts the previous period by what was read, too.
+    expect(read.compare?.shiftMs).toBe(rangeMs("7d"));
   });
 
   it("compares a logs figure the same way, and a sql figure over the whole range", () => {
@@ -39,13 +41,21 @@ describe("cardRead", () => {
     // The key names the range read, so it never shares an entry with the 1h reads.
     expect(read.compare?.offsetKey).toBe("period:7d");
     expect(read.compare?.offsetMs()).toBe(rangeMs("7d"));
+    expect(read.compare?.shiftMs).toBe(rangeMs("7d"));
   });
 
+  afterEach(() => vi.useRealTimers());
+
   it("compares with the window before a release, keyed by the promotion", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-16T12:00:00Z"));
     const promotion = { promotionId: "pr-1", promotedAtMs: Date.now() - 3_600_000 } as Promotion;
     const read = cardRead("24h", panel({}), { mode: "release", offsetMs: 3_600_000, label: "before v1", promotion });
     expect(read.compare?.offsetKey).toBe("release:pr-1");
-    expect(read.compare?.offsetMs()).toBeGreaterThanOrEqual(3_600_000);
+    vi.setSystemTime(new Date("2026-03-16T12:00:05Z"));
+    // Read when it is fetched: the window ending at the promotion, however long ago that is now.
+    expect(read.compare?.offsetMs()).toBe(3_605_000);
+    expect(read.compare?.shiftMs).toBe(3_600_000);
   });
 
   it("has no comparison when none is on", () => {

@@ -17,6 +17,14 @@ export interface CardCompare {
   /** The comparison read's cache key: a release, or the previous period of the range read. */
   offsetKey: string;
   offsetMs: () => number;
+  /**
+   * How far a chart shifts the comparison series forward to lay it on the
+   * current axis: the period the read went back by, so the plot matches the
+   * fetch (a traces line on "Last 30 days" reads 7 days, and its previous
+   * 7 days move forward 7, not 30). A release comparison shifts by the
+   * target's offset, as before.
+   */
+  shiftMs: number;
 }
 
 export interface CardRead {
@@ -44,9 +52,10 @@ export function cardRead(rangeOfCard: RangePreset, panel: Panel, target: Compare
   let compare: CardCompare | null = null;
   if (target.mode === "release") {
     const promotedAtMs = target.promotion.promotedAtMs;
-    compare = { offsetKey: `release:${target.promotion.promotionId}`, offsetMs: () => Math.max(0, Date.now() - promotedAtMs) };
+    compare = { offsetKey: `release:${target.promotion.promotionId}`, offsetMs: () => Math.max(0, Date.now() - promotedAtMs), shiftMs: target.offsetMs };
   } else if (target.mode === "period") {
-    compare = { offsetKey: `period:${range}`, offsetMs: () => rangeMs(readRange(range, panelRead(panel))) };
+    const periodMs = rangeMs(readRange(range, panelRead(panel)));
+    compare = { offsetKey: `period:${range}`, offsetMs: () => periodMs, shiftMs: periodMs };
   }
   return { range, widened: widening?.widened ?? false, compare };
 }

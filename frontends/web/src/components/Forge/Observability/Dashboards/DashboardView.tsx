@@ -1306,7 +1306,8 @@ function DashboardPanelCard({
   });
   const subtitle = subtitlePanel ? subtitleOf(subtitleQuery.data) : null;
   const span = spanOf(panel);
-  const offsetSec = target.mode === "release" || target.mode === "period" ? Math.round(target.offsetMs / 1000) : 0;
+  // The chart shifts the comparison by what the read went back by (cardRead), not the dashboard's range.
+  const offsetSec = read.compare ? Math.round(read.compare.shiftMs / 1000) : 0;
   const drillHref = drillHrefOf?.(panel) ?? null;
   // Opened from another dashboard's drill link to this panel: bring it into
   // view once it is laid out (the router's own hash scroll runs before the
