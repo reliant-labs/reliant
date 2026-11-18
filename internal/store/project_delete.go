@@ -312,8 +312,7 @@ const projectChatIDs = `SELECT id FROM chats WHERE project_id = ?0`
 // messageThinSteps removes a slice of messages, ?0 being their ids, with what
 // hangs off them. As in chatPurgeSteps, what restricts goes first: the fork
 // pointers at these messages, from any chat (a chat of another project
-// included, see the top of this file). agent_messages.delivered_message_id
-// is ON DELETE SET NULL, so it needs no step.
+// included, see the top of this file).
 var messageThinSteps = []struct{ name, sql string }{
 	{"thread fork pointers", `UPDATE threads SET fork_at_message_id = NULL WHERE fork_at_message_id = ANY(?0)`},
 	{"context window fork pointers", `UPDATE context_windows SET fork_at_message_id = NULL WHERE fork_at_message_id = ANY(?0)`},
@@ -321,6 +320,16 @@ var messageThinSteps = []struct{ name, sql string }{
 	{"message_content_blocks", `DELETE FROM message_content_blocks WHERE message_id = ANY(?0)`},
 	{"tool_call_results", `DELETE FROM tool_call_results WHERE message_id = ANY(?0)`},
 	{"tool_calls", `DELETE FROM tool_calls WHERE message_id = ANY(?0)`},
+	// The delivery records of these messages go with them, as
+	// chatPurgeSteps removes agent_messages before messages. Left to
+	// delivered_message_id's ON DELETE SET NULL, a slice would leave a
+	// delivered record naming no message until its chat batch ran (or for
+	// good, after a failed delete). Only records of the messages' own chats:
+	// one of a chat outside the slice keeps its row and loses the pointer.
+	{"agent_messages", `
+		DELETE FROM agent_messages
+		WHERE delivered_message_id = ANY(?0)
+		  AND chat_id IN (SELECT chat_id FROM messages WHERE id = ANY(?0))`},
 	{"messages", `DELETE FROM messages WHERE id = ANY(?0)`},
 }
 

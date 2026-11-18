@@ -84,6 +84,9 @@ func TestDeleteUserProjectThinsALargeChatInRowBoundedSlices(t *testing.T) {
 		exec(`INSERT INTO tool_call_results (tool_call_id, message_id, content, created_at, updated_at)
 		      VALUES ($1,$2,'ok',$3,$3)`, msg+"-tc", msg, now)
 	}
+	// A delivered agent message, whose record names a message being thinned.
+	exec(`INSERT INTO agent_messages (id, chat_id, from_thread_id, to_thread_id, kind, body, status, created_at, delivered_at, delivered_message_id)
+	      VALUES ($1,$2,$3,$3,1,'hi',2,$4,$4,$5)`, chat+"-am", chat, chat+"-thread", now, thinnedMessage)
 	// The chat's own fork pointers, RESTRICT against its messages.
 	exec(`UPDATE threads SET fork_at_message_id = $2 WHERE id = $1`, chat+"-thread", chat+"-msg-00")
 	exec(`UPDATE context_windows SET fork_at_message_id = $2 WHERE id = $1`, chat+"-cw", chat+"-msg-00")
@@ -110,6 +113,9 @@ func TestDeleteUserProjectThinsALargeChatInRowBoundedSlices(t *testing.T) {
 		"chat_updates":           `SELECT count(*) FROM chat_updates WHERE chat_id = $1`,
 		"user_updates":           `SELECT count(*) FROM user_updates WHERE chat_id = $1 OR id LIKE $1 || '-%'`,
 		"step_executions":        `SELECT count(*) FROM step_executions WHERE id LIKE $1 || '-%'`,
+		// The delivery record goes with its message, as in the chat batch,
+		// rather than staying as a delivered record naming no message.
+		"agent_messages": `SELECT count(*) FROM agent_messages WHERE chat_id = $1`,
 	}
 
 	probe := env.Probe(t)
