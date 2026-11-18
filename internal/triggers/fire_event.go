@@ -184,7 +184,10 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 			return nil, fmt.Errorf("load daemon %s: %w", trigger.DaemonID, err)
 		}
 		const detail = "trigger's daemon no longer exists; edit the trigger to choose another"
-		return f.settle(ctx, ev, nil, core.TriggerEventFailed, detail, err)
+		// The declaration only shapes the check's `trigger.activation`
+		// params here: one that cannot be read leaves them as stored.
+		decl, _ := activationFor(ctx, f.workflows, trigger)
+		return f.refuse(ctx, ev, nil, f.workflows, trigger, decl, detail, err)
 	}
 
 	// A pool-bound trigger reads its declaration and concurrency from the
@@ -218,13 +221,13 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	decl, err := activationFor(ctx, workflows, trigger)
 	if err != nil {
 		if isVerdict(err) {
-			return f.settle(ctx, ev, def, core.TriggerEventFailed, err.Error(), err)
+			return f.refuse(ctx, ev, def, workflows, trigger, nil, err.Error(), err)
 		}
 		return nil, err
 	}
 	spec, err := f.buildSpec(ctx, trigger, ev, decl)
 	if err != nil {
-		return f.settle(ctx, ev, def, core.TriggerEventFailed, err.Error(), err)
+		return f.refuse(ctx, ev, def, workflows, trigger, decl, err.Error(), err)
 	}
 	if def != nil {
 		// The run loads the definition this fire recorded (FiringDefinition).
@@ -331,6 +334,25 @@ func (f *EventFirer) refuseCreatorLeftOrg(ctx context.Context, ev *core.TriggerE
 		cause = nil
 	}
 	return f.settle(ctx, ev, def, outcome, detail, cause)
+}
+
+// refuse records that ev can never launch as written (settle, failed), after
+// opening the check ev's workflow declares (openRefusedCheck), so the firing's
+// check concludes failure on GitHub like any other ending. workflows is the
+// resolver this fire reads the workflow through: pinned to def once def is
+// read.
+//
+// Every pre-launch failure of a workflow that can be read goes through here
+// (a failure after the check opened needs no second open). The refusals that
+// settle directly open no check: a skip (the trigger is gone or paused), a
+// creator who left the org (the authority the check is written with left with
+// them), and a pool with no agreed catalog or a broken definition, where no
+// workflow can be read to say whether it declares a check.
+func (f *EventFirer) refuse(ctx context.Context, ev *core.TriggerEvent, def *core.TriggerEventDefinition, workflows WorkflowResolver, trigger *core.Trigger, decl *Declaration, detail string, cause error) (*FireOutput, error) {
+	if err := openRefusedCheck(ctx, f.checks, workflows, f.repo, trigger, decl, ev); err != nil {
+		return nil, err
+	}
+	return f.settle(ctx, ev, def, core.TriggerEventFailed, detail, cause)
 }
 
 // settle records a verdict on an event that did not launch. With cause set,
