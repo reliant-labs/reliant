@@ -116,6 +116,13 @@ var schedLine = regexp.MustCompile(`SCHED \d+ms: gomaxprocs=(\d+)`)
 // the wrapper's one.
 func TestWrapperRunsLeanAndItsCommandGetsItsShare(t *testing.T) {
 	g, _ := oneSlotGate(t)
+	// The machine as the wrapper will see it — this process's affinity and
+	// its cgroup's cpu.max, which the wrapper (a child, in the same cgroup)
+	// inherits — read BEFORE it runs: holding the slot, the wrapper rewrites
+	// that cgroup's cpu.max to the share (limitCPU), so read afterwards, under
+	// a daemon that runs each command in a cgroup of its own, it is the share
+	// and not the machine the share was derived from.
+	cpus := max(1, int(math.Floor(hostslot.DetectMachine().CPUs)))
 	s := start(t, g, childReport, true, "GODEBUG=schedtrace=20")
 	s.wait(t, 10*time.Second)
 	out := s.out.String()
@@ -133,7 +140,6 @@ func TestWrapperRunsLeanAndItsCommandGetsItsShare(t *testing.T) {
 			t.Fatalf("wrapper ran at gomaxprocs=%s, want 1 throughout:\n%s", m[1], out)
 		}
 	}
-	cpus := max(1, int(math.Floor(hostslot.DetectMachine().CPUs)))
 	want := strconv.Itoa(DefaultShare(cpus, 1))
 	if line := fmt.Sprintf("child GOMAXPROCS=[%s] UV=[%s] GOFLAGS=[]", want, want); !strings.Contains(out, line) {
 		t.Fatalf("want %q (%d CPUs, 1 slot) in:\n%s", line, cpus, out)
