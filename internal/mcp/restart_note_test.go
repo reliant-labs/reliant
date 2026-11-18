@@ -3,6 +3,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -135,6 +136,143 @@ func TestLazyClient_ReplacesADeadDelegateAndSaysSo(t *testing.T) {
 	}
 	if note := restartNoteOf(t, result); !strings.Contains(note, "process exited") {
 		t.Fatalf("expected a note saying the process exited, got %q", note)
+	}
+}
+
+// scriptedDelegate answers each tool call with the next step of its script; a
+// step may also act while the call is in flight.
+type scriptedDelegate struct {
+	*spyDelegate
+	steps []func() (*ToolResult, error)
+}
+
+func (s *scriptedDelegate) CallTool(name string, arguments map[string]interface{}) (*ToolResult, error) {
+	s.mu.Lock()
+	var step func() (*ToolResult, error)
+	if len(s.steps) > 0 {
+		step, s.steps = s.steps[0], s.steps[1:]
+	}
+	s.mu.Unlock()
+	if step == nil {
+		return s.spyDelegate.CallTool(name, arguments)
+	}
+	return step()
+}
+
+// browserReapedIdle returns a browser client whose first process was reaped
+// idle, so its next call must report the restart, and whose replacement
+// process answers with the given script.
+func browserReapedIdle(t *testing.T, steps ...func() (*ToolResult, error)) *lazyClient {
+	t.Helper()
+	spawns := 0
+	lc := newLazyClientWithFactory(chromeDevtoolsServerName, stdioServer(), func() (Client, error) {
+		spawns++
+		d := &scriptedDelegate{spyDelegate: &spyDelegate{}}
+		if spawns == 2 {
+			d.steps = steps
+		}
+		return d, nil
+	})
+	lc.idleTimeout = time.Hour
+	t.Cleanup(func() { _ = lc.Close() })
+
+	if _, err := lc.CallTool("new_page", nil); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	lc.idleShutdown()
+	return lc
+}
+
+func ok() (*ToolResult, error) {
+	return &ToolResult{Content: []ToolContent{{Type: "text", Text: "ok"}}}, nil
+}
+
+func TestLazyClient_RestartNoteSurvivesAFailedCall(t *testing.T) {
+	lc := browserReapedIdle(t, func() (*ToolResult, error) {
+		return nil, errors.New("navigation timed out")
+	})
+
+	_, err := lc.CallTool("navigate_page", nil)
+	if err == nil {
+		t.Fatal("the scripted failure must surface")
+	}
+	if !strings.Contains(err.Error(), "browser restarted") {
+		t.Fatalf("a failed call still mentions the restart, got %q", err)
+	}
+
+	result, err := lc.CallTool("list_pages", nil)
+	if err != nil {
+		t.Fatalf("call after the failure: %v", err)
+	}
+	if note := restartNoteOf(t, result); !strings.Contains(note, "idle") {
+		t.Fatalf("an error is not a delivered result: the next success must still report the restart, got %q", note)
+	}
+
+	again, err := lc.CallTool("list_pages", nil)
+	if err != nil {
+		t.Fatalf("third call: %v", err)
+	}
+	if note := restartNoteOf(t, again); note != "" {
+		t.Fatalf("once delivered, the restart is not reported again, got %q", note)
+	}
+}
+
+func TestLazyClient_RestartNoteIsDeliveredOnce(t *testing.T) {
+	lc := browserReapedIdle(t)
+
+	result, err := lc.CallTool("list_pages", nil)
+	if err != nil {
+		t.Fatalf("call after reap: %v", err)
+	}
+	if note := restartNoteOf(t, result); !strings.Contains(note, "idle") {
+		t.Fatalf("expected the restart note, got %q", note)
+	}
+	again, err := lc.CallTool("list_pages", nil)
+	if err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if note := restartNoteOf(t, again); note != "" {
+		t.Fatalf("the restart is reported once, got it again: %q", note)
+	}
+}
+
+func TestLazyClient_NewerRestartDuringACallIsKept(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		fail bool
+	}{
+		{"failed call", true},
+		{"successful call", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var lc *lazyClient
+			lc = browserReapedIdle(t, func() (*ToolResult, error) {
+				// Another restart is recorded while this call runs.
+				lc.setRestartReason("a newer restart")
+				if tc.fail {
+					return nil, errors.New("navigation timed out")
+				}
+				return ok()
+			})
+
+			first, err := lc.CallTool("navigate_page", nil)
+			if tc.fail != (err != nil) {
+				t.Fatalf("scripted outcome not surfaced: err=%v", err)
+			}
+			if !tc.fail {
+				if note := restartNoteOf(t, first); !strings.Contains(note, "idle") {
+					t.Fatalf("the in-flight call reports the restart it began with, got %q", note)
+				}
+			}
+
+			next, err := lc.CallTool("list_pages", nil)
+			if err != nil {
+				t.Fatalf("next call: %v", err)
+			}
+			if note := restartNoteOf(t, next); !strings.Contains(note, "a newer restart") {
+				t.Fatalf("the newer restart must still be reported, got %q", note)
+			}
+		})
 	}
 }
 

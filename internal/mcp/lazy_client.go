@@ -78,10 +78,13 @@ type lazyClient struct {
 	// lost whatever state a caller built up in it.
 	started bool
 	// restartReason, when set, says why the delegate a caller was using is
-	// gone. The call that starts the next delegate reports it (restartNote),
-	// so an agent learns its browser restarted instead of chasing
+	// gone. Tool calls report it (restartNote) until one delivers a result
+	// carrying it, so an agent learns its browser restarted instead of chasing
 	// "No page found". Only stateful servers carry one (announcesRestarts).
 	restartReason string
+	// restartGen counts the restart reasons recorded, so a call clears only
+	// the reason it delivered and never a newer one recorded meanwhile.
+	restartGen uint64
 }
 
 // announcesRestarts reports whether losing this server's process loses state a
@@ -96,27 +99,40 @@ func (c *lazyClient) announcesRestarts() bool {
 // have depended on it. c.mu must be held.
 func (c *lazyClient) noteLostLocked(reason string) {
 	if c.started && c.announcesRestarts() {
-		c.restartReason = reason
+		c.recordRestartLocked(reason)
 	}
+}
+
+// recordRestartLocked makes reason the pending restart reason, superseding any
+// earlier one. c.mu must be held.
+func (c *lazyClient) recordRestartLocked(reason string) {
+	c.restartReason = reason
+	c.restartGen++
 }
 
 // setRestartReason carries a loss recorded outside this client — the manager
 // replaced a session's client — into the client that replaces it.
 func (c *lazyClient) setRestartReason(reason string) {
 	c.mu.Lock()
-	c.restartReason = reason
+	c.recordRestartLocked(reason)
 	c.mu.Unlock()
 }
 
-// keepRestartReason puts back a restart reason a call could not report, so the
-// next tool call does.
-func (c *lazyClient) keepRestartReason(reason string) {
-	if reason == "" {
-		return
-	}
+// pendingRestart returns the restart reason no caller has been shown yet, and
+// its generation for restartDelivered.
+func (c *lazyClient) pendingRestart() (reason string, gen uint64) {
 	c.mu.Lock()
-	if c.restartReason == "" {
-		c.restartReason = reason
+	defer c.mu.Unlock()
+	return c.restartReason, c.restartGen
+}
+
+// restartDelivered clears the pending restart reason once a caller has been
+// handed a result carrying it — unless a newer restart was recorded since,
+// which the next call must still report.
+func (c *lazyClient) restartDelivered(gen uint64) {
+	c.mu.Lock()
+	if c.restartGen == gen {
+		c.restartReason = ""
 	}
 	c.mu.Unlock()
 }
@@ -185,11 +201,7 @@ func (c *lazyClient) Initialize(ctx context.Context) error {
 
 // begin ensures the delegate subprocess is running, registers an in-flight tool
 // call, and pauses the idle timer. Callers must pair it with end().
-//
-// restarted is non-empty only for the call that started a fresh delegate after
-// the previous one was lost: it is why (see restartNote), for that call to
-// report to its caller.
-func (c *lazyClient) begin() (d Client, restarted string, err error) {
+func (c *lazyClient) begin() (d Client, err error) {
 	c.dropDeadDelegate()
 
 	c.mu.Lock()
@@ -198,14 +210,14 @@ func (c *lazyClient) begin() (d Client, restarted string, err error) {
 	}
 	if c.closed {
 		c.mu.Unlock()
-		return nil, "", fmt.Errorf("mcp client %q is closed", c.name)
+		return nil, fmt.Errorf("mcp client %q is closed", c.name)
 	}
 	if c.delegate != nil {
 		d := c.delegate
 		c.inFlight++
 		c.stopIdleLocked()
 		c.mu.Unlock()
-		return d, "", nil
+		return d, nil
 	}
 
 	// We are the goroutine responsible for starting the delegate. Release the
@@ -235,23 +247,22 @@ func (c *lazyClient) begin() (d Client, restarted string, err error) {
 		if d != nil {
 			_ = d.Close()
 		}
-		return nil, "", err
+		return nil, err
 	}
 	if c.closed {
 		c.mu.Unlock()
 		_ = d.Close()
-		return nil, "", fmt.Errorf("mcp client %q is closed", c.name)
+		return nil, fmt.Errorf("mcp client %q is closed", c.name)
 	}
 	c.delegate = d
 	c.started = true
 	if info := d.ServerInfo(); info != nil {
 		c.serverInfo = info
 	}
-	restarted, c.restartReason = c.restartReason, ""
 	c.inFlight++
 	c.stopIdleLocked()
 	c.mu.Unlock()
-	return d, restarted, nil
+	return d, nil
 }
 
 // dropDeadDelegate discards a delegate whose process has exited on its own, so
@@ -432,15 +443,19 @@ func (c *lazyClient) ListTools() ([]Tool, error) {
 // CallTool spawns the subprocess on demand (waiting for readiness) and executes
 // the tool. For chrome-devtools this is where headless Chrome is first launched.
 //
-// The call that had to start a fresh process because the caller's previous one
-// was lost says so in its result, so an agent whose browser restarted learns
-// it from the first answer rather than from a puzzling "No page found".
+// When the caller's previous process was lost, the result says so, so an agent
+// whose browser restarted learns it from the first answer rather than from a
+// puzzling "No page found". The reason stays pending until a result carrying it
+// is returned: a failed call — a failed start, or an error from the new process
+// — mentions it in its error too, but an error can be lost on its way to the
+// model, so the next successful call reports it again.
 func (c *lazyClient) CallTool(name string, arguments map[string]interface{}) (*ToolResult, error) {
-	d, restarted, err := c.begin()
+	d, err := c.begin()
 	if err != nil {
 		return nil, err
 	}
 	defer c.end()
+	restarted, gen := c.pendingRestart()
 	result, err := d.CallTool(name, arguments)
 	if restarted == "" {
 		return result, err
@@ -453,6 +468,7 @@ func (c *lazyClient) CallTool(name string, arguments map[string]interface{}) (*T
 		result = &ToolResult{}
 	}
 	result.Content = append([]ToolContent{{Type: "text", Text: note}}, result.Content...)
+	c.restartDelivered(gen)
 	return result, nil
 }
 
@@ -472,23 +488,21 @@ func (c *lazyClient) ListPrompts() ([]Prompt, error) {
 // ReadResource routes through an on-demand spawn for correctness in the rare
 // case a lazy server does expose resources.
 func (c *lazyClient) ReadResource(uri string) (*ResourceContent, error) {
-	d, restarted, err := c.begin()
+	d, err := c.begin()
 	if err != nil {
 		return nil, err
 	}
 	defer c.end()
-	c.keepRestartReason(restarted)
 	return d.ReadResource(uri)
 }
 
 // GetPrompt routes through an on-demand spawn, mirroring ReadResource.
 func (c *lazyClient) GetPrompt(name string, arguments map[string]interface{}) (*PromptResult, error) {
-	d, restarted, err := c.begin()
+	d, err := c.begin()
 	if err != nil {
 		return nil, err
 	}
 	defer c.end()
-	c.keepRestartReason(restarted)
 	return d.GetPrompt(name, arguments)
 }
 
