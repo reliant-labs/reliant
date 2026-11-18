@@ -83,7 +83,7 @@ func TestReleaseFilesTheShippedRenderersSourceMaps(t *testing.T) {
 		t.Fatal("prepare no longer removes the .map files from the installers' renderer")
 	case dist < 0 || marker < 0:
 		t.Fatal("prepare's web-dist upload or prebuild marker upload is gone: update this test with the workflow")
-	case !(upload < strip && strip < dist):
+	case upload >= strip || strip >= dist:
 		t.Fatalf("prepare must upload the maps (step %d), then strip them (step %d), then upload web-dist (step %d)", upload, strip, dist)
 	}
 	up := prepare.Steps[upload]
