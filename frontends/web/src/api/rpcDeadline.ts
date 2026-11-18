@@ -56,20 +56,26 @@ export const MAX_ATTEMPTS = 2;
 /**
  * Reads the server answers fast enough that silence means a lost response,
  * not a slow one. Measured from the prod api-server `rpc completed` log over
- * 24h (2026-10-07/08); the slowest of these never exceeded 1.4s (ListMessages)
- * and most stay under 0.8s, so STALL_RETRY_MS leaves ~3x headroom.
+ * 24h (2026-10-07/08); the slowest of these never exceeded 1.4s and most stay
+ * under 0.8s, so STALL_RETRY_MS leaves ~3x headroom.
  *
  * Deliberately absent: reads the server is genuinely slow on (ListWorkflows,
  * MCP ListServers, ListPresetsForWorkflow — p99 2–10s), where replacing the
  * request would only restart the wait; and reads served by the user's machine
  * (GetFileTree, ListProcesses), whose latency is the machine's, not ours.
+ *
+ * ListMessages left this list on 2026-11-18: its server p99 is 6.1s (7d), all
+ * of it the chat's message COUNT, which is O(chat) and slowest on the biggest,
+ * busiest chats. A hedge there is a second copy of the same slow count: prod
+ * obs 16122d5e, chat 2ee014da at 12:00Z, two ListMessages each hedged at 4s
+ * put four 4-10s counts on the database during a load spike, and the call
+ * still timed out.
  */
 const FAST_READS: ReadonlySet<string> = new Set([
   "reliant.v1.DaemonRegistryService/ListDaemons",
   "reliant.v1.ChatService/ListChats",
   "reliant.v1.ChatService/ListArchivedChats",
   "reliant.v1.ChatService/GetChat",
-  "reliant.v1.ChatService/ListMessages",
   "reliant.v1.ChatService/GetContentBlockBodies",
   "reliant.v1.ChatService/GetWorkflowExecutions",
   "reliant.v1.ChatService/ListQueuedAgentMessages",
