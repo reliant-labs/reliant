@@ -83,6 +83,35 @@ func PruneWorktrees(ctx context.Context, repoPath string, wait bool) error {
 		release = r
 	}
 	defer release()
+	return PruneWorktreesLocked(ctx, repoPath)
+}
+
+// LockWorktreeRemoval takes repoPath's add lock exclusive, waiting until no
+// `git worktree add` holds it or ctx is done. A cleanup that removes a
+// checkout's directory or registration takes it before its first such step
+// and holds it through its last (prune included), so it never deletes the
+// destination or registration of an add that is mid-checkout. Under it, prune
+// with PruneWorktreesLocked: PruneWorktrees would wait for the very lock its
+// caller holds (an flock belongs to the open file, not to the goroutine), and
+// never get it.
+//
+// A repoPath with no git directory has no add to wait for: release is then a
+// no-op and err is nil.
+func LockWorktreeRemoval(ctx context.Context, repoPath string) (release func(), err error) {
+	common := repoCommonDir(ctx, repoPath)
+	if common == "" {
+		return func() {}, nil
+	}
+	release, err = lockFileExclusive(ctx, filepath.Join(common, addLockName))
+	if err != nil {
+		return nil, fmt.Errorf("waiting for the worktree add lock of %s: %w", common, err)
+	}
+	return release, nil
+}
+
+// PruneWorktreesLocked runs `git worktree prune` in repoPath. The caller holds
+// the repository's add lock exclusive (LockWorktreeRemoval); it never takes it.
+func PruneWorktreesLocked(ctx context.Context, repoPath string) error {
 	_, err := git(ctx, repoPath, nil, "worktree", "prune")
 	return err
 }

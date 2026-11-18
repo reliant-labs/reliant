@@ -863,6 +863,17 @@ func handleWorktreeForceCleanup(ctx context.Context, payload []byte) ([]byte, er
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
+	// Everything that touches a registration or a checkout's directory runs
+	// under the repository's add lock, exclusive: an add in flight may be
+	// making this very checkout, and removing its directory or registration
+	// mid-checkout breaks it (worktreereclaim/addlock.go). Held through the
+	// prune, which therefore must not take it again.
+	release, err := worktreereclaim.LockWorktreeRemoval(ctx, req.ProjectPath)
+	if err != nil {
+		return json.Marshal(worktreeForceCleanupResponse{Success: false})
+	}
+	defer release()
+
 	// Check if git worktree path exists and remove it
 	if _, err := os.Stat(req.WorktreePath); err == nil {
 		stopProcessesInRemovedWorkspace(req.WorktreePath)
@@ -873,8 +884,8 @@ func handleWorktreeForceCleanup(ctx context.Context, payload []byte) ([]byte, er
 		_ = os.RemoveAll(req.WorktreePath)
 	}
 
-	// Prune stale worktrees, never beside an add (worktreereclaim/addlock.go).
-	_ = worktreereclaim.PruneWorktrees(ctx, req.ProjectPath, true)
+	// Prune stale worktrees.
+	_ = worktreereclaim.PruneWorktreesLocked(ctx, req.ProjectPath)
 
 	// Check if branch exists and delete it
 	branchCheckCmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", req.Branch)
@@ -906,6 +917,15 @@ func handleWorktreeDeleteDirectory(ctx context.Context, payload []byte) ([]byte,
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+
+	// Under the repository's add lock, exclusive, as force_cleanup: never
+	// beside an add that may be making this checkout. Not taken (ctx ended
+	// first), nothing is removed and the caller is told so.
+	release, err := worktreereclaim.LockWorktreeRemoval(ctx, req.ProjectPath)
+	if err != nil {
+		return json.Marshal(worktreeDeleteDirectoryResponse{Deleted: false})
+	}
+	defer release()
 
 	stopProcessesInRemovedWorkspace(req.WorktreePath)
 	worktreereclaim.UnlockForRemoval(ctx, req.WorktreePath)
