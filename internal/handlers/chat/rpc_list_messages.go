@@ -64,6 +64,11 @@ func (s *Service) ListMessages(
 
 	threadsSvc := threads.NewService(s.deps.Repo)
 
+	// skip_total: the caller pages by cursor and never reads total, so none of
+	// the paths below count. The count walks every message of the chat; on a
+	// chat of a million it ran 9.9s and timed the read out (obs 16122d5e).
+	wantTotal := !req.Msg.GetSkipTotal()
+
 	var messages []*db.Message
 	var totalCount int
 	var oldestSeq int64
@@ -103,9 +108,11 @@ func (s *Service) ListMessages(
 		// transcript (which crosses compaction boundaries), so a total that
 		// stopped at the newest summary would describe a different list than
 		// the one being returned.
-		totalCount, err = threadsSvc.CountDisplayMessages(ctx, threadID)
-		if err != nil {
-			return nil, messagesReadError(ctx, err)
+		if wantTotal {
+			totalCount, err = threadsSvc.CountDisplayMessages(ctx, threadID)
+			if err != nil {
+				return nil, messagesReadError(ctx, err)
+			}
 		}
 		if len(messages) > 0 {
 			oldestSeq = messages[0].Seq
@@ -113,7 +120,7 @@ func (s *Service) ListMessages(
 
 	case recentLimit > 0:
 		messages, totalCount, oldestSeq, hasMore, err = s.listMessagesBounded(
-			ctx, threadsSvc, req.Msg.ChatId, mainThreadID, beforeSeq, recentLimit)
+			ctx, threadsSvc, req.Msg.ChatId, mainThreadID, beforeSeq, recentLimit, wantTotal)
 		if err != nil {
 			return nil, messagesReadError(ctx, err)
 		}
@@ -129,6 +136,11 @@ func (s *Service) ListMessages(
 		var page messagePage
 		messages, page = paginateBySeq(messages, beforeSeq, recentLimit, mainThreadID)
 		oldestSeq, hasMore = page.OldestSeq, page.HasMore
+		// This path's total costs nothing (it read the whole chat), but a
+		// skip_total response leaves total unset on every path alike.
+		if !wantTotal {
+			totalCount = 0
+		}
 	}
 
 	// Batch-fetch content blocks for the paginated page of messages in one
@@ -368,24 +380,27 @@ func (s *Service) listThreadMessages(
 //     alone, recentLimit at a time, and HasMore comes from that read.
 //
 // The two counts depend on nothing the page read produces, so they run
-// beside it.
+// beside it. Without wantTotal neither runs and the total is 0.
 func (s *Service) listMessagesBounded(
 	ctx context.Context, threadsSvc *threads.Service, chatID, mainThreadID string, beforeSeq int64, recentLimit int,
+	wantTotal bool,
 ) ([]*db.Message, int, int64, bool, error) {
 	var mainCount, siblingCount int
 	counts, countsCtx := errgroup.WithContext(ctx)
-	counts.Go(func() (err error) {
-		if mainCount, err = threadsSvc.CountDisplayMessages(countsCtx, mainThreadID); err != nil {
-			return fmt.Errorf("failed to count main thread messages: %w", err)
-		}
-		return nil
-	})
-	counts.Go(func() (err error) {
-		if siblingCount, err = s.deps.Repo.CountMessagesInChatOutsideThread(countsCtx, chatID, mainThreadID); err != nil {
-			return fmt.Errorf("failed to count sibling thread messages: %w", err)
-		}
-		return nil
-	})
+	if wantTotal {
+		counts.Go(func() (err error) {
+			if mainCount, err = threadsSvc.CountDisplayMessages(countsCtx, mainThreadID); err != nil {
+				return fmt.Errorf("failed to count main thread messages: %w", err)
+			}
+			return nil
+		})
+		counts.Go(func() (err error) {
+			if siblingCount, err = s.deps.Repo.CountMessagesInChatOutsideThread(countsCtx, chatID, mainThreadID); err != nil {
+				return fmt.Errorf("failed to count sibling thread messages: %w", err)
+			}
+			return nil
+		})
+	}
 
 	mainThreadMessages, mainHasMoreOlder, err := threadsSvc.LoadRecentMessagesBefore(ctx, mainThreadID, beforeSeq, recentLimit)
 	if err != nil {
