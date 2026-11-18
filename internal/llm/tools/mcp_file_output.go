@@ -28,13 +28,21 @@ import (
 // it, takes the image the server returns instead, and writes it through the
 // tool context's daemon — the same per-chat path policy the write tool and
 // save_attachment follow — resolving a relative path against the chat's
-// workspace root, and never replacing a file this thread has not read or that
-// changed since it did (the write tool's guard).
+// workspace root. The destination must be a new file: an existing one is
+// never replaced (writeSavedOutputLocked says why).
 
 // daemonSavedOutput names the argument a tool takes a destination path in.
 type daemonSavedOutput struct {
 	pathArg string
 	noun    string
+}
+
+// daemonSavedOutputNote is appended to the description of a tool whose output
+// the daemon saves, because the server's own description of the path argument
+// no longer holds.
+func daemonSavedOutputNote(spec daemonSavedOutput) string {
+	return fmt.Sprintf("\n\nReliant saves the %s to %s itself: a relative path resolves against the chat's workspace, "+
+		"and the path must be a new file — an existing file is never replaced.", spec.noun, spec.pathArg)
 }
 
 // daemonSavedMCPOutputs lists, per server and tool, the outputs the daemon
@@ -153,15 +161,22 @@ func (a *MCPToolAdapter) saveMCPImageOutput(tc *rctx.ToolContext, spec daemonSav
 	return NewTextResponse(strings.TrimSpace(strings.Join(lines, "\n")))
 }
 
-// writeSavedOutputLocked writes data to dest under the write tool's
-// read-awareness rules, and returns an error response when it refuses or fails
-// (a zero response on success). Callers must hold the path lock for dest.
+// maxFreePathProbes bounds the search for a free name to suggest when the
+// destination exists.
+const maxFreePathProbes = 20
+
+// writeSavedOutputLocked writes data to dest, which must not exist yet, and
+// returns an error response when it refuses or fails (a zero response on
+// success). Callers must hold the path lock for dest.
 //
-// A new file is created. An existing one is overwritten only when this thread
-// has observed it and it has not changed since (modifiedSinceAwareness, the
-// write tool's guard). Unlike the write tool, an existing file the thread never
-// read is refused rather than overwritten with a diff: a binary file has no
-// diff to show what was replaced, so there would be no way to repair it.
+// An existing file is never replaced, even one this thread read. The daemon's
+// file API has no conditional write — no compare-and-write against an observed
+// version, no create-exclusive — so a check followed by a write could not stop
+// another process changing the file in between, and the previous bytes of a
+// binary file are not returned to put back. Refusing every existing
+// destination leaves only the window where the file is created between the
+// stat and the write; WriteResult.Created reports that case, and it is a tool
+// error rather than a claimed clean save.
 func (a *MCPToolAdapter) writeSavedOutputLocked(tc *rctx.ToolContext, spec daemonSavedOutput, dest string, data []byte) ToolResponse {
 	chatID, thread := tc.ChatID, tc.Thread
 	if thread == "" {
@@ -177,28 +192,56 @@ func (a *MCPToolAdapter) writeSavedOutputLocked(tc *rctx.ToolContext, spec daemo
 		return notSaved(fmt.Sprintf("could not check the path: %v.", err))
 	}
 	if stat.Exists {
+		reason := "a file already exists there, and a saved " + spec.noun + " never replaces one, so it was left untouched."
 		if stat.IsDir {
-			return notSaved("the path is a directory.")
+			reason = "the path is a directory."
 		}
-		lastAwareness := getLastAwarenessTime(chatID, thread, dest)
-		if lastAwareness.IsZero() {
-			return notSaved("a file already exists there and has not been read in this thread, so it was left untouched. " +
-				"Read it first to replace it, or choose a new path.")
+		if free := freeSiblingPath(tc, dest); free != "" {
+			reason += fmt.Sprintf(" Save to a new path instead, such as %s.", free)
+		} else {
+			reason += " Save to a new path instead."
 		}
-		if msg, modified := modifiedSinceAwareness(dest, stat.ModTime, lastAwareness); modified {
-			return notSaved(msg)
-		}
+		return notSaved(reason)
 	}
 
-	if _, err := tc.Daemon.WriteBinaryFile(tc.Context, dest, data); err != nil {
+	res, err := tc.Daemon.WriteBinaryFile(tc.Context, dest, data)
+	if err != nil {
 		return notSaved(fmt.Sprintf(
 			"%v. Choose a path this chat may write to, or omit %s to get the image in the response.",
 			err, spec.pathArg))
 	}
 	recordFileAwareness(chatID, thread, dest)
+	if res != nil && !res.Created {
+		return NewTextErrorResponse(fmt.Sprintf(
+			"Took the %s and wrote it to %s, but a file appeared there while it was being saved and was replaced; "+
+				"its previous contents could not be kept. Check that file, and save to a new path next time.",
+			spec.noun, dest))
+	}
 	logging.Debug("Saved MCP tool output through the daemon",
 		"server", a.serverName, "tool", a.tool.Name, "path", dest, "bytes", len(data))
 	return ToolResponse{}
+}
+
+// freeSiblingPath returns the first of name-1.ext, name-2.ext, … beside dest
+// that does not exist, or "" when none of the first few is free or the daemon
+// cannot say. It is a suggestion for the model, not a reservation.
+func freeSiblingPath(tc *rctx.ToolContext, dest string) string {
+	ext := filepath.Ext(dest)
+	if ext == filepath.Base(dest) {
+		ext = ""
+	}
+	stem := strings.TrimSuffix(dest, ext)
+	for i := 1; i <= maxFreePathProbes; i++ {
+		candidate := fmt.Sprintf("%s-%d%s", stem, i, ext)
+		stat, err := tc.Daemon.StatFile(tc.Context, candidate)
+		if err != nil {
+			return ""
+		}
+		if !stat.Exists {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // withImageExtension gives dest the extension of the image's format, replacing

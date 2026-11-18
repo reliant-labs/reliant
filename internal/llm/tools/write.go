@@ -163,8 +163,9 @@ func (w *writeTool) writeLocked(rctx *rctx.ToolContext, params WriteParams, file
 		// file changed on disk AFTER we last saw it, hard-error. This stays strict.
 		// Only meaningful when we hold a prior awareness timestamp — an unread file
 		// (zero awareness) is handled by the soft path below.
-		if msg, modified := modifiedSinceAwareness(filePath, modTime, lastAwareness); modified {
-			return NewTextErrorResponse(msg), nil
+		if !lastAwareness.IsZero() && modTime.After(lastAwareness) {
+			return NewTextErrorResponse(fmt.Sprintf("file %s has been modified since it was last read (mod time: %s, last aware: %s). Multiple agents or humans may be making edits simultaneously — re-read the file before editing to avoid overwriting their changes.",
+				filePath, modTime.Format(time.RFC3339), lastAwareness.Format(time.RFC3339))), nil
 		}
 
 		// Read-before-write: the file exists but was never read in this thread.
@@ -231,19 +232,6 @@ func (w *writeTool) writeLocked(rctx *rctx.ToolContext, params WriteParams, file
 			Removals:  removals,
 		},
 	), nil
-}
-
-// modifiedSinceAwareness is the concurrent-modification guard for a tool that
-// overwrites a whole file: it reports, with the message to refuse with, a file
-// that changed on disk after this thread last observed it. A zero
-// lastAwareness (the file was never observed) is not a modification; each
-// caller decides what an unread overwrite means for it.
-func modifiedSinceAwareness(filePath string, modTime, lastAwareness time.Time) (string, bool) {
-	if lastAwareness.IsZero() || !modTime.After(lastAwareness) {
-		return "", false
-	}
-	return fmt.Sprintf("file %s has been modified since it was last read (mod time: %s, last aware: %s). Multiple agents or humans may be making edits simultaneously — re-read the file before editing to avoid overwriting their changes.",
-		filePath, modTime.Format(time.RFC3339), lastAwareness.Format(time.RFC3339)), true
 }
 
 // compactDiff returns a length-bounded form of a unified diff suitable for

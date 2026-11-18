@@ -73,6 +73,9 @@ func (a *MCPToolAdapter) Description() string {
 	if desc == "" {
 		desc = fmt.Sprintf("MCP tool from %s", a.serverName)
 	}
+	if spec, ok := daemonSavedMCPOutputs[a.serverName][a.tool.Name]; ok {
+		desc += daemonSavedOutputNote(spec)
+	}
 	return fmt.Sprintf("%s [via MCP:%s]", desc, a.serverName)
 }
 

@@ -46,32 +46,37 @@ func inlineScreenshot(mime string) *mcp.ToolResult {
 	}}
 }
 
+// fixedModTime is the modification time every fake file reports.
+var fixedModTime = time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+
 // fileDaemon records binary writes and reads, serves stats and reads from
 // files, and refuses writes under a denied prefix the way the daemon's path
-// policy does.
+// policy does. appearOnWrite simulates another process creating a file after
+// the tool's stat and before its write lands.
 type fileDaemon struct {
 	daemon.Client
-	files      map[string][]byte
-	modTimes   map[string]time.Time
-	denyPrefix string
-	writes     []string
-	reads      []string
+	files         map[string][]byte
+	dirs          map[string]bool
+	appearOnWrite map[string][]byte
+	denyPrefix    string
+	writes        []string
+	reads         []string
 }
 
 func (d *fileDaemon) WriteBinaryFile(_ context.Context, path string, content []byte) (*daemon.WriteResult, error) {
 	if d.denyPrefix != "" && strings.HasPrefix(path, d.denyPrefix) {
 		return nil, errors.New("path is outside the directories this run may use")
 	}
-	d.writes = append(d.writes, path)
 	if d.files == nil {
 		d.files = map[string][]byte{}
 	}
-	d.files[path] = append([]byte(nil), content...)
-	if d.modTimes == nil {
-		d.modTimes = map[string]time.Time{}
+	if theirs, ok := d.appearOnWrite[path]; ok {
+		d.files[path] = theirs
 	}
-	d.modTimes[path] = time.Now().Add(-time.Second)
-	return &daemon.WriteResult{Created: true, BytesWritten: len(content)}, nil
+	_, existed := d.files[path]
+	d.writes = append(d.writes, path)
+	d.files[path] = append([]byte(nil), content...)
+	return &daemon.WriteResult{Created: !existed, ModTime: fixedModTime, BytesWritten: len(content)}, nil
 }
 
 func (d *fileDaemon) ReadBinaryFile(_ context.Context, path string, _ int64) ([]byte, error) {
@@ -84,19 +89,14 @@ func (d *fileDaemon) ReadBinaryFile(_ context.Context, path string, _ int64) ([]
 }
 
 func (d *fileDaemon) StatFile(_ context.Context, path string) (*daemon.FileStat, error) {
+	if d.dirs[path] {
+		return &daemon.FileStat{Exists: true, IsDir: true, ModTime: fixedModTime}, nil
+	}
 	data, ok := d.files[path]
 	if !ok {
 		return &daemon.FileStat{}, nil
 	}
-	return &daemon.FileStat{Exists: true, Size: int64(len(data)), ModTime: d.modTimes[path]}, nil
-}
-
-// existing returns a fileDaemon holding one file, last modified at modTime.
-func existing(path string, content []byte, modTime time.Time) *fileDaemon {
-	return &fileDaemon{
-		files:    map[string][]byte{path: content},
-		modTimes: map[string]time.Time{path: modTime},
-	}
+	return &daemon.FileStat{Exists: true, Size: int64(len(data)), ModTime: fixedModTime}, nil
 }
 
 func runScreenshot(t *testing.T, server string, runtime *screenshotRuntime, d *fileDaemon, input map[string]interface{}) ToolResponse {
@@ -223,15 +223,35 @@ func TestMCPScreenshot_PathInTheServersReplyIsNeverRead(t *testing.T) {
 	}
 }
 
-// The screenshot is written under the write tool's read-awareness rules.
-func TestMCPScreenshot_WriteFollowsTheWriteToolsReadAwareness(t *testing.T) {
+// The daemon has no conditional write, so a saved screenshot never replaces
+// an existing file: a check-then-write could not stop another writer in
+// between, and a binary file's previous bytes cannot be put back.
+func TestMCPScreenshot_AnExistingDestinationIsNeverReplaced(t *testing.T) {
 	const dest = "/home/workspace/worktrees/chat-1/shot.png"
-	old := []byte("someone else's image")
+	theirs := []byte("someone else's image")
+	save := func(t *testing.T, d *fileDaemon) ToolResponse {
+		t.Helper()
+		return runScreenshot(t, "chrome-devtools", &screenshotRuntime{result: inlineScreenshot("image/png")}, d,
+			map[string]interface{}{"filePath": dest})
+	}
+	refused := func(t *testing.T, d *fileDaemon, resp ToolResponse, wants ...string) {
+		t.Helper()
+		if !resp.IsError {
+			t.Fatalf("an existing destination must be refused, got %q", resp.Content)
+		}
+		for _, want := range append([]string{dest}, wants...) {
+			if !strings.Contains(resp.Content, want) {
+				t.Fatalf("error should mention %q, got %q", want, resp.Content)
+			}
+		}
+		if len(d.writes) != 0 {
+			t.Fatalf("nothing may be written, wrote %v", d.writes)
+		}
+	}
 
 	t.Run("a new path is written", func(t *testing.T) {
 		d := &fileDaemon{}
-		resp := runScreenshot(t, "chrome-devtools", &screenshotRuntime{result: inlineScreenshot("image/png")}, d,
-			map[string]interface{}{"filePath": dest})
+		resp := save(t, d)
 		if resp.IsError {
 			t.Fatalf("expected success, got error: %s", resp.Content)
 		}
@@ -241,50 +261,64 @@ func TestMCPScreenshot_WriteFollowsTheWriteToolsReadAwareness(t *testing.T) {
 	})
 
 	t.Run("an existing file this thread never read is refused", func(t *testing.T) {
-		d := existing(dest, old, time.Now().Add(-time.Hour))
-		resp := runScreenshot(t, "chrome-devtools", &screenshotRuntime{result: inlineScreenshot("image/png")}, d,
-			map[string]interface{}{"filePath": dest})
-		if !resp.IsError {
-			t.Fatalf("overwriting an unread file must be refused, got %q", resp.Content)
+		d := &fileDaemon{files: map[string][]byte{dest: theirs}}
+		refused(t, d, save(t, d), "never replaces", "/home/workspace/worktrees/chat-1/shot-1.png")
+		if !bytes.Equal(d.files[dest], theirs) {
+			t.Fatal("the existing file must be left untouched")
 		}
-		for _, want := range []string{dest, "has not been read in this thread"} {
+	})
+
+	t.Run("an existing file read and unchanged is refused too", func(t *testing.T) {
+		recordFileAwareness(t.Name(), t.Name(), dest)
+		d := &fileDaemon{files: map[string][]byte{dest: theirs}}
+		refused(t, d, save(t, d), "never replaces")
+		if !bytes.Equal(d.files[dest], theirs) {
+			t.Fatal("the existing file must be left untouched")
+		}
+	})
+
+	t.Run("the suggested path is one that is free", func(t *testing.T) {
+		d := &fileDaemon{files: map[string][]byte{
+			dest: theirs,
+			"/home/workspace/worktrees/chat-1/shot-1.png": theirs,
+		}}
+		refused(t, d, save(t, d), "/home/workspace/worktrees/chat-1/shot-2.png")
+	})
+
+	t.Run("a directory is refused", func(t *testing.T) {
+		d := &fileDaemon{dirs: map[string]bool{dest: true}}
+		refused(t, d, save(t, d), "is a directory")
+	})
+
+	t.Run("a file that appears between the check and the write is reported, not claimed saved", func(t *testing.T) {
+		d := &fileDaemon{appearOnWrite: map[string][]byte{dest: theirs}}
+		resp := save(t, d)
+		if !resp.IsError {
+			t.Fatalf("a write that replaced a file created concurrently must not report a clean save, got %q", resp.Content)
+		}
+		for _, want := range []string{dest, "a file appeared there"} {
 			if !strings.Contains(resp.Content, want) {
 				t.Fatalf("error should mention %q, got %q", want, resp.Content)
 			}
 		}
-		if len(d.writes) != 0 || !bytes.Equal(d.files[dest], old) {
-			t.Fatalf("the existing file must be left untouched, wrote %v", d.writes)
-		}
 	})
+}
 
-	t.Run("an existing file changed since this thread read it is refused", func(t *testing.T) {
-		recordFileAwareness(t.Name(), t.Name(), dest)
-		d := existing(dest, old, time.Now().Add(time.Hour))
-		resp := runScreenshot(t, "chrome-devtools", &screenshotRuntime{result: inlineScreenshot("image/png")}, d,
-			map[string]interface{}{"filePath": dest})
-		if !resp.IsError {
-			t.Fatalf("overwriting a file changed since it was read must be refused, got %q", resp.Content)
-		}
-		if !strings.Contains(resp.Content, "has been modified since it was last read") {
-			t.Fatalf("error should name the concurrent modification, got %q", resp.Content)
-		}
-		if len(d.writes) != 0 || !bytes.Equal(d.files[dest], old) {
-			t.Fatalf("the other writer's file must be left untouched, wrote %v", d.writes)
-		}
-	})
-
-	t.Run("an existing file read and unchanged is overwritten", func(t *testing.T) {
-		recordFileAwareness(t.Name(), t.Name(), dest)
-		d := existing(dest, old, time.Now().Add(-time.Hour))
-		resp := runScreenshot(t, "chrome-devtools", &screenshotRuntime{result: inlineScreenshot("image/png")}, d,
-			map[string]interface{}{"filePath": dest})
-		if resp.IsError {
-			t.Fatalf("expected success, got error: %s", resp.Content)
-		}
-		if !bytes.Equal(d.files[dest], screenshotBytes) {
-			t.Fatalf("expected the image to replace the file, wrote %v", d.writes)
-		}
-	})
+func TestMCPScreenshot_DescriptionSaysTheDestinationMustBeNew(t *testing.T) {
+	adapter, err := NewProjectMCPToolAdapter("/workspace", "chrome-devtools", mcp.Tool{Name: "take_screenshot", Description: "Take a screenshot."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if desc := adapter.Description(); !strings.Contains(desc, "an existing file is never replaced") {
+		t.Fatalf("the description must say an existing file is not replaced, got %q", desc)
+	}
+	other, err := NewProjectMCPToolAdapter("/workspace", "chrome-devtools", mcp.Tool{Name: "click", Description: "Click."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if desc := other.Description(); strings.Contains(desc, "never replaced") {
+		t.Fatalf("other tools keep their own description, got %q", desc)
+	}
 }
 
 func TestMCPScreenshot_ExtensionFollowsTheImageFormat(t *testing.T) {
