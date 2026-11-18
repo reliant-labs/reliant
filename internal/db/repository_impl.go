@@ -611,13 +611,14 @@ func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, 
 	return store.ListRecentTranscriptSiblingMessages(ctx, r.ORM(), chatID, mainThreadID, fromSeq, limit)
 }
 
-// CountMessagesInChat returns the true message count for a chat.
+// CountMessagesInChat returns the true message count for a chat, read from
+// the trigger-maintained chat_thread_message_counts rather than counted.
 func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, error) {
 	if chatID == "" {
 		return 0, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldChatID, chatID))
+	return store.CountMessagesInChat(ctx, r.ORM(), chatID)
 }
 
 // CountMessagesByContextWindow returns the row count of a single context

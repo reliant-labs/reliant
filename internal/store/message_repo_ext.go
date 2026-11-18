@@ -317,20 +317,75 @@ func ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx context.Context, d
 }
 
 // CountMessagesOutsideThreadSQL is CountMessagesInChatOutsideThread's
-// statement, exported so the index test
+// fallback statement, exported so the index test
 // (internal/db/messages_chat_thread_index_test.go) plans exactly what runs.
 // It takes the chat id and the thread id.
 //
 // It is an index-only scan of idx_messages_chat_thread: thread_id is in the
 // index, so no heap row is read to test it. Without that index it read every
 // one of the chat's rows from the heap (prod: p50 3.9s on long chats, ~95% of
-// a slow ListMessages).
+// a slow ListMessages). It is still one index entry per message, which is
+// why the counts are read from chat_thread_message_counts first.
 const CountMessagesOutsideThreadSQL = `SELECT count(*) FROM messages WHERE chat_id = ? AND thread_id <> ?`
 
+// chatMessageCountsSQL reads a chat's message counts from
+// chat_thread_message_counts (migration 20261118210350), which triggers on
+// messages keep exact in the transaction of every message write: how many
+// threads have a row, the chat's total, and the count on thread $2. It is
+// one row per thread of the chat, not one per message.
+//
+// It runs through the raw passthrough with bound $N parameters rather than
+// NewRaw, which would format the ids into the text: it runs on every
+// ListMessages page and every chat snapshot, and a bound statement is
+// prepared once per connection.
+const chatMessageCountsSQL = `SELECT count(*), COALESCE(sum(message_count), 0), COALESCE(sum(message_count) FILTER (WHERE thread_id = $2), 0)
+FROM chat_thread_message_counts
+WHERE chat_id = $1`
+
+// chatMessageCounts returns the chat's total and the count on threadID from
+// chat_thread_message_counts; counted is false when the chat has no row
+// there, which the triggers make mean "no messages" (a row exists exactly
+// while its count is above zero). The caller then counts the messages
+// themselves, which costs nothing on a chat that truly has none and stays
+// correct on a database whose counts were cleared by hand.
+func chatMessageCounts(ctx context.Context, db orm.Context, chatID, threadID string) (total, onThread int, counted bool, err error) {
+	var rows int
+	if err := db.QueryRow(ctx, chatMessageCountsSQL, chatID, threadID).Scan(&rows, &total, &onThread); err != nil {
+		return 0, 0, false, fmt.Errorf("failed to read chat message counts: %w", err)
+	}
+	return total, onThread, rows > 0, nil
+}
+
+// CountMessagesInChat is how many messages the chat holds — exactly
+// `count(*) FROM messages WHERE chat_id = chatID` — read from the maintained
+// counts rather than counted.
+func CountMessagesInChat(ctx context.Context, db orm.Context, chatID string) (int, error) {
+	total, _, counted, err := chatMessageCounts(ctx, db, chatID, "")
+	if err != nil {
+		return 0, err
+	}
+	if counted {
+		return total, nil
+	}
+	n, err := CountMessage(ctx, db, orm.WhereEq(MessageFieldChatID, chatID))
+	if err != nil {
+		return 0, fmt.Errorf("failed to count messages: %w", err)
+	}
+	return int(n), nil
+}
+
 // CountMessagesInChatOutsideThread is how many messages of the chat sit on
-// threads other than threadID: with a thread's own resolved count, the chat's
-// total, in one COUNT instead of a chat-wide count minus a thread count.
+// threads other than threadID — exactly CountMessagesOutsideThreadSQL's
+// count: the chat's total less that thread's, from the maintained counts.
+// With a thread's own resolved count, it is the chat's total.
 func CountMessagesInChatOutsideThread(ctx context.Context, db orm.Context, chatID, threadID string) (int, error) {
+	total, onThread, counted, err := chatMessageCounts(ctx, db, chatID, threadID)
+	if err != nil {
+		return 0, err
+	}
+	if counted {
+		return total - onThread, nil
+	}
 	var n int
 	if err := db.Bun().NewRaw(CountMessagesOutsideThreadSQL, chatID, threadID).Scan(ctx, &n); err != nil {
 		return 0, fmt.Errorf("failed to count messages outside thread: %w", err)
