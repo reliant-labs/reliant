@@ -125,7 +125,7 @@ func (t *proveTestTool) Execute(tc *rctx.ToolContext, params ProveTestParams) (T
 	// The engine reads and writes the files directly, so it must be running
 	// on the machine that holds them. Daemon placement guarantees that; a
 	// remote client here means it was dispatched somewhere it cannot work.
-	if _, remote := tc.Daemon.(*daemon.RemoteClient); remote {
+	if daemon.IsRemote(tc.Daemon) {
 		return NewTextErrorResponse("prove_test must execute on the daemon that holds the files, but this call is running elsewhere"), nil
 	}
 	command := strings.TrimSpace(params.Command)
@@ -158,10 +158,10 @@ func (t *proveTestTool) Execute(tc *rctx.ToolContext, params ProveTestParams) (T
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	run := func(ctx context.Context) provetest.RunOutcome {
+	run := func(ctx context.Context, runDir string) provetest.RunOutcome {
 		res, runErr := tc.Daemon.RunCommand(ctx, &daemon.RunCommandRequest{
 			Command:    command,
-			WorkingDir: dir,
+			WorkingDir: runDir,
 			TimeoutMs:  int(timeout.Milliseconds()),
 		})
 		if runErr != nil {

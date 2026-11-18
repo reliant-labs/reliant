@@ -15,7 +15,7 @@ Reliant refuses requests to private, loopback, link-local and cloud-metadata add
 |-----------|---------|---------|
 | `url` | required | The address to call, with any query string |
 | `method` | `GET` | `GET`, `POST`, `PUT`, `PATCH` or `DELETE` |
-| `headers` | | Request headers, name to value |
+| `headers` | | Request headers, name to value. Without a `User-Agent` the request sends `reliant-integrations/1` |
 | `query` | | Extra query-string parameters |
 | `body` | | An object or list for a JSON or form body, or a string for a text body |
 | `body_type` | `json` | `json`, `form` (a flat object, sent URL-encoded) or `text` |

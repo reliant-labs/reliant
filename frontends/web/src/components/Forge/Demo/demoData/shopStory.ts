@@ -478,7 +478,8 @@ export function demoRouteRate(route: DemoRoute, envId: DemoEnvKey, atMs: number)
   return (1000 / SLOT_MS) * dailyLoad(atMs) * ENV_TRAFFIC[envId] * (route.weight / DEMO_ROUTE_WEIGHT);
 }
 
-export interface DemoStats {
+/** A window's request and error counts: demoStats without its latency quantiles. */
+export interface DemoCounts {
   /** Unrounded, for callers that split a window and must keep its total (demoTrend). */
   requestsExact?: number;
   errorsExact?: number;
@@ -486,6 +487,9 @@ export interface DemoStats {
   errors: number;
   errorRate: number;
   ratePerSecond: number;
+}
+
+export interface DemoStats extends DemoCounts {
   p50Ms: number;
   p95Ms: number;
   p99Ms: number;
@@ -501,33 +505,78 @@ function normCdf(x: number): number {
 /** A latency mixture: (weight, median ms, sigma) log-normal components. */
 type Mixture = { w: number; median: number; sigma: number }[];
 
-function quantileOf(mix: Mixture, q: number): number {
-  const total = mix.reduce((a, c) => a + c.w, 0);
-  if (total <= 0) return 0;
-  const cdf = (x: number) => mix.reduce((a, c) => a + c.w * normCdf((Math.log(x) - Math.log(c.median)) / c.sigma), 0) / total;
-  let lo = 0.01;
-  let hi = 600_000;
-  for (let i = 0; i < 60; i++) {
-    const mid = Math.sqrt(lo * hi);
-    if (cdf(mid) < q) lo = mid;
-    else hi = mid;
+/** The window's answer before any quantile: its counts and latency mixture, plus what every quantile of it reuses. */
+interface Integrated {
+  counts: DemoCounts;
+  mix: Mixture;
+  /** Math.log of each component's median, hoisted out of the bisection. */
+  logMedians: number[];
+  /** The mixture's total weight. */
+  total: number;
+  /** Quantiles already found, by q. */
+  quantiles: Map<number, number>;
+}
+
+/** The share of the mixture at or below `ms`. */
+function cdfAt(it: Integrated, ms: number): number {
+  const x = Math.log(ms);
+  let a = 0;
+  for (let i = 0; i < it.mix.length; i++) a += it.mix[i].w * normCdf((x - it.logMedians[i]) / it.mix[i].sigma);
+  return a / it.total;
+}
+
+function quantileOf(it: Integrated, q: number): number {
+  const known = it.quantiles.get(q);
+  if (known !== undefined) return known;
+  let value = 0;
+  if (it.total > 0) {
+    let lo = 0.01;
+    let hi = 600_000;
+    for (let i = 0; i < 60; i++) {
+      const mid = Math.sqrt(lo * hi);
+      if (cdfAt(it, mid) < q) lo = mid;
+      else hi = mid;
+    }
+    value = Math.round(Math.sqrt(lo * hi) * 10) / 10;
   }
-  return Math.round(Math.sqrt(lo * hi) * 10) / 10;
+  it.quantiles.set(q, value);
+  return value;
+}
+
+/**
+ * One latency component a route (or hop) contributes, keyed by its shape so
+ * equal shapes merge. Its weight for `n` requests is `n * a * b`.
+ */
+interface Part {
+  key: string;
+  median: number;
+  sigma: number;
+  a: number;
+  b: number;
 }
 
 /** A request's latency components on `route` (its root span) with the incident on or off. */
-function routeMixture(route: { base: number; charges?: boolean }, incident: boolean, w: number): Mixture {
-  if (w <= 0) return [];
+function partsOf(route: { base: number }, incident: boolean): Part[] {
   const fail = incident ? DEMO_INCIDENT.failShare : 0;
   const slow = incident ? DEMO_INCIDENT.slowShare : 0;
   const ok = 1 - fail - slow;
+  const part = (median: number, sigma: number, a: number, b: number): Part => ({ key: `${median}|${sigma}`, median, sigma, a, b });
   return [
-    { w: w * ok * (1 - OUTLIER_SHARE), median: route.base, sigma: LATENCY_SIGMA },
-    { w: w * ok * OUTLIER_SHARE, median: route.base * OUTLIER_FACTOR, sigma: 0.3 },
-    ...(slow ? [{ w: w * slow, median: route.base + DEMO_INCIDENT.retryMs + 120, sigma: 0.08 }] : []),
-    ...(fail ? [{ w: w * fail, median: DEMO_INCIDENT.deadlineMs + 20, sigma: 0.01 }] : []),
+    part(route.base, LATENCY_SIGMA, ok, 1 - OUTLIER_SHARE),
+    part(route.base * OUTLIER_FACTOR, 0.3, ok, OUTLIER_SHARE),
+    ...(slow ? [part(route.base + DEMO_INCIDENT.retryMs + 120, 0.08, slow, 1)] : []),
+    ...(fail ? [part(DEMO_INCIDENT.deadlineMs + 20, 0.01, fail, 1)] : []),
   ];
 }
+
+/** Every route's components, built once: statsOf's inner loop only multiplies and adds. */
+const ROUTE_PARTS = DEMO_ROUTES.map((route) => ({
+  route,
+  share: route.weight / DEMO_ROUTE_WEIGHT,
+  calm: partsOf(route, false),
+  incident: partsOf(route, true),
+  hops: route.hops.map((hop) => ({ hop, parts: partsOf(hop, false) })),
+}));
 
 /** Integration steps for a window (every 5 minutes, at least 12). */
 const stepsOf = (startMs: number, endMs: number) => Math.max(12, Math.ceil((endMs - startMs) / (5 * MINUTE)));
@@ -550,7 +599,18 @@ export interface DemoStatsQuery {
  * this function's answer for its window.
  */
 export function demoStats(q: DemoStatsQuery): DemoStats {
-  return statsOf(q).stats;
+  const it = statsOf(q);
+  return { ...it.counts, p50Ms: quantileOf(it, 0.5), p95Ms: quantileOf(it, 0.95), p99Ms: quantileOf(it, 0.99) };
+}
+
+/** demoStats' counts alone, for a caller that reads no latency (each quantile is a 60-step bisection). */
+export function demoCounts(q: DemoStatsQuery): DemoCounts {
+  return { ...statsOf(q).counts };
+}
+
+/** One latency quantile (`p`: 0.5 is demoStats' p50Ms) of the window. */
+export function demoQuantile(q: DemoStatsQuery, p: number): number {
+  return quantileOf(statsOf(q), p);
 }
 
 /**
@@ -559,28 +619,52 @@ export function demoStats(q: DemoStatsQuery): DemoStats {
  * explorer's duration, from the same model as demoStats.
  */
 export function demoHistogram(q: DemoStatsQuery, boundsSeconds: readonly number[]): { buckets: number[]; count: number; sumSeconds: number } {
-  const { stats, mix } = statsOf(q);
-  const total = mix.reduce((a, c) => a + c.w, 0);
-  const cdf = (ms: number) => (total ? mix.reduce((a, c) => a + c.w * normCdf((Math.log(ms) - Math.log(c.median)) / c.sigma), 0) / total : 0);
+  const it = statsOf(q);
+  const { counts, mix, total } = it;
+  const cdf = (ms: number) => (total ? cdfAt(it, ms) : 0);
   const edges = [0, ...boundsSeconds.map((b) => cdf(b * 1000)), 1];
-  const buckets = edges.slice(1).map((e, i) => Math.round(stats.requests * (e - edges[i])));
+  const buckets = edges.slice(1).map((e, i) => Math.round(counts.requests * (e - edges[i])));
   const meanMs = total ? mix.reduce((a, c) => a + c.w * c.median * Math.exp((c.sigma * c.sigma) / 2), 0) / total : 0;
-  return { buckets, count: buckets.reduce((a, b) => a + b, 0), sumSeconds: (stats.requests * meanMs) / 1000 };
+  return { buckets, count: buckets.reduce((a, b) => a + b, 0), sumSeconds: (counts.requests * meanMs) / 1000 };
 }
 
-function statsOf(q: DemoStatsQuery): { stats: DemoStats; mix: Mixture } {
+/**
+ * Windows already integrated, by query. Every answer is a pure function of
+ * its query (`now` is the page load), and the console asks the same windows
+ * again and again: each panel, its sparkline, a refetch, the next page.
+ * Least recently used first; bounded so a long visit cannot grow it.
+ */
+const integrated = new Map<string, Integrated>();
+const INTEGRATED_LIMIT = 2_000;
+
+function statsOf(q: DemoStatsQuery): Integrated {
   const now = q.now ?? demoNow();
   const envs = (q.envIds?.length ? DEMO_ENV_IDS.filter((e) => q.envIds!.includes(e)) : [...DEMO_ENV_IDS]) as DemoEnvKey[];
+  const key = `${q.startMs}|${q.endMs}|${envs.join(",")}|${q.service ?? ""}|${q.op ?? ""}|${now}`;
+  const hit = integrated.get(key);
+  if (hit) {
+    integrated.delete(key);
+    integrated.set(key, hit);
+    return hit;
+  }
+  const it = integrate(q, envs, now);
+  integrated.set(key, it);
+  if (integrated.size > INTEGRATED_LIMIT) integrated.delete(integrated.keys().next().value!);
+  return it;
+}
+
+function integrate(q: DemoStatsQuery, envs: readonly DemoEnvKey[], now: number): Integrated {
   let requests = 0;
   let errors = 0;
   // Components with the same shape are merged, so a quantile stays cheap over any window.
   const merged = new Map<string, Mixture[number]>();
-  const add = (parts: Mixture) => {
-    for (const c of parts) {
-      const key = `${c.median}|${c.sigma}`;
-      const prev = merged.get(key);
-      if (prev) prev.w += c.w;
-      else merged.set(key, { ...c });
+  const add = (parts: readonly Part[], w: number) => {
+    if (w <= 0) return;
+    for (const p of parts) {
+      const cw = w * p.a * p.b;
+      const prev = merged.get(p.key);
+      if (prev) prev.w += cw;
+      else merged.set(p.key, { w: cw, median: p.median, sigma: p.sigma });
     }
   };
   // The window, split at the incident's start so neither side borrows the other's shape.
@@ -589,25 +673,32 @@ function statsOf(q: DemoStatsQuery): { stats: DemoStats; mix: Mixture } {
   for (const [from, to] of ranges) {
     const steps = stepsOf(from, to);
     const dt = (to - from) / steps;
+    const stepSeconds = dt / 1000;
     for (let i = 0; i < steps; i++) {
       const at = from + (i + 0.5) * dt;
+      // demoRouteRate, its factors taken in the same order.
+      const rate = (1000 / SLOT_MS) * dailyLoad(at);
+      const incidentOn = at >= split;
       for (const env of envs) {
-        for (const route of DEMO_ROUTES) {
-          const n = demoRouteRate(route, env, at) * (dt / 1000);
-          const incident = inIncident(route, env, at, now);
+        const envRate = rate * ENV_TRAFFIC[env];
+        const prod = env === DEMO_INCIDENT.envId;
+        for (const r of ROUTE_PARTS) {
+          const { route } = r;
+          const n = envRate * r.share * stepSeconds;
+          const incident = route.charges && prod && incidentOn;
           // The root span, when it is the service's (or no service was named).
           if ((!q.service || route.service === q.service) && (!q.op || route.op === q.op)) {
             requests += n;
             if (incident) errors += n * DEMO_INCIDENT.failShare;
-            add(routeMixture(route, incident, n));
+            add(incident ? r.incident : r.calm, n);
           }
           // The downstream hops it makes into other services.
-          for (const hop of route.hops) {
+          for (const { hop, parts } of r.hops) {
             if (q.service && hop.service === q.service && (!q.op || hop.op === q.op)) {
               // A failed order is still recorded (payment_failed) and its event published: the hop happens either way.
               const h = n * hop.share;
               requests += h;
-              add(routeMixture(hop, false, h));
+              add(parts, h);
             }
           }
         }
@@ -616,26 +707,23 @@ function statsOf(q: DemoStatsQuery): { stats: DemoStats; mix: Mixture } {
   }
   const mix = [...merged.values()];
   const seconds = (q.endMs - q.startMs) / 1000;
-  const stats = {
+  const counts = {
     requests: Math.round(requests),
     errors: Math.round(errors),
     requestsExact: requests,
     errorsExact: errors,
     errorRate: requests ? errors / requests : 0,
     ratePerSecond: seconds > 0 ? requests / seconds : 0,
-    p50Ms: quantileOf(mix, 0.5),
-    p95Ms: quantileOf(mix, 0.95),
-    p99Ms: quantileOf(mix, 0.99),
   };
-  return { stats, mix };
+  return { counts, mix, logMedians: mix.map((c) => Math.log(c.median)), total: mix.reduce((a, c) => a + c.w, 0), quantiles: new Map() };
 }
 
 /**
- * `demoStats` per bucket: a trend of `buckets` points over the window. Counts
+ * demoCounts per bucket: a trend of `buckets` points over the window. Counts
  * are rounded cumulatively, so the buckets always sum to the window's own
  * (rounded) total, however few requests each holds.
  */
-export function demoTrend(q: DemoStatsQuery, buckets = 30): { startMs: number; stats: DemoStats }[] {
+export function demoTrend(q: DemoStatsQuery, buckets = 30): { startMs: number; stats: DemoCounts }[] {
   const step = (q.endMs - q.startMs) / buckets;
   let requests = 0;
   let errors = 0;
@@ -643,7 +731,7 @@ export function demoTrend(q: DemoStatsQuery, buckets = 30): { startMs: number; s
   let shownErrors = 0;
   return Array.from({ length: buckets }, (_, i) => {
     const startMs = q.startMs + i * step;
-    const stats = demoStats({ ...q, startMs, endMs: startMs + step });
+    const stats = demoCounts({ ...q, startMs, endMs: startMs + step });
     requests += stats.requestsExact ?? stats.requests;
     errors += stats.errorsExact ?? stats.errors;
     const r = Math.round(requests) - shownRequests;

@@ -33,10 +33,24 @@ func (f *fakeRunChatService) StartChat(_ context.Context, r *connect.Request[rel
 // returns the StartChat request it sent and what it printed.
 func runWorkflowRunCmd(t *testing.T, args ...string) (*reliantv1.StartChatRequest, string) {
 	t.Helper()
+	got, out, err := execWorkflowRunCmd(t, nil, append([]string{"--project-id", "p1"}, args...)...)
+	require.NoError(t, err)
+	require.NotNil(t, got, "StartChat was called")
+	return got, out
+}
+
+// execWorkflowRunCmd runs `reliant workflow run` with args against a fake
+// ChatService plus whatever other fakes register mounts. It returns the
+// StartChat request (nil when none was sent), the output and the error.
+func execWorkflowRunCmd(t *testing.T, register func(*http.ServeMux), args ...string) (*reliantv1.StartChatRequest, string, error) {
+	t.Helper()
 	isolateForgeCredHome(t)
 	fake := &fakeRunChatService{}
 	mux := http.NewServeMux()
 	mux.Handle(reliantv1connect.NewChatServiceHandler(fake))
+	if register != nil {
+		register(mux)
+	}
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	t.Setenv(envServerURL, srv.URL)
@@ -45,10 +59,78 @@ func runWorkflowRunCmd(t *testing.T, args ...string) (*reliantv1.StartChatReques
 	cmd := newWorkflowRunCmd()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
-	cmd.SetArgs(append([]string{"--project-id", "p1"}, args...))
-	require.NoError(t, cmd.Execute())
-	require.NotNil(t, fake.got, "StartChat was called")
-	return fake.got, out.String()
+	cmd.SetErr(&out)
+	cmd.SetArgs(args)
+	err := cmd.Execute()
+	return fake.got, out.String(), err
+}
+
+type fakeRunDaemons struct {
+	reliantv1connect.UnimplementedDaemonRegistryServiceHandler
+}
+
+func (fakeRunDaemons) ListDaemons(context.Context, *connect.Request[reliantv1.ListDaemonsRequest]) (*connect.Response[reliantv1.ListDaemonsResponse], error) {
+	return connect.NewResponse(&reliantv1.ListDaemonsResponse{Daemons: []*reliantv1.DaemonInfo{
+		{DaemonId: "d-laptop", Hostname: "laptop"},
+		{DaemonId: "d-cloud", Hostname: "cloud"},
+	}}), nil
+}
+
+type fakeRunProjects struct {
+	reliantv1connect.UnimplementedProjectServiceHandler
+	rows []*reliantv1.ProjectDaemon
+}
+
+func (f fakeRunProjects) ListProjectDaemons(context.Context, *connect.Request[reliantv1.ListProjectDaemonsRequest]) (*connect.Response[reliantv1.ListProjectDaemonsResponse], error) {
+	return connect.NewResponse(&reliantv1.ListProjectDaemonsResponse{ProjectDaemons: f.rows}), nil
+}
+
+// --project-id wins over --project-path, so nothing looks the project up on
+// the --daemon machine: the run is refused before StartChat unless the
+// project is checked out there, and sent to that machine when it is.
+func TestWorkflowRun_ProjectIDWithDaemonNeedsTheProjectOnThatMachine(t *testing.T) {
+	installed := reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_INSTALLED
+	installing := reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_INSTALLING
+	mounts := func(rows ...*reliantv1.ProjectDaemon) func(*http.ServeMux) {
+		return func(mux *http.ServeMux) {
+			mux.Handle(reliantv1connect.NewDaemonRegistryServiceHandler(fakeRunDaemons{}))
+			mux.Handle(reliantv1connect.NewProjectServiceHandler(fakeRunProjects{rows: rows}))
+		}
+	}
+
+	t.Run("on that machine", func(t *testing.T) {
+		got, _, err := execWorkflowRunCmd(t, mounts(
+			&reliantv1.ProjectDaemon{ProjectId: "p1", DaemonId: "d-cloud", InstallState: installed},
+		), "--project-id", "p1", "--daemon", "cloud", "cicd-probe")
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.Equal(t, "d-cloud", got.GetDaemonId())
+	})
+
+	t.Run("only on another machine", func(t *testing.T) {
+		got, _, err := execWorkflowRunCmd(t, mounts(
+			&reliantv1.ProjectDaemon{ProjectId: "p1", DaemonId: "d-laptop", InstallState: installed},
+			&reliantv1.ProjectDaemon{ProjectId: "p2", DaemonId: "d-cloud", InstallState: installed},
+		), "--project-id", "p1", "--daemon", "cloud", "cicd-probe")
+		require.ErrorContains(t, err, "project p1 is not on machine d-cloud")
+		assert.ErrorContains(t, err, "--project-path")
+		assert.Nil(t, got, "no run is started")
+	})
+
+	t.Run("still installing there", func(t *testing.T) {
+		got, _, err := execWorkflowRunCmd(t, mounts(
+			&reliantv1.ProjectDaemon{ProjectId: "p1", DaemonId: "d-cloud", InstallState: installing},
+		), "--project-id", "p1", "--daemon", "cloud", "cicd-probe")
+		require.ErrorContains(t, err, "not ready on machine d-cloud")
+		assert.Nil(t, got)
+	})
+
+	t.Run("--project-path is ignored when --project-id is given", func(t *testing.T) {
+		got, _, err := execWorkflowRunCmd(t, mounts(),
+			"--project-id", "p1", "--project-path", t.TempDir(), "--daemon", "cloud", "cicd-probe")
+		require.ErrorContains(t, err, "project p1 is not on machine d-cloud")
+		assert.Nil(t, got)
+	})
 }
 
 // A command-line run is recorded as cli.run, which keeps it out of the

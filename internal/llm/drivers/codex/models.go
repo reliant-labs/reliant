@@ -28,7 +28,10 @@ const Family models.Family = "codex"
 // codex model tagged `fast`, so chat titling resolved to it and 400'd on
 // every chat.
 var SupportedModels = []models.ModelID{
+	models.GPT62Sol,
+	models.GPT62Astra,
 	models.GPT61Sol,
+	models.GPT61Terra,
 	models.GPT6Astra,
 	models.GPT6Sol,
 	models.GPT6Luna,

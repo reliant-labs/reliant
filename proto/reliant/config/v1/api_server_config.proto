@@ -15,7 +15,10 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;confi
 message ApiServerConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
-    command: ["server", "api"]
+    command: [
+      "server",
+      "api"
+    ]
   };
   option (buf.validate.message).cel = {
     id: "auth_api_key_required"
@@ -26,8 +29,7 @@ message ApiServerConfig {
   // The blocks every server role shares moved to ServerProcessConfig and
   // DatabaseConfig.
   reserved 5, 10, 11, 12, 13, 14, 19, 20, 40, 50, 51, 60, 70, 90;
-  reserved "control_plane", "database", "nats", "temporal", "tls", "drain", "data_dir",
-    "streaming_driver", "integrations", "observability", "sentry", "analytics", "llm", "preview";
+  reserved "control_plane", "database", "nats", "temporal", "tls", "drain", "data_dir", "streaming_driver", "integrations", "observability", "sentry", "analytics", "llm", "preview";
 
   // How the API server validates a caller's JWT. Any one of these is enough.
   // A PEM given directly wins over a file.
@@ -78,7 +80,10 @@ message ApiServerConfig {
       default_value: "9090"
       description: "gRPC/ConnectRPC listen port"
     },
-    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+    (buf.validate.field).int32 = {
+      gte: 1
+      lte: 65535
+    }
   ];
   // The probe listener (/health, /ready). Not forge's `port`, which names
   // the port a process serves its API on: reliant's API is GRPC_PORT, and
@@ -90,7 +95,10 @@ message ApiServerConfig {
       default_value: "8081"
       description: "Health/readiness HTTP endpoint port"
     },
-    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+    (buf.validate.field).int32 = {
+      gte: 1
+      lte: 65535
+    }
   ];
   int32 pprof_port = 17 [
     (forge.v1.config) = {
@@ -100,7 +108,10 @@ message ApiServerConfig {
       description: "pprof debug server port"
     },
     (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
-    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+    (buf.validate.field).int32 = {
+      gte: 1
+      lte: 65535
+    }
   ];
   string bind_address = 18 [(forge.v1.config) = {
     env_var: "BIND_ADDRESS"
@@ -123,7 +134,10 @@ message ApiServerConfig {
   string auth_mode = 30 [(forge.v1.config) = {
     env_var: "AUTH_MODE"
     default_value: "supabase"
-    allowed_values: ["supabase", "apikey"]
+    allowed_values: [
+      "supabase",
+      "apikey"
+    ]
     description: "Auth mode: supabase (JWTs) or apikey (one shared bearer key)"
   }];
   // The shared bearer key apikey mode checks; required in that mode.
@@ -177,7 +191,11 @@ message ApiServerConfig {
   string worktree_auto_archive = 36 [(forge.v1.config) = {
     env_var: "RELIANT_WORKTREE_AUTO_ARCHIVE"
     default_value: "dry-run"
-    allowed_values: ["dry-run", "on", "off"]
+    allowed_values: [
+      "dry-run",
+      "on",
+      "off"
+    ]
     description: "Worktree auto-archive: dry-run, on or off"
   }];
 

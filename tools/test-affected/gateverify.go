@@ -82,7 +82,10 @@ func verifyGate(planPath, dir string) []string {
 	if pl.MigOrder.Full {
 		obliged["migorder"] = "the plan selected the migration-order lane"
 	}
-	var migration, subdir, web bool
+	if pl.WebDemo.Full {
+		obliged["demo"] = "the plan selected the forge demo bundle's build"
+	}
+	var migration, subdir, web, goFile bool
 	for _, f := range pl.Files {
 		p := f.Path
 		switch {
@@ -97,20 +100,35 @@ func verifyGate(planPath, dir string) []string {
 		if !f.Deleted && strings.Contains(p, "/") {
 			subdir = true
 		}
+		if !f.Deleted && strings.HasSuffix(p, ".go") {
+			goFile = true
+		}
 	}
 	if pl.Web.Full || len(pl.Web.Tests) > 0 || web {
 		obliged["typecheck"] = "a web lane or frontends/web/ change needs the type-check"
 	}
-	// The merge queue's tier and --skip-lint (merge-gate.sh writes <dir>/tier:
-	// "queue" or "skip-lint") leave vet and the scoped forge lint to the
-	// release gate, which runs both over the whole module: the queue's budget
-	// is five minutes (owner, 2026-11-01).
-	skipLint := false
+	// merge-gate.sh writes <dir>/tier. --skip-lint ("skip-lint") leaves vet
+	// and the scoped forge lint to the release gate, which runs both over the
+	// whole module. The merge queue's tier ("queue") leaves vet to it (the
+	// queue's golangci (changed) job runs beside the gate) but runs the
+	// scoped forge lint: with none, #2696 and #2662 reached main on findings
+	// forge lint names in about a minute (the 2026-11-13 backtest).
+	//
+	// golangci (scripts/golangci-changed.sh) is obliged whenever a .go file
+	// was added or changed, unless the gate wrote <dir>/golangci-elsewhere
+	// (--queue, --skip-golangci): a golangci (changed) job beside the gate
+	// runs it. --skip-lint keeps it: the release gate ejects nothing, the
+	// queue's golangci job ejects the PR.
+	skipLint, skipVet := false, false
 	if tb, err := os.ReadFile(filepath.Join(dir, "tier")); err == nil {
 		tier := strings.TrimSpace(string(tb))
-		skipLint = tier == "queue" || tier == "skip-lint"
+		skipLint = tier == "skip-lint"
+		skipVet = tier == "queue" || tier == "skip-lint"
 	}
-	if !skipLint && (len(pl.Go.Build) > 0 || len(pl.Go.Packages) > 0 || pl.Go.Full) {
+	if _, err := os.Stat(filepath.Join(dir, "golangci-elsewhere")); goFile && err != nil {
+		obliged["golangci"] = "a .go file changed: the merge queue's golangci (changed) job lints it"
+	}
+	if !skipVet && (len(pl.Go.Build) > 0 || len(pl.Go.Packages) > 0 || pl.Go.Full) {
 		obliged["vet"] = "production build reach and affected test packages are vetted"
 	}
 	if migration {

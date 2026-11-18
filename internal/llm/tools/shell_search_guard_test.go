@@ -56,6 +56,18 @@ func TestUnscopedSearchRefusal(t *testing.T) {
 		{"relative cd then find", `cd internal && find . -name "*.go"`, false},
 		{"git command mentioning slash", `git log --oneline -- /`, false},
 		{"build in cwd", `go build ./...`, false},
+
+		// --- a grep-like's pattern is text, not a root (bug 12aa032d) ---
+		{"rg pattern that spells home", `rg -c '~/' internal/llm/tools/shell_search_guard.go`, false},
+		{"rg pattern that spells root", `rg -n '/' internal/`, false},
+		{"grep -r pattern that spells $HOME", `grep -rn '$HOME' scripts/`, false},
+		{"rg pattern after a valued flag", `rg -g '*.go' -m 5 '~' internal/`, false},
+		{"rg pattern home, no path", `rg '~/'`, false},
+		{"rg home after the pattern", `rg -c '~/' ~`, true},
+		{"rg root after a valued flag", `rg -t go svcerr /`, true},
+		{"rg -e pattern then home", `rg -e svcerr ~`, true},
+		{"rg --regexp= pattern then home", `rg --regexp=svcerr ~/`, true},
+		{"grep -T takes no value", `grep -rT svcerr /`, true},
 	}
 
 	for _, tt := range tests {

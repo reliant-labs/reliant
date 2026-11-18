@@ -27,6 +27,7 @@ import { disableTelemetry, grantAnalyticsConsent, setTelemetryUser } from "@reli
 import {
   enableAttribution,
   initBrowserTelemetry,
+  setTelemetryAttributes,
   type BrowserTelemetryConfig,
 } from "@reliantlabs/forge-web-runtime/telemetry";
 import {
@@ -223,39 +224,11 @@ export function buildTelemetryConfig(
     // GPC / DNT browsers never get here (demoTelemetry() is "off").
     ...(demo && input.demoTelemetry && input.demoTelemetry !== "off" ? { analytics: "full" as const } : {}),
     // The demo records replays by its own switch (DEMO_TELEMETRY, owner
-    // default on); the runtime masks all text and inputs whenever replay runs.
+    // default on; phones too, unless demoTelemetry.ts DEMO_REPLAY_ON_PHONES is off);
+    // the runtime masks all text and inputs whenever replay runs.
     replay: demo ? input.demoTelemetry === "replay" : config.OTEL_REPLAY === "true",
     replaySampleRate: input.replayRate,
   };
-}
-
-interface GlobalAttributeClient {
-  setGlobalAttributes(attributes: Record<string, string>): void;
-}
-
-// @hyperdx/browser's module.exports IS the client; a bundler wraps it in
-// namespace objects whose `default` leads to it. Take the deepest `default`
-// that is still a client, as the runtime does, so both hold the same instance.
-function findClient(mod: unknown): GlobalAttributeClient | null {
-  const isClient = (v: unknown): v is GlobalAttributeClient =>
-    typeof (v as GlobalAttributeClient | null)?.setGlobalAttributes ===
-    "function";
-  let cur: unknown = mod;
-  for (let depth = 0; depth < 4; depth++) {
-    const next = (cur as { default?: unknown } | null)?.default;
-    if (!isClient(next)) break;
-    cur = next;
-  }
-  return isClient(cur) ? cur : null;
-}
-
-// The runtime has no hook for the build, so it rides as a global span
-// attribute beside the app.client the runtime stamps.
-async function stampClientAttributes(
-  attributes: Record<string, string>,
-): Promise<void> {
-  const client = findClient(await import("@hyperdx/browser"));
-  client?.setGlobalAttributes(attributes);
 }
 
 /**
@@ -410,6 +383,10 @@ async function start(): Promise<boolean> {
   // The demo's notice is its consent (buildTelemetryConfig's `analytics`):
   // granted before the SDK starts, so the first page view is in the full tier.
   if (config.analytics === "full") grantAnalyticsConsent();
+  // The build rides as a global span attribute beside the app.client the
+  // runtime stamps. Set before init: the runtime holds it and applies it as
+  // the SDK starts, so the page load's own spans carry it too.
+  setTelemetryAttributes({ "reliant.build": buildVersion });
   const running = await initBrowserTelemetry(config);
   if (!running) return false;
   if (handoff) dropLandingAttribution();
@@ -422,11 +399,6 @@ async function start(): Promise<boolean> {
   // fired no event we heard. Reconcile now, so it still stops and reloads.
   onConsentChange(privacyConsent());
 
-  try {
-    await stampClientAttributes({ "reliant.build": buildVersion });
-  } catch (e) {
-    console.debug("[telemetry] client attributes not set:", e);
-  }
   if (desktop) {
     reportFirstLaunch().catch((e) => {
       console.debug("[telemetry] app_first_launch not reported:", e);

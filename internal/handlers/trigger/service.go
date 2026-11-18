@@ -195,6 +195,10 @@ type Service struct {
 	// grants holds delegated automation credentials; nil (no control
 	// plane) makes it a no-op.
 	grants *automationGrants
+
+	// sources reads the accounts a trigger's runs may spend, for the funding
+	// warning (fundingWarning); nil is drivers.LookupAvailableDrivers.
+	sources driverSources
 }
 
 // New creates a new trigger service instance with the supplied Deps.

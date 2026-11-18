@@ -20,7 +20,7 @@ describe("SettingsNavigation grouping", () => {
     const headings = screen.getAllByTestId(/^settings-group-/).map((el) => el.getAttribute("data-testid")?.replace("settings-group-", ""));
     expect(headings).toEqual(["Account", "AI", "Connections", "Machines & projects", "Preferences", "Advanced"]);
 
-    expect(labels("Account")).toEqual(["Account", "Billing & usage", "Members", "Policies", "AI accounts", "Privacy"]);
+    expect(labels("Account")).toEqual(["Account", "Billing & usage", "Members", "Policies", "AI accounts", "AI usage", "Privacy"]);
     expect(labels("AI")).toEqual(["AI providers"]);
     expect(labels("Connections")).toEqual(["Integrations", "GitHub", "Tools (MCP)"]);
     expect(labels("Machines & projects")).toEqual(["Machines", "Projects"]);

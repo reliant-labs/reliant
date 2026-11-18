@@ -212,11 +212,55 @@ export function ConsoleLayout() {
     };
   }, [dashboards.data, forgeProject]);
 
+  // ConsoleShell is memoized: every element it takes is built once per input,
+  // so a URL change that moves none of them (a tour step, a filter) leaves the
+  // chrome alone, and the context value above leaves the page alone.
+  const orgSwitcher = useMemo(() => <OrgSwitcher />, []);
+  const brand = useMemo(
+    () => (
+      <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}>
+        {/* The forge shell has no app to close back to: its mark leads
+            home (the Apps list), and Reliant is a link in its own chrome. */}
+        {forgeShell ? (
+          <a href={APPS_PATH} aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="forge-shell-home">
+            <ForgeMark className="h-6 w-6" />
+          </a>
+        ) : (
+          <ForgeCloseButton onClose={onClose} />
+        )}
+        <ConsoleProjectSwitcher
+          forgeProject={forgeProject}
+          onSelect={(app) => void navigate({ href: switchTarget(app, page) })}
+          onSelectAll={() => void navigate({ href: APPS_PATH })}
+        />
+      </div>
+    ),
+    [trafficLightPadding, dragRegionStyle, forgeShell, onClose, forgeProject, navigate, page]
+  );
+  const brandCollapsed = useMemo(() => <ProjectMonogram name={forgeProject} />, [forgeProject]);
+  const body = useMemo(
+    () =>
+      listed ? (
+        <ForgeConsoleContext.Provider value={value}>
+          <div className="empty:hidden [&:not(:empty)]:mb-4">
+            <ObsQuotaBanner />
+          </div>
+          <Outlet />
+        </ForgeConsoleContext.Provider>
+      ) : (
+        <div aria-busy="true" aria-label="Loading" data-testid="forge-console-loading" className="space-y-4">
+          <SkeletonLoader variant="text" count={1} width="30%" />
+          <SkeletonLoader variant="table-row" count={4} />
+        </div>
+      ),
+    [listed, value]
+  );
+
   return (
     <LedConsoleProvider host={ledHost}>
     <ConsoleShell
       project={forgeProject}
-      orgSwitcher={<OrgSwitcher />}
+      orgSwitcher={orgSwitcher}
       page={page}
       env={env}
       envs={navEnvs}
@@ -232,39 +276,10 @@ export function ConsoleLayout() {
       user={user}
       collapsed={collapsed}
       onToggleCollapsed={toggleCollapsed}
-      brand={
-        <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}>
-          {/* The forge shell has no app to close back to: its mark leads
-              home (the Apps list), and Reliant is a link in its own chrome. */}
-          {forgeShell ? (
-            <a href={APPS_PATH} aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="forge-shell-home">
-              <ForgeMark className="h-6 w-6" />
-            </a>
-          ) : (
-            <ForgeCloseButton onClose={onClose} />
-          )}
-          <ConsoleProjectSwitcher
-            forgeProject={forgeProject}
-            onSelect={(app) => void navigate({ href: switchTarget(app, page) })}
-            onSelectAll={() => void navigate({ href: APPS_PATH })}
-          />
-        </div>
-      }
-      brandCollapsed={<ProjectMonogram name={forgeProject} />}
+      brand={brand}
+      brandCollapsed={brandCollapsed}
     >
-      {listed ? (
-        <ForgeConsoleContext.Provider value={value}>
-          <div className="empty:hidden [&:not(:empty)]:mb-4">
-            <ObsQuotaBanner />
-          </div>
-          <Outlet />
-        </ForgeConsoleContext.Provider>
-      ) : (
-        <div aria-busy="true" aria-label="Loading" data-testid="forge-console-loading" className="space-y-4">
-          <SkeletonLoader variant="text" count={1} width="30%" />
-          <SkeletonLoader variant="table-row" count={4} />
-        </div>
-      )}
+      {body}
     </ConsoleShell>
     </LedConsoleProvider>
   );

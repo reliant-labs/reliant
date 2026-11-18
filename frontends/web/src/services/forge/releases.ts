@@ -51,6 +51,7 @@ import {
   type CompareDeployReleasesResponse,
   type DeployObjectDelta,
 } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { orgRequest } from "@/lib/orgScope";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
@@ -561,6 +562,11 @@ export function toReleaseBundle(msg: DeployBundle): ReleaseBundle {
 }
 
 // ── RPCs ────────────────────────────────────────────────────────────────────
+//
+// Each read takes the org it is read in (`orgId`; null names none and the
+// active org is filled on the wire) and names it in the request, so a cached
+// answer is the org its key says (lib/orgScope). The Releases pages pass it
+// through ReleasesApiContext's org-bound api.
 
 function client() {
   return getControlPlaneClient(DeployService);
@@ -575,8 +581,8 @@ export const RELEASE_LIST_LIMIT = 50;
  * server that ignored the field would otherwise put another project's
  * releases, with this project's Promote button, on this screen.
  */
-export async function listProjectReleases(project: string, limit = RELEASE_LIST_LIMIT): Promise<ReleaseRecord[]> {
-  const res = await client().listReleases({ project, limit });
+export async function listProjectReleases(project: string, limit = RELEASE_LIST_LIMIT, orgId: string | null = null): Promise<ReleaseRecord[]> {
+  const res = await client().listReleases(orgRequest({ project, limit }, orgId));
   return (res.releases ?? [])
     .map(toReleaseRecord)
     .filter((release) => release.version !== "" && (release.project === "" || release.project === project))
@@ -586,10 +592,11 @@ export async function listProjectReleases(project: string, limit = RELEASE_LIST_
 /** One release, with the environments whose CURRENT promotion is it. Null when there is no such release. */
 export async function getProjectRelease(
   project: string,
-  version: string
+  version: string,
+  orgId: string | null = null
 ): Promise<{ release: ReleaseRecord; currentEnvironmentIds: string[] } | null> {
   try {
-    const res = await client().getRelease({ project, version });
+    const res = await client().getRelease(orgRequest({ project, version }, orgId));
     if (!res.release) return null;
     return { release: toReleaseRecord(res.release), currentEnvironmentIds: [...(res.currentEnvironmentIds ?? [])] };
   } catch (err) {
@@ -604,20 +611,28 @@ export async function getProjectRelease(
  * plane that predates the filter compares every object (objects.workload is
  * then ""), so a caller that names one filters the deltas itself as well.
  */
-export async function compareProjectReleases(req: {
-  project: string;
-  from: string;
-  to: string;
-  environmentId?: string;
-  workload?: string;
-}): Promise<ReleaseComparison> {
-  const res = await client().compareReleases({
-    project: req.project,
-    fromVersion: req.from,
-    toVersion: req.to,
-    environmentId: req.environmentId ?? "",
-    ...(req.workload ? { workload: req.workload } : {}),
-  });
+export async function compareProjectReleases(
+  req: {
+    project: string;
+    from: string;
+    to: string;
+    environmentId?: string;
+    workload?: string;
+  },
+  orgId: string | null = null,
+): Promise<ReleaseComparison> {
+  const res = await client().compareReleases(
+    orgRequest(
+      {
+        project: req.project,
+        fromVersion: req.from,
+        toVersion: req.to,
+        environmentId: req.environmentId ?? "",
+        ...(req.workload ? { workload: req.workload } : {}),
+      },
+      orgId,
+    ),
+  );
   return toReleaseComparison(res);
 }
 
@@ -625,19 +640,19 @@ export async function compareProjectReleases(req: {
 export const PROMOTIONS_PAGE = 100;
 
 /** One environment's promotion ledger, newest first. */
-export async function listReleasePromotions(environmentId: string, limit = PROMOTIONS_PAGE): Promise<ReleasePromotion[]> {
-  const res = await client().listPromotions({ environmentId, limit });
+export async function listReleasePromotions(environmentId: string, limit = PROMOTIONS_PAGE, orgId: string | null = null): Promise<ReleasePromotion[]> {
+  const res = await client().listPromotions(orgRequest({ environmentId, limit }, orgId));
   return (res.promotions ?? []).map(toReleasePromotion);
 }
 
 /** How far one promotion has rolled out, judged against its own pins. */
-export async function getPromotionRollout(environmentId: string, promotionId: string): Promise<ReleaseRollout | null> {
-  const res = await client().getRollout({ environmentId, promotionId });
+export async function getPromotionRollout(environmentId: string, promotionId: string, orgId: string | null = null): Promise<ReleaseRollout | null> {
+  const res = await client().getRollout(orgRequest({ environmentId, promotionId }, orgId));
   return res.rollout ? toReleaseRollout(res.rollout) : null;
 }
 
 /** The bundle one promotion applied. */
-export async function getPromotionBundle(environmentId: string, bundleId: string, digest: string): Promise<ReleaseBundle | null> {
-  const res = await client().getBundle({ environmentId, bundleId, digest });
+export async function getPromotionBundle(environmentId: string, bundleId: string, digest: string, orgId: string | null = null): Promise<ReleaseBundle | null> {
+  const res = await client().getBundle(orgRequest({ environmentId, bundleId, digest }, orgId));
   return res.bundle ? toReleaseBundle(res.bundle) : null;
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/projectfacts"
 )
 
 // Router is the slice of toolexec.DaemonRouter the forge handlers use.
@@ -41,6 +42,10 @@ type Repository interface {
 	// reachable is asked of another checkout of the same forge project
 	// (forgeFallbackTargets), which may belong to another of them.
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
+	// ForgeAppsStore records the forge apps of the project's repos, which a
+	// topology read refreshes from the machine that answered it
+	// (projectfacts.RefreshForgeApps).
+	projectfacts.ForgeAppsStore
 	// Installs is each machine's checkout of the project (project_daemons)
 	// and who owns each machine (daemonplacement.ProjectCheckout).
 	daemonplacement.Installs

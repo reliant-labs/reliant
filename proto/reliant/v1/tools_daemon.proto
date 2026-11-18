@@ -708,7 +708,7 @@ message RegistrationAck {
   bool accepted = 1;
   repeated string requested_project_paths = 2; // "send me config for these"
   string daemon_id = 3; // Gateway-assigned daemon identity (from PAT binding or newly generated)
-  string user_id = 4;   // Gateway-derived user identity (from PAT). Daemon uses for tool execution context.
+  string user_id = 4; // Gateway-derived user identity (from PAT). Daemon uses for tool execution context.
   // account_email is user_id's account email, from the token authority at
   // connect (WhoAmIResponse.account_email). The daemon names it in its
   // connected banner, so a machine signed in as the wrong person is obvious.
@@ -752,7 +752,7 @@ message ProjectConfigSnapshot {
   repeated IndexedScenario scenarios = 10;
 
   // Memory files that must be available to cloud workers.
-  bytes global_memory_md = 11;  // ~/.reliant/reliant.md
+  bytes global_memory_md = 11; // ~/.reliant/reliant.md
   // The project root's memory: the forge framework guide (forge projects
   // only), then {project_path}/reliant.md, then {project_path}/reliant.local.md.
   bytes project_memory_md = 12;
@@ -808,8 +808,8 @@ message ChangedFile {
 // Sent by the daemon when it detects filesystem changes via polling.
 // This is a nudge signal — the frontend re-fetches the full file tree.
 message FileSystemChanged {
-  string project_path = 1;        // Which project directory had changes
-  int64 timestamp_unix_ms = 2;    // When the change was detected
+  string project_path = 1; // Which project directory had changes
+  int64 timestamp_unix_ms = 2; // When the change was detected
 }
 
 // Sent by the daemon when a command dispatched WITHOUT a live RPC waiter
@@ -821,7 +821,7 @@ message FileSystemChanged {
 // the same path FileSystemChanged uses for the success case.
 message DaemonCommandFailed {
   string request_id = 1;
-  string command_type = 2;        // e.g. "git.clone"
+  string command_type = 2; // e.g. "git.clone"
   string error_message = 3;
   int64 timestamp_unix_ms = 4;
 }
@@ -856,14 +856,14 @@ message IndexedScenario {
 // config sync. The frontmatter is parsed into structured fields; the full body
 // is shipped so the skill tool can render it without another round trip.
 message IndexedSkill {
-  string skill_path = 1;       // hierarchical path, e.g. "go/error-handling"
-  string name = 2;             // normalized skill name
-  string description = 3;      // from frontmatter
-  string relative_path = 4;    // SKILL.md path relative to project (or empty for global/builtin)
+  string skill_path = 1; // hierarchical path, e.g. "go/error-handling"
+  string name = 2; // normalized skill name
+  string description = 3; // from frontmatter
+  string relative_path = 4; // SKILL.md path relative to project (or empty for global/builtin)
   string content_hash = 5;
   int64 mtime_unix_ms = 6;
-  string scope = 7;            // project-local | project | claude | codex | agents | global | claude-global | codex-global | builtin
-  string body = 8;             // full markdown body after frontmatter
+  string scope = 7; // project-local | project | claude | codex | agents | global | claude-global | codex-global | builtin
+  string body = 8; // full markdown body after frontmatter
   repeated string allowed_tools = 9;
   map<string, string> metadata = 10;
   bool has_children = 11;
@@ -1030,7 +1030,7 @@ message DaemonCommandResponse {
 // TerminalInputMessage sends raw PTY input bytes (server -> daemon)
 message TerminalInputMessage {
   string session_id = 1;
-  bytes data = 2;           // Raw PTY input bytes
+  bytes data = 2; // Raw PTY input bytes
 }
 
 // TerminalResizeMessage requests a terminal resize (server -> daemon)
@@ -1043,7 +1043,7 @@ message TerminalResizeMessage {
 // TerminalOutputMessage sends raw PTY output bytes (daemon -> server)
 message TerminalOutputMessage {
   string session_id = 1;
-  bytes data = 2;            // Raw PTY output bytes
+  bytes data = 2; // Raw PTY output bytes
 }
 
 // TerminalSessionEvent reports terminal session lifecycle events (daemon -> server)
@@ -1056,8 +1056,8 @@ message TerminalSessionEvent {
     EVENT_TYPE_ERROR = 3;
   }
   EventType event_type = 2;
-  string message = 3;        // Error message or additional info
-  int32 pid = 4;              // PID of the shell process (on created)
+  string message = 3; // Error message or additional info
+  int32 pid = 4; // PID of the shell process (on created)
 }
 
 // TerminalOutputSubscribeMessage subscribes to a terminal session's output
@@ -1075,7 +1075,7 @@ message TerminalOutputSubscribeMessage {
 // ProcessOutputSubscribeMessage subscribes to a process's output (server -> daemon)
 message ProcessOutputSubscribeMessage {
   string process_id = 1;
-  bool new_only = 2;          // If true, skip existing output
+  bool new_only = 2; // If true, skip existing output
 }
 
 // ProcessOutputUnsubscribeMessage unsubscribes from a process's output (server -> daemon)
@@ -1086,9 +1086,9 @@ message ProcessOutputUnsubscribeMessage {
 // ProcessOutputChunkMessage sends a chunk of process output (daemon -> server)
 message ProcessOutputChunkMessage {
   string process_id = 1;
-  string data = 2;            // Output text
-  string stream = 3;          // "stdout" or "stderr"
-  uint64 sequence = 4;        // Sequence number for ordering
-  bool is_complete = 5;       // True when process has exited
-  int32 exit_code = 6;        // Only meaningful when is_complete=true
+  string data = 2; // Output text
+  string stream = 3; // "stdout" or "stderr"
+  uint64 sequence = 4; // Sequence number for ordering
+  bool is_complete = 5; // True when process has exited
+  int32 exit_code = 6; // Only meaningful when is_complete=true
 }

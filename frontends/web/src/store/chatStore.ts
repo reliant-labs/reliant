@@ -93,6 +93,7 @@ import { useModalStore } from "./modalStore";
 import type { Attachment } from "../api/client";
 import { logger } from "../lib/logger";
 import { singleflight } from "../lib/singleflight";
+import { getOrgScope, whenOrgScopeReady } from "../lib/orgScope";
 import { queryClient } from "../lib/query-client";
 import { notifyManager } from "@tanstack/react-query";
 import { initEventBus } from "../lib/events";
@@ -111,6 +112,7 @@ import {
 import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { sendWithDaemonWait } from "../lib/daemon-retry";
 import { sendOnExistingChat } from "../lib/chatSendRouting";
+import { runRecipientChoices, type RunRecipientChoice } from "../lib/runRecipient";
 import { applyApprovalUpdate, approvalsFromCache } from "../hooks/approval-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
@@ -980,8 +982,10 @@ interface ChatStoreState {
   // for a final error; a caller that gave up retrying a machine calls it too.
   markSendFailed: (chatId: string, clientMessageId: string) => void;
   // Send a failed message again, the way the composer sends. Rejects if this
-  // attempt fails too (its bubble is "Not sent" again).
-  retryFailedSend: (chatId: string, clientMessageId: string) => Promise<void>;
+  // attempt fails too (its bubble is "Not sent" again). targetThread sends it
+  // to that thread instead of where it first went: one of the agents a
+  // run_recipient_ambiguous refusal listed (failedSendRecipients).
+  retryFailedSend: (chatId: string, clientMessageId: string, targetThread?: string) => Promise<void>;
   // Drop a failed message from the transcript.
   discardFailedSend: (chatId: string, clientMessageId: string) => void;
   loadMessages: (chatId: string) => Promise<void>;
@@ -1181,12 +1185,24 @@ interface SendPayload {
     targetThread?: string | null;
     selectedPresets?: Record<string, string>;
   };
+  // Set when the send was refused because several agents run in its run
+  // (run_recipient_ambiguous): the agents the refusal listed.
+  recipientChoices?: RunRecipientChoice[];
 }
 const sendPayloads = new Map<string, SendPayload>();
 
 /** Whether a failed send can still be sent again from here. */
 export function canRetryFailedSend(clientMessageId: string): boolean {
   return sendPayloads.has(clientMessageId);
+}
+
+/**
+ * The agents a failed send can be sent to instead: those its
+ * run_recipient_ambiguous refusal listed. [] for any other failure, and once
+ * the payload is gone (a reload).
+ */
+export function failedSendRecipients(clientMessageId: string): RunRecipientChoice[] {
+  return sendPayloads.get(clientMessageId)?.recipientChoices ?? [];
 }
 
 /**
@@ -1215,16 +1231,18 @@ function withdrawFromQueueStrip(chatId: string, thread: string, rowId: string): 
 // Shared by startChat and startExistingChat: home the chat the server returned,
 // flip activity to RUNNING. The optimistic first message is
 // each caller's job, because the two must write it at different times.
-function applyFirstSend(chat: Chat, projectId: string): void {
+// `orgId` is the org the send began in (captured before StartChat was
+// awaited): the chat goes into that org's lists, whatever the tab shows now.
+function applyFirstSend(chat: Chat, projectId: string, orgId: string | null): void {
   const chatId = chat.id;
 
   // Home the new chat into the React Query caches immediately so both
   // useChat / useActiveChat and list readers (sidebar/search/worktree views)
   // show it without waiting for a stream-triggered list refetch.
   seedChatDetail(chat);
-  upsertChatInListCache(projectId, chat);
-  void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId) });
-  void queryClient.invalidateQueries({ queryKey: chatKeys.list(null) });
+  upsertChatInListCache(projectId, chat, orgId);
+  void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId, orgId) });
+  void queryClient.invalidateQueries({ queryKey: chatKeys.list(null, orgId) });
 
   // Initialize state for the new chat
   useChatStore.getState().initChatState(chat);
@@ -1261,7 +1279,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     return singleflight(`loadChats:${scope ?? "*"}`, async () => {
       set({ error: null });
       try {
-        const response = await chatActions.listChats(scope ?? undefined);
+        // In the tab's org, once it is known: with no org, every org's chats.
+        const org = getOrgScope();
+        const { orgId } = org.ready ? org : await whenOrgScopeReady();
+        const response = await chatActions.listChats(scope ?? undefined, { orgId });
         const chatList = response.chats;
         const lastUserUpdateSequence = response.lastUserUpdateSequence;
 
@@ -1339,6 +1360,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (!projectId) {
       throw new Error("No project selected");
     }
+    // The org this start is in: the request names it (orgInterceptor, at the
+    // call below), and the answer goes into its lists even after a switch.
+    const orgId = getOrgScope().orgId;
 
     const effectiveWorkflowParams: Record<string, unknown> = workflowParams ?? {};
 
@@ -1377,7 +1401,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
     endAttempt(attemptKey);
 
-    applyFirstSend(chat, projectId);
+    applyFirstSend(chat, projectId, orgId);
     // Safe to seed after the request: a brand-new chat has no id until
     // StartChat returns, so nothing is subscribed to it yet and no echo can
     // beat this write. It replaces the empty list initChatState seeded.
@@ -1402,6 +1426,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   ) => {
     const { clientMessageId: givenId, ...sendOptions } = options ?? {};
     const workflowParams = sendOptions.workflowParams ?? {};
+    // The org this start is in, before anything is awaited (see startChat).
+    const orgId = getOrgScope().orgId;
     const clientMessageId = givenId ?? newClientMessageId();
     const optimisticId = optimisticSendId(clientMessageId);
     sendPayloads.set(clientMessageId, {
@@ -1452,7 +1478,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
     sendPayloads.delete(clientMessageId);
 
-    applyFirstSend(chat, chat.projectId);
+    applyFirstSend(chat, chat.projectId, orgId);
     return chat;
   },
 
@@ -1847,6 +1873,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // saying so — with a way to send it again — beats a dimmed bubble that
         // never resolves (a refused send leaves nothing on the server, #688).
         if (!isDaemonConnectingError(error)) {
+          const payload = sendPayloads.get(clientMessageId);
+          const choices = runRecipientChoices(error);
+          if (payload && choices.length > 0) payload.recipientChoices = choices;
           get().markSendFailed(chatId, clientMessageId);
         }
         throw error;
@@ -1955,7 +1984,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
   },
 
-  retryFailedSend: async (chatId: string, clientMessageId: string) => {
+  retryFailedSend: async (chatId: string, clientMessageId: string, targetThread?: string) => {
     const payload = sendPayloads.get(clientMessageId);
     if (!payload) {
       // A reload drops the payload, never the text on screen: leave the entry
@@ -1987,6 +2016,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             payload.attachmentIds,
             {
               ...payload.options,
+              ...(targetThread ? { targetThread } : {}),
               workflowParams,
               workflow: payload.options.workflow ?? null,
               clientMessageId: retryId,
@@ -2916,12 +2946,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   branchChatWithoutMachine: async (chatId: string, messageId: string) => {
+    // The org the branch began in: its lists, even after a switch.
+    const orgId = getOrgScope().orgId;
     const { chat: newChat } = await chatActions.branchChat(chatId, {
       messageId,
       noMachine: true,
     });
     seedChatDetail(newChat);
-    upsertChatInListCache(newChat.projectId, newChat);
+    upsertChatInListCache(newChat.projectId, newChat, orgId);
     get().initChatState(newChat);
 
     get().selectChat(newChat);

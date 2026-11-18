@@ -210,11 +210,11 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 		// The forge pin and forge's own config reach Go and codegen, never a
 		// vitest file or electron: a forge bump must not run the whole web lane.
 		{"forge.yaml", []lane{laneGo, laneForgeGen}},
-		{"frontends/web/package.json", []lane{laneWeb}},
-		{"frontends/web/vite.config.ts", []lane{laneWeb}},
-		{"frontends/web/src/test/setup.ts", []lane{laneWeb}},
-		{"package-lock.json", []lane{laneWeb, laneElectron}},
-		{"proto/buf.yaml", []lane{laneGo, laneWeb, laneForgeGen}},
+		{"frontends/web/package.json", []lane{laneWeb, laneWebDemo}},
+		{"frontends/web/vite.config.ts", []lane{laneWeb, laneWebDemo}},
+		{"frontends/web/src/test/setup.ts", []lane{laneWeb, laneWebDemo}},
+		{"package-lock.json", []lane{laneWeb, laneElectron, laneWebDemo}},
+		{"proto/buf.yaml", []lane{laneGo, laneWeb, laneForgeGen, laneWebDemo}},
 		// buf's root configuration reaches tests only through the code it
 		// generates, which the diff carries (or forge-generate fails).
 		{"buf.yaml", []lane{laneForgeGen}},
@@ -236,6 +236,8 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 				got = pl.ForgeGen.Full
 			case laneDocGen:
 				got = pl.DocGen.Full
+			case laneWebDemo:
+				got = pl.WebDemo.Full
 			}
 			if got != want {
 				t.Errorf("%s: lane %s full = %v, want %v", tc.path, l, got, want)

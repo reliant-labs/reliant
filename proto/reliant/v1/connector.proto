@@ -185,11 +185,38 @@ message Connector {
   optional string last_used_at = 10;
   optional string revoked_at = 11;
   string created_at = 12;
+
+  // kind is what the connector reaches: a workspace (daemon_id, path_root,
+  // exec_mode) or the Reliant Forge account tools (org_id, project_names).
+  // UNSPECIFIED is a workspace connector: every connector before kinds.
+  ConnectorKind kind = 13;
+
+  // org_id is the organization a forge connector may read and act in.
+  string org_id = 14;
+
+  // project_names confines a forge connector to these forge projects of
+  // org_id; empty means every project of it.
+  repeated string project_names = 15;
+}
+
+// ConnectorKind is what a connector grants access to.
+enum ConnectorKind {
+  // Unspecified is a workspace connector, the only kind before kinds existed.
+  CONNECTOR_KIND_UNSPECIFIED = 0;
+
+  // A workspace connector: MCP tools inside one daemon's workspace, at /mcp.
+  CONNECTOR_KIND_WORKSPACE = 1;
+
+  // A Reliant Forge connector: forge's account-scoped MCP tools (monitoring,
+  // releases, environments) in one organization, optionally confined to some
+  // projects, at /forge/mcp.
+  CONNECTOR_KIND_FORGE = 2;
 }
 
 message CreateConnectorRequest {
-  // daemon_id is required: a connector is bound to exactly one workspace.
-  // There is deliberately no "all my daemons" form.
+  // daemon_id is required for a workspace connector: it is bound to exactly
+  // one workspace. There is deliberately no "all my daemons" form. A forge
+  // connector names none.
   string daemon_id = 1;
 
   string name = 2;
@@ -197,8 +224,8 @@ message CreateConnectorRequest {
   // allowed_tools names MCP tools (see ListAvailableTools). Must be non-empty.
   repeated string allowed_tools = 3;
 
-  // path_root confines filesystem access. Must be non-empty; an empty root
-  // means no access rather than unrestricted access.
+  // path_root confines filesystem access. Must be non-empty for a workspace
+  // connector; an empty root means no access rather than unrestricted access.
   string path_root = 4;
 
   ConnectorExecMode exec_mode = 5;
@@ -206,6 +233,18 @@ message CreateConnectorRequest {
 
   // expires_at is an optional RFC3339 bound on the grant.
   optional string expires_at = 7;
+
+  // kind is what the connector reaches; UNSPECIFIED is a workspace.
+  ConnectorKind kind = 8;
+
+  // org_id is required for a forge connector: the organization it may read
+  // and act in. The grant only narrows what the caller's own credential may
+  // do there, so an org the caller does not belong to permits nothing.
+  string org_id = 9;
+
+  // project_names confines a forge connector to these projects of org_id;
+  // empty means every project.
+  repeated string project_names = 10;
 }
 
 message CreateConnectorResponse {
@@ -215,7 +254,8 @@ message CreateConnectorResponse {
   // it to the user immediately; it cannot be retrieved again.
   string credential = 2;
 
-  // mcp_url is the endpoint to paste into the third-party client.
+  // mcp_url is the endpoint to paste into the third-party client: /mcp for a
+  // workspace connector, /forge/mcp for a forge connector.
   string mcp_url = 3;
 }
 
@@ -271,7 +311,11 @@ message ListConnectorActivityResponse {
   repeated ConnectorActivity activity = 1;
 }
 
-message ListAvailableToolsRequest {}
+message ListAvailableToolsRequest {
+  // kind selects the catalog: a workspace connector's tools (UNSPECIFIED)
+  // or the Reliant Forge connector's.
+  optional ConnectorKind kind = 1;
+}
 
 // ConnectorTool describes one grantable tool for the consent UI.
 message ConnectorTool {

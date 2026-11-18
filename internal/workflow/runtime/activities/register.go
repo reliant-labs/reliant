@@ -181,8 +181,8 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// ========================================================================
 
 	v2.RegisterActivity(registry, handlers.NewCompactActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting))
-	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting))
-	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithProviderPreferences(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.Repo).WithProviderPreferences(deps.Repo))
 
 	// ========================================================================
 	// APPROVAL ACTIVITIES
@@ -244,6 +244,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 
 	v2.RegisterActivity(registry, handlers.NewUnknownStepTypeActivity())
 	v2.RegisterActivity(registry, handlers.NewFailStepActivity())
+	v2.RegisterActivity(registry, handlers.NewRecordToleratedFailureActivity())
 	v2.RegisterActivity(registry, handlers.NewSkippedStepActivity())
 	v2.RegisterActivity(registry, handlers.NewFetchThreadResultActivity(deps.Threads))
 	v2.RegisterActivity(registry, handlers.NewValidateThreadOwnershipActivity(deps.Repo))

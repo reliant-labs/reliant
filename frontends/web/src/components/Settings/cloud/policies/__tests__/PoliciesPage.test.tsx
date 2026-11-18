@@ -126,6 +126,8 @@ describe("PoliciesPage (member)", () => {
     expect(screen.queryByTestId("policy-card-spend")).toBeNull();
     expect(screen.queryAllByRole("switch")).toHaveLength(0);
     expect(screen.getByText(/They apply to you too/)).toBeInTheDocument();
+    // The denial counts name members and what they tried: admins and owners only.
+    expect(screen.queryByRole("tab", { name: "Denials" })).toBeNull();
   });
 
   it("shows the policy history, and only its policy rows", async () => {
@@ -153,6 +155,20 @@ describe("PoliciesPage (member)", () => {
 });
 
 describe("PoliciesPage (admin)", () => {
+  it("shows an admin the Denials tab, read from the org being looked at", async () => {
+    const denials = vi.fn((_req: unknown) => ({
+      counts: [{ day: "2026-11-14", policy: "models", reason: "model_not_allowed", userId: "u_bob", outcome: "audited", count: 9n }],
+      refusedTotal: 0n,
+      auditedTotal: 9n,
+    }));
+    setup("admin", { overrides: { "OrgPolicyService.ListOrgPolicyDenials": denials } });
+    await screen.findByTestId("policy-card-models");
+    await userEvent.click(screen.getByRole("tab", { name: "Denials" }));
+    expect(await screen.findByTestId("policy-denial-models-model_not_allowed-audited")).toHaveTextContent("Bob");
+    expect(screen.getByTestId("policy-denial-models-model_not_allowed-audited")).toHaveTextContent("9 calls would have been refused");
+    expect(denials).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG }));
+  });
+
   it("previews a draft, then saves it with the version it started from", async () => {
     const { calls } = setup("admin");
     await screen.findByTestId("policy-card-mcp");

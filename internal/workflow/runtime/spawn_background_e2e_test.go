@@ -70,6 +70,12 @@ type spawnE2EEnv struct {
 	t   *testing.T
 	env *testsuite.TestWorkflowEnvironment
 
+	// onCallLLM and onExecuteTools, when set, run inside the stub activities
+	// with the activity's ctx and may add to its output (run_telemetry_e2e_test.go
+	// opens the worker's spans there).
+	onCallLLM      func(ctx context.Context, input types.ActivityInput, out map[string]interface{})
+	onExecuteTools func(ctx context.Context, input types.ActivityInput, out map[string]interface{})
+
 	mu            sync.Mutex
 	callLLMCount  int32
 	toolResultsBy map[string][]interface{} // turn index -> tool_results seen by execute_tools
@@ -326,14 +332,22 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 	)
 
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input types.ActivityInput) (map[string]interface{}, error) {
-			return e.executeToolsStub(input)
+		func(ctx context.Context, input types.ActivityInput) (map[string]interface{}, error) {
+			out, err := e.executeToolsStub(input)
+			if e.onExecuteTools != nil && err == nil {
+				e.onExecuteTools(ctx, input, out)
+			}
+			return out, err
 		},
 		activity.RegisterOptions{Name: "ExecuteTools"},
 	)
 	env.RegisterActivityWithOptions(
 		func(ctx context.Context, input types.ActivityInput) (map[string]interface{}, error) {
-			return e.callLLMStub(ctx, input)
+			out, err := e.callLLMStub(ctx, input)
+			if e.onCallLLM != nil && err == nil {
+				e.onCallLLM(ctx, input, out)
+			}
+			return out, err
 		},
 		activity.RegisterOptions{Name: "CallLLM"},
 	)

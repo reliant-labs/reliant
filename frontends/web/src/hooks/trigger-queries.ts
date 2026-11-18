@@ -17,7 +17,7 @@
  */
 
 import { create, isMessage } from "@bufbuild/protobuf";
-import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 import {
@@ -28,8 +28,11 @@ import {
   type ListTriggerEventsResponse,
   type ListTriggersResponse,
   type Trigger as ProtoTrigger,
+  type TriggerFundingWarning,
 } from "../gen/reliant/v1/trigger_pb";
 import { connectClient } from "../lib/connect";
+import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
+import { toast } from "../lib/toast-manager";
 import {
   automationDraftFromProto,
   definitionToProto,
@@ -59,7 +62,6 @@ import {
   useGetTrigger,
   useListReplayEvents,
   useListTriggerEvents,
-  useListTriggers,
   useRotateWebhookToken as useRotateWebhookTokenRpc,
   useSetTriggerEnabled as useSetTriggerEnabledRpc,
   useUpdateTrigger as useUpdateTriggerRpc,
@@ -112,14 +114,18 @@ const eventsRequest = (triggerId: string) => ({ triggerId, limit: EVENTS_LIMIT }
 
 /** The caller's automations, optionally narrowed to one project. */
 export function useTriggers(projectId?: string, options: { enabled?: boolean } = {}) {
-  return useListTriggers(
-    { projectId },
-    {
-      enabled: options.enabled ?? true,
-      // A page left open should not show a stale "next run" indefinitely.
-      refetchInterval: TRIGGER_POLL_MS,
-      select: triggersOf,
-    },
+  // In the tab's org, and not before it is known (lib/orgScope).
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      triggerServiceQueries.listTriggers(orgRequest({ projectId }, org.orgId), {
+        enabled: (options.enabled ?? true) && orgQueryEnabled(org),
+        // A page left open should not show a stale "next run" indefinitely.
+        refetchInterval: TRIGGER_POLL_MS,
+        select: triggersOf,
+      }),
+      org,
+    ),
   );
 }
 
@@ -139,7 +145,15 @@ export function useTriggerName(triggerId: string | undefined): string | undefine
  * schedule timezone). Undefined while loading, or when it was deleted.
  */
 export function useTriggerById(triggerId: string | undefined): Trigger | undefined {
-  const { data } = useListTriggers({}, { enabled: !!triggerId, staleTime: 5 * 60_000, select: triggersOf });
+  const org = useOrgScope();
+  // A label: it waits for the org and shows nothing on failure (no Retry here).
+  const { data } = useQuery(
+    triggerServiceQueries.listTriggers(orgRequest({}, org.orgId), {
+      enabled: !!triggerId && org.ready,
+      staleTime: 5 * 60_000,
+      select: triggersOf,
+    }),
+  );
   return triggerId ? data?.find((trigger) => trigger.id === triggerId) : undefined;
 }
 
@@ -267,10 +281,27 @@ function seedTrigger(queryClient: QueryClient, trigger: ProtoTrigger | undefined
   queryClient.setQueryData(triggerServiceKeys.getTrigger({ id: trigger.id }), create(GetTriggerResponseSchema, { trigger }));
 }
 
+/**
+ * Tell the person that the automation they just turned on may run only on its
+ * organization's AI accounts and none of them can run its model yet. The
+ * write went through: it is advice, not a refusal, and each fire fails until
+ * an admin adds an account. One toast per org and model, however many
+ * triggers an enable turned on.
+ */
+function showFundingWarning(warning: TriggerFundingWarning | undefined) {
+  if (!warning?.message) return;
+  toast.warning(warning.message, { id: `trigger-funding:${warning.orgId}:${warning.model}`, duration: 10_000 });
+}
+
 /** Create a trigger; resolves to it, with the webhook token when it is a webhook (shown once). */
 export function useCreateTrigger() {
   const queryClient = useQueryClient();
-  const mutation = useCreateTriggerRpc({ onSuccess: (response) => seedTrigger(queryClient, response.trigger) });
+  const mutation = useCreateTriggerRpc({
+    onSuccess: (response) => {
+      seedTrigger(queryClient, response.trigger);
+      showFundingWarning(response.fundingWarning);
+    },
+  });
   return {
     isPending: mutation.isPending,
     mutateAsync: async (input: TriggerDefinitionInput) =>
@@ -281,7 +312,12 @@ export function useCreateTrigger() {
 /** Replace a trigger's definition (a FULL replacement: start from definitionFromTrigger). */
 export function useUpdateTrigger() {
   const queryClient = useQueryClient();
-  const mutation = useUpdateTriggerRpc({ onSuccess: (response) => seedTrigger(queryClient, response.trigger) });
+  const mutation = useUpdateTriggerRpc({
+    onSuccess: (response) => {
+      seedTrigger(queryClient, response.trigger);
+      showFundingWarning(response.fundingWarning);
+    },
+  });
   return {
     isPending: mutation.isPending,
     mutateAsync: async ({ id, input }: { id: string; input: TriggerDefinitionInput }) =>
@@ -303,7 +339,9 @@ export function useRotateWebhookToken() {
  * normal result (`enabled: false`) naming the trigger that failed and why.
  */
 export function useEnableWorkflow() {
-  const mutation = useEnableWorkflowRpc();
+  const mutation = useEnableWorkflowRpc({
+    onSuccess: (response) => response.results.forEach((r) => showFundingWarning(r.fundingWarning)),
+  });
   return {
     isPending: mutation.isPending,
     mutateAsync: async (input: EnableWorkflowInput) =>
@@ -324,7 +362,10 @@ export function useSetTriggerEnabled() {
       return patchTriggerReads(queryClient, id ?? "", (t) => ({ ...t, enabled: enabled ?? t.enabled }));
     },
     onError: (_error, _request, snapshot) => restore(queryClient, snapshot),
-    onSuccess: (response) => seedTrigger(queryClient, response.trigger),
+    onSuccess: (response) => {
+      seedTrigger(queryClient, response.trigger);
+      showFundingWarning(response.fundingWarning);
+    },
   });
 }
 

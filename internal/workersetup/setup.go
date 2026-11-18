@@ -36,6 +36,7 @@ import (
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	v2activities "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
+	"github.com/reliant-labs/reliant/internal/workflowcheck"
 
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
@@ -140,6 +141,11 @@ type Config struct {
 	// requests and benches one the provider refused. Optional: nil records
 	// nothing and a refused account is waited out, not switched away from.
 	AccountLimits handlers.AccountLimitRecorder
+
+	// OrgAdmins emails an org's owners and admins when a provider rejects
+	// one of the org's own API keys (OrgKeyRejectedNoticeWorkflow). Optional:
+	// nil sends no email (the inbox item is the only notice).
+	OrgAdmins OrgAdminNotifier
 
 	// StopNudges tells running activities that a stop was just requested
 	// for their workflow, so they ask the server for the cancel at once
@@ -272,7 +278,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.SecretResolver = cfg.SecretResolver
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
-	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits)
+	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)
@@ -318,6 +324,16 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// declaration as it is now; every fire path reads it through the same
 	// resolution run start uses.
 	declarations := triggers.LaunchWorkflows{Repo: cfg.Database}
+	// A workflow's `check:` (workflowcheck): an event fire opens the check
+	// and the run reports its start and end through these activities. They
+	// only record; the worker's check syncer writes GitHub.
+	var checks workflowcheck.Service
+	if cfg.Database != nil {
+		checks = workflowcheck.NewInstrumented(workflowcheck.Deps{Store: cfg.Database})
+		reports := workflowcheck.Activities{Service: checks}
+		w.RegisterActivityWithOptions(reports.Started, activity.RegisterOptions{Name: workflowcheck.StartedActivityName})
+		w.RegisterActivityWithOptions(reports.Ended, activity.RegisterOptions{Name: workflowcheck.EndedActivityName})
+	}
 	if cfg.TriggerPollers != nil {
 		if repo := cfg.Database; repo != nil {
 			poller := triggers.NewTriggerPoller(
@@ -341,12 +357,43 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
 		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
+			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).WithChecks(checks).Fire,
 			activity.RegisterOptions{Name: triggers.EventFireActivityName},
 		)
 	} else {
 		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
 	}
+
+	// A rejected org key's email to the org's owners and admins: always
+	// registered, so a notice started on any worker is delivered by any.
+	w.RegisterWorkflowWithOptions(OrgKeyRejectedNoticeWorkflow, workflow.RegisterOptions{
+		Name: OrgKeyRejectedNoticeWorkflowName,
+	})
+	w.RegisterActivityWithOptions(orgKeyNotices{admins: cfg.OrgAdmins}.Notify, activity.RegisterOptions{
+		Name: NotifyOrgKeyRejectedActivityName,
+	})
+	// An automation paused for want of an org account: the same, for its
+	// org's owners and admins.
+	w.RegisterWorkflowWithOptions(OrgAutomationNoOrgAccountNoticeWorkflow, workflow.RegisterOptions{
+		Name: OrgAutomationNoOrgAccountNoticeWorkflowName,
+	})
+	var pauseAdmins pauseNotifier
+	if cfg.OrgAdmins != nil {
+		pauseAdmins = cfg.OrgAdmins
+	}
+	pauses := pauseNotices{admins: pauseAdmins}
+	if cfg.Database != nil {
+		pauses.store = cfg.Database
+	}
+	w.RegisterActivityWithOptions(pauses.Notify, activity.RegisterOptions{
+		Name: NotifyOrgAutomationNoOrgAccountActivityName,
+	})
+	w.RegisterActivityWithOptions(pauses.Confirm, activity.RegisterOptions{
+		Name: ConfirmPauseNoticeActivityName,
+	})
+	w.RegisterActivityWithOptions(pauses.Refuse, activity.RegisterOptions{
+		Name: RefusePauseNoticeActivityName,
+	})
 
 	// Moving a project to another org: the saga is pure orchestration; its
 	// steps need the control plane and the trigger service.
@@ -374,7 +421,18 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		)
 	}
 
-	return newWorker(w, fatal), registry, nil
+	out := newWorker(w, fatal)
+	// Rejected org keys whose notice never started (a Temporal outage at the
+	// rejection), and paused automations whose email was never delivered, are
+	// started here, where the notices' workflows run.
+	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
+		out.background = append(out.background, func(ctx context.Context) {
+			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval,
+				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.Database, q) },
+				func(ctx context.Context) { sweepPauseNotices(ctx, cfg.Database, q) })
+		})
+	}
+	return out, registry, nil
 }
 
 // workerOptions is the shared worker's worker.Options, gomaxprocs being the
@@ -471,12 +529,16 @@ func chatOwners(cfg *Config) *telemetry.ChatOwnerCache {
 		return nil
 	}
 	repo := cfg.Database
-	return telemetry.NewChatOwnerCache(func(ctx context.Context, chatID string) (string, error) {
+	return telemetry.NewChatOwnerOrgCache(func(ctx context.Context, chatID string) (telemetry.ChatOwner, error) {
 		chat, err := repo.GetChat(ctx, chatID)
 		if err != nil || chat == nil {
-			return "", err
+			return telemetry.ChatOwner{}, err
 		}
-		return chat.UserID, nil
+		owner := telemetry.ChatOwner{UserID: chat.UserID}
+		if chat.OrgID != nil {
+			owner.OrgID = *chat.OrgID
+		}
+		return owner, nil
 	}, time.Hour, 10000)
 }
 
@@ -490,7 +552,12 @@ func triggerAutoPause(cfg *Config) *triggers.AutoPause {
 	if cfg.TemporalClient != nil {
 		schedules = cfg.TemporalClient.ScheduleClient()
 	}
-	return triggers.NewAutoPause(cfg.Database, schedules)
+	pause := triggers.NewAutoPause(cfg.Database, schedules)
+	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil {
+		// A pause for want of an org account emails the org's admins.
+		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(cfg.Database, q))
+	}
+	return pause
 }
 
 // TaskQueueName returns the task queue name that would be used by a worker with the given config.

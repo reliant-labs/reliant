@@ -17,6 +17,12 @@
 // (PreferredModelOn returns nil) and keeps its thinking level, temperature and
 // compaction threshold.
 //
+// Below the per-tag preference sits the user's default provider
+// (ProviderPreference, Settings → "Default provider"): for a selector that
+// names no provider, on a run with none of its own, it decides which
+// connected provider's model a tier resolves to. A tag preference's model_id
+// is the more specific choice and still wins.
+//
 //forge:exclude-contract: decodes and applies tag preference settings over the consumer-declared SettingsReader; pure precedence logic
 package modelprefs
 

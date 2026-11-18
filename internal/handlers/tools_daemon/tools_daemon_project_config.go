@@ -177,8 +177,12 @@ func (s *Service) learnForgeNameForProject(ctx context.Context, conn *daemonConn
 			case <-readCtx.Done():
 			}
 		}()
-		projectfacts.LearnForgeName(readCtx, connCommandSender{svc: s, conn: conn},
+		sender := connCommandSender{svc: s, conn: conn}
+		projectfacts.LearnForgeName(readCtx, sender,
 			s.deps.Repo, conn.userID, conn.daemonID, project.ID, path)
+		// And every forge app in the clone's repos, off the same disk.
+		projectfacts.RefreshForgeApps(readCtx, sender,
+			s.deps.Repo, conn.userID, conn.daemonID, project.ID, path, 0)
 	}()
 }
 

@@ -4,13 +4,17 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/modelprefs"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -18,12 +22,34 @@ import (
 // DraftAutomationInput is what TriggerService.DraftAutomation asks for: a
 // person's description of an automation, with what the dialog knows.
 type DraftAutomationInput struct {
-	UserID      string `json:"user_id" reliant:"-"`
+	UserID string `json:"user_id" reliant:"-"`
+	// OrgID is the org of the project the automation is drafted in, read by
+	// the api-server from the project row: the draft is that org's work, so it
+	// is scoped there (org-funded accounts first, the person's own only with
+	// their consent, §10). Empty from an older api-server, or for a project
+	// in no org: the person's own accounts, as before.
+	OrgID       string `json:"org_id,omitempty" reliant:"-"`
 	Description string `json:"description"`
 	// Workflow, when set, is the workflow the automation must run.
 	Workflow string `json:"workflow,omitempty"`
 	// Timezone is the person's IANA zone, for "at 9".
 	Timezone string `json:"timezone,omitempty"`
+}
+
+// DraftNeedsConsentErrorType is the application-error type of a draft that only
+// the person's own account could make, in an org whose accounts cannot, with
+// no consent to it on record (§10): not retried, and named to the person.
+const DraftNeedsConsentErrorType = "PersonalFundingRefused"
+
+// draftFundingRefusal is err, unless it is the refusal of the person's own
+// account (personalFundingRefused): that becomes a non-retryable error a
+// second sample cannot change.
+func draftFundingRefusal(err error) error {
+	var refused *personalFundingRefused
+	if errors.As(err, &refused) {
+		return temporal.NewNonRetryableApplicationError(refused.Error(), DraftNeedsConsentErrorType, err)
+	}
+	return err
 }
 
 // DraftAutomationOutput carries the draft as protojson AutomationDraft — a
@@ -46,6 +72,16 @@ type DraftAutomationActivity struct {
 	// usage records the draft's model request in the usage ledger; nil
 	// records nothing.
 	usage LLMUsageRecorder
+	// providerPrefs reads the user's Settings default provider; nil drafts
+	// in the tier's own order.
+	providerPrefs modelprefs.SettingsReader
+}
+
+// WithProviderPreferences makes drafting honor the user's Settings default
+// provider (llmCallSpec.ProviderPrefsReader).
+func (a *DraftAutomationActivity) WithProviderPreferences(r modelprefs.SettingsReader) *DraftAutomationActivity {
+	a.providerPrefs = r
+	return a
 }
 
 // WithUsageRecorder wires the usage ledger into drafting.
@@ -83,7 +119,12 @@ func (a *DraftAutomationActivity) Execute(ctx context.Context, input DraftAutoma
 	temperature := 0.2
 	maxTokens := int64(2048)
 	spec := llmCallSpec{
-		UserID:      input.UserID,
+		UserID: input.UserID,
+		// A person drafting in an org's project: the org's accounts first,
+		// their own only with consent already on record, never a question.
+		OrgID:       input.OrgID,
+		Attended:    true,
+		Background:  true,
 		Temperature: &temperature,
 		MaxTokens:   &maxTokens,
 		// A single request with one tool: a tool call is the only thing the
@@ -96,13 +137,14 @@ func (a *DraftAutomationActivity) Execute(ctx context.Context, input DraftAutoma
 		spec.Selector = titleModelSelector()
 		spec.FallbackSelector = titleModelFallbackSelector()
 	}
+	spec.ProviderPrefsReader = a.providerPrefs
 	// No ThreadID: a draft belongs to no thread, so it reads and writes no
 	// sticky account assignment. A refused account is benched below, so the
 	// workflow's retry re-resolves to another one.
 	spec.Routing = a.routing
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, spec)
 	if err != nil {
-		return DraftAutomationOutput{}, err
+		return DraftAutomationOutput{}, draftFundingRefusal(err)
 	}
 
 	draftTool := tools.NewDraftAutomationTool()
@@ -121,10 +163,11 @@ func (a *DraftAutomationActivity) Execute(ctx context.Context, input DraftAutoma
 	meter := newUsageMeter(a.usage, spec.UserID, "", store.LLMPurposeDraftAutomation)
 	response, err := meter.streamAndAccumulate(a.routing.observe(ctx, spec.UserID, resolved.Account), resolved, prompt, messages, []tools.Tool{draftTool})
 	if err != nil {
-		return DraftAutomationOutput{}, a.routing.providerFailure(ctx, fmt.Errorf("draft automation: %w", err), usageLimitContext{
+		return DraftAutomationOutput{}, draftFundingRefusal(a.routing.providerFailure(ctx, fmt.Errorf("draft automation: %w", err), usageLimitContext{
 			Scope: spec.scope(), Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account,
-		})
+			Plan: resolved.plan,
+		}))
 	}
 	params, err := draftParamsFromToolCalls(response.ToolCalls)
 	if err != nil {

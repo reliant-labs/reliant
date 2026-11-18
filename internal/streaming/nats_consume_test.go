@@ -8,6 +8,7 @@ import (
 	"time"
 
 	natstest "github.com/nats-io/nats-server/v2/test"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 )
 
@@ -102,9 +103,11 @@ func TestConsumeLoop_NoLossUnderBackpressure(t *testing.T) {
 	// Terminal structural delta marks end-of-message; it must never be dropped.
 	hub.Publish(ctx, chatID, StreamingDelta{DeltaType: DeltaTypeContentBlockStop, BlockIndex: 0})
 
-	// Consumer deliberately starts draining only after a delay, forcing the
-	// producer side to hit backpressure and coalesce.
-	time.Sleep(200 * time.Millisecond)
+	// Consumer deliberately starts draining only once the producer side has
+	// hit backpressure and coalesced.
+	testkit.Eventually(t, "the consume loop to coalesce behind the full buffer", func() bool {
+		return hub.coalesceCount.Load() > 0
+	})
 	got := drainAll(sub, 2*time.Second, DeltaTypeContentBlockStop)
 
 	if len(got) == 0 {

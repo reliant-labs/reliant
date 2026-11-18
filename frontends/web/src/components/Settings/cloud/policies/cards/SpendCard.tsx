@@ -7,9 +7,8 @@
  * admin exempts someone (D4). A hosted app's calls count toward the
  * organization limit only when the admin says so (D6).
  *
- * The member's own usage against these limits comes with the gateway's
- * counters (GetMyPolicyUsage); until this deployment has them the card says
- * so instead of guessing.
+ * The member's own usage against these limits is MyPolicyUsage
+ * (GetMyPolicyUsage), shown to everyone who can see the card.
  */
 
 import { useState } from "react";
@@ -33,6 +32,7 @@ import {
 import type { OrgMember } from "@/services/controlPlane/members";
 
 import { memberLabel } from "../../members/MemberRoster";
+import { MyPolicyUsage } from "../MyPolicyUsage";
 import { PolicyCardShell, selectClass, type PolicyCardProps } from "../PolicyCard";
 import { formatUsdNanos, parseUsd, PERIOD_LABELS, usdInputValue } from "../policyDocument";
 
@@ -96,22 +96,13 @@ function CapEditor({ cap, onChange, label }: { cap: SpendCap; onChange: (cap: Sp
   );
 }
 
-/** Your own spend against the limits: not available until the gateway counts it per member (G2). */
-export function MyPolicyUsage() {
-  return (
-    <p className="text-sm text-muted-foreground" data-testid="policy-my-usage">
-      Your usage against these limits: not available yet.
-    </p>
-  );
-}
-
 function overrideWords(o: MemberSpendCap): string {
   if (o.cap.case === "unlimited") return "No limit";
   if (o.cap.case === "limit") return capWords(o.cap.value);
   return "The default limit";
 }
 
-export function SpendCard({ value, onChange, editable, changed, violations, members }: PolicyCardProps<SpendPolicy> & { members: OrgMember[] }) {
+export function SpendCard({ value, onChange, editable, org, changed, violations, members }: PolicyCardProps<SpendPolicy> & { members: OrgMember[] }) {
   const [adding, setAdding] = useState("");
   const byId = new Map(members.map((m) => [m.userId, memberLabel(m)]));
   const nameOf = (id: string) => byId.get(id) ?? "A former member";
@@ -249,7 +240,7 @@ export function SpendCard({ value, onChange, editable, changed, violations, memb
           ))}
         </ul>
       )}
-      {hasCap && <MyPolicyUsage />}
+      {hasCap && <MyPolicyUsage orgId={org.id} orgName={org.name} />}
     </PolicyCardShell>
   );
 }

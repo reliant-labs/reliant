@@ -11,9 +11,11 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -23,7 +25,12 @@ import (
 // wait that was answered with a model nobody can serve would only fail the
 // next turn, so it is refused here, where the person can pick another. A
 // refusal is an svcerr.InvalidArgument.
-func usableFallbackModel(ctx context.Context, userID, modelAtDriver string) (string, error) {
+//
+// It is checked in the accounts chat's runs draw on, under its org's policy
+// (launch.AccountScope): a model or provider the policy refuses is refused
+// here with the policy's reason (a FailedPrecondition), so a wait is never
+// answered with what the run would only refuse.
+func usableFallbackModel(ctx context.Context, userID string, chat *db.Chat, modelAtDriver string) (string, error) {
 	modelID, driverID := drivers.ParseModelIDWithDriver(modelAtDriver)
 	if driverID == "" {
 		return "", svcerr.InvalidArgument("use_model must name a provider as <model>@<provider>")
@@ -31,7 +38,13 @@ func usableFallbackModel(ctx context.Context, userID, modelAtDriver string) (str
 	if _, ok := models.MustGetRegistry().GetDefinition(modelID); !ok {
 		return "", svcerr.InvalidArgument(fmt.Sprintf("unknown model %q", modelID))
 	}
-	avail := drivers.GetAvailableDrivers(ctx, drivers.PersonalScope(userID))
+	scope := launch.AccountScope(userID, chat)
+	avail := drivers.GetAvailableDrivers(ctx, scope)
+	if refused, ok := avail.PolicyRefused[models.DriverID(driverID)]; ok {
+		if refusal, isRefusal := orgpolicy.RefusalOf(drivers.CheckOrgPolicy(ctx, scope, models.DriverID(driverID), refused.Funding, modelID, false)); isRefusal {
+			return "", svcerr.WithReason(svcerr.FailedPrecondition(refusal.Message()), refusal.Reason)
+		}
+	}
 	cfg, ok := avail.Drivers[models.DriverID(driverID)]
 	if !ok || !cfg.IsConfigured() {
 		return "", svcerr.InvalidArgument(fmt.Sprintf("the %s provider is not connected", models.ProviderDisplayName(driverID)))
@@ -129,7 +142,7 @@ func (s *Service) RetryUsageLimitWait(
 	useModel := ""
 	if req.Msg.UseModel != nil && *req.Msg.UseModel != "" {
 		var err error
-		if useModel, err = usableFallbackModel(ctx, userID, *req.Msg.UseModel); err != nil {
+		if useModel, err = usableFallbackModel(ctx, userID, chat, *req.Msg.UseModel); err != nil {
 			return nil, err
 		}
 	}

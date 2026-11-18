@@ -9,11 +9,13 @@ const store = vi.hoisted(() => ({
   retryFailedSend: vi.fn(),
   discardFailedSend: vi.fn(),
   retryable: true,
+  recipients: [] as { threadId: string; node: string; title: string }[],
 }));
 const toastError = vi.hoisted(() => vi.fn());
 
 vi.mock("../../../store/chatStore", () => ({
   canRetryFailedSend: () => store.retryable,
+  failedSendRecipients: () => store.recipients,
   useChatStore: { getState: () => store },
 }));
 vi.mock("../../../lib/toast-manager", () => ({ toast: { error: toastError } }));
@@ -24,6 +26,7 @@ beforeEach(() => {
   store.retryFailedSend.mockReset();
   store.discardFailedSend.mockReset();
   store.retryable = true;
+  store.recipients = [];
   toastError.mockReset();
 });
 
@@ -58,5 +61,33 @@ describe("FailedSendStatus", () => {
     render(<FailedSendStatus chatId="c1" clientMessageId="cid-1" />);
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
     expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy();
+  });
+
+  // reliant#2465: a run with several agents running refused the message. A
+  // plain Retry would be refused again, so the line offers the agents the
+  // refusal listed, and each sends the message to that agent's thread.
+  it("offers each running agent the refusal listed, and sends to the one picked", async () => {
+    store.recipients = [
+      { threadId: "t-impl", node: "implement.agent_loop", title: "Implement the fix" },
+      { threadId: "t-review", node: "review.agent_loop", title: "" },
+    ];
+    store.retryFailedSend.mockResolvedValue(undefined);
+    render(<FailedSendStatus chatId="c1" clientMessageId="cid-1" />);
+
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(screen.getByRole("group", { name: "Send to" })).toBeTruthy();
+    // A titled thread shows its title; an untitled one its node's name.
+    expect(screen.getByRole("button", { name: "Implement the fix" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "review" }));
+
+    await waitFor(() => expect(store.retryFailedSend).toHaveBeenCalledWith("c1", "cid-1", "t-review"));
+    expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy();
+  });
+
+  it("offers no agents once the message cannot be resent", () => {
+    store.retryable = false;
+    store.recipients = [{ threadId: "t-impl", node: "implement.agent_loop", title: "" }];
+    render(<FailedSendStatus chatId="c1" clientMessageId="cid-1" />);
+    expect(screen.queryByRole("group", { name: "Send to" })).toBeNull();
   });
 });

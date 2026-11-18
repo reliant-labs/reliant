@@ -51,21 +51,20 @@ var scopeOrigins = []scopeOrigin{
 	// The activity edge: the run's org and attendance, read from the chat row.
 	{"internal/workflow/runtime/activities/handlers/llm_request.go: llmCallSpec.scope: PersonalScope", "a call with no org: no chat, or a chat that predates orgs (§4.1)"},
 	{"internal/workflow/runtime/activities/handlers/llm_request.go: llmCallSpec.scope: Scope{}", "the run's scope, from OrgID/Attended the activity read off the chat row"},
-	{"internal/workflow/runtime/activities/handlers/draft_automation.go: (*DraftAutomationActivity).Execute: llmCallSpec{no OrgID}", "a builder draft belongs to no chat or run; a person is drafting (P5: the automation's org)"},
+	{"internal/launch/org_accounts_only.go: (*Launcher).checkOrgAccountsOnly: Scope{}", "an org_only automation's launch: the unattended, org-funded-only scope of the run it would start, from the new chat row's owner and org (§11.4)"},
+	{"internal/handlers/trigger/trigger_funding_warning.go: (*Service).fundingWarning: Scope{}", "an enabled automation's create, update or resume: the unattended scope its fires will run in, from the stored trigger's owner, org and funding stamp, to warn when no org account can run its model (§11.3; never routes)"},
+	{"internal/launch/org_policy.go: AccountScope: PersonalScope", "a person's act on a chat of no org (or no chat): their own accounts"},
+	{"internal/launch/org_policy.go: AccountScope: Scope{}", "a person's act on a chat (a send, a pick, a launch, a wait answered): the chat row's org, attended; launch, send-time substitution, the provider default and usableFallbackModel all take it (org-policies R2)"},
+	{"internal/launch/selected_model.go: SelectionCheck.scope: PersonalScope", "a pick in a chat of no org: the person's own accounts"},
+	{"internal/launch/selected_model.go: SelectionCheck.scope: Scope{}", "a pick in a chat: its org, read from the chat row by the handler (selectionCheck), attended"},
+	{"internal/workflow/runtime/activities/handlers/draft_automation.go: (*DraftAutomationActivity).Execute: llmCallSpec{OrgID: not from the chat row}", "a builder draft belongs to no chat or run; a person is drafting in a project, whose org the api-server reads from the project row (DraftAutomationInput.OrgID)"},
 	{"internal/workflow/runtime/activities/handlers/llm_probe.go: ProbeLLMCall: llmCallSpec{no OrgID}", "the dev probe belongs to no run"},
 
 	// One-shot and send-time callers with no run scope in hand yet.
-	{"internal/llm/drivers/media_resolution.go: CheckMediaAvailable: PersonalScope", "load_tool's media check carries only the user (P5: the chat's scope)"},
-	{"internal/llm/drivers/media_resolution.go: resolveMediaModel: PersonalScope", "media generation carries only the user (P5: the chat's scope)"},
-	{"internal/handlers/catalog/catalog.go: (*Service).ListModels: PersonalScope", "the picker reads the person's accounts (P5/P6: the active org's)"},
-	{"internal/handlers/catalog/catalog.go: (*Service).ListModels: PersonalScope", "the picker's per-account availability (P5/P6: the active org's)"},
-	{"internal/handlers/catalog/catalog.go: (*Service).ListAvailableModels: PersonalScope", "the picker reads the person's accounts (P5/P6: the active org's)"},
-	{"internal/handlers/chat/chat_usage_limit.go: usableFallbackModel: PersonalScope", "a person answering a wait (P5: the chat's org)"},
-	{"internal/launch/provider_policy.go: (*Launcher).primaryDriver: PersonalScope", "send-time provider default (P5: the chat's org)"},
-	{"internal/launch/provider_policy.go: (*Launcher).ResolvedModelAtDriver: PersonalScope", "send-time model wake (P5: the chat's org)"},
-	{"internal/launch/selected_model.go: (*Launcher).ValidateSelectedModel: PersonalScope", "send-time model check (P5: the chat's org)"},
-	{"internal/launch/workflows.go: (*Launcher).validateChatWorkflowInputsAt: PersonalScope", "launch input validation (P5: the run's org)"},
-	{"internal/launch/workflows.go: (*Launcher).SubstituteUnservableModels: PersonalScope", "send-time substitution (P5: the chat's org)"},
+	{"internal/llm/drivers/run_scope.go: runScopeFor: PersonalScope", "an image or video generation (and load_tool's check of one) that belongs to no run, or is made as anyone but the actor the run scope is bound to and the person it spends: their own accounts; a tool call's run scope is set by ExecuteTools from the chat row (WithRunScope)"},
+	{"internal/handlers/catalog/catalog.go: (*Service).pickerScope: PersonalScope", "a picker in a deployment with no orgs: the person's own accounts"},
+	{"internal/handlers/catalog/catalog.go: (*Service).pickerScope: PersonalScope", "a picker request naming no org (every client before orgs): the person's own accounts"},
+	{"internal/handlers/catalog/catalog.go: (*Service).pickerScope: Scope{}", "a picker for the org the request names (ListModels, ListAvailableModels org_id), once orgs.Named verified the caller a live member of it (a machine credential: its own org only), attended: what a chat of that org may run on"},
 	{"tools/reliant-dev/models_probe_run.go: newModelsProbeCmd: PersonalScope", "the dev probe belongs to no run"},
 }
 

@@ -92,7 +92,7 @@ func Outdated(err error) error {
 // disagree on a code.
 func machineCode(err error) (connect.Code, bool) {
 	switch {
-	case Unreachable(err):
+	case Unreachable(err), toolexec.IsDaemonReconnecting(err):
 		return connect.CodeUnavailable, true
 	case toolexec.IsNoDaemon(err):
 		return connect.CodeFailedPrecondition, true
@@ -133,6 +133,12 @@ func machineReason(code connect.Code, err error) string {
 //     machinery expects, and the message keeps the "no daemon connected"
 //     marker isDaemonConnectingError keys on. It is a user error
 //     (svcerr.ClassUser): nobody on the server side can connect the machine;
+//   - reconnecting — back online, its fresh stream not yet proven
+//     (toolexec.ErrDaemonReconnecting) — is the same Unavailable user error,
+//     with its own reason. The command was never sent. It is not Unreachable:
+//     the machine is awake, so there is nothing to wake. Unrecognised, it
+//     fell through to each handler's own code: ListProcesses answered a
+//     waking laptop's poll Internal and logged ERROR (prod, 2026-11-17);
 //   - no machine at all (toolexec.ErrNoDaemon) is FailedPrecondition: waiting
 //     cannot produce a machine the user has not connected;
 //   - connected but too busy to answer before the deadline

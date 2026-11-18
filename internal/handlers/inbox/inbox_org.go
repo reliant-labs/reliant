@@ -75,6 +75,11 @@ func (r *inboxReads) itemOrg(it *reliantv1.InboxItem) (*string, itemPlacement) {
 		org := orgKeyItemOrg(it)
 		return &org, placedInOrg
 	}
+	if org, ok := automationNoticeOrg(it); ok {
+		// Named by its org (an admin's item is about an automation not
+		// theirs, whose org this read never looked up).
+		return &org, placedInOrg
+	}
 	keys := itemOrgKeys(it)
 	if len(keys) == 0 {
 		return nil, placedEveryOrg

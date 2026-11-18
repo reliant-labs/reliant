@@ -223,7 +223,7 @@ afterEach(() => setTransport(null));
 import { SecretsTab } from "../../EnvPage/EnvTabPanels";
 import { useLiveView } from "@/hooks/forge-queries";
 
-/** The Secrets page's body for staging, as the console mounts it (ConsolePages.SecretsPage). */
+/** The Secrets page's body for staging, as the console mounts it (Console/SecretsPage.tsx). */
 function StagingSecrets() {
   const live = useLiveView("hounders");
   const staging = (live.data?.envs ?? []).find((env) => env.name === "staging") ?? null;

@@ -69,7 +69,9 @@ import (
 // requires the same owner. chats.project_id has no foreign key: deleting a
 // project leaves its chats (and their pending questions) behind, and the run
 // page cannot open a chat whose project is gone. A LEFT JOIN here listed those
-// as dead "This run doesn't exist" items. Likewise a blocking item of a run
+// as dead "This run doesn't exist" items. A project scheduled for deletion
+// (delete_after set) is hidden, and cannot be opened either, so the join
+// leaves it out too until it is restored. Likewise a blocking item of a run
 // that completed (stop_reason 1) or was cancelled (4) can never be answered —
 // nothing expires it when the run stops — so it is not listed either, and the
 // same holds for the run that ASKED it (pending_input_gates names it): a
@@ -131,7 +133,7 @@ SELECT * FROM (
         OFFSET 0
     ) a
     JOIN chats_with_activity c ON c.id = a.chat_id
-    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id AND p.delete_after IS NULL
     LEFT JOIN triggers t ON t.id = c.trigger_id
     WHERE a.status = 1
       AND (
@@ -166,7 +168,7 @@ SELECT * FROM (
         OFFSET 0
     ) q
     JOIN chats_with_activity c ON c.id = q.chat_id
-    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id AND p.delete_after IS NULL
     LEFT JOIN triggers t ON t.id = c.trigger_id
     WHERE q.status = 1
       AND c.user_id = $1::text
@@ -199,7 +201,7 @@ SELECT * FROM (
         COALESCE(d.hostname, ''),
         0
     FROM chats_with_activity c
-    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id AND p.delete_after IS NULL
     LEFT JOIN triggers t ON t.id = c.trigger_id
     LEFT JOIN daemons d ON d.id = COALESCE(c.active_daemon_id, t.daemon_id) AND d.user_id = c.user_id
     WHERE c.display_state = 8
@@ -255,7 +257,7 @@ SELECT * FROM (
         WHERE x.trigger_id = t.id AND x.outcome = 'failed'
           AND (lt.id IS NULL OR (x.occurred_at, x.id) > (lt.occurred_at, lt.id))
     ) ep ON true
-    JOIN projects p ON p.id = t.project_id AND p.user_id = t.user_id
+    JOIN projects p ON p.id = t.project_id AND p.user_id = t.user_id AND p.delete_after IS NULL
     WHERE t.user_id = $1::text
       AND t.enabled
       AND ep.failures > 0
@@ -282,9 +284,23 @@ SELECT * FROM (
         COALESCE(f.error_message, ''),
         '',
         0
-    FROM chats_with_activity c
+    FROM (
+        -- display_state 4 is exactly a root run with state 3 and stop
+        -- reason 3, and paused runs are few in the whole database: find the
+        -- caller's from idx_workflows_state, then read only those chats
+        -- through the view (a root run is a run of its own chat). Fenced
+        -- like the approval branch: joined directly, the planner walked all
+        -- of the caller's chats, computing each one's launch kind and
+        -- display state, 45-60ms for 2,000 automation chats (reliant#2736).
+        SELECT ch.id FROM workflows pw
+        JOIN chats ch ON ch.id = pw.chat_id AND ch.workflow_id = pw.id
+        WHERE pw.state = 3 AND pw.stop_reason = 3
+          AND ch.user_id = $1::text AND ch.state IS DISTINCT FROM 3
+        OFFSET 0
+    ) pc
+    JOIN chats_with_activity c ON c.id = pc.id
     JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
-    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id AND p.delete_after IS NULL
     LEFT JOIN LATERAL (
         SELECT se.created_at, se.error_message
         FROM workflows w
@@ -322,7 +338,7 @@ SELECT * FROM (
         0
     FROM chat_personal_funding f
     JOIN chats_with_activity c ON c.id = f.chat_id
-    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id AND p.delete_after IS NULL
     LEFT JOIN triggers t ON t.id = c.trigger_id
     WHERE f.state = 'asked'
       AND f.user_id = $1::text
@@ -330,6 +346,11 @@ SELECT * FROM (
       AND c.state IS DISTINCT FROM 3
 ) inbox
 ORDER BY kind, waiting_since, item_key`
+
+// InboxPendingSQL returns ListInboxPending's statement, with $1 the user and
+// $2 the unattended launch kinds, so a plan test runs the exact statement the
+// Inbox does.
+func InboxPendingSQL() string { return listInboxPendingSQL }
 
 // ListInboxPending returns the user's pending approvals, questions,
 // waiting-for-machine runs, launch-failed automations and paused automation

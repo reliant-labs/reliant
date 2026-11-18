@@ -48,5 +48,10 @@ func stepConfigFailure(ctx workflow.Context, activityName, stepID string, err er
 	if errors.As(err, &appErr) {
 		msg = appErr.Message()
 	}
-	return temporal.NewNonRetryableApplicationError(fmt.Sprintf("step %s failed: %s", stepID, msg), stepConfigFailedErrType, nil)
+	// Benign: the definition is the user's, so the layers that pass this up
+	// (the loop, the inline workflow, the run) log it below ERROR through the
+	// process logger's error-class policy (errclass.Library). Each used to
+	// open an obs issue for a workflow that was simply misconfigured.
+	return temporal.NewApplicationErrorWithOptions(fmt.Sprintf("step %s failed: %s", stepID, msg), stepConfigFailedErrType,
+		temporal.ApplicationErrorOptions{NonRetryable: true, Category: temporal.ApplicationErrorCategoryBenign})
 }

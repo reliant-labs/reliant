@@ -32,7 +32,7 @@ import { useMemo, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 import { ConnectError } from "@connectrpc/connect";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 
 import {
   ListRunsRequestSchema,
@@ -65,14 +65,14 @@ import { chatKeys, seedChatDetail } from "./chat-queries";
 import { useAdoptChat, useListMessages, useUnadoptChat } from "./chat-service-hooks_gen";
 import {
   runServiceKeys,
+  runServiceQueries,
   useCancelRun,
   useLastRunPerWorkflow as useLastRunPerWorkflowRpc,
-  useListRuns,
-  useListRunsInfinite,
   usePauseRun,
   useResumeRun,
 } from "./run-service-hooks_gen";
 import { useGetLaunchEvent } from "./trigger-service-hooks_gen";
+import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
 import { TRANSCRIPT_TOOL_BODY_MODE } from "../lib/toolBodies";
 
 // ============================================
@@ -247,7 +247,7 @@ export type RunListFilters = Omit<RunsSearch, "allProjects" | "group" | "parent"
  */
 export function buildListRunsRequest(
   filters: RunListFilters,
-  options: { now: number; limit?: number },
+  options: { now: number; limit?: number; orgId?: string | null },
 ): ListRunsRequest {
   const displayStates = new Set<RunDisplayState>();
   for (const key of filters.state ?? []) {
@@ -272,6 +272,8 @@ export function buildListRunsRequest(
     includeArchived: true,
     includeUnlaunchedEvents:
       filters.includeUnlaunched && displayStates.size === 0 && !filters.parentChatId ? true : undefined,
+    // The tab's org (lib/orgScope), so the key names it too.
+    orgId: options.orgId || undefined,
   });
 }
 
@@ -528,9 +530,17 @@ export function useRunList(filters: RunListFilters) {
   if (anchor.key !== filterKey) setAnchor({ key: filterKey, now: windowAnchor(filterKey) });
   const now = anchor.key === filterKey ? anchor.now : windowAnchor(filterKey);
 
-  const query = useListRunsInfinite(buildListRunsRequest(filters, { now, limit: RUNS_PAGE_SIZE }), {
-    select: runLogOfPages,
-  });
+  const org = useOrgScope();
+  const query = useInfiniteQuery(
+    withOrgFailure(
+      runServiceQueries.listRunsInfinite(
+        buildListRunsRequest(filters, { now, limit: RUNS_PAGE_SIZE, orgId: org.orgId }),
+        // Not before the tab's org is known: runs naming no org are every org's.
+        { enabled: orgQueryEnabled(org), select: runLogOfPages },
+      ),
+      org,
+    ),
+  );
 
   return {
     runs: query.data?.runs ?? NO_RUNS,
@@ -605,9 +615,15 @@ function childRunsOf(response: ListRunsResponse) {
  * Every project and every time: a child is a child wherever it runs.
  */
 export function useChildRuns(parentChatId: string | undefined, enabled = true) {
-  return useListRuns(
-    { parentChatId, limit: CHILD_RUNS_LIMIT + 1, includeArchived: false },
-    { enabled: !!parentChatId && enabled, select: childRunsOf },
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      runServiceQueries.listRuns(
+        orgRequest({ parentChatId, limit: CHILD_RUNS_LIMIT + 1, includeArchived: false }, org.orgId),
+        { enabled: !!parentChatId && enabled && orgQueryEnabled(org), select: childRunsOf },
+      ),
+      org,
+    ),
   );
 }
 
@@ -748,9 +764,18 @@ export function summarizeLiveAutomations(
  * still live.
  */
 export function useLiveRuns() {
-  return useListRuns(
-    { displayStates: [...LIVE_AUTOMATION_STATES], limit: LIVE_AUTOMATION_LIMIT, includeArchived: false },
-    { select: runPageFromProto },
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      runServiceQueries.listRuns(
+        orgRequest(
+          { displayStates: [...LIVE_AUTOMATION_STATES], limit: LIVE_AUTOMATION_LIMIT, includeArchived: false },
+          org.orgId,
+        ),
+        { enabled: orgQueryEnabled(org), select: runPageFromProto },
+      ),
+      org,
+    ),
   );
 }
 

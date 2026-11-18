@@ -6,6 +6,8 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
 
 // titleLLMAttempts is how many times the LLM is asked for a title before the
@@ -49,7 +51,12 @@ func GenerateTitleWorkflow(ctx workflow.Context, input map[string]interface{}) e
 
 	// Never leave a chat untitled: the activity returns early once a title is
 	// set, so this is the only chance to write one.
-	logger.Error("GenerateTitle failed after retries, falling back to truncated first message",
+	//
+	// WARN, not ERROR: the chat still gets a title, so this is a degraded
+	// outcome handled here, not a fault to page on (prod 44690b25 was one
+	// provider stream error). A provider outage shows in the LLM error metrics
+	// and in failed turns; a fallback that cannot be written stays ERROR below.
+	logger.Warn("GenerateTitle failed after retries, falling back to truncated first message",
 		"error", err, "chatID", chatID, "attempts", titleLLMAttempts)
 
 	fallbackInput := make(map[string]interface{}, len(input)+1)
@@ -77,6 +84,10 @@ func GenerateTitleWorkflow(ctx workflow.Context, input map[string]interface{}) e
 
 // DraftAutomationWorkflowName is TriggerService.DraftAutomation's workflow.
 const DraftAutomationWorkflowName = "DraftAutomationWorkflow"
+
+// DraftNeedsConsentErrorType is the application-error type of a draft only the
+// person's own account could make, with no consent to it on record (§10).
+const DraftNeedsConsentErrorType = handlers.DraftNeedsConsentErrorType
 
 // draftLLMAttempts bounds the model requests one draft may take. A second
 // sample usually fixes a draft the normalizer refused (a malformed cron); a

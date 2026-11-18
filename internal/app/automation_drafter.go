@@ -3,11 +3,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -39,6 +41,7 @@ func (d *temporalDrafter) DraftAutomation(ctx context.Context, in trigger.DraftR
 		WorkflowExecutionTimeout: 2 * time.Minute,
 	}, workersetup.DraftAutomationWorkflowName, map[string]interface{}{
 		"user_id":     in.UserID,
+		"org_id":      in.OrgID,
 		"description": in.Description,
 		"workflow":    in.Workflow,
 		"timezone":    in.Timezone,
@@ -48,6 +51,10 @@ func (d *temporalDrafter) DraftAutomation(ctx context.Context, in trigger.DraftR
 	}
 	var out map[string]interface{}
 	if err := run.Get(ctx, &out); err != nil {
+		var appErr *temporal.ApplicationError
+		if errors.As(err, &appErr) && appErr.Type() == workersetup.DraftNeedsConsentErrorType {
+			return nil, fmt.Errorf("draft workflow: %w", trigger.ErrDraftNeedsConsent)
+		}
 		return nil, fmt.Errorf("draft workflow: %w", err)
 	}
 	raw, _ := out["draft"].(string)

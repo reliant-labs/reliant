@@ -1,10 +1,15 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -29,11 +34,14 @@ type mqWorkflow struct {
 		If             string            `yaml:"if"`
 		TimeoutMinutes int               `yaml:"timeout-minutes"`
 		Env            map[string]string `yaml:"env"`
-		Steps          []struct {
-			ciStep `yaml:",inline"`
-			Env    map[string]string `yaml:"env"`
-		} `yaml:"steps"`
+		Steps          []mqStep          `yaml:"steps"`
 	} `yaml:"jobs"`
+}
+
+// mqStep is one step of a merge-queue.yml job.
+type mqStep struct {
+	ciStep `yaml:",inline"`
+	Env    map[string]string `yaml:"env"`
 }
 
 func loadMergeQueue(t *testing.T) *mqWorkflow {
@@ -326,20 +334,29 @@ func TestGolangciChangedPlan(t *testing.T) {
 
 	// Without --plan, over the same diff: golangci-lint is invoked on exactly
 	// the planned packages, findings limited to the diff's whole files from
-	// base, under -trimpath; and a finding (golangci-lint's exit 1) fails the
-	// script with that status.
+	// base, under -trimpath, waiting for golangci-lint's machine lock (or,
+	// --in-slot, dropping it); and a finding (golangci-lint's exit 1) fails
+	// the script with that status.
 	lint := t.TempDir()
 	argsFile := filepath.Join(lint, "args")
 	writeExec(t, filepath.Join(lint, "golangci-lint"), "#!/usr/bin/env bash\n"+
-		"[ \"$1\" = version ] && { echo 'golangci-lint fake'; exit 0; }\n"+
+		"[ \"$1\" = version ] && { echo 'golangci-lint has version 2.14.0 built with go1.27.0 from fake'; exit 0; }\n"+
 		"{ printf '%s\\n' \"$*\"; printf 'GOFLAGS=%s\\n' \"$GOFLAGS\"; } > \""+argsFile+"\"\n"+
 		"[ \"$FAKE_FINDING\" = 1 ] && { echo 'kept/kept.go:3:1: finding (fake)'; exit 1; }\n"+
 		"exit 0\n")
-	for _, finding := range []bool{false, true} {
+	for _, tc := range []struct {
+		finding, inSlot bool
+		lock            string
+	}{{false, false, "--allow-serial-runners"}, {true, false, "--allow-serial-runners"}, {false, true, "--allow-parallel-runners"}} {
+		finding := tc.finding
 		_ = os.Remove(argsFile)
-		cmd = exec.Command("bash", "scripts/golangci-changed.sh", "--base", base)
+		args := []string{"scripts/golangci-changed.sh", "--base", base}
+		if tc.inSlot {
+			args = append(args, "--in-slot")
+		}
+		cmd = exec.Command("bash", args...)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "PATH="+lint+":"+os.Getenv("PATH"), "GOFLAGS=-mod=mod")
+		cmd.Env = append(os.Environ(), "PATH="+lint+":"+os.Getenv("PATH"), "GOFLAGS=-mod=mod", "GOLANGCI_LINT_VERSION=v2.14.0")
 		if finding {
 			cmd.Env = append(cmd.Env, "FAKE_FINDING=1")
 		}
@@ -355,11 +372,56 @@ func TestGolangciChangedPlan(t *testing.T) {
 		if rerr != nil {
 			t.Fatalf("finding=%v: golangci-lint run was never invoked: %v\n%s", finding, rerr, b)
 		}
-		want := "run --new-from-rev=" + base + " --whole-files ./added/a ./kept\nGOFLAGS=-mod=mod -trimpath\n"
+		want := "run " + tc.lock + " --new-from-rev=" + base + " --whole-files ./added/a ./kept\nGOFLAGS=-mod=mod -trimpath\n"
 		if string(got) != want {
 			t.Errorf("finding=%v: golangci-lint invoked as\n%s\nwant\n%s", finding, got, want)
 		}
 	}
+
+	// A golangci-lint that is not the pinned release fails before linting
+	// anything, naming the install command: another release reports other
+	// findings, so its pass would not predict the merge queue's.
+	_ = os.Remove(argsFile)
+	cmd = exec.Command("bash", "scripts/golangci-changed.sh", "--base", base)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "PATH="+lint+":"+os.Getenv("PATH"), "GOFLAGS=-mod=mod", "GOLANGCI_LINT_VERSION=2.15.0")
+	b, err := cmd.CombinedOutput()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 2 || !strings.Contains(string(b), "golangci-lint@v2.15.0") {
+		t.Errorf("an unpinned golangci-lint: err=%v, want exit 2 naming the pinned install:\n%s", err, b)
+	}
+	if _, err := os.Stat(argsFile); err == nil {
+		t.Error("an unpinned golangci-lint was run")
+	}
+
+	// No golangci-lint on PATH at all (a runner whose setup did not install
+	// it): exit 2 with the pinned install command, before any lint.
+	goBin, _ := exec.LookPath("go")
+	bare := filepath.Dir(goBin) + ":/usr/bin:/bin"
+	hidden := goBin != ""
+	for _, d := range filepath.SplitList(bare) {
+		if _, serr := os.Stat(filepath.Join(d, "golangci-lint")); serr == nil {
+			hidden = false // beside go or in a system dir: cannot be hidden here
+		}
+	}
+	if hidden {
+		cmd = exec.Command("bash", "scripts/golangci-changed.sh", "--base", base)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "PATH="+bare, "GOFLAGS=-mod=mod", "GOLANGCI_LINT_VERSION=2.14.0")
+		b, err := cmd.CombinedOutput()
+		if !errors.As(err, &exit) || exit.ExitCode() != 2 ||
+			!strings.Contains(string(b), "golangci-lint is not on PATH; install the pinned v2.14.0: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0") {
+			t.Errorf("no golangci-lint on PATH: err=%v, want exit 2 with the pinned install command:\n%s", err, b)
+		}
+	}
+
+	// An untracked .go file is in the diff (golangci-lint's --new-from-rev
+	// reads the working tree); on a clean checkout, as in CI, nothing changes.
+	write("loose/l.go", "package loose\n")
+	if out := sh("bash", "scripts/golangci-changed.sh", "--base", base, "--plan"); !strings.Contains(out, "  ./loose\n") {
+		t.Errorf("an untracked package is not planned:\n%s", out)
+	}
+	sh("rm", "-r", "loose")
 
 	write("README.md", "more docs\n")
 	sh("git", "add", "-A")
@@ -370,5 +432,156 @@ func TestGolangciChangedPlan(t *testing.T) {
 	cmd.Dir, cmd.Env = dir, append(os.Environ(), "PATH=/usr/bin:/bin")
 	if b, err := cmd.CombinedOutput(); err != nil || !strings.Contains(string(b), "nothing to lint") {
 		t.Errorf("a docs-only diff: err=%v, want a clean no-op:\n%s", err, b)
+	}
+}
+
+// TestGolangciChangedFailsOnAG101 runs scripts/golangci-changed.sh, the merge
+// gate's golangci phase and the merge queue's golangci (changed) job, with the
+// real pinned golangci-lint and this repository's .golangci.yml over a
+// throwaway module whose diff adds a hard-coded credential: gosec's G101, the
+// finding #2368 reached main with and the queue's job ejects a PR for. It
+// fails with the finding named; the same module without it passes.
+func TestGolangciChangedFailsOnAG101(t *testing.T) {
+	testkit.Slow(t, "runs the real golangci-lint (go list and type-checking) over a throwaway module",
+		testkit.Inputs("scripts/golangci-changed.sh", "scripts/lint-scope.sh", ".golangci.yml"))
+	for _, tool := range []string{"bash", "git", "go", "jq", "golangci-lint"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s not on PATH", tool)
+		}
+	}
+	// The pin, read as the script reads it in this repository.
+	mod, err := exec.Command("go", "mod", "download", "-json", "github.com/reliant-labs/forge").Output()
+	if err != nil {
+		t.Skipf("cannot download the pinned forge module: %v", err)
+	}
+	var fm struct{ Dir string }
+	if err := json.Unmarshal(mod, &fm); err != nil {
+		t.Fatal(err)
+	}
+	tv, err := os.ReadFile(filepath.Join(fm.Dir, "internal", "templates", "toolversions.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`(?m)^const GolangciLintVersion = "v([0-9.]+)"$`).FindSubmatch(tv)
+	if m == nil {
+		t.Fatal("no GolangciLintVersion in the pinned forge")
+	}
+	pin := string(m[1])
+	if v, _ := exec.Command("golangci-lint", "version").CombinedOutput(); !strings.Contains(string(v), "has version "+pin+" ") {
+		t.Skipf("golangci-lint on PATH is not the pinned %s: %s", pin, v)
+	}
+
+	dir := t.TempDir()
+	write := func(rel, body string) {
+		t.Helper()
+		putFixture(t, dir, rel, body, 0o644)
+	}
+	sh := func(env []string, args ...string) (string, error) {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t", "GOFLAGS=-mod=mod"), env...)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	must := func(args ...string) string {
+		t.Helper()
+		out, err := sh(nil, args...)
+		if err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
+		return out
+	}
+	write("go.mod", "module example.com/m\n\ngo 1.22\n")
+	write(".golangci.yml", string(readRepo(t, ".golangci.yml")))
+	write("scripts/golangci-changed.sh", string(readRepo(t, "scripts/golangci-changed.sh")))
+	write("scripts/lint-scope.sh", string(readRepo(t, "scripts/lint-scope.sh")))
+	write("kept/kept.go", "// Package kept is a fixture.\npackage kept\n")
+	must("chmod", "+x", "scripts/golangci-changed.sh", "scripts/lint-scope.sh")
+	must("git", "init", "-q", "-b", "main")
+	must("git", "add", "-A")
+	must("git", "commit", "-qm", "base")
+	base := strings.TrimSpace(must("git", "rev-parse", "HEAD"))
+
+	lint := func() (string, error) {
+		return sh([]string{"GOLANGCI_LINT_VERSION=" + pin}, "bash", "scripts/golangci-changed.sh", "--base", base)
+	}
+	write("kept/kept.go", "// Package kept is a fixture.\npackage kept\n\n// Answer is not a secret.\nconst Answer = 42\n")
+	if out, err := lint(); err != nil {
+		t.Fatalf("a clean change fails the lint: %v\n%s", err, out)
+	}
+	// The planted value is derived at run time, so no credential-shaped
+	// literal sits in this file for a secret scanner to flag: 40 mixed-case
+	// base64url characters of a fixed hash, high-entropy enough for G101.
+	sum := sha256.Sum256([]byte("reliant merge-gate G101 fixture"))
+	planted := base64.RawURLEncoding.EncodeToString(sum[:])[:40]
+	write("kept/kept.go", "// Package kept is a fixture.\npackage kept\n\n// Token is a hard-coded credential.\nconst Token = \""+planted+"\"\n")
+	must("git", "add", "-A")
+	must("git", "commit", "-qm", "credential")
+	out, err := lint()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 1 || !strings.Contains(out, "G101") {
+		t.Errorf("a G101 finding: err=%v, want golangci-lint's exit 1 naming G101:\n%s", err, out)
+	}
+}
+
+// TestEveryMergeGateCallerProvisionsGolangci: every workflow step that runs the
+// merge gate (task ci:merge) either installs the pinned golangci-lint in its
+// job (the setup action's golangci input), or hands golangci to a golangci
+// (changed) job beside it (--queue, --skip-golangci) that the workflow runs
+// under the same condition. Otherwise a Go change fails the gate's golangci
+// phase on a clean runner ("golangci-lint is not on PATH") instead of being
+// linted.
+func TestEveryMergeGateCallerProvisionsGolangci(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join(repoRoot, ".github", "workflows", "*.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	callers := 0
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wf ciWorkflow
+		if err := yaml.Unmarshal(b, &wf); err != nil {
+			t.Fatalf("parse %s: %v", f, err)
+		}
+		name := filepath.Base(f)
+		for id, job := range wf.Jobs {
+			installs := false
+			for _, s := range job.Steps {
+				if strings.HasSuffix(s.Uses, "/actions/setup") && fmt.Sprint(s.With["golangci"]) == "true" {
+					installs = true
+				}
+			}
+			for _, s := range job.Steps {
+				if !strings.Contains(s.Run, "task ci:merge") && !strings.Contains(s.Run, "merge-gate.sh") {
+					continue
+				}
+				callers++
+				delegates := strings.Contains(s.Run, "--queue") || strings.Contains(s.Run, "--skip-golangci")
+				if !installs && !delegates {
+					t.Errorf("%s job %s step %q runs the merge gate without golangci-lint installed: set the setup action's golangci: \"true\", or pass --skip-golangci beside a golangci (changed) job", name, id, s.Name)
+					continue
+				}
+				if !delegates {
+					continue
+				}
+				beside := false
+				for gid, g := range wf.Jobs {
+					for _, gs := range g.Steps {
+						if gid != id && strings.Contains(gs.Run, "task ci:golangci") && g.If == job.If {
+							beside = true
+						}
+					}
+				}
+				if !beside {
+					t.Errorf("%s job %s hands golangci elsewhere, but no job of %s runs task ci:golangci under its condition %q", name, id, name, job.If)
+				}
+			}
+		}
+	}
+	if callers < 2 {
+		t.Fatalf("found %d merge-gate caller(s) in .github/workflows; want ci.yml's and merge-queue.yml's", callers)
 	}
 }

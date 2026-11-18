@@ -503,10 +503,41 @@ func validateTriggerScope(wt *reliantv1.WorkflowTrigger, declared map[string]*re
 			result.AddWarning(CategoryTrigger, path, field,
 				fmt.Sprintf("%s declares no events, so the type of attribute %q cannot be checked against input %q", integration, attr, name))
 		}
-		if !model.IsInputRequired(input) {
+		// An activation that leaves the input unset is scoped to its default
+		// (triggers.Declaration.ProjectedConfig applies defaults), so only an
+		// optional input with no value to fall back on matches nothing.
+		if !model.IsInputRequired(input) && scopeDefaultIsEmpty(model.GetInputDefault(input)) {
 			result.AddWarning(CategoryTrigger, path, field,
-				fmt.Sprintf("input %q is optional, and while it is unset this trigger matches nothing; mark it required: true (and drop its default) so it must be chosen when the automation is turned on", name))
+				fmt.Sprintf("input %q is optional with an empty default, and while it is unset this trigger matches nothing; mark it required: true (and drop its default) so it must be chosen when the automation is turned on, or give it a non-empty default", name))
 		}
+	}
+}
+
+// scopeDefaultIsEmpty reports whether an input default gives a scope no value
+// to match: none, an empty string, or an empty list (triggers.scopeValues
+// drops empty strings the same way).
+func scopeDefaultIsEmpty(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return true
+	case string:
+		return strings.TrimSpace(x) == ""
+	case []any:
+		for _, item := range x {
+			if !scopeDefaultIsEmpty(item) {
+				return false
+			}
+		}
+		return true
+	case []string:
+		for _, item := range x {
+			if strings.TrimSpace(item) != "" {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
 	}
 }
 

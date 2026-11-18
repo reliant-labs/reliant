@@ -264,6 +264,7 @@ func TestSharedReadIsCancelledWithItsLastCaller(t *testing.T) {
 
 	cancel1()
 	require.Error(t, <-done1)
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a read correctly kept alive leaves no event to wait for
 	time.Sleep(50 * time.Millisecond)
 	require.Equal(t, int32(0), svc.cancelled.Load(), "the read must outlive a caller while another waits on it")
 

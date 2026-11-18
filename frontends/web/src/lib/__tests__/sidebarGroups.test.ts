@@ -2,7 +2,17 @@
 import { describe, expect, it } from "vitest";
 
 import { WorktreeStatus, type WorktreeSummary } from "../../gen/reliant/v1/worktree_pb";
-import { activeWorkspaceChats, groupByProject, groupByWorkspace, type GroupableChat } from "../sidebarGroups";
+import {
+  ACTIVE_PROJECT_WINDOW_DAYS,
+  activeWorkspaceChats,
+  groupByProject,
+  groupByWorkspace,
+  isProjectHiddenFromSidebar,
+  isRecentlyActive,
+  listProjectGroups,
+  type GroupableChat,
+  type ProjectListing,
+} from "../sidebarGroups";
 
 const main = (projectId: string): WorktreeSummary =>
   ({
@@ -96,5 +106,98 @@ describe("activeWorkspaceChats", () => {
     const live = chat("a", feature("a", "live"));
     const orphan = { ...chat("a"), worktreeId: "gone" };
     expect(activeWorkspaceChats([done, live, orphan], [main("a")])).toEqual([live, orphan]);
+  });
+});
+
+describe("listProjectGroups", () => {
+  const NOW = Date.parse("2025-06-30T12:00:00Z");
+  const daysAgo = (days: number) => new Date(NOW - days * 24 * 60 * 60 * 1000).toISOString();
+  const listing = (over: Partial<ProjectListing> = {}): ProjectListing => ({
+    pinned: new Set(),
+    hidden: new Set(),
+    showAll: false,
+    now: NOW,
+    ...over,
+  });
+  // chatty: has a chat. recent: no chat, used 3 days ago. stale: no chat, used
+  // 40 days ago. never: no chat, never used (an auto-created my-project).
+  const projects = [
+    { id: "chatty", name: "Chatty", last_active: daysAgo(90) },
+    { id: "recent", name: "Recent", last_active: daysAgo(3) },
+    { id: "stale", name: "Stale", last_active: daysAgo(40) },
+    { id: "never", name: "Never" },
+  ];
+  const groupsWith = (...chats: GroupableChat[]) =>
+    groupByProject(chats, [main("chatty")], projects, options);
+  const ids = (groups: readonly { projectId: string }[]) => groups.map((g) => g.projectId);
+
+  it("lists projects with chats or recent use, and folds the rest", () => {
+    const result = listProjectGroups(groupsWith(chat("chatty", main("chatty"))), projects, listing());
+    expect(ids(result.listed)).toEqual(["chatty", "recent"]);
+    expect(ids(result.folded)).toEqual(["stale", "never"]);
+    expect(result.hiddenCount).toBe(0);
+  });
+
+  it("draws the recent-use line at ACTIVE_PROJECT_WINDOW_DAYS", () => {
+    expect(isRecentlyActive(daysAgo(ACTIVE_PROJECT_WINDOW_DAYS), NOW)).toBe(true);
+    expect(isRecentlyActive(daysAgo(ACTIVE_PROJECT_WINDOW_DAYS + 1), NOW)).toBe(false);
+    expect(isRecentlyActive(undefined, NOW)).toBe(false);
+    expect(isRecentlyActive("not a time", NOW)).toBe(false);
+  });
+
+  it("always lists a pinned project, first", () => {
+    const result = listProjectGroups(
+      groupsWith(chat("chatty", main("chatty"))),
+      projects,
+      listing({ pinned: new Set(["never"]) }),
+    );
+    expect(ids(result.listed)).toEqual(["never", "chatty", "recent"]);
+    expect(ids(result.folded)).toEqual(["stale"]);
+  });
+
+  it("leaves a hidden project out, chats and all", () => {
+    const result = listProjectGroups(
+      groupsWith(chat("chatty", main("chatty"))),
+      projects,
+      listing({ hidden: new Set(["chatty", "stale"]) }),
+    );
+    expect(ids(result.listed)).toEqual(["recent"]);
+    expect(ids(result.folded)).toEqual(["never"]);
+    expect(result.hiddenCount).toBe(2);
+    expect(isProjectHiddenFromSidebar("chatty", listing({ hidden: new Set(["chatty"]) }))).toBe(true);
+  });
+
+  it("never hides or folds the current project", () => {
+    const result = listProjectGroups(
+      groupsWith(),
+      projects,
+      listing({ hidden: new Set(["stale"]), currentProjectId: "stale" }),
+    );
+    expect(ids(result.listed)).toContain("stale");
+    expect(result.hiddenCount).toBe(0);
+    expect(isProjectHiddenFromSidebar("stale", listing({ hidden: new Set(["stale"]), currentProjectId: "stale" }))).toBe(
+      false,
+    );
+    // Not hidden, just stale: the current project is listed rather than folded.
+    expect(ids(listProjectGroups(groupsWith(), projects, listing({ currentProjectId: "never" })).listed)).toContain(
+      "never",
+    );
+  });
+
+  it("with show-all lists every project, hidden ones included, and folds none", () => {
+    const result = listProjectGroups(
+      groupsWith(chat("chatty", main("chatty"))),
+      projects,
+      listing({ showAll: true, hidden: new Set(["chatty"]), pinned: new Set(["stale"]) }),
+    );
+    expect(ids(result.listed)).toEqual(["stale", "chatty", "recent", "never"]);
+    expect(result.folded).toEqual([]);
+    expect(result.hiddenCount).toBe(0);
+    expect(isProjectHiddenFromSidebar("chatty", listing({ showAll: true, hidden: new Set(["chatty"]) }))).toBe(false);
+  });
+
+  it("lists a chat's project that is not loaded yet", () => {
+    const result = listProjectGroups(groupsWith(chat("unloaded")), projects, listing());
+    expect(ids(result.listed)).toContain("unloaded");
   });
 });

@@ -183,7 +183,7 @@ func TestImageGenerationUsesTheDefaultAccount(t *testing.T) {
 	require.Len(t, available.Accounts["gemini"], 2)
 	assert.Equal(t, "g-first", available.Drivers["gemini"].APIKey)
 
-	resolved, avail, err := resolveMediaModel(ctx, user, models.ModelSelector{Tags: []string{"image-gen"}}, models.ModalityImage)
+	resolved, avail, _, err := resolveMediaModel(ctx, user, models.ModelSelector{Tags: []string{"image-gen"}}, models.ModalityImage)
 	require.NoError(t, err)
 	if resolved.Provider.Driver == "gemini" {
 		assert.Equal(t, "g-first", avail.Drivers["gemini"].APIKey)

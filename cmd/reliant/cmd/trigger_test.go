@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -140,6 +141,21 @@ func TestScheduleSummaryShowsCronAndIntervalTogether(t *testing.T) {
 
 // The create command must leave enabled UNSET unless the user said something,
 // because the server reads nil as "true on create, unchanged on update".
+// Whose name a trigger's GitHub writes carry is chosen per activation, so
+// `trigger get` must show it: it is how an operator checks an activation
+// will act as the app, not as them.
+func TestTriggerDetailShowsTheActingIdentity(t *testing.T) {
+	for acting, want := range map[reliantv1.ActingIdentity]string{
+		reliantv1.ActingIdentity_ACTING_IDENTITY_APP:         "Acting as:  app (the Reliant GitHub App's bot)",
+		reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER:       "Acting as:  owner (the activation owner's own GitHub account)",
+		reliantv1.ActingIdentity_ACTING_IDENTITY_UNSPECIFIED: "Acting as:  -",
+	} {
+		var out strings.Builder
+		printTriggerDetail(&out, &reliantv1.Trigger{Name: "t", ActingIdentity: acting})
+		assert.Contains(t, out.String(), want, acting.String())
+	}
+}
+
 func TestTriggerCreateLeavesEnabledUnsetByDefault(t *testing.T) {
 	cmd := newTriggerCreateCmd()
 	flags := &triggerDefinitionFlags{
@@ -188,6 +204,33 @@ func TestTriggerDefinitionNameFallsBackToTheWorkflow(t *testing.T) {
 	flags.workflow = ""
 	_, err = flags.definition(context.Background(), cmd, nil, false)
 	assert.ErrorContains(t, err, "--name is required")
+}
+
+// An update without --name keeps the trigger's name: falling back to the
+// workflow (create's default) renamed "PR pipeline · pr-review · by hand" to
+// "pr-review", and the runbook's next `trigger fire <name>` found nothing.
+func TestTriggerUpdateKeepsTheNameAndProjectUnlessGiven(t *testing.T) {
+	existing := &reliantv1.Trigger{Name: "PR pipeline · pr-review · by hand", ProjectId: "proj-1"}
+	newFlags := func() *triggerDefinitionFlags {
+		return &triggerDefinitionFlags{
+			daemon: "d", daemonLister: fakeDaemonLister{{DaemonId: "d"}}, message: "go", cron: []string{"0 9 * * *"}, workflow: "pr-review",
+		}
+	}
+
+	flags := newFlags()
+	flags.keepIdentityOf(existing)
+	def, err := flags.definition(context.Background(), newTriggerUpdateCmd(), nil, true)
+	require.NoError(t, err)
+	assert.Equal(t, "PR pipeline · pr-review · by hand", def.GetName())
+	assert.Equal(t, "proj-1", def.GetProjectId())
+
+	flags = newFlags()
+	flags.name, flags.projectID = "renamed", "proj-2"
+	flags.keepIdentityOf(existing)
+	def, err = flags.definition(context.Background(), newTriggerUpdateCmd(), nil, true)
+	require.NoError(t, err)
+	assert.Equal(t, "renamed", def.GetName(), "--name still renames")
+	assert.Equal(t, "proj-2", def.GetProjectId(), "--project-id still moves it")
 }
 
 func TestTriggerCommandTreeIsRegistered(t *testing.T) {

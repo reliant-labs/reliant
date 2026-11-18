@@ -20,6 +20,8 @@ import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { DeployAttemptState, type DeployAttempt } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 
+import { orgRequest } from "@/lib/orgScope";
+
 import { getControlPlaneClient } from "../controlPlane/client";
 
 export type DeployRunState = "running" | "succeeded" | "failed" | "queued" | "cancelled" | "abandoned" | "unknown";
@@ -106,15 +108,20 @@ function client() {
 /** How many deploys the Releases page lists. */
 export const DEPLOY_RUN_LIST_LIMIT = 25;
 
-/** A project's deploys, newest first; one environment's when `env` is set. */
-export async function listDeployRuns(project: string, env?: string, limit = DEPLOY_RUN_LIST_LIMIT): Promise<DeployRun[]> {
-  const res = await client().listDeployAttempts({ project, environmentName: env, limit });
+/** A project's deploys in `orgId` (null: none named), newest first; one environment's when `env` is set. */
+export async function listDeployRuns(
+  project: string,
+  env?: string,
+  limit = DEPLOY_RUN_LIST_LIMIT,
+  orgId: string | null = null,
+): Promise<DeployRun[]> {
+  const res = await client().listDeployAttempts(orgRequest({ project, environmentName: env, limit }, orgId));
   return res.attempts.map(toDeployRun);
 }
 
 /** One deploy with the tail of its output and its `--json` report. */
-export async function getDeployRun(id: string): Promise<DeployRunDetail> {
-  const res = await client().getDeployAttempt({ id });
+export async function getDeployRun(id: string, orgId: string | null = null): Promise<DeployRunDetail> {
+  const res = await client().getDeployAttempt(orgRequest({ id }, orgId));
   if (!res.attempt) throw new Error(`deploy ${id} came back empty`);
   return { run: toDeployRun(res.attempt), log: res.log, report: res.reportJson };
 }

@@ -389,8 +389,9 @@ func TestLoader_UnattendedScopeIsOrgFundedOnly(t *testing.T) {
 
 	anySource := strict
 	anySource.UnattendedAnySource = true
-	assert.Equal(t, []string{"managed", "managed-x", "personal", "seat-x", "x-members", "x-selected-granted"},
-		loadedIDs(loaded(t, repo, elsewhere, anySource)), "an automation stamped any draws on every source, as today")
+	assert.Equal(t, []string{"managed-x", "personal", "seat-x", "x-members", "x-selected-granted"},
+		loadedIDs(loaded(t, repo, elsewhere, anySource)),
+		"an automation stamped any draws on every source, as today, except the org-less managed key where X's own is held (P10)")
 }
 
 // Property (§8.1, §11.2): over random accounts and scopes, no resolution in a

@@ -20,7 +20,7 @@ func TestTierResolutions_ReflectTagPreferences(t *testing.T) {
 		prefs := map[string]modelprefs.TagPrefs{
 			"moderate": {ModelID: "claude-5.5-opus", ThinkingLevel: "low"},
 		}
-		tier, ok := tiersByTag(tierResolutions(registry, providers, prefs, nil))["moderate"]
+		tier, ok := tiersByTag(tierResolutions(registry, providers, prefs, modelprefs.ProviderPreference{}, nil))["moderate"]
 		require.True(t, ok)
 		assert.Equal(t, "claude-5.5-opus@anthropic", tier.ModelId)
 		assert.Equal(t, "low", tier.ThinkingLevel)
@@ -28,14 +28,14 @@ func TestTierResolutions_ReflectTagPreferences(t *testing.T) {
 
 	t.Run("thinking_level alone keeps the tier's model", func(t *testing.T) {
 		prefs := map[string]modelprefs.TagPrefs{"moderate": {ThinkingLevel: "high"}}
-		tier := tiersByTag(tierResolutions(registry, providers, prefs, nil))["moderate"]
+		tier := tiersByTag(tierResolutions(registry, providers, prefs, modelprefs.ProviderPreference{}, nil))["moderate"]
 		assert.Equal(t, "claude-5.5-sonnet@anthropic", tier.ModelId)
 		assert.Equal(t, "high", tier.ThinkingLevel)
 	})
 
 	t.Run("unavailable model_id falls back to the tier", func(t *testing.T) {
 		prefs := map[string]modelprefs.TagPrefs{"moderate": {ModelID: "gpt-6-sol"}}
-		tier := tiersByTag(tierResolutions(registry, providers, prefs, nil))["moderate"]
+		tier := tiersByTag(tierResolutions(registry, providers, prefs, modelprefs.ProviderPreference{}, nil))["moderate"]
 		assert.Equal(t, "claude-5.5-sonnet@anthropic", tier.ModelId)
 		assert.Equal(t, "high", tier.ThinkingLevel)
 	})
@@ -48,10 +48,10 @@ func TestTierResolutions_PinnedLocalModel(t *testing.T) {
 	prefs := map[string]modelprefs.TagPrefs{"moderate": {ModelID: "qwen3:latest@local", Providers: []string{"local:gpu"}}}
 
 	online := local.Synthesize(local.DaemonInventory{DaemonID: "gpu", Machine: "GPU box", Online: true, Inventory: inv})
-	tier := tiersByTag(tierResolutions(registry, []string{"anthropic"}, prefs, online))["moderate"]
+	tier := tiersByTag(tierResolutions(registry, []string{"anthropic"}, prefs, modelprefs.ProviderPreference{}, online))["moderate"]
 	assert.Equal(t, "qwen3:latest@local", tier.ModelId, "tier shows the pinned local model while its machine is online")
 
 	offline := local.Synthesize(local.DaemonInventory{DaemonID: "gpu", Machine: "GPU box", Online: false, Inventory: inv})
-	tier = tiersByTag(tierResolutions(registry, []string{"anthropic"}, prefs, offline))["moderate"]
+	tier = tiersByTag(tierResolutions(registry, []string{"anthropic"}, prefs, modelprefs.ProviderPreference{}, offline))["moderate"]
 	assert.Equal(t, "claude-5.5-sonnet@anthropic", tier.ModelId, "offline machine falls back to the tier")
 }

@@ -18,6 +18,7 @@ import type { PromoteControl, ReleasesListProps } from "../ReleasesList";
 import type { ReleaseDetailProps } from "../ReleaseDetail";
 
 const consoleState: { projectId: string | null } = { projectId: "proj-1" };
+const routeSearch: { current: Record<string, unknown> } = { current: {} };
 
 const liveEnv = (id: string, name: string, kind: string, release: string) => ({
   name,
@@ -53,7 +54,7 @@ vi.mock("../../Console/consoleContext", () => ({
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useNavigate: () => vi.fn(),
-  useSearch: () => ({}),
+  useSearch: () => routeSearch.current,
   useParams: () => ({ version: "v1" }),
 }));
 
@@ -90,16 +91,20 @@ vi.mock("../ReleaseDetail", () => ({
 }));
 
 // The Deploys section and the promoter names read the control plane; neither is under test here.
-vi.mock("../../Deploy/DeployRuns", () => ({ DeployRunsPanel: () => <div data-testid="deploys" /> }));
+vi.mock("../../Deploy/DeployRuns", () => ({
+  DeployRunsPanel: ({ openId }: { openId?: string | null }) => <div data-testid="deploys" data-open={openId ?? ""} />,
+}));
 vi.mock("../useReleaseData", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../useReleaseData")>()),
   usePromoterNames: () => new Map(),
 }));
 
+import { ConsoleNavExtrasProvider } from "../../Console/consoleNavExtras";
 import { ReleasePage, ReleasesPage } from "../ReleasesPages";
 
 beforeEach(() => {
   consoleState.projectId = "proj-1";
+  routeSearch.current = {};
   dialogProps.mockClear();
   listProps.mockClear();
   detailProps.mockClear();
@@ -136,6 +141,33 @@ describe("ReleasesPage", () => {
     expect(screen.getByTestId("blocked")).toHaveTextContent("Open the project in Reliant, with its daemon running, to promote from here.");
     await userEvent.setup().click(screen.getByRole("button", { name: "promote" }));
     expect(screen.queryByTestId("plan-dialog")).not.toBeInTheDocument();
+  });
+
+  // The Overview's "See the output" on a failed deploy links to
+  // releases?deploy=<id>. The led console (the product's default) leaves the
+  // deploy log out, which made that link land on a page without the deploy.
+  it("in the led console, leaves the deploy log out unless the URL names a deploy", () => {
+    renderWithQuery(
+      <ConsoleNavExtrasProvider value={{ led: true }}>
+        <ReleasesPage />
+      </ConsoleNavExtrasProvider>
+    );
+    expect(screen.queryByTestId("deploys")).not.toBeInTheDocument();
+  });
+
+  it("in the led console, shows the deploy a link names, opened", () => {
+    routeSearch.current = { deploy: "att_d23d" };
+    renderWithQuery(
+      <ConsoleNavExtrasProvider value={{ led: true }}>
+        <ReleasesPage />
+      </ConsoleNavExtrasProvider>
+    );
+    expect(screen.getByTestId("deploys")).toHaveAttribute("data-open", "att_d23d");
+  });
+
+  it("outside the led console, always shows the deploy log", () => {
+    renderWithQuery(<ReleasesPage />);
+    expect(screen.getByTestId("deploys")).toBeInTheDocument();
   });
 });
 

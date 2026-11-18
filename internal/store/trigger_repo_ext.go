@@ -57,7 +57,9 @@ func InsertTrigger(ctx context.Context, db orm.Context, t *core.Trigger) error {
 	if err != nil {
 		return err
 	}
-	return CreateTrigger(ctx, db, row)
+	// A trigger in a project scheduled for deletion is refused
+	// (project_schedule.go).
+	return projectDeletedError(CreateTrigger(ctx, db, row))
 }
 
 // namedTrigger is a triggers row with the display names its reads join in.
@@ -239,7 +241,11 @@ func SetTriggerEnabled(ctx context.Context, db orm.Context, id string, enabled b
 // (core.TriggerPaused*), or returns core.ErrTriggerNotFound.
 func PauseTrigger(ctx context.Context, db orm.Context, id, reason string) error {
 	enabled := false
-	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled, PausedReason: &reason}, "paused", TriggerFieldEnabled, TriggerFieldPausedReason)
+	now := time.Now().UTC()
+	// A new pause owes its notice now: the previous pause's sweep claim
+	// (pause_notice_next_at) is not this one's.
+	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled, PausedReason: &reason, PausedAt: &now}, "paused",
+		TriggerFieldEnabled, TriggerFieldPausedReason, TriggerFieldPausedAt, TriggerFieldPauseNoticeNextAt)
 }
 
 // SetTriggerWebhookTokenHash rotates a webhook trigger's token hash. The hash
@@ -258,7 +264,10 @@ func SetTriggerWebhookSecret(ctx context.Context, db orm.Context, id string, sea
 
 // writeTrigger writes the named columns of a trigger and stamps updated_at.
 func writeTrigger(ctx context.Context, db orm.Context, row *Trigger, what string, fields ...string) error {
-	err := UpdateTriggerMasked(ctx, db, row, fields, crud.NoReadBack())
+	err := projectDeletedError(UpdateTriggerMasked(ctx, db, row, fields, crud.NoReadBack()))
+	if errors.Is(err, core.ErrProjectScheduledForDeletion) {
+		return err
+	}
 	if errors.Is(err, svcerr.ErrNotFound) {
 		return core.ErrTriggerNotFound
 	}
@@ -541,6 +550,7 @@ func triggerToCore(row *Trigger) (*core.Trigger, error) {
 	// does not know the column) means nothing.
 	if row.PausedReason != nil && !t.Enabled {
 		t.PausedReason = *row.PausedReason
+		t.PausedAt, t.PauseNoticeFor = row.PausedAt, row.PauseNoticeFor
 	}
 	return t, nil
 }

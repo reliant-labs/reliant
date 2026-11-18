@@ -17,7 +17,7 @@ import type { AlertEvent } from "@/services/controlPlane/observability/alertingT
 import type { Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import type { DashboardKind, DashboardRef, DashboardSource, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 import type { Dashboard, Panel } from "@/services/controlPlane/observability/types";
-import { RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { RANGE_PRESETS, rangeMs, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import type { ChartBand } from "../charts/UPlotChart";
 import { GROUP_LABELS, groupOf, type DashboardGroup } from "./dashboardGroups";
@@ -244,17 +244,7 @@ export function refreshParam(value: unknown): RefreshInterval {
   return (REFRESH_INTERVALS as readonly string[]).includes(String(value)) ? (value as RefreshInterval) : "off";
 }
 
-const RANGE_MS: Record<RangePreset, number> = {
-  "15m": 15 * 60_000,
-  "1h": 60 * 60_000,
-  "6h": 6 * 60 * 60_000,
-  "24h": 24 * 60 * 60_000,
-  "7d": 7 * 24 * 60 * 60_000,
-};
-
-export function rangeMs(range: RangePreset): number {
-  return RANGE_MS[range];
-}
+export { rangeMs };
 
 /**
  * What the comparison is, and how far back it reads.

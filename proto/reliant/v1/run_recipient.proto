@@ -1,0 +1,34 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// RunRecipientAmbiguous lists the agents running in a run when input to the
+// run had no single recipient: several agents run in parallel and the send
+// (ChatService.SendMessage, ChatService.SendAgentMessage, RunService.SignalRun)
+// named none of them.
+//
+// IT TRAVELS AS A CONNECT ERROR DETAIL on the FailedPrecondition refusal whose
+// reason is `run_recipient_ambiguous`, not as a response field: nothing was
+// queued. A client that ignores the detail still has the refusal's message,
+// which names the same agents in prose; the detail lets a client offer them as
+// choices and send again with the one picked as its target thread.
+//
+// It lives in its own file, outside the SDK's protos (proto/public-api.txt), so
+// the app can send it without an SDK release. Moving it into chat.proto later
+// keeps its full name, and so the type URL a detail is decoded by.
+message RunRecipientAmbiguous {
+  // One agent running in the run.
+  message Agent {
+    // The thread the agent reads: the target thread to send to it.
+    string thread_id = 1;
+    // The workflow node it runs at, e.g. "implement.agent_loop". Empty when
+    // the run did not say.
+    string node = 2;
+    // The thread's title. Empty when it has none.
+    string title = 3;
+  }
+  repeated Agent agents = 1;
+}

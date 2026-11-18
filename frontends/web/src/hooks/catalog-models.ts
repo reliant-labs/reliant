@@ -40,8 +40,8 @@ export function driverDisplayName(driverId: string): string {
 // Copilot reports its account policy). The id here is the base model id and
 // `provider` is the raw driver; callers that need the app-wide model id
 // should combine them as `${id}@${provider}`.
-async function listAvailableModels() {
-  const response = await catalog().listAvailableModels({});
+async function listAvailableModels(orgId: string | null) {
+  const response = await catalog().listAvailableModels({ orgId: orgId ?? undefined });
   return response.models.map((m) => ({
     id: m.id,
     displayName: m.displayName,
@@ -61,8 +61,8 @@ async function listAvailableModels() {
 
 // Catalog list with full metadata (ListModels RPC). Each model is returned
 // once per available driver, id formatted as "modelId@driverId".
-async function listCatalogModels() {
-  const response = await catalog().listModels({});
+async function listCatalogModels(orgId: string | null) {
+  const response = await catalog().listModels({ orgId: orgId ?? undefined });
   return {
     models: response.models.map((m) => ({
       id: m.id,
@@ -114,14 +114,18 @@ async function listCatalogModels() {
  *     map iteration), so we only use it to append the extras the catalog
  *     lacks; disabled entries are dropped, matching the existing omit UX.
  *
+ * Both list what a chat of `orgId` may run on: the org's accounts and seats,
+ * and the person's own as its policy admits them (the server verifies the
+ * caller is a member). null names no org: the person's own accounts.
+ *
  * Fails open: if either RPC fails we degrade to whatever succeeded, so the
  * picker never blanks. Selection semantics are unchanged — every model id is
  * "modelId@driverId".
  */
-export async function fetchModelList() {
+export async function fetchModelList(orgId: string | null) {
   const [availableResult, catalogResult] = await Promise.allSettled([
-    listAvailableModels(),
-    listCatalogModels(),
+    listAvailableModels(orgId),
+    listCatalogModels(orgId),
   ]);
 
   const catalogModels =

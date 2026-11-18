@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -27,9 +28,10 @@ import (
 // already produced out of the consumer's reach when it is cancelled, and
 // CallLLM persists the partial turn from exactly those events.
 type GenAISpan struct {
-	span      trace.Span
-	requested string
-	retries   int
+	span       trace.Span
+	requested  string
+	retries    int
+	firstToken bool
 }
 
 // StartGenAISpan opens the span for a call to model through provider (the
@@ -40,12 +42,12 @@ func StartGenAISpan(ctx context.Context, provider string, model models.Model, st
 	if requested == "" {
 		requested = string(model.ID)
 	}
-	name := "chat"
+	name := telemetry.GenAIOpChat
 	if requested != "" {
 		name += " " + requested
 	}
 	attrs := []attribute.KeyValue{
-		attribute.String("gen_ai.operation.name", "chat"),
+		attribute.String(telemetry.AttrGenAIOperationName, telemetry.GenAIOpChat),
 		attribute.String("gen_ai.provider.name", provider),
 		attribute.String("gen_ai.request.model", requested),
 		attribute.Bool("gen_ai.request.stream", stream),
@@ -53,6 +55,12 @@ func StartGenAISpan(ctx context.Context, provider string, model models.Model, st
 	if model.ID != "" {
 		attrs = append(attrs, attribute.String("reliant.model_id", string(model.ID)))
 	}
+	// The run the call belongs to — workflow, node, agent, run, chat, user —
+	// so a dashboard can read tokens by workflow without joining to the
+	// workflow's span, which a continue-as-new or a resume puts on another
+	// trace. The worker puts the scope on the activity's ctx
+	// (observability.NewRunScopeWorkerInterceptor); outside a run it is empty.
+	attrs = append(attrs, telemetry.RunScopeFromContext(ctx).GenAIAttributes()...)
 	// Resolved per call, not cached: a package-level tracer taken before the
 	// process installs its provider would stay a no-op.
 	ctx, span := otel.Tracer("reliant.llm").Start(ctx, name,
@@ -65,6 +73,13 @@ func StartGenAISpan(ctx context.Context, provider string, model models.Model, st
 // and its usage, an error, a backoff wait.
 func (s *GenAISpan) Observe(ev DriverEvent) {
 	switch ev.Type {
+	case EventContentDelta, EventThinkingDelta:
+		// The first token of the response: the span's start to this event
+		// is the time to first token. Once per call, retries included.
+		if !s.firstToken {
+			s.firstToken = true
+			s.span.AddEvent(telemetry.EventFirstToken)
+		}
 	case EventComplete:
 		if ev.Response != nil {
 			s.RecordResponse(ev.Response, ev.Model.APIModel)
@@ -74,7 +89,7 @@ func (s *GenAISpan) Observe(ev DriverEvent) {
 	case EventRetryWait:
 		s.retries++
 		if ev.Retry != nil {
-			s.span.AddEvent("gen_ai.retry_wait", trace.WithAttributes(
+			s.span.AddEvent(telemetry.EventRetryWait, trace.WithAttributes(
 				attribute.Int("attempt", ev.Retry.Attempt),
 				attribute.Int("http.response.status_code", ev.Retry.StatusCode),
 				attribute.String("reason", ev.Retry.Reason),
@@ -114,7 +129,11 @@ func (s *GenAISpan) RecordResponse(resp *DriverResponse, servedModel string) {
 		attrs = append(attrs, attribute.Int64("gen_ai.usage.reasoning.output_tokens", u.ReasoningTokens))
 	}
 	if u.Cost > 0 {
-		attrs = append(attrs, attribute.Float64("reliant.cost_usd", u.Cost))
+		// The cost the provider or gateway reported, under forge's name and
+		// the one reliant reported it under first.
+		attrs = append(attrs,
+			attribute.Float64(telemetry.AttrAICostUSD, u.Cost),
+			attribute.Float64(telemetry.AttrReliantCostUSD, u.Cost))
 	}
 	if resp.UpstreamRequestID != "" {
 		attrs = append(attrs, attribute.String("gen_ai.response.id", resp.UpstreamRequestID))
@@ -134,7 +153,7 @@ func (s *GenAISpan) RecordError(err error) {
 	}
 	s.span.RecordError(err)
 	if errors.Is(err, context.Canceled) {
-		s.span.SetAttributes(attribute.String("error.type", "canceled"))
+		s.span.SetAttributes(attribute.String(telemetry.AttrErrorType, telemetry.ErrorTypeCanceled))
 		return
 	}
 	s.span.SetStatus(codes.Error, err.Error())

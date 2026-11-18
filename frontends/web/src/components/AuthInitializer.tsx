@@ -158,17 +158,16 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         hasAccessToken: !!session?.access_token,
       });
 
+      // A prefetch, not awaited: the project list waits for the tab's org
+      // (lib/orgScope), and nothing below depends on it. The forge shell has
+      // no Reliant projects (lib/shell.ts).
+      if (!isForgeShell()) {
+        void fetchProjects().catch((err: unknown) => {
+          logger.warn("[AuthInitializer] fetchProjects failed (will retry in ModernApp):", err);
+        });
+      }
       try {
-        await Promise.all([
-          loadPrivacySettings(),
-          settingsSync.initialize(),
-          // The forge shell has no Reliant projects (lib/shell.ts).
-          isForgeShell()
-            ? Promise.resolve()
-            : fetchProjects().catch((err: unknown) => {
-                logger.warn("[AuthInitializer] fetchProjects failed (will retry in ModernApp):", err);
-              }),
-        ]);
+        await Promise.all([loadPrivacySettings(), settingsSync.initialize()]);
         if (!stillSignedInAs(startupUserId)) return;
 
         logger.info("[AuthInitializer] Applying appearance settings to DOM...");

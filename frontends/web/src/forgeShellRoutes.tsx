@@ -15,7 +15,13 @@
  *                                             (components/Orgs/AcceptInvitePage)
  *   /forge/demo, /demo                        the forge journey's demo console
  *                                             on fixture data: public
- *   _authenticated                            ForgeAuthGuard: signed in, nothing else
+ *   _authenticated                            ForgeAuthGuard: signed in; then
+ *                                             OnboardingGate: a user who has not
+ *                                             finished onboarding goes through
+ *                                             Reliant's wizard first and comes
+ *                                             back (OnboardingFlow/onboardingGate.ts)
+ *     /onboarding                             that wizard, the same route, id
+ *                                             and page as Reliant's
  *     _forgeShell                             ForgeShellLayout: brand, nav, org,
  *                                             "Open in Reliant"
  *       /apps, /sites, /usage,
@@ -30,9 +36,11 @@
  * pages read their params and search by route id. That is why the guard's
  * layout keeps the id `_authenticated`.
  *
- * Nothing here reaches a daemon or Reliant's onboarding, chats or projects.
- * The pages that would (deploy, promote, the local dev stack) say how to run
- * them from a terminal instead (ForgeShell/RunFromTerminal).
+ * Nothing here reaches a daemon, chats or projects, except Reliant's
+ * onboarding wizard, which a first-time user is walked through on this host
+ * (no second sign-in) before the console. The pages that would (deploy,
+ * promote, the local dev stack) say how to run them from a terminal instead
+ * (ForgeShell/RunFromTerminal).
  */
 
 import type { ComponentType, ReactNode } from 'react'
@@ -48,6 +56,7 @@ import { bootForgeTour } from './components/ForgeShell/forgeTourBoot'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
 import { AuthGuard } from './components/AuthGuard'
 import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
+import { AskAgentModeProvider } from './components/Forge/Observability/AskReliant/askAgentMode'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { PageVisitTracker } from './components/PageVisitTracker'
 import { ModalLayer } from './components/Modals/ModalLayer'
@@ -59,7 +68,9 @@ import { getIsDev } from './lib/constants'
 import { lazyRoute } from './lib/lazyRoute'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { Toaster } from './lib/toast'
-import { authSearchSchema, oauthCallbackSearchSchema, upgradeSearchSchema } from './routeSchemas'
+import { authSearchSchema, oauthCallbackSearchSchema, onboardingSearchSchema, upgradeSearchSchema } from './routeSchemas'
+import { OnboardingGate } from './components/OnboardingFlow/OnboardingGate'
+import { FORGE_SHELL_ONBOARDING_EXEMPT_PREFIXES } from './components/OnboardingFlow/onboardingGate'
 
 // Taken before the router exists: the guard's sign-in redirect replaces the
 // URL the landing handoff arrived on (forgeEntry.ts).
@@ -75,6 +86,7 @@ const UpgradeAccount = lazyRoute(() => import('./components/UpgradeAccount'), 'U
 const ClaimPage = lazyRoute(() => import('./components/Claim/ClaimPage'), 'ClaimPage')
 const AcceptInvitePage = lazyRoute(() => import('./components/Orgs/AcceptInvitePage'), 'AcceptInvitePage')
 const CliLogin = lazyRoute(() => import('./components/Auth/CliLogin'), 'CliLogin')
+const OnboardingRoute = lazyRoute(() => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const OAuthConsent = lazyRoute(() => import('./components/Auth/OAuthConsent'), 'OAuthConsent')
 
 const ForgeAppsPage = lazyRoute(() => import('./components/ForgeShell/ForgeAppsPage'), 'ForgeAppsPage')
@@ -86,18 +98,23 @@ function ForgeRootShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   return (
     <SurfaceProvider surface="desktop">
-      <div data-shell="forge" data-pathname={pathname} className="contents">
-        <ActiveOrgBinding />
-        <PageVisitTracker firstVisitProps={entry} />
-        <Outlet />
-        <ModalLayer />
-        <Toaster />
-        <NewBuildPrompt />
-        {/* The journeys (Onboarding/JOURNEYS.md): at the root, so a step
-            follows the visitor between the public demo and signed-in pages. */}
-        <JourneyTour />
-        <ForgeLandingJourney />
-      </div>
+      {/* No daemon, no Reliant projects here: every "Ask Reliant" is the
+          handoff sheet (askAgentMode.tsx), never a chat this shell cannot
+          start. The public demo nests its own provider, with demo set. */}
+      <AskAgentModeProvider mode="handoff" cli="forge">
+        <div data-shell="forge" data-pathname={pathname} className="contents">
+          <ActiveOrgBinding />
+          <PageVisitTracker firstVisitProps={entry} />
+          <Outlet />
+          <ModalLayer />
+          <Toaster />
+          <NewBuildPrompt />
+          {/* The journeys (Onboarding/JOURNEYS.md): at the root, so a step
+              follows the visitor between the public demo and signed-in pages. */}
+          <JourneyTour />
+          <ForgeLandingJourney />
+        </div>
+      </AskAgentModeProvider>
     </SurfaceProvider>
   )
 }
@@ -221,6 +238,17 @@ export function buildForgeShellTree({
     ),
   })
 
+  // Reliant's welcome wizard, mounted as routes.tsx mounts it: the same path
+  // under a layout of the same id, so its route id is `/_authenticated/onboarding`
+  // in both trees (OnboardingRoute and useOnboardingPlan read search by it).
+  // Full-screen, outside the shell's chrome, as in Reliant.
+  const onboardingRoute = createRoute({
+    getParentRoute: () => authenticatedLayoutRoute,
+    path: '/onboarding',
+    validateSearch: onboardingSearchSchema,
+    component: OnboardingRoute,
+  })
+
   const shellLayoutRoute = createRoute({
     getParentRoute: () => authenticatedLayoutRoute,
     id: '_forgeShell',
@@ -276,6 +304,7 @@ export function buildForgeShellTree({
     indexRoute,
     ...extraRoutes(rootRoute),
     authenticatedLayoutRoute.addChildren([
+      onboardingRoute,
       shellLayoutRoute.addChildren([appsRoute, sitesRoute, usageRoute, settingsRoute, settingsSectionRoute]),
       forgeConsoleRoutes,
     ]),
@@ -286,8 +315,17 @@ export function buildForgeShellTree({
 // for screenshots and visual review — /forge-shell-preview?path=/apps.
 const ForgeShellPreview = lazyRoute(() => import('./components/ForgeShell/__preview__/ForgeShellPreview'), 'ForgeShellPreview')
 
+/** Signed in (ForgeAuthGuard), then onboarded (OnboardingGate, with the forge site's exemptions). */
+function ForgeGuard({ children }: { children: ReactNode }) {
+  return (
+    <ForgeAuthGuard>
+      <OnboardingGate exempt={FORGE_SHELL_ONBOARDING_EXEMPT_PREFIXES} honourForgeSkip>{children}</OnboardingGate>
+    </ForgeAuthGuard>
+  )
+}
+
 export const forgeRouteTree = buildForgeShellTree({
-  Guard: ForgeAuthGuard,
+  Guard: ForgeGuard,
   extraRoutes: (root) => [
     createRoute({
       getParentRoute: () => root,

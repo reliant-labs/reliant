@@ -282,3 +282,47 @@ func UnattendedFundingFromProto(f reliantv1.UnattendedFunding) (core.UnattendedF
 		return "", false
 	}
 }
+
+// StoredDefinition is the definition t (a read of the trigger) has now, to
+// send back in an update that changes one field: UpdateTrigger replaces the
+// whole row. `reliant trigger update <t> --org-accounts-only` sends it with
+// only the funding stamp changed.
+// Enabled is left unset (unchanged), an activation names its declaration
+// rather than a source, and its filter is the declaration's, not the row's.
+// The write-only webhook secret is left unset, which keeps the stored one
+// (Service.writeWebhookCredentials changes it only when the definition sets
+// one, or turns signatures off), and an update never re-issues the webhook
+// token.
+func StoredDefinition(t *reliantv1.Trigger) *reliantv1.TriggerDefinition {
+	def := &reliantv1.TriggerDefinition{
+		Name:             t.GetName(),
+		ProjectId:        t.GetProjectId(),
+		WorktreeId:       t.WorktreeId,
+		Workflow:         t.GetWorkflow(),
+		Presets:          t.GetPresets(),
+		Params:           t.GetParams(),
+		Message:          t.GetMessage(),
+		DaemonId:         t.GetDaemonId(),
+		NoMachine:        t.GetNoMachine(),
+		MachinePoolId:    t.GetMachinePoolId(),
+		NotifyOnComplete: t.GetNotifyOnComplete(),
+		ConnectionId:     t.ConnectionId,
+		ActingIdentity:   t.GetActingIdentity(),
+	}
+	if name := t.GetWorkflowTrigger(); name != "" {
+		def.Source = &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: name}
+		return def
+	}
+	def.Filter = t.GetFilter()
+	switch src := t.GetSource().(type) {
+	case *reliantv1.Trigger_Schedule:
+		def.Source = &reliantv1.TriggerDefinition_Schedule{Schedule: src.Schedule}
+	case *reliantv1.Trigger_Webhook:
+		def.Source = &reliantv1.TriggerDefinition_Webhook{Webhook: src.Webhook}
+	case *reliantv1.Trigger_Integration:
+		def.Source = &reliantv1.TriggerDefinition_Integration{Integration: src.Integration}
+	case *reliantv1.Trigger_WorkflowEvent:
+		def.Source = &reliantv1.TriggerDefinition_WorkflowEvent{WorkflowEvent: src.WorkflowEvent}
+	}
+	return def
+}

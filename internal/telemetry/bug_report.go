@@ -96,6 +96,12 @@ type BugReport struct {
 	// reliant's version, and the forge it embeds.
 	ReliantVersion string
 	ForgeVersion   string
+
+	// DaemonVersion and DaemonCommit are the build the machine's daemon
+	// registered with, which may be releases older than ReliantVersion.
+	// Empty when the daemon is unknown or did not report its build.
+	DaemonVersion string
+	DaemonCommit  string
 }
 
 // FileBugReport writes report to logger (the process logger when nil) as one
@@ -146,6 +152,8 @@ func bugReportAttrs(ctx context.Context, id string, report BugReport) []slog.Att
 		{"pod", report.Pod},
 		{"reliant_version", report.ReliantVersion},
 		{"forge_version", report.ForgeVersion},
+		{"daemon_version", report.DaemonVersion},
+		{"daemon_commit", report.DaemonCommit},
 	} {
 		if field.value != "" {
 			attrs = append(attrs, slog.String(field.key, field.value))

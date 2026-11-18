@@ -7,6 +7,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/errreason"
@@ -235,22 +236,45 @@ func errNoListeningAgent() error {
 		core.ErrRunNoListeningAgent), errreason.RunNoListeningAgent)
 }
 
+// errRecipientAmbiguous refuses input that several running agents could
+// read. The message names them for a reader; the RunRecipientAmbiguous
+// detail lists them for a client to offer as choices (reliant#2465).
 func (s *Service) errRecipientAmbiguous(ctx context.Context, listeners []v2.AgentLoopThread) error {
-	return svcerr.WithReason(svcerr.WithCause(svcerr.FailedPrecondition(fmt.Sprintf(
+	agents := s.listenerAgents(ctx, listeners)
+	err := svcerr.WithReason(svcerr.WithCause(svcerr.FailedPrecondition(fmt.Sprintf(
 		"not delivered: several agents are running in this run; name the one the message is for (target thread: its thread id or node name). Running: %s",
-		s.describeListeners(ctx, listeners))), core.ErrRunRecipientAmbiguous), errreason.RunRecipientAmbiguous)
+		describeAgents(agents))), core.ErrRunRecipientAmbiguous), errreason.RunRecipientAmbiguous)
+	return svcerr.WithDetail(err, &reliantv1.RunRecipientAmbiguous{Agents: agents})
 }
 
 // describeListeners names each running agent for a refusal: thread id, node,
 // and the thread's title when it has one.
 func (s *Service) describeListeners(ctx context.Context, listeners []v2.AgentLoopThread) string {
-	parts := make([]string, 0, len(listeners))
+	return describeAgents(s.listenerAgents(ctx, listeners))
+}
+
+// listenerAgents resolves each running agent's thread title. A thread whose
+// title cannot be read keeps an empty one: the refusal still lists it.
+func (s *Service) listenerAgents(ctx context.Context, listeners []v2.AgentLoopThread) []*reliantv1.RunRecipientAmbiguous_Agent {
+	agents := make([]*reliantv1.RunRecipientAmbiguous_Agent, 0, len(listeners))
 	for _, l := range listeners {
-		part := "thread " + l.Thread
-		if l.Node != "" {
-			part += " (node " + l.Node
-			if thread, err := s.deps.Repo.GetThread(ctx, l.Thread); err == nil && thread != nil && thread.Title != nil && *thread.Title != "" {
-				part += fmt.Sprintf(", %q", *thread.Title)
+		agent := &reliantv1.RunRecipientAmbiguous_Agent{ThreadId: l.Thread, Node: l.Node}
+		if thread, err := s.deps.Repo.GetThread(ctx, l.Thread); err == nil && thread != nil && thread.Title != nil {
+			agent.Title = *thread.Title
+		}
+		agents = append(agents, agent)
+	}
+	return agents
+}
+
+func describeAgents(agents []*reliantv1.RunRecipientAmbiguous_Agent) string {
+	parts := make([]string, 0, len(agents))
+	for _, a := range agents {
+		part := "thread " + a.GetThreadId()
+		if a.GetNode() != "" {
+			part += " (node " + a.GetNode()
+			if a.GetTitle() != "" {
+				part += fmt.Sprintf(", %q", a.GetTitle())
 			}
 			part += ")"
 		}

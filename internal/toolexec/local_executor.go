@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -128,6 +129,17 @@ func (e *LocalToolExecutor) executeTool(
 
 	var tool tools.Tool
 
+	// The run's org stamp (daemonpolicy.OrgStamp), from the worker that
+	// enforces the org's policy. Whatever runs this call honours it: it is
+	// carried on ctx for what starts MCP servers (mcp.Manager), and an MCP
+	// tool of a server the org does not allow is refused here, before its
+	// server is started. No stamp: today's behaviour exactly.
+	stamp := daemonpolicy.OrgStampFrom(contextMap)
+	ctx = daemonpolicy.WithOrgStamp(ctx, stamp)
+	if !stamp.MCPToolAllowed(toolName) {
+		return orgMCPRefusal(toolName)
+	}
+
 	// Extract context fields
 	chatID, _ := contextMap["chat_id"].(string)
 	thread, _ := contextMap["thread"].(string)
@@ -179,21 +191,18 @@ func (e *LocalToolExecutor) executeTool(
 
 	// Decode the project's nested repos so tools with a `repo` param can
 	// resolve it to a workspace-relative path. Absent when single-repo.
-	if reposRaw, ok := contextMap["repos"].([]interface{}); ok {
-		repos := make([]*core.Repo, 0, len(reposRaw))
-		for _, item := range reposRaw {
-			obj, ok := item.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			id, _ := obj["id"].(string)
-			name, _ := obj["name"].(string)
-			rel, _ := obj["relative_path"].(string)
-			repos = append(repos, &core.Repo{ID: id, Name: name, RelativePath: rel})
-		}
+	if repos, ok := reposFromContext(contextMap); ok {
 		toolContext.Repos = repos
 	}
 	if daemonClient != nil {
+		// An org that forces `credentials: none` on its runs' commands
+		// (the worker's OrgStamp; RemoteExecutor.applyMachinePolicy) gets it
+		// on every command this tool builds, here on the worker and on a
+		// machine that reads the stamp: the tool reaches a command only
+		// through this client.
+		if stamp.CredentialsForced() {
+			daemonClient = daemon.ForceCredentialsNone(daemonClient)
+		}
 		toolContext = toolContext.WithDaemon(daemonClient)
 	}
 	if e.mcpBinder != nil {
@@ -241,6 +250,13 @@ func (e *LocalToolExecutor) executeTool(
 			ErrorMessage: fmt.Sprintf("tool not found: %s", toolName),
 			ErrorCode:    "TOOL_NOT_FOUND",
 		}
+	}
+
+	// The org's MCP allowlist, on the server the name actually resolved to:
+	// the name-prefix check above only keeps a disallowed server from being
+	// started, and cannot tell server "a" from server "a__b" by a name.
+	if mcpTool, ok := tool.(interface{ MCPServer() string }); ok && !stamp.MCPServerAllowed(mcpTool.MCPServer()) {
+		return orgMCPRefusal(toolName)
 	}
 
 	// Admitted only once the tool is known to exist, so a daemon without it
@@ -305,4 +321,47 @@ func boundParamsFrom(contextMap map[string]interface{}) []string {
 		}
 	}
 	return out
+}
+
+// reposFromContext is the project's nested repos as the server recorded them in
+// the context map (ToolRequest.Repos), and whether the map carries any. Like
+// boundParamsFrom it reads both shapes: a []interface{} once the map has
+// crossed JSON on the way to a daemon, and the []map[string]interface{}
+// toolContextMap built when it stays in process — a server-placed tool (view,
+// edit, write). Reading only the first left every server-placed call with no
+// repos, so its `repo` param failed "not found in project (available: root)"
+// while shell and code_context resolved it (reliant#2755).
+func reposFromContext(contextMap map[string]interface{}) ([]*core.Repo, bool) {
+	var objs []map[string]interface{}
+	switch raw := contextMap["repos"].(type) {
+	case []map[string]interface{}:
+		objs = raw
+	case []interface{}:
+		for _, item := range raw {
+			if obj, ok := item.(map[string]interface{}); ok {
+				objs = append(objs, obj)
+			}
+		}
+	default:
+		return nil, false
+	}
+	repos := make([]*core.Repo, 0, len(objs))
+	for _, obj := range objs {
+		id, _ := obj["id"].(string)
+		name, _ := obj["name"].(string)
+		rel, _ := obj["relative_path"].(string)
+		repos = append(repos, &core.Repo{ID: id, Name: name, RelativePath: rel})
+	}
+	return repos, true
+}
+
+// orgMCPRefusal is the result of an MCP tool call the run's org does not allow.
+func orgMCPRefusal(toolName string) *ExecutionResult {
+	return &ExecutionResult{
+		Success:      false,
+		IsError:      true,
+		Content:      fmt.Sprintf("Your organization does not allow the MCP server of %s for its agents.", toolName),
+		ErrorMessage: "refused by the organization's MCP policy",
+		ErrorCode:    ErrorCodeOrgPolicy,
+	}
 }

@@ -110,6 +110,7 @@ func requireSingleClose(t *testing.T, router *terminalCommandRouter) {
 		"connection ended without closing its daemon terminal session — the shell and its PTY leak")
 	// A second close would come from the same teardown path; give it a
 	// moment to show up before asserting there is exactly one.
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — no second close is the pass, so there is no event to wait for, and the hijacked handler's exit is not observable
 	time.Sleep(50 * time.Millisecond)
 	closes := router.closeCommands()
 	require.Len(t, closes, 1, "expected exactly one terminal.close")

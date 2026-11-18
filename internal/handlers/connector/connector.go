@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -30,9 +31,15 @@ func connectorResource(grantID string) fat.Resource {
 // createGrantWithCredential stores the grant, then mints its credential bound
 // to it. The grant must exist first (the credential names it); if minting
 // fails, the grant is revoked so no credential-less grant looks usable.
+//
+// A forge grant gets no credential: the Reliant Forge connector acts only as
+// its signed-in person (OAuth), which a connector credential cannot do.
 func (s *Service) createGrantWithCredential(ctx context.Context, grant *connectorgrant.Grant) (string, error) {
 	if err := s.deps.Grants.CreateGrant(ctx, grant); err != nil {
 		return "", fmt.Errorf("create connector: %w", err)
+	}
+	if grant.KindOrDefault() == connectorgrant.KindForge {
+		return "", nil
 	}
 	res := connectorResource(grant.ID)
 	minted, err := s.deps.Tokens.MintForUser(ctx, tokenauthority.MintRequest{
@@ -78,7 +85,7 @@ func (s *Service) CreateConnector(
 		Connector: toProtoConnector(grant),
 		// Returned exactly once; the authority holds only its hash.
 		Credential: raw,
-		McpUrl:     s.mcpURL(),
+		McpUrl:     s.mcpURLFor(grant.KindOrDefault()),
 	}), nil
 }
 
@@ -99,6 +106,16 @@ func (s *Service) buildGrant(userID string, msg *reliantv1.CreateConnectorReques
 }
 
 func grantFromRequest(userID string, msg *reliantv1.CreateConnectorRequest) (*connectorgrant.Grant, error) {
+	switch msg.GetKind() {
+	case reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE:
+		return forgeGrantFromRequest(userID, msg)
+	case reliantv1.ConnectorKind_CONNECTOR_KIND_UNSPECIFIED, reliantv1.ConnectorKind_CONNECTOR_KIND_WORKSPACE:
+	default:
+		return nil, fmt.Errorf("unknown connector kind %v", msg.GetKind())
+	}
+	if strings.TrimSpace(msg.GetOrgId()) != "" || len(msg.GetProjectNames()) > 0 {
+		return nil, errors.New("a workspace connector names a workspace, not an organization or projects")
+	}
 	daemonID := strings.TrimSpace(msg.GetDaemonId())
 	if daemonID == "" {
 		return nil, errors.New("a connector must be bound to a specific workspace")
@@ -172,6 +189,104 @@ func grantFromRequest(userID string, msg *reliantv1.CreateConnectorRequest) (*co
 	}
 
 	return grant, nil
+}
+
+// forgeGrantFromRequest builds a Reliant Forge grant: one organization,
+// optionally some of its projects, and which forge tools.
+//
+// The org is not checked for membership here: the grant only ever NARROWS
+// what the person's own credential may do at the control plane, so a grant
+// naming an org they do not belong to permits nothing.
+func forgeGrantFromRequest(userID string, msg *reliantv1.CreateConnectorRequest) (*connectorgrant.Grant, error) {
+	if strings.TrimSpace(msg.GetDaemonId()) != "" || strings.TrimSpace(msg.GetPathRoot()) != "" ||
+		len(msg.GetExecAllowlist()) > 0 ||
+		(msg.GetExecMode() != reliantv1.ConnectorExecMode_CONNECTOR_EXEC_MODE_UNSPECIFIED &&
+			msg.GetExecMode() != reliantv1.ConnectorExecMode_CONNECTOR_EXEC_MODE_DENY) {
+		return nil, errors.New("a Reliant Forge connector reaches an organization, not a workspace: it takes no workspace, directory or shell access")
+	}
+	orgID := strings.TrimSpace(msg.GetOrgId())
+	if orgID == "" {
+		return nil, errors.New("choose the organization this connector may read")
+	}
+	projects, err := validateProjectNames(msg.GetProjectNames())
+	if err != nil {
+		return nil, err
+	}
+	tools, err := validateForgeTools(msg.GetAllowedTools())
+	if err != nil {
+		return nil, err
+	}
+	name := strings.TrimSpace(msg.GetName())
+	if name == "" {
+		name = "Reliant Forge"
+	}
+	grant := &connectorgrant.Grant{
+		ID: uuid.New().String(), UserID: userID, Name: name, Kind: connectorgrant.KindForge,
+		OrgID: orgID, ProjectNames: projects, AllowedTools: tools, ExecMode: connectorgrant.ExecDeny,
+	}
+	if grant.ExpiresAt, err = parseExpiry(msg.GetExpiresAt()); err != nil {
+		return nil, err
+	}
+	return grant, nil
+}
+
+// parseExpiry reads an optional RFC 3339 expiry that must lie ahead.
+func parseExpiry(raw string) (*time.Time, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	ts, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil, fmt.Errorf("expires_at must be an RFC3339 timestamp: %w", err)
+	}
+	if ts.Before(time.Now()) {
+		return nil, errors.New("expires_at is in the past")
+	}
+	return &ts, nil
+}
+
+// projectNameRE is a forge project name: forge.yaml `name`, the console's
+// /forge/p/<project>.
+var projectNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
+
+// validateProjectNames cleans a forge grant's project list; empty is every
+// project of the org.
+func validateProjectNames(names []string) ([]string, error) {
+	out := make([]string, 0, len(names))
+	seen := map[string]bool{}
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n == "" || seen[n] {
+			continue
+		}
+		if !projectNameRE.MatchString(n) {
+			return nil, fmt.Errorf("%q is not a forge project name (lowercase letters, digits and dashes)", n)
+		}
+		seen[n] = true
+		out = append(out, n)
+	}
+	return out, nil
+}
+
+// validateForgeTools rejects names outside the Reliant Forge catalog.
+func validateForgeTools(requested []string) ([]string, error) {
+	tools := make([]string, 0, len(requested))
+	seen := map[string]bool{}
+	for _, name := range requested {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		if _, ok := mcpserver.ForgeToolByName(name); !ok {
+			return nil, fmt.Errorf("unknown Reliant Forge tool %q", name)
+		}
+		seen[name] = true
+		tools = append(tools, name)
+	}
+	if len(tools) == 0 {
+		return nil, errors.New("a connector must be granted at least one tool")
+	}
+	return tools, nil
 }
 
 // validateTools rejects unknown tool names.
@@ -361,10 +476,19 @@ func (s *Service) ListConnectorActivity(
 // a list that drifts from the server's.
 func (s *Service) ListAvailableTools(
 	ctx context.Context,
-	_ *connect.Request[reliantv1.ListAvailableToolsRequest],
+	req *connect.Request[reliantv1.ListAvailableToolsRequest],
 ) (*connect.Response[reliantv1.ListAvailableToolsResponse], error) {
 	if _, ok := auth.GetUserIDFromContext(ctx); !ok {
 		return nil, svcerr.ErrUnauthenticated
+	}
+
+	if req.Msg.GetKind() == reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE {
+		forge := mcpserver.ForgeTools()
+		tools := make([]*reliantv1.ConnectorTool, 0, len(forge))
+		for _, t := range forge {
+			tools = append(tools, &reliantv1.ConnectorTool{Name: t.Name, Description: t.Description, Mutating: t.Mutating})
+		}
+		return connect.NewResponse(&reliantv1.ListAvailableToolsResponse{Tools: tools}), nil
 	}
 
 	catalog := mcpserver.Tools()
@@ -380,15 +504,16 @@ func (s *Service) ListAvailableTools(
 	return connect.NewResponse(&reliantv1.ListAvailableToolsResponse{Tools: tools}), nil
 }
 
-// mcpURL is the endpoint the user pastes into their MCP client.
-func (s *Service) mcpURL() string {
-	base := s.publicURL
-	if base == "" {
-		// Without a configured public URL, return the path alone rather than
-		// inventing a hostname that would silently be wrong.
-		return mcpserver.MountPath
+// mcpURLFor is the endpoint the user pastes into their MCP client for a
+// connector of kind.
+func (s *Service) mcpURLFor(kind connectorgrant.Kind) string {
+	path := mcpserver.MountPath
+	if kind == connectorgrant.KindForge {
+		path = mcpserver.ForgeMountPath
 	}
-	return base + mcpserver.MountPath
+	// Without a configured public URL, return the path alone rather than
+	// inventing a hostname that would silently be wrong.
+	return s.publicURL + path
 }
 
 // toProtoConnector converts a grant for display. It never carries credential
@@ -408,6 +533,9 @@ func toProtoConnector(g *connectorgrant.Grant) *reliantv1.Connector {
 		ExecMode:      execModeToProto(g.ExecMode),
 		ExecAllowlist: g.ExecAllowlist,
 		CreatedAt:     g.CreatedAt.UTC().Format(time.RFC3339),
+		Kind:          kindToProto(g.KindOrDefault()),
+		OrgId:         g.OrgID,
+		ProjectNames:  g.ProjectNames,
 	}
 
 	if g.ExpiresAt != nil {
@@ -435,3 +563,11 @@ func execModeToProto(m connectorgrant.ExecMode) reliantv1.ConnectorExecMode {
 
 // optionalTime formats a timestamp for an optional proto string field.
 func optionalTime(s string) *string { return &s }
+
+// kindToProto is a grant kind on the wire.
+func kindToProto(k connectorgrant.Kind) reliantv1.ConnectorKind {
+	if k == connectorgrant.KindForge {
+		return reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE
+	}
+	return reliantv1.ConnectorKind_CONNECTOR_KIND_WORKSPACE
+}

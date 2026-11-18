@@ -27,6 +27,7 @@ package controlplane
 import (
 	"context"
 	"net/http"
+	"time"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 )
@@ -174,6 +175,35 @@ type Service interface {
 	// writes nothing. Errors as the steps above; a control plane that
 	// predates it is ErrProjectOrgMoveUnsupported.
 	PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
+
+	// NotifyOrgKeyRejected emails orgID's owners and admins that a provider
+	// rejected one of the org's own API keys (OrgNotifyInternalService
+	// .NotifyOrgAdmins; control-plane docs/design/org-provider-accounts.md
+	// §4.7), signed with this process's internal-service identity. The
+	// control plane renders a fixed template, resolves the recipients and
+	// sends once per incident; deduplicated reports a repeat. Errors:
+	// ErrOrgNotifyUnsupported when the control plane has no such service or
+	// this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
+	// control-plane's code and reason.
+	NotifyOrgKeyRejected(ctx context.Context, n OrgKeyRejectedNotice) (deduplicated bool, err error)
+
+	// NotifyOrgAutomationNoOrgAccount emails orgID's owners and admins that an
+	// automation which may run only on the org's own AI accounts was paused
+	// because none of them could run its model (NotifyOrgAdmins'
+	// org_automation_no_org_account; org-provider-accounts §11.4). Errors as
+	// NotifyOrgKeyRejected; a control plane that predates the notice kind
+	// answers invalid_argument, a permanent refusal.
+	NotifyOrgAutomationNoOrgAccount(ctx context.Context, n OrgAutomationNoOrgAccountNotice) (deduplicated bool, err error)
+
+	// GetModelListPrices reads the list price of each model from
+	// control-plane's LLMPriceInternalService (LiteLLM's model catalog;
+	// docs/design/org-provider-accounts.md §5, P9), one per ref in order, and
+	// when the catalog was read. Signed with this process's internal-service
+	// identity. A model with no list price has Priced false. Errors:
+	// ErrListPricesUnsupported when the control plane has no such service or
+	// this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
+	// control-plane's code (unavailable: no catalog could be read).
+	GetModelListPrices(ctx context.Context, refs []ModelRef) ([]ModelListPrice, time.Time, error)
 }
 
 // Deps configures the adapter.

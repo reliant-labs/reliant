@@ -269,6 +269,11 @@ type usageLimitContext struct {
 	ChatID           string
 	Plan             fundingPlan
 	OrgFundedLimited bool
+	// RoutedAccounts are the provider's accounts a call refused before any
+	// request (every account limited) was routed over: whose org account the
+	// held thread waits for (recordOrgWait). Unset for a provider's refusal,
+	// whose account recorded its provenance before the call.
+	RoutedAccounts []models.AccountConfig
 }
 
 // usageLimitFailure turns a usage-limit refusal into a *types.UsageLimitFailure
@@ -335,7 +340,12 @@ func (r *AccountRouting) usageLimitFailure(ctx context.Context, err error, uc us
 	if !synthetic && uc.Account != nil {
 		uc.OrgFundedLimited = uc.OrgFundedLimited || limitedTierIsOrgFunded(uc.Account.Accounts, uc.ModelID)
 	}
-	r.fundingOnLimit(ctx, uc, &facts)
+	if synthetic {
+		r.recordOrgWait(ctx, uc, uc.RoutedAccounts)
+	}
+	if refused := r.fundingOnLimit(ctx, uc, &facts); refused != nil {
+		return refused
+	}
 	if !facts.AlternativeAccount {
 		facts.FallbackModel = r.fallbackModel(ctx, uc)
 	}
@@ -363,6 +373,13 @@ func (r *AccountRouting) providerFailure(ctx context.Context, err error, uc usag
 		return err
 	}
 	if rejected := r.credentialRejection(ctx, err, uc); rejected != nil {
+		return rejected
+	}
+	// An OAuth session the provider still refuses after the driver's reload
+	// and refresh is the user's to reconnect: told so, and not an ERROR.
+	if rejected := oauthSessionRejection(err, uc); rejected != nil {
+		logging.InfoContext(ctx, "[Failover] The provider rejected an OAuth session after a refresh; the user must reconnect the account",
+			"userID", uc.Scope.UserID, "provider", string(uc.Driver), "accountID", uc.Account.Config.AccountID)
 		return rejected
 	}
 	return r.usageLimitFailure(ctx, err, uc)

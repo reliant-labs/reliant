@@ -66,9 +66,11 @@ interface RepoSelectorProps {
   oauthReturnTo?: string;
   /** Optional analytics tag to differentiate where the picker was opened. */
   analyticsPhase?: string;
+  /** A repository URL to start the URL field with; the reader still confirms it. */
+  initialUrl?: string;
 }
 
-export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSelectorProps) {
+export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase, initialUrl }: RepoSelectorProps) {
   const {
     data: reposData,
     isLoading: reposLoading,
@@ -88,7 +90,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
   } = useGitHubCredential();
 
   const [search, setSearch] = useState("");
-  const [manualUrl, setManualUrl] = useState("");
+  const [manualUrl, setManualUrl] = useState(initialUrl ?? "");
   const [manualBranch, setManualBranch] = useState("main");
   const [manualError, setManualError] = useState("");
   const [connecting, setConnecting] = useState(false);

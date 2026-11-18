@@ -160,38 +160,95 @@ func TestPinOnlyChangeDoesNotRequireLint(t *testing.T) {
 	}
 }
 
-// The merge queue's tier (merge-gate.sh --queue) and --skip-lint leave vet and
-// the scoped forge lint to the release gate; everything else they are obliged
-// to keep.
-func TestQueueTierDoesNotRequireVetOrLint(t *testing.T) {
+// --skip-lint leaves vet and the scoped forge lint to the release gate. The
+// merge queue's tier (merge-gate.sh --queue) leaves vet to it but runs the
+// scoped forge lint: with none, #2696 and #2662 reached main on findings it
+// names. Everything else both are obliged to keep. golangci (the queue's
+// golangci (changed) job, run by the gate) is obliged on a .go change unless
+// the gate marked golangci-elsewhere (--queue, --skip-golangci): such a job
+// runs beside it.
+func TestQueueTierRequiresLintButNotVet(t *testing.T) {
 	pl := &Plan{
 		Files: []FileReport{{Path: "internal/x/x.go"}, {Path: "db/migrations/1_a.up.sql"}},
 		Go:    GoPlan{Build: []string{"./internal/x"}, Packages: []string{"./internal/x"}},
 	}
 	dir := gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0})
-	for _, tier := range []string{"queue", "skip-lint"} {
-		if err := os.WriteFile(filepath.Join(dir, "tier"), []byte(tier+"\n"), 0o644); err != nil {
-			t.Fatal(err)
+	for _, tc := range []struct {
+		tier       string
+		elsewhere  bool // the gate wrote golangci-elsewhere
+		obliged    []string
+		notObliged []string
+	}{
+		{"queue", true, []string{"migsafety", "lint"}, []string{"vet", "golangci"}},
+		{"skip-lint", true, []string{"migsafety"}, []string{"vet", "lint", "golangci"}},
+		{"skip-lint", false, []string{"migsafety", "golangci"}, []string{"vet", "lint"}},
+		{"", true, []string{"migsafety", "lint", "vet"}, []string{"golangci"}},
+		{"", false, []string{"migsafety", "lint", "vet", "golangci"}, nil},
+	} {
+		_ = os.Remove(filepath.Join(dir, "tier"))
+		_ = os.Remove(filepath.Join(dir, "golangci-elsewhere"))
+		if tc.elsewhere {
+			if err := os.WriteFile(filepath.Join(dir, "golangci-elsewhere"), []byte("a job beside the gate\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if tc.tier != "" {
+			if err := os.WriteFile(filepath.Join(dir, "tier"), []byte(tc.tier+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
 		}
 		if code, _ := verify(t, dir); code == 0 {
-			t.Fatalf("the %s tier passed a migration without migsafety", tier)
+			t.Fatalf("the %q tier passed a migration without migsafety", tc.tier)
 		}
 		v := verdict(t, dir)
-		if !strings.Contains(v, "migsafety") {
-			t.Fatalf("%s: verdict %q does not name migsafety", tier, v)
+		for _, want := range tc.obliged {
+			if !strings.Contains(v, want+" never completed") {
+				t.Errorf("the %q tier did not oblige %s: %q", tc.tier, want, v)
+			}
 		}
-		for _, unwanted := range []string{"vet", "lint"} {
+		for _, unwanted := range tc.notObliged {
 			if strings.Contains(v, unwanted+" never completed") {
-				t.Fatalf("the %s tier obliged %s: %q", tier, unwanted, v)
+				t.Errorf("the %q tier obliged %s: %q", tc.tier, unwanted, v)
 			}
 		}
 	}
-	if err := os.Remove(filepath.Join(dir, "tier")); err != nil {
-		t.Fatal(err)
+}
+
+// golangci's verdict is the gate's: a finding (golangci-lint's exit 1, a G101
+// hard-coded credential say) fails it by name, a green row passes, and a diff
+// that only deletes Go files obliges no lint.
+func TestGolangciRowDecidesTheGate(t *testing.T) {
+	pl := &Plan{Files: []FileReport{{Path: "internal/x/x.go"}}}
+	base := map[string]int{"plan": 0, "build": 0, "test": 0, "lint": 0, "vet": 0}
+	rows := func(golangci int) map[string]int {
+		r := map[string]int{"golangci": golangci}
+		for k, v := range base {
+			r[k] = v
+		}
+		return r
 	}
-	verify(t, dir)
-	if v := verdict(t, dir); !strings.Contains(v, "vet never completed") || !strings.Contains(v, "lint never completed") {
-		t.Fatalf("without the queue tier vet and lint must be obliged: %q", v)
+	if code, v := verify(t, gateDir(t, pl, rows(1))); code == 0 || !strings.Contains(v, "golangci failed (rc 1)") {
+		t.Errorf("a golangci finding passed the gate: %q", v)
+	}
+	if code, v := verify(t, gateDir(t, pl, rows(0))); code != 0 {
+		t.Errorf("a clean golangci failed the gate: %q", v)
+	}
+	gone := &Plan{Files: []FileReport{{Path: "internal/x/x.go", Deleted: true}, {Path: "internal/x/README.md"}}}
+	if code, v := verify(t, gateDir(t, gone, base)); code != 0 {
+		t.Errorf("a diff deleting its only Go file obliged golangci: %q", v)
+	}
+}
+
+// A selected demo build that never ran fails the gate, by name.
+func TestSelectedDemoBuildIsObliged(t *testing.T) {
+	pl := &Plan{Files: []FileReport{{Path: "frontends/web/src/hooks/useOrgs.ts"}}, WebDemo: WebDemoPlan{LaneFull: selected("in the forge demo bundle's import graph")}}
+	dir := gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0, "typecheck": 0, "lint": 0})
+	if code, _ := verify(t, dir); code == 0 || !strings.Contains(verdict(t, dir), "demo never completed") {
+		t.Fatalf("a selected demo build with no row passed: %q", verdict(t, dir))
+	}
+	dir = gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0, "typecheck": 0, "lint": 0, "demo": 0})
+	if code, v := verify(t, dir); code != 0 {
+		t.Fatalf("a completed demo build failed: %q", v)
 	}
 }
 

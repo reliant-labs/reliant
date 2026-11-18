@@ -58,7 +58,7 @@ export function useIdentityUser(orgId: string, envId: string, userId: string | n
       if (!api.getUser) throw new Error("This server does not support identity lookup.");
       return api.getUser(orgId, envId, userId!);
     },
-    enabled: enabled && !!userId,
+    enabled: enabled && !!orgId && !!userId,
     retry: identityRetry,
   });
 }

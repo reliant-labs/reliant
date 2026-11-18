@@ -136,14 +136,15 @@ func GetProjectWithUserCheck(ctx context.Context, db orm.Context, id, userID str
 	return p, nil
 }
 
-// ListProjects returns the user's projects, most recently active first. A
-// zero limit is 100.
+// ListProjects returns the user's projects, most recently active first,
+// leaving out those scheduled for deletion (ListDeletedProjects lists them).
+// A zero limit is 100.
 func ListProjects(ctx context.Context, db orm.Context, filters core.ProjectFilters) ([]*core.Project, error) {
 	limit := filters.Limit
 	if limit == 0 {
 		limit = 100
 	}
-	opts := []orm.QueryOption{orm.WhereEq(ProjectFieldUserID, filters.UserID)}
+	opts := []orm.QueryOption{orm.WhereEq(ProjectFieldUserID, filters.UserID), orm.WhereIsNull(ProjectFieldDeleteAfter)}
 	if filters.Org != nil {
 		opts = append(opts, whereOrg(ProjectFieldOrgID, filters.Org))
 	}
@@ -209,16 +210,6 @@ func TouchProject(ctx context.Context, db orm.Context, id, userID string) error 
 	return err
 }
 
-// DeleteUserProject deletes the user's project. A project that is missing or
-// another user's is left alone, without an error.
-func DeleteUserProject(ctx context.Context, db orm.Context, id, userID string) error {
-	_, err := db.Bun().NewDelete().Model((*Project)(nil)).
-		Where("id = ?", id).
-		Where("user_id = ?", userID).
-		Exec(ctx)
-	return err
-}
-
 // firstProject returns the first project matching opts, or nil when none
 // does.
 func firstProject(ctx context.Context, db orm.Context, opts ...orm.QueryOption) (*core.Project, error) {
@@ -267,5 +258,8 @@ func projectToCore(row *Project) *core.Project {
 		LastActive:       row.LastActive,
 		Visibility:       visibilityOf(row.Visibility),
 		SharedAt:         row.SharedAt,
+		DeleteAfter:      row.DeleteAfter,
+		DeletedBy:        row.DeletedBy,
+		PurgeStartedAt:   row.PurgeStartedAt,
 	}
 }

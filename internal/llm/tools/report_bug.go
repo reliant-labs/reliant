@@ -251,11 +251,31 @@ func (t *reportBugTool) describeCaller(tc *rctx.ToolContext, report *telemetry.B
 				report.Pod = stringOrEmpty(daemon.Hostname)
 			}
 		}
+		// ReliantVersion is this server's build. The daemon that ran the
+		// tools can be releases older (reliant#2761: a machine on v1.13 for
+		// days filed dozens of reports against defects v1.13.0-rc.2 fixed,
+		// each carrying the server's newer version), so its own build is
+		// recorded beside it, as it registered.
+		if report.UserID != "" {
+			if atts, err := t.lookup.ListFreshDaemonAttachmentsForUser(tc.Context, report.UserID, bugReportAttachmentWindow); err == nil {
+				for _, att := range atts {
+					if att != nil && att.DaemonID == report.DaemonID && att.Build.Known() {
+						report.DaemonVersion, report.DaemonCommit = att.Build.Version, att.Build.Commit
+						break
+					}
+				}
+			}
+		}
 	}
 }
 
 // daemonTypeManaged is db.Daemon.DaemonType for a cloud workspace.
 const daemonTypeManaged = "managed"
+
+// bugReportAttachmentWindow is how recently a daemon must have been heard from
+// for its registered build to describe a report. Generous: a report is often
+// filed about a machine that has just been flapping.
+const bugReportAttachmentWindow = 15 * time.Minute
 
 func stringOrEmpty(s *string) string {
 	if s == nil {

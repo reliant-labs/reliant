@@ -155,8 +155,14 @@ func (s *Service) CreateProject(
 		Truncated        bool             `json:"truncated"`
 		TruncatedReason  string           `json:"truncated_reason"`
 	}
-	if err := send("repo.discover", map[string]interface{}{"path": req.Msg.Path}, &discoverResp); err != nil {
+	// forge_apps: the same walk reports every forge app in each repo, which
+	// is recorded once the repos are (projectfacts.RecordForgeApps). A daemon
+	// older than that walk ignores it and reports none: unknown.
+	var discoverRaw json.RawMessage
+	if err := send("repo.discover", map[string]interface{}{"path": req.Msg.Path, "forge_apps": true}, &discoverRaw); err != nil {
 		logging.WarnContext(ctx, "Failed to discover repos via daemon, project will start with zero repos", "error", err, "path", req.Msg.Path)
+	} else if err := json.Unmarshal(discoverRaw, &discoverResp); err != nil {
+		logging.WarnContext(ctx, "Could not read the daemon's repo discovery, project will start with zero repos", "error", err, "path", req.Msg.Path)
 	} else if discoverResp.Truncated {
 		// The repos found are registered; the rest are adopted the first time
 		// a workspace needs them (repo.AdoptFromDaemon), which says so if its
@@ -345,6 +351,11 @@ func (s *Service) CreateProject(
 		}
 	}
 
+	// Every forge app in the repos just recorded, from the same walk.
+	if scan, ok := projectfacts.ParseForgeApps(discoverRaw); ok {
+		projectfacts.RecordForgeApps(ctx, s.deps.Repo, project.ID, scan)
+	}
+
 	// Create reliant.md with default instructions if it doesn't exist (via daemon)
 	var initFilesResp struct {
 		CreatedReliantMD  bool   `json:"created_reliant_md"`
@@ -503,9 +514,18 @@ func (s *Service) findOrAttachOn(ctx context.Context, userID, daemonID, path str
 // may no longer act in (an org they have left, a credential's other org). It
 // still holds its (user_id, path) and (user_id, remote_url) keys, so a new
 // project cannot take them either: AlreadyExists, naming nothing of it.
+//
+// A project of the caller's that is scheduled for deletion holds them too,
+// until it is purged: it is hidden, so it is not found, and the caller is
+// told how to free the path (FailedPrecondition, ReasonProjectScheduledForDeletion).
 func reusableProject(ctx context.Context, userID string, existing *db.Project) error {
 	if authz.CanWriteProject(ctx, userID, existing) {
 		return nil
+	}
+	if existing.DeleteAfter != nil && ownsDeleted(ctx, userID, existing) {
+		return svcerr.WithReason(svcerr.FailedPrecondition(fmt.Sprintf(
+			"you deleted the project %q that uses this path or repository; it can be restored until %s. Restore it ('reliant project restore %s'), or delete it for good ('reliant project delete --now %s'), to add it again",
+			existing.Name, existing.DeleteAfter.UTC().Format("2006-01-02 15:04 MST"), existing.ID, existing.ID)), ReasonProjectScheduledForDeletion)
 	}
 	return svcerr.AlreadyExists("a project you can no longer access already uses this path or repository")
 }
@@ -526,6 +546,7 @@ func (s *Service) attachExisting(ctx context.Context, userID, daemonID string, e
 		return nil, err
 	}
 	projectfacts.LearnForgeName(ctx, s.deps.Router, s.deps.Repo, userID, daemonID, existing.ID, path)
+	projectfacts.RefreshForgeApps(ctx, s.deps.Router, s.deps.Repo, userID, daemonID, existing.ID, path, 0)
 	return connect.NewResponse(&reliantv1.CreateProjectResponse{
 		Project:       projectToProto(existing),
 		ProjectDaemon: s.checkoutProto(ctx, justRecorded(existing.ID, daemonID, path, existing.DefaultBranch)),

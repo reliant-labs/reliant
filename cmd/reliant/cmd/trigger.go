@@ -264,6 +264,7 @@ func newTriggerCreateCmd() *cobra.Command {
 				return conn.annotate(fmt.Errorf("creating trigger: %w", err))
 			}
 			printTriggerDetail(cmd.OutOrStdout(), resp.Msg.GetTrigger())
+			printFundingWarning(cmd.OutOrStdout(), resp.Msg.GetFundingWarning())
 			return nil
 		},
 	}
@@ -272,8 +273,24 @@ func newTriggerCreateCmd() *cobra.Command {
 	return cmd
 }
 
+// keepIdentityOf defaults an update's name and project to the trigger's own,
+// so an update that does not mean to rename or move a trigger does neither.
+// Without it an update with --workflow and no --name renamed the trigger to
+// its workflow's name (create's default), and the next `trigger fire <name>`
+// found nothing by its old name.
+func (f *triggerDefinitionFlags) keepIdentityOf(existing *reliantv1.Trigger) {
+	if f.name == "" {
+		f.name = existing.GetName()
+	}
+	// Updating a schedule from another directory does not relocate it.
+	if f.projectID == "" && f.projectPath == "" {
+		f.projectID = existing.GetProjectId()
+	}
+}
+
 func newTriggerUpdateCmd() *cobra.Command {
 	var flags triggerDefinitionFlags
+	var orgAccountsOnly bool
 	cmd := &cobra.Command{
 		Use:     "update <id-or-name>",
 		PreRunE: refuseFromAgentShell,
@@ -281,8 +298,15 @@ func newTriggerUpdateCmd() *cobra.Command {
 		Long: `Replace a trigger's definition.
 
 This is a full replacement, not a patch: every field is written as given, so
-flags you omit are written as their zero value. The exception is enabled,
-which is left as it is unless you pass --disabled or --disabled=false.`,
+flags you omit are written as their zero value. The exceptions are enabled,
+which is left as it is unless you pass --disabled or --disabled=false, and the
+trigger's name and project, which are kept unless you pass --name or
+--project-id / --project.
+
+--org-accounts-only makes the trigger's runs spend only its organization's AI
+accounts, never your own. Given alone, it changes only that and keeps the rest
+of the stored definition. The CLI only tightens: letting an automation spend
+your own accounts is done in the app.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conn, err := resolveConnection(cmd)
@@ -294,12 +318,10 @@ which is left as it is unless you pass --disabled or --disabled=false.`,
 			if err != nil {
 				return conn.annotate(err)
 			}
-			// Default the project to the one the trigger already runs in, so
-			// updating a schedule from another directory does not relocate it.
-			if flags.projectID == "" && flags.projectPath == "" {
-				flags.projectID = existing.GetProjectId()
-			}
-			def, err := flags.definition(cmd.Context(), cmd, conn, true)
+			flags.keepIdentityOf(existing)
+			def, err := updateDefinition(cmd, orgAccountsOnly, existing, func() (*reliantv1.TriggerDefinition, error) {
+				return flags.definition(cmd.Context(), cmd, conn, true)
+			})
 			if err != nil {
 				return err
 			}
@@ -309,11 +331,13 @@ which is left as it is unless you pass --disabled or --disabled=false.`,
 				return conn.annotate(fmt.Errorf("updating trigger: %w", err))
 			}
 			printTriggerDetail(cmd.OutOrStdout(), resp.Msg.GetTrigger())
+			printFundingWarning(cmd.OutOrStdout(), resp.Msg.GetFundingWarning())
 			return nil
 		},
 	}
 	flags.bind(cmd)
 	cmd.Flags().BoolVar(&flags.disabled, "disabled", false, "Pause the trigger (omit to leave its current state alone)")
+	cmd.Flags().BoolVar(&orgAccountsOnly, orgAccountsOnlyFlag, false, "Run only on the trigger's organization's AI accounts, never your own (alone: changes only that)")
 	return cmd
 }
 
@@ -415,6 +439,7 @@ definition and firing history survive and re-enabling needs no re-derivation.`,
 				return conn.annotate(fmt.Errorf("%s trigger: %w", verb, err))
 			}
 			printTriggerDetail(cmd.OutOrStdout(), resp.Msg.GetTrigger())
+			printFundingWarning(cmd.OutOrStdout(), resp.Msg.GetFundingWarning())
 			return nil
 		},
 	}
@@ -699,6 +724,11 @@ func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
 	}
 	fmt.Fprintf(w, "Daemon:\t%s\n", orDash(t.GetDaemonId()))
 	fmt.Fprintf(w, "Workflow:\t%s\n", orDash(t.GetWorkflow()))
+	fmt.Fprintf(w, "Acting as:\t%s\n", actingIdentityLabel(t.GetActingIdentity()))
+	if org := t.GetOrgId(); org != "" {
+		fmt.Fprintf(w, "Organization:\t%s\n", org)
+		fmt.Fprintf(w, "Unattended funding:\t%s\n", unattendedFundingLabel(t.GetUnattendedFunding()))
+	}
 	if src := t.GetDefinitionSource(); src != nil {
 		fmt.Fprintf(w, "Definition:\t%s\n", src.GetSummary())
 		for _, warning := range src.GetWarnings() {
@@ -766,6 +796,19 @@ func triggerStateLabel(t *reliantv1.Trigger) string {
 		return "enabled"
 	}
 	return "paused"
+}
+
+// actingIdentityLabel says whose name a trigger's GitHub writes carry, in the
+// words --acting-as takes; "-" when the server sent none (an older server).
+func actingIdentityLabel(a reliantv1.ActingIdentity) string {
+	switch a {
+	case reliantv1.ActingIdentity_ACTING_IDENTITY_APP:
+		return "app (the Reliant GitHub App's bot)"
+	case reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER:
+		return "owner (the activation owner's own GitHub account)"
+	default:
+		return "-"
+	}
 }
 
 // triggerHealthLabel is TriggerHealth.status in the words the app uses

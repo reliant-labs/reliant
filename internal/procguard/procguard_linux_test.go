@@ -109,6 +109,35 @@ func TestGuardRefusesNearTheLimitAndNamesTheTrees(t *testing.T) {
 	}
 }
 
+// GroupTasks sizes any counted group, not only the few the report names.
+func TestGroupTasksSizesEveryGroup(t *testing.T) {
+	f := newFakeProc(t)
+	g := New(Config{ProcRoot: f.root, UID: os.Getuid(), NprocLimit: 1000, ThreadsMax: 1 << 30, Owners: func() []proctree.Info { return nil }})
+	if got := g.GroupTasks(100); got != 0 {
+		t.Fatalf("GroupTasks before a count = %d, want 0", got)
+	}
+	for i := range TopTrees + 1 {
+		f.add(100+i, 100+i, 10+i, "sleep 9")
+	}
+	f.add(500, 100, 3, "sleep 9")
+	if !g.Check() {
+		t.Fatal("the guard could not count the fake /proc")
+	}
+	if got := g.GroupTasks(100); got != 13 {
+		t.Errorf("GroupTasks(100) = %d, want 13 (10 + 3 in the group)", got)
+	}
+	if len(g.Report().Top) != TopTrees {
+		t.Fatalf("report names %d trees, want %d", len(g.Report().Top), TopTrees)
+	}
+	// Group 101 (11 tasks) is the smallest, outside the report's top.
+	if got := g.GroupTasks(101); got != 11 {
+		t.Errorf("GroupTasks(101) = %d, want 11: a group outside the report's top is sized too", got)
+	}
+	if got := g.GroupTasks(999); got != 0 {
+		t.Errorf("GroupTasks of a group that does not exist = %d, want 0", got)
+	}
+}
+
 // Whichever limit is nearer counts: here the kernel's threads-max, against
 // every user's tasks.
 func TestGuardUsesTheTighterLimit(t *testing.T) {

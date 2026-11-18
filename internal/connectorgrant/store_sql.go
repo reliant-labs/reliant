@@ -53,6 +53,10 @@ func (s *SQLStore) CreateGrant(ctx context.Context, g *Grant) error {
 	if err != nil {
 		return fmt.Errorf("encode exec allowlist: %w", err)
 	}
+	projects, err := json.Marshal(orEmpty(g.ProjectNames))
+	if err != nil {
+		return fmt.Errorf("encode project names: %w", err)
+	}
 
 	now := time.Now().UTC()
 	if g.CreatedAt.IsZero() {
@@ -60,9 +64,10 @@ func (s *SQLStore) CreateGrant(ctx context.Context, g *Grant) error {
 	}
 	g.UpdatedAt = now
 	row := &store.ConnectorGrant{
-		ID: g.ID, UserID: g.UserID, DaemonID: g.DaemonID, Name: g.Name, TokenPrefix: g.TokenPrefix,
+		ID: g.ID, UserID: g.UserID, DaemonID: nullString(g.DaemonID), Name: g.Name, TokenPrefix: g.TokenPrefix,
 		AllowedTools: tools, PathRoot: g.PathRoot, ExecMode: string(g.ExecMode), ExecAllowlist: allowlist,
 		ExpiresAt: g.ExpiresAt, CreatedAt: g.CreatedAt, UpdatedAt: g.UpdatedAt,
+		Kind: string(g.KindOrDefault()), OrgID: g.OrgID, ProjectNames: projects,
 	}
 	if err := store.CreateConnectorGrant(ctx, s.db, row); err != nil {
 		return fmt.Errorf("create connector grant: %w", err)
@@ -79,14 +84,35 @@ func validateGrant(g *Grant) error {
 		return errors.New("grant id is required")
 	case g.UserID == "":
 		return errors.New("grant user id is required")
-	case g.DaemonID == "":
-		// A grant must name exactly one daemon. There is no "all daemons"
-		// form, by design.
-		return errors.New("grant must be bound to a daemon")
 	case len(g.AllowedTools) == 0:
 		return errors.New("grant must allow at least one tool")
-	case g.PathRoot == "":
-		return errors.New("grant must specify a path root")
+	}
+
+	switch g.KindOrDefault() {
+	case KindWorkspace:
+		switch {
+		case g.DaemonID == "":
+			// A grant must name exactly one daemon. There is no "all
+			// daemons" form, by design.
+			return errors.New("grant must be bound to a daemon")
+		case g.PathRoot == "":
+			return errors.New("grant must specify a path root")
+		case g.OrgID != "" || len(g.ProjectNames) > 0:
+			return errors.New("a workspace grant names no organization or projects")
+		}
+	case KindForge:
+		switch {
+		case g.OrgID == "":
+			// An account-scoped grant names exactly one organization:
+			// there is no "every org I belong to" form either.
+			return errors.New("a forge grant must name an organization")
+		case g.DaemonID != "" || g.PathRoot != "":
+			return errors.New("a forge grant names no daemon or path root")
+		}
+		// Shell access means nothing to a forge grant; store the safe value.
+		g.ExecMode, g.ExecAllowlist = ExecDeny, nil
+	default:
+		return fmt.Errorf("unknown grant kind %q", g.Kind)
 	}
 
 	switch g.ExecMode {
@@ -263,7 +289,7 @@ func (s *SQLStore) listAudit(ctx context.Context, limit int, filters ...orm.Quer
 
 func grantFromRow(row *store.ConnectorGrant) (*Grant, error) {
 	g := &Grant{
-		ID: row.ID, UserID: row.UserID, DaemonID: row.DaemonID, Name: row.Name, TokenPrefix: row.TokenPrefix,
+		ID: row.ID, UserID: row.UserID, Name: row.Name, TokenPrefix: row.TokenPrefix,
 		PathRoot: row.PathRoot, ExecMode: ExecMode(row.ExecMode),
 		ExpiresAt: row.ExpiresAt, LastUsedAt: row.LastUsedAt, RevokedAt: row.RevokedAt,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
@@ -274,6 +300,16 @@ func grantFromRow(row *store.ConnectorGrant) (*Grant, error) {
 	if len(row.ExecAllowlist) > 0 {
 		if err := json.Unmarshal(row.ExecAllowlist, &g.ExecAllowlist); err != nil {
 			return nil, fmt.Errorf("decode exec allowlist for grant %s: %w", g.ID, err)
+		}
+	}
+	// A forge grant names no daemon (NULL).
+	if row.DaemonID != nil {
+		g.DaemonID = *row.DaemonID
+	}
+	g.Kind, g.OrgID = Kind(row.Kind), row.OrgID
+	if len(row.ProjectNames) > 0 {
+		if err := json.Unmarshal(row.ProjectNames, &g.ProjectNames); err != nil {
+			return nil, fmt.Errorf("decode project names for grant %s: %w", g.ID, err)
 		}
 	}
 	return g, nil

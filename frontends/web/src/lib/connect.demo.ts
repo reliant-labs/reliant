@@ -16,6 +16,7 @@ import type { DescService } from "@bufbuild/protobuf";
 import { Code, ConnectError, createClient, type Client, type Transport } from "@connectrpc/connect";
 
 import type * as Real from "./connect";
+import { yieldToMain } from "./yieldToMain";
 
 /** What a page shows for a read the demo has no sample data for. */
 export const SAMPLE_DATA_UNAVAILABLE = "Sample data isn't available for this in the demo.";
@@ -50,6 +51,9 @@ function friendly(err: unknown): never {
 export const transport: typeof Real.transport = {
   async unary(method, signal, timeoutMs, header, input, contextValues) {
     const t = await target();
+    // The scenario answers in the browser, synchronously: one read per task, so
+    // a page's burst of reads cannot hold the main thread in one long task.
+    await yieldToMain();
     try {
       return await t.unary(method, signal, timeoutMs, header, input, contextValues);
     } catch (err) {

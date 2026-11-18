@@ -46,6 +46,7 @@ func (s *Service) RotateOrgProviderAPIKey(
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
+	s.wakeOrgChats(ctx, orgID, "an org account's key was replaced")
 	s.deps.Logger.InfoContext(ctx, "org provider account key rotated", "org_id", orgID, "account_id", acct.ID, "user_id", userID)
 	out, err := s.one(ctx, orgID, acct)
 	if err != nil {

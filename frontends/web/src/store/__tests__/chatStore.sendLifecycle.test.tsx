@@ -21,6 +21,7 @@
 import { act, render, waitFor } from "@testing-library/react";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
   ContentBlockType,
@@ -28,6 +29,7 @@ import {
   StreamingState,
   WorkflowState,
 } from "../../gen/reliant/v1/chat_pb";
+import { RunRecipientAmbiguousSchema } from "../../gen/reliant/v1/run_recipient_pb";
 import type { QueuedAgentMessageView } from "../../hooks/chat-model";
 import type { ChatUpdate } from "../../types/streaming";
 
@@ -47,7 +49,7 @@ vi.mock("../../lib/daemon-wait", async (importOriginal) => ({
   DAEMON_WAIT_POLL_MS: 1,
 }));
 
-import { canRetryFailedSend, useChatStore } from "../chatStore";
+import { canRetryFailedSend, failedSendRecipients, useChatStore } from "../chatStore";
 import { useActivityStore, ChatActivity } from "../activityStore";
 import { useProjectStore } from "../projectStore";
 import { useChatParamsStore } from "../chatParamsStore";
@@ -259,6 +261,46 @@ describe("a send that fails for good", () => {
     expect(transcriptIds()).toEqual([`optimistic-user-${failedId}`]);
     expect(canRetryFailedSend(failedId)).toBe(false);
     expect(Math.max(...renders.map((r) => r.transcript.length + r.strip.length))).toBe(1);
+  });
+
+  // reliant#2465: several agents run in the run, so the server refused the
+  // send and listed them. The failed message remembers the list, and a retry
+  // that names one goes to that agent's thread, as the same message.
+  it("remembers the agents an ambiguous refusal listed, and is sent to the one picked", async () => {
+    const agents = [
+      { threadId: "t-impl", node: "implement.agent_loop", title: "Implement" },
+      { threadId: "t-review", node: "review.agent_loop", title: "" },
+    ];
+    sendMessageMock.mockRejectedValueOnce(
+      new ConnectError(
+        "not delivered: several agents are running in this run",
+        Code.FailedPrecondition,
+        new Headers({ "x-forge-error-reason": "run_recipient_ambiguous" }),
+        [{ desc: RunRecipientAmbiguousSchema, value: create(RunRecipientAmbiguousSchema, { agents }) }],
+      ),
+    );
+    await act(async () => {
+      await expect(useChatStore.getState().sendMessage(CHAT, TEXT)).rejects.toThrow();
+    });
+    await settle();
+    const failedId = clientIdOf(failedEntry()!);
+    expect(failedSendRecipients(failedId)).toEqual(agents);
+
+    sendMessageMock.mockResolvedValueOnce(saved());
+    await act(async () => {
+      await useChatStore.getState().retryFailedSend(CHAT, failedId, "t-review");
+    });
+    await settle();
+
+    expect(sendMessageMock.mock.calls[1][0].targetThread).toBe("t-review");
+    expect(sendMessageMock.mock.calls[1][0].messages[0]?.content).toBe(TEXT);
+    expect(sentIds()).toEqual([failedId, failedId]);
+    expect(failedSendRecipients(failedId)).toEqual([]);
+  });
+
+  it("lists no agents for a failure that is not an ambiguous recipient", async () => {
+    await failOnce();
+    expect(failedSendRecipients(clientIdOf(failedEntry()!))).toEqual([]);
   });
 
   it("is retried on the model selected now, not the one from the first attempt", async () => {

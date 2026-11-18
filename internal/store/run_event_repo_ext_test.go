@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/testkit"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -273,7 +274,13 @@ func TestLockChatForRunEventBlocksOtherTransactions(t *testing.T) {
 			return nil
 		})
 	}()
-	time.Sleep(100 * time.Millisecond)
+	// Release only once the second transaction is queued on the row lock, so
+	// the ordering below is the lock's and not the scheduler's.
+	testkit.Eventually(t, "the second transaction to wait on the row lock", func() bool {
+		var waiting int
+		err := env.ORM.Bun().NewRaw(`SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(ctx, &waiting)
+		return err == nil && waiting > 0
+	})
 	close(release)
 	if err := <-done; err != nil {
 		t.Fatal(err)

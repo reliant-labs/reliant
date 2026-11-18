@@ -31,6 +31,7 @@ func TestMachineStateKeepsTheReasonOnTheWire(t *testing.T) {
 		{machineStates[1].name, machineStates[1].err, errreason.DaemonStarting},
 		{machineStates[2].name, machineStates[2].err, errreason.DaemonNotConnected},
 		{"machine asleep", suspended, errreason.DaemonSuspended},
+		{"machine reconnecting", toolexec.ErrDaemonReconnecting, errreason.DaemonReconnecting},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

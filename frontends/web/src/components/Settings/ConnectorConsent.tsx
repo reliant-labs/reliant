@@ -7,6 +7,7 @@ import {
   AuthorizeClientRequestSchema,
   CreateConnectorRequestSchema,
   ConnectorExecMode,
+  ConnectorKind,
 } from "../../gen/reliant/v1/connector_pb";
 import type {
   Connector,
@@ -162,7 +163,11 @@ export function ConnectorConsent({
         queryClient.fetchQuery(connectorServiceQueries.listAvailableTools({})),
       ]);
 
-      const live = connectorsRes.connectors.filter((c) => !c.revokedAt);
+      // Workspace connectors only: a Reliant Forge connector reaches no
+      // machine (ForgeConnectorConsent chooses those).
+      const live = connectorsRes.connectors.filter(
+        (c) => !c.revokedAt && c.kind !== ConnectorKind.FORGE
+      );
       setConnectors(live);
       setTools(toolsRes.tools);
 

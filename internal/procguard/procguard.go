@@ -91,6 +91,10 @@ type Sample struct {
 	Count, Limit uint64
 	Top          []Tree
 	At           time.Time
+	// groups is every counted process group's tasks, keyed by pgid: Top
+	// keeps only the largest few, and the fork watchdog's self-heal sizes
+	// the daemon's own commands, wherever they rank (GroupTasks).
+	groups map[int]uint64
 }
 
 // Fraction is Count / Limit, 0 without a limit.
@@ -219,6 +223,19 @@ func (g *Guard) Report() *reliantv1.ProcessReport {
 		rep.Top = append(rep.Top, &reliantv1.ProcessTree{ChatId: t.ChatID, Command: t.Command, Tasks: t.Tasks, Tracked: t.Tracked})
 	}
 	return rep
+}
+
+// GroupTasks is how many of the daemon user's tasks were in process group pgid
+// at the last count: 0 when it had none, or before the first count. Reading it
+// forks nothing, so it still answers on a machine that cannot start a process
+// (the fork watchdog's self-heal sizes background commands with it).
+func (g *Guard) GroupTasks(pgid int) uint64 {
+	if g == nil {
+		return 0
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.last.groups[pgid]
 }
 
 // LargestTrees names up to n of the largest process trees of the last count,

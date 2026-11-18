@@ -15,6 +15,7 @@ import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
+import { toast } from "@/lib/toast-manager";
 
 import { createFixtureApi, FIXTURE_ENVS, FIXTURE_PROJECT, type FixtureOptions } from "../../__fixtures__/fixtureApi";
 import { renderWithApi } from "../../__tests__/obsTestUtils";
@@ -269,6 +270,26 @@ describe("variables, compare, refresh, share, full screen", () => {
   it("refuses the previous release with every environment in scope", async () => {
     renderDashboard(ref("workspace", "checkout-latency"), { compare: "release" }, {}, "all");
     expect(await screen.findByTestId("dashboard-compare-unavailable")).toHaveTextContent("Pick one environment");
+  });
+
+  it("says so when the browser refuses the share link's clipboard write", async () => {
+    // prod 1c42e505: writeText rejects with NotAllowedError when the document
+    // is not focused; that was an unhandled rejection.
+    const user = userEvent.setup();
+    renderDashboard(ref("workspace", "checkout-latency"));
+    await screen.findByTestId("dashboard-grid");
+    const refused = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockRejectedValue(new DOMException("Document is not focused.", "NotAllowedError"));
+    const warned = vi.spyOn(toast, "warning");
+    try {
+      await user.click(screen.getByTestId("dashboard-share"));
+      await waitFor(() => expect(warned).toHaveBeenCalledWith(expect.stringContaining("Couldn't copy the link")));
+      expect(screen.queryByText("Link copied")).not.toBeInTheDocument();
+    } finally {
+      refused.mockRestore();
+      warned.mockRestore();
+    }
   });
 
   it("sets auto-refresh, copies a link, and goes full screen and back", async () => {

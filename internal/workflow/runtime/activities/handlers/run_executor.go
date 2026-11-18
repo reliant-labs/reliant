@@ -45,6 +45,9 @@ type RunExecutorContext struct {
 	UserID    string
 	ChatID    string
 	ProjectID string
+	// OrgID is the chat's org, whose machines policy governs the command
+	// (toolexec.ToolRequest.OrgID); empty outside any org.
+	OrgID string
 	// ProjectPath is the project's checkout on the machine the command runs
 	// on (resolveRunCheckout), never projects.path.
 	ProjectPath  string
@@ -215,6 +218,7 @@ func (e *RemoteRunExecutor) toolRequest(command, workingDir string, timeoutMs in
 		UserID:         e.execCtx.UserID,
 		ChatID:         e.execCtx.ChatID,
 		ProjectID:      e.execCtx.ProjectID,
+		OrgID:          e.execCtx.OrgID,
 		WorktreeID:     e.execCtx.WorktreeID,
 		ProjectPath:    e.execCtx.ProjectPath,
 		ProjectName:    e.execCtx.ProjectName,
@@ -321,6 +325,9 @@ func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore
 		ProjectName: project.Name,
 		NoMachine:   chat.NoMachine,
 		project:     project,
+	}
+	if chat.OrgID != nil {
+		execCtx.OrgID = *chat.OrgID
 	}
 
 	// Check if chat has a worktree

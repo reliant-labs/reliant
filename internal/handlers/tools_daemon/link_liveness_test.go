@@ -283,6 +283,7 @@ func TestSendCommand_HeldUntilTheLinkAnswers(t *testing.T) {
 		resp, err := svc.sendCommandToConn(context.Background(), conn, req)
 		got <- result{resp, err}
 	}()
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a command correctly held sends nothing, so there is no event to wait for
 	time.Sleep(50 * time.Millisecond)
 	require.Empty(t, link.received(), "still held while the link has not answered")
 

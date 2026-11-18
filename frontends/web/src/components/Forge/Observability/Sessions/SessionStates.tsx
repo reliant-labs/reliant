@@ -13,7 +13,7 @@ import { ArrowUpRight, MonitorPlay } from "lucide-react";
 import Button from "@/components/forge-ui/button";
 import Status, { type StatusTone } from "@/components/forge-ui/status";
 import { DOCS } from "@/components/Forge/GettingStarted";
-import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { RANGE_LABELS, rangeMs, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import { ReplayBlockedFix, ReplayBuildFlagNote, ReplayOffFix, ReplayTurnOnSteps, turnOnPhrase } from "./replayGuidance";
 import { samplePercent, type FrontendReplayNote, type FrontendReplayNoteKind, type ReplayStatus } from "./replayStatus";
@@ -119,7 +119,7 @@ export function SessionsReplayOff({ range, onWiden, status }: { range: RangePres
       testId="obs-sessions-replay-off"
       action={
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          {onWiden && range !== "7d" && (
+          {onWiden && rangeMs(range) < rangeMs("7d") && (
             <Button variant="ghost" size="sm" onClick={onWiden} data-testid="obs-widen">
               Look at the last 7 days
             </Button>

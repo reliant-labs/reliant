@@ -266,9 +266,36 @@ func (t *editWorkflowTool) Execute(ctx *rctx.ToolContext, args EditWorkflowParam
 		return NewTextErrorResponse("new_string is required (use delete operations explicitly if removing content)"), nil
 	}
 
+	// The replacement is computed from the draft as read, and saved only if
+	// the draft is still at that version. Two edits issued in the same turn
+	// both read one version; the one saved second finds the draft moved on
+	// and is applied again to the new content, exactly as if the two had run
+	// one after the other — or fails if its old_string is no longer there. A
+	// caller that pinned expected_version gets the conflict instead.
+	for attempt := 1; ; attempt++ {
+		resp, conflict := t.editOnce(ctx, args)
+		if !conflict {
+			return resp, nil
+		}
+		if args.ExpectedVersion != nil || attempt >= editWorkflowMaxAttempts {
+			return NewTextErrorResponse(
+				"Workflow was modified by another edit while this one was being saved, so this edit was not applied.\n\n" +
+					"Please call get_workflow again to see the latest changes, then retry.",
+			), nil
+		}
+	}
+}
+
+// editWorkflowMaxAttempts bounds how often one edit is re-applied after a
+// concurrent write moved the draft on.
+const editWorkflowMaxAttempts = 5
+
+// editOnce applies args to the draft as it is now. conflict reports that the
+// draft was written between the read and the save, and nothing was saved.
+func (t *editWorkflowTool) editOnce(ctx *rctx.ToolContext, args EditWorkflowParams) (resp ToolResponse, conflict bool) {
 	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
 	if err != nil {
-		return NewTextErrorResponse(err.Error()), nil
+		return NewTextErrorResponse(err.Error()), false
 	}
 
 	// Check for conflicts if expected_version is provided
@@ -281,7 +308,7 @@ func (t *editWorkflowTool) Execute(ctx *rctx.ToolContext, args EditWorkflowParam
 					"Please call get_workflow again to see the latest changes.",
 				*args.ExpectedVersion,
 				draft.Version,
-			)), nil
+			)), false
 		}
 	}
 
@@ -291,7 +318,7 @@ func (t *editWorkflowTool) Execute(ctx *rctx.ToolContext, args EditWorkflowParam
 		return NewTextErrorResponse(
 			"old_string not found in workflow. Make sure it matches exactly, including whitespace and indentation.\n\n" +
 				"Tip: Use get_workflow to see the current content.",
-		), nil
+		), false
 	}
 
 	// Check for multiple matches
@@ -300,7 +327,7 @@ func (t *editWorkflowTool) Execute(ctx *rctx.ToolContext, args EditWorkflowParam
 		return NewTextErrorResponse(fmt.Sprintf(
 			"old_string appears %d times in the workflow. Please provide more context to ensure a unique match.",
 			count,
-		)), nil
+		)), false
 	}
 
 	newContent := strings.Replace(oldContent, args.OldString, args.NewString, 1)
@@ -311,7 +338,7 @@ func (t *editWorkflowTool) Execute(ctx *rctx.ToolContext, args EditWorkflowParam
 	status := resolveToolStatus(args.Complete, draft)
 	check := validateWorkflowForTool(ctx, t.repo, newContent)
 	if rejection := check.gate("updated", status); rejection != "" {
-		return NewTextErrorResponse(rejection), nil
+		return NewTextErrorResponse(rejection), false
 	}
 
 	// Extract name from the updated YAML to keep draft name in sync. The
@@ -326,15 +353,18 @@ func (t *editWorkflowTool) Execute(ctx *rctx.ToolContext, args EditWorkflowParam
 	}
 	slug := generateSlugFromName(workflowName)
 
-	// Save the updated draft with synced name
-	if err := t.repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, workflowName, slug, newContent, status); err != nil {
-		if errors.Is(err, db.ErrWorkflowSlugTaken) {
-			return NewTextErrorResponse(workflowSlugTakenMessage(slug)), nil
+	// Save the updated draft with synced name, only over the version read.
+	if err := t.repo.UpdateWorkflowDraftDefinitionAtVersion(ctx, draft.ID, draft.Version, workflowName, slug, newContent, status); err != nil {
+		if errors.Is(err, db.ErrWorkflowDraftVersionConflict) {
+			return ToolResponse{}, true
 		}
-		return NewTextErrorResponse(fmt.Sprintf("Failed to save workflow: %v", err)), nil
+		if errors.Is(err, db.ErrWorkflowSlugTaken) {
+			return NewTextErrorResponse(workflowSlugTakenMessage(slug)), false
+		}
+		return NewTextErrorResponse(fmt.Sprintf("Failed to save workflow: %v", err)), false
 	}
 
-	return NewTextResponse(check.outcome("Workflow updated successfully.\n\nUse `get_workflow` to see the full result.", status)), nil
+	return NewTextResponse(check.outcome("Workflow updated successfully.\n\nUse `get_workflow` to see the full result.", status)), false
 }
 
 // =============================================================================
@@ -481,8 +511,26 @@ func (t *writeWorkflowTool) Execute(ctx *rctx.ToolContext, args WriteWorkflowPar
 		draft.Description = &wfMeta.Description
 	}
 
-	// Save the updated draft with synced name/slug
-	if err := t.repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, draft.Name, draft.Slug, args.Content, status); err != nil {
+	// Save the updated draft with synced name/slug. A pinned expected_version
+	// is enforced at the write, under the draft's lock, not only at the read
+	// above: a write between the two is a conflict too. Without one, a full
+	// replacement is the caller's intent whatever was there.
+	save := func() error {
+		return t.repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, draft.Name, draft.Slug, args.Content, status)
+	}
+	if args.ExpectedVersion != nil {
+		save = func() error {
+			return t.repo.UpdateWorkflowDraftDefinitionAtVersion(ctx, draft.ID, *args.ExpectedVersion, draft.Name, draft.Slug, args.Content, status)
+		}
+	}
+	if err := save(); err != nil {
+		if errors.Is(err, db.ErrWorkflowDraftVersionConflict) {
+			return NewTextErrorResponse(fmt.Sprintf(
+				"Workflow was modified since you last viewed it (your version: %d).\n\n"+
+					"Please call get_workflow again to see the latest changes.",
+				*args.ExpectedVersion,
+			)), nil
+		}
 		if errors.Is(err, db.ErrWorkflowSlugTaken) {
 			return NewTextErrorResponse(workflowSlugTakenMessage(draft.Slug)), nil
 		}

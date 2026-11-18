@@ -90,6 +90,9 @@ const (
 	// ObservabilityServiceGetReleaseHealthProcedure is the fully-qualified name of the
 	// ObservabilityService's GetReleaseHealth RPC.
 	ObservabilityServiceGetReleaseHealthProcedure = "/controlplane.v1.ObservabilityService/GetReleaseHealth"
+	// ObservabilityServiceGetUserActivityProcedure is the fully-qualified name of the
+	// ObservabilityService's GetUserActivity RPC.
+	ObservabilityServiceGetUserActivityProcedure = "/controlplane.v1.ObservabilityService/GetUserActivity"
 	// ObservabilityServiceListFrontendReplayProcedure is the fully-qualified name of the
 	// ObservabilityService's ListFrontendReplay RPC.
 	ObservabilityServiceListFrontendReplayProcedure = "/controlplane.v1.ObservabilityService/ListFrontendReplay"
@@ -222,6 +225,14 @@ type ObservabilityServiceClient interface {
 	// issues and alerts as well as telemetry, all under obs:read for a machine
 	// credential.
 	GetReleaseHealth(context.Context, *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error)
+	// GetUserActivity counts an environment's users from its product events
+	// (`forge obs users`, the console's Users card): distinct active users, new
+	// users (the env's sign-ups when it reports auth_signed_up, else users first
+	// seen) and returning users over scope.time_range and the range of the same
+	// length before it, plus an optional daily series and the distinct users
+	// still retained. The statement is forge's (obsquery.UserActivityQuery), so
+	// the local and hosted answers agree. Max range 90 days.
+	GetUserActivity(context.Context, *connect.Request[v1.GetUserActivityRequest]) (*connect.Response[v1.GetUserActivityResponse], error)
 	// ListFrontendReplay answers "is session replay on for this frontend, in
 	// this environment": one row per (environment, frontend). Replay is a
 	// setting of a frontend INSTANCE (forge.BrowserTelemetry.replay, rendered
@@ -370,6 +381,12 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(observabilityServiceMethods.ByName("GetReleaseHealth")),
 			connect.WithClientOptions(opts...),
 		),
+		getUserActivity: connect.NewClient[v1.GetUserActivityRequest, v1.GetUserActivityResponse](
+			httpClient,
+			baseURL+ObservabilityServiceGetUserActivityProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("GetUserActivity")),
+			connect.WithClientOptions(opts...),
+		),
 		listFrontendReplay: connect.NewClient[v1.ListFrontendReplayRequest, v1.ListFrontendReplayResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListFrontendReplayProcedure,
@@ -400,6 +417,7 @@ type observabilityServiceClient struct {
 	getDashboards          *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
 	getObservabilityUsage  *connect.Client[v1.GetObservabilityUsageRequest, v1.GetObservabilityUsageResponse]
 	getReleaseHealth       *connect.Client[v1.GetReleaseHealthRequest, v1.GetReleaseHealthResponse]
+	getUserActivity        *connect.Client[v1.GetUserActivityRequest, v1.GetUserActivityResponse]
 	listFrontendReplay     *connect.Client[v1.ListFrontendReplayRequest, v1.ListFrontendReplayResponse]
 }
 
@@ -500,6 +518,11 @@ func (c *observabilityServiceClient) GetObservabilityUsage(ctx context.Context, 
 // GetReleaseHealth calls controlplane.v1.ObservabilityService.GetReleaseHealth.
 func (c *observabilityServiceClient) GetReleaseHealth(ctx context.Context, req *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error) {
 	return c.getReleaseHealth.CallUnary(ctx, req)
+}
+
+// GetUserActivity calls controlplane.v1.ObservabilityService.GetUserActivity.
+func (c *observabilityServiceClient) GetUserActivity(ctx context.Context, req *connect.Request[v1.GetUserActivityRequest]) (*connect.Response[v1.GetUserActivityResponse], error) {
+	return c.getUserActivity.CallUnary(ctx, req)
 }
 
 // ListFrontendReplay calls controlplane.v1.ObservabilityService.ListFrontendReplay.
@@ -635,6 +658,14 @@ type ObservabilityServiceHandler interface {
 	// issues and alerts as well as telemetry, all under obs:read for a machine
 	// credential.
 	GetReleaseHealth(context.Context, *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error)
+	// GetUserActivity counts an environment's users from its product events
+	// (`forge obs users`, the console's Users card): distinct active users, new
+	// users (the env's sign-ups when it reports auth_signed_up, else users first
+	// seen) and returning users over scope.time_range and the range of the same
+	// length before it, plus an optional daily series and the distinct users
+	// still retained. The statement is forge's (obsquery.UserActivityQuery), so
+	// the local and hosted answers agree. Max range 90 days.
+	GetUserActivity(context.Context, *connect.Request[v1.GetUserActivityRequest]) (*connect.Response[v1.GetUserActivityResponse], error)
 	// ListFrontendReplay answers "is session replay on for this frontend, in
 	// this environment": one row per (environment, frontend). Replay is a
 	// setting of a frontend INSTANCE (forge.BrowserTelemetry.replay, rendered
@@ -779,6 +810,12 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		connect.WithSchema(observabilityServiceMethods.ByName("GetReleaseHealth")),
 		connect.WithHandlerOptions(opts...),
 	)
+	observabilityServiceGetUserActivityHandler := connect.NewUnaryHandler(
+		ObservabilityServiceGetUserActivityProcedure,
+		svc.GetUserActivity,
+		connect.WithSchema(observabilityServiceMethods.ByName("GetUserActivity")),
+		connect.WithHandlerOptions(opts...),
+	)
 	observabilityServiceListFrontendReplayHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListFrontendReplayProcedure,
 		svc.ListFrontendReplay,
@@ -825,6 +862,8 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceGetObservabilityUsageHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetReleaseHealthProcedure:
 			observabilityServiceGetReleaseHealthHandler.ServeHTTP(w, r)
+		case ObservabilityServiceGetUserActivityProcedure:
+			observabilityServiceGetUserActivityHandler.ServeHTTP(w, r)
 		case ObservabilityServiceListFrontendReplayProcedure:
 			observabilityServiceListFrontendReplayHandler.ServeHTTP(w, r)
 		default:
@@ -910,6 +949,10 @@ func (UnimplementedObservabilityServiceHandler) GetObservabilityUsage(context.Co
 
 func (UnimplementedObservabilityServiceHandler) GetReleaseHealth(context.Context, *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetReleaseHealth is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) GetUserActivity(context.Context, *connect.Request[v1.GetUserActivityRequest]) (*connect.Response[v1.GetUserActivityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetUserActivity is not implemented"))
 }
 
 func (UnimplementedObservabilityServiceHandler) ListFrontendReplay(context.Context, *connect.Request[v1.ListFrontendReplayRequest]) (*connect.Response[v1.ListFrontendReplayResponse], error) {

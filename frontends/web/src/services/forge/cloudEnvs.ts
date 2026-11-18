@@ -53,6 +53,7 @@ import {
   type DeploymentStatus,
   type GetDeploymentStatusResponse,
 } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { orgRequest } from "@/lib/orgScope";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 
@@ -320,6 +321,10 @@ export function toCloudEnvStatus(msg: GetDeploymentStatusResponse): CloudEnvStat
 }
 
 // ── RPCs ────────────────────────────────────────────────────────────────────
+//
+// The reads take the org they are read in (`orgId`, null for none) and name it
+// in the request, so a cached answer is always the org its key says
+// (lib/orgScope). The writes act in the active org (api/orgInterceptor).
 
 function client() {
   return getControlPlaneClient(DeployService);
@@ -336,8 +341,8 @@ function client() {
  * Filtering on the response field makes that impossible: an old server's rows
  * carry no project, so they match nothing.
  */
-export async function listProjectEnvironments(project: string): Promise<CloudEnv[]> {
-  const res = await client().listEnvironments({ project });
+export async function listProjectEnvironments(project: string, orgId: string | null): Promise<CloudEnv[]> {
+  const res = await client().listEnvironments(orgRequest({ project }, orgId));
   return (res.environments ?? [])
     .map(toCloudEnv)
     .filter((env) => env.id !== "" && env.name !== "" && env.project === project)
@@ -349,24 +354,25 @@ export async function listProjectEnvironments(project: string): Promise<CloudEnv
  * list's one read. An environment with no project predates the project
  * dimension and names no app, so it is dropped here.
  */
-export async function listOrgEnvironments(): Promise<CloudEnv[]> {
-  const res = await client().listEnvironments({});
+export async function listOrgEnvironments(orgId: string | null): Promise<CloudEnv[]> {
+  const res = await client().listEnvironments(orgRequest({}, orgId));
   return (res.environments ?? [])
     .map(toCloudEnv)
     .filter((env) => env.id !== "" && env.name !== "" && env.project !== "");
 }
 
 /** The control plane's observation of one environment — a database read, no cluster hop. */
-export async function getEnvironmentStatus(environmentId: string): Promise<CloudEnvStatus> {
-  return toCloudEnvStatus(await client().getStatus({ environmentId }));
+export async function getEnvironmentStatus(environmentId: string, orgId: string | null): Promise<CloudEnvStatus> {
+  return toCloudEnvStatus(await client().getStatus(orgRequest({ environmentId }, orgId)));
 }
 
 /** The environment's promotion ledger, newest first. */
 export async function listEnvironmentPromotions(
   environmentId: string,
+  orgId: string | null,
   limit = 25
 ): Promise<CloudPromotion[]> {
-  const res = await client().listPromotions({ environmentId, limit });
+  const res = await client().listPromotions(orgRequest({ environmentId, limit }, orgId));
   return (res.promotions ?? []).map(toCloudPromotion);
 }
 

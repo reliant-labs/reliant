@@ -27,8 +27,11 @@ import (
 
 // ErrVersionConflict reports a write that named a version other than the
 // record's current one. The caller refetches and decides again. It is an
-// Aborted, and its text is what the client reads.
-var ErrVersionConflict = svcerr.Aborted("the chat's selection changed since it was read; reload and try again")
+// Aborted, and its text is what the client reads. It is the user's to resolve
+// (another tab or client wrote first), so it is classed as a user error and
+// is not logged at ERROR (prod a9117392).
+var ErrVersionConflict = svcerr.WithClass(
+	svcerr.Aborted("the chat's selection changed since it was read; reload and try again"), svcerr.ClassUser)
 
 // OnLimit is what a chat does when its provider is rate-limited. The empty
 // value inherits the Settings default.

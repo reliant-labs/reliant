@@ -558,6 +558,45 @@ func TestParseUsageLimit(t *testing.T) {
 	require.False(t, ok)
 }
 
+// The provider a wait names is read from the message the driver (or the
+// org-funding hold) formats: ratelimit.UsageLimitError.Error, mirrored here
+// because that package imports this one. A name with a parenthesis in it, which
+// is how a wait on an org's accounts is named, is kept whole: the waiting card
+// used to read "Waiting for your organization's AI accounts (rate-limited
+// usage limit".
+func TestParseUsageLimit_ProviderName(t *testing.T) {
+	t.Parallel()
+	// detail is UsageLimitError's "<provider>[, <window>][, overage …]".
+	limitErr := func(detail, cause string) error {
+		msg := chatmarkers.Wrap(chatmarkers.KindProviderUsageLimit, "",
+			chatmarkers.ProviderUsageLimitLead+" ("+detail+") — reset time unknown. Switch to another provider, or send a message after it resets")
+		if cause != "" {
+			msg += ": " + cause
+		}
+		return fmt.Errorf("activity error: %w", temporal.NewNonRetryableApplicationError(msg, "ProviderUsageLimit", nil))
+	}
+	for _, tc := range []struct {
+		name, detail, cause, want string
+	}{
+		{"plain", "Anthropic", "", "Anthropic"},
+		{"window and overage detail are dropped", "Codex, 7-day window, overage unavailable: out of credits", "", "Codex"},
+		{"org accounts, rate-limited", "your organization's AI accounts (rate-limited)", "", "your organization's AI accounts (rate-limited)"},
+		{"org accounts, model unserved", "your organization's AI accounts (they do not serve claude-5.5-opus)", "",
+			"your organization's AI accounts (they do not serve claude-5.5-opus)"},
+		{"parenthesis and window", "Acme (EU), 5-hour window", "", "Acme (EU)"},
+		{"a cause that has parentheses too", "OpenAI", "429 (insufficient_quota) — later", "OpenAI"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := parseUsageLimit(limitErr(tc.detail, tc.cause))
+			require.True(t, ok)
+			require.Equal(t, tc.want, got.Provider)
+		})
+	}
+	require.Equal(t, "", usageLimitProvider("no lead here"))
+	require.Equal(t, "Anthropic (unterminated", usageLimitProvider(chatmarkers.ProviderUsageLimitLead+" (Anthropic (unterminated"))
+}
+
 const parallelFanoutYAML = `
 name: par
 entry: [fanout]

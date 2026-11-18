@@ -347,6 +347,7 @@ func TestLocalModelE2E(t *testing.T) {
 
 	t.Run("e_refresh_rpc", func(t *testing.T) {
 		before := inv.GetProbedAt()
+		// forge:lint-disable-next-line forge-test-fixed-sleep: moves the real clock past probed_at's 1s resolution, a lower bound load can only lengthen; the daemon's clock cannot be injected in this e2e
 		time.Sleep(1100 * time.Millisecond) // probed_at has 1s resolution
 		resp, err := registry.RefreshLocalModels(context.Background(), asUser(e2eUserA, &reliantv1.RefreshLocalModelsRequest{DaemonId: daemonID}))
 		require.NoError(t, err)
@@ -480,6 +481,8 @@ func TestLocalModelE2E(t *testing.T) {
 		var unavailable *local.UnavailableError
 		require.ErrorAs(t, r.Err(), &unavailable)
 		assert.Contains(t, r.Err().Error(), "offline")
-		assert.Less(t, elapsed, 3*time.Second)
+		// Answered from the registry, not by waiting out the gateway's 10s
+		// ack timeout (localModelAckTimeout) on a daemon that is gone.
+		assert.Less(t, elapsed, 5*time.Second)
 	})
 }

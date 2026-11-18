@@ -37,7 +37,7 @@
  * it — a choice remembered per user (obsNavOpen.ts).
  */
 
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { Activity, Database, Gauge, Globe, HardDrive, Home, KeyRound, Layers, Tag as TagIcon, Users } from "lucide-react";
 
 import SidebarLayout, { type SidebarNavItem, type SidebarUserInfo } from "@/components/forge-ui/sidebar_layout";
@@ -274,7 +274,7 @@ export interface ConsoleShellProps extends ConsoleNavInput {
   children: ReactNode;
 }
 
-export function ConsoleShell({
+function ConsoleShellImpl({
   brand,
   brandCollapsed,
   scope,
@@ -383,3 +383,10 @@ function QueuedMark({ env, on }: { env: string; on: string }) {
     </span>
   );
 }
+
+/**
+ * Memoized: the layout re-renders on every URL change (a tour step, a filter),
+ * and the chrome — the nav and its hundred links — only needs to when one of
+ * its inputs moved (ConsoleLayout builds each once per input).
+ */
+export const ConsoleShell = memo(ConsoleShellImpl);

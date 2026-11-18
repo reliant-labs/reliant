@@ -468,6 +468,7 @@ func TestGenerateFixture_PauseResume(t *testing.T) {
 	// the resume epoch advances. The sleep gives the workflow time to
 	// actually reach the Await so the fixture pins the blocked→resumed shape.
 	h.ResolveQuestion(q1.ID, []string{"Provide feedback"}, "Please also mention the weather.")
+	// forge:lint-disable-next-line forge-test-fixed-sleep: parking on workflow.Await records no history event, so there is nothing to wait for; too short changes the recorded shape, it fails nothing
 	time.Sleep(2 * time.Second)
 
 	// 4. Resume (signal.resume) → turn 2 plays → ask_question again.
@@ -647,6 +648,7 @@ func TestGenerateFixture_MachineWaitSignaled(t *testing.T) {
 	router.mu.Lock()
 	signalAt := router.firstCheck.Add(machineWaitUpAfter + 2*time.Second)
 	router.mu.Unlock()
+	// forge:lint-disable-next-line forge-test-fixed-sleep: the signal must land after the machine is up, which the router decides on the real clock (upAfter); a lower bound load can only lengthen
 	time.Sleep(time.Until(signalAt))
 	require.NoError(t, h.Stack.Temporal.SignalWorkflow(h.Ctx, workflowID, "", machinewait.SignalName,
 		machinewait.Signal{Reason: machinewait.ReasonMachineConnected}))

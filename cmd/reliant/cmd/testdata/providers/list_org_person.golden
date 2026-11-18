@@ -1,0 +1,11 @@
+Yours
+  (none)
+
+In organization org-acme
+  Use:  only the organization's accounts
+  When its accounts can't serve a chat:  wait (your own accounts never serve its chats)
+  Change these in the Reliant app: Settings → AI providers. Only a person signed in to the app can.
+
+Its own API keys
+  anthropic  Acme prod  organization key  available
+Admins manage them in the Reliant app: Settings → Organization → AI accounts.

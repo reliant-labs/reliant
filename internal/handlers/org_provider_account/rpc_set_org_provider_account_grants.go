@@ -57,6 +57,9 @@ func (s *Service) SetOrgProviderAccountGrants(
 	if err := s.deps.Store.SetOrgAccountGrants(ctx, orgID, acct.ID, users, userID); err != nil {
 		return nil, svcerr.Wrap(err)
 	}
+	if len(users) > 0 {
+		s.wakeOrgChats(ctx, orgID, "an org account was granted to members")
+	}
 	out, err := s.one(ctx, orgID, acct)
 	if err != nil {
 		return nil, err

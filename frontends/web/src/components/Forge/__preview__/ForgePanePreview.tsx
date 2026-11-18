@@ -49,11 +49,9 @@ import { create } from "@bufbuild/protobuf";
 
 import { ConsoleLayout } from "../Console/ConsoleLayout";
 import { DashboardPage, DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
-import {
-  ActivityPage,
-  ObservabilityViewPage,
-  SecretsPage,
-} from "../Console/ConsolePages";
+import { ActivityPage } from "../Console/ActivityPage";
+import { ObservabilityViewPage } from "../Console/ConsolePages";
+import { SecretsPage } from "../Console/SecretsPage";
 import { DataPage } from "../Data/DataPage";
 import { UsersPage } from "../Users/UsersPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";

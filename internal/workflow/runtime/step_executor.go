@@ -81,6 +81,10 @@ type StepExecutor struct {
 	// agent loop: a blocking ask_user in its execute_tools batch can park
 	// the spawn for a continue-as-new handoff (ask_user_handoff.go).
 	askUserHandoff *toolBatchHandoff
+	// cutOffTurns maps a call_llm node a pause cancelled mid-dispatch to the
+	// pre-allocated message id of the dispatch it cancelled, until that node
+	// is re-dispatched (noteCancelledForPause).
+	cutOffTurns map[string]string
 }
 
 // WithAskUserHandoff lets this executor's execute_tools batches park their
@@ -490,6 +494,9 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 		e.pauseCtrl.CapacitySlot.untrackStep(running)
 	}
 	stepEvent := e.handleActivityCompletion(running, eventID)
+	// Whether the step's failure, if any, is the activity's own: the activity
+	// wrapper has then written the failed attempt already.
+	activityFailed := stepEvent != nil && stepEvent.Error != nil
 	if machine, _, _ := machineStepTools(running.Node.GetType(), nil); machine {
 		e.pauseCtrl.MachineStepDone(e.ctx)
 	}
@@ -520,7 +527,10 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// transcript shows exactly what it kept hitting. Attended chats are left
 	// alone: a person is there to redirect them.
 	if IsUnattended(e.workflowInputs) && stepEvent != nil && stepEvent.Error == nil {
-		if err := e.pauseCtrl.ObserveRepeatedToolErrors(e.GetThread(), running.ActivityName, stepEvent); err != nil &&
+		inputAware := func() bool {
+			return workflow.GetVersion(e.ctx, repeatedToolErrorInputChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
+		}
+		if err := e.pauseCtrl.ObserveRepeatedToolErrors(e.GetThread(), running.ActivityName, stepEvent, toolCallInputs(running.EvalResult), inputAware); err != nil &&
 			workflow.GetVersion(e.ctx, repeatedToolErrorChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
 			// Reported here, once, at WARN: the guard working as designed is
 			// an outcome, not a fault. The loop, the inline workflow and the
@@ -528,6 +538,24 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 			stepEvent.Error = reportExpectedStop(e.logger, err,
 				"[StepExecutor] Ending the agent: its tool calls keep failing identically",
 				"stepID", running.StepID, "thread", e.GetThread(), "error", err)
+		}
+	}
+
+	// A node that tolerates failure is optional: its failure becomes outputs
+	// the graph routes on, instead of ending or pausing the run
+	// (tolerate_failure.go). Not once the run has given up: it is ending.
+	if stepEvent != nil && stepEvent.Error != nil && e.pauseCtrl.gaveUp() == nil {
+		if out, ok := toleratedFailure(running.Node, stepEvent.Error); ok {
+			logToleratedFailure(e.logger, running.StepID, stepEvent.Error)
+			// A failure decided here, after the activity succeeded (the
+			// repeated-tool-error breaker), has no failed attempt yet.
+			if !activityFailed {
+				recordToleratedFailure(e.ctx, e.toleratedScope(running.StepID), stepEvent.Error)
+			}
+			if e.nodeOutputs != nil {
+				e.nodeOutputs[running.StepID] = out
+			}
+			stepEvent.Data, stepEvent.Error, stepEvent.RetryExhausted = out, nil, false
 		}
 	}
 
@@ -694,6 +722,18 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 	}
 }
 
+// toleratedScope is where this executor's node stepID sits, for the failed
+// attempt a tolerated failure records (tolerate_failure.go).
+func (e *StepExecutor) toleratedScope(stepID string) toleratedScope {
+	return toleratedScope{
+		WorkflowID:    e.workflowID,
+		StepID:        stepID,
+		NodePath:      joinNodePath(e.nodePathPrefix, stepID),
+		LoopNodeID:    e.loopNodeID,
+		LoopIteration: e.loopIteration,
+	}
+}
+
 // threadForFinalize returns the thread to record on stream_finalized markers.
 func (e *StepExecutor) threadForFinalize() string {
 	if e.execContext != nil {
@@ -730,7 +770,7 @@ func (e *StepExecutor) executeSaveMessage(running *RunningStep, output map[strin
 
 	workflowContext := buildSaveMessageWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.GetThread(), e.execContext)
 	saveOutput, err := executeSaveMessageInline(
-		e.ctx,
+		withRunTelemetry(e.ctx, e.runtimeTelemetry()),
 		node,
 		output,
 		workflowContext,
@@ -915,6 +955,11 @@ func (e *StepExecutor) startAction(
 		}
 
 		rtx := e.buildRuntimeContext(node)
+		// The turn that asked for these calls, so each call's span is opened
+		// under it, on whichever worker runs the batch (run_telemetry.go).
+		if rtx.Telemetry != nil {
+			rtx.Telemetry.TurnTraceParent = e.upstreamTurnTraceParent(node, evalResult.GetExecuteTools().GetResolvedToolCalls())
+		}
 		// A batch with spawn/ask_user calls is merged workflow-side, so the
 		// workflow is the executor of that output and saves it itself; any
 		// other batch's result IS the ExecuteTools activity's result.
@@ -950,6 +995,7 @@ func (e *StepExecutor) startAction(
 	// Build structured input: pass the proto Node directly for proper protojson roundtrip
 	rtx := e.buildRuntimeContext(node)
 	rtx.AssistantMessageID = preallocatedMessageID
+	rtx.CutOffMessageID = e.takeCutOffTurn(node.GetId())
 	rtx.SaveMessage = e.saveMessageRequest(node)
 	input := types.ActivityInput{Runtime: rtx, Node: evalResult}
 
@@ -1079,6 +1125,11 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 	runInputs["chat_id"] = e.chatID
 	runInputs["step_id"] = node.GetId()
 	runInputs["node_path"] = joinNodePath(e.nodePathPrefix, node.GetId())
+	// The run this step belongs to, for the worker's spans (run_telemetry.go).
+	if rt := e.runtimeTelemetry(); rt != nil {
+		runInputs["telemetry"] = rt
+	}
+	runInputs["node_type"] = model.NodeTypeRun
 	if e.loopNodeID != "" {
 		runInputs["loop_node_id"] = e.loopNodeID
 		runInputs["loop_iteration"] = e.loopIteration
@@ -1200,6 +1251,49 @@ func (e *StepExecutor) threadInterruptedSince(epoch int64) bool {
 	return interrupt != nil && interrupt.InterruptedSince(epoch)
 }
 
+// noteCancelledForPause records, for a call_llm step whose dispatch a pause
+// cancelled, the id that dispatch streamed under. Call it before re-dispatching
+// the step after the resume: the re-dispatch carries the id as
+// RuntimeContext.CutOffMessageID.
+//
+// Why: a cancelled call_llm persists its partial under that id
+// (persistInterruptedTurn), and the re-dispatch that follows the resume finds
+// it as its history's tail. With nothing new to read, it used to yield on that
+// tail, so the agent's loop ended with half a reply as its answer. That is how
+// a terminal provider error on a run's root thread cut its sub-agents short:
+// the error pauses the run, the pause cancels every thread's in-flight
+// call_llm, and each resumed sub-agent yielded its partial (reliant #2759,
+// chat e1041795). With the id, call_llm can tell its own cut-off partial from
+// a finished answer and continue it.
+//
+// A same-thread interrupt is not a pause, and is left out: it is issued to
+// deliver a message, which the re-dispatch reads instead. Pure workflow state
+// with no command, so it needs no version gate: a replay records the same id
+// and dispatches the same activity.
+func (e *StepExecutor) noteCancelledForPause(running *RunningStep) {
+	if running == nil || running.PreallocatedMessageID == "" || model.NodeType(running.Node) != model.NodeTypeCallLLM {
+		return
+	}
+	if e.threadInterruptedSince(running.ThreadInterruptEpoch) {
+		return
+	}
+	if e.cutOffTurns == nil {
+		e.cutOffTurns = make(map[string]string)
+	}
+	e.cutOffTurns[running.Node.GetId()] = running.PreallocatedMessageID
+}
+
+// takeCutOffTurn returns the id noteCancelledForPause recorded for nodeID, and
+// clears it: it describes exactly one re-dispatch.
+func (e *StepExecutor) takeCutOffTurn(nodeID string) string {
+	id, ok := e.cutOffTurns[nodeID]
+	if !ok {
+		return ""
+	}
+	delete(e.cutOffTurns, nodeID)
+	return id
+}
+
 // callLLMIdempotencyKey identifies a call_llm turn by its position in the graph
 // — the same turn re-dispatched after an interrupt produces the same key, while
 // a different node or a later loop iteration produces a different one.
@@ -1286,6 +1380,8 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		rtx.Thread = e.execContext.Thread
 		rtx.ExcludeAmbientMemory = e.execContext.ExcludeAmbientMemory
 	}
+	// The run this node belongs to, for the worker's spans (run_telemetry.go).
+	rtx.Telemetry = e.runtimeTelemetry()
 	// A call's opt-out also caps any descendants it subsequently spawns on
 	// this thread. Never clear a previously recorded exclusion.
 	rtx.ExcludeAmbientMemory = rtx.ExcludeAmbientMemory || excludesAmbientMemory(e.workflowInputs) || e.childTracker.excludesAmbientMemory(rtx.Thread)

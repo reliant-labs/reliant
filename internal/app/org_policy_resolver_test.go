@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -37,6 +38,37 @@ func TestNewOrgPolicyResolver(t *testing.T) {
 	}
 	if p, err := orgpolicy.For(context.Background(), "org-a"); err != nil || !p.None() {
 		t.Fatalf("self-hosted process answers %+v, %v; want no policy", p, err)
+	}
+}
+
+// The platform switch of each R5 point reaches the process from
+// ServerProcessConfig org_policy_enforcement; unset is audit, the level a
+// point ships in.
+func TestNewOrgPolicyResolver_InstallsTheApprovalAndMachineSwitches(t *testing.T) {
+	t.Cleanup(func() {
+		orgpolicy.SetProcessResolver(nil)
+		orgpolicy.SetProcessEnforcement(orgpolicy.PointApprovals, orgpolicy.EnforcementAudit)
+		orgpolicy.SetProcessEnforcement(orgpolicy.PointMachines, orgpolicy.EnforcementAudit)
+	})
+	_, err := NewOrgPolicyResolver(OrgPolicyResolverDeps{Authority: selfHostedAuthority{},
+		Enforcement: &configv1.OrgPolicyEnforcementConfig{Approvals: "enforce", Machines: "off"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := orgpolicy.EnforcementOf(orgpolicy.PointApprovals); got != orgpolicy.EnforcementEnforce {
+		t.Errorf("approvals = %s, want enforce", got)
+	}
+	if got := orgpolicy.EnforcementOf(orgpolicy.PointMachines); got != orgpolicy.EnforcementOff {
+		t.Errorf("machines = %s, want off", got)
+	}
+	if _, err := NewOrgPolicyResolver(OrgPolicyResolverDeps{Authority: selfHostedAuthority{}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := orgpolicy.EnforcementOf(orgpolicy.PointApprovals); got != orgpolicy.EnforcementAudit {
+		t.Errorf("unset approvals = %s, want audit", got)
+	}
+	if got := orgpolicy.EnforcementOf(orgpolicy.PointMachines); got != orgpolicy.EnforcementAudit {
+		t.Errorf("unset machines = %s, want audit", got)
 	}
 }
 

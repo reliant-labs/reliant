@@ -217,6 +217,31 @@ func (r *Resolver) RoleFresh(ctx context.Context, userID, orgID string) (role st
 	return roleOf(m, orgID, err)
 }
 
+// ScopesFresh is the org-administration scopes userID is granted org-wide in
+// orgID ("billing:read", ...), asked of control-plane now, bypassing the
+// cache, so a revoked grant stops the next read. member is false for a
+// non-member and in a deployment with no orgs (a nil Resolver, or a control
+// plane without the rpc); a member of a control plane that predates the
+// scopes field holds none. err is an outage. A caller deciding access from it
+// fails closed on all three.
+func (r *Resolver) ScopesFresh(ctx context.Context, userID, orgID string) (scopes []string, member bool, err error) {
+	if r == nil || userID == "" || orgID == "" {
+		return nil, false, nil
+	}
+	m, err := r.src.ResolveOrgMembership(ctx, userID, orgID)
+	if errors.Is(err, errUnsupported) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	r.remember(key{userID, orgID}, m)
+	if !m.Member || m.OrgID != orgID {
+		return nil, false, nil
+	}
+	return m.OrgScopes.List(), true, nil
+}
+
 // LiveMembersFresh is how many live members orgID has, asked of control-plane
 // now as userID (only a member is told). known is false when the answer has
 // no count: userID is not a member, or the control plane predates the field

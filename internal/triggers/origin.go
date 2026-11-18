@@ -139,7 +139,7 @@ func echoableBy(w *core.IntegrationWrite, echo *provenance.Echo) bool {
 // must agree, so a bare "same repository, same event type" never attributes.
 func intentMatches(w *core.IntegrationWrite, echo *provenance.Echo) bool {
 	c := provenance.CorrelationFromMap(w.Correlation)
-	if c.ObjectKind != echo.ObjectKind || !contains(c.Events, echo.EventType) {
+	if !sameObjectKind(c.ObjectKind, echo.ObjectKind) || !contains(c.Events, echo.EventType) {
 		return false
 	}
 	// Where: the same issue, pull request or branch. A creation's target is the
@@ -179,6 +179,16 @@ func intentMatches(w *core.IntegrationWrite, echo *provenance.Echo) bool {
 		agreed++
 	}
 	return agreed > 0
+}
+
+// sameObjectKind reports whether a write on an object of kind write can echo
+// as an event about an object of kind echo. A pull request is an issue to
+// GitHub's issues API: issue.labels.add (and the other issue writes) on a
+// pull request's number echoes as pull_request.labeled, whose object is the
+// pull request. Which events a write can echo as is still decided by its
+// Events, so this only lets those listed pull_request.* echoes through.
+func sameObjectKind(write, echo string) bool {
+	return write == echo || (write == provenance.KindIssue && echo == provenance.KindPullRequest)
 }
 
 // fromWrite builds the origin for an event a ledger entry caused.

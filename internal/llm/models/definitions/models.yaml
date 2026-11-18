@@ -53,6 +53,7 @@ tags:
     # reliant, vertexai) and any account not yet on 5.2 still resolves to Fable.
     - {model: claude-5.2-fable, thinking_level: xhigh}
     - {model: claude-5.1-fable, thinking_level: xhigh}
+    - {model: gpt-6.2-astra, thinking_level: xhigh}
     - {model: gpt-6.1-astra, thinking_level: xhigh}
     - {model: gpt-6-astra, thinking_level: xhigh}
     - {model: gpt-5.6-sol, thinking_level: xhigh}
@@ -74,6 +75,7 @@ tags:
     - {model: claude-5-fable, thinking_level: high}
     - {model: claude-4.6-opus, thinking_level: high}
     - {model: claude-4.5-opus, thinking_level: high}
+    - {model: gpt-6.2-sol, thinking_level: high}
     - {model: gpt-6.1-sol, thinking_level: high}
     - {model: gpt-6-sol, thinking_level: xhigh}
     - {model: gpt-5.5, thinking_level: xhigh}
@@ -109,8 +111,10 @@ tags:
     - {model: claude-5-sonnet, thinking_level: high}
     - {model: gpt-6.1-terra, thinking_level: high}
     - {model: gpt-6-terra, thinking_level: high}
-    # Codex's workhorse (the Terras are API-key only). Below them, so an OpenAI
-    # user's [moderate] is unchanged.
+    # The Sols back up the Terras for a codex plan that does not serve
+    # gpt-6.1-terra (codex serves it from codex-tui 0.169.0; gpt-6-terra is
+    # API-key only). Below them, so an OpenAI user's [moderate] is unchanged.
+    - {model: gpt-6.2-sol, thinking_level: high}
     - {model: gpt-6.1-sol, thinking_level: high}
     - {model: gpt-5.5, thinking_level: xhigh}
     - {model: gpt-5.6-terra, thinking_level: high}
@@ -226,8 +230,10 @@ tags:
     - {model: claude-4.6-opus, thinking_level: high}
     - {model: claude-4.5-opus, thinking_level: high}
     # GPT order as in [flagship]: the current Sol ahead of legacy gpt-5.5.
+    - {model: gpt-6.2-sol, thinking_level: high}
     - {model: gpt-6.1-sol, thinking_level: high}
     - {model: gpt-5.5, thinking_level: xhigh}
+    - {model: gpt-6.2-astra, thinking_level: high}
     - {model: gpt-6.1-astra, thinking_level: high}
     - {model: gpt-6-astra, thinking_level: xhigh}
     - {model: gpt-6-sol, thinking_level: xhigh}
@@ -679,6 +685,9 @@ models:
   # probe; it is refused exactly like its parent. A `-mini` does not inherit
   # the family's acceptance — probe each id.
   #
+  # gpt-6.2-astra, gpt-6.2-sol and gpt-6.1-terra (2026-11-17) are mapped on the live
+  # /codex/models report at codex-tui 0.169.0; see the notes on each.
+  #
   # gpt-6.1-sol, gpt-6-sol and gpt-6-luna (2026-10-10) were not live-probed.
   # They are mapped on the strength of Codex CLI's own catalog listing them
   # (visibility "list", every ChatGPT plan; openai/codex
@@ -725,6 +734,45 @@ models:
         api_model: gpt-5.5
       - driver: openrouter
         api_model: openai/gpt-5.5
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  # GPT-6.2 Astra (2026-11-17) is OpenAI's frontier model, the GPT `powerful`
+  # pick ahead of gpt-6.1-astra. Figures from
+  # developers.openai.com/api/docs/models/gpt-6.2-astra (checked 2026-11-17):
+  # 1,050,000 window, 922,000 max input, 128,000 max output, text + image in;
+  # the API rejects reasoning effort `none`. Same Responses API contract as
+  # the rest of the GPT-6 family.
+  #
+  # Codex: rolled out after gpt-6.2-sol the same day. The live GET
+  # /codex/models at client_version 0.169.0 (2026-11-17 ~20:00 UTC) lists it
+  # at priority 2 with use_responses_lite, context_window 272000 and
+  # max_context_window 872000, and a /responses request through the codex
+  # driver streamed a reply. Its default_service_tier is unset, so unlike
+  # gpt-6-astra it pins no priority tier (see astraServiceTier). OpenRouter
+  # serves it as openai/gpt-6.2-astra.
+  - id: gpt-6.2-astra
+    name: GPT-6.2 Astra
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1050000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh, max]
+      supported_file_types: [image, text]
+    providers:
+      - driver: codex
+        api_model: gpt-6.2-astra
+      - driver: openai
+        api_model: gpt-6.2-astra
+      - driver: openrouter
+        api_model: openai/gpt-6.2-astra
     driver_settings:
       preferred_endpoint: responses
       temperature_mode: omit
@@ -800,7 +848,45 @@ models:
     # Powerful tier: astra gets its top practical effort. `max` is supported but
     # reserved for explicit opt-in, matching how sol treats max.
 
-  # GPT-6.1 Sol is OpenAI's current flagship model. It inherits GPT-6 Sol's
+  # GPT-6.2 Sol (2026-11-17) is OpenAI's everyday model and the GPT [flagship]
+  # and [reasoning] pick, ahead of gpt-6.1-sol. Figures from
+  # developers.openai.com/api/docs/models/gpt-6.2-sol (checked 2026-11-17):
+  # 1,050,000 window, 922,000 max input, 128,000 max output, text + image in;
+  # the API rejects reasoning effort `none`.
+  #
+  # Codex: the bundled catalog of codex-tui 0.169.0 does not list it yet, but
+  # the live GET /codex/models does (2026-11-17, ChatGPT account): priority 1 —
+  # Codex's new default — use_responses_lite, context_window 500000,
+  # max_context_window 872000. It is listed at client_version 0.169.0 and
+  # absent at 0.162.1, which is why CodexVersion moved to 0.169.0 with it. The
+  # 872,000 advertised limit caps the codex prompt ceiling as for the rest of
+  # the family.
+  - id: gpt-6.2-sol
+    name: GPT-6.2 Sol
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1050000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh, max]
+      supported_file_types: [image, text]
+    providers:
+      - driver: codex
+        api_model: gpt-6.2-sol
+      - driver: openai
+        api_model: gpt-6.2-sol
+      - driver: openrouter
+        api_model: openai/gpt-6.2-sol
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  # GPT-6.1 Sol is OpenAI's previous flagship model. It inherits GPT-6 Sol's
   # Responses API contract and capability envelope.
   #
   # Window and output are OpenAI's published figures for all three GPT-6
@@ -819,8 +905,9 @@ models:
   # served a given model is the live /codex/models report's call: it is
   # authoritative, so a model the plan lacks is hidden, not offered and 400'd.
   #
-  # Tiers: gpt-6.1-sol is codex's [flagship], [moderate] and [reasoning] pick;
-  # gpt-6-luna its [fast], [cheap] and [meta] pick; astra stays [powerful].
+  # Tiers: gpt-6.2-sol (above) displaced it as codex's [flagship] and
+  # [reasoning] pick; gpt-6-luna is codex's [fast], [cheap] and [meta] pick;
+  # astra stays [powerful].
   - id: gpt-6.1-sol
     name: GPT-6.1 Sol
     visibility: user
@@ -888,6 +975,12 @@ models:
 
   # GPT-6.1 Terra is OpenAI's current balanced model. It inherits GPT-6 Terra's
   # Responses API contract and capability envelope.
+  #
+  # Codex serves it: codex-tui 0.169.0's bundled catalog lists it (openai/codex
+  # 126a0ee9 "Add GPT-6.1 Terra to model catalogs", visibility "list",
+  # use_responses_lite, max_context_window 872000), and so does the live
+  # /codex/models at 0.162.1 and 0.169.0 (2026-11-17). That makes it codex's
+  # [moderate] pick, as it already was for an OpenAI key.
   - id: gpt-6.1-terra
     name: GPT-6.1 Terra
     visibility: user
@@ -902,6 +995,8 @@ models:
       thinking_levels: [low, medium, high, xhigh, max]
       supported_file_types: [image, text]
     providers:
+      - driver: codex
+        api_model: gpt-6.1-terra
       - driver: openai
         api_model: gpt-6.1-terra
     driver_settings:

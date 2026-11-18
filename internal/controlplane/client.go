@@ -69,6 +69,14 @@ type AccountDeletionResult struct {
 // user's other devices' keys alone.
 const ReliantProviderKeyName = "reliant-provider"
 
+// ReliantOrgProviderKeyName is the name of the managed key minted in one org
+// (the per-(person, org) key, org-provider-accounts P10). control-plane rotates
+// a person's tokens per (org, name), so one name serves every org; it differs
+// from ReliantProviderKeyName so that minting in the person's default org never
+// revokes the org-less key, which a chat of no org (and an older release) still
+// spends.
+const ReliantOrgProviderKeyName = "reliant-provider-org"
+
 // LLMKey is a freshly minted LLM gateway key: an `rlat_` access token with
 // llm:invoke acting as the caller. Returned exactly once.
 type LLMKey struct {

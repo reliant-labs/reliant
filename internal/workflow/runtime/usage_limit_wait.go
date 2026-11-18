@@ -4,7 +4,6 @@ package runtime
 import (
 	"errors"
 	"hash/fnv"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -197,7 +196,40 @@ func usageLimitUntil(limit usageLimit, facts types.UsageLimitFacts, state usageL
 	return now.Add(usageLimitProbeLadder[rung] + jitter), true
 }
 
-var usageLimitProviderRE = regexp.MustCompile(`usage limit reached \(([^,)]+)`)
+// usageLimitProviderLead opens the parenthesis that names who imposed the
+// limit: "… usage limit reached (<provider>[, <window>…]) — …".
+const usageLimitProviderLead = "usage limit reached ("
+
+// usageLimitProvider reads who imposed the limit from a usage-limit message:
+// the text in the lead's parenthesis, up to its first top-level comma (the
+// window and overage details follow one). Parentheses inside the name are kept
+// whole, so "your organization's AI accounts (rate-limited)", the name of a
+// wait on an org's accounts, is not cut to an unbalanced
+// "your organization's AI accounts (rate-limited". "" when there is no lead.
+func usageLimitProvider(msg string) string {
+	i := strings.Index(msg, usageLimitProviderLead)
+	if i < 0 {
+		return ""
+	}
+	rest := msg[i+len(usageLimitProviderLead):]
+	depth := 0
+	for j, r := range rest {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			if depth == 0 {
+				return strings.TrimSpace(rest[:j])
+			}
+			depth--
+		case ',':
+			if depth == 0 {
+				return strings.TrimSpace(rest[:j])
+			}
+		}
+	}
+	return strings.TrimSpace(rest)
+}
 
 // parseUsageLimit reads a usage-limit error, or reports that err is not one.
 // Matched on the marker, which survives every wrap the error has been through.
@@ -214,9 +246,7 @@ func parseUsageLimit(err error) (usageLimit, bool) {
 	if t, perr := time.Parse(time.RFC3339, strings.TrimSpace(payload)); perr == nil {
 		limit.ResetAt = t.UTC()
 	}
-	if m := usageLimitProviderRE.FindStringSubmatch(msg); m != nil {
-		limit.Provider = strings.TrimSpace(m[1])
-	}
+	limit.Provider = usageLimitProvider(msg)
 	var appErr *temporal.ApplicationError
 	if errors.As(err, &appErr) && appErr.HasDetails() {
 		var facts types.UsageLimitFacts

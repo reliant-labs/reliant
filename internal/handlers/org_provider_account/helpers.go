@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
+	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/orgs"
 )
@@ -138,7 +139,7 @@ func (s *Service) validKey(ctx context.Context, provider, apiKey string) error {
 		return svcerr.Wrap(svcerr.InvalidArgument("api_key is required"))
 	}
 	if ok, msg := s.deps.ValidateKey(ctx, models.Family(provider), apiKey); !ok {
-		return svcerr.Wrap(svcerr.InvalidArgument(msg))
+		return svcerr.Wrap(svcerr.WithReason(svcerr.InvalidArgument(msg), keyvalidate.Reason(msg)))
 	}
 	return nil
 }
@@ -286,4 +287,18 @@ func optional(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// wakeOrgChats tells orgID's blocked chats that an org account may serve them
+// now (Deps.ChatWaker). Best effort: the account change stands whatever
+// happens here, and a chat it could not reach goes on at its own retry.
+func (s *Service) wakeOrgChats(ctx context.Context, orgID, why string) {
+	if s.deps.ChatWaker == nil {
+		return
+	}
+	failed, err := s.deps.ChatWaker.WakeOrgChats(context.WithoutCancel(ctx), orgID, why)
+	if err != nil || len(failed) > 0 {
+		s.deps.Logger.WarnContext(ctx, "could not wake every org chat after an org account change",
+			"org_id", orgID, "why", why, "unreached", len(failed), "error", err)
+	}
 }

@@ -136,6 +136,12 @@ type Plan struct {
 	// plantable there, and sealing that directory would lose what the command
 	// writes in it. Wrap refuses the command and names them.
 	Conflicts []string `json:"-"`
+	// Terminal runs the command as an interactive shell on the helper's
+	// controlling terminal: its process group is put in the terminal's
+	// foreground, so the shell reads the terminal instead of stopping on
+	// SIGTTIN (WrapTerminal). The helper must have been started as the
+	// session leader with the terminal as its stdin.
+	Terminal bool `json:",omitempty"`
 }
 
 // Overlay is one directory the command sees through a private overlay.
@@ -334,6 +340,22 @@ func CredScratchDir() string {
 // when the sandbox is in force for its credentials-none peers. A non-empty
 // refusal means the command must not run.
 func Wrap(cmd *exec.Cmd, credentials string, writable Writable) (refusal string) {
+	return wrap(cmd, credentials, writable, false)
+}
+
+// WrapTerminal is Wrap for an interactive shell on a terminal, run with
+// `credentials: none`: an org that forces it on its machines (the run's org
+// stamp, control-plane docs/design/org-policies.md §5.4) gets it on the
+// terminals opened for its work too. cmd must be set up to become the session
+// leader with the terminal as its controlling terminal (Setsid, Setctty, the
+// terminal as stdin); the shell then runs in the terminal's foreground
+// (Plan.Terminal). It declares no writable checkout beyond its own working
+// directory.
+func WrapTerminal(cmd *exec.Cmd) (refusal string) {
+	return wrap(cmd, daemonpolicy.CredentialsNone, Writable{}, true)
+}
+
+func wrap(cmd *exec.Cmd, credentials string, writable Writable, terminal bool) (refusal string) {
 	self, err := os.Executable()
 	if credentials != daemonpolicy.CredentialsNone {
 		// The signal says the sandbox's version 2 holds here, which includes a
@@ -360,6 +382,7 @@ func Wrap(cmd *exec.Cmd, credentials string, writable Writable) (refusal string)
 	}
 	cmd.Env = withSignal(cmd.Env, false)
 	plan := PlanFor(cmd.Dir, cmd.Env, writable)
+	plan.Terminal = terminal
 	// Only where the sandbox is in force: elsewhere nothing is read-only, so
 	// there is nothing a declared directory could be refused.
 	if len(plan.Rejected) > 0 && Available(self) == nil {

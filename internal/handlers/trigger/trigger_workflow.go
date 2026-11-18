@@ -214,6 +214,10 @@ func (s *Service) EnableWorkflow(
 	for i, step := range steps {
 		if step != nil {
 			results[i].Warnings = step.warnings
+			// Also one of warnings, for a client that predates the field.
+			if w := results[i].GetFundingWarning(); w != nil {
+				results[i].Warnings = append(results[i].Warnings, w.GetMessage())
+			}
 		}
 	}
 	return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Enabled: true, Results: results}), nil
@@ -374,6 +378,7 @@ func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result 
 		})
 		result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED
 		result.Activation = resp.Msg.GetTrigger()
+		result.FundingWarning = resp.Msg.GetFundingWarning()
 		return nil
 	}
 	resp, err := s.CreateTrigger(ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: step.def}))
@@ -388,6 +393,7 @@ func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result 
 	result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ENABLED
 	result.Activation = resp.Msg.GetTrigger()
 	result.Webhook = resp.Msg.GetWebhook()
+	result.FundingWarning = resp.Msg.GetFundingWarning()
 	return nil
 }
 
@@ -425,6 +431,7 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 		result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED
 	}
 	result.Activation = resp.Msg.GetTrigger()
+	result.FundingWarning = resp.Msg.GetFundingWarning()
 	return nil
 }
 

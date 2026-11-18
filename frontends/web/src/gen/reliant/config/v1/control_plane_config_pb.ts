@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/control_plane_config.proto.
  */
 export const file_reliant_config_v1_control_plane_config: GenFile = /*@__PURE__*/
-  fileDesc("CixyZWxpYW50L2NvbmZpZy92MS9jb250cm9sX3BsYW5lX2NvbmZpZy5wcm90bxIRcmVsaWFudC5jb25maWcudjEixQIKEkNvbnRyb2xQbGFuZUNvbmZpZxKWAQoDdXJsGAEgASgJQogBgs4YgwEKGVJFTElBTlRfQ09OVFJPTF9QTEFORV9VUkwqL0NvbnRyb2wtcGxhbmUgYmFzZSBVUkw7IHVuc2V0IG1lYW5zIHNlbGYtaG9zdGVkWhkKFUNPTlRST0xfUExBTkVfQVBJX1VSTBABWhoKFkNPTlRST0xfUExBTkVfQkFTRV9VUkwQARKVAQoXaW50ZXJuYWxfc2VydmljZV9zZWNyZXQYAiABKAlCdILOGHAKF0lOVEVSTkFMX1NFUlZJQ0VfU0VDUkVUKlFTZWNyZXQgZm9yIGludGVybmFsLXNlcnZpY2UgY2FsbHMgdG8gdGhlIGNvbnRyb2wgcGxhbmUgKHJlcXVpcmVkIHdoZW4gdXJsIGlzIHNldCkwAVABQkBaPmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_forge_v1_forge]);
+  fileDesc("CixyZWxpYW50L2NvbmZpZy92MS9jb250cm9sX3BsYW5lX2NvbmZpZy5wcm90bxIRcmVsaWFudC5jb25maWcudjEi6gMKEkNvbnRyb2xQbGFuZUNvbmZpZxKWAQoDdXJsGAEgASgJQogBgs4YgwEKGVJFTElBTlRfQ09OVFJPTF9QTEFORV9VUkwqL0NvbnRyb2wtcGxhbmUgYmFzZSBVUkw7IHVuc2V0IG1lYW5zIHNlbGYtaG9zdGVkWhkKFUNPTlRST0xfUExBTkVfQVBJX1VSTBABWhoKFkNPTlRST0xfUExBTkVfQkFTRV9VUkwQARKVAQoXaW50ZXJuYWxfc2VydmljZV9zZWNyZXQYAiABKAlCdILOGHAKF0lOVEVSTkFMX1NFUlZJQ0VfU0VDUkVUKlFTZWNyZXQgZm9yIGludGVybmFsLXNlcnZpY2UgY2FsbHMgdG8gdGhlIGNvbnRyb2wgcGxhbmUgKHJlcXVpcmVkIHdoZW4gdXJsIGlzIHNldCkwAVABEqIBChRtYW5hZ2VkX2tleXNfcGVyX29yZxgDIAEoCEKDAYLOGH8KKlJFTElBTlRfQ09OVFJPTF9QTEFORV9NQU5BR0VEX0tFWVNfUEVSX09SRypRTWludCB0aGUgbWFuYWdlZCBSZWxpYW50IGtleSBwZXIgKHBlcnNvbiwgb3JnKSwgc28gZWFjaCBvcmcncyBjaGF0cyBiaWxsIHRoYXQgb3JnQkBaPmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_forge_v1_forge]);
 
 /**
  * ControlPlaneConfig is how a server process reaches the control plane that
@@ -43,6 +43,24 @@ export type ControlPlaneConfig = Message<"reliant.config.v1.ControlPlaneConfig">
    * @generated from field: string internal_service_secret = 2;
    */
   internalServiceSecret: string;
+
+  /**
+   * Mints the managed Reliant key once per (person, org): a person's chats in
+   * an org they belong to spend a key minted in that org (identity
+   * managed:<org_id>, attributed to it), so the gateway bills that org's
+   * wallet rather than their default org's (control-plane
+   * docs/design/org-provider-accounts.md §3.2, P10; org-policies §2, G0). The
+   * key is minted the first time it is needed, and in a chat of an org that
+   * has one the org-less managed key is not used. Off by default. A release
+   * before org-provider-accounts P5 ignores a managed key's org and would
+   * balance one person's calls across every org's key, so turn it on only once
+   * P5 is in every server AND in the release a rollback would return to, and a
+   * query in prod shows no live person holds more than one managed row. Off,
+   * nothing new is minted; keys already minted keep serving their orgs.
+   *
+   * @generated from field: bool managed_keys_per_org = 3;
+   */
+  managedKeysPerOrg: boolean;
 };
 
 /**

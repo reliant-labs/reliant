@@ -81,7 +81,7 @@ function setup() {
   );
   const reading = (env: LiveEnv) =>
     act(() => {
-      client.setQueryData(forgeCloudKeys.liveView("hounders"), { availability: "available", envs: [env], detail: "" });
+      client.setQueryData(forgeCloudKeys.liveView(null, "hounders"), { availability: "available", envs: [env], detail: "" });
     });
   return { client, reading };
 }
@@ -150,8 +150,8 @@ describe("QueuedDeployNotifier", () => {
     const { client, reading } = setup();
     reading(prod({ queued: true }));
     act(() => {
-      client.setQueryData(forgeCloudKeys.liveView("hounders"), { availability: "unreachable", envs: [], detail: "" });
+      client.setQueryData(forgeCloudKeys.liveView(null, "hounders"), { availability: "unreachable", envs: [], detail: "" });
     });
-    expect(useQueuedDeployStore.getState().watched).toHaveProperty("cp-prod");
+    expect(Object.values(useQueuedDeployStore.getState().watched).map((d) => d.envId)).toContain("cp-prod");
   });
 });

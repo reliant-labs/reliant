@@ -2,6 +2,7 @@
 package main
 
 import (
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -37,6 +38,12 @@ func isWebCode(p string) bool {
 		return true
 	}
 	return false
+}
+
+// isWebStylesheet is a frontends/web/ stylesheet whose @imports the demo
+// graph follows.
+func isWebStylesheet(p string) bool {
+	return strings.HasPrefix(p, "frontends/web/") && !strings.Contains(p, "/node_modules/") && path.Ext(p) == ".css"
 }
 
 // IsWebTestFile is what vitest's default include picks up, minus the Playwright specs.
@@ -79,13 +86,77 @@ type WebGraph struct {
 	Text map[string]string
 	// Walkers are tests that read whole trees.
 	Walkers []string
+	// Demo is the forge demo bundle's module graph: every file reachable
+	// from demoEntry, each module that has a demo twin replaced by the twin
+	// (the original is kept as a member but not followed). Nil when the
+	// entry does not exist: then the plan cannot narrow the demo lane.
+	Demo map[string]bool
+}
+
+// demoEntry is the forge demo bundle's entry module (demo.html loads it;
+// frontends/web/vite.config.ts's demo target builds it).
+const demoEntry = "frontends/web/src/demoBundle/main.tsx"
+
+// demoTwin mirrors twinOf in frontends/web/vite-plugin-demo-bundle.ts: the demo
+// build replaces a module x.<ext> that has a sibling x.demo.<ext> (or
+// x.demo.ts, x.demo.tsx) with that sibling, for every importer.
+func demoTwin(f string, exists map[string]bool) (string, bool) {
+	ext := path.Ext(f)
+	switch ext {
+	case ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts":
+	default:
+		return "", false
+	}
+	stem := strings.TrimSuffix(f, ext)
+	if strings.HasSuffix(stem, ".demo") {
+		return "", false
+	}
+	for _, e := range []string{ext, ".ts", ".tsx"} {
+		if exists[stem+".demo"+e] {
+			return stem + ".demo" + e, true
+		}
+	}
+	return "", false
+}
+
+// demoGraph is the closure of demoEntry over deps, with demo twins
+// substituted. Like the test graph it over-approximates: every quoted
+// specifier is an edge, so a file in it may never reach the bundle, but a
+// file the bundle contains is never missing from it.
+func demoGraph(deps map[string][]string, exists map[string]bool) map[string]bool {
+	if !exists[demoEntry] {
+		return nil
+	}
+	in := map[string]bool{demoEntry: true}
+	queue := []string{demoEntry}
+	for len(queue) > 0 {
+		f := queue[0]
+		queue = queue[1:]
+		for _, d := range deps[f] {
+			if in[d] {
+				continue
+			}
+			in[d] = true
+			// The original is a member (an edit to it is an edit to what a
+			// demo importer resolves through), but the bundle holds its twin.
+			if twin, ok := demoTwin(d, exists); ok {
+				if !in[twin] {
+					in[twin] = true
+					queue = append(queue, twin)
+				}
+				continue
+			}
+			queue = append(queue, d)
+		}
+	}
+	return in
 }
 
 // BuildWebGraph scans the frontends/web/ sources under root. files is every tracked or
 // untracked repo path; read returns a file's text.
 func BuildWebGraph(files []string, read func(string) (string, bool)) *WebGraph {
 	exists := map[string]bool{}
-	var code []string
+	var code, styles []string
 	for _, f := range files {
 		if strings.HasPrefix(f, "frontends/web/") {
 			exists[f] = true
@@ -93,8 +164,12 @@ func BuildWebGraph(files []string, read func(string) (string, bool)) *WebGraph {
 		if isWebCode(f) {
 			code = append(code, f)
 		}
+		if isWebStylesheet(f) {
+			styles = append(styles, f)
+		}
 	}
 	sort.Strings(code)
+	sort.Strings(styles)
 
 	deps := map[string][]string{}
 	wg := &WebGraph{Reach: map[string][]string{}, Near: map[string][]string{}, Direct: map[string][]string{}, Text: map[string]string{}}
@@ -140,6 +215,17 @@ func BuildWebGraph(files []string, read func(string) (string, bool)) *WebGraph {
 			}
 		}
 	}
+	// A stylesheet's @import is an edge of the bundle (vite inlines it), so
+	// the demo closure follows it: index.css imports styles/ and themes/
+	// sheets, and a broken nested @import breaks the demo build. The test
+	// graph does not follow them (vitest does not process CSS by default).
+	demoDeps := maps.Clone(deps)
+	for _, f := range styles {
+		if text, ok := read(f); ok {
+			demoDeps[f] = webDeps(f, text, exists)
+		}
+	}
+	wg.Demo = demoGraph(demoDeps, exists)
 	for f := range wg.Reach {
 		sort.Strings(wg.Reach[f])
 	}

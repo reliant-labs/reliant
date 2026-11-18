@@ -18,6 +18,34 @@ type MediaUnavailableError struct {
 
 func (e *MediaUnavailableError) Error() string { return e.Message }
 
+// MediaPersonalFundingError says a generation in an org chat could be served
+// only by the person's own accounts, which they have not chosen to spend in
+// that org (control-plane docs/design/org-provider-accounts.md §4.4, §10). A
+// generation has no turn to pause for the question, so it is not made; the
+// message says how to allow it. load_tool and the generate_* tools show it
+// verbatim, like MediaUnavailableError.
+type MediaPersonalFundingError struct {
+	Modality Modality
+	// OrgOnly: the chat may never use the person's own accounts (org_only).
+	OrgOnly bool
+	Message string
+}
+
+func (e *MediaPersonalFundingError) Error() string { return e.Message }
+
+// NewMediaPersonalFundingError builds the error for a modality.
+func NewMediaPersonalFundingError(modality Modality, orgOnly bool) *MediaPersonalFundingError {
+	noun := MediaNoun(modality)
+	title := strings.ToUpper(noun[:1]) + noun[1:]
+	msg := title + " generation was not started: your organization's AI accounts cannot do it, and only your own accounts could. "
+	if orgOnly {
+		msg += "This chat may use only your organization's accounts, so this is not a failure to retry. Tell the user an org admin can add an account that can."
+	} else {
+		msg += "You have not chosen to use your own accounts in this organization, so this is not a failure to retry. Tell the user they can allow it in Settings → AI providers, in the organization's section (\"When its accounts can't serve a chat\", or use their own accounts first), or ask an org admin to add an account that can."
+	}
+	return &MediaPersonalFundingError{Modality: modality, OrgOnly: orgOnly, Message: msg}
+}
+
 // NewMediaUnavailableError builds the error for a modality from the catalog.
 func NewMediaUnavailableError(registry *ModelRegistry, modality Modality) *MediaUnavailableError {
 	return &MediaUnavailableError{Modality: modality, Message: MediaUnavailableMessage(registry, modality)}

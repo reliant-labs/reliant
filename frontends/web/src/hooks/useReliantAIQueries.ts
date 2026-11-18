@@ -21,6 +21,7 @@ import {
   type CreateManagedKeyArgs,
   type GetLLMSpendArgs,
 } from "@/services/controlPlane/reliantAI";
+import { orgQueryEnabled, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 import { cloudBillingKeys } from "./useCloudBillingQueries";
 import { computeEligibilityQueryKey } from "./useOnboardingQueries";
 
@@ -33,22 +34,38 @@ const KEY = {
     ["reliantAI", "spend", args.orgId, args.startDate, args.endDate] as const,
 };
 
+/** In the tab's org: read in it, keyed by it, and not before it is known (lib/orgScope). */
 export function useReliantOverview() {
-  return useQuery({
-    queryKey: KEY.reliantOverview,
-    queryFn: () => getReliantOverview(),
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-  });
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      {
+        queryKey: [...KEY.reliantOverview, org.orgId ?? ""],
+        queryFn: () => getReliantOverview(org.orgId),
+        enabled: orgQueryEnabled(org),
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
+      },
+      org,
+    ),
+  );
 }
 
+/** In the tab's org, like useReliantOverview. */
 export function useWalletOverview() {
-  return useQuery({
-    queryKey: KEY.walletOverview,
-    queryFn: () => getWalletOverview(),
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-  });
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      {
+        queryKey: [...KEY.walletOverview, org.orgId ?? ""],
+        queryFn: () => getWalletOverview(org.orgId),
+        enabled: orgQueryEnabled(org),
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
+      },
+      org,
+    ),
+  );
 }
 
 /**

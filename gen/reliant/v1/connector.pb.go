@@ -85,6 +85,61 @@ func (ConnectorExecMode) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_connector_proto_rawDescGZIP(), []int{0}
 }
 
+// ConnectorKind is what a connector grants access to.
+type ConnectorKind int32
+
+const (
+	// Unspecified is a workspace connector, the only kind before kinds existed.
+	ConnectorKind_CONNECTOR_KIND_UNSPECIFIED ConnectorKind = 0
+	// A workspace connector: MCP tools inside one daemon's workspace, at /mcp.
+	ConnectorKind_CONNECTOR_KIND_WORKSPACE ConnectorKind = 1
+	// A Reliant Forge connector: forge's account-scoped MCP tools (monitoring,
+	// releases, environments) in one organization, optionally confined to some
+	// projects, at /forge/mcp.
+	ConnectorKind_CONNECTOR_KIND_FORGE ConnectorKind = 2
+)
+
+// Enum value maps for ConnectorKind.
+var (
+	ConnectorKind_name = map[int32]string{
+		0: "CONNECTOR_KIND_UNSPECIFIED",
+		1: "CONNECTOR_KIND_WORKSPACE",
+		2: "CONNECTOR_KIND_FORGE",
+	}
+	ConnectorKind_value = map[string]int32{
+		"CONNECTOR_KIND_UNSPECIFIED": 0,
+		"CONNECTOR_KIND_WORKSPACE":   1,
+		"CONNECTOR_KIND_FORGE":       2,
+	}
+)
+
+func (x ConnectorKind) Enum() *ConnectorKind {
+	p := new(ConnectorKind)
+	*p = x
+	return p
+}
+
+func (x ConnectorKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ConnectorKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_connector_proto_enumTypes[1].Descriptor()
+}
+
+func (ConnectorKind) Type() protoreflect.EnumType {
+	return &file_reliant_v1_connector_proto_enumTypes[1]
+}
+
+func (x ConnectorKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ConnectorKind.Descriptor instead.
+func (ConnectorKind) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_connector_proto_rawDescGZIP(), []int{1}
+}
+
 type AuthorizeClientRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// client_id identifies the requesting application, as supplied by the
@@ -481,6 +536,15 @@ type Connector struct {
 	LastUsedAt    *string           `protobuf:"bytes,10,opt,name=last_used_at,json=lastUsedAt,proto3,oneof" json:"last_used_at,omitempty"`
 	RevokedAt     *string           `protobuf:"bytes,11,opt,name=revoked_at,json=revokedAt,proto3,oneof" json:"revoked_at,omitempty"`
 	CreatedAt     string            `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// kind is what the connector reaches: a workspace (daemon_id, path_root,
+	// exec_mode) or the Reliant Forge account tools (org_id, project_names).
+	// UNSPECIFIED is a workspace connector: every connector before kinds.
+	Kind ConnectorKind `protobuf:"varint,13,opt,name=kind,proto3,enum=reliant.v1.ConnectorKind" json:"kind,omitempty"`
+	// org_id is the organization a forge connector may read and act in.
+	OrgId string `protobuf:"bytes,14,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// project_names confines a forge connector to these forge projects of
+	// org_id; empty means every project of it.
+	ProjectNames  []string `protobuf:"bytes,15,rep,name=project_names,json=projectNames,proto3" json:"project_names,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -599,21 +663,52 @@ func (x *Connector) GetCreatedAt() string {
 	return ""
 }
 
+func (x *Connector) GetKind() ConnectorKind {
+	if x != nil {
+		return x.Kind
+	}
+	return ConnectorKind_CONNECTOR_KIND_UNSPECIFIED
+}
+
+func (x *Connector) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *Connector) GetProjectNames() []string {
+	if x != nil {
+		return x.ProjectNames
+	}
+	return nil
+}
+
 type CreateConnectorRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// daemon_id is required: a connector is bound to exactly one workspace.
-	// There is deliberately no "all my daemons" form.
+	// daemon_id is required for a workspace connector: it is bound to exactly
+	// one workspace. There is deliberately no "all my daemons" form. A forge
+	// connector names none.
 	DaemonId string `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
 	Name     string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// allowed_tools names MCP tools (see ListAvailableTools). Must be non-empty.
 	AllowedTools []string `protobuf:"bytes,3,rep,name=allowed_tools,json=allowedTools,proto3" json:"allowed_tools,omitempty"`
-	// path_root confines filesystem access. Must be non-empty; an empty root
-	// means no access rather than unrestricted access.
+	// path_root confines filesystem access. Must be non-empty for a workspace
+	// connector; an empty root means no access rather than unrestricted access.
 	PathRoot      string            `protobuf:"bytes,4,opt,name=path_root,json=pathRoot,proto3" json:"path_root,omitempty"`
 	ExecMode      ConnectorExecMode `protobuf:"varint,5,opt,name=exec_mode,json=execMode,proto3,enum=reliant.v1.ConnectorExecMode" json:"exec_mode,omitempty"`
 	ExecAllowlist []string          `protobuf:"bytes,6,rep,name=exec_allowlist,json=execAllowlist,proto3" json:"exec_allowlist,omitempty"`
 	// expires_at is an optional RFC3339 bound on the grant.
-	ExpiresAt     *string `protobuf:"bytes,7,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
+	ExpiresAt *string `protobuf:"bytes,7,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
+	// kind is what the connector reaches; UNSPECIFIED is a workspace.
+	Kind ConnectorKind `protobuf:"varint,8,opt,name=kind,proto3,enum=reliant.v1.ConnectorKind" json:"kind,omitempty"`
+	// org_id is required for a forge connector: the organization it may read
+	// and act in. The grant only narrows what the caller's own credential may
+	// do there, so an org the caller does not belong to permits nothing.
+	OrgId string `protobuf:"bytes,9,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// project_names confines a forge connector to these projects of org_id;
+	// empty means every project.
+	ProjectNames  []string `protobuf:"bytes,10,rep,name=project_names,json=projectNames,proto3" json:"project_names,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -697,13 +792,35 @@ func (x *CreateConnectorRequest) GetExpiresAt() string {
 	return ""
 }
 
+func (x *CreateConnectorRequest) GetKind() ConnectorKind {
+	if x != nil {
+		return x.Kind
+	}
+	return ConnectorKind_CONNECTOR_KIND_UNSPECIFIED
+}
+
+func (x *CreateConnectorRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *CreateConnectorRequest) GetProjectNames() []string {
+	if x != nil {
+		return x.ProjectNames
+	}
+	return nil
+}
+
 type CreateConnectorResponse struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Connector *Connector             `protobuf:"bytes,1,opt,name=connector,proto3" json:"connector,omitempty"`
 	// credential is the raw value, returned exactly once. The caller must show
 	// it to the user immediately; it cannot be retrieved again.
 	Credential string `protobuf:"bytes,2,opt,name=credential,proto3" json:"credential,omitempty"`
-	// mcp_url is the endpoint to paste into the third-party client.
+	// mcp_url is the endpoint to paste into the third-party client: /mcp for a
+	// workspace connector, /forge/mcp for a forge connector.
 	McpUrl        string `protobuf:"bytes,3,opt,name=mcp_url,json=mcpUrl,proto3" json:"mcp_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1160,7 +1277,10 @@ func (x *ListConnectorActivityResponse) GetActivity() []*ConnectorActivity {
 }
 
 type ListAvailableToolsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// kind selects the catalog: a workspace connector's tools (UNSPECIFIED)
+	// or the Reliant Forge connector's.
+	Kind          *ConnectorKind `protobuf:"varint,1,opt,name=kind,proto3,enum=reliant.v1.ConnectorKind,oneof" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1193,6 +1313,13 @@ func (x *ListAvailableToolsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListAvailableToolsRequest.ProtoReflect.Descriptor instead.
 func (*ListAvailableToolsRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_connector_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListAvailableToolsRequest) GetKind() ConnectorKind {
+	if x != nil && x.Kind != nil {
+		return *x.Kind
+	}
+	return ConnectorKind_CONNECTOR_KIND_UNSPECIFIED
 }
 
 // ConnectorTool describes one grantable tool for the consent UI.
@@ -1345,7 +1472,7 @@ const file_reliant_v1_connector_proto_rawDesc = "" +
 	" RevokeClientAuthorizationRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\"=\n" +
 	"!RevokeClientAuthorizationResponse\x12\x18\n" +
-	"\arevoked\x18\x01 \x01(\bR\arevoked\"\xd1\x03\n" +
+	"\arevoked\x18\x01 \x01(\bR\arevoked\"\xbc\x04\n" +
 	"\tConnector\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tdaemon_id\x18\x02 \x01(\tR\bdaemonId\x12\x12\n" +
@@ -1363,10 +1490,13 @@ const file_reliant_v1_connector_proto_rawDesc = "" +
 	"\n" +
 	"revoked_at\x18\v \x01(\tH\x02R\trevokedAt\x88\x01\x01\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\f \x01(\tR\tcreatedAtB\r\n" +
+	"created_at\x18\f \x01(\tR\tcreatedAt\x12-\n" +
+	"\x04kind\x18\r \x01(\x0e2\x19.reliant.v1.ConnectorKindR\x04kind\x12\x15\n" +
+	"\x06org_id\x18\x0e \x01(\tR\x05orgId\x12#\n" +
+	"\rproject_names\x18\x0f \x03(\tR\fprojectNamesB\r\n" +
 	"\v_expires_atB\x0f\n" +
 	"\r_last_used_atB\r\n" +
-	"\v_revoked_at\"\xa1\x02\n" +
+	"\v_revoked_at\"\x8c\x03\n" +
 	"\x16CreateConnectorRequest\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12#\n" +
@@ -1375,7 +1505,11 @@ const file_reliant_v1_connector_proto_rawDesc = "" +
 	"\texec_mode\x18\x05 \x01(\x0e2\x1d.reliant.v1.ConnectorExecModeR\bexecMode\x12%\n" +
 	"\x0eexec_allowlist\x18\x06 \x03(\tR\rexecAllowlist\x12\"\n" +
 	"\n" +
-	"expires_at\x18\a \x01(\tH\x00R\texpiresAt\x88\x01\x01B\r\n" +
+	"expires_at\x18\a \x01(\tH\x00R\texpiresAt\x88\x01\x01\x12-\n" +
+	"\x04kind\x18\b \x01(\x0e2\x19.reliant.v1.ConnectorKindR\x04kind\x12\x15\n" +
+	"\x06org_id\x18\t \x01(\tR\x05orgId\x12#\n" +
+	"\rproject_names\x18\n" +
+	" \x03(\tR\fprojectNamesB\r\n" +
 	"\v_expires_at\"\x87\x01\n" +
 	"\x17CreateConnectorResponse\x123\n" +
 	"\tconnector\x18\x01 \x01(\v2\x15.reliant.v1.ConnectorR\tconnector\x12\x1e\n" +
@@ -1413,8 +1547,10 @@ const file_reliant_v1_connector_proto_rawDesc = "" +
 	"\t_grant_idB\b\n" +
 	"\x06_limit\"Z\n" +
 	"\x1dListConnectorActivityResponse\x129\n" +
-	"\bactivity\x18\x01 \x03(\v2\x1d.reliant.v1.ConnectorActivityR\bactivity\"\x1b\n" +
-	"\x19ListAvailableToolsRequest\"\x80\x01\n" +
+	"\bactivity\x18\x01 \x03(\v2\x1d.reliant.v1.ConnectorActivityR\bactivity\"X\n" +
+	"\x19ListAvailableToolsRequest\x122\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x19.reliant.v1.ConnectorKindH\x00R\x04kind\x88\x01\x01B\a\n" +
+	"\x05_kind\"\x80\x01\n" +
 	"\rConnectorTool\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
@@ -1427,7 +1563,11 @@ const file_reliant_v1_connector_proto_rawDesc = "" +
 	"\x1fCONNECTOR_EXEC_MODE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CONNECTOR_EXEC_MODE_DENY\x10\x01\x12!\n" +
 	"\x1dCONNECTOR_EXEC_MODE_ALLOWLIST\x10\x02\x12$\n" +
-	" CONNECTOR_EXEC_MODE_UNRESTRICTED\x10\x032\xd5\a\n" +
+	" CONNECTOR_EXEC_MODE_UNRESTRICTED\x10\x03*g\n" +
+	"\rConnectorKind\x12\x1e\n" +
+	"\x1aCONNECTOR_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18CONNECTOR_KIND_WORKSPACE\x10\x01\x12\x18\n" +
+	"\x14CONNECTOR_KIND_FORGE\x10\x022\xd5\a\n" +
 	"\x10ConnectorService\x12\\\n" +
 	"\x0fCreateConnector\x12\".reliant.v1.CreateConnectorRequest\x1a#.reliant.v1.CreateConnectorResponse\"\x00\x12Y\n" +
 	"\x0eListConnectors\x12!.reliant.v1.ListConnectorsRequest\x1a\".reliant.v1.ListConnectorsResponse\"\x00\x12{\n" +
@@ -1456,62 +1596,66 @@ func file_reliant_v1_connector_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_connector_proto_rawDescData
 }
 
-var file_reliant_v1_connector_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_reliant_v1_connector_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_reliant_v1_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_reliant_v1_connector_proto_goTypes = []any{
 	(ConnectorExecMode)(0),                    // 0: reliant.v1.ConnectorExecMode
-	(*AuthorizeClientRequest)(nil),            // 1: reliant.v1.AuthorizeClientRequest
-	(*AuthorizeClientResponse)(nil),           // 2: reliant.v1.AuthorizeClientResponse
-	(*ListAuthorizedClientsRequest)(nil),      // 3: reliant.v1.ListAuthorizedClientsRequest
-	(*AuthorizedClient)(nil),                  // 4: reliant.v1.AuthorizedClient
-	(*ListAuthorizedClientsResponse)(nil),     // 5: reliant.v1.ListAuthorizedClientsResponse
-	(*RevokeClientAuthorizationRequest)(nil),  // 6: reliant.v1.RevokeClientAuthorizationRequest
-	(*RevokeClientAuthorizationResponse)(nil), // 7: reliant.v1.RevokeClientAuthorizationResponse
-	(*Connector)(nil),                         // 8: reliant.v1.Connector
-	(*CreateConnectorRequest)(nil),            // 9: reliant.v1.CreateConnectorRequest
-	(*CreateConnectorResponse)(nil),           // 10: reliant.v1.CreateConnectorResponse
-	(*ListConnectorsRequest)(nil),             // 11: reliant.v1.ListConnectorsRequest
-	(*ListConnectorsResponse)(nil),            // 12: reliant.v1.ListConnectorsResponse
-	(*RevokeConnectorRequest)(nil),            // 13: reliant.v1.RevokeConnectorRequest
-	(*RevokeConnectorResponse)(nil),           // 14: reliant.v1.RevokeConnectorResponse
-	(*ConnectorActivity)(nil),                 // 15: reliant.v1.ConnectorActivity
-	(*ListConnectorActivityRequest)(nil),      // 16: reliant.v1.ListConnectorActivityRequest
-	(*ListConnectorActivityResponse)(nil),     // 17: reliant.v1.ListConnectorActivityResponse
-	(*ListAvailableToolsRequest)(nil),         // 18: reliant.v1.ListAvailableToolsRequest
-	(*ConnectorTool)(nil),                     // 19: reliant.v1.ConnectorTool
-	(*ListAvailableToolsResponse)(nil),        // 20: reliant.v1.ListAvailableToolsResponse
+	(ConnectorKind)(0),                        // 1: reliant.v1.ConnectorKind
+	(*AuthorizeClientRequest)(nil),            // 2: reliant.v1.AuthorizeClientRequest
+	(*AuthorizeClientResponse)(nil),           // 3: reliant.v1.AuthorizeClientResponse
+	(*ListAuthorizedClientsRequest)(nil),      // 4: reliant.v1.ListAuthorizedClientsRequest
+	(*AuthorizedClient)(nil),                  // 5: reliant.v1.AuthorizedClient
+	(*ListAuthorizedClientsResponse)(nil),     // 6: reliant.v1.ListAuthorizedClientsResponse
+	(*RevokeClientAuthorizationRequest)(nil),  // 7: reliant.v1.RevokeClientAuthorizationRequest
+	(*RevokeClientAuthorizationResponse)(nil), // 8: reliant.v1.RevokeClientAuthorizationResponse
+	(*Connector)(nil),                         // 9: reliant.v1.Connector
+	(*CreateConnectorRequest)(nil),            // 10: reliant.v1.CreateConnectorRequest
+	(*CreateConnectorResponse)(nil),           // 11: reliant.v1.CreateConnectorResponse
+	(*ListConnectorsRequest)(nil),             // 12: reliant.v1.ListConnectorsRequest
+	(*ListConnectorsResponse)(nil),            // 13: reliant.v1.ListConnectorsResponse
+	(*RevokeConnectorRequest)(nil),            // 14: reliant.v1.RevokeConnectorRequest
+	(*RevokeConnectorResponse)(nil),           // 15: reliant.v1.RevokeConnectorResponse
+	(*ConnectorActivity)(nil),                 // 16: reliant.v1.ConnectorActivity
+	(*ListConnectorActivityRequest)(nil),      // 17: reliant.v1.ListConnectorActivityRequest
+	(*ListConnectorActivityResponse)(nil),     // 18: reliant.v1.ListConnectorActivityResponse
+	(*ListAvailableToolsRequest)(nil),         // 19: reliant.v1.ListAvailableToolsRequest
+	(*ConnectorTool)(nil),                     // 20: reliant.v1.ConnectorTool
+	(*ListAvailableToolsResponse)(nil),        // 21: reliant.v1.ListAvailableToolsResponse
 }
 var file_reliant_v1_connector_proto_depIdxs = []int32{
-	9,  // 0: reliant.v1.AuthorizeClientRequest.new_connector:type_name -> reliant.v1.CreateConnectorRequest
-	8,  // 1: reliant.v1.AuthorizeClientResponse.connector:type_name -> reliant.v1.Connector
-	4,  // 2: reliant.v1.ListAuthorizedClientsResponse.clients:type_name -> reliant.v1.AuthorizedClient
+	10, // 0: reliant.v1.AuthorizeClientRequest.new_connector:type_name -> reliant.v1.CreateConnectorRequest
+	9,  // 1: reliant.v1.AuthorizeClientResponse.connector:type_name -> reliant.v1.Connector
+	5,  // 2: reliant.v1.ListAuthorizedClientsResponse.clients:type_name -> reliant.v1.AuthorizedClient
 	0,  // 3: reliant.v1.Connector.exec_mode:type_name -> reliant.v1.ConnectorExecMode
-	0,  // 4: reliant.v1.CreateConnectorRequest.exec_mode:type_name -> reliant.v1.ConnectorExecMode
-	8,  // 5: reliant.v1.CreateConnectorResponse.connector:type_name -> reliant.v1.Connector
-	8,  // 6: reliant.v1.ListConnectorsResponse.connectors:type_name -> reliant.v1.Connector
-	15, // 7: reliant.v1.ListConnectorActivityResponse.activity:type_name -> reliant.v1.ConnectorActivity
-	19, // 8: reliant.v1.ListAvailableToolsResponse.tools:type_name -> reliant.v1.ConnectorTool
-	9,  // 9: reliant.v1.ConnectorService.CreateConnector:input_type -> reliant.v1.CreateConnectorRequest
-	11, // 10: reliant.v1.ConnectorService.ListConnectors:input_type -> reliant.v1.ListConnectorsRequest
-	13, // 11: reliant.v1.ConnectorService.RevokeConnector:input_type -> reliant.v1.RevokeConnectorRequest
-	16, // 12: reliant.v1.ConnectorService.ListConnectorActivity:input_type -> reliant.v1.ListConnectorActivityRequest
-	18, // 13: reliant.v1.ConnectorService.ListAvailableTools:input_type -> reliant.v1.ListAvailableToolsRequest
-	1,  // 14: reliant.v1.ConnectorService.AuthorizeClient:input_type -> reliant.v1.AuthorizeClientRequest
-	3,  // 15: reliant.v1.ConnectorService.ListAuthorizedClients:input_type -> reliant.v1.ListAuthorizedClientsRequest
-	6,  // 16: reliant.v1.ConnectorService.RevokeClientAuthorization:input_type -> reliant.v1.RevokeClientAuthorizationRequest
-	10, // 17: reliant.v1.ConnectorService.CreateConnector:output_type -> reliant.v1.CreateConnectorResponse
-	12, // 18: reliant.v1.ConnectorService.ListConnectors:output_type -> reliant.v1.ListConnectorsResponse
-	14, // 19: reliant.v1.ConnectorService.RevokeConnector:output_type -> reliant.v1.RevokeConnectorResponse
-	17, // 20: reliant.v1.ConnectorService.ListConnectorActivity:output_type -> reliant.v1.ListConnectorActivityResponse
-	20, // 21: reliant.v1.ConnectorService.ListAvailableTools:output_type -> reliant.v1.ListAvailableToolsResponse
-	2,  // 22: reliant.v1.ConnectorService.AuthorizeClient:output_type -> reliant.v1.AuthorizeClientResponse
-	5,  // 23: reliant.v1.ConnectorService.ListAuthorizedClients:output_type -> reliant.v1.ListAuthorizedClientsResponse
-	7,  // 24: reliant.v1.ConnectorService.RevokeClientAuthorization:output_type -> reliant.v1.RevokeClientAuthorizationResponse
-	17, // [17:25] is the sub-list for method output_type
-	9,  // [9:17] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	1,  // 4: reliant.v1.Connector.kind:type_name -> reliant.v1.ConnectorKind
+	0,  // 5: reliant.v1.CreateConnectorRequest.exec_mode:type_name -> reliant.v1.ConnectorExecMode
+	1,  // 6: reliant.v1.CreateConnectorRequest.kind:type_name -> reliant.v1.ConnectorKind
+	9,  // 7: reliant.v1.CreateConnectorResponse.connector:type_name -> reliant.v1.Connector
+	9,  // 8: reliant.v1.ListConnectorsResponse.connectors:type_name -> reliant.v1.Connector
+	16, // 9: reliant.v1.ListConnectorActivityResponse.activity:type_name -> reliant.v1.ConnectorActivity
+	1,  // 10: reliant.v1.ListAvailableToolsRequest.kind:type_name -> reliant.v1.ConnectorKind
+	20, // 11: reliant.v1.ListAvailableToolsResponse.tools:type_name -> reliant.v1.ConnectorTool
+	10, // 12: reliant.v1.ConnectorService.CreateConnector:input_type -> reliant.v1.CreateConnectorRequest
+	12, // 13: reliant.v1.ConnectorService.ListConnectors:input_type -> reliant.v1.ListConnectorsRequest
+	14, // 14: reliant.v1.ConnectorService.RevokeConnector:input_type -> reliant.v1.RevokeConnectorRequest
+	17, // 15: reliant.v1.ConnectorService.ListConnectorActivity:input_type -> reliant.v1.ListConnectorActivityRequest
+	19, // 16: reliant.v1.ConnectorService.ListAvailableTools:input_type -> reliant.v1.ListAvailableToolsRequest
+	2,  // 17: reliant.v1.ConnectorService.AuthorizeClient:input_type -> reliant.v1.AuthorizeClientRequest
+	4,  // 18: reliant.v1.ConnectorService.ListAuthorizedClients:input_type -> reliant.v1.ListAuthorizedClientsRequest
+	7,  // 19: reliant.v1.ConnectorService.RevokeClientAuthorization:input_type -> reliant.v1.RevokeClientAuthorizationRequest
+	11, // 20: reliant.v1.ConnectorService.CreateConnector:output_type -> reliant.v1.CreateConnectorResponse
+	13, // 21: reliant.v1.ConnectorService.ListConnectors:output_type -> reliant.v1.ListConnectorsResponse
+	15, // 22: reliant.v1.ConnectorService.RevokeConnector:output_type -> reliant.v1.RevokeConnectorResponse
+	18, // 23: reliant.v1.ConnectorService.ListConnectorActivity:output_type -> reliant.v1.ListConnectorActivityResponse
+	21, // 24: reliant.v1.ConnectorService.ListAvailableTools:output_type -> reliant.v1.ListAvailableToolsResponse
+	3,  // 25: reliant.v1.ConnectorService.AuthorizeClient:output_type -> reliant.v1.AuthorizeClientResponse
+	6,  // 26: reliant.v1.ConnectorService.ListAuthorizedClients:output_type -> reliant.v1.ListAuthorizedClientsResponse
+	8,  // 27: reliant.v1.ConnectorService.RevokeClientAuthorization:output_type -> reliant.v1.RevokeClientAuthorizationResponse
+	20, // [20:28] is the sub-list for method output_type
+	12, // [12:20] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_connector_proto_init() }
@@ -1523,12 +1667,13 @@ func file_reliant_v1_connector_proto_init() {
 	file_reliant_v1_connector_proto_msgTypes[7].OneofWrappers = []any{}
 	file_reliant_v1_connector_proto_msgTypes[8].OneofWrappers = []any{}
 	file_reliant_v1_connector_proto_msgTypes[15].OneofWrappers = []any{}
+	file_reliant_v1_connector_proto_msgTypes[17].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_connector_proto_rawDesc), len(file_reliant_v1_connector_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,

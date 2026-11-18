@@ -15,7 +15,10 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;confi
 message GatewayConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
-    command: ["server", "gateway"]
+    command: [
+      "server",
+      "gateway"
+    ]
   };
 
   // The blocks every server role shares moved to ServerProcessConfig and
@@ -32,7 +35,10 @@ message GatewayConfig {
       default_value: "9190"
       description: "Daemon bidi-streaming gRPC listen port"
     },
-    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+    (buf.validate.field).int32 = {
+      gte: 1
+      lte: 65535
+    }
   ];
   int32 health_port = 15 [
     (forge.v1.config) = {
@@ -41,7 +47,10 @@ message GatewayConfig {
       default_value: "8080"
       description: "Health/readiness HTTP endpoint port"
     },
-    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+    (buf.validate.field).int32 = {
+      gte: 1
+      lte: 65535
+    }
   ];
   string bind_address = 16 [(forge.v1.config) = {
     env_var: "BIND_ADDRESS"

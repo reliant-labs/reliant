@@ -17,7 +17,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=0d72098afd41c402a9f5d3d46d32164bf3d86b5d22fe66b5c2965dde1f957e5d
+// forge:hash=6b6e929730f6af62bf865ab9ffac8177dd971493e25a876bd8695055eb9f21a6
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -32,6 +32,7 @@ type MockRepository struct {
 	GetRepoFunc                      func(context.Context, string) (*core.Repo, error)
 	GetRepoByProjectAndPathFunc      func(context.Context, string, string) (*core.Repo, error)
 	ListReposByProjectFunc           func(context.Context, string) ([]*core.Repo, error)
+	ListRepoForgeAppsByProjectFunc   func(context.Context, string) ([]core.RepoForgeApp, error)
 	CreateRepoFunc                   func(context.Context, *core.Repo) error
 	DeleteRepoFunc                   func(context.Context, string) error
 	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
@@ -81,6 +82,15 @@ func (m *MockRepository) ListReposByProject(ctx context.Context, projectID strin
 		return m.ListReposByProjectFunc(ctx, projectID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListReposByProject")
+}
+
+// ListRepoForgeAppsByProject records the call and delegates to ListRepoForgeAppsByProjectFunc when set.
+func (m *MockRepository) ListRepoForgeAppsByProject(ctx context.Context, projectID string) ([]core.RepoForgeApp, error) {
+	m.Recorder.Record("ListRepoForgeAppsByProject", ctx, projectID)
+	if m.ListRepoForgeAppsByProjectFunc != nil {
+		return m.ListRepoForgeAppsByProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListRepoForgeAppsByProject")
 }
 
 // CreateRepo records the call and delegates to CreateRepoFunc when set.

@@ -56,6 +56,9 @@ type EventRepo interface {
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
+	// GetLatestTriggerEvent is the trigger's newest event with outcome (any
+	// outcome when nil), nil when it has none.
+	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 	// SettlePendingTriggerEvent records a verdict, and the definition the
 	// fire resolved (nil keeps the recorded one), on a still-pending event.
 	SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (settled bool, err error)

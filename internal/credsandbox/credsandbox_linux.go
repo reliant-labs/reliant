@@ -474,11 +474,19 @@ func superviseCommand(s spec) int {
 		// machine's /tmp, which the command cannot see).
 		env = privateTmpEnv(env)
 	}
+	// An interactive shell on the helper's terminal (Plan.Terminal) runs in
+	// the terminal's foreground: in a background process group it would stop
+	// on SIGTTIN at its first read. The helper is the session leader and the
+	// terminal is its stdin (descriptor 0, here as in the child).
+	sys := &syscall.SysProcAttr{Setpgid: true}
+	if s.Plan.Terminal {
+		sys.Foreground, sys.Ctty = true, 0
+	}
 	pid, err := syscall.ForkExec(s.Path, args, &syscall.ProcAttr{
 		Dir:   s.Dir,
 		Env:   env,
 		Files: []uintptr{0, 1, 2},
-		Sys:   &syscall.SysProcAttr{Setpgid: true},
+		Sys:   sys,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "credsandbox: starting %s: %v\n", s.Path, err)

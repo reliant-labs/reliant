@@ -184,11 +184,41 @@ type AvailableDrivers struct {
 	// per model.
 	DriverRank map[DriverID]AccountTier
 
+	// OrgGave reports that the run's org gives the person at least one
+	// account it pays for on the first tier (its own key the person may use,
+	// or a seat it pays for), whether or not that account can serve now:
+	// paused, needing sign-in, rate-limited or refused by the org's policy
+	// all still count, and so does an answer nobody could give (a read of
+	// the membership, the org's accounts or the person's grants that failed).
+	// Spending the person's own accounts in its place needs their say
+	// (org-provider-accounts §10); an org that gives nothing leaves them
+	// serving as before. False for every scope of no org.
+	OrgGave bool
+
 	// StickyDriver, when set, is the provider a thread is already on between
 	// the tool steps of one turn: TierFor ranks it above every tier for a
 	// model it serves, so a better tier is taken up at the next turn start,
 	// never mid-turn (org-provider-accounts §4.5, D6).
 	StickyDriver DriverID
+
+	// PolicyRefused is what the run's org policy took out of this set, by
+	// driver (control-plane docs/design/org-policies.md §4.1, §4.2): a driver
+	// whose every account it refuses (provider_not_allowed; the driver is not
+	// in Drivers or Accounts), and the managed driver whose models it narrows
+	// (model_not_allowed; those models are Disabled in Availability). A
+	// resolution that fails reads it to say the org's policy is why, instead
+	// of "connect a provider". Nil when the policy took nothing, which is
+	// every scope of no org and every policy in audit.
+	PolicyRefused map[DriverID]PolicyRefusal
+}
+
+// PolicyRefusal is one driver the run's org policy took out of a set.
+type PolicyRefusal struct {
+	// Reason is the org policy's refusal reason (provider_not_allowed,
+	// model_not_allowed).
+	Reason string
+	// Funding is the class (Funding*) of an account the refusal applied to.
+	Funding string
 }
 
 // TierFor is driver's best tier among its accounts that serve modelID

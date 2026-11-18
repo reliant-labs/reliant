@@ -101,7 +101,7 @@ func ResolveImageGenerator(ctx context.Context, userID string, selector models.M
 		selector.Tags = []string{DefaultImageGenTag}
 	}
 
-	resolved, availableDrivers, err := resolveMediaModel(ctx, userID, selector, models.ModalityImage)
+	resolved, availableDrivers, scope, err := resolveMediaModel(ctx, userID, selector, models.ModalityImage)
 	if err != nil {
 		return nil, err
 	}
@@ -110,6 +110,9 @@ func ResolveImageGenerator(ctx context.Context, userID string, selector models.M
 	driverConfig, ok := availableDrivers.Drivers[models.DriverID(driverID)]
 	if !ok || !driverConfig.IsConfigured() {
 		return nil, fmt.Errorf("model %s resolved to provider %s, which is not configured", resolved.Definition.ID, driverID)
+	}
+	if err := checkMediaPolicy(ctx, scope, availableDrivers, resolved); err != nil {
+		return nil, err
 	}
 
 	config, err := imageGenConfig(resolved, driverConfig)

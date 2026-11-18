@@ -246,6 +246,32 @@ message Run {
   // would not load), which has no node attempt to carry the error. Empty
   // for a run that did not fail.
   string failure_detail = 24;
+
+  // RunOutcome is how the run ended, for whoever judges whether it worked:
+  // trigger health, failure streaks, a run list's verdict. Unlike state it
+  // tells a run that completed cleanly from one that completed only because
+  // its own failure path handled a node that failed (reliant#2753). Unlike
+  // outcome it is never declared: the runtime derives it when the run ends.
+  // UNSPECIFIED while the run is live, when it was cancelled, and for a run
+  // that ended before the field existed. Filled by GetRun and every list.
+  RunOutcome run_outcome = 25;
+}
+
+// RunOutcome is how a run ended (Run.run_outcome). The lifecycle (state,
+// stop_reason) is unchanged by it: a FAILURE_HANDLED run is still COMPLETED.
+enum RunOutcome {
+  RUN_OUTCOME_UNSPECIFIED = 0;
+  // SUCCEEDED: the run completed, and no node's last attempt failed.
+  RUN_OUTCOME_SUCCEEDED = 1;
+  // FAILED: the run failed, or completed into a node that declares
+  // outcome: failure.
+  RUN_OUTCOME_FAILED = 2;
+  // FAILURE_HANDLED: the run completed, but a node's last attempt failed and
+  // the run went on past it: an action that reported is_error and the graph
+  // routed on, a parallel loop iteration that failed under on_failure:
+  // continue, a finally handler's node that failed. A run node's non-zero
+  // exit code is not one. Health counts it as a failure.
+  RUN_OUTCOME_FAILURE_HANDLED = 3;
 }
 
 // RunDisplayState is the single status vocabulary the UI shows for a run

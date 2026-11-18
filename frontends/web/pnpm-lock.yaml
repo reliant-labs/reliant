@@ -187,9 +187,6 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.2.1
         version: 5.2.2(react-hook-form@7.71.1(react@19.2.3))
-      '@hyperdx/browser':
-        specifier: 0.26.0
-        version: 0.26.0(supports-color@10.2.2)(zone.js@0.16.3)
       '@monaco-editor/loader':
         specifier: ^1.7.0
         version: 1.7.0
@@ -200,8 +197,8 @@ importers:
         specifier: ^1.9.1
         version: 1.9.1
       '@reliantlabs/forge-web-runtime':
-        specifier: ^0.13.14
-        version: 0.13.14(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@hyperdx/browser@0.26.0(supports-color@10.2.2)(zone.js@0.16.3))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)
+        specifier: ^0.13.19
+        version: 0.13.19(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)(supports-color@10.2.2)(zone.js@0.16.3)
       '@reliantlabs/sdk':
         specifier: workspace:*
         version: link:../../sdk/ts
@@ -215,11 +212,11 @@ importers:
         specifier: 5.10.0
         version: 5.10.0
       '@supabase/auth-js':
-        specifier: ^2.90.1
-        version: 2.90.1
+        specifier: 2.93.0
+        version: 2.93.0
       '@supabase/supabase-js':
-        specifier: ^2.58.0
-        version: 2.90.1
+        specifier: 2.93.0
+        version: 2.93.0
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.19(tailwindcss@4.1.18)
@@ -332,6 +329,9 @@ importers:
       '@eslint/js':
         specifier: ^9.33.0
         version: 9.39.2
+      '@hyperdx/otel-web':
+        specifier: 0.20.0
+        version: 0.20.0(supports-color@10.2.2)(zone.js@0.16.3)
       '@playwright/mcp':
         specifier: ^0.0.83
         version: 0.0.83
@@ -1154,13 +1154,12 @@ packages:
       react:
         optional: true
 
-  '@reliantlabs/forge-web-runtime@0.13.14':
-    resolution: {integrity: sha512-OINfZZPoVyMs3uZaHGeKADYU9UW37hrCSccT1TzLxHAQ3KQHpVOb9D3q5uqL2sjViWzo+lVeQ+noZpxkob2W6Q==}
+  '@reliantlabs/forge-web-runtime@0.13.19':
+    resolution: {integrity: sha512-EKcyFbQjGA2JaowhU9lbbWu9Ou5t99tVv8D1X5KeBfJ+c2WYK2XbyweU6/j8WpuFTyTFGJ63qYWG8xee+5KKtw==}
     engines: {node: '>=22'}
     peerDependencies:
       '@bufbuild/protobuf': ^2.5.0
       '@connectrpc/connect': ^2.0.0
-      '@hyperdx/browser': 0.26.0
       '@opentelemetry/api': ^1.9.0
       '@tanstack/react-query': ^5.62.0
       react: ^18.3.0 || ^19.0.0
@@ -1168,8 +1167,6 @@ packages:
       '@bufbuild/protobuf':
         optional: true
       '@connectrpc/connect':
-        optional: true
-      '@hyperdx/browser':
         optional: true
       '@tanstack/react-query':
         optional: true
@@ -1359,28 +1356,28 @@ packages:
     resolution: {integrity: sha512-PTigkxMdMUP6B5ISS7jMqJAKhgrhZwjprDqR1eATtFfh0OpKVNp110xiH+goeVdrJ29/4LeZJR4FaHHWstsu0A==}
     engines: {node: '>=12.16'}
 
-  '@supabase/auth-js@2.90.1':
-    resolution: {integrity: sha512-vxb66dgo6h3yyPbR06735Ps+dK3hj0JwS8w9fdQPVZQmocSTlKUW5MfxSy99mN0XqCCuLMQ3jCEiIIUU23e9ng==}
+  '@supabase/auth-js@2.93.0':
+    resolution: {integrity: sha512-cKbYoaFOKa0fE5/PMEd2vvJpvzkOrVFkaMUWaz9lG+bORzzEpUQnMlgBdL8j0VEpMXGkvMgbvvGXVm4UhtCB6g==}
     engines: {node: '>=20.0.0'}
 
-  '@supabase/functions-js@2.90.1':
-    resolution: {integrity: sha512-x9mV9dF1Lam9qL3zlpP6mSM5C9iqMPtF5B/tU1Jj/F0ufX5mjDf9ghVBaErVxmrQJRL4+iMKWKY2GnODkpS8tw==}
+  '@supabase/functions-js@2.93.0':
+    resolution: {integrity: sha512-bg6AFBMCeznBNC6VEZXI7ztnjwmxS6SvI+gtkkjhg0+tiYe0ZucBy56x0c9v9WKbXUXfKgSGAZtaZRSycvz10g==}
     engines: {node: '>=20.0.0'}
 
-  '@supabase/postgrest-js@2.90.1':
-    resolution: {integrity: sha512-jh6vqzaYzoFn3raaC0hcFt9h+Bt+uxNRBSdc7PfToQeRGk7PDPoweHsbdiPWREtDVTGKfu+PyPW9e2jbK+BCgQ==}
+  '@supabase/postgrest-js@2.93.0':
+    resolution: {integrity: sha512-Bg1FVyjJFHbdN2lwcY7p6GgMGYEbY8Zbsqe5VyQOU8RS5KdudN/HB+XfnB5Ov936klZMtm/e3znkBKnqPUaftg==}
     engines: {node: '>=20.0.0'}
 
-  '@supabase/realtime-js@2.90.1':
-    resolution: {integrity: sha512-PWbnEMkcQRuor8jhObp4+Snufkq8C6fBp+MchVp2qBPY1NXk/c3Iv3YyiFYVzo0Dzuw4nAlT4+ahuPggy4r32w==}
+  '@supabase/realtime-js@2.93.0':
+    resolution: {integrity: sha512-q1PERmJ8j2wrKgO+D5wbXmrI/5LPXMgTRBGEZjiiutqG7fiCVpKc4hUjNudstxoMOh6GO+leBA8s/0HFAzvUJQ==}
     engines: {node: '>=20.0.0'}
 
-  '@supabase/storage-js@2.90.1':
-    resolution: {integrity: sha512-GHY+Ps/K/RBfRj7kwx+iVf2HIdqOS43rM2iDOIDpapyUnGA9CCBFzFV/XvfzznGykd//z2dkGZhlZZprsVFqGg==}
+  '@supabase/storage-js@2.93.0':
+    resolution: {integrity: sha512-hUA6dncn+hq9yq9YTj3t4TceL8pDOgIuPkr2BKlnvc/XGnKLV0tb6CAjmNuKPQmHHNSTLP8DwTr4GpsvhDIjrQ==}
     engines: {node: '>=20.0.0'}
 
-  '@supabase/supabase-js@2.90.1':
-    resolution: {integrity: sha512-U8KaKGLUgTIFHtwEW1dgw1gK7XrdpvvYo7nzzqPx721GqPe8WZbAiLh/hmyKLGBYQ/mmQNr20vU9tWSDZpii3w==}
+  '@supabase/supabase-js@2.93.0':
+    resolution: {integrity: sha512-95kw2w+TC2Gy03BlA/s5tAZh9+cofcCvXzZ0DJfMbkGkjv7eGhQJh43sz7803Q1uo2i98jrttWB8ct9kqZ3OPQ==}
     engines: {node: '>=20.0.0'}
 
   '@tailwindcss/node@4.1.18':
@@ -3971,6 +3968,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
       - zone.js
+    optional: true
 
   '@hyperdx/instrumentation-exception@0.3.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)':
     dependencies:
@@ -4013,6 +4011,7 @@ snapshots:
       rrweb: 2.1.7
       rrweb-snapshot: 2.1.7
       type-fest: 4.20.1
+    optional: true
 
   '@hyperdx/otel-web@0.20.0(supports-color@10.2.2)(zone.js@0.16.3)':
     dependencies:
@@ -4248,25 +4247,34 @@ snapshots:
     dependencies:
       playwright: 1.58.0
 
-  '@protobufjs/aspromise@1.1.2': {}
+  '@protobufjs/aspromise@1.1.2':
+    optional: true
 
-  '@protobufjs/base64@1.1.2': {}
+  '@protobufjs/base64@1.1.2':
+    optional: true
 
-  '@protobufjs/codegen@2.0.5': {}
+  '@protobufjs/codegen@2.0.5':
+    optional: true
 
-  '@protobufjs/eventemitter@1.1.1': {}
+  '@protobufjs/eventemitter@1.1.1':
+    optional: true
 
   '@protobufjs/fetch@1.1.1':
     dependencies:
       '@protobufjs/aspromise': 1.1.2
+    optional: true
 
-  '@protobufjs/float@1.0.2': {}
+  '@protobufjs/float@1.0.2':
+    optional: true
 
-  '@protobufjs/path@1.1.2': {}
+  '@protobufjs/path@1.1.2':
+    optional: true
 
-  '@protobufjs/pool@1.1.0': {}
+  '@protobufjs/pool@1.1.0':
+    optional: true
 
-  '@protobufjs/utf8@1.1.2': {}
+  '@protobufjs/utf8@1.1.2':
+    optional: true
 
   '@reliantlabs/forge-web-runtime@0.13.1(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@hyperdx/browser@0.26.0(supports-color@10.2.2)(zone.js@0.16.3))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)':
     dependencies:
@@ -4278,15 +4286,19 @@ snapshots:
       '@tanstack/react-query': 5.100.9(react@19.2.3)
       react: 19.2.3
 
-  '@reliantlabs/forge-web-runtime@0.13.14(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@hyperdx/browser@0.26.0(supports-color@10.2.2)(zone.js@0.16.3))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)':
+  '@reliantlabs/forge-web-runtime@0.13.19(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)(supports-color@10.2.2)(zone.js@0.16.3)':
     dependencies:
+      '@hyperdx/otel-web': 0.20.0(supports-color@10.2.2)(zone.js@0.16.3)
       '@opentelemetry/api': 1.9.1
+      rrweb: 2.1.7
     optionalDependencies:
       '@bufbuild/protobuf': 2.10.2
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.10.2)
-      '@hyperdx/browser': 0.26.0(supports-color@10.2.2)(zone.js@0.16.3)
       '@tanstack/react-query': 5.100.9(react@19.2.3)
       react: 19.2.3
+    transitivePeerDependencies:
+      - supports-color
+      - zone.js
 
   '@rolldown/pluginutils@1.0.0-beta.53': {}
 
@@ -4399,19 +4411,19 @@ snapshots:
 
   '@stripe/stripe-js@5.10.0': {}
 
-  '@supabase/auth-js@2.90.1':
+  '@supabase/auth-js@2.93.0':
     dependencies:
       tslib: 2.8.1
 
-  '@supabase/functions-js@2.90.1':
+  '@supabase/functions-js@2.93.0':
     dependencies:
       tslib: 2.8.1
 
-  '@supabase/postgrest-js@2.90.1':
+  '@supabase/postgrest-js@2.93.0':
     dependencies:
       tslib: 2.8.1
 
-  '@supabase/realtime-js@2.90.1':
+  '@supabase/realtime-js@2.93.0':
     dependencies:
       '@types/phoenix': 1.6.7
       '@types/ws': 8.18.1
@@ -4421,18 +4433,18 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@supabase/storage-js@2.90.1':
+  '@supabase/storage-js@2.93.0':
     dependencies:
       iceberg-js: 0.8.1
       tslib: 2.8.1
 
-  '@supabase/supabase-js@2.90.1':
+  '@supabase/supabase-js@2.93.0':
     dependencies:
-      '@supabase/auth-js': 2.90.1
-      '@supabase/functions-js': 2.90.1
-      '@supabase/postgrest-js': 2.90.1
-      '@supabase/realtime-js': 2.90.1
-      '@supabase/storage-js': 2.90.1
+      '@supabase/auth-js': 2.93.0
+      '@supabase/functions-js': 2.93.0
+      '@supabase/postgrest-js': 2.93.0
+      '@supabase/realtime-js': 2.93.0
+      '@supabase/storage-js': 2.93.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -5332,7 +5344,8 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.5
 
-  fflate@0.7.4: {}
+  fflate@0.7.4:
+    optional: true
 
   file-entry-cache@11.1.2:
     dependencies:
@@ -5685,7 +5698,8 @@ snapshots:
 
   lodash@4.18.1: {}
 
-  long@5.3.2: {}
+  long@5.3.2:
+    optional: true
 
   longest-streak@3.1.0: {}
 
@@ -6245,6 +6259,7 @@ snapshots:
       '@protobufjs/utf8': 1.1.2
       '@types/node': 24.10.9
       long: 5.3.2
+    optional: true
 
   punycode@2.3.1: {}
 
@@ -6649,7 +6664,8 @@ snapshots:
     dependencies:
       prelude-ls: 1.2.1
 
-  type-fest@4.20.1: {}
+  type-fest@4.20.1:
+    optional: true
 
   typescript-eslint@8.53.0(eslint@9.39.2(jiti@2.6.1)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@5.8.3):
     dependencies:

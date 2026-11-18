@@ -165,7 +165,9 @@ type (
 	InboxAutomationFailing                   = sdk.InboxAutomationFailing
 	InboxAutomationLaunchFailed              = sdk.InboxAutomationLaunchFailed
 	InboxAutomationNeedsSetup                = sdk.InboxAutomationNeedsSetup
+	InboxAutomationNoOrgAccount              = sdk.InboxAutomationNoOrgAccount
 	InboxAutomationRunPaused                 = sdk.InboxAutomationRunPaused
+	InboxAutomationsOnPersonalAccounts       = sdk.InboxAutomationsOnPersonalAccounts
 	InboxItem                                = sdk.InboxItem
 	InboxItemKind                            = sdk.InboxItemKind
 	InboxItem_Approval                       = sdk.InboxItem_Approval
@@ -173,7 +175,9 @@ type (
 	InboxItem_AutomationFailing              = sdk.InboxItem_AutomationFailing
 	InboxItem_AutomationLaunchFailed         = sdk.InboxItem_AutomationLaunchFailed
 	InboxItem_AutomationNeedsSetup           = sdk.InboxItem_AutomationNeedsSetup
+	InboxItem_AutomationNoOrgAccount         = sdk.InboxItem_AutomationNoOrgAccount
 	InboxItem_AutomationRunPaused            = sdk.InboxItem_AutomationRunPaused
+	InboxItem_AutomationsOnPersonalAccounts  = sdk.InboxItem_AutomationsOnPersonalAccounts
 	InboxItem_OrgProviderKeyRejected         = sdk.InboxItem_OrgProviderKeyRejected
 	InboxItem_Question                       = sdk.InboxItem_Question
 	InboxItem_Recovery                       = sdk.InboxItem_Recovery
@@ -400,6 +404,7 @@ type (
 	TriggerEventOutcome                      = sdk.TriggerEventOutcome
 	TriggerEventRun                          = sdk.TriggerEventRun
 	TriggerFailure                           = sdk.TriggerFailure
+	TriggerFundingWarning                    = sdk.TriggerFundingWarning
 	TriggerHealth                            = sdk.TriggerHealth
 	TriggerHealthStatus                      = sdk.TriggerHealthStatus
 	TriggerKind                              = sdk.TriggerKind
@@ -542,10 +547,12 @@ const (
 	FileChangeType_FILE_CHANGE_TYPE_UNSPECIFIED                                = sdk.FileChangeType_FILE_CHANGE_TYPE_UNSPECIFIED
 	FileChangeType_FILE_CHANGE_TYPE_UPDATED                                    = sdk.FileChangeType_FILE_CHANGE_TYPE_UPDATED
 	InboxItemKind_INBOX_ITEM_KIND_APPROVAL                                     = sdk.InboxItemKind_INBOX_ITEM_KIND_APPROVAL
+	InboxItemKind_INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS             = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN                 = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING                           = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED                     = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP                       = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP
+	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NO_ORG_ACCOUNT                    = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NO_ORG_ACCOUNT
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED                        = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED
 	InboxItemKind_INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED                    = sdk.InboxItemKind_INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED
 	InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING                             = sdk.InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING

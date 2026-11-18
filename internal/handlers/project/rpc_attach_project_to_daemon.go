@@ -91,6 +91,7 @@ func (s *Service) AttachProjectToDaemon(
 	// Learned here as after a clone (MarkProjectInstalled): the folder's
 	// forge.yaml is on this machine's disk now.
 	projectfacts.LearnForgeName(ctx, s.deps.Router, s.deps.Repo, userID, daemonID, project.ID, path)
+	projectfacts.RefreshForgeApps(ctx, s.deps.Router, s.deps.Repo, userID, daemonID, project.ID, path, 0)
 
 	return connect.NewResponse(&pb.AttachProjectToDaemonResponse{
 		ProjectDaemon: s.checkoutProto(ctx, justRecorded(project.ID, daemonID, path, defaultBranch)),

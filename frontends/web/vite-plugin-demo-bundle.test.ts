@@ -41,6 +41,8 @@ describe("demo twins", () => {
     expect(twinOf(at("src/lib/shell.ts"))).toBeUndefined();
   });
 
+  // The first twin pays the cold import of the app's module graph (~2.5-3s
+  // on an idle host), which a loaded gate stretches past vitest's default 5s.
   it.each(twins())("%s replaces a real module and exports only names it has", async (twin) => {
     const real = twin.replace(/\.demo(\.tsx?)$/, "$1");
     const realFile = [real, real.replace(/\.tsx?$/, ".ts"), real.replace(/\.tsx?$/, ".tsx")].find((f) => fs.existsSync(at(f)));
@@ -48,5 +50,5 @@ describe("demo twins", () => {
     const [twinExports, realExports] = await Promise.all([import(/* @vite-ignore */ at(twin)), import(/* @vite-ignore */ at(realFile!))]);
     const missing = Object.keys(twinExports).filter((name) => !(name in realExports) && name !== "SAMPLE_DATA_UNAVAILABLE");
     expect(missing, `${twin} exports names ${realFile} does not`).toEqual([]);
-  });
+  }, 30_000);
 });

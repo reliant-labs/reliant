@@ -39,7 +39,7 @@ func runInGroup(t *testing.T, group string, probe func(cmd *cobra.Command) error
 // commands fail before they run: `reliant github` shipped bound but missing
 // from the annotation, so every `reliant github token|gh` exited with
 // "CLIConfig is declared for the commands at or below ...".
-var cliConfigGroups = []string{"auth", "daemon", "github", "machine", "project", "trigger", "workflow"}
+var cliConfigGroups = []string{"auth", "daemon", "github", "machine", "project", "providers", "trigger", "workflow"}
 
 // Every end-user command group hands the machine block to the packages that
 // resolve ~/.reliant and the instance id lazily, before the command runs.

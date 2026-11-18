@@ -34,7 +34,7 @@ vi.mock("@/forgeConsolePages", async () => {
     return <main data-testid={`console-${name}`} data-read-only={readOnly} data-read-only-reason={reason} />;
   };
   const names = ["overview", "workload", "releases", "release", "observabilityView", "dashboards", "dashboard", "environments", "environment", "secrets", "domains", "activity", "data", "storage", "orgObservability", "landing", "legacyEnv", "legacyDomains", "legacyCommand"];
-  return { forgeConsolePages: { layout: Outlet, console: Outlet, orgLayout: Outlet, ...Object.fromEntries(names.map((n) => [n, page(n)])) } };
+  return { forgeConsolePages: { layout: Outlet, console: Outlet, orgLayout: Outlet, ...Object.fromEntries(names.map((n) => [n, page(n)])) }, preloadForgeConsole: () => {} };
 });
 vi.mock("@/demoBundle/DemoConsoleProviders", () => ({ DemoConsoleProviders: ({ children }: { children: React.ReactNode }) => children }));
 // The boot installs the demo transport through a lazy import() whose fixture

@@ -303,6 +303,12 @@ type AccountUpsert struct {
 	KeyHint, Scope    string
 	Secrets           AccountSecrets
 	ExpiresAt         time.Time
+	// AttributedOrgID and AttributionSource attribute a new row to the org that pays for it.
+	// Only a managed key minted in an org is attributed when it is written (identity
+	// ManagedOrgIdentityKey(org), source AttributionManaged); a seat is attributed by its
+	// workspace binding, never here. Both "" otherwise. An existing row keeps its attribution.
+	AttributedOrgID   string
+	AttributionSource string
 	// ReplaceIdentityOf names a placeholder identity (PlaceholderIdentityKey) this write supersedes:
 	// the row holding it is rewritten to IdentityKey in place (design §3.3). A non-placeholder value
 	// is ignored: a real identity is never rewritten. If another row already owns IdentityKey the
@@ -377,8 +383,24 @@ type Assignment struct {
 	Reason                        string // initial | limited | paused | removed | needs_reauth | pinned
 }
 
-// ManagedIdentityKey is the identity of the managed Reliant key; at most one per user.
+// ManagedIdentityKey is the identity of the org-less managed Reliant key; at most one per user.
+// It is minted in the person's default org (where it bills), and is what every release before
+// P10 writes and reads.
 const ManagedIdentityKey = "managed"
+
+// managedOrgIdentityPrefix is the identity prefix of a managed Reliant key minted in one org.
+const managedOrgIdentityPrefix = "managed:"
+
+// ManagedOrgIdentityKey is the identity of the managed Reliant key minted in orgID
+// (org-provider-accounts §3.2, G0's per-org key, P10): one per (person, org), attributed to
+// orgID with source "managed", so the gateway bills that org's wallet for the chats of that org.
+func ManagedOrgIdentityKey(orgID string) string { return managedOrgIdentityPrefix + orgID }
+
+// IsManagedIdentityKey reports whether key is a managed Reliant key's identity: the org-less
+// one, or one minted in an org. provider_accounts_one_managed holds a managed row to these.
+func IsManagedIdentityKey(key string) bool {
+	return key == ManagedIdentityKey || (strings.HasPrefix(key, managedOrgIdentityPrefix) && len(key) > len(managedOrgIdentityPrefix))
+}
 
 // placeholderIdentityPrefix is stored in rows, so it stays "legacy:" for the placeholders already
 // written; only the Go names say what it is.

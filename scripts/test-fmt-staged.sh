@@ -132,6 +132,30 @@ else
 fi
 [ ! -s "${LOG}" ] && pass "gofmt not run" || fail "gofmt ran on a web-only commit"
 
+echo "fmt-staged: a merge formats only what differs from the merged branch"
+new_repo merge
+git checkout -qb feature
+printf '%s' "${UNFORMATTED}" >internal/a/mine.go
+git add -A && git commit -qm mine --no-verify
+git checkout -q -
+# main brings in an unformatted file of its own (as main is, formatting aside).
+printf '%s' "${UNFORMATTED}" >internal/a/theirs.go
+git add -A && git commit -qm theirs --no-verify
+git checkout -q feature
+git merge -q --no-commit --no-ff - >/dev/null 2>&1 || true
+: >"${LOG}"
+if run_hook && [ "$(cat "${LOG}")" = "internal/a/mine.go" ]; then
+    pass "gofmt saw only the branch's own file"
+else
+    fail "gofmt saw: $(tr '\n' ' ' <"${LOG}") $(cat "${TMP_DIR}/out.txt")"
+fi
+if [ "$(git show :internal/a/theirs.go)" = "$(printf '%s' "${UNFORMATTED}")" ]; then
+    pass "the merged branch's file is staged as that branch has it"
+else
+    fail "the merged branch's file was reformatted"
+fi
+git merge --abort
+
 echo "fmt-staged: an empty commit formats nothing"
 new_repo empty
 if run_hook && [ ! -s "${LOG}" ]; then pass "nothing run"; else fail "ran: $(cat "${LOG}" "${TMP_DIR}/out.txt")"; fi

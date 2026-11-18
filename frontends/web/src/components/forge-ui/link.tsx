@@ -23,7 +23,7 @@
  * match it against the route tree and fail.
  */
 
-import React from "react";
+import React, { startTransition } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 const EXTERNAL_HREF = /^(?:[a-z][a-z0-9+.-]*:)?\/\//i;
@@ -81,7 +81,11 @@ export default function Link({ href, children, onClick, className, ...rest }: Li
     const search = queryString
       ? Object.fromEntries(new URLSearchParams(queryString))
       : {};
-    void navigate({ to: pathname, search });
+    // A transition: the page the link opens renders as non-urgent work, so
+    // the tap itself (a pressed state, a closing drawer) is not held behind it.
+    startTransition(() => {
+      void navigate({ to: pathname, search });
+    });
   };
 
   return (

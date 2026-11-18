@@ -18,7 +18,7 @@ import type { Dashboard, Panel, PanelResult } from "@/services/controlPlane/obse
 
 import { demoAudience, demoAudienceTotals } from "../shop/audience";
 import { demoActivity, weekStart } from "../shop/audienceActivity";
-import { PRODUCT_ANALYTICS_ANSWERS } from "../shop/productAnalytics";
+import { PRODUCT_ANALYTICS_ANSWERS, usersHistoryStart } from "../shop/productAnalytics";
 import { createShopApi } from "../shop/shopApi";
 import { DAY, DEMO_ENV_IDS, demoNow, HOUR, resetDemoNowForTests } from "../shopStory";
 
@@ -33,7 +33,8 @@ const specs = new Map<string, Dashboard>();
 
 async function read(dashboard: string, panelId: string, window: { startMs: number; endMs: number }, envIds: string[] = [], trend = false): Promise<PanelResult> {
   const spec = specs.get(dashboard)!;
-  const own = spec.panels.find((p) => p.id === panelId);
+  // An attention panel's own figures are read like any panel.
+  const own = spec.panels.flatMap((p) => [p, ...(p.attention?.figures ?? [])]).find((p) => p.id === panelId);
   if (!own) throw new Error(`${dashboard} has no panel ${panelId}`);
   const panel: Panel = trend ? { ...own, id: `${own.id}.trend`, sql: own.trendSql, trendSql: undefined } : own;
   return api.queryPanel({ orgId: "org-acme", projectId: "shop", envIds, filters: [], window, panel, services: [], stepSeconds: 0, dashboardId: dashboard });
@@ -50,7 +51,7 @@ describe.each(WHEN)("the product analytics dashboards, %s", (_when, at) => {
     NOW = demoNow();
     week = { startMs: NOW - 7 * DAY, endMs: NOW };
     api = createShopApi(NOW);
-    for (const id of ["overview", "users", "product", "acquisition"]) {
+    for (const id of ["overview", "product-overview", "users", "product", "acquisition"]) {
       specs.set(id, (await api.getDashboard({ orgId: "org-acme", ref: { kind: "release", projectId: "shop", key: id } })).spec);
     }
   });
@@ -59,22 +60,57 @@ describe.each(WHEN)("the product analytics dashboards, %s", (_when, at) => {
   it("lists the built-in dashboards in the Product group, as forge generates them", async () => {
     const index = await api.listDashboards({ orgId: "org-acme", projectId: "shop" });
     const product = index.dashboards.filter((d) => d.group === "product" && d.source === "generated").map((d) => d.ref.key);
-    expect(product).toEqual(["users", "product", "acquisition"]);
+    expect(product).toEqual(["product-overview", "users", "product", "acquisition"]);
     expect(specs.get("overview")!.sections?.map((s) => s.id)).toEqual(["health", "traffic", "users"]);
   });
 
-  it("answers every sql panel and sparkline of the four, by panel id, with data", async () => {
+  it("answers every sql panel and sparkline of the five, by panel id, with data", async () => {
     for (const [id, spec] of specs) {
-      for (const panel of spec.panels.filter((p) => p.kind === "sql")) {
+      // A Needs-attention panel reads figures only it holds.
+      const panels = spec.panels.flatMap((p) => [p, ...(p.attention?.figures ?? [])]);
+      for (const panel of panels.filter((p) => p.kind === "sql")) {
         expect(PRODUCT_ANALYTICS_ANSWERS, `${id}/${panel.id}`).toContain(`${id}/${panel.id}`);
         const result = await read(id, panel.id, week);
         // A flag nobody evaluated would be empty; shop's express-checkout is evaluated every day.
         expect(result.rows.length + result.series.length, `${id}/${panel.id}`).toBeGreaterThan(0);
+        // A subtitle is answered, and empty: shop reports sign-ups for its whole history.
+        if (panel.subtitleSql) expect(PRODUCT_ANALYTICS_ANSWERS, `${id}/${panel.id} subtitle`).toContain(`${id}/${panel.id}.subtitle`);
         if (panel.trendSql) {
           expect(PRODUCT_ANALYTICS_ANSWERS).toContain(`${id}/${panel.id}.trend`);
           expect((await read(id, panel.id, week, [], true)).series.length, `${id}/${panel.id} trend`).toBeGreaterThan(0);
         }
       }
+    }
+  });
+
+  it("draws the Overview's figures as the tabs it links to count them (forge builds them from the same statements)", async () => {
+    // What a panel draws: its rows and its series, not the read's bookkeeping.
+    const drawn = (r: PanelResult) => ({ columns: r.columns, rows: r.rows, series: r.series.map((x) => ({ label: x.label, group: x.group, timestamps: x.timestamps, values: x.values })) });
+    const same = async (overview: string, dashboard: string, panel: string, trend = false) =>
+      expect(drawn(await read("product-overview", overview, week, [], trend)), `product-overview/${overview}`).toEqual(drawn(await read(dashboard, panel, week, [], trend)));
+    await same("visitors", "acquisition", "visitors");
+    await same("visitors", "acquisition", "visitors", true);
+    await same("signups", "acquisition", "signups");
+    await same("conversion", "acquisition", "visit-to-signup");
+    await same("funnel", "product", "funnel-activation");
+    await same("attention-bounce", "product", "bounce");
+    await same("attention-stickiness", "users", "stickiness");
+    expect(drawn(await read("product-overview", "top-channels", week, [], true))).toEqual(drawn(await read("acquisition", "visitors-by-channel", week)));
+    // Active users leads with the Users tab's figure.
+    expect(figure(await read("product-overview", "active", week))).toBe(figure(await read("users", "active", week)));
+    // The grid is the Users tab's last six cohorts over their first six weeks.
+    const grid = await read("users", "retention-cohorts", week);
+    const overviewGrid = await read("product-overview", "retention", week);
+    expect(overviewGrid.rows.map((r) => r.group)).toEqual(grid.rows.slice(-6).map((r) => r.group));
+    expect(overviewGrid.rows.map((r) => r.values)).toEqual(grid.rows.slice(-6).map((r) => r.values.slice(0, 6)));
+    // Each top feature is an event of Events by name, with its persons.
+    const events = await read("product", "events-by-name", week);
+    const features = await read("product-overview", "top-features", week);
+    expect(features.rows.length).toBeGreaterThan(0);
+    for (const f of features.rows) {
+      const e = rowOf(events, "Event", f.group.Event!);
+      expect(e, f.group.Event).toBeDefined();
+      expect(f.values[0]).toBe(e!.values[events.columns.indexOf("Persons")]);
     }
   });
 
@@ -114,13 +150,17 @@ describe.each(WHEN)("the product analytics dashboards, %s", (_when, at) => {
     expect(figure(await read("users", "active", window))).toBe(active);
     expect(figure(await read("users", "new", window))).toBe(fresh);
     expect(figure(await read("users", "returning", window))).toBe(active - fresh);
-    // An old sign-up's sign-up session is there: its day's active users count it.
-    const { sessions } = demoActivity("env-prod", NOW, window.startMs);
+    // An old sign-up's sign-up session is there, in the history the panels above read: its day's active users
+    // count it. (The same arguments as the panels' read hit demoActivity's cache instead of building it again.)
+    const { sessions } = demoActivity("env-prod", NOW, usersHistoryStart(window.startMs));
     const prodOld = demoAudience("env-prod").find((a) => a.lastSignInAtMs !== null && a.createdAtMs >= window.startMs && a.createdAtMs < NOW - 100 * DAY);
     if (prodOld) expect(sessions.some((s) => s.signUp && s.start === prodOld.createdAtMs)).toBe(true);
-    // A wider history only adds older sessions: the default one's are all still there, unchanged.
+    // A wider history only adds older sessions: the default one's are all still there, unchanged. toEqual over
+    // these thousands of sessions took ~0.5s; equal JSON means equal plain data, and a mismatch still gets its diff.
     const defaultFirst = Math.floor(NOW / DAY) * DAY - 99 * DAY;
-    expect(sessions.filter((s) => s.start >= defaultFirst)).toEqual(demoActivity("env-prod", NOW).sessions);
+    const kept = sessions.filter((s) => s.start >= defaultFirst);
+    const defaults = demoActivity("env-prod", NOW).sessions;
+    if (JSON.stringify(kept) !== JSON.stringify(defaults)) expect(kept).toEqual(defaults);
   });
 
   it("splits sign-ups the same way everywhere: by channel, method, country and device, all equal to new (rule 2)", async () => {

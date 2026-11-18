@@ -287,7 +287,9 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"get_workflow": {
 		Bindable: map[string]struct{}{
-			"id": {},
+			"id":         {},
+			"line_count": {},
+			"start_line": {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -905,6 +907,8 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"all":        {},
 			"chat_id":    {},
+			"limit":      {},
+			"offset":     {},
 			"session_id": {},
 		},
 		Unbindable: map[string]string{},

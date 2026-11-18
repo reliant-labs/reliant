@@ -64,6 +64,7 @@ class ToastManager {
 
   warning(message: string, options?: ToastOptions) {
     sonnerToast.warning(message, {
+      id: options?.id,
       duration: options?.duration || 5000,
       dismissible: true,
     });

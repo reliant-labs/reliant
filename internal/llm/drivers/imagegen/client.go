@@ -42,6 +42,7 @@ import (
 	openaiopt "github.com/openai/openai-go/v3/option"
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 const (
@@ -507,6 +508,16 @@ func (c *Client) apiError(err error) error {
 	}
 	if sdkErr.Response != nil {
 		apiErr.RetryAfter, _ = parseRetryAfterSeconds(sdkErr.Response.Header.Get("Retry-After"))
+	}
+
+	// An org policy's refusal from the gateway (403 with x-forge-error-reason,
+	// org-policies §5.1) is a verdict, not a fault: never retried (it is not
+	// an *APIError) and never read as a rejected key. Only the managed driver
+	// reaches the gateway; a BYO provider's 403 is its own.
+	if c.config.Driver == managedDriverID && sdkErr.Response != nil {
+		if reason := orgpolicy.GatewayRefusalReason(sdkErr.StatusCode, sdkErr.Response.Header, apiErr.Code); reason != "" {
+			return &orgpolicy.Refusal{Reason: reason, Detail: apiErr.Message}
+		}
 	}
 
 	// Managed-credit exhaustion is terminal and needs to survive Temporal's

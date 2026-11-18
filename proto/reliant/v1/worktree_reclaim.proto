@@ -84,4 +84,3 @@ message WorktreeReclaimDecisionResult {
   // A sentence for the person.
   string removal_detail = 6;
 }
-

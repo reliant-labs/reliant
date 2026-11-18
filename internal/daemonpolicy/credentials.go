@@ -220,12 +220,57 @@ func WithoutCredentials(inherited []string, extra map[string]string) []string {
 	return out
 }
 
+// NeutralizeEnv is own without a credential, with NeutralEnv laid over it.
+// A variable of own that carries or locates a credential (by name: a token,
+// a key, a cloud or Reliant credential; or by value: a provider key, a JWT,
+// URL userinfo) is dropped, exactly as StripCredentials drops it from a
+// request's env, and every neutral assignment wins over a value own gives the
+// same name. So a caller's (or a model's) env cannot hand a command a
+// credential even on a daemon that predates `credentials: none` and applies
+// env alone; own's other variables pass through.
+func NeutralizeEnv(own map[string]string) map[string]string {
+	env := NeutralEnv()
+	for k, v := range own {
+		if _, neutral := env[k]; neutral || isCredentialEnv(k) || looksSecret(k, v) {
+			continue
+		}
+		env[k] = v
+	}
+	return env
+}
+
+// neutralizedCredentialVars are credential variables a daemon's own
+// environment may hold, emptied by NeutralEnv for a daemon that predates
+// `credentials: none` and so inherits its environment into the command
+// before applying the request's env: tokens and keys of the forges, clouds,
+// registries, model providers and databases a machine commonly holds.
+var neutralizedCredentialVars = []string{
+	"GIT_TOKEN", "GITLAB_TOKEN", "BITBUCKET_TOKEN",
+	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_SECURITY_TOKEN",
+	"AWS_PROFILE", "AWS_DEFAULT_PROFILE", "AWS_ROLE_ARN", "AWS_WEB_IDENTITY_TOKEN_FILE",
+	"AWS_CONTAINER_CREDENTIALS_FULL_URI", "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "AWS_CONTAINER_AUTHORIZATION_TOKEN",
+	"GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_OAUTH_ACCESS_TOKEN", "GOOGLE_API_KEY",
+	"CLOUDSDK_AUTH_ACCESS_TOKEN", "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+	"AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID", "AZURE_CLIENT_CERTIFICATE_PATH",
+	"AZURE_FEDERATED_TOKEN_FILE", "ARM_CLIENT_SECRET", "ARM_ACCESS_KEY",
+	"NPM_TOKEN", "NODE_AUTH_TOKEN", "DOCKER_AUTH_CONFIG",
+	"FORGE_TOKEN", "FORGE_CREDENTIAL_HELPER", "RELIANT_TOKEN", "RELIANT_FORGE_ORG",
+	"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY", "HF_TOKEN",
+	"DATABASE_URL", "PGPASSWORD", "VAULT_TOKEN", "CLOUDFLARE_API_TOKEN", "DIGITALOCEAN_TOKEN", "HEROKU_API_KEY",
+}
+
 // NeutralEnv is WithoutCredentials as assignments a caller can send in a
 // request's env. A daemon that predates the request's `credentials` field
-// ignores the field but applies env, so the common vectors (tokens, the git
-// helper, ssh, the gh config) are neutralized there too instead of failing
-// open. A current daemon builds the environment itself and strips everything
-// it can name.
+// ignores the field but applies env over the environment it inherits, so the
+// vectors it can name are neutralized there too instead of failing open: the
+// forge, cloud, registry, model-provider and database credentials a machine
+// commonly holds (neutralizedCredentialVars) are emptied, the cloud and
+// registry config locations are pointed at nothing, and the git helper, ssh
+// and the gh config are reset. A variable it cannot name, and the credential
+// files the daemon's user can read, stay within such a daemon's reach: the
+// environment half, as control-plane docs/design/org-policies.md §4.6 states.
+// A current daemon builds the environment itself from an allowlist and strips
+// everything.
 func NeutralEnv() map[string]string {
 	m := map[string]string{
 		"GH_TOKEN":            "",
@@ -245,8 +290,21 @@ func NeutralEnv() map[string]string {
 		m["GIT_CONFIG_KEY_"+strconv.Itoa(i)] = kv[0]
 		m["GIT_CONFIG_VALUE_"+strconv.Itoa(i)] = kv[1]
 	}
+	for _, name := range neutralizedCredentialVars {
+		m[name] = ""
+	}
 	if runtime.GOOS != "windows" {
 		m["GIT_SSH_COMMAND"] = "/bin/false"
+		// Config locations: pointed at nothing, so the tools find no stored
+		// login there either.
+		m["AWS_SHARED_CREDENTIALS_FILE"] = "/dev/null"
+		m["AWS_CONFIG_FILE"] = "/dev/null"
+		m["CLOUDSDK_CONFIG"] = neutralConfigDir
+		m["AZURE_CONFIG_DIR"] = neutralConfigDir
+		m["DOCKER_CONFIG"] = neutralConfigDir
 	}
 	return m
 }
+
+// neutralConfigDir is a directory no tool can read a stored login from.
+const neutralConfigDir = "/nonexistent/reliant-no-credentials"

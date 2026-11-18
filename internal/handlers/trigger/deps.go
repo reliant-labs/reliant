@@ -107,13 +107,19 @@ type TriggerLister interface {
 // AutomationDrafter writes an automation draft from a description
 // (DraftAutomation). The model call runs on the worker — the api-server has no
 // LLM drivers — so internal/app implements it over Temporal.
+//
+// A draft only the caller's own account could make, in an org whose accounts
+// cannot, with no consent to it on record, fails with ErrDraftNeedsConsent.
 type AutomationDrafter interface {
 	DraftAutomation(ctx context.Context, in DraftRequest) (*reliantv1.AutomationDraft, error)
 }
 
 // DraftRequest is a validated DraftAutomationRequest and its caller.
 type DraftRequest struct {
-	UserID      string
+	UserID string
+	// OrgID is the org of the project the draft is for, from the project row
+	// ("" for a project in no org): whose accounts may draft it (§10).
+	OrgID       string
 	Description string
 	Workflow    string
 	Timezone    string

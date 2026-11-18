@@ -40,7 +40,7 @@ function findProjectByPath(projects: Project[], path: string): Project | undefin
   return projects.find((project) => project.path === path);
 }
 
-export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
+export function GitHubConnectStep({ plan, updatePlan, onBack, returnTo }: StepProps) {
   const navigate = useNavigate();
 
   const eventBus = useEventBus();
@@ -181,7 +181,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
           commit={commit}
           compute={plan.compute}
           onContinue={() =>
-            void leaveOnboarding("completed_cloud_gate_continue", navigate, plan.intent)
+            void leaveOnboarding("completed_cloud_gate_continue", navigate, plan.intent, returnTo)
           }
           onRetry={() => void retry(plan)}
         />

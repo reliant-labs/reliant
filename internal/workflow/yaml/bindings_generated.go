@@ -17,6 +17,7 @@ const yamlKeyTimeout = "timeout"
 const yamlKeySaveMessage = "save_message"
 const yamlKeyDaemon = "daemon"
 const yamlKeyOutcome = "outcome"
+const yamlKeyTolerateFailure = "tolerate_failure"
 const yamlKeyArgs = "args"
 const yamlKeyFrom = "from"
 const yamlKeyCases = "cases"
@@ -25,13 +26,14 @@ const yamlKeyTo = "to"
 const yamlKeyLabel = "label"
 
 var generatedNodeBaseFieldKeys = map[string]struct{}{
-	"condition":    {},
-	"daemon":       {},
-	"id":           {},
-	"outcome":      {},
-	"save_message": {},
-	"timeout":      {},
-	"type":         {},
+	"condition":        {},
+	"daemon":           {},
+	"id":               {},
+	"outcome":          {},
+	"save_message":     {},
+	"timeout":          {},
+	"tolerate_failure": {},
+	"type":             {},
 }
 
 var generatedEdgeFieldKeys = map[string]struct{}{

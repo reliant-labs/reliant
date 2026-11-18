@@ -199,6 +199,7 @@ func TestDerivation_RemovedEventForUnknownDaemonIsQuiet(t *testing.T) {
 	nc, rec := startRegistryDerivation(t, repo, 1)
 
 	publishEvent(t, nc, daemonwire.Event{DaemonID: "never-registered", Type: daemonwire.EventRemoved, At: time.Now().UTC()})
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a quiet removal leaves no notification to wait for
 	time.Sleep(100 * time.Millisecond)
 	if calls := rec.snapshot(); len(calls) != 0 {
 		t.Fatalf("removing nothing notified: %+v", calls)

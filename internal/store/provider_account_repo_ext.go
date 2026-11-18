@@ -312,6 +312,9 @@ type ProviderAccountOwnership struct {
 	Owner           core.AccountOwner
 	OrgAccess       string
 	CreatedByUserID string
+	// AttributedOrgID and AttributionSource attribute a person's new row to the org that pays
+	// for it (the managed key minted in that org); both "" for a plain personal row.
+	AttributedOrgID, AttributionSource string
 }
 
 // InsertProviderAccount writes a new account at priority, created at createdAt, and returns it
@@ -332,6 +335,8 @@ func InsertProviderAccount(ctx context.Context, db orm.Context, id string, own P
 	if own.Owner.IsOrg() {
 		row.OrgID, row.OrgAccess = &own.Owner.ID, acctNullText(own.OrgAccess)
 		row.CreatedByUserID = acctNullText(own.CreatedByUserID)
+	} else if own.AttributedOrgID != "" {
+		row.AttributedOrgID, row.AttributionSource = acctNullText(own.AttributedOrgID), acctNullText(own.AttributionSource)
 	}
 	// RETURNING, so the account carries the stored (microsecond) timestamps, as a read would.
 	if err := db.Bun().NewInsert().Model(row).Returning(providerAccountMetaColumns).Scan(ctx); err != nil {
@@ -698,6 +703,77 @@ func ListRejectedOrgKeysIn(ctx context.Context, db orm.Context, orgIDs []string)
 	out := make([]core.ProviderAccount, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, providerAccountToCore(r))
+	}
+	return out, nil
+}
+
+// ClaimDueOrgKeyNotices claims up to limit org-owned accounts whose rejection mark
+// (needs_reauth_at) has no confirmed notice to the org's owners and admins (reauth_notice_for is
+// not that mark) and is due: never claimed, its claim's lease passed, or claimed before this mark.
+// Each is claimed by moving reauth_notice_next_at to now + lease, so a mark whose start keeps
+// failing comes round again after lease and never holds the batch from a newer one. Metadata
+// only, oldest due first (never claimed first); SKIP LOCKED, so two workers claim different rows.
+func ClaimDueOrgKeyNotices(ctx context.Context, db orm.Context, limit int, lease time.Duration) ([]core.ProviderAccount, error) {
+	var ids []string
+	if err := db.Bun().NewRaw(`UPDATE provider_accounts SET reauth_notice_next_at = now() + make_interval(secs => ?0)
+		WHERE id IN (
+			SELECT id FROM provider_accounts
+			 WHERE owner_kind = ?1 AND needs_reauth_at IS NOT NULL
+			   AND reauth_notice_for IS DISTINCT FROM needs_reauth_at
+			   AND (reauth_notice_next_at IS NULL OR reauth_notice_next_at <= now()
+			        OR reauth_notice_next_at - make_interval(secs => ?0) < needs_reauth_at)
+			 ORDER BY reauth_notice_next_at NULLS FIRST, needs_reauth_at, id
+			 LIMIT ?2 FOR UPDATE SKIP LOCKED)
+		RETURNING id`, lease.Seconds(), core.AccountOwnerOrg, limit).Scan(ctx, &ids); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var rows []*ProviderAccount
+	if err := db.Bun().NewSelect().Model(&rows).ExcludeColumn(providerAccountSealedColumns...).
+		Where("id IN (?)", bun.List(ids)).Order("needs_reauth_at", "id").Scan(ctx); err != nil {
+		return nil, err
+	}
+	out := make([]core.ProviderAccount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, providerAccountToCore(r))
+	}
+	return out, nil
+}
+
+// ConfirmOrgKeyNotice records that the notice of orgID's account accountID, marked at markedAt,
+// was accepted by Temporal. It writes nothing when the mark has changed since (rotated, or
+// marked again): that mark's notice is still to start.
+func ConfirmOrgKeyNotice(ctx context.Context, db orm.Context, orgID, accountID string, markedAt time.Time) error {
+	_, err := db.Bun().NewRaw(`UPDATE provider_accounts SET reauth_notice_for = needs_reauth_at
+		WHERE id = ? AND owner_kind = 'org' AND org_id = ? AND needs_reauth_at = ?`,
+		accountID, orgID, markedAt.UTC()).Exec(ctx)
+	return err
+}
+
+// ProviderAccountName is what a usage view shows for an account it has an id
+// of: never a secret, a hint or a sign-in's email.
+type ProviderAccountName struct {
+	ID       string `bun:"id"`
+	Provider string `bun:"provider"`
+	Label    string `bun:"label"`
+	AuthKind string `bun:"auth_kind"`
+}
+
+// ProviderAccountNames returns the provider, label and kind of each account in
+// ids that still exists, keyed by id. A deleted account is absent.
+func ProviderAccountNames(ctx context.Context, db orm.Context, ids []string) (map[string]ProviderAccountName, error) {
+	out := map[string]ProviderAccountName{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []ProviderAccountName
+	if err := db.Bun().NewRaw(`SELECT id, provider, label, auth_kind FROM provider_accounts WHERE id IN (?)`, bun.List(ids)).Scan(ctx, &rows); err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.ID] = r
 	}
 	return out, nil
 }

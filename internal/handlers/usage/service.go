@@ -18,6 +18,11 @@ import (
 // Store is the slice of the repository this service uses; *db.Repo satisfies it.
 type Store interface {
 	ListLLMUsageDaily(ctx context.Context, userID string, from, to time.Time) ([]*db.LLMUsageDay, error)
+	// ListLLMUsageDetail is the per-call breakdown (funding and account
+	// included) of the days whose individual calls are still kept.
+	ListLLMUsageDetail(ctx context.Context, userID string, from, to time.Time) ([]*db.LLMUsageDetail, error)
+	// ProviderAccountNames labels an account breakdown.
+	ProviderAccountNames(ctx context.Context, ids []string) (map[string]db.ProviderAccountName, error)
 }
 
 // Deps holds dependencies for the usage service. Composition

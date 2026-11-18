@@ -49,7 +49,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/mcp"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
+	"github.com/reliant-labs/reliant/internal/handlers/org_policy_impact"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
+	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
@@ -102,6 +104,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
+	"github.com/reliant-labs/reliant/internal/workflowcheck"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
 
@@ -327,6 +330,7 @@ func (g *Graph) newCatalog() (*catalog.Service, error) {
 		Search:             g.APICatalogSearch(),
 		InputOptions:       g.InputOptions(),
 		IntegrationMethods: catalog.IntegrationMethodsFrom(g.APIConnections().Service),
+		Orgs:               g.OrgResolver(),
 	})
 }
 
@@ -622,6 +626,10 @@ func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 		Ledger: g.WriteLedger(),
 		DB:     g.Database(),
 	})
+}
+
+func (g *Graph) newProjectPurge() (*ProjectPurge, error) {
+	return NewProjectPurge(ProjectPurgeDeps{DB: g.Database()})
 }
 
 func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
@@ -949,6 +957,8 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		Sharing:            g.Sharing(),
 		AutomationTakeover: g.AutomationTakeover(),
 		OrgProviderAccount: g.OrgProviderAccount(),
+		OrgUsage:           g.OrgUsage(),
+		OrgPolicyImpact:    g.OrgPolicyImpact(),
 	})
 }
 
@@ -1162,6 +1172,9 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		// The caller's live orgs, asked of the control plane as the caller;
 		// nil when self-hosted. A nil Service converts to a nil OrgLister.
 		MyOrgs: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		// Which of the caller's orgs are teams, for the notice of their
+		// automations still on their own accounts; nil without orgs.
+		Members: inboxMembers(g.OrgResolver()),
 	})
 }
 
@@ -1257,6 +1270,10 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Moves:      projectOrgMoveStarter{c: g.TemporalClient().Client},
 		// The preview's control-plane facts; nil shows them as unknown.
 		MoveFacts: ProjectOrgMoveFacts(g.ServerProcessConfig.GetControlPlane()),
+		// A project delete pauses its triggers' schedules, a restore
+		// resumes them, and a purge removes them.
+		Schedules: g.ScheduleSyncer(),
+		Now:       nil, // optional — no provider
 	})
 }
 
@@ -1467,6 +1484,7 @@ func (g *Graph) newOrgProviderAccount() (*org_provider_account.Service, error) {
 		ValidateKey: keyvalidate.Validate,
 		OrgRollout:  g.ApiServerConfig.GetOrgs(), // NewOrgProviderAccount sets the same, from the config it is given
 		Seats:       g.Seatmatch(),
+		ChatWaker:   orgAccountChatWaker(g.Database(), g.TemporalClient()),
 	})
 }
 
@@ -1493,4 +1511,45 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 		return nil, err
 	}
 	return seatmatch.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newOrgUsage constructs the org-usage handler (internal/handlers/org_usage):
+// an org's billing:read holders read its org-funded usage, priced at list
+// through control-plane (OrgUsageListPrices; nil shows no estimates).
+func (g *Graph) newOrgUsage() (*org_usage.Service, error) {
+	return org_usage.New(org_usage.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Store:  g.Database(),
+		Prices: OrgUsageListPrices(g.ServerProcessConfig.GetControlPlane()),
+		Now:    nil, // optional — no provider
+	})
+}
+
+// newOrgPolicyImpact constructs the org-policy-impact handler (internal/handlers/org_policy_impact).
+func (g *Graph) newOrgPolicyImpact() (*org_policy_impact.Service, error) {
+	return org_policy_impact.New(org_policy_impact.Deps{
+		Logger:     g.Log,
+		Config:     g.Cfg,
+		Store:      g.Database(),
+		Now:        nil, // optional — no provider
+		Attendance: g.OrgPolicyAttendance(),
+	})
+}
+
+// newOrgPolicyAttendance constructs the OrgPolicyAttendance provider (NewOrgPolicyAttendance, internal/app/providers_api.go).
+func (g *Graph) newOrgPolicyAttendance() (org_policy_impact.ChatAttendance, error) {
+	return NewOrgPolicyAttendance(OrgPolicyAttendanceDeps{
+		Store: g.Database(),
+	})
+}
+
+// newWorkflowCheckSyncer constructs the WorkflowCheckSyncer provider (NewWorkflowCheckSyncer, internal/app/providers_worker.go).
+func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
+	return NewWorkflowCheckSyncer(WorkflowCheckSyncerDeps{
+		DB:          g.Database(),
+		Credentials: g.WorkerIntegrationCredentials(),
+		Policies:    g.OrgPolicyResolver(),
+		Membership:  g.OrgResolver(),
+	})
 }

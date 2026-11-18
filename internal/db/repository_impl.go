@@ -99,8 +99,8 @@ func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) 
 	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
 }
 
-// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a bound
-// chat whose run is pending or active.
+// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
+// in them: a bound chat's run, or a bound thread's own (store.WorktreeRunActivities).
 func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error) {
 	return store.ListWorktreeIDsWithRunningChat(ctx, r.ORM(), worktreeIDs)
 }
@@ -2043,6 +2043,31 @@ func (r *Repo) DeleteRepo(ctx context.Context, id string) error {
 	return store.RemoveRepo(ctx, r.ORM(), id)
 }
 
+// SetRepoForgeApps records the forge apps a daemon found in a repo
+// (repo_forge_apps). complete (the daemon's walk covered the repo) replaces
+// the set and stamps repos.forge_apps_scanned_at; a partial walk only adds and
+// renames, since what it did not reach may still be there. A repo deleted
+// meanwhile is a no-op.
+func (r *Repo) SetRepoForgeApps(ctx context.Context, repoID string, apps []core.RepoForgeApp, complete bool) error {
+	if repoID == "" {
+		return fmt.Errorf("repo ID cannot be empty")
+	}
+	// ReadCommitted: the repo's row lock, taken first, is what serializes
+	// two reports for one repo.
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		return store.SetRepoForgeApps(ctx, r.ORM(), repoID, apps, complete)
+	})
+}
+
+// ListRepoForgeAppsByProject returns every forge app recorded in the
+// project's repos, ordered by repo and subpath.
+func (r *Repo) ListRepoForgeAppsByProject(ctx context.Context, projectID string) ([]core.RepoForgeApp, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	return store.ListRepoForgeAppsByProject(ctx, r.ORM(), projectID)
+}
+
 func (r *Repo) CreateSetting(ctx context.Context, setting *Setting) error {
 	if setting == nil {
 		return fmt.Errorf("setting cannot be nil")
@@ -3169,6 +3194,11 @@ func (r *Repo) CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ..
 		if err := store.LockUserOrgs(ctx, r.ORM(), t.UserID, reads...); err != nil {
 			return err
 		}
+		// Then its project: refused while scheduled for deletion, and a
+		// schedule waits for this insert (store.LockProjectsForWrite).
+		if err := store.LockProjectsForWrite(ctx, r.ORM(), t.ProjectID); err != nil {
+			return err
+		}
 		if err := store.InsertTrigger(ctx, r.ORM(), t); err != nil {
 			return mapTriggerNameConflict(err, t.Name)
 		}
@@ -3226,8 +3256,14 @@ func (r *Repo) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ..
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		// The org lock first, then the trigger's row (store/org_lock.go).
+		// The org lock first, then the projects the trigger is in and moves
+		// to, then the trigger's row (store/org_lock.go,
+		// store.LockProjectsForWrite). A trigger left on, or moved, in a
+		// project scheduled for deletion is refused.
 		if err := store.LockUserOrgs(ctx, r.ORM(), t.UserID, reads...); err != nil {
+			return err
+		}
+		if err := r.lockTriggerProjects(ctx, t.ID, t.ProjectID, t.Enabled); err != nil {
 			return err
 		}
 		if err := store.LockTrigger(ctx, r.ORM(), t.ID); err != nil {
@@ -3263,6 +3299,13 @@ func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) e
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		// Turning a trigger on locks its project first: refused while the
+		// project is scheduled for deletion (store.LockProjectsForWrite).
+		if enabled {
+			if err := r.lockTriggerProjects(ctx, id, "", true); err != nil {
+				return err
+			}
+		}
 		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
 			return err
 		}
@@ -3286,6 +3329,24 @@ func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) e
 		}
 		return store.RecordTriggerChange(ctx, r.ORM(), op, before, after)
 	})
+}
+
+// lockTriggerProjects takes the key share a trigger write needs on its
+// projects before the trigger's own row lock (store.LockProjectsForWrite):
+// the project it is in now and, when it moves, toProjectID. Only a write
+// that leaves the trigger on, or moves it, is admitted against a deletion;
+// one that leaves it off, in place, locks nothing. The database's admission
+// re-decides under the same lock in the write itself, so a trigger that moved
+// between this read and its row lock is still refused.
+func (r *Repo) lockTriggerProjects(ctx context.Context, triggerID, toProjectID string, enabled bool) error {
+	current, err := store.TriggerProjectID(ctx, r.ORM(), triggerID)
+	if err != nil {
+		return err
+	}
+	if !enabled && (toProjectID == "" || toProjectID == current) {
+		return nil
+	}
+	return store.LockProjectsForWrite(ctx, r.ORM(), current, toProjectID)
 }
 
 // PauseTrigger is the system pausing a trigger that can no longer launch as
@@ -4222,9 +4283,31 @@ func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 }
 
 func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error {
+	return r.updateWorkflowDraftDefinition(ctx, id, nil, name, slug, definition, status)
+}
+
+// ErrWorkflowDraftVersionConflict reports that a draft was written since the
+// version the caller read: its write was computed from content that is no
+// longer current, so it was not applied.
+var ErrWorkflowDraftVersionConflict = svcerr.Aborted("workflow draft changed since it was read")
+
+// UpdateWorkflowDraftDefinitionAtVersion is UpdateWorkflowDraftDefinition
+// applied only while the draft is still at version: a compare-and-swap under
+// the draft's row lock. A draft written since returns
+// ErrWorkflowDraftVersionConflict and is left as it is, so two edits computed
+// from the same read cannot both report success while one is lost.
+func (r *Repo) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status WorkflowDraftStatus) error {
+	return r.updateWorkflowDraftDefinition(ctx, id, &version, name, slug, definition, status)
+}
+
+func (r *Repo) updateWorkflowDraftDefinition(ctx context.Context, id string, version *int64, name string, slug string, definition string, status WorkflowDraftStatus) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if _, err := r.lockWritableDraft(txCtx, id); err != nil {
+		row, err := r.lockWritableDraft(txCtx, id)
+		if err != nil {
 			return err
+		}
+		if version != nil && row.Version != *version {
+			return ErrWorkflowDraftVersionConflict
 		}
 		if err := store.SetWorkflowDraftDefinition(txCtx, r.ORM(), id, name, slug, definition, status); err != nil {
 			return mapWorkflowSlugConflict(err, slug)
@@ -4492,4 +4575,39 @@ func (r *Repo) validateAPIKeysSealedConstraint(ctx context.Context) error {
 // opening (decrypting) any of them.
 func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
 	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
+}
+
+// HasNoOrgAccountPauses reports whether any trigger is paused for want of an org account
+// (store.HasNoOrgAccountPauses).
+func (r *Repo) HasNoOrgAccountPauses(ctx context.Context) (bool, error) {
+	return store.HasNoOrgAccountPauses(ctx, r.ORM())
+}
+
+// ListNoOrgAccountPauses returns the triggers paused for want of an org account that userID owns
+// or that belong to one of adminOrgIDs (store.ListNoOrgAccountPauses).
+func (r *Repo) ListNoOrgAccountPauses(ctx context.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error) {
+	return store.ListNoOrgAccountPauses(ctx, r.ORM(), userID, adminOrgIDs)
+}
+
+// ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
+// moving each one's next attempt lease on (store.ClaimDuePauseNotices).
+func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {
+	return store.ClaimDuePauseNotices(ctx, r.ORM(), limit, lease)
+}
+
+// RefusePauseNotice records that a no-org-account pause's email was refused for good
+// (store.RefusePauseNotice).
+func (r *Repo) RefusePauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
+	return store.RefusePauseNotice(ctx, r.ORM(), triggerID, pausedAt)
+}
+
+// ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
+func (r *Repo) ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
+	return store.ConfirmPauseNotice(ctx, r.ORM(), triggerID, pausedAt)
+}
+
+// ListPersonallyFundedTriggers returns userID's org triggers whose runs may spend their own
+// accounts (store.ListPersonallyFundedTriggers).
+func (r *Repo) ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error) {
+	return store.ListPersonallyFundedTriggers(ctx, r.ORM(), userID)
 }

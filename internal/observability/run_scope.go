@@ -53,8 +53,20 @@ func (a *runScopeActivityInbound) ExecuteActivity(ctx context.Context, in *inter
 	if scope.WorkflowID == "" {
 		scope.WorkflowID = activity.GetInfo(ctx).WorkflowExecution.ID
 	}
-	scope.UserID = a.owners.Owner(ctx, scope.ChatID)
-	return a.Next.ExecuteActivity(telemetry.WithRunScope(ctx, scope), in)
+	owner := a.owners.ChatOf(ctx, scope.ChatID)
+	scope.UserID, scope.OrgID = owner.UserID, owner.OrgID
+	ctx = telemetry.WithRunScope(ctx, scope)
+	if scope.NodeID == "" {
+		return a.Next.ExecuteActivity(ctx, in)
+	}
+	// A workflow node's activity is one execution of the node: its span
+	// (workflow.node <id>) holds the agent turn, tool calls and everything
+	// else the node does on this worker. Opened here, worker-side, because
+	// workflow code is replayed (internal/telemetry/ai_spans.go).
+	ctx, span := telemetry.StartNodeSpan(ctx)
+	result, err := a.Next.ExecuteActivity(ctx, in)
+	telemetry.EndAISpan(span, err)
+	return result, err
 }
 
 type runScopeActivityOutbound struct {
@@ -75,6 +87,11 @@ func (o *runScopeActivityOutbound) GetLogger(ctx context.Context) log.Logger {
 // activity is dispatched as {runtime: {chat_id, thread, workflow_id, ...}, node};
 // other inputs carry chat_id and thread_id (or thread) at the top level. Only
 // the first argument is read, and only those keys: nothing is guessed.
+//
+// A workflow node's activity also names its node — the v3 shape by node.type
+// and runtime.step_id, a run step by node_type and step_id at the top level —
+// and the run's telemetry (runtime.telemetry, or telemetry at the top level).
+// NodeID is set only for such an activity.
 func RunScopeOfActivityArgs(args []any) telemetry.RunScope {
 	if len(args) == 0 {
 		return telemetry.RunScope{}
@@ -101,8 +118,12 @@ func RunScopeOfActivityArgs(args []any) telemetry.RunScope {
 		ThreadID:   str(m, "thread", "thread_id", "Thread", "ThreadID"),
 		WorkflowID: str(m, "workflow_id", "WorkflowID"),
 	}
+	// Where the node and telemetry fields sit: in runtime (v3), else at the
+	// top level (a run step).
+	fields := m
 	var rt map[string]json.RawMessage
 	if v, ok := m["runtime"]; ok && json.Unmarshal(v, &rt) == nil {
+		fields = rt
 		if scope.ChatID == "" {
 			scope.ChatID = str(rt, "chat_id")
 		}
@@ -112,6 +133,37 @@ func RunScopeOfActivityArgs(args []any) telemetry.RunScope {
 		if scope.WorkflowID == "" {
 			scope.WorkflowID = str(rt, "workflow_id")
 		}
+	}
+
+	nodeType := str(m, "node_type")
+	var node map[string]json.RawMessage
+	if v, ok := m["node"]; ok && json.Unmarshal(v, &node) == nil {
+		nodeType = str(node, "type")
+	}
+	if stepID := str(fields, "step_id"); stepID != "" && nodeType != "" {
+		scope.NodeID, scope.NodeType = stepID, nodeType
+		if str(fields, "loop_node_id") != "" {
+			scope.InLoop = true
+			var iteration int
+			if v, ok := fields["loop_iteration"]; ok && json.Unmarshal(v, &iteration) == nil {
+				scope.NodeIteration = iteration
+			}
+		}
+	}
+
+	var tel struct {
+		WorkflowName string `json:"workflow_name"`
+		WorkflowRef  string `json:"workflow_ref"`
+		Trigger      string `json:"trigger"`
+		RunID        string `json:"run_id"`
+		ParentRunID  string `json:"parent_run_id"`
+		RootRunID    string `json:"root_run_id"`
+		Preset       string `json:"preset"`
+	}
+	if v, ok := fields["telemetry"]; ok && json.Unmarshal(v, &tel) == nil {
+		scope.WorkflowName, scope.WorkflowRef, scope.Trigger = tel.WorkflowName, tel.WorkflowRef, tel.Trigger
+		scope.RunID, scope.ParentRunID, scope.RootRunID = tel.RunID, tel.ParentRunID, tel.RootRunID
+		scope.Preset = tel.Preset
 	}
 	return scope
 }

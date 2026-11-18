@@ -129,6 +129,7 @@ func TestKillProcessNeverSignalsARecycledGroup(t *testing.T) {
 	m.processes["old"] = old
 
 	require.Error(t, m.KillProcess("old"), "a group no survivor proves is the command's must be refused")
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a signal wrongly sent would take this long to show as the victim gone; a correct refusal leaves nothing to wait for
 	time.Sleep(200 * time.Millisecond)
 	require.False(t, gone(victim.Process.Pid), "shell_kill on a stale record killed an unrelated process group")
 

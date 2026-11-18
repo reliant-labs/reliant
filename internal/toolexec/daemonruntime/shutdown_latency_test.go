@@ -104,6 +104,7 @@ func TestCancelStopsAnIdleDaemonPromptly(t *testing.T) {
 		elapsed := time.Since(start)
 		require.ErrorIs(t, d.err, context.Canceled,
 			"a cancelled daemon must report cancellation, not a stream fault")
+		// forge:lint-disable-next-line forge-test-wall-clock-bound: a test OF timing — the 500ms is the product's sign-in restart budget (cancelUnblockGrace), not a guess at machine speed
 		require.Less(t, elapsed, cancelUnblockGrace,
 			"a cancelled daemon took %v to stop against an idle gateway; SIGTERM-to-exit must fit in the sign-in restart budget", elapsed)
 		t.Logf("cancelled daemon stopped in %v", elapsed)

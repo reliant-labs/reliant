@@ -16,7 +16,10 @@
  *
  * Which Reliant project: the one that declares the console's forge project
  * (askReliantProject.ts). When that is not decidable the reader is asked, once,
- * with a picker; it never guesses.
+ * with a picker; it never guesses. When there is no project at all (an app
+ * deployed from outside Reliant), the dialog offers the step that gets one, a
+ * machine or a project, and the handoff sheet as the way that needs neither
+ * (AskReliantNoProject).
  *
  * `onChatCreated` is called with the chat's id when the reader sends — the
  * first moment the chat exists — so a surface can record "chat started from
@@ -40,11 +43,13 @@ import { tourEvents } from "@/components/Onboarding/tourEvents";
 import { fetchProjects } from "@/hooks/project-queries";
 import { trackEvent } from "@/lib/analytics";
 import { toast } from "@/lib/toast-manager";
+import { openAddProject } from "@/store/addProjectDialogStore";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
 import { ForgeConsoleContext } from "../../Console/consoleContext";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON } from "../Dashboards/parts";
 import { AskAgentSheet } from "./AskAgentSheet";
+import { AskReliantNoProject } from "./AskReliantNoProject";
 import { useAskAgentMode } from "./askAgentMode";
 import { useObsAskContext } from "./askReliantContext";
 import { askWorkspaceName, buildAskReliantPrompt, type AskEnv, type AskIntent, type AskSubject } from "./askReliantPrompt";
@@ -120,15 +125,10 @@ export function useAskReliant(options: AskReliantOptions = {}) {
     [router]
   );
 
-  const ask = useCallback(
+  // Which project, then start there or ask. Also the retry once the reader has
+  // added the machine the chat needed (ProjectChoice), so the projects are read again.
+  const resolveAndRun = useCallback(
     async (subject: AskSubject, onChatCreated?: (chatId: string) => void, intent?: AskIntent): Promise<boolean> => {
-      tourEvents.emit("askAgent:opened", { subjectKind: subject.kind, mode });
-      trackEvent("ask_agent_opened", { subject_kind: subject.kind, mode, surface: cli === "forge" ? "forge" : "reliant", demo });
-      if (mode === "handoff") {
-        // No daemon, no project: the sheet hands the prompt to the reader's own agent.
-        setHandoff({ subject, intent });
-        return true;
-      }
       const { options: opts, consoleContext: console, obs: ctx } = latest.current;
       const projects = await fetchProjects().catch(() => []);
       const { currentProject } = useProjectStore.getState();
@@ -142,26 +142,55 @@ export function useAskReliant(options: AskReliantOptions = {}) {
       setChoosing({ ...resolution, subject, onChatCreated, intent });
       return false;
     },
-    [run, mode, cli, demo]
+    [run]
   );
+
+  const ask = useCallback(
+    async (subject: AskSubject, onChatCreated?: (chatId: string) => void, intent?: AskIntent): Promise<boolean> => {
+      tourEvents.emit("askAgent:opened", { subjectKind: subject.kind, mode });
+      trackEvent("ask_agent_opened", { subject_kind: subject.kind, mode, surface: cli === "forge" ? "forge" : "reliant", demo });
+      if (mode === "handoff") {
+        // No daemon, no project: the sheet hands the prompt to the reader's own agent.
+        setHandoff({ subject, intent });
+        return true;
+      }
+      return resolveAndRun(subject, onChatCreated, intent);
+    },
+    [resolveAndRun, mode, cli, demo]
+  );
+
+  const forgeProject = options.forgeProject ?? consoleContext?.forgeProject ?? obs.forgeProject;
 
   const busy = starting !== null;
   const dialog: ReactNode = handoff ? (
     <AskAgentSheet
       subject={handoff.subject}
       intent={handoff.intent}
-      forgeProject={options.forgeProject ?? consoleContext?.forgeProject ?? obs.forgeProject}
+      forgeProject={forgeProject}
       envChoices={options.envChoices ?? (obs.environments.length ? obs.environments.map((env) => env.name) : consoleContext?.roster?.envs.map((env) => env.name))}
+      // Reached from ProjectChoice in Reliant itself: "Open in Reliant" would open this page again.
+      openInReliant={mode === "handoff"}
       onClose={() => setHandoff(null)}
     />
   ) : choosing ? (
     <ProjectChoice
       choosing={choosing}
+      forgeProject={forgeProject}
       busy={busy}
       onCancel={() => setChoosing(null)}
       onChoose={(project) => {
         const { subject, onChatCreated, intent } = choosing;
         void run(project, subject, onChatCreated, intent).then((started) => started && setChoosing(null));
+      }}
+      onHandoff={() => {
+        const { subject, intent } = choosing;
+        setChoosing(null);
+        setHandoff({ subject, intent });
+      }}
+      onRetry={() => {
+        const { subject, onChatCreated, intent } = choosing;
+        setChoosing(null);
+        void resolveAndRun(subject, onChatCreated, intent);
       }}
     />
   ) : null;
@@ -376,16 +405,32 @@ export function DeployWithAgentButton({ env, forgeProject, envChoices }: AskReli
 
 const REASON: Record<Choosing["reason"], string> = {
   ambiguous: "More than one project here declares this forge project, and none of them is open.",
-  unmapped: "No project here declares this forge project, so Reliant can't tell which checkout it is.",
+  unmapped: "No project here declares this forge project, so Reliant can't tell which checkout it is. Pick the one with its code, or add it.",
 };
+
+interface ProjectChoiceProps {
+  choosing: Choosing;
+  forgeProject?: string;
+  busy: boolean;
+  onCancel: () => void;
+  onChoose: (project: Project) => void;
+  /** Hand the subject to the reader's own agent instead (the handoff sheet). */
+  onHandoff: () => void;
+  /** Resolve the project again, after the reader added what was missing. */
+  onRetry: () => void;
+}
 
 /**
  * Sits above the dashboard's panel drawer (z-60) like AlertFromPanelDialog, and
- * keeps Escape from also closing the drawer under it.
+ * keeps Escape from also closing the drawer under it. With no project at all,
+ * the next step to get one instead (AskReliantNoProject).
  */
-function ProjectChoice({ choosing, busy, onCancel, onChoose }: { choosing: Choosing; busy: boolean; onCancel: () => void; onChoose: (project: Project) => void }) {
+function ProjectChoice({ choosing, forgeProject, busy, onCancel, onChoose, onHandoff, onRetry }: ProjectChoiceProps) {
   const name = useId();
   const [picked, setPicked] = useState(choosing.preselected);
+  if (choosing.candidates.length === 0) {
+    return <AskReliantNoProject forgeProject={forgeProject} onCancel={onCancel} onHandoff={onHandoff} onRetry={onRetry} />;
+  }
   const project = choosing.candidates.find((candidate) => candidate.id === picked);
   return (
     <div className="relative z-[70]" onKeyDown={(event) => event.key === "Escape" && event.nativeEvent.preventDefault()}>
@@ -395,33 +440,44 @@ function ProjectChoice({ choosing, busy, onCancel, onChoose }: { choosing: Choos
         title="Which project is this?"
         description={REASON[choosing.reason]}
         footer={
-          <div className="flex justify-end gap-2">
-            <button type="button" className={BUTTON_SECONDARY} onClick={onCancel}>
-              Cancel
-            </button>
-            <button type="button" className={BUTTON_PRIMARY} disabled={!project || busy} onClick={() => project && onChoose(project)} data-testid="ask-reliant-start">
-              {busy ? "Starting…" : project ? `Start in ${project.name}` : "Choose a project"}
-            </button>
+          <div className="flex items-center justify-between gap-2">
+            {choosing.reason === "unmapped" ? (
+              <button
+                type="button"
+                className={BUTTON_SECONDARY}
+                onClick={() => {
+                  onCancel();
+                  openAddProject();
+                }}
+                data-testid="ask-reliant-add-project"
+              >
+                Add project
+              </button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <button type="button" className={BUTTON_SECONDARY} onClick={onCancel}>
+                Cancel
+              </button>
+              <button type="button" className={BUTTON_PRIMARY} disabled={!project || busy} onClick={() => project && onChoose(project)} data-testid="ask-reliant-start">
+                {busy ? "Starting…" : project ? `Start in ${project.name}` : "Choose a project"}
+              </button>
+            </div>
           </div>
         }
       >
-        {choosing.candidates.length === 0 ? (
-          <p className="text-sm text-ink-muted" data-testid="ask-reliant-no-projects">
-            There is no project to start a chat in. Add one from the main screen first.
-          </p>
-        ) : (
-          <div role="radiogroup" aria-label="Project" className="space-y-1.5" data-testid="ask-reliant-projects">
-            {choosing.candidates.map((candidate) => (
-              <label key={candidate.id} className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm has-[:checked]:border-ink/40">
-                <input type="radio" name={name} value={candidate.id} checked={picked === candidate.id} onChange={() => setPicked(candidate.id)} className="mt-1" />
-                <span className="min-w-0">
-                  <span className="block font-medium text-ink">{candidate.name}</span>
-                  <span className="block truncate font-mono text-xs text-ink-muted">{candidate.path}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        )}
+        <div role="radiogroup" aria-label="Project" className="space-y-1.5" data-testid="ask-reliant-projects">
+          {choosing.candidates.map((candidate) => (
+            <label key={candidate.id} className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm has-[:checked]:border-ink/40">
+              <input type="radio" name={name} value={candidate.id} checked={picked === candidate.id} onChange={() => setPicked(candidate.id)} className="mt-1" />
+              <span className="min-w-0">
+                <span className="block font-medium text-ink">{candidate.name}</span>
+                <span className="block truncate font-mono text-xs text-ink-muted">{candidate.path}</span>
+              </span>
+            </label>
+          ))}
+        </div>
       </Modal>
     </div>
   );

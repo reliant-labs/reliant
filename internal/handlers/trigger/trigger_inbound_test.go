@@ -353,3 +353,43 @@ func TestIntegrationTriggerShowsTheWebhookURLTheUserMustConfigure(t *testing.T) 
 	appLevel := env.create(t, integration("test"))
 	assert.Nil(t, appLevel.WebhookUrl, "an operator-registered webhook is not the user's to configure")
 }
+
+// `reliant trigger update <t> --org-accounts-only` sends the trigger's stored
+// definition back (triggers.StoredDefinition, built from a read, which never
+// carries the write-only secret) with only the funding stamp changed. A signed
+// webhook keeps its sealed secret and its token through it: an unset secret is
+// kept (writeWebhookCredentials) and an update never re-issues the token.
+func TestWebhookSecretAndTokenSurviveAFundingOnlyUpdate(t *testing.T) {
+	t.Parallel()
+
+	env, _ := setupInboundTriggerTest(t)
+	secret := "s3cret"
+	resp, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+		Trigger: webhookDefinition(env, func(d *reliantv1.TriggerDefinition) {
+			d.Source = &reliantv1.TriggerDefinition_Webhook{Webhook: &reliantv1.WebhookSource{
+				Hmac: &reliantv1.WebhookHmac{Header: "X-Hub-Signature-256", Prefix: "sha256="},
+			}}
+			d.WebhookHmacSecret = &secret
+		}),
+	}))
+	require.NoError(t, err)
+	id := resp.Msg.GetTrigger().GetId()
+	before, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	require.NoError(t, err)
+	require.NotEmpty(t, before.SecretSealed)
+	require.NotEmpty(t, before.TokenHash)
+
+	read, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: id}))
+	require.NoError(t, err)
+	def := triggers.StoredDefinition(read.Msg.GetTrigger())
+	require.Nil(t, def.WebhookHmacSecret, "a read never carries the secret")
+	def.UnattendedFunding = reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY
+	updated, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{Id: id, Trigger: def}))
+	require.NoError(t, err)
+	assert.NotNil(t, updated.Msg.GetTrigger().GetWebhook().GetHmac(), "signatures stay on")
+
+	after, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	require.NoError(t, err)
+	assert.Equal(t, before.SecretSealed, after.SecretSealed, "the secret is kept")
+	assert.Equal(t, before.TokenHash, after.TokenHash, "the token is not re-issued")
+}

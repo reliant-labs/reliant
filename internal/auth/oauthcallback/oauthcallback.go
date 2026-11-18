@@ -34,13 +34,14 @@ const (
 	// to receive the result. Local writes, so this is generous by an order of
 	// magnitude; it exists only so a waiter that vanishes cannot hang the owner.
 	waiterDrainBudget = 5 * time.Second
-
-	// shutdownBudget bounds the graceful shutdown that follows. The browser
-	// holds a keep-alive connection open after the callback, and Shutdown waits
-	// for idle connections, so this must be short enough not to stall the
-	// caller — Close() is the fallback when it expires.
-	shutdownBudget = 2 * time.Second
 )
+
+// shutdownBudget bounds the graceful shutdown that follows. The browser
+// holds a keep-alive connection open after the callback, and Shutdown waits
+// for idle connections, so this must be short enough not to stall the
+// caller — Close() is the fallback when it expires. A var so a test can hold
+// the drain open and observe what happens inside it.
+var shutdownBudget = 2 * time.Second
 
 // CallbackConfig describes how to listen for and construct the OAuth redirect URI.
 type CallbackConfig struct {
@@ -166,6 +167,11 @@ func (s *callbackServer) awaitResult(ctx context.Context) (*Result, error) {
 }
 
 var openBrowser = OpenBrowser
+
+// wrapHandler puts a handler in front of the callback server's. Identity in
+// production; TestPortFreedPromptlyAfterCancel holds a request open in it to
+// keep the graceful drain running while it checks the port.
+var wrapHandler = func(h http.Handler) http.Handler { return h }
 
 // reuseProbeClient asks "is a compatible listener there?" — a local,
 // immediate question, so a short timeout is right.
@@ -307,7 +313,7 @@ func RunWithConfig(ctx context.Context, authorizeURLTemplate string, cfg Callbac
 		authorizeURL = strings.ReplaceAll(authorizeURLTemplate, "{redirect_uri}", url.QueryEscape(server.redirectURI))
 	}
 
-	httpServer := &http.Server{Handler: server.handler(), ReadHeaderTimeout: 10 * time.Second}
+	httpServer := &http.Server{Handler: wrapHandler(server.handler()), ReadHeaderTimeout: 10 * time.Second}
 	go httpServer.Serve(listener) //nolint:errcheck // best-effort serve in background goroutine
 
 	// Hand off to any queued flows before dropping the listener, then shut

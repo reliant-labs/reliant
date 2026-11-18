@@ -26,6 +26,13 @@ type OrgLister interface {
 	ListMyOrganizations(ctx context.Context, jwt string) ([]controlplane.MyOrganization, error)
 }
 
+// OrgMemberCounter is how many live members an org has, asked of the control
+// plane now as userID (orgs.Resolver.LiveMembersFresh); known is false when it
+// gives no count.
+type OrgMemberCounter interface {
+	LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error)
+}
+
 // Repository is the slice of *db.Repo the inbox handlers use. It
 // includes worktreesweep.StorageStore because the storage view and the
 // clean-up read through the same store.
@@ -52,6 +59,15 @@ type Repository interface {
 	// An unfinished observer without an open incident is not suppressible.
 	ListAttentionIncidents(ctx context.Context, userID string) ([]*core.AttentionIncident, error)
 	AttentionManagedChats(ctx context.Context, userID string, chatIDs []string) (map[string]bool, error)
+	// ListNoOrgAccountPauses and ListPersonallyFundedTriggers are the
+	// automations of the org-provider-accounts §11 notices: paused for want
+	// of an org account, and still on their owner's own accounts.
+	HasNoOrgAccountPauses(ctx context.Context) (bool, error)
+	ListNoOrgAccountPauses(ctx context.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error)
+	ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error)
+	// GetLatestTriggerEvent is a trigger's newest event with outcome, nil
+	// when it has none.
+	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 	ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error)
 	DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error
 	RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error

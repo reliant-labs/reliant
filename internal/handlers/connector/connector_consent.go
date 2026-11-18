@@ -45,9 +45,11 @@ func (s *Service) AuthorizeClient(
 	}
 
 	binding := &connectorgrant.ClientBinding{
-		ID:         uuid.New().String(),
-		UserID:     userID,
-		ClientID:   clientID,
+		ID:     uuid.New().String(),
+		UserID: userID,
+		// Namespaced by kind: one application may act through a workspace
+		// connector and a forge connector at once.
+		ClientID:   connectorgrant.BindingClientID(grant.KindOrDefault(), clientID),
 		GrantID:    grant.ID,
 		ClientName: strings.TrimSpace(req.Msg.GetClientName()),
 	}

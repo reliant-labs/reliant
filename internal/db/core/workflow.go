@@ -70,8 +70,11 @@ type WorkflowCheckpoint struct {
 	LoopIteration int64  `json:"loop_iteration"`
 	// CatalogPin is the workflow catalog the run at this position started
 	// with (db.Repo.PinProjectCatalog); "" for a run with no pin.
-	CatalogPin string    `json:"catalog_pin,omitempty"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	CatalogPin string `json:"catalog_pin,omitempty"`
+	// RunID is the run at this position for AI monitoring (forge.ai.run.id),
+	// which a restart from here continues; "" when the writer recorded none.
+	RunID     string    `json:"run_id,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // StepExecution represents a single execution of a workflow step.

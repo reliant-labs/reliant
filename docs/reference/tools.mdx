@@ -1653,6 +1653,10 @@ PARAMETERS:
 - id: (required) Workflow UUID, slug, or name — including a builtin or project
   workflow name straight out of list_workflows, or the id from create_workflow.
 
+- start_line, line_count: (optional) a window of the YAML's lines. A workflow
+  that fits arrives whole; a larger one arrives as its first lines that fit,
+  with the exact start_line that continues it.
+
 RETURNS:
 The complete workflow YAML with validation status. For editable drafts it also
 returns the version and timestamp; pass that version as expected_version to
@@ -1994,6 +1998,9 @@ AUTOMATIC STOP:
 Usage notes:
 - By default, shows only running processes in the current workspace
 - Use 'all: true' to include completed, failed, and killed processes
+- Running processes come first, newest first, then finished ones, newest first
+- At most 50 processes per call (limit, up to 200); offset pages through the rest, and the last line says what is left
+- A long command is shortened to its first 200 bytes
 - Process IDs can be used with shell_output and shell_kill tools
 
 Example outputs:
@@ -2936,8 +2943,9 @@ need to know whether it landed, check back with spawn_status or wait for a
 response.
 
 v1 is parent ↔ child only: you may message a direct sub-agent (a spawn of
-this thread) or your own parent. Messaging a sibling or unrelated agent is
-rejected.
+this thread) or your own parent. agent_id "parent" always names your parent,
+even when you were never given its id. Messaging a sibling or unrelated agent
+is rejected.
 
 A sub-agent of yours that stopped on an error is not finished: your message
 resumes it where it stopped, and it reads the message at its first turn.
@@ -3150,6 +3158,10 @@ FILE COPYING:
 - copy_files: exact paths relative to the project root, for gitignored files a fresh checkout lacks (the new worktree mirrors the project's layout)
 - Nothing is searched for: ".env" copies only the root .env; name "frontend/.env" to copy that one
 - A directory is copied whole (e.g. "web/node_modules"); a missing path is skipped
+- A copied node_modules is the SOURCE checkout's install, build caches included
+  (node_modules/.tmp, *.tsbuildinfo). When the new branch's lockfile differs, run
+  its install (e.g. pnpm install --frozen-lockfile) before typechecking, or the
+  errors come from stale packages, not from the branch
 - When you are working inside a worktree, files are copied from that worktree
 
 WORKFLOW DATA:

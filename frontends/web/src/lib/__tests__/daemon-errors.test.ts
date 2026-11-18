@@ -33,6 +33,17 @@ describe("isDaemonConnectingError classifies the pending-daemon signal", () => {
     expect(isDaemonConnectingError(err)).toBe(true);
   });
 
+  // toolexec.ErrDaemonReconnecting: a laptop back from sleep whose fresh stream
+  // has not answered yet. The command was never sent, so the surface waits.
+  it("treats a reconnecting machine (reason daemon_reconnecting) as a connecting/waiting error", () => {
+    const err = withReason(
+      "your machine is reconnecting: it is back online but has not answered yet; try again in a moment",
+      Code.Unavailable,
+      "daemon_reconnecting",
+    );
+    expect(isDaemonConnectingError(err)).toBe(true);
+  });
+
   it("does NOT treat the old flat 'no daemon available' message as connecting", () => {
     const err = new ConnectError(GENUINE_NO_DAEMON_MESSAGE, Code.Unavailable);
     expect(isDaemonConnectingError(err)).toBe(false);

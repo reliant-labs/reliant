@@ -5,8 +5,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
+
+	"github.com/reliant-labs/reliant/internal/errclass"
 )
 
 // control-plane pr-review, 2026-10-31: a compute node's expression went over
@@ -73,6 +76,8 @@ func (s *MachineBlipRunSuite) assertStepConfigFailureEndsTheRun(chatID, node str
 	s.Equal(stepConfigFailedErrType, appErr.Type())
 	s.Contains(err.Error(), "step b failed")
 	s.Contains(err.Error(), "no such key: result", "the failure names the expression's error")
+	s.Equal(svcerr.ClassUser, errclass.Classify(err),
+		"a misconfigured workflow is its author's error: logged below ERROR, never an obs issue")
 	s.Empty(e.pausedStatuses(), "a resume would fail the same way, so the run never pauses")
 	s.Equal(0, calls.count(), "the command never runs")
 

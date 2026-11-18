@@ -68,6 +68,10 @@ type subAgentFailureEnv struct {
 	// hold, when it returns a non-empty milestone, parks that CallLLM stub
 	// until the milestone is reached. toolCallID is "" for the parent.
 	hold func(toolCallID string, turn int) string
+	// streamUntilCancelled, when it returns true, parks that CallLLM stub
+	// until its activity context is cancelled: a call streaming when a pause
+	// lands. toolCallID is "" for the parent.
+	streamUntilCancelled func(toolCallID string, turn int) bool
 
 	mu                sync.Mutex
 	threadForToolCall map[string]string
@@ -106,6 +110,22 @@ type subAgentFailureEnv struct {
 
 	milestones map[string]chan struct{}
 	testDone   chan struct{}
+	// cancels holds, per activity id, a channel closed when the environment
+	// cancels that activity (see cancelled).
+	cancels map[string]chan struct{}
+}
+
+// cancelled returns a channel closed when the environment cancels the
+// activity with activityID.
+func (e *subAgentFailureEnv) cancelled(activityID string) chan struct{} {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	ch, ok := e.cancels[activityID]
+	if !ok {
+		ch = make(chan struct{})
+		e.cancels[activityID] = ch
+	}
+	return ch
 }
 
 const (
@@ -127,6 +147,7 @@ func newSubAgentFailureEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 		turnsByThread:     map[string]int{},
 		milestones:        map[string]chan struct{}{},
 		testDone:          make(chan struct{}),
+		cancels:           map[string]chan struct{}{},
 		parentTurn:        func(int) ([]map[string]interface{}, error) { return nil, nil },
 		childTurn: func(string, int) (map[string]interface{}, error) {
 			return map[string]interface{}{"response_text": "done", "tool_calls": nil}, nil
@@ -134,6 +155,16 @@ func newSubAgentFailureEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 		hold: func(string, int) string { return "" },
 	}
 	t.Cleanup(func() { close(e.testDone) })
+	env.SetOnActivityCanceledListener(func(info *activity.Info) {
+		ch := e.cancelled(info.ActivityID)
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		select {
+		case <-ch:
+		default:
+			close(ch)
+		}
+	})
 
 	wf, err := wfyaml.ParseWorkflow([]byte(spawnBackgroundE2EYAML))
 	require.NoError(t, err)
@@ -340,6 +371,20 @@ func (e *subAgentFailureEnv) callLLM(ctx context.Context, input types.ActivityIn
 			e.mu.Lock()
 			e.cancelledCalls = append(e.cancelledCalls, fmt.Sprintf("%s#%d", who, turn))
 			e.mu.Unlock()
+		}
+	}
+	if e.streamUntilCancelled != nil && e.streamUntilCancelled(toolCallIDOrEmpty(isParent, toolCallID), turn) {
+		// Released by the environment's cancel listener, not by ctx: the
+		// test environment delivers a cancel to an activity only through a
+		// heartbeat, and a heartbeat sent before the cancel throttles the
+		// next one behind the mock clock, which cannot advance while this
+		// activity runs.
+		select {
+		case <-e.cancelled(activity.GetInfo(ctx).ActivityID):
+			e.mu.Lock()
+			e.cancelledCalls = append(e.cancelledCalls, fmt.Sprintf("%s#%d", who, turn))
+			e.mu.Unlock()
+		case <-e.testDone:
 		}
 	}
 

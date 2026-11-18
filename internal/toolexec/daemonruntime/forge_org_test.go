@@ -87,3 +87,55 @@ func TestForgeOrg_SurvivesIntoADetachedJob(t *testing.T) {
 		t.Fatalf("job context lost the org: %q", forgeOrgOf(jobCtx))
 	}
 }
+
+// The project a request names reaches forge's environment as
+// RELIANT_PROJECT_ID, beside the org; a request naming none (a server older
+// than the field) adds nothing.
+func TestForgeScope_ProjectReachesTheChildEnvironmentBesideTheOrg(t *testing.T) {
+	ctx, err := bindForgeScope(context.Background(), "org-b", " proj-1 ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := forgeScopeEnv(ctx); len(got) != 2 || got[0] != "RELIANT_FORGE_ORG=org-b" || got[1] != "RELIANT_PROJECT_ID=proj-1" {
+		t.Fatalf("env = %v", got)
+	}
+	ctx, err = bindForgeScope(context.Background(), "", "")
+	if err != nil || forgeScopeEnv(ctx) != nil {
+		t.Fatalf("an unnamed org and project must add nothing: %v %v", err, forgeScopeEnv(ctx))
+	}
+	for _, bad := range []string{"a b", "a\nb", strings.Repeat("a", 129)} {
+		if _, err := bindForgeScope(context.Background(), "", bad); err == nil {
+			t.Errorf("project %q was accepted", bad)
+		}
+	}
+}
+
+func TestForgeScope_HandlerCarriesTheRequestedProjectToTheRunner(t *testing.T) {
+	previous := runForge
+	defer func() { runForge = previous }()
+	var got string
+	runForge = func(ctx context.Context, _ string, _ []string) (forgeCommandResult, error) {
+		got = forgeProjectOf(ctx)
+		return forgeCommandResult{Stdout: []byte(`{}`)}, nil
+	}
+	payload, err := json.Marshal(map[string]any{"project_path": forgeProject(t), "org_id": "org-b", "project_id": "proj-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handleForgeTopology(context.Background(), payload); err != nil {
+		t.Fatal(err)
+	}
+	if got != "proj-1" {
+		t.Fatalf("runner project = %q, want proj-1", got)
+	}
+}
+
+// A detached deploy job outlives its request, so the project rides the job.
+func TestForgeScope_ProjectSurvivesIntoADetachedJob(t *testing.T) {
+	ctx, _ := bindForgeScope(context.Background(), "org-b", "proj-1")
+	job := &forgeDeployJob{orgID: forgeOrgOf(ctx), projectID: forgeProjectOf(ctx)}
+	jobCtx := withForgeProject(withForgeOrg(context.Background(), job.orgID), job.projectID)
+	if forgeProjectOf(jobCtx) != "proj-1" {
+		t.Fatalf("job context lost the project: %q", forgeProjectOf(jobCtx))
+	}
+}

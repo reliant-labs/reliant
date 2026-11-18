@@ -17,7 +17,7 @@ import type { ObservabilityApi } from "@/services/controlPlane/observability/Obs
 import type { Panel, PanelResult, QueryPanelRequest, SeriesIntent, TimeWindow } from "@/services/controlPlane/observability/types";
 
 import { failedIncidentRequests } from "../busyApp";
-import { DEMO_BACKENDS, DEMO_ENV_IDS, DEMO_INCIDENT, dailyLoad, demoLedger, demoStats, incidentStartMs, MINUTE, type DemoEnvKey } from "../shopStory";
+import { DEMO_BACKENDS, DEMO_ENV_IDS, DEMO_INCIDENT, dailyLoad, demoCounts, demoLedger, demoQuantile, incidentStartMs, MINUTE, type DemoEnvKey, type DemoStatsQuery } from "../shopStory";
 import type { MetricKeys } from "./shopApi";
 
 const MiB = 2 ** 20;
@@ -40,13 +40,15 @@ interface MetricSpec {
 
 /** Requests per second on `ops` (all when empty) of `service` around `at`. */
 const rps = (service: string | undefined, env: DemoEnvKey, at: number, now: number, op?: string) =>
-  demoStats({ startMs: at - 2.5 * MINUTE, endMs: at + 2.5 * MINUTE, envIds: [env], service, op, now }).ratePerSecond;
+  demoCounts({ startMs: at - 2.5 * MINUTE, endMs: at + 2.5 * MINUTE, envIds: [env], service, op, now }).ratePerSecond;
 const errs = (env: DemoEnvKey, at: number, now: number) =>
   ["orders.v1.OrdersService/CreateOrder", "checkout.v1.CheckoutService/Checkout"].reduce((a, op) => {
-    const s = demoStats({ startMs: at - 2.5 * MINUTE, endMs: at + 2.5 * MINUTE, envIds: [env], service: "api", op, now });
+    const s = demoCounts({ startMs: at - 2.5 * MINUTE, endMs: at + 2.5 * MINUTE, envIds: [env], service: "api", op, now });
     return a + s.errors / 300;
   }, 0);
-const quantileOf = (q: number, s: { p50Ms: number; p95Ms: number; p99Ms: number }) => (q >= 0.99 ? s.p99Ms : q >= 0.95 ? s.p95Ms : q >= 0.9 ? (s.p50Ms + s.p95Ms) / 2 : s.p50Ms);
+/** Latency quantile `q` (ms) of a window, from demoStats' p50 / p95 / p99: only the ones `q` reads are computed. */
+const quantileOf = (q: number, w: DemoStatsQuery) =>
+  q >= 0.99 ? demoQuantile(w, 0.99) : q >= 0.95 ? demoQuantile(w, 0.95) : q >= 0.9 ? (demoQuantile(w, 0.5) + demoQuantile(w, 0.95)) / 2 : demoQuantile(w, 0.5);
 const wiggle = (at: number, service: string) => 1 + 0.04 * Math.sin(at / 600_000 + service.length);
 const load = (env: DemoEnvKey, at: number) => (env === "env-prod" ? dailyLoad(at) : 0.3);
 const incidentOn = (env: DemoEnvKey, at: number, now: number) => env === "env-prod" && at >= incidentStartMs(now);
@@ -99,8 +101,8 @@ const CATALOG: MetricSpec[] = [
     declared: true,
     services: ["api"],
     value: (_s, env, at, q, now) => {
-      const s = demoStats({ startMs: at - 2.5 * MINUTE, endMs: at + 2.5 * MINUTE, envIds: [env], service: "api", op: "orders.v1.OrdersService/CreateOrder", now });
-      return Math.max(0.02, (quantileOf(q, s) - 20) / 1000);
+      const w = { startMs: at - 2.5 * MINUTE, endMs: at + 2.5 * MINUTE, envIds: [env], service: "api", op: "orders.v1.OrdersService/CreateOrder", now };
+      return Math.max(0.02, (quantileOf(q, w) - 20) / 1000);
     },
   },
   {
@@ -109,7 +111,7 @@ const CATALOG: MetricSpec[] = [
     unit: "s",
     description: "RPC duration.",
     services: DEMO_BACKENDS,
-    value: (service, env, at, q, now) => quantileOf(q, demoStats({ startMs: at - 2.5 * MINUTE, endMs: at + 2.5 * MINUTE, envIds: [env], service, now })) / 1000,
+    value: (service, env, at, q, now) => quantileOf(q, { startMs: at - 2.5 * MINUTE, endMs: at + 2.5 * MINUTE, envIds: [env], service, now }) / 1000,
   },
   {
     name: "rpc.server.calls",

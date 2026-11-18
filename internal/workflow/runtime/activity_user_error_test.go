@@ -61,9 +61,10 @@ func TestMarkTextOnlyUserError(t *testing.T) {
 	t.Parallel()
 	usageLimit := errors.New("AI provider usage limit reached [RELIANT_PROVIDER_USAGE_LIMIT:2026-10-10T18:00:00Z]: 429")
 	creditOut := errors.New("insufficient_quota: you exceeded your current quota")
+	promptRefused := errors.New(`failed to stream LLM response: received error while streaming: {"message":"Invalid prompt: your prompt was flagged as potentially violating our usage policy.","type":"invalid_request_error","param":null,"code":"invalid_prompt"}`)
 	plain := errors.New("pq: connection refused")
 
-	for name, err := range map[string]error{"usage limit": usageLimit, "credit exhausted": creditOut} {
+	for name, err := range map[string]error{"usage limit": usageLimit, "credit exhausted": creditOut, "prompt refused": promptRefused} {
 		marked := markTextOnlyUserError(err)
 		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(marked), name)
 		assert.ErrorIs(t, marked, err, "%s: the original must stay reachable", name)

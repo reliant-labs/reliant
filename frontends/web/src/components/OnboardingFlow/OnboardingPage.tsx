@@ -13,7 +13,7 @@ import type { LaunchPlan } from './types';
 import './steps';
 
 export function OnboardingPage() {
-  const { plan, updatePlan } = useOnboardingPlan();
+  const { plan, updatePlan, returnTo } = useOnboardingPlan();
   // The onboarding overlay sits at z-40 over the normal app chrome, so the
   // Layout/Header's drag region is occluded. Render our own drag strip across
   // the top of the window so users can still move the Electron window from
@@ -122,7 +122,7 @@ export function OnboardingPage() {
           <div className="flex-1">
             <ProgressBar steps={progressSteps} currentStepIndex={currentIndex} />
           </div>
-          <OnboardingEscapeHatch className="flex-shrink-0" />
+          <OnboardingEscapeHatch className="flex-shrink-0" returnTo={returnTo} />
         </div>
 
         {/* Step content */}
@@ -132,6 +132,7 @@ export function OnboardingPage() {
               <StepComponent
                 plan={plan}
                 updatePlan={updatePlan}
+                returnTo={returnTo}
                 onNext={onNext}
                 onBack={onBack}
               />

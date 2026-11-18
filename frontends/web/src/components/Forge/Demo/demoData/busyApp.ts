@@ -52,6 +52,7 @@ import {
   dailyLoad,
   demoLedger,
   demoNow,
+  demoCounts,
   demoStats,
   demoTrend,
   ENV_TRAFFIC,
@@ -103,7 +104,17 @@ interface Ctx {
   versions: Record<DemoEnvKey, [number, string][]>;
   /** The toured trace's start. No generated prod CreateOrder fails after it. */
   touredAtMs: number;
+  /**
+   * Requests already generated, by `slot * 3 + env index`, and their summaries.
+   * Each is a pure function of (now, env, slot), and the console's windows
+   * slide over the same slots read after read.
+   */
+  generated: Map<number, Req | null>;
+  summaries: WeakMap<Req, TraceSummary>;
 }
+
+/** Past this many generated slots the cache starts over (a day of prod traffic at its busiest is ≈ 60,000). */
+const GENERATED_LIMIT = 60_000;
 
 /**
  * How long before "now" the toured trace started. The tour tells the visitor to
@@ -114,10 +125,15 @@ interface Ctx {
  */
 export const TOURED_AGO_MS = 10_000;
 
+let lastCtx: Ctx | null = null;
+
+/** The world as of `now`: one per page load, so every read shares its generated requests. */
 function ctxOf(now: number): Ctx {
+  if (lastCtx?.now === now) return lastCtx;
   const versions = Object.fromEntries(DEMO_ENV_IDS.map((e) => [e, [] as [number, string][]])) as Ctx["versions"];
   for (const p of demoLedger(now)) if (!p.targets.length) versions[p.envId].push([p.atMs, p.version]);
-  return { now, versions, touredAtMs: now - TOURED_AGO_MS };
+  lastCtx = { now, versions, touredAtMs: now - TOURED_AGO_MS, generated: new Map(), summaries: new WeakMap() };
+  return lastCtx;
 }
 
 function versionAt(ctx: Ctx, env: DemoEnvKey, atMs: number): string {
@@ -147,6 +163,16 @@ interface Req {
 
 /** The request in `env`'s `slot`, or null when the load leaves that slot idle. */
 function requestAt(ctx: Ctx, env: DemoEnvKey, slot: number): Req | null {
+  const key = slot * DEMO_ENV_IDS.length + DEMO_ENV_IDS.indexOf(env);
+  const known = ctx.generated.get(key);
+  if (known !== undefined) return known;
+  if (ctx.generated.size >= GENERATED_LIMIT) ctx.generated.clear();
+  const r = generateRequest(ctx, env, slot);
+  ctx.generated.set(key, r);
+  return r;
+}
+
+function generateRequest(ctx: Ctx, env: DemoEnvKey, slot: number): Req | null {
   const e = DEMO_ENV_IDS.indexOf(env);
   const startMs = slot * SLOT_MS + Math.floor(hash01(slot, 1, e) * SLOT_MS);
   if (startMs > ctx.now) return null;
@@ -215,7 +241,13 @@ function servicesOf(r: Req): string[] {
   return [...(isBrowser(r) ? [DEMO_FRONTEND] : []), ...DEMO_BACKENDS.filter((s) => set.has(s))];
 }
 
-function summary(r: Req): TraceSummary {
+function summary(ctx: Ctx, r: Req): TraceSummary {
+  let s = ctx.summaries.get(r);
+  if (!s) ctx.summaries.set(r, (s = summarize(r)));
+  return s;
+}
+
+function summarize(r: Req): TraceSummary {
   const browser = isBrowser(r);
   const n = Math.floor(hash01(r.slot, 13, r.envIndex) * 1000);
   const trace = traceOf(r);
@@ -698,7 +730,7 @@ export function createBusyApp(now: number = demoNow()): TelemetryApi {
     listTraces: async (req) => {
       const envs = envsOf(req.envIds);
       const { requests, sampledFromMs } = requestsIn(ctx, req.window.startMs, req.window.endMs, envs);
-      let all: (TraceSummary & { env: string })[] = requests.map((r) => ({ ...summary(r), env: ENV_NAME[r.env] }));
+      let all: (TraceSummary & { env: string })[] = requests.map((r) => ({ ...summary(ctx, r), env: ENV_NAME[r.env] }));
       if (touredInScope(req.envIds, req.window.startMs, req.window.endMs)) all.push({ ...touredSummary(ctx), env: "prod" });
       all.sort((a, b) => b.startMs - a.startMs);
       if (req.rootSpanName) all = all.filter((t) => t.rootOperation.toLowerCase().includes(req.rootSpanName.toLowerCase()));
@@ -715,8 +747,8 @@ export function createBusyApp(now: number = demoNow()): TelemetryApi {
       const red = redOf(all, seconds);
       // A window longer than the slots built: the counts are scaled to the whole window (latency is the sample's).
       if (sampledFromMs > req.window.startMs) {
-        const whole = demoStats({ startMs: req.window.startMs, endMs: req.window.endMs, envIds: envs, now }).requests;
-        const sampled = demoStats({ startMs: sampledFromMs, endMs: req.window.endMs, envIds: envs, now }).requests;
+        const whole = demoCounts({ startMs: req.window.startMs, endMs: req.window.endMs, envIds: envs, now }).requests;
+        const sampled = demoCounts({ startMs: sampledFromMs, endMs: req.window.endMs, envIds: envs, now }).requests;
         const scale = sampled > 0 ? whole / sampled : 1;
         red.traceCount = Math.round(red.traceCount * scale);
         red.errorTraceCount = Math.round(red.errorTraceCount * scale);

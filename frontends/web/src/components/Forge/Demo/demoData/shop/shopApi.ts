@@ -83,8 +83,19 @@ export const demoWriteRefused = async (): Promise<never> => {
   throw new ConnectError("This is a demo. Changes are turned off.", Code.PermissionDenied);
 };
 
-/** shop's observability, as of `now` (the page load). */
+let shared: { now: number; api: ObservabilityApi } | null = null;
+
+/**
+ * shop's observability, as of `now` (the page load). One per `now`: the
+ * console, the wire scenario and the browser providers all read the same
+ * answers, so they share one model and every cache behind it.
+ */
 export function createShopApi(now: number = demoNow()): ObservabilityApi {
+  if (shared?.now !== now) shared = { now, api: buildShopApi(now) };
+  return shared.api;
+}
+
+function buildShopApi(now: number): ObservabilityApi {
   return {
     currentOrgId: async () => DEMO_ORG,
     ...shopTelemetry(now),

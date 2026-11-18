@@ -44,6 +44,7 @@ import {
   TriggerHealthStatus,
   TriggerSenderSchema,
   TriggerOverlapPolicy,
+  UnattendedFunding,
   WorkflowTriggerOutcome,
   IntegrationSourceSchema,
   WebhookSourceSchema,
@@ -252,7 +253,18 @@ export interface Trigger {
    * and rotating re-connects rather than showing a token.
    */
   webhookManaged: boolean;
+  /** The organization the trigger belongs to. Unset for one of no org. */
+  orgId?: string;
+  /**
+   * Which AI accounts its runs may spend (org-provider-accounts §11.3):
+   * "orgOnly" the organization's alone, "any" its owner's own accounts too. A
+   * trigger of no org, and a server that predates the field, read "any".
+   */
+  unattendedFunding: UnattendedFundingKey;
 }
+
+/** Trigger.unattendedFunding: the organization's accounts only, or any the owner has. */
+export type UnattendedFundingKey = "any" | "orgOnly";
 
 /** The trigger's schedule, or undefined for any other kind of source. */
 export function triggerSchedule(trigger: Pick<Trigger, "source">): TriggerSchedule | undefined {
@@ -325,6 +337,12 @@ export interface TriggerDefinitionInput {
    * declaration's (the server refuses one).
    */
   filter?: string;
+  /**
+   * Which AI accounts the runs may spend. Unset: stamped from the org's shape
+   * on create, unchanged on update. Loosening to "any" in an org with other
+   * members is refused (reason org_only_automation).
+   */
+  unattendedFunding?: UnattendedFundingKey;
 }
 
 // ============================================
@@ -456,6 +474,8 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
     filter: proto.filter || undefined,
     webhookUrl: proto.webhookUrl || undefined,
     webhookManaged: proto.webhookManaged,
+    orgId: proto.orgId || undefined,
+    unattendedFunding: proto.unattendedFunding === UnattendedFunding.ORG_ONLY ? "orgOnly" : "any",
   };
 }
 
@@ -483,11 +503,23 @@ export function definitionToProto(input: TriggerDefinitionInput): ProtoTriggerDe
     actingIdentity: actingIdentityToProto(input.actingIdentity),
     connectionId: input.connectionId || undefined,
     filter: input.source.kind === "activation" ? "" : (input.filter ?? "").trim(),
+    unattendedFunding: unattendedFundingToProto(input.unattendedFunding),
   });
   // Assigned rather than passed to create(): a passthrough arm is the decoded
   // message the server sent, and goes back as that same object.
   definition.source = sourceToProto(input.source);
   return definition;
+}
+
+function unattendedFundingToProto(key: UnattendedFundingKey | undefined): UnattendedFunding {
+  switch (key) {
+    case "orgOnly":
+      return UnattendedFunding.ORG_ONLY;
+    case "any":
+      return UnattendedFunding.ANY;
+    default:
+      return UnattendedFunding.UNSPECIFIED;
+  }
 }
 
 function sourceToProto(source: TriggerSource): ProtoTriggerDefinition["source"] {

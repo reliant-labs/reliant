@@ -48,6 +48,10 @@ type Worker struct {
 
 	startDone chan struct{} // closed once Start has returned
 	started   bool          // Start returned nil; written before startDone closes
+
+	// background runs beside the worker once it has started, until Run
+	// returns (the org key notice sweep).
+	background []func(context.Context)
 }
 
 // newWorker wraps w, whose fatal errors arrive on fatal.
@@ -82,6 +86,11 @@ func (w *Worker) Run(ctx context.Context) error {
 	close(w.startDone)
 	if err != nil {
 		return fmt.Errorf("start temporal worker: %w", err)
+	}
+	bgCtx, stopBackground := context.WithCancel(ctx)
+	defer stopBackground()
+	for _, run := range w.background {
+		go run(bgCtx)
 	}
 
 	select {

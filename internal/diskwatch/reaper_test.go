@@ -219,6 +219,7 @@ func TestReaper_SingleFlight(t *testing.T) {
 	if started, _ := h.w.ClearCaches([]string{KindGoBuildCache}); len(started) != 1 {
 		t.Fatalf("ClearCaches started %v, want the Go build cache", started)
 	}
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a second pass started beside the first would show here, and there is no event to wait for when it correctly does not
 	time.Sleep(50 * time.Millisecond)
 	if h.runs() != 1 {
 		t.Fatalf("runs = %d while the first pass is still running, want 1", h.runs())

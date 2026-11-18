@@ -65,6 +65,11 @@ var userScopedReads = map[string]string{
 	// The takeover decides each offer: its offeree and offerer must be live
 	// members of its org, or an admin of it asked (internal/orgtakeover).
 	"ListPendingTriggerOffers": readCallersFilter,
+	// The inbox's P11 notices (inbox_automation_notices.go): each row is the
+	// caller's own, decided by CanReadTrigger, or one of an org they
+	// administer (control-plane's live answer).
+	"ListNoOrgAccountPauses":       readCallersFilter,
+	"ListPersonallyFundedTriggers": readCallersFilter,
 	// The account loader counts a grant only for a live member of the org,
 	// and only when it postdates their current membership (internal/llm/
 	// drivers, org-provider-accounts §3.3).
@@ -72,7 +77,11 @@ var userScopedReads = map[string]string{
 	// A project's moves span two orgs: ProjectService decides each with
 	// canReadMove (its owner or actor through authz.CanReadOwn on either org,
 	// or authz.RequireOrgAdmin of either), the list and a retried request alike.
-	"ListProjectOrgMoves":          readCallersFilter,
+	"ListProjectOrgMoves": readCallersFilter,
+	// "Recently deleted": ProjectService decides each row again with
+	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
+	// asked fresh, once the owner left).
+	"ListDeletedProjects":          readCallersFilter,
 	"FindProjectOrgMoveByRequest":  readCallersFilter,
 	"ListUnlaunchedTriggerEvents":  readCallersFilter,
 	"ListWorktreeRecoveries":       readCallersFilter,
@@ -117,6 +126,7 @@ var userScopedReads = map[string]string{
 	"ListCommandFavorites":            readPersonal,
 	"ListDismissedInboxItemIDs":       readPersonal,
 	"ListLLMUsageDaily":               readPersonal,
+	"ListLLMUsageDetail":              readPersonal,
 	"ListMachinePoolsForUser":         readPersonal,
 	"ListModelEndpoints":              readPersonal,
 	"ListProviderAccounts":            readPersonal,

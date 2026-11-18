@@ -35,6 +35,9 @@ export function OnboardingRoute() {
   const queryClient = useQueryClient();
   const search = useSearch({ from: "/_authenticated/onboarding" });
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
+  // Where OnboardingGate found the user (./onboardingGate.ts): every exit to
+  // the app lands back there.
+  const returnTo = search.returnTo;
 
   const isComplete = !isUserLoading && !!currentUser?.onboardingCompleted;
 
@@ -62,9 +65,9 @@ export function OnboardingRoute() {
     // the next visit retries.
     completeOnboarding.mutate(
       { source: "returning_user_with_daemon" },
-      { onSettled: () => void leaveOnboarding("returning_user_heal", navigate) },
+      { onSettled: () => void leaveOnboarding("returning_user_heal", navigate, undefined, returnTo) },
     );
-  }, [completeOnboarding, navigate]);
+  }, [completeOnboarding, navigate, returnTo]);
 
   useReturningUserHeal({
     userId: currentUser?.id,
@@ -90,19 +93,19 @@ export function OnboardingRoute() {
   useEffect(() => {
     if (isUserLoading) return;
     if (arrivedComplete) {
-      void leaveOnboarding("already_complete", navigate);
+      void leaveOnboarding("already_complete", navigate, undefined, returnTo);
     }
-  }, [isUserLoading, arrivedComplete, navigate]);
+  }, [isUserLoading, arrivedComplete, navigate, returnTo]);
 
   // reset-onboarding signal: drop plan + the signal, restart from step 0.
   useEffect(() => {
     if (!resetOnboarding) return;
     navigate({
       to: "/onboarding",
-      search: { "reset-onboarding": undefined, plan: undefined },
+      search: { "reset-onboarding": undefined, plan: undefined, returnTo },
       replace: true,
     });
-  }, [resetOnboarding, navigate]);
+  }, [resetOnboarding, navigate, returnTo]);
 
   // GitHub OAuth return. The control-plane OAuth handler redirects back to
   // `returnTo` (set by ProjectChoiceStep to the current /onboarding URL) with

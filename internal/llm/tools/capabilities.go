@@ -20,6 +20,26 @@ import (
 // the registry.
 const ToolSpawn = "spawn"
 
+// MaxSpawnDepth is how deep spawning nests. An agent whose spawn depth has
+// reached it is never offered spawn, whatever its node declares, so recursive
+// spawning stays bounded (#93). At 2, a root agent spawns sub-agents, those
+// sub-agents may spawn their own (orchestrator -> worker -> helper), and the
+// helpers cannot spawn (reliant#2757). How many run at once is capped
+// separately, per agent and per run (activitytypes.SpawnLimits).
+const MaxSpawnDepth = 2
+
+// SpawnAllowedAtDepth reports whether an agent at spawn depth depth (0 for a
+// root agent) may be offered spawn: whether the sub-agents it would start are
+// still within MaxSpawnDepth.
+func SpawnAllowedAtDepth(depth int) bool {
+	return depth < MaxSpawnDepth
+}
+
+// spawnDepthRefusal is why a sub-agent at MaxSpawnDepth has no spawn tool. It
+// names the limit and what to do instead, so an agent told to fan out does
+// not search for a tool it cannot have (reliant#2757).
+var spawnDepthRefusal = fmt.Sprintf("Spawning is not available to this sub-agent: spawn nests at most %d levels deep, and this agent is already at that depth (it was spawned by a sub-agent), so it cannot spawn sub-agents of its own. Do the work yourself, one item after another, or tell your parent (spawn_send) which parts it should fan out.", MaxSpawnDepth)
+
 // Capabilities is one agent turn's tool capability set: what the model was
 // offered, what load_tool may add, and at what tier.
 //
@@ -70,6 +90,9 @@ type Capabilities struct {
 	// author decided it does that work, so an unattended run keeps them. Only
 	// populated on an unattended turn.
 	UnattendedOptIn []string
+	// SpawnDepthExhausted: the agent is a sub-agent at MaxSpawnDepth, so it is
+	// never offered spawn. load_tool and execution refusals say so.
+	SpawnDepthExhausted bool
 }
 
 // BoundParam is one bound parameter as a turn's capability set records it.
@@ -133,6 +156,10 @@ type CapabilityInputs struct {
 	// RuntimeContext: a trigger-fired run, every sub-workflow and spawned
 	// sub-agent of one, and never a person's turn.
 	Unattended bool
+	// SpawnDepthExhausted: the agent's spawn depth has reached MaxSpawnDepth.
+	// Its spawn declaration, if any, has already been dropped by the caller;
+	// this only lets a refusal name the reason.
+	SpawnDepthExhausted bool
 }
 
 // ResolveCapabilities computes a turn's capability set. Pure: no I/O and no
@@ -153,6 +180,8 @@ func ResolveCapabilities(in CapabilityInputs) *Capabilities {
 		NoMachine:    in.NoMachine,
 		SpawnPresets: sortedUnique(in.SpawnPresets),
 		Unattended:   in.Unattended,
+
+		SpawnDepthExhausted: in.SpawnDepthExhausted,
 	}
 	if in.Unattended {
 		for _, name := range in.Access.Named {
@@ -456,6 +485,14 @@ func (c *Capabilities) LoadRefusal(name string) string {
 	if OnlyWithoutMachine(name) {
 		return fmt.Sprintf("Tool '%s' is not loadable: a chat with no machine already has it, and a chat on a machine never does.", name)
 	}
+	// spawn is never in the registry, so the generic answer below would be
+	// "not found", which reads as a missing tool rather than a limit.
+	if name == ToolSpawn {
+		if c != nil && c.SpawnDepthExhausted {
+			return spawnDepthRefusal
+		}
+		return "Spawning is not available to this agent: spawn is offered only by a workflow node that declares spawn presets (tools_config.spawn), and this one declares none, so load_tool cannot add it."
+	}
 	switch c.exclusion(registryIndex(), name) {
 	case excludedUnknown:
 		return fmt.Sprintf("Tool '%s' not found in the registry. Use load_tool with query to search for available tools.", name)
@@ -487,6 +524,9 @@ func (c *Capabilities) Explain(name string) string {
 		return ""
 	}
 	if name == ToolSpawn {
+		if c != nil && c.SpawnDepthExhausted {
+			return spawnDepthRefusal + " The spawn call was not run."
+		}
 		return "Spawning sub-agents is not available to this agent on this turn, so the spawn call was not run."
 	}
 	switch c.exclusion(registryIndex(), name) {
@@ -575,6 +615,7 @@ func (c *Capabilities) Proto() *reliantv1.ToolCapabilities {
 		BoundParams:          boundParamsProto(c.BoundParams),
 		Unattended:           c.Unattended,
 		UnattendedOptIn:      c.UnattendedOptIn,
+		SpawnDepthExhausted:  c.SpawnDepthExhausted,
 	}
 }
 
@@ -660,6 +701,8 @@ func CapabilitiesFromProto(p *reliantv1.ToolCapabilities) *Capabilities {
 		SpawnPresets: sortedUnique(p.GetSpawnPresets()),
 		BoundParams:  boundParamsFromProto(p.GetBoundParams()),
 		Unattended:   p.GetUnattended(),
+
+		SpawnDepthExhausted: p.GetSpawnDepthExhausted(),
 	}
 	if caps.Unattended {
 		caps.UnattendedOptIn = sortedUnique(p.GetUnattendedOptIn())

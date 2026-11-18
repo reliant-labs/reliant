@@ -281,6 +281,20 @@ service ObservabilityService {
     };
   }
 
+  // GetUserActivity counts an environment's users from its product events
+  // (`forge obs users`, the console's Users card): distinct active users, new
+  // users (the env's sign-ups when it reports auth_signed_up, else users first
+  // seen) and returning users over scope.time_range and the range of the same
+  // length before it, plus an optional daily series and the distinct users
+  // still retained. The statement is forge's (obsquery.UserActivityQuery), so
+  // the local and hosted answers agree. Max range 90 days.
+  rpc GetUserActivity(GetUserActivityRequest) returns (GetUserActivityResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // ListFrontendReplay answers "is session replay on for this frontend, in
   // this environment": one row per (environment, frontend). Replay is a
   // setting of a frontend INSTANCE (forge.BrowserTelemetry.replay, rendered
@@ -2365,6 +2379,12 @@ message ReleasePromotionRef {
   // "telemetry_first_seen" (inferred). Always set by a server that knows the
   // field; an older server leaves it empty, which means "promotion".
   string marker_source = 7;
+  // When the release went live, from the promotion's deploy gates (the end of
+  // the first attempt whose apply and cluster-rollout gates all succeeded):
+  // the after window starts here when it is later than promoted_at. Unset
+  // when the gates do not say, and from an older server, which anchored the
+  // after window at promoted_at.
+  google.protobuf.Timestamp live_at = 8;
 }
 
 // ServiceHealthDelta is one service's before and after, over weighted server
@@ -2515,4 +2535,58 @@ enum FrontendReplaySource {
   FRONTEND_REPLAY_SOURCE_RELEASE = 2;
   // No runtime config was readable.
   FRONTEND_REPLAY_SOURCE_NONE = 3;
+}
+
+message GetUserActivityRequest {
+  // time_range is the current window; the previous window is the same length
+  // before it.
+  QueryScope scope = 1;
+  // The daily series' length in UTC days, ending with the day of
+  // scope.time_range's end; 0 = no series. At most 90.
+  int32 series_days = 2;
+  // Adds seen_total, the distinct users over the whole retention.
+  bool want_seen_total = 3;
+}
+
+message GetUserActivityResponse {
+  // One entry per environment in scope, including one with no events.
+  repeated EnvUserActivity envs = 1;
+}
+
+// UserActivityCounts are the distinct users of one window.
+message UserActivityCounts {
+  int64 active = 1;
+  int64 new = 2;
+  int64 returning = 3;
+}
+
+// UserActivityDay is one UTC day of the series.
+message UserActivityDay {
+  // YYYY-MM-DD.
+  string day = 1;
+  int64 active = 2;
+  int64 new = 3;
+  int64 returning = 4;
+}
+
+// EnvUserActivity is one environment's users.
+message EnvUserActivity {
+  string env_id = 1;
+  string env_name = 2;
+  // current is scope.time_range; previous the range of the same length before it.
+  UserActivityCounts current = 3;
+  UserActivityCounts previous = 4;
+  // Oldest first, zero-filled; empty without series_days.
+  repeated UserActivityDay days = 5;
+  // Distinct users still retained; unset unless want_seen_total.
+  optional int64 seen_total = 6;
+  // The longest retention of the rows read (what seen_total spans); 0 when
+  // none was read.
+  int32 retention_days = 7;
+  // The earliest event read; unset when none.
+  google.protobuf.Timestamp first_event_at = 8;
+  // Where the current window's events came from (app.client), sorted.
+  repeated string clients = 9;
+  // How new was counted: "signups" or "first_seen".
+  string new_rule = 10;
 }

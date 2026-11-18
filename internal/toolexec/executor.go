@@ -5,10 +5,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
-	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // DefaultToolTimeout bounds a single tool call. It is the hard ceiling every
@@ -50,10 +50,11 @@ type ToolRequest struct {
 	// policy governs the call (RemoteExecutor.ExecuteTool). Empty for work
 	// outside any org.
 	OrgID string
-	// mcpStamp is the MCP part of OrgID's policy the worker enforces for this
-	// call, carried to the daemon in the context map (OrgPolicyContextKey).
-	// Set by RemoteExecutor only.
-	mcpStamp *orgpolicy.MCPStamp
+	// orgStamp is the daemon-relevant part of OrgID's policy that the worker
+	// enforces for this call (its MCP allowlist, refuseMCPByOrgPolicy; its
+	// forced credentials:none, applyMachinePolicy), carried to the daemon in
+	// the context map (OrgPolicyContextKey). Set by RemoteExecutor only.
+	orgStamp *daemonpolicy.OrgStamp
 	// WorktreeDaemonID is the daemon that owns the worktree's checkout
 	// (rctx.WorktreeInfo.DaemonID). Empty for the main checkout.
 	WorktreeDaemonID string

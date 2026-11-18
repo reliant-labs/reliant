@@ -174,4 +174,70 @@ set +e; out=$(cd "$tmp/w" && env -u MERGE_REGEN_GEN_RE "$script" --branch pr --p
 echo "$out" | tail -1 | grep -q 'refused-conflict deploy/observability/gateway-sync.sh' || fail "refusal: $out"
 git fetch -q origin; [ "$(git rev-parse origin/pr)" = "$before" ] || fail "a refused run pushed"
 echo "ok   hand-written file beside generated output is refused"
+
+# 10. forge's per-file scaffold and hash records (.forge/scaffolded/**,
+#     .forge/hashes/**) are forge's state: a regenerate on main's new pin that
+#     rewrites them is committed, never refused as hand-written drift, with the
+#     default classifier and no driver attribute (control-plane #2789).
+setup
+mkdir -p .forge/scaffolded/internal/handlers/x .forge/hashes/deploy/spec
+printf '{}\n' >.forge/scaffolded/internal/handlers/x/rpc_y.go.json
+printf '{}\n' >.forge/hashes/deploy/spec/z.json.json
+git add -A && git commit -qm records && git push -q origin main
+edit pr in/b.txt b3 B3
+edit main in/a.txt a2 A2
+out=$(cd "$tmp/w" && env -u MERGE_REGEN_GEN_RE \
+  MERGE_REGEN_GENERATE='sh ./gen.sh && printf "{\"absent_reported\":true}\n" >.forge/scaffolded/internal/handlers/x/rpc_y.go.json && printf "{\"h\":1}\n" >.forge/hashes/deploy/spec/z.json.json' \
+  "$script" --branch pr --push 2>&1) || fail "forge records exited $?: $out"
+echo "$out" | tail -1 | grep -q '^merge-regen: pushed ' || fail "regenerated forge records should be pushed: $out"
+git fetch -q origin
+git show origin/pr:.forge/scaffolded/internal/handlers/x/rpc_y.go.json | grep -q absent_reported || fail "the regenerated scaffold record was not committed"
+echo "ok   forge's per-file scaffold and hash records are generated"
+
+# 11-13. go.mod / go.sum (cp#2770): a pin PR and main bump modules on ADJACENT require
+#        lines, which git's line merge conflicts on. Resolved per module, go.sum the union.
+gomod() { # forge-version sdk-version [extra require line]
+  printf '%s\n' 'module example.com/m' '' 'go 1.27.0' '' 'require (' '	github.com/a/a v1.0.0' \
+    "	github.com/reliant-labs/forge $1" "	github.com/reliant-labs/reliant/sdk/go $2" ${3:+"$3"} '	golang.org/x/z v0.1.0 // indirect' ')'
+}
+gosum() { for l in "$@"; do printf '%s h1:%s=\n%s/go.mod h1:%s-mod=\n' "$l" "${l##* }" "$l" "${l##* }"; done; }
+pin_setup() {
+  setup
+  gomod v1.0.0-f1 v0.0.0-s1 >go.mod; gosum 'github.com/reliant-labs/forge v1.0.0-f1' 'github.com/reliant-labs/reliant/sdk/go v0.0.0-s1' >go.sum
+  git add -A && git commit -qm pins && git push -q origin main
+  git checkout -q -B pr origin/main
+  gomod v1.0.0-f2 v0.0.0-s1 >go.mod; gosum 'github.com/reliant-labs/forge v1.0.0-f2' 'github.com/reliant-labs/reliant/sdk/go v0.0.0-s1' >go.sum
+  git commit -qam "pin forge" && git push -q -f origin pr
+  git checkout -q --detach origin/main
+  gomod v1.0.0-f1 v0.0.0-s2 "${1:-}" >go.mod; gosum 'github.com/reliant-labs/forge v1.0.0-f1' 'github.com/reliant-labs/reliant/sdk/go v0.0.0-s2' >go.sum
+  git commit -qam "bump sdk" && git push -q origin HEAD:main
+  git fetch -q origin
+}
+pin_setup
+git merge-tree --write-tree origin/main origin/pr >/dev/null 2>&1 && fail "precondition: the adjacent bumps should conflict"
+out=$(run --branch pr --push 2>&1) || fail "adjacent go.mod bumps exited $?: $out"
+echo "$out" | tail -1 | grep -q '^merge-regen: pushed ' || fail "adjacent go.mod bumps should be resolved and pushed: $out"
+git fetch -q origin
+[ "$(git show origin/pr:go.mod)" = "$(gomod v1.0.0-f2 v0.0.0-s2)" ] || fail "go.mod should take forge from the PR and sdk/go from main: $(git show origin/pr:go.mod)"
+[ "$(git show origin/pr:go.sum)" = "$(gosum 'github.com/reliant-labs/forge v1.0.0-f1' 'github.com/reliant-labs/forge v1.0.0-f2' 'github.com/reliant-labs/reliant/sdk/go v0.0.0-s1' 'github.com/reliant-labs/reliant/sdk/go v0.0.0-s2')" ] \
+  || fail "go.sum should be the union of both sides: $(git show origin/pr:go.sum)"
+git merge-base --is-ancestor origin/main origin/pr || fail "pr does not contain main"
+git log -1 --format=%B origin/pr | grep -q 'go.mod/go.sum conflicts resolved per module: go.mod go.sum' || fail "the commit names the resolution: $(git log -1 --format=%B origin/pr)"
+echo "ok   adjacent go.mod require bumps resolve per module; go.sum is the union"
+
+# A module main adds on the line next to the PR's bump resolves too.
+pin_setup '	github.com/reliant-labs/zz v1.0.0'
+out=$(run --branch pr --push 2>&1) || fail "an added adjacent module exited $?: $out"
+git fetch -q origin
+[ "$(git show origin/pr:go.mod)" = "$(gomod v1.0.0-f2 v0.0.0-s2 '	github.com/reliant-labs/zz v1.0.0')" ] || fail "main's added module and the PR's bump both stand: $(git show origin/pr:go.mod)"
+echo "ok   a module main adds beside the PR's bump resolves"
+
+# Both sides change the SAME module: a real conflict, refused.
+pin_setup
+git checkout -q --detach origin/main; gomod v1.0.0-f9 v0.0.0-s2 >go.mod; git commit -qam "main bumps forge too" && git push -q origin HEAD:main
+before=$(git rev-parse origin/pr)
+set +e; out=$(run --branch pr --push 2>&1); rc=$?; set -e
+[ $rc = 2 ] && echo "$out" | tail -1 | grep -q '^merge-regen: refused-conflict go.mod' || fail "one module changed by both sides: exit $rc: $out"
+git fetch -q origin; [ "$(git rev-parse origin/pr)" = "$before" ] || fail "a refused run pushed"
+echo "ok   one module bumped differently by both sides is refused"
 echo PASS

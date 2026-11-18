@@ -12,17 +12,17 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service BackgroundService {
   // ListProcesses returns all background processes, optionally filtered
   rpc ListProcesses(ListBackgroundProcessesRequest) returns (ListBackgroundProcessesResponse) {}
-  
+
   // GetProcessOutput returns the stdout/stderr output of a process
   rpc GetProcessOutput(GetProcessOutputRequest) returns (GetProcessOutputResponse) {}
-  
+
   // KillProcess terminates a background process
   rpc KillProcess(KillProcessRequest) returns (KillProcessResponse) {
     option (forge.v1.method) = {
       activity: {none: "stops a background process on the daemon; process lifecycle, not project history"}
     };
   }
-  
+
   // StreamProcessOutput streams real-time process output (stdout/stderr)
   // Returns existing output first, then streams new lines as they arrive
   rpc StreamProcessOutput(StreamProcessOutputRequest) returns (stream ProcessOutputEvent) {
@@ -120,17 +120,17 @@ message StreamProcessOutputRequest {
 // ProcessOutputEvent represents a single output event in the stream
 message ProcessOutputEvent {
   oneof event {
-    ProcessOutputLine line = 1;           // A single line of output
-    ProcessOutputComplete complete = 2;   // Process completed, no more output
-    ProcessOutputSnapshot snapshot = 3;   // Initial snapshot of existing output
+    ProcessOutputLine line = 1; // A single line of output
+    ProcessOutputComplete complete = 2; // Process completed, no more output
+    ProcessOutputSnapshot snapshot = 3; // Initial snapshot of existing output
   }
 }
 
 // ProcessOutputLine represents a single line of process output
 message ProcessOutputLine {
   OutputStreamType type = 1;
-  string text = 2;      // The line content
-  int64 sequence = 3;   // Monotonically increasing sequence number
+  string text = 2; // The line content
+  int64 sequence = 3; // Monotonically increasing sequence number
 }
 
 // ProcessOutputComplete indicates the process has finished
@@ -143,8 +143,8 @@ message ProcessOutputComplete {
 // ProcessOutputSnapshot contains all existing output (sent on stream start)
 message ProcessOutputSnapshot {
   repeated ProcessOutputLine lines = 1;
-  int64 latest_sequence = 2;  // Sequence number of last line
-  bool is_complete = 3;       // True if process already finished
+  int64 latest_sequence = 2; // Sequence number of last line
+  bool is_complete = 3; // True if process already finished
   optional BackgroundProcessStatus status = 4;
   optional int32 exit_code = 5;
 }

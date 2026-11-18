@@ -104,6 +104,17 @@ describe("console paths", () => {
     expect(defaultParseSearch(href.slice(href.indexOf("?")))).toEqual({ env: "prod", f: ["service.version:v1"], live: true, service: "123" });
     expect(withSearch("/x", {})).toBe("/x");
   });
+
+  it("answers a repeated search from memory, and never confuses a value with its type or another order", () => {
+    const search = { env: "prod", f: ["a"], page: 2 };
+    const first = withSearch("/x", search);
+    expect(withSearch("/x", { ...search })).toBe(first);
+    // A number and its digits as a string encode differently ("2" is quoted).
+    expect(withSearch("/x", { env: "prod", f: ["a"], page: "2" })).not.toBe(first);
+    expect(withSearch("/x", { f: ["a"], env: "prod", page: 2 })).toBe("/x?f=%5B%22a%22%5D&env=prod&page=2");
+    expect(withSearch("/y", search)).toBe(first.replace("/x", "/y"));
+    expect(withSearch("/x", { ...search, f: ["b"] })).not.toBe(first);
+  });
 });
 
 describe("Observability views as pages", () => {

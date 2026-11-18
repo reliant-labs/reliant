@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // SelectedModel is what an explicit picker choice was checked to be.
@@ -37,6 +40,19 @@ type SelectionCheck struct {
 	Local local.Directory
 	// PreferDaemonID is the chat's own machine, tried first for a local model.
 	PreferDaemonID string
+	// OrgID is the chat's org: the choice is checked against the accounts
+	// its runs draw on and under its org's policy (AccountScope), so a model
+	// the policy refuses is refused here, with the reason. "" is a chat of no
+	// org: the person's own accounts.
+	OrgID string
+}
+
+// scope is the account scope a choice for userID is checked in.
+func (c SelectionCheck) scope(userID string) drivers.Scope {
+	if c.OrgID == "" {
+		return drivers.PersonalScope(userID)
+	}
+	return drivers.Scope{UserID: userID, OrgID: c.OrgID, Attended: true}
 }
 
 // errLocalModelsUnreachable refuses a local choice this server cannot check.
@@ -58,6 +74,9 @@ func (l *Launcher) ValidateSelectedModel(ctx context.Context, userID string, val
 		return SelectedModel{}, fmt.Errorf("the selected model is not a model selector")
 	}
 	if local.IsSelector(selector) {
+		if err := drivers.CheckOrgPolicy(ctx, check.scope(userID), models.DriverID(local.Family), models.FundingLocal, "", false); err != nil {
+			return SelectedModel{}, selectionPolicyError(err)
+		}
 		if check.Local == nil {
 			return SelectedModel{}, errLocalModelsUnreachable
 		}
@@ -71,7 +90,7 @@ func (l *Launcher) ValidateSelectedModel(ctx context.Context, userID string, val
 		return SelectedModel{Local: true}, nil
 	}
 
-	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
+	available, err := drivers.LookupAvailableDrivers(ctx, check.scope(userID))
 	if err != nil {
 		return SelectedModel{}, err
 	}
@@ -90,6 +109,9 @@ func (l *Launcher) ValidateSelectedModel(ctx context.Context, userID string, val
 	}
 	resolved := resolveOn(selector, available, candidates)
 	if resolved == nil {
+		if refusal := drivers.OrgPolicyRefusal(ctx, check.scope(userID), available, selector, false); refusal != nil {
+			return SelectedModel{}, selectionPolicyError(refusal)
+		}
 		if check.BoundProvider != "" && len(named) != 1 {
 			return SelectedModel{}, fmt.Errorf("the selected model is not available on %s, the provider this chat runs on; pick a model on another provider to switch the chat to it", check.BoundProvider)
 		}
@@ -127,7 +149,7 @@ func (l *Launcher) RootProvider(ctx context.Context, userID string, chat *db.Cha
 	if selector == nil || isLocalSelector(selector) {
 		return ""
 	}
-	return l.primaryDriver(ctx, userID, map[string]interface{}{"model": selector})
+	return l.primaryDriver(ctx, AccountScope(userID, chat), map[string]interface{}{"model": selector})
 }
 
 // selectorProviders are the providers a selector names itself: the driver of
@@ -146,4 +168,15 @@ func containsString(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// selectionPolicyError is the org policy's refusal of a choice as the person
+// reads it: the policy's message, a FailedPrecondition with its reason. Any
+// other error (a policy that cannot be read) comes back as it is.
+func selectionPolicyError(err error) error {
+	refusal, ok := orgpolicy.RefusalOf(err)
+	if !ok {
+		return err
+	}
+	return svcerr.WithReason(svcerr.FailedPrecondition(refusal.Message()), refusal.Reason)
 }

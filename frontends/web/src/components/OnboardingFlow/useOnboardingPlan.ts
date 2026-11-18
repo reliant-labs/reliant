@@ -58,5 +58,7 @@ export function useOnboardingPlan() {
     });
   }, [navigate]);
 
-  return { plan, updatePlan, resetPlan };
+  // Where OnboardingGate found the user, for the exits (leaveOnboarding).
+  // updatePlan and resetPlan keep it: both spread `prev`.
+  return { plan, updatePlan, resetPlan, returnTo: search.returnTo };
 }

@@ -65,6 +65,7 @@ import "./uplot-theme.css";
 
 
 import { cn } from "@/lib/utils";
+import { useStructurallyStable } from "@/lib/useStructurallyStable";
 
 import { formatValue, type ValueUnit } from "../format";
 import { chartToken } from "./chartPalette";
@@ -220,26 +221,35 @@ export interface UPlotChartProps {
 const NO_BANDS: readonly ChartBand[] = [];
 
 export function UPlotChart({
-  timestamps,
-  series,
+  timestamps: timestampsProp,
+  series: seriesProp,
   unit,
   height,
   label,
   compact = false,
   className,
-  markers: own,
-  bands = NO_BANDS,
+  markers: ownProp,
+  bands: bandsProp = NO_BANDS,
   legend,
   area,
   bars = false,
   highlight = null,
   onCursor,
-  exemplars,
+  exemplars: exemplarsProp,
   onExemplarOpen,
   onExemplarsPlaced,
   window: requested,
-  calendar,
+  calendar: calendarProp,
 }: UPlotChartProps) {
+  // Callers build these arrays afresh on every render, and the chart below is
+  // rebuilt whenever one changes identity: a page re-render (a tour step, a
+  // tap elsewhere) redrew every chart on it. The same data keeps the same chart.
+  const timestamps = useStructurallyStable(timestampsProp);
+  const series = useStructurallyStable(seriesProp);
+  const own = useStructurallyStable(ownProp);
+  const bands = useStructurallyStable(bandsProp);
+  const exemplars = useStructurallyStable(exemplarsProp);
+  const calendar = useStructurallyStable(calendarProp);
   const hostRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<ExemplarLayout | null>(null);
   const layoutKey = useRef("");

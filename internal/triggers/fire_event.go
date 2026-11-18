@@ -81,6 +81,14 @@ type EventFirer struct {
 	wake      *capacityWake
 	pools     Placer
 	pause     *AutoPause
+	checks    CheckOpener
+}
+
+// WithChecks lets the firer open the GitHub check a workflow's `check:`
+// block declares (workflowcheck). Without it, no firing opens one.
+func (f *EventFirer) WithChecks(c CheckOpener) *EventFirer {
+	f.checks = c
+	return f
 }
 
 // WithAutoPause lets the firer pause a trigger whose creator left its org
@@ -222,6 +230,12 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		// The run loads the definition this fire recorded (FiringDefinition).
 		spec.CatalogPin = def.CatalogPin
 	}
+	// The workflow's GitHub check is opened before the run launches or waits
+	// for capacity, so a queued firing already shows on GitHub. Idempotent:
+	// a retried or redriven fire finds the check it opened.
+	if err := openCheck(ctx, f.checks, workflows, f.repo, trigger, decl, ev); err != nil {
+		return nil, err
+	}
 	policy, err := capacityPolicy(ctx, workflows, trigger)
 	if err != nil {
 		return nil, err
@@ -290,6 +304,13 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	}
 	if launch.OwnerLeftOrg(launchErr) {
 		return f.refuseCreatorLeftOrg(ctx, ev, def, trigger, launchErr)
+	}
+	if errors.Is(launchErr, launch.ErrNoOrgAccount) {
+		detail, err := f.pause.RefuseNoOrgAccount(ctx, f.repo, trigger, launchErr)
+		if err != nil {
+			return nil, err
+		}
+		return f.settle(ctx, ev, def, core.TriggerEventFailed, detail, launchErr)
 	}
 	var validation *launch.ValidationError
 	if errors.As(launchErr, &validation) || errors.Is(launchErr, launch.ErrNotFound) {
@@ -421,9 +442,10 @@ func eventSpec(ctx context.Context, repo any, trigger *core.Trigger, ev *core.Tr
 				DisplayStyle: &hidden,
 			},
 		},
-		Unattended:     true,
-		ActingIdentity: trigger.ActingIdentity,
-		Automation:     trigger.Name,
+		Unattended:      true,
+		ActingIdentity:  trigger.ActingIdentity,
+		Automation:      trigger.Name,
+		OrgAccountsOnly: trigger.UnattendedFunding.OrgOnly(),
 	}, nil
 }
 

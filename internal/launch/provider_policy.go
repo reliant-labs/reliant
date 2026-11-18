@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/modelprefs"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -83,9 +84,13 @@ func EffectiveProviderPolicy(
 //
 // A read that fails leaves the policy at its default (wait): a settings hiccup
 // must not turn into a cross-provider spend.
-func (l *Launcher) injectProviderPolicy(ctx context.Context, userID, chatID string, inputs map[string]interface{}) {
+func (l *Launcher) injectProviderPolicy(ctx context.Context, userID string, forChat *db.Chat, inputs map[string]interface{}) {
 	if inputs == nil {
 		return
+	}
+	chatID := ""
+	if forChat != nil {
+		chatID = forChat.ID
 	}
 	var chat chatselection.ProviderPolicy
 	if chatID != "" {
@@ -109,7 +114,7 @@ func (l *Launcher) injectProviderPolicy(ctx context.Context, userID, chatID stri
 		defaults = ParseProviderPolicyDefaults(setting.Value)
 	}
 
-	policy := EffectiveProviderPolicy(inputs, chat, defaults, l.primaryDriver(ctx, userID, inputs))
+	policy := EffectiveProviderPolicy(inputs, chat, defaults, l.primaryDriver(ctx, AccountScope(userID, forChat), inputs))
 	if policy.IsZero() {
 		delete(inputs, v2.InputKeyProviderPolicy)
 		return
@@ -145,11 +150,7 @@ func (l *Launcher) ResolveProviderPolicy(ctx context.Context, userID string, cha
 			base[v2.InputKeyProviderPolicy] = value
 		}
 	}
-	chatID := ""
-	if chat != nil {
-		chatID = chat.ID
-	}
-	l.injectProviderPolicy(ctx, userID, chatID, base)
+	l.injectProviderPolicy(ctx, userID, chat, base)
 	return v2.ProviderPolicy(base)
 }
 
@@ -168,9 +169,9 @@ func (l *Launcher) RefreshProviderPolicy(ctx context.Context, userID string, cha
 }
 
 // primaryDriver is the provider a run starts on: the one its inputs prefer or
-// pin, else the one its model input resolves to for this user's providers. ""
-// when it cannot be told, in which case no Settings default applies.
-func (l *Launcher) primaryDriver(ctx context.Context, userID string, inputs map[string]interface{}) string {
+// pin, else the one its model input resolves to over accounts, the run's
+// scope. "" when it cannot be told, in which case no Settings default applies.
+func (l *Launcher) primaryDriver(ctx context.Context, accounts drivers.Scope, inputs map[string]interface{}) string {
 	if preferred := v2.ProviderPreference(inputs); len(preferred) > 0 {
 		return preferred[0]
 	}
@@ -178,11 +179,28 @@ func (l *Launcher) primaryDriver(ctx context.Context, userID string, inputs map[
 	if !ok || selector == nil {
 		return ""
 	}
-	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
+	available, err := drivers.LookupAvailableDrivers(ctx, accounts)
 	if err != nil {
 		return ""
 	}
-	return resolvedDriver(selector, available)
+	return resolvedDriver(selector, available, l.defaultProvider(ctx, accounts.UserID))
+}
+
+// defaultProvider is the user's Settings default provider, which every run
+// that names no provider of its own resolves its tiers by
+// (modelprefs.ProviderPreference). The launcher's view of a run's provider
+// must apply it too, or it predicts Claude for a run that will start on
+// ChatGPT and hands it Claude's on-limit policy. Unreadable reads as Auto.
+func (l *Launcher) defaultProvider(ctx context.Context, userID string) modelprefs.ProviderPreference {
+	setting, err := l.repo.GetSetting(ctx, userID, nil, modelprefs.ProviderPreferenceKey)
+	if err != nil || setting == nil {
+		return modelprefs.ProviderPreference{}
+	}
+	pref, err := modelprefs.DecodeProviderPreference(setting.Value)
+	if err != nil {
+		logging.WarnContext(ctx, "Ignoring an unreadable default provider preference", "key", modelprefs.ProviderPreferenceKey, "error", err)
+	}
+	return pref
 }
 
 // RefreshSelectedProvider preserves an explicit binding during ordinary send
@@ -200,8 +218,8 @@ func (l *Launcher) RefreshSelectedProvider(ctx context.Context, userID string, i
 
 // resolvedDriver is the driver a model selector value resolves to over the
 // providers available, "" when it resolves to none.
-func resolvedDriver(selector interface{}, available models.AvailableDrivers) string {
-	resolved := resolveSelector(selector, available)
+func resolvedDriver(selector interface{}, available models.AvailableDrivers, defaultProvider modelprefs.ProviderPreference) string {
+	resolved := resolveSelector(selector, available, defaultProvider)
 	if resolved == nil {
 		return ""
 	}
@@ -209,29 +227,31 @@ func resolvedDriver(selector interface{}, available models.AvailableDrivers) str
 }
 
 // ResolvedModelAtDriver is the "<model>@<driver>" a model selector value
-// resolves to over the user's connected providers right now, "" when it
-// resolves to none (or the providers cannot be read).
-func (l *Launcher) ResolvedModelAtDriver(ctx context.Context, userID string, selector interface{}) string {
+// resolves to right now over the accounts chat's runs draw on, under its org's
+// policy, "" when it resolves to none (or the providers cannot be read).
+func (l *Launcher) ResolvedModelAtDriver(ctx context.Context, userID string, chat *db.Chat, selector interface{}) string {
 	if selector == nil {
 		return ""
 	}
-	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
+	available, err := drivers.LookupAvailableDrivers(ctx, AccountScope(userID, chat))
 	if err != nil {
 		return ""
 	}
-	resolved := resolveSelector(selector, available)
+	resolved := resolveSelector(selector, available, l.defaultProvider(ctx, userID))
 	if resolved == nil || resolved.Definition.ID == "" || resolved.Provider.Driver == "" {
 		return ""
 	}
 	return string(resolved.Definition.ID) + "@" + resolved.Provider.Driver
 }
 
-func resolveSelector(selector interface{}, available models.AvailableDrivers) *models.ResolvedModel {
+// resolveSelector resolves a model selector value as a run would, the user's
+// default provider included (a no-op for a selector naming its own provider).
+func resolveSelector(selector interface{}, available models.AvailableDrivers, defaultProvider modelprefs.ProviderPreference) *models.ResolvedModel {
 	ms, ok := toSelector(selector)
 	if !ok {
 		return nil
 	}
-	return resolveOn(ms, available, configuredProviders(available))
+	return resolveOn(defaultProvider.Apply(ms), available, configuredProviders(available))
 }
 
 // resolveOn resolves ms over exactly providers. The registry treats a

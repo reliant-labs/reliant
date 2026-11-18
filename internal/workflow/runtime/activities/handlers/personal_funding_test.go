@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -453,11 +454,14 @@ func TestPersonalFunding_LeaseReturnsAtReset(t *testing.T) {
 	env.store.rows["chat-1"] = &core.PersonalFunding{ChatID: "chat-1", UserID: "u1", OrgID: fundOrg,
 		State: core.PersonalFundingUsePersonal, Reason: core.PersonalFundingLimited, Model: routeModel, LeaseUntil: &until}
 
+	// The org's key is limited until the reset the answer leases to.
+	env.routing.Store.(*routerFake).bench("acme-key", time.Now().Add(time.Hour), "five_hour")
 	res, err := env.resolve(t, "root", routeModel)
 	require.NoError(t, err)
 	assert.Equal(t, "my-claude", res.Account.Config.AccountID, "during the lease")
 
 	now = until.Add(time.Second)
+	delete(env.routing.Store.(*routerFake).limits, "acme-key") // reset
 	res, err = env.resolve(t, "root-2", routeModel)
 	require.NoError(t, err)
 	assert.Equal(t, "acme-key", res.Account.Config.AccountID, "after the reset, the org's again")
@@ -953,4 +957,149 @@ func TestPersonalFunding_RootPickKeepsTheOrgFirst(t *testing.T) {
 	res, err := env.resolve(t, "root", routeModel)
 	require.NoError(t, err)
 	assert.Equal(t, "acme-key", res.Account.Config.AccountID)
+}
+
+// An unattended run that may spend only its org's sources, none of which
+// serves its model, fails the call with the no_org_account reason through
+// the real resolution path: no personal driver is built, and the failure is
+// one the runtime pauses on rather than retries (§11.4).
+func TestUnattendedOrgOnly_NoOrgSourceFailsWithTheReason(t *testing.T) {
+	withAvailableDrivers(t, tiered())
+	env := newFundingEnv(t, "", "")
+	_, err := env.resolve(t, "root", "gpt-5.6-sol@codex", func(s *llmCallSpec) { s.Attended, s.UnattendedAnySource = false, false })
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "this automation runs only on its organization's AI accounts, and none of them can run gpt-5.6-sol")
+	assert.ErrorIs(t, err, drivererrors.ErrNoServableProvider)
+	assert.Empty(t, env.built)
+
+	// An attended run on the same empty providers keeps today's wording.
+	_, err = env.resolve(t, "root", "gpt-5.6-sol@codex")
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "organization's AI accounts")
+}
+
+// A first turn held on the org's limited key made no call, so nothing else
+// records whose accounts it waits for: the hold does (thread_funding). When
+// the org then gives the person nothing at all (the key's access narrowed, the
+// other key paused), the retry a capacity wake sends is case 2, under "ask"
+// with Keep waiting answered and under "wait" alike: it never goes on on the
+// person's own account (reliant#2723's browser pass).
+func TestPersonalFunding_HeldOnTheOrgTierThenTheOrgGivesNothing(t *testing.T) {
+	reset := time.Date(2099, 1, 2, 5, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		onLimit orgfunding.OnOrgLimit
+		asks    bool
+	}{{"", true}, {orgfunding.OnOrgLimitWait, false}} {
+		t.Run("on_org_limit="+string(tc.onLimit), func(t *testing.T) {
+			withAvailableDrivers(t, tiered(acmeKey("acme-key"), personal(claudeAccount("my-claude", "me@me.com", 0))))
+			env := newFundingEnv(t, tc.onLimit, "")
+			env.routing.Store.(*routerFake).bench("acme-key", reset, "five_hour")
+			_, err := env.resolve(t, "root", routeModel)
+			var failure *types.UsageLimitFailure
+			require.ErrorAs(t, err, &failure)
+			assert.False(t, failure.Facts.AlternativeAccount)
+			assert.Equal(t, [3]string{models.FundingOrgKey, fundOrg, "acme-key"}, env.store.threadFunding["root"], "the hold records whose account it waits for")
+			if tc.asks {
+				env.store.answer("chat-1", core.PersonalFundingKeepWaiting, nil)
+			}
+
+			withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
+			_, err = env.resolve(t, "root", routeModel)
+			isWait(t, err)
+			assert.Empty(t, env.built, "no provider call on the person's account")
+			q := env.store.row("chat-1")
+			if !tc.asks {
+				assert.Nil(t, q, "wait never asks")
+				return
+			}
+			require.NotNil(t, q)
+			assert.Equal(t, core.PersonalFundingAsked, q.State)
+			assert.Equal(t, core.PersonalFundingUnusable, q.Reason)
+		})
+	}
+}
+
+// A chat with a question about the org's accounts, answered or not, was
+// waiting for them or leasing in their place. When the org gives the person
+// nothing any more, that is case 2: a Keep waiting, an unanswered question or
+// a lease that ended is never consent to go on.
+func TestPersonalFunding_TheChatsQuestionOutlivesTheOrgsAccounts(t *testing.T) {
+	ended := time.Now().Add(-time.Minute)
+	for name, row := range map[string]core.PersonalFunding{
+		"asked":        {State: core.PersonalFundingAsked, Reason: core.PersonalFundingLimited},
+		"keep waiting": {State: core.PersonalFundingKeepWaiting, Reason: core.PersonalFundingLimited},
+		"lease ended":  {State: core.PersonalFundingUsePersonal, Reason: core.PersonalFundingLimited, LeaseUntil: &ended},
+	} {
+		t.Run(name, func(t *testing.T) {
+			withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
+			env := newFundingEnv(t, "", "")
+			row.ChatID, row.UserID, row.OrgID, row.Model = "chat-1", "u1", fundOrg, routeModel
+			env.store.rows["chat-1"] = &row
+			// The thread's calls were the person's own (the lease's).
+			env.store.threadFunding["root"] = [3]string{models.FundingPersonal, fundOrg, "my-claude"}
+			_, err := env.resolve(t, "root", routeModel)
+			isWait(t, err)
+			assert.Empty(t, env.built)
+			q := env.store.row("chat-1")
+			require.NotNil(t, q)
+			assert.Equal(t, core.PersonalFundingAsked, q.State)
+			assert.Equal(t, core.PersonalFundingUnusable, q.Reason)
+		})
+	}
+	t.Run("another person's question says nothing", func(t *testing.T) {
+		withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
+		env := newFundingEnv(t, "", "")
+		env.store.rows["chat-1"] = &core.PersonalFunding{ChatID: "chat-1", UserID: "someone-else", OrgID: fundOrg,
+			State: core.PersonalFundingKeepWaiting, Reason: core.PersonalFundingLimited, Model: routeModel}
+		res, err := env.resolve(t, "root", routeModel)
+		require.NoError(t, err)
+		assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+	})
+}
+
+// §4.5: an org account usable again ends a live "Use my account" lease at the
+// next turn start, before the org's reset: the thread moves back to the org's
+// tier, says so, and the question is over. Between the tool steps of a turn the
+// thread stays where it is; a turn start whose org accounts are still all
+// limited keeps the lease and never asks again.
+func TestPersonalFunding_LiveLeaseEndsWhenTheOrgIsUsableAtATurnStart(t *testing.T) {
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), acmeKey("acme-backup"), personal(claudeAccount("my-claude", "me@me.com", 0))))
+	env := newFundingEnv(t, "", "")
+	router := env.routing.Store.(*routerFake)
+	reset := time.Now().Add(time.Hour)
+	router.bench("acme-key", reset, "five_hour")
+	router.bench("acme-backup", reset, "five_hour")
+	env.store.rows["chat-1"] = &core.PersonalFunding{ChatID: "chat-1", UserID: "u1", OrgID: fundOrg,
+		State: core.PersonalFundingUsePersonal, Reason: core.PersonalFundingLimited, Model: routeModel, LeaseUntil: &reset, Announced: true}
+
+	// A turn start, the org still limited: the lease holds, no new question.
+	res, err := env.resolve(t, "root", routeModel)
+	require.NoError(t, err)
+	assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+	assert.Zero(t, env.store.asks)
+	assert.Equal(t, core.PersonalFundingUsePersonal, env.store.row("chat-1").State)
+	env.store.serving["root"] = "my-claude"
+
+	// A new thread (a sub-agent's first call) under the lease, too.
+	res, err = env.resolve(t, "sub-agent", routeModel)
+	require.NoError(t, err)
+	assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+	assert.Zero(t, env.store.asks)
+
+	// The owner resumes a key well before the reset.
+	delete(router.limits, "acme-backup")
+
+	// Mid-turn, the thread stays on the person's account (§4.5, D6).
+	res, err = env.resolve(t, "root", routeModel, func(s *llmCallSpec) { s.TurnStart = false })
+	require.NoError(t, err)
+	assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+
+	// The next turn start moves back to the org, with the notice, and the
+	// lease is over.
+	res, err = env.resolve(t, "root", routeModel)
+	require.NoError(t, err)
+	assert.Equal(t, "acme-backup", res.Account.Config.AccountID)
+	assert.Equal(t, orgAccountsBackNotice(), res.FundingNotice)
+	assert.Nil(t, env.store.row("chat-1"))
+	assert.Zero(t, env.store.asks)
 }

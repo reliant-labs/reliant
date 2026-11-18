@@ -251,6 +251,10 @@ type bugReportLookup interface {
 	GetLatestMessageInThread(ctx context.Context, threadID string) (*db.Message, error)
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
+	// ListFreshDaemonAttachmentsForUser names the build each of the user's
+	// attached daemons registered with: the daemon's own version, which is
+	// not the server's.
+	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
 }
 
 // --- workflow tools ---------------------------------------------------------
@@ -281,6 +285,9 @@ type workflowWriteStore interface {
 	workflowsource.Store
 	workflowDraftLookup
 	UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status db.WorkflowDraftStatus) error
+	// UpdateWorkflowDraftDefinitionAtVersion writes only while the draft is
+	// still at version; otherwise db.ErrWorkflowDraftVersionConflict.
+	UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status db.WorkflowDraftStatus) error
 }
 
 // --- scenario tools ---------------------------------------------------------

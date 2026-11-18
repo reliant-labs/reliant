@@ -166,6 +166,40 @@ describe("CliLogin", () => {
     expect(await screen.findByRole("radio", { name: /Acme/ })).toHaveAttribute("aria-checked", "true");
   });
 
+  // `forge login` asks for a human identity, which the control plane mints
+  // bound to no org and refuses an org_id for ("human login takes no
+  // organization"). The page must not offer a choice nor send one.
+  it("sends no org and shows no picker for a human login (credential_kind=human)", async () => {
+    listMyOrganizations.mockResolvedValue(TWO_ORGS);
+    getSession.mockResolvedValue({ data: { session: { access_token: "jwt-1", user: { email: "a@example.test" } } } });
+    const search = `${QUERY}&credential_kind=human`;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        search,
+        get href() {
+          return href;
+        },
+        set href(v: string) {
+          href = v;
+        },
+      },
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ redirect_to: "http://127.0.0.1:5000/callback?code=c1&state=st" }), { status: 200 }),
+    );
+    renderWithQuery(<CliLogin />);
+    const approve = await screen.findByRole("button", { name: "Approve" });
+    expect(screen.queryByTestId("authorize-org")).toBeNull();
+    expect(screen.queryByTestId("authorize-org-single")).toBeNull();
+    await userEvent.click(approve);
+    await waitFor(() => expect(href).toContain("code=c1"));
+    expect(JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string)).toEqual({
+      query: search,
+      approved: true,
+    });
+  });
+
   it("shows a person with one org that org in a sentence, not a choice", async () => {
     getSession.mockResolvedValue({ data: { session: { access_token: "jwt-1", user: { email: "a@example.test" } } } });
     renderWithQuery(<CliLogin />);
