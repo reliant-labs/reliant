@@ -1780,6 +1780,12 @@ type activityInputInfo struct {
 	// is what lets a consumer of the node event attribute an activity deep in
 	// a sub-workflow to the loop-body node that contains it.
 	NodePath string
+	// RunID is the run the activity works for: its RuntimeContext.Telemetry's
+	// root run id (a spawned sub-agent's RootRunID, else the run's own
+	// RunID), "" when the input names no run. Recorded on the step's row
+	// (step_executions.run_id), it is what tells this run's attempts from an
+	// earlier run's on the same reused workflow id (run_outcome.go).
+	RunID string
 }
 
 // extractActivityInputInfo extracts common fields from a typed input using JSON.
@@ -1852,7 +1858,29 @@ func extractActivityInputInfo(input interface{}) activityInputInfo {
 	if nodePath, ok := m["node_path"].(string); ok {
 		info.NodePath = nodePath
 	}
+	info.RunID = telemetryRunID(m)
 	return info
+}
+
+// telemetryRunID is the root run id of the RunTelemetry in an activity input
+// (types.RuntimeContext.Telemetry), "" when it carries none. The telemetry is
+// an object, which withNestedInputKeys does not lift, so it is read where a v3
+// input holds it (runtime.telemetry) or where a flat one does (telemetry).
+func telemetryRunID(m map[string]interface{}) string {
+	tel, _ := m["telemetry"].(map[string]interface{})
+	if tel == nil {
+		if rt, ok := m["runtime"].(map[string]interface{}); ok {
+			tel, _ = rt["telemetry"].(map[string]interface{})
+		}
+	}
+	if tel == nil {
+		return ""
+	}
+	if root, ok := tel["root_run_id"].(string); ok && root != "" {
+		return root
+	}
+	run, _ := tel["run_id"].(string)
+	return run
 }
 
 // withNestedInputKeys returns m with the scalar keys of its one-level-nested
@@ -2013,6 +2041,10 @@ func buildStepExecution(attempt stepAttempt) *db.StepExecution {
 	if attempt.Scope.NodePath != "" {
 		nodePath = ptr.Of(attempt.Scope.NodePath)
 	}
+	var runID *string
+	if attempt.Scope.RunID != "" {
+		runID = ptr.Of(attempt.Scope.RunID)
+	}
 
 	return &db.StepExecution{
 		ID:            uuid.New().String(),
@@ -2029,6 +2061,7 @@ func buildStepExecution(attempt stepAttempt) *db.StepExecution {
 		ErrorMessage:  recordedError(attempt.Err),
 		Attempt:       attemptNumber,
 		NodePath:      nodePath,
+		RunID:         runID,
 		// No .UTC(): created_at is timestamptz, so the offset is preserved and
 		// normalized on the way in and a local time stores the same instant.
 		// This site is where the two-basis bug was found — it wrote local time

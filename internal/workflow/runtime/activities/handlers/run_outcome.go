@@ -15,7 +15,9 @@ import (
 
 // runStartSkew is how far before the run's start (workflow time) a node
 // attempt (database time) may be stamped and still be the run's. The two
-// clocks are different machines'.
+// clocks are different machines'. It applies only to an attempt that names no
+// run (step_executions.run_id NULL): a run's own attempts are told apart by
+// its id, which a previous run that ended within the skew does not share.
 const runStartSkew = 5 * time.Second
 
 // runOutcome is how an ending run ended for whoever judges whether it worked
@@ -32,8 +34,11 @@ type runOutcome struct {
 // COMPLETED, and read as a success to the run list and its trigger's health.
 //
 //   - failed, or completed into a declared outcome: failure -> failed
-//   - completed, with a node whose last attempt since the run began failed ->
-//     failure_handled
+//   - completed, with a node whose last attempt in this run failed ->
+//     failure_handled. "In this run" is the attempts recorded under its run
+//     id (input.RunID), so the previous run on the same reused workflow id is
+//     never read; an attempt recorded with no run id falls back to having
+//     been recorded since the run began.
 //   - completed otherwise -> succeeded
 //
 // Anything else (started, paused, cancelled) has no outcome. A failed read of
@@ -51,7 +56,7 @@ func (a *WorkflowStatusActivity) resolveRunOutcome(ctx context.Context, input Wo
 	if input.RunStartedAtMs > 0 {
 		since = time.UnixMilli(input.RunStartedAtMs).Add(-runStartSkew)
 	}
-	handled, err := a.repo.FirstHandledNodeFailure(ctx, input.WorkflowID, since)
+	handled, err := a.repo.FirstHandledNodeFailure(ctx, input.WorkflowID, input.RunID, since)
 	if err != nil {
 		logging.WarnContext(ctx, "[WorkflowStatus] Could not read the run's node attempts; judging it succeeded",
 			"workflow_id", input.WorkflowID, "error", err)

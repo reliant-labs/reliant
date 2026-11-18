@@ -133,6 +133,14 @@ type StepExecution struct {
 	Attempt *int32 `json:"attempt"`
 	// NodePath is the node's dotted graph position ("agent.agent_loop.call_llm").
 	NodePath *string `json:"node_path"`
+	// RunID is the run the attempt belongs to: the root run's id
+	// (forge.ai.run.id, RuntimeContext.Telemetry), kept across continue-as-new
+	// and shared by the sub-agents it spawned. A root run's workflow id is
+	// reused by every run of its chat, so this is what tells one run's
+	// attempts from the previous run's (store.FirstHandledNodeFailure). NULL
+	// on rows written before it, and by an activity that names no run. It is
+	// a write-side column only: not part of the JSON shape (legacy_json.go).
+	RunID *string `json:"-"`
 }
 
 // ChatStepExecution is one step of one workflow of a chat, as the chat's

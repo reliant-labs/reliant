@@ -500,6 +500,11 @@ type ChildWorkflowTracker struct {
 	// runStartedAtMs is when this run began, across continue-as-new
 	// (run_outcome.go); carried to a successor by its handoff.
 	runStartedAtMs int64
+	// runID is the run's id (forge.ai.run.id, rootRunIDFrom): every node
+	// attempt of the run is recorded under it, so its outcome reads only its
+	// own attempts (run_outcome.go). A continue-as-new successor keeps it
+	// through its execution context's telemetry.
+	runID string
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -1764,8 +1769,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Sub-agent concurrency caps (spawn_limits.go): one setting for the run,
 	// read from the root run's inputs, whatever depth spawns.
 	childTracker.spawnLimits = types.SpawnLimitsFromInputs(input.Inputs)
-	// When the run began, for judging its outcome (run_outcome.go).
+	// When the run began, and which run it is, for judging its outcome
+	// (run_outcome.go).
 	childTracker.runStartedAtMs = runStartedAtMs(ctx, input.Resume)
+	childTracker.runID = rootRunIDFrom(ctx)
 
 	// Continue-as-new handoff state (continue_as_new.go).
 	childTracker.chatID = input.ChatID
@@ -5463,8 +5470,12 @@ type workflowStatusOpts struct {
 	OutcomeNode string
 	// RunStartedAtMs is when the run began (ChildWorkflowTracker.runStartedAtMs),
 	// on a "completed" notification: the status activity judges the run's
-	// outcome from the node attempts since then.
+	// outcome from the node attempts since then that name no run.
 	RunStartedAtMs int64
+	// RunID is the run's id (ChildWorkflowTracker.runID), on a "completed"
+	// notification: the status activity judges the run's outcome from the
+	// node attempts recorded under it.
+	RunID string
 	// Error is why the run failed, on a "failed" notification. It is what a
 	// workflow-event trigger reports as the source run's error.
 	Error string
@@ -5621,6 +5632,9 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		}
 		if opts.RunStartedAtMs != 0 {
 			input["run_started_at_ms"] = opts.RunStartedAtMs
+		}
+		if opts.RunID != "" {
+			input["run_id"] = opts.RunID
 		}
 		if opts.Error != "" {
 			input["error"] = opts.Error
@@ -5997,7 +6011,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		outcomeNode = runOutcomeNode
 	}
 	notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread,
-		&workflowStatusOpts{Outcome: runOutcome, OutcomeNode: outcomeNode, LaunchRun: launchRun, RunStartedAtMs: childTracker.startedAtMs()})
+		&workflowStatusOpts{Outcome: runOutcome, OutcomeNode: outcomeNode, LaunchRun: launchRun, RunStartedAtMs: childTracker.startedAtMs(), RunID: childTracker.outcomeRunID()})
 
 	// Last, so a wake that landed during the bookkeeping above counts too.
 	// Child runs are never signalled — every wake addresses the chat's root

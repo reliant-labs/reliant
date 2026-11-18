@@ -531,15 +531,24 @@ func RecentTriggerOutcomes(ctx context.Context, db orm.Context, userID string, t
 }
 
 // firingsSinceLastSuccessSQL is every firing of each named trigger after its
-// newest SUCCESS (a launched firing whose run completed), newest first, capped
-// at ?2 rows. A trigger with no success returns its whole history up to the
+// newest SUCCESS (a launched firing whose run completed, and did not complete
+// only because its failure path ran), newest first, capped at ?2 rows. A trigger with no success returns its whole history up to the
 // cap. This is the failure episode: Go reads its length and its oldest
 // failure from it, so the episode is not truncated at the 10-firing health
 // window.
 //
 // "Completed" is the run the trigger fired (run_status), not whatever turn the
 // chat is on now — the same rule triggers.resolveFiring applies — so a
-// person's later reply in the chat neither ends nor extends the episode.
+// person's later reply in the chat neither ends nor extends the episode. A run
+// that completed with run_outcome failure_handled — a node failed and the run
+// went on past it (reliant#2753) — is not a success: resolveRecordedRun
+// counts it a failure, so it must not end the episode either, or the streak
+// would restart at every handled failure. A completed run with no outcome
+// (recorded before run_outcome existed) is still a success.
+//
+// The outcome is read on the at most ?2 firings the success search already
+// holds, so it filters those rows and changes nothing about the index walks
+// below.
 //
 // Per trigger, both halves walk idx_trigger_events_trigger_occurred_id newest
 // first, and each reads at most ?2 firings:
@@ -566,16 +575,17 @@ FROM (SELECT DISTINCT unnest(?1::text[]) AS id) t
 LEFT JOIN LATERAL (
 	SELECT w.occurred_at, w.id
 	FROM (
-		SELECT s.occurred_at, s.id, s.outcome, s.run_status, s.chat_id, s.user_id
+		SELECT s.occurred_at, s.id, s.outcome, s.run_status, s.run_outcome, s.chat_id, s.user_id
 		FROM trigger_events s
 		WHERE s.trigger_id = t.id AND s.user_id = ?0::text
 		ORDER BY s.occurred_at DESC, s.id DESC
 		LIMIT ?2::integer
 	) w
 	WHERE w.outcome = 'launched'
-		AND (w.run_status = 'completed' OR (w.run_status IS NULL AND (
-			SELECT sc.display_state FROM chats_with_activity sc
-			WHERE sc.id = w.chat_id AND sc.user_id = w.user_id) = 5))
+		AND ((w.run_status = 'completed' AND (w.run_outcome IS NULL OR w.run_outcome <> 'failure_handled'))
+			OR (w.run_status IS NULL AND (
+				SELECT sc.display_state FROM chats_with_activity sc
+				WHERE sc.id = w.chat_id AND sc.user_id = w.user_id) = 5))
 	ORDER BY w.occurred_at DESC, w.id DESC
 	LIMIT 1
 ) ls ON true

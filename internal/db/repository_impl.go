@@ -3016,9 +3016,10 @@ func (r *Repo) SetWorkflowRunOutcome(ctx context.Context, id string, outcome str
 type HandledNodeFailure = store.HandledNodeFailure
 
 // FirstHandledNodeFailure returns a node of the run, or of a run under it,
-// whose last attempt since since failed, or nil (store.FirstHandledNodeFailure).
-func (r *Repo) FirstHandledNodeFailure(ctx context.Context, workflowID string, since time.Time) (*HandledNodeFailure, error) {
-	return store.FirstHandledNodeFailure(ctx, r.ORM(), workflowID, since)
+// whose last attempt in run runID (since since, for an attempt that names no
+// run) failed, or nil (store.FirstHandledNodeFailure).
+func (r *Repo) FirstHandledNodeFailure(ctx context.Context, workflowID, runID string, since time.Time) (*HandledNodeFailure, error) {
+	return store.FirstHandledNodeFailure(ctx, r.ORM(), workflowID, runID, since)
 }
 
 // SetWorkflowFailureDetail records why a run failed, on the run.

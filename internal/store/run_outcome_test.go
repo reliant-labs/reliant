@@ -67,14 +67,14 @@ func TestFirstHandledNodeFailure(t *testing.T) {
 	insertOut("diff", "wf-o1", "diff", "ExecuteRunStep", at(103), false, "", -1, `{"exit_code":1}`)
 	insertOut("post-ok", "wf-o1", "post_ok", "Action", at(103), true, "", -1, `{"is_error":false,"content":"ok"}`)
 
-	got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-o1", runStart)
+	got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-o1", "", runStart)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != nil {
 		t.Fatalf("a node retried to success, an earlier run's failure and bookkeeping are not handled failures: %+v", got)
 	}
-	if old, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-o1", time.Time{}); err != nil || old == nil || old.Node != "post" {
+	if old, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-o1", "", time.Time{}); err != nil || old == nil || old.Node != "post" {
 		t.Fatalf("with no start, every attempt is read: %+v, %v", old, err)
 	}
 
@@ -83,7 +83,7 @@ func TestFirstHandledNodeFailure(t *testing.T) {
 	insert("iter-0", "wf-o2", "loop.body", "Shell", at(104), true, "", 0)
 	insert("iter-1", "wf-o2", "loop.body", "Shell", at(105), false, "channel_not_found", 1)
 
-	got, err = store.FirstHandledNodeFailure(ctx, env.ORM, "wf-o1", runStart)
+	got, err = store.FirstHandledNodeFailure(ctx, env.ORM, "wf-o1", "", runStart)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestFirstHandledNodeFailure(t *testing.T) {
 	// community-watch's shape: the failure-reporting action ran and itself
 	// reported an error. Its activity succeeded; the node did not.
 	insertOut("post-failed", "wf-o1", "post_failed", "Action", at(106), true, "", -1, `{"is_error":true,"content":"channel_not_found"}`)
-	got, err = store.FirstHandledNodeFailure(ctx, env.ORM, "wf-o1", runStart)
+	got, err = store.FirstHandledNodeFailure(ctx, env.ORM, "wf-o1", "", runStart)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestFirstHandledNodeFailure_ToleratedAgentEndedByTheBreaker(t *testing.T) {
 		insert(fmt.Sprintf("llm-%d", i), "reader.agent_loop.call_llm", "CallLLM", at(1+2*i), true, "")
 		insert(fmt.Sprintf("tools-%d", i), "reader.agent_loop.execute_tools", "ExecuteTools", at(2+2*i), true, "")
 	}
-	got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-t1", time.Time{})
+	got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-t1", "", time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,11 +148,135 @@ func TestFirstHandledNodeFailure_ToleratedAgentEndedByTheBreaker(t *testing.T) {
 		"the agent's tool calls failed 3 times in a row with the same error, so the run was ended instead of retrying again: github__repo_get_tree: GitHub returned not found")
 	insert("after", "after", "Compute", at(9), true, "")
 
-	got, err = store.FirstHandledNodeFailure(ctx, env.ORM, "wf-t1", time.Time{})
+	got, err = store.FirstHandledNodeFailure(ctx, env.ORM, "wf-t1", "", time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got == nil || got.Node != "reader" || !strings.Contains(got.Error, "failed 3 times in a row") {
 		t.Fatalf("the tolerated reader's recorded attempt makes the run failure_handled: %+v", got)
+	}
+}
+
+// The root workflow id is reused by every run of a chat, so a run's attempts
+// are told apart by the run id each one records (step_executions.run_id), not
+// by a time window around the run's start: a run that failed a node less than
+// the clock-skew allowance before its successor began is not the successor's.
+func TestFirstHandledNodeFailure_APriorRunJustBeforeTheSuccessorIsNotItsOwn(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	seedChat(t, env, "chat-adjacent")
+	if err := store.InsertWorkflowIfAbsent(ctx, env.ORM, newWorkflow("wf-a1", "chat-adjacent", nil, core.Active(), l2Base)); err != nil {
+		t.Fatal(err)
+	}
+	at := func(ms int) time.Time { return l2Base.Add(time.Duration(ms) * time.Millisecond) }
+	insert := func(id, run, node string, created time.Time, ok bool, errMsg string) {
+		t.Helper()
+		exec := &core.StepExecution{
+			ID: id, WorkflowID: "wf-a1", StepID: node, ActivityName: "Action",
+			NodePath: nstr(node), CreatedAt: created, Success: nbool(ok), Attempt: ptr(int32(1)),
+		}
+		if run != "" {
+			exec.RunID = nstr(run)
+		}
+		if errMsg != "" {
+			exec.ErrorMessage = nstr(errMsg)
+		}
+		if err := store.InsertStepExecution(ctx, env.ORM, exec); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+	// The prior run failed a node 2s before the successor began, and went on
+	// past it; the successor ran a different node cleanly.
+	successorStart := at(100_000)
+	insert("prior-fail", "run-prior", "notify", at(98_000), false, "channel_not_found")
+	insert("prior-after", "run-prior", "wrap_up", at(98_500), true, "")
+	insert("next-ok", "run-next", "fetch", at(100_200), true, "")
+
+	// The status activity reads from the start less the skew allowance, which
+	// reaches back over the prior run's failure.
+	since := successorStart.Add(-5 * time.Second)
+	got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-a1", "run-next", since)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatalf("the prior run's failure is not the successor's: the successor succeeded, got %+v", got)
+	}
+	// The prior run itself still reads its own handled failure.
+	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-a1", "run-prior", at(90_000)); err != nil || got == nil || got.Node != "notify" {
+		t.Fatalf("the prior run's own outcome is failure_handled: %+v, %v", got, err)
+	}
+	// Without run ids (rows recorded before the column), only the time window
+	// is left: that is the fallback, and the ambiguity the run id removes.
+	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-a1", "", since); err != nil || got == nil {
+		t.Fatalf("with no run id the window is all there is: %+v, %v", got, err)
+	}
+}
+
+// A continue-as-new successor continues its predecessor's run: the run id is
+// kept, so the outcome is judged over the whole run — the predecessor's
+// attempts and the sub-agents it spawned included — however late the
+// successor's own execution began, and the chat's next run reads none of it.
+// Attempts recorded with no run id still fall back to the window.
+func TestFirstHandledNodeFailure_ContinueAsNewKeepsTheRunsAttempts(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	seedChat(t, env, "chat-can")
+	for _, w := range []*core.Workflow{
+		newWorkflow("wf-c1", "chat-can", nil, core.Active(), l2Base),
+		newWorkflow("wf-c1-agent", "chat-can", ptr("wf-c1"), core.Active(), l2Base),
+	} {
+		if err := store.InsertWorkflowIfAbsent(ctx, env.ORM, w); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := func(s int) time.Time { return l2Base.Add(time.Duration(s) * time.Second) }
+	insert := func(id, workflow, run, node string, created time.Time, ok bool, errMsg string) {
+		t.Helper()
+		exec := &core.StepExecution{
+			ID: id, WorkflowID: workflow, StepID: node, ActivityName: "Action",
+			NodePath: nstr(node), CreatedAt: created, Success: nbool(ok), Attempt: ptr(int32(1)),
+		}
+		if run != "" {
+			exec.RunID = nstr(run)
+		}
+		if errMsg != "" {
+			exec.ErrorMessage = nstr(errMsg)
+		}
+		if err := store.InsertStepExecution(ctx, env.ORM, exec); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+	// The predecessor execution: a sub-agent of the run failed a node, and
+	// the run went on past it.
+	insert("pred-ok", "wf-c1", "run-c", "plan", at(10), true, "")
+	insert("pred-agent-fail", "wf-c1-agent", "run-c", "agent.post", at(20), false, "rate limited")
+	// The successor execution, after continue-as-new, minutes later.
+	successorStart := at(600)
+	insert("succ-ok", "wf-c1", "run-c", "report", at(601), true, "")
+
+	got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-c1", "run-c", successorStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.Node != "agent.post" || got.Error != "rate limited" {
+		t.Fatalf("the predecessor's handled failure is the run's, whatever the successor's start: %+v", got)
+	}
+
+	// The chat's next run, on the same root id: none of run-c is its.
+	insert("next-ok", "wf-c1", "run-d", "plan", at(900), true, "")
+	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-c1", "run-d", at(895)); err != nil || got != nil {
+		t.Fatalf("the next run reads only its own attempts: %+v, %v", got, err)
+	}
+
+	// An attempt recorded with no run id (an activity that names none) is
+	// the run's when it falls in the run's window, and not otherwise.
+	insert("legacy-old", "wf-c1", "", "old_node", at(500), false, "before the run")
+	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-c1", "run-d", at(895)); err != nil || got != nil {
+		t.Fatalf("an unnamed attempt before the run's start is not the run's: %+v, %v", got, err)
+	}
+	insert("legacy-in", "wf-c1", "", "unnamed", at(901), false, "an unnamed failure")
+	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-c1", "run-d", at(895)); err != nil || got == nil || got.Node != "unnamed" {
+		t.Fatalf("an unnamed attempt in the run's window is the run's: %+v, %v", got, err)
 	}
 }

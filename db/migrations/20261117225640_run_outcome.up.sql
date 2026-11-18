@@ -1,4 +1,4 @@
--- forge:backward-compatible — two new nullable columns with no default; the previous release neither reads nor writes them, and its inserts and updates name their columns.
+-- forge:backward-compatible — three new nullable columns with no default; the previous release neither reads nor writes them, and its inserts and updates name their columns.
 
 -- Migration: run_outcome
 -- Created: 2026-11-17T22:56:40Z
@@ -22,3 +22,14 @@ COMMENT ON COLUMN workflows.run_outcome IS 'How the run ended for its health: su
 -- firing's own run (trigger_events.run_status), never the chat's later turns.
 ALTER TABLE trigger_events ADD COLUMN run_outcome text;
 COMMENT ON COLUMN trigger_events.run_outcome IS 'The launched run''s workflows.run_outcome, recorded with run_status.';
+
+-- Which run each node attempt belongs to. A root run's workflow id is reused
+-- by every run of its chat, so the workflow id cannot tell this run's
+-- attempts from the previous run's, and a time window around the run's start
+-- reads a run that ended seconds earlier as part of this one. run_id is the
+-- run's id (forge.ai.run.id, RuntimeContext.Telemetry): kept across
+-- continue-as-new and a resume, shared by the sub-agents the run spawned.
+-- NULL on an attempt recorded before it existed, or by an activity that names
+-- no run; the outcome then falls back to the time window for that row.
+ALTER TABLE step_executions ADD COLUMN run_id text;
+COMMENT ON COLUMN step_executions.run_id IS 'The run this attempt belongs to (the root run''s forge.ai.run.id, kept across continue-as-new and shared by its sub-agents). NULL on attempts recorded before it existed.';

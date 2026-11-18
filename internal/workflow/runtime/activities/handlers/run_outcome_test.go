@@ -23,10 +23,12 @@ func TestResolveRunOutcome(t *testing.T) {
 
 	started := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
 	var asked []time.Time
+	var askedRuns []string
 	handled := &db.HandledNodeFailure{Node: "post_failed", Error: "channel_not_found"}
 	store := &MockWorkflowStatusStore{
-		FirstHandledNodeFailureFunc: func(_ context.Context, workflowID string, since time.Time) (*db.HandledNodeFailure, error) {
+		FirstHandledNodeFailureFunc: func(_ context.Context, workflowID, runID string, since time.Time) (*db.HandledNodeFailure, error) {
 			asked = append(asked, since)
+			askedRuns = append(askedRuns, runID)
 			switch workflowID {
 			case "wf-handled":
 				return handled, nil
@@ -46,7 +48,7 @@ func TestResolveRunOutcome(t *testing.T) {
 	}{
 		{"failed", WorkflowStatusInput{WorkflowID: "wf-clean", Status: "failed"}, core.RunOutcomeFailed},
 		{"declared failure", WorkflowStatusInput{WorkflowID: "wf-clean", Status: "completed", Outcome: model.OutcomeFailure}, core.RunOutcomeFailed},
-		{"clean completion", WorkflowStatusInput{WorkflowID: "wf-clean", Status: "completed", RunStartedAtMs: started.UnixMilli()}, core.RunOutcomeSucceeded},
+		{"clean completion", WorkflowStatusInput{WorkflowID: "wf-clean", Status: "completed", RunStartedAtMs: started.UnixMilli(), RunID: "run-1"}, core.RunOutcomeSucceeded},
 		{"completed past a failed node", WorkflowStatusInput{WorkflowID: "wf-handled", Status: "completed", RunStartedAtMs: started.UnixMilli()}, core.RunOutcomeFailureHandled},
 		{"unreadable attempts keep the old reading", WorkflowStatusInput{WorkflowID: "wf-unreadable", Status: "completed"}, core.RunOutcomeSucceeded},
 		{"cancelled has none", WorkflowStatusInput{WorkflowID: "wf-clean", Status: "cancelled"}, ""},
@@ -61,9 +63,11 @@ func TestResolveRunOutcome(t *testing.T) {
 		}
 	}
 
-	// Only a completion reads the attempts, and from the run's start (less
-	// the clock skew allowance); with no start, every attempt.
+	// Only a completion reads the attempts: the run's own, by its id, and
+	// from the run's start (less the clock skew allowance) for an attempt
+	// that names no run; with no start, every such attempt.
 	require.Len(t, asked, 3)
+	assert.Equal(t, []string{"run-1", "", ""}, askedRuns, "the run's id is what its attempts are read by")
 	assert.True(t, started.Add(-runStartSkew).Equal(asked[0]), "since is the start less the skew allowance: %v", asked[0])
 	assert.True(t, asked[2].IsZero())
 
@@ -79,7 +83,7 @@ func TestWorkflowStatus_RecordsTheRunOutcome(t *testing.T) {
 
 	var rowOutcome, eventOutcome, eventDetail string
 	store := &MockWorkflowStatusStore{
-		FirstHandledNodeFailureFunc: func(context.Context, string, time.Time) (*db.HandledNodeFailure, error) {
+		FirstHandledNodeFailureFunc: func(context.Context, string, string, time.Time) (*db.HandledNodeFailure, error) {
 			return &db.HandledNodeFailure{Node: "post_failed", Error: "channel_not_found"}, nil
 		},
 		SetWorkflowRunOutcomeFunc: func(_ context.Context, _ string, outcome string) error {

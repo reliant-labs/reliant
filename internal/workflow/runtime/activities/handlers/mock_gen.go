@@ -5191,7 +5191,7 @@ func (m *MockWorkflowCheckpointStore) UpsertWorkflowCheckpoint(ctx context.Conte
 var _ WorkflowCheckpointStore = (*MockWorkflowCheckpointStore)(nil)
 
 // forge:section MockWorkflowStatusStore
-// forge:hash=9c292e4f461ddf27396a41467ce61db68ad0db0a4d065745c1f8bc3ad9c7a064
+// forge:hash=67b3a8b5fc030bc16e86c416df447ff4fd42c64854fa17cf06c1ca706edfc46e
 
 // MockWorkflowStatusStore is a test mock for the WorkflowStatusStore interface.
 //
@@ -5214,7 +5214,7 @@ type MockWorkflowStatusStore struct {
 	UpdateWorkflowStatusFunc                                 func(context.Context, string, db.WorkflowStatus) error
 	SetWorkflowOutcomeFunc                                   func(context.Context, string, string) error
 	SetWorkflowRunOutcomeFunc                                func(context.Context, string, string) error
-	FirstHandledNodeFailureFunc                              func(context.Context, string, time.Time) (*db.HandledNodeFailure, error)
+	FirstHandledNodeFailureFunc                              func(context.Context, string, string, time.Time) (*db.HandledNodeFailure, error)
 	SetLaunchEventRunOutcomeFunc                             func(context.Context, string, string) error
 	SetWorkflowFailureDetailFunc                             func(context.Context, string, string) error
 	DeleteWorkflowCheckpointFunc                             func(context.Context, string) error
@@ -5406,10 +5406,10 @@ func (m *MockWorkflowStatusStore) SetWorkflowRunOutcome(ctx context.Context, id 
 }
 
 // FirstHandledNodeFailure records the call and delegates to FirstHandledNodeFailureFunc when set.
-func (m *MockWorkflowStatusStore) FirstHandledNodeFailure(ctx context.Context, workflowID string, since time.Time) (*db.HandledNodeFailure, error) {
-	m.Recorder.Record("FirstHandledNodeFailure", ctx, workflowID, since)
+func (m *MockWorkflowStatusStore) FirstHandledNodeFailure(ctx context.Context, workflowID string, runID string, since time.Time) (*db.HandledNodeFailure, error) {
+	m.Recorder.Record("FirstHandledNodeFailure", ctx, workflowID, runID, since)
 	if m.FirstHandledNodeFailureFunc != nil {
-		return m.FirstHandledNodeFailureFunc(ctx, workflowID, since)
+		return m.FirstHandledNodeFailureFunc(ctx, workflowID, runID, since)
 	}
 	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "FirstHandledNodeFailure")
 }

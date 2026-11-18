@@ -41,6 +41,7 @@ func InsertStepExecution(ctx context.Context, db orm.Context, exec *core.StepExe
 		ErrorMessage:  validUTF8Ptr(exec.ErrorMessage),
 		Attempt:       exec.Attempt,
 		NodePath:      exec.NodePath,
+		RunID:         exec.RunID,
 	})
 }
 
@@ -214,10 +215,15 @@ type HandledNodeFailure struct {
 }
 
 // FirstHandledNodeFailure returns a node of run workflowID, or of a run under
-// it, whose LAST attempt since since failed, or nil when there is none. A
-// root run's workflow id is reused by every run of its chat, so since (the
-// run's start) keeps an earlier run's attempts out; the zero time reads every
-// attempt. A node retried to
+// it, whose LAST attempt in run runID failed, or nil when there is none. A
+// root run's workflow id is reused by every run of its chat, so the run's id
+// (step_executions.run_id: the root run's forge.ai.run.id, kept across
+// continue-as-new and shared by its sub-agents) keeps an earlier run's
+// attempts out, however close together the two ran. An attempt recorded
+// without a run id (before the column existed, or by an activity that names
+// no run), or every attempt when runID is empty, is the run's when it was
+// recorded at or after since (the run's start, less clock skew); the zero
+// time reads every such attempt. A node retried to
 // success has a successful last attempt and is not one. Each node is told
 // apart by its path and loop iteration, so one failed iteration of a parallel
 // loop counts even when its siblings passed. The runtime's own bookkeeping
@@ -226,7 +232,7 @@ type HandledNodeFailure struct {
 // It reads the run when it has ended, so the node it finds is one the run went
 // on past: a run that a node failure ended is FAILED, not handled. Newest
 // failure first.
-func FirstHandledNodeFailure(ctx context.Context, db orm.Context, workflowID string, since time.Time) (*HandledNodeFailure, error) {
+func FirstHandledNodeFailure(ctx context.Context, db orm.Context, workflowID, runID string, since time.Time) (*HandledNodeFailure, error) {
 	var rows []HandledNodeFailure
 	err := db.Bun().NewRaw(`WITH RECURSIVE tree AS (
     SELECT id, chat_id FROM workflows WHERE id = ?0
@@ -241,14 +247,15 @@ func FirstHandledNodeFailure(ctx context.Context, db orm.Context, workflowID str
            END AS failure
     FROM step_executions se JOIN tree t ON t.id = se.workflow_id
     WHERE se.activity_name <> ALL(ARRAY['WorkflowStatus', 'FetchThreadResult', 'Cleanup', 'WorkflowError', 'SkippedStep']::text[])
-      AND se.created_at >= ?1
+      AND CASE WHEN ?2::text <> '' AND se.run_id IS NOT NULL THEN se.run_id = ?2::text
+               ELSE se.created_at >= ?1 END
     ORDER BY se.workflow_id, coalesce(se.node_path, se.step_id), coalesce(se.loop_node_id, ''), coalesce(se.loop_iteration, -1),
              se.created_at DESC, se.id DESC
 )
 SELECT node, failure AS error FROM last_attempt
 WHERE failure IS NOT NULL
 ORDER BY created_at DESC, id DESC
-LIMIT 1`, workflowID, since).Scan(ctx, &rows)
+LIMIT 1`, workflowID, since, runID).Scan(ctx, &rows)
 	if err != nil {
 		return nil, err
 	}
@@ -634,6 +641,7 @@ func stepExecutionToCore(row *StepExecution) *core.StepExecution {
 		ErrorMessage:   row.ErrorMessage,
 		Attempt:        row.Attempt,
 		NodePath:       row.NodePath,
+		RunID:          row.RunID,
 	}
 }
 

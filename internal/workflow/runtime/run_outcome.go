@@ -5,10 +5,21 @@ import "go.temporal.io/sdk/workflow"
 
 // A run's outcome (core.Workflow.RunOutcome, reliant#2753) is judged by the
 // WorkflowStatus activity when the run ends: a COMPLETED run whose node
-// attempts since it began include one whose last attempt failed went on past
-// a failure, and is FAILURE_HANDLED rather than SUCCEEDED. The workflow's part
-// is only to say when the run began, which a continue-as-new successor must
-// carry: its own execution started later than the run it continues.
+// attempts include one whose last attempt failed went on past a failure, and
+// is FAILURE_HANDLED rather than SUCCEEDED. The workflow's part is to say
+// which run it is and when it began:
+//
+//   - its run id (rootRunIDFrom, forge.ai.run.id) is what every node attempt
+//     records (step_executions.run_id, from the activity's
+//     RuntimeContext.Telemetry), and what the outcome reads by. The root
+//     workflow id is reused by every run of the chat, so it cannot tell this
+//     run's attempts from the previous run's; the run id can, and it is kept
+//     across continue-as-new and a resume, and shared by spawned sub-agents
+//     (their telemetry's RootRunID).
+//   - its start is the fallback for an attempt recorded with no run id (one
+//     written before the column, or by an activity that names no run). A
+//     continue-as-new successor carries it: its own execution started later
+//     than the run it continues.
 
 // runStartedAtMs is when the run began, in unix ms: the start of the run a
 // continue-as-new successor continues, else this execution's. Read from
@@ -27,4 +38,13 @@ func (t *ChildWorkflowTracker) startedAtMs() int64 {
 		return 0
 	}
 	return t.runStartedAtMs
+}
+
+// outcomeRunID is the tracker's run id, "" when unknown (a bare tracker in
+// tests): the status activity then judges every attempt by the run's start.
+func (t *ChildWorkflowTracker) outcomeRunID() string {
+	if t == nil {
+		return ""
+	}
+	return t.runID
 }

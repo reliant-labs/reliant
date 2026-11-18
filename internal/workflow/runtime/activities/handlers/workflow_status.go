@@ -71,6 +71,12 @@ type WorkflowStatusInput struct {
 	// status: its outcome is judged from the node attempts since then
 	// (run_outcome.go). Zero reads every attempt the run has.
 	RunStartedAtMs int64 `json:"run_started_at_ms,omitempty"`
+	// RunID is the run's id (forge.ai.run.id), on a "completed" status: its
+	// outcome is judged from the node attempts recorded under it
+	// (step_executions.run_id), RunStartedAtMs only for an attempt recorded
+	// with none. Empty from a workflow that predates it: then every attempt is
+	// judged by RunStartedAtMs.
+	RunID string `json:"run_id,omitempty"`
 	// Error is why the run failed, on a "failed" status. It becomes the
 	// source run's error in a workflow-event trigger's payload.
 	Error string `json:"error,omitempty"`
