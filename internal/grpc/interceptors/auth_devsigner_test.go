@@ -38,7 +38,8 @@ func TestAuthInterceptorAcceptsDevSignerInDev(t *testing.T) {
 
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": "dev-smoke-user", "email": "dev-smoke-user@dev.test", "email_verified": true,
-		"exp": time.Now().Add(time.Hour).Unix(),
+		// A fixed exp no wall clock reaches: nothing here depends on today.
+		"exp": time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC).Unix(),
 	}).SignedString([]byte(devSignerSecret))
 	require.NoError(t, err)
 

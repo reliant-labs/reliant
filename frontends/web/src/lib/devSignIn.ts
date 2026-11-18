@@ -145,9 +145,10 @@ const defaultDeps: AdoptDeps = {
  * the app on path so everything starts from it. Throws, storing nothing, when
  * dev sign-in is off or the token could never work.
  */
-export async function adoptDevToken(token: string, path: string, deps: AdoptDeps = defaultDeps): Promise<void> {
+export async function adoptDevToken(token: string, path: string, deps: Partial<AdoptDeps> = {}): Promise<void> {
   if (!devSignInEnabled()) throw new Error("Dev sign-in is off in this build (VITE_DEV_SIGN_IN).");
+  const { write, restart } = { ...defaultDeps, ...deps };
   const session = sessionFromDevToken(token);
-  await deps.write(session);
-  deps.restart(path);
+  await write(session);
+  restart(path);
 }

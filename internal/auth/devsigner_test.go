@@ -24,6 +24,25 @@ func signHS256(t *testing.T, secret string, claims jwt.MapClaims) string {
 	return signed
 }
 
+// refTime is the fixed "now" every token here is minted and checked against:
+// no assertion depends on the wall clock.
+var refTime = time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC)
+
+// farFuture is an exp no wall clock reaches, for tokens checked by the session
+// validator, whose clock is the real one.
+var farFuture = time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+// atRefTime pins v's dev signer clock to refTime.
+func atRefTime(t *testing.T, v TokenValidator) TokenValidator {
+	t.Helper()
+	d, ok := v.(*devSignerDispatch)
+	if !ok {
+		t.Fatalf("validator is %T, want the dev signer dispatch", v)
+	}
+	d.dev.now = func() time.Time { return refTime }
+	return v
+}
+
 func devClaims(exp time.Time) jwt.MapClaims {
 	return jwt.MapClaims{
 		"sub":            "dev-smoke-user",
@@ -32,7 +51,7 @@ func devClaims(exp time.Time) jwt.MapClaims {
 		"role":           "authenticated",
 		"aud":            "authenticated",
 		"iss":            "https://umoxnokojetwkrmttfqj.supabase.co/auth/v1",
-		"iat":            time.Now().Unix(),
+		"iat":            refTime.Unix(),
 		"exp":            exp.Unix(),
 	}
 }
@@ -51,12 +70,12 @@ func devAndSession(t *testing.T) (TokenValidator, func(map[string]any) string) {
 	if err != nil {
 		t.Fatalf("WithDevSigner in the dev tier: %v", err)
 	}
-	return v, func(claims map[string]any) string { return signES256(t, key, claims) }
+	return atRefTime(t, v), func(claims map[string]any) string { return signES256(t, key, claims) }
 }
 
 func TestDevSignerAcceptsMintedTokenAsSession(t *testing.T) {
 	v, _ := devAndSession(t)
-	exp := time.Now().Add(time.Hour)
+	exp := refTime.Add(time.Hour)
 	claims, err := v.ValidateToken(signHS256(t, devSecret, devClaims(exp)))
 	if err != nil {
 		t.Fatalf("a token minted with the dev secret was refused: %v", err)
@@ -77,7 +96,7 @@ func TestDevSignerAcceptsMintedTokenAsSession(t *testing.T) {
 func TestDevSignerKeepsSessionTokensWorking(t *testing.T) {
 	v, signSession := devAndSession(t)
 	claims, err := v.ValidateToken(signSession(map[string]any{
-		"sub": "real-user", "email": "real@example.com", "exp": time.Now().Add(time.Hour).Unix(),
+		"sub": "real-user", "email": "real@example.com", "exp": farFuture.Unix(),
 	}))
 	if err != nil {
 		t.Fatalf("an ES256 session token was refused once the dev signer was added: %v", err)
@@ -89,23 +108,23 @@ func TestDevSignerKeepsSessionTokensWorking(t *testing.T) {
 
 func TestDevSignerRejections(t *testing.T) {
 	v, _ := devAndSession(t)
-	noExp := devClaims(time.Now())
+	noExp := devClaims(refTime)
 	delete(noExp, "exp")
-	noSub := devClaims(time.Now().Add(time.Hour))
+	noSub := devClaims(refTime.Add(time.Hour))
 	delete(noSub, "sub")
 	for _, tc := range []struct {
 		name  string
 		token string
 		want  error
 	}{
-		{"wrong secret", signHS256(t, "some-other-secret", devClaims(time.Now().Add(time.Hour))), ErrInvalidSignature},
-		{"expired", signHS256(t, devSecret, devClaims(time.Now().Add(-time.Minute))), ErrExpiredToken},
+		{"wrong secret", signHS256(t, "some-other-secret", devClaims(refTime.Add(time.Hour))), ErrInvalidSignature},
+		{"expired", signHS256(t, devSecret, devClaims(refTime.Add(-time.Minute))), ErrExpiredToken},
 		{"no exp", signHS256(t, devSecret, noExp), ErrInvalidToken},
 		{"no sub", signHS256(t, devSecret, noSub), ErrInvalidToken},
 		// Another HMAC alg is not the dev signer's: it goes to the session
 		// validator, which accepts ES256 alone.
 		{"HS512", func() string {
-			s, err := jwt.NewWithClaims(jwt.SigningMethodHS512, devClaims(time.Now().Add(time.Hour))).SignedString([]byte(devSecret))
+			s, err := jwt.NewWithClaims(jwt.SigningMethodHS512, devClaims(refTime.Add(time.Hour))).SignedString([]byte(devSecret))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -141,7 +160,7 @@ func TestNoDevSignerLeavesSessionValidatorAlone(t *testing.T) {
 	if v != TokenValidator(session) {
 		t.Fatalf("WithDevSigner without a secret returned %T, want the session validator itself", v)
 	}
-	if _, err := v.ValidateToken(signHS256(t, devSecret, devClaims(time.Now().Add(time.Hour)))); !errors.Is(err, ErrInvalidToken) {
+	if _, err := v.ValidateToken(signHS256(t, devSecret, devClaims(refTime.Add(time.Hour)))); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("an HS256 token with no dev signer configured: err = %v, want ErrInvalidToken", err)
 	}
 }

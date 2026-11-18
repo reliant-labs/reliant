@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 
@@ -55,6 +56,7 @@ func WithDevSigner(session TokenValidator, s Settings) (TokenValidator, error) {
 		dev: &devSignerValidator{
 			secret:                    []byte(s.DevJWTSecret),
 			requireEmailVerifiedClaim: s.RequireEmailVerifiedClaim,
+			now:                       time.Now,
 		},
 	}, nil
 }
@@ -96,12 +98,16 @@ func tokenAlg(token string) string {
 type devSignerValidator struct {
 	secret                    []byte
 	requireEmailVerifiedClaim bool
+	// now is the clock exp is checked against: time.Now, or a fixed time in
+	// tests.
+	now func() time.Time
 }
 
 func (v *devSignerValidator) ValidateToken(token string) (*JWTClaims, error) {
 	parsed, err := jwt.Parse(token, func(*jwt.Token) (any, error) { return v.secret, nil },
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 		jwt.WithExpirationRequired(),
+		jwt.WithTimeFunc(v.now),
 	)
 	switch {
 	case errors.Is(err, jwt.ErrTokenExpired):
