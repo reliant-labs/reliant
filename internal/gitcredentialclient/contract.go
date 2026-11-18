@@ -109,8 +109,9 @@ type InstallationRequest struct {
 	// Owner and Repo name the one repository the token is scoped to.
 	Owner string
 	Repo  string
-	// Permissions narrows the token (issues, pull_requests, contents ->
-	// read|write). Empty means control-plane's default: all three at write.
+	// Permissions narrows the token (issues, pull_requests, contents, actions
+	// -> read|write). Empty means control-plane's default: issues,
+	// pull_requests and contents at write.
 	Permissions map[string]string
 	// OrgID, when set, mints through the org's own linked installation only:
 	// the repository's installation must be linked to the org
