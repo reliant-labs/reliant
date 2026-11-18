@@ -571,6 +571,31 @@ its GitHub writes default to the bot, and that the user can choose to write as t
 without a control plane refuses the bot identity on save; the user must configure the App or explicitly choose owner. Comments written by Reliant's own bot never fire
 ` + bt + `issue_comment.created` + bt + ` or ` + bt + `pull_request_review_comment.created` + bt + `, so a run that comments cannot trigger itself; other bots' comments do.
 
+### An optional node: ` + bt + `tolerate_failure: true` + bt + `
+
+A node whose failure must not fail the run (an auxiliary reader agent, a best-effort notification) declares ` + bt + `tolerate_failure: true` + bt + ` at node level, beside ` + bt + `id` + bt + ` and ` + bt + `type` + bt + `. When it fails, the run goes on instead of failing, and instead of pausing on a step that used up its retries:
+
+` + bt + bt + bt + `yaml
+- id: cp_reader
+  type: workflow
+  ref: builtin://autopilot-agent
+  tolerate_failure: true
+  args: { ... }
+- id: review
+  ...
+edges:
+  - from: cp_reader
+    cases:
+      - condition: "nodes.cp_reader.?failed.orValue(false)"
+        to: [note_reader_failed]
+    default: [review]
+` + bt + bt + bt + `
+
+- **Its outputs when it failed are exactly** ` + bt + `{failed: true, error: "<why, one line>"}` + bt + `: route on them with an edge case or a condition. When it succeeded they are its ordinary outputs, with no ` + bt + `failed` + bt + ` key, so read ` + bt + `nodes.<id>.?failed.orValue(false)` + bt + ` and guard its other fields.
+- **It works on every node type** (an activity, a loop, a sub-workflow or agent, a router), in the main graph, a loop body or a sub-workflow. Its ` + bt + `save_message` + bt + ` is not written when it failed.
+- **Never tolerated:** a cancel, a pause, a panic, and a run that is already ending (a continue-as-new handoff, an unattended run that gave up). Those are not the node failing.
+- **It is not a success.** The failure is logged, and an activity's failed attempt stays in the run's node diagnostics (` + bt + `get_run` + bt + `). Use it for work the run can do without, not to hide a step it needs: a required step that fails should fail the run (and reach ` + bt + `on_failure` + bt + `).
+
 ### When a run fails: ` + bt + `on_failure:` + bt + `
 
 A workflow-level ` + bt + `on_failure:` + bt + ` is a finally-style handler: an inline graph (` + bt + `entry` + bt + `, ` + bt + `nodes` + bt + `, ` + bt + `edges` + bt + `, or ` + bt + `sequence:` + bt + `) that runs ONCE when a run

@@ -1452,6 +1452,15 @@ type Node struct {
 	// node carrying a declaration wins, and it is recorded on the workflow
 	// execution as its outcome, alongside — not instead of — its lifecycle status.
 	Outcome string `protobuf:"bytes,8,opt,name=outcome,proto3" json:"outcome,omitempty"`
+	// TolerateFailure marks the node optional: when it fails, the run goes on
+	// instead of failing (or pausing on a step that exhausted its retries).
+	// Its outputs are then exactly {failed: true, error: "<why>"}, so the edges
+	// and nodes after it branch on nodes.<id>.failed and read nodes.<id>.error;
+	// a node that succeeded has no `failed` key, so read it as
+	// nodes.<id>.?failed.orValue(false). A cancel, a pause, and a run that is
+	// already ending are not failures and are never tolerated. Unset (the
+	// default) keeps today's behaviour: the node's failure is the run's.
+	TolerateFailure bool `protobuf:"varint,9,opt,name=tolerate_failure,json=tolerateFailure,proto3" json:"tolerate_failure,omitempty"`
 	// Type-specific arguments. Exactly one must be set, matching the type field.
 	// SecretRefs are the declared secrets this node's activity resolves, written by
 	// the parser from the workflow's `secrets:` block and never authored. An action
@@ -1560,6 +1569,13 @@ func (x *Node) GetOutcome() string {
 		return x.Outcome
 	}
 	return ""
+}
+
+func (x *Node) GetTolerateFailure() bool {
+	if x != nil {
+		return x.TolerateFailure
+	}
+	return false
 }
 
 func (x *Node) GetSecretRefs() []*NodeSecretRef {
@@ -8931,7 +8947,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x03tag\x18\x01 \x01(\tB\x1d\x82\xb5\x18\x19\n" +
 	"\x17Tag for preset matchingR\x03tag\x123\n" +
 	"\adefault\x18\x02 \x01(\tB\x19\x82\xb5\x18\x15\n" +
-	"\x13Default preset slugR\adefault\"\xdd\x0f\n" +
+	"\x13Default preset slugR\adefault\"\x8c\x11\n" +
 	"\x04Node\x12f\n" +
 	"\x02id\x18\x01 \x01(\tBV\x82\xb5\x18R\n" +
 	"PUnique within the workflow; other nodes read this node's outputs as nodes.<id>.*R\x02id\x12r\n" +
@@ -8946,7 +8962,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x06daemon\x18\a \x01(\v2\x1d.reliant.v1.CelDaemonSelectorBT\x82\xb5\x18P\n" +
 	"NWhich machine runs this node's tools, overriding the workflow's daemon settingR\x06daemon\x12\xb4\x01\n" +
 	"\aoutcome\x18\b \x01(\tB\x99\x01\x82\xb5\x18\x94\x01\n" +
-	"\x80\x01The verdict reaching this node stamps on the run: success or failure. The last node that runs with one decides the run's outcome\x12\x0fsuccess|failureR\aoutcome\x12B\n" +
+	"\x80\x01The verdict reaching this node stamps on the run: success or failure. The last node that runs with one decides the run's outcome\x12\x0fsuccess|failureR\aoutcome\x12\xac\x01\n" +
+	"\x10tolerate_failure\x18\t \x01(\bB\x80\x01\x82\xb5\x18|\n" +
+	"zMake the node optional: when it fails the run continues, and nodes.<id>.failed is true with the reason in nodes.<id>.errorR\x0ftolerateFailure\x12B\n" +
 	"\vsecret_refs\x18( \x03(\v2\x19.reliant.v1.NodeSecretRefB\x06\x82\xb5\x18\x02 \x01R\n" +
 	"secretRefs\x124\n" +
 	"\bcall_llm\x18\n" +

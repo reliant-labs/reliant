@@ -283,6 +283,18 @@ message Node {
     enum_values: "success|failure"
   }];
 
+  // TolerateFailure marks the node optional: when it fails, the run goes on
+  // instead of failing (or pausing on a step that exhausted its retries).
+  // Its outputs are then exactly {failed: true, error: "<why>"}, so the edges
+  // and nodes after it branch on nodes.<id>.failed and read nodes.<id>.error;
+  // a node that succeeded has no `failed` key, so read it as
+  // nodes.<id>.?failed.orValue(false). A cancel, a pause, and a run that is
+  // already ending are not failures and are never tolerated. Unset (the
+  // default) keeps today's behaviour: the node's failure is the run's.
+  bool tolerate_failure = 9 [(reliant) = {
+    description: "Make the node optional: when it fails the run continues, and nodes.<id>.failed is true with the reason in nodes.<id>.error"
+  }];
+
   // Type-specific arguments. Exactly one must be set, matching the type field.
   // SecretRefs are the declared secrets this node's activity resolves, written by
   // the parser from the workflow's `secrets:` block and never authored. An action

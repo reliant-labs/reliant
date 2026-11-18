@@ -938,15 +938,24 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					WithInvocationContract(loopContract)
 
 				loopOutput, err := loopExecutor.Execute()
+				var toleratedLoop map[string]interface{}
 				if err != nil {
-					recordFailedNode(e.ctx, joinNodePath(e.nodePath(), node.GetId()), 1)
-					return nil, fmt.Errorf("loop %s failed: %w", node.GetId(), err)
+					out, ok := toleratedFailure(node, err)
+					if !ok {
+						recordFailedNode(e.ctx, joinNodePath(e.nodePath(), node.GetId()), 1)
+						return nil, fmt.Errorf("loop %s failed: %w", node.GetId(), err)
+					}
+					logToleratedFailure(e.logger, node.GetId(), err)
+					toleratedLoop = out
 				}
 
 				// Store loop output and create completion event
 				nid := node.GetId()
 				// ProtoLoopOutputToMap handles both sequential and parallel loop output formats.
 				loopOutputMap := model.ProtoLoopOutputToMap(loopOutput)
+				if toleratedLoop != nil {
+					loopOutputMap = toleratedLoop
+				}
 				subNodeOutputs[nid] = loopOutputMap
 				loopEvent := &core.WorkflowEvent{
 					ID:           fmt.Sprintf("%s-loop-%s", uniqueActivityIDBase, nid),
@@ -971,22 +980,31 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				} else {
 					inlineOutput, err = e.executeNestedWorkflow(triggered, subNodeOutputs, subInputs, uniqueActivityIDBase)
 				}
+				tolerated := false
 				if err != nil {
-					// The deepest scope records first; the recorder keeps the
-					// first, so this names the nested node only when nothing
-					// inside it did (its config would not evaluate).
-					recordFailedNode(e.ctx, joinNodePath(e.nodePath(), node.GetId()), 1)
-					return nil, err
+					out, ok := toleratedFailure(node, err)
+					if !ok {
+						// The deepest scope records first; the recorder keeps the
+						// first, so this names the nested node only when nothing
+						// inside it did (its config would not evaluate).
+						recordFailedNode(e.ctx, joinNodePath(e.nodePath(), node.GetId()), 1)
+						return nil, err
+					}
+					logToleratedFailure(e.logger, node.GetId(), err)
+					inlineOutput, tolerated = out, true
 				}
 				nid := node.GetId()
-				inlineOutput = publishWorkflowNodeOutputs(e.ctx, node, inlineOutput)
+				if !tolerated {
+					inlineOutput = publishWorkflowNodeOutputs(e.ctx, node, inlineOutput)
+				}
 				subNodeOutputs[nid] = inlineOutput
 
 				// Execute save_message if configured on the nested workflow node
 				// IMPORTANT: Use parent's execContext, not child's, so save_message saves to the
 				// parent workflow's thread. The save_message is declared on the node in the parent
-				// workflow, so it should act in the parent's context.
-				if node.GetSaveMessage() != nil {
+				// workflow, so it should act in the parent's context. Not for a
+				// tolerated failure: the node did not complete.
+				if node.GetSaveMessage() != nil && !tolerated {
 					_, err := ExecuteSaveMessageForNode(
 						e.ctx,
 						node,
