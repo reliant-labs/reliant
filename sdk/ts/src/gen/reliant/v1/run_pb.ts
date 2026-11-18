@@ -451,9 +451,10 @@ export enum RunOutcome {
 
   /**
    * FAILURE_HANDLED: the run completed, but a node's last attempt failed and
-   * the run went on past it: a parallel loop iteration that failed under
-   * on_failure: continue, a node whose failure the workflow tolerates, a
-   * finally handler's node that failed. Health counts it as a failure.
+   * the run went on past it: an action that reported is_error and the graph
+   * routed on, a parallel loop iteration that failed under on_failure:
+   * continue, a finally handler's node that failed. A run node's non-zero
+   * exit code is not one. Health counts it as a failure.
    *
    * @generated from enum value: RUN_OUTCOME_FAILURE_HANDLED = 3;
    */
