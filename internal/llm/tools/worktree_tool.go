@@ -47,7 +47,7 @@ type WorktreeParams struct {
 	Filter    string `json:"filter,omitempty" jsonschema:"description=list only: show just the worktrees whose name or branch contains this text (case-insensitive)."`
 	Archived  bool   `json:"archived,omitempty" jsonschema:"description=list only: also list archived (deleted) worktrees, after the live ones. Each is marked archived."`
 	PageToken string `json:"page_token,omitempty" jsonschema:"description=list only: the next_page_token a previous list returned, to read the next page. Pass the same filter and archived."`
-	Limit     int    `json:"limit,omitempty" jsonschema:"description=list only: worktrees per page (default 50, at most 200)."`
+	Limit     int    `json:"limit,omitempty" jsonschema:"description=list only: page the listing, this many worktrees per page (at most 200). Without limit or page_token, list returns every worktree."`
 }
 
 // WorktreeResponseMetadata contains metadata about the worktree operation
@@ -127,7 +127,9 @@ type RunMachine interface {
 
 const (
 	worktreeListPage = 100
-	// worktreeListLimit and worktreeListMax bound one page of list.
+	// worktreeListLimit is a paged list's page size when the caller gives
+	// page_token but no limit, and the size past which an unpaged list says
+	// it can be paged; worktreeListMax bounds one page.
 	worktreeListLimit = 50
 	worktreeListMax   = 200
 	// worktreeGetChats bounds the chats get lists for one worktree.
@@ -176,9 +178,9 @@ ACTIONS:
    Returns the worktree id, the workspace root path, the branch, and the path of each repository's checkout.
    The name must be unique among the project's live worktrees; an archived (deleted) worktree's name can be reused.
 
-2. list - List the project's worktrees (any state: creating, active, failed), most recently active first, 50 per page.
-   Optional: filter (text in the name or branch), archived (also list archived ones), limit, page_token.
-   When there are more, the result ends with a next_page_token: pass it back as page_token, with the same filter and archived.
+2. list - List the project's worktrees (any state: creating, active, failed), most recently active first. Without limit or page_token it lists every one.
+   Optional: filter (text in the name or branch), archived (also list archived ones), limit and page_token (to page: limit per page, default 50).
+   A paged result that has more ends with a next_page_token: pass it back as page_token, with the same filter, archived and limit.
 
 3. get - Required: name. Details, paths and owner of one worktree, and the chats bound to it with their state
 
@@ -374,6 +376,10 @@ func (w *worktreeTool) handleList(ctx context.Context, p *WorktreeParams, rc *rc
 	if w.repo == nil {
 		return NewTextErrorResponse("Database not available for listing worktrees"), nil
 	}
+	// Paging is opt-in: a list without limit or page_token returns every
+	// worktree, as it did before paging existed, so no caller is silently cut
+	// short.
+	paged := p.Limit != 0 || strings.TrimSpace(p.PageToken) != ""
 	limit := p.Limit
 	switch {
 	case limit < 0:
@@ -414,10 +420,13 @@ func (w *worktreeTool) handleList(ctx context.Context, p *WorktreeParams, rc *rc
 	if offset >= total {
 		return NewTextErrorResponse(fmt.Sprintf("page_token is past the end: there are %d worktree(s); list again without page_token", total)), nil
 	}
-	page := rows[offset:min(offset+limit, total)]
+	page := rows
 	next := ""
-	if offset+len(page) < total {
-		next = encodeOffsetToken(offset + len(page))
+	if paged {
+		page = rows[offset:min(offset+limit, total)]
+		if offset+len(page) < total {
+			next = encodeOffsetToken(offset + len(page))
+		}
 	}
 	repos := w.reposForDisplay(ctx, rc, project)
 
@@ -455,6 +464,8 @@ func (w *worktreeTool) handleList(ctx context.Context, p *WorktreeParams, rc *rc
 	}
 	if next != "" {
 		fmt.Fprintf(&content, "next_page_token: %s\n%d more: call worktree again with action \"list\" and page_token %q (same filter and archived).\n", next, total-offset-len(page), next)
+	} else if !paged && total > worktreeListLimit {
+		fmt.Fprintf(&content, "All %d worktrees are listed. To read fewer at a time, pass limit (then page_token), or narrow with filter.\n", total)
 	}
 	return WithResponseMetadata(NewTextResponse(content.String()), WorktreeResponseMetadata{Action: "list", Worktrees: worktrees, Total: total, NextPageToken: next}), nil
 }

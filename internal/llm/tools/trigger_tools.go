@@ -111,12 +111,16 @@ type ListTriggersParams struct {
 	Workflow  string `json:"workflow,omitempty" jsonschema:"description=Only triggers that launch this workflow (a slug or builtin://<name>)."`
 	ProjectID string `json:"project_id,omitempty" jsonschema:"description=Only triggers in this project."`
 	Health    string `json:"health,omitempty" jsonschema:"enum=UNHEALTHY,enum=BROKEN,enum=FAILING,enum=DEGRADED,enum=NEEDS_SETUP,enum=UNKNOWN,enum=HEALTHY,description=Only triggers in this health. UNHEALTHY is BROKEN or FAILING or DEGRADED or NEEDS_SETUP."`
-	PageToken string `json:"page_token,omitempty" jsonschema:"description=The next_page_token a previous list_triggers returned, to read the next page. Pass the same workflow, project_id and health."`
+	Limit     int    `json:"limit,omitempty" jsonschema:"description=Page the listing, this many triggers per page (at most 200). Without limit or page_token, list_triggers returns every trigger."`
+	PageToken string `json:"page_token,omitempty" jsonschema:"description=The next_page_token a previous list_triggers returned, to read the next page. Pass the same workflow, project_id, health and limit."`
 }
 
 const (
-	// listTriggersPage is how many triggers one list_triggers call shows.
+	// listTriggersPage is a paged list's page size when the caller gives
+	// page_token but no limit, and the size past which an unpaged list says
+	// it can be paged; listTriggersMax bounds one page.
 	listTriggersPage = 20
+	listTriggersMax  = 200
 )
 
 // triggerHealthOrder lists unhealthy triggers first: the ones an agent asked
@@ -148,7 +152,7 @@ const (
 	ListTriggersToolName        = "list_triggers"
 	listTriggersToolDescription = `List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's machine (name, id and current registry state) and health. Failed launched runs include the failing node's error.
 
-Narrow by workflow to see a workflow's activations, or by health (UNHEALTHY for everything that needs attention). Unhealthy triggers are listed first, 20 per page: when there are more, the result ends with a next_page_token to pass back as page_token. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; every firing is refused and recorded as failed until the workflow is fixed, and pause_trigger turns it off). A DEGRADED detail that ends "N later run(s) succeeded" is a past failure the trigger has recovered from.`
+Narrow by workflow to see a workflow's activations, or by health (UNHEALTHY for everything that needs attention). Unhealthy triggers are listed first. Every trigger is listed unless you page: pass limit (triggers per page), and a page that has more ends with a next_page_token to pass back as page_token. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; every firing is refused and recorded as failed until the workflow is fixed, and pause_trigger turns it off). A DEGRADED detail that ends "N later run(s) succeeded" is a past failure the trigger has recovered from.`
 )
 
 type listTriggersTool struct {
@@ -176,6 +180,19 @@ func (l *listTriggersTool) Execute(rctx *rctx.ToolContext, params ListTriggersPa
 	health := strings.ToUpper(strings.TrimSpace(params.Health))
 	if _, known := triggerHealthOrder[health]; health != "" && health != "UNHEALTHY" && !known {
 		return NewTextErrorResponse(fmt.Sprintf("Unknown health %q: use UNHEALTHY, BROKEN, FAILING, DEGRADED, NEEDS_SETUP, UNKNOWN or HEALTHY.", params.Health)), nil
+	}
+	// Paging is opt-in: a call without limit or page_token lists every
+	// trigger, as it did before paging existed, so no caller is silently cut
+	// short.
+	paged := params.Limit != 0 || strings.TrimSpace(params.PageToken) != ""
+	limit := params.Limit
+	switch {
+	case limit < 0:
+		return NewTextErrorResponse("limit must not be negative"), nil
+	case limit == 0:
+		limit = listTriggersPage
+	case limit > listTriggersMax:
+		limit = listTriggersMax
 	}
 	offset, err := decodeOffsetToken(params.PageToken)
 	if err != nil {
@@ -219,10 +236,13 @@ func (l *listTriggersTool) Execute(rctx *rctx.ToolContext, params ListTriggersPa
 	if offset >= total {
 		return NewTextErrorResponse(fmt.Sprintf("page_token is past the end: %d trigger(s) match; list again without page_token.", total)), nil
 	}
-	page := list[offset:min(offset+listTriggersPage, total)]
+	page := list
 	next := ""
-	if offset+len(page) < total {
-		next = encodeOffsetToken(offset + len(page))
+	if paged {
+		page = list[offset:min(offset+limit, total)]
+		if offset+len(page) < total {
+			next = encodeOffsetToken(offset + len(page))
+		}
 	}
 	var b strings.Builder
 	if offset == 0 && next == "" {
@@ -279,7 +299,9 @@ func (l *listTriggersTool) Execute(rctx *rctx.ToolContext, params ListTriggersPa
 		}
 	}
 	if next != "" {
-		fmt.Fprintf(&b, "\nnext_page_token: %s\n%d more: call list_triggers again with page_token %q (same workflow, project_id and health).\n", next, total-offset-len(page), next)
+		fmt.Fprintf(&b, "\nnext_page_token: %s\n%d more: call list_triggers again with page_token %q (same workflow, project_id, health and limit).\n", next, total-offset-len(page), next)
+	} else if !paged && total > listTriggersPage {
+		fmt.Fprintf(&b, "\nAll %d triggers are listed. To read fewer at a time, pass limit (then page_token), or narrow with health (UNHEALTHY) or workflow.\n", total)
 	}
 	return WithResponseMetadata(NewTextResponse(strings.TrimRight(b.String(), "\n")), page), nil
 }

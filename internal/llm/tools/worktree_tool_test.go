@@ -638,6 +638,54 @@ func TestWorktreeTool_List_FiltersAndPages(t *testing.T) {
 	assert.Contains(t, none.Content, "No worktrees match")
 }
 
+// list without limit or page_token returns every live worktree, as it did
+// before paging existed; an explicit limit pages, and the token continues.
+func TestWorktreeTool_List_WithoutPagingListsEveryWorktree(t *testing.T) {
+	f := newWorktreeToolFixture(t)
+	var want []string
+	for i := 0; i < 60; i++ {
+		name := fmt.Sprintf("wt-%02d", i)
+		f.register(t, name, 1)
+		want = append(want, name)
+	}
+	listed := func(resp ToolResponse) ([]string, WorktreeResponseMetadata) {
+		t.Helper()
+		require.False(t, resp.IsError, resp.Content)
+		var meta WorktreeResponseMetadata
+		require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+		var out []string
+		for _, wt := range meta.Worktrees {
+			out = append(out, wt.Name)
+		}
+		return out, meta
+	}
+
+	resp := f.call(t, WorktreeParams{Action: "list"})
+	all, meta := listed(resp)
+	assert.ElementsMatch(t, want, all)
+	assert.Equal(t, 60, meta.Total)
+	assert.Empty(t, meta.NextPageToken)
+	assert.Contains(t, resp.Content, "Found 60 worktrees:\n")
+	assert.Contains(t, resp.Content, "\n60. ")
+	assert.NotContains(t, resp.Content, "next_page_token")
+	assert.Contains(t, resp.Content, "All 60 worktrees are listed")
+
+	var paged []string
+	token := ""
+	for pages := 0; ; pages++ {
+		require.Less(t, pages, 3, "60 worktrees at 25 a page is three pages")
+		got, meta := listed(f.call(t, WorktreeParams{Action: "list", Limit: 25, PageToken: token}))
+		paged = append(paged, got...)
+		if meta.NextPageToken == "" {
+			assert.Len(t, got, 10)
+			break
+		}
+		assert.Len(t, got, 25)
+		token = meta.NextPageToken
+	}
+	assert.Equal(t, all, paged, "the pages, in order, are the unpaged list")
+}
+
 // get names the caller's chats bound to the worktree, with their state.
 func TestWorktreeTool_Get_ShowsBoundChats(t *testing.T) {
 	f := newWorktreeToolFixture(t)

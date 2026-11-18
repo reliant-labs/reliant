@@ -690,6 +690,7 @@ var generatedToolParams = map[string]ToolParams{
 	"list_triggers": {
 		Bindable: map[string]struct{}{
 			"health":     {},
+			"limit":      {},
 			"page_token": {},
 			"project_id": {},
 			"workflow":   {},

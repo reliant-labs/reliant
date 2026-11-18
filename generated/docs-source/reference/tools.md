@@ -1720,7 +1720,7 @@ Use after fire_trigger to see whether a firing launched, skipped or failed; acce
 
 List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's machine (name, id and current registry state) and health. Failed launched runs include the failing node's error.
 
-Narrow by workflow to see a workflow's activations, or by health (UNHEALTHY for everything that needs attention). Unhealthy triggers are listed first, 20 per page: when there are more, the result ends with a next_page_token to pass back as page_token. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; every firing is refused and recorded as failed until the workflow is fixed, and pause_trigger turns it off). A DEGRADED detail that ends "N later run(s) succeeded" is a past failure the trigger has recovered from.
+Narrow by workflow to see a workflow's activations, or by health (UNHEALTHY for everything that needs attention). Unhealthy triggers are listed first. Every trigger is listed unless you page: pass limit (triggers per page), and a page that has more ends with a next_page_token to pass back as page_token. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; every firing is refused and recorded as failed until the workflow is fixed, and pause_trigger turns it off). A DEGRADED detail that ends "N later run(s) succeeded" is a past failure the trigger has recovered from.
 
 ---
 
@@ -3118,9 +3118,9 @@ ACTIONS:
    Returns the worktree id, the workspace root path, the branch, and the path of each repository's checkout.
    The name must be unique among the project's live worktrees; an archived (deleted) worktree's name can be reused.
 
-2. list - List the project's worktrees (any state: creating, active, failed), most recently active first, 50 per page.
-   Optional: filter (text in the name or branch), archived (also list archived ones), limit, page_token.
-   When there are more, the result ends with a next_page_token: pass it back as page_token, with the same filter and archived.
+2. list - List the project's worktrees (any state: creating, active, failed), most recently active first. Without limit or page_token it lists every one.
+   Optional: filter (text in the name or branch), archived (also list archived ones), limit and page_token (to page: limit per page, default 50).
+   A paged result that has more ends with a next_page_token: pass it back as page_token, with the same filter, archived and limit.
 
 3. get - Required: name. Details, paths and owner of one worktree, and the chats bound to it with their state
 
