@@ -601,6 +601,14 @@ func (e *RPCError) ErrorClass() svcerr.Class {
 // "connection reset by peer" on ResolveOrgMembership failed a ListChats as
 // "could not resolve your default organization". The transport retries only a
 // REUSED connection, never a fresh one, so a real outage still fails fast.
+//
+// A method belongs here ONLY if its server-side effect is read-only or
+// idempotent, because the server may have run the first delivery before the
+// connection died. Each entry was checked against control-plane's handler and
+// everything it calls (reliant#2915, "Answer to B1"): all five only read,
+// except Introspect's `last_used_at = NOW()`, throttled to one write a
+// minute, so a replay right after the first delivery changes nothing.
+// Adding a method needs the same evidence.
 var replayable = map[string]bool{
 	"Introspect":           true,
 	"ListForUser":          true,

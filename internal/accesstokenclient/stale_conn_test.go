@@ -71,6 +71,27 @@ func TestCall_WriteIsNotRetried(t *testing.T) {
 	}
 }
 
+// The replay allowlist is exactly the methods whose server-side effects were
+// shown read-only or idempotent (see replayable). Growing it means showing the
+// same for the new method, so a change here must be deliberate.
+func TestReplayable_IsExactlyTheVerifiedReads(t *testing.T) {
+	want := map[string]bool{
+		"Introspect":           true,
+		"ListForUser":          true,
+		"ResolveOrgMembership": true,
+		"ResolveGoneOrgs":      true,
+		"ResolveOrgPolicy":     true,
+	}
+	if len(replayable) != len(want) {
+		t.Fatalf("replayable has %d methods, want %d: %v", len(replayable), len(want), replayable)
+	}
+	for method, ok := range replayable {
+		if !ok || !want[method] {
+			t.Errorf("replayable[%q] = %v: not one of the verified reads", method, ok)
+		}
+	}
+}
+
 func TestRPCError_ClassFollowsWhoMustAct(t *testing.T) {
 	for _, tc := range []struct {
 		err  *RPCError
