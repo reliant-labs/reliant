@@ -3,6 +3,8 @@ package workflowcheck
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -94,7 +96,7 @@ func TestLeaseExpiresMidSyncAndTheStaleSaveIsRefused(t *testing.T) {
 // syncer takes the check, and the sync's save lands.
 func TestHeartbeatKeepsTheLeaseThroughALongSync(t *testing.T) {
 	h := newHarness()
-	h.store.renewed = make(chan []string, 1)
+	h.renewals = make(chan renewal, 1)
 	a, b := h.svc, h.syncer("syncer-b")
 	row := h.open(t, &reliantv1.WorkflowCheck{Name: "reliant/ci"})
 	h.observe(&core.WorkflowCheckObservation{EventOutcome: core.TriggerEventPending})
@@ -103,7 +105,7 @@ func TestHeartbeatKeepsTheLeaseThroughALongSync(t *testing.T) {
 		h.gh.hook = nil
 		h.clock.advance(renewEvery)
 		h.beat <- h.clock.now
-		require.Equal(t, []string{row.ID}, <-h.store.renewed)
+		require.Equal(t, []string{row.ID}, (<-h.renewals).ids)
 		// Past the claim's lease, within the renewed one.
 		h.clock.advance(lease - renewEvery + time.Second)
 		n, err := b.SyncOnce(context.Background())
@@ -122,7 +124,7 @@ func TestHeartbeatKeepsTheLeaseThroughALongSync(t *testing.T) {
 // cancelled, nothing is written, and A's save is refused.
 func TestHeartbeatCancelsASyncWhoseLeaseWasLost(t *testing.T) {
 	h := newHarness()
-	h.store.renewed = make(chan []string, 1)
+	h.renewals = make(chan renewal, 1)
 	row := h.open(t, &reliantv1.WorkflowCheck{Name: "reliant/ci"})
 	h.observe(&core.WorkflowCheckObservation{EventOutcome: core.TriggerEventPending})
 
@@ -135,7 +137,7 @@ func TestHeartbeatCancelsASyncWhoseLeaseWasLost(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, taken, 1, "B takes the expired lease")
 		h.beat <- h.clock.now
-		require.Empty(t, <-h.store.renewed, "A's renewal finds the lease gone")
+		require.Empty(t, (<-h.renewals).ids, "A's renewal finds the lease gone")
 		select {
 		case <-ctx.Done():
 		case <-time.After(10 * time.Second):
@@ -151,4 +153,133 @@ func TestHeartbeatCancelsASyncWhoseLeaseWasLost(t *testing.T) {
 	require.Equal(t, "syncer-b", row.ClaimedBy, "B's lease stands")
 	require.Equal(t, int64(2), row.LeaseGeneration)
 	require.Zero(t, row.Attempts)
+}
+
+// The renewals fail (the database is unreachable from A) until A's lease
+// expires: A's in-flight GitHub write is cancelled at the expiry, before
+// another syncer takes the check, and A writes nothing after it.
+func TestRenewalErrorsPastExpiryCancelTheWrite(t *testing.T) {
+	h := newHarness()
+	h.renewals = make(chan renewal, 1)
+	a, b := h.svc, h.syncer("syncer-b")
+	row := h.open(t, &reliantv1.WorkflowCheck{Name: "reliant/ci"})
+	h.observe(&core.WorkflowCheckObservation{EventOutcome: core.TriggerEventPending})
+	h.store.renewErr = errors.New("database unreachable")
+
+	h.gh.hook = func(ctx context.Context, what string) {
+		h.gh.hook = nil
+		require.Equal(t, "create", what, "A's create is in flight")
+		for range lease / renewEvery {
+			h.clock.advance(renewEvery)
+			if ctx.Err() == nil {
+				h.beat <- h.clock.Now()
+				require.Error(t, (<-h.renewals).err)
+			}
+		}
+		require.ErrorIs(t, context.Cause(ctx), core.ErrWorkflowCheckLeaseLost, "cancelled at the lease's expiry, renewals failing")
+		require.True(t, !h.clock.Now().Before(*h.store.rows[row.ID].ClaimedUntil), "no earlier than the expiry the database holds")
+
+		// Only now may B take the check; it creates it.
+		h.clock.advance(time.Second)
+		n, err := b.SyncOnce(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, 1, n, "B took the expired lease")
+	}
+	n, err := a.SyncOnce(context.Background())
+	require.NoError(t, err, "a check stopped for its lease is not a failed sync")
+	require.Zero(t, n)
+
+	require.Equal(t, []string{"find", "find", "create:queued/"}, h.gh.writes, "A's create never landed; B's is the only one")
+	require.Equal(t, core.CheckStatusQueued, row.GitHubStatus, "B's state stands")
+	require.Equal(t, int64(2), row.LeaseGeneration)
+	require.Empty(t, row.ClaimedBy)
+	require.Zero(t, row.Attempts, "A's stop is not recorded over B's success")
+	require.Empty(t, row.LastError)
+}
+
+// The renewals fail and A's lease nears its expiry while it is sending a
+// concluded check's annotations: the call in flight finishes, but no call
+// starts within writeMargin of the expiry. What landed is saved (nobody
+// took the row), the row is due again with no attempt counted, and the next
+// claim sends the rest.
+func TestRenewalErrorsStopWritesNearExpiry(t *testing.T) {
+	h := newHarness()
+	h.renewals = make(chan renewal, 1)
+	ctx := context.Background()
+	row := h.open(t, &reliantv1.WorkflowCheck{Name: "reliant/ci"})
+	annotations := make([]any, 120)
+	for i := range annotations {
+		annotations[i] = map[string]any{"path": fmt.Sprintf("f%03d.go", i), "start_line": 1, "message": "m"}
+	}
+	require.NoError(t, h.svc.Ended(ctx, "chat-1", core.WorkflowCheckEnding{Status: core.TriggerRunCompleted, Verdict: "success",
+		Output: map[string]any{"title": "Passed", "summary": "s", "annotations": annotations}}))
+	h.observe(launched(status(core.Completed())))
+	h.store.renewErr = errors.New("database unreachable")
+
+	h.gh.hook = func(ctx context.Context, what string) {
+		h.gh.hook = nil
+		require.Equal(t, "create", what)
+		h.clock.advance(renewEvery)
+		h.beat <- h.clock.Now()
+		require.Error(t, (<-h.renewals).err)
+		// Inside the margin, not yet expired: this call goes on.
+		h.clock.advance(lease - renewEvery - writeMargin + time.Second)
+		require.NoError(t, ctx.Err())
+	}
+	n, err := h.svc.SyncOnce(ctx)
+	require.NoError(t, err)
+	require.Zero(t, n)
+	require.Equal(t, []string{"find", "create:completed/success"}, h.gh.writes, "no annotation batch started inside the margin")
+	require.NotNil(t, row.GitHubCheckRunID, "the create that landed is saved")
+	require.Zero(t, row.AnnotationsSent)
+	require.Nil(t, row.FinishedAt)
+	require.Zero(t, row.Attempts)
+	require.Empty(t, row.LastError)
+	require.Empty(t, row.ClaimedBy, "released")
+	require.False(t, row.NextSyncAt.After(h.clock.Now()), "due again at once")
+
+	// The database answers again: the next claim sends the annotations.
+	h.store.renewErr = nil
+	h.sync(t)
+	require.Equal(t, []string{"find", "create:completed/success", "update:/+50", "update:/+50", "update:/+20"}, h.gh.writes)
+	require.Equal(t, 120, row.AnnotationsSent)
+	require.NotNil(t, row.FinishedAt)
+}
+
+// A renewal fails once, then succeeds: the lease's expiry moves out, the
+// write outlives the claim's original expiry, nobody else takes the check,
+// and A's save lands.
+func TestTransientRenewalErrorThenSuccessKeepsTheLease(t *testing.T) {
+	h := newHarness()
+	h.renewals = make(chan renewal, 1)
+	a, b := h.svc, h.syncer("syncer-b")
+	row := h.open(t, &reliantv1.WorkflowCheck{Name: "reliant/ci"})
+	h.observe(&core.WorkflowCheckObservation{EventOutcome: core.TriggerEventPending})
+	h.store.renewErr = errors.New("connection reset")
+
+	h.gh.hook = func(ctx context.Context, _ string) {
+		h.gh.hook = nil
+		h.clock.advance(renewEvery)
+		h.beat <- h.clock.Now()
+		require.Error(t, (<-h.renewals).err)
+
+		h.store.renewErr = nil
+		h.clock.advance(renewEvery)
+		h.beat <- h.clock.Now()
+		require.Equal(t, []string{row.ID}, (<-h.renewals).ids)
+
+		// Past the claim's expiry, well inside the renewed one.
+		h.clock.advance(lease - 2*renewEvery + 10*time.Second)
+		require.NoError(t, ctx.Err(), "the renewal moved the expiry")
+		n, err := b.SyncOnce(context.Background())
+		require.NoError(t, err)
+		require.Zero(t, n, "the lease is still A's")
+	}
+	n, err := a.SyncOnce(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+	require.Equal(t, []string{"find", "create:queued/"}, h.gh.writes)
+	require.Equal(t, core.CheckStatusQueued, row.GitHubStatus)
+	require.Equal(t, int64(1), row.LeaseGeneration, "nobody else claimed it")
+	require.Empty(t, row.ClaimedBy)
 }

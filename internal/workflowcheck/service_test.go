@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,8 +23,8 @@ type fakeStore struct {
 	obs  map[string]*core.WorkflowCheckObservation // by trigger event id; absent: firing gone
 	// chats maps a chat to its launch firing, for Started/Ended.
 	chats map[string]string
-	// renewed, when set, receives each renewal's answer.
-	renewed chan []string
+	// renewErr, when set, fails every lease renewal.
+	renewErr error
 }
 
 func newFakeStore() *fakeStore {
@@ -83,15 +84,15 @@ func (s *fakeStore) ClaimWorkflowCheckRuns(_ context.Context, holder string, now
 }
 
 func (s *fakeStore) RenewWorkflowCheckRunLeases(_ context.Context, holder string, leases []core.WorkflowCheckLease, until time.Time) ([]string, error) {
+	if s.renewErr != nil {
+		return nil, s.renewErr
+	}
 	var renewed []string
 	for _, l := range leases {
 		if r := s.rows[l.ID]; r != nil && r.ClaimedBy == holder && r.LeaseGeneration == l.Generation && r.FinishedAt == nil {
 			r.ClaimedUntil = &until
 			renewed = append(renewed, l.ID)
 		}
-	}
-	if s.renewed != nil {
-		s.renewed <- renewed
 	}
 	return renewed, nil
 }
@@ -195,10 +196,63 @@ func (g *fakeGitHub) Update(ctx context.Context, id int64, w Write) error {
 	return nil
 }
 
-type clock struct{ now time.Time }
+// clock is the tests' time. Its timers (afterFunc) fire only from advance,
+// on the goroutine that advances it, once the time reaches theirs.
+type clock struct {
+	mu     sync.Mutex
+	now    time.Time
+	timers map[*fakeTimer]bool
+}
 
-func (c *clock) Now() time.Time          { return c.now }
-func (c *clock) advance(d time.Duration) { c.now = c.now.Add(d) }
+type fakeTimer struct {
+	at time.Time
+	f  func()
+}
+
+func (c *clock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *clock) advance(d time.Duration) {
+	c.mu.Lock()
+	c.now = c.now.Add(d)
+	var due []*fakeTimer
+	for t := range c.timers {
+		if !t.at.After(c.now) {
+			due = append(due, t)
+			delete(c.timers, t)
+		}
+	}
+	c.mu.Unlock()
+	for _, t := range due {
+		t.f()
+	}
+}
+
+func (c *clock) afterFunc(d time.Duration, f func()) func() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.timers == nil {
+		c.timers = map[*fakeTimer]bool{}
+	}
+	t := &fakeTimer{at: c.now.Add(d), f: f}
+	c.timers[t] = true
+	return func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		pending := c.timers[t]
+		delete(c.timers, t)
+		return pending
+	}
+}
+
+// renewal is the outcome of one lease renewal.
+type renewal struct {
+	ids []string
+	err error
+}
 
 type harness struct {
 	store *fakeStore
@@ -207,6 +261,9 @@ type harness struct {
 	clock *clock
 	// beat drives every syncer's heartbeat by hand.
 	beat chan time.Time
+	// renewals, when set, receives each renewal's outcome once the syncer
+	// has acted on it.
+	renewals chan renewal
 }
 
 func newHarness() *harness {
@@ -221,6 +278,12 @@ func (h *harness) syncer(holder string) *service {
 	svc := newService(Deps{Store: h.store, GitHub: h.gh, RunURL: HostedRunURL})
 	svc.now, svc.holder = h.clock.Now, holder
 	svc.ticker = func(time.Duration) (<-chan time.Time, func()) { return h.beat, func() {} }
+	svc.afterFunc = h.clock.afterFunc
+	svc.renewed = func(ids []string, err error) {
+		if h.renewals != nil {
+			h.renewals <- renewal{ids: ids, err: err}
+		}
+	}
 	return svc
 }
 

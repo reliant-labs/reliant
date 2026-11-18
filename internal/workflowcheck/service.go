@@ -34,6 +34,11 @@ const (
 	// still holds, its rows waiting their turn included. A third of the
 	// lease, so one late or failed renewal does not lose it.
 	renewEvery = lease / 3
+	// writeMargin is how close to its lease's expiry a sync stops starting
+	// GitHub calls. A call in flight at the expiry is cancelled then, but a
+	// write GitHub already accepted cannot be taken back, so none starts
+	// this close to the moment another syncer may take the row.
+	writeMargin = 15 * time.Second
 	// batch is how many checks one pass claims.
 	batch = 25
 	// maxBackoff caps the wait after a failed GitHub write.
@@ -53,11 +58,21 @@ type service struct {
 	holder string
 	// ticker starts a pass's heartbeat (time.NewTicker; a test drives it).
 	ticker func(time.Duration) (<-chan time.Time, func())
+	// afterFunc runs f once d has passed, unless stopped first
+	// (time.AfterFunc; a test fires it from its clock).
+	afterFunc func(d time.Duration, f func()) (stop func() bool)
+	// renewed, when set, is told the outcome of every renewal (tests).
+	renewed func(ids []string, err error)
 }
 
 func newService(deps Deps) *service {
-	return &service{store: deps.Store, github: deps.GitHub, runURL: deps.RunURL, now: time.Now, holder: newHolder(), ticker: newTicker}
+	return &service{
+		store: deps.Store, github: deps.GitHub, runURL: deps.RunURL, now: time.Now,
+		holder: newHolder(), ticker: newTicker, afterFunc: afterFunc,
+	}
 }
+
+func afterFunc(d time.Duration, f func()) func() bool { return time.AfterFunc(d, f).Stop }
 
 // newHolder is a lease holder name unique to this process: the host, for
 // whoever reads the row, and a random suffix, for uniqueness.
@@ -170,10 +185,12 @@ func (s *Syncer) Run(ctx context.Context) error {
 
 // SyncOnce implements Service. It claims a batch under a lease, renews the
 // leases it still holds on a heartbeat while it works through the batch, and
-// syncs each row it still holds. A row whose lease was lost (it expired and
-// another syncer took it) is dropped: its in-flight GitHub writes are
-// cancelled and its save is refused by the fence, so the newer holder's state
-// stands. A dropped row is not a failed sync.
+// syncs each row it still holds. Writing fails closed on the lease: a row's
+// GitHub calls stop when a renewal finds its lease taken, and also when the
+// lease reaches its expiry with no renewal since (the renewals failing, the
+// database unreachable), because another syncer may then take it. Its save
+// is fenced, so what this sync did lands only if nobody did. A row stopped
+// for its lease is not a failed sync.
 func (s *service) SyncOnce(ctx context.Context) (int, error) {
 	if s.github == nil {
 		return 0, errors.New("workflowcheck: no GitHub writer in this process")
@@ -188,16 +205,16 @@ func (s *service) SyncOnce(ctx context.Context) (int, error) {
 	synced := 0
 	var errs []error
 	for _, row := range rows {
-		rowCtx, done, held := hb.begin(ctx, row.ID)
-		if !held {
-			logging.InfoContext(ctx, "[workflowcheck] lost the lease on a check before syncing it; another syncer has it", "check_id", row.ID)
+		l := hb.begin(ctx, row.ID)
+		if l == nil {
+			logging.InfoContext(ctx, "[workflowcheck] no longer sure of the lease on a check (lost, or expiring with no renewal); left it to the next claim", "check_id", row.ID)
 			continue
 		}
-		err := s.sync(ctx, rowCtx, row)
-		done()
+		err := s.sync(ctx, l, row)
+		l.done()
 		switch {
 		case errors.Is(err, core.ErrWorkflowCheckLeaseLost):
-			logging.InfoContext(ctx, "[workflowcheck] lost the lease on a check mid-sync; dropped this sync's result", "check_id", row.ID, "detail", err)
+			logging.InfoContext(ctx, "[workflowcheck] stopped syncing a check for its lease; left it to the next claim", "check_id", row.ID, "detail", err)
 		case err != nil:
 			errs = append(errs, fmt.Errorf("check %s (%s on %s/%s@%s): %w", row.ID, row.Name, row.Owner, row.Repo, row.HeadSHA, err))
 		default:
@@ -208,15 +225,17 @@ func (s *service) SyncOnce(ctx context.Context) (int, error) {
 }
 
 // sync brings one check up to date and saves the result, whatever happened:
-// a failed write is recorded and retried later, never lost. rowCtx carries
-// the reads and GitHub writes and is cancelled when the lease is lost; the
-// save runs on ctx, and its fence decides whether it lands.
-func (s *service) sync(ctx, rowCtx context.Context, row *core.WorkflowCheckRun) error {
+// a failed write is recorded and retried later, never lost. l carries the
+// reads and GitHub calls and stops them when the lease is lost or expiring;
+// the save runs on ctx, and its fence decides whether it lands.
+func (s *service) sync(ctx context.Context, l *rowLease, row *core.WorkflowCheckRun) error {
 	now := s.now().UTC()
-	obs, err := s.store.ObserveWorkflowCheckRun(rowCtx, row.TriggerEventID)
+	obs, err := s.store.ObserveWorkflowCheckRun(l.ctx, row.TriggerEventID)
 	switch {
 	case errors.Is(err, core.ErrWorkflowCheckRunNotFound):
 		obs = nil
+	case err != nil && l.stopped():
+		return s.leaseEnded(ctx, l, row, now, err)
 	case err != nil:
 		return s.failed(ctx, row, now, fmt.Errorf("observe: %w", err))
 	}
@@ -227,7 +246,10 @@ func (s *service) sync(ctx, rowCtx context.Context, row *core.WorkflowCheckRun) 
 		chatID = obs.ChatID
 	}
 	out := outputFor(st, row.Output, row.OutputError, s.link(chatID))
-	if err := s.push(rowCtx, row, st, out, s.link(chatID), now); err != nil {
+	if err := s.push(l, row, st, out, s.link(chatID), now); err != nil {
+		if l.stopped() {
+			return s.leaseEnded(ctx, l, row, now, err)
+		}
 		return s.failed(ctx, row, now, err)
 	}
 	row.Attempts, row.LastError = 0, ""
@@ -238,6 +260,23 @@ func (s *service) sync(ctx, rowCtx context.Context, row *core.WorkflowCheckRun) 
 	}
 	row.UpdatedAt = now
 	return s.store.SaveWorkflowCheckRunSync(ctx, row)
+}
+
+// leaseEnded ends a sync stopped for its lease. What landed on GitHub before
+// it stopped (push records each write as it lands) is saved, fenced: it
+// lands only if no other syncer took the row meanwhile, and then no other
+// syncer wrote either. The row is left due at once, with no attempt counted:
+// the stop was this syncer's, not GitHub's.
+func (s *service) leaseEnded(ctx context.Context, l *rowLease, row *core.WorkflowCheckRun, now time.Time, cause error) error {
+	stopped := cause
+	if !errors.Is(cause, core.ErrWorkflowCheckLeaseLost) {
+		stopped = fmt.Errorf("%w (stopped: %v)", context.Cause(l.ctx), cause)
+	}
+	row.NextSyncAt, row.UpdatedAt = now, now
+	if err := s.store.SaveWorkflowCheckRunSync(ctx, row); err != nil && !errors.Is(err, core.ErrWorkflowCheckLeaseLost) {
+		return errors.Join(stopped, fmt.Errorf("save: %w", err))
+	}
+	return stopped
 }
 
 // failed records a failed sync: backoff, and past the check's timeout plus
@@ -292,7 +331,8 @@ func (s *service) failed(ctx context.Context, row *core.WorkflowCheckRun, now ti
 // push writes st and out to GitHub when they differ from what it holds, then
 // the output's annotations not yet sent. It updates row's GitHub fields as
 // each write lands, so a failure part-way keeps what did.
-func (s *service) push(ctx context.Context, row *core.WorkflowCheckRun, st state, out Output, detailsURL string, now time.Time) error {
+func (s *service) push(l *rowLease, row *core.WorkflowCheckRun, st state, out Output, detailsURL string, now time.Time) error {
+	ctx := l.ctx
 	status := st.Status
 	// A check moves forward only: once in_progress, a run that reads as
 	// starting again (a resumed run's row, for a moment) changes nothing.
@@ -308,12 +348,16 @@ func (s *service) push(ctx context.Context, row *core.WorkflowCheckRun, st state
 	if row.GitHubCheckRunID != nil && row.GitHubDigest == want && !pendingAnnotations {
 		return nil
 	}
-	runs, err := s.github.CheckRuns(ctx, Identity{
+	if err := l.mayCall(); err != nil {
+		return err
+	}
+	gh, err := s.github.CheckRuns(ctx, Identity{
 		UserID: row.UserID, OrgID: ptr.From(row.OrgID), ActingIdentity: row.ActingIdentity, Automation: row.Automation,
 	}, row.Owner, row.Repo)
 	if err != nil {
 		return err
 	}
+	runs := leasedRuns{runs: gh, l: l}
 	if row.GitHubCheckRunID == nil || row.GitHubDigest != want {
 		w := Write{Status: status, Conclusion: conclusion, ExternalID: row.ID, DetailsURL: detailsURL, Output: &out}
 		if status != core.CheckStatusQueued {
@@ -397,27 +441,39 @@ func (s *service) link(chatID string) string {
 	return s.runURL(chatID)
 }
 
-// heartbeat renews a pass's leases every renewEvery until the pass ends. A
-// row the renewal no longer finds held is lost: its sync, if running, is
-// cancelled, and a row still waiting is skipped.
+// heartbeat renews a pass's leases every renewEvery until the pass ends,
+// and keeps each row's lease expiry as this syncer last knew it held: the
+// claim's, then each successful renewal's. A row the renewal finds taken is
+// lost. A row whose expiry passes with no renewal since may be taken by
+// another syncer, so it is treated as lost too: fail closed.
 type heartbeat struct {
+	s      *service
 	mu     sync.Mutex
 	held   map[string]core.WorkflowCheckLease // claimed and not yet synced
+	until  map[string]time.Time               // each held row's lease expiry
 	lost   map[string]bool
-	active map[string]context.CancelFunc
+	active *rowLease // the row being synced
 	done   chan struct{}
 	wg     sync.WaitGroup
 }
 
 func (s *service) startHeartbeat(ctx context.Context, rows []*core.WorkflowCheckRun) *heartbeat {
 	hb := &heartbeat{
-		held:   make(map[string]core.WorkflowCheckLease, len(rows)),
-		lost:   map[string]bool{},
-		active: map[string]context.CancelFunc{},
-		done:   make(chan struct{}),
+		s:     s,
+		held:  make(map[string]core.WorkflowCheckLease, len(rows)),
+		until: make(map[string]time.Time, len(rows)),
+		lost:  map[string]bool{},
+		done:  make(chan struct{}),
 	}
 	for _, r := range rows {
 		hb.held[r.ID] = core.WorkflowCheckLease{ID: r.ID, Generation: r.LeaseGeneration}
+		// The claim's expiry; a store that returned none is held for no
+		// longer than the claim asked.
+		until := s.now().UTC().Add(lease)
+		if r.ClaimedUntil != nil && r.ClaimedUntil.Before(until) {
+			until = *r.ClaimedUntil
+		}
+		hb.until[r.ID] = until
 	}
 	tick, stopTick := s.ticker(renewEvery)
 	hb.wg.Add(1)
@@ -438,9 +494,9 @@ func (s *service) startHeartbeat(ctx context.Context, rows []*core.WorkflowCheck
 	return hb
 }
 
-// renew extends the leases the pass still holds. A renewal that fails
-// changes nothing: the lease may then expire, and the save's fence still
-// refuses a write after another syncer took the row.
+// renew extends the leases the pass still holds. A renewal that fails moves
+// no expiry: each row then stops writing at the expiry it had, unless a later
+// renewal succeeds first. A lease the renewal does not return is lost now.
 func (s *service) renew(ctx context.Context, hb *heartbeat) {
 	hb.mu.Lock()
 	leases := make([]core.WorkflowCheckLease, 0, len(hb.held))
@@ -451,9 +507,15 @@ func (s *service) renew(ctx context.Context, hb *heartbeat) {
 	if len(leases) == 0 {
 		return
 	}
-	renewed, err := s.store.RenewWorkflowCheckRunLeases(ctx, s.holder, leases, s.now().UTC().Add(lease))
+	// The new expiry is measured from before the call, so this syncer never
+	// believes it holds a row longer than the database does.
+	until := s.now().UTC().Add(lease)
+	renewed, err := s.store.RenewWorkflowCheckRunLeases(ctx, s.holder, leases, until)
+	if s.renewed != nil {
+		defer s.renewed(renewed, err)
+	}
 	if err != nil {
-		logging.WarnContext(ctx, "[workflowcheck] could not renew check leases", "error", err)
+		logging.WarnContext(ctx, "[workflowcheck] could not renew check leases; each stops writing at its expiry unless a renewal succeeds first", "error", err)
 		return
 	}
 	kept := make(map[string]bool, len(renewed))
@@ -463,38 +525,142 @@ func (s *service) renew(ctx context.Context, hb *heartbeat) {
 	hb.mu.Lock()
 	defer hb.mu.Unlock()
 	for _, l := range leases {
-		if _, still := hb.held[l.ID]; !still || kept[l.ID] {
+		if _, still := hb.held[l.ID]; !still {
+			continue
+		}
+		active := hb.active != nil && hb.active.id == l.ID
+		if kept[l.ID] {
+			if until.After(hb.until[l.ID]) {
+				hb.until[l.ID] = until
+				if active {
+					hb.arm(hb.active, until)
+				}
+			}
 			continue
 		}
 		hb.lost[l.ID] = true
 		delete(hb.held, l.ID)
-		if cancel := hb.active[l.ID]; cancel != nil {
-			cancel()
+		if active {
+			hb.active.cancel(fmt.Errorf("%w: another syncer holds it now", core.ErrWorkflowCheckLeaseLost))
 		}
 	}
 }
 
-// begin starts row id's sync: its context (ctx's values and deadline, and
-// cancelled too if the lease is lost) and the func that ends it. held is
-// false when the lease is already lost.
-func (hb *heartbeat) begin(ctx context.Context, id string) (context.Context, func(), bool) {
+// begin starts row id's sync under its lease, or returns nil when the lease
+// is lost or too near its expiry to start: either way the row is left to
+// the next claim.
+func (hb *heartbeat) begin(ctx context.Context, id string) *rowLease {
 	hb.mu.Lock()
 	defer hb.mu.Unlock()
-	if _, ok := hb.held[id]; !ok || hb.lost[id] {
-		return nil, nil, false
+	until := hb.until[id]
+	if _, ok := hb.held[id]; !ok || hb.lost[id] || !hb.s.now().Before(until.Add(-writeMargin)) {
+		return nil
 	}
-	rowCtx, cancel := context.WithCancel(ctx)
-	hb.active[id] = cancel
-	return rowCtx, func() {
+	rowCtx, cancel := context.WithCancelCause(ctx)
+	l := &rowLease{hb: hb, id: id, ctx: rowCtx, cancel: cancel}
+	hb.active = l
+	hb.arm(l, until)
+	return l
+}
+
+// arm cancels l at until, unless it is armed again (a renewal) or done
+// first. hb.mu is held.
+func (hb *heartbeat) arm(l *rowLease, until time.Time) {
+	if l.stopTimer != nil {
+		l.stopTimer()
+	}
+	l.arms++
+	arm := l.arms
+	l.stopTimer = hb.s.afterFunc(until.Sub(hb.s.now()), func() {
 		hb.mu.Lock()
-		delete(hb.active, id)
-		delete(hb.held, id)
+		current := hb.active == l && l.arms == arm
 		hb.mu.Unlock()
-		cancel()
-	}, true
+		if current {
+			l.cancel(fmt.Errorf("%w: it expired at %s with no renewal since", core.ErrWorkflowCheckLeaseLost, until.Format(time.RFC3339)))
+		}
+	})
 }
 
 func (hb *heartbeat) stop() {
 	close(hb.done)
 	hb.wg.Wait()
+}
+
+// rowLease is one row's sync under its lease: the context its reads and
+// GitHub calls run in, cancelled with ErrWorkflowCheckLeaseLost as its cause
+// when the lease is lost or expires with no renewal.
+type rowLease struct {
+	hb     *heartbeat
+	id     string
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+	// Guarded by hb.mu.
+	stopTimer func() bool
+	arms      int
+}
+
+// mayCall is asked before every GitHub call: the context must be live, and
+// the lease must not be within writeMargin of its expiry. Too near, the row
+// is stopped (fail closed) and nothing more is called for it.
+func (l *rowLease) mayCall() error {
+	if l.ctx.Err() != nil {
+		return context.Cause(l.ctx)
+	}
+	l.hb.mu.Lock()
+	until := l.hb.until[l.id]
+	l.hb.mu.Unlock()
+	if !l.hb.s.now().Before(until.Add(-writeMargin)) {
+		l.cancel(fmt.Errorf("%w: it expires at %s with no renewal since, too soon to start a GitHub call", core.ErrWorkflowCheckLeaseLost, until.Format(time.RFC3339)))
+		return context.Cause(l.ctx)
+	}
+	return nil
+}
+
+// stopped reports whether the row was stopped for its lease.
+func (l *rowLease) stopped() bool {
+	return errors.Is(context.Cause(l.ctx), core.ErrWorkflowCheckLeaseLost)
+}
+
+// done ends the row's sync: its expiry timer stops and its lease is no longer
+// renewed (the save released it).
+func (l *rowLease) done() {
+	hb := l.hb
+	hb.mu.Lock()
+	if hb.active == l {
+		hb.active = nil
+	}
+	if l.stopTimer != nil {
+		l.stopTimer()
+	}
+	delete(hb.held, l.id)
+	delete(hb.until, l.id)
+	hb.mu.Unlock()
+	l.cancel(nil)
+}
+
+// leasedRuns asks the row's lease before every call to GitHub.
+type leasedRuns struct {
+	runs CheckRuns
+	l    *rowLease
+}
+
+func (r leasedRuns) Find(ctx context.Context, headSHA, name, externalID string) (int64, error) {
+	if err := r.l.mayCall(); err != nil {
+		return 0, err
+	}
+	return r.runs.Find(ctx, headSHA, name, externalID)
+}
+
+func (r leasedRuns) Create(ctx context.Context, w Write) (int64, error) {
+	if err := r.l.mayCall(); err != nil {
+		return 0, err
+	}
+	return r.runs.Create(ctx, w)
+}
+
+func (r leasedRuns) Update(ctx context.Context, id int64, w Write) error {
+	if err := r.l.mayCall(); err != nil {
+		return err
+	}
+	return r.runs.Update(ctx, id, w)
 }
