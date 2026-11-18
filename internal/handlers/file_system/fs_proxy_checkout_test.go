@@ -63,7 +63,8 @@ func checkoutMissingDetail(t *testing.T, err error) *reliantv1.ProjectCheckoutMi
 // directory" — rendered verbatim, repeatedly. The project root missing while a
 // clone onto THIS machine is installing is a state, not a failure.
 func TestFileSystemProxy_GetFileTree_QueuedCloneIsCloningNotInternal(t *testing.T) {
-	repo, projectID, base := seedFSProxyProject(t)
+	repo, projectID, base := seedFSProxyProjectOn(t)
+	// On no machine yet: the clone onto 2aab1465 is the only record.
 	ctx := fsProxyContext()
 	remote := "https://github.com/reliant-labs/forge.git"
 	require.NoError(t, repo.UpdateProject(ctx, &db.Project{ID: projectID, Name: "forge", Path: base, UserID: fsProxyTestUser, RemoteURL: &remote}, fsProxyTestUser))
@@ -88,7 +89,9 @@ func TestFileSystemProxy_GetFileTree_QueuedCloneIsCloningNotInternal(t *testing.
 // deliberately never mkdirs a repository's directory, so the honest answer is
 // ABSENT — with the remote, so the UI can offer to clone it here.
 func TestFileSystemProxy_GetFileTree_ProjectNotOnThisMachineIsAbsent(t *testing.T) {
-	repo, projectID, base := seedFSProxyProject(t)
+	repo, projectID, base := seedFSProxyProjectOn(t)
+	// On none of the user's machines: with a machine that HAS it, the tree
+	// is read there instead (TestFileSystemProxy_ChatlessTreeIsReadOnAMachineThatHasIt).
 	ctx := fsProxyContext()
 	remote := "https://github.com/acme/houndersclub.git"
 	require.NoError(t, repo.UpdateProject(ctx, &db.Project{ID: projectID, Name: "houndersclub", Path: base, UserID: fsProxyTestUser, RemoteURL: &remote}, fsProxyTestUser))
@@ -130,7 +133,7 @@ func TestFileSystemProxy_GetFileTree_MissingSubdirStaysAsItWas(t *testing.T) {
 // the main checkout, so a missing project root arrived with a worktree id and
 // skipped the checkout classification entirely, coming back INTERNAL.
 func TestFileSystemProxy_GetFileTree_MissingRootViaMainWorktreeIsACheckoutState(t *testing.T) {
-	repo, projectID, base := seedFSProxyProject(t)
+	repo, projectID, base := seedFSProxyProjectOn(t)
 	ctx := fsProxyContext()
 	now := time.Now()
 	mainID := uuid.NewString()

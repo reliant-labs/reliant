@@ -38,24 +38,26 @@ function shortId(daemonId: string): string {
 }
 
 /**
- * A hostname that names nothing a person would recognize: empty, the
- * daemon's own id, or a bare UUID (what a self-hosted daemon that never
- * registered a name falls back to).
+ * A name or hostname that names nothing a person would recognize: empty, the
+ * daemon's own id, or a bare UUID. A self-hosted daemon that connected with
+ * neither a name nor a hostname is named by its id in the control plane — a
+ * placeholder, not a name: shown, it read "reliant-labs isn't on
+ * 46e3682b-33cd-…".
  */
-function isPlaceholderHostname(hostname: string, daemonId: string): boolean {
-  return !hostname || hostname === daemonId || UUID_RE.test(hostname);
+function isPlaceholderLabel(label: string, daemonId: string): boolean {
+  return !label || label.toLowerCase() === (daemonId || "").toLowerCase() || UUID_RE.test(label);
 }
 
 export function machineDisplayName(d: NameableMachine): string {
   const name = d.name?.trim() ?? "";
-  if (name) return name;
+  if (!isPlaceholderLabel(name, d.daemonId)) return name;
 
   const id = shortId(d.daemonId);
   if (isManagedMachine(d)) {
     return id ? `Cloud machine (${id})` : "Cloud machine";
   }
   const hostname = d.hostname?.trim() ?? "";
-  if (!isPlaceholderHostname(hostname, d.daemonId)) return hostname;
+  if (!isPlaceholderLabel(hostname, d.daemonId)) return hostname;
   return id ? `Self-hosted machine (${id})` : "Self-hosted machine";
 }
 

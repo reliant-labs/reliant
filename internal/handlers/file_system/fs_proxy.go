@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
@@ -82,14 +83,18 @@ func (s *Service) requireProjectBase(ctx context.Context, userID, projectID stri
 		if err != nil {
 			return "", err
 		}
-		// A request left to default resolution is resolved on the machine
-		// that resolution names, so the path is that machine's checkout.
-		machine := target.DaemonID
-		if machine == "" && !target.NoMachine && s.deps.Router != nil {
-			machine, _ = s.deps.Router.ResolveDaemonID(ctx, userID)
-		}
+		// A request no chat or workspace placed (target.DaemonID "") is
+		// resolved among the machines that HAVE the project — the default
+		// when it is one of them, else another of the user's — never on
+		// project-blind default resolution, which refused the Files tab
+		// with "<project> isn't on <machine>" whenever the default machine
+		// lacked a checkout another machine had. A chat or workspace pinned
+		// to a machine without one is still refused: its files are there.
 		machines, _ := s.deps.Router.(daemonplacement.Machines)
-		checkout, err := projectcheckout.ForMachine(ctx, s.deps.Repo, machines, userID, project, machine, "browse its files")
+		checkout, err := projectcheckout.ForMachine(ctx, s.deps.Repo, machines, userID, project, target.DaemonID, fsCheckoutPurpose)
+		if err != nil && target.DaemonID == "" && !target.NoMachine {
+			err = s.noCheckoutAnywhere(ctx, userID, project, err)
+		}
 		if err != nil {
 			return "", err
 		}
@@ -104,6 +109,34 @@ func (s *Service) requireProjectBase(ctx context.Context, userID, projectID stri
 		return "", "", svcerr.FailedPrecondition(fmt.Sprintf("project %q has no workspace path to scope this request to", projectID))
 	}
 	return basePath, resolvedOn, nil
+}
+
+// fsCheckoutPurpose finishes projectcheckout's refusal sentence ("clone it
+// onto <machine> to <purpose>").
+const fsCheckoutPurpose = "browse its files"
+
+// noCheckoutAnywhere is the refusal for a request no machine was named for,
+// when none of the user's machines has an installed checkout and none is
+// cloning or failed (err is Resolve's). There is then no machine the files
+// are on, so the Files tab describes the machine default resolution names —
+// the one "Clone it here" clones onto — with that machine's own state (a
+// clone of a machine the registry does not list yet, still landing there, is
+// CLONING). Any other err is returned as it is.
+func (s *Service) noCheckoutAnywhere(ctx context.Context, userID string, project *db.Project, err error) error {
+	var missing *daemonplacement.NoCheckoutError
+	if s.deps.Router == nil || !errors.As(err, &missing) || len(missing.Cloning) > 0 || len(missing.Failed) > 0 {
+		return err
+	}
+	machine, rerr := s.deps.Router.ResolveDaemonID(ctx, userID)
+	if rerr != nil || machine == "" {
+		return err
+	}
+	if _, onErr := projectcheckout.On(ctx, s.deps.Repo, userID, project, machine, fsCheckoutPurpose); onErr != nil {
+		return onErr
+	}
+	// Installed there after all (a row written since Resolve read): the
+	// original refusal stands; the next read resolves it.
+	return err
 }
 
 // workspaceScope is where a workspace-scoped request acts: the directory it
