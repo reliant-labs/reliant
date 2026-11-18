@@ -6,8 +6,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const NOW = 1_800_000_000_000
-/** 2100-01-01T00:00:00Z, in seconds. */
-const FAR_FUTURE = 4_102_444_800
 
 function b64url(value: unknown): string {
   return btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -87,9 +85,9 @@ describe('adoptDevToken', () => {
     const { adoptDevToken } = await import('../devSignIn')
     const write = vi.fn(async () => {})
     const restart = vi.fn()
-    // A fixed exp no wall clock reaches: adoption checks it against Date.now().
-    const token = devToken({ ...minted, exp: FAR_FUTURE })
-    await adoptDevToken(token, '/chats', { write, restart })
+    // Checked against the fixed clock NOW, never the wall clock.
+    const token = devToken(minted)
+    await adoptDevToken(token, '/chats', { write, restart, now: () => NOW })
     expect(write).toHaveBeenCalledWith(expect.objectContaining({ access_token: token }))
     expect(restart).toHaveBeenCalledWith('/chats')
   })

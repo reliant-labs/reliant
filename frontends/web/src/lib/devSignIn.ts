@@ -130,6 +130,8 @@ export interface AdoptDeps {
   write: (session: Session) => Promise<void>;
   /** Restarts the app on path, so it starts from the stored session. */
   restart: (path: string) => void;
+  /** The clock a token's exp is checked against, in milliseconds. */
+  now: () => number;
 }
 
 const defaultDeps: AdoptDeps = {
@@ -138,6 +140,7 @@ const defaultDeps: AdoptDeps = {
     await writeStoredSessionForDevSignIn(session);
   },
   restart: (path) => window.location.replace(path),
+  now: () => Date.now(),
 };
 
 /**
@@ -147,8 +150,8 @@ const defaultDeps: AdoptDeps = {
  */
 export async function adoptDevToken(token: string, path: string, deps: Partial<AdoptDeps> = {}): Promise<void> {
   if (!devSignInEnabled()) throw new Error("Dev sign-in is off in this build (VITE_DEV_SIGN_IN).");
-  const { write, restart } = { ...defaultDeps, ...deps };
-  const session = sessionFromDevToken(token);
+  const { write, restart, now } = { ...defaultDeps, ...deps };
+  const session = sessionFromDevToken(token, now());
   await write(session);
   restart(path);
 }

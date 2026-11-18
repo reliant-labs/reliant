@@ -105,6 +105,34 @@ _pod = {
     go_memory_limit_percent = GO_MEMORY_LIMIT_PERCENT
 }
 
+# ── The dev signer is dev's alone ───────────────────────────────────────────
+# AUTH_DEV_JWT_SECRET makes the api-server accept HS256 tokens minted with it
+# beside the Supabase key (internal/auth WithDevSigner): dev sign-in, and dev
+# tier only. The process refuses to start with it outside that tier; this
+# refuses to RENDER it there, wherever the api-server is bound — every env of
+# this repo and of control-plane binds `api_server` below, so the check runs on
+# the env each binding finally gives it. The tier is the one the process will
+# read (RELIANT_ENV, else NODE_ENV), parsed as internal/runenv.Parse does:
+# unset or unrecognised is prod.
+DEV_SIGNER_ENV = "AUTH_DEV_JWT_SECRET"
+_DEV_TIER_NAMES = ["dev", "development", "local", "e2e"]
+
+# dev_signer_allowed reports whether env may carry the dev signer: it does not,
+# or the tier it runs in is dev.
+dev_signer_allowed = lambda env: {str:} -> bool {
+    _tier = env.RELIANT_ENV if "RELIANT_ENV" in env else (env.NODE_ENV if "NODE_ENV" in env else "")
+    DEV_SIGNER_ENV not in env or (typeof(_tier) == "str" and _tier.lower() in _DEV_TIER_NAMES)
+}
+
+# The api-server's workload: a forge Workload that refuses the dev signer
+# outside the dev tier. A schema check, so it runs again on every binding's
+# union (`api_server | {env = ...}`), on the final env.
+schema APIServerWorkload(fw.Workload):
+    check:
+        dev_signer_allowed(env or {}), "${DEV_SIGNER_ENV} is a dev-only signer: ${name} sets it outside the dev tier " \
+            "(its RELIANT_ENV is not dev, development, local or e2e; unset is prod). Only a dev environment may set it " \
+            "(reliant deploy/kcl/workloads.k, control-plane#2735)."
+
 # ── The workloads ───────────────────────────────────────────────────────────
 
 # The schema migration, to completion, before every other workload. It takes
@@ -128,7 +156,7 @@ migrate = fw.Workload {
 # them.
 
 # Every Connect service, on one mux (GRPC_PORT), plus /health on HEALTH_PORT.
-api_server = fw.Workload {
+api_server = APIServerWorkload {
     name = "reliant-api-server"
     kind = "service"
     build = _build
