@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (28 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (72 tools)
+- [Other Tools](#other-tools) (73 tools)
 
 ---
 
@@ -2190,6 +2190,7 @@ _Miscellaneous tools and utilities._
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
 | [`manage_machine`](#manage_machine) | - | Start, stop or resize one of the user's own machines (from list_machines), exactly as Settings ->... |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
+| [`propose_connection`](#propose_connection) | - | Ask the person to connect an integration you need: GitHub, Slack, Gmail, Twilio, or an HTTP API (... |
 | [`report_bug`](#report_bug) | readonly, coding:plan, coding:default | Report a defect in Reliant itself, or in forge, to the Reliant engineering team. One call files i... |
 | [`request_machine`](#request_machine) | - | Offer the user the choice to connect a machine, when the task genuinely needs their computer. |
 | [`send_to_run`](#send_to_run) | runs | Send a message to another top-level run that is still going, as if the user had typed it into tha... |
@@ -2735,6 +2736,19 @@ Unattended runs may only start the machine their trigger activation targets.
 ### metadata_writer
 
 Writes and updates project metadata YAML file
+
+---
+
+### propose_connection
+
+Ask the person to connect an integration you need: GitHub, Slack, Gmail, Twilio, or an HTTP API (api key or username and password). It raises an approval card in the chat; the person completes the sign-in or enters the key in Reliant's connection dialog, and owns the connection.
+
+You never see the credential. The result is only a status — connected (with the connection's id and name), declined, or not completed — and the provider. Use the connection id wherever a connection is asked for.
+
+- scope: personal (the person's own) or org (their organization's; only its owners and admins may make one). Omit it to let the person choose.
+- reason: say what you need it for; it is shown on the card.
+
+Propose a connection only when a step needs one that is missing (search_integrations shows what is connected). Do not ask again after the person declines unless they ask you to; an identical proposal already waiting, or declined in the last few minutes, is refused. On Reliant hosting GitHub is usually connected through the Reliant GitHub App: propose github only when a saved GitHub connection is needed. Interactive chats only.
 
 ---
 

@@ -773,6 +773,14 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"propose_connection": {
+		Bindable: map[string]struct{}{
+			"provider": {},
+			"reason":   {},
+			"scope":    {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"prove_test": {
 		Bindable: map[string]struct{}{
 			"baseline":   {},

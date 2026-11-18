@@ -105,12 +105,16 @@ func (a activationApprovalAsk) preview(gctx workflow.Context, tc *pb.ToolCallMsg
 // it with the other cards of its turn; empty when it is the only one.
 func (a activationApprovalAsk) wait(gctx workflow.Context, card activationCard, batchID string) (map[string]interface{}, error) {
 	rtx := a.rtx
-	return executeApprovalSignalFlow(gctx, approvalExecution{ChatID: rtx.ChatID, WorkflowID: rtx.WorkflowID, ThreadID: rtx.Thread, StepID: rtx.StepID, LoopNodeID: rtx.LoopNodeID, LoopIteration: rtx.LoopIteration, NodePath: rtx.NodePath, Title: card.preview.Title, ToolCallID: card.call.GetId(), BatchID: batchID, Logger: workflow.GetLogger(gctx)})
+	return executeApprovalSignalFlow(gctx, approvalExecution{ChatID: rtx.ChatID, WorkflowID: rtx.WorkflowID, ThreadID: rtx.Thread, StepID: rtx.StepID, LoopNodeID: rtx.LoopNodeID, LoopIteration: rtx.LoopIteration, NodePath: rtx.NodePath, Title: card.preview.Title, ToolCallID: card.call.GetId(), BatchID: batchID, ConnectionProposal: card.preview.Connection, Logger: workflow.GetLogger(gctx)})
 }
 
 // settle records the owner's decision on one card.
 func (a activationApprovalAsk) settle(gctx workflow.Context, card activationCard, output map[string]interface{}, err error) {
 	id := card.call.GetId()
+	if card.preview.Connection != nil {
+		a.settleConnection(gctx, card, output, err)
+		return
+	}
 	if err != nil || gctx.Err() != nil {
 		if approvalID, _ := output["approval_id"].(string); approvalID != "" && gctx.Err() != nil {
 			disconnected, _ := workflow.NewDisconnectedContext(gctx)
@@ -127,6 +131,67 @@ func (a activationApprovalAsk) settle(gctx workflow.Context, card activationCard
 	a.rtx.ActivationApprovals[id] = card.preview.Hash
 }
 
+// settleConnection records the person's answer to a propose_connection
+// card. Approving it means they made the connection: its id is recorded for
+// the call, which reads it back and answers the model with the status and
+// identifiers only. Anything else answers the call with a status the model
+// can act on: declined, or not completed.
+func (a activationApprovalAsk) settleConnection(gctx workflow.Context, card activationCard, output map[string]interface{}, err error) {
+	id := card.call.GetId()
+	name := card.preview.Connection.IntegrationName
+	if name == "" {
+		name = card.preview.Connection.IntegrationID
+	}
+	if err != nil || gctx.Err() != nil {
+		if approvalID, _ := output["approval_id"].(string); approvalID != "" && gctx.Err() != nil {
+			disconnected, _ := workflow.NewDisconnectedContext(gctx)
+			closeCtx := workflow.WithActivityOptions(disconnected, workflow.ActivityOptions{StartToCloseTimeout: 30 * time.Second})
+			_ = workflow.ExecuteActivity(closeCtx, "ApprovalResolve", map[string]interface{}{"approval_id": approvalID, "status": "interrupted"}).Get(closeCtx, nil)
+		}
+		a.rtx.ActivationRefusals[id] = fmt.Sprintf("status: not completed. The card asking to connect %s could not be completed; no connection was made.", name)
+		return
+	}
+	connectionID, _ := output["connection_id"].(string)
+	switch status, _ := output["status"].(string); {
+	case status == "approved" && connectionID != "":
+		a.rtx.ActivationApprovals[id] = card.preview.Hash
+		if a.rtx.ApprovedConnections == nil {
+			a.rtx.ApprovedConnections = map[string]string{}
+		}
+		a.rtx.ApprovedConnections[id] = connectionID
+	case status == "denied" && output["action_taken"] == connectionNotCompleted:
+		a.rtx.ActivationRefusals[id] = fmt.Sprintf("status: not completed. The person closed the connection dialog without connecting %s; no connection was made. Do not propose it again unless they ask you to.", name)
+	case status == "denied":
+		a.rtx.ActivationRefusals[id] = fmt.Sprintf("status: declined. The person declined to connect %s; no connection was made. Do not propose it again unless they ask you to.", name)
+	default:
+		a.rtx.ActivationRefusals[id] = fmt.Sprintf("status: not completed. Nobody connected %s before the card closed; no connection was made.", name)
+	}
+}
+
+// connectionNotCompleted is the action_taken of a propose_connection card
+// denied because the person closed the connection dialog without connecting
+// (frontends/web ConnectionProposalCard).
+const connectionNotCompleted = "not_completed"
+
+// dedupeConnectionCards answers every propose_connection card of a turn that
+// asks for the same thing as an earlier one (integration, scope and org) as
+// a duplicate, and returns the rest: one card per proposal.
+func (a activationApprovalAsk) dedupeConnectionCards(cards []activationCard) []activationCard {
+	seen := map[string]bool{}
+	kept := cards[:0:0]
+	for _, card := range cards {
+		if p := card.preview.Connection; p != nil {
+			if seen[p.Key()] {
+				a.rtx.ActivationRefusals[card.call.GetId()] = fmt.Sprintf("status: already pending. An identical proposal to connect %s is on a card raised in this same turn; wait for the person's answer.", p.IntegrationName)
+				continue
+			}
+			seen[p.Key()] = true
+		}
+		kept = append(kept, card)
+	}
+	return kept
+}
+
 // together previews every call first, then asks for all the cards the turn
 // needs at once and waits for every decision. Cards raised together carry
 // one batch id, so the chat and the Inbox offer them as a single decision
@@ -138,6 +203,7 @@ func (a activationApprovalAsk) together(gctx workflow.Context, calls []*pb.ToolC
 			cards = append(cards, card)
 		}
 	}
+	cards = a.dedupeConnectionCards(cards)
 	if len(cards) == 0 {
 		return
 	}
@@ -180,7 +246,7 @@ func (a activationApprovalAsk) oneByOne(gctx workflow.Context, calls []*pb.ToolC
 func isActivationCall(name string) bool {
 	switch name {
 	case names.ToolCreateTriggerActivation, names.ToolUpdateTriggerActivation, names.ToolEnableTrigger, names.ToolPauseTrigger, names.ToolDeleteTrigger,
-		names.ToolManageMachine:
+		names.ToolManageMachine, names.ToolProposeConnection:
 		return true
 	}
 	return false

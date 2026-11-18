@@ -941,12 +941,22 @@ function Expansion({
       <CardInset padding="sm" className="space-y-3">
         {apartReason && <p className="text-xs text-warning-ink">{apartReason}</p>}
         <ApprovalCardView title={title} hideLead={nested} />
-        <ApprovalRowAction
-          approvalId={item.payload.value.approvalId}
-          itemId={item.itemId}
-          subject={subject}
-          onFailure={onRaceOrError}
-        />
+        {parseApprovalCard(title).connectionProposal ? (
+          <ProposalRowAction
+            approvalId={item.payload.value.approvalId}
+            itemId={item.itemId}
+            chatId={item.chatId}
+            subject={subject}
+            onFailure={onRaceOrError}
+          />
+        ) : (
+          <ApprovalRowAction
+            approvalId={item.payload.value.approvalId}
+            itemId={item.itemId}
+            subject={subject}
+            onFailure={onRaceOrError}
+          />
+        )}
       </CardInset>
     );
   }
@@ -1000,6 +1010,57 @@ function ApprovalRowAction({
         onApprove={() => void act("approve")}
         onDeny={() => void act("deny")}
       />
+    </div>
+  );
+}
+
+/**
+ * An agent's connection proposal: approved only by making the connection in
+ * its chat's card (ConnectionProposalCard), so the Inbox opens the chat, or
+ * declines it here.
+ */
+function ProposalRowAction({
+  approvalId,
+  itemId,
+  chatId,
+  subject,
+  onFailure,
+}: {
+  approvalId: string;
+  itemId: string;
+  chatId: string;
+  subject: string;
+  onFailure: (verb: string) => (error: unknown) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const queryClient = useQueryClient();
+  const decide = useInboxApprovalActions();
+  const decline = async () => {
+    setBusy(true);
+    try {
+      await decide.deny(approvalId, { denialReason: "Declined" });
+      removeInboxItems([itemId], queryClient);
+    } catch (error) {
+      onFailure("deny")(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <p className="mr-auto text-xs text-muted-foreground">Connect it from its chat: making the connection approves it.</p>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void decline()}
+        aria-label={`Decline ${subject}`}
+        className="h-7 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-destructive-ink hover:bg-foreground/5 disabled:opacity-50"
+      >
+        Decline
+      </button>
+      <RunLink chatId={chatId} className={actionButtonClass}>
+        Open chat
+      </RunLink>
     </div>
   );
 }

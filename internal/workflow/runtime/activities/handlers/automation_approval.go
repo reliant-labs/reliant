@@ -54,8 +54,16 @@ func (a *AutomationApprovalActivity) Execute(ctx context.Context, in types.Autom
 			"workflow_ref", names.Workflow, "workflow_trigger", names.WorkflowTrigger, "trigger_id", names.TriggerID,
 			"reason", reason, "code", svcerr.Code(err).String(), "error", err)
 		subject := "Activation"
-		if in.ToolName == tools.ToolManageMachine {
+		switch in.ToolName {
+		case tools.ToolManageMachine:
 			subject = "Machine change"
+		case tools.ToolProposeConnection:
+			// Its refusals are written for the model whole: a status and
+			// what to do instead (connection_proposal_tool.go).
+			if tools.ActivationRefusalReason(err) != "" {
+				return types.AutomationApprovalPreview{Refusal: strings.TrimSuffix(reason, ".") + "."}, nil
+			}
+			subject = "Connection proposal"
 		}
 		return types.AutomationApprovalPreview{Refusal: subject + " could not be validated for approval: " + reason + ". Nothing changed."}, nil
 	}
@@ -86,5 +94,5 @@ func (a *AutomationApprovalActivity) Execute(ctx context.Context, in types.Autom
 	if err != nil {
 		return refuse(err)
 	}
-	return types.AutomationApprovalPreview{Title: preview.Title, Hash: preview.Hash, NoApproval: !needsApproval}, nil
+	return types.AutomationApprovalPreview{Title: preview.Title, Hash: preview.Hash, NoApproval: !needsApproval, Connection: preview.Connection}, nil
 }

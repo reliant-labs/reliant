@@ -670,6 +670,10 @@ func GetToolRegistry() []ToolDefinition {
 		// resize need an approval card.
 		{ToolListMachines, (*ToolsFactory).ListMachines, []ToolTag{TagReadOnly}, PlacementServer, false},
 		{ToolManageMachine, (*ToolsFactory).ManageMachine, nil, PlacementServer, false},
+		// Asks a person, on an approval card, to connect an integration in
+		// the connection dialog (connection_proposal_tool.go). Loaded on
+		// demand; the agent never sees the credential.
+		{ToolProposeConnection, (*ToolsFactory).ProposeConnection, nil, PlacementServer, false},
 		{ToolShellKill, (*ToolsFactory).ShellKill, []ToolTag{TagExecution, TagShell, TagCodingDefault}, PlacementDaemon, false},
 
 		// prove_test reverts the fix, runs a test expecting failure, restores,
