@@ -104,6 +104,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
+	"github.com/reliant-labs/reliant/internal/workflowcheck"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
 
@@ -1532,5 +1533,14 @@ func (g *Graph) newOrgPolicyImpact() (*org_policy_impact.Service, error) {
 func (g *Graph) newOrgPolicyAttendance() (org_policy_impact.ChatAttendance, error) {
 	return NewOrgPolicyAttendance(OrgPolicyAttendanceDeps{
 		Store: g.Database(),
+	})
+}
+
+// newWorkflowCheckSyncer constructs the WorkflowCheckSyncer provider (NewWorkflowCheckSyncer, internal/app/providers_worker.go).
+func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
+	return NewWorkflowCheckSyncer(WorkflowCheckSyncerDeps{
+		DB:          g.Database(),
+		Credentials: g.WorkerIntegrationCredentials(),
+		Policies:    g.OrgPolicyResolver(),
 	})
 }

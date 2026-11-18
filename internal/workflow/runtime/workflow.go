@@ -1041,6 +1041,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// on_failure's and run by the same defer, after it.
 	var finallyHandler *reliantv1.Workflow
 	var finallyRecord FinallyRecord
+	// check: the workflow's GitHub check, which a trigger's launch run
+	// reports its start and end to (workflow_check.go). Armed when the
+	// definition loads; reported by the completion defer below.
+	var checkDecl *reliantv1.WorkflowCheck
 	if err := workflow.SetQueryHandler(ctx, FinallyQuery, func() (FinallyRecord, error) {
 		return finallyRecord, nil
 	}); err != nil {
@@ -1115,6 +1119,14 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					status, failureFor(failRec, retErr, runOutcome, runOutcomeNode), &finallyRecord, "")
 			}
 		}
+		// The check hears how the run ended after every handler ran, and
+		// before the run reports its status: the syncer prefers this report,
+		// with the run's own check output, to the workflow row.
+		if checkDecl != nil {
+			if status, ending := runEnding(ctx, retErr, runOutcome); ending && workflowCheckGate(ctx) {
+				reportCheckEnded(ctx, checkDecl, input, workflowID, execCtx, failureNodeOutputs, status, runOutcome)
+			}
+		}
 		// Read at exit, off the final inputs map (ApplyDefaults replaces it).
 		launchRun := IsLaunchRun(input.Inputs)
 		// A root run woken after its last turn hands off to a fresh run
@@ -1163,6 +1175,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// parsed definition's handler is the handler the resolved one carries.
 	onFailureHandler = wfWithPlaceholders.GetOnFailure()
 	finallyHandler = wfWithPlaceholders.GetFinally()
+	// A check is armed with them: a launch run that dies validating its
+	// inputs still reports that it failed.
+	if reportsCheck(wfWithPlaceholders, input, parentWorkflowID) {
+		checkDecl = wfWithPlaceholders.GetCheck()
+	}
 
 	// STEP 5.5: Validate and apply defaults from workflow input schemas
 	// This ensures all inputs with defaults are available for CEL evaluation
@@ -1495,6 +1512,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// and after preflight so a daemon preflight just woke can answer it.
 	if input.GreenfieldProbe {
 		runGreenfieldProbe(ctx, input, execCtx, workflowID, thread)
+	}
+
+	// STEP 6.85: The first node is next: the workflow's check moves to
+	// in_progress now, not while a machine was still waking.
+	if checkDecl != nil && workflowCheckGate(ctx) {
+		reportCheckStarted(ctx, input.ChatID)
 	}
 
 	// STEP 6.9: Resume-at-position. When this run resumes an interrupted

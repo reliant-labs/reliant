@@ -506,6 +506,7 @@
         "WorkerRun",
         "WorkerToolsFactory",
         "WorkerTrigger",
+        "WorkflowCheckSyncer",
         "WorkflowEventRelay",
         "WriteLedger",
         "WriteLedgerPrune"
@@ -48437,6 +48438,11 @@
               "name": "attention",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowAttention"
+            },
+            {
+              "name": "check",
+              "kind": "message",
+              "type_name": "reliant.v1.WorkflowCheck"
             }
           ],
           "reliant.v1.WorkflowAttention": [
@@ -48458,6 +48464,28 @@
             },
             {
               "name": "on_failure",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WorkflowCheck": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "repository",
+              "kind": "string"
+            },
+            {
+              "name": "head_sha",
+              "kind": "string"
+            },
+            {
+              "name": "output",
+              "kind": "string"
+            },
+            {
+              "name": "timeout",
               "kind": "string"
             }
           ],
@@ -48796,6 +48824,7 @@
           "reliant.v1.WebhookSource": "reliant/v1/trigger.proto",
           "reliant.v1.Workflow": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowAttention": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.WorkflowCheck": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowConcurrency": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
           "reliant.v1.WorkflowListItem": "reliant/v1/workflow.proto",
@@ -53556,6 +53585,18 @@
       "source": {
         "path": "internal/handlers/workflow/service.go",
         "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "WorkflowCheckSyncer",
+      "name": "WorkflowCheckSyncer",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/workflowcheck.Syncer",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewWorkflowCheckSyncer"
       },
       "methods": [],
       "implementation_candidates": []

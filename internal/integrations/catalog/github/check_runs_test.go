@@ -100,8 +100,12 @@ func TestCheckRunCreateRefusesBadInput(t *testing.T) {
 		"unknown verdict":   base(map[string]any{"conclusion": "passed"}),
 		"http details url":  base(map[string]any{"details_url": "http://example.com/x"}),
 		"output no summary": base(map[string]any{"output": map[string]any{"title": "t"}}),
-		"output extra key":  base(map[string]any{"output": map[string]any{"title": "t", "summary": "s", "annotations": []any{}}}),
-		"bad timestamp":     base(map[string]any{"started_at": "yesterday"}),
+		"output extra key":  base(map[string]any{"output": map[string]any{"title": "t", "summary": "s", "images": []any{}}}),
+		"annotation without a path": base(map[string]any{"output": map[string]any{"title": "t", "summary": "s",
+			"annotations": []any{map[string]any{"start_line": 1, "end_line": 1, "annotation_level": "failure", "message": "m"}}}}),
+		"annotation level": base(map[string]any{"output": map[string]any{"title": "t", "summary": "s",
+			"annotations": []any{map[string]any{"path": "a.go", "start_line": 1, "end_line": 1, "annotation_level": "error", "message": "m"}}}}),
+		"bad timestamp": base(map[string]any{"started_at": "yesterday"}),
 	} {
 		_, err := f.try("check_run.create", p)
 		assert.Error(t, err, name)
@@ -125,6 +129,22 @@ func TestCheckRunUpdateCompletesTheRun(t *testing.T) {
 		"output":     map[string]any{"title": "Changes requested: 2 blockers", "summary": "- a\n- b"},
 	}, req.Body, "only what changes; the commit is never sent")
 	assert.Equal(t, 4242.0, out["id"])
+}
+
+// Annotations ride in output, as GitHub's API takes them: each update's are
+// appended to those already on the run.
+func TestCheckRunUpdateSendsAnnotations(t *testing.T) {
+	f := newFake(t)
+	f.on("PATCH", "/repos/acme/app/check-runs/4242", jsonReply(200, checkRunReply))
+	annotation := map[string]any{"path": "a.go", "start_line": 3, "end_line": 3, "annotation_level": "warning", "message": "unused"}
+	f.run("check_run.update", map[string]any{
+		"owner": "acme", "repo": "app", "check_run_id": 4242,
+		"output": map[string]any{"title": "1 finding", "summary": "lint", "annotations": []any{annotation}},
+	})
+	req := f.only()
+	assert.Equal(t, map[string]any{"output": map[string]any{"title": "1 finding", "summary": "lint", "annotations": []any{
+		map[string]any{"path": "a.go", "start_line": 3.0, "end_line": 3.0, "annotation_level": "warning", "message": "unused"},
+	}}}, req.Body)
 }
 
 func TestCheckRunUpdateRefusesBadInput(t *testing.T) {

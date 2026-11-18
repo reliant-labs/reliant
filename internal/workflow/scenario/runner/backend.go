@@ -44,6 +44,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
+	"github.com/reliant-labs/reliant/internal/workflowcheck"
 
 	// Imported for its init(), which registers every activity's input/output
 	// type into the schema registry. This is the same registration production
@@ -118,6 +119,21 @@ type Runner struct {
 	// command is still running — a test seam for what a cancel runs
 	// (finally) and what it leaves alone (on_failure).
 	cancelAtRunStep string
+
+	// launchedBy, when set, makes the run the launch run this trigger event
+	// fired (WorkflowInput.Trigger and the launch-run input): a test seam for
+	// what only such a run does, such as reporting to its `check:`.
+	launchedBy *runtime.TriggerInfo
+	// checkReports records the run's reports to its check, in order.
+	checkReports *checkReports
+}
+
+// checkReports is what a run reported to its workflow's check
+// (workflowcheck's Started and Ended activities).
+type checkReports struct {
+	mu      sync.Mutex
+	started []workflowcheck.StartedInput
+	ended   []workflowcheck.EndedInput
 }
 
 // versionOverride is what GetVersion(changeID, DefaultVersion, max) returns.
@@ -829,6 +845,9 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 	for k, v := range sc.Inputs {
 		inputs[k] = v
 	}
+	if r.launchedBy != nil {
+		inputs[runtime.InputKeyLaunchRun] = true
+	}
 
 	// A scenario that does not terminate must FAIL, not hang. The bound is
 	// wall-clock rather than an iteration count because the loop lives inside
@@ -850,6 +869,7 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 			ChatID:       "scenario-chat",
 			WorkflowName: r.workflow.GetName(),
 			Inputs:       inputs,
+			Trigger:      r.launchedBy,
 			Resume:       resumeInput(sc),
 			ExecContext: &runtime.ExecutionContext{
 				WorkflowID:   "scenario-wf",
@@ -1887,6 +1907,27 @@ func (r *Runner) registerActivities(
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
 	)
+
+	// A run a trigger launched reports its start and end to its workflow's
+	// check (runtime/workflow_check.go). Recorded, never failed: a report
+	// changes nothing about the run.
+	reports := r.checkReports
+	env.RegisterActivityWithOptions(func(_ context.Context, in workflowcheck.StartedInput) error {
+		if reports != nil {
+			reports.mu.Lock()
+			reports.started = append(reports.started, in)
+			reports.mu.Unlock()
+		}
+		return nil
+	}, activity.RegisterOptions{Name: workflowcheck.StartedActivityName})
+	env.RegisterActivityWithOptions(func(_ context.Context, in workflowcheck.EndedInput) error {
+		if reports != nil {
+			reports.mu.Lock()
+			reports.ended = append(reports.ended, in)
+			reports.mu.Unlock()
+		}
+		return nil
+	}, activity.RegisterOptions{Name: workflowcheck.EndedActivityName})
 
 	// A skipped node dispatches no activity at all — SkippedStep is the real
 	// runtime's only observable signal that a node was scheduled and its
