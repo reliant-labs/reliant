@@ -199,6 +199,43 @@ vi.mock('@connectrpc/connect-web', async (importOriginal) => {
   }
 })
 
+// ── The app's QueryClient does not outlive a test ──────────────────────────
+//
+// lib/query-client's `queryClient` is a module singleton, and the imperative
+// readers (orgs.ts currentOrgId, the worktree cache readers, ...) fetch
+// through it whatever client a test rendered with. Its queries retry on a
+// timer (lib/queryRetry.ts), so a lookup that failed in one test retried
+// LATER: after that test's afterEach had put its mock transport away, and
+// into whichever test ran next. The real transport then sent it, and that
+// test failed with a request it never made (an unanswered ListMyOrganizations
+// in ForgeEnvPage.liveNoDaemon, #2937). So after each test the singleton's
+// fetches are cancelled and its cache dropped: no retry from one test can
+// fire in another. Within a test the client is untouched.
+//
+// Captured as the module loads rather than imported here: a module a setup
+// file imports is cached before the test file's vi.mock calls register, so
+// importing it would make it unmockable. A test file that mocks
+// lib/query-client itself replaces this factory, and has no singleton to reset.
+const appQueryClient = vi.hoisted(() => ({ current: null as import('@tanstack/react-query').QueryClient | null }))
+
+vi.mock('@/lib/query-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/query-client')>()
+  appQueryClient.current = actual.queryClient
+  return actual
+})
+
+// Through the caches, not QueryClient.cancelQueries/clear: a test may have
+// replaced those with a spy (authStore.apiKeyOwner rejects cancelQueries to
+// prove a failed sign-out cleanup is handled). Removing a query from its cache
+// destroys it, which cancels its fetch and any retry it is waiting to make, so
+// this is cancelQueries() and clear() in one step.
+function resetAppQueryClient() {
+  const client = appQueryClient.current
+  if (!client) return
+  client.getQueryCache().clear()
+  client.getMutationCache().clear()
+}
+
 const unmockedRequests: string[] = []
 
 function describeRequest(input: RequestInfo | URL, init?: RequestInit): string {
@@ -244,6 +281,8 @@ afterEach(async () => {
     await Promise.allSettled([...rpcs.inFlight])
   }
   cleanup()
+  // After cleanup, so nothing still mounted can start another fetch on it.
+  resetAppQueryClient()
   await settleLazyImports()
   if (unmockedRequests.length === 0) return
   const requests = [...new Set(unmockedRequests.splice(0))]
