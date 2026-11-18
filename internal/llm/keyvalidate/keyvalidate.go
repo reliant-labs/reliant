@@ -8,6 +8,8 @@ package keyvalidate
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -91,20 +93,14 @@ func classify(errText string) string {
 	return MsgCheckFailed
 }
 
-// redacted replaces a key wherever a log line would otherwise carry it.
-const redacted = "[redacted]"
-
-// redactRun is the shortest run of a key's characters a log line may not carry: a provider that
-// echoes part of the key (a prefix, a masked middle) still leaves no run this long.
-const redactRun = 8
-
 // buildDriver builds the driver a key is checked with: drivers.GetDriverForModel in production,
 // a stand-in in tests (validate's seam).
 type buildDriver func(model models.Model, driverID models.Family, opts ...llm.DriverOption) (llm.Driver, error)
 
 // Validate reports whether apiKey works for provider, with one of the fixed Msg* messages, fit to
 // show the user (Reason maps it to a reason code). A driver's or provider's error is never
-// returned; it is logged with the key redacted.
+// returned, and never logged either: the log line names only the reason, the HTTP status and the
+// error's types (errorFacts), so no key, whole or in part, can reach it.
 func Validate(ctx context.Context, provider models.Family, apiKey string) (bool, string) {
 	return validate(ctx, provider, apiKey, drivers.GetDriverForModel)
 }
@@ -133,41 +129,60 @@ func validate(ctx context.Context, provider models.Family, apiKey string, build 
 	driverOpts = append(driverOpts, llm.WithAPIKey(resolvedAPIKey))
 	driver, err := build(testModel, provider, driverOpts...)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to create driver for validation", "provider", provider,
-			"error", redact(err.Error(), apiKey, resolvedAPIKey))
+		logging.ErrorContext(ctx, "Failed to create driver for validation",
+			append([]any{"provider", provider, "reason", Reason(MsgInitFailed)}, errorFacts(err)...)...)
 		return false, MsgInitFailed
 	}
 
 	err = driver.ValidateKey(ctx)
 	if err != nil {
 		msg := classify(err.Error())
-		logging.WarnContext(ctx, "API key validation failed", "provider", provider, "reason", Reason(msg),
-			"error", redact(err.Error(), apiKey, resolvedAPIKey))
+		logging.WarnContext(ctx, "API key validation failed",
+			append([]any{"provider", provider, "reason", Reason(msg)}, errorFacts(err)...)...)
 		return false, msg
 	}
 
 	return true, MsgValid
 }
 
-// redact is s with every run of redactRun or more characters of any key in keys replaced by
-// redacted. Both the key as pasted and as sent (the resolved bearer) are named, since an error may
-// quote either, whole or in part; surrounding whitespace is trimmed first.
-func redact(s string, keys ...string) string {
-	trimmed := make([]string, 0, len(keys))
-	for _, k := range keys {
-		if k = strings.TrimSpace(k); k != "" {
-			trimmed = append(trimmed, k)
+// httpStatuses are the statuses errorFacts reports: the ones a provider answers a key check with.
+var httpStatuses = []string{"400", "401", "402", "403", "404", "408", "409", "413", "422", "429", "500", "502", "503", "504", "529"}
+
+// errorFacts is what a log line may say about a failed key check: the HTTP status the error names
+// (one of httpStatuses, or none) and the Go types of its chain. Never the error's text: a provider
+// diagnostic can quote the key, whole or in part, in any encoding, and no fragment matching makes
+// that safe.
+func errorFacts(err error) []any {
+	status := ""
+	text := err.Error()
+	for _, code := range httpStatuses {
+		if containsWord(text, code) {
+			status = code
+			break
 		}
 	}
-	// Whole keys first, then their runs: a run of one key that another shares must not split the
-	// other before it is matched whole.
-	for _, k := range trimmed {
-		s = strings.ReplaceAll(s, k, redacted)
+	var types []string
+	for e := err; e != nil && len(types) < 8; e = errors.Unwrap(e) {
+		types = append(types, fmt.Sprintf("%T", e))
 	}
-	for _, k := range trimmed {
-		for i := 0; i+redactRun <= len(k); i++ {
-			s = strings.ReplaceAll(s, k[i:i+redactRun], redacted)
+	return []any{"http_status", status, "error_types", strings.Join(types, " > ")}
+}
+
+// containsWord reports whether s holds w with no letter or digit on either side.
+func containsWord(s, w string) bool {
+	for i := 0; ; {
+		j := strings.Index(s[i:], w)
+		if j < 0 {
+			return false
 		}
+		start, end := i+j, i+j+len(w)
+		if (start == 0 || !isWordByte(s[start-1])) && (end == len(s) || !isWordByte(s[end])) {
+			return true
+		}
+		i = start + 1
 	}
-	return s
+}
+
+func isWordByte(b byte) bool {
+	return b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
 }

@@ -6,9 +6,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
-const pastedKey = "sk-ant-api03-keyvalidate-test-secret-9f8e7d"
+const pastedKey = "sk-ant-api03-Zq7xW-pasted-secret-9f8e7d"
 
 // stubDriver answers ValidateKey with err; nothing else of llm.Driver is called.
 type stubDriver struct {
@@ -132,33 +134,48 @@ func TestFixedMessagesStayClassifiable(t *testing.T) {
 	assert.Equal(t, "key_data_policy", webKeyErrorCode(MsgDataPolicy, "openrouter"))
 }
 
-// The log lines Validate writes carry the provider's diagnostic with the key redacted: neither the
-// key nor any run of redactRun of its characters survives. Not parallel: it replaces slog's default.
+// echo is a provider diagnostic that quotes key whole, as a prefix and as a suffix.
+func echo(class, key string) error {
+	r := []rune(key)
+	return errors.New(class + " key=" + key + " prefix=" + string(r[:len(r)/2]) + "… suffix=…" + string(r[len(r)/2:]) + " detail=i/o timeout")
+}
+
+// The log lines Validate writes carry the reason, the HTTP status and the error's types, and never
+// the diagnostic's text: no run of 4 of the key's characters reaches the log, for an ASCII key or
+// a multibyte one, echoed whole, as a prefix or as a suffix. Not parallel: it replaces slog's
+// default.
 func TestValidate_LogsNeverCarryTheKey(t *testing.T) {
 	var buf bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	var gotKey string
-	validate(t.Context(), "anthropic", pastedKey, builder(&gotKey, stubDriver{err: quoting("upstream: dial tcp: i/o timeout")}, nil))
-	validate(t.Context(), "anthropic", pastedKey, builder(&gotKey, nil, quoting("init:")))
-	validate(t.Context(), "anthropic", pastedKey, builder(&gotKey, stubDriver{err: quoting("401 Unauthorized:")}, nil))
-
-	logged := buf.String()
-	require.Contains(t, logged, "i/o timeout", "the diagnostic is logged")
-	require.Contains(t, logged, "init:")
-	assert.Contains(t, logged, redacted)
-	for i := 0; i+redactRun <= len(pastedKey); i++ {
-		require.NotContains(t, logged, pastedKey[i:i+redactRun], "a run of the key at %d is in the log:\n%s", i, logged)
+	for _, key := range []string{pastedKey, "sk-ключ-élan-密钥钥匙-🔑🔑-ünïcødé-tail", "  sk-ключ-trailing-space-密钥\n"} {
+		var gotKey string
+		buf.Reset()
+		validate(t.Context(), "anthropic", key, builder(&gotKey, stubDriver{err: echo("503 Service Unavailable upstream:", key)}, nil))
+		validate(t.Context(), "anthropic", key, builder(&gotKey, nil, echo("init:", key)))
+		validate(t.Context(), "anthropic", key, builder(&gotKey, stubDriver{err: echo("429 rate limit", key)}, nil))
+		logged := buf.String()
+		require.True(t, utf8.ValidString(logged))
+		assert.Contains(t, logged, "reason="+ReasonCheckFailed)
+		assert.Contains(t, logged, "reason="+ReasonInitFailed)
+		assert.Contains(t, logged, "reason="+ReasonRateLimited)
+		assert.Contains(t, logged, "http_status=503")
+		assert.Contains(t, logged, "http_status=429")
+		assert.Contains(t, logged, "error_types=*errors.errorString")
+		assert.NotContains(t, logged, "i/o timeout", "the diagnostic's text is never logged")
+		r := []rune(strings.TrimSpace(key))
+		for i := 0; i+4 <= len(r); i++ {
+			require.NotContains(t, logged, string(r[i:i+4]), "a run of the key at rune %d is in the log:\n%s", i, logged)
+		}
 	}
 }
 
-func TestRedact(t *testing.T) {
+func TestErrorFacts(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "a [redacted] b [redacted]", redact("a k1-secret-long b k2-secret-long", "k1-secret-long", " k2-secret-long\n", ""))
-	assert.Equal(t, "nothing to hide", redact("nothing to hide", "", "  "), "an empty key redacts nothing")
-	out := redact("prefix sk-ant-api03-ab… only", pastedKey)
-	assert.NotContains(t, out, "sk-ant-api03", "a quoted prefix of the key is redacted too")
-	assert.True(t, strings.Contains(out, redacted))
+	wrapped := fmt.Errorf("check: %w", errors.New("POST /v1/messages: 401 Unauthorized"))
+	assert.Equal(t, []any{"http_status", "401", "error_types", "*fmt.wrapError > *errors.errorString"}, errorFacts(wrapped))
+	assert.Equal(t, []any{"http_status", "", "error_types", "*errors.errorString"}, errorFacts(errors.New("key sk-4010-x")),
+		"a status inside a longer token is not one")
 }
