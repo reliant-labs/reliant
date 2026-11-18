@@ -25,12 +25,14 @@
  *                  nothing of the user's, offered to everyone. The forge
  *                  site mounts it outside the guard.
  *   /apps          (Reliant) where a claim lands there (Claim/useClaimFlow).
- *   a claim        the tab that just claimed a site (markClaimLanding): the
- *                  claim design keeps a new claimant out of the wizard on the
- *                  way to their claimed app, and the wizard has no
- *                  claim-aware path. On the forge site a claim lands in the
- *                  app's console, so this is a mark on the tab, not a route.
- *                  The next visit is gated.
+ *   a claim        the claimed app's own console pages (`/forge/p/<app>/…`),
+ *                  for the user who just claimed it, in that tab, for
+ *                  CLAIM_LANDING_TTL_MS (markClaimLanding): the claim design
+ *                  keeps a new claimant out of the wizard on the way to their
+ *                  claimed app, and the wizard has no claim-aware path. On the
+ *                  forge site a claim lands in that console. Every other
+ *                  guarded route — another app, `/apps` on the forge site —
+ *                  ignores the mark and runs the wizard.
  *   a skip         (forge site) the wizard's own "Only here to deploy apps?"
  *                  escape (OnboardingEscapeHatch), remembered for this user
  *                  in this browser (markForgeSetupSkipped). It leaves the
@@ -64,17 +66,59 @@ export function routeRequiresOnboarding(
   return !exempt.some((prefix) => underPrefix(pathname, prefix));
 }
 
-/** sessionStorage key of the claim mark: the claimant's auth user id. */
+/** sessionStorage key of the claim mark (ClaimLanding, as JSON). */
 export const CLAIM_LANDING_KEY = "reliant.onboarding.claimLanding";
 
-/** Record that this tab just claimed a site as `userId` (Claim/useClaimFlow). */
-export function markClaimLanding(userId: string | undefined): void {
-  if (!userId) return;
+/** How long a claim excuses the claimed app's console: the landing visit, not the account's life. */
+export const CLAIM_LANDING_TTL_MS = 30 * 60 * 1000;
+
+/** The claim mark: who claimed which app, and when. */
+interface ClaimLanding {
+  user: string;
+  project: string;
+  at: number;
+}
+
+/** Record that this tab just claimed `project` as `userId` (Claim/useClaimFlow). */
+export function markClaimLanding(userId: string | undefined, project: string | undefined, now = Date.now()): void {
+  if (!userId || !project) return;
   try {
-    sessionStorage.setItem(CLAIM_LANDING_KEY, userId);
+    sessionStorage.setItem(CLAIM_LANDING_KEY, JSON.stringify({ user: userId, project, at: now } satisfies ClaimLanding));
   } catch {
     // Storage refused: the claimant is gated like anyone else.
   }
+}
+
+function readClaimLanding(): ClaimLanding | null {
+  try {
+    const raw = sessionStorage.getItem(CLAIM_LANDING_KEY);
+    if (!raw) return null;
+    const mark = JSON.parse(raw) as Partial<ClaimLanding>;
+    if (typeof mark.user !== "string" || typeof mark.project !== "string" || typeof mark.at !== "number") return null;
+    return mark as ClaimLanding;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether this tab's claim mark excuses `userId` on `pathname`: the same user,
+ * a page of the claimed app's console, within CLAIM_LANDING_TTL_MS. An
+ * expired mark is removed.
+ */
+export function claimLandingExcuses(userId: string | undefined, pathname: string, now = Date.now()): boolean {
+  if (!userId) return false;
+  const mark = readClaimLanding();
+  if (!mark) return false;
+  if (now - mark.at > CLAIM_LANDING_TTL_MS || now < mark.at) {
+    try {
+      sessionStorage.removeItem(CLAIM_LANDING_KEY);
+    } catch {
+      // Nothing to clean up with.
+    }
+    return false;
+  }
+  return mark.user === userId && underPrefix(pathname, `/forge/p/${encodeURIComponent(mark.project)}`);
 }
 
 /** localStorage key of the forge site's skip: the auth user id that chose it. */
@@ -100,15 +144,6 @@ export function forgeSetupSkippedBy(userId: string | undefined): boolean {
   }
 }
 
-/** Whether this tab claimed a site as `userId`. */
-export function claimLandedAs(userId: string | undefined): boolean {
-  if (!userId) return false;
-  try {
-    return sessionStorage.getItem(CLAIM_LANDING_KEY) === userId;
-  } catch {
-    return false;
-  }
-}
 
 export type OnboardingGateDecision = "allow" | "wait" | "onboard";
 
@@ -119,7 +154,7 @@ export function onboardingGateDecision(state: {
   user: { onboardingCompleted: boolean } | null | undefined;
   /** Exempt path prefixes (default: Reliant's). */
   exempt?: readonly string[];
-  /** The user is excused this visit: a claim landing, or the forge site's skip. */
+  /** The user is excused here: the claimed app's console (claimLandingExcuses), or the forge site's skip. */
   excused?: boolean;
 }): OnboardingGateDecision {
   if (!routeRequiresOnboarding(state.pathname, state.exempt)) return "allow";

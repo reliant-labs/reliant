@@ -19,7 +19,7 @@ import { logger } from "@/lib/logger";
 import { useAuthStore } from "@/store/authStore";
 
 import {
-  claimLandedAs,
+  claimLandingExcuses,
   forgeSetupSkippedBy,
   ONBOARDING_EXEMPT_PREFIXES,
   onboardingGateDecision,
@@ -47,7 +47,7 @@ export function OnboardingGate({
     userLoading: isLoading,
     user: currentUser,
     exempt,
-    excused: claimLandedAs(authUserId) || (honourForgeSkip && forgeSetupSkippedBy(authUserId)),
+    excused: claimLandingExcuses(authUserId, pathname) || (honourForgeSkip && forgeSetupSkippedBy(authUserId)),
   });
 
   useEffect(() => {

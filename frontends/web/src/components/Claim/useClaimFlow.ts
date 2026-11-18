@@ -38,7 +38,8 @@
  * returning-user heal (see the onboarding-flow skill) has nothing to fire on.
  * It lands on /apps (or, on the forge site, the claimed app's console) and
  * marks the tab (markClaimLanding), so OnboardingGate leaves the new claimant
- * alone for the rest of the visit.
+ * alone on that app's console pages for a short while; any other guarded page
+ * runs the wizard.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -210,9 +211,10 @@ export function useClaimFlow(): ClaimFlow {
         }
         // The org's environments are now the user's own: read them afresh.
         await queryClient.invalidateQueries({ queryKey: ["forge"] });
-        // The claimant goes straight to their app, not into the wizard: this
-        // tab is exempt from OnboardingGate for the rest of the visit.
-        markClaimLanding(useAuthStore.getState().user?.id);
+        // The claimant goes straight to their app, not into the wizard: the
+        // claimed app's console is exempt from OnboardingGate, in this tab, for
+        // a short while. Anywhere else runs the wizard.
+        markClaimLanding(useAuthStore.getState().user?.id, pending.project);
         // Report what HAPPENED, not what was asked: the server re-checks inside
         // the claim, so a site deleted or a plan bought since the choice shows
         // as no pause at all.

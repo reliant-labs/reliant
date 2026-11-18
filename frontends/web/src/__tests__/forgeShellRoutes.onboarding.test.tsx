@@ -100,11 +100,20 @@ describe("the forge site's onboarding", () => {
     expect(await screen.findByTestId("apps-page", {}, { timeout: 15_000 })).toBeInTheDocument();
   });
 
-  it("leaves a claimant alone for the rest of the visit", async () => {
+  // A claim excuses only the claimed app's console (onboardingGate.test.tsx
+  // shows that one passing); everything else on the forge site runs the wizard.
+  it("runs the wizard on /apps for a claimant", async () => {
     mockUseCurrentUser.mockReturnValue({ data: { onboardingCompleted: false }, isLoading: false });
-    markClaimLanding("auth-1");
-    renderShell("/apps");
-    expect(await screen.findByTestId("apps-page", {}, { timeout: 15_000 })).toBeInTheDocument();
+    markClaimLanding("auth-1", "simplebutton");
+    const router = renderShell("/apps");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/onboarding"), { timeout: 15_000 });
+  });
+
+  it("runs the wizard on another app's console for a claimant", async () => {
+    mockUseCurrentUser.mockReturnValue({ data: { onboardingCompleted: false }, isLoading: false });
+    markClaimLanding("auth-1", "simplebutton");
+    const router = renderShell("/forge/p/other-app/releases");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/onboarding"), { timeout: 15_000 });
   });
 
   it("leaves alone a user who took the wizard's forge-only skip", async () => {

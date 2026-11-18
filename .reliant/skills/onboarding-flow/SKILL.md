@@ -41,9 +41,10 @@ The forge site (forge.reliantlabs.io, `forgeShellRoutes.tsx`) runs the SAME
 wizard at the same route id (`/_authenticated/onboarding`), behind the same
 gate with its own exemptions (`FORGE_SHELL_ONBOARDING_EXEMPT_PREFIXES`:
 `/onboarding`, `/settings`; `/apps` and the console are gated). Two marks
-excuse a user there: a claim landing (`markClaimLanding`, this tab only) and the
-escape hatch's "Only here to deploy apps? Skip" (`markForgeSetupSkipped`, this
-browser). Neither completes onboarding on the server. After `forge login` the
+excuse a user there: a claim landing (`markClaimLanding`: only the claimed
+app's `/forge/p/<app>/…` pages, for the claimant, in that tab, for 30 minutes —
+any other page runs the wizard) and the escape hatch's "Only here to deploy
+apps? Skip" (`markForgeSetupSkipped`, this browser, per user). Neither completes onboarding on the server. After `forge login` the
 CLI's loopback page goes on to `<forge site>/apps` (forge `LoginSuccessHTML`).
 The wizard's GitHub step returns through Reliant's callback via a
 `/__forge/…` returnTo (`lib/crossShellReturn.ts`).
