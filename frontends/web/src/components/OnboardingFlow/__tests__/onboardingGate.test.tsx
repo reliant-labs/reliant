@@ -30,6 +30,7 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
 
 import { OnboardingGate } from "../OnboardingGate";
 import {
+  FORGE_SHELL_ONBOARDING_EXEMPT_PREFIXES,
   isOnboardingReturnTo,
   onboardingGateDecision,
   onboardingGateTarget,
@@ -147,6 +148,23 @@ describe("routeRequiresOnboarding", () => {
     ["/settingsx", true],
   ])("%s → %s", (pathname, expected) => {
     expect(routeRequiresOnboarding(pathname)).toBe(expected);
+  });
+});
+
+describe("the forge site's exemptions", () => {
+  it.each([
+    ["/apps", true],
+    ["/forge/p/x/releases", true],
+    ["/settings/billing", false],
+    ["/onboarding", false],
+  ])("%s → %s", (pathname, expected) => {
+    expect(routeRequiresOnboarding(pathname, FORGE_SHELL_ONBOARDING_EXEMPT_PREFIXES)).toBe(expected);
+  });
+
+  it("lets an excused user through a gated route", () => {
+    const user = { onboardingCompleted: false };
+    expect(onboardingGateDecision({ pathname: "/inbox", userLoading: false, user, excused: true })).toBe("allow");
+    expect(onboardingGateDecision({ pathname: "/inbox", userLoading: false, user })).toBe("onboard");
   });
 });
 

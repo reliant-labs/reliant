@@ -36,8 +36,9 @@
  * Onboarding: this page lives outside the authenticated layout and does not
  * create a daemon or touch the onboarding plan, so OnboardingRoute's
  * returning-user heal (see the onboarding-flow skill) has nothing to fire on.
- * It lands on /apps, not on a route that would send an unonboarded user into
- * /onboarding on its own.
+ * It lands on /apps (or, on the forge site, the claimed app's console) and
+ * marks the tab (markClaimLanding), so OnboardingGate leaves the new claimant
+ * alone for the rest of the visit.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -74,6 +75,7 @@ import {
   type ReleasedSession,
 } from "@/services/controlPlane/claim";
 import { useAuthStore } from "@/store/authStore";
+import { markClaimLanding } from "@/components/OnboardingFlow/onboardingGate";
 
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isForgeShell } from "@/lib/shell";
@@ -208,6 +210,9 @@ export function useClaimFlow(): ClaimFlow {
         }
         // The org's environments are now the user's own: read them afresh.
         await queryClient.invalidateQueries({ queryKey: ["forge"] });
+        // The claimant goes straight to their app, not into the wizard: this
+        // tab is exempt from OnboardingGate for the rest of the visit.
+        markClaimLanding(useAuthStore.getState().user?.id);
         // Report what HAPPENED, not what was asked: the server re-checks inside
         // the claim, so a site deleted or a plan bought since the choice shows
         // as no pause at all.
