@@ -23,7 +23,9 @@ func (s *Service) RestoreProject(
 	if err != nil {
 		return nil, err
 	}
-	resumed, err := s.deps.Repo.RestoreProject(ctx, project.ID)
+	// Re-checked under the owner's org lock: a project that moved org since
+	// the authority above was decided is refused.
+	resumed, err := s.deps.Repo.RestoreProject(ctx, project.ID, project.Decision())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to restore project"))
 	}

@@ -56,7 +56,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=40e46b90c8116cd7c27d3f3fdf9d0e081024e58311d8821dcb28020d1d0a8855
+// forge:hash=58d7831afcc1c1186dfbd30f78f8a37bfacaef73484916b41ae553801af2ffa9
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -77,9 +77,9 @@ type MockRepository struct {
 	SetProjectForgeNameFunc                   func(context.Context, string, string, string) (bool, error)
 	TouchProjectFunc                          func(context.Context, string, string) error
 	DeleteProjectFunc                         func(context.Context, string, string) error
-	ScheduleProjectDeletionFunc               func(context.Context, string, string, time.Time) (core.ProjectDeletion, error)
-	RestoreProjectFunc                        func(context.Context, string) ([]string, error)
-	PurgeProjectNowFunc                       func(context.Context, string, string) ([]string, error)
+	ScheduleProjectDeletionFunc               func(context.Context, string, string, time.Time, core.ProjectDecision) (core.ProjectDeletion, error)
+	RestoreProjectFunc                        func(context.Context, string, core.ProjectDecision) ([]string, error)
+	PurgeProjectNowFunc                       func(context.Context, string, core.ProjectDecision, func(ctx context.Context)) ([]string, error)
 	ListDeletedProjectsFunc                   func(context.Context, string, *core.OrgScope, bool) ([]*core.Project, error)
 	ProjectOrgMoveBlockersFunc                func(context.Context, string) (*core.ProjectOrgMoveBlockers, error)
 	ProjectOrgMoveEffectsFunc                 func(context.Context, string, string) (*core.ProjectOrgMoveEffects, error)
@@ -212,28 +212,28 @@ func (m *MockRepository) DeleteProject(ctx context.Context, id string, userID st
 }
 
 // ScheduleProjectDeletion records the call and delegates to ScheduleProjectDeletionFunc when set.
-func (m *MockRepository) ScheduleProjectDeletion(ctx context.Context, id string, by string, deleteAfter time.Time) (core.ProjectDeletion, error) {
-	m.Recorder.Record("ScheduleProjectDeletion", ctx, id, by, deleteAfter)
+func (m *MockRepository) ScheduleProjectDeletion(ctx context.Context, id string, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error) {
+	m.Recorder.Record("ScheduleProjectDeletion", ctx, id, by, deleteAfter, decided)
 	if m.ScheduleProjectDeletionFunc != nil {
-		return m.ScheduleProjectDeletionFunc(ctx, id, by, deleteAfter)
+		return m.ScheduleProjectDeletionFunc(ctx, id, by, deleteAfter, decided)
 	}
 	return *new(core.ProjectDeletion), contractkit.MockNotSet("MockRepository", "ScheduleProjectDeletion")
 }
 
 // RestoreProject records the call and delegates to RestoreProjectFunc when set.
-func (m *MockRepository) RestoreProject(ctx context.Context, id string) ([]string, error) {
-	m.Recorder.Record("RestoreProject", ctx, id)
+func (m *MockRepository) RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error) {
+	m.Recorder.Record("RestoreProject", ctx, id, decided)
 	if m.RestoreProjectFunc != nil {
-		return m.RestoreProjectFunc(ctx, id)
+		return m.RestoreProjectFunc(ctx, id, decided)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "RestoreProject")
 }
 
 // PurgeProjectNow records the call and delegates to PurgeProjectNowFunc when set.
-func (m *MockRepository) PurgeProjectNow(ctx context.Context, id string, userID string) ([]string, error) {
-	m.Recorder.Record("PurgeProjectNow", ctx, id, userID)
+func (m *MockRepository) PurgeProjectNow(p0 context.Context, id string, decided core.ProjectDecision, afterClaim func(ctx context.Context)) ([]string, error) {
+	m.Recorder.Record("PurgeProjectNow", p0, id, decided, afterClaim)
 	if m.PurgeProjectNowFunc != nil {
-		return m.PurgeProjectNowFunc(ctx, id, userID)
+		return m.PurgeProjectNowFunc(p0, id, decided, afterClaim)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "PurgeProjectNow")
 }

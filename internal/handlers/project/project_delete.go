@@ -75,7 +75,10 @@ func (s *Service) DeleteProject(
 		}
 	}
 
-	deletion, err := s.deps.Repo.ScheduleProjectDeletion(ctx, project.ID, userID, s.now().Add(core.ProjectDeleteWindow))
+	// The write re-checks, under the owner's org lock, the owner and org this
+	// authority was decided on: a project that moved org meanwhile is refused.
+	// The machine fan-out below runs only after it succeeded.
+	deletion, err := s.deps.Repo.ScheduleProjectDeletion(ctx, project.ID, userID, s.now().Add(core.ProjectDeleteWindow), project.Decision())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project"))
 	}

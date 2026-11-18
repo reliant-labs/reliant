@@ -38,9 +38,11 @@ type Repository interface {
 	// A deletion with a restore window (project_delete.go): schedule it
 	// (hiding the project and pausing its triggers), cancel it, purge at
 	// once, and list what the caller may restore.
-	ScheduleProjectDeletion(ctx context.Context, id, by string, deleteAfter time.Time) (core.ProjectDeletion, error)
-	RestoreProject(ctx context.Context, id string) ([]string, error)
-	PurgeProjectNow(ctx context.Context, id, userID string) ([]string, error)
+	// Each takes the project as the caller's authority was decided on, and
+	// refuses (store.ErrOrgChanged) a project that moved org since.
+	ScheduleProjectDeletion(ctx context.Context, id, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error)
+	RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error)
+	PurgeProjectNow(ctx context.Context, id string, decided core.ProjectDecision, afterClaim func(ctx context.Context)) ([]string, error)
 	ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error)
 	// ProjectOrgMoveBlockers and ProjectOrgMoveEffects are a move's preview:
 	// the running work that refuses it now, and what it would change.

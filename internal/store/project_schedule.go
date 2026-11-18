@@ -38,8 +38,12 @@ import (
 // row FOR NO KEY UPDATE: it waits for a schedule, and the triggers it turns
 // on read the delete_after it cleared.
 //
-// Lock order, with the trigger writers' (LockProjectsForWrite): the project
-// row before any trigger row.
+// Lock order, the project move's (MoveProjectOrg) and the trigger writers'
+// (LockProjectsForWrite) alike: the owner's org lock, then the project row,
+// then any trigger row. Schedule, restore and an immediate purge's claim take
+// the owner's org lock (lockProjectDecision) and re-check the owner and org
+// the caller's authority was decided on, so a move that committed between the
+// decision and the write refuses it (ErrOrgChanged).
 
 // TriggerChangeProjectRestored is the trigger_changes operation recording a
 // trigger turned back on because its project was restored.
@@ -54,13 +58,55 @@ func whereProjectLive(column string) orm.QueryOption {
 	}
 }
 
+// lockProjectDecision takes the project owner's org lock (LockUserOrgs: the
+// lock a project move takes first) and re-checks, under it, that the project
+// is still decided's owner's and in decided's org. A move, or anything else
+// that changed either, since the caller decided is ErrOrgChanged. It must be
+// the first lock of the caller's transaction.
+func lockProjectDecision(ctx context.Context, db orm.Context, id string, decided core.ProjectDecision) error {
+	owner := func() (string, bool, error) {
+		var owners []string
+		if err := db.Bun().NewRaw(`SELECT user_id FROM projects WHERE id = ?0`, id).Scan(ctx, &owners); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", false, fmt.Errorf("read the project's owner: %w", err)
+		}
+		if len(owners) == 0 {
+			return "", false, nil
+		}
+		return owners[0], true, nil
+	}
+	// A project that is gone (purged) is NotFound, not a changed org. The
+	// read takes no lock, so it may precede the org lock.
+	if _, found, err := owner(); err != nil {
+		return err
+	} else if !found {
+		return core.ErrProjectNotFound
+	}
+	if err := LockUserOrgs(ctx, db, decided.OwnerUserID, OrgRead{Table: "projects", ID: id, Org: decided.OrgID}); err != nil {
+		return err
+	}
+	current, found, err := owner()
+	switch {
+	case err != nil:
+		return err
+	case !found:
+		return core.ErrProjectNotFound
+	case current != decided.OwnerUserID:
+		return ErrOrgChanged
+	}
+	return nil
+}
+
 // ScheduleProjectDeletion schedules the project for purge at deleteAfter,
 // recording by as who did, and pauses its enabled triggers. A project already
 // scheduled keeps its first date (AlreadyScheduled); any of its triggers found
 // on (turned on by a writer that bypassed the admission, which no release
-// has) is paused again. A missing project is core.ErrProjectNotFound. Run it
-// in a transaction.
-func ScheduleProjectDeletion(ctx context.Context, db orm.Context, id, by string, deleteAfter time.Time) (core.ProjectDeletion, error) {
+// has) is paused again. A missing project is core.ErrProjectNotFound; one
+// whose owner or org is no longer decided's is ErrOrgChanged
+// (lockProjectDecision). Run it in a transaction, first.
+func ScheduleProjectDeletion(ctx context.Context, db orm.Context, id, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error) {
+	if err := lockProjectDecision(ctx, db, id, decided); err != nil {
+		return core.ProjectDeletion{}, err
+	}
 	var rows []struct {
 		DeleteAfter *time.Time `bun:"delete_after"`
 	}
@@ -133,9 +179,13 @@ func lockProjectTriggers(ctx context.Context, db orm.Context, projectID, where s
 // RestoreProjectDeletion cancels the project's scheduled deletion and turns
 // back on the triggers it paused, returning their ids. A project that is not
 // scheduled is left alone (nothing resumed). One whose purge has begun is
-// core.ErrProjectPurgeStarted; a missing one core.ErrProjectNotFound. Run it
-// in a transaction.
-func RestoreProjectDeletion(ctx context.Context, db orm.Context, id string) ([]string, error) {
+// core.ErrProjectPurgeStarted; a missing one core.ErrProjectNotFound; one
+// whose owner or org is no longer decided's ErrOrgChanged
+// (lockProjectDecision). Run it in a transaction, first.
+func RestoreProjectDeletion(ctx context.Context, db orm.Context, id string, decided core.ProjectDecision) ([]string, error) {
+	if err := lockProjectDecision(ctx, db, id, decided); err != nil {
+		return nil, err
+	}
 	var rows []struct {
 		DeleteAfter    *time.Time `bun:"delete_after"`
 		PurgeStartedAt *time.Time `bun:"purge_started_at"`
@@ -268,12 +318,17 @@ RETURNING user_id`, id, now.UTC(), now.Add(-lease).UTC()).Scan(ctx, &owners); er
 // scheduled or not: it is hidden and can no longer be restored, and its
 // delete_after is brought forward to now (LEAST ignores a NULL), so a purge
 // that stops part way is resumed by the worker once the claim's lease runs
-// out, not at the end of a restore window nobody can use any more. It
-// reports false for a project that is missing or another user's.
-func ClaimProjectPurgeNow(ctx context.Context, db orm.Context, id, userID string, now time.Time) (bool, error) {
+// out, not at the end of a restore window nobody can use any more. The
+// owner purges: decided.OwnerUserID. A project that is missing is
+// core.ErrProjectNotFound, one whose owner or org is no longer decided's
+// ErrOrgChanged (lockProjectDecision). Run it in a transaction, first.
+func ClaimProjectPurgeNow(ctx context.Context, db orm.Context, id string, decided core.ProjectDecision, now time.Time) (bool, error) {
+	if err := lockProjectDecision(ctx, db, id, decided); err != nil {
+		return false, err
+	}
 	res, err := db.Bun().NewRaw(`UPDATE projects
 SET delete_after = LEAST(delete_after, ?2), deleted_by = COALESCE(deleted_by, ?1), purge_started_at = ?2
-WHERE id = ?0 AND user_id = ?1`, id, userID, now.UTC()).Exec(ctx)
+WHERE id = ?0 AND user_id = ?1`, id, decided.OwnerUserID, now.UTC()).Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("claim the project's purge: %w", err)
 	}

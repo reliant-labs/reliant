@@ -24,15 +24,17 @@ import (
 // purge worker deletes it, and pauses its enabled triggers, in one
 // transaction. A project already scheduled keeps its first date. The
 // returned trigger ids are the ones paused, whose schedules the caller
-// converges.
-func (r *Repo) ScheduleProjectDeletion(ctx context.Context, id, by string, deleteAfter time.Time) (core.ProjectDeletion, error) {
+// converges. decided is the project the caller's authority was decided on;
+// a project that moved org (or changed owner) since is store.ErrOrgChanged,
+// and nothing is written.
+func (r *Repo) ScheduleProjectDeletion(ctx context.Context, id, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error) {
 	if id == "" {
 		return core.ProjectDeletion{}, fmt.Errorf("project ID cannot be empty")
 	}
 	var out core.ProjectDeletion
 	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		var err error
-		out, err = store.ScheduleProjectDeletion(ctx, r.ORM(), id, by, deleteAfter)
+		out, err = store.ScheduleProjectDeletion(ctx, r.ORM(), id, by, deleteAfter, decided)
 		return err
 	})
 	return out, err
@@ -40,38 +42,51 @@ func (r *Repo) ScheduleProjectDeletion(ctx context.Context, id, by string, delet
 
 // RestoreProject cancels the project's scheduled deletion and turns back on
 // the triggers it paused, returning their ids. A project not scheduled is a
-// no-op; one whose purge began is core.ErrProjectPurgeStarted.
-func (r *Repo) RestoreProject(ctx context.Context, id string) ([]string, error) {
+// no-op; one whose purge began is core.ErrProjectPurgeStarted; one that moved
+// org since decided is store.ErrOrgChanged.
+func (r *Repo) RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error) {
 	if id == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
 	var resumed []string
 	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		var err error
-		resumed, err = store.RestoreProjectDeletion(ctx, r.ORM(), id)
+		resumed, err = store.RestoreProjectDeletion(ctx, r.ORM(), id, decided)
 		return err
 	})
 	return resumed, err
 }
 
-// PurgeProjectNow deletes userID's project at once, scheduled or not
-// (store.DeleteUserProject's batches): it is claimed first, so it is hidden
-// and can no longer be restored while the batches run, and a purge that
-// stops part way is finished by the purge worker. It returns the ids of the
+// PurgeProjectNow deletes decided's owner's project at once, scheduled or
+// not (store.DeleteUserProject's batches): it is claimed first, under the
+// owner's org lock and only while the project is still decided's owner's and
+// in decided's org (else store.ErrOrgChanged), so it is hidden and can no
+// longer be restored while the batches run, and a purge that stops part way
+// is finished by the purge worker. afterClaim (nil: none) runs once the claim
+// committed and before the batches: the machine fan-out, which acts only on a
+// project whose authority was just re-checked. It returns the ids of the
 // triggers it deleted, whose schedules the caller removes. A project that is
 // missing or another user's is core.ErrProjectNotFound.
-func (r *Repo) PurgeProjectNow(ctx context.Context, id, userID string) ([]string, error) {
+func (r *Repo) PurgeProjectNow(ctx context.Context, id string, decided core.ProjectDecision, afterClaim func(ctx context.Context)) ([]string, error) {
 	if id == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	claimed, err := store.ClaimProjectPurgeNow(ctx, r.ORM(), id, userID, time.Now())
+	var claimed bool
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var err error
+		claimed, err = store.ClaimProjectPurgeNow(ctx, r.ORM(), id, decided, time.Now())
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
 	if !claimed {
 		return nil, core.ErrProjectNotFound
 	}
-	return r.purgeProject(ctx, id, userID)
+	if afterClaim != nil {
+		afterClaim(ctx)
+	}
+	return r.purgeProject(ctx, id, decided.OwnerUserID)
 }
 
 // PurgeDueProject purges the project if its scheduled deletion is due and no

@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
 
 	project "github.com/reliant-labs/reliant/internal/handlers/project"
 )
@@ -22,8 +23,11 @@ func TestPurgeProjectNow_Generated(t *testing.T) {
 
 	store := ownedProjectRepo(t)
 	var purged []string
-	store.PurgeProjectNowFunc = func(_ context.Context, id, userID string) ([]string, error) {
-		purged = append(purged, id+" by "+userID)
+	store.PurgeProjectNowFunc = func(ctx context.Context, id string, decided core.ProjectDecision, afterClaim func(context.Context)) ([]string, error) {
+		if afterClaim != nil {
+			afterClaim(ctx)
+		}
+		purged = append(purged, id+" by "+decided.OwnerUserID)
 		return nil, nil
 	}
 	svc := newService(t, store, nil)

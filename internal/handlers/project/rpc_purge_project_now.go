@@ -35,15 +35,20 @@ func (s *Service) PurgeProjectNow(
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("confirm_name must be the project's name, %q, to delete it immediately", project.Name))
 	}
 	var removals []*pb.ProjectMachineRemoval
+	var afterClaim func(ctx context.Context)
 	if req.Msg.GetRemoveFromMachines() {
-		// Before the purge: it takes the rows that name the checkouts.
+		// Read before the purge, which takes the rows that name the
+		// checkouts; removed once the claim re-checked this authority under
+		// the owner's org lock, and before the batches.
 		checkouts, err := s.deps.Repo.ListProjectDaemonsForProject(ctx, project.ID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list the project's machines"))
 		}
-		removals = s.removeFromMachines(ctx, userID, project, checkouts)
+		afterClaim = func(ctx context.Context) {
+			removals = s.removeFromMachines(ctx, userID, project, checkouts)
+		}
 	}
-	triggers, err := s.deps.Repo.PurgeProjectNow(ctx, project.ID, userID)
+	triggers, err := s.deps.Repo.PurgeProjectNow(ctx, project.ID, project.Decision(), afterClaim)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return nil, svcerr.WithCause(svcerr.DeadlineExceeded(

@@ -58,8 +58,10 @@ func TestAChatOfADeletedProjectIsHiddenFromASavedIDUntilRestored(t *testing.T) {
 	require.NoError(t, transcript(f.Viewer), "viewer's transcript before the delete")
 	require.NoError(t, getChat(f.Viewer), "viewer's chat before the delete")
 
+	org := viewertest.OrgID
+	decided := core.ProjectDecision{OwnerUserID: f.OwnerID, OrgID: &org}
 	_, err := repo.ScheduleProjectDeletion(context.Background(), f.ProjectID, f.OwnerID,
-		time.Date(2026, time.January, 12, 12, 0, 0, 0, time.UTC))
+		time.Date(2026, time.January, 12, 12, 0, 0, 0, time.UTC), decided)
 	require.NoError(t, err)
 
 	for name, call := range map[string]func(context.Context) error{"transcript": transcript, "chat": getChat, "mark unread": markUnread, "rename": rename} {
@@ -77,7 +79,7 @@ func TestAChatOfADeletedProjectIsHiddenFromASavedIDUntilRestored(t *testing.T) {
 	require.NoError(t, err, "the store's unauthorized read, which the purge relies on, still sees the chat")
 	assert.True(t, row.ProjectDeleted)
 
-	_, err = repo.RestoreProject(context.Background(), f.ProjectID)
+	_, err = repo.RestoreProject(context.Background(), f.ProjectID, decided)
 	require.NoError(t, err)
 	for name, call := range map[string]func(context.Context) error{"transcript": transcript, "chat": getChat, "mark unread": markUnread, "rename": rename, "bare row": bareRow} {
 		require.NoError(t, call(f.Owner), "owner %s after the restore", name)

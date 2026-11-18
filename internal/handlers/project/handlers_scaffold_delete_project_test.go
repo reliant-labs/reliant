@@ -22,7 +22,7 @@ import (
 // db.Repo does for a project that was not scheduled.
 func scheduling(store *project.MockRepository) *[]string {
 	var scheduled []string
-	store.ScheduleProjectDeletionFunc = func(_ context.Context, id, by string, after time.Time) (core.ProjectDeletion, error) {
+	store.ScheduleProjectDeletionFunc = func(_ context.Context, id, by string, after time.Time, _ core.ProjectDecision) (core.ProjectDeletion, error) {
 		scheduled = append(scheduled, id+" by "+by)
 		return core.ProjectDeletion{DeleteAfter: after}, nil
 	}

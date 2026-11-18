@@ -284,3 +284,61 @@ func TestPurgeProjectNowNeedsTheOwnerAndItsName(t *testing.T) {
 	assert.True(t, svcerr.IsNotFound(err), "the project is gone at once")
 	assert.Contains(t, f.schedules.synced(), f.trigger, "the purged trigger's schedule is converged away")
 }
+
+// movesBeforeWrite is the database with a project move landing between the
+// handler's authority decision and its write: each delete or restore first
+// commits the project's restamp to another org, as MoveProjectOrg would.
+type movesBeforeWrite struct {
+	*db.Repo
+	to string
+}
+
+func (m movesBeforeWrite) move(ctx context.Context, id string) error {
+	_, err := m.ORM().Bun().NewRaw(`UPDATE projects SET org_id = ?0 WHERE id = ?1`, m.to, id).Exec(ctx)
+	return err
+}
+
+func (m movesBeforeWrite) ScheduleProjectDeletion(ctx context.Context, id, by string, after time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error) {
+	if err := m.move(ctx, id); err != nil {
+		return core.ProjectDeletion{}, err
+	}
+	return m.Repo.ScheduleProjectDeletion(ctx, id, by, after, decided)
+}
+
+func (m movesBeforeWrite) RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error) {
+	if err := m.move(ctx, id); err != nil {
+		return nil, err
+	}
+	return m.Repo.RestoreProject(ctx, id, decided)
+}
+
+// An admin of the org a departed member's project is in may delete and
+// restore it there (D19), but not once the project has moved to another org
+// between the admin's authority check and the write: both are refused, and
+// nothing changes.
+func TestAnAdminsDeleteAndRestoreRefuseAProjectThatMovedOrg(t *testing.T) {
+	f := newDeleteAuthFixture(t)
+	f.members.left[f.owner] = true
+	m := orgs.New(f.members)
+	clock := func() time.Time { return deleteNow }
+	moving := NewTestProject(t, WithProjectDeps(Deps{Repo: movesBeforeWrite{Repo: f.repo, to: "globex"}, Orgs: m, Schedules: f.schedules, Now: clock}))
+	admin := as(m, f.admin, auth.CredentialSession, "")
+
+	_, err := f.delete(moving, admin, false)
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "error: %v", err)
+	assert.False(t, f.scheduled(), "the delete wrote nothing")
+
+	// Back in acme and deleted there; then a restore that a move overtakes.
+	_, err = f.repo.ORM().Bun().NewRaw(`UPDATE projects SET org_id = ?0 WHERE id = ?1`, deleteOrg, f.project).Exec(context.Background())
+	require.NoError(t, err)
+	plain, _ := f.service()
+	_, err = f.delete(plain, admin, false)
+	require.NoError(t, err)
+	require.True(t, f.scheduled())
+
+	_, err = moving.RestoreProject(admin, connect.NewRequest(&reliantv1.RestoreProjectRequest{ProjectId: f.project}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "error: %v", err)
+	assert.True(t, f.scheduled(), "the restore wrote nothing")
+}

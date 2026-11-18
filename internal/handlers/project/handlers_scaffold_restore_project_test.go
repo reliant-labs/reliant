@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
 
 	project "github.com/reliant-labs/reliant/internal/handlers/project"
 )
@@ -22,7 +23,7 @@ func TestRestoreProject_Generated(t *testing.T) {
 
 	store := ownedProjectRepo(t)
 	var restored []string
-	store.RestoreProjectFunc = func(_ context.Context, id string) ([]string, error) {
+	store.RestoreProjectFunc = func(_ context.Context, id string, _ core.ProjectDecision) ([]string, error) {
 		restored = append(restored, id)
 		return []string{"trigger-1"}, nil
 	}

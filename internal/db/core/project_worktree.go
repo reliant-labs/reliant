@@ -80,6 +80,22 @@ const ProjectDeleteWindow = 7 * 24 * time.Hour
 // turns these, and only these, back on.
 const TriggerPausedProjectDeleted = "project_deleted"
 
+// ProjectDecision is the project as a caller's authority to delete, restore
+// or purge it was decided on (ProjectDelete, internal/authz): its owner and
+// its org.
+// The write re-reads both under the owner's org lock, which a project move
+// also takes, and refuses (store.ErrOrgChanged) when either changed: an admin
+// of the org the project left must not act on it in the org it moved to.
+type ProjectDecision struct {
+	OwnerUserID string
+	OrgID       *string
+}
+
+// Decision is p's ProjectDecision.
+func (p *Project) Decision() ProjectDecision {
+	return ProjectDecision{OwnerUserID: p.UserID, OrgID: p.OrgID}
+}
+
 // ProjectDeletion is the outcome of scheduling a project's deletion.
 type ProjectDeletion struct {
 	// DeleteAfter is when the purge may run: the first delete's date when
