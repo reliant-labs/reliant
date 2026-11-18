@@ -214,14 +214,12 @@ func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, er
 			// subscription signed in again elsewhere, or clocks that disagree),
 			// and then only a new token helps. A refresh the provider refuses
 			// marks the account needs-sign-in (CoordinatedAccountRefresh).
-			var attempted bool
-			changed, attempted = t.refreshAfterUnauthorized()
+			// A refresh that failed or brought no new token proves nothing
+			// about the session (the coordinator may have failed
+			// transiently), so this 401 is not marked: only a retry with a
+			// genuinely new token that is refused again is.
+			changed = t.refreshAfterUnauthorized()
 			refreshed = changed
-			if attempted && !changed {
-				// Refreshed, and nothing new to retry with: the refusal
-				// stands, and is the user's to fix (llm.OAuthRecoveryHeader).
-				llm.MarkOAuthRefreshedStillRejected(resp)
-			}
 		}
 		if !changed {
 			// A genuine auth failure, not a stale token.
@@ -289,12 +287,11 @@ func (t *tokenRefreshTransport) refreshIfNeeded() {
 }
 
 // refreshAfterUnauthorized forces a refresh in response to a 401 that the store
-// could not explain. adopted reports whether a genuinely different access token
-// was adopted, which is the only case where retrying is worthwhile; attempted,
-// whether a refresh was asked for at all.
-func (t *tokenRefreshTransport) refreshAfterUnauthorized() (adopted, attempted bool) {
+// could not explain. It reports whether a genuinely different access token was
+// adopted, which is the only case where retrying is worthwhile.
+func (t *tokenRefreshTransport) refreshAfterUnauthorized() bool {
 	if t.opts.TokenRefresher == nil {
-		return false, false
+		return false
 	}
 
 	t.mu.RLock()
@@ -306,23 +303,23 @@ func (t *tokenRefreshTransport) refreshAfterUnauthorized() (adopted, attempted b
 	t.mu.RUnlock()
 
 	if held.RefreshToken == "" {
-		return false, false
+		return false
 	}
 
 	newState, err := t.opts.TokenRefresher(held)
 	if err != nil {
 		logging.Warn("Claude token refresh after 401 failed", "error", err, "user_id", t.opts.UserID)
-		return false, true
+		return false
 	}
 	if newState.AccessToken == "" || newState.AccessToken == held.AccessToken {
-		return false, true
+		return false
 	}
 
 	t.mu.Lock()
 	t.adoptLocked(newState)
 	t.mu.Unlock()
 	logging.Info("Claude OAuth token refreshed after a 401", "new_expiry", newState.ExpiresAt, "user_id", t.opts.UserID)
-	return true, true
+	return true
 }
 
 // adoptLocked installs a new token state on the options and rewrites the

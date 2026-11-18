@@ -206,9 +206,10 @@ func TestTokenRefreshTransport_401TheStoreCannotExplainRefreshesAndRetriesOnce(t
 // A refresh that fails (the provider refused it: the coordinator then marks
 // the account needs-sign-in), or that returns the same token, leaves the 401 to
 // surface, with no retry. A retry that is refused again surfaces too: one
-// refresh and one retry per request, never a loop. Each surfaced 401 is marked
-// as having survived the refresh, which is what lets the activity tell the
-// user to reconnect.
+// refresh and one retry per request, never a loop. Only the retry refused with
+// a genuinely new token is marked as having survived the refresh, which is what
+// lets the activity tell the user to reconnect: a refresh that failed (perhaps
+// transiently) or brought nothing new proves nothing about the session.
 func TestTokenRefreshTransport_401RefreshThatCannotHelpPassesThrough(t *testing.T) {
 	sameStore := func() (*llm.OAuthTokens, error) {
 		return &llm.OAuthTokens{AccessToken: "current-token", RefreshToken: "rt-1", ExpiresAt: fixedNow.Add(time.Hour)}, nil
@@ -218,6 +219,7 @@ func TestTokenRefreshTransport_401RefreshThatCannotHelpPassesThrough(t *testing.
 		statuses []int
 		refresh  func(llm.OAuthTokens) (llm.OAuthTokens, error)
 		requests int
+		marked   bool
 	}{
 		{
 			name:     "refresh refused",
@@ -242,6 +244,7 @@ func TestTokenRefreshTransport_401RefreshThatCannotHelpPassesThrough(t *testing.
 				return llm.OAuthTokens{AccessToken: "refreshed-token", RefreshToken: "rt-2", ExpiresAt: fixedNow.Add(time.Hour)}, nil
 			},
 			requests: 2,
+			marked:   true,
 		},
 	}
 	for _, tc := range cases {
@@ -257,7 +260,7 @@ func TestTokenRefreshTransport_401RefreshThatCannotHelpPassesThrough(t *testing.
 			resp, err := newFixedClockTransport(opts, upstream).RoundTrip(newMessagesRequest(t))
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-			assert.True(t, llm.OAuthRefreshedStillRejectedResponse(resp), "a 401 that survived the refresh is marked")
+			assert.Equal(t, tc.marked, llm.OAuthRefreshedStillRejectedResponse(resp), "only a 401 that survived a successful refresh is marked")
 			assert.Equal(t, 1, refreshes, "one refresh per refused request")
 			assert.Len(t, upstream.requests, tc.requests)
 		})
