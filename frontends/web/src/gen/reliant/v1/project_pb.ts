@@ -682,7 +682,8 @@ export type PurgeProjectNowRequest = Message<"reliant.v1.PurgeProjectNowRequest"
   confirmName: string;
 
   /**
-   * As DeleteProjectRequest.remove_from_machines, done before the purge.
+   * As DeleteProjectRequest.remove_from_machines, done once the purge is
+   * claimed and before its batches run.
    *
    * @generated from field: bool remove_from_machines = 3;
    */
@@ -697,7 +698,8 @@ export const PurgeProjectNowRequestSchema: GenMessage<PurgeProjectNowRequest> = 
   messageDesc(file_reliant_v1_project, 15);
 
 /**
- * PurgeProjectNowResponse confirms the purge.
+ * PurgeProjectNowResponse confirms the purge is claimed: the project is
+ * hidden for good, and its rows are deleted after the response.
  *
  * @generated from message reliant.v1.PurgeProjectNowResponse
  */
@@ -2933,9 +2935,12 @@ export const ProjectService: GenService<{
    * PurgeProjectNow deletes a project immediately and irreversibly, scheduled
    * or not: the path for a person who means it, and for anything that relied
    * on DeleteProject deleting at once. Only the project's owner may, and
-   * confirm_name must be the project's name. The delete runs in batches; one
-   * that stops part way leaves the project hidden, and running it again (or
-   * the purge worker) finishes it.
+   * confirm_name must be the project's name. It returns once the purge is
+   * claimed: from then on the project is hidden and can no longer be
+   * restored. The batches that delete its rows run after it returns (a large
+   * project takes longer than a request may run); one that stops part way
+   * leaves the project hidden, and the purge worker (or running it again)
+   * finishes it.
    *
    * @generated from rpc reliant.v1.ProjectService.PurgeProjectNow
    */

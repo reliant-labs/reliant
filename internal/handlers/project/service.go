@@ -94,6 +94,9 @@ type Service struct {
 	// failed-create cleanup is running (failed_create_cleanup.go), so a
 	// machine that reconnects in a loop runs one at a time.
 	failedCreateCleanups sync.Map
+	// purges tracks the immediate purges whose batches run after their
+	// request returned (rpc_purge_project_now.go startPurge).
+	purges sync.WaitGroup
 }
 
 // New creates a new project service instance with the supplied Deps.

@@ -1067,10 +1067,10 @@ const (
 	// projectPurgeInterval is how often a pass runs: a project is purged at
 	// most this long after its window ends.
 	projectPurgeInterval = 15 * time.Minute
-	// projectPurgeLease is how long a claim holds a project. A purge of the
-	// largest project measured (35k chats) ran 17 minutes in one statement;
-	// in batches each is short, so an hour is generous.
-	projectPurgeLease = time.Hour
+	// projectPurgeLease is how long a claim holds a project: the one
+	// db.ProjectPurgeLease names, which an immediate purge's detached batches
+	// stay inside (internal/handlers/project).
+	projectPurgeLease = db.ProjectPurgeLease
 	// projectPurgeBatch bounds the projects a pass purges, and the orphaned
 	// rows per table it sweeps.
 	projectPurgeBatch = 50
