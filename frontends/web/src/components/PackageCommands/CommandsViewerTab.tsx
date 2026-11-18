@@ -1278,18 +1278,18 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId, pro
         })}
 
         {/* Empty state */}
-        {showAllWorkspaces && allProcesses.length === 0 && !isLoading && !error && (
+        {showAllWorkspaces && allProcesses.length === 0 && visibleChatProcesses.length === 0 && !isLoading && !error && (
           <SidebarEmptyState
             icon={Terminal}
             title="No running processes"
             description="Start a process in any workspace to see it here"
           />
         )}
-        {!showAllWorkspaces && detectedTypes.length === 0 && allProcesses.length === 0 && !isLoading && !error && (
+        {!showAllWorkspaces && detectedTypes.length === 0 && allProcesses.length === 0 && visibleChatProcesses.length === 0 && !isLoading && !error && (
           <SidebarEmptyState
             icon={Terminal}
             title="No processes or commands"
-            description="Add a Makefile, package.json, or Taskfile.yml to see commands"
+            description="Commands an agent runs in the background show here, and so do a Makefile's, package.json's or Taskfile.yml's commands"
           />
         )}
       </div>
