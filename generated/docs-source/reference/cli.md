@@ -52,6 +52,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge agent skill search`](#reliant-forge-agent-skill-search) | Search skills across all scopes by keyword (path/name=3, desc/body=1) |
 | [`reliant forge api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
 | [`reliant forge api curl`](#reliant-forge-api-curl) | Print a copy-pasteable curl command for a Connect RPC method |
+| [`reliant forge app`](#reliant-forge-app) | Stop, tear down or delete a HOSTED app: every environment the control plane runs for this project |
+| [`reliant forge app delete`](#reliant-forge-app-delete) | Schedule this hosted app's deletion, cancel it, or show it (destructive) |
+| [`reliant forge app stop`](#reliant-forge-app-stop) | Suspend every hosted environment of this app (storage keeps billing) |
+| [`reliant forge app teardown`](#reliant-forge-app-teardown) | Delete every hosted environment of this app, keeping the app (destructive) |
 | [`reliant forge build`](#reliant-forge-build) | Compile the project's binaries and frontends locally (never publishes) |
 | [`reliant forge build receipt`](#reliant-forge-build-receipt) | Emit a typed receipt for actual exported build inputs |
 | [`reliant forge ci`](#reliant-forge-ci) | CI helper commands — verify, scan, and validate in CI pipelines |
@@ -231,6 +235,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env releases list`](#reliant-forge-env-releases-list) | The release timeline of an environment, newest first |
 | [`reliant forge env releases show`](#reliant-forge-env-releases-show) | One release in full: commits and PRs, what changed, migrations, gates, health |
 | [`reliant forge env render`](#reliant-forge-env-render) | Print the Kubernetes objects deploy/kcl/<env>/ renders, with the cluster each lands on |
+| [`reliant forge env retained`](#reliant-forge-env-retained) | List or purge the databases kept from deleted HOSTED environments (they bill storage) |
+| [`reliant forge env retained list`](#reliant-forge-env-retained-list) | List the retained databases of this app (--all: of your organization) |
+| [`reliant forge env retained purge`](#reliant-forge-env-retained-purge) | Destroy a retained database: its data, volumes and credentials (IRREVERSIBLE) |
 | [`reliant forge env secret`](#reliant-forge-env-secret) | Manage an environment's secret store (local file or hosted control plane) |
 | [`reliant forge env secret access`](#reliant-forge-env-secret-access) | Show who may use a hosted secret |
 | [`reliant forge env secret allow`](#reliant-forge-env-secret-allow) | Allow a workflow to use a hosted secret |
@@ -1248,6 +1255,7 @@ reliant forge
 |---------|-------------|
 | [`agent`](#reliant-forge-agent) | For coding agents: skills, the MCP server, and filing a forge bug |
 | [`api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
+| [`app`](#reliant-forge-app) | Stop, tear down or delete a HOSTED app: every environment the control plane runs for this project |
 | [`build`](#reliant-forge-build) | Compile the project's binaries and frontends locally (never publishes) |
 | [`ci`](#reliant-forge-ci) | CI helper commands — verify, scan, and validate in CI pipelines |
 | [`cloud`](#reliant-forge-cloud) | Talk to the hosted control plane an environment declares |
@@ -1581,6 +1589,165 @@ reliant forge api curl <service.method> [flags]
 
 ---
 
+### reliant forge app
+
+Stop, tear down or delete a HOSTED app: every environment the control plane runs for this project
+
+Act on a hosted app as a whole: every environment the control plane runs for
+this project (forge.yaml `name` is the app's name). From least to most
+destructive:
+
+  forge app stop        suspend every env; storage keeps billing    (forge env start <env> resumes)
+  forge app teardown    delete every env, keep the app's name, releases, images and domains; nothing bills
+  forge app delete      schedule the app's deletion: stopped now, purged with its name after 7 days
+                        (--cancel keeps it, --status shows it)
+
+Each acts on the control plane this project is bound to
+(.forge/hosted-projects.json), or on the one --endpoint names. One env alone is
+`forge env stop|start|delete <env>`; databases kept by a delete are
+`forge env retained list|purge`.
+
+```
+reliant forge app [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`delete`](#reliant-forge-app-delete) | Schedule this hosted app's deletion, cancel it, or show it (destructive) |
+| [`stop`](#reliant-forge-app-stop) | Suspend every hosted environment of this app (storage keeps billing) |
+| [`teardown`](#reliant-forge-app-teardown) | Delete every hosted environment of this app, keeping the app (destructive) |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge app delete
+
+Schedule this hosted app's deletion, cancel it, or show it (destructive)
+
+Delete this hosted app: everything that names it, and its name.
+
+  forge app delete            prompts: type the app name to confirm
+  forge app delete --yes      no prompt (required with no TTY or CI=1)
+  forge app delete --status   show the scheduled deletion, if any
+  forge app delete --cancel   cancel it, until the purge starts
+
+Deleting is SCHEDULED, not immediate. At once, every env is stopped (compute
+stops billing) and deploys, promotions and new envs of the app are refused.
+After a grace window (7 days) the control plane purges every env and its data,
+kept databases, release history and registry images, custom domains and their
+certificates, and secrets, then frees the name. Activity, audit and spend
+history are kept. --cancel keeps the app and starts again the deployments the
+deletion stopped; one stopped before it stays stopped.
+
+To keep the app's name and releases and still stop every charge, use
+`forge app teardown`.
+
+Deleting an app, and cancelling that, needs an org owner or admin signed in as
+a person, with a live step-up on every protected environment of the app; the
+control plane's refusal is printed as it is sent. A control plane that predates
+app deletion is reported as such, and nothing is changed.
+
+```
+reliant forge app delete [--cancel | --status] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--cancel` | `bool` | - | Cancel the app's scheduled deletion (until its purge starts) |
+| `--endpoint` | `string` | - | Control plane holding the app: one this project is bound to (.forge/hosted-projects.json) or Reliant cloud; https, or http to localhost only (default: the one this project is bound to) |
+| `--status` | `bool` | - | Show the app's scheduled deletion, if any, and change nothing |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+| `--yes` | `bool` | - | Confirm without the typed-name prompt (required when non-interactive) |
+
+---
+
+#### reliant forge app stop
+
+Suspend every hosted environment of this app (storage keeps billing)
+
+Suspend every deployment of every hosted environment of this app: the loop
+`forge env stop <env>` would be for each env, with each env's outcome printed.
+
+  forge app stop          prompts: type the app name to confirm
+  forge app stop --yes    no prompt (required with no TTY or CI=1)
+
+URLs, data, secrets and custom domains are kept, and compute stops billing.
+Storage keeps billing (database volumes, a static site's files): `forge app teardown`
+is the state that bills nothing. Resume an env with `forge env start <env>`.
+
+An env you may not write (deploy:write on it) is refused by the control plane,
+reported, and left running; the others are still stopped, and the command exits
+non-zero.
+
+```
+reliant forge app stop [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--endpoint` | `string` | - | Control plane holding the app: one this project is bound to (.forge/hosted-projects.json) or Reliant cloud; https, or http to localhost only (default: the one this project is bound to) |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+| `--yes` | `bool` | - | Confirm without the typed-name prompt (required when non-interactive) |
+
+---
+
+#### reliant forge app teardown
+
+Delete every hosted environment of this app, keeping the app (destructive)
+
+Delete every hosted environment of this app — `forge env delete <env>` for each
+env, with each env's outcome printed — and keep the app itself: its name, its
+release history and release images (not billed), and its custom domains
+(unbound, still in your organization). Afterwards nothing runs or bills, and
+`forge env deploy <env> <release>` recreates an env from the same releases.
+
+  forge app teardown              prompts: type the app name to confirm
+  forge app teardown --yes        no prompt (required with no TTY or CI=1)
+  forge app teardown --keep-data  keep the databases (still billed as storage)
+
+By default each env's managed databases' data is destroyed with it
+(IRREVERSIBLE). --keep-data RETAINS them, as `forge env delete --keep-data` does:
+they keep billing as storage, are listed by `forge env retained list` until
+purged, and are NOT reattached by a later deploy. Each env's secrets stop being
+delivered and are not given back to a recreated env.
+
+Before asking for confirmation it shows every env with its id, deployment count
+and bound custom domains, and deletes nothing when any domain is still bound
+(the control plane refuses to delete an env while one is: `forge domain unbind`
+it first) or when an env this project declares also runs parts on a cluster you
+operate. It also deletes nothing when the bound domains cannot be read — the
+domain service failing, or a control plane without one. Tearing down an app
+needs an org owner or admin.
+
+```
+reliant forge app teardown [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--endpoint` | `string` | - | Control plane holding the app: one this project is bound to (.forge/hosted-projects.json) or Reliant cloud; https, or http to localhost only (default: the one this project is bound to) |
+| `--keep-data` | `bool` | - | Keep every env's managed databases (retained, still billed as storage) instead of destroying them |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+| `--yes` | `bool` | - | Confirm without the typed-name prompt (required when non-interactive) |
+
+---
+
 ### reliant forge build
 
 Compile the project's binaries and frontends locally (never publishes)
@@ -1741,6 +1908,20 @@ On a branch, unit-tests runs only the Go packages the branch's changes reach (af
 mode), and falls back to the whole suite when anything but Go source changed, on the
 default branch, or with CI_FULL=1 / --full. The mode and why are printed.
 
+Tiers (--tier, or --event to pick one from a GitHub event name) run the gate as the
+scaffolded ci.yml runs it for that event. A requested built-in lane the tier does not
+run is listed DEFERRED, which does not fail the gate:
+  pr     pull_request, pull_request_target  a pull request: every lane, unit tests narrowed to the packages the branch reaches
+  queue  merge_group                        a merge-queue group: what pr runs, narrowed against the group's base (pass --base)
+  main   push                               a push to the default branch: checks and the whole unit suite; integration is deferred to pr, queue and full
+  full   schedule, workflow_dispatch        the release or nightly gate: every lane, whole suites
+
+--json prints one forge.ci.gate/v1 document on stdout (the progress lines and
+the table go to stderr): the verdict, exit_code, and per check its status (pass, fail,
+skip, waived, deferred, na), duration_ms, queued_ms, cached, and for a failed check
+the findings {path, line, column, level, message} read from its log (go test, go
+vet / golangci-lint / buf `file:line:` lines, tsc). The exit status is unchanged.
+
 Environment: CI_SKIP, CI_ONLY (checks or groups to run, with what they depend on),
 CI_FULL, CI_BASE, CI_NO_CACHE, CI_REPORT (also write the Markdown table to a file),
 CI_LOG_DIR, FORGE_CI_CACHE_DIR.
@@ -1755,14 +1936,17 @@ reliant forge ci gate [checks|test|integration|all|<lane>] [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--base` | `string` | - | Ref a branch's changes are measured from for affected unit tests (default origin/<default branch>; a stacked branch names its parent; also CI_BASE) |
+| `--event` | `string` | - | Pick the tier from a GitHub event name: pull_request, merge_group, push, schedule, workflow_dispatch (an action suffix such as pull_request.synchronize is ignored) |
 | `--full` | `bool` | - | Run the whole unit suite on a branch instead of the affected packages (also CI_FULL=1) |
 | `--groups` | `bool` | - | Print each check's output in a GitHub Actions ::group:: (automatic under GITHUB_ACTIONS) |
 | `--jobs` | `int` | `0` | Light checks to run at once (default: half the CPUs, 2-8); heavy checks are bounded by host slots |
+| `--json` | `bool` | - | Print a forge.ci.gate/v1 document on stdout; progress and the table go to stderr |
 | `--list` | `bool` | - | Print the checks of the selected lanes (lane, group, name, scheduling) and exit |
 | `--no-cache` | `bool` | - | Run every check even when this tree already passed it (also CI_NO_CACHE=1) |
 | `--only` | `stringSlice` | `[]` | Checks or groups to run, in addition to CI_ONLY (plus what they depend on) |
 | `--report` | `string` | - | Also write the Markdown summary to this file (also CI_REPORT) |
 | `--skip` | `stringSlice` | `[]` | Check names to skip, in addition to CI_SKIP (still listed, as SKIPPED) |
+| `--tier` | `string` | - | Run the gate as one CI event's tier: pr, queue (alias merge), main or full (see Tiers above) |
 
 ---
 
@@ -6465,6 +6649,7 @@ reliant forge env [flags]
 | [`ps`](#reliant-forge-env-ps) | List every forge stack running on this machine, across all projects |
 | [`releases`](#reliant-forge-env-releases) | What was released to an environment, when, and what changed |
 | [`render`](#reliant-forge-env-render) | Print the Kubernetes objects deploy/kcl/<env>/ renders, with the cluster each lands on |
+| [`retained`](#reliant-forge-env-retained) | List or purge the databases kept from deleted HOSTED environments (they bill storage) |
 | [`secret`](#reliant-forge-env-secret) | Manage an environment's secret store (local file or hosted control plane) |
 | [`secrets`](#reliant-forge-env-secrets) | Project the env's secret_provider into the cluster |
 | [`shape`](#reliant-forge-env-shape) | Print what an environment DECLARES — kind, workloads, secrets, domains, and one hash per object |
@@ -6633,8 +6818,9 @@ its managed databases' data (Postgres clusters and volumes). IRREVERSIBLE.
 
 --keep-data RETAINS each managed database: it keeps running and billing as
 storage, is listed by the control plane as a retained database, and stays
-until purged (DeleteRetainedDatabase). A later deploy of the same name creates
-a NEW environment and does NOT reattach it.
+until purged (`forge env retained list`, `forge env retained purge <id>`). A
+later deploy of the same name creates a NEW environment and does NOT reattach
+it. `forge app teardown` deletes every env of the app at once.
 
 KEPT EITHER WAY: the project's release images in the registry. They belong to
 the project, not the environment, and other environments promote them.
@@ -8637,6 +8823,95 @@ reliant forge env render <environment> [flags]
 
 ---
 
+#### reliant forge env retained
+
+List or purge the databases kept from deleted HOSTED environments (they bill storage)
+
+A hosted env deleted with --keep-data (`forge env delete`, `forge app teardown`)
+leaves its managed databases behind as RETAINED databases: still running, still
+billing as storage, and never reattached by a later deploy. These verbs show
+and remove them, on the control plane this project is bound to
+(.forge/hosted-projects.json) or the one --endpoint names.
+
+  forge env retained list              this app's retained databases
+  forge env retained list --all        your organization's
+  forge env retained purge <id>        destroy one of this app's (IRREVERSIBLE; type its name to confirm)
+  forge env retained purge <id> --all  destroy one of your organization's
+
+A control plane that purges them by itself shows the date in a PURGE AFTER
+column.
+
+```
+reliant forge env retained [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-forge-env-retained-list) | List the retained databases of this app (--all: of your organization) |
+| [`purge`](#reliant-forge-env-retained-purge) | Destroy a retained database: its data, volumes and credentials (IRREVERSIBLE) |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge env retained list
+
+List the retained databases of this app (--all: of your organization)
+
+```
+reliant forge env retained list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--all` | `bool` | - | List every retained database of your organization, not only this app's |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--endpoint` | `string` | - | Control plane holding the app: one this project is bound to (.forge/hosted-projects.json) or Reliant cloud; https, or http to localhost only (default: the one this project is bound to) |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
+#### reliant forge env retained purge
+
+Destroy a retained database: its data, volumes and credentials (IRREVERSIBLE)
+
+Destroy one retained database: its data, volumes and credentials, and its
+storage stops billing. IRREVERSIBLE.
+
+  forge env retained purge <id>          prompts: type the database name to confirm
+  forge env retained purge <id> --yes    no prompt (required with no TTY or CI=1)
+
+The argument is the id `forge env retained list` prints, or the database's
+name when exactly one of this app's retained databases has it. Either is
+resolved among THIS app's retained databases: one of another app is refused,
+and named. --all resolves among your organization's (`forge env retained list --all`),
+and the confirmation names the app that owns it. Purging needs an org owner or
+admin.
+
+```
+reliant forge env retained purge <id | database name> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--all` | `bool` | - | Resolve the id or name among your organization's retained databases, not only this app's |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--endpoint` | `string` | - | Control plane holding the app: one this project is bound to (.forge/hosted-projects.json) or Reliant cloud; https, or http to localhost only (default: the one this project is bound to) |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+| `--yes` | `bool` | - | Confirm without the typed-name prompt (required when non-interactive) |
+
+---
+
 #### reliant forge env secret
 
 Manage an environment's secret store (local file or hosted control plane)
@@ -9311,8 +9586,16 @@ WHAT ONE ENV'S REPORT CARRIES:
     verify half exists to measure);
   * VERIFY — the digests the env is actually RUNNING against the ones the
     binding froze, per declared image, in five states: match / drift /
-    missing / untagged / unreachable. A hosted env is read through its
-    control plane's observer, because forge cannot read a hosted cluster;
+    missing / untagged / unreachable. UNREACHABLE means forge could not
+    observe what runs, so it says nothing about the env either way: the
+    cluster, observer or site could not be read, or it answered without
+    saying which release it runs. A hosted env is read through its control
+    plane's observer, because forge cannot read a hosted cluster. A hosted
+    static site is read from the site itself: env build stamps the release
+    into /.well-known/forge-release.json, and status fetches it from the live
+    URL (MATCH when it names the bound release, DRIFT when it names another,
+    UNREACHABLE when the fetch fails or the site, though it answers, serves
+    no marker, as a release built before forge stamped one does);
   * the ROLLOUT PHASE per workload, as the control plane computes it;
   * IDENTITY — a hosted env that declares forge.ManagedIdentity gets one line,
     "identity: ready / provisioning / failed: <reason>", as its control plane
@@ -9381,8 +9664,9 @@ EXIT CODES — a pipeline branches on these directly:
   1  we looked and it is WRONG — an image drifted or is missing; with --wait,
      a workload is DEGRADED
   2  we could not DETERMINE — a cluster or control plane was unreachable, a
-     credential was refused, the thing is unobservable, or this checkout's
-     promotion ledger is stale
+     credential was refused, the thing is unobservable (a hosted static site
+     that serves no release marker included), or this checkout's promotion
+     ledger is stale
   6  --wait only: SUPERSEDED — a newer promotion replaced the one waited on
   7  QUEUED — the bound release is accepted and recorded, and the control plane
      holds it on a person (billing). The output names what it waits on and the
@@ -16705,10 +16989,21 @@ back on (orm has no key; --disable orm only leaves db/migrations out):
 Valid feature names: orm, codegen, migrations, ci, build, deploy,
 contracts, docs, frontend, observability, hot_reload.
 
+--auth-mode picks the sign-in system of a service project with a frontend.
+native (the default) scaffolds today's: the users in deploy/kcl/identity.k,
+the dev identity provider and mail catcher, the sign-in pages and the route
+guard. none scaffolds an app nobody signs in to: no identity, no dev IdP, a
+public frontend with no route guard and no sign-in pages, and a login broker
+that is never mounted. The API still authenticates, fail-closed: an rpc
+answers anonymous callers only when its proto declares
+`option (forge.v1.method) = { auth_required: false }`; every other rpc
+answers 401, because nothing can issue the token it requires.
+
 Example:
   forge project new my-project --mod github.com/example/my-project
   forge project new my-project --mod github.com/example/my-project --service gateway
   forge project new my-project --mod github.com/example/my-project --frontend web
+  forge project new my-project --mod github.com/example/my-project --frontend web --auth-mode none
   forge project new mycli      --mod github.com/example/mycli --kind cli
   forge project new mylib      --mod github.com/example/mylib --kind library
   forge project new landing    --kind site                          # new static site (Next.js export)
@@ -16754,6 +17049,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--auth-mode` | `string` | - | Sign-in system of a service project with a --frontend: native (default — managed identity, the dev IdP, sign-in pages and a route guard) or none (no sign-in at all: no identity, no dev IdP, a public frontend). Either way the API fails closed: an rpc answers anonymous callers only when its proto declares auth_required: false |
 | `--binary` | `string` | `per-service` | Binary packaging: 'per-service' (default — canonical cmd/server.go cobra root, one Application per service) or 'shared' (one Go binary, cobra subcommand per service, KCL MultiServiceApplication for deploy) |
 | `--buf-plugins` | `string` | `local` | Default proto plugin source: 'local' (resolved from PATH; no BSR auth needed) or 'remote' (BSR-hosted, requires login under load) |
 | `--claimable` | `bool` | - | Scaffold prod for an ANONYMOUS deploy: forge env deploy prod --claimable then publishes with no account and prints a claim link. prod declares control_plane = forge.ControlPlane {claimable = True} and sizes its hosted services and jobs to the claimable plan (125m / 128 MiB, request and limit) instead of the billed shape band. A static site needs nothing extra |
@@ -18769,8 +19065,12 @@ reverse proxy that blends several apps on one host). It is rendered into
 next.config.ts (basePath + assetPrefix; forge reads it back from there) and the generated src/lib/basepath_gen.ts
 helper. The single runtime override is NEXT_PUBLIC_BASE_PATH.
 
---auth-mode names the sign-in flow this frontend uses. "native" is the
-default and the only mode forge scaffolds, and it is a first-party form:
+--auth-mode names the sign-in flow this frontend uses: "native" or
+"none". The default follows the project: native when its dev environment
+declares an identity provider, none (a public frontend with no route guard
+and no sign-in screens; the API still answers 401 to an anonymous call of
+any rpc not declared auth_required: false) when it declares none. Native is
+a first-party form:
 the browser POSTs an email and a password to your own app (POST
 /auth/login) and gets back an HttpOnly session cookie. The browser never
 contacts the identity provider — no /authorize redirect, no PKCE in the
@@ -18807,7 +19107,7 @@ reliant forge scaffold frontend <name> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
-| `--auth-mode` | `string` | - | Sign-in flow for this frontend. Only `native` (the default) is scaffolded: your own form POSTs credentials to your own API and gets an HttpOnly session cookie; the server runs the OIDC flow (internal/app/login_broker.go) and the browser never contacts the IdP. |
+| `--auth-mode` | `string` | - | Sign-in flow for this frontend: `native` (your own form POSTs credentials to your own API and gets an HttpOnly session cookie; the server runs the OIDC flow in internal/app/login_broker.go and the browser never contacts the IdP) or `none` (a public frontend: no route guard, no sign-in screens). Default: native when deploy/kcl/dev/main.k declares an identity provider, else none. |
 | `--base-path` | `string` | - | URL prefix the frontend is mounted under (e.g. "/admin"). Only applies to --kind web. |
 | `--kind` | `string` | - | frontend kind (web, mobile, or vite-spa) |
 | `--no-generate` | `bool` | - | skip the post-scaffold 'forge generate' run (scaffold-only mode for parallel-agent rounds); run 'forge generate' before 'forge lint' |
