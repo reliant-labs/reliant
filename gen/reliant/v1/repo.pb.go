@@ -27,16 +27,25 @@ const (
 
 // Repo is a git repository nested inside a project.
 type Repo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ProjectId     string                 `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`                                     // display name; defaults to dir basename
-	RelativePath  string                 `protobuf:"bytes,4,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"` // path relative to project root; "" means project root itself
-	RemoteUrl     string                 `protobuf:"bytes,5,opt,name=remote_url,json=remoteUrl,proto3" json:"remote_url,omitempty"`          // remote.origin.url, "" if no remote
-	CreatedAt     string                 `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     string                 `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Id           string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ProjectId    string                 `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Name         string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`                                     // display name; defaults to dir basename
+	RelativePath string                 `protobuf:"bytes,4,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"` // path relative to project root; "" means project root itself
+	RemoteUrl    string                 `protobuf:"bytes,5,opt,name=remote_url,json=remoteUrl,proto3" json:"remote_url,omitempty"`          // remote.origin.url, "" if no remote
+	CreatedAt    string                 `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt    string                 `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// forge_apps are the forge apps in this repo: one per forge.yaml a daemon
+	// found in it (depth <= 4 below the repo root), ordered by subpath. Read it
+	// with forge_apps_scanned_at. ListRepos fills it; DiscoverRepos does not.
+	ForgeApps []*RepoForgeApp `protobuf:"bytes,8,rep,name=forge_apps,json=forgeApps,proto3" json:"forge_apps,omitempty"`
+	// forge_apps_scanned_at (RFC 3339) is when a daemon last finished scanning
+	// this repo for forge apps. Unset means unknown: no daemon has scanned it
+	// yet (one older than the scan never does), and forge_apps, if any, may be
+	// partial. Set with no forge_apps: the repo has no forge app.
+	ForgeAppsScannedAt *string `protobuf:"bytes,9,opt,name=forge_apps_scanned_at,json=forgeAppsScannedAt,proto3,oneof" json:"forge_apps_scanned_at,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Repo) Reset() {
@@ -118,6 +127,77 @@ func (x *Repo) GetUpdatedAt() string {
 	return ""
 }
 
+func (x *Repo) GetForgeApps() []*RepoForgeApp {
+	if x != nil {
+		return x.ForgeApps
+	}
+	return nil
+}
+
+func (x *Repo) GetForgeAppsScannedAt() string {
+	if x != nil && x.ForgeAppsScannedAt != nil {
+		return *x.ForgeAppsScannedAt
+	}
+	return ""
+}
+
+// RepoForgeApp is one forge app found in a repo: a forge.yaml and the `name`
+// it declares, which is the app's name in the project's org.
+type RepoForgeApp struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// name is forge.yaml's `name`.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// subpath is the forge.yaml's directory relative to the repo root,
+	// "/"-separated; "" is the repo root itself.
+	Subpath       string `protobuf:"bytes,2,opt,name=subpath,proto3" json:"subpath,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepoForgeApp) Reset() {
+	*x = RepoForgeApp{}
+	mi := &file_reliant_v1_repo_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepoForgeApp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepoForgeApp) ProtoMessage() {}
+
+func (x *RepoForgeApp) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_repo_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepoForgeApp.ProtoReflect.Descriptor instead.
+func (*RepoForgeApp) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *RepoForgeApp) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *RepoForgeApp) GetSubpath() string {
+	if x != nil {
+		return x.Subpath
+	}
+	return ""
+}
+
 type DiscoverReposRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
@@ -128,7 +208,7 @@ type DiscoverReposRequest struct {
 
 func (x *DiscoverReposRequest) Reset() {
 	*x = DiscoverReposRequest{}
-	mi := &file_reliant_v1_repo_proto_msgTypes[1]
+	mi := &file_reliant_v1_repo_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -140,7 +220,7 @@ func (x *DiscoverReposRequest) String() string {
 func (*DiscoverReposRequest) ProtoMessage() {}
 
 func (x *DiscoverReposRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_repo_proto_msgTypes[1]
+	mi := &file_reliant_v1_repo_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -153,7 +233,7 @@ func (x *DiscoverReposRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverReposRequest.ProtoReflect.Descriptor instead.
 func (*DiscoverReposRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *DiscoverReposRequest) GetProjectId() string {
@@ -185,7 +265,7 @@ type DiscoverReposResponse struct {
 
 func (x *DiscoverReposResponse) Reset() {
 	*x = DiscoverReposResponse{}
-	mi := &file_reliant_v1_repo_proto_msgTypes[2]
+	mi := &file_reliant_v1_repo_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -197,7 +277,7 @@ func (x *DiscoverReposResponse) String() string {
 func (*DiscoverReposResponse) ProtoMessage() {}
 
 func (x *DiscoverReposResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_repo_proto_msgTypes[2]
+	mi := &file_reliant_v1_repo_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -210,7 +290,7 @@ func (x *DiscoverReposResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverReposResponse.ProtoReflect.Descriptor instead.
 func (*DiscoverReposResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DiscoverReposResponse) GetDiscovered() []*Repo {
@@ -243,7 +323,7 @@ type ListReposRequest struct {
 
 func (x *ListReposRequest) Reset() {
 	*x = ListReposRequest{}
-	mi := &file_reliant_v1_repo_proto_msgTypes[3]
+	mi := &file_reliant_v1_repo_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -255,7 +335,7 @@ func (x *ListReposRequest) String() string {
 func (*ListReposRequest) ProtoMessage() {}
 
 func (x *ListReposRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_repo_proto_msgTypes[3]
+	mi := &file_reliant_v1_repo_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -268,7 +348,7 @@ func (x *ListReposRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListReposRequest.ProtoReflect.Descriptor instead.
 func (*ListReposRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ListReposRequest) GetProjectId() string {
@@ -287,7 +367,7 @@ type ListReposResponse struct {
 
 func (x *ListReposResponse) Reset() {
 	*x = ListReposResponse{}
-	mi := &file_reliant_v1_repo_proto_msgTypes[4]
+	mi := &file_reliant_v1_repo_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -299,7 +379,7 @@ func (x *ListReposResponse) String() string {
 func (*ListReposResponse) ProtoMessage() {}
 
 func (x *ListReposResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_repo_proto_msgTypes[4]
+	mi := &file_reliant_v1_repo_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -312,7 +392,7 @@ func (x *ListReposResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListReposResponse.ProtoReflect.Descriptor instead.
 func (*ListReposResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListReposResponse) GetRepos() []*Repo {
@@ -333,7 +413,7 @@ type AddRepoRequest struct {
 
 func (x *AddRepoRequest) Reset() {
 	*x = AddRepoRequest{}
-	mi := &file_reliant_v1_repo_proto_msgTypes[5]
+	mi := &file_reliant_v1_repo_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -345,7 +425,7 @@ func (x *AddRepoRequest) String() string {
 func (*AddRepoRequest) ProtoMessage() {}
 
 func (x *AddRepoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_repo_proto_msgTypes[5]
+	mi := &file_reliant_v1_repo_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -358,7 +438,7 @@ func (x *AddRepoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddRepoRequest.ProtoReflect.Descriptor instead.
 func (*AddRepoRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *AddRepoRequest) GetProjectId() string {
@@ -391,7 +471,7 @@ type AddRepoResponse struct {
 
 func (x *AddRepoResponse) Reset() {
 	*x = AddRepoResponse{}
-	mi := &file_reliant_v1_repo_proto_msgTypes[6]
+	mi := &file_reliant_v1_repo_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -403,7 +483,7 @@ func (x *AddRepoResponse) String() string {
 func (*AddRepoResponse) ProtoMessage() {}
 
 func (x *AddRepoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_repo_proto_msgTypes[6]
+	mi := &file_reliant_v1_repo_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -416,7 +496,7 @@ func (x *AddRepoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddRepoResponse.ProtoReflect.Descriptor instead.
 func (*AddRepoResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *AddRepoResponse) GetRepo() *Repo {
@@ -435,7 +515,7 @@ type RemoveRepoRequest struct {
 
 func (x *RemoveRepoRequest) Reset() {
 	*x = RemoveRepoRequest{}
-	mi := &file_reliant_v1_repo_proto_msgTypes[7]
+	mi := &file_reliant_v1_repo_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -447,7 +527,7 @@ func (x *RemoveRepoRequest) String() string {
 func (*RemoveRepoRequest) ProtoMessage() {}
 
 func (x *RemoveRepoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_repo_proto_msgTypes[7]
+	mi := &file_reliant_v1_repo_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -460,7 +540,7 @@ func (x *RemoveRepoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveRepoRequest.ProtoReflect.Descriptor instead.
 func (*RemoveRepoRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RemoveRepoRequest) GetRepoId() string {
@@ -479,7 +559,7 @@ type RemoveRepoResponse struct {
 
 func (x *RemoveRepoResponse) Reset() {
 	*x = RemoveRepoResponse{}
-	mi := &file_reliant_v1_repo_proto_msgTypes[8]
+	mi := &file_reliant_v1_repo_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -491,7 +571,7 @@ func (x *RemoveRepoResponse) String() string {
 func (*RemoveRepoResponse) ProtoMessage() {}
 
 func (x *RemoveRepoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_repo_proto_msgTypes[8]
+	mi := &file_reliant_v1_repo_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -504,7 +584,7 @@ func (x *RemoveRepoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveRepoResponse.ProtoReflect.Descriptor instead.
 func (*RemoveRepoResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RemoveRepoResponse) GetSuccess() bool {
@@ -523,7 +603,7 @@ type GetRepoGitInfoRequest struct {
 
 func (x *GetRepoGitInfoRequest) Reset() {
 	*x = GetRepoGitInfoRequest{}
-	mi := &file_reliant_v1_repo_proto_msgTypes[9]
+	mi := &file_reliant_v1_repo_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -535,7 +615,7 @@ func (x *GetRepoGitInfoRequest) String() string {
 func (*GetRepoGitInfoRequest) ProtoMessage() {}
 
 func (x *GetRepoGitInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_repo_proto_msgTypes[9]
+	mi := &file_reliant_v1_repo_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -548,7 +628,7 @@ func (x *GetRepoGitInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRepoGitInfoRequest.ProtoReflect.Descriptor instead.
 func (*GetRepoGitInfoRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetRepoGitInfoRequest) GetRepoId() string {
@@ -576,7 +656,7 @@ type GetRepoGitInfoResponse struct {
 
 func (x *GetRepoGitInfoResponse) Reset() {
 	*x = GetRepoGitInfoResponse{}
-	mi := &file_reliant_v1_repo_proto_msgTypes[10]
+	mi := &file_reliant_v1_repo_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -588,7 +668,7 @@ func (x *GetRepoGitInfoResponse) String() string {
 func (*GetRepoGitInfoResponse) ProtoMessage() {}
 
 func (x *GetRepoGitInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_repo_proto_msgTypes[10]
+	mi := &file_reliant_v1_repo_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -601,7 +681,7 @@ func (x *GetRepoGitInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRepoGitInfoResponse.ProtoReflect.Descriptor instead.
 func (*GetRepoGitInfoResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_repo_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetRepoGitInfoResponse) GetRepoId() string {
@@ -679,7 +759,7 @@ var File_reliant_v1_repo_proto protoreflect.FileDescriptor
 const file_reliant_v1_repo_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/repo.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xcb\x01\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xd6\x02\n" +
 	"\x04Repo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -691,7 +771,14 @@ const file_reliant_v1_repo_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\a \x01(\tR\tupdatedAt\"R\n" +
+	"updated_at\x18\a \x01(\tR\tupdatedAt\x127\n" +
+	"\n" +
+	"forge_apps\x18\b \x03(\v2\x18.reliant.v1.RepoForgeAppR\tforgeApps\x126\n" +
+	"\x15forge_apps_scanned_at\x18\t \x01(\tH\x00R\x12forgeAppsScannedAt\x88\x01\x01B\x18\n" +
+	"\x16_forge_apps_scanned_at\"<\n" +
+	"\fRepoForgeApp\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\asubpath\x18\x02 \x01(\tR\asubpath\"R\n" +
 	"\x14DiscoverReposRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
@@ -760,39 +847,41 @@ func file_reliant_v1_repo_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_repo_proto_rawDescData
 }
 
-var file_reliant_v1_repo_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_reliant_v1_repo_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_reliant_v1_repo_proto_goTypes = []any{
 	(*Repo)(nil),                   // 0: reliant.v1.Repo
-	(*DiscoverReposRequest)(nil),   // 1: reliant.v1.DiscoverReposRequest
-	(*DiscoverReposResponse)(nil),  // 2: reliant.v1.DiscoverReposResponse
-	(*ListReposRequest)(nil),       // 3: reliant.v1.ListReposRequest
-	(*ListReposResponse)(nil),      // 4: reliant.v1.ListReposResponse
-	(*AddRepoRequest)(nil),         // 5: reliant.v1.AddRepoRequest
-	(*AddRepoResponse)(nil),        // 6: reliant.v1.AddRepoResponse
-	(*RemoveRepoRequest)(nil),      // 7: reliant.v1.RemoveRepoRequest
-	(*RemoveRepoResponse)(nil),     // 8: reliant.v1.RemoveRepoResponse
-	(*GetRepoGitInfoRequest)(nil),  // 9: reliant.v1.GetRepoGitInfoRequest
-	(*GetRepoGitInfoResponse)(nil), // 10: reliant.v1.GetRepoGitInfoResponse
+	(*RepoForgeApp)(nil),           // 1: reliant.v1.RepoForgeApp
+	(*DiscoverReposRequest)(nil),   // 2: reliant.v1.DiscoverReposRequest
+	(*DiscoverReposResponse)(nil),  // 3: reliant.v1.DiscoverReposResponse
+	(*ListReposRequest)(nil),       // 4: reliant.v1.ListReposRequest
+	(*ListReposResponse)(nil),      // 5: reliant.v1.ListReposResponse
+	(*AddRepoRequest)(nil),         // 6: reliant.v1.AddRepoRequest
+	(*AddRepoResponse)(nil),        // 7: reliant.v1.AddRepoResponse
+	(*RemoveRepoRequest)(nil),      // 8: reliant.v1.RemoveRepoRequest
+	(*RemoveRepoResponse)(nil),     // 9: reliant.v1.RemoveRepoResponse
+	(*GetRepoGitInfoRequest)(nil),  // 10: reliant.v1.GetRepoGitInfoRequest
+	(*GetRepoGitInfoResponse)(nil), // 11: reliant.v1.GetRepoGitInfoResponse
 }
 var file_reliant_v1_repo_proto_depIdxs = []int32{
-	0,  // 0: reliant.v1.DiscoverReposResponse.discovered:type_name -> reliant.v1.Repo
-	0,  // 1: reliant.v1.ListReposResponse.repos:type_name -> reliant.v1.Repo
-	0,  // 2: reliant.v1.AddRepoResponse.repo:type_name -> reliant.v1.Repo
-	1,  // 3: reliant.v1.RepoService.DiscoverRepos:input_type -> reliant.v1.DiscoverReposRequest
-	3,  // 4: reliant.v1.RepoService.ListRepos:input_type -> reliant.v1.ListReposRequest
-	5,  // 5: reliant.v1.RepoService.AddRepo:input_type -> reliant.v1.AddRepoRequest
-	7,  // 6: reliant.v1.RepoService.RemoveRepo:input_type -> reliant.v1.RemoveRepoRequest
-	9,  // 7: reliant.v1.RepoService.GetRepoGitInfo:input_type -> reliant.v1.GetRepoGitInfoRequest
-	2,  // 8: reliant.v1.RepoService.DiscoverRepos:output_type -> reliant.v1.DiscoverReposResponse
-	4,  // 9: reliant.v1.RepoService.ListRepos:output_type -> reliant.v1.ListReposResponse
-	6,  // 10: reliant.v1.RepoService.AddRepo:output_type -> reliant.v1.AddRepoResponse
-	8,  // 11: reliant.v1.RepoService.RemoveRepo:output_type -> reliant.v1.RemoveRepoResponse
-	10, // 12: reliant.v1.RepoService.GetRepoGitInfo:output_type -> reliant.v1.GetRepoGitInfoResponse
-	8,  // [8:13] is the sub-list for method output_type
-	3,  // [3:8] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	1,  // 0: reliant.v1.Repo.forge_apps:type_name -> reliant.v1.RepoForgeApp
+	0,  // 1: reliant.v1.DiscoverReposResponse.discovered:type_name -> reliant.v1.Repo
+	0,  // 2: reliant.v1.ListReposResponse.repos:type_name -> reliant.v1.Repo
+	0,  // 3: reliant.v1.AddRepoResponse.repo:type_name -> reliant.v1.Repo
+	2,  // 4: reliant.v1.RepoService.DiscoverRepos:input_type -> reliant.v1.DiscoverReposRequest
+	4,  // 5: reliant.v1.RepoService.ListRepos:input_type -> reliant.v1.ListReposRequest
+	6,  // 6: reliant.v1.RepoService.AddRepo:input_type -> reliant.v1.AddRepoRequest
+	8,  // 7: reliant.v1.RepoService.RemoveRepo:input_type -> reliant.v1.RemoveRepoRequest
+	10, // 8: reliant.v1.RepoService.GetRepoGitInfo:input_type -> reliant.v1.GetRepoGitInfoRequest
+	3,  // 9: reliant.v1.RepoService.DiscoverRepos:output_type -> reliant.v1.DiscoverReposResponse
+	5,  // 10: reliant.v1.RepoService.ListRepos:output_type -> reliant.v1.ListReposResponse
+	7,  // 11: reliant.v1.RepoService.AddRepo:output_type -> reliant.v1.AddRepoResponse
+	9,  // 12: reliant.v1.RepoService.RemoveRepo:output_type -> reliant.v1.RemoveRepoResponse
+	11, // 13: reliant.v1.RepoService.GetRepoGitInfo:output_type -> reliant.v1.GetRepoGitInfoResponse
+	9,  // [9:14] is the sub-list for method output_type
+	4,  // [4:9] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_repo_proto_init() }
@@ -800,14 +889,15 @@ func file_reliant_v1_repo_proto_init() {
 	if File_reliant_v1_repo_proto != nil {
 		return
 	}
-	file_reliant_v1_repo_proto_msgTypes[5].OneofWrappers = []any{}
+	file_reliant_v1_repo_proto_msgTypes[0].OneofWrappers = []any{}
+	file_reliant_v1_repo_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_repo_proto_rawDesc), len(file_reliant_v1_repo_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

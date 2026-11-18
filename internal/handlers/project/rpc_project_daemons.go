@@ -472,6 +472,8 @@ func (s *Service) MarkProjectInstalled(
 	// and a failed read is never the RPC's failure: the install is recorded.
 	projectfacts.LearnForgeName(ctx, s.deps.Router, s.deps.Repo,
 		userID, req.Msg.DaemonId, req.Msg.ProjectId, req.Msg.Path)
+	projectfacts.RefreshForgeApps(ctx, s.deps.Router, s.deps.Repo,
+		userID, req.Msg.DaemonId, req.Msg.ProjectId, req.Msg.Path, 0)
 
 	// Return the resolved row so the client can populate UI state without
 	// a follow-up list call.

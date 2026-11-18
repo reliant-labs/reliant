@@ -80,7 +80,10 @@ func (s *Service) authorizeProject(ctx context.Context, projectID, userID string
 	return project, nil
 }
 
-func repoToProto(r *core.Repo) *reliantv1.Repo {
+// repoToProto is r on the wire, with apps, the forge apps recorded for it
+// (repo_forge_apps). forge_apps_scanned_at stays unset until a daemon
+// finished a scan of the repo: its apps are unknown until then.
+func repoToProto(r *core.Repo, apps []core.RepoForgeApp) *reliantv1.Repo {
 	out := &reliantv1.Repo{
 		Id:           r.ID,
 		ProjectId:    r.ProjectID,
@@ -91,6 +94,13 @@ func repoToProto(r *core.Repo) *reliantv1.Repo {
 	}
 	if r.RemoteURL != nil {
 		out.RemoteUrl = *r.RemoteURL
+	}
+	for _, app := range apps {
+		out.ForgeApps = append(out.ForgeApps, &reliantv1.RepoForgeApp{Name: app.Name, Subpath: app.Subpath})
+	}
+	if r.ForgeAppsScannedAt != nil {
+		scanned := r.ForgeAppsScannedAt.UTC().Format(time.RFC3339)
+		out.ForgeAppsScannedAt = &scanned
 	}
 	return out
 }
@@ -168,10 +178,18 @@ func (s *Service) ListRepos(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos"))
 	}
+	apps, err := s.deps.Repo.ListRepoForgeAppsByProject(ctx, req.Msg.ProjectId)
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list the repos' forge apps"))
+	}
+	appsByRepo := make(map[string][]core.RepoForgeApp, len(repos))
+	for _, app := range apps {
+		appsByRepo[app.RepoID] = append(appsByRepo[app.RepoID], app)
+	}
 
 	out := make([]*reliantv1.Repo, len(repos))
 	for i, r := range repos {
-		out[i] = repoToProto(r)
+		out[i] = repoToProto(r, appsByRepo[r.ID])
 	}
 	return connect.NewResponse(&reliantv1.ListReposResponse{Repos: out}), nil
 }
@@ -272,7 +290,7 @@ func (s *Service) AddRepo(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.AddRepoResponse{Repo: repoToProto(record)}), nil
+	return connect.NewResponse(&reliantv1.AddRepoResponse{Repo: repoToProto(record, nil)}), nil
 }
 
 // =============================================================================

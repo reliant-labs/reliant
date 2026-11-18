@@ -67,6 +67,9 @@ type Repository interface {
 
 	CreateRepo(ctx context.Context, repo *core.Repo) error
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
+	// SetRepoForgeApps records the forge apps a daemon found in a repo
+	// (projectfacts.RecordForgeApps).
+	SetRepoForgeApps(ctx context.Context, repoID string, apps []core.RepoForgeApp, complete bool) error
 
 	CreateWorktree(ctx context.Context, worktree *db.Worktree) error
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)

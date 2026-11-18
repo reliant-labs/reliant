@@ -88,4 +88,7 @@ type ProjectReconcileStore interface {
 	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
 	// UpdateProject also serves projectfacts.ReconcileGitRepo.
 	projectfacts.ProjectUpdater
+	// ForgeAppsStore records the forge apps the reconcile probe reports for
+	// each repo of a checkout it found (projectfacts.RecordForgeApps).
+	projectfacts.ForgeAppsStore
 }
