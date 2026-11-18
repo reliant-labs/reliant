@@ -26,6 +26,7 @@
  */
 
 /** Below this width the desktop shell's sidebars and panels stop fitting. */
+import { orgFreePath } from "./paths/org";
 import { isSafeReturnTo } from "./returnTo";
 
 export const MOBILE_MAX_WIDTH = 768;
@@ -51,7 +52,9 @@ export interface MobileRedirectEnv {
  * below supplies the environment.
  */
 export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
-  const { pathname, width, coarsePointer, optedOutOfMobile } = env;
+  const { width, coarsePointer, optedOutOfMobile } = env;
+  // An org page (`/o/<org>/…`) is matched as its org-less twin.
+  const pathname = orgFreePath(env.pathname);
 
   if (optedOutOfMobile) return false;
 
@@ -121,7 +124,8 @@ export const MOBILE_SETTINGS_SECTION_FOR: Readonly<Record<string, string>> = {
  * home. A run IS a chat, so a run link opens that chat.
  */
 export function mobilePathFor(pathname: string, search = ""): string {
-  const path = pathname.replace(/\/+$/, "") || "/";
+  // The mobile tree is not under the org yet (U15): an org page maps as its org-less twin.
+  const path = orgFreePath(pathname).replace(/\/+$/, "") || "/";
   if (path === "/inbox" || path.startsWith("/inbox/")) return "/m/inbox";
 
   const run = /^\/workflows\/runs\/([^/]+)/.exec(path);

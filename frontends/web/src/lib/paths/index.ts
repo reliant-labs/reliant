@@ -26,7 +26,7 @@
 
 import type { ForgeSettingsSection } from "../../components/ForgeShell/ForgeSettingsPage";
 import type { SettingsSection } from "../../routeSchemas";
-import { withOrg, type PathContext } from "./org";
+import { orgRootPath, withOrg, type PathContext } from "./org";
 
 export { withOrg, type PathContext } from "./org";
 export { withSearch } from "./search";
@@ -35,9 +35,18 @@ const seg = encodeURIComponent;
 
 // ── Chats and projects ──────────────────────────────────────────────────────
 
-/** The chat home: every project's chats. (`/o/<org>/` in U3.) */
+/** The chat home: every project's chats (`/o/<org>` in the org form). */
 export function homePath(ctx?: PathContext): string {
   return withOrg("/", ctx);
+}
+
+/**
+ * An org's home, `/o/<org>`, whatever the flag says: a way into one of the
+ * person's orgs by name (the "no access" page's list). The org routes are
+ * always mounted, so it resolves with the flag off too.
+ */
+export function orgHomePath(org: string): string {
+  return orgRootPath(org);
 }
 
 /** The chat home filtered to one project (the sidebar's project filter). */

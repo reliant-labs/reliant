@@ -26,6 +26,14 @@
  *
  * The path builders and the redirect mapping live in
  * components/Forge/Console/paths.ts; this file only declares the routes.
+ *
+ * The org form (`form: 'org'`, mounted under `/o/$org` by routes.tsx; control-plane
+ * docs/design/unified-shell-and-projects.md §3.1) is the same tree with the
+ * two paths the design moves: the console at `/apps/$project` and the org
+ * Observability at `/observability[/$view]`. The entries and retired paths
+ * keep their `/forge/…` paths there: harmless, and one tree shape for both.
+ * The moved paths are typed as today's, so both forms register the same
+ * route types (the pages read params without a route id).
  */
 
 import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
@@ -90,10 +98,19 @@ export interface ForgeConsoleComponents {
 
 type LegacyCommandPath = '/forge/topology' | '/forge/environments' | '/forge/status' | '/forge/secrets'
 
+export interface ForgeConsoleRouteOptions {
+  /** Today's paths (`/forge/p/$project`, the default), or the org form under `/o/$org` (`/apps/$project`). */
+  form?: 'legacy' | 'org'
+}
+
 export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   getParentRoute: () => TParent,
   components: ForgeConsoleComponents,
+  { form = 'legacy' }: ForgeConsoleRouteOptions = {},
 ) {
+  // The org form's two moved paths are typed as today's (see the header).
+  const inOrg = form === 'org'
+
   const layoutRoute = createRoute({
     getParentRoute,
     id: '_forge',
@@ -108,14 +125,14 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   })
   const orgObservabilityRoute = createRoute({
     getParentRoute: () => orgLayoutRoute,
-    path: '/forge/observability',
+    path: (inOrg ? '/observability' : '/forge/observability') as '/forge/observability',
     validateSearch: forgeOrgObsSearchSchema,
     component: components.orgObservability,
   })
   // A view that is not a nav entry (a hand-edited URL) lands on the org Observability overview.
   const orgObservabilityViewRoute = createRoute({
     getParentRoute: () => orgLayoutRoute,
-    path: '/forge/observability/$view',
+    path: (inOrg ? '/observability/$view' : '/forge/observability/$view') as '/forge/observability/$view',
     validateSearch: forgeOrgObsSearchSchema,
     beforeLoad: ({ params, location }) => {
       if (isObsNavView(params.view)) return
@@ -154,7 +171,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   // ── The console ──
   const consoleRoute = createRoute({
     getParentRoute: () => layoutRoute,
-    path: '/forge/p/$project',
+    path: (inOrg ? '/apps/$project' : '/forge/p/$project') as '/forge/p/$project',
     component: components.console,
   })
   const overviewRoute = createRoute({

@@ -50,6 +50,7 @@ import {
   workflowsTabForPath,
 } from "./workflowsArea";
 import { homePath, workflowLibraryPath } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
 export type RouteParentNavigateOptions = {
   to: string;
@@ -57,8 +58,10 @@ export type RouteParentNavigateOptions = {
 };
 
 export function getParentRouteNavigateOptions(
-  pathname: string,
+  routePathname: string,
 ): RouteParentNavigateOptions {
+  // An org page's parent is its org-less parent's, in the same org (the builders).
+  const pathname = orgFreePath(routePathname);
   if (isWorkflowBuilderPath(pathname)) {
     // `/workflow/<name>[/…]`: the name is already encoded, as the URL has it.
     const name = pathname.split("/")[2] ?? "";

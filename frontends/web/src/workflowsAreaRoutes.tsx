@@ -23,6 +23,7 @@ import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tans
 import { legacyWorkflowsPath, onWorkflowsHref } from './lib/workflowsArea'
 import { librarySearchSchema, runsSearchSchema, workflowsAreaSearchSchema } from './routeSchemas'
 import { workflowLibraryPath } from '@/lib/paths'
+import { inOrgOfPath } from '@/lib/paths/org'
 
 export interface WorkflowsAreaComponents {
   layout: RouteComponent
@@ -43,9 +44,18 @@ function withSearch(target: string, searchStr: string): string {
 
 type LegacyPath = '/workflow' | '/runs' | '/runs/$runId' | '/automations' | '/automations/$triggerId'
 
+export interface WorkflowsAreaRouteOptions {
+  /**
+   * Mount the retired paths' redirects (`/workflow`, `/runs`, `/automations`, …).
+   * Only the org-less tree has them: no link ever named one under `/o/<org>`.
+   */
+  retiredPaths?: boolean
+}
+
 export function createWorkflowsAreaRoutes<TParent extends AnyRoute>(
   getParentRoute: () => TParent,
   components: WorkflowsAreaComponents,
+  { retiredPaths = true }: WorkflowsAreaRouteOptions = {},
 ) {
   const layoutRoute = createRoute({
     getParentRoute,
@@ -58,8 +68,10 @@ export function createWorkflowsAreaRoutes<TParent extends AnyRoute>(
     path: '/workflows',
     validateSearch: workflowsAreaSearchSchema,
     // The area's landing tab. The search string (`?project=`) rides along.
+    // In the org the URL is in (inOrgOfPath): the route on screen, which the
+    // builders would read, may be another org's while this one loads.
     beforeLoad: ({ location }) => {
-      throw redirect({ href: `${workflowLibraryPath()}${location.searchStr}`, replace: true })
+      throw redirect({ href: `${inOrgOfPath(location.pathname, workflowLibraryPath())}${location.searchStr}`, replace: true })
     },
   })
 
@@ -104,7 +116,7 @@ export function createWorkflowsAreaRoutes<TParent extends AnyRoute>(
     getParentRoute: () => layoutRoute,
     path: '/workflows/automations',
     beforeLoad: ({ location }) => {
-      throw redirect({ href: withSearch(onWorkflowsHref(), location.searchStr), replace: true })
+      throw redirect({ href: withSearch(inOrgOfPath(location.pathname, onWorkflowsHref()), location.searchStr), replace: true })
     },
   })
 
@@ -142,16 +154,18 @@ export function createWorkflowsAreaRoutes<TParent extends AnyRoute>(
       },
     })
 
+  const area = layoutRoute.addChildren([
+    indexRoute,
+    libraryRoute,
+    workflowDetailRoute,
+    runsRoute,
+    runDetailRoute,
+    automationsRoute,
+    automationRedirectRoute,
+  ])
+  if (!retiredPaths) return [area] as const
   return [
-    layoutRoute.addChildren([
-      indexRoute,
-      libraryRoute,
-      workflowDetailRoute,
-      runsRoute,
-      runDetailRoute,
-      automationsRoute,
-      automationRedirectRoute,
-    ]),
+    area,
     legacyRoute('/workflow'),
     legacyRoute('/runs'),
     legacyRoute('/runs/$runId'),
