@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/observe"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // ServicePath is the Connect path prefix of control-plane's internal service.
@@ -30,6 +32,7 @@ const (
 	reasonOwnerCannotPush  = "github_owner_cannot_push"
 	reasonAppNotLinked     = "github_app_not_linked"
 	reasonNotOrgMember     = "not_org_member"
+	reasonRateLimited      = "github_rate_limited"
 )
 
 // Client calls control-plane's GitCredentialInternalService.
@@ -59,10 +62,54 @@ func New(deps Deps) Service {
 type RPCError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// Reason is control-plane's X-Forge-Error-Reason when it named one this
+	// package has no typed outcome for (a control plane newer than this
+	// client). Empty when it named none.
+	Reason string `json:"-"`
 }
 
 func (e *RPCError) Error() string {
 	return "gitcredentialclient: control-plane " + e.Code + ": " + e.Message
+}
+
+// ErrorClass implements svcerr.Classed, so the log and span layers grade a
+// control-plane refusal by who must act on it, as control-plane itself did:
+// without it every RPCError was an unrecognised error, a server fault at
+// ERROR, even a refusal the user acts on.
+//
+// The codes control-plane answers for the user's state are user errors.
+// permission_denied, unauthenticated and invalid_argument are user errors only
+// with a reason: without one they are control-plane's internal-service door
+// refusing OUR bearer (middleware.RequireInternalService) or our request,
+// which is ours to fix. Any other code has no opinion, which svcerr reads as a
+// server fault.
+func (e *RPCError) ErrorClass() svcerr.Class {
+	switch e.Code {
+	case "canceled":
+		return svcerr.ClassCanceled
+	case "failed_precondition", "not_found", "already_exists", "out_of_range", "resource_exhausted":
+		return svcerr.ClassUser
+	case "permission_denied", "unauthenticated", "invalid_argument":
+		if e.Reason != "" {
+			return svcerr.ClassUser
+		}
+	}
+	return svcerr.ClassNone
+}
+
+// replayable are the methods with no side effect a second delivery could
+// repeat: reads, and GetUserAccessToken, whose renewal control-plane
+// serializes, so a replay is answered with the renewed token.
+//
+// net/http retries a request whose keep-alive connection turns out dead on its
+// first read (the peer closed or reset it while it sat in the pool) only when
+// the request is replayable, and a POST is not unless it carries an
+// idempotency key. Marking these lets that one-time blip retry on a fresh
+// connection instead of failing the call. The transport retries only a REUSED
+// connection, never a fresh one, so a real outage still fails fast.
+var replayable = map[string]bool{
+	"GetUserAccessToken":         true,
+	"ListOrgGitHubInstallations": true,
 }
 
 // UserAccessToken asks control-plane for the user's current token.
@@ -188,6 +235,11 @@ func (c *Client) call(ctx context.Context, method string, payload, out any) erro
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Connect-Protocol-Version", "1")
 	req.Header.Set("Authorization", "Bearer "+bearer)
+	if replayable[method] {
+		// A nil value marks the request idempotent without sending the
+		// header (net/http's Transport documents this).
+		req.Header["X-Idempotency-Key"] = nil
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -201,11 +253,21 @@ func (c *Client) call(ctx context.Context, method string, payload, out any) erro
 		return fmt.Errorf("gitcredentialclient: reading response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		if typed, ok := reasonErrors[resp.Header.Get(reasonHeader)]; ok {
+		reason := resp.Header.Get(reasonHeader)
+		if typed, ok := reasonErrors[reason]; ok {
 			return typed
 		}
 		rpcErr := &RPCError{Code: http.StatusText(resp.StatusCode)}
 		_ = json.Unmarshal(body, rpcErr)
+		if reason == reasonRateLimited {
+			// Connect sends error metadata as response headers.
+			limited := &RateLimitedError{Message: rpcErr.Message}
+			if secs, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil && secs > 0 {
+				limited.RetryAfter = time.Duration(secs) * time.Second
+			}
+			return limited
+		}
+		rpcErr.Reason = reason
 		return rpcErr
 	}
 	if err := json.Unmarshal(body, out); err != nil {

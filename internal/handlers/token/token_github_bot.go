@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,10 +21,11 @@ import (
 // GetGitToken's. They are control-plane's names, so a client sees one
 // vocabulary end to end.
 const (
-	reasonAppNotConfigured = "github_app_not_configured"
-	reasonAppNotInstalled  = "github_app_not_installed"
-	reasonAppPermissions   = "github_app_permissions"
-	reasonOwnerCannotPush  = "github_owner_cannot_push"
+	reasonAppNotConfigured  = "github_app_not_configured"
+	reasonAppNotInstalled   = "github_app_not_installed"
+	reasonAppPermissions    = "github_app_permissions"
+	reasonOwnerCannotPush   = "github_owner_cannot_push"
+	reasonGitHubRateLimited = "github_rate_limited"
 )
 
 // githubName is what GitHub allows in an owner or repository name. A name
@@ -120,6 +122,20 @@ func botMintError(ctx context.Context, userID, repository string, err error) err
 	case errors.Is(err, gitcredentialclient.ErrNeedsReconnect):
 		return refuse(svcerr.FailedPrecondition(
 			"your GitHub connection expired; reconnect it in Reliant"), reasonGitNeedsReconnect)
+	case errors.Is(err, gitcredentialclient.ErrRateLimited):
+		// Waited out, not an outage: ResourceExhausted with control-plane's
+		// message (whose limit, until when) and its Retry-After, so the
+		// caller backs off for the right time instead of retrying at once.
+		msg := "GitHub's API rate limit is exhausted; try again later"
+		var limited *gitcredentialclient.RateLimitedError
+		if errors.As(err, &limited) && limited.Message != "" {
+			msg = limited.Message
+		}
+		e := svcerr.ResourceExhausted(msg)
+		if limited != nil && limited.RetryAfter > 0 {
+			e = svcerr.WithMetadata(e, "Retry-After", strconv.Itoa(int((limited.RetryAfter+time.Second-1)/time.Second)))
+		}
+		return refuse(e, reasonGitHubRateLimited)
 	}
 	// WARN: gitcredentialclient's component log layer already recorded this
 	// failure at ERROR, and the RPC log layer records the Unavailable below.
