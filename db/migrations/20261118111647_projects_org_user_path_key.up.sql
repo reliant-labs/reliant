@@ -1,7 +1,7 @@
 -- forge:backward-compatible — a new unique index whose key (user_id, path, org) is finer than the existing UNIQUE (user_id, path): every row the previous release can write satisfies both, and no statement of it names the index.
 
 -- Migration: projects_org_user_path_key
--- Created: 2026-11-17T21:18:05Z
+-- Created: 2026-11-18T11:16:47Z
 --
 -- A project is unique per (org, user, path), not per (user, path): the same
 -- folder may be a project in two organizations (owner decision, 2026-11-17).
