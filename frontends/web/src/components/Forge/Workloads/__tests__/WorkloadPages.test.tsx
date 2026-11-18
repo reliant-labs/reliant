@@ -118,7 +118,7 @@ describe("the workload page in the console", () => {
     await userEvent.click(screen.getByTestId("workload-restart"));
     await userEvent.click(within(screen.getByRole("dialog", { name: "Restart admin-server in prod?" })).getByRole("button", { name: "Restart in prod" }));
     await waitFor(() => expect(cloud.restartWorkload).toHaveBeenCalledWith("env-prod", "admin-server"));
-    expect(cloud.getEnvironmentStatus).toHaveBeenCalledWith("env-prod");
+    expect(cloud.getEnvironmentStatus).toHaveBeenCalledWith("env-prod", null);
   });
 
   it("stops the workload's own deployment, found in that environment's status", async () => {

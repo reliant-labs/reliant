@@ -22,6 +22,7 @@ import { useAuthStore } from "@/store/authStore";
 import { hasErrorReason } from "@/lib/errorReasons";
 import { useMachineSaleTerms, type MachineSaleTerms } from "@/lib/machine-sale-terms";
 import { getActiveOrgId } from "@/store/activeOrgStore";
+import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 
 function billingClient() {
   return getControlPlaneClient(BillingService);
@@ -95,6 +96,13 @@ function assertPurchaseIdentity(): void {
   }
 }
 
+/**
+ * The org-scoped reads (their request has an org_id: the wallet, compute
+ * usage, invoices, auto-recharge) are read in the tab's org, which their key
+ * and request both name after the family below (`[...family, org]`), and not
+ * before it is known (lib/orgScope). The family alone still matches every
+ * org's entry, for an invalidation.
+ */
 export const cloudBillingKeys = {
   all: ["cloud-billing"] as const,
   computeSubscription: ["cloud-billing", "compute-subscription"] as const,
@@ -130,15 +138,21 @@ export function useComputeSubscription() {
 }
 
 export function useWalletOverview() {
-  return useQuery({
-    queryKey: cloudBillingKeys.walletOverview,
-    queryFn: () =>
-      billingClient().getCurrentUserWalletOverview({
-        ledgerPage: 1,
-        ledgerPageSize: 5,
-      }),
-    staleTime: 30_000,
-  });
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      {
+        queryKey: [...cloudBillingKeys.walletOverview, org.orgId ?? ""],
+        queryFn: () =>
+          billingClient().getCurrentUserWalletOverview(
+            orgRequest({ ledgerPage: 1, ledgerPageSize: 5 }, org.orgId),
+          ),
+        enabled: orgQueryEnabled(org),
+        staleTime: 30_000,
+      },
+      org,
+    ),
+  );
 }
 
 /**
@@ -146,12 +160,18 @@ export function useWalletOverview() {
  * current period (its balance answers "now"), so there is no period to choose.
  */
 export function useComputeUsage(period: "current", { enabled = true }: { enabled?: boolean } = {}) {
-  return useQuery({
-    enabled,
-    queryKey: cloudBillingKeys.computeUsage(period),
-    queryFn: () => billingClient().getCurrentUserComputeUsage({ period }),
-    staleTime: 30_000,
-  });
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      {
+        enabled: enabled && orgQueryEnabled(org),
+        queryKey: [...cloudBillingKeys.computeUsage(period), org.orgId ?? ""],
+        queryFn: () => billingClient().getCurrentUserComputeUsage(orgRequest({ period }, org.orgId)),
+        staleTime: 30_000,
+      },
+      org,
+    ),
+  );
 }
 
 export function usePlans({ enabled = true }: { enabled?: boolean } = {}) {
@@ -164,11 +184,18 @@ export function usePlans({ enabled = true }: { enabled?: boolean } = {}) {
 }
 
 export function useCurrentUserInvoices() {
-  return useQuery({
-    queryKey: cloudBillingKeys.invoices,
-    queryFn: () => billingClient().listCurrentUserInvoices({}),
-    staleTime: 60_000,
-  });
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      {
+        queryKey: [...cloudBillingKeys.invoices, org.orgId ?? ""],
+        queryFn: () => billingClient().listCurrentUserInvoices(orgRequest({}, org.orgId)),
+        enabled: orgQueryEnabled(org),
+        staleTime: 60_000,
+      },
+      org,
+    ),
+  );
 }
 
 export function useBillingEmail() {
@@ -347,12 +374,18 @@ export function useWalletTopupQuote(creditCents: number, enabled = true) {
 
 /** The caller's auto-recharge rule and saved card, if any. */
 export function useWalletAutoRecharge(enabled = true) {
-  return useQuery({
-    queryKey: cloudBillingKeys.autoRecharge,
-    queryFn: () => billingClient().getCurrentUserWalletAutoRecharge({}),
-    enabled,
-    staleTime: 30_000,
-  });
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      {
+        queryKey: [...cloudBillingKeys.autoRecharge, org.orgId ?? ""],
+        queryFn: () => billingClient().getCurrentUserWalletAutoRecharge(orgRequest({}, org.orgId)),
+        enabled: enabled && orgQueryEnabled(org),
+        staleTime: 30_000,
+      },
+      org,
+    ),
+  );
 }
 
 /**

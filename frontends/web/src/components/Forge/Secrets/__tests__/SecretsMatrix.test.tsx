@@ -7,7 +7,7 @@ import { SecretsMatrix } from "../SecretsMatrix";
 const store = vi.hoisted(() => ({ list: vi.fn(), history: vi.fn(), reveal: vi.fn() }));
 // Each environment's declared shape, served per environment (GetEnvironmentShape).
 const shapes = vi.hoisted(() => new Map<string, unknown>());
-vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test" }));
+vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 vi.mock("@/services/forge/secretStore", async (original) => ({
   ...await original<typeof import("@/services/forge/secretStore")>(),
   listSecrets: store.list, getSecretVersions: store.history, revealSecret: store.reveal,

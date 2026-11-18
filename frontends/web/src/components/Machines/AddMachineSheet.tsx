@@ -41,12 +41,12 @@ import Button from "@/components/forge-ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast-manager";
 import { capabilities } from "@/services/controlPlane/capabilities";
-import { getComputeEligibility } from "@/services/controlPlane/billing";
 import type { GitRepo } from "@/services/controlPlane/git";
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { invalidateDaemonList } from "@/hooks/daemon-registry-queries";
-import { computeEligibilityQueryKey } from "@/hooks/computeEligibilityKey";
+import { computeEligibilityQuery } from "@/hooks/computeEligibilityKey";
+import { useOrgScope } from "@/lib/orgScope";
 import { usePlans, useComputeSubscription, cloudBillingKeys } from "@/hooks/useCloudBillingQueries";
 import { useAccountGate } from "@/hooks/useAccountGate";
 import { classifyDaemonWait } from "@/lib/daemon-wait";
@@ -137,12 +137,8 @@ function AddMachineSheetBody({
   // ── What may be started, and on what terms ───────────────────────────────
   const plansQ = usePlans({ enabled: cloud && open });
   const subQ = useComputeSubscription();
-  const eligibilityQ = useQuery({
-    queryKey: computeEligibilityQueryKey,
-    queryFn: () => getComputeEligibility(),
-    staleTime: 30_000,
-    enabled: cloud && open,
-  });
+  const org = useOrgScope();
+  const eligibilityQ = useQuery(computeEligibilityQuery(org, cloud && open));
   const hasSubscription = Boolean(subQ.data?.subscription);
   const rows = useMemo(() => {
     const plans = sortPlansForDisplay((plansQ.data?.plans ?? []).filter(isPurchasableComputePlan));

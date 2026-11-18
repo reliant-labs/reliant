@@ -45,6 +45,7 @@ import {
 
 import { ForgeDeployJobStatus, ForgeService } from "../gen/reliant/v1/forge_pb";
 import { connectClient } from "../lib/connect";
+import { getOrgScope, orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure, type OrgScope } from "../lib/orgScope";
 import {
   appliedPromoteOf,
   applyPromoteRequest,
@@ -69,11 +70,6 @@ import {
   forgeServiceQueries,
   useApplyPromote,
   useGetDeployStatus,
-  useGetEnvShape,
-  useGetEnvStatus,
-  useGetTopology,
-  usePlanDeploy,
-  usePlanPromote,
   useStartDeploy,
 } from "./forge-service-hooks_gen";
 import { releaseKeys } from "./release-queries";
@@ -158,6 +154,17 @@ function cloudKey<Args extends readonly string[]>(name: string) {
 }
 
 /**
+ * `cloudKey` for an org-scoped read (its request has an org_id): the org it is
+ * read in comes first, "" for none, so one org's answer is never served as
+ * another's. A forge project name is unique only within an org. `.all` still
+ * spans every org, for an invalidation.
+ */
+function orgCloudKey<Args extends readonly string[]>(name: string) {
+  const all = ["forge", name] as const;
+  return Object.assign((orgId: string | null, ...args: Args) => [...all, orgId ?? "", ...args] as const, { all });
+}
+
+/**
  * The control plane's reads, which have no generated hooks. Keyed by the FORGE
  * project name and the control plane's environment id — not the Reliant
  * project id — because that is what the control plane knows them by. Under
@@ -166,19 +173,19 @@ function cloudKey<Args extends readonly string[]>(name: string) {
  */
 export const forgeCloudKeys = {
   all: ["forge"] as const,
-  cloudEnvs: cloudKey<[forgeProject: string]>("cloud-envs"),
+  cloudEnvs: orgCloudKey<[forgeProject: string]>("cloud-envs"),
   // Every project's environments at once: the Apps list (hooks/apps-queries.ts).
-  orgEnvs: cloudKey<[]>("org-envs"),
+  orgEnvs: orgCloudKey<[]>("org-envs"),
   // LIVE. Keyed by the forge project name, like cloudEnvs — one entry holds
   // every environment's whole Live answer, because GetLiveView returns them
   // together (see services/forge/live.ts on why it is one round trip).
-  liveView: cloudKey<[forgeProject: string]>("live-view"),
+  liveView: orgCloudKey<[forgeProject: string]>("live-view"),
   // One environment's declared shape (GetEnvironmentShape): the document the
   // Live roster deliberately does not carry.
-  environmentShape: cloudKey<[environmentId: string]>("environment-shape"),
-  cloudStatus: cloudKey<[environmentId: string]>("cloud-status"),
-  cloudPromotions: cloudKey<[environmentId: string]>("cloud-promotions"),
-  convergences: cloudKey<[environmentId: string]>("convergences"),
+  environmentShape: orgCloudKey<[environmentId: string]>("environment-shape"),
+  cloudStatus: orgCloudKey<[environmentId: string]>("cloud-status"),
+  cloudPromotions: orgCloudKey<[environmentId: string]>("cloud-promotions"),
+  convergences: orgCloudKey<[environmentId: string]>("convergences"),
   // The managed secret store (control-plane SecretStoreService), keyed by the
   // Reliant project and env the screen shows it under.
   managedSecrets: cloudKey<[projectId: string, env: string]>("managed-secrets"),
@@ -196,14 +203,19 @@ function invalidateCloudAfterWrite(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudPromotions.all });
 }
 
-/** The topology request every reader of one project's topology shares: unverified, every env. */
-function topologyRequest(projectId: string | null | undefined) {
-  return { projectId: projectId ?? "" };
+/**
+ * The topology request every reader of one project's topology shares in an
+ * org: unverified, every env. ForgeService reads name the org forge acts in
+ * (its credential helper mints for exactly that org), so the request names it
+ * and the generated key does too (lib/orgScope).
+ */
+function topologyRequest(projectId: string | null | undefined, orgId: string | null) {
+  return orgRequest({ projectId: projectId ?? "" }, orgId);
 }
 
-/** One env's status request — shared by the env page, which asks, and the roster, which only listens. */
-function envStatusRequest(projectId: string | null | undefined, env: string | null | undefined) {
-  return { projectId: projectId ?? "", env: env ?? "" };
+/** One env's status request in an org — shared by the env page, which asks, and the roster, which only listens. */
+function envStatusRequest(projectId: string | null | undefined, env: string | null | undefined, orgId: string | null) {
+  return orgRequest({ projectId: projectId ?? "", env: env ?? "" }, orgId);
 }
 
 // ── Topology ────────────────────────────────────────────────────────────────
@@ -218,15 +230,21 @@ function envStatusRequest(projectId: string | null | undefined, env: string | nu
  * the user is told.
  */
 export function useForgeTopology(projectId: string | null | undefined, options?: { enabled?: boolean }) {
+  const org = useOrgScope();
   // `enabled: false` with a real project id still READS the cache — another
   // surface (the sidebar's roster) may already have asked — it just never
   // asks itself.
-  return useGetTopology(topologyRequest(projectId), {
-    select: topologyOutcomeOf,
-    enabled: !!projectId && options?.enabled !== false,
-    staleTime: 30_000,
-    retry: forgeRetry,
-  });
+  return useQuery(
+    withOrgFailure(
+      forgeServiceQueries.getTopology(topologyRequest(projectId, org.orgId), {
+        select: topologyOutcomeOf,
+        enabled: !!projectId && options?.enabled !== false && orgQueryEnabled(org),
+        staleTime: 30_000,
+        retry: forgeRetry,
+      }),
+      org,
+    ),
+  );
 }
 
 /**
@@ -256,17 +274,23 @@ export function useVerifyForgeEnv(projectId: string | null | undefined) {
   const queryClient = useQueryClient();
 
   const mutation = useMutation<
-    { env: string; outcome: ForgeOutcome<ForgeVerifyReport> },
+    { env: string; orgId: string | null; outcome: ForgeOutcome<ForgeVerifyReport> },
     Error,
     string
   >({
-    mutationFn: async (env: string) => ({
-      env,
-      outcome: verifyOutcomeOf(await forgeClient.verifyEnv({ projectId: projectId as string, env })),
-    }),
-    onSuccess: ({ env, outcome }) => {
+    mutationFn: async (env: string) => {
+      // The org this verify runs in, taken when it starts: the observation is
+      // merged into THAT org's topology entry, even if the tab switched since.
+      const { orgId } = getOrgScope();
+      return {
+        env,
+        orgId,
+        outcome: verifyOutcomeOf(await forgeClient.verifyEnv(orgRequest({ projectId: projectId as string, env }, orgId))),
+      };
+    },
+    onSuccess: ({ env, orgId, outcome }) => {
       if (outcome.kind !== "report") return;
-      queryClient.setQueryData(forgeServiceQueries.getTopology(topologyRequest(projectId)).queryKey, (previous) =>
+      queryClient.setQueryData(forgeServiceQueries.getTopology(topologyRequest(projectId, orgId)).queryKey, (previous) =>
         previous ? withVerifiedEnv(previous, env, outcome.report) : previous
       );
     },
@@ -318,24 +342,30 @@ export function useVerifyForgeEnv(projectId: string | null | undefined) {
  * guess.
  */
 export function useCloudEnvironments(forgeProject: string | null | undefined) {
-  const enabled = !!forgeProject && hasCloudControlPlane();
-  return useQuery<{ availability: CloudAvailability; envs: CloudEnv[]; detail: string }>({
-    queryKey: forgeCloudKeys.cloudEnvs(forgeProject ?? ""),
-    queryFn: async () => {
-      try {
-        return {
-          availability: "available" as const,
-          envs: await listProjectEnvironments(forgeProject as string),
-          detail: "",
-        };
-      } catch (err) {
-        return { availability: cloudAvailabilityFromError(err), envs: [], detail: cloudErrorDetail(err) };
-      }
-    },
-    enabled,
-    staleTime: 30_000,
-    retry: false,
-  });
+  const org = useOrgScope();
+  const enabled = !!forgeProject && hasCloudControlPlane() && orgQueryEnabled(org);
+  return useQuery<{ availability: CloudAvailability; envs: CloudEnv[]; detail: string }>(
+    withOrgFailure(
+      {
+        queryKey: forgeCloudKeys.cloudEnvs(org.orgId, forgeProject ?? ""),
+        queryFn: async () => {
+          try {
+            return {
+              availability: "available" as const,
+              envs: await listProjectEnvironments(forgeProject as string, org.orgId),
+              detail: "",
+            };
+          } catch (err) {
+            return { availability: cloudAvailabilityFromError(err), envs: [], detail: cloudErrorDetail(err) };
+          }
+        },
+        enabled,
+        staleTime: 30_000,
+        retry: false,
+      },
+      org,
+    ),
+  );
 }
 
 // ── LIVE: the control plane, and nothing else ───────────────────────────────
@@ -368,8 +398,9 @@ export function useCloudEnvironments(forgeProject: string | null | undefined) {
  * a few seconds of freshness for a request per environment per interval.
  */
 export function useLiveView(forgeProject: string | null | undefined) {
-  const enabled = !!forgeProject && hasLiveControlPlane();
-  return useQuery<LiveViewResult>({ ...liveViewQuery(forgeProject ?? ""), enabled });
+  const org = useOrgScope();
+  const enabled = !!forgeProject && hasLiveControlPlane() && orgQueryEnabled(org);
+  return useQuery<LiveViewResult>(withOrgFailure({ ...liveViewQuery(forgeProject ?? "", org.orgId), enabled }, org));
 }
 
 /** How many times the Live read is sent before an unreachable answer is final (liveViewQuery). */
@@ -382,14 +413,15 @@ export interface LiveViewResult {
 }
 
 /**
- * The Live query's key and fetch, shared by useLiveView and by the queued-
- * deploy watcher (QueuedDeployNotifier), which polls the SAME cache entry
- * while a deploy this session saw queued is on its way out — so a page that
- * is open settles with it, and neither issues a second request.
+ * The Live query's key and fetch in an org (null for none), shared by
+ * useLiveView and by the queued-deploy watcher (QueuedDeployNotifier), which
+ * polls the SAME cache entry while a deploy this session saw queued is on its
+ * way out — so a page that is open settles with it, and neither issues a
+ * second request.
  */
-export function liveViewQuery(forgeProject: string) {
+export function liveViewQuery(forgeProject: string, orgId: string | null) {
   return {
-    queryKey: forgeCloudKeys.liveView(forgeProject),
+    queryKey: forgeCloudKeys.liveView(orgId, forgeProject),
     queryFn: async (): Promise<LiveViewResult> => {
       // An UNREACHABLE answer (a timeout, a dropped response) is asked once
       // more before it is resolved: this one read is the roster every console
@@ -400,7 +432,7 @@ export function liveViewQuery(forgeProject: string) {
         try {
           return {
             availability: "available" as const,
-            envs: await getLiveView(forgeProject),
+            envs: await getLiveView(forgeProject, orgId),
             detail: "",
           };
         } catch (err) {
@@ -444,18 +476,22 @@ export function useInvalidateLiveView() {
  * the workloads page share one request; no poll, since a declaration moves
  * only when somebody builds or deploys, and those paths invalidate it.
  */
-function environmentShapeQuery(environmentId: string) {
-  return {
-    queryKey: forgeCloudKeys.environmentShape(environmentId),
-    queryFn: () => getEnvironmentShape(environmentId),
-    enabled: environmentId !== "" && hasLiveControlPlane(),
-    staleTime: 60_000,
-    retry: forgeRetry,
-  };
+function environmentShapeQuery(environmentId: string, org: OrgScope) {
+  return withOrgFailure(
+    {
+      queryKey: forgeCloudKeys.environmentShape(org.orgId, environmentId),
+      queryFn: () => getEnvironmentShape(environmentId, org.orgId),
+      enabled: environmentId !== "" && hasLiveControlPlane() && orgQueryEnabled(org),
+      staleTime: 60_000,
+      retry: forgeRetry,
+    },
+    org,
+  );
 }
 
 export function useEnvironmentShape(environmentId: string | null | undefined) {
-  return useQuery<LiveShape | null>(environmentShapeQuery(environmentId ?? ""));
+  const org = useOrgScope();
+  return useQuery<LiveShape | null>(environmentShapeQuery(environmentId ?? "", org));
 }
 
 /**
@@ -478,6 +514,7 @@ export interface EnvironmentShapeEntry {
  * may put it in a useMemo dependency list without recomputing every render.
  */
 export function useEnvironmentShapes(environmentIds: readonly string[]): Map<string, EnvironmentShapeEntry> {
+  const org = useOrgScope();
   const key = environmentIds.join("\n");
   const combine = useCallback(
     (results: { data?: LiveShape | null; isLoading: boolean; error: unknown }[]) => {
@@ -491,7 +528,7 @@ export function useEnvironmentShapes(environmentIds: readonly string[]): Map<str
     },
     [key]
   );
-  return useQueries({ queries: environmentIds.map((id) => environmentShapeQuery(id)), combine });
+  return useQueries({ queries: environmentIds.map((id) => environmentShapeQuery(id, org)), combine });
 }
 
 /**
@@ -505,19 +542,23 @@ export function useEnvironmentShapes(environmentIds: readonly string[]): Map<str
  */
 const CLOUD_STATUS_POLL_MS = 30_000;
 
-function cloudStatusQuery(environmentId: string) {
-  return {
-    queryKey: forgeCloudKeys.cloudStatus(environmentId),
-    queryFn: () => getEnvironmentStatus(environmentId),
-    enabled: environmentId !== "",
-    staleTime: 10_000,
-    refetchInterval: CLOUD_STATUS_POLL_MS,
-    retry: forgeRetry,
-  };
+function cloudStatusQuery(environmentId: string, org: OrgScope) {
+  return withOrgFailure(
+    {
+      queryKey: forgeCloudKeys.cloudStatus(org.orgId, environmentId),
+      queryFn: () => getEnvironmentStatus(environmentId, org.orgId),
+      enabled: environmentId !== "" && orgQueryEnabled(org),
+      staleTime: 10_000,
+      refetchInterval: CLOUD_STATUS_POLL_MS,
+      retry: forgeRetry,
+    },
+    org,
+  );
 }
 
 export function useCloudEnvStatus(environmentId: string | null | undefined) {
-  return useQuery<CloudEnvStatus>(cloudStatusQuery(environmentId ?? ""));
+  const org = useOrgScope();
+  return useQuery<CloudEnvStatus>(cloudStatusQuery(environmentId ?? "", org));
 }
 
 /** The same query per environment, for the overview's rows. One cache entry per env, shared with the env page. */
@@ -528,7 +569,8 @@ export interface CloudStatusEntry {
 }
 
 export function useCloudEnvStatuses(environmentIds: string[]): Map<string, CloudStatusEntry> {
-  const results = useQueries({ queries: environmentIds.map((id) => cloudStatusQuery(id)) });
+  const org = useOrgScope();
+  const results = useQueries({ queries: environmentIds.map((id) => cloudStatusQuery(id, org)) });
   // Rebuilt per render on purpose: a handful of entries, and memoising on a
   // freshly-allocated results array would never hit.
   const byId = new Map<string, CloudStatusEntry>();
@@ -541,13 +583,19 @@ export function useCloudEnvStatuses(environmentIds: string[]): Map<string, Cloud
 
 /** One environment's promotion ledger, newest first. Append-only, so no poll. */
 export function useCloudPromotions(environmentId: string | null | undefined) {
-  return useQuery<CloudPromotion[]>({
-    queryKey: forgeCloudKeys.cloudPromotions(environmentId ?? ""),
-    queryFn: () => listEnvironmentPromotions(environmentId as string),
-    enabled: !!environmentId,
-    staleTime: 15_000,
-    retry: forgeRetry,
-  });
+  const org = useOrgScope();
+  return useQuery<CloudPromotion[]>(
+    withOrgFailure(
+      {
+        queryKey: forgeCloudKeys.cloudPromotions(org.orgId, environmentId ?? ""),
+        queryFn: () => listEnvironmentPromotions(environmentId as string, org.orgId),
+        enabled: !!environmentId && orgQueryEnabled(org),
+        staleTime: 15_000,
+        retry: forgeRetry,
+      },
+      org,
+    ),
+  );
 }
 
 /**
@@ -566,16 +614,19 @@ export function useCloudPromotions(environmentId: string | null | undefined) {
  * today, where no observations exist.
  */
 export function useLiveConvergences(environmentId: string | null | undefined) {
+  const org = useOrgScope();
+  // A secondary record (above): an org that failed to resolve leaves it empty
+  // rather than showing an error of its own.
   return useQuery<LiveConvergence[]>({
-    queryKey: forgeCloudKeys.convergences(environmentId ?? ""),
+    queryKey: forgeCloudKeys.convergences(org.orgId, environmentId ?? ""),
     queryFn: async () => {
       try {
-        return await listEnvironmentConvergences(environmentId as string);
+        return await listEnvironmentConvergences(environmentId as string, org.orgId);
       } catch {
         return [];
       }
     },
-    enabled: !!environmentId,
+    enabled: !!environmentId && org.ready,
     staleTime: 15_000,
     retry: false,
   });
@@ -661,6 +712,7 @@ export function useForgeEnvironments(projectId: string | null | undefined): Forg
  * load already labels envs correctly without either.
  */
 export function useForgeRoster(projectId: string | null | undefined, forgeProject?: string | null) {
+  const org = useOrgScope();
   const persistedName = usePersistedForgeProjectName(projectId);
   const topology = useForgeTopology(projectId);
   // A forge project the URL names directly (see components/Forge/Console/consoleContext)
@@ -679,7 +731,7 @@ export function useForgeRoster(projectId: string | null | undefined, forgeProjec
     : [];
   const cachedStatuses = useQueries({
     queries: topologyNames.map((env) =>
-      forgeServiceQueries.getEnvStatus(envStatusRequest(projectId, env), {
+      forgeServiceQueries.getEnvStatus(envStatusRequest(projectId, env, org.orgId), {
         select: envStatusOutcomeOf,
         enabled: false,
       })
@@ -802,13 +854,19 @@ export function useForgeEnvShape(
   env: string | null | undefined,
   enabled = true
 ) {
-  return useGetEnvShape({ projectId: projectId ?? "", env: env ?? "" }, {
-    select: envShapeOutcomeOf,
-    enabled: enabled && !!projectId && !!env,
-    staleTime: 0,
-    gcTime: 0,
-    retry: forgeRetry,
-  });
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      forgeServiceQueries.getEnvShape(orgRequest({ projectId: projectId ?? "", env: env ?? "" }, org.orgId), {
+        select: envShapeOutcomeOf,
+        enabled: enabled && !!projectId && !!env && orgQueryEnabled(org),
+        staleTime: 0,
+        gcTime: 0,
+        retry: forgeRetry,
+      }),
+      org,
+    ),
+  );
 }
 
 /**
@@ -871,12 +929,18 @@ export function useForgeEnvStatus(
   projectId: string | null | undefined,
   env: string | null | undefined
 ) {
-  return useGetEnvStatus(envStatusRequest(projectId, env), {
-    select: envStatusOutcomeOf,
-    enabled: !!projectId && !!env,
-    staleTime: 10_000,
-    retry: forgeRetry,
-  });
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      forgeServiceQueries.getEnvStatus(envStatusRequest(projectId, env, org.orgId), {
+        select: envStatusOutcomeOf,
+        enabled: !!projectId && !!env && orgQueryEnabled(org),
+        staleTime: 10_000,
+        retry: forgeRetry,
+      }),
+      org,
+    ),
+  );
 }
 
 // ── Promote ─────────────────────────────────────────────────────────────────
@@ -900,13 +964,19 @@ export function useForgePromotePlan(
   env: string | null | undefined,
   release: string | null | undefined
 ) {
-  return usePlanPromote({ projectId: projectId ?? "", env: env ?? "", release: release ?? "" }, {
-    select: promotePlanOutcomeOf,
-    enabled: !!projectId && !!env && !!release,
-    staleTime: 0,
-    gcTime: 0,
-    retry: forgeRetry,
-  });
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      forgeServiceQueries.planPromote(orgRequest({ projectId: projectId ?? "", env: env ?? "", release: release ?? "" }, org.orgId), {
+        select: promotePlanOutcomeOf,
+        enabled: !!projectId && !!env && !!release && orgQueryEnabled(org),
+        staleTime: 0,
+        gcTime: 0,
+        retry: forgeRetry,
+      }),
+      org,
+    ),
+  );
 }
 
 /**
@@ -1004,13 +1074,19 @@ export function useForgeDeployPlan(
   projectId: string | null | undefined,
   env: string | null | undefined
 ) {
-  return usePlanDeploy({ projectId: projectId ?? "", env: env ?? "" }, {
-    select: deployPlanOutcomeOf,
-    enabled: !!projectId && !!env,
-    staleTime: 0,
-    gcTime: 0,
-    retry: forgeRetry,
-  });
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      forgeServiceQueries.planDeploy(orgRequest({ projectId: projectId ?? "", env: env ?? "" }, org.orgId), {
+        select: deployPlanOutcomeOf,
+        enabled: !!projectId && !!env && orgQueryEnabled(org),
+        staleTime: 0,
+        gcTime: 0,
+        retry: forgeRetry,
+      }),
+      org,
+    ),
+  );
 }
 
 /**
@@ -1437,7 +1513,11 @@ export function useDeleteEnvironment(environmentId: string | null | undefined) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.liveView.all });
       void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudEnvs.all });
-      void queryClient.removeQueries({ queryKey: forgeCloudKeys.cloudStatus(environmentId ?? "") });
+      // In every org's entry: an environment id names one environment anywhere.
+      void queryClient.removeQueries({
+        queryKey: forgeCloudKeys.cloudStatus.all,
+        predicate: (query) => query.queryKey[query.queryKey.length - 1] === (environmentId ?? ""),
+      });
     },
   });
 }

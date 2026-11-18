@@ -51,7 +51,7 @@ describe("observeQueuedDeploys", () => {
   it("watches a queued environment, and nothing else", () => {
     const { watched, settled } = observeQueuedDeploys({}, "hounders", [env("prod", { queued: true }), env("staging")]);
     expect(watched).toEqual({
-      "cp-prod": { envId: "cp-prod", envName: "prod", forgeProject: "hounders", queued: true },
+      "cp-prod": { envId: "cp-prod", envName: "prod", forgeProject: "hounders", orgId: "", queued: true },
     });
     expect(settled).toEqual([]);
   });
@@ -68,7 +68,7 @@ describe("observeQueuedDeploys", () => {
     const live = observeQueuedDeploys(watched, "hounders", [env("prod", { observed: "converged" })]);
     expect(live.settled).toEqual([
       {
-        deploy: { envId: "cp-prod", envName: "prod", forgeProject: "hounders", queued: false },
+        deploy: { envId: "cp-prod", envName: "prod", forgeProject: "hounders", orgId: "", queued: false },
         outcome: "live",
         release: "v13",
       },
@@ -111,6 +111,16 @@ describe("observeQueuedDeploys", () => {
     expect(after).toBe(watched);
   });
 
+  it("leaves the same project name's watch in another org alone", () => {
+    const watched = observeQueuedDeploys({}, "hounders", [env("prod", { queued: true })], "org-a").watched;
+    // Org B has a "hounders" too; its reading lists none of org A's environments.
+    const { watched: after, settled } = observeQueuedDeploys(watched, "hounders", [], "org-b");
+    expect(settled).toEqual([]);
+    expect(after).toBe(watched);
+    expect(watchPollInterval(after, "hounders", "org-b")).toBe(false);
+    expect(watchedProjects(after)).toEqual([{ orgId: "org-a", forgeProject: "hounders" }]);
+  });
+
   it("starts watching again when a newer deploy is queued after a release", () => {
     let watched = observeQueuedDeploys({}, "hounders", [env("prod", { queued: true })]).watched;
     watched = observeQueuedDeploys(watched, "hounders", [env("prod", { observed: "converging" })]).watched;
@@ -128,6 +138,6 @@ describe("watchPollInterval", () => {
     expect(watchPollInterval(releasing, "hounders")).toBe(RELEASING_POLL_MS);
 
     expect(watchPollInterval(releasing, "other")).toBe(false);
-    expect(watchedProjects(releasing)).toEqual(["hounders"]);
+    expect(watchedProjects(releasing)).toEqual([{ orgId: "", forgeProject: "hounders" }]);
   });
 });

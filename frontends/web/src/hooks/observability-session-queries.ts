@@ -147,7 +147,7 @@ export function useFrontendReplay(scope: RumScope | null, enabled = true) {
     queryKey: sessionKeys.frontendReplay(scope),
     queryFn: ({ signal }): Promise<FrontendReplayList> =>
       api.listFrontendReplay({ orgId: (scope as RumScope).orgId, projectId: scope?.projectId, envIds: scope?.envIds ?? [] }, { signal }),
-    enabled: !!scope && enabled,
+    enabled: !!scope?.orgId && enabled,
     staleTime: 60_000,
     retry: rumRetry, retryDelay: obsRetryDelay,
   });

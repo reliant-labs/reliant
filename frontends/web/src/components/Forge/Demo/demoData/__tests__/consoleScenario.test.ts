@@ -81,26 +81,26 @@ describe("the console's sample data, on the demo's transport", () => {
   });
 
   it("Environments: three deployed envs, prod and staging on v1.8.3, dev on the fix", async () => {
-    const live = await getLiveView(DEMO_PROJECT);
+    const live = await getLiveView(DEMO_PROJECT, null);
     expect(live.map((e) => e.name)).toEqual(["dev", "prod", "staging"]);
     expect(Object.fromEntries(live.map((e) => [e.name, e.release]))).toEqual({ dev: "v1.8.4", staging: "v1.8.3", prod: "v1.8.3" });
     expect(live.every((e) => e.declared && e.phase === "succeeded")).toBe(true);
-    expect(await getLiveView("someone-else")).toEqual([]);
+    expect(await getLiveView("someone-else", null)).toEqual([]);
 
-    const envs = await listProjectEnvironments(DEMO_PROJECT);
+    const envs = await listProjectEnvironments(DEMO_PROJECT, null);
     expect(envs.map((e) => e.name)).toEqual(["dev", "prod", "staging"]);
 
-    const status = await getEnvironmentStatus("env-prod");
+    const status = await getEnvironmentStatus("env-prod", null);
     expect(status.verdict).toBe("converged");
     expect(status.workloads.map((w) => w.name)).toEqual(DEMO_WORKLOADS.map((w) => w.name));
     expect(status.workloads.every((w) => w.observed_state === "ready")).toBe(true);
 
-    const shape = await getEnvironmentShape("env-prod");
+    const shape = await getEnvironmentShape("env-prod", null);
     expect(shape?.workloads.map((w) => w.name)).toEqual(DEMO_WORKLOADS.map((w) => w.name));
     expect(shape?.domains).toContain("shop.example.com");
     expect(shape?.alerts?.length ?? 0).toBeGreaterThan(0);
 
-    const promotions = await listEnvironmentPromotions("env-prod", 10);
+    const promotions = await listEnvironmentPromotions("env-prod", null, 10);
     expect(promotions.length).toBeGreaterThanOrEqual(3);
   });
 
@@ -201,7 +201,7 @@ describe("the console's sample data, on the demo's transport", () => {
   });
 
   it("Domains: live on prod, one still verifying on staging", async () => {
-    const domains = await listDomains();
+    const domains = await listDomains(null);
     expect(domains.map((d) => d.hostname)).toEqual(DEMO_DOMAINS.map((d) => d.hostname));
     expect(domains.find((d) => d.hostname === "shop.example.com")?.state).toBe("live");
     expect(domains.find((d) => d.hostname === "staging.shop.example.com")?.state).toBe("verifying");

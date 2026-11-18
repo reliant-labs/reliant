@@ -3,7 +3,8 @@ import { create } from "zustand";
 import { fetchModelList } from "../hooks/catalog-models";
 import { logger } from "../lib/logger";
 import { waitForConfig } from "../lib/configReady";
-import { getActiveOrgId, useActiveOrgStore } from "./activeOrgStore";
+import { getOrgScope, whenOrgScopeReady } from "../lib/orgScope";
+import { useActiveOrgStore } from "./activeOrgStore";
 
 // Type definitions
 interface Model {
@@ -84,7 +85,7 @@ let generation = 0;
  * starts its own fetch), and requests still name the org it asked for.
  */
 function stillCurrent(startedIn: number, orgId: string | null): boolean {
-  return startedIn === generation && getActiveOrgId() === orgId;
+  return startedIn === generation && getOrgScope().orgId === orgId;
 }
 
 export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
@@ -123,9 +124,18 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
       // A reset or an org switch meanwhile started its own fetch, which owns
       // the loading flags now.
       if (startedIn !== generation) return;
-      // The org is read once the config is ready, so it is the one the
-      // requests below name.
-      const orgId = getActiveOrgId();
+      // The models are the org's (its accounts and seats), so nothing is
+      // listed before the tab's org is known (lib/orgScope); the requests
+      // below name it. An org that cannot be resolved is the list's error.
+      let orgId: string | null;
+      try {
+        ({ orgId } = await whenOrgScopeReady());
+      } catch (error) {
+        if (startedIn !== generation) return;
+        set({ isPrefetching: false, modelsError: error instanceof Error ? error.message : "Failed to fetch models" });
+        return;
+      }
+      if (startedIn !== generation) return;
 
       // Set all loading states
       set({ modelsLoading: true });
@@ -185,8 +195,10 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   refetchModels: async () => {
     set({ modelsLoading: true, modelsError: null });
     const startedIn = generation;
-    const orgId = getActiveOrgId();
     try {
+      // Not before the tab's org is known, like the first load.
+      const scope = getOrgScope();
+      const { orgId } = scope.ready ? scope : await whenOrgScopeReady();
       const response = await fetchModelList(orgId);
       if (!stillCurrent(startedIn, orgId)) {
         if (startedIn === generation) void get().refetchModels();

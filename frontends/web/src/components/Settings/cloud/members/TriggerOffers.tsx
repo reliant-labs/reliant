@@ -28,7 +28,7 @@ import { sourceLabel, takeoverErrorMessage } from "./takeover";
 
 export function TriggerOffers({ org, members }: { org: MyOrg; members: OrgMember[] }) {
   const qc = useQueryClient();
-  const offers = useListTriggerOffers({ orgId: org.id }, { meta: { silenceErrorToast: true } });
+  const offers = useListTriggerOffers({ orgId: org.id }, { enabled: !!org.id, meta: { silenceErrorToast: true } });
   const decline = useRevokeTriggerOffer({ meta: { silenceErrorToast: true } });
   const [accepting, setAccepting] = useState<AdoptTarget | null>(null);
   const [error, setError] = useState<string | null>(null);

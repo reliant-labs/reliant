@@ -15,15 +15,15 @@ import { observeQueuedDeploys, type SettledDeploy, type WatchedDeploys } from "@
 
 interface QueuedDeployState {
   watched: WatchedDeploys;
-  /** Fold an ANSWERED Live reading in; returns the deploys it settled, each exactly once. */
-  observe: (forgeProject: string, envs: LiveEnv[]) => SettledDeploy[];
+  /** Fold an ANSWERED Live reading (in `orgId`, "" for none) in; returns the deploys it settled, each exactly once. */
+  observe: (forgeProject: string, envs: LiveEnv[], orgId?: string) => SettledDeploy[];
   reset: () => void;
 }
 
 export const useQueuedDeployStore = create<QueuedDeployState>((set, get) => ({
   watched: {},
-  observe: (forgeProject, envs) => {
-    const { watched, settled } = observeQueuedDeploys(get().watched, forgeProject, envs);
+  observe: (forgeProject, envs, orgId = "") => {
+    const { watched, settled } = observeQueuedDeploys(get().watched, forgeProject, envs, orgId);
     if (watched !== get().watched) set({ watched });
     return settled;
   },
