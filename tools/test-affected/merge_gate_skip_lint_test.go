@@ -62,7 +62,7 @@ func TestMergeGateSkipLint(t *testing.T) {
 		`set -uo pipefail`,
 		`phase() { printf '%s|%s\n' "$1" "${*:2}" >>"$L/phases"; }`,
 		`build_check() { :; }`,
-		`fail=0 typecheck=false gofull=false half=2 quarter=2 test_lanes=go webdemo=${WEBDEMO:-false}`,
+		`fail=0 typecheck=false gofull=false half=2 quarter=2 test_lanes=go webdemo=${WEBDEMO:-false} webbuild=false`,
 		`forge=(forge) notes=() pids=() run_plan=$PLAN MG_IN_SLOT=${TEST_IN_SLOT:-}`,
 		extract(`lint_lanes=(`, "\n# The whole vitest suite"),
 		extract(`base="" amend=0`, "\nexport GOFLAGS"),
