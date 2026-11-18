@@ -465,6 +465,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 						return result
 					}
 					logToleratedFailure(e.logger, step.Node.GetId(), err)
+					recordToleratedFailure(gCtx, e.toleratedScope(step.Node.GetId(), index), err)
 					toleratedLoop = out
 				}
 
@@ -600,6 +601,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 						return result
 					}
 					logToleratedFailure(e.logger, step.Node.GetId(), err)
+					recordToleratedFailure(gCtx, e.toleratedScope(step.Node.GetId(), index), err)
 					inlineOutput, tolerated = out, true
 				}
 
