@@ -142,6 +142,8 @@ func approvalOperation(tool string) automationpolicy.Operation {
 		return automationpolicy.OperationEnable
 	case tools.ToolPauseTrigger:
 		return automationpolicy.OperationPause
+	case tools.ToolDeleteTrigger:
+		return automationpolicy.OperationDelete
 	default:
 		return automationpolicy.OperationUpdate
 	}

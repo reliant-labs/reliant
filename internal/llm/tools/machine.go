@@ -101,7 +101,7 @@ var serverSafeTools = map[string]struct{}{
 	// Fire delegates to the saved activation's machine choice, not this run's;
 	// all trigger tool operations execute through the server-side service.
 	ToolListTriggers: {}, ToolFireTrigger: {}, ToolListTriggerEvents: {},
-	ToolCreateTriggerActivation: {}, ToolUpdateTriggerActivation: {}, ToolEnableTrigger: {}, ToolPauseTrigger: {},
+	ToolCreateTriggerActivation: {}, ToolUpdateTriggerActivation: {}, ToolEnableTrigger: {}, ToolPauseTrigger: {}, ToolDeleteTrigger: {},
 	// A draft is validated, never stored or fired.
 	ToolDraftAutomation: {},
 	// Returns a fixed text; the offer is the rendered call itself.

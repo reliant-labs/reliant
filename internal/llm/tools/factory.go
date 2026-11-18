@@ -512,6 +512,9 @@ func (f *ToolsFactory) EnableTrigger() Tool {
 func (f *ToolsFactory) PauseTrigger() Tool {
 	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolPauseTrigger)
 }
+func (f *ToolsFactory) DeleteTrigger() Tool {
+	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolDeleteTrigger)
+}
 
 func (f *ToolsFactory) ListMachines() Tool {
 	return NewListMachinesTool(f.store(), f.opts.MachineController)

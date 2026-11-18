@@ -179,7 +179,7 @@ func (a activationApprovalAsk) oneByOne(gctx workflow.Context, calls []*pb.ToolC
 
 func isActivationCall(name string) bool {
 	switch name {
-	case names.ToolCreateTriggerActivation, names.ToolUpdateTriggerActivation, names.ToolEnableTrigger, names.ToolPauseTrigger,
+	case names.ToolCreateTriggerActivation, names.ToolUpdateTriggerActivation, names.ToolEnableTrigger, names.ToolPauseTrigger, names.ToolDeleteTrigger,
 		names.ToolManageMachine:
 		return true
 	}

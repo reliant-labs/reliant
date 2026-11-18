@@ -208,6 +208,9 @@ const (
 	OperationUpdate
 	OperationEnable
 	OperationPause
+	// OperationDelete removes the activation, its schedule and its
+	// configuration history. It cannot be undone, so it always needs a card.
+	OperationDelete
 )
 
 // ApprovalDecision says whether a change needs the owner's card and why.
@@ -226,7 +229,8 @@ type ApprovalDecision struct {
 // before the change and nil when they are unknown (a create, or a saved
 // activation whose current configuration could not be resolved), which
 // ApprovalOnCapabilityChange treats as widening. Pausing only reduces power,
-// so it never needs a card, whatever the mode.
+// so it never needs a card, whatever the mode. Deleting cannot be undone, so
+// it always needs one, whatever the mode.
 func Decide(mode ApprovalMode, op Operation, base, next Capabilities) ApprovalDecision {
 	d := ApprovalDecision{Mode: mode}
 	if next != nil {
@@ -238,6 +242,9 @@ func Decide(mode ApprovalMode, op Operation, base, next Capabilities) ApprovalDe
 	switch {
 	case op == OperationPause:
 		d.Reason = "Pausing only reduces an activation's power; applied without a card and recorded."
+	case op == OperationDelete:
+		d.CardRequired = true
+		d.Reason = "Deleting an activation removes it, its schedule and its configuration history, and cannot be undone: it always needs a card, whatever automation approvals are set to."
 	case mode == ApprovalNever && slices.Contains(d.Added, CapabilityApprovalsDecide):
 		d.CardRequired = true
 		d.Reason = "This change lets the activation approve or deny requests (" + CapabilityApprovalsDecide + "); that always needs a card, whatever automation approvals are set to."
