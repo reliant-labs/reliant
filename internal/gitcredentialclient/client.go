@@ -98,8 +98,18 @@ func (e *RPCError) ErrorClass() svcerr.Class {
 }
 
 // replayable are the methods with no side effect a second delivery could
-// repeat: reads, and GetUserAccessToken, whose renewal control-plane
-// serializes, so a replay is answered with the renewed token.
+// repeat: reads only.
+//
+// GetUserAccessToken is deliberately NOT here. It can renew the user's GitHub
+// credential server-side, and a GitHub App renewal rotates a single-use
+// refresh token: a replay of a request that already reached control-plane
+// could renew a second time and, if control-plane ever stopped serializing
+// renewal per credential, spend a token the first renewal just stored and
+// flag the user's connection for reconnect. Make it replayable only with
+// proof, held by a test here, that control-plane serializes renewal and
+// answers a replay with the token the first delivery renewed.
+// MintInstallationToken is not here either: the first delivery may have
+// minted.
 //
 // net/http retries a request whose keep-alive connection turns out dead on its
 // first read (the peer closed or reset it while it sat in the pool) only when
@@ -108,7 +118,6 @@ func (e *RPCError) ErrorClass() svcerr.Class {
 // connection instead of failing the call. The transport retries only a REUSED
 // connection, never a fresh one, so a real outage still fails fast.
 var replayable = map[string]bool{
-	"GetUserAccessToken":         true,
 	"ListOrgGitHubInstallations": true,
 }
 

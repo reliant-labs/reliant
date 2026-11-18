@@ -76,11 +76,15 @@ func TestRPCError_ClassFollowsWhoMustAct(t *testing.T) {
 
 // staleOnSecond answers the first request and drops the keep-alive connection
 // under the second without a response: a pooled connection the peer closed.
+// It reads the whole second request first, so the client sees the drop on its
+// read, never mid-write (a write error is never retried, which made the
+// retry case racy), and the server has provably received the request once.
 func staleOnSecond(t *testing.T, answer string) (gitcredentialclient.Service, *atomic.Int32) {
 	t.Helper()
 	var n atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if n.Add(1) == 2 {
+			_, _ = io.Copy(io.Discard, r.Body)
 			conn, _, err := w.(http.Hijacker).Hijack()
 			if err != nil {
 				t.Errorf("hijack: %v", err)
@@ -117,4 +121,15 @@ func TestMintInstallationToken_IsNotRetriedOnADeadConnection(t *testing.T) {
 	_, err = c.MintInstallationToken(context.Background(), gitcredentialclient.InstallationRequest{ExternalUserID: "u", Owner: "o", Repo: "r"})
 	require.Error(t, err)
 	assert.EqualValues(t, 2, n.Load())
+}
+
+// A user-token read is never replayed: control-plane may have renewed the
+// credential on the first delivery, rotating its single-use refresh token.
+func TestUserAccessToken_IsNotRetriedOnADeadConnection(t *testing.T) {
+	c, n := staleOnSecond(t, `{"accessToken":"ghu_x"}`)
+	_, err := c.UserAccessToken(context.Background(), "idp|alice", "github")
+	require.NoError(t, err)
+	_, err = c.UserAccessToken(context.Background(), "idp|alice", "github")
+	require.Error(t, err, "the dropped request was replayed")
+	assert.EqualValues(t, 2, n.Load(), "control-plane must see the dropped request exactly once")
 }
