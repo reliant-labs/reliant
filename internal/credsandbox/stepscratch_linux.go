@@ -21,7 +21,8 @@ import (
 )
 
 // The Linux half of each credentialed command's own scratch (stepscratch.go):
-// making it, proving from /proc that nothing holds it, and the sweep.
+// making it under its ownership lock, proving from /proc that nothing holds it
+// (a command's reclaim without a cgroup), and the lock-only sweep.
 
 // Each directory's ownership lock, and the names around it.
 const (
@@ -143,18 +144,13 @@ func maybeSweepStepScratch(root string) {
 			stepSweep.running = false
 			stepSweep.Unlock()
 		}()
-		if _, complete := sweepStepScratch(root); !complete {
-			// Walk again soon rather than a whole interval later.
-			stepSweep.Lock()
-			stepSweep.last = stepSweep.last.Add(stepScratchRetryEvery - stepScratchSweepEvery)
-			stepSweep.Unlock()
-		}
+		sweepStepScratch(root)
 	}()
 }
 
 // SweepStepScratch removes, in the background, the scratch directories of
-// credentialed commands (StepScratchEnv) that an earlier daemon left and that no
-// live process holds. The daemon calls it when it starts; it does nothing where
+// credentialed commands (StepScratchEnv) whose creating daemon is gone: those
+// whose ownership lock it can take (stepscratch.go). The daemon calls it when it starts; it does nothing where
 // the sandbox is not in force, since no command gets one there.
 func SweepStepScratch() {
 	self, err := os.Executable()
@@ -165,133 +161,87 @@ func SweepStepScratch() {
 }
 
 // stepSweepListed runs between the sweep's listing of the root and its first
-// candidate, and stepSweepLocked once it holds a candidate's lock, before it
-// re-checks /proc; tests use them to act inside those windows.
-var (
-	stepSweepListed = func() {}
-	stepSweepLocked = func(string) {}
-)
+// candidate; tests use it to act inside that window.
+var stepSweepListed = func() {}
 
-// sweepStepScratch removes the command scratch directories in root that no
-// live daemon owns and no live process holds, and reports how many.
-//
-// Listed, it spares every directory this daemon handed out and has not removed
-// (the registry, read after the listing, so one made during the sweep is never
-// a candidate) and every one younger than stepScratchMinAge. Then, one
-// candidate at a time, it tries the candidate's ownership lock: held by another
-// descriptor (a live daemon, this one or another), the candidate is skipped.
-// Taken, or absent (no lock file), it walks /proc afresh, while it holds the
-// lock, and removes the candidate only when that walk is complete and shows no
-// process holding it: renamed to a .trash- name (so no step- name points at a
-// half-removed tree) and then removed. An incomplete walk stops the sweep:
-// nothing more is removed, what it kept is logged, complete is false, and the
-// next sweep comes after stepScratchRetryEvery instead of stepScratchSweepEvery.
-//
-// It also finishes what a crash left: .trash- directories (already judged), and
-// .new- directories older than stepScratchMinAge whose lock is free (a daemon
-// killed while making one; never handed out).
-func sweepStepScratch(root string) (removed int, complete bool) {
+// sweepStepScratch removes the scratch directories in root that it can prove no
+// daemon can hand out, and reports how many: those whose ownership lock it
+// takes (the invariant in stepscratch.go). Each step- candidate is moved to a
+// .trash- name while the sweep holds its lock, then removed. It finishes, the
+// same way, a .new- directory (a daemon killed while making one, never handed
+// out) and a .trash- one (a sweep stopped mid-removal) whose lock it takes. A
+// directory with no lock file, one whose lock is held, and any other name are
+// left alone. This daemon's own directories are skipped by the registry too.
+func sweepStepScratch(root string) (removed int) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		return 0, true
+		return 0
 	}
-	now := stepScratchNow()
 	var candidates []string
 	for _, e := range entries {
 		name := e.Name()
 		path := filepath.Join(root, name)
-		fi, err := os.Lstat(path)
-		if err != nil || !fi.IsDir() || !ownedByUs(fi) {
-			continue
-		}
 		switch {
-		case strings.HasPrefix(name, stepScratchTrashPrefix+stepScratchPrefix):
-			if removeTree(path) == nil {
-				removed++
-			}
-		case strings.HasPrefix(name, stepScratchNewPrefix+stepScratchPrefix):
-			if now.Sub(fi.ModTime()) < stepScratchMinAge {
-				continue
-			}
-			lock, state, _ := tryLockStepScratch(path)
-			if state == lockTaken || state == lockAbsent {
-				if removeTree(path) == nil {
-					removed++
-				}
-			}
-			if lock != nil {
-				_ = lock.Close()
-			}
-		case strings.HasPrefix(name, stepScratchPrefix):
-			if now.Sub(fi.ModTime()) >= stepScratchMinAge && !stepScratchRegistered(path) {
+		case strings.HasPrefix(name, stepScratchPrefix) && !stepScratchRegistered(path),
+			strings.HasPrefix(name, stepScratchNewPrefix+stepScratchPrefix),
+			strings.HasPrefix(name, stepScratchTrashPrefix+stepScratchPrefix):
+			if fi, err := os.Lstat(path); err == nil && fi.IsDir() && ownedByUs(fi) {
 				candidates = append(candidates, path)
 			}
 		}
 	}
 	stepSweepListed()
-	for i, path := range candidates {
-		ok, err := sweepOne(root, path)
-		if err != nil {
-			logging.Info("credsandbox: not sweeping credentialed commands' scratch directories: the live processes could not all be read, so none is proven unheld",
-				"root", root, "kept", len(candidates)-i, "first_kept", path, "retry_in", stepScratchRetryEvery, "error", err)
-			return removed, false
-		}
-		if ok {
+	for _, path := range candidates {
+		if sweepOne(root, path) {
 			removed++
 		}
 	}
 	if removed > 0 {
-		logging.Info("credsandbox: removed credentialed commands' scratch directories no live daemon owns and no live process holds", "root", root, "removed", removed)
+		logging.Info("credsandbox: removed credentialed commands' scratch directories whose daemon is gone", "root", root, "removed", removed)
 	}
-	return removed, true
+	return removed
 }
 
-// sweepOne judges one candidate under its ownership lock and removes it when
-// nothing owns or holds it. err is an incomplete walk of /proc, which stops the
-// sweep.
-func sweepOne(root, path string) (removed bool, err error) {
-	lock, state, lerr := tryLockStepScratch(path)
-	if lock != nil {
-		defer func() { _ = lock.Close() }()
-	}
-	switch state {
-	case lockOwned:
-		return false, nil
-	case lockUnusable:
-		logging.Debug("credsandbox: keeping a command scratch directory whose lock cannot be judged", "dir", path, "error", lerr)
-		return false, nil
-	}
-	stepSweepLocked(path)
-	refs, err := stepScratchRefs(stepScratchProcRoot)
-	if err != nil {
-		return false, err
-	}
-	if refs[filepath.Base(path)] {
-		return false, nil
-	}
-	trash, err := os.MkdirTemp(root, stepScratchTrashPrefix+filepath.Base(path)+"-")
-	if err != nil {
-		logging.Warn("credsandbox: cannot move an orphaned command scratch directory aside", "dir", path, "error", err)
-		return false, nil
-	}
-	_ = os.Remove(trash)
-	if err := unix.Renameat2(unix.AT_FDCWD, path, unix.AT_FDCWD, trash, unix.RENAME_NOREPLACE); err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			logging.Warn("credsandbox: cannot move an orphaned command scratch directory aside", "dir", path, "error", err)
+// sweepOne removes path when it takes its ownership lock, holding the lock
+// through the move aside: a step- directory goes to a .trash- name first, so
+// no step- name ever points at a half-removed tree.
+func sweepOne(root, path string) bool {
+	lock, state, err := tryLockStepScratch(path)
+	if state != lockTaken {
+		if state == lockUnusable {
+			logging.Debug("credsandbox: keeping a command scratch directory whose lock cannot be judged", "dir", path, "error", err)
 		}
-		return false, nil
+		return false
 	}
-	if err := removeTree(trash); err != nil {
-		logging.Warn("credsandbox: cannot remove an orphaned command scratch directory; the next sweep finishes it", "dir", trash, "error", err)
+	defer func() { _ = lock.Close() }()
+	target := path
+	if strings.HasPrefix(filepath.Base(path), stepScratchPrefix) {
+		trash, err := os.MkdirTemp(root, stepScratchTrashPrefix+filepath.Base(path)+"-")
+		if err != nil {
+			logging.Warn("credsandbox: cannot move an orphaned command scratch directory aside", "dir", path, "error", err)
+			return false
+		}
+		_ = os.Remove(trash)
+		if err := unix.Renameat2(unix.AT_FDCWD, path, unix.AT_FDCWD, trash, unix.RENAME_NOREPLACE); err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				logging.Warn("credsandbox: cannot move an orphaned command scratch directory aside", "dir", path, "error", err)
+			}
+			return false
+		}
+		target = trash
 	}
-	return true, nil
+	if err := removeTree(target); err != nil {
+		logging.Warn("credsandbox: cannot remove an orphaned command scratch directory; the next sweep finishes it", "dir", target, "error", err)
+	}
+	return true
 }
 
 // credScratchMarker is how CredScratchDir appears inside a path: the scratch
 // directory named after it is the one a path holds.
 var credScratchMarker = "/" + filepath.Base(CredScratchRel) + "/"
 
-// procFS is how the scan reads /proc; tests replace it to make a read fail
+// procFS is how a command's reclaim (StepScratch.Done, for a command with no
+// cgroup) reads /proc; tests replace it to make a read fail
 // the way the kernel's do (ESRCH from a process mid-exit, or one in another pid
 // namespace).
 var procFS = struct {
@@ -301,7 +251,8 @@ var procFS = struct {
 	readlink func(string) (string, error)
 }{os.ReadDir, os.Lstat, os.ReadFile, os.Readlink}
 
-// stepScratchRefs lists the command scratch directories (by name) that a live
+// stepScratchRefs lists, for a command's reclaim (never the sweep, which
+// reads no /proc), the command scratch directories (by name) that a live
 // process of this user holds: in a value of its environment (StepScratchEnv,
 // which every process of a command inherits, or a TMPDIR under it), as its
 // working directory, or through an open file. Matching by name rather than
@@ -314,7 +265,7 @@ var procFS = struct {
 // reports them, but by then its pid may be another process's, which the
 // listing named and the read never saw, and ESRCH from a process in another pid
 // namespace says nothing about what it holds. So a walk that met one proves
-// nothing: the caller removes nothing and walks again later. A process in a
+// nothing: the reclaim keeps the directory and walks again later. A process in a
 // container whose user shares our uid (k3d's coredns runs as 65532, a cloud
 // workspace's user) whose files are withheld from us fails it the same way.
 // Only another user's process, and a non-dumpable one of ours (the kernel

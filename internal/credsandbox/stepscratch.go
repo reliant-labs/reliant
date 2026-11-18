@@ -34,23 +34,29 @@ import (
 // through an open file). One still held then stays until nothing holds it: its
 // own reclaim keeps looking, every stepScratchLingerEvery.
 //
-// Every directory a daemon hands out carries an ownership lock, a .lock file
-// inside it on which the daemon holds flock(LOCK_EX), taken before the
-// directory gets its step- name and held until the step's own removal finished
-// (the descriptor is close-on-exec, so no command inherits it). The kernel drops
-// the lock when the daemon exits however it exits. This daemon's directories are
-// also in its registry (stepRegistry), with that descriptor. The sweep, which the daemon runs
-// when it starts and then at most every stepScratchSweepEvery whenever a
-// credentialed command starts, takes only the directories no live daemon owns:
-// never one in the registry, never one younger than stepScratchMinAge, never one
-// whose lock another process holds (flock LOCK_NB fails: a daemon, this one or
-// another on the same home, owns it). One whose lock it takes is re-checked
-// while it holds the lock: removed only when a fresh, complete walk of /proc
-// shows nothing holds it, by an atomic rename to a .trash- name and then its
-// removal. A directory with no lock file (made before locks, or a step that
-// removed its own) is judged by that walk and the age gate alone. A process
-// whose holdings cannot be read makes the walk incomplete, and then the sweep
-// removes nothing more and says what it kept.
+// The invariant everything else rests on: a scratch directory is handed to a
+// command only by the daemon that created it, only while that daemon holds the
+// directory's ownership lock, and never handed out again. The lock is a .lock
+// file inside the directory on which the daemon holds flock(LOCK_EX), taken
+// before the directory gets its step- name (newStepScratch) and held until the
+// step's own removal has finished; the descriptor is close-on-exec, so no
+// command inherits it, and the kernel drops it when the daemon exits however
+// it exits. No daemon ever takes an existing directory for a new command.
+//
+// So a step- directory whose lock the sweep takes (flock LOCK_EX|LOCK_NB) is one
+// no live daemon owns and none can hand out again: the sweep moves it to a
+// .trash- name while it still holds the lock, then removes it. It reads no
+// /proc, and needs no age gate. What it cannot prove that of, it never touches:
+// a step- directory with no lock file (made before locks, or one whose step
+// removed its .lock), and every other name in CredScratchDir (the PR
+// pipeline's bootstrap tmp.* directories, its slots/), which control-plane's
+// disk janitor reclaims. The daemon runs the sweep when it starts and then at
+// most every stepScratchSweepEvery whenever a credentialed command starts.
+//
+// The sweep may remove a directory a process still uses: one that inherited
+// StepScratchEnv from a step whose daemon has died (a daemon restarted under
+// its running commands). That is correct: its daemon is gone, so its step is
+// over, and nothing was going to remove what it left there otherwise.
 //
 // It is an addition: a command that never reads StepScratchEnv keeps working as
 // before, and one written for it falls back to its own `mktemp -d` where the
@@ -81,16 +87,10 @@ var (
 	// stepScratchSweepEvery is how often the sweep runs while credentialed
 	// commands start.
 	stepScratchSweepEvery = 10 * time.Minute
-	// stepScratchRetryEvery is how soon the sweep runs again after a pass
-	// whose walk of /proc was incomplete and removed nothing.
-	stepScratchRetryEvery = time.Minute
-	// stepScratchMinAge spares a directory made this recently: the moment
-	// between its making and its command's start, when nothing holds it yet.
-	stepScratchMinAge = time.Minute
-	// stepScratchProcRoot is the /proc the sweep reads live processes from.
+	// stepScratchProcRoot is the /proc a command's reclaim reads live
+	// processes from when the command has no cgroup.
 	stepScratchProcRoot = "/proc"
-	// stepScratchNow is the clock the sweep judges ages and its own cadence
-	// by.
+	// stepScratchNow is the clock the sweep's cadence is judged by.
 	stepScratchNow = time.Now
 )
 
@@ -98,9 +98,7 @@ var (
 // yet removed, with the descriptor of the ownership lock it holds on each. A
 // directory enters it when it is made, under mu, before any command can see its
 // name, and leaves it only when its own reclaim removed it (removeStepScratch),
-// which then closes the descriptor and so releases the lock. The sweep checks it under mu, after it has listed the
-// root: a directory listed then was made before the listing, so it is either
-// registered already or not this daemon's.
+// which then closes the descriptor and so releases the lock.
 var stepRegistry struct {
 	mu   sync.Mutex
 	dirs map[string]*os.File
