@@ -163,6 +163,10 @@ type ProcessEvent struct {
 	StartTime  time.Time  `json:"start_time"`
 	EndTime    *time.Time `json:"end_time,omitempty"`
 	Ports      []PortInfo `json:"ports,omitempty"` // Currently listening ports
+	// ThreadID, PackageCommand and KeepAlive: see BackgroundProcess.
+	ThreadID       string `json:"thread_id,omitempty"`
+	PackageCommand bool   `json:"package_command,omitempty"`
+	KeepAlive      bool   `json:"keep_alive,omitempty"`
 }
 
 // ProcessEventCallback is a callback function for process events
@@ -578,6 +582,10 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		Status:     "running",
 		StartTime:  process.StartTime,
 		Ports:      process.Ports,
+
+		ThreadID:       opts.ThreadID,
+		PackageCommand: opts.PackageCommand,
+		KeepAlive:      opts.KeepAlive,
 	})
 
 	return process, nil
@@ -792,6 +800,10 @@ func (m *BackgroundManager) handleProcessCompletion(process *BackgroundProcess, 
 		StartTime:  process.StartTime,
 		EndTime:    process.EndTime,
 		Ports:      process.Ports,
+
+		ThreadID:       process.ThreadID,
+		PackageCommand: process.PackageCommand,
+		KeepAlive:      process.KeepAlive,
 	}
 
 	process.outputMu.Unlock()
@@ -1366,6 +1378,10 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		StartTime:  process.StartTime,
 		EndTime:    process.EndTime,
 		Ports:      process.Ports,
+
+		ThreadID:       process.ThreadID,
+		PackageCommand: process.PackageCommand,
+		KeepAlive:      process.KeepAlive,
 	}
 	process.outputMu.Unlock()
 
@@ -1613,6 +1629,10 @@ func (m *BackgroundManager) AdoptRunningProcess(opts AdoptRunningProcessOptions)
 		Status:     "running",
 		StartTime:  process.StartTime,
 		Ports:      process.Ports,
+
+		ThreadID:       opts.ThreadID,
+		PackageCommand: false, // an adopted process is a tool call's, never the Commands panel's
+		KeepAlive:      opts.KeepAlive,
 	})
 
 	return process, nil
