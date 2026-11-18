@@ -219,11 +219,16 @@ type HandledNodeFailure struct {
 // root run's workflow id is reused by every run of its chat, so the run's id
 // (step_executions.run_id: the root run's forge.ai.run.id, kept across
 // continue-as-new and shared by its sub-agents) keeps an earlier run's
-// attempts out, however close together the two ran. An attempt recorded
-// without a run id (before the column existed, or by an activity that names
-// no run), or every attempt when runID is empty, is the run's when it was
+// attempts out, however close together the two ran. With a run id, ONLY the
+// attempts recorded under it are the run's: an attempt recorded without one
+// (before the column existed) is never attributed to a known run by when it
+// was recorded, since the previous run on the reused workflow id may have
+// recorded it inside the clock-skew allowance before this one began. Every
+// node attempt the runtime records names its run (the activity input's
+// telemetry: FailStep and RecordToleratedFailure included). Only when runID
+// is empty (a run that predates its id) is an attempt the run's when it was
 // recorded at or after since (the run's start, less clock skew); the zero
-// time reads every such attempt. A node retried to
+// time then reads every attempt. A node retried to
 // success has a successful last attempt and is not one. Each node is told
 // apart by its path and loop iteration, so one failed iteration of a parallel
 // loop counts even when its siblings passed. The runtime's own bookkeeping
@@ -247,7 +252,7 @@ func FirstHandledNodeFailure(ctx context.Context, db orm.Context, workflowID, ru
            END AS failure
     FROM step_executions se JOIN tree t ON t.id = se.workflow_id
     WHERE se.activity_name <> ALL(ARRAY['WorkflowStatus', 'FetchThreadResult', 'Cleanup', 'WorkflowError', 'SkippedStep']::text[])
-      AND CASE WHEN ?2::text <> '' AND se.run_id IS NOT NULL THEN se.run_id = ?2::text
+      AND CASE WHEN ?2::text <> '' THEN se.run_id = ?2::text
                ELSE se.created_at >= ?1 END
     ORDER BY se.workflow_id, coalesce(se.node_path, se.step_id), coalesce(se.loop_node_id, ''), coalesce(se.loop_iteration, -1),
              se.created_at DESC, se.id DESC

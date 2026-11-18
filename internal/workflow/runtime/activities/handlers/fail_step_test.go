@@ -101,6 +101,8 @@ func TestFailStepInput_KeepsTheNodeLocation(t *testing.T) {
 		"loop_node_id":   "attempt",
 		"loop_iteration": 2,
 		"node_path":      "attempt.post",
+		// The run the node belongs to, for the step row's run_id.
+		"telemetry": map[string]interface{}{"run_id": "run-1", "root_run_id": "run-1"},
 	}
 	encoded, err := json.Marshal(sent)
 	require.NoError(t, err)

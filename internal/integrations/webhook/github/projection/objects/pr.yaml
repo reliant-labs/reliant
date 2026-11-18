@@ -9,6 +9,7 @@ fields:
   merge_commit_sha: { kind: string, omit_empty: true }
   html_url: string
   user: { kind: object, object: user }
+  author_association: { kind: string, enum: [OWNER, MEMBER, COLLABORATOR, CONTRIBUTOR, FIRST_TIME_CONTRIBUTOR, FIRST_TIMER, MANNEQUIN, NONE], description: "How the pull request's author is associated with the repository. OWNER, MEMBER and COLLABORATOR have access to it; the rest do not." }
   head: { kind: object, object: ref }
   base: { kind: object, object: ref }
   labels: { kind: names, pluck: name }

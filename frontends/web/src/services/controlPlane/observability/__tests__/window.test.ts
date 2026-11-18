@@ -19,7 +19,8 @@ describe("spec durations", () => {
     expect(presetCovering(spanMs("2h")!)).toBe("6h");
     expect(presetCovering(spanMs("1d")!)).toBe("24h");
     expect(presetCovering(spanMs("3d")!)).toBe("7d");
-    expect(presetCovering(spanMs("30d")!)).toBe("7d");
+    expect(presetCovering(spanMs("30d")!)).toBe("30d");
+    expect(presetCovering(spanMs("90d")!)).toBe("30d");
   });
 });
 
@@ -30,7 +31,7 @@ describe("a dashboard's default range", () => {
     expect(dashboardDefaultRange("garbage")).toBe(DEFAULT_RANGE);
     expect(dashboardDefaultRange("7d")).toBe("7d");
     expect(dashboardDefaultRange("24h")).toBe("24h");
-    expect(dashboardDefaultRange("30d")).toBe("7d");
+    expect(dashboardDefaultRange("30d")).toBe("30d");
   });
 });
 

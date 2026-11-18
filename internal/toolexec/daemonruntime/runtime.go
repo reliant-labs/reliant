@@ -166,6 +166,10 @@ type daemonClient struct {
 	// (internal/forkwatch; reliant#1919). Its verdict rides on the
 	// heartbeat's health.
 	forkWatch *forkwatch.Watchdog
+	// forkHeal carries out the watchdog's self-heal: it stops the largest
+	// background command after five minutes degraded, and a managed daemon
+	// exits if that did not help (fork_heal.go).
+	forkHeal *forkHealer
 
 	// portWatcher scans /proc/net/tcp{,6} for loopback/wildcard LISTEN
 	// sockets so heartbeats can carry the detected ports (the preview
@@ -361,6 +365,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	ctx, stopRuntime := context.WithCancel(ctx)
 	defer stopRuntime()
 	client.armWorkspaceGuard(ctx, stopRuntime)
+	// And when its process table stays full even after the self-heal stopped
+	// its largest command (fork_heal.go).
+	client.forkHeal.arm(client.cancelAllRequests, stopRuntime)
 	initializeWorktreeActivity(ctx, opts.BootstrapConfig.DataDir)
 
 	// Publish the runtime record before the first dial. Until the gateway acks
@@ -491,6 +498,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 		if lost := client.guard.lostVolume(); lost != nil {
 			return lost
 		}
+		if full := client.forkHeal.gaveUp(); full != nil {
+			return full
+		}
 		if err != nil && !errors.Is(err, context.Canceled) {
 			return fmt.Errorf("tools daemon server stopped: %w", err)
 		}
@@ -506,6 +516,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	err = client.run(ctx)
 	if lost := client.guard.lostVolume(); lost != nil {
 		return lost
+	}
+	if full := client.forkHeal.gaveUp(); full != nil {
+		return full
 	}
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("tools daemon runtime stopped: %w", err)
@@ -592,7 +605,24 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// (a full process table) from a working one, which the guard above
 	// cannot: by then nothing new starts to be refused. It names the trees
 	// the guard counted, which reading /proc does without a fork.
-	forkWatch := forkwatch.New(forkwatch.Config{Trees: procGuard.LargestTrees})
+	// When starts stay refused it heals: it stops the largest background
+	// command, and a managed daemon exits if that did not free the table
+	// (fork_heal.go).
+	forkHeal := &forkHealer{
+		managed:        host.Managed(),
+		recount:        procGuard.Check,
+		tasks:          procGuard.GroupTasks,
+		stopLargest:    shell.GetBackgroundManager().StopLargest,
+		exit:           workspaceGuardExit,
+		flushDelay:     forkHealFlushDelay,
+		exitBackstop:   forkHealExitBackstop,
+		terminationLog: workspaceGuardTerminationLog,
+	}
+	forkWatchCfg := forkwatch.Config{Trees: procGuard.LargestTrees, Heal: forkHeal.heal}
+	if host.Managed() {
+		forkWatchCfg.GiveUp = forkHeal.giveUp
+	}
+	forkWatch := forkwatch.New(forkWatchCfg)
 
 	heavyGate, err := heavyjob.New(heavyjob.Config{
 		Commands: guards.HeavyCommands,
@@ -704,6 +734,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		diskGuard:         diskGuard,
 		procGuard:         procGuard,
 		forkWatch:         forkWatch,
+		forkHeal:          forkHeal,
 	}
 	client.restoreResultOutbox()
 	return client, nil

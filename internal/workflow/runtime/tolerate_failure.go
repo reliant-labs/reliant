@@ -3,11 +3,14 @@ package runtime
 
 import (
 	"errors"
+	"time"
 
 	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // A node that declares `tolerate_failure: true` is optional (reliant#2752):
@@ -70,4 +73,63 @@ func tolerable(err error) bool {
 func logToleratedFailure(logger log.Logger, nodeID string, err error) {
 	logger.Warn("[Workflow Runtime] Node failed; it tolerates failure, so the run continues",
 		"stepID", nodeID, "error", err)
+}
+
+// toleratedFailureRecordChangeID gates recording a tolerated failure as the
+// node's failed attempt (recordToleratedFailure). It adds an activity command,
+// and is consulted only where a tolerated failure happens.
+const toleratedFailureRecordChangeID = "tolerated-failure-record"
+
+// recordToleratedFailureActivityName is handlers.RecordToleratedFailureActivityName,
+// spelled here as the runtime spells "FailStep": the runtime does not import
+// the handlers.
+const recordToleratedFailureActivityName = "RecordToleratedFailure"
+
+// toleratedScope is where a tolerated node sits, for its attempt row.
+type toleratedScope struct {
+	WorkflowID    string
+	StepID        string
+	NodePath      string
+	LoopNodeID    string
+	LoopIteration int
+}
+
+// recordToleratedFailure puts a tolerated node's failure on record as the
+// node's failed attempt (handlers.RecordToleratedFailureActivity): a
+// step_executions row with the error, which is what the run's outcome and its
+// diagnostics read. Without it, a failure decided in the workflow — the
+// repeated-tool-error breaker ending an agent, a loop or sub-workflow that
+// ended — left every attempt successful, and a run that went on past it read
+// as having succeeded.
+//
+// The activity always fails, by design; its error is expected and dropped.
+// Best effort: a record that cannot be written never changes the run.
+func recordToleratedFailure(ctx workflow.Context, scope toleratedScope, err error) {
+	if ctx == nil || scope.StepID == "" || err == nil {
+		return
+	}
+	if workflow.GetVersion(ctx, toleratedFailureRecordChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return
+	}
+	input := map[string]interface{}{
+		"workflow_id": scope.WorkflowID,
+		"step_id":     scope.StepID,
+		"node_path":   scope.NodePath,
+		"error":       oneLineError(err),
+	}
+	if scope.LoopNodeID != "" {
+		input["loop_node_id"] = scope.LoopNodeID
+		input["loop_iteration"] = scope.LoopIteration
+	}
+	// The run the node belongs to, recorded on its attempt row: the run's
+	// outcome reads only the attempts under its id
+	// (store.FirstHandledNodeFailure).
+	if root := rootRunIDFrom(ctx); root != "" {
+		input["telemetry"] = &types.RunTelemetry{RootRunID: root}
+	}
+	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
+	})
+	_ = workflow.ExecuteActivity(actCtx, recordToleratedFailureActivityName, input).Get(ctx, nil)
 }

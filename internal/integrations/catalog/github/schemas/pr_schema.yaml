@@ -12,6 +12,12 @@ properties:
   merge_commit_sha: { type: string }
   html_url: { type: string }
   user: { $ref: user_schema.yaml }
+  author_association:
+    type: string
+    enum: [OWNER, MEMBER, COLLABORATOR, CONTRIBUTOR, FIRST_TIME_CONTRIBUTOR, FIRST_TIMER, MANNEQUIN, NONE]
+    description: >-
+      How the pull request's author is associated with the repository. OWNER,
+      MEMBER and COLLABORATOR have access to it; the rest do not.
   head: { $ref: ref_schema.yaml }
   base: { $ref: ref_schema.yaml }
   labels: { type: array, items: { type: string } }

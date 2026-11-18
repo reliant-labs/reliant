@@ -15,9 +15,10 @@ import (
 
 // runStartSkew is how far before the run's start (workflow time) a node
 // attempt (database time) may be stamped and still be the run's. The two
-// clocks are different machines'. It applies only to an attempt that names no
-// run (step_executions.run_id NULL): a run's own attempts are told apart by
-// its id, which a previous run that ended within the skew does not share.
+// clocks are different machines'. It applies only to a run with no id (a
+// workflow that predates it): a run with an id reads only the attempts
+// recorded under it, which a previous run that ended within the skew does not
+// share.
 const runStartSkew = 5 * time.Second
 
 // runOutcome is how an ending run ended for whoever judges whether it worked
@@ -37,8 +38,9 @@ type runOutcome struct {
 //   - completed, with a node whose last attempt in this run failed ->
 //     failure_handled. "In this run" is the attempts recorded under its run
 //     id (input.RunID), so the previous run on the same reused workflow id is
-//     never read; an attempt recorded with no run id falls back to having
-//     been recorded since the run began.
+//     never read, nor an attempt recorded with no run id. Only a run with
+//     no id (a workflow that predates it) falls back to the attempts
+//     recorded since it began.
 //   - completed otherwise -> succeeded
 //
 // Anything else (started, paused, cancelled) has no outcome. A failed read of

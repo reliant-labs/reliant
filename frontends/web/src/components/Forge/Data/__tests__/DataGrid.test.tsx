@@ -7,7 +7,7 @@
  * dataUrl-model says.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code } from "@connectrpc/connect";
@@ -22,6 +22,16 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 
 const gridReady = async () => waitFor(() => expect(screen.getByTestId("data-grid")).toHaveAttribute("data-state", "ready"));
 const headers = () => within(screen.getByTestId("data-grid-scroll")).getAllByRole("columnheader").map((th) => th.textContent);
+
+afterEach(() => vi.useRealTimers());
+
+/**
+ * Under fake timers: let every answered request render. The fixture answers
+ * in microtasks and react-query delivers on a zero-delay timer, so advancing
+ * the fake clock (which drains microtasks between timers) settles the view
+ * without waiting on the wall clock. Its 5-minute cache timers never fire.
+ */
+const settle = () => act(() => vi.advanceTimersByTimeAsync(100));
 
 describe("databases and tables", () => {
   it("opens the first readable database, and shows an unreachable one disabled with its reason", async () => {
@@ -177,26 +187,40 @@ describe("the grid", () => {
     expect(within(screen.getByTestId("data-filter-op")).queryByText("is NULL")).not.toBeInTheDocument();
   });
 
+  // Deterministic: the clock is fake and advanced only by settle(), so every
+  // page has answered and rendered before the next assertion, whatever the
+  // host's load. The smallest page size keeps the renders cheap.
   it("pages by offset, with has_more driving Next and the size choosable", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const api = createDataFixtureApi({ onlyShop: true });
     const view = renderBrowser(api, { db: "shop", table: "public.orders" });
-    await gridReady();
+    await settle();
+    expect(screen.getByTestId("data-range")).toHaveTextContent("Rows 1–50");
     expect(screen.getByTestId("data-page-prev")).toBeDisabled();
     fireEvent.click(screen.getByTestId("data-page-next"));
     expect(view.search().offset).toBe(50);
-    await waitFor(() => expect(browseCalls(api).at(-1)).toMatchObject({ offset: 50, limit: 50 }));
-    await waitFor(() => expect(screen.getByTestId("data-range")).toHaveTextContent("Rows 51–100"));
+    await settle();
+    expect(browseCalls(api).at(-1)).toMatchObject({ offset: 50, limit: 50 });
+    expect(screen.getByTestId("data-range")).toHaveTextContent("Rows 51–100");
 
     // A new page size keeps the first row on screen.
-    await userEvent.selectOptions(screen.getByTestId("data-page-size"), "200");
-    expect(view.search()).toEqual({ db: "shop", table: "public.orders", offset: 50, size: 200 });
-    view.go({ db: "shop", table: "public.orders", size: 200, offset: 200 });
+    fireEvent.change(screen.getByTestId("data-page-size"), { target: { value: "25" } });
+    expect(view.search()).toEqual({ db: "shop", table: "public.orders", offset: 50, size: 25 });
+    await settle();
+    expect(screen.getByTestId("data-range")).toHaveTextContent("Rows 51–75");
+    view.go({ db: "shop", table: "public.orders", size: 25, offset: 225 });
+    await settle();
     // The last page: no next, and the total is exact.
-    await waitFor(() => expect(screen.getByTestId("data-range")).toHaveTextContent("Rows 201–230 of 230"));
+    expect(screen.getByTestId("data-range")).toHaveTextContent("Rows 226–230 of 230");
     expect(screen.getByTestId("data-page-next")).toBeDisabled();
+    // Back a page size.
     fireEvent.click(screen.getByTestId("data-page-prev"));
-    // Back a page size, to the first row (an offset of 0 leaves the URL).
-    expect(view.search().offset).toBeUndefined();
+    expect(view.search().offset).toBe(200);
+    view.go({ db: "shop", table: "public.orders", size: 25, offset: 25 });
+    await settle();
+    fireEvent.click(screen.getByTestId("data-page-prev"));
+    // To the first row, an offset of 0 leaves the URL.
+    expect(view.search()).toEqual({ db: "shop", table: "public.orders", size: 25 });
   });
 
   it("counts exactly on request, and says when the count stopped at the server's cap", async () => {

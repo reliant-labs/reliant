@@ -55,6 +55,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 async function load(activeOrg: string | null) {

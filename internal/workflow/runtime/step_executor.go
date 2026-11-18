@@ -494,6 +494,9 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 		e.pauseCtrl.CapacitySlot.untrackStep(running)
 	}
 	stepEvent := e.handleActivityCompletion(running, eventID)
+	// Whether the step's failure, if any, is the activity's own: the activity
+	// wrapper has then written the failed attempt already.
+	activityFailed := stepEvent != nil && stepEvent.Error != nil
 	if machine, _, _ := machineStepTools(running.Node.GetType(), nil); machine {
 		e.pauseCtrl.MachineStepDone(e.ctx)
 	}
@@ -544,6 +547,11 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	if stepEvent != nil && stepEvent.Error != nil && e.pauseCtrl.gaveUp() == nil {
 		if out, ok := toleratedFailure(running.Node, stepEvent.Error); ok {
 			logToleratedFailure(e.logger, running.StepID, stepEvent.Error)
+			// A failure decided here, after the activity succeeded (the
+			// repeated-tool-error breaker), has no failed attempt yet.
+			if !activityFailed {
+				recordToleratedFailure(e.ctx, e.toleratedScope(running.StepID), stepEvent.Error)
+			}
 			if e.nodeOutputs != nil {
 				e.nodeOutputs[running.StepID] = out
 			}
@@ -711,6 +719,18 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 		WorkflowName: e.workflowName,
 		StepID:       running.StepID,
 		Data:         normalizedOutput,
+	}
+}
+
+// toleratedScope is where this executor's node stepID sits, for the failed
+// attempt a tolerated failure records (tolerate_failure.go).
+func (e *StepExecutor) toleratedScope(stepID string) toleratedScope {
+	return toleratedScope{
+		WorkflowID:    e.workflowID,
+		StepID:        stepID,
+		NodePath:      joinNodePath(e.nodePathPrefix, stepID),
+		LoopNodeID:    e.loopNodeID,
+		LoopIteration: e.loopIteration,
 	}
 }
 
@@ -1326,6 +1346,12 @@ func (e *StepExecutor) failStepInput(node *reliantv1.Node, errorMsg string) map[
 	if e.loopNodeID != "" {
 		input["loop_node_id"] = e.loopNodeID
 		input["loop_iteration"] = e.loopIteration
+	}
+	// The run the node belongs to, recorded on its step row, so the failure
+	// is never read as the next run's on the reused workflow id
+	// (store.FirstHandledNodeFailure).
+	if rt := e.runtimeTelemetry(); rt != nil {
+		input["telemetry"] = rt
 	}
 	return input
 }

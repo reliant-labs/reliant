@@ -16,7 +16,7 @@ import { Clock, Layers, LayoutGrid } from "lucide-react";
 import Tag from "@/components/forge-ui/tag";
 import Button from "@/components/forge-ui/button";
 import type { MetricCatalogEntry, MetricDetail as MetricDetailModel } from "@/services/controlPlane/observability/metricsTypes";
-import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { RANGE_LABELS, rangeMs, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { formatCount } from "../format";
@@ -109,7 +109,7 @@ function NoDataInWindow({ name, entry, range, onWiden }: { name: string; entry?:
             ? "The release declares it, but nothing has sent it. A code path that never ran, or a name that differs from the code's, looks like this."
             : "A metric whose service was idle, or deployed after the window began, looks like this."}
         </p>
-        {onWiden && range !== "7d" && (
+        {onWiden && rangeMs(range) < rangeMs("7d") && (
           <Button variant="ghost" size="sm" onClick={onWiden} data-testid="metric-no-data-widen">
             Look at the last 7 days
           </Button>

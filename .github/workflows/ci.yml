@@ -582,8 +582,13 @@ jobs:
     runs-on: ubuntu-24.04
     # Two parallel jobs, split by install cost (Taskfile test:web:e2e:desktop
     # and :responsive): WebKit's apt packages alone once took 6.5 minutes,
-    # which pushed the combined lane past this budget.
-    timeout-minutes: 15
+    # which pushed the combined lane past this budget. The responsive leg gets
+    # 30 minutes: on a system-package cache miss it installs WebKit's set from
+    # the Ubuntu mirror, which took 14+ minutes on 2026-11-18 (reliant main
+    # a03a070e8, control-plane main-red #2909), and a leg cancelled there never
+    # seeds the cache, so every later run on that runner image missed too. A
+    # pinned mirror or a prebuilt image is the real fix for mirror speed.
+    timeout-minutes: ${{ matrix.suite == 'responsive' && 30 || 15 }}
     strategy:
       fail-fast: false
       matrix:
@@ -626,6 +631,26 @@ jobs:
           key: playwright-os-deps-${{ vars.PLAYWRIGHT_OS_DEPS_CACHE_VERSION || 'v1' }}-${{ matrix.suite }}-${{ steps.runner-image.outputs.image }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
       - name: task deps:web
         run: task deps:web
+      # The system packages are installed, and on a main miss saved, in steps
+      # of their own BEFORE the suite runs: a failing or timed-out suite then
+      # cannot keep the cache from being seeded. The browser list is the
+      # suite's Taskfile BROWSERS (pinned by tools/test-affected); the suite
+      # step re-runs the script, which is a no-op cache hit by then.
+      - name: Install Playwright system packages
+        if: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' }}
+        run: scripts/playwright-os-deps.sh "$HOME/.cache/playwright-os-deps" ${{ matrix.suite == 'responsive' && 'chromium webkit' || 'chromium' }}
+      # The script writes the cache only after the packages installed, so a
+      # failed install leaves nothing to save. (hashFiles cannot see ~.)
+      - name: Were the system packages recorded
+        id: os-deps-recorded
+        if: ${{ !cancelled() && vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' && github.ref == 'refs/heads/main' && steps.os-deps.outputs.cache-hit != 'true' }}
+        run: if [ -f "$HOME/.cache/playwright-os-deps/browsers" ]; then echo "yes=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Save Playwright system packages (main only)
+        if: ${{ !cancelled() && steps.os-deps-recorded.outputs.yes == 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-os-deps
+          key: ${{ steps.os-deps.outputs.cache-primary-key }}
       # desktop: the Chromium suite (which also runs the responsive journeys
       # with mouse input). responsive: the required production-route
       # assertions in Chromium touch and WebKit phone/tablet.
@@ -644,18 +669,6 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ steps.browsers.outputs.cache-primary-key }}
-      # The script writes the cache only after the packages installed, so a
-      # failed install leaves nothing to save. (hashFiles cannot see ~.)
-      - name: Were the system packages recorded
-        id: os-deps-recorded
-        if: ${{ !cancelled() && vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' && github.ref == 'refs/heads/main' && steps.os-deps.outputs.cache-hit != 'true' }}
-        run: if [ -f "$HOME/.cache/playwright-os-deps/browsers" ]; then echo "yes=true" >> "$GITHUB_OUTPUT"; fi
-      - name: Save Playwright system packages (main only)
-        if: ${{ !cancelled() && steps.os-deps-recorded.outputs.yes == 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/playwright-os-deps
-          key: ${{ steps.os-deps.outputs.cache-primary-key }}
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:

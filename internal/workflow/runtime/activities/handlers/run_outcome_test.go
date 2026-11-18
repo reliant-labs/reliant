@@ -64,8 +64,8 @@ func TestResolveRunOutcome(t *testing.T) {
 	}
 
 	// Only a completion reads the attempts: the run's own, by its id, and
-	// from the run's start (less the clock skew allowance) for an attempt
-	// that names no run; with no start, every such attempt.
+	// for a run with no id, from the run's start (less the clock skew
+	// allowance); with no start, every attempt.
 	require.Len(t, asked, 3)
 	assert.Equal(t, []string{"run-1", "", ""}, askedRuns, "the run's id is what its attempts are read by")
 	assert.True(t, started.Add(-runStartSkew).Equal(asked[0]), "since is the start less the skew allowance: %v", asked[0])

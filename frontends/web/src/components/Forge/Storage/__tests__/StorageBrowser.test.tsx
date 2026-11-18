@@ -9,17 +9,28 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 import { createStorageFixtureApi } from "../__fixtures__/fixtureStorageApi";
-import { callsOf, renderBrowser, searchOf } from "./storageTestUtils";
+import { callsOf, renderBrowser, searchOf, STAGING } from "./storageTestUtils";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useNavigate: () => vi.fn(),
 }));
 
-afterEach(() => window.sessionStorage.clear());
+afterEach(() => {
+  window.sessionStorage.clear();
+  vi.useRealTimers();
+});
+
+/**
+ * Under fake timers: let every answered request render. The fixture answers
+ * in microtasks and react-query delivers on a zero-delay timer, so advancing
+ * the fake clock (which drains microtasks between timers) settles the view
+ * without waiting on the wall clock. Its 5-minute cache timers never fire.
+ */
+const settle = () => act(() => vi.advanceTimersByTimeAsync(100));
 
 /** Every listed entry, in the order shown: `p:` a folder, `o:` an object. */
 function entries(): string[] {
@@ -131,31 +142,41 @@ describe("a level", () => {
 });
 
 describe("paging", () => {
+  // Deterministic: the clock is fake and advanced only by settle(), so every
+  // listing has answered and rendered before the next assertion, whatever the
+  // host's load. A page of one object keeps the three renders cheap.
   it("pages forward by token and back through the pages it walked", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const api = createStorageFixtureApi();
-    const view = renderBrowser(api, { bucket: "exports", prefix: "daily/" });
-    await listed();
-    expect(screen.getAllByTestId("storage-object")).toHaveLength(200);
+    const view = renderBrowser(api, { bucket: "uploads", prefix: "avatars/2026/" }, STAGING, { pageSize: 1 });
+    await settle();
+    expect(entries()).toEqual(["o:avatars/2026/ada.png"]);
     expect(screen.getByTestId("storage-page")).toHaveTextContent("Page 1");
     expect(screen.getByTestId("storage-page-prev")).toBeDisabled();
 
     fireEvent.click(screen.getByTestId("storage-page-next"));
     const second = view.search().token!;
     expect(second).toBeTruthy();
-    await waitFor(() => expect(screen.getAllByTestId("storage-object")[0]).toHaveAttribute("data-key", "daily/2026-201.csv"));
+    await settle();
+    expect(entries()).toEqual(["o:avatars/2026/grace.webp"]);
     expect(screen.getByTestId("storage-page")).toHaveTextContent("Page 2");
+    expect(screen.getByTestId("storage-page-next")).toBeEnabled();
 
-    await waitFor(() => expect(screen.getByTestId("storage-page-next")).toBeEnabled());
     fireEvent.click(screen.getByTestId("storage-page-next"));
-    await waitFor(() => expect(screen.getByTestId("storage-page")).toHaveTextContent("Page 3 (the last)"));
-    expect(screen.getAllByTestId("storage-object")).toHaveLength(50);
+    await settle();
+    expect(screen.getByTestId("storage-page")).toHaveTextContent("Page 3 (the last)");
+    expect(entries()).toEqual(["o:avatars/2026/logo.svg"]);
     expect(screen.getByTestId("storage-page-next")).toBeDisabled();
 
     fireEvent.click(screen.getByTestId("storage-page-prev"));
     expect(view.search().token).toBe(second);
-    await waitFor(() => expect(screen.getByTestId("storage-page")).toHaveTextContent("Page 2"));
+    await settle();
+    expect(screen.getByTestId("storage-page")).toHaveTextContent("Page 2");
+    expect(entries()).toEqual(["o:avatars/2026/grace.webp"]);
     fireEvent.click(screen.getByTestId("storage-page-prev"));
-    expect(view.search()).toEqual({ bucket: "exports", prefix: "daily/" });
+    expect(view.search()).toEqual({ bucket: "uploads", prefix: "avatars/2026/" });
+    await settle();
+    expect(entries()).toEqual(["o:avatars/2026/ada.png"]);
     // Going back reads the pages already read (each is an audit row): none is listed twice.
     expect(callsOf(api, "listObjects").map((call) => call.pageToken)).toEqual(["", second, expect.any(String)]);
   });

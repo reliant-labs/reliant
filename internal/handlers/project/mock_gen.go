@@ -56,7 +56,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=ab5a8803c9b7c5fa66086549bc8263c711c57baf8893ab71e5075226722941ec
+// forge:hash=5302d23b43f8df7b154fd8e041d3874fb5664bae6a242565d1a40a48a41ac034
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -96,6 +96,7 @@ type MockRepository struct {
 	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
 	CreateRepoFunc                            func(context.Context, *core.Repo) error
 	ListReposByProjectFunc                    func(context.Context, string) ([]*core.Repo, error)
+	SetRepoForgeAppsFunc                      func(context.Context, string, []core.RepoForgeApp, bool) error
 	CreateWorktreeFunc                        func(context.Context, *db.Worktree) error
 	ListWorktreesFunc                         func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
 	UpdateWorktreeFunc                        func(context.Context, *db.Worktree) error
@@ -375,6 +376,15 @@ func (m *MockRepository) ListReposByProject(ctx context.Context, projectID strin
 		return m.ListReposByProjectFunc(ctx, projectID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListReposByProject")
+}
+
+// SetRepoForgeApps records the call and delegates to SetRepoForgeAppsFunc when set.
+func (m *MockRepository) SetRepoForgeApps(ctx context.Context, repoID string, apps []core.RepoForgeApp, complete bool) error {
+	m.Recorder.Record("SetRepoForgeApps", ctx, repoID, apps, complete)
+	if m.SetRepoForgeAppsFunc != nil {
+		return m.SetRepoForgeAppsFunc(ctx, repoID, apps, complete)
+	}
+	return contractkit.MockNotSet("MockRepository", "SetRepoForgeApps")
 }
 
 // CreateWorktree records the call and delegates to CreateWorktreeFunc when set.

@@ -36,6 +36,7 @@ import (
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	v2activities "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
+	"github.com/reliant-labs/reliant/internal/workflowcheck"
 
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
@@ -323,6 +324,16 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// declaration as it is now; every fire path reads it through the same
 	// resolution run start uses.
 	declarations := triggers.LaunchWorkflows{Repo: cfg.Database}
+	// A workflow's `check:` (workflowcheck): an event fire opens the check
+	// and the run reports its start and end through these activities. They
+	// only record; the worker's check syncer writes GitHub.
+	var checks workflowcheck.Service
+	if cfg.Database != nil {
+		checks = workflowcheck.NewInstrumented(workflowcheck.Deps{Store: cfg.Database})
+		reports := workflowcheck.Activities{Service: checks}
+		w.RegisterActivityWithOptions(reports.Started, activity.RegisterOptions{Name: workflowcheck.StartedActivityName})
+		w.RegisterActivityWithOptions(reports.Ended, activity.RegisterOptions{Name: workflowcheck.EndedActivityName})
+	}
 	if cfg.TriggerPollers != nil {
 		if repo := cfg.Database; repo != nil {
 			poller := triggers.NewTriggerPoller(
@@ -346,7 +357,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
 		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
+			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).WithChecks(checks).Fire,
 			activity.RegisterOptions{Name: triggers.EventFireActivityName},
 		)
 	} else {

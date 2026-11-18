@@ -412,3 +412,88 @@ func TestActivationSnapshotHoldsApprovalsDecideForADeclaredPermission(t *testing
 	require.NoError(t, err)
 	require.False(t, plain.Capabilities["approvals:decide"])
 }
+
+// laneChild is pr-review's cp_reader shape: a child workflow whose tool
+// bindings split inputs.repo, which only resolves for a real owner/name, never
+// for its empty default.
+const laneChild = `name: review
+inputs:
+  repos: {type: github.repository, multi: true, required: true, min_items: 1}
+  repo: {type: string, default: ''}
+  pr_number: {type: integer, default: 0}
+entry: [reader]
+nodes:
+  - id: reader
+    type: workflow
+    ref: builtin://autopilot-agent
+    args:
+      tools: [github__pr_list_files]
+      tool_params:
+        github__pr_list_files:
+          owner: "{{ inputs.repo.split('/')[0] }}"
+          repo: "{{ inputs.repo.split('/')[1] }}"
+          pull_number: '{{ inputs.pr_number }}'
+`
+
+// laneParent is pr-review-main-red's shape: its own trigger, and the child run
+// with the event's repository and pull request.
+const laneParent = `name: %s
+inputs:
+  repos: {type: github.repository, multi: true, required: true, min_items: 1}
+  repo: {type: string, default: ''}
+  pr_number: {type: integer, default: 0}
+triggers:
+- name: labelled
+  integration:
+    integration: github
+    events: [pull_request.labeled]
+    match: {repository: {input: repos}}
+  inputs:
+    repo: '{{ trigger.payload.attributes.repository }}'
+    pr_number: '{{ trigger.payload.data.pull_request.number }}'
+  prompt: go
+entry: [review]
+nodes:
+- id: review
+  type: workflow
+  ref: project://review
+  args:
+    repos: '{{ inputs.repos }}'
+    repo: '{{ inputs.repo }}'
+    pr_number: '{{ inputs.pr_number }}'
+`
+
+func TestActivationSnapshotWalksAChildOnlyWithWhatItsParentPasses(t *testing.T) {
+	// A child is read with the arguments its parent hands it, whichever ref
+	// sorts first. A child whose ref sorted before its parent's
+	// (project://review before project://review-lane; cp's
+	// pr-review-main-red and pr-review-priority lanes over pr-review) was
+	// walked under its bare defaults first, where inputs.repo is '' and the
+	// split fails, refusing the activation for a run that never happens.
+	for _, parent := range []string{"review-lane", "a-lane"} {
+		t.Run(parent, func(t *testing.T) {
+			repo := &MockRepository{}
+			repo.ListSettingsByKeyFunc = func(context.Context, string, string) ([]*db.Setting, error) { return nil, nil }
+			repo.GetUsableWorkflowBySlugFunc = func(_ context.Context, _, slug string) (*db.WorkflowDraft, error) {
+				if slug == "review" {
+					return &db.WorkflowDraft{Definition: laneChild}, nil
+				}
+				return nil, fmt.Errorf("no workflow %s", slug)
+			}
+			repo.GetWorkflowDraftBySlugFunc = repo.GetUsableWorkflowBySlugFunc
+			root, err := wfyaml.ParseWorkflow([]byte(fmt.Sprintf(laneParent, parent)))
+			require.NoError(t, err)
+			repos, err := structpb.NewValue([]any{"acme/api"})
+			require.NoError(t, err)
+			def := &pb.TriggerDefinition{
+				Workflow: "project://" + parent,
+				Params:   map[string]*structpb.Value{"repos": repos},
+				Source:   &pb.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: "labelled"},
+			}
+			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo}))
+			snap, err := svc.activationSnapshot(context.Background(), "owner", def, root)
+			require.NoError(t, err)
+			require.Contains(t, strings.Join(snap.Summary, "\n"), "Agent tool privileges: github__pr_list_files;")
+		})
+	}
+}

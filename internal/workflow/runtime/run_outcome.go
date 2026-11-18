@@ -16,10 +16,10 @@ import "go.temporal.io/sdk/workflow"
 //     run's attempts from the previous run's; the run id can, and it is kept
 //     across continue-as-new and a resume, and shared by spawned sub-agents
 //     (their telemetry's RootRunID).
-//   - its start is the fallback for an attempt recorded with no run id (one
-//     written before the column, or by an activity that names no run). A
-//     continue-as-new successor carries it: its own execution started later
-//     than the run it continues.
+//   - its start is the fallback only for a run with no id (a workflow that
+//     predates it); a run with an id never reads an attempt recorded without
+//     one, which may be the previous run's. A continue-as-new successor
+//     carries it: its own execution started later than the run it continues.
 
 // runStartedAtMs is when the run began, in unix ms: the start of the run a
 // continue-as-new successor continues, else this execution's. Read from

@@ -269,14 +269,72 @@ func TestFirstHandledNodeFailure_ContinueAsNewKeepsTheRunsAttempts(t *testing.T)
 		t.Fatalf("the next run reads only its own attempts: %+v, %v", got, err)
 	}
 
-	// An attempt recorded with no run id (an activity that names none) is
-	// the run's when it falls in the run's window, and not otherwise.
+	// An attempt recorded with no run id (before the column) is never a
+	// known run's, in its window or not: it may be the previous run's.
 	insert("legacy-old", "wf-c1", "", "old_node", at(500), false, "before the run")
-	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-c1", "run-d", at(895)); err != nil || got != nil {
-		t.Fatalf("an unnamed attempt before the run's start is not the run's: %+v, %v", got, err)
-	}
 	insert("legacy-in", "wf-c1", "", "unnamed", at(901), false, "an unnamed failure")
-	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-c1", "run-d", at(895)); err != nil || got == nil || got.Node != "unnamed" {
-		t.Fatalf("an unnamed attempt in the run's window is the run's: %+v, %v", got, err)
+	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-c1", "run-d", at(895)); err != nil || got != nil {
+		t.Fatalf("an unnamed attempt is not a known run's: %+v, %v", got, err)
+	}
+	// A run with no id (one that predates it) still reads its window.
+	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-c1", "", at(895)); err != nil || got == nil || got.Node != "unnamed" {
+		t.Fatalf("a run with no id reads the attempts in its window: %+v, %v", got, err)
+	}
+}
+
+// reliant#2863 R2.B2: a FailStep failure the previous run tolerated, recorded
+// inside the clock-skew allowance before a clean run began on the reused root
+// workflow id, is not the clean run's. The row is the one the runtime writes
+// for FailStep: it names its run, and an attempt that names none (as FailStep
+// rows did) is never attributed to a known run by its time alone.
+func TestFirstHandledNodeFailure_AdjacentRunsFailStepIsNotTheCleanRuns(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	seedChat(t, env, "chat-failstep")
+	if err := store.InsertWorkflowIfAbsent(ctx, env.ORM, newWorkflow("wf-f1", "chat-failstep", nil, core.Active(), l2Base)); err != nil {
+		t.Fatal(err)
+	}
+	at := func(ms int) time.Time { return l2Base.Add(time.Duration(ms) * time.Millisecond) }
+	insert := func(id, run, node, activity string, created time.Time, ok bool, errMsg string) {
+		t.Helper()
+		exec := &core.StepExecution{
+			ID: id, WorkflowID: "wf-f1", StepID: node, ActivityName: activity,
+			NodePath: nstr(node), CreatedAt: created, Success: nbool(ok), Attempt: ptr(int32(1)),
+		}
+		if run != "" {
+			exec.RunID = nstr(run)
+		}
+		if errMsg != "" {
+			exec.ErrorMessage = nstr(errMsg)
+		}
+		if err := store.InsertStepExecution(ctx, env.ORM, exec); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+	const cfgErr = "step cannot run as configured: CEL evaluation failed for step post: no such key: channel"
+	successorStart := at(100_000)
+	since := successorStart.Add(-5 * time.Second)
+	insert("next-ok", "run-next", "fetch", "Action", at(100_200), true, "")
+
+	// The previous run's tolerated FailStep, 1s before the clean run began.
+	insert("prior-failstep", "run-prior", "post", "FailStep", at(99_000), false, cfgErr)
+	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-f1", "run-next", since); err != nil || got != nil {
+		t.Fatalf("the previous run's FailStep is not the clean run's: %+v, %v", got, err)
+	}
+	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-f1", "run-prior", at(90_000)); err != nil || got == nil || got.Node != "post" {
+		t.Fatalf("the previous run reads its own FailStep: %+v, %v", got, err)
+	}
+
+	// The same failure recorded with no run id, inside the window.
+	insert("prior-failstep-unnamed", "", "notify", "FailStep", at(99_500), false, cfgErr)
+	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-f1", "run-next", since); err != nil || got != nil {
+		t.Fatalf("an unnamed FailStep in the window is not the clean run's: %+v, %v", got, err)
+	}
+
+	// The clean run's own FailStep, tolerated, is its handled failure.
+	insert("next-failstep", "run-next", "report", "FailStep", at(100_400), false, cfgErr)
+	insert("next-after", "run-next", "wrap_up", "Action", at(100_600), true, "")
+	if got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-f1", "run-next", since); err != nil || got == nil || got.Node != "report" {
+		t.Fatalf("the run's own FailStep is its handled failure: %+v, %v", got, err)
 	}
 }

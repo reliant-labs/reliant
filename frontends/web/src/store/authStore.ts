@@ -7,6 +7,8 @@ import { setTelemetryUserId } from '@/lib/telemetry'
 import { trackEvent } from '@/lib/analytics'
 import { queryClient } from '@/lib/query-client'
 import { setSessionOwner } from '@/lib/auth/sessionOwner'
+import { bindActiveOrgUser } from '@/store/activeOrgStore'
+import { API_KEY_USER_ID } from '@/lib/auth/apiKeyUser'
 import { getReaderSession, setReaderPrincipal } from '@/components/Forge/AuditedAccess/readerSession'
 import {
   startOAuthSignIn,
@@ -1053,7 +1055,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     localStorage.setItem('reliant-api-key', apiKey)
     set({
       user: {
-        id: 'apikey-user',
+        id: API_KEY_USER_ID,
         email: 'apikey@localhost',
         email_confirmed_at: new Date().toISOString(),
         is_anonymous: false,
@@ -1073,7 +1075,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       logger.info('[AuthStore] Restoring API key session')
       set({
         user: {
-          id: 'apikey-user',
+          id: API_KEY_USER_ID,
           email: 'apikey@localhost',
           email_confirmed_at: new Date().toISOString(),
           is_anonymous: false,
@@ -1188,5 +1190,12 @@ const readerId = (state: Pick<AuthState, 'user' | 'session'>) => {
 }
 setReaderPrincipal(readerId(useAuthStore.getState()))
 useAuthStore.subscribe((state, previous) => {
-  if (readerId(state) !== readerId(previous) || readerId(state) === 'apikey-user') setReaderPrincipal(readerId(state))
+  if (readerId(state) !== readerId(previous) || readerId(state) === API_KEY_USER_ID) setReaderPrincipal(readerId(state))
 })
+
+// The active org is the signed-in person's (store/activeOrgStore). Bound here,
+// at the same synchronous boundary, so no read between a sign-in and the
+// ActiveOrgBinding's next render sees the previous person's org, or no person
+// at all (lib/orgScope would take that for "signed out: nothing to wait for").
+bindActiveOrgUser(useAuthStore.getState().user?.id ?? null)
+useAuthStore.subscribe((state) => bindActiveOrgUser(state.user?.id ?? null))

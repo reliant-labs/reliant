@@ -2043,6 +2043,31 @@ func (r *Repo) DeleteRepo(ctx context.Context, id string) error {
 	return store.RemoveRepo(ctx, r.ORM(), id)
 }
 
+// SetRepoForgeApps records the forge apps a daemon found in a repo
+// (repo_forge_apps). complete (the daemon's walk covered the repo) replaces
+// the set and stamps repos.forge_apps_scanned_at; a partial walk only adds and
+// renames, since what it did not reach may still be there. A repo deleted
+// meanwhile is a no-op.
+func (r *Repo) SetRepoForgeApps(ctx context.Context, repoID string, apps []core.RepoForgeApp, complete bool) error {
+	if repoID == "" {
+		return fmt.Errorf("repo ID cannot be empty")
+	}
+	// ReadCommitted: the repo's row lock, taken first, is what serializes
+	// two reports for one repo.
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		return store.SetRepoForgeApps(ctx, r.ORM(), repoID, apps, complete)
+	})
+}
+
+// ListRepoForgeAppsByProject returns every forge app recorded in the
+// project's repos, ordered by repo and subpath.
+func (r *Repo) ListRepoForgeAppsByProject(ctx context.Context, projectID string) ([]core.RepoForgeApp, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	return store.ListRepoForgeAppsByProject(ctx, r.ORM(), projectID)
+}
+
 func (r *Repo) CreateSetting(ctx context.Context, setting *Setting) error {
 	if setting == nil {
 		return fmt.Errorf("setting cannot be nil")

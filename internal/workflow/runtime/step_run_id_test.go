@@ -4,6 +4,7 @@ package runtime
 import (
 	"testing"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -43,6 +44,22 @@ func TestStepExecutionRecordsTheRunItBelongsTo(t *testing.T) {
 		if tc.want == "" && exec.RunID != nil {
 			t.Errorf("%s: a step that names no run must record NULL, not %q", tc.name, *exec.RunID)
 		}
+	}
+
+	// FailStep's input (a {{ }} expression that did not evaluate) names the
+	// run too: its row is the node's failed attempt, and without the run id
+	// a tolerated one would be read as the next run's on the reused
+	// workflow id (reliant#2863 R2.B2).
+	executor := &StepExecutor{
+		chatID: "chat", workflowID: "wf",
+		execContext: &ExecutionContext{Telemetry: &types.RunTelemetry{RunID: "run-root", RootRunID: "run-root"}},
+	}
+	failInfo := extractActivityInputInfo(executor.failStepInput(&reliantv1.Node{Id: "post", Type: "action"}, "boom"))
+	if failInfo.RunID != "run-root" {
+		t.Errorf("FailStep: extractActivityInputInfo().RunID = %q, want run-root", failInfo.RunID)
+	}
+	if exec := buildStepExecution(stepAttempt{WorkflowID: "wf", StepID: "post", ActivityType: "FailStep", Scope: failInfo}); exec.RunID == nil || *exec.RunID != "run-root" {
+		t.Errorf("FailStep: the step row's run_id = %v, want run-root", exec.RunID)
 	}
 
 	// A flat input (not v3) carrying its telemetry at the top level.

@@ -23,6 +23,12 @@
  * shell has no onboarding). The link opens a new tab and leaves this user's
  * onboarding unfinished: the agent side still onboards them if they come back.
  * Hidden in the desktop app, whose window must not navigate away (AppsPage).
+ *
+ * On the forge host itself the wizard runs before the console
+ * (OnboardingGate), so a link to the console would loop back here. There the
+ * same choice is a skip: it is remembered for this user in this browser
+ * (markForgeSetupSkipped), the server's onboarding stays unfinished, and the
+ * user goes on to the page they were going to (`returnTo`) or the Apps list.
  */
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
@@ -31,13 +37,15 @@ import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { trackEvent } from "@/lib/analytics";
 import { isElectron } from "@/lib/constants";
-import { forgeAppOrigin } from "@/lib/shell";
+import { forgeAppOrigin, isForgeShell } from "@/lib/shell";
 import { useAuthStore } from "@/store/authStore";
 import { leaveOnboarding } from "./leaveOnboarding";
+import { markForgeSetupSkipped } from "./onboardingGate";
 
-export function OnboardingEscapeHatch({ className }: { className?: string }) {
+export function OnboardingEscapeHatch({ className, returnTo }: { className?: string; returnTo?: string }) {
   const navigate = useNavigate();
   const signOut = useAuthStore((s) => s.signOut);
+  const userId = useAuthStore((s) => (s as { user?: { id?: string } | null }).user?.id);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,7 +95,21 @@ export function OnboardingEscapeHatch({ className }: { className?: string }) {
           {isSigningOut ? "Signing out…" : "Sign out"}
         </button>
       </div>
-      {!isElectron() && (
+      {isForgeShell() ? (
+        <button
+          type="button"
+          onClick={() => {
+            trackEvent("onboarding_forge_console_opened", { skipped: true });
+            markForgeSetupSkipped(userId);
+            void leaveOnboarding("skipped_to_forge_console", navigate, undefined, returnTo);
+          }}
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          data-testid="onboarding-forge-console-skip"
+        >
+          Only here to deploy apps? Skip to the Forge console
+          <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      ) : !isElectron() && (
         <a
           href={`${forgeAppOrigin()}/apps`}
           target="_blank"

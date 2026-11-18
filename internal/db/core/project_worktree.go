@@ -336,6 +336,20 @@ type Repo struct {
 	RemoteURL    *string   `json:"remote_url,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	// ForgeAppsScannedAt is when a daemon last reported a complete scan of
+	// the repo for forge apps (repo_forge_apps). nil is unknown, never "none".
+	ForgeAppsScannedAt *time.Time `json:"forge_apps_scanned_at,omitempty"`
+}
+
+// RepoForgeApp is one forge app in a repo (repo_forge_apps): a forge.yaml,
+// the directory it sits in and the `name` it declares.
+type RepoForgeApp struct {
+	RepoID string `json:"repo_id"`
+	// Subpath is the forge.yaml's directory relative to the repo root,
+	// "/"-separated; "" is the root.
+	Subpath string `json:"subpath"`
+	// Name is forge.yaml's `name`, the app's name in the project's org.
+	Name string `json:"name"`
 }
 
 // ProjectFilters contains options for filtering projects.

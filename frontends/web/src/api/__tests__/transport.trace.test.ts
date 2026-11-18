@@ -80,23 +80,11 @@ function captureExport(body: unknown): void {
   }
 }
 
-async function flushedSpans(): Promise<OtlpSpan[]> {
-  // The fetch span ends after the response body is read, so flush until the
-  // batch processor has it.
-  const provider = trace.getTracerProvider() as unknown as {
-    getDelegate(): { forceFlush(): Promise<void> };
-  };
-  await vi.waitFor(
-    async () => {
-      await provider.getDelegate().forceFlush();
-      expect(exported.length).toBeGreaterThan(0);
-    },
-    { timeout: 5000, interval: 100 },
-  );
-  return exported.flatMap((e) => e.spans);
-}
-
-// The exported span for one request, waiting for the batch processor.
+// The exported span for one request, waiting for the batch processor. The
+// SDK's fetch span ends only once the response's resource timing is in (some
+// 300 ms after the call), and other spans (the runtime's frame stalls) may be
+// exported before it, so wait for the request's own span, never for "any
+// export".
 async function exportedSpanFor(match: (url: string) => boolean): Promise<OtlpSpan[]> {
   const provider = trace.getTracerProvider() as unknown as {
     getDelegate(): { forceFlush(): Promise<void> };
@@ -176,13 +164,13 @@ describe("an RPC through the full interceptor chain", () => {
     expect(traceparent).toMatch(TRACEPARENT_RE);
     const [, traceId, spanId] = (traceparent as string).split("-");
 
-    const all = await flushedSpans();
+    const spans = await exportedSpanFor(
+      (url) => url === `${API}/${ChatService.typeName}/ListChats`,
+    );
     // reliant no longer opens its own `grpc.<service>/<method>` span.
+    const all = exported.flatMap((e) => e.spans);
     expect(all.filter((s) => s.name.startsWith("grpc."))).toEqual([]);
 
-    const spans = all.filter(
-      (s) => attr(s, "http.url") === `${API}/${ChatService.typeName}/ListChats`,
-    );
     // One RPC, one span: the SDK's fetch span. No second span from reliant.
     expect(spans).toHaveLength(1);
     const span = spans[0];
@@ -197,7 +185,7 @@ describe("an RPC through the full interceptor chain", () => {
     expect(span.spanId).toBe(spanId);
 
     // The dashboards and alerts key on these (reliant-frontend_gen.json).
-    const resource = exported[0].resource;
+    const resource = exported.find((e) => e.spans.includes(span))?.resource ?? {};
     expect(resource["service.name"]).toBe("reliant-web");
     expect(resource["service.version"]).toBe("1.8.1");
     expect(resource["deployment.environment.name"]).toBe("prod");

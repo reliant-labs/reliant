@@ -2287,6 +2287,57 @@ message Workflow {
   // Attention correlates human action independently of lifecycle and outcome.
   // Only root unattended launch runs apply it. Absent preserves legacy behavior.
   WorkflowAttention attention = 25;
+  // Check makes the engine own one GitHub check run per run a trigger fires:
+  // created queued when the firing is recorded, in_progress when the first
+  // node starts, and concluded on every ending (see WorkflowCheck). Absent,
+  // the default, posts nothing.
+  WorkflowCheck check = 26;
+}
+
+// WorkflowCheck is a GitHub check run whose lifecycle the engine owns, posted
+// as the activation's GitHub identity (the Reliant App: GitHub lets only an
+// App write a check run).
+//
+// The engine creates the check `queued` when a trigger's firing resolves the
+// workflow (so a firing that waits for capacity or a machine shows), moves it
+// to `in_progress` when the run's first node starts, and concludes it on every
+// ending: success when the run completes and passes; failure when it fails,
+// routes to an `outcome: failure` node, cannot start, or its result cannot be
+// confirmed; cancelled when it is cancelled, superseded or skipped; timed_out
+// when it is still going at `timeout`. It never concludes neutral or skipped,
+// which a required check counts as passing. details_url is the run's page.
+//
+// One check per firing: a retried or resumed fire, a retried activity and a
+// resumed run all update the same check, and a re-run is a new firing and so
+// a new check. Only runs a trigger fires post one; a chat or builder start of
+// the same workflow does not.
+//
+// This message is the check's whole declaration, so a node-level `check:`
+// (one check per node or group, on the same lifecycle) can reuse it.
+message WorkflowCheck {
+  // Name is the check's name on GitHub, as a pull request's Checks tab shows
+  // it and a branch ruleset requires it ("reliant/ci"). A literal: a ruleset
+  // names a fixed check. 1 to 255 characters.
+  string name = 1;
+  // Repository is the repository the check is posted on, "owner/name": a
+  // template over `trigger`. Empty means the event's repository
+  // (trigger.payload.attributes.repository).
+  string repository = 2;
+  // HeadSha is the commit the check is posted on: a template over `trigger`
+  // rendering 40 hex characters. Empty means the event's head commit: the
+  // pull request's head, the check suite's or check run's head_sha, the
+  // workflow run's head_sha, or the commit a push moved the branch to.
+  string head_sha = 3;
+  // Output is the check's details: a template over the run's final scope
+  // (nodes, inputs, trigger, workflow, and run.status) evaluating to an
+  // object {title, summary, text?, annotations?}. annotations is a list of
+  // {path, start_line, end_line?, annotation_level, message, title?}; the
+  // engine sends them in batches of 50, GitHub's limit per request. Empty, or
+  // an evaluation that fails, reports a summary the engine writes itself.
+  string output = 4;
+  // Timeout bounds the check, from its firing: a check still not concluded
+  // then concludes timed_out. A Go duration from 1m to 72h; empty is 6h.
+  string timeout = 5;
 }
 
 // WorkflowAttention declares explicit transitions for one owner/project incident.

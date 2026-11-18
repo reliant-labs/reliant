@@ -10,6 +10,7 @@ import (
 	"github.com/openai/openai-go/v3"
 	"google.golang.org/genai"
 
+	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
@@ -50,4 +51,22 @@ func CredentialRejected(err error) bool {
 
 func rejectedStatus(code int) bool {
 	return code == http.StatusUnauthorized || code == http.StatusForbidden
+}
+
+// OAuthRefreshedStillRejected reports whether err is a provider refusing an
+// OAuth session AFTER the driver's own recovery refreshed it: the driver marked
+// the response (llm.MarkOAuthRefreshedStillRejected), which today only the
+// Claude subscription driver's request path does. Any other refusal — a driver
+// that does not refresh on a 401, or a 401 its recovery never got to — is
+// false, and keeps whatever handling it had.
+func OAuthRefreshedStillRejected(err error) bool {
+	if !CredentialRejected(err) {
+		return false
+	}
+	var anth *anthropic.Error
+	if errors.As(err, &anth) && llm.OAuthRefreshedStillRejectedResponse(anth.Response) {
+		return true
+	}
+	var oai *openai.Error
+	return errors.As(err, &oai) && llm.OAuthRefreshedStillRejectedResponse(oai.Response)
 }

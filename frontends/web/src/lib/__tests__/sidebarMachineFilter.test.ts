@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import {
   NO_MACHINE,
   chatMachineId,
@@ -9,6 +10,7 @@ import {
   countByMachine,
   effectiveMachineFilter,
   filterChatsByMachine,
+  filterProjectsByMachine,
   machineResolver,
   onlyMachine,
   toggleMachine,
@@ -127,5 +129,32 @@ describe("choosing machines", () => {
   it("shows one machine alone with Only", () => {
     expect(onlyMachine("cloud", options)).toEqual(["cloud"]);
     expect(onlyMachine("cloud", ["cloud"])).toBeNull();
+  });
+});
+
+describe("filterProjectsByMachine", () => {
+  const projects = [{ id: "on-cloud" }, { id: "on-laptop" }, { id: "chat-only" }, { id: "failed-clone" }, { id: "nowhere" }];
+  const checkouts = [
+    { project_id: "on-cloud", daemon_id: "cloud", install_state: ProjectInstallState.INSTALLING },
+    { project_id: "on-laptop", daemon_id: "laptop", install_state: ProjectInstallState.INSTALLED },
+    { project_id: "failed-clone", daemon_id: "cloud", install_state: ProjectInstallState.FAILED },
+  ];
+  const ids = (list: { id: string }[]) => list.map((p) => p.id);
+
+  it("lists every project with no filter, and while the checkouts are unknown", () => {
+    expect(filterProjectsByMachine(projects, null, checkouts, [])).toBe(projects);
+    expect(filterProjectsByMachine(projects, ["cloud"], undefined, [])).toBe(projects);
+  });
+
+  it("lists a project with a checkout on a selected machine or a listed chat, and hides the rest", () => {
+    expect(ids(filterProjectsByMachine(projects, ["cloud"], checkouts, [{ projectId: "chat-only" }]))).toEqual([
+      "on-cloud",
+      "chat-only",
+    ]);
+    expect(ids(filterProjectsByMachine(projects, ["laptop", "cloud"], checkouts, []))).toEqual(["on-cloud", "on-laptop"]);
+  });
+
+  it("does not count a failed clone as a checkout", () => {
+    expect(ids(filterProjectsByMachine(projects, ["cloud"], checkouts, []))).not.toContain("failed-clone");
   });
 });

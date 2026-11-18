@@ -26,9 +26,14 @@
 // it never needs a new thread to probe, decide or log, the one thing a full
 // table refuses.
 //
-// It reports and does nothing else. Freeing the table (killing the largest
-// tool tree, then restarting the daemon) is reliant#1919's self-heal step,
-// built on this signal later.
+// Self-heal (Config.Heal, Config.GiveUp; owner-approved 2026-11-18 on
+// reliant#1919). Once the machine has been degraded for HealAfter (5 minutes),
+// Heal runs once: the daemon stops its largest background command, the work
+// most likely to have filled the table, and the reason says what it stopped.
+// If the next probe, one Interval later, is still refused, GiveUp runs once: a
+// managed daemon exits so its container restarts, which frees the table. A
+// start that succeeds ends the spell; a later one heals afresh. Without Heal
+// the watchdog only reports.
 //
 //forge:exclude-contract: one concrete policy over this machine's own process starts; its only consumer is the daemon heartbeat, and tests drive it through Config.Probe
 package forkwatch
@@ -53,6 +58,10 @@ const (
 	DefaultThreshold = 3
 	// CodeProcessTableFull is MachineHealth.code while starts are refused.
 	CodeProcessTableFull = "process_table_full"
+	// DefaultHealAfter is how long the machine stays degraded before Heal
+	// runs: long enough that a table freeing itself (a build finishing) is
+	// not interrupted, short enough that agents are not stuck for long.
+	DefaultHealAfter = 5 * time.Minute
 	// probeTimeout bounds one probe. `true` exits at once; one that has not
 	// exited by then has still started, which is all the probe asks.
 	probeTimeout = 10 * time.Second
@@ -76,6 +85,17 @@ type Config struct {
 	// Trees names the largest process trees on the machine, for the reason;
 	// nil names none. It must not start a process.
 	Trees func(n int) string
+	// HealAfter is how long the machine stays degraded before Heal runs; 0
+	// is DefaultHealAfter.
+	HealAfter time.Duration
+	// Heal frees the process table, once per degraded spell: it stops what
+	// it can and describes what it stopped ("" for nothing). It runs on the
+	// watchdog's own thread and must not start a process. Nil: the watchdog
+	// only reports.
+	Heal func(ctx context.Context) string
+	// GiveUp is the last resort, run once when a start is still refused at
+	// the first probe after Heal ran, with the degraded reason. Nil: none.
+	GiveUp func(reason string)
 }
 
 // Watchdog probes process starts and keeps the machine's health. A nil
@@ -93,6 +113,13 @@ type Watchdog struct {
 	firstRefused time.Time
 	degraded     bool
 	reason       string
+	// degradedSince is when the spell began; healed and gaveUp are whether
+	// Heal and GiveUp ran in it, and healNote is what the reason says Heal
+	// did.
+	degradedSince time.Time
+	healed        bool
+	gaveUp        bool
+	healNote      string
 	// inconclusive is whether the last probe could not tell, logged once
 	// per run of them.
 	inconclusive bool
@@ -105,6 +132,9 @@ func New(cfg Config) *Watchdog {
 	}
 	if cfg.Threshold <= 0 {
 		cfg.Threshold = DefaultThreshold
+	}
+	if cfg.HealAfter <= 0 {
+		cfg.HealAfter = DefaultHealAfter
 	}
 	if cfg.Probe == nil {
 		cfg.Probe = defaultProbe()
@@ -163,10 +193,12 @@ func (w *Watchdog) Check(ctx context.Context) {
 
 	w.mu.Lock()
 	was := w.degraded
+	var heal, giveUp bool
 	switch {
 	case err == nil:
 		w.probed, w.refused, w.inconclusive = true, 0, false
 		w.degraded, w.reason = false, ""
+		w.healed, w.gaveUp, w.healNote = false, false, ""
 	case refused(err):
 		w.probed, w.inconclusive = true, false
 		if w.refused == 0 {
@@ -174,10 +206,21 @@ func (w *Watchdog) Check(ctx context.Context) {
 		}
 		w.refused++
 		if w.refused >= w.cfg.Threshold {
+			if !w.degraded {
+				w.degradedSince = now
+			}
 			w.degraded = true
 			// Rewritten on every refusal while degraded: the trees to
 			// name change as the machine does.
 			w.reason = w.describe(err)
+			// One remedy per probe: GiveUp only at a probe after the one
+			// that healed, so the kill gets an Interval to free the table.
+			switch {
+			case w.healed && !w.gaveUp && w.cfg.GiveUp != nil:
+				giveUp, w.gaveUp = true, true
+			case !w.healed && w.cfg.Heal != nil && now.Sub(w.degradedSince) >= w.cfg.HealAfter:
+				heal, w.healed = true, true
+			}
 		}
 	default:
 		if !w.inconclusive {
@@ -189,6 +232,14 @@ func (w *Watchdog) Check(ctx context.Context) {
 	degraded, reason, refusedN := w.degraded, w.reason, w.refused
 	w.mu.Unlock()
 
+	if heal {
+		w.heal(ctx, err, now)
+	}
+	if giveUp {
+		logging.ErrorContext(ctx, "forkwatch: this machine still cannot start processes after the self-heal; giving up",
+			"refused_in_a_row", refusedN, "reason", reason)
+		w.cfg.GiveUp(reason)
+	}
 	if degraded == was {
 		return
 	}
@@ -198,6 +249,29 @@ func (w *Watchdog) Check(ctx context.Context) {
 	} else {
 		logging.InfoContext(ctx, "forkwatch: this machine can start processes again; reporting it healthy")
 	}
+	select {
+	case w.changed <- struct{}{}:
+	default:
+	}
+}
+
+// heal runs Heal, outside w.mu (it may wait for a kill), and puts what it did
+// in the reason, which the heartbeat carries at once.
+func (w *Watchdog) heal(ctx context.Context, probeErr error, at time.Time) {
+	stopped := w.cfg.Heal(ctx)
+	note := fmt.Sprintf(" Self-heal at %s UTC, after %s degraded: ", at.UTC().Format(time.TimeOnly), w.cfg.HealAfter)
+	if stopped == "" {
+		note += "there was no background command of this machine's agents to stop."
+	} else {
+		note += "stopped the largest background command, " + stopped + "."
+	}
+	logging.WarnContext(ctx, "forkwatch: self-heal ran on a machine that cannot start processes", "stopped", stopped)
+	w.mu.Lock()
+	w.healNote = note
+	if w.degraded {
+		w.reason = w.describe(probeErr)
+	}
+	w.mu.Unlock()
 	select {
 	case w.changed <- struct{}{}:
 	default:
@@ -216,7 +290,7 @@ func (w *Watchdog) describe(err error) string {
 			s += " Largest process trees: " + trees + "."
 		}
 	}
-	return s
+	return s + w.healNote
 }
 
 // errText is the cause of err, "resource temporarily unavailable" rather than

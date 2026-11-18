@@ -503,7 +503,8 @@ prompt against it. Lists of names are strings, not objects: GitHub's ` + bt + `i
 
 GitHub is the fullest integration for automations. Besides ` + bt + `issues.opened` + bt + ` and the like it delivers ` + bt + `issues.labeled` + bt + `/` + bt + `unlabeled` + bt + `/` + bt + `reopened` + bt + `,
 ` + bt + `pull_request.labeled` + bt + `/` + bt + `unlabeled` + bt + `/` + bt + `reopened` + bt + ` (` + bt + `match: {label: ...}` + bt + `), ` + bt + `pull_request_review_comment.created` + bt + ` (inline diff comments; ` + bt + `match` + bt + ` ` + bt + `is_reply` + bt + `
-and ` + bt + `mentions_reliant` + bt + `), and ` + bt + `check_run.completed` + bt + ` / ` + bt + `check_suite.completed` + bt + ` / ` + bt + `workflow_run.completed` + bt + ` (` + bt + `conclusion` + bt + `, ` + bt + `branch` + bt + `, ` + bt + `app` + bt + `).
+and ` + bt + `mentions_reliant` + bt + `), and ` + bt + `check_run.completed` + bt + ` / ` + bt + `check_suite.completed` + bt + ` / ` + bt + `workflow_run.completed` + bt + ` (` + bt + `conclusion` + bt + `, ` + bt + `branch` + bt + `, ` + bt + `app` + bt + `),
+and ` + bt + `check_run.rerequested` + bt + ` / ` + bt + `check_suite.rerequested` + bt + ` (GitHub's Re-run button on the App's own checks; GitHub re-runs nothing itself).
 Its ` + bt + `type: action` + bt + ` nodes cover comments (` + bt + `issue.comment` + bt + `, ` + bt + `.update` + bt + `, ` + bt + `.list` + bt + `), atomic ` + bt + `issue.labels.add` + bt + `/` + bt + `remove` + bt + ` (prefer them to ` + bt + `issue.update` + bt + `,
 which replaces the whole label list and races), ` + bt + `issue.search` + bt + `, ` + bt + `labels.create` + bt + ` (idempotent, for pack setup) / ` + bt + `labels.list` + bt + `, ` + bt + `pr.create` + bt + `/` + bt + `update` + bt + `, ` + bt + `pr.reviews.list` + bt + `, ` + bt + `pr.review_comments.list` + bt + ` and
 ` + bt + `pr.review_comment.reply` + bt + `. There is no merge action, on purpose. Actions that change GitHub are withheld from an unattended run unless the
@@ -649,7 +650,52 @@ finally:
 - **On a cancel**, the run's in-flight steps are cancelled first, and a ` + bt + `run` + bt + ` node's command is stopped on its machine. Then finally runs, on its own budget, so its own commands are not cancelled. A run that does not stop within a few seconds of the cancel is hard-terminated without it.
 - **The same rules as on_failure:** guard ` + bt + `nodes.<main node>` + bt + ` reads (a cancel can stop the graph anywhere), no node id shared with the main graph, ` + bt + `finally` + bt + ` is a reserved id, no ` + bt + `outputs` + bt + `, ` + bt + `inputs` + bt + ` or nested handlers, no ` + bt + `approval` + bt + ` or ` + bt + `ask_question` + bt + `, a 5-minute budget, and an error in it is logged and never changes how the run ended. Make its steps idempotent: releasing a lease that is not held must succeed.
 - **A child's finally.** A workflow started by a ` + bt + `workflow:` + bt + ` node with ` + bt + `ref:` + bt + ` runs its own finally when it ends, in its own scope, before the parent's (` + bt + `release.finally.<id>` + bt + `).
-- **Test it.** Name its nodes ` + bt + `finally.<node>` + bt + ` in a scenario and assert ` + bt + `expect.finally: {ran, status, handler_failed}` + bt + `.`
+- **Test it.** Name its nodes ` + bt + `finally.<node>` + bt + ` in a scenario and assert ` + bt + `expect.finally: {ran, status, handler_failed}` + bt + `.
+
+### A GitHub check the engine owns: ` + bt + `check:` + bt + `
+
+A workflow-level ` + bt + `check:` + bt + ` makes every run a trigger fires post ONE GitHub check run, as the Reliant App, whose lifecycle the
+engine owns: do NOT write ` + bt + `github/check_run.create` + bt + `/` + bt + `update` + bt + ` nodes, an ` + bt + `on_failure` + bt + ` that concludes it, or a sweep for stuck
+checks. A branch ruleset can then require it by name. One workflow can be an agentic check (a code review) or a
+deterministic one (lint, tests); each is its own workflow with its own ` + bt + `check:` + bt + `, so each can be required and re-run alone.
+
+` + "```yaml" + `
+check:
+  name: reliant/ci                       # the check's name on GitHub; a ruleset requires it by this name
+  output: "{{ nodes.report.check }}"     # optional: {title, summary, text?, annotations?}
+  # repository: "{{ trigger.payload.attributes.repository }}"   # the default
+  # head_sha: "{{ trigger.payload.data.check_suite.head_sha }}" # default: the event's head commit
+  # timeout: 2h                          # default 6h, 1m..72h
+triggers:
+  - name: pr
+    integration: {integration: github, events: [pull_request.opened, pull_request.synchronize, pull_request.reopened]}
+` + "```" + `
+
+` + bt + `check: reliant/ci` + bt + ` (the name alone) is the short form.
+
+- **Lifecycle.** ` + bt + `queued` + bt + ` as soon as the firing is recorded (so a firing waiting for capacity or a waking machine
+  shows), ` + bt + `in_progress` + bt + ` when the run's first node starts, and concluded on EVERY ending: ` + bt + `success` + bt + ` when the run completes;
+  ` + bt + `failure` + bt + ` when it fails, routes to a node with ` + bt + `outcome: failure` + bt + `, cannot start, or pauses for more than 15 minutes (titled
+  "Reliant could not run this check" for an engine fault); ` + bt + `cancelled` + bt + ` when it is cancelled, skipped or superseded
+  (` + bt + `concurrency: {waiting: latest}` + bt + `); ` + bt + `timed_out` + bt + ` when it is still going at ` + bt + `timeout` + bt + `. Never ` + bt + `neutral` + bt + ` or ` + bt + `skipped` + bt + `, which a required
+  check counts as passing.
+- **The verdict is the run's.** The conclusion comes from how the run ended, not from ` + bt + `output` + bt + `. To fail the check when the
+  gate fails, route that path to a terminal node with ` + bt + `outcome: failure` + bt + `.
+- **Output.** ` + bt + `output` + bt + ` is evaluated when the run ends, in a finally handler's scope (` + bt + `nodes` + bt + `, ` + bt + `inputs` + bt + `, ` + bt + `trigger` + bt + `, ` + bt + `workflow` + bt + `,
+  and ` + bt + `run.status` + bt + `), and must be an object with ` + bt + `title` + bt + ` and ` + bt + `summary` + bt + ` (markdown), optionally ` + bt + `text` + bt + ` and ` + bt + `annotations` + bt + `: a list of
+  ` + bt + `{path, start_line, end_line?, annotation_level: notice|warning|failure, message, title?}` + bt + `, sent 50 per request. A
+  ` + bt + `run` + bt + ` node and an agent node work the same way: build the object in a ` + bt + `compute` + bt + ` node from either's outputs, or have
+  an agent return it as its structured response. Guard reads of nodes that may not have run (` + bt + `nodes.?gate.exit_code.orValue(-1)` + bt + `); an output that fails
+  to evaluate falls back to the engine's own summary. ` + bt + `details_url` + bt + ` is always the run's page.
+- **Where.** ` + bt + `repository` + bt + ` and ` + bt + `head_sha` + bt + ` are templates over ` + bt + `trigger` + bt + `, rendered when the firing is recorded. By default the
+  head is the pull request's head, the check suite's or check run's head_sha, the workflow run's head_sha, or the
+  commit a push moved its branch to. A firing that names no repository or commit posts no check, and the run still runs.
+- **Who.** The activation's GitHub identity: it must act as the Reliant bot (the default), since GitHub lets only an App
+  write a check run.
+- **One check per firing.** A retried or resumed fire and a resumed run update the same check; a re-run is a new firing
+  and a new check. Only runs an event trigger fires post one (GitHub events, webhooks): a chat, a schedule or a builder
+  test does not.
+- **Test it.** A scenario runs the graph; what the check concludes follows from how the run ends.`
 }
 
 func generateGotchas() string {

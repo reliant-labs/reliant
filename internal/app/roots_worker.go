@@ -6,6 +6,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/workersetup"
+	"github.com/reliant-labs/reliant/internal/workflowcheck"
 )
 
 // The worker root's field order is its STOP order: the first field stops
@@ -18,8 +19,9 @@ import (
 //     re-dispatches them to a live replica rather than waiting out their
 //     heartbeat timeout (workersetup.Worker). It is also the node whose
 //     Ready ("polling") holds the process's readiness until it polls.
-//  2. workflow_event_relay, account_usage_poller, write_ledger_prune,
-//     ledger_retention: the background loops, which take no Temporal tasks;
+//  2. workflow_event_relay, workflow_check_syncer, account_usage_poller,
+//     write_ledger_prune, ledger_retention: the background loops, which take
+//     no Temporal tasks;
 //     each ends with its context.
 //  3. account_recorder: after every loop, because the activities record into
 //     it; its Close flushes the rate-limit state they recorded. It is a
@@ -57,6 +59,9 @@ import (
 type Worker struct {
 	TemporalWorker *workersetup.Worker
 	Relay          *workflowevent.Relay
+	// Checks writes the GitHub check runs workflows' `check:` blocks
+	// declare (workflowcheck), a background loop like Relay.
+	Checks *workflowcheck.Syncer
 	// PolicyWatcher wakes the chats an org policy paused once the org's
 	// policy changes (orgpolicy.Watcher); nil with no policies.
 	PolicyWatcher *OrgPolicyWatcher

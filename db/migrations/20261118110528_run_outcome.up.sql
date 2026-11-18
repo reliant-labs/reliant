@@ -1,7 +1,7 @@
 -- forge:backward-compatible — three new nullable columns with no default; the previous release neither reads nor writes them, and its inserts and updates name their columns.
 
 -- Migration: run_outcome
--- Created: 2026-11-17T22:56:40Z
+-- Created: 2026-11-18T11:05:28Z
 --
 -- A run's outcome, beside its lifecycle status (reliant#2753). A run whose own
 -- failure path ran — a node failed and the run went on past it — ends

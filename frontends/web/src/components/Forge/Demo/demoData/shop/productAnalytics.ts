@@ -55,7 +55,7 @@ import {
 } from "./audienceActivity";
 
 /** The dashboards whose sql panels this module answers. */
-export const PRODUCT_ANALYTICS_DASHBOARDS: ReadonlySet<string> = new Set(["overview", "users", "product", "acquisition"]);
+export const PRODUCT_ANALYTICS_DASHBOARDS: ReadonlySet<string> = new Set(["overview", "product-overview", "users", "product", "acquisition"]);
 
 type Row = { group: Record<string, string>; values: (number | null)[] };
 interface Answer {
@@ -401,7 +401,116 @@ function trafficFigures(q: Q) {
   return { t, bounce: share(bounced, t.visits) };
 }
 
+// ── The Product analytics Overview (forge obsbuiltin.ProductOverview) ──────
+//
+// forge builds each Overview figure from the statement of the tab it links to,
+// so where it shares a statement the answer here is that tab's answer (the
+// visitors and sign-ups are Acquisition's, the funnel and bounce Product's,
+// stickiness and the retention grid Users'), and the rest are the same
+// definitions over the same audience.
+
+const attributedSignups = (q: Q, us = usersOf(q)) => signups(us, q.from, q.to).filter((a) => a.channel !== UNATTRIBUTED).length;
+
+function PRODUCT_OVERVIEW_ANSWERS(): Record<string, (q: Q) => Answer> {
+  const O = "product-overview";
+  return {
+    [`${O}/visitors`]: (q) => ANSWERS["acquisition/visitors"](q),
+    [`${O}/visitors.trend`]: (q) => ANSWERS["acquisition/visitors.trend"](q),
+    [`${O}/signups`]: (q) => ANSWERS["acquisition/signups"](q),
+    [`${O}/signups.trend`]: (q) => ANSWERS["acquisition/signups.trend"](q),
+    [`${O}/active`]: (q) => {
+      const us = usersOf(q);
+      const last = dauWauMau(us, dayStart(q.to - 1), q.to).at(-1);
+      return figures(["Active users", active(us, q.from, q.to)], ["DAU", last?.dau ?? null], ["WAU", last?.wau ?? null], ["MAU", last?.mau ?? null]);
+    },
+    [`${O}/active.trend`]: (q) => {
+      const us = usersOf(q);
+      return perDay(q, "Active users", (from, to) => active(us, from, to));
+    },
+    [`${O}/conversion`]: (q) => ANSWERS["acquisition/visit-to-signup"](q),
+    [`${O}/conversion.trend`]: (q) => {
+      const us = usersOf(q);
+      return perDay(q, "Visit to sign-up", (from, to) => share(attributedSignups({ ...q, from, to }, us), traffic({ ...q, from, to }).visitors) ?? 0);
+    },
+    // Each week's active users: new (signed up that week) and returning (the rest).
+    [`${O}/active-new-returning`]: (q) => {
+      const us = usersOf(q);
+      const points = [];
+      for (let w = weekStart(q.from); w < q.to; w += 7 * DAY) {
+        const from = w;
+        const to = Math.min(w + 7 * DAY, q.to);
+        let fresh = 0;
+        let all = 0;
+        for (const u of us) {
+          const seen = new Set(u.sessions.filter((s) => within(s, from, to)).map((s) => s.account));
+          all += seen.size;
+          fresh += u.accounts.filter((a) => a.signedUp && a.createdAtMs >= w && a.createdAtMs < w + 7 * DAY && seen.has(a.index)).length;
+        }
+        points.push({ at: w, values: { New: fresh, Returning: all - fresh } });
+      }
+      return series(points, WEEK_BUCKET, "UTC");
+    },
+    [`${O}/attention-activation`]: (q) => {
+      const su = signups(usersOf(q), q.from, q.to);
+      return figures(["Activation rate", share(su.filter((a) => activated(a, q.now) && a.activationAtMs! <= q.now).length, su.length)]);
+    },
+    [`${O}/attention-bounce`]: (q) => ANSWERS["product/bounce"](q),
+    [`${O}/attention-stickiness`]: (q) => ANSWERS["users/stickiness"](q),
+    [`${O}/funnel`]: (q) => ANSWERS["product/funnel-activation"](q),
+    [`${O}/top-channels`]: (q) => {
+      const t = traffic(q);
+      const visitors = channelVisitors(t);
+      const su = countBy(signups(usersOf(q), q.from, q.to), (a) => a.channel);
+      const rows = [...CHANNELS, UNATTRIBUTED].map((channel) => {
+        const v = visitors.get(channel) ?? 0;
+        const s = su.get(channel)?.length ?? 0;
+        return { v, s, row: { group: { Channel: channel }, values: [v, s, pct(s, v, 2)] } };
+      });
+      return { columns: ["Visitors", "Sign-ups", "Conversion %"], rows: rows.filter((r) => r.v > 0 || r.s > 0).sort((a, b) => b.v - a.v || b.s - a.s).map((r) => r.row) };
+    },
+    [`${O}/top-channels.trend`]: (q) => ANSWERS["acquisition/visitors-by-channel"](q),
+    [`${O}/retention`]: (q) => {
+      const full = ANSWERS["users/retention-cohorts"](q);
+      // The Overview's grid: the last 6 cohorts, their first 6 weeks (the whole grid is on Users).
+      return { columns: full.columns.slice(0, 6), rows: (full.rows ?? []).slice(-6).map((r) => ({ group: r.group, values: r.values.slice(0, 6) })) };
+    },
+    [`${O}/top-pages`]: (q) => ({
+      columns: ["Visitors"],
+      rows: pages(q).rows.filter((r) => r.visitors > 0).sort((a, b) => b.visitors - a.visitors || a.route.localeCompare(b.route)).slice(0, 10).map((r) => ({ group: { Route: r.route }, values: [r.visitors] })),
+    }),
+    [`${O}/top-pages.trend`]: (q) => {
+      const reach = new Map(ROUTES.map((r) => [r.route, r.reach]));
+      return series(
+        daysOf(q.from, q.to).flatMap((day) => {
+          const t = traffic({ ...q, from: Math.max(day, q.from), to: Math.min(day + DAY, q.to) });
+          return [...reach].map(([route, r]) => ({ at: day, group: { route }, values: { Visitors: Math.round(t.fractional * r) } }));
+        }),
+        86400,
+        "UTC"
+      );
+    },
+    [`${O}/top-features`]: (q) => ({
+      columns: ["People", "Events"],
+      rows: eventsByName(q)
+        .filter((r) => !/^(page_viewed|auth_|flag_evaluated)/.test(r.name))
+        .sort((a, b) => b.persons - a.persons || a.name.localeCompare(b.name))
+        .slice(0, 10)
+        .map((r) => ({ group: { Event: r.name }, values: [r.persons, r.events] })),
+    }),
+  };
+}
+
+// The New and Returning figures' subtitles (subtitleSql: "since <date>" while
+// sign-ups are reported only from inside the range). shop has reported its
+// sign-ups for its whole history, so none applies: an empty answer draws none.
+const NO_SUBTITLE = (): Answer => ({ columns: [], rows: [] });
+const SUBTITLE_ANSWERS: Record<string, (q: Q) => Answer> = Object.fromEntries(
+  ["users/new", "users/returning", "overview/new-7d", "overview/returning-7d", "product-overview/active-new-returning"].map((key) => [`${key}.subtitle`, NO_SUBTITLE])
+);
+
 const ANSWERS: Record<string, (q: Q) => Answer> = {
+  ...PRODUCT_OVERVIEW_ANSWERS(),
+  ...SUBTITLE_ANSWERS,
   // Overview: Traffic.
   "overview/live-visitors": (q) => figures(["Visitors now", Math.round(visitorMix(q.envs, q.to - 7 * MINUTE, q.to).visitors)]),
   "overview/visitors": (q) => figures(["Visitors", traffic(q).visitors]),

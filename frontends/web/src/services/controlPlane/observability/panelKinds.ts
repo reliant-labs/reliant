@@ -5,7 +5,7 @@
  * Any other kind is one a newer forge added, drawn as "not yet", never as an
  * error, and never sent to QueryPanel.
  */
-export const DRAWN_KINDS: ReadonlySet<string> = new Set(["line", "number", "table", "bar", "heatmap", "sql", "postgres", "search", "text", "funnel", "issues", "sessions"]);
+export const DRAWN_KINDS: ReadonlySet<string> = new Set(["line", "number", "table", "bar", "heatmap", "sql", "postgres", "search", "text", "funnel", "issues", "sessions", "attention"]);
 
 /**
  * Whether a panel of `kind` runs a query: not a search (a link), a text panel
@@ -13,5 +13,6 @@ export const DRAWN_KINDS: ReadonlySet<string> = new Set(["line", "number", "tabl
  * AppDatabaseService.QueryDatabasePanel; every other one is QueryPanel.
  */
 export function panelRunsQuery(kind: string): boolean {
-  return DRAWN_KINDS.has(kind) && kind !== "search" && kind !== "text";
+  // An attention panel reads the figures it watches, never a query of its own.
+  return DRAWN_KINDS.has(kind) && kind !== "search" && kind !== "text" && kind !== "attention";
 }
