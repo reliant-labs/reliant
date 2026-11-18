@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -174,6 +175,10 @@ type fakeTriggerService struct {
 	fired    string
 	gotLimit int32
 	gotPages int
+
+	gotOutcomes []reliantv1.TriggerEventOutcome
+	// ignoreOutcomes plays a server that predates the outcome filter.
+	ignoreOutcomes bool
 }
 
 func (f *fakeTriggerService) GetTrigger(_ context.Context, r *connect.Request[reliantv1.GetTriggerRequest]) (*connect.Response[reliantv1.GetTriggerResponse], error) {
@@ -204,11 +209,22 @@ func (f *fakeTriggerService) ListTriggerEvents(_ context.Context, r *connect.Req
 	defer f.mu.Unlock()
 	f.gotLimit = r.Msg.GetLimit()
 	f.gotPages++
+	f.gotOutcomes = r.Msg.GetOutcomes()
 	limit := int(r.Msg.GetLimit())
 	if limit <= 0 {
 		limit = 50
 	}
 	events, next := f.events, ""
+	if len(r.Msg.GetOutcomes()) > 0 && !f.ignoreOutcomes {
+		events = nil
+		for _, ev := range f.events {
+			for _, o := range r.Msg.GetOutcomes() {
+				if ev.GetOutcome() == o {
+					events = append(events, ev)
+				}
+			}
+		}
+	}
 	if len(events) > limit {
 		events, next = events[:limit], "more"
 	}
@@ -289,7 +305,84 @@ func TestTriggerEventsReadsOnePageAndZeroLimitIsTheServerDefault(t *testing.T) {
 	assert.Equal(t, 1, trig.gotPages, "one page, though the server has more")
 	assert.EqualValues(t, 2, trig.gotLimit)
 	assert.Equal(t, 2, strings.Count(stdout, "chat-"))
+	assert.Empty(t, trig.gotOutcomes, "no --outcome, no filter")
 }
+
+// withOutcomes gives the harness's five events the outcomes pending, launched,
+// failed, pending, skipped, newest first.
+func withOutcomes(trig *fakeTriggerService) {
+	outcomes := []reliantv1.TriggerEventOutcome{
+		reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_PENDING,
+		reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_LAUNCHED,
+		reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_FAILED,
+		reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_PENDING,
+		reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_SKIPPED,
+	}
+	for i, ev := range trig.events {
+		ev.Outcome = outcomes[i]
+	}
+}
+
+// --outcome becomes the request's outcome filter, repeated or comma-separated,
+// and the server filters before it applies --limit.
+func TestTriggerEventsOutcomeFlagFiltersTheRequest(t *testing.T) {
+	h, trig := newTriggerHarness(t)
+	withOutcomes(trig)
+
+	stdout, stderr, err := h.run(t, "", "trigger", "events", "nightly", "--outcome", "pending")
+	require.NoError(t, err, stderr)
+	assert.Equal(t, []reliantv1.TriggerEventOutcome{reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_PENDING}, trig.gotOutcomes)
+	assert.Equal(t, 2, strings.Count(stdout, "pending"))
+	assert.Equal(t, "chat-1chat-4", strings.Join(regexpChats.FindAllString(stdout, -1), ""))
+	assert.Empty(t, stderr)
+
+	trig.gotPages = 0
+	stdout, stderr, err = h.run(t, "", "trigger", "events", "nightly",
+		"--outcome", "FAILED,skipped", "--outcome", "pending", "--outcome", "failed", "--limit", "2")
+	require.NoError(t, err, stderr)
+	assert.Equal(t, []reliantv1.TriggerEventOutcome{
+		reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_FAILED,
+		reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_SKIPPED,
+		reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_PENDING,
+	}, trig.gotOutcomes, "case-insensitive, duplicates collapse, order kept")
+	assert.EqualValues(t, 2, trig.gotLimit)
+	assert.Equal(t, 1, trig.gotPages, "still one page")
+	assert.Equal(t, 2, strings.Count(stdout, "chat-"))
+
+	trig.events = trig.events[1:2] // only a launched firing left
+	stdout, stderr, err = h.run(t, "", "trigger", "events", "nightly", "--outcome", "pending")
+	require.NoError(t, err, stderr)
+	assert.Equal(t, "No firings with that outcome.\n", stdout)
+}
+
+// An unknown outcome is refused before any request, naming the words it takes.
+func TestTriggerEventsRejectsAnUnknownOutcome(t *testing.T) {
+	h, trig := newTriggerHarness(t)
+
+	for _, bad := range []string{"bogus", "pending,", "unspecified"} {
+		_, _, err := h.run(t, "", "trigger", "events", "nightly", "--outcome", bad)
+		require.Error(t, err, bad)
+		assert.Contains(t, err.Error(), "invalid --outcome ")
+		assert.Contains(t, err.Error(), "want one of pending, launched, skipped, failed")
+	}
+	assert.Zero(t, trig.gotPages, "no request for an invalid filter")
+}
+
+// A server that ignored the filter must not pass for a filtered answer: the CLI
+// keeps only the matches and warns that the page was not filtered.
+func TestTriggerEventsFiltersAgainstAServerThatIgnoresTheOutcome(t *testing.T) {
+	h, trig := newTriggerHarness(t)
+	withOutcomes(trig)
+	trig.ignoreOutcomes = true
+
+	stdout, stderr, err := h.run(t, "", "trigger", "events", "nightly", "--outcome", "pending")
+	require.NoError(t, err, stderr)
+	assert.Equal(t, "chat-1chat-4", strings.Join(regexpChats.FindAllString(stdout, -1), ""))
+	assert.NotContains(t, stdout, "launched")
+	assert.Contains(t, stderr, "warning: the server ignored --outcome and returned 3 other firing(s)")
+}
+
+var regexpChats = regexp.MustCompile(`chat-\d`)
 
 // A plain http:// server is the user's explicit choice and keeps working; the
 // SDK refuses it unless the CLI opts in.
