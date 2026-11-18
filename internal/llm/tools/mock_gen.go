@@ -3080,7 +3080,7 @@ func (m *MockrunScenarioStore) GetChat(ctx context.Context, id string) (*db.Chat
 var _ runScenarioStore = (*MockrunScenarioStore)(nil)
 
 // forge:section MockworktreeStore
-// forge:hash=e9c63573c29739275f38799d1c8ab9e79397bb99d29fb632bd1f23fd4d2d325f
+// forge:hash=6e47510c5fb7e1854d94d59a05eb527fd43fff6fe6781088e010da922c6b5763
 
 // MockworktreeStore is a test mock for the worktreeStore interface.
 //
@@ -3103,6 +3103,7 @@ type MockworktreeStore struct {
 	GetProjectFunc               func(context.Context, string) (*db.Project, error)
 	EmitUserRefetchFunc          func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	GetLiveChatIDForWorktreeFunc func(context.Context, string) (string, error)
+	ListChatsForWorktreeFunc     func(context.Context, string, string, int) ([]db.WorktreeChat, error)
 	ListWorktreesFunc            func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
 	GetWorktreeFunc              func(context.Context, string) (*db.Worktree, error)
 }
@@ -3222,6 +3223,15 @@ func (m *MockworktreeStore) GetLiveChatIDForWorktree(ctx context.Context, worktr
 		return m.GetLiveChatIDForWorktreeFunc(ctx, worktreeID)
 	}
 	return "", contractkit.MockNotSet("MockworktreeStore", "GetLiveChatIDForWorktree")
+}
+
+// ListChatsForWorktree records the call and delegates to ListChatsForWorktreeFunc when set.
+func (m *MockworktreeStore) ListChatsForWorktree(ctx context.Context, userID string, worktreeID string, limit int) ([]db.WorktreeChat, error) {
+	m.Recorder.Record("ListChatsForWorktree", ctx, userID, worktreeID, limit)
+	if m.ListChatsForWorktreeFunc != nil {
+		return m.ListChatsForWorktreeFunc(ctx, userID, worktreeID, limit)
+	}
+	return nil, contractkit.MockNotSet("MockworktreeStore", "ListChatsForWorktree")
 }
 
 // ListWorktrees records the call and delegates to ListWorktreesFunc when set.

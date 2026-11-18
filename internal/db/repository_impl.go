@@ -99,6 +99,12 @@ func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) 
 	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
 }
 
+// ListChatsForWorktree lists userID's chats bound to worktreeID, archived ones
+// included, most recently active first, at most limit.
+func (r *Repo) ListChatsForWorktree(ctx context.Context, userID, worktreeID string, limit int) ([]WorktreeChat, error) {
+	return store.ListChatsForWorktree(ctx, r.ORM(), userID, worktreeID, limit)
+}
+
 // ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
 // in them: a bound chat's run, or a bound thread's own (store.WorktreeRunActivities).
 func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error) {

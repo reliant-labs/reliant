@@ -62,6 +62,9 @@ type ChatActivityState = core.ChatActivityState
 // ArchivedChatInfo represents an archived chat with worktree information.
 type ArchivedChatInfo = core.ArchivedChatInfo
 
+// WorktreeChat is a chat bound to a worktree: see core.
+type WorktreeChat = core.WorktreeChat
+
 // QueuedForMachineChat, QueuedMachine, PausedForMachineChat and
 // WaitingForMachineRun: see core.
 type (
