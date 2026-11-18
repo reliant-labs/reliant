@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { createContextKey, createContextValues, type ContextValues, type Interceptor } from "@connectrpc/connect";
+import { currentRouteOrg } from "@/lib/routeOrg";
 import { getActiveOrgId } from "@/store/activeOrgStore";
 
 /**
@@ -20,7 +21,17 @@ export function acrossAllOrgs(values: ContextValues = createContextValues()): Co
 }
 
 /**
- * Names the active org on every request whose message has an `org_id` field
+ * The org a request names: the org of the route on screen when it is an org
+ * page (`/o/<org>/…`, lib/routeOrg.ts), else the tab's active org — the mirror
+ * the router writes when it enters an org, and the switcher on a page outside
+ * the org tree (control-plane docs/design/unified-shell-and-projects.md §3.5).
+ */
+export function requestOrgId(): string | null {
+  return currentRouteOrg()?.id ?? getActiveOrgId();
+}
+
+/**
+ * Names the request's org (requestOrgId) on every request whose message has an `org_id` field
  * (control-plane's org-scoped rpcs, docs/orgs.md, and ForgeService, which hands
  * the org to forge's credential helper).
  *
@@ -42,7 +53,7 @@ export const orgInterceptor: Interceptor = (next) => async (req) => {
   if (!req.stream && !req.contextValues.get(acrossAllOrgsKey)) {
     const field = req.method.input.fields.find((f) => f.name === "org_id");
     if (field) {
-      const orgId = getActiveOrgId();
+      const orgId = requestOrgId();
       const message = req.message as Record<string, unknown>;
       const key = field.localName;
       if (orgId && !message[key]) message[key] = orgId;

@@ -477,6 +477,9 @@ const runOAuthSignIn = async (
   }
 }
 
+/** The auth restore in flight (initialize), shared by its concurrent callers. */
+let initializing: Promise<void> | null = null
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   session: null,
@@ -1169,96 +1172,103 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     })
   },
 
-  initialize: async () => {
-    if (get().initialized) return
+  initialize: () => {
+    if (get().initialized) return Promise.resolve()
+    // One run, shared by every caller while it is in flight: on a first load
+    // the org routes' beforeLoad (lib/orgRouting.ts) and AuthGuard's effect
+    // both ask, and a second run would install a second auth listener.
+    initializing ??= (async () => {
+      // Restore API key session from localStorage
+      const storedApiKey = localStorage.getItem('reliant-api-key')
+      if (storedApiKey) {
+        logger.info('[AuthStore] Restoring API key session')
+        // Installed like any identity, so the session owner and the principal
+        // whose state the page holds are this key's: a later key, or a person
+        // signing in, is then seen as a change of account.
+        await adoptIdentity(set, apiKeyUser(), { access_token: storedApiKey } as Session)
+        set({ loading: false, initialized: true })
+        return
+      }
 
-    // Restore API key session from localStorage
-    const storedApiKey = localStorage.getItem('reliant-api-key')
-    if (storedApiKey) {
-      logger.info('[AuthStore] Restoring API key session')
-      // Installed like any identity, so the session owner and the principal
-      // whose state the page holds are this key's: a later key, or a person
-      // signing in, is then seen as a change of account.
-      await adoptIdentity(set, apiKeyUser(), { access_token: storedApiKey } as Session)
-      set({ loading: false, initialized: true })
-      return
-    }
+      // Mock mode: skip auth entirely and set a mock user
+      const isMockMode = (window as unknown as { __MOCK_MODE__?: boolean }).__MOCK_MODE__;
+      if (isMockMode) {
+        // The mock user is the page's owner like any signed-in account: a write
+        // captured with nobody is refused (lib/auth/sessionOwner).
+        scopedStatePrincipal = { userId: 'mock-user' }
+        setSessionOwner('mock-user')
+        set({
+          user: { id: 'mock-user', email: 'mock@example.com' } as User,
+          session: { access_token: 'mock-token' } as Session,
+          loading: false,
+          initialized: true,
+        })
+        return
+      }
 
-    // Mock mode: skip auth entirely and set a mock user
-    const isMockMode = (window as unknown as { __MOCK_MODE__?: boolean }).__MOCK_MODE__;
-    if (isMockMode) {
-      // The mock user is the page's owner like any signed-in account: a write
-      // captured with nobody is refused (lib/auth/sessionOwner).
-      scopedStatePrincipal = { userId: 'mock-user' }
-      setSessionOwner('mock-user')
-      set({
-        user: { id: 'mock-user', email: 'mock@example.com' } as User,
-        session: { access_token: 'mock-token' } as Session,
-        loading: false,
-        initialized: true,
+      set({ loading: true })
+
+      // A permanently unreadable stored session must become a real auth state.
+      //
+      // Without this the app half-authenticates: the storage adapter can only
+      // answer null, so `getSession()` reports no session and `getToken()`
+      // returns null, while this store still holds a user from a prior
+      // `onAuthStateChange` — so the UI shows signed-in and every RPC goes out
+      // with no Authorization header and comes back "missing authorization
+      // token". Dropping the stale in-memory session converts that into the
+      // honest state: signed out, with a message explaining why.
+      setAuthStorageUnreadableHandler(() => {
+        logger.warn('[AuthStore] Stored session unreadable; forcing re-authentication')
+        set({
+          user: null,
+          session: null,
+          loading: false,
+          initialized: true,
+          authError:
+            'Your saved sign-in could not be read from this device’s secure storage and has been cleared. Please sign in again.',
+        })
       })
-      return
-    }
 
-    set({ loading: true })
+      try {
+        // Supabase will automatically load session from custom storage adapter
+        // No need to manually load from file storage anymore
+        const { data: { session } } = await supabase.auth.getSession()
 
-    // A permanently unreadable stored session must become a real auth state.
-    //
-    // Without this the app half-authenticates: the storage adapter can only
-    // answer null, so `getSession()` reports no session and `getToken()`
-    // returns null, while this store still holds a user from a prior
-    // `onAuthStateChange` — so the UI shows signed-in and every RPC goes out
-    // with no Authorization header and comes back "missing authorization
-    // token". Dropping the stale in-memory session converts that into the
-    // honest state: signed out, with a message explaining why.
-    setAuthStorageUnreadableHandler(() => {
-      logger.warn('[AuthStore] Stored session unreadable; forcing re-authentication')
-      set({
-        user: null,
-        session: null,
-        loading: false,
-        initialized: true,
-        authError:
-          'Your saved sign-in could not be read from this device’s secure storage and has been cleared. Please sign in again.',
-      })
+        await adoptIdentity(set, session?.user ?? null, session)
+        set({ loading: false, initialized: true })
+
+        // Set up auth state listener to keep store in sync. A different
+        // identity (signed out, or another user signed in on another host
+        // sharing the session cookie) clears the previous user's state first,
+        // and installs nothing if that fails: see adoptIdentity.
+        supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
+          observedEvents++
+          observedIdentity = { user: session?.user ?? null, session }
+          if (!(await adoptIdentity(set, session?.user ?? null, session))) return
+
+          // Attach the user to telemetry for error correlation
+          setTelemetryUserId(session?.user ? { id: session.user.id } : null)
+
+          // provider_token is deliberately not persisted here: this listener
+          // also fires on every token refresh and tab focus, when the provider
+          // token is gone or stale. The one-shot capture lives in OAuthCallback,
+          // which sees the session straight after the sign-in exchange.
+
+          // NOTE: Supabase automatically saves session through custom storage adapter
+        })
+
+        // OAuth callback listener is registered at initialize start (including dev mode)
+      } catch (error) {
+        logger.error('Failed to initialize auth:', error)
+        set({
+          loading: false,
+          initialized: true,
+        })
+      }
+    })().finally(() => {
+      initializing = null
     })
-
-    try {
-      // Supabase will automatically load session from custom storage adapter
-      // No need to manually load from file storage anymore
-      const { data: { session } } = await supabase.auth.getSession()
-
-      await adoptIdentity(set, session?.user ?? null, session)
-      set({ loading: false, initialized: true })
-
-      // Set up auth state listener to keep store in sync. A different
-      // identity (signed out, or another user signed in on another host
-      // sharing the session cookie) clears the previous user's state first,
-      // and installs nothing if that fails: see adoptIdentity.
-      supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
-        observedEvents++
-        observedIdentity = { user: session?.user ?? null, session }
-        if (!(await adoptIdentity(set, session?.user ?? null, session))) return
-
-        // Attach the user to telemetry for error correlation
-        setTelemetryUserId(session?.user ? { id: session.user.id } : null)
-
-        // provider_token is deliberately not persisted here: this listener
-        // also fires on every token refresh and tab focus, when the provider
-        // token is gone or stale. The one-shot capture lives in OAuthCallback,
-        // which sees the session straight after the sign-in exchange.
-
-        // NOTE: Supabase automatically saves session through custom storage adapter
-      })
-
-      // OAuth callback listener is registered at initialize start (including dev mode)
-    } catch (error) {
-      logger.error('Failed to initialize auth:', error)
-      set({
-        loading: false,
-        initialized: true,
-      })
-    }
+    return initializing
   },
 
   refreshSession: async () => {

@@ -29,7 +29,14 @@ import { findPathSites, scanSource, type PathSite } from "@/test/navPathAnalysis
 const SRC = join(__dirname, "..");
 
 /** The builder modules: the only files that spell destinations. */
-const BUILDERS = new Set(["lib/paths/index.ts", "lib/paths/org.ts", "lib/paths/search.ts", "components/Forge/Console/paths.ts"]);
+const BUILDERS = new Set([
+  "lib/paths/index.ts",
+  "lib/paths/org.ts",
+  "lib/paths/search.ts",
+  // The org-less paths that forward into an org (U3): a table of today's paths, one place.
+  "lib/paths/legacy.ts",
+  "components/Forge/Console/paths.ts",
+]);
 
 /** Files allowed to spell a route outside a navigation, by why. */
 const ALLOWED_ROUTE: Record<string, string> = {

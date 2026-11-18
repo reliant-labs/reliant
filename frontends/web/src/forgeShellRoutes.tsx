@@ -24,6 +24,14 @@
  *                                             factory and pages as Reliant
  *                                             (forgeConsoleRoutes.tsx)
  *   /                                         → /apps
+ *   /o/$org/…                                 an org URL (control-plane
+ *                                             docs/design/unified-shell-and-projects.md
+ *                                             §3): the org resolved like in
+ *                                             Reliant, then the org-less page
+ *                                             (orgRoutes.tsx,
+ *                                             createOrgEntryRoutes) until the
+ *                                             one shell (U6) mounts the pages
+ *                                             under the org
  *
  * Route IDS match routes.tsx where pages are shared — `/auth`, `/upgrade`,
  * `/auth/callback`, `/_authenticated/_forge/forge/p/$project/…` — because those
@@ -55,6 +63,7 @@ import { ModalLayer } from './components/Modals/ModalLayer'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
 import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundary'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
+import { createOrgEntryRoutes } from './orgRoutes'
 import { forgeConsolePages } from './forgeConsolePages'
 import { getIsDev } from './lib/constants'
 import { lazyRoute } from './lib/lazyRoute'
@@ -272,6 +281,9 @@ export function buildForgeShellTree({
   // shell IS the feature) — the pages themselves hide what needs a daemon.
   const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRoute, forgeConsolePages)
 
+  // An org URL (a link from the app host, an old one after U14) opens here too.
+  const orgEntryRoutes = createOrgEntryRoutes(() => rootRoute, { Guard })
+
   return rootRoute.addChildren([
     authRoute,
     oauthCallbackRoute,
@@ -285,6 +297,7 @@ export function buildForgeShellTree({
     forgeDemoRoute,
     demoRedirectRoute,
     indexRoute,
+    orgEntryRoutes,
     ...extraRoutes(rootRoute),
     authenticatedLayoutRoute.addChildren([
       shellLayoutRoute.addChildren([appsRoute, sitesRoute, usageRoute, settingsRoute, settingsSectionRoute]),

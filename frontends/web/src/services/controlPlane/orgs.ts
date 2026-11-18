@@ -12,7 +12,8 @@
 
 import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { queryClient } from "@/lib/query-client";
-import { chooseActiveOrg, useActiveOrgStore } from "@/store/activeOrgStore";
+import { switchTabOrg } from "@/lib/orgSwitch";
+import { learnOrgSegments, useActiveOrgStore } from "@/store/activeOrgStore";
 import { getControlPlaneClient } from "./client";
 
 export const orgKeys = {
@@ -84,12 +85,17 @@ export async function currentOrgId(): Promise<string | null> {
 }
 
 /**
- * Act in an org the person has just joined (a claimed site's org). The
- * membership list is read afresh FIRST: the binding forgets a choice that is
- * not in the list it holds, so choosing before the refetch would be undone.
- * View-level only, like the switcher: the server-side default is untouched.
+ * Act in an org the person has just joined (a claimed site's org, one they
+ * created). The membership list is read afresh FIRST: the binding forgets a
+ * choice that is not in the list it holds, so choosing before the refetch
+ * would be undone. View-level only, like the switcher: the server-side
+ * default is untouched. On an org page that is a navigation into it
+ * (lib/orgSwitch.ts), by its slug once the fresh list names it.
  */
 export async function switchToJoinedOrg(orgId: string): Promise<void> {
   await queryClient.invalidateQueries({ queryKey: orgKeys.mine });
-  chooseActiveOrg(orgId);
+  const orgs = queryClient.getQueryData<MyOrgs>(orgKeys.mine)?.orgs ?? [];
+  learnOrgSegments(orgs);
+  const org = orgs.find((o) => o.id === orgId);
+  switchTabOrg({ id: orgId, slug: org?.slug ?? "" });
 }
