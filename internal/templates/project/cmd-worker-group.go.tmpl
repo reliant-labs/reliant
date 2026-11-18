@@ -1,0 +1,47 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// forge writes it ONCE (write-if-absent). The command tree + component wiring is
+// owned code — add a component by hand-editing here (or via `forge scaffold`), never a
+// re-derivation. Deleting it sticks; `forge project rescaffold <path>` re-creates it from template.
+// Source: worker {{.Name}} (one file per worker — devspace idiom).
+//
+// REAL per-worker subcommand, in the workers/ command group. `<bin> {{.Name}}`
+// runs a supervisor process for ONLY the {{.Name}} worker: no Connect services
+// are mounted (cmd.MountNone), no other workers/operators run. The command
+// composes ITSELF — its Workers closure runs the TYPED (*app.Components).Worker{{.FieldName}}
+// accessor (worker{{.FieldName}}, re-derived next door in {{.Name}}_accessor_gen.go);
+// there is no name filter and no re-selection. Sibling
+// components are still CONSTRUCTED by the DI graph (cross-component reads stay
+// nil-safe); only this worker is supervised.
+//
+// main.go names this command's exported New…Cmd constructor explicitly and
+// passes it to cmd.Execute — the tree is assembled in the composition root,
+// not via init() self-registration.
+package workers
+
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/reliant-labs/forge/pkg/serverkit"
+
+	"{{.Module}}/cmd/{{.Bin}}/cmd"
+	"{{.Module}}/internal/app"
+	"{{.Module}}/pkg/config"
+)
+
+// New{{.FieldName}}Cmd is the cobra subcommand that runs only the {{.Name}} worker.
+func New{{.FieldName}}Cmd(deps cmd.Deps) *cobra.Command {
+	c := &cobra.Command{
+		Use:   "{{.Name}}",
+		Short: "Run only the {{.Name}} worker",
+		Long:  "Run a supervisor process for only the {{.Name}} worker. No Connect services are mounted and no other workers/operators run; the DI graph still constructs everything so cross-component reads stay nil-safe.",
+		RunE: func(c *cobra.Command, args []string) error {
+			deps.Cmd = c
+			return cmd.Serve(c.Context(), deps, cmd.ServeSpec{
+				Mount:   cmd.MountNone,
+				Workers: func(c *app.Components) []serverkit.Worker { return []serverkit.Worker{worker{{.FieldName}}(c)} },
+			})
+		},
+	}
+	config.RegisterFlags(c)
+	return c
+}

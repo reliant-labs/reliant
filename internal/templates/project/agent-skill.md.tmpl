@@ -1,0 +1,12 @@
+---
+name: forge
+description: How to build in this project. It uses Reliant Forge (github.com/reliant-labs/forge): proto and SQL migrations in, generated services, ORM, frontend hooks, tests and deploy config out. Use before touching proto, handlers, the DB layer, the frontend, tests or deploy config.
+---
+
+This project uses **Reliant Forge** (github.com/reliant-labs/forge), run as `{{.CLI}}`. It is not Atlassian Forge, Foundry's `forge` (Solidity) or Laravel Forge; do not use their commands.
+
+The guidance lives in the `{{.CLI}}` binary, so it always matches the version this project pins. Read it there; do not look for copies on disk.
+
+1. Run `{{.CLI}} skill load forge` first. It is the entry point.
+2. Look up a topic with `{{.CLI}} skill search <query>`, then `{{.CLI}} skill load <name>`. `{{.CLI}} skill list` prints the catalog.
+3. Before concluding forge cannot do something, run `{{.CLI}} project capabilities`.

@@ -1,0 +1,63 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// External-client test scaffolding; canonical pattern in `forge skill load testing/patterns`.
+package {{.Name}}
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+{{- if .HasConfig}}
+
+	"{{.Module}}/pkg/config"
+{{- end}}
+)
+
+func TestHealthCheck(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	c := &client{
+		deps: Deps{
+			Logger: slog.Default(),
+{{- if .HasConfig}}
+			Config: &config.Config{},
+{{- end}}
+		},
+		http:    server.Client(),
+		baseURL: server.URL,
+	}
+
+	if err := c.HealthCheck(context.Background()); err != nil {
+		t.Fatalf("HealthCheck failed: %v", err)
+	}
+}
+
+func TestHealthCheckFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	c := &client{
+		deps: Deps{
+			Logger: slog.Default(),
+{{- if .HasConfig}}
+			Config: &config.Config{},
+{{- end}}
+		},
+		http:    server.Client(),
+		baseURL: server.URL,
+	}
+
+	if err := c.HealthCheck(context.Background()); err == nil {
+		t.Fatal("HealthCheck should have failed")
+	}
+}

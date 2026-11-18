@@ -1,0 +1,86 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// PasskeysPanel — an account-settings panel listing the signed-in person's
+// passkeys and adding one on this device. Render it on your account page;
+// it renders nothing where this deployment does not offer passkeys.
+//
+// Who the passkey is for comes from the session cookie, which the server
+// validates — never from anything this component sends.
+
+import { useEffect, useState } from "react";
+
+import Button from "@/components/ui/button";
+import {
+  AuthError,
+  listPasskeys,
+  passkeysSupported,
+  registerPasskey,
+  type PasskeySummary,
+} from "@/lib/auth/native-login";
+import { useAuthOptions } from "@/lib/auth/use-auth-options";
+
+export function PasskeysPanel() {
+  const options = useAuthOptions();
+  const offered = options.methods.includes("passkey") && passkeysSupported();
+  const [keys, setKeys] = useState<PasskeySummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!offered) return;
+    let live = true;
+    void listPasskeys()
+      .then((k) => live && setKeys(k))
+      .catch(() => live && setError("Your passkeys could not be loaded."));
+    return () => {
+      live = false;
+    };
+  }, [offered]);
+
+  if (!offered) return null;
+
+  return (
+    <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+      <h2 className="text-lg font-semibold text-ink">Passkeys</h2>
+      <p className="mt-1 text-sm text-ink-muted">
+        Sign in with your fingerprint, face or device PIN instead of a password.
+      </p>
+      {keys && keys.length > 0 ? (
+        <ul className="mt-4 divide-y divide-border text-sm text-ink">
+          {keys.map((k) => (
+            <li key={k.id} className="py-2">
+              {k.name || "Passkey"}
+            </li>
+          ))}
+        </ul>
+      ) : keys ? (
+        <p className="mt-4 text-sm text-ink-muted">No passkeys yet.</p>
+      ) : null}
+      {error ? (
+        <p role="alert" className="mt-4 text-sm text-danger-ink">
+          {error}
+        </p>
+      ) : null}
+      <Button
+        type="button"
+        className="mt-4"
+        loading={busy}
+        onClick={() => {
+          setBusy(true);
+          setError(null);
+          void registerPasskey()
+            .then(listPasskeys)
+            .then(setKeys)
+            .catch((err: unknown) =>
+              setError(err instanceof AuthError ? err.message : "The passkey could not be added."),
+            )
+            .finally(() => setBusy(false));
+        }}
+      >
+        Add a passkey
+      </Button>
+    </section>
+  );
+}

@@ -1,0 +1,7 @@
+{
+  "//": "Legacy-resolver shim for the '@reliantlabs/forge-web-runtime/interceptors' subpath. Resolvers that read package.json 'exports' never look here. Resolvers that do NOT — TypeScript moduleResolution node10 and Metro with unstable_enablePackageExports off, which is what Expo SDK 52 / React Native 0.76 ship — resolve the subpath as a real directory and read the fields below. Both routes land on the same BUILD OUTPUT under dist/, never on src/: a consumer must never typecheck this package's sources against its own React. See README.md, 'What this package publishes' and 'The DOM-free interceptors entry point'.",
+  "types": "../dist/interceptors.d.ts",
+  "main": "../dist/interceptors.js",
+  "react-native": "../dist/interceptors.js",
+  "sideEffects": false
+}

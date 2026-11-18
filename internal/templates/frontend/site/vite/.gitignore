@@ -1,0 +1,11 @@
+# dependencies
+node_modules/
+
+# build output (the static export forge deploys)
+dist/
+
+# misc
+.DS_Store
+*.log
+*.tsbuildinfo
+.env*.local

@@ -1,0 +1,123 @@
+// Part of @reliantlabs/forge-web-runtime — the web twin of forge/pkg.
+//
+// The hand-off between browser telemetry startup and the first RPCs.
+//
+// The HyperDX SDK is a ~600 KB lazy chunk, so it patches `fetch` some hundreds
+// of milliseconds after the app is interactive — and a page fires its first
+// queries on mount, inside that window. A call made before the patch carries a
+// SYNTHESIZED traceparent (trace.ts) that names a span no browser ever
+// exported: the API's span has a parent id that matches nothing, and "this page
+// load, end to end" has no answer exactly for the requests the page makes
+// first.
+//
+// So initBrowserTelemetry registers its startup here, and the trace interceptor
+// waits for it — at most TELEMETRY_WAIT_MS, so a blocked chunk or an ad blocker
+// delays a request by that much and no more, then falls back to the synthesized
+// traceparent. With telemetry off nothing is registered and nothing waits.
+//
+// The SDK starts after the page has loaded, when the browser is idle
+// (telemetry.ts, "Loading"). An RPC is a reason not to wait for that: the first
+// call that waits here asks the startup to begin at once, so a page that calls
+// its API on mount gets its first requests joined, as before, and a page that
+// calls nothing (a static site) loads the SDK when it is idle.
+//
+// Except on a page that has never been visible: no session starts there, RPC
+// or not (telemetry.ts, "No session until the page has been seen"). The ask
+// then answers that it cannot start now, and the request does not wait at all:
+// waiting would only spend TELEMETRY_WAIT_MS before the same fallback.
+//
+// DOM-free and import-free on purpose: the transport entry point
+// (@reliantlabs/forge-web-runtime/interceptors) imports this and must stay
+// light enough for React Native.
+
+/** The longest an RPC waits for browser telemetry to finish starting. */
+export const TELEMETRY_WAIT_MS = 2000;
+
+let startup: Promise<unknown> | null = null;
+let hurry: (() => boolean | void) | null = null;
+
+/**
+ * Called once by initBrowserTelemetry with the promise of its startup, and
+ * what to call to begin it now rather than when the browser is idle.
+ * `startNow` returns false when startup cannot begin now (the page has never
+ * been visible): telemetryReady then does not wait for it.
+ */
+export function registerTelemetryStartup(
+  p: Promise<unknown>,
+  startNow?: () => boolean | void,
+): void {
+  startup = p;
+  hurry = startNow ?? null;
+  const settled = () => {
+    if (startup === p) {
+      hurry = null;
+    }
+  };
+  p.then(settled, settled);
+}
+
+/**
+ * Resolves when telemetry has finished starting (or failed to), or after
+ * `maxMs`, whichever is first. Resolves immediately when none is starting or it
+ * has already settled.
+ */
+export function telemetryReady(
+  maxMs: number = TELEMETRY_WAIT_MS,
+): Promise<void> {
+  const p = startup;
+  if (!p) {
+    return Promise.resolve();
+  }
+  try {
+    if (hurry?.() === false) {
+      return Promise.resolve();
+    }
+  } catch {
+    // Telemetry must never break the app.
+  }
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, maxMs);
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    p.then(done, done);
+  });
+}
+
+// ── The RUM session the requests belong to ─────────────────────────────────
+//
+// initBrowserTelemetry registers the SDK's session id here once it runs, and
+// clears it when telemetry is disabled. injectTraceContext (trace.ts) sends it
+// as the W3C baggage member `session.id`, which forge servers copy onto their
+// server span (forge/pkg/observe, span_identity.go), so a backend trace links
+// back to the browser session that caused it.
+
+/** The shape of a RUM session id; forge servers drop anything else. */
+const RUM_SESSION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+let sessionSource: (() => string | undefined) | null = null;
+
+/** Called by initBrowserTelemetry with the SDK's session getter, or null. */
+export function registerRumSession(
+  source: (() => string | undefined) | null,
+): void {
+  sessionSource = source;
+}
+
+/** The current RUM session id, or undefined with telemetry off. Never throws. */
+export function rumSessionId(): string | undefined {
+  try {
+    const id = sessionSource?.();
+    return id && RUM_SESSION_ID_RE.test(id) ? id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Test seam. */
+export function resetTelemetryGate(): void {
+  startup = null;
+  hurry = null;
+  sessionSource = null;
+}

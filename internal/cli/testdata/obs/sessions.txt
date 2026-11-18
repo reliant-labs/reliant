@@ -1,0 +1,3 @@
+APP          STARTED (UTC)   LENGTH  USER     ENTRY     PAGES  CLICKS  ERRORS  REPLAY  SESSION
+reliant-web  10-22 11:44:06  3m12s   user-42  /         5      12      2       replay  91b955b313a1a86644ea53730a92deab
+reliant-web  10-22 10:44:06  3m12s   -        /pricing  1      3       0       -       072af6846fd16a702ead77ec49f2408e

@@ -1,0 +1,256 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// SignInMethods — the sign-in options beside the password: a passkey, an
+// emailed link, Google or GitHub. Each renders only when GET /auth/options
+// says this deployment offers it (the identity's LOGIN_POLICY), so the screen
+// never shows a button the server would answer with 404.
+//
+// UnverifiedNotice — what the sign-in screen shows when the password was right
+// but the address is not yet confirmed: a button that mails a new link.
+//
+// NoCodeHint — "Didn't get a code?", shown after a resend or a minute of
+// waiting. The SAME words for every address: the server cannot tell whether
+// mail was delivered (a relay may refuse an address that once reported spam),
+// and a screen that said why would tell anyone which addresses exist.
+//
+// ── The copy never says whether an address has an account ─────────────
+//
+// "If that address can sign in, a link is on its way" is the only thing the
+// server will say about an address, and the screens repeat it rather than
+// guess. A passkey prompt for an unknown address fails exactly like one for
+// a known address with no passkey on this device.
+
+import { useEffect, useState } from "react";
+
+import { AuthAlert, AuthDivider, AuthInput } from "@/components/auth-ui";
+import Button from "@/components/ui/button";
+import Label from "@/components/ui/label";
+import {
+  AuthError,
+  consumeMagicLink,
+  passkeySignIn,
+  passkeysSupported,
+  requestMagicLink,
+  resendVerification,
+  socialStart,
+  type AuthOptions,
+} from "@/lib/auth/native-login";
+
+/** One sentence for every address, whatever happened to the mail. */
+const NO_CODE_HINT =
+  "Didn't get a code? Check spam, try another sign-in method, or contact support.";
+
+/** How long a person waits for a code before the hint appears. */
+const NO_CODE_HINT_AFTER_MS = 60_000;
+
+/**
+ * "Didn't get a code?": shown at once when `resent` (the person already asked
+ * again), else after NO_CODE_HINT_AFTER_MS of waiting.
+ */
+export function NoCodeHint({ resent = false }: { resent?: boolean }) {
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setWaited(true), NO_CODE_HINT_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!resent && !waited) return null;
+  return <p className="mt-2 text-sm text-ink-muted">{NO_CODE_HINT}</p>;
+}
+
+export interface SignInMethodsProps {
+  options: AuthOptions;
+  /** The address typed into the screen's email field. */
+  email: string;
+  /** Where to land after a social sign-in (a same-origin path). */
+  returnTo: string;
+  /** Called once a passkey or a typed code signed the person in. */
+  onSignedIn: () => void | Promise<void>;
+}
+
+export function SignInMethods({ options, email, returnTo, onSignedIn }: SignInMethodsProps) {
+  const offersPasskey = options.methods.includes("passkey") && passkeysSupported();
+  const offersLink = options.methods.includes("magic_link") && options.mail;
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [unverified, setUnverified] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
+  const [code, setCode] = useState("");
+
+  if (!offersPasskey && !offersLink && options.social.length === 0) return null;
+
+  async function run(what: string, action: () => Promise<void>) {
+    setBusy(what);
+    setError(null);
+    setUnverified(false);
+    try {
+      await action();
+    } catch (err) {
+      setError(err instanceof AuthError ? err.message : "That did not work. Please try again.");
+      setUnverified(err instanceof AuthError && err.code === "email_unverified");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function needEmail(): boolean {
+    if (email.trim() !== "") return false;
+    setError("Enter your email address first.");
+    return true;
+  }
+
+  return (
+    <div className={options.methods.includes("password") ? "" : "mt-6"}>
+      {options.methods.includes("password") ? <AuthDivider /> : null}
+      <div className="space-y-3">
+        {offersPasskey ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="xl"
+            fullWidth
+            className="h-11"
+            loading={busy === "passkey"}
+            onClick={() => {
+              if (needEmail()) return;
+              void run("passkey", async () => {
+                await passkeySignIn(email.trim());
+                await onSignedIn();
+              });
+            }}
+          >
+            Continue with passkey
+          </Button>
+        ) : null}
+
+        {offersLink && sent === null ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="xl"
+            fullWidth
+            className="h-11"
+            loading={busy === "link"}
+            onClick={() => {
+              if (needEmail()) return;
+              void run("link", async () => {
+                setSent(await requestMagicLink(email.trim()));
+              });
+            }}
+          >
+            Email me a link
+          </Button>
+        ) : null}
+
+        {sent !== null ? (
+          // A div, not a form: this renders inside the sign-in screen's form.
+          <div>
+            <AuthAlert tone="success" className="mt-0">
+              <p>{sent}</p>
+              <p>
+                Open the link in this browser, or type the code from the email here. Never share
+                this code: {{.ProjectName}} will never ask you for it.
+              </p>
+            </AuthAlert>
+            <Label className="mt-4" htmlFor="magic-code">
+              Code from the email
+            </Label>
+            <AuthInput
+              id="magic-code"
+              name="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+            />
+            <Button
+              type="button"
+              size="xl"
+              fullWidth
+              loading={busy === "code"}
+              className="mt-3 h-11"
+              onClick={() =>
+                void run("code", async () => {
+                  await consumeMagicLink(code.trim());
+                  await onSignedIn();
+                })
+              }
+            >
+              Sign in with the code
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              fullWidth
+              loading={busy === "resend"}
+              className="mt-2"
+              onClick={() =>
+                void run("resend", async () => {
+                  setSent(await requestMagicLink(email.trim()));
+                  setResent(true);
+                })
+              }
+            >
+              Send a new link
+            </Button>
+            <NoCodeHint resent={resent} />
+          </div>
+        ) : null}
+
+        {options.social.map((provider) => (
+          <Button
+            key={provider.type}
+            type="button"
+            variant="outline"
+            size="xl"
+            fullWidth
+            className="h-11"
+            loading={busy === provider.type}
+            onClick={() => void run(provider.type, () => socialStart(provider.type, returnTo))}
+          >
+            Continue with {provider.label}
+          </Button>
+        ))}
+      </div>
+
+      {error ? <AuthAlert tone="error">{error}</AuthAlert> : null}
+      {unverified ? <UnverifiedNotice email={email} /> : null}
+    </div>
+  );
+}
+
+/** "Confirm your address first", with a button that mails a new link. */
+export function UnverifiedNotice({ email }: { email: string }) {
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <AuthAlert tone="info">
+      <p>This address is not confirmed yet. Use the link we emailed, or ask for a new one.</p>
+      {message ? (
+        <>
+          <p className="text-ink-muted">{message}</p>
+          <NoCodeHint resent />
+        </>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          loading={busy}
+          onClick={() => {
+            setBusy(true);
+            void resendVerification(email.trim())
+              .then(setMessage)
+              .catch(() => setMessage("Could not send a new link right now. Please try again."))
+              .finally(() => setBusy(false));
+          }}
+        >
+          Send a new link
+        </Button>
+      )}
+    </AuthAlert>
+  );
+}
