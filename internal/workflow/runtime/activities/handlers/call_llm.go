@@ -2994,7 +2994,8 @@ func (a *CallLLMActivity) getSystemPrompts(
 		// its root, outside every git checkout, are saved only up to a size
 		// cap and otherwise keep the directory on disk, so scratch belongs
 		// elsewhere (and a worktree's checkout is the place for anything to keep).
-		bb.WriteString("\nKeep scratch files (notes, plans, logs, temporary output) outside this directory, e.g. under /tmp or a scratchpad directory you were given, so they never sit loose at the workspace root where git cannot see them; put anything meant to last inside a repository checkout.")
+		bb.WriteString("\nKeep scratch files (notes, plans, logs, temporary output) outside this directory, so they never sit loose at the workspace root where git cannot see them; put anything meant to last inside a repository checkout. ")
+		bb.WriteString(scratchDirGuidance(chat))
 	}
 
 	// Multi-repo hint. When the project has more than one repo, every fs/process
