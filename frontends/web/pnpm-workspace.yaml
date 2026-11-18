@@ -23,7 +23,7 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@reliantlabs/forge-web-runtime@0.13.1'
   - '@reliantlabs/forge-web-runtime@0.13.17'
-  - '@reliantlabs/forge-web-runtime@0.13.18'
+  - '@reliantlabs/forge-web-runtime@0.13.19'
 # Dependency versions forced past what a package pins.
 #   monaco-editor pins dompurify exactly (3.4.15 in 0.57.0); keep its copy on
 #   the same patched release as ours.
