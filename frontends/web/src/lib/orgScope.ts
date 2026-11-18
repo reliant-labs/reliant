@@ -1,5 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
+import type { QueryClient, QueryKey } from "@tanstack/react-query";
+
 import { hasControlPlane } from "@/services/controlPlane/config";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 
@@ -190,6 +192,25 @@ export function keepPreviousInOrg(orgId: string | null) {
 export function keepPreviousInOrgSegment(orgId: string | null) {
   return <T>(previous: T | undefined, previousQuery?: { queryKey: readonly unknown[] }): T | undefined =>
     orgId && previousQuery && previousQuery.queryKey.includes(orgId) ? previous : undefined;
+}
+
+/**
+ * After the tab's org moved off `left` (a switch, or a reconcile away from a
+ * saved choice): drop the answers cached under `queryKey` and re-read what is
+ * on screen, in the new org.
+ *
+ * A query whose key names `left` is removed, never refetched. Its observers
+ * are still attached to it when this runs: TanStack Query moves an observer
+ * to its new key in an effect, and ActiveOrgBinding's effect runs before the
+ * screen's. A refetch would send `left`'s request again (its key and request
+ * name `left`), and its answer is one nothing will show. The screen's own
+ * effect then reads the new org's key. Every other query is reset and
+ * refetched: its key names no org, so the request goes out in the
+ * transport's org, which is already the new one.
+ */
+export function resetAfterLeavingOrg(client: QueryClient, queryKey: QueryKey, left: string | null): Promise<void> {
+  if (left) client.removeQueries({ queryKey, predicate: (query) => keyNamesOrg(query.queryKey, left) });
+  return client.resetQueries({ queryKey });
 }
 
 /**
