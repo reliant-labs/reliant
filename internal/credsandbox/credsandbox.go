@@ -323,7 +323,10 @@ const CredScratchRel = ".reliant/cred-scratch" //nolint:gosec // a directory nam
 
 // CredScratchDir is the root a credentialed command keeps its scratch in: the
 // daemon creates it, mode 0700, before any command runs, and a credentials-none
-// command cannot see it, so it can neither read nor plant anything there.
+// command cannot see it, so it can neither read nor plant anything there. Each
+// credentialed command also gets a directory of its own in it, named by
+// StepScratchEnv, that the daemon removes when the command ends however it
+// ends; what a command makes there itself is its own to remove.
 // Empty when there is no home directory.
 func CredScratchDir() string {
 	home, err := os.UserHomeDir()
@@ -372,6 +375,8 @@ func wrap(cmd *exec.Cmd, credentials string, writable Writable, terminal bool) (
 			}
 		}
 		cmd.Env = withSignal(cmd.Env, signal)
+		// Its own scratch in it, removed whichever way it ends (stepscratch.go).
+		withStepScratch(cmd, signal)
 		return ""
 	}
 	if err != nil {
@@ -416,13 +421,15 @@ func rejectedRefusal(rejected []string, handOffsOnly bool) string {
 
 // withSignal is env (nil: this process's) with SignalEnv set when signal, and
 // without it otherwise: a value this process inherited (a daemon started by a
-// credentialed step) says nothing about this daemon's sandbox.
+// credentialed step) says nothing about this daemon's sandbox. An inherited
+// StepScratchEnv goes too: it names the scratch of the step that started this
+// daemon, which that step's daemon removes when the step ends.
 func withSignal(env []string, signal bool) []string {
 	if env == nil {
 		env = os.Environ() //nolint:forbidigo // a command with no environment of its own inherits this process's
 	}
 	out := make([]string, 0, len(env)+1)
-	for _, kv := range env {
+	for _, kv := range withoutEnv(env, StepScratchEnv) {
 		if !strings.HasPrefix(kv, SignalEnv+"=") {
 			out = append(out, kv)
 		}

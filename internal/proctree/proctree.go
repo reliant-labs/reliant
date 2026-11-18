@@ -357,6 +357,10 @@ type Tree struct {
 	// goTmp is the command's own GOTMPDIR (gotmp_linux.go); "" when it has
 	// none.
 	goTmp string
+	// stepScratch is a credentialed command's own scratch directory
+	// (credsandbox.StepScratchEnv), handed back to credsandbox on Release;
+	// nil when it has none.
+	stepScratch *credsandbox.StepScratch
 }
 
 // Prepare readies cmd, which must not have been started, to run as a bounded
@@ -368,6 +372,7 @@ func (l *Limiter) Prepare(cmd *exec.Cmd, owner Owner) *Tree {
 	t := &Tree{l: l, owner: owner, fd: -1}
 	setProcessGroup(cmd)
 	t.prepareGoTmp(cmd)
+	t.stepScratch = credsandbox.TakeStepScratch(cmd)
 	if credsandbox.IsInit(cmd) {
 		t.footprint, _ = accountedFootprint(cmd)
 	}

@@ -252,9 +252,37 @@ cat '`+filepath.Join(home, ".reliant", "daemon.json")+`' 2>/dev/null || true
 	assert.NoDirExists(t, filepath.Join(scratch, "planted"), "what it made there was its own, and is gone")
 
 	out = runWrapped(t, "inherit", home, home,
-		`mkdir -p '`+scratch+`/step' && echo ok > '`+scratch+`/step/run.sh' && ls '`+scratch+`' && echo CRED-WROTE`)
-	assert.Contains(t, out, "step\nCRED-WROTE")
-	assert.FileExists(t, filepath.Join(scratch, "step", "run.sh"))
+		`mkdir -p '`+scratch+`/pr-fix' && echo ok > '`+scratch+`/pr-fix/run.sh' && ls '`+scratch+`' && echo CRED-WROTE`)
+	assert.Contains(t, out, "pr-fix\n")
+	assert.Contains(t, out, "CRED-WROTE")
+	assert.FileExists(t, filepath.Join(scratch, "pr-fix", "run.sh"))
+}
+
+// Each credentialed command gets a directory of its own in the credentialed
+// scratch, named by StepScratchEnv, and the daemon removes it once the command
+// is done with; a credentials-none command gets none, even inherited.
+func TestWrap_ACredentialedCommandGetsItsOwnScratch(t *testing.T) {
+	testkit.Slow(t, "probes real user, mount and PID namespaces")
+	requireSandbox(t)
+	home := wrapHome(t)
+	scratch := filepath.Join(home, CredScratchRel)
+
+	cmd := wrapped(t, "inherit", home, home, `echo "dir=$`+StepScratchEnv+`"; echo built > "$`+StepScratchEnv+`/out"`)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	s := TakeStepScratch(cmd)
+	require.NotNil(t, s)
+	assert.Equal(t, "dir="+s.Dir()+"\n", string(out))
+	assert.Equal(t, scratch, filepath.Dir(s.Dir()))
+	assert.True(t, strings.HasPrefix(filepath.Base(s.Dir()), stepScratchPrefix), s.Dir())
+	assert.FileExists(t, filepath.Join(s.Dir(), "out"))
+	assert.Nil(t, TakeStepScratch(cmd), "handed over once")
+
+	s.reclaim(func() bool { return true })
+	assert.NoDirExists(t, s.Dir())
+	assert.DirExists(t, scratch, "the root stays: other steps keep state in it")
+
+	assert.Equal(t, "dir=\n", runWrapped(t, "none", home, home, `echo "dir=${`+StepScratchEnv+`:-}"`, StepScratchEnv+"=/x"))
 }
 
 // A credentialed step hands a later step a directory under XDG_CACHE_HOME (a

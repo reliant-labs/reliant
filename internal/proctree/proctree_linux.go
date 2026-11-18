@@ -301,6 +301,7 @@ func (t *Tree) Release() {
 	t.forget()
 	t.closeFD()
 	defer t.releaseGoTmp()
+	defer t.releaseStepScratch()
 	if t.dir == "" {
 		return
 	}

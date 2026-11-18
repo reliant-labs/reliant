@@ -85,6 +85,22 @@ func (t *Tree) releaseGoTmp() {
 	go func() { _ = os.RemoveAll(dir) }()
 }
 
+// releaseStepScratch hands a credentialed command's own scratch back to
+// credsandbox, which removes it once the command's processes are gone: the
+// moment its cgroup proves it, or, without one, once no live process holds it.
+func (t *Tree) releaseStepScratch() {
+	s, dir := t.stepScratch, t.dir
+	if s == nil {
+		return
+	}
+	t.stepScratch = nil
+	var gone func() bool
+	if dir != "" {
+		gone = func() bool { return cgroupProvenEmpty(dir) }
+	}
+	s.Done(gone)
+}
+
 // cgroupProvenEmpty reports whether the cgroup at dir is gone (Release
 // removes it only once empty) or reports itself unpopulated. A cgroup that
 // cannot be read proves nothing.

@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskguard"
@@ -658,6 +659,10 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	limiter := proctree.New(proctree.Config{CommandThreads: guards.CommandThreads})
 	proctree.SetDefault(limiter)
 	logging.Info(logPrefix + " " + limiter.String())
+	// The scratch directories an earlier daemon's credentialed commands were
+	// given (credsandbox.StepScratchEnv) and that nothing holds any more: it
+	// was killed, or restarted under its running commands.
+	credsandbox.SweepStepScratch()
 
 	localExec := toolexec.NewLocalToolExecutor(toolsFactory)
 	egressLimiter, err := egresslimit.NewInstrumented(egresslimit.Deps{Limits: daemonEgressLimits(host)})

@@ -33,8 +33,14 @@ func (t *Tree) limitNote() string { return "" }
 // Populated is false outside Linux.
 func (t *Tree) Populated() bool { return false }
 
-// Release does nothing else outside Linux.
-func (t *Tree) Release() { t.forget() }
+// Release does nothing else outside Linux (where no command has a scratch
+// directory of its own; Done is a no-op on nil).
+func (t *Tree) Release() {
+	t.forget()
+	s := t.stepScratch
+	t.stepScratch = nil
+	s.Done(nil)
+}
 
 // processIdentity is unknown outside Linux, so nothing enters the ledger.
 func processIdentity(int) (pgid int, start uint64, ok bool) { return 0, 0, false }
