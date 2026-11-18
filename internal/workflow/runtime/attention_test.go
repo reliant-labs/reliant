@@ -83,6 +83,61 @@ func TestDynamicWorkflowAttentionTerminalPersistenceExhaustionIsExecutionFailure
 	require.Equal(t, "failure", final["outcome"])
 }
 
+// A cancelled key-only observer whose terminal write is exhausted has lost its
+// action_required (the write rolled back) and opened no incident with a lease
+// to expire. The run must end FAILED, not CANCELED: the reconciler repairs a
+// failed execution's row to Failed, which the legacy failure projection still
+// shows, and a cancelled one to Cancelled, which it does not.
+func TestDynamicWorkflowAttentionCancelledPersistenceExhaustionIsExecutionFailure(t *testing.T) {
+	observer := strings.Replace(noOutcomeYAML, "entry: [work]", "attention:\n  key: incident\nentry: [work]", 1)
+	for _, tc := range []struct {
+		name, definition string
+		writeFails       bool
+		wantFailed       bool
+	}{
+		{name: "observer exhausted", definition: observer, writeFails: true, wantFailed: true},
+		{name: "observer written", definition: observer},
+		{name: "no policy exhausted", definition: noOutcomeYAML, writeFails: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var suite temporaltest.WorkflowTestSuite
+			env := suite.NewTestWorkflowEnvironment()
+			rec := setupResumeEnv(t, env, tc.definition)
+			env.OnActivity("WorkflowStatus", mock.Anything, mock.Anything).Return(func(_ context.Context, status map[string]interface{}) (interface{}, error) {
+				rec.statuses = append(rec.statuses, status)
+				if tc.writeFails && status["status"] == "cancelled" {
+					return nil, temporal.NewNonRetryableApplicationError("status store unavailable", "PersistenceExhausted", nil)
+				}
+				return nil, nil
+			})
+			// The run is still working when it is cancelled.
+			env.OnActivity("CallLLM", mock.Anything, mock.Anything).After(time.Hour).Return(map[string]interface{}{"response_text": "ok"}, nil)
+			env.RegisterDelayedCallback(env.CancelWorkflow, time.Minute)
+			input := resumeWorkflowInput("attention-cancelled", nil)
+			input.Inputs[InputKeyLaunchRun], input.Inputs[InputKeyUnattended] = true, true
+			env.ExecuteWorkflow(DynamicWorkflow, input)
+
+			final := terminalStatus(t, rec)
+			require.Equal(t, "cancelled", final["status"], "the attempted lifecycle still says how the run ended")
+			err := env.GetWorkflowError()
+			require.Error(t, err)
+			if !tc.wantFailed {
+				require.True(t, temporal.IsCanceledError(err), "only an armed policy's lost terminal changes how the execution ends: %v", err)
+				return
+			}
+			require.False(t, temporal.IsCanceledError(err), "an execution that ends CANCELED is reconciled to Cancelled, which no legacy surface counts")
+			require.Contains(t, err.Error(), "persist workflow attention terminal status")
+			encoded, jerr := json.Marshal(final["attention"])
+			require.NoError(t, jerr)
+			var update core.AttentionUpdate
+			require.NoError(t, json.Unmarshal(encoded, &update))
+			require.Equal(t, "finish", update.Phase)
+			require.Equal(t, "action_required", update.State, "cancellation escalates, never resolves")
+			require.Equal(t, "execution_error", update.FailureClass)
+		})
+	}
+}
+
 func TestDynamicWorkflowAttentionInvalidKeyFailsDurablyWithoutSuppression(t *testing.T) {
 	definition := strings.Replace(noOutcomeYAML, "entry: [work]", "attention:\n  key: '{{ inputs.missing }}'\nentry: [work]", 1)
 	var suite temporaltest.WorkflowTestSuite

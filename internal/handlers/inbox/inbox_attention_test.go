@@ -142,6 +142,41 @@ func TestInboxAttention_ObserverWithMissingFinishRetainsLegacyFailure(t *testing
 	assert.Empty(t, f.list(t, nil).Items, "finished stale actor is safely excluded, not reopened")
 }
 
+// A cancelled key-only observer whose terminal write was exhausted keeps only
+// its start: no finish, no incident, no lease. The runtime then ends the
+// execution FAILED (not CANCELED), and the reconciler repairs the row to Failed:
+// that row stays action-required in the legacy projection, on every later read.
+// The Cancelled row the run would otherwise have been repaired to does not.
+func TestInboxAttention_CancelledObserverWithLostTerminalStaysVisibleOnceReconciledFailed(t *testing.T) {
+	f := newInboxFixture(t)
+	f.trigger(t, "cancelled-observer")
+	at := time.Now().UTC().Add(-time.Minute)
+	attentionFiring(t, f, "cancelled-observer-job", "cancelled-observer", db.Active(), at)
+	applyInboxAttention(t, f, "cancelled-observer-job", "observer-run", "pr:42", "start", "", at, 0)
+	managed, err := f.repo.AttentionManagedChats(f.ctx, f.userID, []string{"cancelled-observer-job"})
+	require.NoError(t, err)
+	require.False(t, managed["cancelled-observer-job"], "a bare observer start cannot own the run's attention")
+
+	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, "cancelled-observer-job", db.Cancelled()))
+	assert.Empty(t, inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING),
+		"a Cancelled repair is not a failure to the legacy projection: the run must not end CANCELED")
+
+	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, "cancelled-observer-job", db.Failed()))
+	for range 2 {
+		items := inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING)
+		require.Len(t, items, 1, "the reconciled execution failure stays visible")
+		assert.Equal(t, "automation_failing:event-cancelled-observer-job", items[0].ItemId)
+	}
+	assert.Empty(t, attentionIncidents(t, f), "nothing opened an incident; legacy projection is the only backstop")
+}
+
+func attentionIncidents(t *testing.T, f *inboxFixture) []*core.AttentionIncident {
+	t.Helper()
+	items, err := f.repo.ListAttentionIncidents(f.ctx, f.userID)
+	require.NoError(t, err)
+	return items
+}
+
 func TestInboxAttention_StaleStartWithoutOpenBackstopRetainsLegacyFailure(t *testing.T) {
 	f := newInboxFixture(t)
 	f.trigger(t, "stale-start")

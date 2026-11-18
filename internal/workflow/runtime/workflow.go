@@ -5973,8 +5973,18 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		// Run cleanup activities (cancel pending approvals, etc.)
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow was cancelled and update workflow record
-		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "cancelled", parentWorkflowID, thread,
-			&workflowStatusOpts{LaunchRun: launchRun})
+		if err := notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "cancelled", parentWorkflowID, thread,
+			&workflowStatusOpts{LaunchRun: launchRun}); err != nil && attentionHandoff(ctx) != nil {
+			// The same backstop as normal completion's, below. The exhausted
+			// write rolled back this run's action_required and its cancelled
+			// lifecycle together. Ended CANCELED, the reconciler would repair
+			// the row to Cancelled, which the legacy failure projection does
+			// not count, and a key-only observer opened no incident and holds
+			// no lease to expire: the attention this policy promises would be
+			// lost for good. Ended FAILED, the reconciler repairs the row to
+			// Failed and the legacy projection shows the unfinished actor.
+			return fmt.Errorf("persist workflow attention terminal status: %w", err)
+		}
 		return nil
 	}
 
