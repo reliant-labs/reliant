@@ -172,6 +172,9 @@ type tokenRefreshTransport struct {
 	opts             *llm.DriverOptions
 	lowercaseHeaders map[string]string
 	mu               *sync.RWMutex // guards opts token fields + lowercaseHeaders (shared with lowercaseHeaderTransport)
+	// now is the clock the pre-flight expiry check reads; nil is time.Now.
+	// A field so a test can fix it.
+	now func() time.Time
 }
 
 func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -203,6 +206,7 @@ func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, er
 			t.adoptLocked(*stored)
 		}
 		t.mu.Unlock()
+		refreshed := false
 		if !changed {
 			// The store agrees with the token we just used. Before giving up,
 			// refresh once: the provider can consider an access token expired
@@ -210,7 +214,14 @@ func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, er
 			// subscription signed in again elsewhere, or clocks that disagree),
 			// and then only a new token helps. A refresh the provider refuses
 			// marks the account needs-sign-in (CoordinatedAccountRefresh).
-			changed = t.refreshAfterUnauthorized()
+			var attempted bool
+			changed, attempted = t.refreshAfterUnauthorized()
+			refreshed = changed
+			if attempted && !changed {
+				// Refreshed, and nothing new to retry with: the refusal
+				// stands, and is the user's to fix (llm.OAuthRecoveryHeader).
+				llm.MarkOAuthRefreshedStillRejected(resp)
+			}
 		}
 		if !changed {
 			// A genuine auth failure, not a stale token.
@@ -225,7 +236,12 @@ func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, er
 			"user_id", t.opts.UserID)
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		_ = resp.Body.Close()
-		return t.base.RoundTrip(retryReq)
+		retryResp, retryErr := t.base.RoundTrip(retryReq)
+		if retryErr == nil && refreshed && retryResp.StatusCode == http.StatusUnauthorized {
+			// A freshly refreshed token refused too.
+			llm.MarkOAuthRefreshedStillRejected(retryResp)
+		}
+		return retryResp, retryErr
 	}
 
 	return resp, nil
@@ -251,7 +267,11 @@ func (t *tokenRefreshTransport) refreshIfNeeded() {
 	if held.RefreshToken == "" || held.ExpiresAt.IsZero() {
 		return
 	}
-	if !time.Now().After(held.ExpiresAt.Add(-5 * time.Minute)) {
+	now := time.Now
+	if t.now != nil {
+		now = t.now
+	}
+	if !now().After(held.ExpiresAt.Add(-5 * time.Minute)) {
 		return
 	}
 
@@ -269,11 +289,12 @@ func (t *tokenRefreshTransport) refreshIfNeeded() {
 }
 
 // refreshAfterUnauthorized forces a refresh in response to a 401 that the store
-// could not explain. It reports whether a genuinely different access token was
-// adopted, which is the only case where retrying is worthwhile.
-func (t *tokenRefreshTransport) refreshAfterUnauthorized() bool {
+// could not explain. adopted reports whether a genuinely different access token
+// was adopted, which is the only case where retrying is worthwhile; attempted,
+// whether a refresh was asked for at all.
+func (t *tokenRefreshTransport) refreshAfterUnauthorized() (adopted, attempted bool) {
 	if t.opts.TokenRefresher == nil {
-		return false
+		return false, false
 	}
 
 	t.mu.RLock()
@@ -285,23 +306,23 @@ func (t *tokenRefreshTransport) refreshAfterUnauthorized() bool {
 	t.mu.RUnlock()
 
 	if held.RefreshToken == "" {
-		return false
+		return false, false
 	}
 
 	newState, err := t.opts.TokenRefresher(held)
 	if err != nil {
 		logging.Warn("Claude token refresh after 401 failed", "error", err, "user_id", t.opts.UserID)
-		return false
+		return false, true
 	}
 	if newState.AccessToken == "" || newState.AccessToken == held.AccessToken {
-		return false
+		return false, true
 	}
 
 	t.mu.Lock()
 	t.adoptLocked(newState)
 	t.mu.Unlock()
 	logging.Info("Claude OAuth token refreshed after a 401", "new_expiry", newState.ExpiresAt, "user_id", t.opts.UserID)
-	return true
+	return true, true
 }
 
 // adoptLocked installs a new token state on the options and rewrites the

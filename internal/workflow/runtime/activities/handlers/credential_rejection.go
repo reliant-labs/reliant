@@ -89,7 +89,7 @@ func (r *AccountRouting) credentialRejection(ctx context.Context, err error, uc 
 }
 
 // OAuthSessionRejectedError is a provider refusing an OAuth session's access
-// token (401/403) after the driver already recovered what it could: it
+// token (401) after the driver already recovered what it could: it
 // reloaded the stored tokens and refreshed through the token coordinator once
 // (anthropic tokenRefreshTransport; reliant#2833). Nothing the system does
 // next can fix it: the user reconnects the account. A refresh the provider
@@ -122,14 +122,16 @@ func (e *OAuthSessionRejectedError) ErrorClass() svcerr.Class { return svcerr.Cl
 
 // oauthSessionRejection marks a routed OAuth session's credential refusal as
 // the user's to fix (OAuthSessionRejectedError), or returns nil when err is not
-// one. API keys are credentialRejection's; the managed Reliant key and local
-// models are never an OAuth session.
+// one. Only a refusal the driver marked as surviving its own refresh counts
+// (drivers.OAuthRefreshedStillRejected), so the verdict rests on what the
+// driver did, not on its name: a provider whose driver does not refresh on a
+// 401 keeps the handling it had. API keys are credentialRejection's.
 func oauthSessionRejection(err error, uc usageLimitContext) error {
 	if uc.Account == nil {
 		return nil
 	}
 	cfg := uc.Account.Config
-	if cfg.RefreshToken == "" || cfg.DriverID == "reliant" || cfg.DriverID == "local" || !drivers.CredentialRejected(err) {
+	if cfg.RefreshToken == "" || !drivers.OAuthRefreshedStillRejected(err) {
 		return nil
 	}
 	return &OAuthSessionRejectedError{
