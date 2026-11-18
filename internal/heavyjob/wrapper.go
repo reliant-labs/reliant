@@ -66,7 +66,8 @@ func RunWrapper(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	opt.Env = os.Environ() //nolint:forbidigo // forge hostslot reads its own FORGE_* slot variables from the environment it is given; not reliant configuration
 	opt.Subtree = true
-	notice := &waitNotice{w: stderr, label: opt.Label}
+	lane, _ := lookup(opt.Env, laneEnv)
+	notice := &waitNotice{w: stderr, label: opt.Label, lane: lane}
 	opt.Out = notice
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
@@ -209,8 +210,11 @@ func parseWrapperArgs(args []string) (wrapperArgs, error) {
 // the marker must also see who holds the slot: written separately, the header
 // could be read on its own.
 type waitNotice struct {
-	w      io.Writer
-	label  string
+	w     io.Writer
+	label string
+	// lane is the slot lane the command asked for (FORGE_SLOT_LANE), "" for
+	// the default.
+	lane   string
 	headed bool
 }
 
@@ -219,7 +223,11 @@ func (n *waitNotice) Write(p []byte) (int, error) {
 		return n.w.Write(p)
 	}
 	n.headed = true
-	header := fmt.Sprintf("%s: `%s` waits for one of this machine's heavy slots (shared by every agent and forge lane) before it runs\n", waitingMarker, n.label)
+	lane := ""
+	if n.lane != "" {
+		lane = fmt.Sprintf(" (%s lane)", n.lane)
+	}
+	header := fmt.Sprintf("%s: `%s` waits for one of this machine's heavy slots%s, shared by every agent and forge's own lanes, before it runs\n", waitingMarker, n.label, lane)
 	written, err := n.w.Write(append([]byte(header), p...))
 	// The caller asked to write p: report how much of it went out.
 	return max(written-len(header), 0), err

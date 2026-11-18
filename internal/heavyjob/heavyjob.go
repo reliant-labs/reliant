@@ -34,6 +34,21 @@
 //
 // Light commands never wait: they are not rewritten at all.
 //
+// Heavy commands wait in one of two lanes. One FIFO for every heavy command
+// made a one-minute `go test -short ./internal/foo/` wait 20–24 minutes behind
+// whole-repo lints and gate steps that each hold a slot for most of an hour
+// (2026-11-18: agents on a 30-minute pr-fix lease pushed after it expired). So
+// a command whose every heavy part is scoped — it names at most
+// maxScopedTargets packages, paths or files, none of them the whole module
+// (`go test ./internal/foo/...`, `golangci-lint run ./internal/cli/`,
+// `task test:short -- ./internal/x/...`, `forge lint --scope internal/x`,
+// `vitest related a.ts`) — runs with FORGE_SLOT_LANE=express, which
+// forge/pkg/hostslot reads to give it slots reserved for short work and a
+// place ahead of bulk waiters. Everything else, including any command the
+// classifier does not recognize and any command declared heavy, is bulk, the
+// default lane (lane.go has the rules). A forge without lanes ignores the
+// variable, and the command queues as before.
+//
 // A slot bounds how many heavy commands run, not how wide each one runs, and
 // left alone every one assumes the whole machine: a Go build or test run under
 // a slot on a 32 CPU machine ran at GOMAXPROCS=31, so `go test ./...` fanned
@@ -291,6 +306,20 @@ func (g *Gate) Heavy(job Job) bool {
 	return classify(g.patterns, job.Command)
 }
 
+// Express reports whether job, a heavy one, waits in the slots' express lane:
+// every heavy command in it is scoped (lane.go), and the caller did not
+// declare it heavy — a declared command is one whose words the gate cannot
+// see into, so it is bulk.
+func (g *Gate) Express(job Job) bool {
+	if g == nil || job.Declared {
+		return false
+	}
+	if len(job.Argv) > 0 {
+		return matchWords(g.patterns, job.Argv) && scopedCommand(job.Argv)
+	}
+	return express(g.patterns, job.Command)
+}
+
 // Prepare readies cmd, which must not have been started, for job. A light
 // job is left alone: (false, nil). A heavy one is first put to the Admission
 // — a refusal is (true, *RefusedError), and cmd must not be started — and
@@ -341,6 +370,14 @@ func (g *Gate) Prepare(cmd *exec.Cmd, job Job) (heavy bool, err error) {
 	cmd.Path = g.self[0]
 	cmd.Args = append([]string{g.self[0]}, args...)
 	cmd.Env = append(env[:len(env):len(env)], gomaxprocsVar+"=1")
+	// The lane rides in the wrapper's environment, not a flag: hostslot reads
+	// it from there, the command inherits it, and a wrapper binary that
+	// predates lanes (a daemon downgraded in place) neither rejects it nor
+	// needs to know it. A lane the command's environment already names is
+	// kept.
+	if _, set := lookup(env, laneEnv); !set && g.Express(job) {
+		cmd.Env = append(cmd.Env, laneEnv+"="+laneExpress)
+	}
 	return true, nil
 }
 
