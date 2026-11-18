@@ -389,7 +389,8 @@ prompt against it. Lists of names are strings, not objects: GitHub's `issue.labe
 
 GitHub is the fullest integration for automations. Besides `issues.opened` and the like it delivers `issues.labeled`/`unlabeled`/`reopened`,
 `pull_request.labeled`/`unlabeled`/`reopened` (`match: {label: ...}`), `pull_request_review_comment.created` (inline diff comments; `match` `is_reply`
-and `mentions_reliant`), and `check_run.completed` / `check_suite.completed` / `workflow_run.completed` (`conclusion`, `branch`, `app`).
+and `mentions_reliant`), and `check_run.completed` / `check_suite.completed` / `workflow_run.completed` (`conclusion`, `branch`, `app`),
+and `check_run.rerequested` / `check_suite.rerequested` (GitHub's Re-run button on the App's own checks; GitHub re-runs nothing itself).
 Its `type: action` nodes cover comments (`issue.comment`, `.update`, `.list`), atomic `issue.labels.add`/`remove` (prefer them to `issue.update`,
 which replaces the whole label list and races), `issue.search`, `labels.create` (idempotent, for pack setup) / `labels.list`, `pr.create`/`update`, `pr.reviews.list`, `pr.review_comments.list` and
 `pr.review_comment.reply`. There is no merge action, on purpose. Actions that change GitHub are withheld from an unattended run unless the

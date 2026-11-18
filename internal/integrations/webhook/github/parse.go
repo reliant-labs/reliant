@@ -274,8 +274,13 @@ func senderLogin(body *payload) string {
 }
 
 // occurredAt is when the event says it happened, from the field each event
-// type carries; receivedAt when it carries none.
+// type carries; receivedAt when it carries none. A re-run request carries
+// only the timestamps of the run being re-run, not of the click, so it is
+// receivedAt too.
 func occurredAt(raw map[string]any, receivedAt time.Time) time.Time {
+	if action, _ := str(raw["action"]); action == "rerequested" {
+		return receivedAt.UTC()
+	}
 	for _, path := range [][]string{
 		{"comment", "created_at"}, {"review", "submitted_at"}, {"workflow_run", "updated_at"},
 		{"check_run", "completed_at"}, {"check_suite", "updated_at"},
