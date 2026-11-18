@@ -139,7 +139,7 @@ func commandDir(ctx context.Context, dir, filesTop string) (string, bool) {
 		return dir, false
 	}
 	rel, err := filepath.Rel(dirTop, realDir)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return filesTop, true
 	}
 	if info, err := os.Stat(filepath.Join(filesTop, rel)); err == nil && info.IsDir() {

@@ -512,6 +512,9 @@ func TestProve_RunsTheCommandInTheWorktreeThatHoldsTheFiles(t *testing.T) {
 	repo := filepath.Join(workspace, "app")
 	require.NoError(t, os.Rename(gitRepo(t), repo))
 	git(t, repo, "checkout", "-q", "--", "calc.go") // the main checkout holds no fix
+	// A directory whose name only starts with "..": still inside the checkout.
+	writeFile(t, filepath.Join(repo, "..config"), "keep", "x\n")
+	commitAll(t, repo, "add ..config")
 	branch := filepath.Join(t.TempDir(), "app-branch")
 	git(t, repo, "worktree", "add", "-q", "-b", "fix/add", branch)
 	writeFile(t, branch, "calc.go", fixedCalc)
@@ -532,6 +535,24 @@ func TestProve_RunsTheCommandInTheWorktreeThatHoldsTheFiles(t *testing.T) {
 	assert.Equal(t, realBranch, report.RunDir)
 	assert.Contains(t, strings.Join(report.Warnings, "\n"), "another git worktree of the same repository")
 	assert.Equal(t, buggyCalc, readFile(t, repo, "calc.go"), "the main checkout is never touched")
+
+	t.Run("a subdirectory runs in the same subdirectory of the worktree, even one named ..config", func(t *testing.T) {
+		var ran []string
+		report, err := Prove(context.Background(), Options{
+			Workspace: workspace,
+			Repos:     []string{workspace, repo},
+			Dir:       filepath.Join(repo, "..config"),
+			Files:     []string{filepath.Join(branch, "calc.go")},
+			Run: func(_ context.Context, dir string) RunOutcome {
+				ran = append(ran, dir)
+				return RunOutcome{ExitCode: 1}
+			},
+		})
+		require.NoError(t, err)
+		want := filepath.Join(realBranch, "..config")
+		assert.Equal(t, []string{want, want}, ran)
+		assert.Equal(t, want, report.RunDir)
+	})
 
 	t.Run("a directory outside the repository is where the caller chose to run", func(t *testing.T) {
 		var ran []string
