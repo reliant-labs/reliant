@@ -1,0 +1,16 @@
+--- stdout
+This will stop app "shop" on https://cp.example: every deployment of each env is suspended.
+  ENV       ID
+  prod      env_prod
+  staging   env_stg
+
+Kept: URLs, data, secrets and custom domains. `forge env start <env>` resumes an env.
+Compute stops billing. Storage keeps billing (database volumes, a static site's files);
+  `forge app teardown` is the state that bills nothing.
+
+Type the app name (shop) to confirm: 
+  prod     stopped (2 deployment(s) suspended)
+  staging  stopped (2 deployment(s) suspended)
+
+Stopped every env of app "shop". The platform converges asynchronously: `forge env status <env>` shows it.
+--- error

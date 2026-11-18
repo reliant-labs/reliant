@@ -1,0 +1,52 @@
+//go:build integration
+// +build integration
+
+package admin_server_test
+
+import (
+	"context"
+	"testing"
+
+	"connectrpc.com/connect"
+
+	pb "example.com/proj/gen/services/admin_server/v1"
+	admin_serverv1connect "example.com/proj/gen/services/admin_server/v1/admin_serverv1connect"
+	"example.com/proj/pkg/app"
+)
+
+func TestIntegration(t *testing.T) {
+	t.Parallel()
+
+	_, client := app.NewTestAdminServerServer(t)
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		call func(client admin_serverv1connect.AdminServerServiceClient) error
+	}{
+		{
+			name: "Create",
+			call: func(c admin_serverv1connect.AdminServerServiceClient) error {
+				_, err := c.Create(ctx, connect.NewRequest(&pb.CreateRequest{}))
+				return err
+			},
+		},
+		{
+			name: "List",
+			call: func(c admin_serverv1connect.AdminServerServiceClient) error {
+				_, err := c.List(ctx, connect.NewRequest(&pb.ListRequest{}))
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := tt.call(client)
+			if err != nil {
+				t.Logf("%s returned error: %v", tt.name, err)
+			}
+		})
+	}
+}

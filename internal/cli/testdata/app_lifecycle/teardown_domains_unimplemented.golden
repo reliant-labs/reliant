@@ -1,0 +1,4 @@
+--- stdout
+--- error
+https://cp.example does not serve DomainService/ListDomains, so forge cannot check that no custom domain is bound to app "shop"'s envs and the teardown preview is incomplete; nothing was deleted
+fix: delete each env with `forge env delete <env>`, which shows its own preview, or tear down from the Reliant web app

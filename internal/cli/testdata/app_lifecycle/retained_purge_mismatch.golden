@@ -1,0 +1,13 @@
+--- stdout
+This will permanently delete retained database "orders" of app "shop":
+  id:             rdb_2
+  project:        shop
+  environment:    preview (deleted; id env_prev)
+  storage:        10 GiB
+  retained since: 2026-11-10 09:00 UTC
+  location:       cluster wc-1, namespace shop-preview
+
+Its data, volumes and credentials are destroyed and its storage stops billing. IRREVERSIBLE.
+
+Type the database name (orders) to confirm: --- error
+confirmation did not match "orders"; nothing was purged

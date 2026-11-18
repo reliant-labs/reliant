@@ -1,0 +1,3 @@
+--- stdout
+no retained databases for app "shop" on https://cp.example (`--all` lists your organization's)
+--- error

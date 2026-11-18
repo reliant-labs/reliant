@@ -1,0 +1,130 @@
+{
+  "schema": "forge.ci.gate/v1",
+  "ok": false,
+  "exit_code": 1,
+  "error": "the CI gate failed (see the summary above)",
+  "verdict": "fail",
+  "lane": "all",
+  "tier": "main",
+  "head": "1a2b3c4",
+  "dirty": false,
+  "wall_ms": 95000,
+  "counts": {
+    "pass": 2,
+    "cached": 1,
+    "fail": 2,
+    "skip": 1,
+    "waived": 1,
+    "deferred": 1,
+    "na": 1
+  },
+  "checks": [
+    {
+      "name": "verify-generated",
+      "lane": "checks",
+      "status": "pass",
+      "blocking": false,
+      "duration_ms": 0,
+      "queued_ms": 0,
+      "cached": true,
+      "cached_at": "1a2b3c4",
+      "note": "this tree passed before",
+      "findings": []
+    },
+    {
+      "name": "golangci-lint",
+      "lane": "checks",
+      "status": "fail",
+      "blocking": true,
+      "duration_ms": 41200,
+      "queued_ms": 3000,
+      "cached": false,
+      "note": "exit status 1; log: tmp/ci/all/golangci-lint.log",
+      "log": "tmp/ci/all/golangci-lint.log",
+      "tail": "internal/orders/orders.go:23:9: Error return value of `rows.Close` is not checked (errcheck)",
+      "findings": [
+        {
+          "path": "internal/orders/orders.go",
+          "line": 23,
+          "column": 9,
+          "level": "error",
+          "message": "Error return value of `rows.Close` is not checked (errcheck)"
+        }
+      ]
+    },
+    {
+      "name": "go-build",
+      "lane": "checks",
+      "status": "pass",
+      "blocking": false,
+      "duration_ms": 12000,
+      "queued_ms": 0,
+      "cached": false,
+      "findings": []
+    },
+    {
+      "name": "vuln-go",
+      "lane": "checks",
+      "status": "waived",
+      "blocking": false,
+      "duration_ms": 0,
+      "queued_ms": 0,
+      "cached": false,
+      "note": "not run",
+      "findings": []
+    },
+    {
+      "name": "license-check",
+      "lane": "checks",
+      "status": "skip",
+      "blocking": true,
+      "duration_ms": 0,
+      "queued_ms": 0,
+      "cached": false,
+      "note": "go-licenses is not on PATH",
+      "findings": []
+    },
+    {
+      "name": "migration-safety",
+      "lane": "checks",
+      "status": "na",
+      "blocking": false,
+      "duration_ms": 0,
+      "queued_ms": 0,
+      "cached": false,
+      "note": "no db/migrations/",
+      "findings": []
+    },
+    {
+      "name": "unit-tests",
+      "lane": "test",
+      "status": "fail",
+      "blocking": true,
+      "duration_ms": 30000,
+      "queued_ms": 1500,
+      "cached": false,
+      "note": "exit status 1; full suite: --tier main",
+      "log": "tmp/ci/all/unit-tests.log",
+      "tail": "FAIL\texample.com/shop/internal/orders\t0.031s",
+      "findings": [
+        {
+          "path": "internal/orders/orders_test.go",
+          "line": 9,
+          "level": "error",
+          "message": "TestOrders: want 2 rows"
+        }
+      ]
+    },
+    {
+      "name": "integration-tests",
+      "lane": "integration",
+      "status": "deferred",
+      "blocking": false,
+      "duration_ms": 0,
+      "queued_ms": 0,
+      "cached": false,
+      "note": "the main tier does not run the integration lane; pr, queue, full do",
+      "findings": []
+    }
+  ]
+}

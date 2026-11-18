@@ -1,0 +1,88 @@
+//go:build ignore
+
+package {{.Package}}
+
+import (
+	"context"
+	"log/slog"
+	"testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+{{- if .SplitAPI }}
+
+	apipkg "{{.APIImportPath}}"
+{{- end }}
+)
+
+func newTestController(client *fake.ClientBuilder) *Controller {
+	c := New(Deps{
+		Logger: slog.Default(),
+	})
+	c.client = client.Build()
+	return c
+}
+
+func TestReconcile(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := {{ if .SplitAPI }}apipkg.{{ end }}AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	obj := &{{ if .SplitAPI }}apipkg.{{ end }}{{.TypeName}}{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-resource",
+			Namespace: "default",
+		},
+		Spec: {{ if .SplitAPI }}apipkg.{{ end }}{{.TypeName}}Spec{},
+	}
+
+	controller := newTestController(
+		fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(obj),
+	)
+
+	result, err := controller.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-resource",
+			Namespace: "default",
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+	if result != (reconcile.Result{}) {
+		t.Errorf("unexpected requeue: %+v", result)
+	}
+}
+
+func TestReconcileNotFound(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := {{ if .SplitAPI }}apipkg.{{ end }}AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	controller := newTestController(
+		fake.NewClientBuilder().
+			WithScheme(scheme),
+	)
+
+	result, err := controller.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "nonexistent",
+			Namespace: "default",
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("Reconcile should not error for not-found: %v", err)
+	}
+	if result != (reconcile.Result{}) {
+		t.Errorf("unexpected requeue: %+v", result)
+	}
+}

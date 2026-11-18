@@ -1,0 +1,8 @@
+--- stdout
+app "shop" on https://cp.example is scheduled for deletion:
+  scheduled:     2026-11-18 10:00 UTC by user usr_ada
+  purge after:   2026-11-25 10:00 UTC
+  purge started: 2026-11-25 10:05 UTC (it can no longer be cancelled)
+  secret destroy paused: the purge is waiting on a secret destroy that the control plane's
+    kill switch holds; it resumes when the platform operator turns destroys back on
+--- error

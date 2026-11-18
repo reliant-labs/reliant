@@ -1,0 +1,197 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: api
+  namespace: demo-prod
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        app.kubernetes.io/name: api
+        app.kubernetes.io/part-of: demo
+        forge.dev/env: prod
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - image: ghcr.io/acme/demo:v1.2.3
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+        name: api
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /readyz
+            port: 8080
+          periodSeconds: 5
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 250m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      enableServiceLinks: false
+      securityContext:
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: api
+      terminationGracePeriodSeconds: 40
+      volumes:
+      - emptyDir: {}
+        name: tmp
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: api
+  namespace: demo-prod
+spec:
+  ports:
+  - name: http
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: api
+---
+apiVersion: v1
+automountServiceAccountToken: false
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: api
+  namespace: demo-prod
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: legacy
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: legacy
+  namespace: demo-prod
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: legacy
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        app.kubernetes.io/name: legacy
+        app.kubernetes.io/part-of: demo
+        forge.dev/env: prod
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - command:
+        - /app/demo
+        - legacy
+        image: ghcr.io/acme/demo:v1.2.3
+        imagePullPolicy: IfNotPresent
+        name: legacy
+        resources:
+          limits:
+            cpu: 250m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      enableServiceLinks: true
+      securityContext:
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: legacy
+      terminationGracePeriodSeconds: 40
+      volumes:
+      - emptyDir: {}
+        name: tmp
+---
+apiVersion: v1
+automountServiceAccountToken: false
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: legacy
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: legacy
+  namespace: demo-prod

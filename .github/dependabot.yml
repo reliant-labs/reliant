@@ -1,0 +1,113 @@
+# yours: scaffolded once, never touched again — forge will not overwrite this file.
+# This CI workflow is a starting point you own — add jobs, secrets, and steps freely.
+# Deleting it sticks (.forge/scaffolded.json); `forge project rescaffold <path>` re-creates it.
+# Source: internal/templates/ci/github/dependabot.yml.tmpl.
+#
+# Every Dependabot PR runs the project's whole CI, so one PR per dependency
+# multiplies that cost (and each rebase re-runs it). Updates are grouped: Go
+# patches in one PR, Go minors in one PR per ecosystem that moves together
+# (see the gomod entry), docker and actions one PR each. Groups take minor and
+# patch updates only, so a rare major bump stays its own PR and cannot block a
+# batch.
+#
+# A Dependabot PR goes through the merge queue like any other
+# (`gh pr merge <n> --squash --auto`) and is never merged with --admin: it has
+# no author who will come back to fix what a red check showed.
+version: 2
+updates:
+  # The generated protobuf module lives under /gen with its own go.mod.
+  - package-ecosystem: gomod
+    directories:
+      - /
+      - /gen
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Grouped by ecosystem, not one group for everything. #997 took every
+    # minor and patch bump of every module (23 of them) in one PR; one, a 0.x
+    # minor of connectrpc.com/vanguard, removed the API pkg/serverkit used, and
+    # main stopped compiling. Go treats v0 as unstable (a minor may break), and
+    # Dependabot cannot group by version range, so the minors are split by the
+    # ecosystems that move together, and a red PR points at one of them:
+    # reverting it does not drop twenty unrelated good bumps. Patches stay one
+    # PR: cheap, and almost never breaking.
+    #
+    # connectrpc.com/* is in no minor group on purpose: each of its minors is
+    # its own PR. connectrpc is mid-migration to connect-go v2, and its 0.x
+    # minors are where redesigns land.
+    groups:
+      go-patch:
+        patterns:
+          - "*"
+        # KCL is pinned to one release everywhere (templates.KCLVersion,
+        # enforced by TestKCLVersionIsPinnedEverywhere); it moves by hand.
+        exclude-patterns:
+          - "kcl-lang.io/*"
+        update-types:
+          - patch
+      # k8s.io and sigs.k8s.io (controller-runtime) move together or not at all.
+      go-k8s:
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+        update-types:
+          - minor
+      # otel, the collector and contrib are versioned as a set.
+      go-otel:
+        patterns:
+          - "go.opentelemetry.io/*"
+          - "github.com/open-telemetry/*"
+          - "github.com/XSAM/otelsql"
+        update-types:
+          - minor
+      go-kcl:
+        patterns:
+          - "kcl-lang.io/*"
+        update-types:
+          - minor
+      # Every other minor, golang.org/x included.
+      go-minor:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "connectrpc.com/*"
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+          - "go.opentelemetry.io/*"
+          - "github.com/open-telemetry/*"
+          - "github.com/XSAM/otelsql"
+          - "kcl-lang.io/*"
+        update-types:
+          - minor
+    ignore:
+      # forge_version in forge.yaml must move with this require, and a hop can
+      # carry migrations that only `forge project upgrade` runs.
+      - dependency-name: github.com/reliant-labs/forge
+      # A 0.x minor is a breaking release: vanguard v0.5.0 replaced
+      # Service/NewService/NewTranscoder with a connect.Server + vanguard.Mount
+      # model, and grouped in with the patch bumps it merged as #997 and
+      # pkg/serverkit/rest.go stopped compiling. v0.5 is adopted on purpose
+      # (pkg/serverkit/rest.go); the next 0.x minor is a migration too, made
+      # deliberately, not a weekly bump.
+      - dependency-name: connectrpc.com/vanguard
+        update-types: ["version-update:semver-minor"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      docker:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      github-actions:
+        patterns:
+          - "*"

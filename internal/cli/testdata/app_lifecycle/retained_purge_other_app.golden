@@ -1,0 +1,4 @@
+--- stdout
+--- error
+retained database rdb_9 belongs to app "other", not this app ("shop"); nothing was purged
+fix: purge it from that app's checkout, or name your organization's scope: `forge env retained purge rdb_9 --all`

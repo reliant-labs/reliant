@@ -1,0 +1,5 @@
+[
+  { "project": "shop", "frontend": "web", "service": "shop-web" },
+  { "project": "reliant", "frontend": "desktop", "service": "reliant-desktop" },
+  { "project": "control-plane", "frontend": "internal-console", "service": "control-plane-internal-console" }
+]

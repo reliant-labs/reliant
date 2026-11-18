@@ -1,0 +1,427 @@
+# yours: scaffolded once, never touched again — forge will not overwrite this file.
+# Written for `ci.provider: reliant` in forge.yaml. Deleting it sticks
+# (.forge/scaffolded/); `forge project rescaffold .reliant/workflows/ci.yaml`
+# re-creates it.
+#
+# demo/ci: this project's CI gate (`forge ci gate`) as a Reliant workflow.
+# GitHub sends its events to the Reliant App; this workflow runs the gate on
+# the Reliant machine you enable it on, and the engine posts the verdict as the
+# GitHub check run "demo/ci", written by the Reliant App (its `check:`
+# block below). No GitHub Actions job runs and no runner is registered.
+#
+#   a pull request is opened, pushed to, reopened or marked ready  ->  --tier pr
+#   the merge queue builds a group (gh-readonly-queue/...)         ->  --tier queue
+#   a push to the default branch                                   ->  --tier main
+#
+# There is no Re-run trigger: GitHub's Re-run on the check names only a commit
+# and a branch, and nothing a workflow can read says whether that commit is a
+# trusted pull request's head, so a re-run could gate code the pull-request
+# filter never admitted. To run the gate again, push to the branch (an empty
+# commit will do) or close and reopen the pull request; both pass the filter
+# below again.
+#
+# A draft is skipped. A pull request from a fork, or by an author with no write
+# access to the repository (and not in trusted_ids), never runs on your
+# machine: a check the ruleset requires stays pending until a maintainer pushes
+# the branch into the repository.
+#
+# Declaring triggers fires nothing. Enable the workflow on this project's
+# machine (Workflows -> Library -> ci -> Enable, or `reliant trigger activate
+# --workflow ci --machine <machine> --param repository=<owner/name>`), then
+# require "demo/ci" in the branch ruleset. `forge skill load ci/reliant` has
+# the steps, forks, and how to add checks of your own.
+name: ci
+title: demo/ci
+description: >-
+  Runs this project's CI gate (forge ci gate) on a Reliant machine for every pull
+  request, merge-queue group and push to the default branch of the repository it is
+  enabled for, and posts the verdict as the GitHub check run demo/ci. Scaffolded
+  by forge for ci.provider reliant; yours to edit.
+automation_only: true
+# The gate queues each heavy check for one of the machine's heavy slots itself;
+# this bounds how many runs hold a checkout at once.
+concurrency:
+  max_running: 2
+requires:
+  tools: [git, reliant]
+check:
+  name: demo/ci
+  # Evaluated when the run ends. The conclusion is how the run ended: success when
+  # it completes, failure when it reaches a node with outcome: failure.
+  output: "{{ nodes.?report.check.orValue({'title': 'Not run', 'summary': 'The run ended before the gate reported. Open the run (Details) for why.'}) }}"
+  timeout: 2h
+inputs:
+  repository:
+    type: github.repository
+    required: true
+    description: The repository this gate checks. Events from any other repository are dropped.
+  trusted_ids:
+    type: github.user
+    multi: true
+    default: []
+    description: >-
+      Pull request authors to gate besides the repository's owners, members and
+      collaborators, as GitHub user ids (dependabot[bot] is 49699333). Their branch must
+      still be in the repository: a fork's never runs.
+  tier:
+    type: enum
+    enum: [pr, queue, main]
+    default: pr
+    description: The gate's tier (set by the trigger).
+  sha:
+    type: string
+    default: ''
+    description: The commit to gate (set by the trigger).
+  base:
+    type: string
+    default: ''
+    description: The commit a pull request's affected tests are measured from (set by the trigger).
+  branch:
+    type: string
+    default: ''
+    description: The branch the commit is on (set by the trigger).
+  default_branch:
+    type: string
+    default: main
+    description: The repository's default branch (set by the trigger).
+triggers:
+- name: pull-request
+  description: A pull request is opened, pushed to, reopened or marked ready for review.
+  integration:
+    integration: github
+    events: [pull_request.opened, pull_request.synchronize, pull_request.reopened, pull_request.ready_for_review]
+    match: {repository: {input: repository}}
+  # Trusted heads only: not a draft, a branch of this repository (never a
+  # fork's), opened by someone with access to it or listed in trusted_ids.
+  filter: >-
+    !trigger.payload.data.pull_request.draft
+    && has(trigger.payload.data.pull_request.head.repo)
+    && trigger.payload.data.pull_request.head.repo.full_name == trigger.payload.attributes.repository
+    && (trigger.payload.data.pull_request.author_association in ['OWNER', 'MEMBER', 'COLLABORATOR']
+        || (has(trigger.payload.data.pull_request.user.id)
+            && string(trigger.payload.data.pull_request.user.id) in trigger.activation.params.trusted_ids))
+  inputs:
+    tier: pr
+    sha: '{{ trigger.payload.data.pull_request.head.sha }}'
+    base: '{{ trigger.payload.data.pull_request.base.sha }}'
+    branch: '{{ trigger.payload.data.pull_request.head.ref }}'
+    default_branch: '{{ trigger.payload.data.repository.default_branch }}'
+  prompt: 'Run the CI gate on pull request #{{ trigger.payload.data.pull_request.number }} of {{ trigger.payload.attributes.repository }} at {{ trigger.payload.data.pull_request.head.sha }}.'
+# A merge group holds only pull requests the queue admitted, which needed this
+# check to pass on their (trusted) heads.
+- name: merge-group
+  description: GitHub's merge queue built a group and asks the Reliant App for its checks.
+  integration:
+    integration: github
+    events: [check_suite.requested]
+    match: {repository: {input: repository}}
+  filter: >-
+    has(trigger.payload.attributes.branch)
+    && trigger.payload.attributes.branch.matches('^gh-readonly-queue/.+/pr-[0-9]+-[0-9a-f]{40}$')
+    && has(trigger.payload.data.check_suite.head_sha)
+  inputs:
+    tier: queue
+    sha: '{{ trigger.payload.data.check_suite.head_sha }}'
+    branch: '{{ trigger.payload.attributes.branch }}'
+    default_branch: '{{ trigger.payload.data.repository.default_branch }}'
+  prompt: 'Run the CI gate on the merge group {{ trigger.payload.attributes.branch }} of {{ trigger.payload.attributes.repository }}.'
+- name: push
+  description: A push to the repository's default branch.
+  integration:
+    integration: github
+    events: [push]
+    match: {repository: {input: repository}}
+  filter: >-
+    has(trigger.payload.attributes.branch)
+    && trigger.payload.attributes.branch == trigger.payload.data.repository.default_branch
+    && !trigger.payload.data.deleted
+  inputs:
+    tier: main
+    sha: '{{ trigger.payload.data.after }}'
+    branch: '{{ trigger.payload.attributes.branch }}'
+    default_branch: '{{ trigger.payload.data.repository.default_branch }}'
+  prompt: 'Run the CI gate on {{ trigger.payload.attributes.branch }} of {{ trigger.payload.attributes.repository }} at {{ trigger.payload.data.after }}.'
+outputs:
+  verdict: "{{ nodes.?doc.doc.verdict.orValue('') }}"
+entry: [facts]
+nodes:
+# Every value a shell below sees is checked here first, against a pattern that
+# cannot hold a quote, a $, a backtick or a newline, and the scripts read them
+# only from this node (and from resolved, which checks fetch's output the same
+# way), each inside single quotes. A run node takes no env: block, so a
+# checked value in single quotes is the safe way in. Anything else is refused
+# before a command runs.
+- id: facts
+  type: compute
+  outputs:
+    valid: >-
+      {{ inputs.tier in ['pr', 'queue', 'main']
+      && inputs.sha.matches('^[0-9a-f]{40}$')
+      && (inputs.base == '' || inputs.base.matches('^[0-9a-f]{40}$'))
+      && inputs.default_branch.matches('^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$')
+      && (inputs.tier != 'queue' || inputs.branch.matches('^gh-readonly-queue/.+/pr-[0-9]+-[0-9a-f]{40}$'))
+      && has(workflow.path) && workflow.path.matches('^/[A-Za-z0-9 ._/+@=,:~-]*$') }}
+    tier: '{{ inputs.tier }}'
+    sha: '{{ inputs.sha }}'
+    default_branch: '{{ inputs.default_branch }}'
+    path: "{{ has(workflow.path) ? workflow.path : '' }}"
+    # A merge group's base is the commit its branch name ends in.
+    base: "{{ inputs.tier == 'queue' ? regex.extract(inputs.branch, '-([0-9a-f]{40})$').orValue('') : inputs.base }}"
+- id: invalid
+  type: save_message
+  outcome: failure
+  args:
+    role: assistant
+    content: >-
+      Refused: the gate needs a known tier, a 40-character commit sha, a valid base and default branch, a
+      gh-readonly-queue branch for a merge group, and a project directory a shell can take as it is.
+# Fetches the commit (and its base) into the project's checkout on this
+# machine and writes them as a git bundle to a directory of this run's own,
+# which the gate reads instead of the checkout. This step holds the machine's
+# git credentials, so it runs git only (fetch, bundle, rev-parse): it never
+# checks out, reads or runs the commit's files.
+#
+# The run directory is mktemp -d's run.XXXXXXXX (mode 0700, a name no other
+# run can predict or share) under <cache>/reliant-ci, which must be a real
+# directory this user owns with mode 0700, or this step refuses. Its refs
+# (refs/reliant-ci/run.XXXXXXXX/) go when it exits; the directory goes with
+# it when it fails, and in finally otherwise. The only other thing it ever
+# deletes is a run directory a lost run left: a run.XXXXXXXX child of the
+# root, not a symlink, owned by this user, carrying this workflow's marker
+# file, and older than two days.
+#
+# The pr and queue tiers' affected tests are measured from a base commit, so
+# a base that does not fetch or resolve fails this step. A merge group's base
+# is its branch name's suffix (gh-readonly-queue/<base>/pr-<n>-<base sha>),
+# the commit the group was built on: it must be an ancestor of the group.
+#
+# stdout is four lines and nothing else: root=<the run directories' parent>,
+# run=run.XXXXXXXX, prefix=./<the project's directory in the repository>, and
+# base=<sha> (not on main).
+- id: fetch
+  type: run
+  timeout: 15m
+  args:
+    command: |
+      set -eu
+      tier='{{ nodes.facts.tier }}'
+      sha='{{ nodes.facts.sha }}'
+      base='{{ nodes.facts.base }}'
+      default_branch='{{ nodes.facts.default_branch }}'
+      dir='{{ nodes.facts.path }}'
+      case "$sha" in *[!0-9a-f]*|'') echo "refused: '$sha' is not a commit sha" >&2; exit 1 ;; esac
+      cd "$dir"
+      uid=$(id -u)
+      root="${XDG_CACHE_HOME:-$HOME/.cache}/reliant-ci"
+      marker=.reliant-ci-run
+      # A real directory (not a symlink) owned by this user, mode 0700.
+      ours() { [ -d "$1" ] && [ ! -L "$1" ] && [ -n "$(find -P "$1" -maxdepth 0 -type d -user "$uid" -perm 700 2>/dev/null)" ]; }
+      if [ ! -e "$root" ] && [ ! -L "$root" ]; then
+        mkdir -p -- "${root%/*}"
+        mkdir -m 700 -- "$root" 2>/dev/null || true
+      fi
+      ours "$root" || { echo "refused: $root must be a directory (not a symlink) owned by uid $uid with mode 0700" >&2; exit 1; }
+      # Run directories a lost run left behind: only marked, owned, old run.XXXXXXXX ones.
+      find -P "$root" -mindepth 1 -maxdepth 1 -type d -user "$uid" -name 'run.*' -mtime +2 2>/dev/null |
+        while IFS= read -r old; do
+          name=${old##*/}
+          case "$name" in run.????????) ;; *) continue ;; esac
+          case "${name#run.}" in *[!A-Za-z0-9]*) continue ;; esac
+          [ "$old" = "$root/$name" ] && [ ! -L "$old" ] && [ -f "$old/$marker" ] && [ ! -L "$old/$marker" ] || continue
+          rm -rf -- "$root/$name" || true
+        done || true
+      out=''
+      ref=''
+      trap 'rc=$?; if [ -n "$ref" ]; then for r in head base; do git update-ref -d "$ref/$r" 2>/dev/null; done; fi; if [ "$rc" != 0 ] && [ -n "$out" ]; then rm -rf -- "$out"; fi' EXIT
+      out=$(mktemp -d "$root/run.XXXXXXXX")
+      run=${out##*/}
+      printf '%s\n' "$run" >"$out/$marker"
+      ref="refs/reliant-ci/$run"
+      git fetch --quiet --no-tags --no-write-fetch-head --refmap= origin "+$sha:$ref/head"
+      refs="$ref/head"
+      if [ "$tier" != main ]; then
+        if [ -n "$base" ]; then
+          git fetch --quiet --no-tags --no-write-fetch-head --refmap= origin "+$base:$ref/base" ||
+            { echo "the $tier tier needs its base commit $base, and fetching it failed" >&2; exit 1; }
+        else
+          git fetch --quiet --no-tags --no-write-fetch-head --refmap= origin "+refs/heads/$default_branch:$ref/base" ||
+            { echo "the $tier tier needs a base commit, and fetching $default_branch for it failed" >&2; exit 1; }
+        fi
+        git rev-parse --verify --quiet "$ref/base^{commit}" >/dev/null ||
+          { echo "the $tier tier needs a base commit, and $ref/base did not resolve" >&2; exit 1; }
+        if [ "$tier" = queue ] && ! git merge-base --is-ancestor "$ref/base" "$ref/head"; then
+          echo "the merge group's base $base is not an ancestor of its head $sha" >&2; exit 1
+        fi
+        refs="$refs $ref/base"
+      fi
+      # shellcheck disable=SC2086 # two ref names, no spaces
+      git bundle create --quiet "$out/head.bundle" $refs
+      printf 'root=%s\n' "$root"
+      printf 'run=%s\n' "$run"
+      printf 'prefix=./%s\n' "$(git rev-parse --show-prefix)"
+      if [ "$tier" != main ]; then printf 'base=%s\n' "$(git rev-parse "$ref/base^{commit}")"; fi
+# fetch's output, checked like facts before a shell or a work_dir sees it: a
+# root a shell can take as it is, a run directory named as mktemp names it,
+# a project prefix inside the repository, and a base sha, which only the main
+# tier may lack. The run directory is these, never anything a shell or an
+# earlier step could choose.
+- id: resolved
+  type: compute
+  outputs:
+    root: "{{ nodes.fetch.exit_code == 0 ? regex.extract(nodes.fetch.stdout, '(?m)^root=(/[A-Za-z0-9 ._/+@=,:~-]*)$').orValue('') : '' }}"
+    run: "{{ nodes.fetch.exit_code == 0 ? regex.extract(nodes.fetch.stdout, '(?m)^run=(run[.][A-Za-z0-9]{8})$').orValue('') : '' }}"
+    dir: "{{ nodes.fetch.exit_code == 0 ? regex.extract(nodes.fetch.stdout, '(?m)^root=(/[A-Za-z0-9 ._/+@=,:~-]*)$').orValue('') + '/' + regex.extract(nodes.fetch.stdout, '(?m)^run=(run[.][A-Za-z0-9]{8})$').orValue('') : '' }}"
+    prefix: "{{ regex.extract(nodes.fetch.stdout, '(?m)^prefix=([.]/[A-Za-z0-9 ._/+@=,:~-]*)$').orValue('') }}"
+    base: "{{ nodes.fetch.exit_code == 0 ? regex.extract(nodes.fetch.stdout, '(?m)^base=([0-9a-f]{40})$').orValue('') : '' }}"
+    ok: >-
+      {{ nodes.fetch.exit_code == 0
+      && regex.extract(nodes.fetch.stdout, '(?m)^root=(/[A-Za-z0-9 ._/+@=,:~-]*)$').hasValue()
+      && !regex.extract(nodes.fetch.stdout, '(?m)^root=(.*)$').orValue('').contains('..')
+      && regex.extract(nodes.fetch.stdout, '(?m)^run=(run[.][A-Za-z0-9]{8})$').hasValue()
+      && regex.extract(nodes.fetch.stdout, '(?m)^prefix=([.]/[A-Za-z0-9 ._/+@=,:~-]*)$').hasValue()
+      && !regex.extract(nodes.fetch.stdout, '(?m)^prefix=(.*)$').orValue('').contains('..')
+      && (regex.extract(nodes.fetch.stdout, '(?m)^base=([0-9a-f]{40})$').hasValue() || nodes.facts.tier == 'main') }}
+    error: >-
+      {{ nodes.fetch.exit_code != 0
+      ? 'fetching the commit failed: ' + nodes.fetch.stderr.substring(math.greatest(0, size(nodes.fetch.stderr) - 1500))
+      : !regex.extract(nodes.fetch.stdout, '(?m)^root=(/[A-Za-z0-9 ._/+@=,:~-]*)$').hasValue() || !regex.extract(nodes.fetch.stdout, '(?m)^run=(run[.][A-Za-z0-9]{8})$').hasValue() || !regex.extract(nodes.fetch.stdout, '(?m)^prefix=([.]/[A-Za-z0-9 ._/+@=,:~-]*)$').hasValue()
+        ? 'the run directory or the project directory is not one a shell can take as it is'
+      : 'the ' + nodes.facts.tier + ' tier needs a base commit, and fetch resolved none' }}
+# The gate runs the commit's code, so it holds no credentials, and it never
+# touches the project's checkout: it starts in this run's directory (its
+# work_dir, the only directory the sandbox lets it write besides its private
+# /tmp), checks that it is that directory, and makes its own repository in
+# that /tmp from fetch's bundle, with git hooks off. Nothing in it points at
+# the checkout's object store (no alternates, no origin). stdout is the
+# gate's forge.ci.gate/v1 document and nothing else.
+- id: gate
+  type: run
+  # lint:allow shared-checkout-fetch — its one fetch reads the run's bundle into the repository it just made in its private /tmp, never a shared checkout
+  timeout: 90m
+  args:
+    credentials: none
+    work_dir: '{{ nodes.resolved.dir }}'
+    command: |
+      set -u
+      tier='{{ nodes.facts.tier }}'
+      sha='{{ nodes.facts.sha }}'
+      base='{{ nodes.resolved.base }}'
+      prefix='{{ nodes.resolved.prefix }}'
+      run='{{ nodes.resolved.run }}'
+      bundle="$PWD/head.bundle"
+      work=$(mktemp -d)
+      trap 'rm -rf "$work"' EXIT
+      log="$work/setup.log"
+      fail() {
+        printf '{"schema":"forge.ci.gate/v1","ok":false,"exit_code":2,"verdict":"error","error":"%s","checks":[]}\n' "$1"
+        tail -c 4000 "$log" >&2
+        exit 0
+      }
+      case "$tier" in pr|queue|main) ;; *) fail 'refused: unknown tier' ;; esac
+      case "$sha$base" in *[!0-9a-f]*) fail 'refused: the commit or its base is not a sha' ;; esac
+      case "$prefix" in *..*) fail 'refused: the project directory leaves the repository' ;; esac
+      case "$run" in run.????????) ;; *) fail 'refused: not a run directory' ;; esac
+      if [ "${PWD##*/}" != "$run" ] || [ -L "$PWD" ] || [ ! -f .reliant-ci-run ]; then fail 'refused: the gate is not in its run directory'; fi
+      if [ "$tier" != main ] && [ -z "$base" ]; then fail "the $tier tier needs a base commit"; fi
+      [ -f "$bundle" ] && [ ! -L "$bundle" ] || fail 'the bundle of the commit is missing'
+      git init --quiet "$work/src" >>"$log" 2>&1 || fail 'git init failed'
+      git -C "$work/src" -c core.hooksPath=/dev/null fetch --quiet --no-tags "$bundle" '+refs/reliant-ci/*:refs/reliant-ci/*' >>"$log" 2>&1 ||
+        fail 'reading the bundle of the commit failed'
+      git -C "$work/src" -c core.hooksPath=/dev/null checkout --quiet --detach "$sha" >>"$log" 2>&1 || fail 'git checkout of the commit failed'
+      cd "$work/src/$prefix" || fail 'the project directory is missing at this commit'
+      if [ -n "$base" ]; then
+        reliant forge ci gate --tier "$tier" --base "$base" --json 2>"$work/gate.log"
+      else
+        reliant forge ci gate --tier "$tier" --json 2>"$work/gate.log"
+      fi
+      rc=$?
+      tail -c 6000 "$work/gate.log" >&2
+      exit "$rc"
+- id: doc
+  type: compute
+  outputs:
+    doc: >-
+      {{ !nodes.resolved.ok
+      ? {'ok': false, 'verdict': 'error', 'error': nodes.resolved.error, 'checks': []}
+      : json.decode(nodes.?gate.stdout.orValue('')).orValue({'ok': false, 'verdict': 'error', 'error': 'the gate printed no result (exit ' + string(nodes.?gate.exit_code.orValue(-1)) + ')', 'checks': []}) }}
+    log: "{{ nodes.?gate.stderr.orValue('') }}"
+# The check run's output: a table of every check, the notes and log tails of
+# the ones that failed, and their findings as annotations (at most 50).
+- id: report
+  type: compute
+  outputs:
+    ok: "{{ nodes.doc.doc.?ok.orValue(false) == true }}"
+    check: >-
+      {{ cel.bind(d, nodes.doc.doc,
+      cel.bind(checks, d.?checks.orValue([]),
+      cel.bind(blocking, checks.filter(c, c.?blocking.orValue(false) == true),
+      cel.bind(found, blocking.map(c, c.?findings.orValue([])
+          .filter(f, int(f.?line.orValue(0)) > 0 && string(f.?path.orValue('')) != '' && string(f.?message.orValue('')) != '')
+          .map(f, {'path': string(f.path), 'start_line': int(f.line), 'end_line': int(f.line),
+                   'annotation_level': f.?level.orValue('') == 'warning' ? 'warning' : f.?level.orValue('') == 'error' ? 'failure' : 'notice',
+                   'message': string(f.message), 'title': string(c.?name.orValue(''))})).flatten(),
+      {
+        'title': d.?ok.orValue(false) == true ? 'Passed: forge ci gate --tier ' + inputs.tier
+          : d.?verdict.orValue('error') == 'error' ? 'Could not run the gate: ' + string(d.?error.orValue('no result'))
+          : 'Failed: ' + blocking.map(c, string(c.?name.orValue('?'))).join(', '),
+        'summary': '**' + (d.?ok.orValue(false) == true ? 'Passed' : d.?verdict.orValue('error') == 'error' ? 'Could not run' : 'Failed')
+          + '**: forge ci gate --tier ' + inputs.tier + ' on ' + inputs.sha.substring(0, 12)
+          + (d.?wall_ms.hasValue() ? ' in ' + string(int(d.wall_ms) / 1000) + 's' : '') + '.\n\n'
+          + (size(checks) == 0 ? string(d.?error.orValue(''))
+            : '| Check | Lane | Status | Time |\n|---|---|---|---|\n' + checks.map(c, '| ' + string(c.?name.orValue('?')) + ' | ' + string(c.?lane.orValue(''))
+              + ' | ' + (c.?blocking.orValue(false) == true ? '**' + string(c.?status.orValue('')) + '**' : string(c.?status.orValue('')))
+              + ' | ' + string(int(c.?duration_ms.orValue(0)) / 1000) + 's |').join('\n')),
+        'text': (size(blocking) == 0 ? '' : blocking.map(c, '### ' + string(c.?name.orValue('?')) + '\n\n' + string(c.?note.orValue(''))
+            + (string(c.?tail.orValue('')) == '' ? '' : '\n\n~~~\n' + string(c.tail) + '\n~~~')).join('\n\n'))
+          + (d.?ok.orValue(false) == true || nodes.doc.log == '' ? '' : '\n\n### Gate log (tail)\n\n~~~\n' + nodes.doc.log + '\n~~~'),
+        'annotations': found.slice(0, math.least(size(found), 50))
+      })))) }}
+- id: failed
+  type: save_message
+  condition: "!nodes.report.ok"
+  outcome: failure
+  args:
+    role: assistant
+    content: "{{ nodes.report.check.title }}"
+edges:
+- from: facts
+  cases:
+  - condition: nodes.facts.valid == true
+    to: [fetch]
+  default: invalid
+- from: fetch
+  default: resolved
+- from: resolved
+  cases:
+  - condition: nodes.resolved.ok == true
+    to: [gate]
+  default: doc
+- from: gate
+  default: doc
+- from: doc
+  default: report
+- from: report
+  default: failed
+# Drops this run's directory, however the run ended: the exact directory
+# fetch reported, checked again here (a run.XXXXXXXX child of the root it
+# starts in, not a symlink, owned by this user). It starts in the root, which
+# makes the removal real for a credentials: none command; fetch already
+# dropped its refs.
+finally:
+  sequence:
+  - id: cleanup
+    type: run
+    condition: nodes.?resolved.root.orValue('') != '' && nodes.?resolved.run.orValue('') != ''
+    timeout: 2m
+    args:
+      credentials: none
+      work_dir: "{{ nodes.?resolved.root.orValue('') }}"
+      command: |
+        run='{{ nodes.?resolved.run.orValue('') }}'
+        case "$run" in run.????????) ;; *) exit 0 ;; esac
+        case "${run#run.}" in *[!A-Za-z0-9]*) exit 0 ;; esac
+        [ "${PWD##*/}" = reliant-ci ] && [ ! -L "$PWD" ] || exit 0
+        [ -d "./$run" ] && [ ! -L "./$run" ] && [ -O "./$run" ] || exit 0
+        rm -rf -- "./$run"
+        exit 0
+

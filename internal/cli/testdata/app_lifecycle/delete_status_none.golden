@@ -1,0 +1,3 @@
+--- stdout
+app "shop" on https://cp.example has no deletion scheduled
+--- error

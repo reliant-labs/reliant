@@ -1,0 +1,13 @@
+--- stdout
+This will permanently delete retained database "main" of app "other":
+  id:             rdb_9
+  project:        other
+  environment:    prod (deleted; id env_x)
+  storage:        1 GiB
+  retained since: 2026-11-02 00:00 UTC
+
+Its data, volumes and credentials are destroyed and its storage stops billing. IRREVERSIBLE.
+
+Type the database name (main) to confirm: 
+Purged retained database main (rdb_9); the platform is destroying its data and volumes.
+--- error

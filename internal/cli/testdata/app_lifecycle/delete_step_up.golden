@@ -1,0 +1,16 @@
+--- stdout
+This will schedule app "shop" on https://cp.example for deletion.
+  ENV       ID
+  prod      env_prod
+  staging   env_stg
+
+Now: every env is stopped (compute stops billing), and deploys, promotions and new envs of the app are refused.
+After the grace window (7 days): the control plane purges everything that names the app — every env and
+  its data, kept databases, release history and registry images, custom domains and their certificates,
+  secrets — and frees the name. Activity, audit and spend history are kept.
+Until the purge starts, `forge app delete --cancel` keeps the app and starts again what this stopped.
+To keep the app's name and releases but stop every charge, use `forge app teardown` instead.
+--- error
+the control plane refused to schedule the deletion of app "shop": this environment is protected: confirm with a step-up code (BeginStepUp/CompleteStepUp) first (reason: step_up_required)
+fix: app "shop" has a protected environment, and deleting it (or cancelling that) needs a live step-up on each protected env. Step up in the Reliant web app (a one-time code is emailed to you), then re-run while it is live.
+Nothing was changed

@@ -1,0 +1,15 @@
+--- stdout
+This will stop app "shop" on https://cp.example: every deployment of each env is suspended.
+  ENV       ID
+  prod      env_prod
+  staging   env_stg
+
+Kept: URLs, data, secrets and custom domains. `forge env start <env>` resumes an env.
+Compute stops billing. Storage keeps billing (database volumes, a static site's files);
+  `forge app teardown` is the state that bills nothing.
+
+  prod     NOT stopped: deploy:write on prod is required
+  staging  stopped (2 deployment(s) suspended)
+--- error
+stopped 1 of 2 envs of app "shop"; left running: prod
+fix: each refusal is printed above. An env you may not write (deploy:write) stays running: ask someone who may stop it, or re-run `forge app stop` once the refusal is resolved (stopping a stopped env changes nothing)

@@ -1,0 +1,51 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Where the browser sends API traffic, for RPCs (connect.ts) and sign-in (native-login.ts) alike.
+// Dev server: this page's own origin at `/_api` (vite.config.ts proxies it), so a preview URL, tunnel or LAN IP
+// works with no CORS and a first-party cookie. A build: the runtime config's API URL (`/_api` on
+// Reliant hosting). FORGE_DEV_API_PROXY=off calls the API directly. Depth: `frontend/serving`.
+
+/** The same-origin path the dev server proxies to the API, or "" when it does not. */
+const DEV_API_PROXY: string = import.meta.env.DEV
+  ? ((import.meta.env.FORGE_DEV_API_PROXY as string | undefined) ?? "")
+  : "";
+
+/** What the choice depends on, passed in so each case can be tested by name. */
+export interface ApiBaseInputs {
+  /** The path the dev server proxies to the API (`/_api`); "" when there is no proxy. */
+  devProxyPath: string;
+  /** This page's origin; "" when there is no window. */
+  origin: string;
+  /** The frontend's mount prefix; "" at the host root (this scaffold's shape). */
+  basePath: string;
+  /** The API URL the environment declares, after the caller's own fallbacks. */
+  configured: string;
+}
+
+/**
+ * chooseApiBase is the decision: this page's own origin while the dev server
+ * proxies the API, the configured URL otherwise. Never a trailing slash.
+ */
+export function chooseApiBase({
+  devProxyPath,
+  origin,
+  basePath,
+  configured,
+}: ApiBaseInputs): string {
+  if (devProxyPath) {
+    return `${origin}${basePath}${devProxyPath}`;
+  }
+  return configured.replace(/\/+$/, "");
+}
+
+/**
+ * apiBase returns the base URL for API requests from this page, given the
+ * API URL the environment configures.
+ */
+export function apiBase(configured: string): string {
+  return chooseApiBase({
+    devProxyPath: DEV_API_PROXY,
+    origin: typeof window === "undefined" ? "" : window.location.origin,
+    basePath: "",
+    configured,
+  });
+}

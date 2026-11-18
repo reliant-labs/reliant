@@ -1,0 +1,66 @@
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
+
+import { AppShell } from "@/components/app_shell";
+import { MockModeBanner } from "@/components/mock_mode_banner";
+import { joinBasePath } from "@/lib/basepath_gen";
+
+import { Providers } from "./providers";
+
+import type { Metadata } from "next";
+
+import "./globals.css";
+
+// Geist faces, self-hosted by next/font: the neutral default until there is a brief. Rebrand by
+// swapping these loaders and the --font-sans/--font-mono tokens in globals.css. The variables go
+// on the html element, not the body: globals.css reads them on :root, and set on the body every
+// font silently falls back to the OS stack.
+const fontVariables = `${GeistSans.variable} ${GeistMono.variable}`;
+
+export const metadata: Metadata = {
+  title: "{{.FrontendName}} | {{.ProjectName}}",
+  description: "Frontend for the {{.ProjectName}} project",
+};
+
+// A const, not an inline literal: forge renders this file through Go's text/template, where a
+// doubled brace is an action delimiter.
+const THEME_BOOT_SCRIPT = {
+  __html: `(function(){try{var t=localStorage.getItem("forge-theme");if(t==="dark"||t==="light"){document.documentElement.setAttribute("data-theme",t)}}catch(e){}})();`,
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    // suppressHydrationWarning: the theme script sets data-theme here before hydration, on
+    // purpose. It silences this element's own attributes, not its children.
+    <html lang="en" className={fontVariables} suppressHydrationWarning>
+      <head>
+        {/*
+          Per-env runtime config (window.__FORGE_CONFIG__), so one bundle is promoted between envs
+          without a rebuild. A plain blocking <script>: src/lib/config_gen.ts reads the global at
+          module scope, and every next/script strategy runs too late.
+        */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src={joinBasePath("/config.js")} />
+        {/*
+          Theme before first paint (no white flash for dark-mode users); only an explicit choice
+          is applied, "system" is plain CSS. The storage key duplicates THEME_STORAGE_KEY in
+          src/lib/theme/use-theme.ts, held equal by a contract test.
+        */}
+        <script dangerouslySetInnerHTML={THEME_BOOT_SCRIPT} />
+      </head>
+      {/*
+        bg-surface/text-ink on the BODY are load-bearing: without them the dark palette's ink lands
+        on the browser's white sheet (1.12:1, invisible). The shell's wrapper is no substitute.
+      */}
+      <body className="bg-surface font-sans text-ink antialiased">
+        <Providers>
+          <AppShell banner={<MockModeBanner />}>{children}</AppShell>
+        </Providers>
+      </body>
+    </html>
+  );
+}

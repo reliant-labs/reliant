@@ -1,0 +1,82 @@
+{
+  "version": "forge.dashboards/v1",
+  "sections": [
+    {
+      "id": "usage",
+      "title": "Usage",
+      "description": "Tokens and calls by model, per UTC day."
+    },
+    {
+      "id": "models",
+      "title": "Models",
+      "description": "One row per provider and the model that served the call (gen_ai.response.model, else the one asked for)."
+    }
+  ],
+  "id": "ai-models",
+  "title": "shop: AI models \u0026 providers",
+  "description": "Every model call by provider and model: tokens and calls by day, latency, time to first token, output speed, errors, the cache, and calls a gateway served with another model. From the GenAI spans in the environment's traces, so the range is bounded by their retention.",
+  "group": "ai",
+  "tags": [
+    "ai"
+  ],
+  "filters": [
+    {
+      "id": "env",
+      "label": "deployment.environment.name",
+      "field": "deployment.environment.name"
+    }
+  ],
+  "defaultRange": "7d",
+  "panels": [
+    {
+      "section": "usage",
+      "id": "tokens-by-model",
+      "title": "Tokens by model",
+      "description": "Input and output tokens each UTC day by model: the eight models with the most tokens in the range, the rest as Other.",
+      "kind": "sql",
+      "sql": "WITH calls AS (SELECT Timestamp AS ts, if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS model, toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) + toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) AS tok FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']),\ntop AS (SELECT model FROM calls GROUP BY model ORDER BY sum(tok) DESC, model LIMIT 8)\nSELECT toDate(ts) AS day, if(model IN (SELECT model FROM top), model, 'Other') AS model, sum(tok) AS \"Tokens\"\nFROM calls GROUP BY day, model ORDER BY day, model",
+      "minStep": "1d",
+      "display": {
+        "style": "bars",
+        "stack": true
+      },
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "usage",
+      "id": "calls-by-model",
+      "title": "Calls by model",
+      "description": "Model calls each UTC day by model: the eight models called most in the range, the rest as Other.",
+      "kind": "sql",
+      "sql": "WITH calls AS (SELECT Timestamp AS ts, if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS model FROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']),\ntop AS (SELECT model FROM calls GROUP BY model ORDER BY count() DESC, model LIMIT 8)\nSELECT toDate(ts) AS day, if(model IN (SELECT model FROM top), model, 'Other') AS model, count() AS \"Calls\"\nFROM calls GROUP BY day, model ORDER BY day, model",
+      "minStep": "1d",
+      "display": {
+        "style": "bars",
+        "stack": true
+      },
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "models",
+      "id": "models",
+      "title": "Providers and models",
+      "description": "Calls, failed calls, latency (p50, p95), time to first token of streamed calls (p50; a gen_ai.first_token event), output tokens per second of call time, tokens, the prompt cache hit ratio, and the gateway-reported cost.",
+      "kind": "sql",
+      "sql": "SELECT if(SpanAttributes['gen_ai.provider.name'] != '', SpanAttributes['gen_ai.provider.name'], SpanAttributes['gen_ai.system']) AS \"Provider\", if(SpanAttributes['gen_ai.response.model'] != '', SpanAttributes['gen_ai.response.model'], SpanAttributes['gen_ai.request.model']) AS \"Model\", count() AS \"Calls\",\n       round(countIf((StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND SpanAttributes['error.type'] != 'canceled')) / count(), 4) AS \"Error rate\",\n       round(quantile(0.5)(Duration / 1e6)) AS \"p50 ms\", round(quantile(0.95)(Duration / 1e6)) AS \"p95 ms\",\n       round(quantile(0.5)(if(indexOf(Events.Name, 'gen_ai.first_token') = 0, NULL, (toUnixTimestamp64Nano(Events.Timestamp[indexOf(Events.Name, 'gen_ai.first_token')]) - toUnixTimestamp64Nano(Timestamp)) / 1e6))) AS \"TTFT p50 ms\",\n       round(sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])) / nullIf(sumIf(Duration, toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) \u003e 0) / 1e9, 0), 1) AS \"Output tok/s\",\n       sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens'])) AS \"Input tokens\", sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])) AS \"Output tokens\",\n       round(sum(toUInt64OrZero(if(SpanAttributes['gen_ai.usage.cache_read.input_tokens'] != '', SpanAttributes['gen_ai.usage.cache_read.input_tokens'], SpanAttributes['gen_ai.usage.cache_read_input_tokens']))) / nullIf(sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens'])), 0), 4) AS \"Cache hit\",\n       round(sum(toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd']))), 4) AS \"Reported cost (USD)\"\nFROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']\nGROUP BY \"Provider\", \"Model\" ORDER BY \"Calls\" DESC LIMIT 50",
+      "width": 24,
+      "height": 9
+    },
+    {
+      "section": "models",
+      "id": "fallbacks",
+      "title": "Served by another model",
+      "description": "Calls a provider or gateway answered with a model other than the one asked for (gen_ai.request.model against gen_ai.response.model): a fallback, or an alias resolved to a dated model.",
+      "kind": "sql",
+      "sql": "SELECT SpanAttributes['gen_ai.request.model'] AS \"Asked for\", SpanAttributes['gen_ai.response.model'] AS \"Served by\", count() AS \"Calls\"\nFROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings']\n  AND SpanAttributes['gen_ai.request.model'] != '' AND SpanAttributes['gen_ai.response.model'] != '' AND SpanAttributes['gen_ai.request.model'] != SpanAttributes['gen_ai.response.model']\nGROUP BY \"Asked for\", \"Served by\" ORDER BY \"Calls\" DESC LIMIT 50",
+      "width": 24,
+      "height": 7
+    }
+  ]
+}
