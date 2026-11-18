@@ -31,26 +31,20 @@ vi.mock("../../hooks/privacy-queries", () => ({
 vi.mock("../constants", () => ({ isDev: false }));
 vi.mock("../appFirstLaunch", () => ({ reportFirstLaunch: async () => {} }));
 
-import HyperDX from "@hyperdx/browser";
+import { Rum } from "@hyperdx/otel-web";
 import { initTelemetry, reportErrorToTelemetry } from "../telemetry";
 
 // forge's runtime is a prebuilt dependency, so vitest does not rewrite its
-// imports and a vi.mock of the SDK would not reach it. Both load the same
-// @hyperdx/browser instance, so the SDK is stubbed in place instead: the
-// runtime itself runs for real.
-type Client = typeof HyperDX;
-function findClient(mod: unknown): Client {
-  let cur = mod as { default?: unknown; init?: unknown };
-  while (typeof cur.init !== "function" && cur.default) cur = cur.default as typeof cur;
-  return cur as unknown as Client;
-}
-const client = findClient(HyperDX);
+// imports and a vi.mock of the SDK would not reach it. The runtime drives
+// @hyperdx/otel-web's Rum, and this app's devDependency on it is the same
+// version, so both load the same instance: the SDK is stubbed in place and
+// the runtime itself runs for real.
 const sdk = {
-  init: vi.spyOn(client, "init").mockImplementation(() => {}),
-  recordException: vi.spyOn(client, "recordException").mockImplementation(() => {}),
+  init: vi.spyOn(Rum, "init").mockImplementation(() => {}),
+  recordException: vi.spyOn(Rum, "recordException").mockImplementation(() => {}),
 };
-vi.spyOn(client, "setGlobalAttributes").mockImplementation(() => {});
-vi.spyOn(client, "addAction").mockImplementation(() => {});
+vi.spyOn(Rum, "setGlobalAttributes").mockImplementation(() => {});
+vi.spyOn(Rum, "addAction").mockImplementation(() => {});
 
 const RELEASE = JSON.parse(
   readFileSync(resolve(__dirname, "../../../../../electron/release.config.json"), "utf8"),
@@ -85,13 +79,13 @@ describe("the packaged desktop renderer's error path", () => {
     expect(await initTelemetry()).toBe(true);
 
     expect(sdk.init).toHaveBeenCalledTimes(1);
-    const options = sdk.init.mock.calls[0][0] as {
+    const options = sdk.init.mock.calls[0][0] as unknown as {
       url: string;
-      otelResourceAttributes: Record<string, string>;
+      resourceAttributes: Record<string, string>;
       instrumentations?: { errors?: boolean };
     };
-    expect(options.url).toBe(RELEASE.renderer.OTEL_ENDPOINT);
-    expect(options.otelResourceAttributes["forge.frontend"]).toBe("desktop");
+    expect(options.url).toBe(`${RELEASE.renderer.OTEL_ENDPOINT}/v1/traces`);
+    expect(options.resourceAttributes["forge.frontend"]).toBe("desktop");
     // The SDK's own uncaught-error / rejection / console.error capture stays on.
     expect(options.instrumentations?.errors).not.toBe(false);
 

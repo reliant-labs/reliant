@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import HyperDXModule from "@hyperdx/browser";
+import { Rum } from "@hyperdx/otel-web";
 
 // The landing → app handoff end to end, through the REAL forge web runtime (only
 // the HyperDX SDK underneath it is faked). The landing site links to the app with
@@ -10,24 +10,13 @@ import HyperDXModule from "@hyperdx/browser";
 // This failed in prod until the boot hold: 0 of 12 user_identified matched.
 //
 // The runtime is a dependency vitest does not transform, so vi.mock cannot reach
-// its import of @hyperdx/browser: the test spies on that same SDK singleton
-// instead, with init stubbed so nothing leaves the process.
-
-type SDK = {
-  init: (...a: unknown[]) => void;
-  setGlobalAttributes: (a: Record<string, string>) => void;
-  addAction: (name: string, attrs?: Record<string, string>) => void;
-};
-function client(mod: unknown): SDK {
-  let cur = mod as { default?: unknown };
-  while (cur && typeof (cur as SDK).init !== "function" && cur.default) cur = cur.default as { default?: unknown };
-  return cur as unknown as SDK;
-}
-const hdx = client(HyperDXModule);
+// its import of @hyperdx/otel-web: the test spies on that same SDK singleton
+// instead (this app's devDependency is the version the runtime pins), with init
+// stubbed so nothing leaves the process.
 const sdk = {
-  init: vi.spyOn(hdx, "init").mockImplementation(() => {}),
-  setGlobalAttributes: vi.spyOn(hdx, "setGlobalAttributes").mockImplementation(() => {}),
-  addAction: vi.spyOn(hdx, "addAction").mockImplementation(() => {}),
+  init: vi.spyOn(Rum, "init").mockImplementation(() => {}),
+  setGlobalAttributes: vi.spyOn(Rum, "setGlobalAttributes").mockImplementation(() => {}),
+  addAction: vi.spyOn(Rum, "addAction").mockImplementation(() => {}),
 };
 beforeEach(() => vi.clearAllMocks());
 

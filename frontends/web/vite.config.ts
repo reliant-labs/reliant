@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin, type ViteUserConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { forgeRuntimeConfig } from "@reliantlabs/forge-web-runtime/vite";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "path";
 import { browserLogSink } from "./vite-plugin-browser-logs";
@@ -23,6 +24,15 @@ function getWorktreeName(): string {
     console.warn('[Vite] Failed to get worktree name:', error);
     return 'dev';
   }
+}
+
+// The browser build of the OTLP trace exporter @hyperdx/otel-web imports
+// (its package.json "browser" field, which vitest does not apply). Tests only.
+function browserTraceExporter(): string {
+  const fromOtelWeb = createRequire(createRequire(import.meta.url).resolve("@hyperdx/otel-web"));
+  // The package's CommonJS main, build/src/index.js.
+  const main = fromOtelWeb.resolve("@opentelemetry/exporter-trace-otlp-http");
+  return path.resolve(path.dirname(main), "../esm/platform/browser/index.js");
 }
 
 // Vitest sizing. A jsdom worker is ~300MB and a core's worth of CPU, and this
@@ -393,6 +403,19 @@ const appConfig: ViteUserConfig = {
     maxWorkers,
     testTimeout,
     hookTimeout: Math.max(10_000, testTimeout * 2),
+    // Tests run forge's runtime over the real HyperDX SDK, as the bundle
+    // does, with only the network stubbed. Loaded by Node they cannot:
+    // @hyperdx/otel-web's `import` entry is ESM in a package Node reads as
+    // CommonJS (the import throws, and the runtime reports telemetry as not
+    // running), and the OTLP exporter it imports picks its Node build (http,
+    // not fetch). So both go through vite, the exporter as its browser
+    // build: the bundle's SDK, and the same instance a test stubs
+    // (lib/__tests__/telemetryBuildAttribute.test.ts,
+    // api/__tests__/transport.trace.test.ts).
+    server: { deps: { inline: ["@reliantlabs/forge-web-runtime", "@hyperdx/otel-web"] } },
+    ...(process.env.VITEST
+      ? { alias: [{ find: /^@opentelemetry\/exporter-trace-otlp-http$/, replacement: browserTraceExporter() }] }
+      : {}),
     // Read by src/test/setup.ts, which configures Testing Library with it.
     env: { RELIANT_ASYNC_UTIL_TIMEOUT_MS: String(asyncUtilTimeout) },
     setupFiles: "./src/test/setup.ts",
