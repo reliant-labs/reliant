@@ -2140,7 +2140,8 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 				projectPath = resolveProjectPathFromContext(contextMap, "", d.cwd)
 			}
 			if projectPath != "" {
-				if err := d.mcpManager.RemoveProjectServer(projectPath, serverName); err != nil {
+				if err := d.mcpManager.RemoveProjectServer(projectPath, serverName,
+					"restart to reload credentials: the tool result read as an authentication failure"); err != nil {
 					logging.Warn(logPrefix+" Failed removing MCP server before auth retry", "projectPath", projectPath, "server", serverName, "error", err)
 				}
 				d.mcpManager.EnsureProjectServersLoaded(execCtx, projectPath)

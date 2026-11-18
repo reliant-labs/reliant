@@ -12,6 +12,7 @@ package mcp
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -86,6 +87,7 @@ func (c *client) Initialize(ctx context.Context) error {
 	// Create the appropriate transport based on config type
 	var transport mcp.Transport
 	var err error
+	var stdioCmd *exec.Cmd
 
 	// The config arrives with its ${VAR} references as the user wrote them;
 	// this is where they are resolved, from this (the user's) environment.
@@ -145,6 +147,7 @@ func (c *client) Initialize(ctx context.Context) error {
 		}
 
 		cmd.Env = env
+		stdioCmd = cmd
 		transport = &mcp.CommandTransport{Command: cmd}
 
 	case config.MCPSse, config.MCPHTTP:
@@ -187,6 +190,9 @@ func (c *client) Initialize(ctx context.Context) error {
 	}
 
 	c.session = mcpruntime.WrapSDKSession(session)
+	if stdioCmd != nil {
+		go c.watchProcessExit(session, c.session, stdioCmd)
+	}
 
 	// Get server info from the session's InitializeResult
 	// The SDK handles the initialize handshake automatically
@@ -530,6 +536,49 @@ func (c *client) GetPrompt(name string, arguments map[string]interface{}) (*Prom
 	return promptResult, nil
 }
 
+// watchProcessExit waits for a stdio server's connection to end and, when it
+// ended without Close — the process exited, crashed or was killed — logs how,
+// and marks the client disconnected so the health monitor and lazy wrapper see
+// it rather than every later call failing against a closed pipe. Before this a
+// server's death left no trace in the log at all (#2818).
+//
+// Close holds c.mu across session.Close and clears c.session, so a watcher
+// woken by Close finds the session it watches already gone and stays quiet.
+func (c *client) watchProcessExit(session *mcp.ClientSession, watched mcpruntime.Session, cmd *exec.Cmd) {
+	waitErr := session.Wait()
+
+	c.mu.Lock()
+	unexpected := c.session == watched
+	if unexpected {
+		c.session = nil
+		c.initialized = false
+	}
+	c.mu.Unlock()
+	if !unexpected {
+		return
+	}
+
+	attrs := []any{"name", c.name, "exit", describeProcessExit(waitErr)}
+	if cmd.Process != nil {
+		attrs = append(attrs, "pid", cmd.Process.Pid)
+	}
+	logging.Warn("MCP server process exited unexpectedly", attrs...)
+}
+
+// describeProcessExit renders how a stdio server's connection ended. The SDK
+// reports the process's own exit (exit status or signal) as the connection's
+// close error once stdout reaches EOF.
+func describeProcessExit(err error) string {
+	if err == nil {
+		return "exit status 0 or stdout closed"
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ProcessState != nil {
+		return exitErr.ProcessState.String()
+	}
+	return err.Error()
+}
+
 // Close cleanly shuts down the client
 func (c *client) Close() error {
 	c.mu.Lock()
@@ -541,15 +590,18 @@ func (c *client) Close() error {
 
 	logging.Debug("Closing MCP client", "name", c.name)
 
-	if c.session != nil {
-		if err := c.session.Close(); err != nil {
+	// Cleared before closing so the exit watcher, woken by this close, knows
+	// it was asked for. A session whose close failed is not reusable either.
+	session := c.session
+	c.initialized = false
+	c.session = nil
+
+	if session != nil {
+		if err := session.Close(); err != nil {
 			logging.Warn("Error closing MCP session", "name", c.name, "error", err)
 			return err
 		}
 	}
-
-	c.initialized = false
-	c.session = nil
 
 	return nil
 }
