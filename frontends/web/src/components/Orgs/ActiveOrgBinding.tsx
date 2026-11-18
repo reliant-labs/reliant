@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { useActiveOrg } from "@/hooks/useOrgs";
+import { keyNamesOrg } from "@/lib/orgScope";
 import { useAuthStore } from "@/store/authStore";
 import {
   ORG_SCOPED_QUERY_ROOTS,
@@ -90,7 +91,15 @@ export function ActiveOrgBinding({
     const switched = settled.current !== undefined && settled.current !== activeOrgId;
     const reconciled = used !== null && used !== activeOrgId;
     if (switched || reconciled) {
-      for (const root of ORG_SCOPED_QUERY_ROOTS) void qc.resetQueries({ queryKey: [root] });
+      // A query whose key names the org we left is dropped, not reset: its
+      // observers move to the new org's key on their next render, and a reset
+      // would refetch it first, naming the org we left.
+      const left = reconciled ? used : settled.current;
+      const namesLeft = (queryKey: readonly unknown[]) => !!left && keyNamesOrg(queryKey, left);
+      for (const root of ORG_SCOPED_QUERY_ROOTS) {
+        qc.removeQueries({ queryKey: [root], predicate: (query) => namesLeft(query.queryKey) });
+        void qc.resetQueries({ queryKey: [root], predicate: (query) => !namesLeft(query.queryKey) });
+      }
       onSwitch?.(activeOrgId, qc, { firstLoad: false });
     } else if (settled.current === undefined && used === null && activeOrgId !== null) {
       // The first answer of a tab that had nothing saved. The product's lists
