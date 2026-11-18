@@ -8,7 +8,8 @@ import { test, type Page, type Request, type Route } from '@playwright/test';
 //
 // Same approach as mobileMocks.ts: broad `{}` fallbacks first, specific RPCs
 // after (the LAST matching route wins), and the API-key login path so no
-// Supabase session is needed. The control plane is configured through
+// Supabase session is needed (`person: true` signs a person in with one
+// instead, for what an API key cannot do). The control plane is configured through
 // window.__FORGE_CONFIG__ so the deploy reads go out at all.
 
 const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
@@ -176,7 +177,32 @@ export interface AppsMockOptions {
   onboarded?: boolean;
   /** The org's deploy environments. Default ENVIRONMENTS; [] for a user who has deployed nothing. */
   environments?: typeof ENVIRONMENTS;
+  /**
+   * Sign in as a person (a Supabase session for `user_apps`) instead of with
+   * an API key. An API-key session is a machine credential: the control plane
+   * refuses it a membership list, so the app never asks for one and acts in
+   * the credential's own org (store/activeOrgStore). Anything that chooses
+   * between orgs (the switcher, the CLI-login org picker) needs a person.
+   * Default false.
+   */
+  person?: boolean;
 }
+
+/** A JWT supabase-js can decode: it reads only `exp` and `sub` locally. */
+function personJwt(sub: string): string {
+  const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub, exp: 4102444800, aud: 'authenticated', role: 'authenticated' })}.sig`;
+}
+
+/** The GoTrue user and non-expiring session of the person `person: true` signs in. */
+export const PERSON_USER = {
+  id: 'user_apps', aud: 'authenticated', role: 'authenticated', email: 'dev@example.com', is_anonymous: false,
+  email_confirmed_at: '2026-01-01T00:00:00Z', app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z',
+};
+export const PERSON_SESSION = {
+  access_token: personJwt(PERSON_USER.id), refresh_token: 'test-refresh', token_type: 'bearer',
+  expires_at: 4102444800, expires_in: 3600, user: PERSON_USER,
+};
 
 export async function mockAppsBackend(page: Page, options: AppsMockOptions = {}): Promise<void> {
   const onboarded = options.onboarded ?? true;
@@ -187,8 +213,19 @@ export async function mockAppsBackend(page: Page, options: AppsMockOptions = {})
   await page.route('**/reliant.v1.**', (route) => json(route, {}));
   await page.route('**/controlplane.v1.**', (route) => json(route, {}));
   await page.route('**/reliant.v1.StreamingService/**', emptyStream);
-  await page.route('**/health', (route) => json(route, { auth_mode: 'apikey' }));
-  await page.route('**/supabase/**', (route) => json(route, {}));
+  await page.route('**/health', (route) => json(route, { auth_mode: options.person ? 'supabase' : 'apikey' }));
+  await page.route('**/supabase/**', (route) => {
+    if (!options.person) return json(route, {});
+    const path = new URL(route.request().url()).pathname.replace(/^.*\/supabase/, '');
+    if (path === '/auth/v1/user') return json(route, PERSON_USER);
+    if (path === '/auth/v1/token') return json(route, PERSON_SESSION);
+    return json(route, {});
+  });
+  if (options.person) {
+    await page.route('**/reliant.v1.SystemService/DevAuthLoad', (route) =>
+      json(route, { success: true, sessionJson: JSON.stringify(PERSON_SESSION) }),
+    );
+  }
 
   await page.route('**/controlplane.v1.UserService/GetCurrentUser', (route) =>
     json(route, { user: { id: 'user_apps', email: 'dev@example.com', onboardingCompleted: onboarded } }),
@@ -270,11 +307,18 @@ export async function mockAppsBackend(page: Page, options: AppsMockOptions = {})
   // the runtime config script (src/lib/config_gen.ts). Served here rather than
   // set in an init script, so the built app's own config.js cannot replace it.
   // A control plane implies Supabase auth is configured too; the API-key
-  // session is what actually signs the user in.
+  // session, or with `person` the Supabase session, signs the user in.
   const config = { CONTROL_PLANE_API_URL: origin, SUPABASE_URL: `${origin}/supabase`, SUPABASE_ANON_KEY: 'anon-test-key' };
   await page.route('**/config.js', (route) =>
     route.fulfill({ status: 200, contentType: 'text/javascript', body: `window.__FORGE_CONFIG__ = ${JSON.stringify(config)};` }),
   );
+  if (options.person) {
+    // Seed only app pages: a CLI-login callback deliberately leaves the app origin.
+    await page.addInitScript(({ appOrigin, session }) => {
+      if (location.origin === appOrigin) localStorage.setItem('supabase-auth', session);
+    }, { appOrigin: origin, session: JSON.stringify(PERSON_SESSION) });
+    return;
+  }
   await page.addInitScript((appOrigin) => {
     if (location.origin === appOrigin) localStorage.setItem('reliant-api-key', 'test-key-123');
   }, origin);
