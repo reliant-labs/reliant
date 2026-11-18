@@ -56,6 +56,15 @@ var nodeExposedTools = []NodeExposure{
 	// opt-in an unattended agent's `tools:` list is.
 	{Tool: ToolGetRun, OutputType: reflect.TypeOf(RunDetail{})},
 	{Tool: ToolSendToRun, OutputType: reflect.TypeOf(SendToRunResponseMetadata{})},
+	// report_bug: "the platform, not the code, is at fault, so tell Reliant"
+	// is a step an automation draws when it classifies a failure itself
+	// (control-plane's main-red-fix files one for a main CI red from
+	// infrastructure). It is server-placed and filing is a log write, so a
+	// node can always run it; the per-chat dedupe and cap apply to the run's
+	// chat exactly as in a conversation. Before it was here, that node failed
+	// on every attempt and the unattended run held its automation for 33
+	// minutes of self-resumes before giving up (prod 23295ad3, 2026-11-18).
+	{Tool: ToolReportBug, OutputType: reflect.TypeOf(ReportBugMetadata{})},
 }
 
 // NodeExposedTools returns every tool that opted in to node exposure, ordered
