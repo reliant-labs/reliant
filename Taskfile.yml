@@ -1006,6 +1006,27 @@ tasks:
     cmds:
       - ./scripts/release-tag.sh --dry-run
 
+  release:sourcemaps:
+    # The desktop renderer's source maps, filed so its prod browser errors are
+    # symbolicated (reliant#2535). release.yml's `sourcemaps` job runs it on
+    # every release tag with FORGE_CONTROL_PLANE_TOKEN set to a sourcemaps:write
+    # org token (RELIANT_SOURCEMAPS_TOKEN). The maps are filed under the env the
+    # renderer REPORTS into, not this repo: tenant zero's prod (ORG) in
+    # control-plane's forge project (PROJECT), frontend `desktop`
+    # (control-plane deploy/kcl/lib/env.k, reliant_desktop_ingest_keys).
+    # --env desktop only names the control plane (deploy/kcl/desktop). BUILD_ID
+    # is the version the renderer reports as service.version
+    # (frontends/web/dist/version.json), the release tag without its `v`.
+    desc: "File the desktop renderer's source maps (DIST, default frontends/web/dist) for BUILD_ID=<version> with the platform registry"
+    requires:
+      vars: [BUILD_ID]
+    vars:
+      DIST: '{{.DIST | default "frontends/web/dist"}}'
+      ORG: '{{.ORG | default "55949942-3ee9-4cfc-bb7c-817bdba75186"}}'
+      PROJECT: '{{.PROJECT | default "control-plane"}}'
+    cmds:
+      - '{{.FORGE}} ui sourcemaps push {{.DIST}} --frontend desktop --build-id {{.BUILD_ID}} --env desktop --project {{.PROJECT}} --org {{.ORG}} {{.CLI_ARGS}}'
+
   flake:report:test:
     desc: Self-test of scripts/flake-report.sh (a retried pass is a suspected flake; a data race never is) against a throwaway module
     cmds:

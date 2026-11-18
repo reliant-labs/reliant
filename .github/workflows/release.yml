@@ -316,6 +316,38 @@ jobs:
       - name: Verify the built bundle
         run: node .github/scripts/verify-bundle.mjs --dist frontends/web/dist
 
+      # ── The renderer's source maps go to the platform, not the installers ──
+      #
+      # vite builds the renderer with `sourcemap: true`. Unfiled, a desktop
+      # release's browser errors are never symbolicated: their culprits are
+      # app://bundle/assets/main-<hash>.js, the content hash changes every
+      # build, so every desktop release re-opens a copy of every browser issue
+      # (reliant#2535). The `sourcemaps` job below files them from this
+      # artifact (a release tag only: a prebuild publishes nothing). A tag that
+      # reuses a prebuild ships the prebuild's renderer; this run's build of the
+      # same commit and RELEASE_VERSION is the same bytes (content-hashed
+      # chunks), so these maps are that renderer's maps.
+      - name: Upload the renderer's source maps
+        if: github.ref_type == 'tag' && startsWith(steps.version.outputs.version, 'v')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-dist-sourcemaps
+          path: frontends/web/dist
+          retention-days: 1
+          compression-level: 6
+
+      # The installers ship the bundle without its maps: they serve nothing
+      # there (the platform symbolicates from the registry) and only add size
+      # and readable source to every download. The bundles keep their
+      # sourceMappingURL comments, which a missing file leaves inert.
+      - name: Keep source maps out of the installers
+        if: startsWith(steps.version.outputs.version, 'v')
+        run: |
+          set -euo pipefail
+          n="$(find frontends/web/dist -type f -name '*.map' | wc -l)"
+          find frontends/web/dist -type f -name '*.map' -delete
+          echo "Removed $n source map(s) from frontends/web/dist"
+
       - name: Upload web build artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -364,6 +396,70 @@ jobs:
   # ============================================================================
   # BACKEND BINARIES: Matrix build (full-width fan-out)
   # ============================================================================
+  # ============================================================================
+  # SOURCEMAPS: file the renderer's source maps so its prod errors symbolicate
+  # ============================================================================
+  # `task release:sourcemaps` (forge ui sourcemaps push) into the platform
+  # registry, under the env the desktop app reports into: tenant zero's prod,
+  # frontend `desktop`, build id = the version the renderer reports
+  # (reliant#2535). The credential is RELIANT_SOURCEMAPS_TOKEN, an org token
+  # whose only scope is sourcemaps:write (registry-only: refused on every
+  # control-plane RPC, push and pull on the org's *-sourcemaps repositories
+  # only), stored as a secret of the `release` environment so only this job
+  # can read it. Until it exists the job warns and files nothing.
+  #
+  # Best effort by design (continue-on-error): unfiled maps leave this
+  # release's renderer errors unsymbolicated, which is today's state, and
+  # must never fail a release that otherwise shipped (release-health.yml
+  # opens `release:failed` for a red run).
+  sourcemaps:
+    name: File renderer source maps
+    needs: prepare
+    if: github.ref_type == 'tag' && startsWith(needs.prepare.outputs.version, 'v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    environment: release
+    permissions:
+      contents: read
+      actions: read # download this run's web-dist-sourcemaps artifact
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 1
+
+      - name: Set up Task and Go
+        uses: ./.github/actions/setup
+        with:
+          postgres-cache: "false"
+
+      - name: Download the renderer's source maps
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: web-dist-sourcemaps
+          path: frontends/web/dist
+
+      - name: File the source maps
+        env:
+          FORGE_CONTROL_PLANE_TOKEN: ${{ secrets.RELIANT_SOURCEMAPS_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          # Where the maps are filed: the org and forge project of the env the
+          # renderer reports into. Repository variables override the defaults
+          # in Taskfile.yml's release:sourcemaps.
+          SOURCEMAPS_ORG: ${{ vars.RELIANT_SOURCEMAPS_ORG }}
+          SOURCEMAPS_PROJECT: ${{ vars.RELIANT_SOURCEMAPS_PROJECT }}
+        run: |
+          set -euo pipefail
+          if [ -z "$FORGE_CONTROL_PLANE_TOKEN" ]; then
+            echo "::warning::RELIANT_SOURCEMAPS_TOKEN is not set on the release environment: the renderer's source maps of $VERSION are not filed, so its prod errors stay unsymbolicated (reliant#2535)"
+            exit 0
+          fi
+          got="$(jq -r .version frontends/web/dist/version.json)"
+          [ "$got" = "${VERSION#v}" ] || { echo "::error::the renderer reports version '$got', not ${VERSION#v}: maps filed under another build id are never looked up"; exit 1; }
+          task release:sourcemaps DIST=frontends/web/dist BUILD_ID="${VERSION#v}" \
+            ${SOURCEMAPS_ORG:+ORG="$SOURCEMAPS_ORG"} ${SOURCEMAPS_PROJECT:+PROJECT="$SOURCEMAPS_PROJECT"}
+
   build-backend:
     name: Build backend (${{ matrix.target_os }}-${{ matrix.target_arch }})
     needs: prepare
