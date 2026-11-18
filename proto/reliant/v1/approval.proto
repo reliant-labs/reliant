@@ -41,7 +41,7 @@ enum ApprovalStatus {
 service ApprovalService {
   // ListApprovalsByChat lists all pending approvals for a chat
   rpc ListApprovalsByChat(ListApprovalsByChatRequest) returns (ListApprovalsByChatResponse) {}
-  
+
   // Approve approves a pending approval request (signals workflow to continue).
   rpc Approve(ApproveRequest) returns (ApproveResponse) {
     option (forge.v1.method) = {
@@ -55,7 +55,7 @@ service ApprovalService {
       }
     };
   }
-  
+
   // Deny denies a pending approval request (cancels workflow)
   rpc Deny(DenyRequest) returns (DenyResponse) {
     option (forge.v1.method) = {
@@ -69,7 +69,7 @@ service ApprovalService {
       }
     };
   }
-  
+
   // BatchApprove approves several approvals of one chat at once: every
   // listed approval that is still pending. One already decided (on another
   // surface) is skipped and not counted; FAILED_PRECONDITION only when none
@@ -89,7 +89,7 @@ service ApprovalService {
       }
     };
   }
-  
+
   // BatchDeny denies several approvals of one chat at once, with
   // BatchApprove's rules for approvals already decided.
   rpc BatchDeny(BatchDenyRequest) returns (BatchDenyResponse) {
@@ -114,7 +114,7 @@ message Approval {
   string id = 1;
   string chat_id = 2;
   ApprovalType approval_type = 3;
-  string entity_id = 4;      // content_block_id for tools, event_id for workflows
+  string entity_id = 4; // content_block_id for tools, event_id for workflows
   ApprovalStatus status = 5;
   string title = 6;
   optional string description = 7;
@@ -126,7 +126,7 @@ message Approval {
   optional string message_id = 15;
   optional string workflow_id = 16;
   optional string run_id = 17;
-  optional string action_taken = 19;  // Which action button was clicked (e.g., "Deploy Now")
+  optional string action_taken = 19; // Which action button was clicked (e.g., "Deploy Now")
 
   // Set when the run raised this approval together with others in one step
   // (one turn's tool calls): every approval of the batch carries the same id,
@@ -154,7 +154,7 @@ message ListApprovalsByChatResponse {
 // ApproveRequest approves a single approval
 message ApproveRequest {
   string request_id = 1;
-  optional string action_taken = 2;  // Which action button was clicked (e.g., "Deploy Now")
+  optional string action_taken = 2; // Which action button was clicked (e.g., "Deploy Now")
 }
 
 // ApproveResponse confirms the approval
@@ -167,7 +167,7 @@ message ApproveResponse {
 message DenyRequest {
   string request_id = 1;
   optional string denial_reason = 2;
-  optional string action_taken = 3;  // Which action button was clicked (e.g., "Cancel")
+  optional string action_taken = 3; // Which action button was clicked (e.g., "Cancel")
 }
 
 // DenyResponse confirms the denial
@@ -179,7 +179,7 @@ message DenyResponse {
 // BatchApproveRequest approves multiple approvals at once
 message BatchApproveRequest {
   repeated string request_ids = 1;
-  optional string action_taken = 2;  // Which action button was clicked
+  optional string action_taken = 2; // Which action button was clicked
 }
 
 // BatchApproveResponse confirms the batch approval
@@ -196,7 +196,7 @@ message BatchApproveResponse {
 message BatchDenyRequest {
   repeated string request_ids = 1;
   optional string denial_reason = 2;
-  optional string action_taken = 3;  // Which action button was clicked
+  optional string action_taken = 3; // Which action button was clicked
 }
 
 // BatchDenyResponse confirms the batch denial

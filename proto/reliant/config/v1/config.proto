@@ -91,7 +91,10 @@ message TranscriptConfig {
   string tool_body_stubs = 1 [(forge.v1.config) = {
     env_var: "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS"
     default_value: "on"
-    allowed_values: ["on", "off"]
+    allowed_values: [
+      "on",
+      "off"
+    ]
     description: "Transcript reads may leave finished tool calls' bodies out when a client asks (on) or always send them whole (off)"
   }];
 }
@@ -107,7 +110,8 @@ message RuntimeConfig {
   // being retired.
   string environment = 1 [(forge.v1.config) = {
     env_var: "RELIANT_ENV"
-    env_var_aliases: [{name: "NODE_ENV"}]
+    env_var_aliases: [
+      {name: "NODE_ENV"}]
     description: "Environment tier: dev, test or prod (unset or unrecognised is prod)"
   }];
 }
@@ -149,7 +153,11 @@ message StorageReaperConfig {
   string mode = 1 [(forge.v1.config) = {
     env_var: "RELIANT_STORAGE_REAPER"
     default_value: "auto"
-    allowed_values: ["auto", "on", "off"]
+    allowed_values: [
+      "auto",
+      "on",
+      "off"
+    ]
     description: "Run forge's storage reaper on a schedule: auto (managed daemons only), on, or off"
   }];
 
@@ -206,7 +214,11 @@ message WorktreeReclaimConfig {
   string mode = 1 [(forge.v1.config) = {
     env_var: "RELIANT_WORKTREE_RECLAIM"
     default_value: "dry-run"
-    allowed_values: ["off", "dry-run", "on"]
+    allowed_values: [
+      "off",
+      "dry-run",
+      "on"
+    ]
     description: "Machine-wide worktree reclaim: off, dry-run (report only) or on (capture, then reclaim)"
   }];
 

@@ -26,15 +26,15 @@ service ProjectService {
       }
     };
   }
-  
+
   // ListProjects lists all projects for the current user
   // forge:custom — scoped to the calling user's projects
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {}
-  
+
   // GetProject retrieves a project by ID
   // forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {}
-  
+
   // UpdateProject updates an existing project
   // forge:custom — a partial update the caller's ownership check gates
   rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {
@@ -49,7 +49,7 @@ service ProjectService {
       }
     };
   }
-  
+
   // DeleteProject deletes a project
   // forge:custom — the caller's ownership check gates the delete
   rpc DeleteProject(DeleteProjectRequest) returns (DeleteProjectResponse) {
@@ -63,17 +63,17 @@ service ProjectService {
       }
     };
   }
-  
+
   // TouchProject updates the project's last_active timestamp
   rpc TouchProject(TouchProjectRequest) returns (TouchProjectResponse) {
     option (forge.v1.method) = {
       activity: {none: "bumps last_active when the project is opened: recency for sorting, not a change to the project"}
     };
   }
-  
+
   // GetProjectMetadata returns detailed project metadata
   rpc GetProjectMetadata(GetProjectMetadataRequest) returns (GetProjectMetadataResponse) {}
-  
+
   // UpdateProjectMetadata updates project metadata
   rpc UpdateProjectMetadata(UpdateProjectMetadataRequest) returns (UpdateProjectMetadataResponse) {
     option (forge.v1.method) = {
@@ -87,29 +87,29 @@ service ProjectService {
       }
     };
   }
-  
+
   // GetProjectGitInfo returns git repository information for a project
   rpc GetProjectGitInfo(GetProjectGitInfoRequest) returns (GetProjectGitInfoResponse) {}
-  
+
   // GetProjectGitBranches lists all git branches for a project
   rpc GetProjectGitBranches(GetProjectGitBranchesRequest) returns (GetProjectGitBranchesResponse) {}
-  
+
   // GetProjectInitStatus returns the initialization status of a project
   rpc GetProjectInitStatus(GetProjectInitStatusRequest) returns (GetProjectInitStatusResponse) {}
-  
+
   // InitializeProject initializes a project (no-op in V2, projects are initialized on creation)
   rpc InitializeProject(InitializeProjectRequest) returns (InitializeProjectResponse) {
     option (forge.v1.method) = {
       activity: {none: "a no-op kept for old clients: projects are initialized when they are created, so it only reports that"}
     };
   }
-  
+
   // GetProjectChanges returns recent git changes for a project
   rpc GetProjectChanges(GetProjectChangesRequest) returns (GetProjectChangesResponse) {}
-  
+
   // GetProjectPrompts retrieves project-scoped prompts
   rpc GetProjectPrompts(GetProjectPromptsRequest) returns (GetProjectPromptsResponse) {}
-  
+
   // SaveProjectPrompts saves project-scoped prompts
   rpc SaveProjectPrompts(SaveProjectPromptsRequest) returns (SaveProjectPromptsResponse) {
     option (forge.v1.method) = {
@@ -122,7 +122,7 @@ service ProjectService {
       }
     };
   }
-  
+
   // InitializeGitRepo initializes a git repository for a project
   rpc InitializeGitRepo(InitializeGitRepoRequest) returns (InitializeGitRepoResponse) {
     option (forge.v1.method) = {
@@ -187,7 +187,10 @@ service ProjectService {
           id: "response.project.id"
           label: "response.project.name"
         }
-        detail: ["daemon_id", "response.queued"]
+        detail: [
+          "daemon_id",
+          "response.queued"
+        ]
       }
     };
   }
@@ -252,7 +255,10 @@ service ProjectService {
           kind: "project"
           id: "project_id"
         }
-        detail: ["daemon_id", "path"]
+        detail: [
+          "daemon_id",
+          "path"
+        ]
       }
     };
   }
@@ -565,14 +571,14 @@ message GetProjectGitInfoResponse {
   bool is_git_repo = 2;
   string current_branch = 3;
   bool has_changes = 4;
-  string status = 5;  // "clean" or "dirty"
+  string status = 5; // "clean" or "dirty"
   repeated string staged_files = 6;
   repeated string unstaged_files = 7;
   repeated string untracked_files = 8;
   int32 ahead = 9;
   int32 behind = 10;
   string remote_url = 11;
-  string message = 12;  // Used when not a git repo
+  string message = 12; // Used when not a git repo
 }
 
 // GitBranch represents a git branch
@@ -1036,7 +1042,10 @@ message MoveProjectToOrgRequest {
   // dialog, after the project already left it, is refused (org_changed).
   string expected_from_org_id = 3 [(buf.validate.field).string.min_len = 1];
   // The client's idempotency key: a repeat is the same move.
-  string request_key = 4 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
+  string request_key = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
 }
 
 message MoveProjectToOrgResponse {

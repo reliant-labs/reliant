@@ -24,9 +24,21 @@ message DatabaseConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
     subtrees: [
-      {path: ["server"]},
-      {path: ["db", "migrate"]},
-      {path: ["db", "vault"]}
+      {
+        path: ["server"]
+      },
+      {
+        path: [
+          "db",
+          "migrate"
+        ]
+      },
+      {
+        path: [
+          "db",
+          "vault"
+        ]
+      }
     ]
   };
 

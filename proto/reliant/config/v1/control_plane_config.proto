@@ -21,8 +21,14 @@ message ControlPlaneConfig {
   string url = 1 [(forge.v1.config) = {
     env_var: "RELIANT_CONTROL_PLANE_URL"
     env_var_aliases: [
-      {name: "CONTROL_PLANE_API_URL", deprecated: true},
-      {name: "CONTROL_PLANE_BASE_URL", deprecated: true}
+      {
+        name: "CONTROL_PLANE_API_URL"
+        deprecated: true
+      },
+      {
+        name: "CONTROL_PLANE_BASE_URL"
+        deprecated: true
+      }
     ]
     description: "Control-plane base URL; unset means self-hosted"
   }];

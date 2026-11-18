@@ -22,33 +22,33 @@ enum PackageType {
 service PackageCommandsService {
   // ListCommands returns available commands for a directory
   rpc ListCommands(ListPackageCommandsRequest) returns (ListPackageCommandsResponse) {}
-  
+
   // RunCommand executes a package command
   rpc RunCommand(RunPackageCommandRequest) returns (RunPackageCommandResponse) {
     option (forge.v1.method) = {
       activity: {none: "runs a package script on the daemon: dev-loop process control, high volume"}
     };
   }
-  
+
   // ListProcesses returns processes for a worktree
   rpc ListProcesses(ListPackageProcessesRequest) returns (ListPackageProcessesResponse) {}
-  
+
   // GetProcess returns a specific process
   rpc GetProcess(GetPackageProcessRequest) returns (GetPackageProcessResponse) {}
-  
+
   // GetProcessLogs returns the logs for a process
   rpc GetProcessLogs(GetPackageProcessLogsRequest) returns (GetPackageProcessLogsResponse) {}
-  
+
   // KillProcess terminates a process
   rpc KillProcess(KillPackageProcessRequest) returns (KillPackageProcessResponse) {
     option (forge.v1.method) = {
       activity: {none: "stops a package command's process on the daemon: dev-loop process control"}
     };
   }
-  
+
   // GetCommandFavorites returns the list of favorited command keys for a project
   rpc GetCommandFavorites(GetCommandFavoritesRequest) returns (GetCommandFavoritesResponse) {}
-  
+
   // SetCommandFavorite adds or removes a command from favorites
   rpc SetCommandFavorite(SetCommandFavoriteRequest) returns (SetCommandFavoriteResponse) {
     option (forge.v1.method) = {
@@ -70,8 +70,8 @@ message PackageCommand {
   string source = 5;
   string category = 6;
   repeated string dependencies = 7;
-  string working_dir = 8;      // Full path to directory where command should run
-  string relative_path = 9;    // Path relative to project root for display (empty for root)
+  string working_dir = 8; // Full path to directory where command should run
+  string relative_path = 9; // Path relative to project root for display (empty for root)
 }
 
 // PackageProcess represents a running or completed package command process
@@ -122,11 +122,11 @@ message ListPackageCommandsResponse {
 
 message RunPackageCommandRequest {
   optional string worktree_id = 1;
-  optional string path = 2;           // Root project path (deprecated, use working_dir)
+  optional string path = 2; // Root project path (deprecated, use working_dir)
   string command_name = 3;
   PackageType package_type = 4;
   map<string, string> env = 5;
-  optional string working_dir = 6;    // Directory to run command from (from command.working_dir)
+  optional string working_dir = 6; // Directory to run command from (from command.working_dir)
   // The chat the panel is beside (see ListPackageCommandsRequest.chat_id).
   optional string chat_id = 7;
 }
@@ -226,8 +226,8 @@ message GetCommandFavoritesResponse {
 
 message SetCommandFavoriteRequest {
   string project_id = 1;
-  string command_key = 2;  // Command key in format: {package_type}:{name} or {package_type}:{relative_path}:{name}
-  bool is_favorite = 3;    // true to add, false to remove
+  string command_key = 2; // Command key in format: {package_type}:{name} or {package_type}:{relative_path}:{name}
+  bool is_favorite = 3; // true to add, false to remove
 }
 
 message SetCommandFavoriteResponse {
