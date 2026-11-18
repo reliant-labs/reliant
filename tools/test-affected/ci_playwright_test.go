@@ -607,7 +607,7 @@ func TestPlaywrightSystemPackagesAreSavedBeforeTheSuite(t *testing.T) {
 	if suiteIdx < 0 || installIdx < 0 || saveIdx < 0 {
 		t.Fatalf("playwright job needs an install step, a system-package save and the suite step (install=%d save=%d suite=%d)", installIdx, saveIdx, suiteIdx)
 	}
-	if !(installIdx < saveIdx && saveIdx < suiteIdx) {
+	if installIdx >= saveIdx || saveIdx >= suiteIdx {
 		t.Errorf("system packages must be installed, then saved, then the suite run (install=%d save=%d suite=%d)", installIdx, saveIdx, suiteIdx)
 	}
 	if !strings.Contains(install.If, "vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off'") {

@@ -16,7 +16,9 @@ func TestMigrationOrderColdSetupBudget(t *testing.T) {
 	}
 	var wf struct {
 		Jobs map[string]struct {
-			Timeout int      `yaml:"timeout-minutes"`
+			// any: another job's timeout-minutes may be an expression
+			// (playwright's is per suite), which a plain int cannot hold.
+			Timeout any      `yaml:"timeout-minutes"`
 			Steps   []ciStep `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
@@ -27,8 +29,8 @@ func TestMigrationOrderColdSetupBudget(t *testing.T) {
 	if !ok {
 		t.Fatal("missing migration-order job")
 	}
-	if job.Timeout < 15 {
-		t.Fatalf("migration job budget %dm cannot accommodate cold setup", job.Timeout)
+	if minutes, ok := job.Timeout.(int); !ok || minutes < 15 {
+		t.Fatalf("migration job budget %vm cannot accommodate cold setup", job.Timeout)
 	}
 	setup, check := false, false
 	for _, step := range job.Steps {
