@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,6 +112,10 @@ func handleRepoDiscover(ctx context.Context, payload []byte) ([]byte, error) {
 	return json.Marshal(resp)
 }
 
+// forgeAppTree is the tree findForgeApps walks for the repo at root: nil, the
+// OS filesystem there. A test replaces it to inject read failures.
+var forgeAppTree = func(root string) fs.FS { return nil }
+
 // findForgeApps fills in each discovered repo's forge apps (repo.FindForgeApps).
 // Every walk answers by the same deadline as the repo scan, so a project of
 // many repos still answers in time, its later repos marked truncated. A repo
@@ -122,7 +127,7 @@ func findForgeApps(ctx context.Context, projectPath string, discovered []repoDis
 		if rel := discovered[i].RelativePath; rel != "" && rel != "." {
 			root = filepath.Join(projectPath, rel)
 		}
-		scan, err := repo.FindForgeApps(ctx, root, repo.ForgeAppOptions{Deadline: deadline})
+		scan, err := repo.FindForgeApps(ctx, root, repo.ForgeAppOptions{Deadline: deadline, FS: forgeAppTree(root)})
 		if err != nil {
 			discovered[i].ForgeAppsTruncated = true
 			continue

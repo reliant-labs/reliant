@@ -20,7 +20,7 @@ import (
 func TestRepoForgeAppQueries(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC) // fixed: read from no clock
 
 	require.NoError(t, env.Repo.CreateProject(ctx, &core.Project{ID: "proj-fa", UserID: "user-a", Name: "ws", Path: "/srv/ws",
 		CreatedAt: now, UpdatedAt: now, LastActive: now}))

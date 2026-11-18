@@ -63,6 +63,9 @@ const oldDaemonAnswer = `{
   "has_forge": false
 }`
 
+// fixedNow is the creation time the seeded rows carry, read from no clock.
+var fixedNow = time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC)
+
 // seedWorkspaceProject creates a project with the workspace's three repos
 // registered, as CreateProject leaves it.
 func seedWorkspaceProject(t *testing.T, repo *db.Repo, userID string) (*db.Project, map[string]*core.Repo) {
@@ -76,7 +79,7 @@ func seedWorkspaceProject(t *testing.T, repo *db.Repo, userID string) (*db.Proje
 	repos := map[string]*core.Repo{}
 	for _, rel := range []string{"control-plane", "forge", "reliant"} {
 		r := &core.Repo{ID: uuid.NewString(), ProjectID: project.ID, Name: rel, RelativePath: rel,
-			CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+			CreatedAt: fixedNow, UpdatedAt: fixedNow}
 		require.NoError(t, repo.CreateRepo(ctx, r))
 		repos[rel] = r
 	}
@@ -249,4 +252,33 @@ func TestParseForgeApps(t *testing.T) {
 		"apps/web": {Apps: []core.RepoForgeApp{{Subpath: "", Name: "web"}}, Complete: true},
 		"":         {Complete: true},
 	}, scan)
+}
+
+// A daemon that could not read part of a repo (a permission error on a
+// subtree or a manifest) reports the repo's walk as partial. An app it
+// recorded before and could not see this time is kept, and the last complete
+// scan's stamp stands: unknown is never recorded as absent.
+func TestRecordForgeApps_AnUnreadablePartOfTheTreeDeletesNothing(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	userID := "user-forgeapps-" + uuid.NewString()
+	project, _ := seedWorkspaceProject(t, repo, userID)
+	scan, ok := ParseForgeApps([]byte(workspaceAnswer))
+	require.True(t, ok)
+	RecordForgeApps(ctx, repo, project.ID, scan)
+	before, stamps := appsByRepoPath(t, repo, project.ID)
+	stampBefore := *stamps["reliant"]
+
+	// What repo.discover answers when reliant/frontends could not be read:
+	// the site is missing from the list, and the walk says it is partial.
+	scan, ok = ParseForgeApps([]byte(`{"forge_apps_scanned": true, "discovered": [
+	  {"relative_path": "reliant", "forge_apps_truncated": true, "forge_apps": [{"subpath": "", "name": "reliant"}]}]}`))
+	require.True(t, ok)
+	RecordForgeApps(ctx, repo, project.ID, scan)
+
+	got, stamps := appsByRepoPath(t, repo, project.ID)
+	assert.Equal(t, before, got, "the site the daemon could not see is still recorded")
+	assert.True(t, stamps["reliant"].Equal(stampBefore), "a partial walk does not stamp a complete scan")
 }

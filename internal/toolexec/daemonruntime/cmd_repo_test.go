@@ -4,9 +4,11 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -191,7 +193,8 @@ func TestRepoDiscoverForgeAppsAnswerPartialBeforeTheDeadline(t *testing.T) {
 	root := t.TempDir()
 	writeTree(t, root, []string{"api"}, map[string]string{"api/forge.yaml": "name: api\nforge_version: v1.6.0\n"})
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	// A deadline every run is already past, read from no clock.
+	ctx, cancel := context.WithDeadline(context.Background(), time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC))
 	defer cancel()
 	discovered := []repoDiscoverFound{{RelativePath: "api", Name: "api"}}
 	findForgeApps(ctx, root, discovered)
@@ -202,4 +205,49 @@ func TestRepoDiscoverForgeAppsAnswerPartialBeforeTheDeadline(t *testing.T) {
 	gone := []repoDiscoverFound{{RelativePath: "gone", Name: "gone"}}
 	findForgeApps(context.Background(), root, gone)
 	assert.True(t, gone[0].ForgeAppsTruncated)
+}
+
+// deniedTree is fsys with the named paths unreadable (a permission error on
+// open), as an unreadable directory or file is on disk.
+type deniedTree struct {
+	fsys   fs.FS
+	denied map[string]bool
+}
+
+func (d deniedTree) Open(name string) (fs.File, error) {
+	if d.denied[name] {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrPermission}
+	}
+	return d.fsys.Open(name)
+}
+
+// An unreadable subtree or manifest reaches the server as a partial walk,
+// never as a complete one that lacks the app: the server then keeps the app it
+// recorded (projectfacts.RecordForgeApps; store.SetRepoForgeApps replaces the
+// set only for a complete walk). Injected through forgeAppTree, not chmod.
+func TestRepoDiscoverReportsAnUnreadableTreeAsPartial(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, []string{"api"}, map[string]string{"api/forge.yaml": "name: api\nforge_version: v1.6.0\n"})
+	tree := fstest.MapFS{
+		"forge.yaml":          {Data: []byte("name: api\nforge_version: v1.6.0\n")},
+		"admin/forge.yaml":    {Data: []byte("name: api-admin\nforge_version: v1.6.0\n")},
+		"services/forge.yaml": {Data: []byte("name: api-svc\nforge_version: v1.6.0\n")},
+	}
+	previous := forgeAppTree
+	defer func() { forgeAppTree = previous }()
+
+	for _, denied := range []string{"services", "admin/forge.yaml"} {
+		forgeAppTree = func(string) fs.FS { return deniedTree{fsys: tree, denied: map[string]bool{denied: true}} }
+		resp, _ := discoverForgeAppsForTest(t, root)
+		require.Len(t, resp.Discovered, 1)
+		got := resp.Discovered[0]
+		assert.True(t, got.ForgeAppsTruncated, "%s unreadable: the walk is partial", denied)
+		assert.Contains(t, got.ForgeApps, repoDiscoverForgeApp{Subpath: "", Name: "api"}, "what was readable is still reported")
+		assert.Len(t, got.ForgeApps, 2)
+	}
+
+	forgeAppTree = func(string) fs.FS { return tree }
+	resp, _ := discoverForgeAppsForTest(t, root)
+	assert.False(t, resp.Discovered[0].ForgeAppsTruncated, "read whole, the walk is complete")
+	assert.Len(t, resp.Discovered[0].ForgeApps, 3)
 }

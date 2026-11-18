@@ -3,10 +3,12 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -64,10 +66,12 @@ type ForgeApp struct {
 type ForgeAppScan struct {
 	// Apps is ordered by Subpath.
 	Apps []ForgeApp
-	// Truncated is true when the walk stopped before covering the
-	// repository (its entry budget, the app cap, its deadline or its
-	// context): Apps is then what it found until then, never the whole
-	// answer. TruncatedReason finishes "the search stopped early because".
+	// Truncated is true when the scan did not cover the whole repository:
+	// a bound stopped it (its entry budget, the app cap, its deadline or its
+	// context), or a directory or manifest in it could not be read. Apps is
+	// then what it found, never the whole answer: an app it could not see
+	// may still be there. TruncatedReason says why, finishing "the list may
+	// be incomplete because".
 	Truncated       bool
 	TruncatedReason string
 }
@@ -80,6 +84,10 @@ type ForgeAppOptions struct {
 	MaxEntries int
 	// Deadline, when set, stops the walk at that time with what it has.
 	Deadline time.Time
+	// FS, when set, is the repository's tree, rooted at the repository;
+	// repoRoot then only names it. nil reads the OS filesystem at repoRoot.
+	// It is the seam a test injects read failures through.
+	FS fs.FS
 }
 
 // FindForgeApps walks the repository at repoRoot for forge.yaml files and
@@ -96,8 +104,12 @@ type ForgeAppOptions struct {
 // when it is a forge manifest (forgeManifest): forge.yaml is a common enough
 // file name that a workflow preset or a fixture can be called that too.
 //
-// An unreadable or missing root is an error; an unreadable subdirectory or
-// manifest is skipped.
+// An unreadable or missing root is an error. A directory or manifest below it
+// that cannot be read is NOT "no app there": the walk carries on and the scan
+// is reported Truncated, so its caller keeps what it knew about that part of
+// the tree rather than recording it as gone. A manifest that reads fine but is
+// not one (no name, not YAML, too large, not a forge manifest) is simply not
+// an app.
 func FindForgeApps(ctx context.Context, repoRoot string, opts ForgeAppOptions) (ForgeAppScan, error) {
 	maxDepth := opts.MaxDepth
 	if maxDepth <= 0 {
@@ -108,28 +120,35 @@ func FindForgeApps(ctx context.Context, repoRoot string, opts ForgeAppOptions) (
 		maxEntries = DefaultForgeAppMaxEntries
 	}
 
-	abs, err := filepath.Abs(repoRoot)
-	if err != nil {
-		return ForgeAppScan{}, fmt.Errorf("resolve repository path: %w", err)
-	}
-	info, err := os.Stat(abs)
-	if err != nil {
-		return ForgeAppScan{}, fmt.Errorf("repository path: %w", err)
-	}
-	if !info.IsDir() {
-		return ForgeAppScan{}, fmt.Errorf("repository path is not a directory: %s", abs)
-	}
-	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = resolved
+	fsys := opts.FS
+	if fsys == nil {
+		abs, err := filepath.Abs(repoRoot)
+		if err != nil {
+			return ForgeAppScan{}, fmt.Errorf("resolve repository path: %w", err)
+		}
+		info, err := os.Stat(abs)
+		if err != nil {
+			return ForgeAppScan{}, fmt.Errorf("repository path: %w", err)
+		}
+		if !info.IsDir() {
+			return ForgeAppScan{}, fmt.Errorf("repository path is not a directory: %s", abs)
+		}
+		if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+			abs = resolved
+		}
+		// os.DirFS lists entries with their own (Lstat) type, so a
+		// symlink is never a directory to fs.WalkDir and is not followed.
+		fsys = os.DirFS(abs)
 	}
 
 	var (
-		apps    []ForgeApp
-		entries int
-		stopped string
+		apps       []ForgeApp
+		entries    int
+		stopped    string
+		unreadable []string
 	)
-	rootDepth := strings.Count(abs, string(filepath.Separator))
-	walkErr := filepath.WalkDir(abs, func(path string, d fs.DirEntry, walkErr error) error {
+	couldNotRead := func(p string) { unreadable = append(unreadable, p) }
+	walkErr := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, walkErr error) error {
 		if err := ctx.Err(); err != nil {
 			stopped = "the request ended"
 			return fs.SkipAll
@@ -143,23 +162,36 @@ func FindForgeApps(ctx context.Context, repoRoot string, opts ForgeAppOptions) (
 			return fs.SkipAll
 		}
 		if walkErr != nil {
-			if os.IsPermission(walkErr) {
-				if d != nil && d.IsDir() {
-					return fs.SkipDir
-				}
-				return nil
+			if p == "." {
+				return walkErr
 			}
-			return walkErr
+			// Unread is unknown, whatever the error: the subtree may hold
+			// an app.
+			couldNotRead(p)
+			if d != nil && d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 
 		if d.IsDir() {
-			if path == abs {
+			if p == "." {
 				return nil
 			}
-			if strings.Count(path, string(filepath.Separator))-rootDepth > maxDepth {
+			if strings.Count(p, "/")+1 > maxDepth {
 				return fs.SkipDir
 			}
-			if skipForgeAppDir(d.Name()) || isGitDir(path) {
+			if skipForgeAppDir(d.Name()) {
+				return fs.SkipDir
+			}
+			nested, err := hasGitEntry(fsys, p)
+			if err != nil {
+				// Whether it is a nested checkout cannot be told, so
+				// neither can whose apps are in it.
+				couldNotRead(path.Join(p, ".git"))
+				return fs.SkipDir
+			}
+			if nested {
 				return fs.SkipDir
 			}
 			return nil
@@ -169,19 +201,19 @@ func FindForgeApps(ctx context.Context, repoRoot string, opts ForgeAppOptions) (
 		if d.Name() != "forge.yaml" || !d.Type().IsRegular() {
 			return nil
 		}
-		dir := filepath.Dir(path)
-		isRoot := dir == abs
-		name, ok := readForgeManifest(path, !isRoot)
+		dir := path.Dir(p)
+		isRoot := dir == "."
+		name, ok, err := readForgeManifest(fsys, p, !isRoot)
+		if err != nil {
+			couldNotRead(p)
+			return nil
+		}
 		if !ok {
 			return nil
 		}
 		subpath := ""
 		if !isRoot {
-			rel, err := filepath.Rel(abs, dir)
-			if err != nil {
-				return nil
-			}
-			subpath = filepath.ToSlash(rel)
+			subpath = dir
 		}
 		if len(apps) >= MaxForgeAppsPerRepo {
 			stopped = fmt.Sprintf("it found %d forge apps", MaxForgeAppsPerRepo)
@@ -196,9 +228,16 @@ func FindForgeApps(ctx context.Context, repoRoot string, opts ForgeAppOptions) (
 
 	sort.Slice(apps, func(i, j int) bool { return apps[i].Subpath < apps[j].Subpath })
 	out := ForgeAppScan{Apps: apps}
-	if stopped != "" {
+	switch {
+	case stopped != "":
 		out.Truncated = true
 		out.TruncatedReason = stopped
+	case len(unreadable) > 0:
+		out.Truncated = true
+		out.TruncatedReason = fmt.Sprintf("it could not read %s", unreadable[0])
+		if n := len(unreadable) - 1; n > 0 {
+			out.TruncatedReason += fmt.Sprintf(" and %d more", n)
+		}
 	}
 	return out, nil
 }
@@ -213,50 +252,85 @@ func skipForgeAppDir(name string) bool {
 	return skip
 }
 
+// hasGitEntry reports whether dir in fsys holds a `.git` entry (a checkout,
+// or a worktree linked to one). An error other than "no such entry" is
+// returned: it does not say there is none.
+func hasGitEntry(fsys fs.FS, dir string) (bool, error) {
+	_, err := fs.Stat(fsys, path.Join(dir, ".git"))
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	default:
+		return false, err
+	}
+}
+
 // forgeManifestMaxBytes bounds a forge.yaml read. A real manifest is a few KB.
 const forgeManifestMaxBytes = 1 << 20
 
 // readForgeManifest returns the trimmed top-level `name` of the forge.yaml at
-// path, and whether it is a forge app: it names something and, when
-// requireManifest is set, is a forge manifest (forgeManifest). A missing,
-// oversized or unparseable file is not one.
-func readForgeManifest(path string, requireManifest bool) (string, bool) {
-	f, err := os.Open(path)
+// p in fsys, and whether it is a forge app: it names something and, when
+// requireManifest is set, is a forge manifest (forgeManifest).
+//
+// Not one (ok false, err nil): the file is gone, oversized, not YAML, or names
+// nothing. Unknown (err non-nil): it, or what forgeManifest looks at beside
+// it, could not be read.
+func readForgeManifest(fsys fs.FS, p string, requireManifest bool) (string, bool, error) {
+	f, err := fsys.Open(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", false, nil
+	}
 	if err != nil {
-		return "", false
+		return "", false, err
 	}
 	defer f.Close()
 	data, err := io.ReadAll(io.LimitReader(f, forgeManifestMaxBytes+1))
-	if err != nil || len(data) > forgeManifestMaxBytes {
-		return "", false
+	if err != nil {
+		return "", false, err
+	}
+	if len(data) > forgeManifestMaxBytes {
+		return "", false, nil
 	}
 	var top map[string]any
 	if err := yaml.Unmarshal(data, &top); err != nil {
-		return "", false
+		return "", false, nil
 	}
 	name, _ := top["name"].(string)
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return "", false
+		return "", false, nil
 	}
-	if requireManifest && !forgeManifest(top, filepath.Dir(path)) {
-		return "", false
+	if requireManifest {
+		isManifest, err := forgeManifest(fsys, top, path.Dir(p))
+		if err != nil || !isManifest {
+			return "", false, err
+		}
 	}
-	return name, true
+	return name, true, nil
 }
 
 // forgeManifest reports whether a parsed forge.yaml in dir is a forge
 // project's manifest rather than another file of that name: it pins forge
 // (`forge_version`, which every project forge scaffolds carries), declares a
 // Go module (`module_path`), or sits beside the deploy/kcl tree a forge
-// project's environments live in.
-func forgeManifest(top map[string]any, dir string) bool {
+// project's environments live in. An error is a deploy/kcl that could not be
+// looked at.
+func forgeManifest(fsys fs.FS, top map[string]any, dir string) (bool, error) {
 	if _, ok := top["forge_version"]; ok {
-		return true
+		return true, nil
 	}
 	if _, ok := top["module_path"]; ok {
-		return true
+		return true, nil
 	}
-	info, err := os.Stat(filepath.Join(dir, "deploy", "kcl"))
-	return err == nil && info.IsDir()
+	info, err := fs.Stat(fsys, path.Join(dir, "deploy", "kcl"))
+	switch {
+	case err == nil:
+		return info.IsDir(), nil
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	default:
+		return false, err
+	}
 }

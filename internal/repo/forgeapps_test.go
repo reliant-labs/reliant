@@ -4,11 +4,12 @@ package repo
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -126,30 +127,119 @@ func TestFindForgeApps_AppCapStopsAndSaysSo(t *testing.T) {
 	assert.Contains(t, scan.TruncatedReason, "forge apps")
 }
 
+// fixedPast is a deadline every run is already past, read from no clock.
+var fixedPast = time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
+
 func TestFindForgeApps_DeadlineStopsAndSaysSo(t *testing.T) {
 	repoRoot := t.TempDir()
 	writeFile(t, repoRoot, "forge.yaml", forgeManifestYAML("shop"))
-	scan, err := FindForgeApps(context.Background(), repoRoot, ForgeAppOptions{Deadline: time.Now().Add(-time.Second)})
+	scan, err := FindForgeApps(context.Background(), repoRoot, ForgeAppOptions{Deadline: fixedPast})
 	require.NoError(t, err)
 	assert.True(t, scan.Truncated)
 	assert.Equal(t, "it ran out of time", scan.TruncatedReason)
 }
 
+// A symlinked directory or forge.yaml is not followed: it may point anywhere,
+// another repository or outside the project. Driven through the FS seam, so
+// it runs on every platform: real symlinks need privileges on Windows. The OS
+// tree is os.DirFS, whose entries carry their own (Lstat) type exactly as
+// this fixture's do.
 func TestFindForgeApps_DoesNotFollowSymlinks(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symlinks need privileges on Windows")
+	tree := fstest.MapFS{
+		"forge.yaml":         {Data: []byte("../elsewhere/forge.yaml"), Mode: fs.ModeSymlink},
+		"linked":             {Data: []byte("../elsewhere"), Mode: fs.ModeSymlink},
+		"real/forge.yaml":    {Data: []byte(forgeManifestYAML("real"))},
+		"real/sub/README.md": {Data: []byte("hi")},
 	}
-	outside := t.TempDir()
-	writeFile(t, outside, "forge.yaml", forgeManifestYAML("elsewhere"))
-	writeFile(t, outside, "app/forge.yaml", forgeManifestYAML("elsewhere-app"))
+	scan, err := FindForgeApps(context.Background(), "repo", ForgeAppOptions{FS: tree})
+	require.NoError(t, err)
+	assert.False(t, scan.Truncated)
+	assert.Equal(t, []ForgeApp{{Subpath: "real", Name: "real"}}, scan.Apps)
+}
 
-	repoRoot := t.TempDir()
-	require.NoError(t, os.Symlink(outside, filepath.Join(repoRoot, "linked")))
-	require.NoError(t, os.Symlink(filepath.Join(outside, "forge.yaml"), filepath.Join(repoRoot, "forge.yaml")))
+// deniedFS is fsys with the named paths unreadable: opening one fails with a
+// permission error, as an unreadable directory or file does on disk. Only
+// Open is exposed, so a directory listing goes through it too.
+type deniedFS struct {
+	fsys   fs.FS
+	denied map[string]bool
+}
 
-	scan, err := FindForgeApps(context.Background(), repoRoot, ForgeAppOptions{})
+func (d deniedFS) Open(name string) (fs.File, error) {
+	if d.denied[name] {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrPermission}
+	}
+	return d.fsys.Open(name)
+}
+
+// What cannot be read is unknown, not absent. A scan that could not read a
+// subtree or a manifest is reported Truncated, so the server keeps the apps
+// it recorded there instead of deleting them (a partial scan never replaces
+// the set: store.SetRepoForgeApps), while what it could read is still found.
+func TestFindForgeApps_UnreadableIsUnknownNotAbsent(t *testing.T) {
+	tree := fstest.MapFS{
+		"forge.yaml":                {Data: []byte(forgeManifestYAML("shop"))},
+		"services/api/forge.yaml":   {Data: []byte(forgeManifestYAML("shop-api"))},
+		"sites/landing/forge.yaml":  {Data: []byte(forgeManifestYAML("landing"))},
+		"workers/queue/forge.yaml":  {Data: []byte(forgeManifestYAML("queue"))},
+		"workers/queue/deploy/x.k":  {Data: []byte("x")},
+		"docs/forge.yaml":           {Data: []byte("name: [unterminated\n")},
+		"tools/gen-config/main.go":  {Data: []byte("package main")},
+		"tools/gen-config/.git":     {Data: []byte("gitdir: elsewhere")},
+		"tools/gen-config/app.yaml": {Data: []byte("x")},
+	}
+
+	for _, tc := range []struct {
+		name, denied string
+		want         []ForgeApp
+	}{
+		{"an unreadable subtree", "services", []ForgeApp{
+			{Subpath: "", Name: "shop"}, {Subpath: "sites/landing", Name: "landing"}, {Subpath: "workers/queue", Name: "queue"}}},
+		{"an unreadable manifest", "sites/landing/forge.yaml", []ForgeApp{
+			{Subpath: "", Name: "shop"}, {Subpath: "services/api", Name: "shop-api"}, {Subpath: "workers/queue", Name: "queue"}}},
+		{"an unreadable root manifest", "forge.yaml", []ForgeApp{
+			{Subpath: "services/api", Name: "shop-api"}, {Subpath: "sites/landing", Name: "landing"}, {Subpath: "workers/queue", Name: "queue"}}},
+		{"an unreadable .git: whose apps they are cannot be told", "tools/gen-config/.git", []ForgeApp{
+			{Subpath: "", Name: "shop"}, {Subpath: "services/api", Name: "shop-api"},
+			{Subpath: "sites/landing", Name: "landing"}, {Subpath: "workers/queue", Name: "queue"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scan, err := FindForgeApps(context.Background(), "repo",
+				ForgeAppOptions{FS: deniedFS{fsys: tree, denied: map[string]bool{tc.denied: true}}})
+			require.NoError(t, err)
+			assert.True(t, scan.Truncated, "an unread part of the tree must not read as a complete scan")
+			assert.Equal(t, "it could not read "+tc.denied, scan.TruncatedReason)
+			assert.Equal(t, tc.want, scan.Apps)
+		})
+	}
+
+	// The same tree read whole: complete. A manifest that is not YAML is not
+	// an app, and is not a read failure either.
+	scan, err := FindForgeApps(context.Background(), "repo", ForgeAppOptions{FS: tree})
+	require.NoError(t, err)
+	assert.False(t, scan.Truncated, scan.TruncatedReason)
+	assert.Len(t, scan.Apps, 4)
+}
+
+// A nested forge.yaml with neither key is an app only beside a deploy/kcl
+// tree; when that cannot be looked at, it is unknown.
+func TestFindForgeApps_UnreadableDeployTreeIsUnknown(t *testing.T) {
+	tree := fstest.MapFS{
+		"services/api/forge.yaml":        {Data: []byte("name: shop-api\n")},
+		"services/api/deploy/kcl/main.k": {Data: []byte("x")},
+	}
+	scan, err := FindForgeApps(context.Background(), "repo", ForgeAppOptions{FS: tree})
+	require.NoError(t, err)
+	assert.Equal(t, []ForgeApp{{Subpath: "services/api", Name: "shop-api"}}, scan.Apps)
+
+	scan, err = FindForgeApps(context.Background(), "repo",
+		ForgeAppOptions{FS: deniedFS{fsys: tree, denied: map[string]bool{"services/api/deploy/kcl": true}}})
 	require.NoError(t, err)
 	assert.Empty(t, scan.Apps)
+	assert.True(t, scan.Truncated)
+	// The walk meets the unreadable directory itself as well as the
+	// manifest that needed it.
+	assert.Equal(t, "it could not read services/api/deploy/kcl and 1 more", scan.TruncatedReason)
 }
 
 func TestFindForgeApps_MissingRootIsAnError(t *testing.T) {

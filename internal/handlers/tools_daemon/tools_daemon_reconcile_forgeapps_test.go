@@ -27,7 +27,7 @@ func TestReconcileProjectDaemonsRecordsForgeAppsOnConnect(t *testing.T) {
 	daemonID := uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 
-	now := time.Now().UTC()
+	now := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC) // fixed: read from no clock
 	newer := &db.Project{ID: uuid.NewString(), UserID: userID, Name: "newer",
 		Path: "/tmp/newer-" + uuid.NewString(), CreatedAt: now, UpdatedAt: now, LastActive: now}
 	older := &db.Project{ID: uuid.NewString(), UserID: userID, Name: "older",
