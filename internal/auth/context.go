@@ -19,7 +19,7 @@ const (
 	DaemonIDContextKey  contextKey = "daemon_id"
 	// CredentialOrgContextKey is the org a daemon's connecting credential
 	// acts in, set by the daemon auth interceptor.
-	CredentialOrgContextKey contextKey = "credential_org"
+	CredentialOrgContextKey contextKey = "credential_org" //nolint:gosec // G101: a context key name, not a credential
 )
 
 // userJWTs stores the latest JWT for each authenticated user.
