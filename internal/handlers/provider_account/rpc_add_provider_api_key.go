@@ -12,6 +12,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
@@ -38,7 +39,7 @@ func (s *Service) AddProviderAPIKey(
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("label is too long"))
 	}
 	if ok, msg := s.deps.ValidateKey(ctx, models.Family(provider), apiKey); !ok {
-		return nil, svcerr.Wrap(svcerr.InvalidArgument(msg))
+		return nil, svcerr.Wrap(svcerr.WithReason(svcerr.InvalidArgument(msg), keyvalidate.Reason(msg)))
 	}
 
 	acct, created, err := s.deps.Store.UpsertProviderAccount(ctx, core.AccountUpsert{
