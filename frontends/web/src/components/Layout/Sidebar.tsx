@@ -65,7 +65,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { openChat, openNewChat } from "../../store/openChat";
 import { openAddProject } from "../../store/addProjectDialogStore";
-import { useProjectDaemonInstalls, useProjects } from "../../hooks/project-queries";
+import { useProjects } from "../../hooks/project-queries";
 import { ProjectFilterMenu } from "./ProjectFilterMenu";
 import { MachineFilterMenu, machineFilterLabel } from "./MachineFilterMenu";
 import { useDaemonList } from "../../hooks/useOnboardingQueries";
@@ -75,7 +75,6 @@ import {
   countByMachine,
   effectiveMachineFilter,
   filterChatsByMachine,
-  filterProjectsByMachine,
   machineResolver,
   NO_MACHINE,
   type MachineFilter,
@@ -1017,9 +1016,6 @@ function SidebarComponent({
     () => effectiveMachineFilter(machineFilterIds, machines ?? []),
     [machineFilterIds, machines],
   );
-  // Which machine holds which project, read only while the filter is on: it
-  // narrows the project sections as well as the chats.
-  const { data: projectCheckouts } = useProjectDaemonInstalls(!!machineFilter);
   // The menu offers the active org's machines (with several orgs), plus any
   // the filter already names; the chats it filters are the active org's.
   const machineOrgs = useMachineOrgs();
@@ -1221,12 +1217,9 @@ function SidebarComponent({
 
     // All projects: project sections, each grouped by workspace. One project:
     // its workspace groups directly.
-    // A project is a section only if the machine filter would list something
-    // in it: a checkout on a selected machine, or a chat it lists.
-    const machineProjects = filterProjectsByMachine(scopedProjects, machineFilter, projectCheckouts, activeWorktreeChats);
     const projectGroups = projectFilterId
       ? []
-      : groupByProject(activeWorktreeChats, mainWorktrees, machineProjects, groupOptions);
+      : groupByProject(activeWorktreeChats, mainWorktrees, scopedProjects, groupOptions);
     const groupsArray: ChatGroup[] = projectFilterId
       ? groupByWorkspace(projectFilterId, activeWorktreeChats, mainWorktrees, groupOptions)
       : projectGroups.flatMap((group) => group.workspaces);
@@ -1300,7 +1293,6 @@ function SidebarComponent({
     mainWorktrees,
     projectFilterId,
     scopedProjects,
-    projectCheckouts,
     projectNames,
   ]);
 

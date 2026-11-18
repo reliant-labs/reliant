@@ -14,13 +14,12 @@
  */
 
 import { useMemo } from "react";
-import { useQuery, type QueryClient } from "@tanstack/react-query";
+import { keepPreviousData, type QueryClient } from "@tanstack/react-query";
 import type { Chat } from "../types/chat";
 import type { SearchChatsResponse } from "../gen/reliant/v1/chat_pb";
 import { protoValueToJs } from "../api/proto-utils";
-import { keepPreviousInOrg, orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
 import { queryClient as appQueryClient } from "../lib/query-client";
-import { chatServiceQueries } from "./chat-service-hooks_gen";
+import { chatServiceQueries, useSearchChats } from "./chat-service-hooks_gen";
 import { useChatListWithWorkspaces } from "./chat-queries";
 import { useDebounce } from "./useDebounce";
 
@@ -117,21 +116,15 @@ export function useChatSearch(scope: string | null, query: string, enabled = tru
   const chats = list?.chats ?? NO_CHATS;
   const term = useDebounce(query.trim(), CHAT_SEARCH_DEBOUNCE_MS);
   const searchesServer = enabled && term !== "";
-  const org = useOrgScope();
-  const search = useQuery(
-    withOrgFailure(
-      chatServiceQueries.searchChats(orgRequest({ projectId: scope ?? "", query: term }, org.orgId), {
-        // Not before the tab's org is known: a search naming no org is every org's.
-        enabled: searchesServer && orgQueryEnabled(org),
-        select: hitsOf,
-        // A failed search falls back to the title match at once.
-        retry: false,
-        // The previous term's hits stay up while the next term loads, but
-        // never another org's: after a switch, nothing until this org answers.
-        placeholderData: keepPreviousInOrg(org.orgId),
-      }),
-      org,
-    ),
+  const search = useSearchChats(
+    { projectId: scope ?? "", query: term },
+    {
+      enabled: searchesServer,
+      select: hitsOf,
+      // A failed search falls back to the title match at once.
+      retry: false,
+      placeholderData: keepPreviousData,
+    },
   );
   const serverHits = search.data;
   const failed = search.isError;

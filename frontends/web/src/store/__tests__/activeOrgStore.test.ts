@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { resolveActiveOrg, type MyOrgs } from "@/services/controlPlane/orgs";
 import {
+  adoptPersistedActiveOrg,
   bindActiveOrgUser,
   chooseActiveOrg,
   forgetChosenOrg,
@@ -14,8 +15,7 @@ const org = (id: string, isDefault = false) => ({ id, name: id, slug: id, role: 
 
 beforeEach(() => {
   localStorage.clear();
-  sessionStorage.clear();
-  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
+  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null });
 });
 
 describe("the choice is per user", () => {
@@ -40,49 +40,12 @@ describe("the choice is per user", () => {
     expect(localStorage.getItem("reliant.activeOrg.null")).toBeNull();
   });
 
-});
-
-describe("the choice is per tab", () => {
-  /** A fresh page in a new tab: its own sessionStorage, the browser's localStorage. */
-  function openNewTab() {
-    sessionStorage.clear();
-    useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
-  }
-
-  it("a new tab starts in the org last chosen in any tab", () => {
-    bindActiveOrgUser("alice");
-    chooseActiveOrg("org-b");
-    openNewTab();
-    bindActiveOrgUser("alice");
-    expect(getActiveOrgId()).toBe("org-b");
-  });
-
-  it("a choice in another tab does not move this one, even on reload", () => {
-    bindActiveOrgUser("alice");
-    chooseActiveOrg("org-a");
-    const thisTab = sessionStorage.getItem("reliant.activeOrg.alice");
-    // Another tab picks org-b: it writes the shared last choice and its own session.
-    openNewTab();
-    bindActiveOrgUser("alice");
-    chooseActiveOrg("org-b");
-    // Back in the first tab, which still has its own session, and reloads.
-    sessionStorage.setItem("reliant.activeOrg.alice", thisTab!);
-    useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
-    bindActiveOrgUser("alice");
-    expect(getActiveOrgId()).toBe("org-a");
-    // And a tab opened now starts in the latest choice.
-    openNewTab();
-    bindActiveOrgUser("alice");
-    expect(getActiveOrgId()).toBe("org-b");
-  });
-
-  it("a tab that has its org keeps it when the shared choice changes later", () => {
+  it("is adopted from another tab", () => {
     bindActiveOrgUser("alice");
     chooseActiveOrg("org-a");
     localStorage.setItem("reliant.activeOrg.alice", "org-b");
-    useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
-    bindActiveOrgUser("alice");
-    expect(getActiveOrgId()).toBe("org-a");
+    adoptPersistedActiveOrg();
+    expect(getActiveOrgId()).toBe("org-b");
   });
 });
 
@@ -94,27 +57,7 @@ describe("reconciliation", () => {
     forgetChosenOrg();
     expect(useActiveOrgStore.getState().chosenId).toBeNull();
     expect(getActiveOrgId()).toBe("org-a");
-    expect(sessionStorage.getItem("reliant.activeOrg.alice")).toBeNull();
     expect(localStorage.getItem("reliant.activeOrg.alice")).toBeNull();
-  });
-
-  it("does not forget another tab's newer choice for new tabs", () => {
-    bindActiveOrgUser("alice");
-    chooseActiveOrg("org-gone");
-    localStorage.setItem("reliant.activeOrg.alice", "org-b"); // another tab chose since
-    setEffectiveOrg("org-a");
-    forgetChosenOrg();
-    expect(localStorage.getItem("reliant.activeOrg.alice")).toBe("org-b");
-  });
-
-  it("is resolved once the membership list answers, even with no org", () => {
-    bindActiveOrgUser("alice");
-    expect(useActiveOrgStore.getState().resolved).toBe(false);
-    setEffectiveOrg(null);
-    expect(useActiveOrgStore.getState().resolved).toBe(true);
-    // Another person signs in: theirs is not known yet.
-    bindActiveOrgUser("bob");
-    expect(useActiveOrgStore.getState().resolved).toBe(false);
   });
 });
 

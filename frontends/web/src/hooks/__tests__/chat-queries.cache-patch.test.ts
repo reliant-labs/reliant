@@ -59,7 +59,7 @@ describe("upsertChatInListCache", () => {
   it("creates a list envelope for the first chat when the cache is absent", () => {
     const chat = buildChat({ id: "c1" });
 
-    upsertChatInListCache("p1", chat, null);
+    upsertChatInListCache("p1", chat);
 
     const next = queryClient.getQueryData<ChatListEnvelope>(
       chatKeys.list("p1")
@@ -73,7 +73,7 @@ describe("upsertChatInListCache", () => {
     const chat = buildChat({ id: "c1" });
     queryClient.setQueryData(chatKeys.list("p1"), buildEnvelope([], { total: 0 }));
 
-    upsertChatInListCache("p1", chat, null);
+    upsertChatInListCache("p1", chat);
 
     const next = queryClient.getQueryData<ChatListEnvelope>(
       chatKeys.list("p1")
@@ -89,7 +89,7 @@ describe("upsertChatInListCache", () => {
     const envelope = buildEnvelope([existing, other], { total: 2 });
     queryClient.setQueryData(chatKeys.list("p1"), envelope);
 
-    upsertChatInListCache("p1", buildChat({ id: "c1", title: "New" }), null);
+    upsertChatInListCache("p1", buildChat({ id: "c1", title: "New" }));
 
     const next = queryClient.getQueryData<ChatListEnvelope>(
       chatKeys.list("p1")
@@ -297,11 +297,11 @@ describe("all-projects and project lists together", () => {
 
   it("upserts into a loaded all-projects list but never invents one", () => {
     const chat = buildChat({ id: "c2", projectId: "p2" });
-    upsertChatInListCache("p2", chat, null);
+    upsertChatInListCache("p2", chat);
     expect(queryClient.getQueryData(chatKeys.list(null))).toBeUndefined();
 
     queryClient.setQueryData(chatKeys.list(null), buildEnvelope([buildChat({ id: "c1" })]));
-    upsertChatInListCache("p2", buildChat({ id: "c3", projectId: "p2" }), null);
+    upsertChatInListCache("p2", buildChat({ id: "c3", projectId: "p2" }));
     expect(queryClient.getQueryData<ChatListEnvelope>(chatKeys.list(null))!.chats.map((c) => c.id)).toEqual([
       "c3",
       "c1",

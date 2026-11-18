@@ -17,7 +17,7 @@
  */
 
 import { create, isMessage } from "@bufbuild/protobuf";
-import { useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 import {
@@ -31,7 +31,6 @@ import {
   type TriggerFundingWarning,
 } from "../gen/reliant/v1/trigger_pb";
 import { connectClient } from "../lib/connect";
-import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
 import { toast } from "../lib/toast-manager";
 import {
   automationDraftFromProto,
@@ -62,6 +61,7 @@ import {
   useGetTrigger,
   useListReplayEvents,
   useListTriggerEvents,
+  useListTriggers,
   useRotateWebhookToken as useRotateWebhookTokenRpc,
   useSetTriggerEnabled as useSetTriggerEnabledRpc,
   useUpdateTrigger as useUpdateTriggerRpc,
@@ -114,18 +114,14 @@ const eventsRequest = (triggerId: string) => ({ triggerId, limit: EVENTS_LIMIT }
 
 /** The caller's automations, optionally narrowed to one project. */
 export function useTriggers(projectId?: string, options: { enabled?: boolean } = {}) {
-  // In the tab's org, and not before it is known (lib/orgScope).
-  const org = useOrgScope();
-  return useQuery(
-    withOrgFailure(
-      triggerServiceQueries.listTriggers(orgRequest({ projectId }, org.orgId), {
-        enabled: (options.enabled ?? true) && orgQueryEnabled(org),
-        // A page left open should not show a stale "next run" indefinitely.
-        refetchInterval: TRIGGER_POLL_MS,
-        select: triggersOf,
-      }),
-      org,
-    ),
+  return useListTriggers(
+    { projectId },
+    {
+      enabled: options.enabled ?? true,
+      // A page left open should not show a stale "next run" indefinitely.
+      refetchInterval: TRIGGER_POLL_MS,
+      select: triggersOf,
+    },
   );
 }
 
@@ -145,15 +141,7 @@ export function useTriggerName(triggerId: string | undefined): string | undefine
  * schedule timezone). Undefined while loading, or when it was deleted.
  */
 export function useTriggerById(triggerId: string | undefined): Trigger | undefined {
-  const org = useOrgScope();
-  // A label: it waits for the org and shows nothing on failure (no Retry here).
-  const { data } = useQuery(
-    triggerServiceQueries.listTriggers(orgRequest({}, org.orgId), {
-      enabled: !!triggerId && org.ready,
-      staleTime: 5 * 60_000,
-      select: triggersOf,
-    }),
-  );
+  const { data } = useListTriggers({}, { enabled: !!triggerId, staleTime: 5 * 60_000, select: triggersOf });
   return triggerId ? data?.find((trigger) => trigger.id === triggerId) : undefined;
 }
 

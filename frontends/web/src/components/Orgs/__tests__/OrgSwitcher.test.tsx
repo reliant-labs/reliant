@@ -51,12 +51,10 @@ function Harness({ variant }: { variant?: "sidebar" | "list" }) {
 
 beforeEach(() => {
   localStorage.clear();
-  sessionStorage.clear();
   listMyOrganizations.mockReset();
   setDefaultOrganization.mockReset().mockResolvedValue(undefined);
+  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null });
   useAuthStore.setState({ user: { id: "alice" } as never });
-  // Unbound, so the binding loads what each test saved before it renders.
-  useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
   setTransport(null);
 });
 
@@ -155,7 +153,7 @@ describe("OrgSwitcher", () => {
     expect(screen.getByTestId("org-switcher-name")).toHaveTextContent("Side Project");
   });
 
-  it("tells the product app about a tab's first org, then about each switch, once", async () => {
+  it("tells the product app about a switch, once, and not about the first load", async () => {
     listMyOrganizations.mockResolvedValue({ orgs: [ACME, SIDE], defaultOrgId: "org-a" });
     const onSwitch = vi.fn();
     const { queryClient } = renderWithQuery(
@@ -165,44 +163,12 @@ describe("OrgSwitcher", () => {
       </>,
     );
     await waitFor(() => expect(getActiveOrgId()).toBe("org-a"));
-    // Nothing was saved, so the tab went from naming no org to org-a: what was
-    // read with no org (every org's rows) must not stay cached.
-    await waitFor(() => expect(onSwitch).toHaveBeenCalledTimes(1));
-    expect(onSwitch).toHaveBeenLastCalledWith("org-a", queryClient, { firstLoad: true });
+    expect(onSwitch).not.toHaveBeenCalled();
 
     await userEvent.click(await screen.findByTestId("org-switcher"));
     await userEvent.click(await screen.findByRole("menuitemradio", { name: /Side Project/ }));
-    await waitFor(() => expect(onSwitch).toHaveBeenCalledTimes(2));
-    expect(onSwitch).toHaveBeenLastCalledWith("org-b", queryClient, { firstLoad: false });
-  });
-
-  it("says nothing on the first load of a tab that already had its org", async () => {
-    sessionStorage.setItem("reliant.activeOrg.alice", "org-b");
-    listMyOrganizations.mockResolvedValue({ orgs: [ACME, SIDE], defaultOrgId: "org-a" });
-    const onSwitch = vi.fn();
-    renderWithQuery(<ActiveOrgBinding onSwitch={onSwitch} />);
-    await waitFor(() => expect(useActiveOrgStore.getState().resolved).toBe(true));
-    expect(getActiveOrgId()).toBe("org-b");
-    expect(onSwitch).not.toHaveBeenCalled();
-  });
-
-  it("a switch in another tab does not move this one", async () => {
-    listMyOrganizations.mockResolvedValue({ orgs: [ACME, SIDE], defaultOrgId: "org-a" });
-    const onSwitch = vi.fn();
-    renderWithQuery(<ActiveOrgBinding onSwitch={onSwitch} />);
-    await waitFor(() => expect(getActiveOrgId()).toBe("org-a"));
-    onSwitch.mockClear();
-
-    // Another tab picks Side Project: the browser writes the shared last
-    // choice and fires `storage` in every other tab of the origin. A listener
-    // runs synchronously inside dispatchEvent, and act() flushes any store
-    // update and effect it causes, so the outcome is settled when act returns.
-    act(() => {
-      localStorage.setItem("reliant.activeOrg.alice", "org-b");
-      window.dispatchEvent(new StorageEvent("storage", { key: "reliant.activeOrg.alice", newValue: "org-b" }));
-    });
-    expect(getActiveOrgId()).toBe("org-a");
-    expect(onSwitch).not.toHaveBeenCalled();
+    await waitFor(() => expect(onSwitch).toHaveBeenCalledTimes(1));
+    expect(onSwitch).toHaveBeenCalledWith("org-b", queryClient);
   });
 
   it("restores the person's own choice on the next visit", async () => {

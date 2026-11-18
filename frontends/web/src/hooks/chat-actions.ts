@@ -71,7 +71,7 @@ function chatOf<R extends { chat?: Parameters<typeof convertProtoChat>[0] }>(res
  */
 export async function listChats(
   projectId?: string,
-  options: { signal?: AbortSignal; orgId?: string | null } = {},
+  options: { signal?: AbortSignal } = {},
 ): Promise<{
   chats: Chat[];
   lastUserUpdateSequence: number;
@@ -79,9 +79,6 @@ export async function listChats(
 }> {
   const response = await client.listChats({
     projectId: projectId ?? "",
-    // The org the caller's cache key names (lib/orgScope); unset, the
-    // transport fills the tab's org.
-    ...(options.orgId ? { orgId: options.orgId } : {}),
     // ListChats is the chat list: the server returns only conversations
     // (USER-origin chats and runs the user adopted). Runs an automation,
     // an agent or the CLI started live in Runs; one waiting on the user

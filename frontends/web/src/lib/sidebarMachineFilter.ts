@@ -17,16 +17,12 @@
  * no longer has and falls back to All machines when nothing is left of it, or
  * when the user has one machine (the filter is then not shown at all).
  *
- * The project sections follow the filter too ({@link filterProjectsByMachine}):
- * a project shows only with a checkout on a selected machine or a listed chat.
- *
  * Pure: no React, no RPCs, so the rules are testable on their own. The
  * desktop sidebar and the navigation store (keyboard next/prev) both filter
  * through it, so the order the keys walk is the list on screen.
  */
 
 import type { DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
-import { ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import { defaultMachineDaemon, NO_MACHINE } from "./chatMachine";
 
 export { NO_MACHINE };
@@ -117,37 +113,6 @@ export function filterChatsByMachine<T extends MachineFilterableChat>(
 ): T[] {
   if (!filter) return chats;
   return chats.filter((chat) => chatMatchesMachineFilter(chat, filter, context));
-}
-
-/** The fields of a project checkout (a project_daemons row) the filter reads. */
-export interface MachineFilterableCheckout {
-  project_id: string;
-  daemon_id: string;
-  install_state: ProjectInstallState;
-}
-
-/**
- * The project sections listed under the filter: a project with a checkout on
- * a selected machine (one being cloned counts; a failed clone does not), or
- * with a chat the filter lists. The same array when nothing is filtered, and
- * while the checkouts are not known yet (`undefined`), so a section is not
- * hidden only because they have not loaded.
- */
-export function filterProjectsByMachine<T extends { id: string }>(
-  projects: T[],
-  filter: MachineFilter,
-  checkouts: ReadonlyArray<MachineFilterableCheckout> | undefined,
-  listedChats: ReadonlyArray<{ projectId?: string }>,
-): T[] {
-  if (!filter || !checkouts) return projects;
-  const shown = new Set<string>();
-  for (const checkout of checkouts) {
-    if (checkout.install_state !== ProjectInstallState.FAILED && filter.includes(checkout.daemon_id)) {
-      shown.add(checkout.project_id);
-    }
-  }
-  for (const chat of listedChats) if (chat.projectId) shown.add(chat.projectId);
-  return projects.filter((project) => shown.has(project.id));
 }
 
 /** Whether a choice is shown under the filter. */

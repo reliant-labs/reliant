@@ -26,7 +26,6 @@ export const useActiveOrg: typeof Real.useActiveOrg = () => ({
   canSwitch: false,
   isLoading: false,
   error: null,
-  refetch: () => {},
   select: () => {},
 });
 

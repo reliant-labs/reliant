@@ -24,11 +24,9 @@ import {
   setWorkflowVisibility,
   useWorkflowList,
   workflowListFromProto,
-  workflowListRequest,
   WORKFLOW_STALE_TIME_MS,
   type ListWorkflowsResult,
 } from "./workflow-queries";
-import { orgQueryEnabled, useOrgScope, withOrgFailure } from "../lib/orgScope";
 import { workflowServiceQueries } from "./workflow-service-hooks_gen";
 
 /** Every workflow in the project and every one that failed to load. */
@@ -57,16 +55,11 @@ export function useProjectLibraries(projectIds: readonly string[], enabled = tru
   // Stable, so combine re-runs only when a result changes and the Map holds
   // between renders (the list's view memo depends on it).
   const combine = useMemo(() => combineLibraries(ids ? ids.split("\n") : []), [ids]);
-  const org = useOrgScope();
   return useQueries({
     queries: projectIds.map((projectId) =>
-      withOrgFailure(
-        workflowServiceQueries.listWorkflows(workflowListRequest(projectId, true, org.orgId), {
-          enabled: enabled && orgQueryEnabled(org),
-          staleTime: WORKFLOW_STALE_TIME_MS,
-          select: workflowListFromProto,
-        }),
-        org,
+      workflowServiceQueries.listWorkflows(
+        { projectId, includeHidden: true },
+        { enabled, staleTime: WORKFLOW_STALE_TIME_MS, select: workflowListFromProto },
       ),
     ),
     combine,

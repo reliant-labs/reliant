@@ -13,8 +13,7 @@
  * session page one showed.
  */
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { keepPreviousInOrgSegment } from "@/lib/orgScope";
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { FilterUnsupportedError, obsRetryDelay, rumRetry } from "@/services/controlPlane/observability/errors";
 import type { FrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
@@ -95,8 +94,7 @@ export function useSessions(scope: RumScope | null, filters: SessionFilters) {
       return result;
     },
     enabled: !!scope,
-    // The previous page, but never another org's (lib/orgScope).
-    placeholderData: keepPreviousInOrgSegment(scope?.orgId ?? null),
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
     retry: rumRetry, retryDelay: obsRetryDelay,
   });
