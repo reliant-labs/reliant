@@ -6,6 +6,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -21,7 +23,7 @@ func TestStartConnection_AddsToActiveConns(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dc.startConnection(ctx, "d-1", "u-1", "10.0.0.1", 9190)
+	dc.startConnection(ctx, "d-1", "u-1", "10.0.0.1", 9190, tools_daemon.MachineOrg{})
 
 	dc.mu.Lock()
 	_, exists := dc.activeConns["d-1"]
@@ -68,7 +70,7 @@ func TestStartConnection_ReplacesExisting(t *testing.T) {
 	firstCtx, firstCancel := context.WithCancel(ctx)
 	dc.activeConns["d-1"] = firstCancel
 
-	dc.startConnection(ctx, "d-1", "u-1", "10.0.0.2", 9190)
+	dc.startConnection(ctx, "d-1", "u-1", "10.0.0.2", 9190, tools_daemon.MachineOrg{})
 
 	assert.Error(t, firstCtx.Err(), "old connection context should be cancelled")
 

@@ -89,9 +89,10 @@ type ProjectReconcileStore interface {
 	// remote in one org (nil scope: any): the remote backfill's uniqueness
 	// check, per (org, user, remote_url).
 	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*db.Project, error)
-	// DeleteProjectDaemon removes a checkout row only: the reconcile's
-	// detach of another org's project from the machine.
-	DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error
+	// DetachProjectDaemonOfOtherOrg removes a checkout record of another
+	// org's project from the machine, recording it whole so it can be
+	// restored: the reconcile's machine-org cleanup.
+	DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID, daemonID, userID, machineOrg string, projectOrg *string) (bool, error)
 	// ListProjectDaemonDetachmentsForDaemon is what the user detached from
 	// the machine: a folder there is left unrecorded (DetachProjectFromDaemon).
 	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)

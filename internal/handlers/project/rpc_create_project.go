@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -61,20 +62,20 @@ func (s *Service) CreateProject(
 	// default resolution. A named machine is resolved, and an existing
 	// project attached, before anything below (findOrAttachOn).
 	pinned := req.Msg.GetDaemonId()
+	// target is the machine every command of this create runs on: the named
+	// one, or the one default resolution picks, resolved and authorized
+	// against the org the request acts in BEFORE any command is sent
+	// (resolveCreateTarget). A machine of another org is refused here, with
+	// nothing run on it and nothing queued.
+	target, err := s.resolveCreateTarget(ctx, userID, pinned, orgID)
+	if err != nil {
+		return nil, err
+	}
 	if pinned != "" {
-		machine, err := s.ownedMachine(ctx, userID, pinned)
-		if err != nil {
-			return nil, err
-		}
-		// A machine holds its own org's projects only: a project made, or
-		// found, in another org is not recorded on it.
-		if err := s.requireMachineInOrg(ctx, machine, orgID); err != nil {
-			return nil, err
-		}
 		if scope == nil {
 			// The request acts in no org: the machine's keeps the find
 			// half from attaching another org's project to it.
-			if scope, err = s.machineScope(ctx, machine); err != nil {
+			if scope, err = s.machineScope(ctx, userID, target.machine); err != nil {
 				return nil, err
 			}
 		}
@@ -83,12 +84,37 @@ func (s *Service) CreateProject(
 			return resp, err
 		}
 	}
-	// send runs a command on the pinned machine, or by default resolution.
+	// send runs a command on the validated target, pinned to it. With no
+	// target (no machine could be resolved), a request acting in an org runs
+	// nothing: default routing could reach a machine of another org.
 	send := func(commandType string, payload, resp any) error {
-		if pinned != "" {
-			return s.sendToDaemon(ctx, userID, pinned, commandType, payload, resp)
+		switch {
+		case target.id != "":
+			return s.sendToDaemon(ctx, userID, target.id, commandType, payload, resp)
+		case orgID != nil:
+			return errNoValidatedMachine
 		}
 		return s.sendProjectDaemonCommand(ctx, userID, commandType, payload, resp)
+	}
+	// queue holds a command for whichever of the user's machines connects
+	// next, which cannot be authorized against the org beforehand: only a
+	// request acting in no org (no orgs here) queues. Otherwise the folder is
+	// made by the machine's own connect-time heal (ensureProjectDirsOnDaemon),
+	// which runs only on a machine of the project's org.
+	queue := func(commandType string, payload any) {
+		if orgID != nil {
+			logging.InfoContext(ctx, "Not queueing a project command for the next machine to connect: it could be another organization's",
+				"command", commandType, "path", req.Msg.Path, "org_id", *orgID)
+			return
+		}
+		payloadBytes, marshalErr := json.Marshal(payload)
+		if marshalErr != nil {
+			logging.WarnContext(ctx, "Failed to marshal a project command for enqueue", "error", marshalErr, "command", commandType, "path", req.Msg.Path)
+		} else if n, enqErr := s.enqueueDaemonCommand(ctx, userID, commandType, payloadBytes); enqErr != nil {
+			logging.WarnContext(ctx, "Failed to enqueue a project command for the daemon", "error", enqErr, "command", commandType, "path", req.Msg.Path)
+		} else {
+			logging.InfoContext(ctx, "Queued a project command on DAEMON_PENDING_COMMANDS", "command", commandType, "path", req.Msg.Path, "daemons", n)
+		}
 	}
 
 	// Check if project already exists for this user and path, in the org
@@ -127,22 +153,12 @@ func (s *Service) CreateProject(
 	// DAEMON_PENDING_COMMANDS JetStream so the gateway dispatches it the
 	// moment the daemon's bidi stream comes up.
 	//
-	// Resolve the target daemon up front so, when the synchronous mkdir
-	// below succeeds (proving a connected daemon actually ran it), we can
-	// record a project_daemons row against the SAME daemon the command
-	// routed to. Resolution is deterministic (connected/local preferred),
-	// so the resolved id matches what sendProjectDaemonCommand targeted.
-	// A resolve failure is non-fatal: it just means no daemon is reachable
-	// right now, and the mkdir will fall through to the pending-command
-	// enqueue path (the reconcile-on-connect flow writes the row later).
-	resolvedDaemonID, resolveErr := pinned, error(nil)
-	if pinned == "" {
-		resolvedDaemonID, resolveErr = s.resolveDaemonID(ctx, userID)
-	}
-	if resolveErr != nil {
-		logging.InfoContext(ctx, "No daemon resolvable for new project; will rely on pending-command + reconcile", "path", req.Msg.Path, "error", resolveErr)
-	}
-
+	// The target was resolved up front (resolveCreateTarget) so, when the
+	// synchronous mkdir below succeeds (proving the connected daemon
+	// actually ran it), we can record a project_daemons row against the SAME
+	// daemon the command was pinned to. No target means no daemon is
+	// reachable right now: the mkdir falls through to the pending-command
+	// path (queue), and the reconcile-on-connect flow writes the row later.
 	// daemonConnected is set only when the synchronous mkdir succeeds. That
 	// is the authoritative signal a live daemon handled the command — a
 	// resolved id alone can come from a stale DB fallback. We gate the
@@ -157,14 +173,7 @@ func (s *Service) CreateProject(
 			return nil, daemonerr.Error("create the project's folder on "+s.machineName(ctx, pinned), err)
 		}
 		logging.WarnContext(ctx, "Failed to mkdir project path via daemon; enqueueing for delivery on next connect", "error", err, "path", req.Msg.Path)
-		payloadBytes, marshalErr := json.Marshal(mkdirPayload)
-		if marshalErr != nil {
-			logging.WarnContext(ctx, "Failed to marshal mkdir payload for enqueue", "error", marshalErr, "path", req.Msg.Path)
-		} else if n, enqErr := s.enqueueDaemonCommand(ctx, userID, "fs.mkdir", payloadBytes); enqErr != nil {
-			logging.WarnContext(ctx, "Failed to enqueue mkdir for daemon", "error", enqErr, "path", req.Msg.Path)
-		} else {
-			logging.InfoContext(ctx, "Queued fs.mkdir on DAEMON_PENDING_COMMANDS", "path", req.Msg.Path, "daemons", n)
-		}
+		queue("fs.mkdir", mkdirPayload)
 	} else {
 		daemonConnected = true
 	}
@@ -258,12 +267,8 @@ func (s *Service) CreateProject(
 				// not to the one named; the user is offered "Initialize
 				// Git" instead.
 				logging.InfoContext(ctx, "Not queueing git-init: the project is on a named machine", "daemonID", pinned)
-			} else if payloadBytes, marshalErr := json.Marshal(gitInitPayload); marshalErr != nil {
-				logging.WarnContext(ctx, "Failed to marshal git-init payload for enqueue", "error", marshalErr, "path", req.Msg.Path)
-			} else if n, enqErr := s.enqueueDaemonCommand(ctx, userID, "project.init_git_repo", payloadBytes); enqErr != nil {
-				logging.WarnContext(ctx, "Failed to enqueue git-init for daemon", "error", enqErr, "path", req.Msg.Path)
 			} else {
-				logging.InfoContext(ctx, "Queued project.init_git_repo on DAEMON_PENDING_COMMANDS", "path", req.Msg.Path, "daemons", n)
+				queue("project.init_git_repo", gitInitPayload)
 			}
 		} else if gitInitResp.Success {
 			isGitRepo = true
@@ -337,7 +342,8 @@ func (s *Service) CreateProject(
 	// for later) is the "pending" case, where the reconcile-on-connect flow
 	// creates the row once the daemon comes up. A failure here is logged but
 	// never fails creation; the reconcile path heals it.
-	if daemonConnected && resolvedDaemonID != "" && s.defaultMachineHolds(ctx, resolvedDaemonID, project) {
+	if daemonConnected && target.id != "" {
+		resolvedDaemonID := target.id
 		if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, resolvedDaemonID, project.Path, project.DefaultBranch); err != nil {
 			logging.WarnContext(ctx, "Failed to record project_daemons row at creation; reconcile will heal it",
 				"error", err, "project_id", project.ID, "daemon_id", resolvedDaemonID, "path", project.Path)
@@ -458,9 +464,9 @@ func (s *Service) CreateProject(
 	// Tell the daemon to load real configs for this project path.
 	// This is fire-and-forget — the seed row above ensures the workflow
 	// can start even if the daemon hasn't responded yet.
-	if pinned != "" {
-		s.syncConfigOn(ctx, userID, pinned, project.ID, req.Msg.Path)
-	} else if s.deps.Router != nil {
+	if target.id != "" {
+		s.syncConfigOn(ctx, userID, target.id, project.ID, req.Msg.Path)
+	} else if s.deps.Router != nil && orgID == nil {
 		if err := s.deps.Router.SendLoadProjectConfigs(ctx, userID, req.Msg.Path, uuid.New().String()); err != nil {
 			logging.WarnContext(ctx, "Failed to request daemon config load for new project",
 				"error", err,
@@ -538,35 +544,56 @@ func (s *Service) findOrAttachOn(ctx context.Context, userID, daemonID, path str
 	return s.attachExisting(ctx, userID, daemonID, existing, path)
 }
 
-// defaultMachineHolds reports whether the machine a create without daemon_id
-// ran on (default resolution) may record project as its checkout: not when
-// it belongs to an org the project is not in. The folder is still made there
-// (the create's commands already ran); only the cross-org record is skipped,
-// and logged. A machine that cannot be read has no known org, and records
-// the checkout as before. One whose scope cannot be told (the default org
-// could not be read) records nothing: its next connect's reconcile records
-// the checkout once it can tell.
-func (s *Service) defaultMachineHolds(ctx context.Context, daemonID string, project *db.Project) bool {
-	machine, err := s.deps.Repo.GetDaemon(ctx, daemonID)
-	if err != nil {
-		// No row to read an org from: a machine of no known org
-		// (machineScope of nil is every org's).
-		logging.InfoContext(ctx, "Could not read the machine a project was created on; recording its checkout there as before machines had orgs",
-			"error", err, "project_id", project.ID, "daemon_id", daemonID)
-		machine = nil
+// errNoValidatedMachine is a create's command when no machine could be
+// resolved for a request acting in an org: default routing could reach a
+// machine of another org, so nothing is sent (CreateProject's send).
+var errNoValidatedMachine = errors.New("no machine of the request's organization is reachable")
+
+// createTarget is the machine a create's commands run on (id "" for none
+// reachable) and its registry row (nil when it has none: a machine of no
+// known org).
+type createTarget struct {
+	id      string
+	machine *db.Daemon
+}
+
+// resolveCreateTarget resolves the machine a create runs every command on —
+// the named one (pinned, which must be the caller's), else default
+// resolution's — and refuses it, before any command, when it holds another
+// org's projects than the org the request acts in (requireMachineInOrg; its
+// owner's default org's when its own is not known). A named machine that
+// cannot be read is NotFound (ownedMachine); default resolution that finds
+// no machine is no target, not an error; a resolved machine whose row cannot
+// be read (other than missing) is the request's failure, never skipped.
+func (s *Service) resolveCreateTarget(ctx context.Context, userID, pinned string, orgID *string) (createTarget, error) {
+	if pinned != "" {
+		machine, err := s.ownedMachine(ctx, userID, pinned)
+		if err != nil {
+			return createTarget{}, err
+		}
+		if err := s.requireMachineInOrg(ctx, userID, machine, orgID); err != nil {
+			return createTarget{}, err
+		}
+		return createTarget{id: pinned, machine: machine}, nil
 	}
-	scope, err := s.machineScope(ctx, machine)
-	if err != nil {
-		logging.WarnContext(ctx, "Could not tell which organization's projects the machine holds; not recording the new project's checkout there",
-			"error", err, "project_id", project.ID, "daemon_id", daemonID)
-		return false
+	id, err := s.resolveDaemonID(ctx, userID)
+	if err != nil || id == "" {
+		logging.InfoContext(ctx, "No daemon resolvable for new project; will rely on pending-command + reconcile", "error", err)
+		return createTarget{}, nil
 	}
-	if !scope.Includes(project.OrgID) {
-		logging.InfoContext(ctx, "Not recording a project on a machine of another organization",
-			"project_id", project.ID, "daemon_id", daemonID, "machine_org_id", authz.MachineOrg(machine))
-		return false
+	machine, err := s.deps.Repo.GetDaemon(ctx, id)
+	switch {
+	case err != nil && !svcerr.IsNotFound(err):
+		return createTarget{}, svcerr.WrapOr(err, svcerr.Internal("failed to read the machine the project would be created on"))
+	case err != nil:
+		machine = nil // no registry row: a machine of no known org
+	case !authz.CanWriteMachine(ctx, userID, machine):
+		return createTarget{}, svcerr.NotFound("machine")
 	}
-	return true
+	if err := s.requireMachineInOrg(ctx, userID, machine, orgID); err != nil {
+		return createTarget{}, err
+	}
+	return createTarget{id: id, machine: machine}, nil
 }
 
 // reusableProject refuses a find-or-create's found project that the caller

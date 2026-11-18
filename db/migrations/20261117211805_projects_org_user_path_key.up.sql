@@ -5,8 +5,12 @@
 --
 -- A project is unique per (org, user, path), not per (user, path): the same
 -- folder may be a project in two organizations (owner decision, 2026-11-17).
--- This is the expand half; 20261117211839_projects_drop_user_path_key drops
--- the old UNIQUE (user_id, path).
+-- This is the expand half. The old UNIQUE (user_id, path) STAYS in this
+-- release: the release before it resolves projects by (user, path) with no
+-- org, so it must never see two orgs' projects at one path during a rollout
+-- or a rollback. A later release, shipped only once the release that adds
+-- this index (and reads every project by org) is the rollback target, drops
+-- it. Until then this key adds nothing the old one does not refuse.
 --
 -- HOW A ROW WITH NO ORG IS KEYED. projects.org_id is NULL for a row written
 -- before orgs, or by a create that could not resolve an org; the lazy
@@ -22,7 +26,7 @@
 -- Postgres a self-hosted deployment may run (NULLS NOT DISTINCT is 15+).
 --
 -- user_id and path lead, so a lookup by (user_id, path) — every org's, the
--- behaviour of a request that names no org — is served by this index once the
+-- behaviour of a deployment with no orgs — is served by this index once the
 -- old one is gone.
 --
 -- CONCURRENTLY cannot run in a transaction block, so this is the only

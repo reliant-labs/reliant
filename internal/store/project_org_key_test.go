@@ -8,15 +8,18 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
 
-// A project is unique per (org, user, path) and (org, user, remote_url): the
-// same folder, or repository, may be a project in two orgs, but not twice in
-// one, and rows with no org yet are one bucket of their own, unique among
-// themselves as every row was before orgs.
+// A project is keyed per (org, user, path) and (org, user, remote_url). This
+// release keeps the old per-user keys too; under the next release's schema
+// (the per-user keys relaxed) the same folder, or repository, may be a
+// project in two orgs, but not twice in one, and rows with no org yet are one
+// bucket of their own, unique among themselves as every row was before orgs.
+// The scoped lookups — this release's readers — pick each org's own.
 func TestProjectKeys_ArePerOrg(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
@@ -29,10 +32,20 @@ func TestProjectKeys_ArePerOrg(t *testing.T) {
 	}
 	create := func(p *core.Project) error { return env.Repo.CreateProject(ctx, p) }
 
-	// The same path and repository in two orgs: both are projects.
 	if err := create(project("p-acme", "/home/workspace/projects/props", orgp("acme"), &remote)); err != nil {
 		t.Fatalf("acme's project: %v", err)
 	}
+	// This release keeps the per-user keys, so the release before it never
+	// meets two orgs' projects at one path during a rollout or a rollback.
+	if err := create(project("p-globex", "/home/workspace/projects/props", orgp("globex"), &remote)); orm.ConstraintName(err) != "projects_user_id_path_key" {
+		t.Fatalf("the same path in another org, under this release's keys: %v; want the per-user key to refuse it", err)
+	}
+
+	// The next release relaxes them; this release's readers must already
+	// handle what it allows. From here on, its schema.
+	db.RelaxProjectKeysForTest(t, env.Repo)
+
+	// The same path and repository in two orgs: both are projects.
 	if err := create(project("p-globex", "/home/workspace/projects/props", orgp("globex"), &remote)); err != nil {
 		t.Fatalf("the same path and repository in another org must be creatable: %v", err)
 	}
@@ -87,6 +100,7 @@ func TestAssignUnassignedOrg_SkipsAProjectTheDefaultOrgAlreadyHolds(t *testing.T
 	at := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
 	user := storetest.SeedUserID
 	remote := "https://github.com/acme/props.git"
+	db.RelaxProjectKeysForTest(t, env.Repo) // two rows at one path, in two buckets: the next release's schema
 	for _, p := range []*core.Project{
 		{ID: "p-home", UserID: user, Name: "props", Path: "/srv/props", OrgID: orgp("home"), RemoteURL: &remote},
 		{ID: "p-dup-path", UserID: user, Name: "props", Path: "/srv/props"},

@@ -67,10 +67,10 @@ func (s *Service) AttachProjectToDaemon(
 		return nil, err
 	}
 	// A machine holds its own org's projects only.
-	if err := s.requireMachineHolds(ctx, machine, project); err != nil {
+	if err := s.requireMachineHolds(ctx, userID, machine, project); err != nil {
 		return nil, err
 	}
-	scope, err := s.machineScope(ctx, machine)
+	scope, err := s.machineScope(ctx, userID, machine)
 	if err != nil {
 		return nil, err
 	}

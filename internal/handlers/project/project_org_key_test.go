@@ -32,10 +32,14 @@ func (s twoOrgs) ResolveOrgMembership(_ context.Context, userID, orgID string) (
 
 // orgsFixture is newMachinesFixture's user and machines, in two orgs: the
 // "cloud" machine belongs to globex (as control-plane named it at its
-// connect); the others' orgs are not known.
+// connect); the others' orgs are not known, so they hold the user's default
+// org's (acme's) projects. The per-user project keys are relaxed
+// (db.RelaxProjectKeysForTest): the schema of the release after this one,
+// on which these readers must already pick the right org's project.
 func newOrgsFixture(t *testing.T) *machinesFixture {
 	t.Helper()
 	f := newMachinesFixture(t)
+	db.RelaxProjectKeysForTest(t, f.repo)
 	resolver := orgs.New(twoOrgs{userID: f.userID})
 	f.ctx = authz.WithMembership(f.ctx, resolver)
 	globex := "globex"
@@ -60,9 +64,10 @@ func TestCreateProject_SamePathInTwoOrgs_BothCreatable(t *testing.T) {
 	f := newOrgsFixture(t)
 	path := "/home/workspace/projects/dbpwathces-" + uuid.NewString()
 
+	f.disk.folder(f.cloud, path, "")
 	acme, err := f.create(t, path, "acme", nil)
 	require.NoError(t, err)
-	globex, err := f.create(t, path, "globex", nil)
+	globex, err := f.create(t, path, "globex", &f.cloud)
 	require.NoError(t, err, "the same path in another org is a new project")
 
 	assert.NotEqual(t, acme.Project.Id, globex.Project.Id)
@@ -92,7 +97,8 @@ func TestCreateProject_AnUnassignedProjectIsTheDefaultOrgs(t *testing.T) {
 
 	_, err := f.create(t, path, "acme", nil)
 	assert.Equal(t, connect.CodeAlreadyExists, codeOf(err), "acme is the default org: %v", err)
-	_, err = f.create(t, path, "globex", nil)
+	f.disk.folder(f.cloud, path, "")
+	_, err = f.create(t, path, "globex", &f.cloud)
 	assert.NoError(t, err)
 }
 
@@ -144,4 +150,52 @@ func TestAttachProjectToDaemon_AnotherOrgsMachine_Refused(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, codeOf(err))
 	assert.NotContains(t, f.rows(t, acme.Project.Id), f.cloud)
+}
+
+// Review B1: a create with no daemon_id resolves its machine and authorizes it
+// against the org the request acts in BEFORE anything runs. The default
+// machine of another org is refused with nothing sent to it, nothing queued
+// and no project created.
+func TestCreateProject_DefaultMachineOfAnotherOrg_RefusedBeforeAnyCommand(t *testing.T) {
+	f := newOrgsFixture(t)
+	globex := "globex"
+	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: f.laptop, UserID: f.userID, OrgID: &globex}))
+	path := "/home/workspace/projects/z-" + uuid.NewString()
+
+	_, err := f.create(t, path, "acme", nil)
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, codeOf(err))
+	assert.Contains(t, err.Error(), "organization globex")
+	assert.Empty(t, f.disk.callsTo(f.laptop), "a command reached the machine of another org")
+	projects, err := f.repo.ListProjects(f.ctx, db.ProjectFilters{UserID: f.userID})
+	require.NoError(t, err)
+	for _, p := range projects {
+		assert.NotEqual(t, path, p.Path, "the project was created")
+	}
+}
+
+// A machine whose org is not known holds only its owner's default org's
+// projects: another org's project is not attached to it, the default org's is.
+func TestAttachProjectToDaemon_MachineOfNoKnownOrgHoldsOnlyTheDefaultOrg(t *testing.T) {
+	f := newOrgsFixture(t)
+	path := "/home/workspace/projects/w-" + uuid.NewString()
+	f.disk.folder(f.cloud, path, "")
+	f.disk.folder(f.desktop, path, "")
+	globex, err := f.create(t, path, "globex", &f.cloud)
+	require.NoError(t, err)
+
+	_, err = f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+		ProjectId: globex.Project.Id, DaemonId: f.desktop, Path: path,
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, codeOf(err))
+	assert.Contains(t, err.Error(), "default organization")
+
+	acme, err := f.create(t, "/home/workspace/projects/v-"+uuid.NewString(), "acme", nil)
+	require.NoError(t, err)
+	f.disk.folder(f.desktop, "/home/workspace/projects/elsewhere", "")
+	_, err = f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+		ProjectId: acme.Project.Id, DaemonId: f.desktop, Path: "/home/workspace/projects/elsewhere",
+	}))
+	assert.NoError(t, err)
 }

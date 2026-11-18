@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // A MACHINE HOLDS ITS ORG'S PROJECTS ONLY.
@@ -12,13 +13,18 @@ import (
 // A machine belongs to one organization (control-plane's daemons.org_id,
 // mirrored onto core.Daemon.OrgID when it connects). Its project checkouts —
 // what the connect reconcile records, what an attach or a create records on
-// it — are projects of that org. The same folder on two machines of two orgs
-// is two projects, one per org (projects are unique per (org, user, path)).
+// it — are projects of that org.
 //
 // A machine whose org reliant has not been told (an older daemon credential
 // or control plane, a machine that only ever connected with an unbound login
-// token) keeps the behaviour of before: it matches its owner's projects of
-// every org. Callers log that, so an unscoped machine is visible.
+// token) is held to its OWNER'S DEFAULT org, never to every org: before orgs
+// every machine was its owner's, the default org is where a person's
+// pre-org rows land (the lazy backfill), and a managed machine's credential
+// is minted in it. So the unknown case can never record or attach another
+// org's project; at worst it leaves a non-default org's project unrecorded on
+// a machine of that org until control-plane names the machine's org. Only a
+// KNOWN org is authoritative enough to delete anything (the reconcile's
+// cleanup); the default-org fallback only narrows what is matched.
 
 // ErrDefaultOrgUnavailable is OrgScopeFor's answer when the scope depends on
 // the user's default org and it could not be read (an outage, or a process
@@ -32,32 +38,44 @@ var ErrDefaultOrgUnavailable = errors.New("authz: could not read the default org
 // to keep to, every org's rows, as before orgs.
 //
 // The default org is the process's (or ctx's) membership's answer, cached
-// like every membership answer. A deployment with no orgs names none, so an
-// unassigned row is never in a named org's scope there; such a deployment
-// never names an org either.
+// like every membership answer.
 func OrgScopeFor(ctx context.Context, userID, org string) (*core.OrgScope, error) {
 	if org == "" {
 		return nil, nil
 	}
-	defaults, ok := membershipOf(ctx).(defaultOrgs)
-	if !ok {
-		return nil, ErrDefaultOrgUnavailable
-	}
-	def, err := defaults.DefaultOrg(ctx, userID)
+	def, err := defaultOrg(ctx, userID)
 	if err != nil {
-		return nil, errors.Join(ErrDefaultOrgUnavailable, err)
+		return nil, err
 	}
 	return &core.OrgScope{OrgID: org, IncludeUnassigned: def == org}, nil
 }
 
-// MachineProjectScope is the scope of the projects machine may hold:
-// OrgScopeFor its owner and its org. nil — every org's projects — when the
-// machine's org is not known (MachineOrg).
-func MachineProjectScope(ctx context.Context, machine *core.Daemon) (*core.OrgScope, error) {
-	if machine == nil {
-		return nil, nil
+// MachineScopeFor is the scope of the projects a machine of userID's, of
+// machineOrg ("" when not known), may hold, and whether that org is known.
+//
+//   - A known org: OrgScopeFor it; known is true.
+//   - An unknown org: the owner's default org's scope (its rows and the
+//     unassigned ones); known is false. In a deployment with no orgs (no
+//     default org) it is nil, every row, which there carries no org anyway.
+//
+// An unreadable default org is ErrDefaultOrgUnavailable: the caller records
+// nothing.
+func MachineScopeFor(ctx context.Context, userID, machineOrg string) (scope *core.OrgScope, known bool, err error) {
+	if machineOrg != "" {
+		scope, err = OrgScopeFor(ctx, userID, machineOrg)
+		return scope, err == nil, err
 	}
-	return OrgScopeFor(ctx, machine.UserID, MachineOrg(machine))
+	def, err := defaultOrg(ctx, userID)
+	if err != nil || def == "" {
+		return nil, false, err
+	}
+	return &core.OrgScope{OrgID: def, IncludeUnassigned: true}, false, nil
+}
+
+// MachineProjectScope is MachineScopeFor the machine's owner and org. A nil
+// machine (no registry row) is a machine of no known org.
+func MachineProjectScope(ctx context.Context, userID string, machine *core.Daemon) (*core.OrgScope, bool, error) {
+	return MachineScopeFor(ctx, userID, MachineOrg(machine))
 }
 
 // MachineOrg is the org machine belongs to, "" when it is not known.
@@ -66,4 +84,27 @@ func MachineOrg(machine *core.Daemon) string {
 		return ""
 	}
 	return *machine.OrgID
+}
+
+// defaultOrg is userID's default org, "" in a deployment with none. A
+// process that wired no membership at all (every server process wires one:
+// app.NewOrgResolver) is read as one with no orgs, and logged at ERROR as
+// authz.deny logs it; a membership that cannot answer is
+// ErrDefaultOrgUnavailable.
+func defaultOrg(ctx context.Context, userID string) (string, error) {
+	m := membershipOf(ctx)
+	if m == nil {
+		logging.ErrorContext(ctx, "[authz] no membership wired; reading the default organization as none (a path was never wired with authz.WithMembership)",
+			"user_id", userID)
+		return "", nil
+	}
+	defaults, ok := m.(defaultOrgs)
+	if !ok {
+		return "", ErrDefaultOrgUnavailable
+	}
+	def, err := defaults.DefaultOrg(ctx, userID)
+	if err != nil {
+		return "", errors.Join(ErrDefaultOrgUnavailable, err)
+	}
+	return def, nil
 }

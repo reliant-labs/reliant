@@ -108,16 +108,27 @@ func (s *Service) CreateProjectFromRepo(
 	if err != nil {
 		return nil, err
 	}
-	if machine, err := s.deps.Repo.GetDaemon(ctx, daemonID); err == nil && machine != nil && authz.CanWriteMachine(ctx, userID, machine) {
-		// A machine reliant has not registered yet (never connected) has
-		// no org here to keep to; the control plane decides whose it is.
-		if err := s.requireMachineInOrg(ctx, machine, orgID); err != nil {
+	machine, err := s.deps.Repo.GetDaemon(ctx, daemonID)
+	switch {
+	case err != nil && !svcerr.IsNotFound(err):
+		// Never skip the check over a failed read.
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the machine"))
+	case err != nil:
+		// A machine reliant has not registered yet (it never connected):
+		// no row to read an org from, so it is held to the caller's
+		// default org (machineScope); the control plane decides whose it
+		// is.
+		machine = nil
+	case !authz.CanWriteMachine(ctx, userID, machine):
+		// Another user's machine: NotFound, as ownedMachine answers it.
+		return nil, svcerr.NotFound("machine")
+	}
+	if err := s.requireMachineInOrg(ctx, userID, machine, orgID); err != nil {
+		return nil, err
+	}
+	if scope == nil {
+		if scope, err = s.machineScope(ctx, userID, machine); err != nil {
 			return nil, err
-		}
-		if scope == nil {
-			if scope, err = s.machineScope(ctx, machine); err != nil {
-				return nil, err
-			}
 		}
 	}
 	existing, err := s.existingProjectForRepo(ctx, userID, path, cloneURL, scope)

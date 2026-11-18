@@ -38,14 +38,16 @@ func (s *Service) listScope(ctx context.Context, userID, requested string) (*cor
 	return s.deps.Orgs.ListScope(ctx, userID, requested, s.deps.Repo.AssignUnassignedOrg)
 }
 
-// PROJECTS ARE UNIQUE PER (ORG, USER, PATH) AND (ORG, USER, REPOSITORY).
+// PROJECTS ARE KEYED BY (ORG, USER, PATH) AND (ORG, USER, REPOSITORY).
 //
-// The same folder or repository may be a project in two of a person's orgs.
-// So every "is this already a project?" question a create or an attach asks
-// is asked in one org: the request's (orgScope), or, when the request has
-// none, the machine's (machineScope). A machine holds only its own org's
-// projects (authz.MachineProjectScope): an attach or a pinned create across
-// orgs is refused (requireMachineInOrg, requireMachineHolds), never recorded.
+// The same folder or repository may be a project in two of a person's orgs
+// (once the old per-user keys are dropped, a later release). So every "is
+// this already a project?" question a create or an attach asks is asked in
+// one org: the request's (orgScope), or, when the request has none, the
+// machine's (machineScope). A machine holds only its own org's projects —
+// its owner's default org's when its org is not known
+// (authz.MachineScopeFor): an attach or a create across orgs is refused
+// (requireMachineInOrg, requireMachineHolds), never recorded.
 
 // orgScope is the scope of the caller's projects in org (authz.OrgScopeFor):
 // nil when org is nil, a request acting in no org (no orgs here, or none
@@ -61,42 +63,60 @@ func (s *Service) orgScope(ctx context.Context, userID string, org *string) (*co
 	return scope, nil
 }
 
-// machineScope is the scope of the projects machine may hold
-// (authz.MachineProjectScope): nil, every org's, when its org is not known,
-// which is logged.
-func (s *Service) machineScope(ctx context.Context, machine *db.Daemon) (*core.OrgScope, error) {
-	if machine == nil {
-		return nil, nil
-	}
-	if authz.MachineOrg(machine) == "" {
-		logging.InfoContext(ctx, "[project] machine has no known organization; matching the owner's projects of every organization, as before machines had orgs",
-			"daemonID", machine.ID)
-		return nil, nil
-	}
-	scope, err := authz.MachineProjectScope(ctx, machine)
+// machineScope is the scope of the projects machine (of userID's; nil, no
+// registry row, is a machine of no known org) may hold: its org's, or its
+// owner's default org's when its org is not known, which is logged
+// (authz.MachineScopeFor). nil only in a deployment with no orgs.
+func (s *Service) machineScope(ctx context.Context, userID string, machine *db.Daemon) (*core.OrgScope, error) {
+	scope, known, err := authz.MachineProjectScope(ctx, userID, machine)
 	if err != nil {
 		return nil, orgs.LookupFailed(ctx, "could not resolve your default organization; try again", err)
+	}
+	if !known && scope != nil {
+		id := ""
+		if machine != nil {
+			id = machine.ID
+		}
+		logging.InfoContext(ctx, "[project] machine has no known organization; it holds only its owner's default organization's projects",
+			"daemonID", id, "defaultOrgID", scope.OrgID)
 	}
 	return scope, nil
 }
 
-// requireMachineInOrg refuses a request acting in org that names a machine of
-// another org: what it would record there is a checkout across orgs. Either
-// org unknown refuses nothing.
-func (s *Service) requireMachineInOrg(ctx context.Context, machine *db.Daemon, org *string) error {
-	machineOrg := authz.MachineOrg(machine)
-	if machineOrg == "" || org == nil || *org == "" || machineOrg == *org {
+// machineOrgSentence names the org a machine holds projects of, for a
+// refusal: its own, or its owner's default when its own is not known.
+func machineOrgSentence(machine *db.Daemon, scope *core.OrgScope) string {
+	if org := authz.MachineOrg(machine); org != "" {
+		return "belongs to organization " + org
+	}
+	return "has no organization recorded, so it holds only your default organization's (" + scope.OrgID + ") projects"
+}
+
+// requireMachineInOrg refuses a request acting in org that names (or
+// resolved) a machine holding another org's projects: what it would record
+// there is a checkout across orgs. A request acting in no org, or a
+// deployment with no orgs, refuses nothing.
+func (s *Service) requireMachineInOrg(ctx context.Context, userID string, machine *db.Daemon, org *string) error {
+	if org == nil || *org == "" {
 		return nil
 	}
+	scope, err := s.machineScope(ctx, userID, machine)
+	if err != nil || scope == nil || scope.OrgID == *org {
+		return err
+	}
+	name := "the machine"
+	if machine != nil {
+		name = s.machineName(ctx, machine.ID)
+	}
 	return svcerr.FailedPrecondition(fmt.Sprintf(
-		"%s belongs to organization %s, not %s: a machine holds only its organization's projects; pick a machine of organization %s",
-		s.machineName(ctx, machine.ID), machineOrg, *org, *org))
+		"%s %s, not organization %s: a machine holds only its organization's projects; pick a machine of organization %s",
+		name, machineOrgSentence(machine, scope), *org, *org))
 }
 
 // requireMachineHolds refuses recording project on machine when the machine
-// belongs to an org the project is not in.
-func (s *Service) requireMachineHolds(ctx context.Context, machine *db.Daemon, project *db.Project) error {
-	scope, err := s.machineScope(ctx, machine)
+// holds another org's projects.
+func (s *Service) requireMachineHolds(ctx context.Context, userID string, machine *db.Daemon, project *db.Project) error {
+	scope, err := s.machineScope(ctx, userID, machine)
 	if err != nil || scope.Includes(project.OrgID) {
 		return err
 	}
@@ -105,8 +125,8 @@ func (s *Service) requireMachineHolds(ctx context.Context, machine *db.Daemon, p
 		in = "organization " + *project.OrgID
 	}
 	return svcerr.FailedPrecondition(fmt.Sprintf(
-		"%q is in %s and %s belongs to organization %s: a machine holds only its organization's projects",
-		project.Name, in, s.machineName(ctx, machine.ID), authz.MachineOrg(machine)))
+		"%q is in %s and %s %s: a machine holds only its organization's projects",
+		project.Name, in, s.machineName(ctx, machine.ID), machineOrgSentence(machine, scope)))
 }
 
 // inOrg is how a sentence names the org a found project is in: " in

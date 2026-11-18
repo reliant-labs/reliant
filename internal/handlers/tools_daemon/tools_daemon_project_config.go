@@ -119,7 +119,7 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 	// would emit a refetch naming a project the connected user cannot see.
 	// And by the machine's org: the same path may be a project in each of
 	// the user's orgs, and this machine holds only its own org's.
-	scope, err := s.machineProjectScope(ctx, conn)
+	scope, _, err := s.machineProjectScope(ctx, conn)
 	if err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" could not tell which organization's projects the machine holds; ignoring a filesystem change",
 			"error", err, "daemonID", conn.daemonID, "path", projectPath)
@@ -471,7 +471,7 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 		// our own row is what makes it idempotent rather than fatal. Read back
 		// scoped for the same reason the first lookup is: an unscoped read can
 		// hand us a DIFFERENT user's row for this path.
-		scope, scopeErr := s.machineProjectScope(ctx, conn)
+		scope, _, scopeErr := s.machineProjectScope(ctx, conn)
 		if scopeErr != nil {
 			return nil, fmt.Errorf("failed to create discovered project %s: %w", path, lost.err)
 		}
@@ -522,11 +522,12 @@ func (e *lostProjectCreateError) Unwrap() error { return e.err }
 // the machine's detachments, then its own checkout at path, then the user's
 // project created at path, then a new project for it (created reports so).
 //
-// Every match, and the project created, is in the machine's org (scope; every
-// org's when the machine's org is not known): the same path may be a project
-// in each of the user's orgs, and a machine holds only its own org's.
+// Every match, and the project created, is in the machine's org (scope; its
+// owner's default org's when the machine's org is not known): the same path
+// may be a project in each of the user's orgs, and a machine holds only its
+// own org's.
 func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnection, path string, discovered *reliantv1.DiscoveredProject) (*db.Project, bool, error) {
-	scope, err := s.machineProjectScope(ctx, conn)
+	scope, _, err := s.machineProjectScope(ctx, conn)
 	if err != nil {
 		return nil, false, err
 	}
@@ -633,10 +634,21 @@ func (s *Service) detachedProjects(ctx context.Context, daemonID string) (machin
 	return out, nil
 }
 
+// errMachineOrgUnresolved refuses org-sensitive work on a connection whose
+// machine's org could not be read at connect (daemonConnection.orgUnresolved):
+// matched as "no org", it would reach every org's projects. The next connect
+// tries again.
+var errMachineOrgUnresolved = errors.New("the machine's organization could not be read at connect; nothing org-sensitive runs on this connection")
+
 // machineProjectScope is the scope of the projects the connected machine
-// holds: its org's (authz.OrgScopeFor), every org's when its org is not known.
-func (s *Service) machineProjectScope(ctx context.Context, conn *daemonConnection) (*core.OrgScope, error) {
-	return authz.OrgScopeFor(ctx, conn.userID, conn.orgID)
+// holds (authz.MachineScopeFor): its org's, or its owner's default org's when
+// its org is not known; known reports which. A connection whose machine's
+// org could not be read is errMachineOrgUnresolved.
+func (s *Service) machineProjectScope(ctx context.Context, conn *daemonConnection) (*core.OrgScope, bool, error) {
+	if conn.orgUnresolved {
+		return nil, false, errMachineOrgUnresolved
+	}
+	return authz.MachineScopeFor(ctx, conn.userID, conn.orgID)
 }
 
 // machineCheckoutAt is the user's project in scope whose checkout on the

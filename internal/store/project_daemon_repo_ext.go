@@ -38,6 +38,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -239,4 +240,27 @@ func projectDaemonsToCore(rows []*ProjectDaemon) []*core.ProjectDaemon {
 		}
 	}
 	return out
+}
+
+// DetachProjectDaemonOfOtherOrg removes the project's checkout record on the
+// machine, which belongs to machineOrg while the project is in projectOrg (nil:
+// none yet), and records the removed row whole in project_daemon_org_cleanups
+// in the same statement, so it can be restored
+// (dev-docs/machine-org-rollout.md). Only the record goes: the
+// project and the folder are untouched. It reports whether a row was removed;
+// a row already gone is false, not an error, so the cleanup is idempotent.
+func DetachProjectDaemonOfOtherOrg(ctx context.Context, db orm.Context, projectID, daemonID, userID, machineOrg string, projectOrg *string) (bool, error) {
+	var ids []int64
+	err := db.Bun().NewRaw(`
+WITH gone AS (
+    DELETE FROM project_daemons pd WHERE pd.project_id = ?0 AND pd.daemon_id = ?1
+    RETURNING `+columnsOf[ProjectDaemon]("pd")+`
+)
+INSERT INTO project_daemon_org_cleanups (project_id, daemon_id, user_id, path, machine_org_id, project_org_id, detached_row)
+SELECT gone.project_id, gone.daemon_id, ?2, gone.path, ?3, ?4, to_jsonb(gone) FROM gone
+RETURNING id`, projectID, daemonID, userID, machineOrg, projectOrg).Scan(ctx, &ids)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, err
+	}
+	return len(ids) > 0, nil
 }

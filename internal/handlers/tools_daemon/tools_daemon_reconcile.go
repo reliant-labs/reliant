@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitremote"
@@ -115,17 +114,29 @@ func (s *Service) reconcileProjectDaemonsOnConnect(ctx context.Context, conn *da
 // after recording it. It returns the projects absent from the disk and the
 // pass's error (errReconcileInterrupted).
 func (s *Service) reconcileAndWatch(ctx context.Context, conn *daemonConnection, check daemonPathChecker) ([]*db.Project, error) {
-	// The machine holds its own org's projects only (conn.orgID; every
-	// org's when it is not known, as before machines had orgs).
-	scope, err := authz.OrgScopeFor(ctx, conn.userID, conn.orgID)
+	// The machine holds its own org's projects only (its owner's default
+	// org's when its org is not known).
+	scope, known, err := s.machineProjectScope(ctx, conn)
 	if err != nil {
-		// Which projects are the machine's cannot be told: record nothing
-		// rather than another org's. The next connect tries again.
+		// Which projects are the machine's cannot be told: record and
+		// detach nothing rather than act as a machine of no org. The next
+		// connect tries again.
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: skipped; could not tell which organization's projects the machine holds",
 			"error", err, "userID", conn.userID, "daemonID", conn.daemonID, "orgID", conn.orgID)
 		return nil, nil
 	}
-	missing, added, err := reconcileProjectDaemons(ctx, s.deps.Repo, conn.daemonID, conn.userID, scope, check)
+	// Only a known org is authoritative enough to detach anything, and only
+	// while the kill switch allows it (RELIANT_MACHINE_ORG_CLEANUP).
+	detachFor := ""
+	if known {
+		if s.crossOrgCleanupOn() {
+			detachFor = conn.orgID
+		} else {
+			logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: other organizations' checkout records are left on the machine (RELIANT_MACHINE_ORG_CLEANUP=off)",
+				"userID", conn.userID, "daemonID", conn.daemonID, "orgID", conn.orgID)
+		}
+	}
+	missing, added, err := reconcileProjectDaemons(ctx, s.deps.Repo, conn.daemonID, conn.userID, scope, detachFor, check)
 	for _, path := range added {
 		if err := s.sendLoadAndWatchProjectConfig(ctx, conn, path, true); err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to start the project config watcher for a recorded checkout",
@@ -146,13 +157,16 @@ func (s *Service) reconcileAndWatch(ctx context.Context, conn *daemonConnection,
 // path the daemon reported absent, and the paths of the checkouts it recorded
 // that the machine had no row for or whose lost clone it settled installed.
 //
-// A machine holds only its org's projects: scope (authz.OrgScopeFor the
-// machine's org; nil, every org's, when it is not known). A project outside
-// it is neither recorded nor missing here, and a checkout of one the machine
-// already has on record — written before machines kept to their org, by this
-// reconcile or an attach — is detached: the row only, never the project or
-// the folder (detachOtherOrgCheckouts). Running it on every connect is the
-// one-off cleanup of those rows, and idempotent.
+// A machine holds only its org's projects: scope (authz.MachineScopeFor: the
+// machine's org, or its owner's default org when it is not known; nil only in
+// a deployment with no orgs). A project outside it is neither recorded nor
+// missing here. When detachFor names the machine's KNOWN org (and the kill
+// switch allows it), a checkout of a project outside it that the machine
+// already has on record — written before machines kept to their org — is
+// detached: the record only, kept whole in project_daemon_org_cleanups so it
+// can be restored, never the project or the folder (detachOtherOrgCheckouts).
+// Running it on every connect is the one-off cleanup of those rows, and
+// idempotent.
 //
 // It never overwrites what the machine's own row already says without
 // evidence: a directory at the creation path is evidence of a checkout there
@@ -166,6 +180,7 @@ func reconcileProjectDaemons(
 	database ProjectReconcileStore,
 	daemonID, userID string,
 	scope *core.OrgScope,
+	detachFor string,
 	check daemonPathChecker,
 ) (missing []*db.Project, added []string, _ error) {
 	projects, err := database.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1000, Offset: 0})
@@ -195,7 +210,7 @@ func reconcileProjectDaemons(
 			recorded[row.ProjectID] = row
 		}
 	}
-	for _, projectID := range detachOtherOrgCheckouts(ctx, database, daemonID, userID, scope, projects, rows) {
+	for _, projectID := range detachOtherOrgCheckouts(ctx, database, daemonID, userID, scope, detachFor, projects, rows) {
 		delete(recorded, projectID)
 	}
 	// What the user detached from this machine stays off it, folder or no
@@ -323,23 +338,27 @@ func reconcileProjectDaemons(
 	return missing, added, nil
 }
 
-// detachOtherOrgCheckouts removes the machine's checkout rows of projects
+// detachOtherOrgCheckouts removes the machine's checkout records of projects
 // outside scope — another org's, recorded on it before machines kept to their
-// org — and returns the projects whose row it removed. Only the row goes: the
-// project, its other machines and the folder on this machine are untouched.
-// A row whose project is not among projects (the owner's listed projects) is
-// left alone: nothing here can tell its org. With no scope (the machine's org
-// is not known) nothing is removed. Idempotent: a removed row is not listed
-// again.
+// org — and returns the projects whose record it removed. detachFor is the
+// machine's known org; "" (not known, or the kill switch is off) removes
+// nothing. Each removed row is recorded whole first, in the same statement
+// (DetachProjectDaemonOfOtherOrg), and logged, so it can be restored
+// (dev-docs/machine-org-rollout.md). Only the record goes: the
+// project, its other machines and the folder on this machine are untouched. A
+// row whose project is not among projects (the owner's listed projects) is
+// left alone: nothing here can tell its org. Idempotent: a removed row is not
+// listed again.
 func detachOtherOrgCheckouts(
 	ctx context.Context,
 	database ProjectReconcileStore,
 	daemonID, userID string,
 	scope *core.OrgScope,
+	detachFor string,
 	projects []*db.Project,
 	rows []*core.ProjectDaemon,
 ) []string {
-	if scope == nil || len(rows) == 0 {
+	if detachFor == "" || scope == nil || len(rows) == 0 {
 		return nil
 	}
 	byID := make(map[string]*db.Project, len(projects))
@@ -357,17 +376,28 @@ func detachOtherOrgCheckouts(
 		if !ok || scope.Includes(project.OrgID) {
 			continue
 		}
-		if err := database.DeleteProjectDaemon(ctx, row.ProjectID, daemonID); err != nil {
+		gone, err := database.DetachProjectDaemonOfOtherOrg(ctx, row.ProjectID, daemonID, userID, detachFor, project.OrgID)
+		if err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to detach another organization's project from the machine; the next connect retries",
 				"error", err, "userID", userID, "daemonID", daemonID, "projectID", row.ProjectID)
 			continue
 		}
-		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: detached another organization's project from the machine (the record only; the folder is untouched)",
+		if !gone {
+			continue
+		}
+		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: machine-org cleanup detached another organization's project from the machine (the record only, kept in project_daemon_org_cleanups; the folder is untouched)",
 			"userID", userID, "daemonID", daemonID, "projectID", row.ProjectID,
-			"projectOrgID", deref(project.OrgID), "machineOrgID", scope.OrgID, "path", row.Path)
+			"projectOrgID", deref(project.OrgID), "machineOrgID", detachFor, "path", row.Path,
+			"installState", row.InstallState)
 		removed = append(removed, row.ProjectID)
 	}
 	return removed
+}
+
+// crossOrgCleanupOn is the machine-org cleanup's kill switch
+// (RELIANT_MACHINE_ORG_CLEANUP): only "off" stops it.
+func (s *Service) crossOrgCleanupOn() bool {
+	return s.deps.Config.GetMachineOrg().GetCrossOrgCleanup() != "off"
 }
 
 func deref(s *string) string {

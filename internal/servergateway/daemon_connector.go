@@ -87,7 +87,7 @@ func (dc *DaemonConnector) CloseAll() {
 
 // startConnection initiates a new outbound connection to a daemon pod.
 // If a connection already exists for this daemonID, it is cancelled first.
-func (dc *DaemonConnector) startConnection(parentCtx context.Context, daemonID, userID, podIP string, podPort int) {
+func (dc *DaemonConnector) startConnection(parentCtx context.Context, daemonID, userID, podIP string, podPort int, org tools_daemon.MachineOrg) {
 	dc.mu.Lock()
 	if cancel, ok := dc.activeConns[daemonID]; ok {
 		cancel()
@@ -100,7 +100,7 @@ func (dc *DaemonConnector) startConnection(parentCtx context.Context, daemonID, 
 	logging.InfoContext(parentCtx, connectorLogPrefix+" starting outbound connection",
 		"daemonId", daemonID, "userId", userID, "podIp", podIP, "port", podPort)
 
-	go dc.connectWithRetry(connCtx, daemonID, userID, podIP, podPort)
+	go dc.connectWithRetry(connCtx, daemonID, userID, podIP, podPort, org)
 }
 
 // stopConnection cancels the context for an active daemon connection.
@@ -118,10 +118,10 @@ func (dc *DaemonConnector) stopConnection(daemonID string) {
 // Each failure is also surfaced via the connectFailedPublisher (if configured)
 // so the control plane can show *why* the daemon can't connect instead of a
 // generic "Disconnected" badge.
-func (dc *DaemonConnector) connectWithRetry(ctx context.Context, daemonID, userID, podIP string, podPort int) {
+func (dc *DaemonConnector) connectWithRetry(ctx context.Context, daemonID, userID, podIP string, podPort int, org tools_daemon.MachineOrg) {
 	delay := reconnectMinDelay
 	for {
-		err := dc.connectOnce(ctx, daemonID, userID, podIP, podPort)
+		err := dc.connectOnce(ctx, daemonID, userID, podIP, podPort, org)
 		if ctx.Err() != nil {
 			return
 		}
@@ -152,7 +152,7 @@ func (dc *DaemonConnector) connectWithRetry(ctx context.Context, daemonID, userI
 // connectOnce opens a single ConnectGateway bidi stream to the daemon pod,
 // registers it with ToolsDaemonService, and runs the message loops until
 // the stream ends.
-func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, podIP string, podPort int) error {
+func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, podIP string, podPort int, org tools_daemon.MachineOrg) error {
 	baseURL := fmt.Sprintf("http://%s:%d", podIP, podPort)
 
 	client := reliantv1connect.NewToolsDaemonServiceClient(
@@ -241,7 +241,8 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 	// capabilities/platform from the daemon.
 	// regCancel is how the connection ends a Receive pending on the stream
 	// once it stops reading it.
-	outbound, err := dc.daemonService.RegisterOutboundConnection(ctx, userID, daemonID, podIP, podPort, reg, stream, regCancel)
+	// The machine's org rides the same trusted snapshot as its identity.
+	outbound, err := dc.daemonService.RegisterOutboundConnection(ctx, userID, daemonID, podIP, podPort, reg, stream, regCancel, org)
 	if err != nil {
 		_ = stream.CloseRequest()
 		_ = stream.CloseResponse()

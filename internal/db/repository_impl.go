@@ -1313,6 +1313,16 @@ func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID stri
 	return store.RemoveProjectDaemon(ctx, r.ORM(), projectID, daemonID)
 }
 
+// DetachProjectDaemonOfOtherOrg removes a checkout record of a project of
+// another org than the machine's, recording it whole so it can be restored
+// (store.DetachProjectDaemonOfOtherOrg). It reports whether a row went.
+func (r *Repo) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID, daemonID, userID, machineOrg string, projectOrg *string) (bool, error) {
+	if projectID == "" || daemonID == "" || machineOrg == "" {
+		return false, fmt.Errorf("project, daemon and machine org are required")
+	}
+	return store.DetachProjectDaemonOfOtherOrg(ctx, r.ORM(), projectID, daemonID, userID, machineOrg, projectOrg)
+}
+
 // ErrDaemonOwnedByAnotherUser is returned when a daemon write names an id whose
 // row (or attachment) already belongs to a different user. Ownership is
 // immutable once the row exists.

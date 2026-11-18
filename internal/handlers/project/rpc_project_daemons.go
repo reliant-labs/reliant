@@ -189,12 +189,14 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 		// machines had orgs (machineScope of nil is every org's).
 		machine = nil
 	}
-	scope, err := s.machineScope(ctx, machine)
+	scope, err := s.machineScope(ctx, userID, machine)
 	if err != nil {
 		logging.Warn("project-dir-heal: could not tell which organization's projects the machine holds", "error", err, "userID", userID, "daemonID", daemonID)
 		return nil
 	}
 	if scope != nil {
+		// A machine of no known org heals only its owner's default org's
+		// projects (machineScope).
 		inScope := projects[:0]
 		for _, project := range projects {
 			if project != nil && scope.Includes(project.OrgID) {

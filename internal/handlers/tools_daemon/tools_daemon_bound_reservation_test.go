@@ -277,6 +277,13 @@ func (parkedPodHandler) ConnectGateway(ctx context.Context, _ *connect.BidiStrea
 // DaemonConnector does after the pod's DaemonRegister arrives.
 func dialInPod(t *testing.T, svc *Service, userID, daemonID string) *OutboundConn {
 	t.Helper()
+	return dialInPodOfOrg(t, svc, userID, daemonID, MachineOrg{})
+}
+
+// dialInPodOfOrg is dialInPod with the machine org the control plane's
+// snapshot names for the pod.
+func dialInPodOfOrg(t *testing.T, svc *Service, userID, daemonID string, org MachineOrg) *OutboundConn {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(parkedPodHandler{}))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
@@ -298,7 +305,7 @@ func dialInPod(t *testing.T, svc *Service, userID, daemonID string) *OutboundCon
 	regCtx, regCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer regCancel()
 	out, err := svc.RegisterOutboundConnection(regCtx, userID, daemonID, "10.0.0.1", 9190,
-		&reliantv1.DaemonRegister{Hostname: "ws-pod", Platform: "linux", DaemonType: "cloud"}, stream, cancel)
+		&reliantv1.DaemonRegister{Hostname: "ws-pod", Platform: "linux", DaemonType: "cloud"}, stream, cancel, org)
 	require.NoError(t, err)
 	return out
 }

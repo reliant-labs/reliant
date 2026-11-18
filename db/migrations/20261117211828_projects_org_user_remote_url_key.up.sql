@@ -5,8 +5,8 @@
 --
 -- A repository is one project per (org, user), not per user: the same repo
 -- may be a project in two organizations (owner decision, 2026-11-17). The
--- expand half; 20261117211851_projects_drop_user_remote_url_uniq drops the
--- old (user_id, remote_url) index.
+-- expand half: the old (user_id, remote_url) index stays in this release and
+-- a later one drops it, as 20261117211805_projects_org_user_path_key says.
 --
 -- A row with no org is keyed as in 20261117211805_projects_org_user_path_key:
 -- COALESCE(org_id, '') is one "no org yet" bucket per user.
