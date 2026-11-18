@@ -21,6 +21,9 @@ func TestWorkerStopsTakingWorkFirst(t *testing.T) {
 	require.Equal(t, []string{
 		"temporal_worker",
 		"workflow_event_relay",
+		// The check syncer is a loop like the relay; what it has not written
+		// yet stays due in the database for another worker's.
+		"workflow_check_syncer",
 		// Stops before the client its wakes signal through and the
 		// database it lists the chats from (orgpolicy.Watcher).
 		"org_policy_watcher",

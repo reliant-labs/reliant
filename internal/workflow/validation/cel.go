@@ -2766,4 +2766,5 @@ func validateCELWithTypes(wf *reliantv1.Workflow, result *Result, loader Workflo
 	scope.root = true
 	validateWorkflowScope(scope, result)
 	validateOnFailureCEL(wf, typeCtx, result)
+	validateCheckCEL(wf, typeCtx, result)
 }

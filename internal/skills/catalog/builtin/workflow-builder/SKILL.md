@@ -538,6 +538,51 @@ finally:
 - **A child's finally.** A workflow started by a `workflow:` node with `ref:` runs its own finally when it ends, in its own scope, before the parent's (`release.finally.<id>`).
 - **Test it.** Name its nodes `finally.<node>` in a scenario and assert `expect.finally: {ran, status, handler_failed}`.
 
+### A GitHub check the engine owns: `check:`
+
+A workflow-level `check:` makes every run a trigger fires post ONE GitHub check run, as the Reliant App, whose lifecycle the
+engine owns: do NOT write `github/check_run.create`/`update` nodes, an `on_failure` that concludes it, or a sweep for stuck
+checks. A branch ruleset can then require it by name. One workflow can be an agentic check (a code review) or a
+deterministic one (lint, tests); each is its own workflow with its own `check:`, so each can be required and re-run alone.
+
+```yaml
+check:
+  name: reliant/ci                       # the check's name on GitHub; a ruleset requires it by this name
+  output: "{{ nodes.report.check }}"     # optional: {title, summary, text?, annotations?}
+  # repository: "{{ trigger.payload.attributes.repository }}"   # the default
+  # head_sha: "{{ trigger.payload.data.check_suite.head_sha }}" # default: the event's head commit
+  # timeout: 2h                          # default 6h, 1m..72h
+triggers:
+  - name: pr
+    integration: {integration: github, events: [pull_request.opened, pull_request.synchronize, pull_request.reopened]}
+```
+
+`check: reliant/ci` (the name alone) is the short form.
+
+- **Lifecycle.** `queued` as soon as the firing is recorded (so a firing waiting for capacity or a waking machine
+  shows), `in_progress` when the run's first node starts, and concluded on EVERY ending: `success` when the run completes;
+  `failure` when it fails, routes to a node with `outcome: failure`, cannot start, or pauses for more than 15 minutes (titled
+  "Reliant could not run this check" for an engine fault); `cancelled` when it is cancelled, skipped or superseded
+  (`concurrency: {waiting: latest}`); `timed_out` when it is still going at `timeout`. Never `neutral` or `skipped`, which a required
+  check counts as passing.
+- **The verdict is the run's.** The conclusion comes from how the run ended, not from `output`. To fail the check when the
+  gate fails, route that path to a terminal node with `outcome: failure`.
+- **Output.** `output` is evaluated when the run ends, in a finally handler's scope (`nodes`, `inputs`, `trigger`, `workflow`,
+  and `run.status`), and must be an object with `title` and `summary` (markdown), optionally `text` and `annotations`: a list of
+  `{path, start_line, end_line?, annotation_level: notice|warning|failure, message, title?}`, sent 50 per request. A
+  `run` node and an agent node work the same way: build the object in a `compute` node from either's outputs, or have
+  an agent return it as its structured response. Guard reads of nodes that may not have run (`nodes.?gate.exit_code.orValue(-1)`); an output that fails
+  to evaluate falls back to the engine's own summary. `details_url` is always the run's page.
+- **Where.** `repository` and `head_sha` are templates over `trigger`, rendered when the firing is recorded. By default the
+  head is the pull request's head, the check suite's or check run's head_sha, the workflow run's head_sha, or the
+  commit a push moved its branch to. A firing that names no repository or commit posts no check, and the run still runs.
+- **Who.** The activation's GitHub identity: it must act as the Reliant bot (the default), since GitHub lets only an App
+  write a check run.
+- **One check per firing.** A retried or resumed fire and a resumed run update the same check; a re-run is a new firing
+  and a new check. Only runs an event trigger fires post one (GitHub events, webhooks): a chat, a schedule or a builder
+  test does not.
+- **Test it.** A scenario runs the graph; what the check concludes follows from how the run ends.
+
 ## Important rules
 
 ### Parameters
@@ -860,6 +905,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `secrets` | map[string]SecretDeclaration | No | - |
 | `permissions` | string[] | No | - |
 | `attention` | WorkflowAttention | No | - |
+| `check` | WorkflowCheck | No | *A GitHub check run the engine owns, one per run an event trigger fires, written as the Reliant App: queued when the firing is recorded, in_progress when the first node starts, and concluded on every ending (success, failure, cancelled, timed_out; never neutral or skipped). `check: <name>` or {name, repository, head_sha, output, timeout}. See WorkflowCheck below.* |
 
 ## Edge
 

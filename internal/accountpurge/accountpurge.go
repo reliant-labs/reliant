@@ -270,6 +270,10 @@ var purgeSteps = []step{
 	// The person's pick of a chat's root provider, their consent to spend
 	// their own account there: it goes with them. Chats cascade it too.
 	{"chat_person_picks", `DELETE FROM chat_person_picks WHERE user_id = $1`},
+	// The GitHub checks the person's automations posted (workflowcheck):
+	// where each was written, and the run's check output. Their firings
+	// cascade them too; this covers a firing kept.
+	{"workflow_check_runs", `DELETE FROM workflow_check_runs WHERE user_id = $1`},
 
 	// The durable first-session marker (app_first_session analytics): when the
 	// user first used the app. No users table cascades it.

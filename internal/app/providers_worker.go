@@ -17,6 +17,7 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
@@ -34,6 +35,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
+	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -46,6 +48,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
@@ -64,6 +67,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
+	"github.com/reliant-labs/reliant/internal/workflowcheck"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
@@ -823,6 +827,50 @@ type WorkflowEventRelayDeps struct {
 //forge:root-only worker
 func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, error) {
 	return workflowevent.NewRelay(d.DB, d.Temporal.Client, v2workflow.SharedTaskQueue), nil
+}
+
+// WorkflowCheckSyncerDeps is where workflows' checks are recorded, the
+// credential source whose GitHub broker writes them as the App, and the org
+// policies a write is judged by.
+type WorkflowCheckSyncerDeps struct {
+	DB          *db.Repo
+	Credentials *WorkerIntegrationCredentials
+	Policies    *orgpolicy.Resolver
+	// Membership answers whether a check's owner is still a member of its
+	// trigger's org, asked before every write (workflowcheck.ownerMayWrite);
+	// nil is a deployment with no orgs.
+	Membership *orgs.Resolver
+}
+
+// NewWorkflowCheckSyncer writes the GitHub check runs workflows' `check:`
+// blocks declare (workflowcheck): every worker runs one; checks are leased
+// with SKIP LOCKED, so they share the queue. Without the GitHub broker (a
+// deployment with no control plane) every write fails with that reason and
+// is retried, so nothing is written as anyone but the App.
+//
+//forge:root-only worker
+func NewWorkflowCheckSyncer(d WorkflowCheckSyncerDeps) (*workflowcheck.Syncer, error) {
+	var broker workflowcheck.AppBroker
+	if d.Credentials != nil {
+		if cs, ok := d.Credentials.Source.(connauth.Service); ok {
+			if b, ok := cs.Broker(ghdelegated.BrokerID); ok {
+				broker, _ = b.(workflowcheck.AppBroker)
+			}
+		}
+	}
+	svc := workflowcheck.NewInstrumented(workflowcheck.Deps{
+		Store:  d.DB,
+		GitHub: workflowcheck.NewGitHub(workflowcheck.GitHubDeps{Runner: httpaction.NewRunner(netguard.New()), Broker: broker}),
+		RunURL: workflowcheck.HostedRunURL,
+	})
+	policies := d.Policies
+	var membership authz.Membership = authz.NoOrgs{}
+	if d.Membership != nil {
+		membership = d.Membership
+	}
+	return workflowcheck.NewSyncer(svc, func(ctx context.Context) context.Context {
+		return orgpolicy.WithResolver(authz.WithMembership(ctx, membership), policies)
+	}), nil
 }
 
 // AccountUsagePollerDeps is where the polled accounts are kept, and the

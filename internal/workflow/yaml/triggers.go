@@ -58,13 +58,16 @@ const triggerSourceOneof protoreflect.Name = "source"
 // and the outputs of a run that has ended. `concurrency` too: its key is a
 // template over `trigger` alone (triggerspec.CompileConcurrencyKey), rendered
 // by the trigger layer per firing, and a hand-started run has no trigger
-// payload to render it against.
+// payload to render it against. `check` as well: its repository and head_sha
+// are templates over `trigger`, rendered when the firing is recorded, and its
+// output reads the node outputs of a run that has ended.
 var runtimeEvaluatedTopLevelKeys = map[string]bool{
 	"outputs":     true,
 	"triggers":    true,
 	"on_failure":  true,
 	"finally":     true,
 	"concurrency": true,
+	"check":       true,
 }
 
 // IsRuntimeEvaluatedTopLevelKey reports whether a top-level workflow key's
