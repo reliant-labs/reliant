@@ -30,11 +30,19 @@ import (
 // command's tree (Done), and it goes as soon as the command's cgroup is proven
 // empty, or no live process holds it (stepScratchRefs: in its environment,
 // which every process of the command inherits, as its working directory or
-// through an open file). One still held then, and one an earlier daemon left
-// (it was killed, or restarted under its running commands), is removed by the
-// sweep, which the daemon runs when it starts and then at most every
-// stepScratchSweepEvery, whenever a credentialed command starts: once no live
-// process holds it.
+// through an open file). One still held then stays until nothing holds it: its
+// own reclaim keeps looking, every stepScratchLingerEvery.
+//
+// Every directory this daemon hands out is in its registry (stepRegistry) from
+// the moment it is made, under the registry's lock and before any command sees
+// its name, until its own reclaim removes it. The sweep, which the daemon runs
+// when it starts and then at most every stepScratchSweepEvery whenever a
+// credentialed command starts, takes only the directories an EARLIER daemon
+// left (it was killed, or restarted under its running commands): never one in
+// the registry, never one younger than stepScratchMinAge (another daemon on
+// this home may have just made it), and only when /proc proves that no live
+// process holds it. A process whose holdings cannot be read makes that proof
+// incomplete, and then the sweep removes nothing and says what it kept.
 //
 // It is an addition: a command that never reads StepScratchEnv keeps working as
 // before, and one written for it falls back to its own `mktemp -d` where the
@@ -53,12 +61,13 @@ const stepScratchPrefix = "step-"
 
 // Tunables of the reclaim, package variables so tests can shorten them.
 var (
-	// stepScratchSettleTries and stepScratchSettleEvery bound how long Done
-	// waits for the processes a killed command leaves dying (a SIGKILLed
-	// process group is not reaped at once) before it leaves the directory to
-	// the sweep.
+	// stepScratchSettleTries and stepScratchSettleEvery are how often, and
+	// how long, Done first looks for the processes a killed command leaves
+	// dying (a SIGKILLed process group is not reaped at once); after that it
+	// looks every stepScratchLingerEvery, until nothing holds the directory.
 	stepScratchSettleTries = 20
 	stepScratchSettleEvery = 500 * time.Millisecond
+	stepScratchLingerEvery = time.Minute
 	// stepScratchSweepEvery is how often the sweep runs while credentialed
 	// commands start.
 	stepScratchSweepEvery = 10 * time.Minute
@@ -67,7 +76,46 @@ var (
 	stepScratchMinAge = time.Minute
 	// stepScratchProcRoot is the /proc the sweep reads live processes from.
 	stepScratchProcRoot = "/proc"
+	// stepScratchNow is the clock the sweep judges ages and its own cadence
+	// by.
+	stepScratchNow = time.Now
 )
+
+// stepRegistry is every scratch directory this daemon has handed out and not
+// yet removed. A directory enters it when it is made, under mu, before any
+// command can see its name, and leaves it only when its own reclaim removed it
+// (removeStepScratch). The sweep checks it under mu, after it has listed the
+// root: a directory listed then was made before the listing, so it is either
+// registered already or not this daemon's.
+var stepRegistry struct {
+	mu   sync.Mutex
+	dirs map[string]struct{}
+}
+
+// registerStepScratch runs mk, which creates a directory and returns its path,
+// under the registry's lock, and registers what it made.
+func registerStepScratch(mk func() (string, error)) (string, error) {
+	stepRegistry.mu.Lock()
+	defer stepRegistry.mu.Unlock()
+	dir, err := mk()
+	if err != nil {
+		return "", err
+	}
+	if stepRegistry.dirs == nil {
+		stepRegistry.dirs = map[string]struct{}{}
+	}
+	stepRegistry.dirs[dir] = struct{}{}
+	return dir, nil
+}
+
+// stepScratchRegistered reports whether dir is one this daemon handed out and
+// has not removed.
+func stepScratchRegistered(dir string) bool {
+	stepRegistry.mu.Lock()
+	defer stepRegistry.mu.Unlock()
+	_, ok := stepRegistry.dirs[dir]
+	return ok
+}
 
 // StepScratch is one credentialed command's own scratch directory
 // (StepScratchEnv). Its methods are safe on a nil *StepScratch.
@@ -101,8 +149,8 @@ func (s *StepScratch) Dir() string {
 // Done removes the directory once the command's processes are gone, in the
 // background: a killed build's scratch holds hundreds of megabytes. gone, when
 // not nil, proves it the cheap way (the command's cgroup is empty); otherwise
-// the directory goes once no live process holds it. One still held after
-// stepScratchSettleTries is left to the sweep.
+// the directory goes once no live process holds it. It keeps looking until
+// then: the sweep never takes a directory this daemon handed out.
 func (s *StepScratch) Done(gone func() bool) {
 	if s == nil || s.dir == "" {
 		return
@@ -110,31 +158,45 @@ func (s *StepScratch) Done(gone func() bool) {
 	go s.reclaim(gone)
 }
 
+// reclaim removes the directory once the command's processes are gone,
+// looking every stepScratchSettleEvery at first and every
+// stepScratchLingerEvery after stepScratchSettleTries, for as long as it takes.
 func (s *StepScratch) reclaim(gone func() bool) {
-	for i := 0; i < stepScratchSettleTries; i++ {
-		if i > 0 {
-			time.Sleep(stepScratchSettleEvery)
+	for i := 0; !s.tryReclaim(gone); i++ {
+		wait := stepScratchSettleEvery
+		if i >= stepScratchSettleTries {
+			if i == stepScratchSettleTries {
+				logging.Debug("credsandbox: a command's scratch is still held after it ended; removed once nothing holds it", "dir", s.dir)
+			}
+			wait = stepScratchLingerEvery
 		}
-		if gone != nil && gone() {
-			removeStepScratch(s.dir)
-			return
-		}
-		refs, err := stepScratchRefs(stepScratchProcRoot)
-		if err != nil {
-			continue
-		}
-		if !refs[baseName(s.dir)] {
-			removeStepScratch(s.dir)
-			return
-		}
+		time.Sleep(wait)
 	}
-	logging.Debug("credsandbox: a command's scratch is still held after it ended; the sweep removes it once nothing holds it", "dir", s.dir)
 }
 
-func removeStepScratch(dir string) {
-	if err := removeTree(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		logging.Warn("credsandbox: cannot remove a command's scratch directory; the sweep retries", "dir", dir, "error", err)
+// tryReclaim removes the directory if the command's processes are proven gone
+// (gone, or no live process holds it), and reports whether it is gone.
+func (s *StepScratch) tryReclaim(gone func() bool) bool {
+	if gone == nil || !gone() {
+		refs, err := stepScratchRefs(stepScratchProcRoot)
+		if err != nil || refs[baseName(s.dir)] {
+			return false
+		}
 	}
+	return removeStepScratch(s.dir)
+}
+
+// removeStepScratch removes dir, one this daemon handed out, and takes it out
+// of the registry once it is gone.
+func removeStepScratch(dir string) bool {
+	if err := removeTree(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		logging.Warn("credsandbox: cannot remove a command's scratch directory; retrying", "dir", dir, "error", err)
+		return false
+	}
+	stepRegistry.mu.Lock()
+	delete(stepRegistry.dirs, dir)
+	stepRegistry.mu.Unlock()
+	return true
 }
 
 // withStepScratch gives cmd, a credentialed command whose env (already set)

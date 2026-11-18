@@ -20,25 +20,34 @@ import (
 )
 
 // A credentialed command's own scratch (stepscratch.go) goes when the command
-// ends, whichever way it ends, and the sweep removes what an earlier daemon
-// left once nothing holds it, never what a live step still uses.
+// ends, whichever way it ends; the sweep removes only what an earlier daemon
+// left once nothing provably holds it, never a directory this daemon handed
+// out, and nothing at all when a process's holdings cannot be read.
+
+// testNow is the sweep's clock in these tests: ages are judged against it, so
+// no assertion depends on when the test runs.
+var testNow = time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
 
 // stepRoot is a credentialed scratch root of the test's own, with the reclaim's
-// waits shortened and no sweep pending from an earlier test.
+// waits shortened, the clock fixed at testNow, an empty /proc, and no sweep
+// due (makeStepScratch starts none of its own).
 func stepRoot(t *testing.T) string {
 	t.Helper()
-	tries, every, age := stepScratchSettleTries, stepScratchSettleEvery, stepScratchMinAge
-	stepScratchSettleTries, stepScratchSettleEvery = 200, 10*time.Millisecond
+	tries, every, linger, age, now, proc := stepScratchSettleTries, stepScratchSettleEvery, stepScratchLingerEvery, stepScratchMinAge, stepScratchNow, stepScratchProcRoot
+	stepScratchSettleTries, stepScratchSettleEvery, stepScratchLingerEvery = 200, 10*time.Millisecond, 10*time.Millisecond
+	stepScratchNow = func() time.Time { return testNow }
 	stepSweep.Lock()
 	last := stepSweep.last
-	stepSweep.last = time.Now() // makeStepScratch starts no sweep of its own
+	stepSweep.last = testNow
 	stepSweep.Unlock()
 	t.Cleanup(func() {
-		stepScratchSettleTries, stepScratchSettleEvery, stepScratchMinAge = tries, every, age
+		stepScratchSettleTries, stepScratchSettleEvery, stepScratchLingerEvery, stepScratchMinAge, stepScratchNow, stepScratchProcRoot = tries, every, linger, age, now, proc
 		stepSweep.Lock()
 		stepSweep.last = last
 		stepSweep.Unlock()
+		stepSweepListed = func() {}
 	})
+	stepScratchProcRoot = fakeProc(t, nil)
 	root := filepath.Join(t.TempDir(), "cred-scratch")
 	require.NoError(t, os.Mkdir(root, 0o700))
 	return root
@@ -127,62 +136,63 @@ func TestStepScratch_ATimedOutCommandsScratchIsRemoved(t *testing.T) {
 }
 
 // A command that ends with a process still holding its scratch (a background
-// job it left running) keeps it until that process is gone too.
+// job it left running) keeps it, registered, until that process is gone too.
 func TestStepScratch_DoneSparesAScratchALeftoverProcessStillHolds(t *testing.T) {
 	root := stepRoot(t)
-	stepScratchSettleTries = 3
 	cmd, s := stepCommand(t, context.Background(), root, `true`)
 	require.NoError(t, cmd.Run())
-	proc := fakeProc(t, map[int]fakeProcess{4242: {env: []string{StepScratchEnv + "=" + s.Dir()}}})
-	stepScratchProcRoot = proc
-	t.Cleanup(func() { stepScratchProcRoot = "/proc" })
+	stepScratchProcRoot = fakeProc(t, map[int]fakeProcess{4242: {env: []string{StepScratchEnv + "=" + s.Dir()}}})
 
-	s.reclaim(nil)
+	assert.False(t, s.tryReclaim(nil))
 	assert.DirExists(t, s.Dir(), "a live process holds it in its environment")
+	assert.True(t, stepScratchRegistered(s.Dir()), "still this daemon's: no sweep may take it")
 
-	require.NoError(t, os.RemoveAll(filepath.Join(proc, "4242")))
-	s.reclaim(nil)
+	stepScratchProcRoot = fakeProc(t, nil)
+	assert.True(t, s.tryReclaim(nil))
 	assert.NoDirExists(t, s.Dir(), "gone once nothing holds it")
+	assert.False(t, stepScratchRegistered(s.Dir()), "its own removal is what takes it out of the registry")
 }
 
 // fakeProcess is what a fake /proc shows for one process.
 type fakeProcess struct {
-	env          []string
-	cwd          string
-	fds          []string
-	unreadableFD bool
-	// unreadableEnv withholds its environment, as the kernel does from
-	// another user namespace's process; nsDepth is its pid namespace depth
-	// (NSpid), 1 being ours.
-	unreadableEnv bool
-	nsDepth       int
+	env []string
+	cwd string
+	fds []string
+	// unreadableEnv and unreadableFD make its environment or descriptors
+	// fail to read for a reason other than its exit (here a wrong file type,
+	// which fails the same for root as for anyone).
+	unreadableEnv, unreadableFD bool
+	// nsDepth, when set, is its pid namespace depth (NSpid), 1 being ours.
+	nsDepth int
 }
 
 // fakeProc builds a /proc of the test's own: environ, cwd, fd and status for
-// each process, all this user's, and a self in the first pid namespace.
+// each process, all this user's.
 func fakeProc(t *testing.T, procs map[int]fakeProcess) string {
 	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "self"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "self", "status"), []byte("Name:\ttest\nNSpid:\t4000\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "self", "status"), []byte("NSpid:\t4000\n"), 0o600))
 	for pid, p := range procs {
 		dir := filepath.Join(root, strconv.Itoa(pid))
-		require.NoError(t, os.MkdirAll(filepath.Join(dir, "fd"), 0o700))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "environ"), []byte(strings.Join(p.env, "\x00")+"\x00"), 0o600))
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		if p.unreadableEnv {
+			require.NoError(t, os.Mkdir(filepath.Join(dir, "environ"), 0o700))
+		} else {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "environ"), []byte(strings.Join(p.env, "\x00")+"\x00"), 0o600))
+		}
 		cwd := p.cwd
 		if cwd == "" {
 			cwd = "/"
 		}
 		require.NoError(t, os.Symlink(cwd, filepath.Join(dir, "cwd")))
+		if p.unreadableFD {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "fd"), nil, 0o600))
+		} else {
+			require.NoError(t, os.Mkdir(filepath.Join(dir, "fd"), 0o700))
+		}
 		for i, f := range p.fds {
 			require.NoError(t, os.Symlink(f, filepath.Join(dir, "fd", strconv.Itoa(i))))
-		}
-		if p.unreadableFD {
-			require.NoError(t, os.Chmod(filepath.Join(dir, "fd"), 0))
-			t.Cleanup(func() { _ = os.Chmod(filepath.Join(dir, "fd"), 0o700) })
-		}
-		if p.unreadableEnv {
-			require.NoError(t, os.Chmod(filepath.Join(dir, "environ"), 0))
 		}
 		if p.nsDepth > 0 {
 			ids := make([]string, p.nsDepth)
@@ -195,13 +205,14 @@ func fakeProc(t *testing.T, procs map[int]fakeProcess) string {
 	return root
 }
 
-// stepDir makes a command scratch directory in root as if made age ago.
+// stepDir makes a scratch directory in root as an earlier daemon would have
+// left it, last changed age before testNow.
 func stepDir(t *testing.T, root, name string, age time.Duration) string {
 	t.Helper()
 	dir := filepath.Join(root, name)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "work"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "work", "f"), []byte("x"), 0o600))
-	at := time.Now().Add(-age)
+	at := testNow.Add(-age)
 	require.NoError(t, os.Chtimes(dir, at, at))
 	return dir
 }
@@ -215,7 +226,7 @@ func TestSweepStepScratch_RemovesOrphansAndSparesALiveStepsDir(t *testing.T) {
 	byCwd := stepDir(t, root, "step-999999-cwd", time.Hour)
 	byFD := stepDir(t, root, "step-999999-fd", time.Hour)
 	byTmpdir := stepDir(t, root, "step-999999-tmpdir", time.Hour)
-	young := stepDir(t, root, "step-999999-young", 0)
+	young := stepDir(t, root, "step-999999-young", stepScratchMinAge-time.Second)
 	legacy := stepDir(t, root, "tmp.AbCdEf1234", time.Hour)
 	slots := stepDir(t, root, "slots", time.Hour)
 
@@ -226,74 +237,136 @@ func TestSweepStepScratch_RemovesOrphansAndSparesALiveStepsDir(t *testing.T) {
 		// Seen through another mount of the disk: matched by name.
 		13: {env: []string{"TMPDIR=/mnt/workspace-disk/home/u/.reliant/cred-scratch/step-999999-tmpdir/t"}},
 	})
-	t.Cleanup(func() { stepScratchProcRoot = "/proc" })
 
 	assert.Equal(t, 1, sweepStepScratch(root))
 	assert.NoDirExists(t, dead, "nothing holds it: its daemon and its command are gone")
 	for _, d := range []string{byEnv, byCwd, byFD, byTmpdir} {
 		assert.DirExists(t, d, "a live step's directory is spared")
 	}
-	assert.DirExists(t, young, "too young to judge: its command may not have started")
+	assert.DirExists(t, young, "too young to judge: another daemon's command may not have started")
 	assert.DirExists(t, legacy, "a directory a step made itself is not the daemon's to judge")
 	assert.DirExists(t, slots, "nor is anything else in the root")
 }
 
-// An incomplete picture of the live processes proves nothing: nothing goes.
-func TestSweepStepScratch_RemovesNothingWhenAProcessCannotBeRead(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root reads a mode-0 directory anyway")
-	}
+// The race the registry closes: a directory this daemon handed out whose
+// command has not started yet is held by no process, and may be old enough to
+// judge (a slow start, a clock step). The sweep never takes it; only its own
+// removal does.
+func TestSweepStepScratch_NeverTakesADirectoryThisDaemonHandedOut(t *testing.T) {
 	root := stepRoot(t)
-	dead := stepDir(t, root, "step-999999-dead", time.Hour)
-	stepScratchProcRoot = fakeProc(t, map[int]fakeProcess{20: {unreadableFD: true}})
-	t.Cleanup(func() { stepScratchProcRoot = "/proc" })
+	dir, err := makeStepScratch(root)
+	require.NoError(t, err)
+	old := testNow.Add(-time.Hour)
+	require.NoError(t, os.Chtimes(dir, old, old))
+	orphan := stepDir(t, root, "step-999999-orphan", time.Hour)
 
-	assert.Equal(t, 0, sweepStepScratch(root))
-	assert.DirExists(t, dead)
-}
-
-// A container whose processes share this user's uid (k3d's coredns, on a cloud
-// workspace) withholds them from it: one in a pid namespace below ours cannot
-// hold a daemon command's scratch and is skipped, while a withheld process in
-// our own namespace still makes the picture incomplete.
-func TestSweepStepScratch_SkipsAContainersWithheldProcess(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root reads a mode-0 file anyway")
-	}
-	root := stepRoot(t)
-	dead := stepDir(t, root, "step-999999-dead", time.Hour)
-	t.Cleanup(func() { stepScratchProcRoot = "/proc" })
-
-	stepScratchProcRoot = fakeProc(t, map[int]fakeProcess{30: {unreadableEnv: true, nsDepth: 1}})
-	assert.Equal(t, 0, sweepStepScratch(root), "withheld in our own namespace: nothing is proven")
-	assert.DirExists(t, dead)
-
-	stepScratchProcRoot = fakeProc(t, map[int]fakeProcess{31: {unreadableEnv: true, nsDepth: 3}})
 	assert.Equal(t, 1, sweepStepScratch(root))
-	assert.NoDirExists(t, dead)
+	assert.DirExists(t, dir, "registered: its command is about to start")
+	assert.NoDirExists(t, orphan)
+
+	assert.True(t, (&StepScratch{dir: dir}).tryReclaim(nil))
+	assert.NoDirExists(t, dir)
+	assert.False(t, stepScratchRegistered(dir))
 }
 
-// The same against this machine's real /proc: a live step's scratch, held only
-// by its environment, outlives its daemon until the step is gone.
-func TestSweepStepScratch_SparesALiveStepsDirOnThisMachine(t *testing.T) {
+// A directory made while a sweep runs, between its listing of the root and
+// its scan of /proc, is never one it judges.
+func TestSweepStepScratch_ADirectoryMadeDuringTheSweepSurvivesIt(t *testing.T) {
 	root := stepRoot(t)
-	if _, err := stepScratchRefs("/proc"); err != nil {
-		t.Skipf("this machine's /proc cannot be read completely as this user (%v), so the sweep proves nothing here", err)
+	orphan := stepDir(t, root, "step-999999-orphan", time.Hour)
+	var made string
+	stepSweepListed = func() {
+		var err error
+		made, err = makeStepScratch(root)
+		require.NoError(t, err)
+		old := testNow.Add(-time.Hour)
+		require.NoError(t, os.Chtimes(made, old, old))
 	}
-	cmd, s := stepCommand(t, context.Background(), root, `exec sleep 60`)
-	require.NoError(t, cmd.Start())
-	t.Cleanup(func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); _ = cmd.Wait() })
-	stepScratchMinAge = 0
 
-	sweepStepScratch(root)
-	assert.DirExists(t, s.Dir(), "its step is running")
+	assert.Equal(t, 1, sweepStepScratch(root))
+	require.NotEmpty(t, made)
+	assert.DirExists(t, made, "made after the listing: never a candidate")
+	assert.NoDirExists(t, orphan)
+	assert.Equal(t, 0, sweepStepScratch(root), "nor in the next sweep: it is registered")
+	assert.DirExists(t, made)
+}
 
-	require.NoError(t, syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL))
-	_ = cmd.Wait()
-	// Another process of this machine caught mid-exec makes one scan
-	// incomplete, which spares everything; the next proves it.
-	require.Eventually(t, func() bool { sweepStepScratch(root); _, err := os.Stat(s.Dir()); return errors.Is(err, os.ErrNotExist) },
-		10*time.Second, 50*time.Millisecond, "its step is gone")
+// An incomplete picture of the live processes proves nothing: nothing goes,
+// whichever read failed and wherever the process runs.
+func TestSweepStepScratch_RemovesNothingWhenAProcessCannotBeRead(t *testing.T) {
+	for name, p := range map[string]fakeProcess{
+		"descriptors": {unreadableFD: true},
+		"environment": {unreadableEnv: true},
+		// A container's process sharing our uid, withheld from us: nothing
+		// proves it was not handed a descriptor or a bind mount of one.
+		"environment, in a nested pid namespace": {unreadableEnv: true, nsDepth: 3},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := stepRoot(t)
+			dead := stepDir(t, root, "step-999999-dead", time.Hour)
+			stepScratchProcRoot = fakeProc(t, map[int]fakeProcess{20: p})
+
+			assert.Equal(t, 0, sweepStepScratch(root))
+			assert.DirExists(t, dead)
+			_, err := stepScratchRefs(stepScratchProcRoot)
+			assert.Error(t, err, "the scan reports itself incomplete")
+		})
+	}
+}
+
+// Done's own reclaim fails closed the same way: a scratch whose command has no
+// cgroup to prove it gone stays while the processes cannot all be read.
+func TestStepScratch_DoneKeepsItWhileAProcessCannotBeRead(t *testing.T) {
+	root := stepRoot(t)
+	cmd, s := stepCommand(t, context.Background(), root, `true`)
+	require.NoError(t, cmd.Run())
+	stepScratchProcRoot = fakeProc(t, map[int]fakeProcess{21: {unreadableEnv: true, nsDepth: 3}})
+
+	assert.False(t, s.tryReclaim(nil))
+	assert.DirExists(t, s.Dir())
+	assert.True(t, s.tryReclaim(func() bool { return true }), "a proven-empty cgroup needs no scan")
+	assert.NoDirExists(t, s.Dir())
+}
+
+// The real /proc of a live process of ours: what it holds in its environment,
+// as its working directory and through an open descriptor is what the scan
+// reads.
+func TestStepScratchRefs_ReadsALiveProcess(t *testing.T) {
+	root := stepRoot(t)
+	byEnv := stepDir(t, root, "step-1-env", time.Hour)
+	byCwd := stepDir(t, root, "step-1-cwd", time.Hour)
+	byFD := stepDir(t, root, "step-1-fd", time.Hour)
+	f, err := os.Open(filepath.Join(byFD, "work", "f"))
+	require.NoError(t, err)
+	defer f.Close()
+
+	cmd := exec.Command("sh", "-c", `echo READY; read x`)
+	cmd.Env = []string{"PATH=/usr/bin:/bin", StepScratchEnv + "=" + byEnv}
+	cmd.Dir = filepath.Join(byCwd, "work")
+	cmd.ExtraFiles = []*os.File{f}
+	// READY comes after the exec, so the environment /proc shows is its own.
+	startTrapped(t, cmd)
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+
+	refs := map[string]bool{}
+	require.NoError(t, readStepScratchRefs(filepath.Join("/proc", strconv.Itoa(cmd.Process.Pid)), refs))
+	assert.Equal(t, map[string]bool{"step-1-env": true, "step-1-cwd": true, "step-1-fd": true}, refs)
+}
+
+// A command Wrap gave a scratch that never reached a tree (a return before
+// proctree.Prepare) does not leak it: Release, which every exec path runs,
+// reclaims it.
+func TestRelease_ReclaimsAScratchNoTreeTook(t *testing.T) {
+	root := stepRoot(t)
+	dir, err := makeStepScratch(root)
+	require.NoError(t, err)
+	cmd := exec.Command("true")
+	stepScratches.Store(cmd, &StepScratch{dir: dir})
+
+	Release(cmd)
+	require.Eventually(t, func() bool { return !stepScratchRegistered(dir) }, 10*time.Second, 10*time.Millisecond)
+	assert.NoDirExists(t, dir)
+	assert.Nil(t, TakeStepScratch(cmd))
 }
 
 // An inherited StepScratchEnv names another daemon's step's scratch: no

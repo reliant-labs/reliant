@@ -22,14 +22,21 @@ import (
 // making it, proving from /proc that nothing holds it, and the sweep.
 
 // makeStepScratch makes a command's own scratch directory in root, mode 0700,
-// and starts the sweep when it is due. MkdirTemp's random suffix keeps a
-// restarted daemon that got the same pid from reusing a name.
+// registered (stepRegistry) before its name is returned, and starts the sweep
+// when it is due. MkdirTemp's random suffix keeps a restarted daemon that got
+// the same pid from reusing a name.
 func makeStepScratch(root string) (string, error) {
 	if root == "" {
 		return "", errors.New("no home directory")
 	}
+	dir, err := registerStepScratch(func() (string, error) {
+		return os.MkdirTemp(root, fmt.Sprintf("%s%d-", stepScratchPrefix, os.Getpid()))
+	})
+	if err != nil {
+		return "", err
+	}
 	maybeSweepStepScratch(root)
-	return os.MkdirTemp(root, fmt.Sprintf("%s%d-", stepScratchPrefix, os.Getpid()))
+	return dir, nil
 }
 
 var stepSweep struct {
@@ -44,10 +51,11 @@ var stepSweep struct {
 func maybeSweepStepScratch(root string) {
 	stepSweep.Lock()
 	defer stepSweep.Unlock()
-	if stepSweep.running || (!stepSweep.last.IsZero() && time.Since(stepSweep.last) < stepScratchSweepEvery) {
+	now := stepScratchNow()
+	if stepSweep.running || (!stepSweep.last.IsZero() && now.Sub(stepSweep.last) < stepScratchSweepEvery) {
 		return
 	}
-	stepSweep.last, stepSweep.running = time.Now(), true
+	stepSweep.last, stepSweep.running = now, true
 	go func() {
 		defer func() {
 			stepSweep.Lock()
@@ -70,15 +78,23 @@ func SweepStepScratch() {
 	maybeSweepStepScratch(CredScratchDir())
 }
 
-// sweepStepScratch removes the command scratch directories in root that no
-// live process holds, whichever daemon made them, and reports how many. A
-// directory younger than stepScratchMinAge is spared: its command may not have
-// started yet. When /proc cannot be read completely, nothing is removed.
+// stepSweepListed runs between the sweep's listing of the root and its scan of
+// /proc; tests use it to make a directory inside that window.
+var stepSweepListed = func() {}
+
+// sweepStepScratch removes the command scratch directories in root that an
+// earlier daemon left and no live process holds, and reports how many. It
+// spares every directory this daemon handed out and has not removed (the
+// registry, read after the listing, so one made during the sweep is never a
+// candidate), and every one younger than stepScratchMinAge (another daemon's
+// command may not have started yet). When /proc cannot be read completely,
+// nothing is removed and the directories it would have judged are logged.
 func sweepStepScratch(root string) (removed int) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return 0
 	}
+	now := stepScratchNow()
 	var candidates []string
 	for _, e := range entries {
 		if !strings.HasPrefix(e.Name(), stepScratchPrefix) {
@@ -86,7 +102,7 @@ func sweepStepScratch(root string) (removed int) {
 		}
 		path := filepath.Join(root, e.Name())
 		fi, err := os.Lstat(path)
-		if err != nil || !fi.IsDir() || !ownedByUs(fi) || time.Since(fi.ModTime()) < stepScratchMinAge {
+		if err != nil || !fi.IsDir() || !ownedByUs(fi) || now.Sub(fi.ModTime()) < stepScratchMinAge || stepScratchRegistered(path) {
 			continue
 		}
 		candidates = append(candidates, path)
@@ -94,10 +110,11 @@ func sweepStepScratch(root string) (removed int) {
 	if len(candidates) == 0 {
 		return 0
 	}
+	stepSweepListed()
 	refs, err := stepScratchRefs(stepScratchProcRoot)
 	if err != nil {
-		logging.Info("credsandbox: not sweeping credentialed commands' scratch directories: the live processes could not all be read",
-			"root", root, "error", err)
+		logging.Info("credsandbox: not sweeping credentialed commands' scratch directories: the live processes could not all be read, so none is proven unheld",
+			"root", root, "kept", len(candidates), "first_kept", candidates[0], "error", err)
 		return 0
 	}
 	for _, path := range candidates {
@@ -129,20 +146,18 @@ var credScratchMarker = "/" + filepath.Base(CredScratchRel) + "/"
 //
 // It is a proof only when complete: a process of this user whose environment,
 // working directory or descriptors cannot be read, for any reason but its
-// having exited, fails it. Two kinds are skipped instead. Another user's
+// having exited, fails it, wherever it runs. A process in a container whose
+// user shares our uid (k3d's coredns runs as 65532, a cloud workspace's user)
+// is withheld from us that way, and nothing proves it holds no scratch: it may
+// have been handed a descriptor, or a bind mount of one. Only another user's
 // process, and a non-dumpable one of ours (the kernel hands its /proc files to
-// root: a sandbox's init, which holds no credentialed scratch). And a process
-// the kernel withholds from us that runs in a pid namespace below ours (a
-// container whose user happens to share our uid: k3d's coredns runs as 65532,
-// a cloud workspace's user): no daemon command runs there, so it cannot have
-// inherited a command's scratch.
+// root: a sandbox's init, which holds no credentialed scratch), is skipped.
 func stepScratchRefs(procRoot string) (map[string]bool, error) {
 	entries, err := os.ReadDir(procRoot)
 	if err != nil {
 		return nil, err
 	}
 	uid := os.Geteuid()
-	ownDepth := pidNSDepth(filepath.Join(procRoot, "self"))
 	refs := map[string]bool{}
 	for _, e := range entries {
 		if pid, err := strconv.Atoi(e.Name()); err != nil || pid <= 0 {
@@ -159,14 +174,9 @@ func stepScratchRefs(procRoot string) (map[string]bool, error) {
 		if st, ok := fi.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != uid {
 			continue
 		}
-		err = readStepScratchRefs(dir, refs)
-		if err == nil || procGone(err) {
-			continue
+		if err := readStepScratchRefs(dir, refs); err != nil && !procGone(err) {
+			return nil, fmt.Errorf("pid %s %w", e.Name(), err)
 		}
-		if errors.Is(err, fs.ErrPermission) && ownDepth > 0 && pidNSDepth(dir) > ownDepth {
-			continue
-		}
-		return nil, fmt.Errorf("pid %s %w", e.Name(), err)
 	}
 	return refs, nil
 }
@@ -210,22 +220,6 @@ func readStepScratchRefs(dir string, refs map[string]bool) error {
 		add(target)
 	}
 	return nil
-}
-
-// pidNSDepth is how many pid namespaces deep the process at dir runs, from
-// the NSpid line of its status (readable by everyone): 1 in the namespace
-// /proc belongs to. 0 when unknown.
-func pidNSDepth(dir string) int {
-	raw, err := os.ReadFile(filepath.Join(dir, "status"))
-	if err != nil {
-		return 0
-	}
-	for _, line := range strings.Split(string(raw), "\n") {
-		if v, ok := strings.CutPrefix(line, "NSpid:"); ok {
-			return len(strings.Fields(v))
-		}
-	}
-	return 0
 }
 
 // procGone reports whether err says the process (or the descriptor) is gone.

@@ -175,8 +175,11 @@ var sandboxFiles sync.Map // *exec.Cmd -> []*os.File
 // helper. Call it once cmd.Start has returned, whether it succeeded (the
 // child holds its own copies by then) or failed; it is idempotent, and a
 // no-op for a command Apply did not rewrite. It never closes the caller's
-// own ExtraFiles.
+// own ExtraFiles. A scratch directory Wrap made for cmd that no tree took
+// (TakeStepScratch) is reclaimed here, once nothing holds it: a command that
+// never started, or one started outside proctree, does not leak it.
 func Release(cmd *exec.Cmd) {
+	TakeStepScratch(cmd).Done(nil)
 	v, ok := sandboxFiles.LoadAndDelete(cmd)
 	if !ok {
 		return
