@@ -51,7 +51,7 @@ type Repository interface {
 	// whole or not at all (ensureOwnedProjectForPath).
 	WithMachineCheckoutsLocked(ctx context.Context, daemonID string, fn func(ctx context.Context) error) error
 	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
-	SyncProjectConfigSnapshot(ctx context.Context, record *db.ProjectConfigRecord, force bool) (bool, error)
+	SyncProjectConfigSnapshot(ctx context.Context, record *db.ProjectConfigRecord, force bool, scope *core.OrgScope) (bool, error)
 	GetProjectMachineCatalogPushedAt(ctx context.Context, projectID, daemonID string) (time.Time, error)
 
 	// What the owner's other clients are told.

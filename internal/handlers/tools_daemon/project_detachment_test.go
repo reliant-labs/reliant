@@ -161,7 +161,8 @@ func TestDetachedProject_AnotherProjectAttachedAtItsPathSyncs(t *testing.T) {
 
 	synced, err := f.repo.SyncProjectConfigSnapshot(f.ctx, &db.ProjectConfigRecord{
 		ProjectID: other.ID, DaemonID: f.laptop, PushedAt: now,
-	}, true)
+	}, true, nil)
+
 	require.NoError(t, err)
 	assert.True(t, synced, "the attached project's snapshot from the machine is synced")
 
@@ -239,7 +240,8 @@ func TestEnsureOwnedProjectForPath_DetachBetweenItsReadsCreatesNoProject(t *test
 	assert.True(t, errors.Is(err, errProjectDetached), "got %v", err)
 	synced, err := f.repo.SyncProjectConfigSnapshot(f.ctx, &db.ProjectConfigRecord{
 		ProjectID: f.project.ID, DaemonID: f.laptop, PushedAt: time.Unix(1_800_000_000, 0).UTC(),
-	}, true)
+	}, true, nil)
+
 	require.NoError(t, err)
 	assert.False(t, synced)
 	_, err = f.repo.GetProjectMachineCatalogPushedAt(f.ctx, f.project.ID, f.laptop)

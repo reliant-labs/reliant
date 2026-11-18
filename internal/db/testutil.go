@@ -96,6 +96,22 @@ func RelaxProjectKeysForTest(t *testing.T, repo *Repo) {
 	}
 }
 
+// HoldProjectOnMachineForTest records that the machine holds a checkout of
+// the project, as the connect reconcile would on finding it, unless it has a
+// record of it already or the user detached it: a machine's config snapshot
+// of a project is stored only while it does (SyncProjectConfigSnapshot). It
+// never overwrites a record a test wrote.
+func HoldProjectOnMachineForTest(tb testing.TB, repo *Repo, projectID, daemonID string) {
+	tb.Helper()
+	if _, err := repo.ORM().Bun().ExecContext(context.Background(), `
+INSERT INTO project_daemons (project_id, daemon_id, path, install_state)
+SELECT ?0, ?1, '/work/' || ?1, 'installed'
+WHERE NOT EXISTS (SELECT 1 FROM project_daemon_detachments WHERE project_id = ?0 AND daemon_id = ?1)
+ON CONFLICT (project_id, daemon_id) DO NOTHING`, projectID, daemonID); err != nil {
+		tb.Fatalf("hold project %s on machine %s: %v", projectID, daemonID, err)
+	}
+}
+
 // Exported for use by other packages that need to test against a real database.
 func SetupTestDB(t *testing.T) (*Repo, func()) {
 	t.Helper()

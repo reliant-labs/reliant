@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=21d4924e0c504133501aed23538d020fc7fba32ccc9e55063082799792b8e48e
+// forge:hash=5e09e1f9128f4b5dc8d9b3c53feaa0316f240f40e65ad4fb6d78fda057580292
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -44,7 +44,7 @@ type MockRepository struct {
 	CreateProjectFunc                           func(context.Context, *db.Project) error
 	WithMachineCheckoutsLockedFunc              func(context.Context, string, func(ctx context.Context) error) error
 	ResolveQueuedProjectDaemonFunc              func(context.Context, string, string) error
-	SyncProjectConfigSnapshotFunc               func(context.Context, *db.ProjectConfigRecord, bool) (bool, error)
+	SyncProjectConfigSnapshotFunc               func(context.Context, *db.ProjectConfigRecord, bool, *core.OrgScope) (bool, error)
 	GetProjectMachineCatalogPushedAtFunc        func(context.Context, string, string) (time.Time, error)
 	CreateUserUpdateFunc                        func(context.Context, *db.UserUpdate) error
 	EmitUserRefetchFunc                         func(context.Context, string, db.RefetchType, db.RefetchOpts) error
@@ -211,10 +211,10 @@ func (m *MockRepository) ResolveQueuedProjectDaemon(ctx context.Context, request
 }
 
 // SyncProjectConfigSnapshot records the call and delegates to SyncProjectConfigSnapshotFunc when set.
-func (m *MockRepository) SyncProjectConfigSnapshot(ctx context.Context, record *db.ProjectConfigRecord, force bool) (bool, error) {
-	m.Recorder.Record("SyncProjectConfigSnapshot", ctx, record, force)
+func (m *MockRepository) SyncProjectConfigSnapshot(ctx context.Context, record *db.ProjectConfigRecord, force bool, scope *core.OrgScope) (bool, error) {
+	m.Recorder.Record("SyncProjectConfigSnapshot", ctx, record, force, scope)
 	if m.SyncProjectConfigSnapshotFunc != nil {
-		return m.SyncProjectConfigSnapshotFunc(ctx, record, force)
+		return m.SyncProjectConfigSnapshotFunc(ctx, record, force, scope)
 	}
 	return false, contractkit.MockNotSet("MockRepository", "SyncProjectConfigSnapshot")
 }

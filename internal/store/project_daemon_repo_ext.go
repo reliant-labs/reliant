@@ -195,6 +195,15 @@ func MarkProjectDaemonInstalled(ctx context.Context, db orm.Context, projectID, 
 	return err
 }
 
+// ProjectDaemonExists reports whether the machine has a checkout record of
+// the project, in any install state.
+func ProjectDaemonExists(ctx context.Context, db orm.Context, projectID, daemonID string) (bool, error) {
+	return db.Bun().NewSelect().Model((*ProjectDaemon)(nil)).
+		Where("project_id = ?", projectID).
+		Where("daemon_id = ?", daemonID).
+		Exists(ctx)
+}
+
 // ProjectDaemonInstalled reports whether the project's checkout on the
 // daemon is recorded as installed.
 func ProjectDaemonInstalled(ctx context.Context, db orm.Context, projectID, daemonID string) (bool, error) {

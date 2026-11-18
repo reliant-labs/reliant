@@ -395,8 +395,19 @@ func (s *Service) persistProjectConfigSnapshot(ctx context.Context, conn *daemon
 	// record carries their union over every machine (SyncProjectConfigSnapshot),
 	// so a machine without a checkout cannot erase another machine's. Unless
 	// forced, a snapshot no newer than this machine's last push is dropped
-	// there, under the same lock that writes it.
-	_, err = s.deps.Repo.SyncProjectConfigSnapshot(ctx, record, force)
+	// there, under the same lock that writes it. So is one of a project that
+	// left the machine's scope, or lost its checkout record on the machine
+	// (a detach, the machine-org cleanup), since it was resolved above: the
+	// store re-decides both under the project's locks.
+	scope, _, err := s.machineProjectScope(ctx, conn)
+	if err != nil {
+		return err
+	}
+	stored, err := s.deps.Repo.SyncProjectConfigSnapshot(ctx, record, force, scope)
+	if err == nil && !stored {
+		logging.DebugContext(ctx, "[ToolsDaemon] Config snapshot not stored: stale, or the project is no longer held on this machine",
+			"projectID", project.ID, "daemonID", conn.daemonID)
+	}
 	return err
 }
 

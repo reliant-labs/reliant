@@ -459,3 +459,61 @@ func machineCatalogJSON(t *testing.T, repo *Repo, projectID, daemonID string) st
 	}
 	return out[0]
 }
+
+// Review round 7 (B1): a config snapshot the gateway resolved to the project
+// before the machine-org cleanup ran, and persists after it, recreates
+// neither the machine's catalog nor its share of the union. The store
+// re-decides under the project's locks: the project's org is not the
+// machine's, and the machine has no checkout record of it any more. Either
+// alone drops the snapshot.
+func TestSyncProjectConfigSnapshot_ResolvedBeforeTheCleanupPersistsNothingAfterIt(t *testing.T) {
+	p := newTwoMachineProject(t)
+	ctx := context.Background()
+	machine, other := p.defaultID, p.cicdID
+	_, err := p.repo.ORM().Bun().ExecContext(ctx, `UPDATE projects SET org_id = 'acme' WHERE id = ?`, p.projectID)
+	require.NoError(t, err)
+	require.NoError(t, p.repo.UpsertProjectDaemon(ctx, p.projectID, machine, "/work/"+machine, nil))
+	require.NoError(t, p.repo.UpsertProjectDaemon(ctx, p.projectID, other, "/work/"+other, nil))
+	release := config.StoredWorkflow{Slug: "release", Name: "release", RelativePath: p.releasePath, YAMLContent: releaseYAML}
+	deploy := config.StoredWorkflow{Slug: "deploy", Name: "deploy", RelativePath: "deploy.yaml", YAMLContent: releaseYAML}
+	require.True(t, p.push(t, other, 1000, []config.StoredWorkflow{deploy}, nil))
+
+	// Resolved: the machine's snapshot of the project, as the gateway built
+	// it before the cleanup.
+	wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{release})
+	require.NoError(t, err)
+	snapshot := func() *ProjectConfigRecord {
+		return &ProjectConfigRecord{ProjectID: p.projectID, DaemonID: machine, ProjectWorkflowsJSON: wj,
+			UserConfigYAML: testStringPtr("from " + machine), PushedAt: time.UnixMilli(2000).UTC()}
+	}
+
+	// The cleanup: the machine is globex's, the project acme's.
+	gone, err := p.repo.DetachProjectDaemonOfOtherOrg(ctx, p.projectID, machine, "test-user", "globex")
+	require.NoError(t, err)
+	require.True(t, gone)
+
+	// Persisted after it, with the machine's scope: dropped.
+	stored, err := p.repo.SyncProjectConfigSnapshot(ctx, snapshot(), false, &core.OrgScope{OrgID: "globex"})
+	require.NoError(t, err)
+	assert.False(t, stored)
+	// With no org to keep to (a deployment with no orgs), the missing
+	// checkout record alone drops it.
+	stored, err = p.repo.SyncProjectConfigSnapshot(ctx, snapshot(), true, nil)
+	require.NoError(t, err)
+	assert.False(t, stored)
+
+	assert.Empty(t, machineCatalogJSON(t, p.repo, p.projectID, machine), "the snapshot recreated the machine's catalog")
+	var paths []string
+	for _, w := range p.unionWorkflows(t) {
+		paths = append(paths, w.RelativePath)
+	}
+	assert.Equal(t, []string{"deploy.yaml"}, paths, "the snapshot put the machine's files back in the union")
+
+	// The machine's own org's project, with its checkout: stored.
+	_, err = p.repo.ORM().Bun().ExecContext(ctx, `UPDATE projects SET org_id = 'globex' WHERE id = ?`, p.projectID)
+	require.NoError(t, err)
+	require.NoError(t, p.repo.UpsertProjectDaemon(ctx, p.projectID, machine, "/work/"+machine, nil))
+	stored, err = p.repo.SyncProjectConfigSnapshot(ctx, snapshot(), false, &core.OrgScope{OrgID: "globex"})
+	require.NoError(t, err)
+	assert.True(t, stored)
+}

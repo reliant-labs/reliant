@@ -62,9 +62,11 @@ func TestListInbox_ReadsEachCatalogOnce(t *testing.T) {
 	}
 	wj, err := config.EncodeCatalogJSON(stored)
 	require.NoError(t, err)
+	db.HoldProjectOnMachineForTest(t, f.repo, f.project(), daemonID)
 	_, err = f.repo.SyncProjectConfigSnapshot(f.ctx, &db.ProjectConfigRecord{
 		ProjectID: f.project(), DaemonID: daemonID, ProjectWorkflowsJSON: wj, PushedAt: time.Now().UTC(),
-	}, false)
+	}, false, nil)
+
 	require.NoError(t, err)
 
 	cfg, _ := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})

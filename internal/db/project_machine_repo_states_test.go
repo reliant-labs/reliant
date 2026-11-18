@@ -26,10 +26,12 @@ func TestProjectWorkflowProvenance_TwoMachines(t *testing.T) {
 		require.NoError(t, err)
 		sj, err := config.EncodeCatalogJSON(states)
 		require.NoError(t, err)
+		HoldProjectOnMachineForTest(t, p.repo, p.projectID, daemonID)
 		_, err = p.repo.SyncProjectConfigSnapshot(ctx, &ProjectConfigRecord{
 			ProjectID: p.projectID, DaemonID: daemonID, ProjectWorkflowsJSON: wj, RepoStatesJSON: sj,
 			PushedAt: time.UnixMilli(at).UTC(),
-		}, false)
+		}, false, nil)
+
 		require.NoError(t, err)
 	}
 	const sha = "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"
