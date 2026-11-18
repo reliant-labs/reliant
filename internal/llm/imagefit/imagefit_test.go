@@ -4,10 +4,15 @@ package imagefit
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
+	"hash/crc32"
 	"image"
 	"image/color"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"io"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -124,55 +129,157 @@ func TestForRequest_ToolResultImagesAndJPEGStayJPEG(t *testing.T) {
 func TestForRequest_IsDeterministic(t *testing.T) {
 	// Every turn must send identical bytes, or the prompt cache stops matching.
 	data := pngOf(t, 3200, 100)
-	a, err := downscale(data, "png")
+	a, err := downscale(data, "png", 3200, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := downscale(data, "png")
+	b, err := downscale(data, "png", 3200, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(a.data, b.data) {
+	if !bytes.Equal(a, b) {
 		t.Fatal("two downscales of one image differ")
 	}
 }
 
-func TestForRequest_UnreadableImagesAreLeftToTheProvider(t *testing.T) {
-	bad := message.BinaryContent{MIMEType: "image/png", Data: []byte("not a png")}
-	msgs := history(t, ManyImageThreshold, bad)
-	got := ForRequest(context.Background(), msgs)
-	if bc := got[0].BinaryContent(); len(bc) != 1 || string(bc[0].Data) != "not a png" {
-		t.Fatalf("unreadable image changed: %+v", bc)
+// pngHeader is a PNG whose header claims w x h and that carries no pixels:
+// what a decompression bomb, or a forged header, looks like to DecodeConfig.
+func pngHeader(w, h uint32) []byte {
+	chunk := func(typ string, data []byte) []byte {
+		var c bytes.Buffer
+		_ = binary.Write(&c, binary.BigEndian, uint32(len(data)))
+		c.WriteString(typ)
+		c.Write(data)
+		_ = binary.Write(&c, binary.BigEndian, crc32.ChecksumIEEE(append([]byte(typ), data...)))
+		return c.Bytes()
+	}
+	ihdr := make([]byte, 13)
+	binary.BigEndian.PutUint32(ihdr[0:], w)
+	binary.BigEndian.PutUint32(ihdr[4:], h)
+	ihdr[8], ihdr[9] = 8, 6 // 8-bit RGBA
+	out := []byte("\x89PNG\r\n\x1a\n")
+	out = append(out, chunk("IHDR", ihdr)...)
+	return append(out, chunk("IEND", nil)...)
+}
+
+// withAnimationControl inserts an APNG acTL chunk after a PNG's IHDR.
+func withAnimationControl(data []byte) []byte {
+	const afterIHDR = 8 + 8 + 13 + 4
+	actl := append([]byte{0, 0, 0, 8}, "acTL"...)
+	actl = append(actl, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0)
+	return append(append(append([]byte(nil), data[:afterIHDR]...), actl...), data[afterIHDR:]...)
+}
+
+func gifOf(t *testing.T, w, h, frames int) []byte {
+	t.Helper()
+	pal := color.Palette{color.Transparent, color.Black, color.White}
+	anim := &gif.GIF{}
+	for i := 0; i < frames; i++ {
+		img := image.NewPaletted(image.Rect(0, 0, w, h), pal)
+		for x := 0; x < w; x += 3 {
+			img.SetColorIndex(x, 0, uint8(1+(x+i)%2))
+		}
+		anim.Image = append(anim.Image, img)
+		anim.Delay = append(anim.Delay, 10)
+	}
+	var buf bytes.Buffer
+	if err := gif.EncodeAll(&buf, anim); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// countDecodes replaces the full decode for the test and reports how many
+// images it was asked to decode.
+func countDecodes(t *testing.T) *int {
+	t.Helper()
+	n := 0
+	prev := decode
+	decode = func(r io.Reader) (image.Image, string, error) {
+		n++
+		return prev(r)
+	}
+	t.Cleanup(func() { decode = prev })
+	return &n
+}
+
+// TestForRequest_UnverifiableImagesAreSentUnchanged: anything fitting cannot
+// verify and write back in its declared format reaches the provider exactly
+// as stored, as a user attachment or a tool result; nothing is dropped or
+// replaced by a note.
+func TestForRequest_UnverifiableImagesAreSentUnchanged(t *testing.T) {
+	large := pngOf(t, 3100, 10)
+	for _, tc := range []struct {
+		name    string
+		part    message.BinaryContent
+		decodes bool // the header is sound, so only the full decode can fail
+	}{
+		{"corrupt png", message.BinaryContent{MIMEType: "image/png", Data: []byte("not a png")}, false},
+		{"truncated png", message.BinaryContent{MIMEType: "image/png", Data: large[:len(large)/2]}, true},
+		{"png declared as jpeg", message.BinaryContent{MIMEType: "image/jpeg", Data: large}, false},
+		{"pdf document", message.BinaryContent{MIMEType: "application/pdf", Data: []byte("%PDF-1.7\n" + strings.Repeat("x", 64))}, false},
+		{"png with no supported mime", message.BinaryContent{MIMEType: "image/x-png", Data: large}, false},
+		{"animated gif", message.BinaryContent{MIMEType: "image/gif", Data: gifOf(t, 3100, 10, 2)}, false},
+		{"animated png", message.BinaryContent{MIMEType: "image/png", Data: withAnimationControl(large)}, false},
+		{"decompression bomb", message.BinaryContent{MIMEType: "image/png", Data: pngHeader(100000, 100000)}, false},
+		{"elongated header", message.BinaryContent{MIMEType: "image/png", Data: pngHeader(20000, 10)}, false},
+		{"over the pixel budget", message.BinaryContent{MIMEType: "image/png", Data: pngHeader(9000, 9000)}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			decodes := countDecodes(t)
+			msgs := history(t, ManyImageThreshold, tc.part)
+			msgs = append(msgs, message.Message{Role: message.Tool, Parts: []message.ContentPart{
+				message.ToolResult{ToolCallID: "c2", Content: "page", BinaryParts: []message.BinaryContent{tc.part}},
+			}})
+
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			got := ForRequest(context.Background(), msgs)
+			runtime.ReadMemStats(&after)
+
+			if !tc.decodes {
+				if *decodes != 0 {
+					t.Fatalf("decoded %d images, want none", *decodes)
+				}
+				// A forged header must not cost what it claims (40GB for the bomb).
+				if alloc := after.TotalAlloc - before.TotalAlloc; alloc > 16<<20 {
+					t.Fatalf("fitting allocated %d bytes", alloc)
+				}
+			}
+			if bc := got[0].BinaryContent(); len(bc) != 1 || bc[0].MIMEType != tc.part.MIMEType || !bytes.Equal(bc[0].Data, tc.part.Data) {
+				t.Fatalf("user attachment changed: %d parts", len(bc))
+			}
+			if text := got[0].TextContents(); len(text) != 1 || text[0].Text != "look at this" {
+				t.Fatalf("user text changed: %+v", text)
+			}
+			tr := got[len(got)-1].ToolResults()[0]
+			if tr.Content != "page" || len(tr.BinaryParts) != 1 || tr.BinaryParts[0].MIMEType != tc.part.MIMEType || !bytes.Equal(tr.BinaryParts[0].Data, tc.part.Data) {
+				t.Fatalf("tool result changed: content %q, %d parts", tr.Content, len(tr.BinaryParts))
+			}
+		})
 	}
 }
 
-func TestFitParts_AnImageThatCannotBeFitBecomesANote(t *testing.T) {
-	// A PNG whose header claims a size the decoder then fails on: DecodeConfig
-	// reads it, Decode cannot.
-	data := pngOf(t, 3100, 10)
-	truncated := data[:len(data)/2]
-	parts := []message.ContentPart{
-		message.TextContent{Text: "hi"},
-		message.BinaryContent{MIMEType: "image/png", Data: truncated},
-		message.ToolResult{ToolCallID: "c", Content: "shot", BinaryParts: []message.BinaryContent{
-			{MIMEType: "image/png", Data: truncated},
-			{MIMEType: "image/png", Data: pngOf(t, 8, 8)},
-		}},
+func TestForRequest_LargeJPEGAttachmentStaysJPEG(t *testing.T) {
+	msgs := history(t, ManyImageThreshold, message.BinaryContent{MIMEType: "image/jpeg", Data: jpegOf(t, 4000, 100)})
+	got := ForRequest(context.Background(), msgs)
+	fitted := got[0].BinaryContent()
+	if len(fitted) != 1 {
+		t.Fatalf("user message has %d binary parts, want 1", len(fitted))
 	}
-	got, changed := fitParts(context.Background(), parts)
-	if !changed {
-		t.Fatal("nothing changed")
+	w, h, format := dims(t, fitted[0].Data)
+	if w != ManyImageMaxDimension || h != 75 || format != "jpeg" || fitted[0].MIMEType != "image/jpeg" {
+		t.Fatalf("downscaled to %dx%d %s (%s), want %dx75 jpeg", w, h, format, fitted[0].MIMEType, ManyImageMaxDimension)
 	}
-	note, ok := got[1].(message.TextContent)
-	if !ok || !strings.Contains(note.Text, "is not shown") || !strings.Contains(note.Text, "3100x10") {
-		t.Fatalf("user image became %#v, want a note", got[1])
-	}
-	tr := got[2].(message.ToolResult)
-	if len(tr.BinaryParts) != 1 || !strings.Contains(tr.Content, "is not shown") || !strings.HasPrefix(tr.Content, "shot\n") {
-		t.Fatalf("tool result = %+v", tr)
-	}
-	if _, ok := parts[1].(message.BinaryContent); !ok {
-		t.Fatal("the input parts were modified")
+}
+
+func TestForRequest_LargeStaticGIFStaysGIF(t *testing.T) {
+	msgs := history(t, ManyImageThreshold, message.BinaryContent{MIMEType: "image/gif", Data: gifOf(t, 3100, 20, 1)})
+	got := ForRequest(context.Background(), msgs)
+	fitted := got[0].BinaryContent()
+	w, h, format := dims(t, fitted[0].Data)
+	if w != ManyImageMaxDimension || h != 19 || format != "gif" || fitted[0].MIMEType != "image/gif" {
+		t.Fatalf("downscaled to %dx%d %s (%s), want %dx19 gif", w, h, format, fitted[0].MIMEType, ManyImageMaxDimension)
 	}
 }
 
