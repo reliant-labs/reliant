@@ -28,11 +28,14 @@ func TestFirstHandledNodeFailure(t *testing.T) {
 		}
 	}
 	at := func(s int) time.Time { return l2Base.Add(time.Duration(s) * time.Second) }
-	insert := func(id, workflow, node, activity string, created time.Time, ok bool, errMsg string, loopIter int64) {
+	insertOut := func(id, workflow, node, activity string, created time.Time, ok bool, errMsg string, loopIter int64, output string) {
 		t.Helper()
 		exec := &core.StepExecution{
 			ID: id, WorkflowID: workflow, StepID: node, ActivityName: activity,
 			NodePath: nstr(node), CreatedAt: created, Success: nbool(ok), Attempt: ptr(int32(1)),
+		}
+		if output != "" {
+			exec.OutputJSON = nstr(output)
 		}
 		if errMsg != "" {
 			exec.ErrorMessage = nstr(errMsg)
@@ -45,6 +48,10 @@ func TestFirstHandledNodeFailure(t *testing.T) {
 			t.Fatalf("seed %s: %v", id, err)
 		}
 	}
+	insert := func(id, workflow, node, activity string, created time.Time, ok bool, errMsg string, loopIter int64) {
+		t.Helper()
+		insertOut(id, workflow, node, activity, created, ok, errMsg, loopIter, "")
+	}
 	runStart := at(100)
 
 	// An earlier run of the chat, on the same root id, failed a node: not
@@ -54,6 +61,9 @@ func TestFirstHandledNodeFailure(t *testing.T) {
 	insert("retry-1", "wf-o1", "fetch", "Action", at(101), false, "timeout", -1)
 	insert("retry-2", "wf-o1", "fetch", "Action", at(102), true, "", -1)
 	insert("status", "wf-o1", "status", "WorkflowStatus", at(103), false, "not a node", -1)
+	// A command whose exit status is its answer, and an action that worked.
+	insertOut("diff", "wf-o1", "diff", "ExecuteRunStep", at(103), false, "", -1, `{"exit_code":1}`)
+	insertOut("post-ok", "wf-o1", "post_ok", "Action", at(103), true, "", -1, `{"is_error":false,"content":"ok"}`)
 
 	got, err := store.FirstHandledNodeFailure(ctx, env.ORM, "wf-o1", runStart)
 	if err != nil {
@@ -77,5 +87,16 @@ func TestFirstHandledNodeFailure(t *testing.T) {
 	}
 	if got == nil || got.Node != "loop.body" || got.Error != "channel_not_found" {
 		t.Fatalf("want the failed iteration, got %+v", got)
+	}
+
+	// community-watch's shape: the failure-reporting action ran and itself
+	// reported an error. Its activity succeeded; the node did not.
+	insertOut("post-failed", "wf-o1", "post_failed", "Action", at(106), true, "", -1, `{"is_error":true,"content":"channel_not_found"}`)
+	got, err = store.FirstHandledNodeFailure(ctx, env.ORM, "wf-o1", runStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.Node != "post_failed" || got.Error != "channel_not_found" {
+		t.Fatalf("an action that reported is_error is a handled failure, newest first: %+v", got)
 	}
 }

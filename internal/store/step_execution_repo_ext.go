@@ -201,6 +201,11 @@ ORDER BY se.created_at DESC, se.id DESC`, workflowID, limit).Scan(ctx, &rows)
 
 // HandledNodeFailure is a node of a completed run whose last attempt failed:
 // the run went on past it, so its failure was handled (core.RunOutcomeFailureHandled).
+// A node failed when its activity did (an error recorded on the attempt), or
+// when it is an action or invoke_tool node that reported is_error: those
+// complete their activity and hand the error to the graph to route on, which
+// is a failure path running. A run node's non-zero exit code is not one: a
+// command's exit status is routinely the answer it was run for.
 type HandledNodeFailure struct {
 	// Node is the node's path in the run (its step id at the top level).
 	Node string `bun:"node"`
@@ -228,15 +233,20 @@ func FirstHandledNodeFailure(ctx context.Context, db orm.Context, workflowID str
     UNION ALL SELECT w.id, w.chat_id FROM workflows w JOIN tree t ON w.parent_id = t.id AND w.chat_id = t.chat_id
 ), last_attempt AS (
     SELECT DISTINCT ON (se.workflow_id, coalesce(se.node_path, se.step_id), coalesce(se.loop_node_id, ''), coalesce(se.loop_iteration, -1))
-           coalesce(se.node_path, se.step_id) AS node, se.success, se.error_message, se.created_at, se.id
+           coalesce(se.node_path, se.step_id) AS node, se.created_at, se.id,
+           CASE WHEN se.success = 0 AND coalesce(se.error_message, '') <> '' THEN se.error_message
+                WHEN se.activity_name IN ('Action', 'InvokeTool') AND se.output_json IS JSON OBJECT
+                     AND (se.output_json::jsonb->>'is_error') = 'true'
+                THEN coalesce(nullif(left(se.output_json::jsonb->>'content', 2000), ''), 'the node reported is_error')
+           END AS failure
     FROM step_executions se JOIN tree t ON t.id = se.workflow_id
     WHERE se.activity_name <> ALL(ARRAY['WorkflowStatus', 'FetchThreadResult', 'Cleanup', 'WorkflowError', 'SkippedStep']::text[])
       AND se.created_at >= ?1
     ORDER BY se.workflow_id, coalesce(se.node_path, se.step_id), coalesce(se.loop_node_id, ''), coalesce(se.loop_iteration, -1),
              se.created_at DESC, se.id DESC
 )
-SELECT node, coalesce(error_message, '') AS error FROM last_attempt
-WHERE success = 0 AND coalesce(error_message, '') <> ''
+SELECT node, failure AS error FROM last_attempt
+WHERE failure IS NOT NULL
 ORDER BY created_at DESC, id DESC
 LIMIT 1`, workflowID, since).Scan(ctx, &rows)
 	if err != nil {
