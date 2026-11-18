@@ -3,8 +3,10 @@
  * a whole document: a failure must reach it, and the cache must not claim a
  * value the server does not hold.
  */
+import { waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { currentSessionOwner, resetSessionOwnerForTests, setSessionOwner } from "../auth/sessionOwner";
 import { readSettingFromServer, SettingWriteError, writeStringSetting } from "../settingsPersistence";
 
 const mocks = vi.hoisted(() => ({
@@ -19,7 +21,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../hooks/settings-queries", () => ({
   batchUpsertSettings: mocks.batchUpsertSettings,
   deleteSetting: mocks.deleteSetting,
-  fetchSettings: mocks.listSettings,
+  fetchSettingsFor: mocks.listSettings,
 }));
 
 vi.mock("../../api/authProvider", () => ({
@@ -76,5 +78,58 @@ describe("settingsPersistence strict read and write", () => {
     expect(await readSettingFromServer("sidebar.projects")).toEqual({ status: "missing" });
     mocks.listSettings.mockRejectedValue(new Error("unavailable"));
     expect(await readSettingFromServer("sidebar.projects")).toEqual({ status: "error" });
+  });
+
+  describe("when the account switches mid-flight", () => {
+    beforeEach(() => {
+      resetSessionOwnerForTests();
+      setSessionOwner("alice");
+    });
+
+    function deferred<T>() {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((r) => {
+        resolve = r;
+      });
+      return { promise, resolve };
+    }
+
+    it("a deferred read made for one account publishes nothing once another signs in", async () => {
+      const alice = currentSessionOwner();
+      const answer = deferred<{ settings: Array<{ key: string; value: string }> }>();
+      mocks.listSettings.mockReturnValue(answer.promise);
+      const read = readSettingFromServer("sidebar.projects", alice);
+      await waitFor(() => expect(mocks.listSettings).toHaveBeenCalledTimes(1));
+      // The read goes out naming Alice, so the transport sends it only with her credential.
+      expect(mocks.listSettings.mock.calls[0]![0]).toBe(alice);
+
+      setSessionOwner("bob");
+      answer.resolve({ settings: [{ key: "sidebar.projects", value: '{"a":{"show_all":true}}' }] });
+      expect(await read).toEqual({ status: "error" });
+      expect(mocks.updateCache).not.toHaveBeenCalled();
+      expect(mocks.removeFromCache).not.toHaveBeenCalled();
+    });
+
+    it("refuses before sending a write captured for an account no longer signed in", async () => {
+      const alice = currentSessionOwner();
+      setSessionOwner("bob");
+      await expect(writeStringSetting("sidebar.projects", "{}", alice)).rejects.toBeInstanceOf(SettingWriteError);
+      expect(mocks.batchUpsertSettings).not.toHaveBeenCalled();
+      expect(mocks.updateCache).not.toHaveBeenCalled();
+    });
+
+    it("sends a write as its captured owner, and publishes nothing when it answers after a switch", async () => {
+      const alice = currentSessionOwner();
+      const answer = deferred<never[]>();
+      mocks.batchUpsertSettings.mockReturnValue(answer.promise);
+      const write = writeStringSetting("sidebar.projects", '{"a":{}}', alice);
+      await waitFor(() => expect(mocks.batchUpsertSettings).toHaveBeenCalledTimes(1));
+      expect(mocks.batchUpsertSettings.mock.calls[0]![2]).toBe(alice);
+
+      setSessionOwner("bob");
+      answer.resolve([]);
+      await write;
+      expect(mocks.updateCache).not.toHaveBeenCalled();
+    });
   });
 });

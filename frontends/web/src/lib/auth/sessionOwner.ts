@@ -31,6 +31,15 @@ export function currentSessionOwner(): SessionOwner {
 }
 
 /**
+ * Whether the page still acts for `captured`: no identity was installed or
+ * cleared since it was captured. Work started for an account checks this
+ * before it publishes a result into a cache another account now reads.
+ */
+export function isCurrentSessionOwner(captured: SessionOwner): boolean {
+  return captured.epoch === owner.epoch;
+}
+
+/**
  * Record the account the page now acts for (authStore, on every installed or
  * cleared identity). A different user bumps the epoch, which makes everything
  * captured for the previous one stale.

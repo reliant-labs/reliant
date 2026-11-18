@@ -157,6 +157,15 @@ export function fetchSettings(projectId?: string): Promise<ListSettingsResponse>
 }
 
 /**
+ * ListSettings for `owner`, refetched past every cache: the transport refuses
+ * to send it with a credential that is no longer theirs (writeOwnerKey), so
+ * the answer is always `owner`'s own settings.
+ */
+export function fetchSettingsFor(owner: SessionOwner, projectId?: string): Promise<ListSettingsResponse> {
+  return settingsClient.listSettings({ projectId }, ownedCall(owner));
+}
+
+/**
  * Upsert many settings in ONE request. Server-side each entry has
  * CreateSetting's upsert semantics, so callers do not need to know which keys
  * already exist.

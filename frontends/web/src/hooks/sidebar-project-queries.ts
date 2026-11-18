@@ -3,6 +3,7 @@
 import { useCallback, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
+import { currentSessionOwner, isCurrentSessionOwner, type SessionOwner } from "../lib/auth/sessionOwner";
 import { useOrgScope } from "../lib/orgScope";
 import { readSettingFromServer, writeStringSetting } from "../lib/settingsPersistence";
 import {
@@ -30,9 +31,25 @@ export function cachedSidebarProjectSettings(qc: QueryClient): SidebarProjectSet
   );
 }
 
-/** The stored document, read from the server; a failed read throws. */
-async function readStoredSettings(): Promise<SidebarProjectSettings> {
-  const read = await readSettingFromServer(SIDEBAR_PROJECTS_KEY);
+/** Work started for one account, refused because the page now acts for another. */
+class StaleOwnerError extends Error {
+  constructor() {
+    super("The account this change was made for is no longer signed in");
+    this.name = "StaleOwnerError";
+  }
+}
+
+function assertCurrentOwner(owner: SessionOwner): void {
+  if (!isCurrentSessionOwner(owner)) throw new StaleOwnerError();
+}
+
+/**
+ * `owner`'s stored document, read from the server. A failed read throws, and
+ * so does one that answers after the page began acting for someone else.
+ */
+async function readStoredSettings(owner: SessionOwner): Promise<SidebarProjectSettings> {
+  const read = await readSettingFromServer(SIDEBAR_PROJECTS_KEY, owner);
+  assertCurrentOwner(owner);
   if (read.status === "error") throw new Error("Could not load your sidebar project choices");
   return parseSidebarProjectSettings(read.status === "found" ? read.value : undefined);
 }
@@ -41,6 +58,8 @@ interface ChangeVars {
   change: SidebarProjectChange;
   /** The org the change was made in, captured when it started. */
   orgId: string | null;
+  /** The account the change was made for, captured when it started. */
+  owner: SessionOwner;
 }
 
 export interface SidebarProjectPrefsView {
@@ -74,35 +93,46 @@ export interface SidebarProjectPrefsView {
  *
  * A change shows at once. A write that does not land (writeStringSetting
  * rejects) puts back what was shown before it and reads the server again.
+ *
+ * Every read and change belongs to the account it was started for (a
+ * SessionOwner captured then and carried through read → merge → write): a
+ * queued or delayed one that finds the page acting for someone else sends
+ * nothing and publishes nothing, into this query or the settings cache. The
+ * account switch cleared the query client, so there is nothing to restore.
  */
 export function useSidebarProjectPrefs(): SidebarProjectPrefsView {
   const qc = useQueryClient();
   const { ready, orgId } = useOrgScope();
   const q = useQuery({
     queryKey: sidebarProjectPrefsKey,
-    queryFn: readStoredSettings,
+    queryFn: () => readStoredSettings(currentSessionOwner()),
     staleTime: 30_000,
     retry: false,
   });
   const m = useMutation({
     // One at a time, so each re-read sees the write before it.
     scope: { id: "sidebar-project-prefs" },
-    mutationFn: async ({ change, orgId: changeOrgId }: ChangeVars) => {
-      const next = withSidebarProjectChange(await readStoredSettings(), changeOrgId, change);
-      await writeStringSetting(SIDEBAR_PROJECTS_KEY, JSON.stringify(next));
+    mutationFn: async ({ change, orgId: changeOrgId, owner }: ChangeVars) => {
+      assertCurrentOwner(owner);
+      const next = withSidebarProjectChange(await readStoredSettings(owner), changeOrgId, change);
+      // Refused before sending; writeStringSetting and the transport check again.
+      assertCurrentOwner(owner);
+      await writeStringSetting(SIDEBAR_PROJECTS_KEY, JSON.stringify(next), owner);
       return next;
     },
-    onMutate: async ({ change, orgId: changeOrgId }: ChangeVars) => {
+    onMutate: async ({ change, orgId: changeOrgId, owner }: ChangeVars) => {
       // A read in flight would land over the change.
       await qc.cancelQueries({ queryKey: sidebarProjectPrefsKey });
+      if (!isCurrentSessionOwner(owner)) return { prev: undefined };
       const prev = qc.getQueryData<SidebarProjectSettings>(sidebarProjectPrefsKey);
       if (prev) qc.setQueryData(sidebarProjectPrefsKey, withSidebarProjectChange(prev, changeOrgId, change));
       return { prev };
     },
-    onSuccess: (stored) => {
-      qc.setQueryData(sidebarProjectPrefsKey, stored);
+    onSuccess: (stored, { owner }) => {
+      if (isCurrentSessionOwner(owner)) qc.setQueryData(sidebarProjectPrefsKey, stored);
     },
-    onError: (_error, _vars, ctx) => {
+    onError: (_error, { owner }, ctx) => {
+      if (!isCurrentSessionOwner(owner)) return;
       if (ctx?.prev) qc.setQueryData(sidebarProjectPrefsKey, ctx.prev);
       void qc.invalidateQueries({ queryKey: sidebarProjectPrefsKey });
     },
@@ -111,8 +141,9 @@ export function useSidebarProjectPrefs(): SidebarProjectPrefsView {
   const writable = ready && q.isSuccess;
   const change = useCallback(
     (c: SidebarProjectChange) => {
-      // The org is the tab's when the change starts, never one read later.
-      if (writable) mutate({ change: c, orgId });
+      // The org and the account are the ones current when the change starts,
+      // never ones read later.
+      if (writable) mutate({ change: c, orgId, owner: currentSessionOwner() });
     },
     [writable, mutate, orgId],
   );

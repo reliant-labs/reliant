@@ -1,10 +1,11 @@
-import { batchUpsertSettings, deleteSetting, fetchSettings } from "../hooks/settings-queries";
+import { batchUpsertSettings, deleteSetting, fetchSettingsFor } from "../hooks/settings-queries";
 import { getAuthTokenProvider } from "../api/authProvider";
 import { isWriteOwnerMismatch } from "../api/writeOwner";
 import { settingsSync } from "../services/settingsSync";
 import {
   credentialBelongsTo,
   currentSessionOwner,
+  isCurrentSessionOwner,
   type SessionOwner,
 } from "./auth/sessionOwner";
 import { logger } from "./logger";
@@ -181,11 +182,25 @@ export function upsertStringSetting(key: string, value: string): Promise<void> {
  * failed), so a caller about to rewrite a whole document never mistakes a
  * failed read for "nothing stored". A found or missing answer also brings the
  * cache up to date.
+ *
+ * The read is `owner`'s (by default the account the page acts for when it is
+ * called), start to finish: it goes out only with their credential (the
+ * transport checks the header it attaches), and when the page acts for
+ * someone else by the time it answers, it is "error" and nothing is
+ * published to the cache.
  */
-export async function readSettingFromServer(key: string): Promise<SettingRead> {
-  if (!(await hasAuthToken())) return { status: "error" };
+export async function readSettingFromServer(
+  key: string,
+  owner: SessionOwner = currentSessionOwner(),
+): Promise<SettingRead> {
+  const token = await currentToken();
+  if (token === null || !credentialBelongsTo(owner, token)) return { status: "error" };
   try {
-    const response = await fetchSettings();
+    const response = await fetchSettingsFor(owner);
+    if (!isCurrentSessionOwner(owner)) {
+      logger.warn("[settingsPersistence] Dropped a setting read made for a previous identity", { key });
+      return { status: "error" };
+    }
     const setting = response.settings.find((s) => s.key === key && !s.projectId);
     if (!setting) {
       settingsSync.removeFromCache(key);
@@ -214,16 +229,26 @@ export class SettingWriteError extends Error {
  * The cache changes only after the server has stored the value. For a caller
  * that must recover from a refused write; upsertStringSetting is the
  * fire-and-forget, batched writer every other setting uses.
+ *
+ * The write is `owner`'s: pass the owner captured when the user made the
+ * change, so work queued for them can never land in another account. It is
+ * refused before it is sent when the credential is no longer theirs (here,
+ * and again by the transport against the header it attaches), and when the
+ * page acts for someone else by the time the server answers, the stored
+ * value is not published to the cache that account now reads.
  */
-export async function writeStringSetting(key: string, value: string): Promise<void> {
-  const owner = currentSessionOwner();
+export async function writeStringSetting(
+  key: string,
+  value: string,
+  owner: SessionOwner = currentSessionOwner(),
+): Promise<void> {
   if (!(await mayWriteFor(owner, [key]))) throw new SettingWriteError(key);
   try {
     await batchUpsertSettings([{ key, value, valueType: "string" }], undefined, owner);
   } catch (error) {
     throw new SettingWriteError(key, { cause: error });
   }
-  settingsSync.updateCache(key, value);
+  if (isCurrentSessionOwner(owner)) settingsSync.updateCache(key, value);
 }
 
 export async function deleteSettingIfExists(key: string): Promise<void> {

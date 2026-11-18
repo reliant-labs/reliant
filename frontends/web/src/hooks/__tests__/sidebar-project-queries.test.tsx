@@ -9,49 +9,136 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { SessionOwner } from "../../lib/auth/sessionOwner";
 import type { SettingRead } from "../../lib/settingsPersistence";
 
 // The server's copy of the setting, and what each read and write does.
 let stored: string | undefined;
 let failReads = false;
 let failWrites = false;
-const writeStringSetting = vi.fn(async (_key: string, value: string) => {
+// When set, the next read or write waits for the test to settle it.
+let holdNextRead: Promise<void> | null = null;
+let holdNextWrite: Promise<void> | null = null;
+const writeStringSetting = vi.fn(async (_key: string, value: string, _owner?: SessionOwner) => {
+  const hold = holdNextWrite;
+  holdNextWrite = null;
+  if (hold) await hold;
   if (failWrites) throw new Error("refused");
   stored = value;
 });
-const readSettingFromServer = vi.fn(async (): Promise<SettingRead> => {
+const readSettingFromServer = vi.fn(async (_key: string, owner?: SessionOwner): Promise<SettingRead> => {
+  // `stored` is Alice's; any other account has nothing saved.
+  if (owner?.userId !== "alice") return { status: "missing" };
+  const hold = holdNextRead;
+  holdNextRead = null;
+  if (hold) await hold;
   if (failReads) return { status: "error" };
   return stored === undefined ? { status: "missing" } : { status: "found", value: stored };
 });
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 vi.mock("../../lib/settingsPersistence", () => ({
-  readSettingFromServer: () => readSettingFromServer(),
-  writeStringSetting: (key: string, value: string) => writeStringSetting(key, value),
+  readSettingFromServer: (key: string, owner?: SessionOwner) => readSettingFromServer(key, owner),
+  writeStringSetting: (key: string, value: string, owner?: SessionOwner) => writeStringSetting(key, value, owner),
 }));
 
+import { currentSessionOwner, resetSessionOwnerForTests, setSessionOwner } from "@/lib/auth/sessionOwner";
 import { bindActiveOrgUser, setEffectiveOrg, useActiveOrgStore } from "@/store/activeOrgStore";
-import { SIDEBAR_PROJECTS_KEY } from "../../lib/sidebarProjectPrefs";
-import { useSidebarProjectPrefs } from "../sidebar-project-queries";
+import { SIDEBAR_PROJECTS_KEY, type SidebarProjectSettings } from "../../lib/sidebarProjectPrefs";
+import { sidebarProjectPrefsKey, useSidebarProjectPrefs } from "../sidebar-project-queries";
 
 const OTHER_ORG = { "org-b": { pinned: ["p9"] } };
+
+function deferred() {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+}
 
 function setup() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return renderHook(() => useSidebarProjectPrefs(), { wrapper });
+  return { qc, ...renderHook(() => useSidebarProjectPrefs(), { wrapper }) };
 }
+
+/** Another account signs in: authStore installs its owner and clears the cache. */
+function switchAccount(qc: QueryClient, userId: string) {
+  act(() => {
+    setSessionOwner(userId);
+    qc.getQueryCache().clear();
+  });
+}
+
+const settled = (qc: QueryClient) =>
+  qc
+    .getMutationCache()
+    .getAll()
+    .every((m) => m.state.status === "success" || m.state.status === "error");
 
 describe("useSidebarProjectPrefs", () => {
   beforeEach(() => {
     stored = JSON.stringify(OTHER_ORG);
     failReads = false;
     failWrites = false;
+    holdNextRead = null;
+    holdNextWrite = null;
     writeStringSetting.mockClear();
     readSettingFromServer.mockClear();
+    resetSessionOwnerForTests();
+    setSessionOwner("alice");
     useActiveOrgStore.setState(useActiveOrgStore.getInitialState(), true);
     bindActiveOrgUser("user-1");
+  });
+
+  it("drops a change whose re-read answers after the account switched: nothing written or published", async () => {
+    act(() => setEffectiveOrg("org-a"));
+    const { qc, result } = setup();
+    await waitFor(() => expect(result.current.writable).toBe(true));
+    const alice = currentSessionOwner();
+    const read = deferred();
+    holdNextRead = read.promise;
+    act(() => result.current.setPinned("p1", true));
+    // The re-read went out as Alice's.
+    await waitFor(() => expect(readSettingFromServer).toHaveBeenCalledTimes(2));
+    expect(readSettingFromServer.mock.calls[1]![1]).toBe(alice);
+
+    switchAccount(qc, "bob");
+    read.release();
+    await waitFor(() => expect(settled(qc)).toBe(true));
+    expect(writeStringSetting).not.toHaveBeenCalled();
+    // Nothing of Alice's change reached the cache Bob now reads.
+    const data = qc.getQueryData<SidebarProjectSettings>(sidebarProjectPrefsKey);
+    expect(data?.["org-a"]).toBeUndefined();
+    expect(JSON.parse(stored!)).toEqual(OTHER_ORG);
+  });
+
+  it("sends nothing for a change queued behind another when the account switches, and publishes neither", async () => {
+    act(() => setEffectiveOrg("org-a"));
+    const { qc, result } = setup();
+    await waitFor(() => expect(result.current.writable).toBe(true));
+    const alice = currentSessionOwner();
+    const write = deferred();
+    holdNextWrite = write.promise;
+    act(() => result.current.setPinned("p1", true));
+    // The first change is sending; the second waits behind it.
+    await waitFor(() => expect(writeStringSetting).toHaveBeenCalledTimes(1));
+    act(() => result.current.setHidden("p2", true));
+
+    switchAccount(qc, "bob");
+    write.release();
+    await waitFor(() => expect(qc.getMutationCache().getAll()).toHaveLength(2));
+    await waitFor(() => expect(settled(qc)).toBe(true));
+    // Only the first, sent as Alice's before the switch, was written; the
+    // queued one neither re-read nor wrote.
+    expect(writeStringSetting).toHaveBeenCalledTimes(1);
+    expect(writeStringSetting.mock.calls[0]![2]).toBe(alice);
+    expect(readSettingFromServer.mock.calls.filter(([, owner]) => owner === alice)).toHaveLength(2);
+    expect(JSON.parse(stored!)).toEqual({ "org-a": { pinned: ["p1"] }, ...OTHER_ORG });
+    // Neither result was published into the cache Bob now reads.
+    expect(qc.getQueryData<SidebarProjectSettings>(sidebarProjectPrefsKey)?.["org-a"]).toBeUndefined();
   });
 
   it("writes a pin under the tab's org, keeping other orgs' entries", async () => {
