@@ -979,6 +979,31 @@ func TestSDKModuleChangeIsClaimedAndRunsItsOwnTests(t *testing.T) {
 	}
 }
 
+// go.mod replaces the SDK with ./sdk/go (reliant#2824), so the app builds the
+// SDK package an edit is in: the root packages containing it run, and the
+// SDK's own test files select only the SDK module's step.
+func TestSDKCodeChangeSelectsTheAppPackagesThatContainIt(t *testing.T) {
+	g := noWalkers()
+	sdkPkg := mod + "/sdk/go/reliant"
+	g.TestDeps[mod+"/cmd/app"][sdkPkg] = true
+	g.BuildDeps[mod+"/cmd/app"] = map[string]bool{mod + "/cmd/app": true, sdkPkg: true}
+
+	pl := classifyIn(g, "sdk/go/reliant/runs.go")
+	if got, want := goPkgs(pl), []string{"./cmd/app"}; !slices.Equal(got, want) {
+		t.Fatalf("an SDK code change selects %v, want %v (the app package that contains it)", got, want)
+	}
+	if !slices.Contains(pl.Go.Build, "./cmd/app") {
+		t.Fatalf("an SDK code change does not build the app package that contains it: %v", pl.Go.Build)
+	}
+	if pl.Go.Full {
+		t.Fatalf("an SDK code change ran the whole Go lane: %v", pl.Go.Reasons)
+	}
+
+	if got := goPkgs(classifyIn(g, "sdk/go/reliant/runs_test.go")); len(got) != 0 {
+		t.Fatalf("an SDK test file selected app packages %v; it runs in the SDK module's step", got)
+	}
+}
+
 // A change that does not touch the SDK must not pay for its tests.
 func TestSDKTestsAreNotRunForUnrelatedChanges(t *testing.T) {
 	pl := classify("internal/leaf/leaf.go")

@@ -605,6 +605,13 @@ func (c *classifier) applyRule(ch Change, r *rule, rep *FileReport) bool {
 			c.webTouch = true
 		}
 	}
+	if r.replacedModule && strings.HasSuffix(ch.Path, ".go") && !strings.HasSuffix(ch.Path, "_test.go") {
+		// go.mod's replace makes the nested module's packages part of the
+		// root's build under <module>/<dir>: its importers judge the change.
+		dir := path.Dir(ch.Path)
+		c.code.add(c.g.Module+"/"+dir, path.Base(ch.Path)+" in "+dir+", which go.mod's replace builds into the app")
+		claimed = true
+	}
 	if r.webSrc {
 		c.attributeToWeb(ch)
 		claimed = true

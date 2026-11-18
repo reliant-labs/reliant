@@ -27,8 +27,9 @@ import (
 //   - buf.gen.sdk-go.yaml, whose inputs and M mappings decide which protos
 //     are generated into sdk/go, and whose Connect plugin filters by `types:`,
 //   - the generated tree in sdk/go/gen and gen/,
-//   - the module boundary: sdk/go imports nothing from the app, and the app
-//     reaches the SDK only by a published version, never a replace.
+//   - the module boundary: sdk/go imports nothing from the app; the app
+//     builds against this tree's sdk/go through a replace, and requires a
+//     published version beside it for everything outside this module.
 //
 // Nothing becomes public by default: a service nobody classified fails here.
 
@@ -577,11 +578,18 @@ func TestSDKHasOneRegistrationOfEachPublicProto(t *testing.T) {
 }
 
 // TestSDKModuleIsSelfContained: sdk/go ships on its own, so it may import
-// nothing from the app, and the app may not reach it through a replace that
-// hides a missing release. A consumer ignores a dependency's replace
-// directives, and `go install <module>@<version>` refuses a module that has
-// one, so the app requires the SDK by a version the module proxy can serve
-// (a pseudo-version of the main commit that holds it), never v0.0.0.
+// nothing from the app, and its go.mod may carry no replace (a consumer must
+// build it from its go.mod alone).
+//
+// The app builds against this tree's sdk/go: go.mod replaces the SDK with
+// ./sdk/go, so a change to a public proto lands in one PR, with no pin bump
+// after it (reliant#2824). The replace binds this module only. A consumer of
+// this module ignores it and resolves the SDK by the require line, so that
+// line must still name a version the module proxy can serve, never v0.0.0.
+// `go install <module>@<version>` refuses a module that has a replace, so
+// release commits drop it: scripts/sdk-release-pin.sh (run by the RC train)
+// requires the SDK at the release's base commit instead, and
+// TestSDKReleasePinDropsTheReplace holds that script.
 func TestSDKModuleIsSelfContained(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -626,8 +634,11 @@ func TestSDKModuleIsSelfContained(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if regexp.MustCompile(`(?m)^\s*(replace\s+)?github\.com/reliant-labs/reliant/sdk/go(\s+v\S+)?\s+=>`).Match(rootMod) {
-		t.Error("go.mod replaces github.com/reliant-labs/reliant/sdk/go: consumers of this module ignore the replace and cannot resolve the SDK, and `go install @version` refuses it. Require a published version (go get github.com/reliant-labs/reliant/sdk/go@<main sha>)")
+	if !regexp.MustCompile(`(?m)^\s*(replace\s+)?github\.com/reliant-labs/reliant/sdk/go\s+=>\s+\./sdk/go\s*$`).Match(rootMod) {
+		t.Error("go.mod does not replace github.com/reliant-labs/reliant/sdk/go with ./sdk/go: the app must build against this tree's SDK, or every SDK change needs a pin bump after it merges (reliant#2824)")
+	}
+	if !regexp.MustCompile(`(?m)^\s*(require\s+)?github\.com/reliant-labs/reliant/sdk/go\s+v\S+`).Match(rootMod) {
+		t.Error("go.mod does not require github.com/reliant-labs/reliant/sdk/go at a version: a consumer of this module ignores the replace and resolves the SDK by that line")
 	}
 	if regexp.MustCompile(`(?m)^\s*(require\s+)?github\.com/reliant-labs/reliant/sdk/go\s+v0\.0\.0(\s|$)`).Match(rootMod) {
 		t.Error("go.mod requires github.com/reliant-labs/reliant/sdk/go v0.0.0, which no version provides")

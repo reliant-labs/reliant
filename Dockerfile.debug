@@ -38,6 +38,9 @@ WORKDIR /app
 # with GOWORK=off. See Dockerfile for the full note.
 ENV GOWORK=off
 COPY go.mod go.sum ./
+# go.mod replaces the Go SDK with ./sdk/go (reliant#2824), so its go.mod
+# must be in place before the module graph is read.
+COPY sdk/go/go.mod sdk/go/go.sum ./sdk/go/
 RUN go mod download
 # Pin a Delve version compatible with the toolchain; installed into GOBIN.
 RUN go install github.com/go-delve/delve/cmd/dlv@latest

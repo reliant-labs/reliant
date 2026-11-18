@@ -578,8 +578,10 @@ baseline.
    `export ChatService/GetContentBlockBodies` to `proto/public-api.txt` along
    with the TypeScript work.
 
-PR 1 landing note: `chat.proto` is generated into the SDK module
-(`sdk/go/gen`), which the app links at the version `go.mod` pins, so PR 1 is
+PR 1 landing note (superseded by reliant#2824: the app now builds this tree's
+`sdk/go`, so a proto change and the server are one commit): `chat.proto` is
+generated into the SDK module (`sdk/go/gen`), which the app linked at the
+version `go.mod` pinned, so PR 1 is
 two commits: the protos and their SDK output first, then the server on a pin
 of that commit (the #2337 pattern). After its squash merge the pin must move
 to the squash commit on main (as #2391 did), because the branch commit stops
