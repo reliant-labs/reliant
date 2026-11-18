@@ -351,9 +351,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	go func() {
 		removed, err := credsandbox.PruneMovedAside()
 		if err != nil {
-			logging.Warn(logPrefix+" Could not prune every moved-aside credentialed scratch directory", "removed", removed, "error", err)
+			logging.WarnContext(ctx, logPrefix+" Could not prune every moved-aside credentialed scratch directory", "removed", removed, "error", err)
 		} else if removed > 0 {
-			logging.Info(logPrefix+" Pruned moved-aside credentialed scratch directories", "removed", removed)
+			logging.InfoContext(ctx, logPrefix+" Pruned moved-aside credentialed scratch directories", "removed", removed)
 		}
 	}()
 
