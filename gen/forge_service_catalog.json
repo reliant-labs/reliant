@@ -6759,6 +6759,16 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "page_size",
+              "ProtoType": "int32",
+              "IsOptional": true
+            },
+            {
+              "Name": "page_token",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListArchivedChatsResponse": [
@@ -6771,6 +6781,11 @@
             {
               "Name": "total",
               "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "next_page_token",
+              "ProtoType": "string",
               "IsOptional": false
             }
           ],
@@ -8427,6 +8442,16 @@
               "name": "org_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "page_size",
+              "kind": "int32",
+              "optional": true
+            },
+            {
+              "name": "page_token",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListArchivedChatsResponse": [
@@ -8439,6 +8464,10 @@
             {
               "name": "total",
               "kind": "int32"
+            },
+            {
+              "name": "next_page_token",
+              "kind": "string"
             }
           ],
           "reliant.v1.ListBranchesRequest": [
