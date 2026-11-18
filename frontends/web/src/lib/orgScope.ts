@@ -149,6 +149,50 @@ export function orgRequest<T extends object>(req: T, orgId: string | null): T & 
 }
 
 /**
+ * The org a generated query key's request names (`orgRequest`), or null when
+ * it names none.
+ */
+export function requestOrgOfKey(queryKey: readonly unknown[]): string | null {
+  for (const part of queryKey) {
+    if (typeof part === "object" && part !== null) {
+      const orgId = (part as { orgId?: unknown }).orgId;
+      if (typeof orgId === "string" && orgId) return orgId;
+    }
+  }
+  return null;
+}
+
+/**
+ * `placeholderData` for an org-scoped list that keeps the previous answer on
+ * screen while a new one loads (a search term that changed): only when that
+ * answer was read in the SAME org. `keepPreviousData` alone would show org A's
+ * rows under org B for the renders between the switch and B's answer, since
+ * ActiveOrgBinding's reset runs in an effect, after the render with B's key.
+ *
+ * For GENERATED keys only, whose request names the org (`orgRequest`): the
+ * previous request must name `orgId`, or, with `orgId` null, name no org.
+ * That last case is provable only because such a key carries its org nowhere
+ * else. A key that carries its org as a plain segment (observability's) uses
+ * `keepPreviousInOrgSegment`.
+ */
+export function keepPreviousInOrg(orgId: string | null) {
+  return <T>(previous: T | undefined, previousQuery?: { queryKey: readonly unknown[] }): T | undefined =>
+    previousQuery && requestOrgOfKey(previousQuery.queryKey) === orgId ? previous : undefined;
+}
+
+/**
+ * `keepPreviousInOrg` for keys that carry their org as a plain string segment
+ * (observability's `["observability", orgId, …]`, the sessions list). A
+ * segment cannot prove a key is unscoped, so with `orgId` null (no scope yet,
+ * an empty selection) nothing is kept: the previous answer belongs to some org
+ * this read no longer names.
+ */
+export function keepPreviousInOrgSegment(orgId: string | null) {
+  return <T>(previous: T | undefined, previousQuery?: { queryKey: readonly unknown[] }): T | undefined =>
+    orgId && previousQuery && previousQuery.queryKey.includes(orgId) ? previous : undefined;
+}
+
+/**
  * Whether a query key names `orgId`: as a segment of its own (the chat list's
  * key) or as the `orgId` of a generated key's request.
  */

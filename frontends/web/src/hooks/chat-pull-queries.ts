@@ -14,11 +14,11 @@
  */
 
 import { useMemo } from "react";
-import { keepPreviousData, useQuery, type QueryClient } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 import type { Chat } from "../types/chat";
 import type { SearchChatsResponse } from "../gen/reliant/v1/chat_pb";
 import { protoValueToJs } from "../api/proto-utils";
-import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
+import { keepPreviousInOrg, orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
 import { queryClient as appQueryClient } from "../lib/query-client";
 import { chatServiceQueries } from "./chat-service-hooks_gen";
 import { useChatListWithWorkspaces } from "./chat-queries";
@@ -126,7 +126,9 @@ export function useChatSearch(scope: string | null, query: string, enabled = tru
         select: hitsOf,
         // A failed search falls back to the title match at once.
         retry: false,
-        placeholderData: keepPreviousData,
+        // The previous term's hits stay up while the next term loads, but
+        // never another org's: after a switch, nothing until this org answers.
+        placeholderData: keepPreviousInOrg(org.orgId),
       }),
       org,
     ),

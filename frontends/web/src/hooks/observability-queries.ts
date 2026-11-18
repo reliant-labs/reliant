@@ -54,6 +54,7 @@ import type {
 } from "@/services/controlPlane/observability/types";
 import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 import { rangeMs, readRange, resolveWindow, type RangePreset, type RangeRead } from "@/services/controlPlane/observability/window";
+import { keepPreviousInOrgSegment } from "@/lib/orgScope";
 
 // Presentation never changes QueryPanel's computation: two dashboard tiles
 // with different ids/titles/layout but the same query share one in-flight read.
@@ -527,7 +528,8 @@ export function useAttributeValues(
       api.listAttributeValues({ ...(scope as ObsScope), window: resolveWindow(readRange(range, "overview")), key, prefix, signal }, { signal: abortSignal }),
     enabled: !!scope && !!key,
     staleTime: 60_000,
-    placeholderData: (previous) => previous,
+    // The previous prefix's values, but never another org's (lib/orgScope).
+    placeholderData: keepPreviousInOrgSegment(scope?.orgId ?? null),
     retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
@@ -588,7 +590,7 @@ export function useMetricCatalog(scope: ObsScope | null, range: RangePreset, nam
     queryFn: ({ signal }) => api.listMetricCatalog({ ...(scope as ObsScope), window: resolveWindow(window), name, limit }, { signal }),
     enabled: !!scope,
     staleTime: 60_000,
-    placeholderData: (previous) => previous,
+    placeholderData: keepPreviousInOrgSegment(scope?.orgId ?? null),
     retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }

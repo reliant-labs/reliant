@@ -39,7 +39,9 @@ import { mockTransport } from "@/lib/test-utils";
 import { projectRow } from "@/test/projectList";
 import { bindActiveOrgUser, setEffectiveOrg, useActiveOrgStore } from "@/store/activeOrgStore";
 import { useAuthStore } from "@/store/authStore";
-import { getOrgScope, keyNamesOrg } from "../orgScope";
+import { metricKeys } from "@/hooks/observability-queries";
+import { sessionKeys } from "@/hooks/observability-session-queries";
+import { getOrgScope, keepPreviousInOrg, keepPreviousInOrgSegment, keyNamesOrg } from "../orgScope";
 
 const ACME = { id: "org-a", name: "Acme", slug: "acme", role: "owner", isOwner: true, isDefault: true };
 const SIDE = { id: "org-b", name: "Side", slug: "side", role: "member", isOwner: false, isDefault: false };
@@ -218,6 +220,31 @@ describe("org-scoped product lists", () => {
     expect(projects.result.current.error).toBeNull();
     await waitFor(() => expect(chatOrgs).toEqual(["org-a"]));
     expect(projectOrgs).toEqual(["org-a"]);
+  });
+
+  it("keeps a previous answer as placeholder only when it was read in the same org", () => {
+    const kept = { rows: 1 };
+    const generated = (orgId?: string) => ({ queryKey: ["chatService", "searchChats", { query: "x", ...(orgId ? { orgId } : {}) }] });
+    expect(keepPreviousInOrg("org-a")(kept, generated("org-a"))).toBe(kept);
+    expect(keepPreviousInOrg("org-b")(kept, generated("org-a"))).toBeUndefined();
+    expect(keepPreviousInOrg("org-b")(kept, generated())).toBeUndefined();
+    expect(keepPreviousInOrg(null)(kept, generated())).toBe(kept);
+    expect(keepPreviousInOrg(null)(kept, generated("org-a"))).toBeUndefined();
+    expect(keepPreviousInOrg("org-a")(kept, undefined)).toBeUndefined();
+  });
+
+  it("keeps an observability answer only in its org, and never when the scope becomes null", () => {
+    const kept = { rows: 1 };
+    // The real keys: the org is a plain string segment, not a request field.
+    const scope = { orgId: "org-a", envIds: [] } as never;
+    const catalogA = { queryKey: metricKeys.catalog(scope, "1h", "", 0) as readonly unknown[] };
+    const sessionsA = { queryKey: sessionKeys.list({ orgId: "org-a", envIds: [] }, {} as never) as readonly unknown[] };
+    for (const previous of [catalogA, sessionsA]) {
+      expect(keepPreviousInOrgSegment("org-a")(kept, previous)).toBe(kept);
+      expect(keepPreviousInOrgSegment("org-b")(kept, previous)).toBeUndefined();
+      // An empty app selection (MetricsExplorerPage) makes the scope null: A's rows must go.
+      expect(keepPreviousInOrgSegment(null)(kept, previous)).toBeUndefined();
+    }
   });
 
   it("the first org of a tab drops a list read with no org, and keeps the org's", () => {
