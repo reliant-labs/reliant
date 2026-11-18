@@ -400,7 +400,6 @@ export async function listMessages(
   options?: { recent?: number; beforeSeq?: number; threadId?: string },
 ): Promise<{
   messages: Message[];
-  total: number;
   hasMore: boolean;
   oldestSeq: number;
   /** A scroll-back page's errors (see ListMessagesResponse.errors). */
@@ -413,10 +412,12 @@ export async function listMessages(
     threadId: options?.threadId,
     // Finished calls' bodies are fetched when shown (hooks/content-block-bodies.ts).
     toolBodies: TRANSCRIPT_TOOL_BODY_MODE,
+    // Paging is by cursor (oldestSeq, hasMore); nothing reads a total, and
+    // counting a long chat cost more than the read (obs 16122d5e).
+    skipTotal: true,
   });
   return {
     messages: response.messages.map(convertProtoMessage),
-    total: response.total,
     hasMore: response.hasMore,
     oldestSeq: Number(response.oldestSeq),
     errors: response.errors,
