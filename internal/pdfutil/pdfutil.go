@@ -10,6 +10,7 @@ package pdfutil
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
@@ -37,7 +38,9 @@ func init() {
 // PageCount returns the number of pages in the given PDF bytes.
 func PageCount(data []byte) (_ int, err error) {
 	defer recoverPDFPanic("pdf page count", &err)
-	count, err := api.PageCount(bytes.NewReader(data), model.NewDefaultConfiguration())
+	// pdfcpu takes a context since v0.16; this package's API has none to pass
+	// (the work is in-memory and bounded by the input).
+	count, err := api.PageCount(context.Background(), bytes.NewReader(data), model.NewDefaultConfiguration())
 	if err != nil {
 		return 0, fmt.Errorf("pdf page count: %w", err)
 	}
@@ -67,7 +70,7 @@ func ExtractPages(data []byte, pages string) (_ []byte, err error) {
 	}
 
 	var out bytes.Buffer
-	if err := api.Trim(bytes.NewReader(data), &out, []string{pages}, model.NewDefaultConfiguration()); err != nil {
+	if err := api.Trim(context.Background(), bytes.NewReader(data), &out, []string{pages}, model.NewDefaultConfiguration()); err != nil {
 		return nil, fmt.Errorf("pdf trim to %q: %w", pages, err)
 	}
 	return out.Bytes(), nil
