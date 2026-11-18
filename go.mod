@@ -73,6 +73,21 @@ require (
 	mvdan.cc/sh/v3 v3.14.1
 )
 
+// The Go SDK (sdk/go) is its own module, published from this repository. The
+// app builds against THIS tree's copy, so a change to a public proto lands in
+// one PR: no pin bump after it, and no re-pin after its squash merge
+// (reliant#2824). A replace binds only this module: a program that requires
+// the SDK, or requires this module, never sees it and resolves the SDK by the
+// require line above.
+//
+// `go install github.com/reliant-labs/reliant/cmd/reliant@<version>` refuses a
+// module whose go.mod has a replace, so a release commit carries none: the RC
+// train's reliant pin commit runs scripts/sdk-release-pin.sh, which drops this
+// line and requires the SDK at the commit the release was cut from (whose
+// sdk/go is byte-identical). internal/buildmode's TestSDKModuleIsSelfContained
+// holds both halves.
+replace github.com/reliant-labs/reliant/sdk/go => ./sdk/go
+
 require (
 	buf.build/gen/go/bufbuild/bufplugin/protocolbuffers/go v1.36.8-20250718181942-e35f9b667443.1 // indirect
 	buf.build/gen/go/bufbuild/registry/connectrpc/go v1.18.1-20250819211657-a3dd0d3ea69b.1 // indirect

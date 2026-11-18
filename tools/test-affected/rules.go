@@ -197,6 +197,11 @@ type rule struct {
 
 	// noGraph: do not also map the file to the Go package owning its directory.
 	noGraph bool
+	// replacedModule: the file is in a nested Go module that the root go.mod
+	// replaces with its directory (sdk/go). The root's `go list` does not list
+	// its packages, but the root's packages depend on them by import path, so
+	// a non-test .go file is a code change to <module>/<its directory>.
+	replacedModule bool
 	// protoGen: map proto/<dir>/x.proto to gen/<dir> (Go) and frontends/web/src/gen/<dir>.
 	protoGen bool
 	// dbFan: select every package with DB-backed tests.
@@ -360,14 +365,16 @@ var rules = []rule{
 		// does not see, so no package owns its files. Its generated half is
 		// forge's output (a forge input above), so a change runs
 		// forge-generate; its own tests run as a step in the module (goSteps).
-		// The app does not import it yet; when it does (pinned by version),
-		// a change here reaches the app only through that pin bump.
-		id:       "sdk-go",
-		patterns: []string{"sdk/go/**"},
-		full:     []lane{laneForgeGen},
-		reason:   "the SDK module changed: its generated protos must match proto/, and its own tests run in the module",
-		noGraph:  true,
-		note:     "sdk/go is its own Go module; its tests run with the Go lane",
+		// The app builds against this tree's sdk/go (go.mod replaces it with
+		// ./sdk/go, reliant#2824), so a code change also selects the root
+		// packages that contain the SDK package it is in.
+		id:             "sdk-go",
+		patterns:       []string{"sdk/go/**"},
+		full:           []lane{laneForgeGen},
+		reason:         "the SDK module changed: its generated protos must match proto/, and its own tests run in the module",
+		noGraph:        true,
+		replacedModule: true,
+		note:           "sdk/go is its own Go module; its tests run with the Go lane, and the app packages that contain it run too",
 	},
 	{
 		id: "web-inert",

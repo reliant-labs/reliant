@@ -8,10 +8,9 @@
 # path, from the same proto/ the app's gen/ comes from, so the two cannot drift.
 #
 # Two Go packages that register the same proto file panic at init when linked
-# into one binary. Today nothing links both: the app (root module) does not
-# import the SDK. The app moves onto these packages (and gen/reliant/v1 stops
-# generating them) in a separate change that pins sdk/go by version; until
-# then, never import sdk/go/gen from the root module.
+# into one binary, so the app (root module) does not generate these files a
+# second time: buf.gen.yaml maps them into sdk/go/gen too, and the app links
+# this tree's copy through go.mod's replace of the SDK (reliant#2824).
 #
 # paths=import + module= place each file by the import path the M lines give it
 # (the protos' own go_package names the app's gen/). The Connect stubs are
