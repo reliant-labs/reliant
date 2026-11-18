@@ -24,7 +24,9 @@ func TestFailureEpisode_AHandledFailureDoesNotEndIt(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	ctx := context.Background()
 	const user, project = "test-user", "test-project"
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	// A fixed clock: the episode is ordered by occurred_at alone, and nothing
+	// here reads the wall clock.
+	now := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
 	tr := &core.Trigger{
 		ID: "trg-" + uuid.NewString()[:8], UserID: user, ProjectID: project, Name: "episode",
 		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "nightly", Message: "go", DaemonID: "d",
