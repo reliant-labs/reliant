@@ -163,7 +163,10 @@ func TestPinOnlyChangeDoesNotRequireLint(t *testing.T) {
 // --skip-lint leaves vet and the scoped forge lint to the release gate. The
 // merge queue's tier (merge-gate.sh --queue) leaves vet to it but runs the
 // scoped forge lint: with none, #2696 and #2662 reached main on findings it
-// names. Everything else both are obliged to keep.
+// names. Everything else both are obliged to keep. golangci (the queue's
+// golangci (changed) job, run by the gate) is obliged on a .go change unless
+// the gate marked golangci-elsewhere (--queue, --skip-golangci): such a job
+// runs beside it.
 func TestQueueTierRequiresLintButNotVet(t *testing.T) {
 	pl := &Plan{
 		Files: []FileReport{{Path: "internal/x/x.go"}, {Path: "db/migrations/1_a.up.sql"}},
@@ -172,14 +175,23 @@ func TestQueueTierRequiresLintButNotVet(t *testing.T) {
 	dir := gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0})
 	for _, tc := range []struct {
 		tier       string
+		elsewhere  bool // the gate wrote golangci-elsewhere
 		obliged    []string
 		notObliged []string
 	}{
-		{"queue", []string{"migsafety", "lint"}, []string{"vet"}},
-		{"skip-lint", []string{"migsafety"}, []string{"vet", "lint"}},
-		{"", []string{"migsafety", "lint", "vet"}, nil},
+		{"queue", true, []string{"migsafety", "lint"}, []string{"vet", "golangci"}},
+		{"skip-lint", true, []string{"migsafety"}, []string{"vet", "lint", "golangci"}},
+		{"skip-lint", false, []string{"migsafety", "golangci"}, []string{"vet", "lint"}},
+		{"", true, []string{"migsafety", "lint", "vet"}, []string{"golangci"}},
+		{"", false, []string{"migsafety", "lint", "vet", "golangci"}, nil},
 	} {
 		_ = os.Remove(filepath.Join(dir, "tier"))
+		_ = os.Remove(filepath.Join(dir, "golangci-elsewhere"))
+		if tc.elsewhere {
+			if err := os.WriteFile(filepath.Join(dir, "golangci-elsewhere"), []byte("a job beside the gate\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
 		if tc.tier != "" {
 			if err := os.WriteFile(filepath.Join(dir, "tier"), []byte(tc.tier+"\n"), 0o644); err != nil {
 				t.Fatal(err)
@@ -199,6 +211,31 @@ func TestQueueTierRequiresLintButNotVet(t *testing.T) {
 				t.Errorf("the %q tier obliged %s: %q", tc.tier, unwanted, v)
 			}
 		}
+	}
+}
+
+// golangci's verdict is the gate's: a finding (golangci-lint's exit 1, a G101
+// hard-coded credential say) fails it by name, a green row passes, and a diff
+// that only deletes Go files obliges no lint.
+func TestGolangciRowDecidesTheGate(t *testing.T) {
+	pl := &Plan{Files: []FileReport{{Path: "internal/x/x.go"}}}
+	base := map[string]int{"plan": 0, "build": 0, "test": 0, "lint": 0, "vet": 0}
+	rows := func(golangci int) map[string]int {
+		r := map[string]int{"golangci": golangci}
+		for k, v := range base {
+			r[k] = v
+		}
+		return r
+	}
+	if code, v := verify(t, gateDir(t, pl, rows(1))); code == 0 || !strings.Contains(v, "golangci failed (rc 1)") {
+		t.Errorf("a golangci finding passed the gate: %q", v)
+	}
+	if code, v := verify(t, gateDir(t, pl, rows(0))); code != 0 {
+		t.Errorf("a clean golangci failed the gate: %q", v)
+	}
+	gone := &Plan{Files: []FileReport{{Path: "internal/x/x.go", Deleted: true}, {Path: "internal/x/README.md"}}}
+	if code, v := verify(t, gateDir(t, gone, base)); code != 0 {
+		t.Errorf("a diff deleting its only Go file obliged golangci: %q", v)
 	}
 }
 
