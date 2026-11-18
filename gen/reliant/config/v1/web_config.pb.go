@@ -100,8 +100,10 @@ type ReliantWebConfig struct {
 	// ── Product ───────────────────────────────────────────────────────────
 	DownloadBaseUrl  string `protobuf:"bytes,21,opt,name=download_base_url,json=downloadBaseUrl,proto3" json:"download_base_url,omitempty"`
 	CliDefaultsBaked string `protobuf:"bytes,22,opt,name=cli_defaults_baked,json=cliDefaultsBaked,proto3" json:"cli_defaults_baked,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// ── Routing ───────────────────────────────────────────────────────────
+	OrgRoutes     string `protobuf:"bytes,30,opt,name=org_routes,json=orgRoutes,proto3" json:"org_routes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ReliantWebConfig) Reset() {
@@ -296,11 +298,18 @@ func (x *ReliantWebConfig) GetCliDefaultsBaked() string {
 	return ""
 }
 
+func (x *ReliantWebConfig) GetOrgRoutes() string {
+	if x != nil {
+		return x.OrgRoutes
+	}
+	return ""
+}
+
 var File_reliant_config_v1_web_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xad5\n" +
+	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xfd8\n" +
 	"\x10ReliantWebConfig\x12\xa0\x03\n" +
 	"\aapi_url\x18\x01 \x01(\tB\x86\x03\x82\xce\x18\x81\x03\n" +
 	"\aAPI_URL*\xe1\x02Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.r\x12\n" +
@@ -355,7 +364,11 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\x11download_base_url\x18\x15 \x01(\tB}\x82\xce\x18y\n" +
 	"\x11DOWNLOAD_BASE_URL\x1a https://downloads.reliantlabs.io*BWhere the desktop and CLI downloads the UI links to are published.R\x0fdownloadBaseUrl\x12\xe3\x02\n" +
 	"\x12cli_defaults_baked\x18\x16 \x01(\tB\xb4\x02\x82\xce\x18\xaf\x02\n" +
-	"\x12CLI_DEFAULTS_BAKED*\x98\x02\"true\": the `reliant` binary released beside this deployment has its server, gateway and auth defaults compiled in, so the copy-paste CLI commands render bare instead of behind RELIANT_*= overrides. Only the release knows this; set it where that release is the one users download.R\x10cliDefaultsBaked:\t\xd2\xc1\x18\x05\n" +
+	"\x12CLI_DEFAULTS_BAKED*\x98\x02\"true\": the `reliant` binary released beside this deployment has its server, gateway and auth defaults compiled in, so the copy-paste CLI commands render bare instead of behind RELIANT_*= overrides. Only the release knows this; set it where that release is the one users download.R\x10cliDefaultsBaked\x12\xcd\x03\n" +
+	"\n" +
+	"org_routes\x18\x1e \x01(\tB\xad\x03\x82\xce\x18\xa8\x03\n" +
+	"\n" +
+	"ORG_ROUTES*\x99\x03The flag web.org_routes (control-plane docs/design/unified-shell-and-projects.md, D12). \"true\": the app's links name the org (`/o/<org slug>/…`) and the org-less paths of org-scoped pages redirect into the tab's org. Unset or \"false\": links keep today's form and nothing redirects. The `/o/<org>` routes resolve either way, so turning it off is the rollback: every link printed in either form keeps working.R\torgRoutes:\t\xd2\xc1\x18\x05\n" +
 	"\x03webJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x11\x10\x12R\n" +
 	"sentry_dsnR\x0esentry_enabledR\x19sentry_traces_sample_rateR\"sentry_replays_session_sample_rateR sentry_replays_error_sample_rateR\x0ftelemetry_sinksB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
