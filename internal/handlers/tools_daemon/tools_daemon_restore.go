@@ -48,8 +48,11 @@ type CheckoutRestoreStore interface {
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error)
-	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
-	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
+	// RecordFailedProjectDaemonRestoreInScope marks the checkout failed,
+	// never over a detachment of the pair and only while the project's org,
+	// re-read under its row lock, is in scope: the clone it follows can take
+	// minutes.
+	RecordFailedProjectDaemonRestoreInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, installErr string, scope *core.OrgScope) (bool, error)
 }
 
 // cloneStep is one `git.clone` a restore runs.
@@ -156,7 +159,7 @@ func restorePoolMemberCheckouts(ctx context.Context, store CheckoutRestoreStore,
 		}
 		steps := restorePlan(project, row, repos)
 		if len(steps) == 0 {
-			failRestore(ctx, store, project, row, daemonID, "its checkout is gone and the project has no remote to clone it from")
+			failRestore(ctx, store, project, row, daemonID, scope, "its checkout is gone and the project has no remote to clone it from")
 			continue
 		}
 		var failure error
@@ -167,7 +170,7 @@ func restorePoolMemberCheckouts(ctx context.Context, store CheckoutRestoreStore,
 			}
 		}
 		if failure != nil {
-			failRestore(ctx, store, project, row, daemonID, failure.Error())
+			failRestore(ctx, store, project, row, daemonID, scope, failure.Error())
 			continue
 		}
 		recorded, err := store.RecordObservedProjectDaemonInScope(ctx, project.ID, daemonID, row.Path, row.DefaultBranch, scope)
@@ -189,15 +192,23 @@ func restorePoolMemberCheckouts(ctx context.Context, store CheckoutRestoreStore,
 }
 
 // failRestore marks the row failed with why, so the member's install state
-// and placement both say so instead of waiting on it forever.
-func failRestore(ctx context.Context, store CheckoutRestoreStore, project *db.Project, row *core.ProjectDaemon, daemonID, reason string) {
+// and placement both say so instead of waiting on it forever. Not when the
+// user detached the project from the machine, or it moved out of the
+// machine's org, while the clone ran: the write re-decides both under the
+// project's locks, and never clears a detachment.
+func failRestore(ctx context.Context, store CheckoutRestoreStore, project *db.Project, row *core.ProjectDaemon, daemonID string, scope *core.OrgScope, reason string) {
 	logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" restore: could not put a pool member's checkout back",
 		"daemonID", daemonID, "projectID", project.ID, "reason", reason)
-	requestID := uuid.NewString()
-	if err := store.UpsertQueuedProjectDaemon(ctx, project.ID, daemonID, row.Path, row.DefaultBranch, requestID); err != nil {
-		return
+	recorded, err := store.RecordFailedProjectDaemonRestoreInScope(ctx, project.ID, daemonID, row.Path, row.DefaultBranch,
+		"restoring the checkout on this pool member failed: "+reason, scope)
+	switch {
+	case err != nil:
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" restore: could not record the failure",
+			"error", err, "daemonID", daemonID, "projectID", project.ID)
+	case !recorded:
+		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" restore: the project was detached from the machine or moved out of its organization meanwhile; the failure is not recorded",
+			"daemonID", daemonID, "projectID", project.ID)
 	}
-	_ = store.ResolveQueuedProjectDaemon(ctx, requestID, "restoring the checkout on this pool member failed: "+reason)
 }
 
 // isPoolMember reports whether daemonID's labels match one of userID's pools.

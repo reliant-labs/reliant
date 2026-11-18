@@ -141,16 +141,21 @@ func StartQueuedProjectDaemonClones(ctx context.Context, db orm.Context, daemonI
 // FailProjectDaemonInstall settles a clone that is still installing as
 // failed, with installErr as the reason: the connect reconcile's answer to a
 // clone whose outcome was lost. A row that settled meanwhile is left alone,
-// and install_request_id is kept so a late outcome still finds the row.
-func FailProjectDaemonInstall(ctx context.Context, db orm.Context, projectID, daemonID, installErr string) error {
-	_, err := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil)).
+// and install_request_id is kept so a late outcome still finds the row. It
+// reports whether it marked the row failed.
+func FailProjectDaemonInstall(ctx context.Context, db orm.Context, projectID, daemonID, installErr string) (bool, error) {
+	res, err := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil)).
 		Set("install_state = ?", core.ProjectInstallFailed).
 		Set("install_error = ?", installErr).
 		Where("project_id = ?", projectID).
 		Where("daemon_id = ?", daemonID).
 		Where("install_state = ?", core.ProjectInstallInstalling).
 		Exec(ctx)
-	return err
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 // ResolveQueuedProjectDaemon records the outcome the daemon reported for a
@@ -188,6 +193,16 @@ func MarkProjectDaemonInstalled(ctx context.Context, db orm.Context, projectID, 
 		Where("install_state <> ?", core.ProjectInstallInstalled).
 		Exec(ctx)
 	return err
+}
+
+// ProjectDaemonInstalled reports whether the project's checkout on the
+// daemon is recorded as installed.
+func ProjectDaemonInstalled(ctx context.Context, db orm.Context, projectID, daemonID string) (bool, error) {
+	return db.Bun().NewSelect().Model((*ProjectDaemon)(nil)).
+		Where("project_id = ?", projectID).
+		Where("daemon_id = ?", daemonID).
+		Where("install_state = ?", core.ProjectInstallInstalled).
+		Exists(ctx)
 }
 
 // ListProjectDaemonsForProject returns every daemon the project is (or is

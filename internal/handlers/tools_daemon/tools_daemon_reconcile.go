@@ -249,8 +249,10 @@ func reconcileProjectDaemons(
 			// arrived (the machine suspended mid-clone, the notification
 			// was lost) would hold the row in "installing" for good, and
 			// every machine call refused with "still being cloned". Settle
-			// it from the row's OWN path.
-			settled, err := settleStaleInstall(ctx, database, check, prior)
+			// it from the row's OWN path, and only while the project is in
+			// the machine's scope: the probe can take seconds, and an org
+			// move out of it may land meanwhile.
+			settled, err := settleStaleInstall(ctx, database, check, prior, scope)
 			if err != nil {
 				logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: interrupted; a path check met a transport failure, so the pass stops here and is retried once the link is ready",
 					"error", err, "userID", userID, "daemonID", daemonID,
@@ -449,10 +451,11 @@ const staleInstallReason = "the clone did not report back; it may not have finis
 
 // settleStaleInstall settles row, a clone installing since before
 // staleInstallAfter, from the machine's disk at the row's own path: installed
-// when the checkout is there, failed when it is not. It reports whether the
-// row is now installed. A check failure (transport) is returned and settles
-// nothing.
-func settleStaleInstall(ctx context.Context, database ProjectReconcileStore, check daemonPathChecker, row *core.ProjectDaemon) (bool, error) {
+// when the checkout is there, failed when it is not — each only while the
+// project, re-read under its row lock, is still in scope. It reports whether
+// the row is now installed. A check failure (transport) is returned and
+// settles nothing.
+func settleStaleInstall(ctx context.Context, database ProjectReconcileStore, check daemonPathChecker, row *core.ProjectDaemon, scope *core.OrgScope) (bool, error) {
 	if strings.TrimSpace(row.Path) == "" {
 		return false, nil
 	}
@@ -461,22 +464,31 @@ func settleStaleInstall(ctx context.Context, database ProjectReconcileStore, che
 		return false, err
 	}
 	if state.Exists {
-		if err := database.MarkProjectDaemonInstalled(ctx, row.ProjectID, row.DaemonID); err != nil {
+		installed, err := database.MarkProjectDaemonInstalledInScope(ctx, row.ProjectID, row.DaemonID, scope)
+		if err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to settle a lost clone that landed",
 				"error", err, "daemonID", row.DaemonID, "projectID", row.ProjectID)
+			return false, nil
+		}
+		if !installed {
+			logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: a lost clone landed, but the project moved out of the machine's organization or its record is gone; not settled",
+				"daemonID", row.DaemonID, "projectID", row.ProjectID, "path", row.Path)
 			return false, nil
 		}
 		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: settled a clone whose outcome was lost; its checkout is there",
 			"daemonID", row.DaemonID, "projectID", row.ProjectID, "path", row.Path)
 		return true, nil
 	}
-	if err := database.FailProjectDaemonInstall(ctx, row.ProjectID, row.DaemonID, staleInstallReason); err != nil {
+	failed, err := database.FailProjectDaemonInstallInScope(ctx, row.ProjectID, row.DaemonID, staleInstallReason, scope)
+	if err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to settle a lost clone that never landed",
 			"error", err, "daemonID", row.DaemonID, "projectID", row.ProjectID)
 		return false, nil
 	}
-	logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: settled a clone whose outcome was lost as failed; nothing is at its path",
-		"daemonID", row.DaemonID, "projectID", row.ProjectID, "path", row.Path)
+	if failed {
+		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: settled a clone whose outcome was lost as failed; nothing is at its path",
+			"daemonID", row.DaemonID, "projectID", row.ProjectID, "path", row.Path)
+	}
 	return false, nil
 }
 

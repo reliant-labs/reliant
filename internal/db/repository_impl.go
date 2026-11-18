@@ -1224,13 +1224,8 @@ func (r *Repo) RecordObservedProjectDaemonInScope(ctx context.Context, projectID
 	recorded := false
 	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		recorded = false
-		// The catalog lock first, as every checkout writer takes it; the
-		// org move takes no catalog lock, so the order cannot deadlock it.
-		if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
-			return err
-		}
-		org, found, err := store.LockProjectOrgForShare(ctx, r.ORM(), projectID)
-		if err != nil || !found || !scope.Includes(org) {
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
 			return err
 		}
 		detached, err := store.ProjectDaemonDetached(ctx, r.ORM(), projectID, daemonID)
@@ -1281,13 +1276,52 @@ func (r *Repo) ResolveQueuedProjectDaemon(ctx context.Context, requestID, instal
 	return store.ResolveQueuedProjectDaemon(ctx, r.ORM(), requestID, installErr)
 }
 
-// MarkProjectDaemonInstalled settles a queued clone from a filesystem
-// announcement, which names the path but carries no request id.
-func (r *Repo) MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error {
+// MarkProjectDaemonInstalledInScope settles the machine's clone of the
+// project as installed, from evidence the machine gave (its filesystem
+// announcement, or a directory at the row's own path for a clone whose outcome
+// was lost), for a machine that holds only scope's projects (nil: every
+// org's). It reports whether the checkout is installed now: false when there
+// is no row, or when the project is gone or no longer in scope.
+//
+// Like RecordObservedProjectDaemonInScope, it re-reads the project's org
+// under the catalog lock and the project row FOR SHARE, so a move out of the
+// machine's org that committed while the caller probed the machine is seen
+// and nothing is settled on it. A detached pair has no row, so it settles
+// nothing. There is deliberately no unscoped form.
+func (r *Repo) MarkProjectDaemonInstalledInScope(ctx context.Context, projectID, daemonID string, scope *core.OrgScope) (bool, error) {
 	if projectID == "" || daemonID == "" {
-		return fmt.Errorf("project ID and daemon ID cannot be empty")
+		return false, fmt.Errorf("project ID and daemon ID cannot be empty")
 	}
-	return store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
+	installed := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		installed = false
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
+			return err
+		}
+		if err := store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID); err != nil {
+			return err
+		}
+		installed, err = store.ProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
+		return err
+	})
+	return installed, err
+}
+
+// lockProjectInScope takes, inside the caller's transaction, the locks every
+// machine-observed checkout write holds — the project's catalog lock, then
+// its row FOR SHARE (a project's org move takes it FOR NO KEY UPDATE and no
+// catalog lock, so the order cannot deadlock it) — and reports whether the
+// project still exists and its org, read under that lock, is in scope.
+func (r *Repo) lockProjectInScope(ctx context.Context, projectID string, scope *core.OrgScope) (bool, error) {
+	if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
+		return false, err
+	}
+	org, found, err := store.LockProjectOrgForShare(ctx, r.ORM(), projectID)
+	if err != nil || !found {
+		return false, err
+	}
+	return scope.Includes(org), nil
 }
 
 // StartQueuedProjectDaemonClones starts the stuck-clone clock of the
@@ -1299,13 +1333,67 @@ func (r *Repo) StartQueuedProjectDaemonClones(ctx context.Context, daemonID stri
 	return store.StartQueuedProjectDaemonClones(ctx, r.ORM(), daemonID)
 }
 
-// FailProjectDaemonInstall settles a clone still installing as failed: one
-// whose outcome was lost.
-func (r *Repo) FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error {
+// FailProjectDaemonInstallInScope settles the machine's clone of the project
+// that is still installing as failed — one whose outcome was lost and whose
+// path is empty on the machine — for a machine that holds only scope's
+// projects (nil: every org's). It reports whether it marked the row failed.
+// The org is re-read under the same locks as MarkProjectDaemonInstalledInScope:
+// a project moved out of the machine's org meanwhile is not the machine's to
+// settle (the machine-org cleanup detaches its row instead).
+func (r *Repo) FailProjectDaemonInstallInScope(ctx context.Context, projectID, daemonID, installErr string, scope *core.OrgScope) (bool, error) {
 	if projectID == "" || daemonID == "" {
-		return fmt.Errorf("project ID and daemon ID cannot be empty")
+		return false, fmt.Errorf("project ID and daemon ID cannot be empty")
 	}
-	return store.FailProjectDaemonInstall(ctx, r.ORM(), projectID, daemonID, installErr)
+	failed := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		failed = false
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
+			return err
+		}
+		failed, err = store.FailProjectDaemonInstall(ctx, r.ORM(), projectID, daemonID, installErr)
+		return err
+	})
+	return failed, err
+}
+
+// RecordFailedProjectDaemonRestoreInScope records that putting a pool
+// member's checkout of the project back failed, with installErr as the
+// reason, so its install state and placement say so instead of waiting on it
+// forever. The restore clones for minutes before it gets here, so, like
+// RecordObservedProjectDaemonInScope, it writes nothing when the project
+// moved out of scope (nil: every org's) or the user detached it from the
+// machine meanwhile — and it never clears a detachment: a restore is the
+// platform's doing, not the user's. It reports whether it recorded the
+// failure.
+func (r *Repo) RecordFailedProjectDaemonRestoreInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, installErr string, scope *core.OrgScope) (bool, error) {
+	if projectID == "" || daemonID == "" || path == "" {
+		return false, fmt.Errorf("project ID, daemon ID and path cannot be empty")
+	}
+	recorded := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		recorded = false
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
+			return err
+		}
+		detached, err := store.ProjectDaemonDetached(ctx, r.ORM(), projectID, daemonID)
+		if err != nil || detached {
+			return err
+		}
+		// Queued and resolved at once, under a request id of its own: a
+		// late outcome of an earlier clone cannot overwrite the failure.
+		requestID := uuid.NewString()
+		if err := store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID); err != nil {
+			return err
+		}
+		if err := store.ResolveQueuedProjectDaemon(ctx, r.ORM(), requestID, installErr); err != nil {
+			return err
+		}
+		recorded = true
+		return nil
+	})
+	return recorded, err
 }
 
 func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {

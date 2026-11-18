@@ -82,11 +82,15 @@ type ProjectReconcileStore interface {
 	// project's org, re-read under its row lock, is in the machine's scope
 	// (a move out of it during the probe is seen); false otherwise.
 	RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error)
-	// MarkProjectDaemonInstalled and FailProjectDaemonInstall settle a clone
-	// whose outcome was lost, from the row's own path; the first also
-	// settles one from the machine's filesystem announcement.
-	MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error
-	FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error
+	// MarkProjectDaemonInstalledInScope and FailProjectDaemonInstallInScope
+	// settle a clone whose outcome was lost, from the row's own path; the
+	// first also settles one from the machine's filesystem announcement.
+	// Like RecordObservedProjectDaemonInScope, each re-reads the project's
+	// org under its row lock and settles nothing on a project no longer in
+	// the machine's scope; true only when it settled (the first: the
+	// checkout is installed now).
+	MarkProjectDaemonInstalledInScope(ctx context.Context, projectID, daemonID string, scope *core.OrgScope) (bool, error)
+	FailProjectDaemonInstallInScope(ctx context.Context, projectID, daemonID, installErr string, scope *core.OrgScope) (bool, error)
 	// GetProjectByRemoteURLAndUserInScope finds the user's project of a
 	// remote in one org (nil scope: any): the remote backfill's uniqueness
 	// check, per (org, user, remote_url).

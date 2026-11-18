@@ -300,3 +300,57 @@ func TestReconcile_ProjectMovedOutOfTheMachinesOrgDuringTheProbeIsNotRecorded(t 
 	assert.Empty(t, f.machinesOf(t, f.globex.ID), "the moved project was recorded on the other org's machine")
 	assert.Empty(t, f.machinesOf(t, f.acme.ID))
 }
+
+// Review round 5: a clone whose outcome was lost is settled from its row's
+// own path only while the project is in the machine's org. One that moves out
+// of it while the reconcile probes that path is settled neither installed nor
+// failed, and no config watcher starts for it; in the org, it settles.
+func TestReconcile_LostCloneOfAProjectMovedOutDuringTheProbeIsNotSettled(t *testing.T) {
+	// staleSince is long past staleInstallAfter, and fixed.
+	staleSince := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name      string
+		landed    bool
+		moveOut   bool
+		wantState core.ProjectInstallState
+		wantAdded bool
+	}{
+		{name: "landed, moved out", landed: true, moveOut: true, wantState: core.ProjectInstallInstalling},
+		{name: "never landed, moved out", landed: false, moveOut: true, wantState: core.ProjectInstallInstalling},
+		{name: "landed, still the machine's org", landed: true, wantState: core.ProjectInstallInstalled, wantAdded: true},
+		{name: "never landed, still the machine's org", landed: false, wantState: core.ProjectInstallFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newOrgMachinesFixture(t)
+			require.NoError(t, f.repo.UpsertQueuedProjectDaemon(f.ctx, f.globex.ID, f.globexMachine, f.path, nil, "clone:"+f.globex.ID))
+			_, err := f.repo.ORM().Bun().ExecContext(f.ctx,
+				`UPDATE project_daemons SET cloned_at = ?, clone_started_at = ? WHERE project_id = ? AND daemon_id = ?`,
+				staleSince, staleSince, f.globex.ID, f.globexMachine)
+			require.NoError(t, err)
+			probe := func(_ context.Context, path string) (projectPathState, error) {
+				assert.Equal(t, f.path, path, "a lost clone is settled from its row's own path")
+				if tc.moveOut {
+					// MoveProjectOrg's commit, landing between the list
+					// and the settle. initech: the per-org path key
+					// leaves no room for a second project at this path
+					// in acme.
+					_, err := f.repo.ORM().Bun().ExecContext(f.ctx, `UPDATE projects SET org_id = 'initech' WHERE id = ?`, f.globex.ID)
+					require.NoError(t, err)
+				}
+				return projectPathState{Exists: tc.landed}, nil
+			}
+
+			_, added, err := reconcileProjectDaemons(f.ctx, f.repo, f.globexMachine, f.userID, f.scope(t, "globex"), "globex", probe)
+			require.NoError(t, err)
+			if tc.wantAdded {
+				assert.Equal(t, []string{f.path}, added)
+			} else {
+				assert.Empty(t, added, "a watcher would start for a checkout that did not settle installed")
+			}
+			rows, err := f.repo.ListProjectDaemonsForProject(f.ctx, f.globex.ID)
+			require.NoError(t, err)
+			require.Len(t, rows, 1)
+			assert.Equal(t, tc.wantState, rows[0].InstallState)
+		})
+	}
+}

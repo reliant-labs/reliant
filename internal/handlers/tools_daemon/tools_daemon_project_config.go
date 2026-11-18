@@ -139,11 +139,15 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 	//
 	// Matched by (project, daemon) rather than by request id: unlike the
 	// failure path, FileSystemChanged carries no request id — only the path
-	// — and the path is exactly what the queued row recorded.
-	if err := s.deps.Repo.MarkProjectDaemonInstalled(ctx, project.ID, conn.daemonID); err != nil {
+	// — and the path is exactly what the queued row recorded. The project
+	// was found in the machine's scope above, but that read is not the
+	// write: the org is re-read under the project's row lock, so a move out
+	// of the machine's org that landed since settles nothing here.
+	installed, err := s.deps.Repo.MarkProjectDaemonInstalledInScope(ctx, project.ID, conn.daemonID, scope)
+	if err != nil {
 		logging.WarnContext(ctx, "could not settle queued clone after filesystem change",
 			"error", err, "project_id", project.ID, "daemon_id", conn.daemonID)
-	} else {
+	} else if installed {
 		// The clone just SUCCEEDED on this daemon, which means forge.yaml is
 		// on its disk right now. Read the project's forge name here rather
 		// than waiting for someone to open the Forge tab with a daemon

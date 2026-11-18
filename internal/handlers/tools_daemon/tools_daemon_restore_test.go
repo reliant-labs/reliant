@@ -17,8 +17,7 @@ type restoreStore struct {
 	pools     []*db.MachinePool
 	rows      []*core.ProjectDaemon
 	repos     map[string][]*core.Repo
-	installed []string // projects recorded installed (verified) again
-	queued    map[string]string
+	installed []string          // projects recorded installed (verified) again
 	failed    map[string]string // projectID -> install error
 	movedOut  map[string]string // projectID -> the org it moved to while being cloned
 }
@@ -49,20 +48,16 @@ func (s *restoreStore) RecordObservedProjectDaemonInScope(_ context.Context, pro
 	return true, nil
 }
 
-func (s *restoreStore) UpsertQueuedProjectDaemon(_ context.Context, projectID, _, _ string, _ *string, requestID string) error {
-	if s.queued == nil {
-		s.queued = map[string]string{}
+func (s *restoreStore) RecordFailedProjectDaemonRestoreInScope(_ context.Context, projectID, _, _ string, _ *string, installErr string, scope *core.OrgScope) (bool, error) {
+	// The same locked re-read as RecordObservedProjectDaemonInScope.
+	if org, moved := s.movedOut[projectID]; moved && !scope.Includes(&org) {
+		return false, nil
 	}
-	s.queued[requestID] = projectID
-	return nil
-}
-
-func (s *restoreStore) ResolveQueuedProjectDaemon(_ context.Context, requestID, installErr string) error {
 	if s.failed == nil {
 		s.failed = map[string]string{}
 	}
-	s.failed[s.queued[requestID]] = installErr
-	return nil
+	s.failed[projectID] = installErr
+	return true, nil
 }
 
 func strp(s string) *string { return &s }
@@ -206,5 +201,27 @@ func TestRestorePoolMemberCheckouts_KeepsToTheMachinesOrg(t *testing.T) {
 	}
 	if len(s.installed) != 0 {
 		t.Fatalf("recorded %v; p-single moved out of the machine's org while it was cloned", s.installed)
+	}
+}
+
+// A restore that fails after the project moved out of the machine's org
+// records no failure on it: the clone ran for minutes, and the write
+// re-decides the org under the project's lock, as the success path does.
+func TestRestorePoolMemberCheckouts_FailureOfAProjectMovedOutIsNotRecorded(t *testing.T) {
+	s, missing := newRestoreWorld()
+	acme, globex := "acme", "globex"
+	for _, p := range missing {
+		p.OrgID = &globex
+	}
+	s.movedOut = map[string]string{"p-single": acme}
+	run := func(context.Context, cloneStep) error { return errors.New("authentication failed") }
+
+	restorePoolMemberCheckouts(context.Background(), s, run, "d-1", "user-1", &core.OrgScope{OrgID: globex}, missing)
+
+	if _, ok := s.failed["p-single"]; ok {
+		t.Fatalf("failed = %v; p-single moved out of the machine's org while it was cloned", s.failed)
+	}
+	if !strings.Contains(s.failed["p-multi"], "authentication failed") {
+		t.Fatalf("p-multi failure = %q, want the clone's error (it is still the machine's org's)", s.failed["p-multi"])
 	}
 }
