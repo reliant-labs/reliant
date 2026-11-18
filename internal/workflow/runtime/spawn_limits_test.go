@@ -2,11 +2,13 @@
 package runtime
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -140,6 +142,96 @@ func (s *SpawnLimitsSuite) TestResumingALiveAgent_IsNotCapped() {
 	s.Require().NoError(env.GetWorkflowResult(&out))
 	s.Equal([]string{"again"}, out.Admitted)
 	s.Empty(out.Refused)
+}
+
+// Admission and dispatch are not one step: dispatch yields while it prepares
+// the child's thread. Two admissions that overlap in time — two sub-agents
+// fanning out together — must still share the cap: the first one's slot is
+// reserved from admission, so the second sees it taken. When the first one's
+// dispatch fails, its slot is freed for the next.
+func (s *SpawnLimitsSuite) TestConcurrentAdmissions_ShareOneSlot_AndAFailedDispatchFreesIt() {
+	env := s.NewTestWorkflowEnvironment()
+	// Dispatch prepares a resumed agent's thread by validating it: this
+	// activity is where dispatch yields, and its refusal is a dispatch that
+	// fails before anything starts.
+	env.RegisterActivityWithOptions(func(context.Context, map[string]interface{}) (map[string]interface{}, error) {
+		return map[string]interface{}{"valid": false, "error_message": "not this chat's thread"}, nil
+	}, activity.RegisterOptions{Name: "ValidateThreadOwnership"})
+
+	tracker := &ChildWorkflowTracker{spawnLimits: types.SpawnLimits{PerAgent: 8, Total: 1}}
+	noPause := func(string) *PauseController { return nil }
+
+	type outcome struct{ Admitted, Refused, Dispatched, AfterRelease []string }
+	wf := func(ctx workflow.Context) (outcome, error) {
+		var out outcome
+		admitAndDispatch := func(ctx workflow.Context, parent, id string) {
+			cfg := &spawnChildWorkflowConfig{toolCallID: id, childThread: "child-" + id, isResumption: true}
+			admitted, refused := tracker.admitSpawns(ctx, parent, []*spawnChildWorkflowConfig{cfg})
+			for _, a := range admitted {
+				out.Admitted = append(out.Admitted, a.toolCallID)
+			}
+			for range refused {
+				out.Refused = append(out.Refused, id)
+			}
+			for _, a := range admitted {
+				res := dispatchSpawnBackground(ctx, a, "", "chat-1", "wf-1", parent, map[string]interface{}{}, tracker, noPause, nil)
+				if res.IsError {
+					out.Dispatched = append(out.Dispatched, a.toolCallID+": failed")
+				}
+			}
+		}
+		done := workflow.NewWaitGroup(ctx)
+		for _, w := range []struct{ parent, id string }{{"worker-1", "a"}, {"worker-2", "b"}, {"worker-3", "c"}} {
+			w := w
+			done.Add(1)
+			workflow.Go(ctx, func(gCtx workflow.Context) {
+				defer done.Done()
+				admitAndDispatch(gCtx, w.parent, w.id)
+			})
+		}
+		done.Wait(ctx)
+		// Every reservation has settled: the failed dispatch freed its slot.
+		admitted, _ := tracker.admitSpawns(ctx, "worker-4", []*spawnChildWorkflowConfig{{toolCallID: "d", childThread: "child-d"}})
+		for _, a := range admitted {
+			out.AfterRelease = append(out.AfterRelease, a.toolCallID)
+		}
+		return out, nil
+	}
+	env.ExecuteWorkflow(wf)
+	s.Require().True(env.IsWorkflowCompleted())
+	s.Require().NoError(env.GetWorkflowError())
+	var out outcome
+	s.Require().NoError(env.GetWorkflowResult(&out))
+
+	s.Len(out.Admitted, 1, "one slot: only one of the overlapping admissions starts")
+	s.Len(out.Refused, 2, "the others are refused while the first holds the slot through dispatch")
+	s.Equal([]string{out.Admitted[0] + ": failed"}, out.Dispatched)
+	s.Equal([]string{"d"}, out.AfterRelease, "a failed dispatch releases its reservation")
+	s.Equal(map[string]string{"d": "worker-4"}, tracker.spawnReservations, "only the undispatched admission still holds a slot")
+}
+
+// A batch whose regular tools fail never dispatches its admitted spawns; a
+// settled reservation is gone, and settling one that is not held is a no-op.
+func TestSpawnReservation_SettleIsIdempotent(t *testing.T) {
+	t.Parallel()
+	tracker := &ChildWorkflowTracker{}
+	tracker.reserveSpawn("a", "lead")
+	mine, total := tracker.liveSpawnCounts("lead")
+	assert.Equal(t, 1, mine)
+	assert.Equal(t, 1, total)
+
+	// Registered live and still reserved: one slot, not two.
+	tracker.registerDetachedSpawn(&detachedSpawnRecord{ToolCallID: "a", ParentThread: "lead", ChildThread: "child-a"})
+	mine, total = tracker.liveSpawnCounts("lead")
+	assert.Equal(t, 1, mine)
+	assert.Equal(t, 1, total)
+
+	tracker.settleSpawnReservation("a")
+	tracker.settleSpawnReservation("a")
+	tracker.settleSpawnReservation("never-reserved")
+	assert.Empty(t, tracker.spawnReservations)
+	_, total = tracker.liveSpawnCounts("lead")
+	assert.Equal(t, 1, total, "the live spawn still holds its slot")
 }
 
 func TestSpawnLimitsFromInputs(t *testing.T) {

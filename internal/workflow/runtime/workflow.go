@@ -489,6 +489,9 @@ type ChildWorkflowTracker struct {
 	// spawnLimits are the run's sub-agent concurrency caps, read once from
 	// the root run's inputs (spawn_limits.go). The zero value is the defaults.
 	spawnLimits types.SpawnLimits
+	// spawnReservations are the slots of spawns admitted but not yet
+	// dispatched, tool call id to parent thread (spawn_limits.go).
+	spawnReservations map[string]string
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -4309,6 +4312,9 @@ func dispatchSpawnBackground(
 	makeThreadPauseCtrl func(string) *PauseController,
 	makeThreadInterrupt func(string) *ThreadInterrupt,
 ) *spawnInlineResult {
+	// The slot admitSpawns reserved is held until this returns: by then the
+	// spawn is registered live, or it never started (spawn_limits.go).
+	defer childTracker.settleSpawnReservation(config.toolCallID)
 	// An agent is one loop on one thread. A message can resume a stopped
 	// agent behind its parent's back (subagent_resume.go), so the parent may
 	// ask to resume one that is already running again; a second loop on the
@@ -4912,6 +4918,10 @@ func executeToolsWithSpawnSupport(
 		if regularToolsFuture != nil {
 			result, err := processRegularToolsFuture(gCtx, regularToolsFuture, logger)
 			if err != nil {
+				// The admitted spawns never dispatch: free their slots.
+				for _, cfg := range spawnConfigs {
+					childTracker.settleSpawnReservation(cfg.toolCallID)
+				}
 				resultSettable.SetError(err)
 				return
 			}

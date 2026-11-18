@@ -37,8 +37,11 @@ func withSpawnerDepth(inputs map[string]interface{}, depth int) map[string]inter
 	return out
 }
 
-// liveSpawnCounts returns how many sub-agents parentThread has running, and
-// how many the run has running at every depth. A parked spawn is still live.
+// liveSpawnCounts returns how many sub-agents parentThread holds a slot for,
+// and how many the run holds at every depth: the live ones (a parked spawn is
+// still live) and the ones admitted but not yet dispatched (reservations). A
+// spawn that is both — registered live, its reservation not yet settled — is
+// counted once. Only counts are taken, so map order does not matter.
 func (t *ChildWorkflowTracker) liveSpawnCounts(parentThread string) (mine, total int) {
 	for _, rec := range t.liveDetachedSpawns {
 		total++
@@ -46,11 +49,41 @@ func (t *ChildWorkflowTracker) liveSpawnCounts(parentThread string) (mine, total
 			mine++
 		}
 	}
+	for toolCallID, parent := range t.spawnReservations {
+		if _, live := t.liveDetachedSpawns[toolCallID]; live {
+			continue
+		}
+		total++
+		if parent == parentThread {
+			mine++
+		}
+	}
 	return mine, total
 }
 
+// reserveSpawn holds a concurrency slot for a spawn admitSpawns admitted,
+// from admission until its dispatch settles. Dispatch yields (thread prep runs
+// activities), so without it two batches admitted at the same moment — two
+// sub-agents fanning out together, or one parent's back-to-back turns — would
+// each see the slot free and both start.
+func (t *ChildWorkflowTracker) reserveSpawn(toolCallID, parentThread string) {
+	if t.spawnReservations == nil {
+		t.spawnReservations = make(map[string]string)
+	}
+	t.spawnReservations[toolCallID] = parentThread
+}
+
+// settleSpawnReservation releases toolCallID's reservation: its dispatch
+// either registered it live (which now holds the slot) or failed, was refused
+// or was cancelled (which frees it). Safe for a spawn that holds none.
+func (t *ChildWorkflowTracker) settleSpawnReservation(toolCallID string) {
+	delete(t.spawnReservations, toolCallID)
+}
+
 // admitSpawns splits one batch's spawn calls into those that may start and
-// refusals for those past the run's concurrency caps, in batch order. A
+// refusals for those past the run's concurrency caps, in batch order. Each
+// admitted spawn reserves its slot in the tracker until dispatchSpawnBackground
+// settles it, so admissions that overlap in time see one another. A
 // refusal is a tool result: the agent learns why and spawns again once a
 // sub-agent finishes. Nothing is queued, so a refused spawn holds no slot and
 // starts no thread.
@@ -86,6 +119,7 @@ func (t *ChildWorkflowTracker) admitSpawns(ctx workflow.Context, parentThread st
 			continue
 		}
 		admitted = append(admitted, cfg)
+		t.reserveSpawn(cfg.toolCallID, parentThread)
 		mine++
 		total++
 	}
