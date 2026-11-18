@@ -59,6 +59,10 @@ type DaemonConnector struct {
 
 	mu          sync.Mutex
 	activeConns map[string]context.CancelFunc // daemonID → cancel
+	// activeOrgs is the machine org each active connection registered with
+	// (daemonID → the snapshot's org when it started), so the reconciler can
+	// tell when the snapshot's answer has changed (orgChanged).
+	activeOrgs map[string]tools_daemon.MachineOrg
 }
 
 // NewDaemonConnector creates a new DaemonConnector. The failPublisher is
@@ -82,7 +86,20 @@ func (dc *DaemonConnector) CloseAll() {
 	for daemonID, cancel := range dc.activeConns {
 		cancel()
 		delete(dc.activeConns, daemonID)
+		delete(dc.activeOrgs, daemonID)
 	}
+}
+
+// orgChanged reports whether a snapshot's org for a machine supersedes the
+// one its active connection registered with: it resolves where the
+// connection's was unresolved, or names a different org. A snapshot that
+// cannot read the org this tick (Unresolved) never does: the connection keeps
+// the answer it has, rather than reconnect on every control-plane blip.
+func orgChanged(active, snapshot tools_daemon.MachineOrg) bool {
+	if snapshot.Unresolved {
+		return false
+	}
+	return active.Unresolved || active.ID != snapshot.ID
 }
 
 // startConnection initiates a new outbound connection to a daemon pod.
@@ -95,6 +112,10 @@ func (dc *DaemonConnector) startConnection(parentCtx context.Context, daemonID, 
 	}
 	connCtx, connCancel := context.WithCancel(parentCtx)
 	dc.activeConns[daemonID] = connCancel
+	if dc.activeOrgs == nil {
+		dc.activeOrgs = make(map[string]tools_daemon.MachineOrg)
+	}
+	dc.activeOrgs[daemonID] = org
 	dc.mu.Unlock()
 
 	logging.InfoContext(parentCtx, connectorLogPrefix+" starting outbound connection",
@@ -109,6 +130,7 @@ func (dc *DaemonConnector) stopConnection(daemonID string) {
 	if cancel, ok := dc.activeConns[daemonID]; ok {
 		cancel()
 		delete(dc.activeConns, daemonID)
+		delete(dc.activeOrgs, daemonID)
 		logging.Info(connectorLogPrefix+" Stopping outbound connection", "daemonId", daemonID)
 	}
 	dc.mu.Unlock()

@@ -56,7 +56,7 @@ type MockRepository struct {
 	MarkProjectDaemonInstalledFunc            func(context.Context, string, string) error
 	FailProjectDaemonInstallFunc              func(context.Context, string, string, string) error
 	GetProjectByRemoteURLAndUserInScopeFunc   func(context.Context, string, string, *core.OrgScope) (*db.Project, error)
-	DetachProjectDaemonOfOtherOrgFunc         func(context.Context, string, string, string, string, *string) (bool, error)
+	DetachProjectDaemonOfOtherOrgFunc         func(context.Context, string, string, string, string) (bool, error)
 	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
 	UpdateProjectFunc                         func(context.Context, *db.Project, string) error
 	ListReposByProjectFunc                    func(context.Context, string) ([]*core.Repo, error)
@@ -319,10 +319,10 @@ func (m *MockRepository) GetProjectByRemoteURLAndUserInScope(ctx context.Context
 }
 
 // DetachProjectDaemonOfOtherOrg records the call and delegates to DetachProjectDaemonOfOtherOrgFunc when set.
-func (m *MockRepository) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID string, daemonID string, userID string, machineOrg string, projectOrg *string) (bool, error) {
-	m.Recorder.Record("DetachProjectDaemonOfOtherOrg", ctx, projectID, daemonID, userID, machineOrg, projectOrg)
+func (m *MockRepository) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID string, daemonID string, userID string, machineOrg string) (bool, error) {
+	m.Recorder.Record("DetachProjectDaemonOfOtherOrg", ctx, projectID, daemonID, userID, machineOrg)
 	if m.DetachProjectDaemonOfOtherOrgFunc != nil {
-		return m.DetachProjectDaemonOfOtherOrgFunc(ctx, projectID, daemonID, userID, machineOrg, projectOrg)
+		return m.DetachProjectDaemonOfOtherOrgFunc(ctx, projectID, daemonID, userID, machineOrg)
 	}
 	return false, contractkit.MockNotSet("MockRepository", "DetachProjectDaemonOfOtherOrg")
 }
@@ -411,7 +411,7 @@ type MockProjectReconcileStore struct {
 	MarkProjectDaemonInstalledFunc            func(context.Context, string, string) error
 	FailProjectDaemonInstallFunc              func(context.Context, string, string, string) error
 	GetProjectByRemoteURLAndUserInScopeFunc   func(context.Context, string, string, *core.OrgScope) (*db.Project, error)
-	DetachProjectDaemonOfOtherOrgFunc         func(context.Context, string, string, string, string, *string) (bool, error)
+	DetachProjectDaemonOfOtherOrgFunc         func(context.Context, string, string, string, string) (bool, error)
 	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
 	UpdateProjectFunc                         func(context.Context, *db.Project, string) error
 	ListReposByProjectFunc                    func(context.Context, string) ([]*core.Repo, error)
@@ -482,10 +482,10 @@ func (m *MockProjectReconcileStore) GetProjectByRemoteURLAndUserInScope(ctx cont
 }
 
 // DetachProjectDaemonOfOtherOrg records the call and delegates to DetachProjectDaemonOfOtherOrgFunc when set.
-func (m *MockProjectReconcileStore) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID string, daemonID string, userID string, machineOrg string, projectOrg *string) (bool, error) {
-	m.Recorder.Record("DetachProjectDaemonOfOtherOrg", ctx, projectID, daemonID, userID, machineOrg, projectOrg)
+func (m *MockProjectReconcileStore) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID string, daemonID string, userID string, machineOrg string) (bool, error) {
+	m.Recorder.Record("DetachProjectDaemonOfOtherOrg", ctx, projectID, daemonID, userID, machineOrg)
 	if m.DetachProjectDaemonOfOtherOrgFunc != nil {
-		return m.DetachProjectDaemonOfOtherOrgFunc(ctx, projectID, daemonID, userID, machineOrg, projectOrg)
+		return m.DetachProjectDaemonOfOtherOrgFunc(ctx, projectID, daemonID, userID, machineOrg)
 	}
 	return false, contractkit.MockNotSet("MockProjectReconcileStore", "DetachProjectDaemonOfOtherOrg")
 }

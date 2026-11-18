@@ -38,6 +38,10 @@ control-plane named.
 On each connect, for a machine of a known org, the reconcile detaches the
 checkout records (`project_daemons` rows) of projects in another org.
 
+- **When:** the delete re-reads the project's org under the project row's
+  lock, the same lock an org move takes. It removes the record only if the
+  project is still in another org, so a project moved into the machine's org
+  meanwhile keeps its checkout. A project with no org yet is never detached.
 - **What is detached:** only the record. No project is deleted, no file is
   touched, and no user detachment is recorded.
 - **Audit:** each removed row is written whole to

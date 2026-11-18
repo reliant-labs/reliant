@@ -347,8 +347,10 @@ func reconcileProjectDaemons(
 // (dev-docs/machine-org-rollout.md). Only the record goes: the
 // project, its other machines and the folder on this machine are untouched. A
 // row whose project is not among projects (the owner's listed projects) is
-// left alone: nothing here can tell its org. Idempotent: a removed row is not
-// listed again.
+// left alone: nothing here can tell its org. The list only nominates a row:
+// the delete re-decides under the project's row lock, and keeps a project
+// moved into the machine's org since, or one with no org yet. Idempotent: a
+// removed row is not listed again.
 func detachOtherOrgCheckouts(
 	ctx context.Context,
 	database ProjectReconcileStore,
@@ -376,7 +378,10 @@ func detachOtherOrgCheckouts(
 		if !ok || scope.Includes(project.OrgID) {
 			continue
 		}
-		gone, err := database.DetachProjectDaemonOfOtherOrg(ctx, row.ProjectID, daemonID, userID, detachFor, project.OrgID)
+		// The list read above only nominates the row: the statement
+		// re-reads the project's org under its lock, so a move into the
+		// machine's org since then keeps the checkout.
+		gone, err := database.DetachProjectDaemonOfOtherOrg(ctx, row.ProjectID, daemonID, userID, detachFor)
 		if err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to detach another organization's project from the machine; the next connect retries",
 				"error", err, "userID", userID, "daemonID", daemonID, "projectID", row.ProjectID)

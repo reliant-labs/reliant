@@ -100,3 +100,80 @@ func TestCloseAll_CancelsAllConnections(t *testing.T) {
 	assert.Len(t, dc.activeConns, 0, "activeConns should be empty after CloseAll")
 	dc.mu.Unlock()
 }
+
+// A snapshot org supersedes a connection's only when it resolves or differs;
+// an unresolved tick never does.
+func TestOrgChanged(t *testing.T) {
+	t.Parallel()
+	b := tools_daemon.MachineOrg{ID: "org-b"}
+	for name, tc := range map[string]struct {
+		active, snapshot tools_daemon.MachineOrg
+		want             bool
+	}{
+		"unresolved, then resolved":        {tools_daemon.MachineOrg{Unresolved: true}, b, true},
+		"none (older control plane), then": {tools_daemon.MachineOrg{}, b, true},
+		"changed":                          {tools_daemon.MachineOrg{ID: "org-c"}, b, true},
+		"unchanged":                        {b, b, false},
+		"an unresolved tick":               {b, tools_daemon.MachineOrg{Unresolved: true}, false},
+		"still none":                       {tools_daemon.MachineOrg{}, tools_daemon.MachineOrg{}, false},
+	} {
+		assert.Equal(t, tc.want, orgChanged(tc.active, tc.snapshot), name)
+	}
+}
+
+// Review B1 (round 3): an ACTIVE connection whose machine org resolves, or
+// changes, in a later snapshot is reconnected with the new org, so the
+// machine registers with the authoritative org; an unchanged snapshot, or an
+// unresolved tick, leaves it alone.
+func TestReconcile_ReconnectsAnActiveMachineWhenItsOrgResolvesOrChanges(t *testing.T) {
+	t.Parallel()
+	dc := newTestConnector()
+	r := &ManagedDaemonReconciler{connector: dc}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	t.Cleanup(dc.CloseAll)
+
+	// canary installs an active connection for d-1 registered with org,
+	// whose context reports whether the reconcile replaced it.
+	canary := func(org tools_daemon.MachineOrg) context.Context {
+		connCtx, connCancel := context.WithCancel(ctx)
+		dc.mu.Lock()
+		dc.activeConns["d-1"] = connCancel
+		if dc.activeOrgs == nil {
+			dc.activeOrgs = map[string]tools_daemon.MachineOrg{}
+		}
+		dc.activeOrgs["d-1"] = org
+		dc.mu.Unlock()
+		return connCtx
+	}
+	snapshot := func(org tools_daemon.MachineOrg) managedDaemonStateSnapshot {
+		return managedDaemonStateSnapshot{Daemons: []ManagedDaemonState{{
+			DaemonID: "d-1", UserID: "u-1", PodIP: "10.255.255.1", PodPort: 9190, OrgID: org.ID, OrgUnresolved: org.Unresolved,
+		}}}
+	}
+	orgOf := func() tools_daemon.MachineOrg {
+		dc.mu.Lock()
+		defer dc.mu.Unlock()
+		return dc.activeOrgs["d-1"]
+	}
+	b := tools_daemon.MachineOrg{ID: "org-b"}
+	c := tools_daemon.MachineOrg{ID: "org-c"}
+
+	// Unresolved → resolved: reconnected with org B.
+	first := canary(tools_daemon.MachineOrg{Unresolved: true})
+	r.reconcile(ctx, snapshot(b))
+	assert.Error(t, first.Err(), "the connection registered with an unresolved org was kept")
+	assert.Equal(t, b, orgOf())
+
+	// Unchanged, and an unresolved tick: left alone.
+	steady := canary(b)
+	r.reconcile(ctx, snapshot(b))
+	r.reconcile(ctx, snapshot(tools_daemon.MachineOrg{Unresolved: true}))
+	assert.NoError(t, steady.Err(), "an unchanged or unresolved snapshot reconnected the machine")
+	assert.Equal(t, b, orgOf())
+
+	// Changed org: reconnected with org C.
+	r.reconcile(ctx, snapshot(c))
+	assert.Error(t, steady.Err())
+	assert.Equal(t, c, orgOf())
+}

@@ -243,22 +243,37 @@ func projectDaemonsToCore(rows []*ProjectDaemon) []*core.ProjectDaemon {
 }
 
 // DetachProjectDaemonOfOtherOrg removes the project's checkout record on the
-// machine, which belongs to machineOrg while the project is in projectOrg (nil:
-// none yet), and records the removed row whole in project_daemon_org_cleanups
+// machine, which belongs to machineOrg, when the project is in ANOTHER org
+// right now, and records the removed row whole in project_daemon_org_cleanups
 // in the same statement, so it can be restored
-// (dev-docs/machine-org-rollout.md). Only the record goes: the
-// project and the folder are untouched. It reports whether a row was removed;
-// a row already gone is false, not an error, so the cleanup is idempotent.
-func DetachProjectDaemonOfOtherOrg(ctx context.Context, db orm.Context, projectID, daemonID, userID, machineOrg string, projectOrg *string) (bool, error) {
+// (dev-docs/machine-org-rollout.md). Only the record goes: the project and
+// the folder are untouched.
+//
+// The org is decided in the statement, not from the caller's earlier read:
+// the project row is locked FOR SHARE (a project's org move takes it FOR NO
+// KEY UPDATE, so the two serialize) and its org_id re-read after any move
+// that committed meanwhile. A project now in the machine's org keeps its
+// checkout, and so does one with no org yet (it is its owner's default
+// org's, lazily; only a stamped org is authoritative enough to delete over).
+// It reports whether a row was removed; false (already gone, or no longer
+// of another org) is not an error, so the cleanup is idempotent.
+func DetachProjectDaemonOfOtherOrg(ctx context.Context, db orm.Context, projectID, daemonID, userID, machineOrg string) (bool, error) {
 	var ids []int64
 	err := db.Bun().NewRaw(`
-WITH gone AS (
-    DELETE FROM project_daemons pd WHERE pd.project_id = ?0 AND pd.daemon_id = ?1
-    RETURNING `+columnsOf[ProjectDaemon]("pd")+`
+WITH project AS (
+    SELECT p.id, p.org_id FROM projects p
+    WHERE p.id = ?0
+    FOR SHARE
+), gone AS (
+    DELETE FROM project_daemons pd
+    USING project
+    WHERE pd.project_id = project.id AND pd.daemon_id = ?1
+      AND project.org_id IS NOT NULL AND project.org_id <> ?3
+    RETURNING `+columnsOf[ProjectDaemon]("pd")+`, project.org_id AS project_org_id
 )
 INSERT INTO project_daemon_org_cleanups (project_id, daemon_id, user_id, path, machine_org_id, project_org_id, detached_row)
-SELECT gone.project_id, gone.daemon_id, ?2, gone.path, ?3, ?4, to_jsonb(gone) FROM gone
-RETURNING id`, projectID, daemonID, userID, machineOrg, projectOrg).Scan(ctx, &ids)
+SELECT gone.project_id, gone.daemon_id, ?2, gone.path, ?3, gone.project_org_id, to_jsonb(gone) - 'project_org_id' FROM gone
+RETURNING id`, projectID, daemonID, userID, machineOrg).Scan(ctx, &ids)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
