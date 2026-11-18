@@ -1478,8 +1478,8 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
                 : "hover:bg-foreground/5 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100",
               isCompact ? "p-1" : "p-1.5"
             )} aria-label="View logs">
-            <ExternalLink className="w-3 h-3" />
-            {runningProcess && !isCompact && <span className="text-xs">Logs</span>}
+            {/* The word when it fits, else the icon: never both. */}
+            {runningProcess && !isCompact ? <span className="text-xs">Logs</span> : <ExternalLink className="w-3 h-3" />}
           </button>
 </Tooltip>
         )}
@@ -1682,8 +1682,12 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
             isRunning ? "text-foreground" : "text-muted-foreground",
             isCompact ? "p-1" : "p-1.5"
           )} aria-label="View logs">
-          <ExternalLink className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
-          {isRunning && !isCompact && <span className="text-xs font-medium">Logs</span>}
+          {/* The word when it fits, else the icon: never both. */}
+          {isRunning && !isCompact ? (
+            <span className="text-xs font-medium">Logs</span>
+          ) : (
+            <ExternalLink className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
+          )}
         </button>
 </Tooltip>
         {isRunning && onKill && (
