@@ -106,6 +106,23 @@ func (a *MCPToolAdapter) Run(toolCtx *rctx.ToolContext, params ToolCall) (ToolRe
 		return NewTextErrorResponse("MCP runtime is not configured for this execution"), nil
 	}
 
+	// A destination path the server would have to write itself is the
+	// daemon's to write instead (mcp_file_output.go): the shared server's
+	// notion of where it may write is not this chat's.
+	saveSpec, savePath, arguments, saving := a.daemonSavedOutputFor(arguments)
+	if saving {
+		if toolCtx.Daemon == nil {
+			return NewTextErrorResponse(fmt.Sprintf(
+				"Saving the %s to %s requires a connected daemon, and none is available here; omit %s to get it in the response.",
+				saveSpec.noun, savePath, saveSpec.pathArg)), nil
+		}
+		dest, err := resolveSavePath(toolCtx, savePath)
+		if err != nil {
+			return NewTextErrorResponse(fmt.Sprintf("Can't save the %s: %v", saveSpec.noun, err)), nil
+		}
+		savePath = dest
+	}
+
 	session := mcpSessionKey(toolCtx)
 
 	var (
@@ -125,6 +142,9 @@ func (a *MCPToolAdapter) Run(toolCtx *rctx.ToolContext, params ToolCall) (ToolRe
 		return NewTextErrorResponse(fmt.Sprintf("MCP tool error: %v", err)), nil
 	}
 
+	if saving {
+		return a.saveMCPImageOutput(toolCtx, saveSpec, savePath, result), nil
+	}
 	return a.convertResult(result), nil
 }
 
