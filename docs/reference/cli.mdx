@@ -10383,7 +10383,7 @@ Examples:
   forge generate --check    # Run generate into a tmpdir; exit 1 if it would change the tree (CI guard)
   forge generate --no-cache # Run every step even if nothing changed since the last verified run
   forge generate --explain  # Print per-file provenance log after generate
-  forge generate --verbose  # Print one line per gate-off skipped step
+  forge generate --verbose  # Also print routine lines (skipped steps, pinned-tool resolution)
 
 Additional maintainer/debug flags exist (pipeline narrowing, drift
 forensics, parallel-lane and migration escape hatches); run
@@ -10406,7 +10406,7 @@ reliant forge generate [flags]
 | `--heal` | `bool` | - | Overwrite on-disk content that matches a PRIOR forge render (an older vintage) with the current template. OFF by default: such content is byte-indistinguishable from a deliberate edit, so forge leaves it untouched and tells you how to proceed rather than silently reverting your work. Pass --heal to advance every such file to the current templates. |
 | `--help-dev` | `bool` | - | List maintainer/debug flags hidden from --help |
 | `--no-cache` | `bool` | - | Run every step even when nothing changed since a full run verified this tree (a no-op generate otherwise skips in about a second; see the 'Skipping' section above). FORGE_GENERATE_NO_CACHE=1 does the same. |
-| `--verbose`, `-v` | `bool` | - | Print one line per gate-off skipped step ('⏩ skipped: \<step name> (`<reason>`)'). Default is silent skip. |
+| `--verbose`, `-v` | `bool` | - | Also print routine lines: one per gate-off skipped step ('⏩ skipped: \<step name> (`<reason>`)') and which pinned build each codegen tool resolved to ('📌 `<tool>` resolved to `<version>`'). Default prints progress and what needs action only. |
 | `--watch`, `-w` | `bool` | - | Watch for changes and regenerate |
 
 ---
