@@ -479,6 +479,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant preview-url`](#reliant-preview-url) | Print the shareable preview URL for a local port |
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
+| [`reliant project delete`](#reliant-project-delete) | Delete a project and its chats |
 | [`reliant project list`](#reliant-project-list) | List your projects |
 | [`reliant providers`](#reliant-providers) | Show the AI accounts your chats run on, and who pays for each |
 | [`reliant providers list`](#reliant-providers-list) | List your AI accounts and who pays for each |
@@ -20460,7 +20461,7 @@ reliant preview-url <port> [flags]
 
 Manage Reliant projects
 
-Create and list Reliant projects.
+Create, list and delete Reliant projects.
 
 A project is the unit of ownership a workflow run executes against. Every
 'reliant workflow run' needs a project — use 'reliant project create' to mint
@@ -20475,6 +20476,7 @@ reliant project
 | Command | Description |
 |---------|-------------|
 | [`create`](#reliant-project-create) | Create a project and print its ID |
+| [`delete`](#reliant-project-delete) | Delete a project and its chats |
 | [`list`](#reliant-project-list) | List your projects |
 
 **Flags:**
@@ -20512,6 +20514,40 @@ reliant project create [flags]
 | `--description` | `string` | - | Optional project description |
 | `--name` | `string` | - | Project name (defaults to the base name of --path) |
 | `--path` | `string` | `.` | Project directory path |
+
+---
+
+### reliant project delete
+
+Delete a project and its chats
+
+Deletes a project from Reliant, as Settings → Projects → Remove does.
+<project> is the project's id, name or path ('reliant project list').
+
+The project's chats, runs, worktree records, settings and automations are
+deleted with it. Nothing on disk is deleted: the folder and its git history
+stay where they are, and you can add the folder back at any time.
+
+A hosted deployment of the project (reliant forge env deploy) is not deleted
+by this command; 'reliant forge env delete <env>' removes an environment.
+
+The command asks you to type the project's name, unless --yes is given. A
+large project is deleted in batches; if the delete stops part way, what is
+left is still there, and running the command again resumes it.
+
+Targets --server (else RELIANT_SERVER_URL, else the default), authenticated by
+RELIANT_TOKEN or the login 'reliant auth login' stored for that server.
+
+```
+reliant project delete <project> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print the deleted project as JSON (requires --yes) |
+| `--yes` | `bool` | - | Delete without asking to type the project's name |
 
 ---
 

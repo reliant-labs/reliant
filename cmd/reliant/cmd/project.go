@@ -19,7 +19,7 @@ func newProjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "project",
 		Short: "Manage Reliant projects",
-		Long: `Create and list Reliant projects.
+		Long: `Create, list and delete Reliant projects.
 
 A project is the unit of ownership a workflow run executes against. Every
 'reliant workflow run' needs a project — use 'reliant project create' to mint
@@ -28,6 +28,7 @@ one (or let 'reliant workflow run --project-path' resolve it for you).`,
 
 	cmd.AddCommand(newProjectCreateCmd())
 	cmd.AddCommand(newProjectListCmd())
+	cmd.AddCommand(newProjectDeleteCmd())
 	cmd.AddCommand(newProjectMoveCmd())
 	cmd.PersistentFlags().Bool("daemon-session", false, "Use this server's existing signed-in daemon account without widening its permissions")
 
