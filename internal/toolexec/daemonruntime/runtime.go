@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskguard"
@@ -341,6 +342,18 @@ func Start(ctx context.Context, opts StartOptions) error {
 	defer func() {
 		if releaseErr := lock.Release(); releaseErr != nil {
 			logging.WarnContext(ctx, logPrefix+" Failed to release daemon data dir claim", "error", releaseErr)
+		}
+	}()
+
+	// Credentialed scratch directories moved aside more than a day ago have
+	// been kept for inspection long enough (#2823). In the background: there
+	// can be hundreds, and nothing waits on them.
+	go func() {
+		removed, err := credsandbox.PruneMovedAside()
+		if err != nil {
+			logging.Warn(logPrefix+" Could not prune every moved-aside credentialed scratch directory", "removed", removed, "error", err)
+		} else if removed > 0 {
+			logging.Info(logPrefix+" Pruned moved-aside credentialed scratch directories", "removed", removed)
 		}
 	}()
 
