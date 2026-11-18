@@ -52,8 +52,10 @@ export function ProjectsSection() {
   const { canSwitch: canSwitchOrg } = useActiveOrg();
   // Hiding a project only takes it out of the sidebar: it stays listed here,
   // marked, with the way back.
-  const { prefs: sidebarProjectPrefs, setHidden: setSidebarHidden } = useSidebarProjectPrefs();
-  const sidebarPrefs = { hidden: sidebarProjectPrefs.hidden, setHidden: setSidebarHidden };
+  // Hide/Unhide is offered once the choices have been read: a change saved
+  // before then would write over them.
+  const { prefs: sidebarProjectPrefs, setHidden: setSidebarHidden, writable } = useSidebarProjectPrefs();
+  const sidebarPrefs = { hidden: sidebarProjectPrefs.hidden, setHidden: writable ? setSidebarHidden : undefined };
 
   const sortedProjects = useMemo(
     () => sortProjectsForSettings(projects, currentProject?.id),

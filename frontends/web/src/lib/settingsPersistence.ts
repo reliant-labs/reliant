@@ -1,4 +1,4 @@
-import { batchUpsertSettings, deleteSetting } from "../hooks/settings-queries";
+import { batchUpsertSettings, deleteSetting, fetchSettings } from "../hooks/settings-queries";
 import { getAuthTokenProvider } from "../api/authProvider";
 import { isWriteOwnerMismatch } from "../api/writeOwner";
 import { settingsSync } from "../services/settingsSync";
@@ -173,6 +173,57 @@ export function upsertStringSetting(key: string, value: string): Promise<void> {
   return new Promise<void>((resolve) => {
     batch.waiters.push(resolve);
   });
+}
+
+/**
+ * The setting as the server holds it now: one ListSettings, never the
+ * in-memory cache. "error" when it cannot be read (signed out, or the request
+ * failed), so a caller about to rewrite a whole document never mistakes a
+ * failed read for "nothing stored". A found or missing answer also brings the
+ * cache up to date.
+ */
+export async function readSettingFromServer(key: string): Promise<SettingRead> {
+  if (!(await hasAuthToken())) return { status: "error" };
+  try {
+    const response = await fetchSettings();
+    const setting = response.settings.find((s) => s.key === key && !s.projectId);
+    if (!setting) {
+      settingsSync.removeFromCache(key);
+      return { status: "missing" };
+    }
+    settingsSync.updateCache(key, setting.value);
+    return { status: "found", value: setting.value };
+  } catch (error) {
+    logger.warn("[settingsPersistence] Failed to read setting from the server", { key, error });
+    return { status: "error" };
+  }
+}
+
+/** A setting write that did not reach the server (writeStringSetting). */
+export class SettingWriteError extends Error {
+  constructor(key: string, options?: { cause?: unknown }) {
+    super(`Could not save setting ${key}`, options);
+    this.name = "SettingWriteError";
+  }
+}
+
+/**
+ * Upsert one setting and say whether it landed: resolves once the server
+ * stored it, and rejects (SettingWriteError) when it did not — signed out, a
+ * credential that moved to another account, or a refused or failed request.
+ * The cache changes only after the server has stored the value. For a caller
+ * that must recover from a refused write; upsertStringSetting is the
+ * fire-and-forget, batched writer every other setting uses.
+ */
+export async function writeStringSetting(key: string, value: string): Promise<void> {
+  const owner = currentSessionOwner();
+  if (!(await mayWriteFor(owner, [key]))) throw new SettingWriteError(key);
+  try {
+    await batchUpsertSettings([{ key, value, valueType: "string" }], undefined, owner);
+  } catch (error) {
+    throw new SettingWriteError(key, { cause: error });
+  }
+  settingsSync.updateCache(key, value);
 }
 
 export async function deleteSettingIfExists(key: string): Promise<void> {

@@ -1055,6 +1055,10 @@ function SidebarComponent({
     setPinned: setProjectPinned,
     setHidden: setProjectHidden,
     setShowAll: setShowAllProjects,
+    // Changes wait for the choices to be read, so one never writes over them.
+    writable: projectPrefsWritable,
+    loadFailed: projectPrefsLoadFailed,
+    retry: retryProjectPrefs,
   } = useSidebarProjectPrefs();
   const currentProjectId = useProjectStore((state) => state.currentProject?.id);
   const [moreProjectsOpen, setMoreProjectsOpen] = useState(false);
@@ -1865,12 +1869,14 @@ function SidebarComponent({
             label: isPinned ? "Unpin" : "Pin to sidebar",
             icon: isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />,
             onClick: () => setProjectPinned(group.projectId, !isPinned),
+            disabled: !projectPrefsWritable,
             testId: `sidebar-project-pin-${group.projectId}`,
           },
           {
             label: isHidden ? "Unhide" : "Hide from sidebar",
             icon: isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />,
             onClick: () => setProjectHidden(group.projectId, !isHidden),
+            disabled: !projectPrefsWritable,
             testId: `sidebar-project-hide-${group.projectId}`,
           },
         ],
@@ -2156,7 +2162,11 @@ function SidebarComponent({
           {/* Across projects, and only while it would change something. */}
           {!projectFilterId &&
             (projectPrefs.showAll || foldedProjectGroups.length > 0 || hiddenProjectCount > 0) && (
-              <ProjectListToggle showAll={projectPrefs.showAll} onChange={setShowAllProjects} />
+              <ProjectListToggle
+                showAll={projectPrefs.showAll}
+                onChange={setShowAllProjects}
+                disabled={!projectPrefsWritable}
+              />
             )}
 
           {/* Hidden while there is one machine: nothing to choose between. */}
@@ -2289,6 +2299,23 @@ function SidebarComponent({
           aria-label={chatListTab === "active" ? "Chats" : "Archived chats"}
           role="region"
         >
+          {/* The pins and hides did not load: every project shows by the
+              defaults, and changing them waits for a read. One quiet line. */}
+          {chatListTab === "active" && !projectFilterId && projectPrefsLoadFailed && (
+            <div
+              className="mb-1 flex items-center justify-between gap-2 px-2 text-2xs text-muted-foreground"
+              data-testid="project-prefs-load-failed"
+            >
+              <span className="min-w-0 truncate">Couldn't load pinned and hidden projects</span>
+              <button
+                type="button"
+                onClick={retryProjectPrefs}
+                className="shrink-0 rounded font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Retry
+              </button>
+            </div>
+          )}
           {chatListTab === "active" ? (
             viewMode === "grouped" ? (
               projectFilterId ? (

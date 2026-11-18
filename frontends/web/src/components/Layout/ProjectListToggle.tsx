@@ -20,21 +20,24 @@ export const SHOW_ALL_PROJECTS_LABEL = "Every project";
 interface ProjectListToggleProps {
   showAll: boolean;
   onChange: (showAll: boolean) => void;
+  /** The choice cannot be saved yet (the setting has not been read). */
+  disabled?: boolean;
 }
 
-export function ProjectListToggle({ showAll, onChange }: ProjectListToggleProps) {
+export function ProjectListToggle({ showAll, onChange, disabled = false }: ProjectListToggleProps) {
   const tip = showAll ? "Showing every project, hidden ones too" : "Show every project";
   return (
     <Tooltip content={tip} side="bottom" delay={300} triggerClassName="flex min-w-0 shrink">
       <button
         type="button"
         onClick={() => onChange(!showAll)}
+        disabled={disabled}
         aria-pressed={showAll}
         aria-label="Show every project"
         data-testid="project-list-toggle"
         className={cn(
           "flex h-6 min-w-0 shrink-0 items-center gap-1 rounded-md transition-colors",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
           showAll
             ? "max-w-[8rem] bg-primary/10 px-1.5 text-xs font-medium text-primary-ink hover:bg-primary/15"
             : "w-6 justify-center text-muted-foreground hover:bg-muted/60 hover:text-foreground",
