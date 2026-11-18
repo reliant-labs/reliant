@@ -28,7 +28,8 @@ import (
 // it, takes the image the server returns instead, and writes it through the
 // tool context's daemon — the same per-chat path policy the write tool and
 // save_attachment follow — resolving a relative path against the chat's
-// workspace root.
+// workspace root, and never replacing a file this thread has not read or that
+// changed since it did (the write tool's guard).
 
 // daemonSavedOutput names the argument a tool takes a destination path in.
 type daemonSavedOutput struct {
@@ -47,13 +48,12 @@ var daemonSavedMCPOutputs = map[string]map[string]daemonSavedOutput{
 	},
 }
 
-// maxServerSavedImageBytes bounds the read of an image the server saved to a
-// temporary file instead of returning it (chrome-devtools-mcp does that for
-// screenshots of 2 MB and over).
-const maxServerSavedImageBytes = 64 << 20
-
 // serverSavedFileLine matches the line chrome-devtools-mcp writes when it saved
-// the image to a file rather than returning it.
+// the image to a temporary file of its own rather than returning it (it does
+// that for screenshots of 2 MB and over). The path in it is never read: it is
+// text from the server, and reading it would let a response copy any file the
+// daemon can read to the destination. Only the image the result carries is
+// written.
 var serverSavedFileLine = regexp.MustCompile(`^Saved \w+ to (.+)\.$`)
 
 // daemonSavedOutputFor returns the output spec and requested path when this
@@ -104,10 +104,10 @@ func (a *MCPToolAdapter) saveMCPImageOutput(tc *rctx.ToolContext, spec daemonSav
 	}
 
 	var (
-		data      []byte
-		mimeType  string
-		serverTmp string
-		lines     []string
+		data        []byte
+		mimeType    string
+		serverSaved bool
+		lines       []string
 	)
 	for _, content := range result.Content {
 		switch {
@@ -120,8 +120,8 @@ func (a *MCPToolAdapter) saveMCPImageOutput(tc *rctx.ToolContext, spec daemonSav
 			data, mimeType = decoded, content.MimeType
 		case content.Text != "":
 			for _, line := range strings.Split(content.Text, "\n") {
-				if m := serverSavedFileLine.FindStringSubmatch(strings.TrimSpace(line)); m != nil {
-					serverTmp = m[1]
+				if serverSavedFileLine.MatchString(strings.TrimSpace(line)) {
+					serverSaved = true
 					continue
 				}
 				lines = append(lines, line)
@@ -129,17 +129,12 @@ func (a *MCPToolAdapter) saveMCPImageOutput(tc *rctx.ToolContext, spec daemonSav
 		}
 	}
 
-	if data == nil && serverTmp != "" {
-		// Too large to return inline: the server saved it to a temporary file
-		// on this machine. Read it back through the daemon.
-		read, err := tc.Daemon.ReadBinaryFile(tc.Context, serverTmp, maxServerSavedImageBytes)
-		if err != nil {
-			return NewTextErrorResponse(fmt.Sprintf(
-				"Took the %s, which the server saved to %s, but could not read it to save it to %s: %v",
-				spec.noun, serverTmp, dest, err))
-		}
-		data = read
-		mimeType = mimeTypeForExtension(filepath.Ext(serverTmp))
+	if data == nil && serverSaved {
+		return NewTextErrorResponse(fmt.Sprintf(
+			"The %s was not saved to %s: it was too large for the server to return (2 MB or more), "+
+				"so the server kept it in a temporary file of its own, which Reliant does not read. "+
+				"Retry with format \"jpeg\" or \"webp\" and a lower quality, or without fullPage.",
+			spec.noun, dest))
 	}
 	if data == nil {
 		return NewTextErrorResponse(fmt.Sprintf(
@@ -147,17 +142,63 @@ func (a *MCPToolAdapter) saveMCPImageOutput(tc *rctx.ToolContext, spec daemonSav
 	}
 
 	dest = withImageExtension(dest, mimeType)
-	if _, err := tc.Daemon.WriteBinaryFile(tc.Context, dest, data); err != nil {
-		return NewTextErrorResponse(fmt.Sprintf(
-			"Took the %s but could not save it to %s: %v. "+
-				"Choose a path this chat may write to, or omit %s to get the image in the response.",
-			spec.noun, dest, err, spec.pathArg))
+	resp, err := withPathLock(tc, dest, func() (ToolResponse, error) {
+		return a.writeSavedOutputLocked(tc, spec, dest, data), nil
+	})
+	if err != nil || resp.IsError {
+		return resp
 	}
-	logging.Debug("Saved MCP tool output through the daemon",
-		"server", a.serverName, "tool", a.tool.Name, "path", dest, "bytes", len(data))
 
 	lines = append(lines, fmt.Sprintf("Saved %s to %s.", spec.noun, dest))
 	return NewTextResponse(strings.TrimSpace(strings.Join(lines, "\n")))
+}
+
+// writeSavedOutputLocked writes data to dest under the write tool's
+// read-awareness rules, and returns an error response when it refuses or fails
+// (a zero response on success). Callers must hold the path lock for dest.
+//
+// A new file is created. An existing one is overwritten only when this thread
+// has observed it and it has not changed since (modifiedSinceAwareness, the
+// write tool's guard). Unlike the write tool, an existing file the thread never
+// read is refused rather than overwritten with a diff: a binary file has no
+// diff to show what was replaced, so there would be no way to repair it.
+func (a *MCPToolAdapter) writeSavedOutputLocked(tc *rctx.ToolContext, spec daemonSavedOutput, dest string, data []byte) ToolResponse {
+	chatID, thread := tc.ChatID, tc.Thread
+	if thread == "" {
+		thread = "0"
+	}
+	notSaved := func(reason string) ToolResponse {
+		return NewTextErrorResponse(fmt.Sprintf(
+			"Took the %s but did not save it to %s: %s", spec.noun, dest, reason))
+	}
+
+	stat, err := tc.Daemon.StatFile(tc.Context, dest)
+	if err != nil {
+		return notSaved(fmt.Sprintf("could not check the path: %v.", err))
+	}
+	if stat.Exists {
+		if stat.IsDir {
+			return notSaved("the path is a directory.")
+		}
+		lastAwareness := getLastAwarenessTime(chatID, thread, dest)
+		if lastAwareness.IsZero() {
+			return notSaved("a file already exists there and has not been read in this thread, so it was left untouched. " +
+				"Read it first to replace it, or choose a new path.")
+		}
+		if msg, modified := modifiedSinceAwareness(dest, stat.ModTime, lastAwareness); modified {
+			return notSaved(msg)
+		}
+	}
+
+	if _, err := tc.Daemon.WriteBinaryFile(tc.Context, dest, data); err != nil {
+		return notSaved(fmt.Sprintf(
+			"%v. Choose a path this chat may write to, or omit %s to get the image in the response.",
+			err, spec.pathArg))
+	}
+	recordFileAwareness(chatID, thread, dest)
+	logging.Debug("Saved MCP tool output through the daemon",
+		"server", a.serverName, "tool", a.tool.Name, "path", dest, "bytes", len(data))
+	return ToolResponse{}
 }
 
 // withImageExtension gives dest the extension of the image's format, replacing
@@ -181,16 +222,4 @@ func withImageExtension(dest, mimeType string) string {
 		current = "" // a dotfile's name is not its extension
 	}
 	return strings.TrimSuffix(dest, current) + ext
-}
-
-func mimeTypeForExtension(ext string) string {
-	switch strings.ToLower(ext) {
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".webp":
-		return "image/webp"
-	}
-	return ""
 }

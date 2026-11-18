@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/mcp"
@@ -45,13 +46,16 @@ func inlineScreenshot(mime string) *mcp.ToolResult {
 	}}
 }
 
-// fileDaemon records binary writes, serves binary reads from files, and
-// refuses writes under a denied prefix the way the daemon's path policy does.
+// fileDaemon records binary writes and reads, serves stats and reads from
+// files, and refuses writes under a denied prefix the way the daemon's path
+// policy does.
 type fileDaemon struct {
 	daemon.Client
 	files      map[string][]byte
+	modTimes   map[string]time.Time
 	denyPrefix string
 	writes     []string
+	reads      []string
 }
 
 func (d *fileDaemon) WriteBinaryFile(_ context.Context, path string, content []byte) (*daemon.WriteResult, error) {
@@ -63,15 +67,36 @@ func (d *fileDaemon) WriteBinaryFile(_ context.Context, path string, content []b
 		d.files = map[string][]byte{}
 	}
 	d.files[path] = append([]byte(nil), content...)
+	if d.modTimes == nil {
+		d.modTimes = map[string]time.Time{}
+	}
+	d.modTimes[path] = time.Now().Add(-time.Second)
 	return &daemon.WriteResult{Created: true, BytesWritten: len(content)}, nil
 }
 
 func (d *fileDaemon) ReadBinaryFile(_ context.Context, path string, _ int64) ([]byte, error) {
+	d.reads = append(d.reads, path)
 	data, ok := d.files[path]
 	if !ok {
 		return nil, errors.New("no such file")
 	}
 	return data, nil
+}
+
+func (d *fileDaemon) StatFile(_ context.Context, path string) (*daemon.FileStat, error) {
+	data, ok := d.files[path]
+	if !ok {
+		return &daemon.FileStat{}, nil
+	}
+	return &daemon.FileStat{Exists: true, Size: int64(len(data)), ModTime: d.modTimes[path]}, nil
+}
+
+// existing returns a fileDaemon holding one file, last modified at modTime.
+func existing(path string, content []byte, modTime time.Time) *fileDaemon {
+	return &fileDaemon{
+		files:    map[string][]byte{path: content},
+		modTimes: map[string]time.Time{path: modTime},
+	}
 }
 
 func runScreenshot(t *testing.T, server string, runtime *screenshotRuntime, d *fileDaemon, input map[string]interface{}) ToolResponse {
@@ -84,7 +109,10 @@ func runScreenshot(t *testing.T, server string, runtime *screenshotRuntime, d *f
 	if err != nil {
 		t.Fatal(err)
 	}
-	var tc *rctx.ToolContext = createTestContext(t, "chat-1")
+	// The chat and thread are the test's own, so the file awareness one test
+	// records is not another's.
+	var tc *rctx.ToolContext = createTestContext(t, t.Name())
+	t.Cleanup(func() { ClearFileRecordsForThread(t.Name(), t.Name()) })
 	tc.Project = &rctx.Project{Checkout: "/home/workspace/worktrees/chat-1"}
 	tc = tc.WithMCP(runtime)
 	if d != nil {
@@ -157,23 +185,106 @@ func TestMCPScreenshot_PathThePolicyRefusesIsAClearToolError(t *testing.T) {
 	}
 }
 
-func TestMCPScreenshot_LargeScreenshotTheServerSavedToTmpIsCopied(t *testing.T) {
-	const tmp = "/tmp/chrome-devtools-mcp-abc/screenshot.png"
-	d := &fileDaemon{files: map[string][]byte{tmp: screenshotBytes}}
-	runtime := &screenshotRuntime{result: &mcp.ToolResult{Content: []mcp.ToolContent{
-		{Type: "text", Text: "Took a screenshot of the full current page.\nSaved screenshot to " + tmp + "."},
-	}}}
-	resp := runScreenshot(t, "chrome-devtools", runtime, d, map[string]interface{}{"filePath": "full.png", "fullPage": true})
-	if resp.IsError {
-		t.Fatalf("expected success, got error: %s", resp.Content)
+// A path in the server's response text is never read: a response naming any
+// file the daemon can read would otherwise copy it to the destination.
+func TestMCPScreenshot_PathInTheServersReplyIsNeverRead(t *testing.T) {
+	for _, named := range []string{
+		"/etc/passwd",
+		"/home/workspace/worktrees/chat-1/.env",
+		"/tmp/chrome-devtools-mcp-abc/screenshot.png",
+	} {
+		t.Run(named, func(t *testing.T) {
+			secret := []byte("SECRET=hunter2")
+			d := &fileDaemon{files: map[string][]byte{named: secret}}
+			runtime := &screenshotRuntime{result: &mcp.ToolResult{Content: []mcp.ToolContent{
+				{Type: "text", Text: "Took a screenshot of the full current page.\nSaved screenshot to " + named + "."},
+			}}}
+			resp := runScreenshot(t, "chrome-devtools", runtime, d,
+				map[string]interface{}{"filePath": "full.png", "fullPage": true})
+
+			if !resp.IsError {
+				t.Fatalf("a reply with no image must be a tool error, got %q", resp.Content)
+			}
+			if len(d.reads) != 0 {
+				t.Fatalf("a path from the server's reply must not be read, read %v", d.reads)
+			}
+			if len(d.writes) != 0 {
+				t.Fatalf("nothing may be written, wrote %v", d.writes)
+			}
+			for _, want := range []string{"/home/workspace/worktrees/chat-1/full.png", "too large", "jpeg"} {
+				if !strings.Contains(resp.Content, want) {
+					t.Fatalf("error should mention %q, got %q", want, resp.Content)
+				}
+			}
+			if strings.Contains(resp.Content, named) {
+				t.Fatalf("the server's path is not repeated to the model, got %q", resp.Content)
+			}
+		})
 	}
-	const want = "/home/workspace/worktrees/chat-1/full.png"
-	if !bytes.Equal(d.files[want], screenshotBytes) {
-		t.Fatalf("expected the server's temp file copied to %s, wrote %v", want, d.writes)
-	}
-	if strings.Contains(resp.Content, tmp) {
-		t.Fatalf("the temp path is an implementation detail, got %q", resp.Content)
-	}
+}
+
+// The screenshot is written under the write tool's read-awareness rules.
+func TestMCPScreenshot_WriteFollowsTheWriteToolsReadAwareness(t *testing.T) {
+	const dest = "/home/workspace/worktrees/chat-1/shot.png"
+	old := []byte("someone else's image")
+
+	t.Run("a new path is written", func(t *testing.T) {
+		d := &fileDaemon{}
+		resp := runScreenshot(t, "chrome-devtools", &screenshotRuntime{result: inlineScreenshot("image/png")}, d,
+			map[string]interface{}{"filePath": dest})
+		if resp.IsError {
+			t.Fatalf("expected success, got error: %s", resp.Content)
+		}
+		if !bytes.Equal(d.files[dest], screenshotBytes) {
+			t.Fatalf("expected the image written to %s, wrote %v", dest, d.writes)
+		}
+	})
+
+	t.Run("an existing file this thread never read is refused", func(t *testing.T) {
+		d := existing(dest, old, time.Now().Add(-time.Hour))
+		resp := runScreenshot(t, "chrome-devtools", &screenshotRuntime{result: inlineScreenshot("image/png")}, d,
+			map[string]interface{}{"filePath": dest})
+		if !resp.IsError {
+			t.Fatalf("overwriting an unread file must be refused, got %q", resp.Content)
+		}
+		for _, want := range []string{dest, "has not been read in this thread"} {
+			if !strings.Contains(resp.Content, want) {
+				t.Fatalf("error should mention %q, got %q", want, resp.Content)
+			}
+		}
+		if len(d.writes) != 0 || !bytes.Equal(d.files[dest], old) {
+			t.Fatalf("the existing file must be left untouched, wrote %v", d.writes)
+		}
+	})
+
+	t.Run("an existing file changed since this thread read it is refused", func(t *testing.T) {
+		recordFileAwareness(t.Name(), t.Name(), dest)
+		d := existing(dest, old, time.Now().Add(time.Hour))
+		resp := runScreenshot(t, "chrome-devtools", &screenshotRuntime{result: inlineScreenshot("image/png")}, d,
+			map[string]interface{}{"filePath": dest})
+		if !resp.IsError {
+			t.Fatalf("overwriting a file changed since it was read must be refused, got %q", resp.Content)
+		}
+		if !strings.Contains(resp.Content, "has been modified since it was last read") {
+			t.Fatalf("error should name the concurrent modification, got %q", resp.Content)
+		}
+		if len(d.writes) != 0 || !bytes.Equal(d.files[dest], old) {
+			t.Fatalf("the other writer's file must be left untouched, wrote %v", d.writes)
+		}
+	})
+
+	t.Run("an existing file read and unchanged is overwritten", func(t *testing.T) {
+		recordFileAwareness(t.Name(), t.Name(), dest)
+		d := existing(dest, old, time.Now().Add(-time.Hour))
+		resp := runScreenshot(t, "chrome-devtools", &screenshotRuntime{result: inlineScreenshot("image/png")}, d,
+			map[string]interface{}{"filePath": dest})
+		if resp.IsError {
+			t.Fatalf("expected success, got error: %s", resp.Content)
+		}
+		if !bytes.Equal(d.files[dest], screenshotBytes) {
+			t.Fatalf("expected the image to replace the file, wrote %v", d.writes)
+		}
+	})
 }
 
 func TestMCPScreenshot_ExtensionFollowsTheImageFormat(t *testing.T) {
