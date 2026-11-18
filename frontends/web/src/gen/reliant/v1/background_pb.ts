@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/background.proto.
  */
 export const file_reliant_v1_background: GenFile = /*@__PURE__*/
-  fileDesc("ChtyZWxpYW50L3YxL2JhY2tncm91bmQucHJvdG8SCnJlbGlhbnQudjEiSgoIUG9ydEluZm8SDAoEcG9ydBgBIAEoBRIQCghwcm90b2NvbBgCIAEoCRINCgVzdGF0ZRgDIAEoCRIPCgdhZGRyZXNzGAQgASgJIt0CChFCYWNrZ3JvdW5kUHJvY2VzcxIKCgJpZBgBIAEoCRIPCgdjb21tYW5kGAIgASgJEjMKBnN0YXR1cxgDIAEoDjIjLnJlbGlhbnQudjEuQmFja2dyb3VuZFByb2Nlc3NTdGF0dXMSEgoKc3RhcnRfdGltZRgEIAEoCRIVCghlbmRfdGltZRgFIAEoCUgAiAEBEhYKCWV4aXRfY29kZRgGIAEoBUgBiAEBEhMKC3dvcmtpbmdfZGlyGAcgASgJEhgKC3dvcmt0cmVlX2lkGAggASgJSAKIAQESEgoKc2Vzc2lvbl9pZBgJIAEoCRIUCgdjaGF0X2lkGAogASgJSAOIAQESIwoFcG9ydHMYCyADKAsyFC5yZWxpYW50LnYxLlBvcnRJbmZvQgsKCV9lbmRfdGltZUIMCgpfZXhpdF9jb2RlQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCIvCg1Qcm9jZXNzT3V0cHV0Eg4KBnN0ZG91dBgBIAEoCRIOCgZzdGRlcnIYAiABKAkilAEKHkxpc3RCYWNrZ3JvdW5kUHJvY2Vzc2VzUmVxdWVzdBIYCgt3b3JrdHJlZV9pZBgBIAEoCUgAiAEBEhcKCnNlc3Npb25faWQYAiABKAlIAYgBARIUCgdjaGF0X2lkGAMgASgJSAKIAQFCDgoMX3dvcmt0cmVlX2lkQg0KC19zZXNzaW9uX2lkQgoKCF9jaGF0X2lkIlMKH0xpc3RCYWNrZ3JvdW5kUHJvY2Vzc2VzUmVzcG9uc2USMAoJcHJvY2Vzc2VzGAEgAygLMh0ucmVsaWFudC52MS5CYWNrZ3JvdW5kUHJvY2VzcyItChdHZXRQcm9jZXNzT3V0cHV0UmVxdWVzdBISCgpwcm9jZXNzX2lkGAEgASgJIjoKGEdldFByb2Nlc3NPdXRwdXRSZXNwb25zZRIOCgZzdGRvdXQYASABKAkSDgoGc3RkZXJyGAIgASgJIigKEktpbGxQcm9jZXNzUmVxdWVzdBISCgpwcm9jZXNzX2lkGAEgASgJIiYKE0tpbGxQcm9jZXNzUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCSJoChpTdHJlYW1Qcm9jZXNzT3V0cHV0UmVxdWVzdBISCgpwcm9jZXNzX2lkGAEgASgJEhAKCG5ld19vbmx5GAIgASgIEhYKCWRhZW1vbl9pZBgDIAEoCUgAiAEBQgwKCl9kYWVtb25faWQiugEKElByb2Nlc3NPdXRwdXRFdmVudBItCgRsaW5lGAEgASgLMh0ucmVsaWFudC52MS5Qcm9jZXNzT3V0cHV0TGluZUgAEjUKCGNvbXBsZXRlGAIgASgLMiEucmVsaWFudC52MS5Qcm9jZXNzT3V0cHV0Q29tcGxldGVIABI1CghzbmFwc2hvdBgDIAEoCzIhLnJlbGlhbnQudjEuUHJvY2Vzc091dHB1dFNuYXBzaG90SABCBwoFZXZlbnQiXwoRUHJvY2Vzc091dHB1dExpbmUSKgoEdHlwZRgBIAEoDjIcLnJlbGlhbnQudjEuT3V0cHV0U3RyZWFtVHlwZRIMCgR0ZXh0GAIgASgJEhAKCHNlcXVlbmNlGAMgASgDIoQBChVQcm9jZXNzT3V0cHV0Q29tcGxldGUSMwoGc3RhdHVzGAEgASgOMiMucmVsaWFudC52MS5CYWNrZ3JvdW5kUHJvY2Vzc1N0YXR1cxIWCglleGl0X2NvZGUYAiABKAVIAIgBARIQCghlbmRfdGltZRgDIAEoCUIMCgpfZXhpdF9jb2RlIt4BChVQcm9jZXNzT3V0cHV0U25hcHNob3QSLAoFbGluZXMYASADKAsyHS5yZWxpYW50LnYxLlByb2Nlc3NPdXRwdXRMaW5lEhcKD2xhdGVzdF9zZXF1ZW5jZRgCIAEoAxITCgtpc19jb21wbGV0ZRgDIAEoCBI4CgZzdGF0dXMYBCABKA4yIy5yZWxpYW50LnYxLkJhY2tncm91bmRQcm9jZXNzU3RhdHVzSACIAQESFgoJZXhpdF9jb2RlGAUgASgFSAGIAQFCCQoHX3N0YXR1c0IMCgpfZXhpdF9jb2RlMvEDChFCYWNrZ3JvdW5kU2VydmljZRJqCg1MaXN0UHJvY2Vzc2VzEioucmVsaWFudC52MS5MaXN0QmFja2dyb3VuZFByb2Nlc3Nlc1JlcXVlc3QaKy5yZWxpYW50LnYxLkxpc3RCYWNrZ3JvdW5kUHJvY2Vzc2VzUmVzcG9uc2UiABJfChBHZXRQcm9jZXNzT3V0cHV0EiMucmVsaWFudC52MS5HZXRQcm9jZXNzT3V0cHV0UmVxdWVzdBokLnJlbGlhbnQudjEuR2V0UHJvY2Vzc091dHB1dFJlc3BvbnNlIgASqAEKC0tpbGxQcm9jZXNzEh4ucmVsaWFudC52MS5LaWxsUHJvY2Vzc1JlcXVlc3QaHy5yZWxpYW50LnYxLktpbGxQcm9jZXNzUmVzcG9uc2UiWKK7GFQ6UjpQc3RvcHMgYSBiYWNrZ3JvdW5kIHByb2Nlc3Mgb24gdGhlIGRhZW1vbjsgcHJvY2VzcyBsaWZlY3ljbGUsIG5vdCBwcm9qZWN0IGhpc3RvcnkSZAoTU3RyZWFtUHJvY2Vzc091dHB1dBImLnJlbGlhbnQudjEuU3RyZWFtUHJvY2Vzc091dHB1dFJlcXVlc3QaHi5yZWxpYW50LnYxLlByb2Nlc3NPdXRwdXRFdmVudCIDkAIBMAFCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge, file_reliant_v1_common]);
+  fileDesc("ChtyZWxpYW50L3YxL2JhY2tncm91bmQucHJvdG8SCnJlbGlhbnQudjEiSgoIUG9ydEluZm8SDAoEcG9ydBgBIAEoBRIQCghwcm90b2NvbBgCIAEoCRINCgVzdGF0ZRgDIAEoCRIPCgdhZGRyZXNzGAQgASgJIrsEChFCYWNrZ3JvdW5kUHJvY2VzcxIKCgJpZBgBIAEoCRIPCgdjb21tYW5kGAIgASgJEjMKBnN0YXR1cxgDIAEoDjIjLnJlbGlhbnQudjEuQmFja2dyb3VuZFByb2Nlc3NTdGF0dXMSEgoKc3RhcnRfdGltZRgEIAEoCRIVCghlbmRfdGltZRgFIAEoCUgAiAEBEhYKCWV4aXRfY29kZRgGIAEoBUgBiAEBEhMKC3dvcmtpbmdfZGlyGAcgASgJEhgKC3dvcmt0cmVlX2lkGAggASgJSAKIAQESEgoKc2Vzc2lvbl9pZBgJIAEoCRIUCgdjaGF0X2lkGAogASgJSAOIAQESIwoFcG9ydHMYCyADKAsyFC5yZWxpYW50LnYxLlBvcnRJbmZvEhYKCXRocmVhZF9pZBgMIAEoCUgEiAEBEhYKCWRhZW1vbl9pZBgNIAEoCUgFiAEBEhIKCmtlZXBfYWxpdmUYDiABKAgSGAoLc3RvcHNfYWZ0ZXIYDyABKAlIBogBARIYCgtzdG9wX2V4ZW1wdBgQIAEoCUgHiAEBEhgKC2xhc3RfYWN0aXZlGBEgASgJSAiIAQFCCwoJX2VuZF90aW1lQgwKCl9leGl0X2NvZGVCDgoMX3dvcmt0cmVlX2lkQgoKCF9jaGF0X2lkQgwKCl90aHJlYWRfaWRCDAoKX2RhZW1vbl9pZEIOCgxfc3RvcHNfYWZ0ZXJCDgoMX3N0b3BfZXhlbXB0Qg4KDF9sYXN0X2FjdGl2ZSIvCg1Qcm9jZXNzT3V0cHV0Eg4KBnN0ZG91dBgBIAEoCRIOCgZzdGRlcnIYAiABKAkilAEKHkxpc3RCYWNrZ3JvdW5kUHJvY2Vzc2VzUmVxdWVzdBIYCgt3b3JrdHJlZV9pZBgBIAEoCUgAiAEBEhcKCnNlc3Npb25faWQYAiABKAlIAYgBARIUCgdjaGF0X2lkGAMgASgJSAKIAQFCDgoMX3dvcmt0cmVlX2lkQg0KC19zZXNzaW9uX2lkQgoKCF9jaGF0X2lkIlMKH0xpc3RCYWNrZ3JvdW5kUHJvY2Vzc2VzUmVzcG9uc2USMAoJcHJvY2Vzc2VzGAEgAygLMh0ucmVsaWFudC52MS5CYWNrZ3JvdW5kUHJvY2VzcyJTChdHZXRQcm9jZXNzT3V0cHV0UmVxdWVzdBISCgpwcm9jZXNzX2lkGAEgASgJEhYKCWRhZW1vbl9pZBgCIAEoCUgAiAEBQgwKCl9kYWVtb25faWQiOgoYR2V0UHJvY2Vzc091dHB1dFJlc3BvbnNlEg4KBnN0ZG91dBgBIAEoCRIOCgZzdGRlcnIYAiABKAkiTgoSS2lsbFByb2Nlc3NSZXF1ZXN0EhIKCnByb2Nlc3NfaWQYASABKAkSFgoJZGFlbW9uX2lkGAIgASgJSACIAQFCDAoKX2RhZW1vbl9pZCImChNLaWxsUHJvY2Vzc1Jlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkiaAoaU3RyZWFtUHJvY2Vzc091dHB1dFJlcXVlc3QSEgoKcHJvY2Vzc19pZBgBIAEoCRIQCghuZXdfb25seRgCIAEoCBIWCglkYWVtb25faWQYAyABKAlIAIgBAUIMCgpfZGFlbW9uX2lkIroBChJQcm9jZXNzT3V0cHV0RXZlbnQSLQoEbGluZRgBIAEoCzIdLnJlbGlhbnQudjEuUHJvY2Vzc091dHB1dExpbmVIABI1Cghjb21wbGV0ZRgCIAEoCzIhLnJlbGlhbnQudjEuUHJvY2Vzc091dHB1dENvbXBsZXRlSAASNQoIc25hcHNob3QYAyABKAsyIS5yZWxpYW50LnYxLlByb2Nlc3NPdXRwdXRTbmFwc2hvdEgAQgcKBWV2ZW50Il8KEVByb2Nlc3NPdXRwdXRMaW5lEioKBHR5cGUYASABKA4yHC5yZWxpYW50LnYxLk91dHB1dFN0cmVhbVR5cGUSDAoEdGV4dBgCIAEoCRIQCghzZXF1ZW5jZRgDIAEoAyKEAQoVUHJvY2Vzc091dHB1dENvbXBsZXRlEjMKBnN0YXR1cxgBIAEoDjIjLnJlbGlhbnQudjEuQmFja2dyb3VuZFByb2Nlc3NTdGF0dXMSFgoJZXhpdF9jb2RlGAIgASgFSACIAQESEAoIZW5kX3RpbWUYAyABKAlCDAoKX2V4aXRfY29kZSLeAQoVUHJvY2Vzc091dHB1dFNuYXBzaG90EiwKBWxpbmVzGAEgAygLMh0ucmVsaWFudC52MS5Qcm9jZXNzT3V0cHV0TGluZRIXCg9sYXRlc3Rfc2VxdWVuY2UYAiABKAMSEwoLaXNfY29tcGxldGUYAyABKAgSOAoGc3RhdHVzGAQgASgOMiMucmVsaWFudC52MS5CYWNrZ3JvdW5kUHJvY2Vzc1N0YXR1c0gAiAEBEhYKCWV4aXRfY29kZRgFIAEoBUgBiAEBQgkKB19zdGF0dXNCDAoKX2V4aXRfY29kZTLxAwoRQmFja2dyb3VuZFNlcnZpY2USagoNTGlzdFByb2Nlc3NlcxIqLnJlbGlhbnQudjEuTGlzdEJhY2tncm91bmRQcm9jZXNzZXNSZXF1ZXN0GisucmVsaWFudC52MS5MaXN0QmFja2dyb3VuZFByb2Nlc3Nlc1Jlc3BvbnNlIgASXwoQR2V0UHJvY2Vzc091dHB1dBIjLnJlbGlhbnQudjEuR2V0UHJvY2Vzc091dHB1dFJlcXVlc3QaJC5yZWxpYW50LnYxLkdldFByb2Nlc3NPdXRwdXRSZXNwb25zZSIAEqgBCgtLaWxsUHJvY2VzcxIeLnJlbGlhbnQudjEuS2lsbFByb2Nlc3NSZXF1ZXN0Gh8ucmVsaWFudC52MS5LaWxsUHJvY2Vzc1Jlc3BvbnNlIliiuxhUOlI6UHN0b3BzIGEgYmFja2dyb3VuZCBwcm9jZXNzIG9uIHRoZSBkYWVtb247IHByb2Nlc3MgbGlmZWN5Y2xlLCBub3QgcHJvamVjdCBoaXN0b3J5EmQKE1N0cmVhbVByb2Nlc3NPdXRwdXQSJi5yZWxpYW50LnYxLlN0cmVhbVByb2Nlc3NPdXRwdXRSZXF1ZXN0Gh4ucmVsaWFudC52MS5Qcm9jZXNzT3V0cHV0RXZlbnQiA5ACATABQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_forge_v1_forge, file_reliant_v1_common]);
 
 /**
  * PortInfo represents port information for a background process
@@ -112,6 +112,49 @@ export type BackgroundProcess = Message<"reliant.v1.BackgroundProcess"> & {
    * @generated from field: repeated reliant.v1.PortInfo ports = 11;
    */
   ports: PortInfo[];
+
+  /**
+   * The thread of chat_id whose tool call started it (a sub-agent's thread,
+   * or the chat's main thread). Unset for a Commands-panel process.
+   *
+   * @generated from field: optional string thread_id = 12;
+   */
+  threadId?: string | undefined;
+
+  /**
+   * The machine the process runs on. GetProcessOutput, KillProcess and
+   * StreamProcessOutput take it back as daemon_id.
+   *
+   * @generated from field: optional string daemon_id = 13;
+   */
+  daemonId?: string | undefined;
+
+  /**
+   * The agent asked for it to outlive the idle reaper (shell keep_alive).
+   *
+   * @generated from field: bool keep_alive = 14;
+   */
+  keepAlive: boolean;
+
+  /**
+   * When the machine's idle reaper stops it if nothing touches it (RFC3339);
+   * unset when it never will, and stop_exempt then says why.
+   *
+   * @generated from field: optional string stops_after = 15;
+   */
+  stopsAfter?: string | undefined;
+
+  /**
+   * @generated from field: optional string stop_exempt = 16;
+   */
+  stopExempt?: string | undefined;
+
+  /**
+   * When it last wrote output or an agent used it (RFC3339).
+   *
+   * @generated from field: optional string last_active = 17;
+   */
+  lastActive?: string | undefined;
 };
 
 /**
@@ -162,6 +205,10 @@ export type ListBackgroundProcessesRequest = Message<"reliant.v1.ListBackgroundP
   sessionId?: string | undefined;
 
   /**
+   * Keeps only the processes that chat's agents started (its main thread and
+   * every sub-agent), read from the machine the chat runs on. The chat must
+   * be the caller's; another is not found.
+   *
    * @generated from field: optional string chat_id = 3;
    */
   chatId?: string | undefined;
@@ -199,6 +246,14 @@ export type GetProcessOutputRequest = Message<"reliant.v1.GetProcessOutputReques
    * @generated from field: string process_id = 1;
    */
   processId: string;
+
+  /**
+   * The machine the process runs on (BackgroundProcess.daemon_id). Unset
+   * asks the default machine. It must be one of the caller's machines.
+   *
+   * @generated from field: optional string daemon_id = 2;
+   */
+  daemonId?: string | undefined;
 };
 
 /**
@@ -238,6 +293,14 @@ export type KillProcessRequest = Message<"reliant.v1.KillProcessRequest"> & {
    * @generated from field: string process_id = 1;
    */
   processId: string;
+
+  /**
+   * The machine the process runs on (BackgroundProcess.daemon_id). Unset
+   * asks the default machine. It must be one of the caller's machines.
+   *
+   * @generated from field: optional string daemon_id = 2;
+   */
+  daemonId?: string | undefined;
 };
 
 /**

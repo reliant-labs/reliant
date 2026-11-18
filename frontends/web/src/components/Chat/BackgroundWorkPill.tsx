@@ -1,6 +1,10 @@
 /**
  * Background Work Pill — ambient summary of async spawns and running commands.
  *
+ * A running command is one this chat's agents started in the background (a
+ * dev server, a watch build). Its row opens the live log and stops it, so a
+ * person can do with it what only the agent could (shell_output, shell_kill).
+ *
  * Sits directly above the chat input, in the same "wants your attention" band
  * as QueuedMessages and the permissions panel. Async spawns are launched from
  * a tool call that scrolls away, so without a fixed surface there is no way to
@@ -28,11 +32,12 @@
 
 import Tooltip from "../forge-ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Bot, ChevronDown, Terminal, HelpCircle, RotateCw, Square, X } from "lucide-react";
+import { AlertTriangle, Bot, ChevronDown, Terminal, HelpCircle, RotateCw, ScrollText, Square, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
 import { invalidateQueuedAgentMessages } from "../../hooks/queued-agent-messages";
+import { useStopBackgroundProcess } from "../../hooks/background-queries";
 import { useChatStore } from "../../store/chatStore";
 import {
   useBackgroundWork,
@@ -47,14 +52,13 @@ import { statusBannerFrame, useStatusSlotCollapsed, useStatusSlotSummary } from 
 
 interface BackgroundWorkPillProps {
   chatId?: string;
-  worktreeId?: string;
   /** The thread in view (null = main); the composer already shows its question. */
   selectedThreadId?: string | null;
   /** The chat's main thread id (its root workflow id), when known. */
   mainThreadId?: string | null;
   /** Focus a spawned agent's thread in the timeline. */
   onSelectThread?: (threadId: string | null) => void;
-  /** Reveal a running command in the Commands tab. */
+  /** Open a running command's log (the Commands tab). */
   onSelectCommand?: (processId: string) => void;
 }
 
@@ -333,32 +337,88 @@ function CommandRow({
   command: ActiveCommand;
   onSelect?: (processId: string) => void;
 }) {
+  const { stop } = useStopBackgroundProcess();
+  const [isStopping, setIsStopping] = useState(false);
+
+  const handleSelect = () => onSelect?.(command.id);
+
+  const handleStop = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (isStopping) return;
+    setIsStopping(true);
+    try {
+      await stop({ id: command.id, daemon_id: command.daemonId });
+    } catch (error) {
+      logger.error("[BackgroundWorkPill] Failed to stop a background command", { processId: command.id, error });
+      toast.error(error);
+      setIsStopping(false);
+    }
+  };
+
   return (
-    <button
-      type="button"
-      onClick={() => onSelect?.(command.id)}
-      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleSelect}
+      onKeyDown={(event) => {
+        if (event.currentTarget !== event.target) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handleSelect();
+        }
+      }}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
       data-testid={`background-work-command-${command.id}`}
     >
       <Terminal className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-      <span className="truncate font-mono text-foreground">{command.command}</span>
-      <span className="ml-auto flex-shrink-0">
-        <Elapsed startedAt={command.startedAt} />
+      <span className="truncate font-mono text-foreground" title={command.command}>
+        {command.command}
       </span>
-    </button>
+      {command.ports && command.ports.length > 0 && (
+        <span className="flex-shrink-0 font-mono text-2xs text-muted-foreground">
+          :{command.ports.map((p) => p.port).join(", :")}
+        </span>
+      )}
+      <span className="ml-auto flex flex-shrink-0 items-center gap-1.5">
+        <Elapsed startedAt={command.startedAt} />
+        <Tooltip content="Open its log" side="bottom" delay={300} triggerClassName="inline-flex">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              handleSelect();
+            }}
+            aria-label={`Open the log of ${command.command}`}
+            className="rounded p-0.5 transition-colors hover:bg-muted"
+          >
+            <ScrollText className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        </Tooltip>
+        <Tooltip content={isStopping ? "Stopping…" : "Stop this command"} side="bottom" delay={300} triggerClassName="inline-flex">
+          <button
+            type="button"
+            onClick={handleStop}
+            aria-label={`Stop ${command.command}`}
+            disabled={isStopping}
+            className="rounded p-0.5 transition-colors hover:bg-muted disabled:opacity-60"
+          >
+            <Square className={cn("h-3.5 w-3.5", isStopping ? "animate-pulse text-warning" : "text-destructive")} />
+          </button>
+        </Tooltip>
+      </span>
+    </div>
   );
 }
 
 export function BackgroundWorkPill({
   chatId,
-  worktreeId,
   selectedThreadId,
   mainThreadId,
   onSelectThread,
   onSelectCommand,
 }: BackgroundWorkPillProps) {
   const { spawns, failedSpawns, commands, blockedSpawns, waitingQuestions, hasWork } =
-    useBackgroundWork(chatId, worktreeId, selectedThreadId, mainThreadId);
+    useBackgroundWork(chatId, selectedThreadId, mainThreadId);
   const [isExpanded, setIsExpanded] = useState(false);
   const [dismissed, setDismissed] = useState(readDismissedFailedAgents);
 

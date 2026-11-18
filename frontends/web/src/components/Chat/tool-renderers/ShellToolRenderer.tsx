@@ -14,6 +14,7 @@ import { memo, useMemo } from 'react';
 import type { ToolContentProps } from './types';
 import { LightweightCodeViewer } from '../LightweightCodeViewer';
 import { CopyButton } from './CopyButton';
+import { LiveProcessCard } from '../../Processes/LiveProcessCard';
 
 // Threshold for showing command in expanded area vs relying on header
 const SHORT_COMMAND_THRESHOLD = 80;
@@ -167,11 +168,7 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
           {/* Background process result */}
           {background && (
             <div className={showCommandInput ? "border-t border-border/50" : ""}>
-              <div className="px-2 py-1.5 text-xs text-muted-foreground font-mono">
-                Started background process <span className="text-foreground font-medium">{background.process_id}</span>
-                <br />
-                <span className="text-2xs">Use shell_output to check output, shell_kill to terminate</span>
-              </div>
+              <LiveProcessCard processId={background.process_id} />
             </div>
           )}
 

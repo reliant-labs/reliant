@@ -55,6 +55,20 @@ message BackgroundProcess {
   string session_id = 9;
   optional string chat_id = 10;
   repeated PortInfo ports = 11;
+  // The thread of chat_id whose tool call started it (a sub-agent's thread,
+  // or the chat's main thread). Unset for a Commands-panel process.
+  optional string thread_id = 12;
+  // The machine the process runs on. GetProcessOutput, KillProcess and
+  // StreamProcessOutput take it back as daemon_id.
+  optional string daemon_id = 13;
+  // The agent asked for it to outlive the idle reaper (shell keep_alive).
+  bool keep_alive = 14;
+  // When the machine's idle reaper stops it if nothing touches it (RFC3339);
+  // unset when it never will, and stop_exempt then says why.
+  optional string stops_after = 15;
+  optional string stop_exempt = 16;
+  // When it last wrote output or an agent used it (RFC3339).
+  optional string last_active = 17;
 }
 
 // ProcessOutput contains stdout and stderr from a process
@@ -71,6 +85,9 @@ message ListBackgroundProcessesRequest {
   // Optional filters - if none specified, returns all processes
   optional string worktree_id = 1;
   optional string session_id = 2;
+  // Keeps only the processes that chat's agents started (its main thread and
+  // every sub-agent), read from the machine the chat runs on. The chat must
+  // be the caller's; another is not found.
   optional string chat_id = 3;
 }
 
@@ -84,6 +101,9 @@ message ListBackgroundProcessesResponse {
 
 message GetProcessOutputRequest {
   string process_id = 1;
+  // The machine the process runs on (BackgroundProcess.daemon_id). Unset
+  // asks the default machine. It must be one of the caller's machines.
+  optional string daemon_id = 2;
 }
 
 message GetProcessOutputResponse {
@@ -97,6 +117,9 @@ message GetProcessOutputResponse {
 
 message KillProcessRequest {
   string process_id = 1;
+  // The machine the process runs on (BackgroundProcess.daemon_id). Unset
+  // asks the default machine. It must be one of the caller's machines.
+  optional string daemon_id = 2;
 }
 
 message KillProcessResponse {

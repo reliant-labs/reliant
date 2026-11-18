@@ -1207,6 +1207,9 @@ function handleProcessStarted(update: UserUpdate) {
     session_id?: string;
     worktree_id?: string;
     chat_id?: string;
+    // The thread whose tool call started it, when the event names it.
+    thread_id?: string;
+    keep_alive?: boolean;
     // The machine the process runs on, when the event names it.
     daemon_id?: string;
     ports?: Array<{ port: number; protocol: string; state: string; address: string }>;
@@ -1228,6 +1231,9 @@ function handleProcessStarted(update: UserUpdate) {
     session_id: data.session_id || "",
     worktree_id: data.worktree_id || update.worktree_id,
     chat_id: data.chat_id || update.chat_id,
+    thread_id: data.thread_id || undefined,
+    daemon_id: data.daemon_id || undefined,
+    keep_alive: data.keep_alive,
     ports: data.ports,
   };
 
@@ -1341,6 +1347,7 @@ function updateProcessStatus(
     session_id?: string;
     worktree_id?: string;
     chat_id?: string;
+    thread_id?: string;
     daemon_id?: string;
     ports?: Array<{ port: number; protocol: string; state: string; address: string }>;
   },
@@ -1358,6 +1365,8 @@ function updateProcessStatus(
     session_id: data.session_id || "",
     worktree_id: data.worktree_id || update.worktree_id,
     chat_id: data.chat_id || update.chat_id,
+    thread_id: data.thread_id || undefined,
+    daemon_id: data.daemon_id || undefined,
     ports: data.ports,
   };
 

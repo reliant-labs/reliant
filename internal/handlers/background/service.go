@@ -1,7 +1,6 @@
 package background
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -21,15 +19,11 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Router reaches the caller's daemon, which owns the processes.
+	// Router reaches the caller's machines, which own the processes.
 	Router ProcessRouter
-}
-
-// ProcessRouter is what the background handlers ask of the caller's daemon.
-// toolexec.DaemonRouter implements it.
-type ProcessRouter interface {
-	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
-	SubscribeProcessOutput(ctx context.Context, userID, processID string, newOnly bool) (<-chan *toolexec.ProcessOutputEvent, func(), error)
+	// Repo resolves the chat a list is scoped to and the machines a request
+	// names.
+	Repo Repository
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -43,6 +37,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Router == nil {
 		return fmt.Errorf("background: Deps.Router is required")
+	}
+	if d.Repo == nil {
+		return fmt.Errorf("background: Deps.Repo is required")
 	}
 	return nil
 }

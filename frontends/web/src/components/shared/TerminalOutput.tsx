@@ -23,6 +23,8 @@ import DOMPurify from "dompurify";
 import { cn } from "../../lib/utils";
 import { PortsDisplay } from "./PortsDisplay";
 import { BackgroundProcessStatus } from "../../hooks/background-queries";
+import Status from "../forge-ui/status";
+import { processStatusView } from "../../lib/processStatus";
 
 // ============================================
 // Types
@@ -100,52 +102,6 @@ function useLiveDuration(startTime: string, endTime?: string, isRunning?: boolea
   return duration;
 }
 
-function getStatusConfig(status: ProcessInfo["status"], exitCode?: number) {
-  switch (status) {
-    case BackgroundProcessStatus.RUNNING:
-      return {
-        label: "Running",
-        bgColor: "bg-green-500/10",
-        textColor: "text-green-500",
-        borderColor: "border-green-500/30",
-        icon: <Loader2 className="w-3 h-3 animate-spin" />,
-      };
-    case BackgroundProcessStatus.COMPLETED:
-      return {
-        label: exitCode === 0 ? "Completed" : `Exit ${exitCode}`,
-        bgColor: exitCode === 0 ? "bg-green-500/10" : "bg-yellow-500/10",
-        textColor: exitCode === 0 ? "text-green-500" : "text-yellow-500",
-        borderColor: exitCode === 0 ? "border-green-500/30" : "border-yellow-500/30",
-        icon: null,
-      };
-    case BackgroundProcessStatus.FAILED:
-      return {
-        label: `Failed (exit ${exitCode})`,
-        bgColor: "bg-red-500/10",
-        textColor: "text-red-500",
-        borderColor: "border-red-500/30",
-        icon: null,
-      };
-    case BackgroundProcessStatus.KILLED:
-    case BackgroundProcessStatus.KILLED_EXTERNALLY:
-      return {
-        label: "Killed",
-        bgColor: "bg-yellow-500/10",
-        textColor: "text-yellow-500",
-        borderColor: "border-yellow-500/30",
-        icon: null,
-      };
-    default:
-      return {
-        label: "Unknown",
-        bgColor: "bg-muted",
-        textColor: "text-muted-foreground",
-        borderColor: "border-border",
-        icon: null,
-      };
-  }
-}
-
 // ============================================
 // Main Component
 // ============================================
@@ -186,7 +142,7 @@ export function TerminalOutput({
     }
   };
   const duration = useLiveDuration(process.start_time, process.end_time, isRunning);
-  const statusConfig = getStatusConfig(process.status, process.exit_code);
+  const statusView = processStatusView(process.status, process.exit_code);
 
   // Use combined output from backend if available (properly interleaved)
   // Fall back to frontend combination for backwards compatibility
@@ -204,8 +160,8 @@ export function TerminalOutput({
   }, [combinedOutput, autoScroll]);
 
   const handleCopy = async () => {
-    if (!output) return;
-    const text = (output.stdout + "\n" + output.stderr).trim();
+    if (!combinedOutput || combinedOutput.length === 0) return;
+    const text = combinedOutput.map((line) => line.text).join("\n");
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -234,17 +190,13 @@ export function TerminalOutput({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <code className="text-sm font-mono truncate">{process.command}</code>
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border",
-                statusConfig.bgColor,
-                statusConfig.textColor,
-                statusConfig.borderColor
-              )}
-            >
-              {statusConfig.icon}
-              {statusConfig.label}
-            </span>
+            <Status
+              tone={statusView.tone}
+              label={statusView.label}
+              pulse={statusView.running}
+              size="sm"
+              className="text-xs font-medium"
+            />
           </div>
         </div>
 
@@ -257,7 +209,7 @@ export function TerminalOutput({
               className={cn(
                 "p-1.5 rounded transition-colors",
                 isCanceling 
-                  ? "text-yellow-500 cursor-wait" 
+                  ? "text-warning-ink cursor-wait" 
                   : "hover:bg-destructive/10 text-destructive-ink"
               )} aria-label={isCanceling ? "Stopping..." : "Stop process"}>
   {isCanceling ? (
@@ -281,9 +233,9 @@ export function TerminalOutput({
 <button
             onClick={handleCopy}
             className="p-1.5 hover:bg-muted rounded transition-colors"
-            disabled={!output} aria-label="Copy output">
+            disabled={!combinedOutput || combinedOutput.length === 0} aria-label="Copy output">
             {copied ? (
-              <Check className="w-4 h-4 text-green-500" />
+              <Check className="w-4 h-4 text-success-ink" />
             ) : (
               <Copy className="w-4 h-4" />
             )}

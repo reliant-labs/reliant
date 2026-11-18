@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
@@ -45,7 +46,7 @@ func (r *bgProxyRouter) SendDaemonCommand(_ context.Context, _ string, commandTy
 // it scales with the user's commands, so it gets a much tighter budget than
 // bg_start / bg_kill do.
 func TestBackgroundProxy_ListProcesses_UsesAShortDaemonTimeout(t *testing.T) {
-	reply, err := json.Marshal([]daemonProcessInfo{})
+	reply, err := json.Marshal([]daemon.ProcessInfo{})
 	require.NoError(t, err)
 
 	router := &bgProxyRouter{reply: reply}

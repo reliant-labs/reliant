@@ -14,7 +14,6 @@ func TestBackgroundServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestBackground(t)
-	_ = repo
+	svc := NewTestBackground(t, WithBackgroundDeps(Deps{Repo: repo}))
 	viewertest.RunService(t, f, svc, "reliant.v1.BackgroundService", nil)
 }

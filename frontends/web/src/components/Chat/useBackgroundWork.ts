@@ -6,9 +6,11 @@
  *
  *   - Spawns are chat-scoped. The live chat stream supplies immediate rows,
  *     while the workflow execution tree is the durable title/lifecycle source.
- *   - Background bash processes are worktree-scoped and read from
- *     BackgroundService (useBackgroundProcesses, kept live by the stream),
- *     and a single worktree is shared by every chat open against it.
+ *   - Background commands are the ones this chat's agents started (the
+ *     daemon stamps each with the chat whose tool call ran it), read from
+ *     BackgroundService (useChatBackgroundProcesses, kept live by the stream
+ *     and re-read while one runs). A workspace is shared by every chat open
+ *     against it, so the workspace is never the attribution.
  *
  * Failed spawns come from the workflow tree alone. A sub-agent whose step
  * fails stops on its own — the rest of the chat keeps running — and reports to
@@ -34,7 +36,7 @@
 
 import { useMemo } from "react";
 import { useActiveThreads } from "../../store/threadActivityStore";
-import { BackgroundProcessStatus, useBackgroundProcesses } from "../../hooks/background-queries";
+import { useChatBackgroundProcesses, type PortInfo } from "../../hooks/background-queries";
 import { usePendingQuestions } from "../../hooks/question-queries";
 import { questionThreadId, viewedThreadId } from "../../lib/pendingQuestions";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
@@ -93,6 +95,9 @@ export interface ActiveCommand {
   id: string;
   command: string;
   startedAt: number | null;
+  /** The machine it runs on: Stop goes there. */
+  daemonId?: string;
+  ports?: PortInfo[];
 }
 
 export interface BackgroundWork {
@@ -249,14 +254,13 @@ function workflowOfThread(
 
 export function useBackgroundWork(
   chatId: string | undefined,
-  worktreeId: string | undefined,
   /** The thread in view (null/undefined = main): its question is the composer's. */
   selectedThreadId?: string | null,
   /** The chat's main thread id (its root workflow id), when known. */
   mainThreadId?: string | null,
 ): BackgroundWork {
   const activeThreads = useActiveThreads(chatId ?? "");
-  const { data: processes } = useBackgroundProcesses();
+  const { running: runningProcesses } = useChatBackgroundProcesses(chatId);
   const pendingQuestions = usePendingQuestions(chatId).data?.questions;
   const { allWorkflows } = useWorkflowExecutions(chatId ?? null);
 
@@ -333,23 +337,13 @@ export function useBackgroundWork(
     }
     const waitingQuestions = [...waitingByThread.values()];
 
-    const commands: ActiveCommand[] = [];
-    for (const process of processes) {
-      if (process.status !== BackgroundProcessStatus.RUNNING) continue;
-      // Processes are worktree-scoped and a worktree is shared across chats.
-      // Prefer the process's own chat_id when the daemon set one; fall back to
-      // the worktree so commands started before chat attribution still show.
-      if (process.chat_id && process.chat_id !== chatId) continue;
-      if (!process.chat_id && worktreeId && process.worktree_id !== worktreeId) {
-        continue;
-      }
-
-      commands.push({
-        id: process.id,
-        command: process.command,
-        startedAt: parseTime(process.start_time),
-      });
-    }
+    const commands: ActiveCommand[] = runningProcesses.map((process) => ({
+      id: process.id,
+      command: process.command,
+      startedAt: parseTime(process.start_time),
+      daemonId: process.daemon_id,
+      ports: process.ports,
+    }));
 
     const blockedSpawns = liveSpawns.filter((s) => s.isBlocked);
     const failedSpawns = failedSpawnsOf(allWorkflows, Date.now());
@@ -364,11 +358,10 @@ export function useBackgroundWork(
     };
   }, [
     chatId,
-    worktreeId,
     selectedThreadId,
     mainThreadId,
     activeThreads,
-    processes,
+    runningProcesses,
     pendingQuestions,
     allWorkflows,
   ]);
