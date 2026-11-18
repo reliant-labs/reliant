@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -51,19 +52,37 @@ var fixedModTime = time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
 
 // fileDaemon records binary writes and reads, serves stats and reads from
 // files, and refuses writes under a denied prefix the way the daemon's path
-// policy does. appearOnWrite simulates another process creating a file after
-// the tool's stat and before its write lands.
+// policy does. Its CreateBinaryFile honours exclusive creation like the real
+// daemon's. appearOnWrite simulates another process creating a file after the
+// tool's stat and before its write lands; preExclusive simulates a daemon
+// that predates fs.create_binary_file.
 type fileDaemon struct {
 	daemon.Client
 	files         map[string][]byte
 	dirs          map[string]bool
 	appearOnWrite map[string][]byte
+	preExclusive  bool
 	denyPrefix    string
-	writes        []string
+	writes        []string // successful writes, by either method
+	overwrites    []string // WriteBinaryFile calls: the tool must never make one
 	reads         []string
 }
 
 func (d *fileDaemon) WriteBinaryFile(_ context.Context, path string, content []byte) (*daemon.WriteResult, error) {
+	d.overwrites = append(d.overwrites, path)
+	if d.files == nil {
+		d.files = map[string][]byte{}
+	}
+	_, existed := d.files[path]
+	d.writes = append(d.writes, path)
+	d.files[path] = append([]byte(nil), content...)
+	return &daemon.WriteResult{Created: !existed, ModTime: fixedModTime, BytesWritten: len(content)}, nil
+}
+
+func (d *fileDaemon) CreateBinaryFile(_ context.Context, path string, content []byte) (*daemon.WriteResult, error) {
+	if d.preExclusive {
+		return nil, fmt.Errorf("%w: remote fs.create_binary_file: doesn't support it", daemon.ErrCreateUnsupported)
+	}
 	if d.denyPrefix != "" && strings.HasPrefix(path, d.denyPrefix) {
 		return nil, errors.New("path is outside the directories this run may use")
 	}
@@ -73,10 +92,12 @@ func (d *fileDaemon) WriteBinaryFile(_ context.Context, path string, content []b
 	if theirs, ok := d.appearOnWrite[path]; ok {
 		d.files[path] = theirs
 	}
-	_, existed := d.files[path]
+	if _, exists := d.files[path]; exists || d.dirs[path] {
+		return nil, fmt.Errorf("%w: %s", daemon.ErrFileExists, path)
+	}
 	d.writes = append(d.writes, path)
 	d.files[path] = append([]byte(nil), content...)
-	return &daemon.WriteResult{Created: !existed, ModTime: fixedModTime, BytesWritten: len(content)}, nil
+	return &daemon.WriteResult{Created: true, ModTime: fixedModTime, BytesWritten: len(content)}, nil
 }
 
 func (d *fileDaemon) ReadBinaryFile(_ context.Context, path string, _ int64) ([]byte, error) {
@@ -290,18 +311,40 @@ func TestMCPScreenshot_AnExistingDestinationIsNeverReplaced(t *testing.T) {
 		refused(t, d, save(t, d), "is a directory")
 	})
 
-	t.Run("a file that appears between the check and the write is reported, not claimed saved", func(t *testing.T) {
+	t.Run("a file that appears between the check and the write is not overwritten", func(t *testing.T) {
 		d := &fileDaemon{appearOnWrite: map[string][]byte{dest: theirs}}
 		resp := save(t, d)
 		if !resp.IsError {
-			t.Fatalf("a write that replaced a file created concurrently must not report a clean save, got %q", resp.Content)
+			t.Fatalf("a file created concurrently must be refused, got %q", resp.Content)
 		}
-		for _, want := range []string{dest, "a file appeared there"} {
+		for _, want := range []string{dest, "never replaces", "/home/workspace/worktrees/chat-1/shot-1.png"} {
 			if !strings.Contains(resp.Content, want) {
 				t.Fatalf("error should mention %q, got %q", want, resp.Content)
 			}
 		}
+		if !bytes.Equal(d.files[dest], theirs) || len(d.writes) != 0 || len(d.overwrites) != 0 {
+			t.Fatalf("the other process's file must be left untouched, wrote %v, overwrote %v", d.writes, d.overwrites)
+		}
 	})
+}
+
+// A daemon that predates exclusive creation is never sent a racy write: the
+// screenshot comes back inline, and the message says to update.
+func TestMCPScreenshot_ADaemonWithoutExclusiveCreateSavesNothing(t *testing.T) {
+	d := &fileDaemon{preExclusive: true}
+	resp := runScreenshot(t, "chrome-devtools", &screenshotRuntime{result: inlineScreenshot("image/png")}, d,
+		map[string]interface{}{"filePath": "shot.png"})
+	if len(d.writes) != 0 || len(d.overwrites) != 0 {
+		t.Fatalf("nothing may be written, wrote %v, overwrote %v", d.writes, d.overwrites)
+	}
+	for _, want := range []string{"NOT saved to /home/workspace/worktrees/chat-1/shot.png", "Update Reliant on this machine"} {
+		if !strings.Contains(resp.Content, want) {
+			t.Fatalf("message should mention %q, got %q", want, resp.Content)
+		}
+	}
+	if len(resp.BinaryParts) != 1 || !bytes.Equal(resp.BinaryParts[0].Data, screenshotBytes) {
+		t.Fatalf("the screenshot must be returned inline instead, got %d parts", len(resp.BinaryParts))
+	}
 }
 
 func TestMCPScreenshot_DescriptionSaysTheDestinationMustBeNew(t *testing.T) {

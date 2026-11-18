@@ -2,11 +2,13 @@ package tools
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -105,7 +107,8 @@ func resolveSavePath(tc *rctx.ToolContext, requested string) (string, error) {
 //
 // Every failure is a tool error naming what happened; the screenshot was taken,
 // so the message says so, and the call can be repeated without a path to get
-// the image inline.
+// the image inline. The one exception is a daemon too old to create a file
+// exclusively: nothing is written, and the image is returned inline with why.
 func (a *MCPToolAdapter) saveMCPImageOutput(tc *rctx.ToolContext, spec daemonSavedOutput, dest string, result *mcp.ToolResult) ToolResponse {
 	if result == nil || result.IsError {
 		return a.convertResult(result)
@@ -150,9 +153,23 @@ func (a *MCPToolAdapter) saveMCPImageOutput(tc *rctx.ToolContext, spec daemonSav
 	}
 
 	dest = withImageExtension(dest, mimeType)
+	var unsupported bool
 	resp, err := withPathLock(tc, dest, func() (ToolResponse, error) {
-		return a.writeSavedOutputLocked(tc, spec, dest, data), nil
+		resp, old := a.writeSavedOutputLocked(tc, spec, dest, data)
+		unsupported = old
+		return resp, nil
 	})
+	if unsupported {
+		// Never a racy write instead: the image is returned inline, as it
+		// would have been without a path, with why it was not saved.
+		inline := a.convertResult(result)
+		inline.Content = fmt.Sprintf(
+			"The %s was NOT saved to %s: this machine's Reliant is too old to save it without risking "+
+				"replacing a file there. Update Reliant on this machine to save %ss to a path. "+
+				"The %s is attached below instead.\n\n%s",
+			spec.noun, dest, spec.noun, spec.noun, inline.Content)
+		return inline
+	}
 	if err != nil || resp.IsError {
 		return resp
 	}
@@ -165,19 +182,17 @@ func (a *MCPToolAdapter) saveMCPImageOutput(tc *rctx.ToolContext, spec daemonSav
 // destination exists.
 const maxFreePathProbes = 20
 
-// writeSavedOutputLocked writes data to dest, which must not exist yet, and
-// returns an error response when it refuses or fails (a zero response on
-// success). Callers must hold the path lock for dest.
+// writeSavedOutputLocked creates dest with data and returns an error response
+// when it refuses or fails (a zero response on success), or unsupported when
+// the daemon predates exclusive creation and nothing was written. Callers must
+// hold the path lock for dest.
 //
-// An existing file is never replaced, even one this thread read. The daemon's
-// file API has no conditional write — no compare-and-write against an observed
-// version, no create-exclusive — so a check followed by a write could not stop
-// another process changing the file in between, and the previous bytes of a
-// binary file are not returned to put back. Refusing every existing
-// destination leaves only the window where the file is created between the
-// stat and the write; WriteResult.Created reports that case, and it is a tool
-// error rather than a claimed clean save.
-func (a *MCPToolAdapter) writeSavedOutputLocked(tc *rctx.ToolContext, spec daemonSavedOutput, dest string, data []byte) ToolResponse {
+// An existing file is never replaced, even one this thread read: the write is
+// the daemon's CreateBinaryFile, whose existence check and create are one
+// atomic open, so a file another process creates after the stat below is
+// refused rather than overwritten. The stat is only the fast path that names a
+// directory as one and suggests a free name without a write round trip.
+func (a *MCPToolAdapter) writeSavedOutputLocked(tc *rctx.ToolContext, spec daemonSavedOutput, dest string, data []byte) (resp ToolResponse, unsupported bool) {
 	chatID, thread := tc.ChatID, tc.Thread
 	if thread == "" {
 		thread = "0"
@@ -186,14 +201,9 @@ func (a *MCPToolAdapter) writeSavedOutputLocked(tc *rctx.ToolContext, spec daemo
 		return NewTextErrorResponse(fmt.Sprintf(
 			"Took the %s but did not save it to %s: %s", spec.noun, dest, reason))
 	}
-
-	stat, err := tc.Daemon.StatFile(tc.Context, dest)
-	if err != nil {
-		return notSaved(fmt.Sprintf("could not check the path: %v.", err))
-	}
-	if stat.Exists {
+	exists := func(isDir bool) ToolResponse {
 		reason := "a file already exists there, and a saved " + spec.noun + " never replaces one, so it was left untouched."
-		if stat.IsDir {
+		if isDir {
 			reason = "the path is a directory."
 		}
 		if free := freeSiblingPath(tc, dest); free != "" {
@@ -204,22 +214,29 @@ func (a *MCPToolAdapter) writeSavedOutputLocked(tc *rctx.ToolContext, spec daemo
 		return notSaved(reason)
 	}
 
-	res, err := tc.Daemon.WriteBinaryFile(tc.Context, dest, data)
+	stat, err := tc.Daemon.StatFile(tc.Context, dest)
 	if err != nil {
+		return notSaved(fmt.Sprintf("could not check the path: %v.", err)), false
+	}
+	if stat.Exists {
+		return exists(stat.IsDir), false
+	}
+
+	if _, err := tc.Daemon.CreateBinaryFile(tc.Context, dest, data); err != nil {
+		switch {
+		case errors.Is(err, daemon.ErrCreateUnsupported):
+			return ToolResponse{}, true
+		case errors.Is(err, daemon.ErrFileExists):
+			return exists(false), false
+		}
 		return notSaved(fmt.Sprintf(
 			"%v. Choose a path this chat may write to, or omit %s to get the image in the response.",
-			err, spec.pathArg))
+			err, spec.pathArg)), false
 	}
 	recordFileAwareness(chatID, thread, dest)
-	if res != nil && !res.Created {
-		return NewTextErrorResponse(fmt.Sprintf(
-			"Took the %s and wrote it to %s, but a file appeared there while it was being saved and was replaced; "+
-				"its previous contents could not be kept. Check that file, and save to a new path next time.",
-			spec.noun, dest))
-	}
 	logging.Debug("Saved MCP tool output through the daemon",
 		"server", a.serverName, "tool", a.tool.Name, "path", dest, "bytes", len(data))
-	return ToolResponse{}
+	return ToolResponse{}, false
 }
 
 // freeSiblingPath returns the first of name-1.ext, name-2.ext, … beside dest
