@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -380,10 +381,14 @@ func TestMachineOfAnOrgItsOwnerLeft_CreatesAndResolvesNothing(t *testing.T) {
 	conn := newTestConn(f.userID, f.globexMachine, nil)
 	conn.orgID = "globex"
 
-	// A member: the machine resolves its org's project at the path.
+	// A member: the machine resolves its org's project at the path, and
+	// records its checkout there.
 	got, err := svc.ensureOwnedProjectForPath(ctx, conn, f.path, nil)
 	require.NoError(t, err)
 	assert.Equal(t, f.globex.ID, got.ID)
+	assert.Equal(t, []string{f.globexMachine}, f.machinesOf(t, f.globex.ID))
+	// Gone again, so what follows shows what an owner outside the org records.
+	require.NoError(t, f.repo.DeleteProjectDaemon(ctx, f.globex.ID, f.globexMachine))
 
 	membership.left.Store(true)
 
@@ -412,4 +417,49 @@ func TestMachineOfAnOrgItsOwnerLeft_CreatesAndResolvesNothing(t *testing.T) {
 	got, err = svc.ensureOwnedProjectForPath(ctx, conn, f.path, nil)
 	require.NoError(t, err)
 	assert.Equal(t, f.globex.ID, got.ID)
+}
+
+// Review round 8 (B1): a machine that discovers an existing project of its
+// org after its connect reconcile ran (the folder was not there then, so the
+// reconcile recorded nothing) gets the checkout recorded by the discovery
+// itself, and its config snapshot is stored at once, with no reconnect. A
+// project the user detached from the machine still gets nothing.
+func TestDiscoveredExistingProject_RecordsTheCheckoutAndStoresTheSnapshot(t *testing.T) {
+	snapshot := func(f *orgMachinesFixture) *reliantv1.ProjectConfigSnapshot {
+		return &reliantv1.ProjectConfigSnapshot{ProjectPath: f.path, DaemonTimestampUnixMs: fixedNow.UnixMilli(),
+			UserConfigYaml: []byte("from the machine")}
+	}
+	t.Run("discovered after the reconcile", func(t *testing.T) {
+		f := newOrgMachinesFixture(t)
+		svc := newTestService(f.repo)
+		conn := newTestConn(f.userID, f.globexMachine, nil)
+		conn.orgID = "globex"
+		nothingHere := func(context.Context, string) (projectPathState, error) { return projectPathState{}, nil }
+		_, err := svc.reconcileAndWatch(f.ctx, conn, nothingHere)
+		require.NoError(t, err)
+		require.Empty(t, f.machinesOf(t, f.globex.ID), "precondition: the reconcile recorded nothing")
+
+		require.NoError(t, svc.persistProjectConfigSnapshot(f.ctx, conn, snapshot(f), false))
+
+		assert.Equal(t, []string{f.globexMachine}, f.machinesOf(t, f.globex.ID), "the discovery recorded the machine's checkout")
+		record, synced, err := f.repo.GetProjectMachineConfigRecord(f.ctx, f.globex.ID, f.globexMachine)
+		require.NoError(t, err)
+		require.True(t, synced, "the snapshot was dropped until a reconnect")
+		assert.Equal(t, "from the machine", *record.UserConfigYAML)
+		assert.Empty(t, f.machinesOf(t, f.acme.ID), "another org's project at the same path is untouched")
+	})
+	t.Run("detached by the user", func(t *testing.T) {
+		f := newOrgMachinesFixture(t)
+		svc := newTestService(f.repo)
+		conn := newTestConn(f.userID, f.globexMachine, nil)
+		conn.orgID = "globex"
+		require.NoError(t, f.repo.DetachProjectFromDaemon(f.ctx, f.globex.ID, f.globexMachine, f.path, nil))
+
+		require.NoError(t, svc.persistProjectConfigSnapshot(f.ctx, conn, snapshot(f), false))
+
+		assert.Empty(t, f.machinesOf(t, f.globex.ID), "a detached project was recorded on the machine again")
+		_, synced, err := f.repo.GetProjectMachineConfigRecord(f.ctx, f.globex.ID, f.globexMachine)
+		require.NoError(t, err)
+		assert.False(t, synced, "a detached project's snapshot was stored")
+	})
 }

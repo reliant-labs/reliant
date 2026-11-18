@@ -575,10 +575,6 @@ func TestPR5Smoke_ConfigSyncCancelDisconnectReconnect(t *testing.T) {
 		LastActive: now,
 	}))
 
-	// The machine holds the project, as its connect reconcile records it: a
-	// snapshot is stored only from a machine that does.
-	db.HoldProjectOnMachineForTest(t, repo, projectID, daemonID)
-
 	conn1 := &daemonConnection{
 		userID:   userID,
 		daemonID: daemonID,

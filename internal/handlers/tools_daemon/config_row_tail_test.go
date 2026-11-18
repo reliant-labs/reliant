@@ -157,12 +157,6 @@ func TestDaemonConfigSync_SecondMachineDoesNotEraseTheFirstsWorkflows(t *testing
 		ID: projectID, UserID: "test-user", Name: "labs", Path: projectPath, IsGitRepo: true,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	// Both machines hold the project, as their connect reconcile records it:
-	// a snapshot is stored only from a machine that does.
-	for _, conn := range conns {
-		db.HoldProjectOnMachineForTest(t, repo, projectID, conn.daemonID)
-	}
-
 	require.NoError(t, svc.persistProjectConfigSnapshot(ctx, conns["default"], &reliantv1.ProjectConfigSnapshot{
 		ProjectPath: projectPath, DaemonTimestampUnixMs: 1000,
 		Workflows: []*reliantv1.IndexedWorkflow{{Slug: "release", Name: "release",

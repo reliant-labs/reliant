@@ -1309,16 +1309,27 @@ func (r *Repo) MarkProjectDaemonInstalledInScope(ctx context.Context, projectID,
 }
 
 // lockProjectInScope takes, inside the caller's transaction, the locks every
-// machine-observed checkout write holds — the project's catalog lock, then
-// its row FOR SHARE (a project's org move takes it FOR NO KEY UPDATE and no
-// catalog lock, so the order cannot deadlock it) — and reports whether the
-// project still exists and its org, read under that lock, is in scope.
+// machine-observed checkout or config write holds — the project's catalog
+// lock, then its row FOR SHARE — and reports whether the write may land: the
+// project still exists, is not scheduled for deletion, and its org, read
+// under that lock, is in scope.
+//
+// The row lock conflicts with a project's org move (FOR NO KEY UPDATE) and a
+// deletion schedule (FOR UPDATE), so either is committed and seen here, or
+// waits for this write. Neither takes the catalog lock — their order is the
+// owner's org lock, then the project row (store/project_schedule.go) — and
+// nothing that holds a project row takes it after, so the order cannot
+// deadlock. A project scheduled for deletion gets nothing new from its
+// machines: no checkout recorded or settled, no config synced
+// (project_delete_admission covers chats, workspaces, runs and triggers in
+// the database; these writes are refused here). A restore clears
+// delete_after, and the next connect records and syncs again.
 func (r *Repo) lockProjectInScope(ctx context.Context, projectID string, scope *core.OrgScope) (bool, error) {
 	if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
 		return false, err
 	}
-	org, found, err := store.LockProjectOrgForShare(ctx, r.ORM(), projectID)
-	if err != nil || !found {
+	org, scheduled, found, err := store.LockProjectOrgForShare(ctx, r.ORM(), projectID)
+	if err != nil || !found || scheduled {
 		return false, err
 	}
 	return scope.Includes(org), nil

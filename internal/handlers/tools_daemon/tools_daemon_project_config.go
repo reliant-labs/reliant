@@ -465,12 +465,12 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 	// project: the detached folder came back as a duplicate, under an ID the
 	// per-project detachment checks downstream cannot recognize.
 	var (
-		project *db.Project
-		created bool
+		project    *db.Project
+		unrecorded bool
 	)
 	resolve := func(ctx context.Context) error {
 		var err error
-		project, created, err = s.resolveProjectForPath(ctx, conn, path, discovered)
+		project, unrecorded, err = s.resolveProjectForPath(ctx, conn, path, discovered)
 		return err
 	}
 	var err error
@@ -500,14 +500,18 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 
 	// The machine that reported it holds it, at this path: its own
 	// project_daemons row, which every chat in the project resolves its
-	// directory from. Without it the project would have no checkout on
-	// record until the machine next connected. Recorded after the locked
-	// resolution committed: it takes the new project's catalog lock, which
-	// is never taken under the machine's, and no detach can name a project
-	// that had no checkout until now.
-	// Recorded only while the new project is still in the machine's org
-	// (re-read under its row lock): a move right after its create is seen.
-	if created && strings.TrimSpace(conn.daemonID) != "" {
+	// directory from, and without which its config snapshots are not stored
+	// (SyncProjectConfigSnapshot). That is a project the resolution just
+	// created, or an existing one of the machine's org found by its creation
+	// path that the machine has no record of — the folder appeared after the
+	// connect reconcile ran. Without it the project would have no checkout,
+	// and no synced config, on record until the machine next connected.
+	// Recorded after the locked resolution committed: it takes the project's
+	// catalog lock, which is never taken under the machine's. Through
+	// RecordObservedProjectDaemonInScope, so it keeps that write's guards: a
+	// detach that committed since (the resolution refused one it saw), a
+	// move out of the machine's org or a deletion schedule records nothing.
+	if unrecorded && strings.TrimSpace(conn.daemonID) != "" {
 		scope, _, scopeErr := s.machineProjectScope(ctx, conn)
 		if scopeErr != nil {
 			return nil, scopeErr
@@ -541,7 +545,9 @@ func (e *lostProjectCreateError) Unwrap() error { return e.err }
 // resolveProjectForPath is ensureOwnedProjectForPath's resolution, with ctx
 // carrying the machine's checkout lock when the connection names a machine:
 // the machine's detachments, then its own checkout at path, then the user's
-// project created at path, then a new project for it (created reports so).
+// project created at path, then a new project for it. unrecorded reports a
+// project the machine has no checkout record of: the one created, or the
+// user's project found by its creation path that the machine has none of.
 //
 // Every match, and the project created, is in the machine's org (scope; its
 // owner's default org's when the machine's org is not known): the same path
@@ -580,7 +586,11 @@ func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnect
 		return nil, false, errProjectDetached
 	}
 	if err == nil {
-		return project, false, nil
+		held, err := s.machineHoldsProject(ctx, conn, project.ID)
+		if err != nil {
+			return nil, false, err
+		}
+		return project, !held, nil
 	}
 	if !isNotFoundErr(err) {
 		return nil, false, err
@@ -681,6 +691,24 @@ func (s *Service) machineProjectScope(ctx context.Context, conn *daemonConnectio
 		return nil, false, errMachineOrgUnresolved
 	}
 	return authz.MachineScopeFor(ctx, conn.userID, conn.orgID)
+}
+
+// machineHoldsProject reports whether the connected machine has a checkout
+// record of the project, at any path and in any install state.
+func (s *Service) machineHoldsProject(ctx context.Context, conn *daemonConnection, projectID string) (bool, error) {
+	if strings.TrimSpace(conn.daemonID) == "" {
+		return false, nil
+	}
+	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, conn.daemonID)
+	if err != nil {
+		return false, err
+	}
+	for _, row := range rows {
+		if row != nil && row.ProjectID == projectID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // machineCheckoutAt is the user's project in scope whose checkout on the

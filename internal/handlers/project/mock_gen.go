@@ -20,7 +20,7 @@ import (
 )
 
 // forge:section MockOrgResolver
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=dabc81ebfa5e1c5e15a023d174561b72c47ae004d9aba30a8ec7d18b68537588
 
 // MockOrgResolver is a test mock for the OrgResolver interface.
 //
@@ -56,7 +56,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=638ecbe716fd3e65167ea9c871f04eb5f370f2b3c37cabf20be03ed6a03c7187
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -532,7 +532,7 @@ func (m *MockRepository) UpdateSetting(ctx context.Context, setting *db.Setting)
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockRouter
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=bd522874afdccb76afb9c68661aeda09ddd1aa0ad4a8ce432128e52a15d30417
 
 // MockRouter is a test mock for the Router interface.
 //
@@ -618,7 +618,7 @@ func (m *MockRouter) SendWatchProjectConfigs(ctx context.Context, userID string,
 var _ Router = (*MockRouter)(nil)
 
 // forge:section MockMachineConfigSync
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=f642a5bd5b5def7464a39310710d05daeb70c7357500189f52d79359464e885f
 
 // MockMachineConfigSync is a test mock for the MachineConfigSync interface.
 //
@@ -654,7 +654,7 @@ func (m *MockMachineConfigSync) SendWatchProjectConfigsToDaemon(ctx context.Cont
 var _ MachineConfigSync = (*MockMachineConfigSync)(nil)
 
 // forge:section MockTriggerSchedules
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=0f16007294e174c13b77cdf34dd2bc343842e61fefddc14f78b4970fd5424e77
 
 // MockTriggerSchedules is a test mock for the TriggerSchedules interface.
 //
@@ -680,7 +680,7 @@ func (m *MockTriggerSchedules) Sync(ctx context.Context, triggerID string) error
 var _ TriggerSchedules = (*MockTriggerSchedules)(nil)
 
 // forge:section MockCloneDispatcher
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=6eea8aa99689d047cd90ab65a435856dde67dac29704779135521c377b1493d2
 
 // MockCloneDispatcher is a test mock for the CloneDispatcher interface.
 //
@@ -706,7 +706,7 @@ func (m *MockCloneDispatcher) CloneRepoOntoDaemon(ctx context.Context, jwt strin
 var _ CloneDispatcher = (*MockCloneDispatcher)(nil)
 
 // forge:section MockMoveStarter
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=41a46046c6c08fe0f59812d318b556fae4e4faa39712486d68faf6b4bf937203
 
 // MockMoveStarter is a test mock for the MoveStarter interface.
 //
@@ -732,7 +732,7 @@ func (m *MockMoveStarter) StartProjectOrgMove(ctx context.Context, moveID string
 var _ MoveStarter = (*MockMoveStarter)(nil)
 
 // forge:section MockMoveFacts
-// forge:hash=fb77c2c8cd7a1eb49e56672e6cc199de8e211c4c83e7a8858b416fbdb1461820
+// forge:hash=04e80ff1586f82310da9b50a7c690d5ef010a9bc6b89854527b2a863fcefa74d
 
 // MockMoveFacts is a test mock for the MoveFacts interface.
 //

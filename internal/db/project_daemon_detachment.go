@@ -95,7 +95,10 @@ func (r *Repo) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID, dae
 		if err := r.lockCheckoutForDetach(txCtx, projectID, daemonID); err != nil {
 			return err
 		}
-		org, found, err := store.LockProjectOrgForShare(txCtx, r.ORM(), projectID)
+		// A project scheduled for deletion is detached all the same: the
+		// cleanup removes, never adds, and the audit keeps what it removed
+		// for a restore of either.
+		org, _, found, err := store.LockProjectOrgForShare(txCtx, r.ORM(), projectID)
 		if err != nil || !found || org == nil || *org == machineOrg {
 			return err
 		}

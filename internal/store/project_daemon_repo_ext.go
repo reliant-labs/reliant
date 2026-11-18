@@ -294,19 +294,22 @@ RETURNING id`, projectID, daemonID, userID, machineOrg, projectOrg).Scan(ctx, &i
 	return len(ids) > 0, nil
 }
 
-// LockProjectOrgForShare reads the project's org with its row locked FOR
-// SHARE, so a concurrent org move (FOR NO KEY UPDATE) is either committed
-// and seen, or waits for the caller's transaction. found is false for a
-// project that is gone. ctx must carry a transaction.
-func LockProjectOrgForShare(ctx context.Context, db orm.Context, projectID string) (org *string, found bool, err error) {
+// LockProjectOrgForShare reads the project's org, and whether it is
+// scheduled for deletion (projects.delete_after), with its row locked FOR
+// SHARE: a concurrent org move (FOR NO KEY UPDATE) or deletion schedule (FOR
+// UPDATE) is either committed and seen, or waits for the caller's
+// transaction. found is false for a project that is gone. ctx must carry a
+// transaction.
+func LockProjectOrgForShare(ctx context.Context, db orm.Context, projectID string) (org *string, scheduled, found bool, err error) {
 	var rows []struct {
-		OrgID *string `bun:"org_id"`
+		OrgID     *string `bun:"org_id"`
+		Scheduled bool    `bun:"scheduled"`
 	}
-	if err := db.Bun().NewRaw(`SELECT org_id FROM projects WHERE id = ? FOR SHARE`, projectID).Scan(ctx, &rows); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, false, fmt.Errorf("lock the project's org: %w", err)
+	if err := db.Bun().NewRaw(`SELECT org_id, delete_after IS NOT NULL AS scheduled FROM projects WHERE id = ? FOR SHARE`, projectID).Scan(ctx, &rows); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, false, false, fmt.Errorf("lock the project's org: %w", err)
 	}
 	if len(rows) == 0 {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
-	return rows[0].OrgID, true, nil
+	return rows[0].OrgID, rows[0].Scheduled, true, nil
 }

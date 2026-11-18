@@ -219,15 +219,33 @@ func TestRecordObservedProjectDaemonInScope_WaitsForAMoveOutOfTheMachinesOrg(t *
 // row lock. It returns write's result, which must decide on the moved org.
 func (f *cleanupFixture) whileAMoveHoldsTheProject(t *testing.T, toOrg string, write func() (bool, error)) bool {
 	t.Helper()
+	return f.whileAWriterHoldsTheProject(t, "FOR NO KEY UPDATE", `UPDATE projects SET org_id = $1 WHERE id = $2`, toOrg, write)
+}
+
+// whileADeletionHoldsTheProject is whileAMoveHoldsTheProject for a deletion
+// schedule: it holds the project row FOR UPDATE, as
+// store.ScheduleProjectDeletion takes it, and sets delete_after.
+func (f *cleanupFixture) whileADeletionHoldsTheProject(t *testing.T, write func() (bool, error)) bool {
+	t.Helper()
+	return f.whileAWriterHoldsTheProject(t, "FOR UPDATE",
+		`UPDATE projects SET delete_after = $1, deleted_by = 'owner' WHERE id = $2`, time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC), write)
+}
+
+// whileAWriterHoldsTheProject runs write while another transaction holds the
+// project row (lock) and has run update(arg, project), and commits that
+// transaction only once write is waiting on the row. It returns write's
+// result, which must decide on what the other transaction committed.
+func (f *cleanupFixture) whileAWriterHoldsTheProject(t *testing.T, lock, update string, arg any, write func() (bool, error)) bool {
+	t.Helper()
 	mover, err := sql.Open("pgx", f.dsn)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = mover.Close() })
 	tx, err := mover.BeginTx(f.ctx, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tx.Rollback() })
-	_, err = tx.ExecContext(f.ctx, `SELECT 1 FROM projects WHERE id = $1 FOR NO KEY UPDATE`, f.project)
+	_, err = tx.ExecContext(f.ctx, `SELECT 1 FROM projects WHERE id = $1 `+lock, f.project)
 	require.NoError(t, err)
-	_, err = tx.ExecContext(f.ctx, `UPDATE projects SET org_id = $1 WHERE id = $2`, toOrg, f.project)
+	_, err = tx.ExecContext(f.ctx, update, arg, f.project)
 	require.NoError(t, err)
 
 	type result struct {
@@ -516,4 +534,89 @@ func TestSyncProjectConfigSnapshot_ResolvedBeforeTheCleanupPersistsNothingAfterI
 	stored, err = p.repo.SyncProjectConfigSnapshot(ctx, snapshot(), false, &core.OrgScope{OrgID: "globex"})
 	require.NoError(t, err)
 	assert.True(t, stored)
+}
+
+// Rebased onto #2890: a project scheduled for deletion gets nothing new from
+// its machines. Each machine-observed write — recording a found checkout,
+// settling a clone installed or failed, recording a failed restore, syncing
+// the machine's config — waits for a deletion schedule holding the project
+// row (FOR UPDATE, as store.ScheduleProjectDeletion takes it), then writes
+// nothing. Restored (delete_after cleared), each writes again.
+func TestMachineObservedWrites_RefuseAProjectScheduledForDeletion(t *testing.T) {
+	scope := &core.OrgScope{OrgID: "acme"}
+	snapshot := func(f *cleanupFixture) *ProjectConfigRecord {
+		return &ProjectConfigRecord{ProjectID: f.project, DaemonID: f.machine, UserConfigYAML: testStringPtr("from the machine"),
+			PushedAt: time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)}
+	}
+	for _, tc := range []struct {
+		name  string
+		seed  string
+		write func(f *cleanupFixture) (bool, error)
+	}{
+		{
+			name: "found checkout",
+			seed: `DELETE FROM project_daemons WHERE project_id = $1`,
+			write: func(f *cleanupFixture) (bool, error) {
+				return f.repo.RecordObservedProjectDaemonInScope(f.ctx, f.project, f.machine, f.path, nil, scope)
+			},
+		},
+		{
+			name: "installed",
+			seed: `UPDATE project_daemons SET install_state = 'installing', install_request_id = 'req-1' WHERE project_id = $1`,
+			write: func(f *cleanupFixture) (bool, error) {
+				return f.repo.MarkProjectDaemonInstalledInScope(f.ctx, f.project, f.machine, scope)
+			},
+		},
+		{
+			name: "lost clone failed",
+			seed: `UPDATE project_daemons SET install_state = 'installing', install_request_id = 'req-1' WHERE project_id = $1`,
+			write: func(f *cleanupFixture) (bool, error) {
+				return f.repo.FailProjectDaemonInstallInScope(f.ctx, f.project, f.machine, "lost", scope)
+			},
+		},
+		{
+			name: "restore failed",
+			seed: `UPDATE project_daemons SET install_state = 'installed' WHERE project_id = $1`,
+			write: func(f *cleanupFixture) (bool, error) {
+				return f.repo.RecordFailedProjectDaemonRestoreInScope(f.ctx, f.project, f.machine, f.path, nil, "restore failed", scope)
+			},
+		},
+		{
+			name: "config synced",
+			seed: `UPDATE project_daemons SET install_state = 'installed' WHERE project_id = $1`,
+			write: func(f *cleanupFixture) (bool, error) {
+				return f.repo.SyncProjectConfigSnapshot(f.ctx, snapshot(f), true, scope)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, exec := newCleanupFixture(t)
+			exec(tc.seed, f.project)
+			before := f.machineState(t)
+
+			wrote := f.whileADeletionHoldsTheProject(t, func() (bool, error) { return tc.write(f) })
+			assert.False(t, wrote, "a machine wrote to a project scheduled for deletion")
+			assert.Equal(t, before, f.machineState(t), "the machine's rows changed after the project was scheduled for deletion")
+
+			// Restored: written.
+			exec(`UPDATE projects SET delete_after = NULL, deleted_by = NULL WHERE id = $1`, f.project)
+			wrote, err := tc.write(f)
+			require.NoError(t, err)
+			assert.True(t, wrote)
+		})
+	}
+}
+
+// machineState is the machine's checkout row of the project and its synced
+// config of it, as stored ("" each when absent).
+func (f *cleanupFixture) machineState(t *testing.T) [2]string {
+	t.Helper()
+	var checkout []string
+	require.NoError(t, f.repo.ORM().Bun().NewRaw(`SELECT to_jsonb(pd)::text FROM project_daemons pd WHERE project_id = ? AND daemon_id = ?`,
+		f.project, f.machine).Scan(f.ctx, &checkout))
+	out := [2]string{"", machineCatalogJSON(t, f.repo, f.project, f.machine)}
+	if len(checkout) > 0 {
+		out[0] = checkout[0]
+	}
+	return out
 }
