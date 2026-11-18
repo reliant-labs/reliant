@@ -131,11 +131,18 @@ func TestCollectRepoMemories_FrameworkOnceAndIdenticalCollapsed(t *testing.T) {
 	writeRepoFile(t, filepath.Join(root, "c-plain"), "reliant.md", "same text")
 	writeRepoFile(t, filepath.Join(root, "d-plain"), "reliant.md", "same text")
 
+	// The guide is whatever forge renders for the repo, so compare against
+	// that rather than a byte count: forge trims and grows its guide.
+	framework, _, ok := forgeFrameworkMemoryFrom(filepath.Join(root, "a-forge"))
+	require.True(t, ok)
+	require.NotEmpty(t, framework)
+
 	mem, ver1 := collectRepoMemories(root)
 	require.Contains(t, string(mem["a-forge"]), "notes a-forge")
-	require.Greater(t, len(mem["a-forge"]), 5000, "first forge repo carries the framework")
+	require.Contains(t, string(mem["a-forge"]), string(framework), "first forge repo carries the framework")
 	require.Contains(t, string(mem["b-forge"]), "notes b-forge")
 	require.Contains(t, string(mem["b-forge"]), "`a-forge`")
+	require.NotContains(t, string(mem["b-forge"]), string(framework), "the second forge repo points at the first instead")
 	require.Less(t, len(mem["b-forge"]), 1000)
 	require.Equal(t, "same text", string(mem["c-plain"]))
 	require.Contains(t, string(mem["d-plain"]), "`c-plain`")
