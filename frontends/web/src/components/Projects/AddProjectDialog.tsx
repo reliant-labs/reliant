@@ -31,6 +31,7 @@ type Step = "choose" | "clone";
 export function AddProjectDialog() {
   const isOpen = useAddProjectDialogStore((state) => state.isOpen);
   const method = useAddProjectDialogStore((state) => state.method);
+  const repoUrl = useAddProjectDialogStore((state) => state.repoUrl);
   const close = useAddProjectDialogStore((state) => state.closeAddProject);
   const [step, setStep] = useState<Step>("choose");
   const [isBrowsingFolders, setIsBrowsingFolders] = useState(false);
@@ -110,7 +111,12 @@ export function AddProjectDialog() {
                 selectedDaemonId={effectiveCloneDaemonId}
                 onSelect={setChosenCloneDaemonId}
               />
-              <RepoSelector onSelect={(repo) => void cloneRepo(repo)} analyticsPhase="add_project" />
+              <RepoSelector
+                key={repoUrl ?? ""}
+                onSelect={(repo) => void cloneRepo(repo)}
+                analyticsPhase="add_project"
+                initialUrl={repoUrl ?? undefined}
+              />
             </>
           )}
         </div>
