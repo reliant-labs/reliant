@@ -17,6 +17,7 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
@@ -835,6 +836,10 @@ type WorkflowCheckSyncerDeps struct {
 	DB          *db.Repo
 	Credentials *WorkerIntegrationCredentials
 	Policies    *orgpolicy.Resolver
+	// Membership answers whether a check's owner is still a member of its
+	// trigger's org, asked before every write (workflowcheck.ownerMayWrite);
+	// nil is a deployment with no orgs.
+	Membership *orgs.Resolver
 }
 
 // NewWorkflowCheckSyncer writes the GitHub check runs workflows' `check:`
@@ -859,8 +864,12 @@ func NewWorkflowCheckSyncer(d WorkflowCheckSyncerDeps) (*workflowcheck.Syncer, e
 		RunURL: workflowcheck.HostedRunURL,
 	})
 	policies := d.Policies
+	var membership authz.Membership = authz.NoOrgs{}
+	if d.Membership != nil {
+		membership = d.Membership
+	}
 	return workflowcheck.NewSyncer(svc, func(ctx context.Context) context.Context {
-		return orgpolicy.WithResolver(ctx, policies)
+		return orgpolicy.WithResolver(authz.WithMembership(ctx, membership), policies)
 	}), nil
 }
 

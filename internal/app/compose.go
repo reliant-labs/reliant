@@ -1542,5 +1542,6 @@ func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 		DB:          g.Database(),
 		Credentials: g.WorkerIntegrationCredentials(),
 		Policies:    g.OrgPolicyResolver(),
+		Membership:  g.OrgResolver(),
 	})
 }

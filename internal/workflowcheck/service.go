@@ -198,6 +198,13 @@ func (s *service) sync(ctx context.Context, row *core.WorkflowCheckRun) error {
 
 // failed records a failed sync: backoff, and past the check's timeout plus
 // giveUpAfter, giving up.
+//
+// A refusal (ErrNotAuthorized: the owner left the org, lost the repository,
+// or the activation cannot write as the App) abandons the check at once: the
+// row is finished with the reason in last_error, and nothing more is written
+// to GitHub, because every write would be made with the authority that was
+// refused. A check already open there stays as it is, which a required check
+// never counts as passing.
 func (s *service) failed(ctx context.Context, row *core.WorkflowCheckRun, now time.Time, cause error) error {
 	row.Attempts++
 	row.LastError = truncate(cause.Error(), 2048)
@@ -206,7 +213,14 @@ func (s *service) failed(ctx context.Context, row *core.WorkflowCheckRun, now ti
 		wait = maxBackoff
 	}
 	row.NextSyncAt = now.Add(wait)
-	if now.After(row.CreatedAt.Add(row.Timeout + giveUpAfter)) {
+	refused := errors.Is(cause, ErrNotAuthorized)
+	switch {
+	case refused:
+		row.LastError = truncate("abandoned, not authorized: "+cause.Error(), 2048)
+		row.FinishedAt = ptr.Of(now)
+		logging.WarnContext(ctx, "[workflowcheck] abandoned a check its activation may no longer write", "check_id", row.ID, "name", row.Name, "reason", cause)
+	case now.After(row.CreatedAt.Add(row.Timeout + giveUpAfter)):
+		row.LastError = truncate("abandoned after retries: "+cause.Error(), 2048)
 		row.FinishedAt = ptr.Of(now)
 		logging.WarnContext(ctx, "[workflowcheck] gave up on a check that could not be written", "check_id", row.ID, "name", row.Name, "error", cause)
 	}
@@ -214,6 +228,9 @@ func (s *service) failed(ctx context.Context, row *core.WorkflowCheckRun, now ti
 	row.UpdatedAt = now
 	if err := s.store.SaveWorkflowCheckRunSync(ctx, row); err != nil {
 		return errors.Join(cause, fmt.Errorf("save: %w", err))
+	}
+	if refused {
+		return nil
 	}
 	return cause
 }

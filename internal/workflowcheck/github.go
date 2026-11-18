@@ -9,6 +9,8 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
@@ -64,14 +66,31 @@ type github struct {
 	catalog *catalog.Catalog
 }
 
-// CheckRuns implements GitHub: it applies the org's integrations policy and
-// mints the App's credential once, for every write of one sync.
+// CheckRuns implements GitHub. Every sync asks again, before any credential
+// is minted, whether the check may still be written as its activation's
+// identity:
+//
+//   - the trigger's owner is still allowed to act for its trigger: the rule a
+//     firing applies to its creator (authz.WriteTriggerDenial, through
+//     triggers.CreatorLeftOrg), so an owner removed from the trigger's org
+//     after the firing opened the check writes nothing more;
+//   - the org's integrations policy allows GitHub;
+//   - the App can be minted for the owner on this one repository (the
+//     broker refuses an owner who can no longer push there, or a repository
+//     the App is not installed on).
+//
+// A refusal is ErrNotAuthorized and final; a lookup that could not be made
+// (a membership or policy outage, a mint that failed in transit) is a plain
+// error the syncer retries. Neither writes anything: it fails closed.
 func (g *github) CheckRuns(ctx context.Context, id Identity, owner, repo string) (CheckRuns, error) {
 	if id.ActingIdentity != httpaction.IdentityApp {
-		return nil, errors.New("a check run is written by the Reliant GitHub App, so the automation must act as the Reliant bot; it acts as its owner")
+		return nil, notAuthorized("a check run is written by the Reliant GitHub App, so the automation must act as the Reliant bot; it acts as its owner", nil)
 	}
 	if g.broker == nil {
-		return nil, errors.New("this deployment has no GitHub App to write check runs as")
+		return nil, notAuthorized("this deployment has no GitHub App to write check runs as", nil)
+	}
+	if err := ownerMayWrite(ctx, id); err != nil {
+		return nil, err
 	}
 	create, err := g.catalog.Resolve(usesCreate)
 	if err != nil {
@@ -82,7 +101,7 @@ func (g *github) CheckRuns(ctx context.Context, id Identity, owner, repo string)
 		return nil, fmt.Errorf("read the organization's integrations policy: %w", err)
 	}
 	if d.Refused {
-		return nil, fmt.Errorf("the organization's policy does not allow the %s integration", githubID)
+		return nil, notAuthorized(fmt.Sprintf("the organization's policy does not allow the %s integration", githubID), nil)
 	}
 	params := map[string]any{"owner": owner, "repo": repo}
 	cred, err := g.broker.ActingCredential(ctx, id.UserID, httpaction.CredentialRequest{
@@ -96,7 +115,7 @@ func (g *github) CheckRuns(ctx context.Context, id Identity, owner, repo string)
 		ServerPlaced:   true,
 	})
 	if err != nil {
-		return nil, err
+		return nil, credentialRefusal(err)
 	}
 	return &checkRuns{g: g, cred: fixedCredential{cred}, owner: owner, repo: repo, site: httpaction.CallSite{
 		ActingIdentity: httpaction.IdentityApp, Automation: id.Automation,
@@ -153,7 +172,14 @@ func (c *checkRuns) run(ctx context.Context, uses string, params map[string]any)
 		return nil, err
 	}
 	if res.IsError {
-		return nil, fmt.Errorf("%s: GitHub answered %d: %s", uses, res.StatusCode, truncate(res.Content, 1024))
+		err := fmt.Errorf("%s: GitHub answered %d: %s", uses, res.StatusCode, truncate(res.Content, 1024))
+		if (res.StatusCode == 401 || res.StatusCode == 403) && !res.Retryable {
+			// The App lost the repository between the mint and the write. A
+			// rate limit's 403 is retryable (the catalog's error table) and
+			// is retried.
+			return nil, notAuthorized(err.Error(), err)
+		}
+		return nil, err
 	}
 	return res.Data, nil
 }
@@ -206,6 +232,62 @@ func intOf(v any) (int64, error) {
 		return strconv.ParseInt(n, 10, 64)
 	}
 	return 0, fmt.Errorf("GitHub returned no check run id")
+}
+
+// ErrNotAuthorized is a check that may no longer be written as its
+// activation's identity: its owner left the trigger's org, the activation
+// does not act as the App, the org's policy refuses GitHub, or the App cannot
+// be minted for the owner on the repository. It is final: the syncer abandons
+// the check rather than retry, and writes nothing more to it.
+var ErrNotAuthorized = errors.New("not authorized to write this check")
+
+type notAuthorizedError struct {
+	reason string
+	cause  error
+}
+
+func notAuthorized(reason string, cause error) error {
+	return &notAuthorizedError{reason: reason, cause: cause}
+}
+
+func (e *notAuthorizedError) Error() string        { return e.reason }
+func (e *notAuthorizedError) Unwrap() error        { return e.cause }
+func (e *notAuthorizedError) Is(target error) bool { return target == ErrNotAuthorized }
+
+// ownerMayWrite asks, as a firing does of its trigger's creator, whether the
+// owner may still act for the trigger the check came from: a trigger of no
+// org is its owner's alone; one of an org needs its owner to be a live
+// member. A membership outage fails closed, retried.
+func ownerMayWrite(ctx context.Context, id Identity) error {
+	trigger := &core.Trigger{UserID: id.UserID}
+	if id.OrgID != "" {
+		org := id.OrgID
+		trigger.OrgID = &org
+	}
+	switch denial := authz.WriteTriggerDenial(ctx, id.UserID, trigger); {
+	case denial == nil:
+		return nil
+	case errors.Is(denial, authz.ErrMembershipUnavailable):
+		return fmt.Errorf("could not check that the automation's owner is still a member of its organization: %w", denial)
+	case errors.Is(denial, authz.ErrNotOrgMember):
+		return notAuthorized("the automation's owner is no longer a member of its organization", denial)
+	default:
+		return notAuthorized("the automation's owner may no longer act for it", denial)
+	}
+}
+
+// credentialRefusal classifies a failed mint: a refusal the owner or an admin
+// must fix (no push access, the App not installed, a policy) is
+// ErrNotAuthorized; an outage is retried.
+func credentialRefusal(err error) error {
+	var ce *httpaction.CredentialError
+	if errors.As(err, &ce) {
+		switch ce.Code {
+		case httpaction.CodeFailedPrecondition, httpaction.CodeNeedsReauth, httpaction.CodeInvalidArgument, httpaction.CodeNotFound:
+			return notAuthorized(ce.Message, err)
+		}
+	}
+	return err
 }
 
 // fixedCredential is a credential source that answers every request with the
