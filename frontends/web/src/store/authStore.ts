@@ -88,12 +88,40 @@ const clearUserScopedState = async (): Promise<void> => {
   queryClient.clear()
 }
 
-// The user whose chats, projects and cached answers this page may still hold:
-// the last identity installed with the previous user's state cleared first.
-// Tracked apart from the store's `user`, which several paths (a failed
+// The principal whose chats, projects and cached answers this page may still
+// hold: the last identity installed with the previous one's state cleared
+// first. Tracked apart from the store's `user`, which several paths (a failed
 // refresh, an unreadable stored session) set to null WITHOUT clearing that
 // state, so "the store is signed out" never means "nothing is left to clear".
-let scopedStateUserId: string | null = null
+let scopedStatePrincipal: Principal | null = null
+
+/**
+ * Who a user and session act as. A person is their user id. Every API-key
+ * session shares one synthetic user id (API_KEY_USER_ID), so it is that id
+ * AND the key: replacing one key with another is a change of account, exactly
+ * like another person signing in. In memory only, beside the session that
+ * already holds the key; never in a cache key, a log or the SessionOwner.
+ */
+interface Principal {
+  userId: string
+  apiKey?: string
+}
+
+const principalOf = (user: User | null, session: Session | null): Principal | null => {
+  if (!user) return null
+  return user.id === API_KEY_USER_ID ? { userId: user.id, apiKey: session?.access_token ?? '' } : { userId: user.id }
+}
+
+const samePrincipal = (a: Principal | null, b: Principal | null): boolean =>
+  a === b || (a !== null && b !== null && a.userId === b.userId && a.apiKey === b.apiKey)
+
+const apiKeyUser = (): User =>
+  ({
+    id: API_KEY_USER_ID,
+    email: 'apikey@localhost',
+    email_confirmed_at: new Date().toISOString(),
+    is_anonymous: false,
+  }) as User
 
 const CLEANUP_FAILED_MESSAGE =
   'Your previous session could not be cleared from this page. Please reload the page to continue.'
@@ -106,6 +134,8 @@ type AdoptOutcome = 'installed' | 'refused' | 'superseded'
 // commit waits for the one before it.
 let adoptionSeq = 0
 let adoptionTail: Promise<AdoptOutcome> = Promise.resolve('installed')
+// Adoptions requested and not yet committed or refused.
+let adoptionsPending = 0
 
 /**
  * The one way a user and session are installed in the store: every sign-in,
@@ -141,10 +171,20 @@ const adoptIdentity = async (
   // identity is.
   const nextReader = user && !user.is_anonymous ? user.id : null
   if (getReaderSession().principalId !== nextReader) setReaderPrincipal(null)
+  // Work captured for the current account stops the moment another is
+  // requested, for the same reason: requests may already carry the next
+  // credential. For a person the transport would also see the token's
+  // subject change, but an API key is opaque, so the epoch is all that tells
+  // A's key from B's (lib/auth/sessionOwner credentialBelongsTo).
+  if (!samePrincipal(scopedStatePrincipal, principalOf(user, session))) setSessionOwner(null)
   const ticket = ++adoptionSeq
+  adoptionsPending++
   const run = adoptionTail
     .then(() => commitIdentity(set, user, session, ticket, forceClear))
     .catch((): AdoptOutcome => 'refused')
+    .finally(() => {
+      adoptionsPending--
+    })
   adoptionTail = run
   let outcome = await run
   while (outcome === 'superseded') outcome = await adoptionTail
@@ -160,8 +200,9 @@ const commitIdentity = async (
 ): Promise<AdoptOutcome> => {
   if (ticket !== adoptionSeq) return 'superseded'
   const nextUserId = user?.id ?? null
+  const nextPrincipal = principalOf(user, session)
   if (
-    (scopedStateUserId !== null && scopedStateUserId !== nextUserId) ||
+    (scopedStatePrincipal !== null && !samePrincipal(scopedStatePrincipal, nextPrincipal)) ||
     (forceClear && nextUserId === null)
   ) {
     // From here on the page acts for nobody: writes queued for the previous
@@ -176,10 +217,10 @@ const commitIdentity = async (
       return 'refused'
     }
     // The page now holds nobody's state, whichever identity is installed next.
-    scopedStateUserId = null
+    scopedStatePrincipal = null
   }
   if (ticket !== adoptionSeq) return 'superseded'
-  scopedStateUserId = nextUserId
+  scopedStatePrincipal = nextPrincipal
   setSessionOwner(nextUserId)
   set({ user, session })
   return 'installed'
@@ -1052,17 +1093,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // API-key sessions share a synthetic id: explicit replacement must still
     // invalidate reader authority without putting the credential in a key.
     if (get().session?.access_token !== apiKey) setReaderPrincipal(null, true)
+    const user = apiKeyUser()
+    const session = { access_token: apiKey } as Session
+    const next = principalOf(user, session)
+    // Nothing of another account's is held and no transition is in line:
+    // install now, as before. The owner moves on unless this is the same key.
+    if (adoptionsPending === 0 && (scopedStatePrincipal === null || samePrincipal(scopedStatePrincipal, next))) {
+      if (!samePrincipal(scopedStatePrincipal, next)) setSessionOwner(null)
+      scopedStatePrincipal = next
+      setSessionOwner(user.id)
+      localStorage.setItem('reliant-api-key', apiKey)
+      set({ user, session, loading: false, initialized: true })
+      return
+    }
+    // A different key (or a person's session before it) is a different
+    // account. The transport reads the key from storage on its next request,
+    // so work captured for the previous account must stop before the key is
+    // stored: adoptIdentity bumps the session owner synchronously, then
+    // clears the previous account's settings and queries before installing
+    // this one, as for any other sign-in.
+    const adopted = adoptIdentity(set, user, session)
     localStorage.setItem('reliant-api-key', apiKey)
-    set({
-      user: {
-        id: API_KEY_USER_ID,
-        email: 'apikey@localhost',
-        email_confirmed_at: new Date().toISOString(),
-        is_anonymous: false,
-      } as User,
-      session: { access_token: apiKey } as Session,
-      loading: false,
-      initialized: true,
+    void adopted.then((installed) => {
+      if (installed) set({ loading: false, initialized: true })
     })
   },
 
@@ -1073,17 +1126,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const storedApiKey = localStorage.getItem('reliant-api-key')
     if (storedApiKey) {
       logger.info('[AuthStore] Restoring API key session')
-      set({
-        user: {
-          id: API_KEY_USER_ID,
-          email: 'apikey@localhost',
-          email_confirmed_at: new Date().toISOString(),
-          is_anonymous: false,
-        } as User,
-        session: { access_token: storedApiKey } as Session,
-        loading: false,
-        initialized: true,
-      })
+      // Installed like any identity, so the session owner and the principal
+      // whose state the page holds are this key's: a later key, or a person
+      // signing in, is then seen as a change of account.
+      await adoptIdentity(set, apiKeyUser(), { access_token: storedApiKey } as Session)
+      set({ loading: false, initialized: true })
       return
     }
 
