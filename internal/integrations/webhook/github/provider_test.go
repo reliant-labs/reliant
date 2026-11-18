@@ -196,6 +196,9 @@ func TestPullRequestEvents(t *testing.T) {
 			pr := ev.Data["pull_request"].(map[string]any)
 			assert.EqualValues(t, 7, pr["number"])
 			assert.Equal(t, "fix-save", pr["head"].(map[string]any)["ref"])
+			assert.Equal(t, map[string]any{"full_name": "acme/app", "fork": false}, pr["head"].(map[string]any)["repo"])
+			assert.Equal(t, map[string]any{"full_name": "acme/app", "fork": false}, pr["base"].(map[string]any)["repo"])
+			assert.Equal(t, "MEMBER", pr["author_association"])
 		})
 	}
 	merged := one(t, parseFixture(t, "pull_request", "pull_request.closed"))
@@ -205,6 +208,35 @@ func TestPullRequestEvents(t *testing.T) {
 	assert.Equal(t, "hubot", requested.Attributes["requested_reviewer"])
 	sync := one(t, parseFixture(t, "pull_request", "pull_request.synchronize"))
 	assert.Equal(t, "cccccccccccccccccccccccccccccccccccccccc", sync.Data["after"])
+}
+
+// A pull request from a fork runs code nobody with access to the repository
+// wrote. The head's repository and the author's association are what let a
+// trigger filter refuse it.
+func TestPullRequestFromAForkSaysSo(t *testing.T) {
+	ev := one(t, parseFixture(t, "pull_request", "pull_request.opened.fork"))
+	assert.Equal(t, "pull_request.opened", ev.Type)
+	assert.Equal(t, "acme/app", ev.Attributes["repository"])
+	assert.Equal(t, "fix-typo", ev.Attributes["branch"])
+	pr := ev.Data["pull_request"].(map[string]any)
+	assert.Equal(t, map[string]any{"full_name": "outsider/app", "fork": true}, pr["head"].(map[string]any)["repo"])
+	assert.Equal(t, map[string]any{"full_name": "acme/app", "fork": false}, pr["base"].(map[string]any)["repo"])
+	assert.Equal(t, "FIRST_TIME_CONTRIBUTOR", pr["author_association"])
+}
+
+// GitHub sends a null head repository once the fork is deleted. The projection
+// leaves it out rather than inventing one, so a filter that requires
+// head.repo.fork == false refuses the pull request.
+func TestPullRequestFromADeletedForkHasNoHeadRepo(t *testing.T) {
+	var m map[string]any
+	require.NoError(t, json.Unmarshal(fixture(t, "pull_request.opened.fork"), &m))
+	m["pull_request"].(map[string]any)["head"].(map[string]any)["repo"] = nil
+	body, err := json.Marshal(m)
+	require.NoError(t, err)
+	ev := one(t, parseBody(t, "pull_request", body))
+	head := ev.Data["pull_request"].(map[string]any)["head"].(map[string]any)
+	assert.NotContains(t, head, "repo")
+	assert.Equal(t, "fix-typo", head["ref"])
 }
 
 func TestPullRequestReviewSubmitted(t *testing.T) {

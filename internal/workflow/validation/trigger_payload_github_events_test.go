@@ -38,6 +38,8 @@ func TestGitHubAutomationEventPayloadsAcceptWhatRuns(t *testing.T) {
 		"check suite": {"check_suite.completed",
 			"    filter: \"trigger.payload.data.check_suite.conclusion == 'success' && size(trigger.payload.data.check_suite.pull_requests) > 0\"\n" +
 				"    inputs:\n      issue_number: \"{{ trigger.payload.data.check_suite.pull_requests[0] }}\"\n"},
+		"refuse forks and untrusted authors": {"pull_request.opened, pull_request.synchronize",
+			"    filter: \"has(trigger.payload.data.pull_request.head.repo) && !trigger.payload.data.pull_request.head.repo.fork && trigger.payload.data.pull_request.head.repo.full_name == trigger.payload.data.repository.full_name && trigger.payload.data.pull_request.author_association in ['OWNER', 'MEMBER', 'COLLABORATOR']\"\n"},
 		"check run re-run": {"check_run.rerequested",
 			"    filter: \"trigger.payload.data.check_run.app.slug == 'reliant-labs' && trigger.payload.data.check_run.external_id != ''\"\n" +
 				"    prompt: \"Re-run {{ trigger.payload.data.check_run.name }} on {{ trigger.payload.data.check_run.head_sha }} ({{ trigger.payload.data.check_run.head_branch }})\"\n"},
@@ -84,6 +86,11 @@ func TestGitHubAutomationEventPayloadTypeErrors(t *testing.T) {
 			"check_run.completed",
 			"    filter: \"trigger.payload.data.check_run.app == 'github-actions'\"\n",
 			[]string{"filter", "trigger.payload.data.check_run.app"},
+		},
+		"a fork flag is a boolean": {
+			"pull_request.opened",
+			"    filter: \"trigger.payload.data.pull_request.head.repo.fork == 'true'\"\n",
+			[]string{"filter", "no matching overload", "(bool, string)"},
 		},
 		"a check run re-run has no check suite": {
 			"check_run.rerequested",
