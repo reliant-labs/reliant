@@ -30,6 +30,8 @@ func TestWorkerStopsTakingWorkFirst(t *testing.T) {
 		"account_usage_poller",
 		"write_ledger_prune",
 		"ledger_retention",
+		// The deleted-project purge (internal/db/project_schedule.go).
+		"project_purge",
 		"account_recorder",
 		"streaming_hub",
 		"temporal_client",
@@ -49,7 +51,7 @@ func TestWorkerStopsTakingWorkFirst(t *testing.T) {
 			require.True(t, n.Run, "the Temporal worker polls")
 			require.True(t, n.Drain, "the Temporal worker drains: that is what releases activities")
 			require.True(t, n.Ready, "the Temporal worker gates readiness")
-		case "workflow_event_relay", "org_policy_watcher", "account_usage_poller", "write_ledger_prune", "ledger_retention":
+		case "workflow_event_relay", "org_policy_watcher", "account_usage_poller", "write_ledger_prune", "ledger_retention", "project_purge":
 			require.True(t, n.Run, "%s runs", n.Name)
 		case "account_recorder":
 			require.True(t, n.Close, "the recorder flushes on close")
