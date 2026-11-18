@@ -29454,6 +29454,27 @@
             {
               "name": "updated_at",
               "kind": "string"
+            },
+            {
+              "name": "forge_apps",
+              "kind": "message",
+              "type_name": "reliant.v1.RepoForgeApp",
+              "repeated": true
+            },
+            {
+              "name": "forge_apps_scanned_at",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.RepoForgeApp": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "subpath",
+              "kind": "string"
             }
           ]
         },
@@ -29468,7 +29489,8 @@
           "reliant.v1.ListReposResponse": "reliant/v1/repo.proto",
           "reliant.v1.RemoveRepoRequest": "reliant/v1/repo.proto",
           "reliant.v1.RemoveRepoResponse": "reliant/v1/repo.proto",
-          "reliant.v1.Repo": "reliant/v1/repo.proto"
+          "reliant.v1.Repo": "reliant/v1/repo.proto",
+          "reliant.v1.RepoForgeApp": "reliant/v1/repo.proto"
         }
       }
     },

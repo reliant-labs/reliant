@@ -134,5 +134,7 @@ func repoToCore(row *Repo) *core.Repo {
 		RemoteURL:    gitremote.StripCredentialsPtr(row.RemoteURL),
 		CreatedAt:    row.CreatedAt,
 		UpdatedAt:    row.UpdatedAt,
+		// Written only by SetRepoForgeApps; InsertRepo leaves it NULL.
+		ForgeAppsScannedAt: row.ForgeAppsScannedAt,
 	}
 }

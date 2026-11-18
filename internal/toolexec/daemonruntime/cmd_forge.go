@@ -167,7 +167,7 @@ func runForgeProcess(ctx context.Context, dir, name string, args ...string) (for
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.WaitDelay = forgeWaitDelay
-	if org := forgeOrgEnv(ctx); org != nil {
+	if org := forgeScopeEnv(ctx); org != nil {
 		cmd.Env = append(os.Environ(), org...) //nolint:forbidigo // forwards the first-party forge child's inherited environment plus its captured org; not a daemon configuration read
 	}
 
@@ -468,7 +468,10 @@ func stderrExcerpt(stderr []byte) string {
 type forgeTopologyRequest struct {
 	// OrgID is the org forge acts in for this request (the web's active org).
 	// See ForgeOrgEnv. Empty: the daemon session's own org.
-	OrgID       string `json:"org_id,omitempty"`
+	OrgID string `json:"org_id,omitempty"`
+	// ProjectID is the Reliant project the invocation runs for
+	// (ForgeProjectEnv). Empty from a server older than the field: none.
+	ProjectID   string `json:"project_id,omitempty"`
 	ProjectPath string `json:"project_path"`
 	// Verify opts in to reading every environment's live cluster. Off by
 	// default in forge for a load-bearing reason this handler must not
@@ -494,7 +497,7 @@ func handleForgeTopology(ctx context.Context, payload []byte) ([]byte, error) {
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	ctx, err := bindForgeScope(ctx, req.OrgID, req.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -517,7 +520,10 @@ func handleForgeTopology(ctx context.Context, payload []byte) ([]byte, error) {
 type forgeEnvVerifyRequest struct {
 	// OrgID is the org forge acts in for this request (the web's active org).
 	// See ForgeOrgEnv. Empty: the daemon session's own org.
-	OrgID       string `json:"org_id,omitempty"`
+	OrgID string `json:"org_id,omitempty"`
+	// ProjectID is the Reliant project the invocation runs for
+	// (ForgeProjectEnv). Empty from a server older than the field: none.
+	ProjectID   string `json:"project_id,omitempty"`
 	ProjectPath string `json:"project_path"`
 	Env         string `json:"env"`
 }
@@ -534,7 +540,7 @@ func handleForgeEnvVerify(ctx context.Context, payload []byte) ([]byte, error) {
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	ctx, err := bindForgeScope(ctx, req.OrgID, req.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -557,7 +563,10 @@ func handleForgeEnvVerify(ctx context.Context, payload []byte) ([]byte, error) {
 type forgeSecretListRequest struct {
 	// OrgID is the org forge acts in for this request (the web's active org).
 	// See ForgeOrgEnv. Empty: the daemon session's own org.
-	OrgID       string `json:"org_id,omitempty"`
+	OrgID string `json:"org_id,omitempty"`
+	// ProjectID is the Reliant project the invocation runs for
+	// (ForgeProjectEnv). Empty from a server older than the field: none.
+	ProjectID   string `json:"project_id,omitempty"`
 	ProjectPath string `json:"project_path"`
 	Env         string `json:"env"`
 }
@@ -584,7 +593,7 @@ func handleForgeSecretList(ctx context.Context, payload []byte) ([]byte, error) 
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	ctx, err := bindForgeScope(ctx, req.OrgID, req.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -607,7 +616,10 @@ func handleForgeSecretList(ctx context.Context, payload []byte) ([]byte, error) 
 type forgeEnvStatusRequest struct {
 	// OrgID is the org forge acts in for this request (the web's active org).
 	// See ForgeOrgEnv. Empty: the daemon session's own org.
-	OrgID       string `json:"org_id,omitempty"`
+	OrgID string `json:"org_id,omitempty"`
+	// ProjectID is the Reliant project the invocation runs for
+	// (ForgeProjectEnv). Empty from a server older than the field: none.
+	ProjectID   string `json:"project_id,omitempty"`
 	ProjectPath string `json:"project_path"`
 	Env         string `json:"env"`
 }
@@ -624,7 +636,7 @@ func handleForgeEnvStatus(ctx context.Context, payload []byte) ([]byte, error) {
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	ctx, err := bindForgeScope(ctx, req.OrgID, req.ProjectID)
 	if err != nil {
 		return nil, err
 	}

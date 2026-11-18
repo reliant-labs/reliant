@@ -53,6 +53,25 @@ message Repo {
   string remote_url = 5;       // remote.origin.url, "" if no remote
   string created_at = 6;
   string updated_at = 7;
+  // forge_apps are the forge apps in this repo: one per forge.yaml a daemon
+  // found in it (depth <= 4 below the repo root), ordered by subpath. Read it
+  // with forge_apps_scanned_at. ListRepos fills it; DiscoverRepos does not.
+  repeated RepoForgeApp forge_apps = 8;
+  // forge_apps_scanned_at (RFC 3339) is when a daemon last finished scanning
+  // this repo for forge apps. Unset means unknown: no daemon has scanned it
+  // yet (one older than the scan never does), and forge_apps, if any, may be
+  // partial. Set with no forge_apps: the repo has no forge app.
+  optional string forge_apps_scanned_at = 9;
+}
+
+// RepoForgeApp is one forge app found in a repo: a forge.yaml and the `name`
+// it declares, which is the app's name in the project's org.
+message RepoForgeApp {
+  // name is forge.yaml's `name`.
+  string name = 1;
+  // subpath is the forge.yaml's directory relative to the repo root,
+  // "/"-separated; "" is the repo root itself.
+  string subpath = 2;
 }
 
 message DiscoverReposRequest {

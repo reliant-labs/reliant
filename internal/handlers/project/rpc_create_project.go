@@ -155,8 +155,14 @@ func (s *Service) CreateProject(
 		Truncated        bool             `json:"truncated"`
 		TruncatedReason  string           `json:"truncated_reason"`
 	}
-	if err := send("repo.discover", map[string]interface{}{"path": req.Msg.Path}, &discoverResp); err != nil {
+	// forge_apps: the same walk reports every forge app in each repo, which
+	// is recorded once the repos are (projectfacts.RecordForgeApps). A daemon
+	// older than that walk ignores it and reports none: unknown.
+	var discoverRaw json.RawMessage
+	if err := send("repo.discover", map[string]interface{}{"path": req.Msg.Path, "forge_apps": true}, &discoverRaw); err != nil {
 		logging.WarnContext(ctx, "Failed to discover repos via daemon, project will start with zero repos", "error", err, "path", req.Msg.Path)
+	} else if err := json.Unmarshal(discoverRaw, &discoverResp); err != nil {
+		logging.WarnContext(ctx, "Could not read the daemon's repo discovery, project will start with zero repos", "error", err, "path", req.Msg.Path)
 	} else if discoverResp.Truncated {
 		// The repos found are registered; the rest are adopted the first time
 		// a workspace needs them (repo.AdoptFromDaemon), which says so if its
@@ -345,6 +351,11 @@ func (s *Service) CreateProject(
 		}
 	}
 
+	// Every forge app in the repos just recorded, from the same walk.
+	if scan, ok := projectfacts.ParseForgeApps(discoverRaw); ok {
+		projectfacts.RecordForgeApps(ctx, s.deps.Repo, project.ID, scan)
+	}
+
 	// Create reliant.md with default instructions if it doesn't exist (via daemon)
 	var initFilesResp struct {
 		CreatedReliantMD  bool   `json:"created_reliant_md"`
@@ -526,6 +537,7 @@ func (s *Service) attachExisting(ctx context.Context, userID, daemonID string, e
 		return nil, err
 	}
 	projectfacts.LearnForgeName(ctx, s.deps.Router, s.deps.Repo, userID, daemonID, existing.ID, path)
+	projectfacts.RefreshForgeApps(ctx, s.deps.Router, s.deps.Repo, userID, daemonID, existing.ID, path, 0)
 	return connect.NewResponse(&reliantv1.CreateProjectResponse{
 		Project:       projectToProto(existing),
 		ProjectDaemon: s.checkoutProto(ctx, justRecorded(existing.ID, daemonID, path, existing.DefaultBranch)),

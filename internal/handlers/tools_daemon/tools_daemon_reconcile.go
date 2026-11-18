@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitremote"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
+	"github.com/reliant-labs/reliant/internal/projectfacts"
 )
 
 // reconcileTotalTimeout bounds the entire per-connect reconcile pass so a
@@ -33,6 +34,11 @@ type projectPathState struct {
 	// RemoteURL is the git remote the project root resolves to, or "" when the
 	// root is not a git repo, has no remote, or could not be resolved.
 	RemoteURL string
+	// ForgeApps are the forge apps the daemon found in each repo it found
+	// (projectfacts.ParseForgeApps), when ForgeAppsKnown: a daemon older
+	// than the forge-app walk reports none, which is unknown, not "none".
+	ForgeApps      projectfacts.ForgeAppsScan
+	ForgeAppsKnown bool
 }
 
 // daemonPathChecker asks a daemon whether a project path exists on its disk and,
@@ -61,7 +67,9 @@ func (s *Service) reconcileProjectDaemonsOnConnect(ctx context.Context, conn *da
 	defer cancel()
 
 	check := func(ctx context.Context, path string) (projectPathState, error) {
-		payload, err := json.Marshal(map[string]any{"path": path, "max_depth": 1})
+		// forge_apps: the probe already walks the checkout, so it also
+		// refreshes the forge apps of the repos it finds (projectfacts).
+		payload, err := json.Marshal(map[string]any{"path": path, "max_depth": 1, "forge_apps": true})
 		if err != nil {
 			return projectPathState{}, err
 		}
@@ -79,9 +87,12 @@ func (s *Service) reconcileProjectDaemonsOnConnect(ctx context.Context, conn *da
 			// clean "not on this daemon" signal, not a transport failure.
 			return projectPathState{Exists: false}, nil
 		}
+		forgeApps, forgeAppsKnown := projectfacts.ParseForgeApps(resp.GetPayload())
 		return projectPathState{
-			Exists:    true,
-			RemoteURL: rootRemoteFromDiscover(resp.GetPayload()),
+			Exists:         true,
+			RemoteURL:      rootRemoteFromDiscover(resp.GetPayload()),
+			ForgeApps:      forgeApps,
+			ForgeAppsKnown: forgeAppsKnown,
 		}, nil
 	}
 
@@ -257,6 +268,12 @@ func reconcileProjectDaemons(
 		reconciled++
 		if prior == nil {
 			added = append(added, project.Path)
+		}
+
+		// The machine's checkout, freshly walked: its repos' forge apps are
+		// what it just reported (best effort; RecordForgeApps logs).
+		if state.ForgeAppsKnown {
+			projectfacts.RecordForgeApps(ctx, database, project.ID, state.ForgeApps)
 		}
 
 		// Backfill projects.remote_url when it's unset and discover resolved a
