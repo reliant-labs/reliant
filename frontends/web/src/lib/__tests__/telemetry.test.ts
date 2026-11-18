@@ -32,7 +32,7 @@ const runtime = vi.hoisted(() => ({
   setTelemetryUser: vi.fn(),
   grantAnalyticsConsent: vi.fn(),
   reportException: vi.fn(() => true),
-  setGlobalAttributes: vi.fn(),
+  setTelemetryAttributes: vi.fn(),
 }));
 
 vi.mock("@reliantlabs/forge-web-runtime", () => ({
@@ -44,9 +44,7 @@ vi.mock("@reliantlabs/forge-web-runtime", () => ({
 vi.mock("@reliantlabs/forge-web-runtime/telemetry", () => ({
   initBrowserTelemetry: runtime.initBrowserTelemetry,
   enableAttribution: runtime.enableAttribution,
-}));
-vi.mock("@hyperdx/browser", () => ({
-  default: { setGlobalAttributes: runtime.setGlobalAttributes },
+  setTelemetryAttributes: runtime.setTelemetryAttributes,
 }));
 vi.mock("../../hooks/privacy-queries", () => ({
   privacyConsent: () => privacy.state,
@@ -154,7 +152,6 @@ describe("initTelemetry: when it starts", () => {
   it("is a no-op when the runtime reports it is not running", async () => {
     runtime.initBrowserTelemetry.mockResolvedValueOnce(false);
     expect(await initTelemetry()).toBe(false);
-    expect(runtime.setGlobalAttributes).not.toHaveBeenCalled();
   });
 
   it("never throws when the runtime does", async () => {
@@ -223,10 +220,15 @@ describe("initTelemetry: the options it passes", () => {
   it("names app.client=web on a browser and stamps only reliant.build itself", async () => {
     await initTelemetry();
     expect(lastConfig().appClient).toBe("web");
-    // The runtime stamps app.client from appClient; the app adds the build.
-    expect(runtime.setGlobalAttributes).toHaveBeenCalledWith({
+    // The runtime stamps app.client from appClient; the app adds the build,
+    // through the runtime, before the SDK starts, so the first spans carry it.
+    expect(runtime.setTelemetryAttributes).toHaveBeenCalledTimes(1);
+    expect(runtime.setTelemetryAttributes).toHaveBeenCalledWith({
       "reliant.build": "1.8.1",
     });
+    expect(runtime.setTelemetryAttributes.mock.invocationCallOrder[0]).toBeLessThan(
+      runtime.initBrowserTelemetry.mock.invocationCallOrder[0],
+    );
   });
 
   it("names app.client=electron in the Electron renderer", async () => {
