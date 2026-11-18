@@ -118,6 +118,7 @@ const (
 	ToolUpdateTriggerActivation = "update_trigger_activation"
 	ToolEnableTrigger           = "enable_trigger"
 	ToolPauseTrigger            = "pause_trigger"
+	ToolDeleteTrigger           = "delete_trigger"
 	ToolListTriggerEvents       = "list_trigger_events"
 
 	// Integration discovery tools
@@ -170,7 +171,7 @@ var AllToolNames = []string{
 	ToolListWorkflows, ToolGetWorkflow, ToolGetWorkflowSuggestions, ToolListPresets, ToolGetPreset, ToolGetSchema, ToolGetCELRef, ToolCELEval,
 	// Trigger tools
 	ToolListTriggers, ToolFireTrigger, ToolListTriggerEvents,
-	ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger,
+	ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger, ToolDeleteTrigger,
 	// Integration discovery
 	ToolSearchIntegrations, ToolGetIntegrationSchema,
 	// Integration manifests: every exposed action in internal/integrations/catalog.

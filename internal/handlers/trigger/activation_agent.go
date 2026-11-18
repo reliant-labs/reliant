@@ -272,6 +272,34 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 		decision := automationpolicy.Decide(automationpolicy.ApprovalAlways, automationpolicy.OperationPause, nil, nil)
 		return def, tools.ActivationPreview{Title: title, Hash: fmt.Sprintf("%x", hash), Revision: revision}, decision, nil
 	}
+	// Deleting, like pausing, needs ownership, not setup: an activation whose
+	// workflow was deleted or broke must still be removable. It cannot be
+	// undone, so it always needs a card (automationpolicy.Decide).
+	if operation == tools.ToolDeleteTrigger {
+		if p.Name != "" || p.Workflow != "" || p.WorkflowTrigger != "" || p.ProjectID != "" || p.MachineID != nil || p.NoMachine != nil || p.ConnectionID != nil || p.Params != nil || p.Presets != nil || p.Message != nil || p.ActingIdentity != nil {
+			return nil, tools.ActivationPreview{}, none, refused("delete_trigger only accepts trigger_id")
+		}
+		copy := *existing
+		copy.ProjectName = ""
+		copy.DaemonName = ""
+		saved, _ := json.Marshal(copy) // memory-only digest material
+		safe, _ := automationpolicy.SafeJSON(&copy)
+		machineName := existing.DaemonName
+		if machine, e := s.deps.Repo.GetDaemon(ctx, existing.DaemonID); e == nil && machine != nil {
+			if machine.Name != "" {
+				machineName = machine.Name
+			}
+		}
+		decision := automationpolicy.Decide(automationpolicy.ApprovalAlways, automationpolicy.OperationDelete, nil, nil)
+		title := fmt.Sprintf("Delete activation %s (%s) of workflow %s. Owner: %s. Machine: %s (id %s). Approval needed: %s Saved configuration: %s", "(name withheld)", existing.ID, discloseScope(existing.Workflow), user, machineName, existing.DaemonID, decision.Reason, safe)
+		if len(title) > automationpolicy.MaxDisplayBytes {
+			return nil, tools.ActivationPreview{}, none, refusedPrecondition("Activation approval display size limit exceeded")
+		}
+		// The saved row (with its revision) is in the hash: an activation
+		// edited after the card was raised needs a new one.
+		hash := sha256.Sum256(append([]byte(title), saved...))
+		return def, tools.ActivationPreview{Title: title, Hash: fmt.Sprintf("%x", hash), Revision: existing.UpdatedAt}, decision, nil
+	}
 	if operation == tools.ToolEnableTrigger && (p.Name != "" || p.Workflow != "" || p.WorkflowTrigger != "" || p.ProjectID != "" || p.MachineID != nil || p.NoMachine != nil || p.ConnectionID != nil || p.Params != nil || p.Presets != nil || p.Message != nil || p.ActingIdentity != nil) {
 		return nil, tools.ActivationPreview{}, none, refused("enable_trigger only accepts trigger_id; use update_trigger_activation to edit")
 	}
@@ -447,6 +475,9 @@ func (s *Service) manageActivationAtomic(ctx context.Context, user, operation st
 			return tools.TriggerSummary{}, svcerr.PermissionDenied(automationpolicy.Refusal())
 		}
 		if approvedHash == "" {
+			if operation == tools.ToolDeleteTrigger {
+				return tools.TriggerSummary{}, svcerr.PermissionDenied(tools.DeleteApprovalRequiredMessage)
+			}
 			return tools.TriggerSummary{}, svcerr.PermissionDenied(tools.ApprovalRequiredMessage)
 		}
 		if approvedHash != preview.Hash {
@@ -457,6 +488,16 @@ func (s *Service) manageActivationAtomic(ctx context.Context, user, operation st
 	ctx = context.WithValue(ctx, auth.UserIDContextKey, user)
 	if !preview.Revision.IsZero() {
 		ctx = automationpolicy.WithRevision(ctx, preview.Revision)
+	}
+	if operation == tools.ToolDeleteTrigger {
+		// The same RPC `reliant trigger delete` calls. It drops the schedule
+		// before the row; should this transaction then roll back, the row
+		// survives without a schedule, which only stops it firing until the
+		// next Sync (DeleteTrigger's own ordering argument).
+		if _, err := s.DeleteTrigger(ctx, connect.NewRequest(&pb.DeleteTriggerRequest{Id: p.TriggerID})); err != nil {
+			return tools.TriggerSummary{}, err
+		}
+		return tools.TriggerSummary{ID: p.TriggerID, Name: def.GetName(), Workflow: def.GetWorkflow(), WorkflowTrigger: def.GetWorkflowTrigger(), ProjectID: def.GetProjectId(), DaemonID: def.GetDaemonId(), ConnectionID: def.GetConnectionId()}, nil
 	}
 	var out *pb.Trigger
 	switch operation {

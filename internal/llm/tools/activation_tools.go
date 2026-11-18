@@ -21,11 +21,12 @@ const (
 	ToolUpdateTriggerActivation = "update_trigger_activation"
 	ToolEnableTrigger           = "enable_trigger"
 	ToolPauseTrigger            = "pause_trigger"
+	ToolDeleteTrigger           = "delete_trigger"
 )
 
 func IsActivationManagementTool(name string) bool {
 	switch name {
-	case ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger:
+	case ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger, ToolDeleteTrigger:
 		return true
 	}
 	return false
@@ -62,6 +63,10 @@ type ActivationPreview struct {
 // ApprovalRequiredMessage is the refusal when a change needs a card and none
 // was approved.
 const ApprovalRequiredMessage = "This activation change widens its power and needs the owner's approval card in an interactive chat. It was not run."
+
+// DeleteApprovalRequiredMessage is the refusal of a delete_trigger call with
+// no approved card: a delete always needs one.
+const DeleteApprovalRequiredMessage = "Deleting an activation cannot be undone and needs the owner's approval card in an interactive chat. It was not deleted."
 
 // ActivationRefusal is a failure to prepare an activation whose Reason may be
 // shown to the agent and the owner: a fixed classification that names at most
@@ -132,6 +137,9 @@ type activationTypedTool struct{ outer *activationTool }
 
 func (t *activationTypedTool) Name() string { return t.outer.name }
 func (t *activationTypedTool) Description() string {
+	if t.outer.name == ToolDeleteTrigger {
+		return "Permanently delete a declared workflow trigger activation (delete_trigger): its schedule stops and the activation and its configuration history are removed, the same as `reliant trigger delete`. Accepts only trigger_id, from list_triggers; never guess IDs. Deleting cannot be undone, so it always needs the owner's approval card in an interactive chat, whatever their automation-approvals setting, and is refused in an unattended run. To stop an activation without losing it, use pause_trigger."
+	}
 	return "Manage a declared workflow trigger activation (" + t.outer.name + "). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged."
 }
 func (t *activationTypedTool) RequiresPermission(ActivationParams) (bool, error) { return true, nil }
@@ -189,13 +197,20 @@ func (t *activationTool) PrepareAutomation(ctx *rctx.ToolContext, call ToolCall,
 // reason is the refusal's safe classification, or the client-safe message of
 // a classified service error (what the app itself shows for the same RPC);
 // an internal error keeps only the generic sentence, never its cause. A pause
-// never needs a card, so its failure never mentions approval.
+// never needs a card, so its failure never mentions approval; a delete always
+// does, and its failure never suggests the change widened anything.
 func activationFailureMessage(tool string, err error) string {
 	reason := ActivationRefusalReason(err)
 	if reason == "" && svcerr.IsUserError(err) {
 		if ce := svcerr.ToConnect(err); ce != nil {
 			reason = ce.Message()
 		}
+	}
+	if tool == ToolDeleteTrigger {
+		if reason == "" || reason == svcerr.InternalMessage {
+			return "Deleting the activation could not be completed. Inspect it with list_triggers before retrying."
+		}
+		return "Deleting the activation was not completed: " + strings.TrimSuffix(strings.TrimSpace(reason), ".") + ". Inspect it with list_triggers before retrying."
 	}
 	if tool == ToolPauseTrigger {
 		if reason == "" || reason == svcerr.InternalMessage {
@@ -258,7 +273,13 @@ func (t *activationTypedTool) Execute(ctx *rctx.ToolContext, p ActivationParams)
 		if strings.Contains(err.Error(), ApprovalRequiredMessage) {
 			return NewTextErrorResponse(ApprovalRequiredMessage), nil
 		}
+		if strings.Contains(err.Error(), DeleteApprovalRequiredMessage) {
+			return NewTextErrorResponse(DeleteApprovalRequiredMessage), nil
+		}
 		return NewTextErrorResponse(activationFailureMessage(o.name, err)), nil
+	}
+	if o.name == ToolDeleteTrigger {
+		return WithResponseMetadata(NewTextResponse(fmt.Sprintf("%s: deleted activation %s (id %s) of project %s; its schedule and configuration history are gone", o.name, summary.Name, summary.ID, summary.ProjectID)), summary), nil
 	}
 	return WithResponseMetadata(NewTextResponse(fmt.Sprintf("%s: %s (id %s), enabled=%t, machine=%s (id %s), project=%s", o.name, summary.Name, summary.ID, summary.Enabled, summary.DaemonName, summary.DaemonID, summary.ProjectID)), summary), nil
 }

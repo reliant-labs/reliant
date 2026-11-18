@@ -803,6 +803,7 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolUpdateTriggerActivation, (*ToolsFactory).UpdateTriggerActivation, []ToolTag{TagWorkflow}, PlacementServer, false},
 		{ToolEnableTrigger, (*ToolsFactory).EnableTrigger, []ToolTag{TagWorkflow}, PlacementServer, false},
 		{ToolPauseTrigger, (*ToolsFactory).PauseTrigger, []ToolTag{TagWorkflow}, PlacementServer, false},
+		{ToolDeleteTrigger, (*ToolsFactory).DeleteTrigger, []ToolTag{TagWorkflow}, PlacementServer, false},
 		{ToolListTriggerEvents, (*ToolsFactory).ListTriggerEvents, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer, false},
 		// Proposes an automation; the user reviews it in the app and presses
 		// Create. Pure validation, so it runs anywhere.
