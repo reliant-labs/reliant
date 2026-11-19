@@ -219,8 +219,18 @@ describe("app paths", () => {
       `history.replaceState(null, "", "/inbox")`,
       `hardNavigate("/auth?redirect=%2Fclaim")`,
       `navigate({ to: "/auth", search: { redirect: "/inbox" } })`,
+      // A route interpolated into a template-string destination (review of #2931).
+      `navigate({ href: \`\${"/inbox"}\` })`,
+      `navigate({ href: \`x\${"/inbox"}y\` })`,
+      `const a = <Link to={\`\${cond ? "/inbox" : "/auth"}?q=1\`} />`,
+      `window.location.href = \`\${encodeURIComponent("/inbox")}\``,
     ]) {
       expect(kinds(nav), nav).toContain("navigation");
+    }
+    // The interpolated route itself is the site, not only the template around it.
+    for (const nav of [`navigate({ href: \`/settings/\${"/inbox"}\` })`, `navigate({ href: \`x\${"/inbox"}\` })`]) {
+      const sites = scanSource("probe.tsx", nav, new Set(["settings", "inbox", "auth"]));
+      expect(sites.filter((site) => site.text === "/inbox").map((site) => site.kind), nav).toEqual(["navigation"]);
     }
     for (const route of [`const BILLING = "/settings/billing"`, `const items = [{ path: x, target: "/inbox" }]`, `return "/inbox"`]) {
       expect(kinds(route), route).toEqual(["route"]);

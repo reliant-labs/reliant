@@ -109,8 +109,10 @@ function consumer(node: ts.Node): { parent: ts.Node; child: ts.Node } {
       ts.isSatisfiesExpression(parent) ||
       ts.isTypeAssertionExpression(parent) ||
       ts.isNonNullExpression(parent) ||
-      ts.isTemplateSpan(parent) ||
-      ts.isTemplateExpression(parent) ||
+      // An interpolation (`${"/inbox"}`) is part of its template string: the
+      // span's expression passes up to the span, the span to its template.
+      (ts.isTemplateSpan(parent) && child === parent.expression) ||
+      (ts.isTemplateExpression(parent) && parent.templateSpans.includes(child as ts.TemplateSpan)) ||
       ts.isJsxExpression(parent) ||
       (ts.isConditionalExpression(parent) && child !== parent.condition) ||
       (ts.isBinaryExpression(parent) &&
