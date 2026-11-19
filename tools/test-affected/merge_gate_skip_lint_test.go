@@ -68,7 +68,7 @@ func TestMergeGateSkipLint(t *testing.T) {
 		extract(`base="" amend=0`, "\nexport GOFLAGS"),
 		extract(`[ -n "$base" ] || base=$(git merge-base`, "\nL=${MG_LOGDIR"),
 		`L=$LOGDIR`,
-		extract(`if [ "$skip_lint" = 1 ]; then echo skip-lint >"$L/tier"`, "\npin="),
+		extract(`if [ "$skip_lint" = 1 ]; then echo skip-lint >"$L/tier"`, "\n# The pinned forge"),
 		// As the gate computes it: the working tree against the base.
 		`files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)`,
 		extract("if [ \"$fail\" = 0 ]; then\n  phase build build_check", "\n# Every launched phase is waited for"),

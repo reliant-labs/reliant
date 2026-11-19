@@ -34,9 +34,14 @@ func (s *Service) ListSharedChats(
 		return connect.NewResponse(out), nil
 	}
 	limit, offset := page(req.Msg.GetLimit(), req.Msg.GetOffset())
-	chats, err := s.deps.Repo.ListSharedChats(ctx, core.SharedChatFilters{
+	filters := core.SharedChatFilters{
 		OrgID: org, ViewerUserID: userID, ProjectID: req.Msg.ProjectId, Limit: limit, Offset: offset,
-	})
+	}
+	// An app's chat list; "" is the same as unset.
+	if app := req.Msg.GetAppName(); app != "" {
+		filters.AppName = &app
+	}
+	chats, err := s.deps.Repo.ListSharedChats(ctx, filters)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list shared chats"))
 	}

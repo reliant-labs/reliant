@@ -25,7 +25,7 @@ Reliant is a **multi-tenant distributed system** with three server roles — **A
 - You **cannot** simply kill or pkill reliant processes — you might be killing yourself, not the intended task. `forge env down dev` stops only the stack of the checkout it runs in.
 - Air and Vite hot-reload, so you typically don't need to kill anything, **ever**.
 - You are often working in a worktree: keep edits in that worktree. When looking for a file, check both your worktree and the main git worktree.
-- `task --list` names every task; each runs the forge `forge.yaml` pins, never whatever `forge` is on PATH.
+- `task --list` names every task; each runs the forge `forge.yaml` pins, never whatever `forge` is on PATH (`scripts/forge.sh`: a forge at the pin, else `reliant forge`, else `go run`). Go tests that run forge take it from `forgetest.Pinned(t)`.
 
 ## Database (Postgres only)
 

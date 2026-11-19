@@ -227,7 +227,9 @@ func (s *Service) BranchChat(
 		ID:     branchChatID,
 		UserID: sourceChat.UserID,
 		// A branch is the source chat's conversation continued: same org.
-		OrgID:        sourceChat.OrgID,
+		OrgID: sourceChat.OrgID,
+		// ... and about the same app.
+		AppName:      sourceChat.AppName,
 		Title:        title,
 		ProjectID:    sourceChat.ProjectID,
 		WorktreeID:   worktreeID,
