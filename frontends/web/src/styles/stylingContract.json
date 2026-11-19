@@ -121,14 +121,11 @@
       "components/ForgeShell/ForgeBrand.tsx": 1,
       "components/Git/CommitHistory.tsx": 2,
       "components/Git/GitStatus.tsx": 1,
-      "components/Layout/AutomationActivityPill.tsx": 1,
       "components/Layout/ConfigHealthIndicator.tsx": 2,
       "components/Layout/DetectedPortsChip.tsx": 2,
       "components/Layout/MachineFilterMenu.tsx": 2,
-      "components/Layout/ProjectFilterMenu.tsx": 1,
       "components/Layout/ProjectMark.tsx": 1,
       "components/Layout/SequenceHint.tsx": 1,
-      "components/Layout/Sidebar.tsx": 6,
       "components/Machines/AddMachineSheet.tsx": 2,
       "components/Machines/PairMachinePanel.tsx": 1,
       "components/Mobile/MobileGitHubRepoList.tsx": 1,
@@ -146,7 +143,6 @@
       "components/Worktrees/WorkspaceTableParts.tsx": 2,
       "components/Worktrees/WorktreeDetailView.tsx": 1,
       "components/Worktrees/WorktreesPanel.tsx": 1,
-      "components/inbox/InboxNavItem.tsx": 1,
       "components/inbox/WorktreeReclaimAction.tsx": 1
     }
   },

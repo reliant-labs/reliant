@@ -8,6 +8,7 @@
  * person who left the org they had selected falls back to the default instead
  * of continuing to send an org the control plane would refuse.
  */
+import type React from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
@@ -40,11 +41,11 @@ const org = (id: string, name: string, over: Record<string, unknown> = {}) => ({
 const ACME = org("org-a", "Acme", { isDefault: true });
 const SIDE = org("org-b", "Side Project", { role: "member", isOwner: false });
 
-function Harness({ variant }: { variant?: "sidebar" | "list" }) {
+function Harness({ variant, fallback }: { variant?: "sidebar" | "sidebar-top" | "list"; fallback?: React.ReactNode }) {
   return (
     <>
       <ActiveOrgBinding />
-      <OrgSwitcher variant={variant} />
+      <OrgSwitcher variant={variant} fallback={fallback} />
     </>
   );
 }
@@ -68,6 +69,23 @@ describe("OrgSwitcher", () => {
     await waitFor(() => expect(getActiveOrgId()).toBe("org-a"));
     await userEvent.click(screen.getByTestId("org-switcher"));
     expect(await screen.findByTestId("org-create")).toHaveTextContent("Create organization");
+  });
+
+  it("is the sidebar's top row: the brand mark and the org's name, the whole row the switcher", async () => {
+    listMyOrganizations.mockResolvedValue({ orgs: [ACME, SIDE], defaultOrgId: "org-a" });
+    renderWithQuery(<Harness variant="sidebar-top" />);
+    const trigger = await screen.findByTestId("org-switcher");
+    expect(screen.getByTestId("org-switcher-name")).toHaveTextContent("Acme");
+    expect(trigger.querySelector("svg")).not.toBeNull();
+    await userEvent.click(trigger);
+    expect(await screen.findByTestId("org-option-org-b")).toHaveTextContent("Side Project");
+  });
+
+  it("renders its fallback, not nothing, with no org", () => {
+    listMyOrganizations.mockReturnValue(new Promise(() => {}));
+    renderWithQuery(<Harness variant="sidebar-top" fallback={<span data-testid="no-org">Reliant</span>} />);
+    expect(screen.getByTestId("no-org")).toBeInTheDocument();
+    expect(screen.queryByTestId("org-switcher")).toBeNull();
   });
 
   it("creating an organization makes it the org the app acts in", async () => {
