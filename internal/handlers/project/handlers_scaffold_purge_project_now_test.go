@@ -22,12 +22,13 @@ func TestPurgeProjectNow_Generated(t *testing.T) {
 	t.Parallel()
 
 	store := ownedProjectRepo(t)
-	var purged []string
-	store.PurgeProjectNowFunc = func(ctx context.Context, id string, decided core.ProjectDecision, afterClaim func(context.Context)) ([]string, error) {
-		if afterClaim != nil {
-			afterClaim(ctx)
-		}
-		purged = append(purged, id+" by "+decided.OwnerUserID)
+	var claimed, purged []string
+	store.ClaimProjectPurgeNowFunc = func(_ context.Context, id string, decided core.ProjectDecision) error {
+		claimed = append(claimed, id+" by "+decided.OwnerUserID)
+		return nil
+	}
+	store.PurgeClaimedProjectFunc = func(_ context.Context, id, owner string) ([]string, error) {
+		purged = append(purged, id+" by "+owner)
 		return nil, nil
 	}
 	svc := newService(t, store, nil)
@@ -46,10 +47,14 @@ func TestPurgeProjectNow_Generated(t *testing.T) {
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
-			Name: "the owner naming it deletes it at once",
+			Name: "the owner naming it claims it, and its batches run after the response",
 			Req:  connect.NewRequest(&pb.PurgeProjectNowRequest{ProjectId: "p-1", ConfirmName: "proj"}),
 			Ctx:  project.AuthedContext(t),
 			Check: func(t *testing.T, _ *connect.Response[pb.PurgeProjectNowResponse]) {
+				if len(claimed) != 1 || claimed[0] != "p-1 by test-user" {
+					t.Fatalf("claimed = %v, want p-1 by test-user", claimed)
+				}
+				svc.WaitForPurges()
 				if len(purged) != 1 || purged[0] != "p-1 by test-user" {
 					t.Fatalf("purged = %v, want p-1 by test-user", purged)
 				}

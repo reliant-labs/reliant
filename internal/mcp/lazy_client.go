@@ -73,6 +73,95 @@ type lazyClient struct {
 	manifest       []Tool
 	manifestCached bool
 	serverInfo     *ServerInfo
+
+	// started records that a delegate has run at least once, so losing it
+	// lost whatever state a caller built up in it.
+	started bool
+	// restartReason, when set, says why the delegate a caller was using is
+	// gone. Tool calls report it (restartNote) until one delivers a result
+	// carrying it, so an agent learns its browser restarted instead of chasing
+	// "No page found". Only stateful servers carry one (announcesRestarts).
+	restartReason string
+	// restartGen counts the restart reasons recorded, so a call clears only
+	// the reason it delivered and never a newer one recorded meanwhile.
+	restartGen uint64
+}
+
+// announcesRestarts reports whether losing this server's process loses state a
+// caller can see. It is the session-scoped servers — the browser — whose pages,
+// tabs and storage live in the process; every other server answers the same
+// from a fresh process, so a restart note would be noise.
+func (c *lazyClient) announcesRestarts() bool {
+	return isSessionScopedServer(c.name, c.cfg)
+}
+
+// noteLostLocked records why the running delegate is gone, if a caller could
+// have depended on it. c.mu must be held.
+func (c *lazyClient) noteLostLocked(reason string) {
+	if c.started && c.announcesRestarts() {
+		c.recordRestartLocked(reason)
+	}
+}
+
+// recordRestartLocked makes reason the pending restart reason, superseding any
+// earlier one. c.mu must be held.
+func (c *lazyClient) recordRestartLocked(reason string) {
+	c.restartReason = reason
+	c.restartGen++
+}
+
+// setRestartReason carries a loss recorded outside this client — the manager
+// replaced a session's client — into the client that replaces it.
+func (c *lazyClient) setRestartReason(reason string) {
+	c.mu.Lock()
+	c.recordRestartLocked(reason)
+	c.mu.Unlock()
+}
+
+// pendingRestart returns the restart reason no caller has been shown yet, and
+// its generation for restartDelivered.
+func (c *lazyClient) pendingRestart() (reason string, gen uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.restartReason, c.restartGen
+}
+
+// restartDelivered clears the pending restart reason once a caller has been
+// handed a result carrying it — unless a newer restart was recorded since,
+// which the next call must still report.
+func (c *lazyClient) restartDelivered(gen uint64) {
+	c.mu.Lock()
+	if c.restartGen == gen {
+		c.restartReason = ""
+	}
+	c.mu.Unlock()
+}
+
+// takeRestartReason returns and clears the pending restart reason.
+func (c *lazyClient) takeRestartReason() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	reason := c.restartReason
+	c.restartReason = ""
+	return reason
+}
+
+// hasStarted reports whether a delegate has ever run.
+func (c *lazyClient) hasStarted() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.started
+}
+
+// restartNote is the text a tool result carries when the server it ran on was
+// started fresh after the caller's previous one was lost.
+func restartNote(name, reason string) string {
+	if name == chromeDevtoolsServerName {
+		return fmt.Sprintf("Note: the browser restarted before this call (%s). "+
+			"Pages, tabs and storage from earlier calls (cookies, localStorage, sign-ins) were reset; "+
+			"open the page again and re-establish any session state.", reason)
+	}
+	return fmt.Sprintf("Note: MCP server %q restarted before this call (%s); state from earlier calls was reset.", name, reason)
 }
 
 // newLazyClientWithFactory builds a lazy client around a delegate factory. The
@@ -112,7 +201,9 @@ func (c *lazyClient) Initialize(ctx context.Context) error {
 
 // begin ensures the delegate subprocess is running, registers an in-flight tool
 // call, and pauses the idle timer. Callers must pair it with end().
-func (c *lazyClient) begin() (Client, error) {
+func (c *lazyClient) begin() (d Client, err error) {
+	c.dropDeadDelegate()
+
 	c.mu.Lock()
 	for c.starting {
 		c.startCond.Wait()
@@ -133,10 +224,15 @@ func (c *lazyClient) begin() (Client, error) {
 	// lock during the slow spawn/handshake so ListTools, IsConnected (health
 	// monitor), and other callers aren't blocked; they wait on startCond.
 	c.starting = true
+	again := c.started
 	c.mu.Unlock()
 
-	logging.Info("Lazily starting MCP server on first use", "name", c.name)
-	d, err := c.factory()
+	if again {
+		logging.Info("Starting MCP server again after its previous process ended", "name", c.name)
+	} else {
+		logging.Info("Lazily starting MCP server on first use", "name", c.name)
+	}
+	d, err = c.factory()
 	if err == nil {
 		ctx, cancel := context.WithTimeout(context.Background(), c.startTimeout)
 		err = d.Initialize(ctx)
@@ -159,6 +255,7 @@ func (c *lazyClient) begin() (Client, error) {
 		return nil, fmt.Errorf("mcp client %q is closed", c.name)
 	}
 	c.delegate = d
+	c.started = true
 	if info := d.ServerInfo(); info != nil {
 		c.serverInfo = info
 	}
@@ -166,6 +263,37 @@ func (c *lazyClient) begin() (Client, error) {
 	c.stopIdleLocked()
 	c.mu.Unlock()
 	return d, nil
+}
+
+// dropDeadDelegate discards a delegate whose process has exited on its own, so
+// the next call starts a new one rather than failing against a closed pipe
+// until the idle reaper happens by. The process exit itself is logged by the
+// client's exit watcher; this records what the caller lost.
+//
+// IsConnected is asked with c.mu released: a delegate may hold its own lock
+// across a slow re-initialization, and nothing here may block other callers
+// behind it.
+func (c *lazyClient) dropDeadDelegate() {
+	c.mu.Lock()
+	d := c.delegate
+	busy := c.starting || c.inFlight > 0
+	c.mu.Unlock()
+	if d == nil || busy || d.IsConnected() {
+		return
+	}
+
+	c.mu.Lock()
+	if c.delegate != d || c.starting || c.inFlight > 0 {
+		c.mu.Unlock()
+		return
+	}
+	c.delegate = nil
+	c.stopIdleLocked()
+	c.noteLostLocked("its process exited")
+	c.mu.Unlock()
+
+	logging.Warn("Discarding MCP server whose process exited; the next call starts a new one", "name", c.name)
+	_ = d.Close()
 }
 
 // end releases an in-flight tool call and re-arms the idle timer once the last
@@ -209,6 +337,7 @@ func (c *lazyClient) idleShutdown() {
 	onReap := c.onReap
 	c.delegate = nil
 	c.idleTimer = nil
+	c.noteLostLocked(fmt.Sprintf("it was idle for %s and was shut down to free memory", c.idleTimeout))
 	c.mu.Unlock()
 
 	logging.Info("Shutting down idle MCP server", "name", c.name, "idleTimeout", c.idleTimeout)
@@ -313,13 +442,34 @@ func (c *lazyClient) ListTools() ([]Tool, error) {
 
 // CallTool spawns the subprocess on demand (waiting for readiness) and executes
 // the tool. For chrome-devtools this is where headless Chrome is first launched.
+//
+// When the caller's previous process was lost, the result says so, so an agent
+// whose browser restarted learns it from the first answer rather than from a
+// puzzling "No page found". The reason stays pending until a result carrying it
+// is returned: a failed call — a failed start, or an error from the new process
+// — mentions it in its error too, but an error can be lost on its way to the
+// model, so the next successful call reports it again.
 func (c *lazyClient) CallTool(name string, arguments map[string]interface{}) (*ToolResult, error) {
 	d, err := c.begin()
 	if err != nil {
 		return nil, err
 	}
 	defer c.end()
-	return d.CallTool(name, arguments)
+	restarted, gen := c.pendingRestart()
+	result, err := d.CallTool(name, arguments)
+	if restarted == "" {
+		return result, err
+	}
+	note := restartNote(c.name, restarted)
+	if err != nil {
+		return nil, fmt.Errorf("%w\n%s", err, note)
+	}
+	if result == nil {
+		result = &ToolResult{}
+	}
+	result.Content = append([]ToolContent{{Type: "text", Text: note}}, result.Content...)
+	c.restartDelivered(gen)
+	return result, nil
 }
 
 // ListResources returns no resources without spawning: chrome-devtools exposes

@@ -7,6 +7,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -19,7 +20,8 @@ import (
 // git repos. Depth 0 is the project root, depth 1 is direct children, etc.
 const DefaultMaxDepth = 2
 
-// DefaultMaxEntries bounds how many directory entries one Discover visits.
+// DefaultMaxEntries bounds how many directory entries one Discover visits
+// (walkBounds).
 // A multi-repo project to depth 2 is a few thousand; past this the scan stops
 // and says so (Discovery.Truncated) instead of walking on.
 const DefaultMaxEntries = 20_000
@@ -97,12 +99,28 @@ type Discovery struct {
 //
 // The walk is bounded (Options) and a bound that stops it is reported, not
 // hidden: prod's repo.discover on a project rooted at a home directory could
-// not answer inside its caller's deadline. Remotes are read from each
+// not answer inside its caller's deadline. The bounds hold within one
+// directory as well as across them: a directory is listed in batches, never
+// further than the budget could visit (walkBounds.list), so one very wide
+// directory cannot stall the walk. Remotes are read from each
 // repository's config file, never by running git.
 //
 // An empty result is not an error: a project may legitimately contain no
 // git repos (e.g. a docs folder), and project init must still succeed.
 func Discover(ctx context.Context, projectPath string, opts Options) (Discovery, error) {
+	return discoverWith(ctx, projectPath, opts, openDir)
+}
+
+// openDir opens a directory for listing: os.Open, as a dirOpener.
+func openDir(name string) (fs.File, error) { return os.Open(name) }
+
+// dirOpener opens a directory of the OS filesystem, by absolute path, for a
+// walk to list. It is the seam a test lists a directory no disk could hold
+// through.
+type dirOpener func(name string) (fs.File, error)
+
+// discoverWith is Discover, listing directories through open.
+func discoverWith(ctx context.Context, projectPath string, opts Options, open dirOpener) (Discovery, error) {
 	maxDepth := opts.MaxDepth
 	if maxDepth <= 0 {
 		maxDepth = DefaultMaxDepth
@@ -126,75 +144,30 @@ func Discover(ctx context.Context, projectPath string, opts Options) (Discovery,
 	if !info.IsDir() {
 		return Discovery{}, fmt.Errorf("project path is not a directory: %s", abs)
 	}
-	// WalkDir does not follow a symlinked root (it visits the link and stops),
-	// so a project opened through a symlink would find none of its nested
-	// repos. Walk the target; relative paths are the same either way.
+	// A project opened through a symlink is walked at its target, so the
+	// paths the walk joins and the checkouts it identifies are the real
+	// ones; relative paths are the same either way.
 	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
 		abs = resolved
 	}
 
 	rootIsGit := isGitDir(abs)
 
-	var (
-		found   []Found
-		idents  []checkoutIdent
-		entries int
-		stopped string
-	)
-	rootDepth := strings.Count(abs, string(filepath.Separator))
-
-	walkErr := filepath.WalkDir(abs, func(path string, d fs.DirEntry, walkErr error) error {
-		if err := ctx.Err(); err != nil {
-			stopped = "the request ended"
-			return fs.SkipAll
-		}
-		if !opts.Deadline.IsZero() && !time.Now().Before(opts.Deadline) {
-			stopped = "it ran out of time"
-			return fs.SkipAll
-		}
-		if entries++; entries > maxEntries {
-			stopped = fmt.Sprintf("it looked at %d entries", maxEntries)
-			return fs.SkipAll
-		}
-		if walkErr != nil {
-			// Permission errors on subdirs shouldn't kill the whole scan.
-			if os.IsPermission(walkErr) {
-				return fs.SkipDir
-			}
-			return walkErr
-		}
-		if !d.IsDir() || path == abs {
-			// The root itself is handled after the walk.
-			return nil
-		}
-
-		// Depth check: relative depth from project root.
-		if strings.Count(path, string(filepath.Separator))-rootDepth > maxDepth {
-			return fs.SkipDir
-		}
-		if skipDir(d.Name()) {
-			return fs.SkipDir
-		}
-
-		if isGitDir(path) {
-			rel, err := filepath.Rel(abs, path)
-			if err != nil {
-				return nil
-			}
-			found = append(found, Found{
-				RelativePath: rel,
-				Name:         filepath.Base(path),
-			})
-			idents = append(idents, identifyCheckout(path))
-			// Don't recurse into a discovered repo.
-			return fs.SkipDir
-		}
-		return nil
-	})
-
-	if walkErr != nil {
-		return Discovery{}, fmt.Errorf("scan project: %w", walkErr)
+	w := &discoverWalk{
+		walkBounds: walkBounds{ctx: ctx, deadline: opts.Deadline, maxEntries: maxEntries},
+		open:       open,
+		abs:        abs,
+		maxDepth:   maxDepth,
+		rootDepth:  strings.Count(abs, string(filepath.Separator)),
 	}
+	// The root is the walk's first entry; its own checkout is handled after
+	// the walk.
+	if !w.visit() {
+		if err := w.walk(abs); err != nil && !errors.Is(err, errWalkStopped) {
+			return Discovery{}, fmt.Errorf("scan project: %w", err)
+		}
+	}
+	found, idents, stopped := w.found, w.idents, w.stopped
 
 	// If the root is a git repo and no nested repos were found, treat it as
 	// a single-repo project (the common case). If nested repos were found,
@@ -225,6 +198,91 @@ func Discover(ctx context.Context, projectPath string, opts Options) (Discovery,
 		out.TruncatedReason = stopped
 	}
 	return out, nil
+}
+
+// discoverWalk is one Discover walk: a depth-first walk of the OS tree at abs
+// in lexical order, as filepath.WalkDir's was, charging its budget per entry
+// visited as that walk's callback did, whose directory listings are bounded
+// too (walkBounds.list).
+type discoverWalk struct {
+	walkBounds
+	open      dirOpener
+	abs       string
+	maxDepth  int
+	rootDepth int // separators in abs; a path's depth is its own count less this
+
+	found  []Found
+	idents []checkoutIdent
+}
+
+// walk visits dir's entries. It returns errWalkStopped once a bound stops the
+// walk. A directory it may not list is walked past; any other listing error
+// ends the scan.
+func (w *discoverWalk) walk(dir string) error {
+	list, err := w.listDir(dir)
+	if errors.Is(err, errWalkStopped) {
+		return err
+	}
+	if err != nil {
+		// A failed listing costs an entry, as filepath.WalkDir's second
+		// callback for the directory did.
+		if w.visit() {
+			return errWalkStopped
+		}
+		// Permission errors on subdirs shouldn't kill the whole scan.
+		if os.IsPermission(err) {
+			return nil
+		}
+		return err
+	}
+
+	for _, d := range list {
+		if w.visit() {
+			return errWalkStopped
+		}
+		if !d.IsDir() {
+			continue
+		}
+		path := filepath.Join(dir, d.Name())
+		// Depth check: relative depth from project root.
+		if strings.Count(path, string(filepath.Separator))-w.rootDepth > w.maxDepth {
+			continue
+		}
+		if skipDir(d.Name()) {
+			continue
+		}
+		if isGitDir(path) {
+			rel, err := filepath.Rel(w.abs, path)
+			if err != nil {
+				continue
+			}
+			w.found = append(w.found, Found{
+				RelativePath: rel,
+				Name:         filepath.Base(path),
+			})
+			w.idents = append(w.idents, identifyCheckout(path))
+			// Don't recurse into a discovered repo.
+			continue
+		}
+		if err := w.walk(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// listDir lists dir within the walk's bounds (walkBounds.list).
+func (w *discoverWalk) listDir(dir string) ([]fs.DirEntry, error) {
+	if w.bounded() {
+		return nil, errWalkStopped
+	}
+	f, err := w.open(dir)
+	if err != nil {
+		return nil, err
+	}
+	// Read-only: a failed close loses nothing the listing did not already have.
+	defer func() { _ = f.Close() }()
+	return w.list(f, dir)
 }
 
 // ContainsRepo reports whether Discover would find any repository under

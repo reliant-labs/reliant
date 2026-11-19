@@ -42,6 +42,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/uptrace/bun"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitremote"
@@ -79,6 +80,28 @@ func GetProject(ctx context.Context, db orm.Context, id string) (*core.Project, 
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
 	return projectToCore(row), nil
+}
+
+// ListProjectsByIDs returns the projects with these ids, in one query and in
+// no particular order; an id with no project is simply absent. Like
+// GetProject it reads every row, a project scheduled for deletion included,
+// and checks no owner: the caller decides each row (authz.CanReadProject).
+func ListProjectsByIDs(ctx context.Context, db orm.Context, ids []string) ([]*core.Project, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var rows []*Project
+	err := db.Bun().NewSelect().Model(&rows).
+		Where("id IN (?)", bun.List(ids)).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list projects by id: %w", err)
+	}
+	out := make([]*core.Project, len(rows))
+	for i, row := range rows {
+		out[i] = projectToCore(row)
+	}
+	return out, nil
 }
 
 // GetProjectByPath returns a project registered at path, or an error naming

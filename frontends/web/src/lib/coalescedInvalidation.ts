@@ -29,11 +29,61 @@
  *     names only the reads made before the outage). Signals that collapse
  *     into one refetch cover the union of what they named; one without a
  *     predicate covers everything under the key.
+ *
+ * Two opt-in refinements (CoalescedInvalidatorOptions), both for lists a busy
+ * stream keeps marking stale:
+ *   - `visibility`: a hidden page refetches nothing. Signals still mark the
+ *     queries stale at once; the refetch waits until the page is shown again,
+ *     and then reads what went stale once. React Query only knows "mounted",
+ *     not "seen", so every background tab and minimised window used to refetch
+ *     at the full rate (2026-11-18: one user's 3–4 tabs, each ~8 ListInbox a
+ *     minute, most of them hidden).
+ *   - `latencyMultiple`: the interval stretches with the list's own latency —
+ *     the next refetch starts no sooner than `latencyMultiple` × the last
+ *     refetch's duration after the last one started (never more than
+ *     `maxIntervalMs`). A fixed 2 s interval on a read the server takes 1.5–3 s
+ *     to answer is back-to-back refetching; this keeps a slow list idle at
+ *     least as long as it was busy.
  */
 
 import { hashKey, notifyManager, type Query, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 export type QueryPredicate = (query: Query) => boolean;
+
+/** Whether the page is hidden, and a way to hear when that changes. */
+export interface PageVisibility {
+  hidden(): boolean;
+  onChange(listener: () => void): void;
+}
+
+/**
+ * The document's visibility. A hidden tab, and in Electron a minimised or
+ * hidden window (or, on macOS, a fully covered one), reports "hidden"; a
+ * visible window without focus stays "visible" and keeps refetching. A context
+ * with no document (a worker, SSR, node tests) is always visible.
+ */
+export const documentVisibility: PageVisibility = {
+  hidden: () => typeof document !== "undefined" && document.visibilityState === "hidden",
+  onChange: (listener) => {
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", listener);
+  },
+};
+
+/** The default ceiling for a latency-stretched interval. */
+export const DEFAULT_MAX_INTERVAL_MS = 30_000;
+
+export interface CoalescedInvalidatorOptions {
+  now?: () => number;
+  /** Pause refetches while the page is hidden (see the header). Default: always visible. */
+  visibility?: PageVisibility;
+  /**
+   * Stretch the interval to this multiple of the last refetch's duration
+   * (see the header). Default 0: the interval is fixed.
+   */
+  latencyMultiple?: number;
+  /** The ceiling of a stretched interval. Default DEFAULT_MAX_INTERVAL_MS. */
+  maxIntervalMs?: number;
+}
 
 export interface CoalescedInvalidator {
   /**
@@ -58,6 +108,19 @@ interface KeyState {
   inFlight: boolean;
   /** When the last refetch started; -Infinity before the first. */
   lastStartedAt: number;
+  /** How long the last refetch took to settle (0 before the first). */
+  lastDurationMs: number;
+  /** The page was hidden while the refetch in flight ran: its duration is not the server's. */
+  hiddenDuringFlight: boolean;
+  /** A refetch came due while the page was hidden; it waits for the page to be shown. */
+  parked: boolean;
+  /**
+   * The page was just shown and every signal since the refetch was parked
+   * arrived while hidden: refetch only what is still stale, joining a read
+   * already in flight (the window-focus refetch the same visibilitychange
+   * started) rather than aborting it.
+   */
+  catchUp: boolean;
 }
 
 function unionOf(pending: QueryPredicate[] | "all"): QueryPredicate | undefined {
@@ -69,30 +132,60 @@ function unionOf(pending: QueryPredicate[] | "all"): QueryPredicate | undefined 
 export function createCoalescedInvalidator(
   client: QueryClient,
   intervalMs: number,
-  now: () => number = () => Date.now(),
+  options: CoalescedInvalidatorOptions = {},
 ): CoalescedInvalidator {
+  const now = options.now ?? (() => Date.now());
+  const { visibility, latencyMultiple = 0, maxIntervalMs = DEFAULT_MAX_INTERVAL_MS } = options;
   const states = new Map<string, KeyState>();
 
+  const gapAfterStart = (state: KeyState) =>
+    Math.max(intervalMs, Math.min(maxIntervalMs, latencyMultiple * state.lastDurationMs));
+
   const schedule = (state: KeyState) => {
-    const wait = Math.max(0, state.lastStartedAt + intervalMs - now());
+    const wait = Math.max(0, state.lastStartedAt + gapAfterStart(state) - now());
     state.timer = setTimeout(() => void run(state), wait);
   };
 
   const run = async (state: KeyState) => {
     state.timer = null;
     if (!state.dirty) return;
+    if (visibility?.hidden()) {
+      // Stays dirty: the queries are already stale, and the refetch is made
+      // when the page is shown (the visibility listener below).
+      state.parked = true;
+      return;
+    }
+    const catchUp = state.catchUp;
+    state.catchUp = false;
     state.dirty = false;
     const predicate = unionOf(state.pending);
     state.pending = [];
     state.inFlight = true;
-    state.lastStartedAt = now();
+    state.hiddenDuringFlight = false;
+    const startedAt = now();
+    state.lastStartedAt = startedAt;
     try {
-      // Marks stale again (a fetch that STARTED before the latest signal may
-      // have cleared the flag on success) and refetches the observed queries.
-      await client.invalidateQueries({ queryKey: state.queryKey, predicate });
+      if (catchUp) {
+        // Every signal arrived before the page was shown, so a read that
+        // started since (the focus refetch) already covers them: join it.
+        await client.refetchQueries(
+          {
+            queryKey: state.queryKey,
+            type: "active",
+            predicate: (query) => query.state.isInvalidated && (!predicate || predicate(query)),
+          },
+          { cancelRefetch: false },
+        );
+      } else {
+        // Marks stale again (a fetch that STARTED before the latest signal may
+        // have cleared the flag on success) and refetches the observed queries.
+        await client.invalidateQueries({ queryKey: state.queryKey, predicate });
+      }
     } catch {
       // A failed refetch is the query's own error state; nothing to do here.
     } finally {
+      // A page frozen mid-request measured its sleep, not the server.
+      if (!state.hiddenDuringFlight) state.lastDurationMs = now() - startedAt;
       state.inFlight = false;
       if (state.dirty && states.get(hashKey(state.queryKey)) === state) schedule(state);
     }
@@ -109,18 +202,52 @@ export function createCoalescedInvalidator(
     });
   };
 
+  visibility?.onChange(() => {
+    const hidden = visibility.hidden();
+    for (const state of states.values()) {
+      if (hidden) {
+        if (state.inFlight) state.hiddenDuringFlight = true;
+        continue;
+      }
+      if (!state.parked) continue;
+      state.parked = false;
+      state.catchUp = true;
+      // Stale again: a read that started before a hidden-time signal and
+      // finished since cleared the flag without seeing it. The focus refetch
+      // this same event starts then reads it too.
+      markStale(state.queryKey, unionOf(state.pending));
+      if (state.timer === null && !state.inFlight) schedule(state);
+    }
+  });
+
   return {
     invalidate(queryKey, predicate) {
       markStale(queryKey, predicate);
       const hash = hashKey(queryKey);
       let state = states.get(hash);
       if (!state) {
-        state = { queryKey, dirty: false, pending: [], timer: null, inFlight: false, lastStartedAt: -Infinity };
+        state = {
+          queryKey,
+          dirty: false,
+          pending: [],
+          timer: null,
+          inFlight: false,
+          lastStartedAt: -Infinity,
+          lastDurationMs: 0,
+          hiddenDuringFlight: false,
+          parked: false,
+          catchUp: false,
+        };
         states.set(hash, state);
       }
       state.dirty = true;
       if (!predicate) state.pending = "all";
       else if (state.pending !== "all") state.pending.push(predicate);
+      // Hidden: the refetch is already waiting for the page to be shown.
+      if (state.parked) return;
+      // A signal after the page was shown may postdate a read in flight, so
+      // the next refetch is a full one again.
+      state.catchUp = false;
       if (state.timer !== null || state.inFlight) return;
       schedule(state);
     },

@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/approval.proto.
  */
 export const file_reliant_v1_approval: GenFile = /*@__PURE__*/
-  fileDesc("ChlyZWxpYW50L3YxL2FwcHJvdmFsLnByb3RvEgpyZWxpYW50LnYxIuUECghBcHByb3ZhbBIKCgJpZBgBIAEoCRIPCgdjaGF0X2lkGAIgASgJEi8KDWFwcHJvdmFsX3R5cGUYAyABKA4yGC5yZWxpYW50LnYxLkFwcHJvdmFsVHlwZRIRCgllbnRpdHlfaWQYBCABKAkSKgoGc3RhdHVzGAUgASgOMhoucmVsaWFudC52MS5BcHByb3ZhbFN0YXR1cxINCgV0aXRsZRgGIAEoCRIYCgtkZXNjcmlwdGlvbhgHIAEoCUgAiAEBEhoKDWRlbmlhbF9yZWFzb24YCCABKAlIAYgBARISCgpjcmVhdGVkX2F0GAsgASgJEhgKC3Jlc29sdmVkX2F0GAwgASgJSAKIAQESFwoKbWVzc2FnZV9pZBgPIAEoCUgDiAEBEhgKC3dvcmtmbG93X2lkGBAgASgJSASIAQESEwoGcnVuX2lkGBEgASgJSAWIAQESGQoMYWN0aW9uX3Rha2VuGBMgASgJSAaIAQESFQoIYmF0Y2hfaWQYFyABKAlIB4gBAUIOCgxfZGVzY3JpcHRpb25CEAoOX2RlbmlhbF9yZWFzb25CDgoMX3Jlc29sdmVkX2F0Qg0KC19tZXNzYWdlX2lkQg4KDF93b3JrZmxvd19pZEIJCgdfcnVuX2lkQg8KDV9hY3Rpb25fdGFrZW5CCwoJX2JhdGNoX2lkSgQIDRAOSgQIDhAPSgQIFBAVSgQIFRAWSgQIFhAXUgl0b29sX25hbWVSDHRvb2xfY2FsbF9pZFIKdG9vbF9pbnB1dFIQaW50ZWdyYXRpb25fbmFtZVIQaW50ZWdyYXRpb25faWNvbiI1ChpMaXN0QXBwcm92YWxzQnlDaGF0UmVxdWVzdBIXCgdjaGF0X2lkGAEgASgJQga6SAPIAQEiVQobTGlzdEFwcHJvdmFsc0J5Q2hhdFJlc3BvbnNlEicKCWFwcHJvdmFscxgBIAMoCzIULnJlbGlhbnQudjEuQXBwcm92YWwSDQoFdG90YWwYAiABKAUiUAoOQXBwcm92ZVJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIZCgxhY3Rpb25fdGFrZW4YAiABKAlIAIgBAUIPCg1fYWN0aW9uX3Rha2VuIjMKD0FwcHJvdmVSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkiewoLRGVueVJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIaCg1kZW5pYWxfcmVhc29uGAIgASgJSACIAQESGQoMYWN0aW9uX3Rha2VuGAMgASgJSAGIAQFCEAoOX2RlbmlhbF9yZWFzb25CDwoNX2FjdGlvbl90YWtlbiIwCgxEZW55UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIlYKE0JhdGNoQXBwcm92ZVJlcXVlc3QSEwoLcmVxdWVzdF9pZHMYASADKAkSGQoMYWN0aW9uX3Rha2VuGAIgASgJSACIAQFCDwoNX2FjdGlvbl90YWtlbiJbChRCYXRjaEFwcHJvdmVSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhAKCGFwcHJvdmVkGAIgASgFEg8KB21lc3NhZ2UYAyABKAkSDwoHY2hhdF9pZBgEIAEoCSKBAQoQQmF0Y2hEZW55UmVxdWVzdBITCgtyZXF1ZXN0X2lkcxgBIAMoCRIaCg1kZW5pYWxfcmVhc29uGAIgASgJSACIAQESGQoMYWN0aW9uX3Rha2VuGAMgASgJSAGIAQFCEAoOX2RlbmlhbF9yZWFzb25CDwoNX2FjdGlvbl90YWtlbiJWChFCYXRjaERlbnlSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg4KBmRlbmllZBgCIAEoBRIPCgdtZXNzYWdlGAMgASgJEg8KB2NoYXRfaWQYBCABKAkqhQEKDEFwcHJvdmFsVHlwZRIdChlBUFBST1ZBTF9UWVBFX1VOU1BFQ0lGSUVEEAASHwobQVBQUk9WQUxfVFlQRV9XT1JLRkxPV19TVEVQEAISGwoXQVBQUk9WQUxfVFlQRV9UT09MX0NBTEwQAyIECAEQASoSQVBQUk9WQUxfVFlQRV9UT09MKsQBCg5BcHByb3ZhbFN0YXR1cxIfChtBUFBST1ZBTF9TVEFUVVNfVU5TUEVDSUZJRUQQABIbChdBUFBST1ZBTF9TVEFUVVNfUEVORElORxABEhwKGEFQUFJPVkFMX1NUQVRVU19BUFBST1ZFRBACEhoKFkFQUFJPVkFMX1NUQVRVU19ERU5JRUQQAxIbChdBUFBST1ZBTF9TVEFUVVNfRVhQSVJFRBAEEh0KGUFQUFJPVkFMX1NUQVRVU19DQU5DRUxMRUQQBTKjBQoPQXBwcm92YWxTZXJ2aWNlEmgKE0xpc3RBcHByb3ZhbHNCeUNoYXQSJi5yZWxpYW50LnYxLkxpc3RBcHByb3ZhbHNCeUNoYXRSZXF1ZXN0GicucmVsaWFudC52MS5MaXN0QXBwcm92YWxzQnlDaGF0UmVzcG9uc2UiABJ5CgdBcHByb3ZlEhoucmVsaWFudC52MS5BcHByb3ZlUmVxdWVzdBobLnJlbGlhbnQudjEuQXBwcm92ZVJlc3BvbnNlIjWiuxgxOi8KB2FwcHJvdmUSFgoIYXBwcm92YWwSCnJlcXVlc3RfaWQqDGFjdGlvbl90YWtlbhJtCgREZW55EhcucmVsaWFudC52MS5EZW55UmVxdWVzdBoYLnJlbGlhbnQudjEuRGVueVJlc3BvbnNlIjKiuxguOiwKBGRlbnkSFgoIYXBwcm92YWwSCnJlcXVlc3RfaWQqDGFjdGlvbl90YWtlbhKjAQoMQmF0Y2hBcHByb3ZlEh8ucmVsaWFudC52MS5CYXRjaEFwcHJvdmVSZXF1ZXN0GiAucmVsaWFudC52MS5CYXRjaEFwcHJvdmVSZXNwb25zZSJQorsYTDpKCg1iYXRjaF9hcHByb3ZlEhgKBGNoYXQSEHJlc3BvbnNlLmNoYXRfaWQqEXJlc3BvbnNlLmFwcHJvdmVkKgxhY3Rpb25fdGFrZW4SlQEKCUJhdGNoRGVueRIcLnJlbGlhbnQudjEuQmF0Y2hEZW55UmVxdWVzdBodLnJlbGlhbnQudjEuQmF0Y2hEZW55UmVzcG9uc2UiS6K7GEc6RQoKYmF0Y2hfZGVueRIYCgRjaGF0EhByZXNwb25zZS5jaGF0X2lkKg9yZXNwb25zZS5kZW5pZWQqDGFjdGlvbl90YWtlbkI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge]);
+  fileDesc("ChlyZWxpYW50L3YxL2FwcHJvdmFsLnByb3RvEgpyZWxpYW50LnYxIr8FCghBcHByb3ZhbBIKCgJpZBgBIAEoCRIPCgdjaGF0X2lkGAIgASgJEi8KDWFwcHJvdmFsX3R5cGUYAyABKA4yGC5yZWxpYW50LnYxLkFwcHJvdmFsVHlwZRIRCgllbnRpdHlfaWQYBCABKAkSKgoGc3RhdHVzGAUgASgOMhoucmVsaWFudC52MS5BcHByb3ZhbFN0YXR1cxINCgV0aXRsZRgGIAEoCRIYCgtkZXNjcmlwdGlvbhgHIAEoCUgAiAEBEhoKDWRlbmlhbF9yZWFzb24YCCABKAlIAYgBARISCgpjcmVhdGVkX2F0GAsgASgJEhgKC3Jlc29sdmVkX2F0GAwgASgJSAKIAQESFwoKbWVzc2FnZV9pZBgPIAEoCUgDiAEBEhgKC3dvcmtmbG93X2lkGBAgASgJSASIAQESEwoGcnVuX2lkGBEgASgJSAWIAQESGQoMYWN0aW9uX3Rha2VuGBMgASgJSAaIAQESFQoIYmF0Y2hfaWQYFyABKAlIB4gBARJAChNjb25uZWN0aW9uX3Byb3Bvc2FsGBggASgLMh4ucmVsaWFudC52MS5Db25uZWN0aW9uUHJvcG9zYWxICIgBAUIOCgxfZGVzY3JpcHRpb25CEAoOX2RlbmlhbF9yZWFzb25CDgoMX3Jlc29sdmVkX2F0Qg0KC19tZXNzYWdlX2lkQg4KDF93b3JrZmxvd19pZEIJCgdfcnVuX2lkQg8KDV9hY3Rpb25fdGFrZW5CCwoJX2JhdGNoX2lkQhYKFF9jb25uZWN0aW9uX3Byb3Bvc2FsSgQIDRAOSgQIDhAPSgQIFBAVSgQIFRAWSgQIFhAXUgl0b29sX25hbWVSDHRvb2xfY2FsbF9pZFIKdG9vbF9pbnB1dFIQaW50ZWdyYXRpb25fbmFtZVIQaW50ZWdyYXRpb25faWNvbiKqAQoSQ29ubmVjdGlvblByb3Bvc2FsEhYKDmludGVncmF0aW9uX2lkGAEgASgJEhgKEGludGVncmF0aW9uX25hbWUYAiABKAkSMgoFc2NvcGUYAyABKA4yIy5yZWxpYW50LnYxLkNvbm5lY3Rpb25Qcm9wb3NhbFNjb3BlEhMKBm9yZ19pZBgEIAEoCUgAiAEBEg4KBnJlYXNvbhgFIAEoCUIJCgdfb3JnX2lkIjUKGkxpc3RBcHByb3ZhbHNCeUNoYXRSZXF1ZXN0EhcKB2NoYXRfaWQYASABKAlCBrpIA8gBASJVChtMaXN0QXBwcm92YWxzQnlDaGF0UmVzcG9uc2USJwoJYXBwcm92YWxzGAEgAygLMhQucmVsaWFudC52MS5BcHByb3ZhbBINCgV0b3RhbBgCIAEoBSJ+Cg5BcHByb3ZlUmVxdWVzdBISCgpyZXF1ZXN0X2lkGAEgASgJEhkKDGFjdGlvbl90YWtlbhgCIAEoCUgAiAEBEhoKDWNvbm5lY3Rpb25faWQYAyABKAlIAYgBAUIPCg1fYWN0aW9uX3Rha2VuQhAKDl9jb25uZWN0aW9uX2lkIjMKD0FwcHJvdmVSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkiewoLRGVueVJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIaCg1kZW5pYWxfcmVhc29uGAIgASgJSACIAQESGQoMYWN0aW9uX3Rha2VuGAMgASgJSAGIAQFCEAoOX2RlbmlhbF9yZWFzb25CDwoNX2FjdGlvbl90YWtlbiIwCgxEZW55UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIlYKE0JhdGNoQXBwcm92ZVJlcXVlc3QSEwoLcmVxdWVzdF9pZHMYASADKAkSGQoMYWN0aW9uX3Rha2VuGAIgASgJSACIAQFCDwoNX2FjdGlvbl90YWtlbiJbChRCYXRjaEFwcHJvdmVSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhAKCGFwcHJvdmVkGAIgASgFEg8KB21lc3NhZ2UYAyABKAkSDwoHY2hhdF9pZBgEIAEoCSKBAQoQQmF0Y2hEZW55UmVxdWVzdBITCgtyZXF1ZXN0X2lkcxgBIAMoCRIaCg1kZW5pYWxfcmVhc29uGAIgASgJSACIAQESGQoMYWN0aW9uX3Rha2VuGAMgASgJSAGIAQFCEAoOX2RlbmlhbF9yZWFzb25CDwoNX2FjdGlvbl90YWtlbiJWChFCYXRjaERlbnlSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg4KBmRlbmllZBgCIAEoBRIPCgdtZXNzYWdlGAMgASgJEg8KB2NoYXRfaWQYBCABKAkqhQEKDEFwcHJvdmFsVHlwZRIdChlBUFBST1ZBTF9UWVBFX1VOU1BFQ0lGSUVEEAASHwobQVBQUk9WQUxfVFlQRV9XT1JLRkxPV19TVEVQEAISGwoXQVBQUk9WQUxfVFlQRV9UT09MX0NBTEwQAyIECAEQASoSQVBQUk9WQUxfVFlQRV9UT09MKsQBCg5BcHByb3ZhbFN0YXR1cxIfChtBUFBST1ZBTF9TVEFUVVNfVU5TUEVDSUZJRUQQABIbChdBUFBST1ZBTF9TVEFUVVNfUEVORElORxABEhwKGEFQUFJPVkFMX1NUQVRVU19BUFBST1ZFRBACEhoKFkFQUFJPVkFMX1NUQVRVU19ERU5JRUQQAxIbChdBUFBST1ZBTF9TVEFUVVNfRVhQSVJFRBAEEh0KGUFQUFJPVkFMX1NUQVRVU19DQU5DRUxMRUQQBSqPAQoXQ29ubmVjdGlvblByb3Bvc2FsU2NvcGUSKQolQ09OTkVDVElPTl9QUk9QT1NBTF9TQ09QRV9VTlNQRUNJRklFRBAAEiYKIkNPTk5FQ1RJT05fUFJPUE9TQUxfU0NPUEVfUEVSU09OQUwQARIhCh1DT05ORUNUSU9OX1BST1BPU0FMX1NDT1BFX09SRxACMqMFCg9BcHByb3ZhbFNlcnZpY2USaAoTTGlzdEFwcHJvdmFsc0J5Q2hhdBImLnJlbGlhbnQudjEuTGlzdEFwcHJvdmFsc0J5Q2hhdFJlcXVlc3QaJy5yZWxpYW50LnYxLkxpc3RBcHByb3ZhbHNCeUNoYXRSZXNwb25zZSIAEnkKB0FwcHJvdmUSGi5yZWxpYW50LnYxLkFwcHJvdmVSZXF1ZXN0GhsucmVsaWFudC52MS5BcHByb3ZlUmVzcG9uc2UiNaK7GDE6LwoHYXBwcm92ZRIWCghhcHByb3ZhbBIKcmVxdWVzdF9pZCoMYWN0aW9uX3Rha2VuEm0KBERlbnkSFy5yZWxpYW50LnYxLkRlbnlSZXF1ZXN0GhgucmVsaWFudC52MS5EZW55UmVzcG9uc2UiMqK7GC46LAoEZGVueRIWCghhcHByb3ZhbBIKcmVxdWVzdF9pZCoMYWN0aW9uX3Rha2VuEqMBCgxCYXRjaEFwcHJvdmUSHy5yZWxpYW50LnYxLkJhdGNoQXBwcm92ZVJlcXVlc3QaIC5yZWxpYW50LnYxLkJhdGNoQXBwcm92ZVJlc3BvbnNlIlCiuxhMOkoKDWJhdGNoX2FwcHJvdmUSGAoEY2hhdBIQcmVzcG9uc2UuY2hhdF9pZCoRcmVzcG9uc2UuYXBwcm92ZWQqDGFjdGlvbl90YWtlbhKVAQoJQmF0Y2hEZW55EhwucmVsaWFudC52MS5CYXRjaERlbnlSZXF1ZXN0Gh0ucmVsaWFudC52MS5CYXRjaERlbnlSZXNwb25zZSJLorsYRzpFCgpiYXRjaF9kZW55EhgKBGNoYXQSEHJlc3BvbnNlLmNoYXRfaWQqD3Jlc3BvbnNlLmRlbmllZCoMYWN0aW9uX3Rha2VuQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge]);
 
 /**
  * Approval represents a workflow approval request.
@@ -108,6 +108,16 @@ export type Approval = Message<"reliant.v1.Approval"> & {
    * @generated from field: optional string batch_id = 23;
    */
   batchId?: string | undefined;
+
+  /**
+   * Set when an agent's propose_connection call raised this approval: it
+   * asks the person to set up a connection to an integration. It is decided
+   * by completing the connection dialog (Approve with connection_id), never
+   * by Approve alone or with others in a batch.
+   *
+   * @generated from field: optional reliant.v1.ConnectionProposal connection_proposal = 24;
+   */
+  connectionProposal?: ConnectionProposal | undefined;
 };
 
 /**
@@ -116,6 +126,57 @@ export type Approval = Message<"reliant.v1.Approval"> & {
  */
 export const ApprovalSchema: GenMessage<Approval> = /*@__PURE__*/
   messageDesc(file_reliant_v1_approval, 0);
+
+/**
+ * ConnectionProposal is an agent's request that a person connect an
+ * integration (the propose_connection tool). It carries no credential: the
+ * person enters one in the connection dialog, and the agent learns only
+ * whether a connection was made, and its id and name.
+ *
+ * @generated from message reliant.v1.ConnectionProposal
+ */
+export type ConnectionProposal = Message<"reliant.v1.ConnectionProposal"> & {
+  /**
+   * The catalog integration to connect: github, slack, gmail, twilio or http.
+   *
+   * @generated from field: string integration_id = 1;
+   */
+  integrationId: string;
+
+  /**
+   * Its display name ("Slack").
+   *
+   * @generated from field: string integration_name = 2;
+   */
+  integrationName: string;
+
+  /**
+   * @generated from field: reliant.v1.ConnectionProposalScope scope = 3;
+   */
+  scope: ConnectionProposalScope;
+
+  /**
+   * The chat's organization: the one an org connection is made in. Unset
+   * when the chat has none, and then only a personal connection is offered.
+   *
+   * @generated from field: optional string org_id = 4;
+   */
+  orgId?: string | undefined;
+
+  /**
+   * Why the agent asks, in its words, flattened to one line.
+   *
+   * @generated from field: string reason = 5;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message reliant.v1.ConnectionProposal.
+ * Use `create(ConnectionProposalSchema)` to create a new message.
+ */
+export const ConnectionProposalSchema: GenMessage<ConnectionProposal> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_approval, 1);
 
 /**
  * ListApprovalsByChatRequest lists pending approvals for a chat
@@ -134,7 +195,7 @@ export type ListApprovalsByChatRequest = Message<"reliant.v1.ListApprovalsByChat
  * Use `create(ListApprovalsByChatRequestSchema)` to create a new message.
  */
 export const ListApprovalsByChatRequestSchema: GenMessage<ListApprovalsByChatRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_approval, 1);
+  messageDesc(file_reliant_v1_approval, 2);
 
 /**
  * ListApprovalsByChatResponse returns the list of approvals
@@ -158,7 +219,7 @@ export type ListApprovalsByChatResponse = Message<"reliant.v1.ListApprovalsByCha
  * Use `create(ListApprovalsByChatResponseSchema)` to create a new message.
  */
 export const ListApprovalsByChatResponseSchema: GenMessage<ListApprovalsByChatResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_approval, 2);
+  messageDesc(file_reliant_v1_approval, 3);
 
 /**
  * ApproveRequest approves a single approval
@@ -177,6 +238,15 @@ export type ApproveRequest = Message<"reliant.v1.ApproveRequest"> & {
    * @generated from field: optional string action_taken = 2;
    */
   actionTaken?: string | undefined;
+
+  /**
+   * The connection the approver made for a connection proposal
+   * (Approval.connection_proposal): required to approve one, and checked
+   * against it (integration, owner, scope). Ignored for any other approval.
+   *
+   * @generated from field: optional string connection_id = 3;
+   */
+  connectionId?: string | undefined;
 };
 
 /**
@@ -184,7 +254,7 @@ export type ApproveRequest = Message<"reliant.v1.ApproveRequest"> & {
  * Use `create(ApproveRequestSchema)` to create a new message.
  */
 export const ApproveRequestSchema: GenMessage<ApproveRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_approval, 3);
+  messageDesc(file_reliant_v1_approval, 4);
 
 /**
  * ApproveResponse confirms the approval
@@ -208,7 +278,7 @@ export type ApproveResponse = Message<"reliant.v1.ApproveResponse"> & {
  * Use `create(ApproveResponseSchema)` to create a new message.
  */
 export const ApproveResponseSchema: GenMessage<ApproveResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_approval, 4);
+  messageDesc(file_reliant_v1_approval, 5);
 
 /**
  * DenyRequest denies a single approval
@@ -239,7 +309,7 @@ export type DenyRequest = Message<"reliant.v1.DenyRequest"> & {
  * Use `create(DenyRequestSchema)` to create a new message.
  */
 export const DenyRequestSchema: GenMessage<DenyRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_approval, 5);
+  messageDesc(file_reliant_v1_approval, 6);
 
 /**
  * DenyResponse confirms the denial
@@ -263,7 +333,7 @@ export type DenyResponse = Message<"reliant.v1.DenyResponse"> & {
  * Use `create(DenyResponseSchema)` to create a new message.
  */
 export const DenyResponseSchema: GenMessage<DenyResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_approval, 6);
+  messageDesc(file_reliant_v1_approval, 7);
 
 /**
  * BatchApproveRequest approves multiple approvals at once
@@ -289,7 +359,7 @@ export type BatchApproveRequest = Message<"reliant.v1.BatchApproveRequest"> & {
  * Use `create(BatchApproveRequestSchema)` to create a new message.
  */
 export const BatchApproveRequestSchema: GenMessage<BatchApproveRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_approval, 7);
+  messageDesc(file_reliant_v1_approval, 8);
 
 /**
  * BatchApproveResponse confirms the batch approval
@@ -326,7 +396,7 @@ export type BatchApproveResponse = Message<"reliant.v1.BatchApproveResponse"> & 
  * Use `create(BatchApproveResponseSchema)` to create a new message.
  */
 export const BatchApproveResponseSchema: GenMessage<BatchApproveResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_approval, 8);
+  messageDesc(file_reliant_v1_approval, 9);
 
 /**
  * BatchDenyRequest denies multiple approvals at once
@@ -357,7 +427,7 @@ export type BatchDenyRequest = Message<"reliant.v1.BatchDenyRequest"> & {
  * Use `create(BatchDenyRequestSchema)` to create a new message.
  */
 export const BatchDenyRequestSchema: GenMessage<BatchDenyRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_approval, 9);
+  messageDesc(file_reliant_v1_approval, 10);
 
 /**
  * BatchDenyResponse confirms the batch denial
@@ -394,7 +464,7 @@ export type BatchDenyResponse = Message<"reliant.v1.BatchDenyResponse"> & {
  * Use `create(BatchDenyResponseSchema)` to create a new message.
  */
 export const BatchDenyResponseSchema: GenMessage<BatchDenyResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_approval, 10);
+  messageDesc(file_reliant_v1_approval, 11);
 
 /**
  * ApprovalType is the kind of approval request.
@@ -476,6 +546,42 @@ export enum ApprovalStatus {
  */
 export const ApprovalStatusSchema: GenEnum<ApprovalStatus> = /*@__PURE__*/
   enumDesc(file_reliant_v1_approval, 1);
+
+/**
+ * ConnectionProposalScope is whose connection an agent proposed.
+ *
+ * @generated from enum reliant.v1.ConnectionProposalScope
+ */
+export enum ConnectionProposalScope {
+  /**
+   * The approver chooses: their own connection, or (an owner or admin of
+   * the chat's organization) the organization's.
+   *
+   * @generated from enum value: CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * The approver's own connection.
+   *
+   * @generated from enum value: CONNECTION_PROPOSAL_SCOPE_PERSONAL = 1;
+   */
+  PERSONAL = 1,
+
+  /**
+   * The chat's organization's connection; only its owners and admins may
+   * make one.
+   *
+   * @generated from enum value: CONNECTION_PROPOSAL_SCOPE_ORG = 2;
+   */
+  ORG = 2,
+}
+
+/**
+ * Describes the enum reliant.v1.ConnectionProposalScope.
+ */
+export const ConnectionProposalScopeSchema: GenEnum<ConnectionProposalScope> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_approval, 2);
 
 /**
  * ApprovalService handles workflow approval operations.

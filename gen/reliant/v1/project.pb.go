@@ -1367,7 +1367,8 @@ type PurgeProjectNowRequest struct {
 	// The project's name, typed by the person: the purge is refused
 	// (INVALID_ARGUMENT) unless it matches.
 	ConfirmName string `protobuf:"bytes,2,opt,name=confirm_name,json=confirmName,proto3" json:"confirm_name,omitempty"`
-	// As DeleteProjectRequest.remove_from_machines, done before the purge.
+	// As DeleteProjectRequest.remove_from_machines, done once the purge is
+	// claimed and before its batches run.
 	RemoveFromMachines bool `protobuf:"varint,3,opt,name=remove_from_machines,json=removeFromMachines,proto3" json:"remove_from_machines,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
@@ -1424,7 +1425,8 @@ func (x *PurgeProjectNowRequest) GetRemoveFromMachines() bool {
 	return false
 }
 
-// PurgeProjectNowResponse confirms the purge.
+// PurgeProjectNowResponse confirms the purge is claimed: the project is
+// hidden for good, and its rows are deleted after the response.
 type PurgeProjectNowResponse struct {
 	state           protoimpl.MessageState   `protogen:"open.v1"`
 	MachineRemovals []*ProjectMachineRemoval `protobuf:"bytes,1,rep,name=machine_removals,json=machineRemovals,proto3" json:"machine_removals,omitempty"`

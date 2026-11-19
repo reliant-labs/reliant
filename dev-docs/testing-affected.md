@@ -28,6 +28,7 @@ before a release: `dev-docs/merge-and-release-gates.md`.
 | forge-generate | `task generate:check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**` (not its hand-written `_test.go` files, which forge never reads), every generated file (`*_gen.go`, `*_gen.ts`, `*_gen_test.go`, ...), `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |
 | docs-generate | `task generate:docs:check`, second (in a heavy slot): every docs generator (`Taskfile.yml`'s `generate:docs`), failing (and naming each file) if it changed anything | a change to something a docs generator reads or writes (below) |
 | web-demo | `WEB_BUILD_TARGET=demo npx vite build` in `frontends/web/` (the forge demo bundle; its `vite-plugin-demo-bundle.ts` guard fails on a Reliant-only module in it) | a changed file in the demo bundle's import graph (`WebGraph.Demo`, below), the demo build's own inputs (`demoBuildInputs` in `rules.go`: `vite.config.ts`, `vite-plugin-*.ts`, `demo.html`), or a FULL web lane |
+| web-build | `scripts/web-release-build.sh`: `NODE_ENV=production npx vite build` in `frontends/web/` into a temporary directory, then `.github/scripts/verify-bundle.mjs` (the release gate's webbuild, minus eslint and `tsc -b`) | a FULL web lane (its dependencies, lockfile or build config changed; reliant#2850) or the release build's own inputs (`webBuildInputs` in `rules.go`: `vite.config.ts`, `vite-plugin-*.ts`, `index.html`) |
 | migration-order | `go run ./tools/test-affected migration-order`, first: fetches `origin/main` and fails a migration the branch added whose version is at or below main's newest (never applied; the migrator refuses to start on it, reliant#1399). Fails closed when `origin/main` cannot be fetched (`MIGRATION_ORDER_OFFLINE=1` to override) | any added or changed file under `db/migrations/` (a deletion cannot put a file below the head) |
 
 The forge-generate lane is the merge gate's **generate** phase, run locally
@@ -162,7 +163,7 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | `docs/**`, `**/*.md`, `.github/**`, `research/**`, lint config | nothing, unless a test names the file |
 | `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** (`go.mod`/`go.sum` also run forge-generate and docs-generate) |
 | `package.json`, lockfiles at the root | **web and electron: full** |
-| `frontends/web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `frontends/web/src/test/setup.ts` | **web: full** (the merge gate runs the reached files; above), and the demo build |
+| `frontends/web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `frontends/web/src/test/setup.ts` | **web: full** (the merge gate runs the reached files; above), the demo build, and the renderer's release build |
 | `buf*.yaml` (root) | forge-generate only: the code it generates is in the diff and selects its own tests, or the no-op check fails |
 | `Taskfile.yml` | **forge-generate and docs-generate: full** (the tasks they run); the test lanes do not run through the Taskfile |
 | `forge.yaml` (the forge pin) | Go and forge-generate: full |
@@ -252,7 +253,7 @@ release, the two gates run (`dev-docs/merge-and-release-gates.md`):
 
 | Gate | Go | Everything else |
 |---|---|---|
-| **merge** (`task ci:merge`) | this selector with `-reach direct`, `-short`, cached, no `-race`: the changed packages and their direct importers | the web and electron lanes this selector picks (a FULL web lane: the reached files), `go build ./...`, `forge lint --scope <changed dirs>` (the merge queue too), the demo build, and the forge-generate / docs-generate / migration checks when their inputs changed |
+| **merge** (`task ci:merge`) | this selector with `-reach direct`, `-short`, cached, no `-race`: the changed packages and their direct importers | the web and electron lanes this selector picks (a FULL web lane: the reached files), `go build ./...`, `forge lint --scope <changed dirs>` (the merge queue too), the demo build, the renderer's release build on a web dependency or build-config change, and the forge-generate / docs-generate / migration checks when their inputs changed |
 | **release** (`task release:gate`) | `task test`: every package, `-race -count=1`, no `-short`, so every slow test runs; then `task test:integration` and `task test:e2e` | unscoped `forge lint` (golangci-lint, buf, the frontends), `go vet`, `task generate:check`, `task generate:docs:check` |
 
 Nothing the merge gate skips is deleted; it runs in the release gate, and a

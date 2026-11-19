@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
@@ -54,6 +55,11 @@ type ApprovalCreateInput struct {
 	// BatchID is shared by the approvals one step raised together, so they
 	// can be decided together. Empty for an approval raised on its own.
 	BatchID string `json:"batch_id,omitempty" reliant:"-"`
+	// ConnectionProposal is set for a propose_connection card: what it asks
+	// the person to connect. It is recorded in the approval's metadata,
+	// where ApprovalService reads it to require, and check, the connection
+	// the person made.
+	ConnectionProposal *core.ConnectionProposal `json:"connection_proposal,omitempty" reliant:"-"`
 }
 
 // ApprovalCreateOutput is the output from the ApprovalCreate activity.
@@ -62,6 +68,9 @@ type ApprovalCreateOutput struct {
 	AlreadyResolved bool   `json:"already_resolved"`
 	Status          string `json:"status"`       // Only set if AlreadyResolved
 	ActionTaken     string `json:"action_taken"` // Only set if AlreadyResolved
+	// ConnectionID is the connection a person made to approve a connection
+	// proposal. Only set if AlreadyResolved.
+	ConnectionID string `json:"connection_id,omitempty"`
 }
 
 // ApprovalResolveInput is the input for the ApprovalResolve activity.
@@ -150,6 +159,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 				AlreadyResolved: true,
 				Status:          status,
 				ActionTaken:     actionTaken,
+				ConnectionID:    existingApproval.ApprovedConnectionID(),
 			}, nil
 		}
 
@@ -175,6 +185,9 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 	if input.ToolCallID != "" {
 		approvalType = reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL
 		metadata["tool_call_id"] = input.ToolCallID
+	}
+	if input.ConnectionProposal != nil {
+		metadata[core.ApprovalMetadataConnectionProposal] = input.ConnectionProposal
 	}
 	var batchID *string
 	if input.BatchID != "" {

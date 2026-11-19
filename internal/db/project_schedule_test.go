@@ -231,17 +231,77 @@ func TestAnInterruptedImmediatePurgeResumesAfterItsLease(t *testing.T) {
 	require.Error(t, err, "the project is gone")
 }
 
+// purgeNow is PurgeProjectNow's two halves run back to back: the claim the
+// request makes, then the batches it leaves running.
+func (f *deleteFixture) purgeNow(decided core.ProjectDecision) ([]string, error) {
+	if err := f.repo.ClaimProjectPurgeNow(f.ctx, f.project, decided); err != nil {
+		return nil, err
+	}
+	return f.repo.PurgeClaimedProject(f.ctx, f.project, decided.OwnerUserID)
+}
+
 func TestPurgeProjectNowDeletesAtOnce(t *testing.T) {
 	f := newDeleteFixture(t)
-	_, err := f.repo.PurgeProjectNow(f.ctx, f.project, core.ProjectDecision{OwnerUserID: "not-the-owner"}, nil)
+	_, err := f.purgeNow(core.ProjectDecision{OwnerUserID: "not-the-owner"})
 	assert.ErrorIs(t, err, store.ErrOrgChanged, "a decision about another owner purges nothing")
 	_, err = f.repo.GetProject(f.ctx, f.project)
 	require.NoError(t, err)
-	triggers, err := f.repo.PurgeProjectNow(f.ctx, f.project, f.decided(), nil)
+	triggers, err := f.purgeNow(f.decided())
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{f.enabledTrigger, f.userPaused}, triggers)
 	_, err = f.repo.GetProject(f.ctx, f.project)
 	require.Error(t, err)
+}
+
+// The claim alone hides the project and refuses its restore, before any batch
+// runs; a purge whose batches then fail part way is resumed by the worker
+// once the claim's lease has passed.
+func TestAClaimedPurgeThatFailsIsResumedByTheWorker(t *testing.T) {
+	f := newDeleteFixture(t)
+	require.NoError(t, f.repo.ClaimProjectPurgeNow(f.ctx, f.project, f.decided()))
+	projects, chats := f.listed(t)
+	assert.False(t, projects, "a claimed project leaves the project list")
+	assert.False(t, chats, "its chats leave the chat list")
+	_, err := f.repo.RestoreProject(f.ctx, f.project, f.decided())
+	assert.ErrorIs(t, err, core.ErrProjectPurgeStarted, "nothing can restore it once claimed")
+
+	// The chat holds a message, which the thinning takes before the chat's
+	// own batch; that batch then fails (a trigger of this test's database
+	// refuses the chat's delete), so the purge stops part way.
+	exec := func(query string, args ...any) {
+		t.Helper()
+		_, err := f.repo.ORM().Bun().NewRaw(query, args...).Exec(f.ctx)
+		require.NoError(t, err, query)
+	}
+	exec(`INSERT INTO threads (id, chat_id, origin, created_at) VALUES (?0, ?1, 'root', ?2)`, f.chat+"-thread", f.chat, deleteClock)
+	exec(`INSERT INTO context_windows (id, thread_id, sequence, created_at) VALUES (?0, ?1, 1, ?2)`, f.chat+"-cw", f.chat+"-thread", deleteClock)
+	exec(`INSERT INTO messages (id, chat_id, ordinal, thread_id, context_window_id, role, created_at, updated_at, seq)
+		VALUES (?0, ?1, 1, ?2, ?3, 1, ?4, ?4, 1)`, f.chat+"-msg", f.chat, f.chat+"-thread", f.chat+"-cw", deleteClock)
+	exec(`CREATE FUNCTION test_refuse_chat_delete() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN RAISE EXCEPTION 'test: the chat batch fails'; END $$`)
+	exec(`CREATE TRIGGER test_refuse_chat_delete BEFORE DELETE ON chats FOR EACH ROW EXECUTE FUNCTION test_refuse_chat_delete()`)
+	_, err = f.repo.PurgeClaimedProject(f.ctx, f.project, f.owner)
+	require.ErrorContains(t, err, "the chat batch fails", "the batches stop part way")
+	_, err = f.repo.GetProject(f.ctx, f.project)
+	require.NoError(t, err, "what is left stays, hidden and claimed")
+	_, err = f.repo.GetChat(f.ctx, f.chat)
+	require.NoError(t, err, "the chat's batch rolled back")
+	var messages int
+	require.NoError(t, f.repo.ORM().Bun().NewRaw(`SELECT count(*) FROM messages WHERE chat_id = ?`, f.chat).Scan(f.ctx, &messages))
+	assert.Zero(t, messages, "the thinning before it committed")
+	exec(`DROP TRIGGER test_refuse_chat_delete ON chats`)
+
+	now := time.Now()
+	res, err := f.repo.PurgeDueProjects(f.ctx, now, ProjectPurgeLease, 50)
+	require.NoError(t, err)
+	assert.Zero(t, res.Purged, "the failed purge's claim holds until its lease passes")
+	res, err = f.repo.PurgeDueProjects(f.ctx, now.Add(ProjectPurgeLease+time.Minute), ProjectPurgeLease, 50)
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Purged, "the worker resumes it after the lease")
+	_, err = f.repo.GetProject(f.ctx, f.project)
+	require.Error(t, err, "the project is gone")
+	_, err = f.repo.GetChat(f.ctx, f.chat)
+	assert.Error(t, err, "its chat is gone")
 }
 
 // The rows that name a project with no foreign key to it go with its purge,
@@ -274,7 +334,7 @@ func TestProjectPurgeCleansRowsWithNoForeignKey(t *testing.T) {
 	seedRecovery(mine, f.project)
 	seedRecovery(orphan, "project-deleted-long-ago-"+uuid.NewString()[:8])
 
-	_, err := f.repo.PurgeProjectNow(f.ctx, f.project, f.decided(), nil)
+	_, err := f.purgeNow(f.decided())
 	require.NoError(t, err)
 	assert.Zero(t, count("worktree_recoveries", mine), "the purge removes the project's recoveries")
 	assert.Zero(t, count("worktree_recovery_checkouts", mine))
@@ -562,15 +622,12 @@ func TestDeleteRestoreAndPurgeRefuseAProjectThatMovedOrg(t *testing.T) {
 		assert.False(t, f.trigger(t, f.enabledTrigger).Enabled, "nothing was resumed")
 	})
 
-	t.Run("an immediate purge decided in the source org is refused, and its machine fan-out never runs", func(t *testing.T) {
+	t.Run("an immediate purge decided in the source org is refused", func(t *testing.T) {
 		f, decided := newMovable(t)
-		fannedOut := false
 		err := race(t, f, func() error {
-			_, err := f.repo.PurgeProjectNow(f.ctx, f.project, decided, func(context.Context) { fannedOut = true })
-			return err
+			return f.repo.ClaimProjectPurgeNow(f.ctx, f.project, decided)
 		})
 		assert.ErrorIs(t, err, store.ErrOrgChanged)
-		assert.False(t, fannedOut)
 		p, err := f.repo.GetProject(f.ctx, f.project)
 		require.NoError(t, err, "nothing was purged")
 		assert.Nil(t, p.PurgeStartedAt)

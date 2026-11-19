@@ -28,9 +28,24 @@ const (
 	// vite-plugin-demo-bundle.ts guard fails on a Reliant-only module in it.
 	// tsc -b cannot see that (#2669 passed it and failed the demo build).
 	laneWebDemo lane = "web-demo"
+	// laneWebBuild is not a test runner either: it builds the renderer as a
+	// release does (frontends/web's production `vite build`) and verifies the
+	// bundle. vitest and tsc -b cannot see what only the bundler resolves:
+	// #2829's supabase-js bump imported `node:module`, passed both, and
+	// failed the release gate's webbuild.
+	laneWebBuild lane = "web-build"
 )
 
-var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen, laneMigOrder, laneWebDemo}
+var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen, laneMigOrder, laneWebDemo, laneWebBuild}
+
+// webBuildInputs are the files the renderer's release build reads that are
+// not web sources: its vite config, the plugins that config imports, and its
+// HTML entry. A change to the web lane's dependencies or build config (the
+// web-config and node-toolchain rules: package.json, pnpm-lock.yaml, ...)
+// runs the build too, through the web lane's FULL reasons.
+var webBuildInputs = []string{
+	"frontends/web/vite.config.ts", "frontends/web/vite-plugin-*.ts", "frontends/web/index.html",
+}
 
 // demoBuildInputs are the files the forge demo build reads that are not
 // modules in its import graph (WebGraph.Demo): its vite config and plugins
@@ -380,7 +395,7 @@ var rules = []rule{
 		id: "web-inert",
 		patterns: []string{
 			"frontends/web/.gitignore", "frontends/web/README.md", "frontends/web/eslint.config.js", "frontends/web/stylelint.config.js",
-			"frontends/web/playwright.config.ts", "frontends/web/e2e/**",
+			"frontends/web/playwright.config.ts", "frontends/web/playwright.visual.config.ts", "frontends/web/e2e/**",
 		},
 		note: "lint config and Playwright specs: no vitest file reads them (run Playwright separately)",
 	},

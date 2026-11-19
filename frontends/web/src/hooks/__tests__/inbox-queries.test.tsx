@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Inbox data layer: the badge selects its counts from the list query, both refetch on focus (failure kinds emit no user update), dismissing
+ * The Inbox data layer: the badge selects its counts from the list query, both refetch on focus once INBOX_STALE_MS old (failure kinds emit no user update), dismissing
  * takes the row out at once, and the user updates that change what is waiting
  * mark both stale.
  */
@@ -9,7 +9,7 @@
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
 
 import {
@@ -31,6 +31,7 @@ const dismissInboxItem = vi.fn();
 const restoreInboxItem = vi.fn();
 
 import {
+  INBOX_STALE_MS,
   inboxInvalidatingUpdate,
   useDismissInboxItems,
   useInbox,
@@ -100,15 +101,35 @@ describe("useInboxCounts", () => {
 });
 
 describe("useInbox", () => {
-  it("lists items and refetches on window focus even while fresh", async () => {
+  it("lists items, and refetches on window focus only once the read is INBOX_STALE_MS old", async () => {
     listInbox.mockResolvedValue(create(ListInboxResponseSchema, { items: [failing], hasInformational: true }));
     const queryClient = newClient();
     const { result } = renderHook(() => useInbox(), { wrapper: wrapperFor(queryClient) });
     await waitFor(() => expect(result.current.data?.items).toHaveLength(1));
     expect(listInbox.mock.calls[0]![0].limit).toBeUndefined();
 
-    const query = queryClient.getQueryCache().find({ queryKey: inboxServiceKeys.listInbox({}) });
-    expect((query?.options as { refetchOnWindowFocus?: unknown }).refetchOnWindowFocus).toBe("always");
+    // A focus right after a read reuses it: a tab switch is not a ListInbox.
+    act(() => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    await act(async () => {});
+    expect(listInbox).toHaveBeenCalledTimes(1);
+
+    // Once INBOX_STALE_MS old, the next focus reads it again (the automation
+    // failure kinds arrive no other way).
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + INBOX_STALE_MS + 1);
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await waitFor(() => expect(listInbox).toHaveBeenCalledTimes(2));
+    } finally {
+      vi.useRealTimers();
+      focusManager.setFocused(undefined);
+    }
   });
 });
 

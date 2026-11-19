@@ -87,6 +87,10 @@ type RuntimeContext struct {
 	// Approved preview hashes and refusals are runtime-authored, never model inputs.
 	ActivationApprovals map[string]string `json:"activation_approvals,omitempty"`
 	ActivationRefusals  map[string]string `json:"activation_refusals,omitempty"`
+	// ApprovedConnections maps a propose_connection call approved on its card
+	// to the connection id the person made in the connection dialog. Only an
+	// id: the credential never enters the run.
+	ApprovedConnections map[string]string `json:"approved_connections,omitempty"`
 
 	// ProviderPreference is the run's runtime.ProviderPreference: the
 	// provider(s) the user chose for the run. call_llm hands it to a model

@@ -983,6 +983,11 @@
               "Name": "action_taken",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "connection_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ApproveResponse": [
@@ -1192,6 +1197,12 @@
               "name": "batch_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "connection_proposal",
+              "kind": "message",
+              "type_name": "reliant.v1.ConnectionProposal",
+              "optional": true
             }
           ],
           "reliant.v1.ApproveRequest": [
@@ -1201,6 +1212,11 @@
             },
             {
               "name": "action_taken",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "connection_id",
               "kind": "string",
               "optional": true
             }
@@ -1280,6 +1296,30 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.ConnectionProposal": [
+            {
+              "name": "integration_id",
+              "kind": "string"
+            },
+            {
+              "name": "integration_name",
+              "kind": "string"
+            },
+            {
+              "name": "scope",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectionProposalScope"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.DenyRequest": [
             {
               "name": "request_id",
@@ -1336,6 +1376,7 @@
           "reliant.v1.BatchApproveResponse": "reliant/v1/approval.proto",
           "reliant.v1.BatchDenyRequest": "reliant/v1/approval.proto",
           "reliant.v1.BatchDenyResponse": "reliant/v1/approval.proto",
+          "reliant.v1.ConnectionProposal": "reliant/v1/approval.proto",
           "reliant.v1.DenyRequest": "reliant/v1/approval.proto",
           "reliant.v1.DenyResponse": "reliant/v1/approval.proto",
           "reliant.v1.ListApprovalsByChatRequest": "reliant/v1/approval.proto",
@@ -1354,6 +1395,11 @@
             "APPROVAL_TYPE_UNSPECIFIED",
             "APPROVAL_TYPE_WORKFLOW_STEP",
             "APPROVAL_TYPE_TOOL_CALL"
+          ],
+          "reliant.v1.ConnectionProposalScope": [
+            "CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED",
+            "CONNECTION_PROPOSAL_SCOPE_PERSONAL",
+            "CONNECTION_PROPOSAL_SCOPE_ORG"
           ]
         },
         "EnumNumbers": {
@@ -1369,6 +1415,11 @@
             0,
             2,
             3
+          ],
+          "reliant.v1.ConnectionProposalScope": [
+            0,
+            1,
+            2
           ]
         },
         "EnumGoRefs": {
@@ -1379,6 +1430,10 @@
           "reliant.v1.ApprovalType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ApprovalType"
+          },
+          "reliant.v1.ConnectionProposalScope": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ConnectionProposalScope"
           }
         }
       }
@@ -6880,6 +6935,11 @@
               "Name": "tool_bodies",
               "ProtoType": "enum",
               "IsOptional": true
+            },
+            {
+              "Name": "skip_total",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "ListMessagesResponse": [
@@ -8549,6 +8609,10 @@
               "kind": "enum",
               "type_name": "reliant.v1.ToolBodyMode",
               "optional": true
+            },
+            {
+              "name": "skip_total",
+              "kind": "bool"
             }
           ],
           "reliant.v1.ListMessagesResponse": [
@@ -54075,6 +54139,17 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Approval",
+      "field": "Connections",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.ProposalConnections",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "APIConnections"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Approval",

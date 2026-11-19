@@ -706,6 +706,9 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"list_triggers": {
 		Bindable: map[string]struct{}{
+			"health":     {},
+			"limit":      {},
+			"page_token": {},
 			"project_id": {},
 			"workflow":   {},
 		},
@@ -770,6 +773,14 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"action": {},
 			"path":   {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"propose_connection": {
+		Bindable: map[string]struct{}{
+			"provider": {},
+			"reason":   {},
+			"scope":    {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -1199,11 +1210,15 @@ var generatedToolParams = map[string]ToolParams{
 	"worktree": {
 		Bindable: map[string]struct{}{
 			"action":      {},
+			"archived":    {},
 			"base_branch": {},
 			"branch":      {},
 			"copy_files":  {},
+			"filter":      {},
 			"force":       {},
+			"limit":       {},
 			"name":        {},
+			"page_token":  {},
 		},
 		Unbindable: map[string]string{},
 	},

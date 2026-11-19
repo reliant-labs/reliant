@@ -85,6 +85,9 @@ func verifyGate(planPath, dir string) []string {
 	if pl.WebDemo.Full {
 		obliged["demo"] = "the plan selected the forge demo bundle's build"
 	}
+	if pl.WebBuild.Full {
+		obliged["webbuild"] = "the plan selected the renderer's release build"
+	}
 	var migration, subdir, web, goFile bool
 	for _, f := range pl.Files {
 		p := f.Path
