@@ -10,7 +10,10 @@ vi.mock("@/hooks/apps-queries", () => ({ useApps: () => orgApps.current }));
 vi.mock("@/hooks/project-catalog-queries", () => ({
   useProjectCatalog: () => ({ catalog: undefined, isLoading: false, error: new Error("no catalog here"), refetch: () => {} }),
 }));
-vi.mock("@/hooks/project-queries", () => ({ useProjects: () => ({ projects: [], isLoading: false, error: null, refetch: () => {} }) }));
+vi.mock("@/hooks/project-queries", async (original) => ({
+  ...(await original<typeof import("@/hooks/project-queries")>()),
+  useProjects: () => ({ projects: [], isLoading: false, error: null, refetch: () => {} }),
+}));
 vi.mock("@/hooks/sidebar-project-queries", () => ({
   useSidebarProjectPrefs: () => ({ prefs: { pinned: new Set(), hidden: new Set(), showAll: false } }),
 }));
