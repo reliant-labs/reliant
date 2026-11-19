@@ -66,6 +66,38 @@ describe('page-covering overlays use bg-scrim', () => {
     'components/Onboarding/journeys/workflowsPhone.tsx',
   ])
 
+  /**
+   * The class strings in a file that paint a page-covering backdrop: a
+   * string literal (quoted or template) holding `inset-0` AND a raw
+   * `bg-black/NN`. Comments are removed first, so prose that names the old
+   * pattern is never an offender; only a class list can be.
+   */
+  function rawBackdrops(source: string): number[] {
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '))
+      .replace(/(^|[^:'"`])\/\/[^\n]*/g, (_m, lead: string) => lead)
+    const lines: number[] = []
+    for (const m of code.matchAll(/(["'`])((?:(?!\1)[^\\]|\\.)*)\1/g)) {
+      const body = m[2]!
+      if (/(^|\s)inset-0(\s|$)/.test(body) && /(^|\s)bg-black\/\d+(\s|$)/.test(body)) {
+        lines.push(code.slice(0, m.index).split('\n').length)
+      }
+    }
+    return lines
+  }
+
+  it('finds raw backdrops in class strings, never in comments', () => {
+    const src = [
+      '// was: className="fixed inset-0 bg-black/50"',
+      '/* the old <div className="absolute inset-0 bg-black/40" /> */',
+      '{/* inset-0 bg-black/60 */}',
+      '<div className="absolute inset-0 bg-scrim" />',
+      '<div className="fixed inset-0 z-50 bg-black/50" />',
+      'const c = `absolute inset-0 bg-black/40 ${x}`',
+    ].join('\n')
+    expect(rawBackdrops(src)).toEqual([5, 6])
+  })
+
   function walk(dir: string, out: string[] = []): string[] {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, e.name)
@@ -81,18 +113,14 @@ describe('page-covering overlays use bg-scrim', () => {
     for (const file of walk(path.join(SRC, 'components'))) {
       const rel = path.relative(SRC, file).split(path.sep).join('/')
       if (PENDING.has(rel)) continue
-      const lines = fs.readFileSync(file, 'utf-8').split('\n')
-      lines.forEach((line, i) => {
-        if (/\binset-0\b/.test(line) && /\bbg-black\/\d+/.test(line)) offenders.push(`${rel}:${i + 1}`)
-      })
+      for (const line of rawBackdrops(fs.readFileSync(file, 'utf-8'))) offenders.push(`${rel}:${line}`)
     }
     expect(offenders, 'use bg-scrim (index.css --scrim)').toEqual([])
   })
 
   it('keeps the pending list honest: every entry still has a raw backdrop', () => {
     const stale = [...PENDING].filter((rel) => {
-      const body = fs.readFileSync(path.join(SRC, rel), 'utf-8')
-      return !body.split('\n').some((line) => /\binset-0\b/.test(line) && /\bbg-black\/\d+/.test(line))
+      return rawBackdrops(fs.readFileSync(path.join(SRC, rel), 'utf-8')).length === 0
     })
     expect(stale, 'moved to bg-scrim: drop it from PENDING').toEqual([])
   })
