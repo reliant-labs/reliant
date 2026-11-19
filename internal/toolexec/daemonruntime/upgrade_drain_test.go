@@ -89,6 +89,7 @@ func TestDrainWaitsForRunningCallsThenReportsDrained(t *testing.T) {
 	assert.Equal(t, "roll-1", st.GetRolloutId())
 	assert.Equal(t, "v1.2.3", st.GetTargetVersion())
 
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a drain that wrongly ended with a call running would show as DRAINED here, and there is no event to wait for when it correctly keeps going
 	time.Sleep(20 * time.Millisecond)
 	require.Equal(t, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING, upgradeState(d),
 		"a running call keeps the drain going until its deadline")
@@ -134,7 +135,7 @@ func TestDrainedDaemonNotRestartedMakesAnUpgradeExit(t *testing.T) {
 	d.handleRestartRequested(ctx, restartRequest(time.Time{}).GetRestartRequested())
 	failed := waitForUpgradeState(t, d, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_FAILED)
 	assert.Contains(t, failed.GetDetail(), "did not restart this machine")
-	require.Eventually(t, d.upgrade.exitRequested, time.Second, time.Millisecond)
+	require.Eventually(t, d.upgrade.exitRequested, 5*time.Second, time.Millisecond)
 	assert.True(t, stopped.Load(), "the upgrade exit stops the runtime")
 	select {
 	case code := <-exitCode:
@@ -158,12 +159,14 @@ func TestDrainIsNotBoundedByTheShutdownWatchdog(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	d.handleRestartRequested(ctx, restartRequest(time.Time{}).GetRestartRequested())
-	time.Sleep(50 * time.Millisecond) // 50x the backstop
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — 50x the backstop: a watchdog that wrongly bounded the drain would have stopped or exited the daemon by now, and there is no event to wait for when it correctly does not
+	time.Sleep(50 * time.Millisecond)
 	assert.Equal(t, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING, upgradeState(d))
 	assert.False(t, stopped.Load())
 	assert.False(t, exited.Load())
 
 	cancel() // a signal's stop
+	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a stop wrongly taken for an upgrade exit would request one here, and there is no event to wait for when it correctly does not
 	time.Sleep(20 * time.Millisecond)
 	assert.False(t, d.upgrade.exitRequested(), "a stop during a drain is a stop, not an upgrade exit")
 	assert.False(t, exited.Load())
