@@ -23,6 +23,9 @@ import { projectPath, projectsPath } from "@/lib/paths";
 import { isLive } from "@/services/forge/apps";
 
 import { AppsBody } from "../Apps/AppsPage";
+import { chatSetupNeeded } from "../OnboardingFlow/onboardingGate";
+import { SetUpChatsCard } from "../OnboardingFlow/SetUpChatsCard";
+import { useChatSetup } from "../OnboardingFlow/useChatSetup";
 import { AreaShell } from "../Layout/AreaShell";
 
 type ProjectsFilter = "all" | "apps" | "sites";
@@ -54,11 +57,17 @@ export function ProjectsBody() {
       replace: true,
     } as never);
   const { apps, loading } = useApps();
+  // A person who cannot run a chat yet lands here (the daemonless home, U6):
+  // the way to set chats up leads the page.
+  const setup = useChatSetup();
   const noSites = !loading && filter === "sites" && !apps.some(isLive);
 
   return (
     <div className="space-y-6" data-testid="projects-page">
       <PageHeader title="Projects" meta={<span>Your apps and sites, and the code you work on.</span>} className="mb-0" />
+      {chatSetupNeeded(setup) && (
+        <SetUpChatsCard setup={setup} variant="page" onNavigate={(href) => void navigate({ href })} />
+      )}
       {showApps && (
         <Tabs
           tabs={FILTERS}

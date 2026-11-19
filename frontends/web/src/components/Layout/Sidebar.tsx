@@ -116,6 +116,9 @@ import {
   WorkspaceSubheading,
 } from "./sidebar/primitives";
 import { AppsNavSection } from "./sidebar/AppsNavSection";
+import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGate";
+import { SetUpChatsCard } from "../OnboardingFlow/SetUpChatsCard";
+import { useChatSetup } from "../OnboardingFlow/useChatSetup";
 import { isAtOrBelow } from "./sidebar/navLocation";
 import { ForgeBrand } from "../ForgeShell/ForgeBrand";
 import { isForgeShell } from "../../lib/shell";
@@ -1083,9 +1086,19 @@ function SidebarComponent({
     return ordered[0]?.id ?? null;
   }, [chatListTab, filteredArchivedChats, viewMode, flatList, projectFilterId, activeGroups, projectGroups, activeChatId]);
 
+  // Whether chats can run yet (OnboardingFlow/onboardingGate.ts, ChatSetup).
+  // Until they can, the Chats section is the Set up chats card, and New chat
+  // goes where the card does.
+  const setup = useChatSetup();
+  const setupNeeded = chatSetupNeeded(setup);
+
   // The global New chat: the filter's project, else the open chat's, else the
   // last one used (openNewChat).
   const handleNewChat = () => {
+    if (setupNeeded) {
+      go(chatSetupPath(setup));
+      return;
+    }
     void openNewChat();
   };
 
@@ -1843,7 +1856,8 @@ function SidebarComponent({
         <SidebarPrimaryAction
           icon={<SquarePen className="size-4" />}
           label="New chat"
-          href={newChatHref}
+          // While chats cannot run yet, New chat sets them up (handleNewChat).
+          href={setupNeeded ? chatSetupPath(setup) : newChatHref}
           onClick={handleNewChat}
           testId="create-chat-button"
           shortcut={newChatShortcut}
@@ -1925,6 +1939,12 @@ function SidebarComponent({
         className="flex min-h-[min(100%,max(40%,calc(5*var(--row-h)+3.25rem)))] flex-1 flex-col"
         data-testid="sidebar-chats"
       >
+      {/* Chats cannot run yet (no machine): one card that sets them up, in
+          place of the list. */}
+      {setupNeeded ? (
+        <SetUpChatsCard setup={setup} variant="nav" onNavigate={go} />
+      ) : (
+      <>
       {/* The list's heading: its one menu (project, sort, view, every
           project, archived) on hover, and the machine filter when there is
           more than one machine. */}
@@ -2193,6 +2213,8 @@ function SidebarComponent({
           )}
         </div>
       </div>
+      </>
+      )}
       </div>
       </div>
 

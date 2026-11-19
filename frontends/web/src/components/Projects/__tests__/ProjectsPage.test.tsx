@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   navigate: vi.fn(),
   search: {} as Record<string, unknown>,
   bodyFilter: undefined as undefined | ((app: unknown) => boolean),
+  setup: "ready" as string,
 }));
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => state.navigate, useSearch: () => state.search }));
@@ -24,6 +25,7 @@ vi.mock("@/hooks/apps-queries", () => ({
 vi.mock("@/hooks/project-queries", () => ({
   useProjects: () => ({ projects: state.projects, isLoading: false }),
 }));
+vi.mock("../../OnboardingFlow/useChatSetup", () => ({ useChatSetup: () => state.setup }));
 vi.mock("@/lib/forgeFeature", () => ({ isForgeUIEnabled: () => true }));
 vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: ReactNode }) => <>{children}</> }));
 // The apps list is the Apps page's (covered there): here it says which apps it was asked for.
@@ -47,6 +49,7 @@ beforeEach(() => {
   ];
   state.navigate.mockReset();
   state.search = {};
+  state.setup = "ready";
 });
 
 describe("ProjectsPage", () => {
@@ -86,5 +89,31 @@ describe("ProjectsPage", () => {
     render(<ProjectsPage />);
     expect(screen.getByTestId("projects-no-sites")).toBeInTheDocument();
     expect(screen.queryByTestId("apps-body")).toBeNull();
+  });
+});
+
+/**
+ * The daemonless home (U6): a person who cannot run a chat yet lands here,
+ * and the way to set chats up leads the page.
+ */
+describe("ProjectsPage's Set up chats card", () => {
+  it.each([
+    ["onboard", "/onboarding"],
+    ["connect-machine", "/settings/machines"],
+  ])("leads the page for %s, linking to %s", (setup, href) => {
+    state.setup = setup;
+    render(<ProjectsPage />);
+    const card = screen.getByTestId("set-up-chats-card");
+    expect(card).toHaveTextContent("Chats run your agents on a machine");
+    const link = within(card).getByRole("link", { name: "Set up" });
+    expect(link).toHaveAttribute("href", href);
+    fireEvent.click(link);
+    expect(state.navigate).toHaveBeenCalledWith({ href });
+  });
+
+  it.each(["ready", "checking", "unknown"])("is not there for %s", (setup) => {
+    state.setup = setup;
+    render(<ProjectsPage />);
+    expect(screen.queryByTestId("set-up-chats-card")).toBeNull();
   });
 });

@@ -78,9 +78,9 @@ import { homePath, mobileChatsPath } from '@/lib/paths'
 //     ForgeLandingJourney in place of Reliant's OnboardingWizard;
 //   - AuthGuard holds sign-in for a visitor the landing journey is taking to
 //     the public demo (components/AuthGuard.tsx);
-//   - the home sends a person who has not onboarded to their apps rather
-//     than to the wizard (OnboardingFlow/onboardingGate.ts,
-//     forgeBrandHomeTarget);
+//   - the phone's chat list sends a person who has not onboarded to their
+//     apps rather than to the wizard (OnboardingFlow/onboardingGate.ts,
+//     homeTarget; the desktop home's rule is the same on both brands);
 //   - telemetry reports as `forge-web` (lib/telemetry.ts), and the brand mark
 //     is ForgeBrand (the nav, AuthLayout).
 //

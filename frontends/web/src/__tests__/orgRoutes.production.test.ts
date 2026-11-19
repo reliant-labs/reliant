@@ -19,7 +19,9 @@ vi.mock("@/lib/lazyRoute", async (importOriginal) => ({
   lazyRoute: () => () => null,
 }));
 
+import { homeTarget, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGate";
 import { projectsKey } from "@/hooks/project-queries";
+import { projectsPath } from "@/lib/paths";
 import { mobileHandoffAllowed } from "@/lib/mobileRedirect";
 import { getOrgScope, requestOrgOfKey } from "@/lib/orgScope";
 import { getRouteOrgScope, isMemberOnly, ORG_ROUTE_ID } from "@/lib/routeOrg";
@@ -47,9 +49,9 @@ afterEach(() => {
 
 /**
  * Each canonical org URL, where it lands, by the leaf route it commits: the
- * same on both hosts, which mount one tree. (The forge brand's home sends a
- * person who has not onboarded to their apps from the page, not the route:
- * onboardingGate.ts, forgeBrandHomeTarget.)
+ * same on both hosts, which mount one tree. (The home sends a person who
+ * cannot chat yet to their projects from the page, not the route:
+ * onboardingGate.ts, homeTarget; __tests__/daemonlessShell.routes.test.tsx.)
  */
 const DIRECT: { url: string; lands: [path: string, leaf: RegExp] }[] = [
   { url: "/o/acme", lands: ["/o/acme", /\/_app\/$/] },
@@ -304,6 +306,13 @@ describe("the one shell's pages", () => {
           }
           expect(h.pathname()).toBe(forwards && flag ? inOrg(segment, url) : url);
           expect(h.leafRouteId()).toMatch(leaf);
+          // A daemonless person (U6): only the home is a chat route, and only
+          // the home sends them to Projects; every other page works in place.
+          const home = url === "/";
+          expect(routeRequiresOnboarding(h.pathname())).toBe(home);
+          for (const setup of ["onboard", "connect-machine"] as const) {
+            expect(homeTarget(h.pathname(), setup, { forgeBrand: host === "forge" })).toBe(home ? projectsPath() : null);
+          }
         });
       });
     });
