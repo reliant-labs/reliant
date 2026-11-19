@@ -23,6 +23,7 @@ import { useId, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Building2, ChevronDown } from "lucide-react";
 import { useActiveOrg } from "../../hooks/useOrgs";
+import { mobileChatsPath } from "@/lib/paths";
 import { cn } from "../../lib/utils";
 import { OrgRow } from "../Orgs/OrgSwitcher";
 
@@ -76,7 +77,7 @@ export function MobileOrgSwitcher({ onSwitched }: MobileOrgSwitcherProps) {
     if (orgId === active.id) return;
     select(orgId);
     // The open chat, if any, is the old org's: go to the new org's chat list.
-    void navigate({ to: "/m/chats" });
+    void navigate({ href: mobileChatsPath() });
     onSwitched?.();
   };
 
