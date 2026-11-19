@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // Repository is the slice of *db.Repo the approval handlers use.
@@ -32,4 +33,12 @@ type Repository interface {
 // signal still lands. *workflow.PauseService implements it.
 type Signaler interface {
 	SignalWithRecovery(ctx context.Context, workflowID, signalName string, signalData interface{}, inputUpdate map[string]interface{}) error
+}
+
+// ProposalConnections reads the connection a person made to approve a
+// connection proposal, as they see it: their own (Get), or an organization's
+// they belong to (GetOrg). *connections.Service implements it.
+type ProposalConnections interface {
+	Get(ctx context.Context, userID, id string) (*core.Connection, error)
+	GetOrg(ctx context.Context, userID, orgID, id string) (*core.Connection, error)
 }

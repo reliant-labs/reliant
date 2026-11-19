@@ -32,6 +32,7 @@ import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { launchContextOf } from "./launchContext";
 import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { RunDuration } from "./RunRow";
+import { runPath } from "@/lib/paths";
 
 export interface RunHeaderActions {
   onPause: () => void;
@@ -254,8 +255,7 @@ function StartedBy({
       <>
         Started by an agent in{" "}
         <Link
-          to="/workflows/runs/$runId"
-          params={{ runId: parent.chatId }}
+          to={runPath(parent.chatId)}
           className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {parent.title || "another run"}

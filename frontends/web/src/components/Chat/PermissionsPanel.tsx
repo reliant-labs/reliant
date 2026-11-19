@@ -3,6 +3,8 @@ import { Shield } from 'lucide-react';
 import { ApprovalActions } from './ApprovalActions';
 import { ApprovalBatchConfirm } from './ApprovalBatchConfirm';
 import { ApprovalCardView } from './ApprovalCardView';
+import { ConnectionProposalCard } from './ConnectionProposalCard';
+import { asConnectionProposal, proposalDenial } from '../../lib/connectionProposal';
 import { useActiveChatId } from '../../store/chatStoreHooks';
 import {
   usePendingApprovals,
@@ -96,16 +98,32 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
         className="mb-2 max-h-96 w-full divide-y divide-border overflow-auto rounded-lg border border-border bg-background"
         aria-label="Pending approvals"
       >
-        {pendingApprovals.map((approval) => (
-          <ApprovalItem
-            key={approval.id}
-            approval={approval}
-            apartReason={apartReason.get(approval.id)}
-            shortcutKey={!batch && plan.together[0]?.id === approval.id ? shortcutKey : undefined}
-            onApprove={() => approveOne.mutate({ requestId: approval.id })}
-            onDeny={() => denyOne.mutate({ requestId: approval.id })}
-          />
-        ))}
+        {pendingApprovals.map((approval) => {
+          // An agent's connection proposal is approved by making the
+          // connection from its card (ConnectionProposalCard).
+          const proposal = asConnectionProposal(approval);
+          if (proposal) {
+            return (
+              <li key={approval.id} className="p-3" data-testid={`approval-${approval.id}`}>
+                <ConnectionProposalCard
+                  approval={proposal}
+                  onConnected={(connectionId) => approveOne.mutate({ requestId: approval.id, connectionId })}
+                  onDecline={(notCompleted) => denyOne.mutate(proposalDenial(approval.id, notCompleted))}
+                />
+              </li>
+            );
+          }
+          return (
+            <ApprovalItem
+              key={approval.id}
+              approval={approval}
+              apartReason={apartReason.get(approval.id)}
+              shortcutKey={!batch && plan.together[0]?.id === approval.id ? shortcutKey : undefined}
+              onApprove={() => approveOne.mutate({ requestId: approval.id })}
+              onDeny={() => denyOne.mutate({ requestId: approval.id })}
+            />
+          );
+        })}
       </ul>
       {batch && (
         <div

@@ -12,7 +12,7 @@ import { NO_MACHINE } from "../../../lib/sidebarMachineFilter";
 import { MachineFilterMenu } from "../MachineFilterMenu";
 
 const machines = [
-  { daemonId: "laptop", hostname: "laptop", name: "Laptop", status: DaemonStatus.SUSPENDED, daemonType: "self_hosted" },
+  { daemonId: "laptop", hostname: "work-laptop.local", name: "Work laptop", status: DaemonStatus.SUSPENDED, daemonType: "self_hosted" },
   { daemonId: "cloud", hostname: "cloud", name: "Cloud box", status: DaemonStatus.ACTIVE, daemonType: "managed" },
 ];
 
@@ -48,7 +48,7 @@ describe("MachineFilterMenu", () => {
     const boxes = screen.getAllByRole("checkbox");
     expect(boxes.map((box) => box.closest("label")?.textContent)).toEqual([
       expect.stringContaining("Cloud box"),
-      expect.stringContaining("Laptop"),
+      expect.stringContaining("Work laptop"),
     ]);
     expect(boxes.every((box) => (box as HTMLInputElement).checked)).toBe(true);
     expect(screen.getByTestId("machine-filter-all")).toHaveAttribute("aria-pressed", "true");
@@ -80,7 +80,7 @@ describe("MachineFilterMenu", () => {
   it("shows one machine alone with Only, and everything with All machines", async () => {
     const props = renderMenu(null);
     await open();
-    await userEvent.click(screen.getByRole("button", { name: "Show only Laptop" }));
+    await userEvent.click(screen.getByRole("button", { name: "Show only Work laptop" }));
     expect(props.onChange).toHaveBeenLastCalledWith(["laptop"]);
     await userEvent.click(screen.getByTestId("machine-filter-all"));
     expect(props.onChange).toHaveBeenLastCalledWith(null);
@@ -96,7 +96,7 @@ describe("MachineFilterMenu", () => {
   it("shows how many chats wait on the user per machine", async () => {
     renderMenu(null, { needsYouByMachine: new Map([["laptop", 3]]) });
     await open();
-    expect(screen.getByTestId("machine-filter-laptop").closest("label")).toHaveTextContent("Laptop3");
+    expect(screen.getByTestId("machine-filter-laptop").closest("label")).toHaveTextContent("Work laptop3");
     expect(screen.queryByTestId(`machine-filter-${NO_MACHINE}`)).toBeNull();
   });
 });

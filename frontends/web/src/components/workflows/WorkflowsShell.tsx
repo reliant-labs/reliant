@@ -60,6 +60,7 @@ import { useProjects } from "@/hooks/project-queries";
 import DropdownMenu from "../forge-ui/dropdown_menu";
 import Tooltip from "../forge-ui/tooltip";
 import { useWorkflowsScope } from "./useWorkflowsScope";
+import { homePath } from "@/lib/paths";
 
 const TAB_ICONS: Record<WorkflowsTab, typeof Workflow> = {
   workflows: Workflow,
@@ -99,7 +100,7 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
 
   // The button always leaves the area. Escape steps to the logical parent: a
   // detail page's list, or out of the area from a list.
-  const leave = useCallback(() => void navigate({ to: "/", search: {} }), [navigate]);
+  const leave = useCallback(() => void navigate({ to: homePath(), search: {} }), [navigate]);
   const stepBack = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
   useEscapeToLeave(stepBack);
 
@@ -112,7 +113,7 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
       const Icon = TAB_ICONS[tab.key];
       return {
         label: tab.label,
-        href: `${tab.path}${query}`,
+        href: `${tab.href()}${query}`,
         active: tab.key === activeTab,
         icon: <Icon className="h-4 w-4" aria-hidden="true" />,
       };

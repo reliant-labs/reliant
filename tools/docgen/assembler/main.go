@@ -387,6 +387,9 @@ activations, call the tools together in ONE turn: every card the turn needs is r
 owner approves in one click (or one by one), instead of one card per turn. Enabling says AS WHOM and WHERE:
 their project, the machine whose tools the runs use, and for an integration trigger which of their connected
 accounts it listens through. One declaration can have many activations (one per user or project).
+When the connection it needs does not exist yet, call propose_connection (provider, scope, reason): the owner connects
+it in Reliant's connection dialog from an approval card, and you get back only its status and connection id, never
+the credential.
 
 ` + "```yaml" + `
 name: triage-new-issues

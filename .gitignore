@@ -143,6 +143,8 @@ playwright-report/
 playwright/.cache/
 frontends/web/test-results/
 frontends/web/playwright-report/
+frontends/web/test-results-visual/
+frontends/web/playwright-report-visual/
 frontends/web/coverage/
 
 # Temporary files

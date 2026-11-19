@@ -222,7 +222,7 @@ function renderComputeStep(opts: {
 
   return render(
     <ComputeStep
-      plan={{}}
+      plan={{ compute: "cloud_paid" }}
       updatePlan={opts.updatePlan ?? vi.fn(async () => {})}
       onNext={opts.onNext ?? vi.fn()}
       onBack={vi.fn()}
@@ -269,7 +269,7 @@ describe("ComputeStep loading gate", () => {
       screen.queryByRole("button", { name: /^Continue with /i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /Use your own computer/i }),
+      screen.queryByRole("button", { name: /Your own computer/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -282,7 +282,7 @@ describe("ComputeStep loading gate", () => {
       screen.getByRole("button", { name: /^Continue with /i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Use your own computer/i }),
+      screen.getByRole("button", { name: /Your own computer/i }),
     ).toBeInTheDocument();
   });
 

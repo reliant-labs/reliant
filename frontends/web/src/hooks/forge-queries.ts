@@ -186,6 +186,9 @@ export const forgeCloudKeys = {
   cloudStatus: orgCloudKey<[environmentId: string]>("cloud-status"),
   cloudPromotions: orgCloudKey<[environmentId: string]>("cloud-promotions"),
   convergences: orgCloudKey<[environmentId: string]>("convergences"),
+  // Databases kept by a keep-data environment delete: one org-wide list
+  // (ListRetainedDatabases takes no project), filtered per app by the page.
+  retainedDatabases: orgCloudKey<[]>("retained-databases"),
   // The managed secret store (control-plane SecretStoreService), keyed by the
   // Reliant project and env the screen shows it under.
   managedSecrets: cloudKey<[projectId: string, env: string]>("managed-secrets"),
@@ -1512,18 +1515,34 @@ export function useSetWorkloadRunState() {
   });
 }
 
+/** What a delete removes and what it keeps. `keepData` retains the databases (listed as kept until purged). */
+export interface DeleteEnvironmentVars {
+  keepData: boolean;
+}
+
 export function useDeleteEnvironment(environmentId: string | null | undefined) {
-  const queryClient = useQueryClient();
-  return useMutation<void, Error, void>({
-    mutationFn: () => deleteEnvironment(environmentId ?? ""),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.liveView.all });
-      void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudEnvs.all });
-      // In every org's entry: an environment id names one environment anywhere.
-      void queryClient.removeQueries({
-        queryKey: forgeCloudKeys.cloudStatus.all,
-        predicate: (query) => query.queryKey[query.queryKey.length - 1] === (environmentId ?? ""),
-      });
-    },
+  const invalidate = useInvalidateAfterEnvironmentDelete(environmentId);
+  return useMutation<void, Error, DeleteEnvironmentVars | void>({
+    mutationFn: (vars) => deleteEnvironment(environmentId ?? "", { keepData: vars?.keepData ?? false }),
+    onSuccess: invalidate,
   });
+}
+
+/**
+ * A deleted environment leaves the roster, its status read is dropped, and the
+ * kept-databases list may gain its databases (a keep-data delete), so that
+ * list is re-read too.
+ */
+export function useInvalidateAfterEnvironmentDelete(environmentId: string | null | undefined) {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.liveView.all });
+    void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudEnvs.all });
+    void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.retainedDatabases.all });
+    // In every org's entry: an environment id names one environment anywhere.
+    void queryClient.removeQueries({
+      queryKey: forgeCloudKeys.cloudStatus.all,
+      predicate: (query) => query.queryKey[query.queryKey.length - 1] === (environmentId ?? ""),
+    });
+  }, [queryClient, environmentId]);
 }

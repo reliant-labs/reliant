@@ -8,6 +8,8 @@ import { completeOAuth, relayedErrorMessage } from '@/lib/connection-oauth'
 import { GradientBackground } from './GradientBackground'
 import { BrandMark } from './icons/BrandMark'
 import { isSafeReturnTo } from '@/lib/returnTo'
+import { approveConnectionProposal } from '@/hooks/approval-queries'
+import { CONNECTION_PROPOSAL_PARAM } from '@/lib/connectionProposal'
 
 /**
  * `/connections/oauth/callback`: where the API relays a web app's integration
@@ -15,6 +17,11 @@ import { isSafeReturnTo } from '@/lib/returnTo'
  * itself). This page finishes it with CompleteOAuth, as the signed-in user —
  * which is also what proves the flow is theirs — then returns to the page the
  * user connected from with `?connection=<id>`.
+ *
+ * A sign-in started from an agent's connection proposal (ConnectionProposalCard)
+ * returns with `connection_proposal=<approval id>`: making the connection is
+ * that card's approval, so this page approves it with the new connection
+ * before leaving (the server checks the connection against the proposal).
  *
  * The code in this URL is single-use and only redeemable by the user who
  * started the flow, and leaving with `location.replace` keeps it out of the
@@ -39,8 +46,18 @@ export function ConnectionOAuthCallback() {
       return
     }
     completeOAuth({ state: search.state, code: search.code })
-      .then(({ connection, redirectAfter }) => {
+      .then(async ({ connection, redirectAfter }) => {
         const landing = new URL(safeRelativePath(redirectAfter) ?? back, window.location.origin)
+        const proposal = landing.searchParams.get(CONNECTION_PROPOSAL_PARAM)
+        if (proposal) {
+          landing.searchParams.delete(CONNECTION_PROPOSAL_PARAM)
+          try {
+            await approveConnectionProposal(proposal, connection.id)
+          } catch (err) {
+            setError(`${connection.name || 'The connection'} is connected, but the agent's request could not be approved: ${connectionErrorMessage(err)}`)
+            return
+          }
+        }
         landing.searchParams.set('connection', connection.id)
         window.location.replace(landing.pathname + landing.search + landing.hash)
       })

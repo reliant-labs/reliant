@@ -30,6 +30,7 @@
  */
 
 import { isSafeReturnTo } from "@/lib/returnTo";
+import { onboardingPath } from "@/lib/paths";
 
 /** Path prefixes a not-yet-onboarded user may open without the wizard. */
 export const ONBOARDING_EXEMPT_PREFIXES = ["/onboarding", "/settings", "/m", "/forge/demo", "/apps"] as const;
@@ -69,7 +70,7 @@ export function isOnboardingReturnTo(returnTo: string | undefined | null): retur
 /** The navigation that sends a user at `href` to onboarding, remembering `href`. */
 export function onboardingGateTarget(href: string) {
   return {
-    to: "/onboarding" as const,
+    to: onboardingPath(),
     search: isOnboardingReturnTo(href) ? { returnTo: href } : {},
     replace: true,
   };

@@ -121,6 +121,7 @@ import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
 import { MachineAccess, activeGrantCounts, appCountLabel, useConnectors } from "./machineAccess";
 import { useMakeDefaultMachine } from "@/hooks/useMakeDefaultMachine";
 import { useMachineOrgs } from "@/hooks/useMachineOrgs";
+import { machineSettingsPath, settingsPath } from "@/lib/paths";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
 
@@ -426,8 +427,8 @@ export function MachinesSection() {
   const navigate = useNavigate();
   const selectedId = params.machineId ?? search.daemon ?? null;
   const openMachine = (machineId: string) =>
-    navigate({ to: "/settings/machines/$machineId", params: { machineId } });
-  const backToList = () => navigate({ to: "/settings/$section", params: { section: "machines" } });
+    navigate({ to: machineSettingsPath(machineId) });
+  const backToList = () => navigate({ to: settingsPath("machines") });
   // Without a control plane there are no managed machines to create or
   // drive, but registered machines — and the app access granted to them —
   // still exist, so the list and detail render in a registry-only mode rather

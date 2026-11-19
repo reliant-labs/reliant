@@ -9,8 +9,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -380,10 +382,81 @@ func lockfilePnpm(t *testing.T) string {
 }
 
 // webInstallInputs are the files a frozen web install reads: the workspace
-// root's manifests and lockfile, and its workspace member sdk/ts.
+// root's manifests and lockfile, and its workspace member sdk/ts. The install
+// also reads every patch file patchedDependencies names; webInstallFiles adds
+// those, read from the manifests, so a new `pnpm patch` needs no edit here.
 var webInstallInputs = []string{
 	"frontends/web/package.json", "frontends/web/pnpm-lock.yaml", "frontends/web/pnpm-workspace.yaml",
 	"sdk/ts/package.json",
+}
+
+// webPatchesDir holds the web install's patch files (`pnpm patch-commit`
+// writes them there). The install tests name it to testkit.Inputs, since the
+// patch set itself is only known at run time;
+// TestWebInstallInputsCarryEveryPatchedDependency holds every patch inside it.
+const webPatchesDir = "frontends/web/patches"
+
+// webPatchedDependencyFiles returns the repo-relative patch files the web
+// install applies: patchedDependencies in pnpm-workspace.yaml, where pnpm 10
+// reads it, and in package.json's pnpm block, where older pnpm did. pnpm
+// refuses a frozen install whose patch file is missing
+// (ERR_PNPM_PATCH_NOT_FOUND), so a copied install tree must carry each one.
+func webPatchedDependencyFiles(t *testing.T) []string {
+	t.Helper()
+	var ws struct {
+		PatchedDependencies map[string]string `yaml:"patchedDependencies"`
+	}
+	if err := yaml.Unmarshal(readRepo(t, "frontends/web/pnpm-workspace.yaml"), &ws); err != nil {
+		t.Fatal(err)
+	}
+	var pkg struct {
+		Pnpm struct {
+			PatchedDependencies map[string]string `json:"patchedDependencies"`
+		} `json:"pnpm"`
+	}
+	if err := json.Unmarshal(readRepo(t, "frontends/web/package.json"), &pkg); err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	var files []string
+	for _, deps := range []map[string]string{ws.PatchedDependencies, pkg.Pnpm.PatchedDependencies} {
+		for _, rel := range deps {
+			f := path.Join("frontends/web", filepath.ToSlash(rel))
+			if !seen[f] {
+				seen[f] = true
+				files = append(files, f)
+			}
+		}
+	}
+	slices.Sort(files)
+	return files
+}
+
+// webInstallFiles is every file a frozen web install reads: webInstallInputs
+// and the patch files.
+func webInstallFiles(t *testing.T) []string {
+	t.Helper()
+	return append(slices.Clone(webInstallInputs), webPatchedDependencyFiles(t)...)
+}
+
+// TestWebInstallInputsCarryEveryPatchedDependency pins what the copied install
+// tree (copyWebInstallInputs) must hold for pnpm to apply the committed
+// patches: each patch file patchedDependencies names exists, lies under
+// webPatchesDir (so the install tests' testkit.Inputs covers it), and is one
+// of webInstallFiles.
+func TestWebInstallInputsCarryEveryPatchedDependency(t *testing.T) {
+	files := webInstallFiles(t)
+	for _, f := range webPatchedDependencyFiles(t) {
+		if _, err := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(f))); err != nil {
+			t.Errorf("patchedDependencies names %s, which is missing: a frozen install fails with ERR_PNPM_PATCH_NOT_FOUND (%v)", f, err)
+		}
+		if !strings.HasPrefix(f, webPatchesDir+"/") {
+			t.Errorf("patch %s is outside %s, which the install tests name to testkit.Inputs: keep patches there (pnpm patch-commit's default)", f, webPatchesDir)
+		}
+		if !slices.Contains(files, f) {
+			t.Errorf("webInstallFiles omits patch %s: the copied install tree would fail with ERR_PNPM_PATCH_NOT_FOUND", f)
+		}
+	}
 }
 
 // requireTool fails the test when name is not on PATH. It never skips: the
@@ -398,7 +471,7 @@ func requireTool(t *testing.T, name string) {
 	}
 }
 
-// copyWebInstallInputs copies webInstallInputs into a temp tree and returns
+// copyWebInstallInputs copies webInstallFiles into a temp tree and returns
 // its root, the bytes copied (to prove an install leaves them alone), and a
 // runner for pnpm in its frontends/web. It also checks that the pnpm which
 // runs there is the one packageManager pins, whatever pnpm or Corepack shim
@@ -412,7 +485,7 @@ func copyWebInstallInputs(t *testing.T, nodeBin string) (string, map[string][]by
 	version := rootPnpmVersion(t)
 	root := t.TempDir()
 	want := map[string][]byte{}
-	for _, rel := range webInstallInputs {
+	for _, rel := range webInstallFiles(t) {
 		b := readRepo(t, rel)
 		want[rel] = b
 		dst := filepath.Join(root, rel)
@@ -502,7 +575,7 @@ func fetchNode(t *testing.T, spec string) (bin, version string) {
 // would let one runtime's build stand in for another's.
 func TestPnpmFrozenInstallRunsItsBuildsOnSupportedNodes(t *testing.T) {
 	testkit.Slow(t, "fetches Node runtimes and does full pnpm installs from the registry, with lifecycle scripts",
-		testkit.Inputs(append([]string{"package.json", ".nvmrc", "frontends/web/.nvmrc", setupDir + "/action.yml", ".github/workflows/release.yml"},
+		testkit.Inputs(append([]string{"package.json", ".nvmrc", "frontends/web/.nvmrc", setupDir + "/action.yml", ".github/workflows/release.yml", webPatchesDir + "/**"},
 			webInstallInputs...)...))
 	requireTool(t, "pnpm")
 
@@ -553,7 +626,7 @@ if (code.trim() !== "const n = 1;") { console.error(JSON.stringify(code)); proce
 // version without installing them.
 func TestPnpmAdmitsSupportedNodeAndRefusesOthers(t *testing.T) {
 	testkit.Slow(t, "runs pnpm (and, through Corepack, may fetch the pinned release) over a copy of frontends/web's install inputs",
-		testkit.Inputs(append([]string{"package.json"}, webInstallInputs...)...))
+		testkit.Inputs(append([]string{"package.json", webPatchesDir + "/**"}, webInstallInputs...)...))
 	requireTool(t, "pnpm")
 	root, want, pnpm := copyWebInstallInputs(t, "")
 	web := filepath.Join(root, "frontends", "web")

@@ -519,11 +519,25 @@ asynchronous — use ` + "`trigger events`" + ` to see what it did.`,
 
 func newTriggerEventsCmd() *cobra.Command {
 	var limit int32
+	var outcomeFlags []string
 	cmd := &cobra.Command{
 		Use:   "events <id-or-name>",
 		Short: "List a trigger's firings, newest first",
-		Args:  cobra.ExactArgs(1),
+		Long: `Prints one page: at most --limit firings.
+
+--outcome keeps only firings with that outcome: ` + triggerEventOutcomeNames + `.
+Repeat it, or separate values with commas, to keep several. The server filters
+before it applies --limit, so "--outcome pending --limit 20" is the 20 newest
+pending firings however long the trigger's history is.`,
+		Example: `  reliant trigger events nightly
+  reliant trigger events nightly --outcome pending
+  reliant trigger events nightly --outcome failed,skipped --limit 10`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			outcomes, err := parseTriggerEventOutcomes(outcomeFlags)
+			if err != nil {
+				return err
+			}
 			conn, err := resolveConnection(cmd)
 			if err != nil {
 				return err
@@ -542,16 +556,79 @@ func newTriggerEventsCmd() *cobra.Command {
 				limit = defaultTriggerEventLimit
 			}
 			events, err := client.Triggers.Events(cmd.Context(), trigger.GetId(),
-				reliant.EventFilter{PageSize: int(limit), Limit: int(limit)}).All()
+				reliant.EventFilter{Outcomes: outcomes, PageSize: int(limit), Limit: int(limit)}).All()
 			if err != nil {
 				return conn.annotate(fmt.Errorf("listing trigger events: %w", sdkCause(err)))
+			}
+			// Every v1 server filters by outcome (the request field shipped in
+			// #415), but a server that ignored it would return a page that only
+			// looks filtered. Keep the matches and say so rather than print it.
+			events, dropped := keepTriggerEventOutcomes(events, outcomes)
+			if dropped > 0 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: the server ignored --outcome and returned %d other firing(s); "+
+					"showing only the matches from its page, which may leave out older matching firings\n", dropped)
+			}
+			if len(events) == 0 && len(outcomes) > 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No firings with that outcome.")
+				return nil
 			}
 			printTriggerEventTable(cmd.OutOrStdout(), events)
 			return nil
 		},
 	}
 	cmd.Flags().Int32Var(&limit, "limit", 0, "Maximum firings to return (0 applies the server default)")
+	cmd.Flags().StringSliceVar(&outcomeFlags, "outcome", nil,
+		"Only firings with this outcome: "+triggerEventOutcomeNames+" (repeatable or comma-separated)")
 	return cmd
+}
+
+// triggerEventOutcomes maps the words --outcome takes to the outcomes
+// ListTriggerEvents filters on; the words are the ones the OUTCOME column prints.
+var triggerEventOutcomes = map[string]reliantv1.TriggerEventOutcome{
+	"pending":  reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_PENDING,
+	"launched": reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_LAUNCHED,
+	"skipped":  reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_SKIPPED,
+	"failed":   reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_FAILED,
+}
+
+const triggerEventOutcomeNames = "pending, launched, skipped, failed"
+
+// parseTriggerEventOutcomes turns --outcome values into the request's outcome
+// filter, rejecting an unknown word before any request is made. Duplicates
+// collapse; no values is no filter.
+func parseTriggerEventOutcomes(values []string) ([]reliantv1.TriggerEventOutcome, error) {
+	var out []reliantv1.TriggerEventOutcome
+	seen := map[reliantv1.TriggerEventOutcome]bool{}
+	for _, v := range values {
+		word := strings.ToLower(strings.TrimSpace(v))
+		o, ok := triggerEventOutcomes[word]
+		if !ok {
+			return nil, fmt.Errorf("invalid --outcome %q: want one of %s", v, triggerEventOutcomeNames)
+		}
+		if !seen[o] {
+			seen[o] = true
+			out = append(out, o)
+		}
+	}
+	return out, nil
+}
+
+// keepTriggerEventOutcomes keeps the events whose outcome is one of outcomes
+// (all of them when outcomes is empty) and counts the ones it dropped.
+func keepTriggerEventOutcomes(events []*reliantv1.TriggerEvent, outcomes []reliantv1.TriggerEventOutcome) ([]*reliantv1.TriggerEvent, int) {
+	if len(outcomes) == 0 {
+		return events, 0
+	}
+	kept := events[:0:0]
+	for _, ev := range events {
+		for _, o := range outcomes {
+			if ev.GetOutcome() == o {
+				kept = append(kept, ev)
+				break
+			}
+		}
+	}
+	return kept, len(events) - len(kept)
 }
 
 // defaultTriggerEventLimit is how many firings the server returns when asked for

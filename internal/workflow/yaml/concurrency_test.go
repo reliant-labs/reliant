@@ -59,6 +59,48 @@ func TestWorkflowConcurrencyWaitingLatestRoundTrip(t *testing.T) {
 	require.Equal(t, "{{ trigger.payload.attributes.repository }}", wf.GetConcurrency().GetKey())
 }
 
+func TestWorkflowConcurrencyPriorityAndPerKeyRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		policy   string
+		priority string
+		perKey   uint32
+	}{
+		{"{max_running: 2, priority: \"'main-red' in trigger.payload.labels ? 10 : 0\"}", "'main-red' in trigger.payload.labels ? 10 : 0", 0},
+		{"{max_running: 2, priority: 5}", "5", 0},
+		{"{max_running: 4, max_running_per_key: 1, key: '{{ trigger.payload.pull_request.number }}'}", "", 1},
+		{"{max_running_per_key: 1, key: '{{ trigger.payload.pull_request.number }}'}", "", 1},
+		{"{max_running: 4, max_running_per_key: 2, waiting: latest, key: '{{ trigger.payload.pull_request.number }}', priority: '1'}", "1", 2},
+	} {
+		t.Run(tc.policy, func(t *testing.T) {
+			wf, err := ParseWorkflow([]byte("name: bounded\nconcurrency: " + tc.policy + "\nentry: [a]\nnodes: [{id: a, type: compact}]\n"))
+			require.NoError(t, err)
+			require.Equal(t, tc.priority, wf.GetConcurrency().GetPriority())
+			require.Equal(t, tc.perKey, wf.GetConcurrency().GetMaxRunningPerKey())
+			encoded, err := MarshalWorkflow(wf)
+			require.NoError(t, err)
+			again, err := ParseWorkflow(encoded)
+			require.NoError(t, err)
+			require.Equal(t, wf, again)
+		})
+	}
+}
+
+func TestWorkflowConcurrencyRejectsInvalidPriorityAndPerKey(t *testing.T) {
+	for _, policy := range []string{
+		"{max_running_per_key: 1}", // per-key cap without the key it caps
+		"{max_running: 2, max_running_per_key: 0, key: '{{ trigger.kind }}'}", // zero cap
+		"{max_running: 2, max_running_per_key: x, key: '{{ trigger.kind }}'}",
+		"{max_running: 2, priority: ''}",
+		"{max_running: 2, priority: [1]}",
+		"{priority: 1}", // priority alone bounds nothing
+	} {
+		t.Run(policy, func(t *testing.T) {
+			_, err := ParseWorkflow([]byte("name: bounded\nconcurrency: " + policy + "\nentry: [a]\nnodes: [{id: a, type: compact}]\n"))
+			require.Error(t, err)
+		})
+	}
+}
+
 func TestWorkflowConcurrencyPerMemberRoundTrip(t *testing.T) {
 	for _, policy := range []string{"{per_member: 4}", "{per_member: 4, max_running: 12}", "{per_member: 4, waiting: latest}"} {
 		t.Run(policy, func(t *testing.T) {

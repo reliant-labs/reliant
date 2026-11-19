@@ -196,6 +196,11 @@ message ProjectCheckoutMissing {
   // The repository the project comes from. Empty for a plain folder, which
   // cannot be cloned anywhere.
   string remote_url = 6;
+  // The requesting user's other machines that DO have an installed checkout
+  // of the project, oldest install first: where to switch to. Empty when no
+  // other machine of theirs has it, and from a server that predates the
+  // field.
+  repeated string available_daemon_ids = 7;
 }
 
 // ProjectCheckoutState is what is happening to a project's checkout on one

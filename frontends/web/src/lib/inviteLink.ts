@@ -1,3 +1,4 @@
+import { acceptInvitePath } from "@/lib/paths";
 // Copyright (c) 2025 Reliant Labs
 
 /**
@@ -21,7 +22,7 @@
  */
 
 /** Where the accept page lives, and what sign-in returns to. */
-export const ACCEPT_INVITE_PATH = "/accept-invite";
+export const ACCEPT_INVITE_PATH = acceptInvitePath();
 
 const STORAGE_KEY = "reliant:invite";
 

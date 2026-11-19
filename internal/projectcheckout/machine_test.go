@@ -74,6 +74,54 @@ func TestOn_NotThereNamesTheMachinesThatHaveItAndHowToRecover(t *testing.T) {
 	assert.Equal(t, "cloud", d.DaemonId)
 	assert.Equal(t, reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT, d.State)
 	assert.Equal(t, "https://github.com/acme/cp.git", d.RemoteUrl)
+	assert.Equal(t, []string{"laptop"}, d.AvailableDaemonIds, "the panel names where it is, as the sentence does")
+}
+
+// The detail lists the user's OTHER machines with an installed checkout, in
+// row order: not the refused machine, not a clone still landing or failed,
+// and never another account's machine.
+func TestOn_DetailListsOnlyTheUsersOtherInstalledMachines(t *testing.T) {
+	for _, tc := range []struct {
+		desc  string
+		rows  []*core.ProjectDaemon
+		owner map[string]string
+		want  []string
+	}{
+		{
+			desc: "default and cicd have it",
+			rows: []*core.ProjectDaemon{installed("default", "/home/workspace/projects/cp"), installed("cicd", "/srv/cp")},
+			want: []string{"default", "cicd"},
+		},
+		{
+			desc: "cloning and failed elsewhere are not offered",
+			rows: []*core.ProjectDaemon{
+				{DaemonID: "default", Path: "/p", InstallState: core.ProjectInstallInstalling},
+				{DaemonID: "cicd", Path: "/p", InstallState: core.ProjectInstallFailed},
+			},
+		},
+		{
+			desc:  "another account's machine is never offered",
+			rows:  []*core.ProjectDaemon{installed("default", "/p"), installed("theirs", "/p")},
+			owner: map[string]string{"theirs": "someone-else"},
+			want:  []string{"default"},
+		},
+		{
+			desc: "the refused machine's own failed row is not elsewhere",
+			rows: []*core.ProjectDaemon{{DaemonID: "mac", Path: "", InstallState: core.ProjectInstallFailed}, installed("cicd", "/srv/cp")},
+			want: []string{"cicd"},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			_, err := On(context.Background(), fleet{rows: tc.rows, owner: tc.owner}, "u", mac, "mac", "browse its files")
+			require.Error(t, err)
+			got := detailOf(t, err).AvailableDaemonIds
+			if len(tc.want) == 0 {
+				assert.Empty(t, got)
+				return
+			}
+			assert.Equal(t, tc.want, got)
+		})
+	}
 }
 
 // A pin naming another account's machine (corrupted or foreign) is refused

@@ -158,3 +158,27 @@ CREATE TRIGGER reject_worktree_update BEFORE UPDATE ON worktrees FOR EACH ROW EX
 		})
 	}
 }
+
+// ListChatsForWorktree lists the owner's bound chats, archived ones too, and
+// never another user's.
+func TestListChatsForWorktree(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	c := boundFixture(t, env, "listed", false)
+	chats, err := env.Repo.ListChatsForWorktree(ctx, storetest.SeedUserID, *c.WorktreeID, 10)
+	require.NoError(t, err)
+	require.Len(t, chats, 1)
+	require.Equal(t, c.ID, chats[0].ChatID)
+	require.Equal(t, c.Title, chats[0].Title)
+	require.Equal(t, core.ChatStateIdle, chats[0].State)
+
+	require.NoError(t, env.Repo.UpdateChatState(ctx, c.ID, core.ChatStateArchived, "test"))
+	chats, err = env.Repo.ListChatsForWorktree(ctx, storetest.SeedUserID, *c.WorktreeID, 10)
+	require.NoError(t, err)
+	require.Len(t, chats, 1)
+	require.Equal(t, core.ChatStateArchived, chats[0].State)
+
+	chats, err = env.Repo.ListChatsForWorktree(ctx, "someone-else", *c.WorktreeID, 10)
+	require.NoError(t, err)
+	require.Empty(t, chats)
+}

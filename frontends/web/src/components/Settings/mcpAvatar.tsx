@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "../../lib/utils";
+// Simple Icons v11 (CC0-1.0), served from this build: v11 is the last release
+// with these two brands, and the app loads nothing from jsDelivr.
+import amazonawsIcon from "../../assets/mcp-icons/amazonaws.svg";
+import slackIcon from "../../assets/mcp-icons/slack.svg";
 
 export const MCP_TILE_COLORS = [
   "from-sky-500/30 to-blue-500/20",
@@ -21,9 +25,9 @@ const DISCOVER_MCP_ICON_URLS: Record<string, string> = {
   github: "https://cdn.simpleicons.org/github/181717",
   sqlite: "https://cdn.simpleicons.org/sqlite/003B57",
   postgres: "https://cdn.simpleicons.org/postgresql/4169E1",
-  slack: "https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/slack.svg",
+  slack: slackIcon,
   sentry: "https://cdn.simpleicons.org/sentry/362D59",
-  aws: "https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/amazonaws.svg",
+  aws: amazonawsIcon,
   docker: "https://cdn.simpleicons.org/docker/2496ED",
 };
 

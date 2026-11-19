@@ -10,6 +10,7 @@ import {
   type SettingsTab,
 } from "../../routeSchemas";
 import { readSettingsDestination, rememberSettingsDestination } from "./settingsDestination";
+import { machineSettingsPath, settingsPath } from "@/lib/paths";
 
 export function SettingsPage() {
   // Escape closes the page (matches the WorkflowBuilderPage convention). The
@@ -41,15 +42,13 @@ export function SettingsPage() {
     const restoredSearch = { ...search, tab: search.tab ?? destination.tab };
     if (destination.machineId) {
       void navigate({
-        to: "/settings/machines/$machineId",
-        params: { machineId: destination.machineId },
+        to: machineSettingsPath(destination.machineId),
         search: restoredSearch,
         replace: true,
       });
     } else {
       void navigate({
-        to: "/settings/$section",
-        params: { section: destination.section },
+        to: settingsPath(destination.section),
         search: restoredSearch,
         replace: true,
       });
@@ -58,7 +57,7 @@ export function SettingsPage() {
 
   const onSectionChange = useCallback(
     (next: SettingsSection) => {
-      navigate({ to: "/settings/$section", params: { section: next } });
+      navigate({ to: settingsPath(next) });
     },
     [navigate],
   );

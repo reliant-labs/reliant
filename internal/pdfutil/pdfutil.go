@@ -10,6 +10,7 @@ package pdfutil
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
@@ -27,17 +28,18 @@ const MaxPagesPerRequest = 20
 // /.config: read-only file system") when it cannot. The temporal worker runs
 // with HOME=/ on a read-only root filesystem, so every PDF read_attachment
 // panicked there (prod, 2026-11-10). Counting and trimming pages need neither
-// the file nor user fonts, so the config dir is disabled for the process:
-// pdfcpu then builds its defaults in memory and touches no file. This package
-// is the process's only pdfcpu caller.
-func init() {
-	api.DisableConfigDir()
+// the file nor user fonts, so every call takes pdfcpu's stateless
+// configuration: its built-in defaults, built in memory, touching no file.
+func config() *model.Configuration {
+	return model.NewStatelessConfiguration()
 }
 
 // PageCount returns the number of pages in the given PDF bytes.
 func PageCount(data []byte) (_ int, err error) {
 	defer recoverPDFPanic("pdf page count", &err)
-	count, err := api.PageCount(bytes.NewReader(data), model.NewDefaultConfiguration())
+	// pdfcpu takes a context since v0.16; this package's API has none to pass
+	// (the work is in-memory and bounded by the input).
+	count, err := api.PageCount(context.Background(), bytes.NewReader(data), config())
 	if err != nil {
 		return 0, fmt.Errorf("pdf page count: %w", err)
 	}
@@ -55,7 +57,7 @@ func ExtractPages(data []byte, pages string) (_ []byte, err error) {
 		return nil, err
 	}
 
-	selected, err := api.PagesForPageSelection(total, []string{pages}, false, true)
+	selected, err := api.PagesForSelection(total, []string{pages}, false)
 	if err != nil {
 		return nil, fmt.Errorf("pdf page selection %q: %w", pages, err)
 	}
@@ -67,7 +69,7 @@ func ExtractPages(data []byte, pages string) (_ []byte, err error) {
 	}
 
 	var out bytes.Buffer
-	if err := api.Trim(bytes.NewReader(data), &out, []string{pages}, model.NewDefaultConfiguration()); err != nil {
+	if err := api.Trim(context.Background(), bytes.NewReader(data), &out, []string{pages}, config()); err != nil {
 		return nil, fmt.Errorf("pdf trim to %q: %w", pages, err)
 	}
 	return out.Bytes(), nil

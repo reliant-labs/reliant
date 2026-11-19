@@ -36,6 +36,7 @@ import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { cn } from "../../lib/utils";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
 import { MobileInstallMenuItem } from "./MobileInstallMenuItem";
+import { MobileOrgSwitcher } from "./MobileOrgSwitcher";
 
 interface MobileNavDrawerProps {
   isOpen: boolean;
@@ -270,8 +271,14 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
             })}
           </nav>
 
+          {/* The org this tab acts in, above the project it contains: the
+              desktop sidebar's org switcher, on the phone. */}
+          <div className="pt-2">
+            <MobileOrgSwitcher onSwitched={onClose} />
+          </div>
+
           {/* The current project as a card rather than a tile: it is the
-              drawer's only stateful row — it reports something as well as
+              drawer's stateful row — it reports something as well as
               navigating — and the card is what distinguishes it from the
               plain destinations above. */}
           <div className="pt-2">

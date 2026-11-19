@@ -250,6 +250,10 @@ var daemonIdentityEnvVars = map[string]bool{
 	"DAEMON_WORKING_DIR":   true,
 	"DAEMON_RUNTIME_TYPE":  true,
 	"DAEMON_FRONTEND_PORT": true,
+	// The durable labels this daemon declares for its machine: a test daemon
+	// an agent starts would otherwise declare them for its own machine row
+	// and join the host's pools.
+	"RELIANT_DAEMON_LABELS": true,
 }
 
 // withoutDaemonConnectionEnv drops the daemon's own connection settings

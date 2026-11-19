@@ -12,6 +12,7 @@ import { AuthLayout, AuthHeader, AuthError } from './AuthLayout'
 import { BillingService } from '@/gen/controlplane/services/billing/v1/billing_pb';
 import { getControlPlaneClient } from '../services/controlPlane/client'
 import { CheckSpamNote } from './CheckSpamNote'
+import { homePath } from '@/lib/paths';
 
 /**
  * Account-upgrade flow. Entry point for an anonymous Supabase user who needs a
@@ -60,7 +61,7 @@ const goToReturnTo = (
     void navigate({ href: returnTo })
     return
   }
-  void navigate({ to: '/', search: {} })
+  void navigate({ to: homePath(), search: {} })
 }
 
 export function UpgradeAccount() {

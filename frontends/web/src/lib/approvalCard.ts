@@ -53,6 +53,12 @@ export interface ApprovalCard {
    * ones that gate it.
    */
   decidesApprovals: boolean;
+  /**
+   * An agent's request that the person connect an integration
+   * (propose_connection). It grants nothing by itself: it is approved by
+   * making the connection from its card, so it is never in an "Approve all".
+   */
+  connectionProposal: boolean;
 }
 
 const ROW = /^([A-Z][A-Za-z ]{1,40}): (.+)$/;
@@ -66,6 +72,9 @@ const ROW = /^([A-Z][A-Za-z ]{1,40}): (.+)$/;
  * matches only asks for more reading before an approval is decided.
  */
 const ACTIVATION_OPERATION = /^Operation: (create_trigger_activation|update_trigger_activation|enable_trigger)\b/m;
+
+/** A connection proposal's technical line (internal/llm/tools/connection_proposal_tool.go). */
+const CONNECTION_PROPOSAL_OPERATION = /^Operation: propose_connection$/m;
 
 /** The technical "Capabilities: a, b" line carries the exact capability items. */
 const DECIDES_APPROVALS = /^Capabilities: (?:.*, )?approvals:decide(?:,|$)/m;
@@ -84,6 +93,7 @@ export function parseApprovalCard(title: string): ApprovalCard {
     else notes.push(line);
   }
   const activation = ACTIVATION_OPERATION.test(title);
+  const connectionProposal = at >= 0 && CONNECTION_PROPOSAL_OPERATION.test(title.slice(at));
   // A card says what it grants in its lead and rows; without both it is read
   // as the plain-text form, however it is laid out.
   const summarised = at >= 0 && lead !== "" && rows.length > 0;
@@ -92,9 +102,10 @@ export function parseApprovalCard(title: string): ApprovalCard {
     rows,
     notes,
     details,
-    grantsPower: at >= 0 || activation,
+    grantsPower: (at >= 0 && !connectionProposal) || activation,
     legacyActivation: activation && !summarised,
     decidesApprovals: activation && DECIDES_APPROVALS.test(title),
+    connectionProposal,
   };
 }
 
@@ -112,6 +123,10 @@ export const LEGACY_ACTIVATION_REASON =
 /** Why an activation that can decide approvals is left out of "Approve all", shown beside it. */
 export const DECIDES_APPROVALS_REASON =
   "Not in Approve all: this automation can approve or deny requests, so it is decided on its own.";
+
+/** Why a connection proposal is left out of "Approve all", shown beside it. */
+export const CONNECTION_PROPOSAL_REASON =
+  "Not in Approve all: the agent asks you to connect an integration. Connect it from its card, or decline it.";
 
 /** How "Approve all" treats a set of pending approvals. */
 export interface ApprovalBatchPlan<T> {
@@ -131,10 +146,14 @@ export interface ApprovalBatchPlan<T> {
  * the reason beside it: approving it in bulk would grant standing power
  * nobody was shown in plain words.
  */
-export function planApprovalBatch<T extends { title: string }>(approvals: readonly T[]): ApprovalBatchPlan<T> {
+export function planApprovalBatch<T extends { title: string; connectionProposal?: unknown }>(approvals: readonly T[]): ApprovalBatchPlan<T> {
   const plan: ApprovalBatchPlan<T> = { together: [], grants: [], apart: [] };
   for (const approval of approvals) {
     const card = parseApprovalCard(approval.title);
+    if (card.connectionProposal || approval.connectionProposal) {
+      plan.apart.push({ approval, reason: CONNECTION_PROPOSAL_REASON });
+      continue;
+    }
     if (card.legacyActivation) {
       plan.apart.push({ approval, reason: LEGACY_ACTIVATION_REASON });
       continue;
