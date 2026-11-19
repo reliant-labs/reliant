@@ -21,6 +21,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { consoleBase, consolePath, orgPath, orgUsagePath } from "@/components/Forge/Console/paths";
 import { resetShellForTests } from "@/lib/shell";
+import { commitRouteOrgScope, useRouteOrgScope } from "@/lib/routeOrg";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 import { setRuntimeConfig } from "@/test/runtimeConfig";
 
@@ -229,6 +230,7 @@ function bindTabOrg() {
 
 afterEach(() => {
   resetShellForTests();
+  useRouteOrgScope.setState({ scope: { kind: "legacy" } });
   useActiveOrgStore.setState({ effectiveId: null, segments: {} });
   delete (globalThis as { __RELIANT_ROUTER?: unknown }).__RELIANT_ROUTER;
 });
@@ -308,15 +310,28 @@ describe("the org segment", () => {
     });
 
     it("names the org of the route on screen before the tab's", () => {
-      (globalThis as { __RELIANT_ROUTER?: unknown }).__RELIANT_ROUTER = {
-        state: { matches: [{ routeId: "__root__" }, { routeId: "/o/$org", context: { orgRoute: { kind: "member", org: { id: "org-2", slug: "side" } } } }] },
-      };
+      commitRouteOrgScope({ kind: "member", org: { id: "org-2", slug: "side" } });
       expect(paths.runsPath()).toBe("/o/side/workflows/runs");
     });
 
     it("puts an org without a slug in by its id", () => {
       useActiveOrgStore.setState({ effectiveId: "org 3", segments: { "org 3": "org 3" } });
       expect(paths.homePath()).toBe("/o/org%203");
+    });
+
+    it("keeps today's org-less form for a link that must not name the tab's org ({ org: null })", () => {
+      expect(paths.runsPath({ org: null })).toBe("/workflows/runs");
+      expect(paths.automationPath("t-1", { org: null })).toBe("/workflows/automations/t-1");
+      expect(paths.runsPath()).toBe("/o/acme/workflows/runs");
+    });
+
+    it("carries an already-encoded segment byte for byte (encodedSegment)", () => {
+      for (const raw of ["a%2Fb", "a%252Fb", "builtin%3A%2F%2Fget-it-right", "raw:colon"]) {
+        expect(paths.workflowDetailPath(paths.encodedSegment(raw))).toBe(`/o/acme/workflows/library/${raw}`);
+        expect(paths.mobileChatPath(paths.encodedSegment(raw))).toBe(`/m/chats/${raw}`);
+      }
+      // A canonical encoding is what the plain builder makes of the decoded value.
+      expect(paths.workflowDetailPath(paths.encodedSegment("builtin%3A%2F%2Fget-it-right"))).toBe(paths.workflowDetailPath("builtin://get-it-right"));
     });
 
     it("keeps today's path while no org is known: it forwards once one is", () => {
@@ -362,6 +377,7 @@ describe("the org segment", () => {
     ["/o/acme/observability/logs", "/o/side/observability/logs"],
     ["/o/acme/workflows/library", "/o/side/workflows/library"],
     ["/o/acme/workflows/library/my-flow", "/o/side/workflows/library"],
+    ["/o/acme/workflows/library/builtin%3A%2F%2Fget-it-right", "/o/side/workflows/library/builtin%3A%2F%2Fget-it-right"],
     ["/o/acme/workflows/runs/c-1", "/o/side/workflows/runs"],
     ["/o/acme/workflows/automations/t-1", "/o/side/workflows/library"],
     ["/o/acme/workflow/my-flow", "/o/side/workflows/library"],

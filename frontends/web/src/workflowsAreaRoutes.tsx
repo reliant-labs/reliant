@@ -24,6 +24,7 @@ import { legacyWorkflowsPath, onWorkflowsHref } from './lib/workflowsArea'
 import { librarySearchSchema, runsSearchSchema, workflowsAreaSearchSchema } from './routeSchemas'
 import { workflowLibraryPath } from '@/lib/paths'
 import { inOrgOfPath } from '@/lib/paths/org'
+import { memberOnly } from '@/lib/routeOrg'
 
 export interface WorkflowsAreaComponents {
   layout: RouteComponent
@@ -70,9 +71,10 @@ export function createWorkflowsAreaRoutes<TParent extends AnyRoute>(
     // The area's landing tab. The search string (`?project=`) rides along.
     // In the org the URL is in (inOrgOfPath): the route on screen, which the
     // builders would read, may be another org's while this one loads.
-    beforeLoad: ({ location }) => {
+    // Never for an org that is not the person's (memberOnly, lib/routeOrg.ts).
+    beforeLoad: memberOnly(({ location }) => {
       throw redirect({ href: `${inOrgOfPath(location.pathname, workflowLibraryPath())}${location.searchStr}`, replace: true })
-    },
+    }),
   })
 
   // Search, source and sort are search params (librarySearchSchema).
@@ -115,9 +117,9 @@ export function createWorkflowsAreaRoutes<TParent extends AnyRoute>(
   const automationsRoute = createRoute({
     getParentRoute: () => layoutRoute,
     path: '/workflows/automations',
-    beforeLoad: ({ location }) => {
+    beforeLoad: memberOnly(({ location }) => {
       throw redirect({ href: withSearch(inOrgOfPath(location.pathname, onWorkflowsHref()), location.searchStr), replace: true })
-    },
+    }),
   })
 
   const automationRedirectRoute = createRoute({

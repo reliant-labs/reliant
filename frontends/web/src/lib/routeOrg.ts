@@ -1,20 +1,50 @@
 // Copyright (c) 2025 Reliant Labs
 
+import { create } from "zustand";
+
+import { chooseActiveOrg, learnOrgSegments, useActiveOrgStore } from "@/store/activeOrgStore";
+
 /**
- * THE ORG THE CURRENT ROUTE NAMES (control-plane
- * docs/design/unified-shell-and-projects.md §3.5).
+ * THE ORG THE PAGE ON SCREEN IS IN: the one authority for every org-scoped
+ * read and write (control-plane docs/design/unified-shell-and-projects.md §3.5).
  *
  * Every org-scoped page is mounted under the `/o/$org` layout route
  * (routes.tsx, orgRoutes.tsx). Its `beforeLoad` resolves the URL's org segment
  * against the person's memberships (lib/orgRouting.ts) and puts the answer in
- * the route's context as `orgRoute`, before any child renders. This module
- * reads that answer back from the router's rendered matches, for code that is
- * not a component: the request interceptor (api/orgInterceptor.ts) and the
- * path builders (lib/paths/org.ts).
+ * the route's context as `orgRoute`, before any child loads. Nothing acts on
+ * that answer until the navigation COMMITS: the root route's `onEnter` /
+ * `onStay` (routeOrgScopeHooks, run synchronously as the router swaps in the
+ * new matches, before React renders them) read the committed matches and set
+ * the route scope below. So while a navigation from org A to org B loads, or
+ * if it is superseded and never commits, everything still names A, the org of
+ * the page on screen; and the moment B's page is the one rendered, everything
+ * names B.
  *
- * Dependency-free on purpose: it reads the router from the global registry
- * (routes.tsx registers it), so the transport and lib/paths can import it
- * without importing the route tree.
+ * The scope is what the three consumers read, so they cannot disagree:
+ *
+ *   - query keys and explicit `org_id` fields (lib/orgScope.ts, getOrgScope /
+ *     useOrgScope);
+ *   - the request interceptor's implicit `org_id` (api/orgInterceptor.ts);
+ *   - `currentOrgId()`, the observability and identity reads' required org
+ *     (services/controlPlane/orgs.ts).
+ *
+ * Its four states keep a page outside the org tree apart from an org page
+ * whose org is not (yet) known:
+ *
+ *   legacy   a page outside the org tree (Settings, the mobile tree, an
+ *            org-less path with the flag off): the tab's org applies, as it
+ *            did before U3 (store/activeOrgStore);
+ *   pending  an org URL loaded fresh, before its first resolution commits:
+ *            nothing is named; org-scoped reads wait and implicit requests
+ *            are held;
+ *   member   a committed org page the person is in: everything names it;
+ *   denied   a committed org page that is not theirs, nobody signed in, or a
+ *            membership list that failed: nothing is named, and implicit
+ *            requests are refused rather than sent with the previous org.
+ *
+ * Entering a member org also updates the tab's org (the mirror code outside
+ * the org tree reads): written here, at commit, and never by a load that might
+ * not commit.
  */
 
 /** The org layout's path, and so its route id, in every tree that mounts it. */
@@ -43,6 +73,13 @@ export interface RouteOrgChoice extends RouteOrg {
   name: string;
 }
 
+/** The org scope of the committed route (see the module comment). */
+export type RouteOrgScope =
+  | { kind: "legacy" }
+  | { kind: "pending" }
+  | { kind: "member"; org: RouteOrg }
+  | { kind: "denied"; reason: Exclude<OrgRouteState["kind"], "member"> | "unresolved" };
+
 /** The segment an org's URLs carry: its slug, or its id when it has none. */
 export function orgSegment(org: RouteOrg): string {
   return org.slug || org.id;
@@ -53,22 +90,121 @@ interface MatchLike {
   context?: unknown;
 }
 
-/** The org `matches` resolved, or null when none is under the org layout or it named no member org. */
-export function routeOrgOfMatches(matches: readonly MatchLike[] | undefined): RouteOrg | null {
-  for (const match of matches ?? []) {
-    if (match.routeId !== ORG_ROUTE_ID) continue;
-    const state = (match.context as { orgRoute?: OrgRouteState } | undefined)?.orgRoute;
-    return state?.kind === "member" ? state.org : null;
-  }
-  return null;
+/** The scope `matches` (a committed match list) put the page in. */
+export function routeOrgScopeOfMatches(matches: readonly MatchLike[] | undefined): RouteOrgScope {
+  const layout = (matches ?? []).find((match) => match.routeId === ORG_ROUTE_ID);
+  if (!layout) return LEGACY;
+  const state = (layout.context as { orgRoute?: OrgRouteState } | undefined)?.orgRoute;
+  if (!state) return { kind: "denied", reason: "unresolved" };
+  if (state.kind === "member") return { kind: "member", org: state.org };
+  return { kind: "denied", reason: state.kind };
+}
+
+/** Whether a route's context (a `beforeLoad`'s `context`) is outside the org tree or in a member org. */
+export function inMemberOrLegacyContext(context: unknown): boolean {
+  const state = (context as { orgRoute?: OrgRouteState } | undefined)?.orgRoute;
+  return state === undefined || state.kind === "member";
+}
+
+const LEGACY: RouteOrgScope = { kind: "legacy" };
+const PENDING: RouteOrgScope = { kind: "pending" };
+
+/** A page load that starts on an org URL is pending until its first commit; any other starts legacy. */
+function initialScope(): RouteOrgScope {
+  if (typeof window === "undefined") return LEGACY;
+  return /^\/o\/[^/]+/.test(window.location.pathname) ? PENDING : LEGACY;
+}
+
+export const useRouteOrgScope = create<{ scope: RouteOrgScope }>(() => ({ scope: initialScope() }));
+
+/** The committed route's org scope, for code outside React. */
+export function getRouteOrgScope(): RouteOrgScope {
+  return useRouteOrgScope.getState().scope;
+}
+
+function sameScope(a: RouteOrgScope, b: RouteOrgScope): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "member" && b.kind === "member") return a.org.id === b.org.id && a.org.slug === b.org.slug;
+  if (a.kind === "denied" && b.kind === "denied") return a.reason === b.reason;
+  return true;
 }
 
 /**
- * The org of the page on screen: the rendered matches', so a navigation still
- * loading never changes it early. Null outside the org tree, before the router
- * exists, and on the "no access" page.
+ * The committed matches put the page in `scope`: record it, and, for a member
+ * org, make it the tab's org (the mirror). Only the router calls this, through
+ * routeOrgScopeHooks; tests call it to stand in for a commit.
  */
+export function commitRouteOrgScope(scope: RouteOrgScope): void {
+  if (!sameScope(getRouteOrgScope(), scope)) useRouteOrgScope.setState({ scope });
+  if (scope.kind !== "member") return;
+  learnOrgSegments([scope.org]);
+  if (useActiveOrgStore.getState().chosenId !== scope.org.id) chooseActiveOrg(scope.org.id);
+}
+
+interface RouterLike {
+  state?: { matches?: readonly MatchLike[] };
+}
+
+/** The scope of the router's committed matches (the global registry's router, routes.tsx). */
+function syncFromRouter(): void {
+  const router = (globalThis as { __RELIANT_ROUTER?: RouterLike }).__RELIANT_ROUTER;
+  if (!router?.state) return;
+  commitRouteOrgScope(routeOrgScopeOfMatches(router.state.matches));
+}
+
+/**
+ * The root route's commit hooks: every route tree that mounts `/o/$org` spreads
+ * these into its `createRootRoute` options. The router runs them synchronously
+ * right after it swaps in a navigation's matches (the root match enters on the
+ * first commit and stays on every one after), so the scope moves exactly when
+ * the page on screen does: never during a load, never for a load that does not
+ * commit.
+ */
+export const routeOrgScopeHooks = {
+  onEnter: syncFromRouter,
+  onStay: syncFromRouter,
+};
+
+/** The org of the page on screen, or null outside the org tree and on an org page that names no member org. */
 export function currentRouteOrg(): RouteOrg | null {
-  const router = (globalThis as { __RELIANT_ROUTER?: { state?: { matches?: readonly MatchLike[] } } }).__RELIANT_ROUTER;
-  return routeOrgOfMatches(router?.state?.matches);
+  const scope = getRouteOrgScope();
+  return scope.kind === "member" ? scope.org : null;
+}
+
+/** Resolves with the scope once it is not pending (the first commit of a page load that starts on an org URL). */
+export function whenRouteOrgSettled(): Promise<RouteOrgScope> {
+  const now = getRouteOrgScope();
+  if (now.kind !== "pending") return Promise.resolve(now);
+  return new Promise((resolve) => {
+    const unsubscribe = useRouteOrgScope.subscribe(({ scope }) => {
+      if (scope.kind === "pending") return;
+      unsubscribe();
+      resolve(scope);
+    });
+  });
+}
+
+const memberOnlyBeforeLoads = new WeakSet<object>();
+
+/**
+ * A route's `beforeLoad` that runs only outside the org tree or in a member
+ * org. A redirect under `/o/$org` (a retired path's, a bare area's) must never
+ * run for an org that is not the person's: the layout renders the one "no
+ * access" page there, and a child's redirect would carry the URL away from it.
+ * The router still runs a child's `beforeLoad` when its layout resolved to no
+ * access, so every one under the org tree goes through this
+ * (`orgTreeBeforeLoads.guard.test.ts` holds the production trees to it).
+ */
+// The beforeLoad's own type passes through (F), so the route's params and
+// location stay typed at the call site; skipping returns no context.
+export function memberOnly<F extends (options: any) => unknown>(beforeLoad: F): F {
+  const wrapped = ((options: { context?: unknown }) =>
+    inMemberOrLegacyContext(options.context) ? beforeLoad(options) : undefined) as unknown as F;
+  memberOnlyBeforeLoads.add(wrapped);
+  return wrapped;
+}
+
+/** Whether `beforeLoad` was made by memberOnly. */
+export function isMemberOnly(beforeLoad: unknown): boolean {
+  return typeof beforeLoad === "function" && memberOnlyBeforeLoads.has(beforeLoad);
 }

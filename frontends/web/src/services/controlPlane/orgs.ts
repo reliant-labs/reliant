@@ -13,6 +13,7 @@
 import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { queryClient } from "@/lib/query-client";
 import { switchTabOrg } from "@/lib/orgSwitch";
+import { whenRouteOrgSettled } from "@/lib/routeOrg";
 import { learnOrgSegments, useActiveOrgStore } from "@/store/activeOrgStore";
 import { getControlPlaneClient } from "./client";
 
@@ -75,11 +76,19 @@ export function resolveActiveOrg(orgs: MyOrgs, chosenId: string | null): string 
 
 /**
  * The org every identity and observability request is scoped by (they take a
- * REQUIRED org_id, so they cannot leave it to the interceptor): the active
- * org, resolved against the live membership list the switcher reads. Shares
- * that list's cache entry, so it costs no extra request.
+ * REQUIRED org_id, so they cannot leave it to the interceptor).
+ *
+ * On an org page it is the committed route's org (lib/routeOrg.ts), the one
+ * authority query keys and the interceptor read too: null on an org page that
+ * names no org of theirs, and a page load that starts on an org URL waits for
+ * its first commit. Outside the org tree it is the tab's org, resolved against
+ * the live membership list the switcher reads (sharing its cache entry, so it
+ * costs no extra request).
  */
 export async function currentOrgId(): Promise<string | null> {
+  const route = await whenRouteOrgSettled();
+  if (route.kind === "member") return route.org.id;
+  if (route.kind !== "legacy") return null;
   const mine = await queryClient.fetchQuery({ queryKey: orgKeys.mine, queryFn: listMyOrganizations, staleTime: 60_000 });
   return resolveActiveOrg(mine, useActiveOrgStore.getState().chosenId);
 }

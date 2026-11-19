@@ -15,7 +15,7 @@ import { isForgePath } from "@/components/Forge/QueuedDeployWatch";
 import { projectIdOfPath } from "@/components/Layout/ProjectFilterRouteSync";
 import { isOnboardingReturnTo, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGate";
 import { shortcutScope } from "@/components/Shortcuts/ShortcutHost";
-import { mobilePathFor, shouldRedirectToMobile } from "@/lib/mobileRedirect";
+import { mobileHandoffAllowed, mobilePathFor, shouldRedirectToMobile } from "@/lib/mobileRedirect";
 import { shouldPreloadMonaco } from "@/lib/monacoPreload";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 import { isWorkflowBuilderPath, isWorkflowsAreaPath, isWorkflowsDetailPath, workflowsTabForPath } from "@/lib/workflowsArea";
@@ -81,5 +81,16 @@ describe("pathname matchers, in the org form", () => {
     expect(
       shortcutScope({ routeIds: ["__root__", "/o/$org", "/o/$org/_authenticated", "/o/$org/_authenticated/inbox"], pathname: "/o/acme/inbox", signedIn: true }),
     ).toEqual({ enabled: true, workspace: false });
+  });
+
+  it("mobileRedirect: an org page hands off to the phone only once a member org's page has committed", () => {
+    const member = { kind: "member" as const, org: { id: "org-a", slug: "acme" } };
+    expect(mobileHandoffAllowed({ pathname: "/inbox", committedPathname: null, routeOrgScope: { kind: "legacy" } })).toBe(true);
+    expect(mobileHandoffAllowed({ pathname: "/o/acme/inbox", committedPathname: "/o/acme/inbox", routeOrgScope: member })).toBe(true);
+    // Still loading, someone else's, another org's commit on screen, or not committed yet.
+    expect(mobileHandoffAllowed({ pathname: "/o/acme/inbox", committedPathname: null, routeOrgScope: { kind: "pending" } })).toBe(false);
+    expect(mobileHandoffAllowed({ pathname: "/o/acme/inbox", committedPathname: "/o/acme/inbox", routeOrgScope: { kind: "denied", reason: "not-member" } })).toBe(false);
+    expect(mobileHandoffAllowed({ pathname: "/o/side/inbox", committedPathname: "/o/acme/inbox", routeOrgScope: member })).toBe(false);
+    expect(mobileHandoffAllowed({ pathname: "/o/acme/inbox", committedPathname: "/settings", routeOrgScope: member })).toBe(false);
   });
 });

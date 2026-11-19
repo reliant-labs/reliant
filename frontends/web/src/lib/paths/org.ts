@@ -38,8 +38,14 @@ import { getActiveOrgId, orgSegmentOf } from "@/store/activeOrgStore";
 
 /** Which org a path is built for. Optional everywhere: the default is the tab's own org. */
 export interface PathContext {
-  /** The org's slug (`MyOrganization.slug`), for a link into a different org than the current page's. */
-  org?: string;
+  /**
+   * The org's slug (`MyOrganization.slug`), for a link into a different org
+   * than the current page's. `null`: today's org-less form whatever the flag
+   * says, for a link that must not name the tab's org because the resource's
+   * own org decides where it opens (a retired path naming a run or an
+   * automation by id: the resolver's, U4).
+   */
+  org?: string | null;
 }
 
 const ORG_PREFIX = "/o/";
@@ -70,7 +76,7 @@ export function inOrg(segment: string, path: string): string {
 
 /** The segment of the org a link goes to, or null for today's form. */
 function linkOrgSegment(ctx?: PathContext): string | null {
-  if (!orgLinksEnabled()) return null;
+  if (ctx?.org === null || !orgLinksEnabled()) return null;
   if (ctx?.org) return ctx.org;
   const routeOrg = currentRouteOrg();
   if (routeOrg) return orgSegment(routeOrg);
@@ -143,7 +149,18 @@ export function orgSwitchPath(pathname: string, segment: string): string {
   if (path.startsWith("/project/")) return inOrg(segment, "/");
   if (path.startsWith(CONSOLE_PREFIX)) return inOrg(segment, "/apps");
   if (path.startsWith("/workflows/runs/")) return inOrg(segment, "/workflows/runs");
-  if (path.startsWith("/workflows/library/") || path.startsWith("/workflows/automations/")) return inOrg(segment, "/workflows/library");
+  // A built-in's page belongs to no org: it stays. A saved workflow is the old org's.
+  if (path.startsWith("/workflows/library/") && !isBuiltinSegment(path.slice("/workflows/library/".length))) return inOrg(segment, "/workflows/library");
+  if (path.startsWith("/workflows/automations/")) return inOrg(segment, "/workflows/library");
   if (path.startsWith("/workflow/") && path !== "/workflow/new") return inOrg(segment, "/workflows/library");
   return inOrg(segment, path);
+}
+
+/** Whether a percent-encoded path segment names a built-in workflow (`builtin://…`). */
+function isBuiltinSegment(segment: string): boolean {
+  try {
+    return decodeURIComponent(segment).startsWith("builtin://");
+  } catch {
+    return false;
+  }
 }

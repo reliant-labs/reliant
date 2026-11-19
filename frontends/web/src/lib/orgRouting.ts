@@ -10,10 +10,12 @@
  *                     before any child renders: a slug is the org; an org id
  *                     redirects to the slug form (D6); anything else — not
  *                     theirs, or no such org — is the one "no access" page,
- *                     which never says which. A member org becomes the tab's
- *                     org (store/activeOrgStore): the router is what writes it
- *                     on an org page, and requests name the route's org
- *                     (api/orgInterceptor.ts).
+ *                     which never says which. It changes no state anyone
+ *                     reads: a load can be superseded and never commit. The
+ *                     answer takes effect when it commits (lib/routeOrg.ts,
+ *                     the root's commit hooks): then a member org becomes the
+ *                     route's scope, which query keys, explicit org fields and
+ *                     the interceptor all read, and the tab's org.
  *   forwardIntoOrg    the root route's beforeLoad. With the flag
  *                     `web.org_routes` on, the org-less path of an org-scoped
  *                     page (lib/paths/legacy.ts) redirects into the tab's org,
@@ -38,7 +40,6 @@ import { hasControlPlane } from "@/services/controlPlane/config";
 import { listMyOrganizations, orgKeys, resolveActiveOrg, type MyOrg, type MyOrgs } from "@/services/controlPlane/orgs";
 import {
   bindActiveOrgUser,
-  chooseActiveOrg,
   isMachineCredentialUser,
   learnOrgSegments,
   useActiveOrgStore,
@@ -81,11 +82,16 @@ function suffixOf(location: LocationLike): string {
   return `${location.searchStr ?? ""}${location.hash ? `#${location.hash}` : ""}`;
 }
 
-/** The org `segment` names among `orgs`: by slug, else by id, else by a slug spelled in another case. */
+/**
+ * The org `segment` names among `orgs`: by id, else by slug, else by a slug
+ * spelled in another case. Id first, as the control plane's resolver does
+ * (control-plane internal/db/org_slugs.go), so a historical slug that happens
+ * to equal another org's id names the same org on both sides.
+ */
 export function findOrg(orgs: readonly MyOrg[], segment: string): MyOrg | null {
   return (
-    orgs.find((org) => org.slug !== "" && org.slug === segment) ??
     orgs.find((org) => org.id === segment) ??
+    orgs.find((org) => org.slug !== "" && org.slug === segment) ??
     orgs.find((org) => org.slug !== "" && org.slug.toLowerCase() === segment.toLowerCase()) ??
     null
   );
@@ -97,11 +103,16 @@ function inOtherSegment(location: LocationLike, segment: string): string {
   return `${orgRootPath(segment)}${rest}${suffixOf(location)}`;
 }
 
-/** The `/o/$org` layout's beforeLoad: see the module comment. Throws the redirects. */
+/**
+ * The `/o/$org` layout's beforeLoad: see the module comment. Throws the
+ * redirects. Writes nothing the page reads (bar the auth binding and each
+ * org's URL segment): a preload, or a load a later navigation supersedes, must
+ * leave the page on screen as it was.
+ */
 export async function resolveOrgRoute(
   segment: string,
   location: LocationLike,
-  { preload = false, deps = defaultOrgRoutingDeps }: { preload?: boolean; deps?: OrgRoutingDeps } = {},
+  { deps = defaultOrgRoutingDeps }: { preload?: boolean; deps?: OrgRoutingDeps } = {},
 ): Promise<{ orgRoute: OrgRouteState }> {
   const userId = await deps.signedInUser();
   if (!userId) return { orgRoute: { kind: "signed-out" } };
@@ -124,8 +135,6 @@ export async function resolveOrgRoute(
   }
   const canonical = org.slug || org.id;
   if (segment !== canonical) throw redirect({ href: inOtherSegment(location, canonical), replace: true });
-  // A preload (a link hovered) resolves without moving the tab.
-  if (!preload && useActiveOrgStore.getState().chosenId !== org.id) chooseActiveOrg(org.id);
   return { orgRoute: { kind: "member", org: { id: org.id, slug: org.slug } } };
 }
 
