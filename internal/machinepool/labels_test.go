@@ -44,11 +44,11 @@ func TestParseLabels(t *testing.T) {
 
 func TestValidateLabelsBoundsTheCount(t *testing.T) {
 	labels := map[string]string{}
-	for i := 0; i < MaxLabels; i++ {
+	for i := 0; i < MaxMachineLabels; i++ {
 		labels[fmt.Sprintf("k%d", i)] = "v"
 	}
 	if err := ValidateLabels(labels, "labels"); err != nil {
-		t.Fatalf("%d labels refused: %v", MaxLabels, err)
+		t.Fatalf("%d labels refused: %v", MaxMachineLabels, err)
 	}
 	labels["one-more"] = "v"
 	if err := ValidateLabels(labels, "labels"); err == nil {

@@ -11,16 +11,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/machinepool"
 )
 
-// validateLabels refuses labels that are not short slugs
-// (machinepool.ValidateLabels: the rule `reliant daemon start --label` and the
-// gateway apply too).
-func validateLabels(labels map[string]string, what string) error {
-	if err := machinepool.ValidateLabels(labels, what); err != nil {
-		return svcerr.InvalidArgument(err.Error())
-	}
-	return nil
-}
-
 // SetMachineLabels replaces one of the caller's machines' durable labels.
 func (s *Service) SetMachineLabels(
 	ctx context.Context,
@@ -34,7 +24,7 @@ func (s *Service) SetMachineLabels(
 	if msg.GetDaemonId() == "" {
 		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
-	if err := validateLabels(msg.GetLabels(), "labels"); err != nil {
+	if err := machinepool.ValidateLabels(msg.GetLabels(), "labels"); err != nil {
 		return nil, err
 	}
 	found, err := s.deps.Repo.SetDaemonLabels(ctx, userID, msg.GetDaemonId(), msg.GetLabels())
