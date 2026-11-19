@@ -8,6 +8,7 @@ import { pickerParam } from "../Onboarding/tourParam";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 import { BrandMark } from "../icons/BrandMark";
 import { VersionDetails } from "./VersionDetails";
+import { homePath } from "@/lib/paths";
 
 type LinkItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -86,7 +87,7 @@ export function AboutSection() {
         // is slow, makes the click look like a no-op.
         void useTourStore.getState().resetTourProgress();
         void navigate({
-          to: "/",
+          to: homePath(),
           search: { tour: pickerParam("menu") },
         });
         toast.success("Onboarding guide has been reset");

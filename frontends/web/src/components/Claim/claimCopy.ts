@@ -6,6 +6,7 @@
  */
 
 import type { ClaimRefusal } from "@/services/controlPlane/claim";
+import { appsPath, authPath, claimPath } from "@/lib/paths";
 
 export interface RefusalCopy {
   title: string;
@@ -18,7 +19,7 @@ export const REFUSAL_COPY: Record<ClaimRefusal, RefusalCopy> = {
   claimable_claimed: {
     title: "This site has already been claimed",
     body: "Someone claimed it first, so it now belongs to their account. If that was you, sign in to see it.",
-    next: { label: "Go to Reliant", href: "/apps" },
+    next: { label: "Go to Reliant", href: appsPath() },
   },
   claimable_expired: {
     title: "This site has expired",
@@ -39,7 +40,7 @@ export const REFUSAL_COPY: Record<ClaimRefusal, RefusalCopy> = {
     // into the account that signs in or is created (CompleteClaim's membership
     // path), which needs no session from this link: the token still has to be
     // in this browser, so only the holder of the claim link can do this.
-    next: { label: "Create an account or sign in to claim", href: "/auth?redirect=%2Fclaim" },
+    next: { label: "Create an account or sign in to claim", href: `${authPath()}?redirect=${encodeURIComponent(claimPath())}` },
   },
 };
 

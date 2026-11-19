@@ -90,6 +90,7 @@ import {
   OAUTH_EXCHANGE_TIMEOUT_MS,
   PROVIDER_VALIDATION_TIMEOUT_MS,
 } from "../lib/constants";
+import { authPath } from "@/lib/paths";
 
 // Re-export the upgrade interceptor through this module so tests / callers
 // have one obvious place to look.
@@ -693,7 +694,7 @@ async function runRecovery(
     typeof window !== "undefined" &&
     !window.location.pathname.startsWith("/auth")
   ) {
-    window.location.href = "/auth";
+    window.location.href = authPath();
     // If the navigation lands, this page (and timer) are gone. If something
     // cancels it, forget this recovery after a while so a later 401 can try
     // again, at a bounded rate.

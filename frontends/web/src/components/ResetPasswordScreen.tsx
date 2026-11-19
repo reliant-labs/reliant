@@ -2,6 +2,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { ResetPassword } from './ResetPassword'
 import { useAuthStore } from '@/store/authStore'
 import { BrandMark } from './icons/BrandMark'
+import { authPath } from '@/lib/paths'
 
 export function ResetPasswordScreen() {
   const navigate = useNavigate()
@@ -13,7 +14,7 @@ export function ResetPasswordScreen() {
 
   const handleSuccess = () => {
     // Navigate back to auth screen (login mode)
-    navigate({ to: '/auth', search: { redirect: undefined } })
+    navigate({ to: authPath(), search: { redirect: undefined } })
   }
 
   return (

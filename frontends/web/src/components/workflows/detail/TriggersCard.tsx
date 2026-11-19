@@ -64,6 +64,7 @@ import { RunList } from "../../runs/RunList";
 import { HealthIndicator, LastTriggerEvent, NextFire } from "../automationStatus";
 import { WorkflowBadge } from "../WorkflowSourceBadge";
 import { useSwitchTriggers } from "../useSwitchTriggers";
+import { runsPath } from "@/lib/paths";
 
 export interface TriggersCardProps {
   workflowRef: string;
@@ -654,7 +655,7 @@ function TriggerHistory({ trigger }: { trigger: Trigger }) {
       <div className="mb-1 flex items-center justify-between gap-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">History</h3>
         <Link
-          to="/workflows/runs"
+          to={runsPath()}
           search={{ trigger: trigger.id, range: "all", allProjects: true }}
           className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >

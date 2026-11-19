@@ -660,8 +660,7 @@ describe("a queued deploy", () => {
     await user.click(within(banner).getByTestId("queued-deploy-set-up-billing"));
     expect(navigate).toHaveBeenCalledWith(
       expect.objectContaining({
-        to: "/settings/$section",
-        params: { section: "billing" },
+        to: "/settings/billing",
         search: expect.objectContaining({ tab: "usage", from: "forge", returnTo: expect.stringMatching(/^\//) }),
       })
     );

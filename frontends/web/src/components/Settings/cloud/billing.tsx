@@ -119,6 +119,7 @@ import { exactCentsLabel, exactHours } from "@/lib/exact-rational";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { formatPrice } from "@/components/Billing/priceFormat";
 import { isSafeReturnTo } from "@/lib/returnTo";
+import { appsPath, onboardingPath, settingsPath } from "@/lib/paths";
 
 /**
  * Overview, plans, usage — and Reliant AI, the managed keys and spend that
@@ -412,7 +413,7 @@ function BackToSetup({ returnTo }: { returnTo?: string }) {
             void navigate({ href: safeReturnTo });
             return;
           }
-          void navigate({ to: "/onboarding", search: {} });
+          void navigate({ to: onboardingPath(), search: {} });
         }}
         leftIcon={<ArrowLeft />}
       >
@@ -455,7 +456,7 @@ function BackToEnvironment({ returnTo }: { returnTo?: string }) {
             void navigate({ href: safeReturnTo });
             return;
           }
-          void navigate({ to: "/apps" });
+          void navigate({ to: appsPath() });
         }}
         leftIcon={<ArrowLeft />}
       >
@@ -838,7 +839,7 @@ function OverviewTab({
 
   const handleManageStripe = () => {
     setError("");
-    const returnUrl = buildCheckoutReturnUrls("/settings/billing").successUrl;
+    const returnUrl = buildCheckoutReturnUrls(settingsPath("billing")).successUrl;
     portalMutation.mutate(returnUrl, {
       onSuccess: (res) => {
         void openCheckout(res.portalUrl, returnUrl);
@@ -1298,7 +1299,7 @@ function PlansTab() {
             renderIdentityRequired={(message) => (
               <LinkIdentityModal
                 message={message}
-                returnTo={`/settings/billing?tab=plans&planId=${encodeURIComponent(checkoutPlanId)}`}
+                returnTo={`${settingsPath("billing")}?tab=plans&planId=${encodeURIComponent(checkoutPlanId)}`}
                 onLinked={() => setLinkAttempt((n) => n + 1)}
                 onDismiss={() => undefined}
               />

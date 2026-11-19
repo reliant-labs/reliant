@@ -24,12 +24,12 @@ import { useProjects } from "@/hooks/project-queries";
 import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
 import Button from "@/components/forge-ui/button";
-import { WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
 import { openAutomationDialog } from "../Automations/dialog/openAutomationDialog";
 import { useWorkflowsScope } from "../workflows/useWorkflowsScope";
 import { RunList } from "./RunList";
 import { RunFilters, useRunsSearch } from "./RunFilters";
 import { clearRunFilters, hasActiveRunFilters } from "./runFilterState";
+import { workflowLibraryPath } from "@/lib/paths";
 
 export function RunsPage() {
   return <RunsView />;
@@ -172,7 +172,7 @@ function NoRuns() {
         Runs appear here when you start a chat, run a workflow, or a trigger fires.
       </p>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
-        <Button variant="primary" leftIcon={<Workflow className="h-4 w-4" />} onClick={() => void navigate({ to: WORKFLOWS_LIBRARY_PATH })}>
+        <Button variant="primary" leftIcon={<Workflow className="h-4 w-4" />} onClick={() => void navigate({ to: workflowLibraryPath() })}>
           Run a workflow
         </Button>
         <Button variant="outline" leftIcon={<CalendarClock className="h-4 w-4" />} onClick={() => openAutomationDialog({})}>
