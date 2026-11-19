@@ -81,7 +81,7 @@ import { consolePath } from "@/components/Forge/Console/paths";
 
 import { UPGRADE_STILL_REQUIRED_MESSAGE } from "./claimCopy";
 import { claimSituation, type ClaimSituation } from "./claimSituation";
-import { projectsPath, upgradePath, withSearch } from "@/lib/paths";
+import { projectsPath, upgradePath } from "@/lib/paths";
 
 export type ClaimView =
   | { kind: "loading" }
@@ -173,7 +173,7 @@ export function useClaimFlow(): ClaimFlow {
         void navigate({ href: consolePath(project, { kind: "overview" }), replace: true });
         return;
       }
-      void navigate({ href: withSearch(projectsPath(), { show: "apps", ...search }), replace: true });
+      void navigate({ to: projectsPath(), search: { show: "apps", ...search }, replace: true });
     },
     [navigate],
   );

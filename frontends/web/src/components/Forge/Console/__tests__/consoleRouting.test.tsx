@@ -235,7 +235,7 @@ function renderAt(initialEntry: string, { inShell = false }: { inShell?: boolean
     legacyCommand: LegacyCommandRoute,
   });
   const home = createRoute({ getParentRoute: () => root, path: "/", component: () => <div data-testid="home">home</div> });
-  const apps = createRoute({ getParentRoute: () => root, path: "/apps", component: () => <div data-testid="apps">apps</div> });
+  const apps = createRoute({ getParentRoute: () => root, path: "/projects", component: () => <div data-testid="apps">apps</div> });
   const router = createRouter({
     routeTree: root.addChildren([authenticated.addChildren([forge]), home, apps]),
     history: createMemoryHistory({ initialEntries: [initialEntry] }),
@@ -271,12 +271,12 @@ afterEach(() => {
 });
 
 describe("the way in: /forge", () => {
-  it("names no project, so lands on the Apps list rather than guessing one", async () => {
+  it("names no project, so lands on the apps (Projects) rather than guessing one", async () => {
     // The persisted last project used to be opened here; the list of every
     // app replaced that guess (components/Apps/AppsPage.tsx).
     state.lastProjectId = "project-b";
     const router = renderAt("/forge");
-    await landsOn(router, "/apps");
+    await landsOn(router, "/projects", { show: "apps" });
     expect(await screen.findByTestId("apps")).toBeInTheDocument();
     expect(restoreLastProject).not.toHaveBeenCalled();
   });

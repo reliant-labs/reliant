@@ -186,6 +186,6 @@ describe("return from Stripe", () => {
     renderSection();
 
     fireEvent.click(screen.getByRole("button", { name: /back to environment/i }));
-    expect(routerState.navigate).toHaveBeenCalledWith({ to: "/apps" });
+    expect(routerState.navigate).toHaveBeenCalledWith({ href: "/projects?show=apps" });
   });
 });

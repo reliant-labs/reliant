@@ -19,7 +19,13 @@ export const REFUSAL_COPY: Record<ClaimRefusal, RefusalCopy> = {
   claimable_claimed: {
     title: "This site has already been claimed",
     body: "Someone claimed it first, so it now belongs to their account. If that was you, sign in to see it.",
-    next: { label: "Go to Reliant", href: projectsHref("apps") },
+    // Built when read, not at import: the link names the org the tab is in then.
+    next: {
+      label: "Go to Reliant",
+      get href() {
+        return projectsHref("apps");
+      },
+    },
   },
   claimable_expired: {
     title: "This site has expired",
