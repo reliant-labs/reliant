@@ -14,20 +14,21 @@ import (
 // owns nearly every chat, and nearly all of theirs are archived automation
 // runs (44,385 of 46,639 in prod). 20,000 chats, 19,000 archived; the 1,000
 // live ones are mostly runs too, so the sidebar policy keeps one in ten. A
-// second user owns a handful.
+// second user owns a handful. Every timestamp is a fixed instant, never now(),
+// so no row and no assertion depends on the wall clock.
 const liveChatsPlanSeed = `
 INSERT INTO projects (id, name, path, user_id, is_git_repo, created_at, updated_at, last_active, is_forge)
-VALUES ('lc-p', 'p', '/lc', 'lc-u', true, now(), now(), now(), false),
-       ('lc-p2', 'p', '/lc2', 'lc-u2', true, now(), now(), now(), false);
+VALUES ('lc-p', 'p', '/lc', 'lc-u', true, '2026-01-01T12:00:00Z'::timestamptz, '2026-01-01T12:00:00Z'::timestamptz, '2026-01-01T12:00:00Z'::timestamptz, false),
+       ('lc-p2', 'p', '/lc2', 'lc-u2', true, '2026-01-01T12:00:00Z'::timestamptz, '2026-01-01T12:00:00Z'::timestamptz, '2026-01-01T12:00:00Z'::timestamptz, false);
 
 INSERT INTO chats (id, title, project_id, user_id, state, workflow_id, created_at, updated_at, last_active, unread, no_machine, origin)
 SELECT 'lc-c' || n, 'run', 'lc-p', 'lc-u', CASE WHEN n < 19000 THEN 3 ELSE 1 END, 'lc-c' || n,
-       now() - (20000 - n) * interval '1 minute', now(), now() - (20000 - n) * interval '1 minute', 0, false,
+       '2026-01-01T12:00:00Z'::timestamptz - (20000 - n) * interval '1 minute', '2026-01-01T12:00:00Z'::timestamptz, '2026-01-01T12:00:00Z'::timestamptz - (20000 - n) * interval '1 minute', 0, false,
        CASE WHEN n % 10 = 0 THEN 1 ELSE 2 END
 FROM generate_series(0, 19999) n;
 
 INSERT INTO chats (id, title, project_id, user_id, state, workflow_id, created_at, updated_at, last_active, unread, no_machine, origin)
-SELECT 'lc-o' || n, 'chat', 'lc-p2', 'lc-u2', 1, 'lc-o' || n, now(), now(), now(), 0, false, 1
+SELECT 'lc-o' || n, 'chat', 'lc-p2', 'lc-u2', 1, 'lc-o' || n, '2026-01-01T12:00:00Z'::timestamptz, '2026-01-01T12:00:00Z'::timestamptz, '2026-01-01T12:00:00Z'::timestamptz, 0, false, 1
 FROM generate_series(0, 9) n;
 
 ANALYZE projects, chats;

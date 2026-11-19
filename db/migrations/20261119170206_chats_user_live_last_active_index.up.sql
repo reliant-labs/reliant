@@ -1,7 +1,7 @@
 -- forge:backward-compatible — a new index; no statement of the previous release changes meaning.
 
 -- Migration: chats_user_live_last_active_index
--- Created: 2026-11-18T21:32:45Z
+-- Created: 2026-11-19T17:02:06Z (renumbered from 20261118213245 above main's newest)
 --
 -- The chat list (store.ListChats, which ListChats and the worktree reads call
 -- with ExcludeArchived) reads the caller's chats that are not archived, most
@@ -29,4 +29,7 @@
 -- Rollback: none needed for the index. An extra index changes no result; the
 -- previous release ignores it, so it stays when the application is rolled
 -- back.
+--
+-- Post-deploy check (index valid, ListChats adopts it) and the response to a
+-- failed build: dev-docs/chat-list-live-index-rollout.md.
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_chats_user_live_last_active ON public.chats (user_id, last_active DESC) WHERE state <> 3;
