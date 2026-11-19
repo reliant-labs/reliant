@@ -14,9 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/launch"
 )
 
 // countingRepo counts the reads a workflow resolution makes.
@@ -160,3 +162,35 @@ func TestListInbox_BatchedDraftReadListsTheSame(t *testing.T) {
 type noDraftBatchRepo struct{ *db.Repo }
 
 func (noDraftBatchRepo) GetWorkflowDraftsBySlugs() {}
+
+// A prefetched draft is authorized under each lookup's own context, as the
+// single read is, never under the context it was prefetched with: an org
+// workflow is hidden once its owner has left the org, and seen again while
+// they are back, within one request resolver.
+func TestPrefetchedDraftsAreAuthorizedPerLookup(t *testing.T) {
+	f := newInboxFixture(t)
+	member := authz.WithMembership(f.ctx, memberOf{"home": true, "acme": true})
+	left := authz.WithMembership(f.ctx, memberOf{"home": true})
+	at := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	acme := "acme"
+	require.NoError(t, f.repo.CreateWorkflowDraft(member, &db.WorkflowDraft{
+		ID: uuid.NewString(), UserID: f.userID, Name: "release", Slug: "release", Status: db.WorkflowDraftStatusComplete,
+		OrgID: &acme, Definition: releaseWorkflow, CreatedAt: at, UpdatedAt: at,
+	}))
+
+	for _, prefetchCtx := range []context.Context{member, left} {
+		r := launch.NewRequestResolver(f.repo)
+		require.NoError(t, launch.PrefetchWorkflowDrafts(prefetchCtx, r, f.userID, []string{"release"}))
+		for _, c := range []struct {
+			ctx     context.Context
+			visible bool
+		}{{left, false}, {member, true}, {left, false}} {
+			draft, err := r.GetWorkflowDraftBySlug(c.ctx, f.userID, "release")
+			require.NoError(t, err)
+			require.Equal(t, c.visible, draft != nil, "draft")
+			usable, err := r.GetUsableWorkflowBySlug(c.ctx, f.userID, "release")
+			require.NoError(t, err)
+			require.Equal(t, c.visible, usable != nil, "usable")
+		}
+	}
+}

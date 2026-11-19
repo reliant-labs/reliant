@@ -42,6 +42,12 @@ type requestResolver struct {
 	pinnedCatalogs     memo[string, pinnedResult]
 	provenance         memo[string, []config.WorkflowProvenance]
 	machineNames       memo[string, string]
+
+	// prefetched is the batch each prefetched (user, slug) was read in
+	// (PrefetchWorkflowDrafts). It holds the raw rows, never an answer:
+	// each lookup authorizes the row under its own context.
+	prefetchMu sync.Mutex
+	prefetched map[[2]string]*db.WorkflowDraftsBySlug
 }
 
 type syncedJSON struct {
@@ -71,6 +77,10 @@ type workflowDraftsReader interface {
 // workflows. A slug nobody prefetched (a child a workflow runs) is still read
 // on its own, once.
 //
+// It keeps the rows, not the answers: visibility depends on the caller's
+// context (org membership), so each lookup decides it under its own context,
+// as the single read would, rather than reusing one made under prefetch's.
+//
 // A failed read seeds nothing, so each lookup then reads, and fails, on its
 // own as before.
 func PrefetchWorkflowDrafts(ctx context.Context, resolver WorkflowResolver, userID string, slugs []string) error {
@@ -86,21 +96,40 @@ func PrefetchWorkflowDrafts(ctx context.Context, resolver WorkflowResolver, user
 	if err != nil {
 		return err
 	}
+	r.prefetchMu.Lock()
+	defer r.prefetchMu.Unlock()
+	if r.prefetched == nil {
+		r.prefetched = map[[2]string]*db.WorkflowDraftsBySlug{}
+	}
 	for _, slug := range slugs {
 		key := [2]string{userID, slug}
-		r.drafts.put(key, func() (*db.WorkflowDraft, error) { return got.Draft(ctx, slug) })
-		r.usable.put(key, func() (*db.WorkflowDraft, error) { return got.Usable(ctx, slug) })
+		if _, ok := r.prefetched[key]; !ok {
+			r.prefetched[key] = got
+		}
 	}
 	return nil
 }
 
+// prefetchedDrafts is the batch (userID, slug) was prefetched in, or nil.
+func (r *requestResolver) prefetchedDrafts(userID, slug string) *db.WorkflowDraftsBySlug {
+	r.prefetchMu.Lock()
+	defer r.prefetchMu.Unlock()
+	return r.prefetched[[2]string{userID, slug}]
+}
+
 func (r *requestResolver) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error) {
+	if got := r.prefetchedDrafts(userID, slug); got != nil {
+		return got.Draft(ctx, slug)
+	}
 	return r.drafts.get([2]string{userID, slug}, func() (*db.WorkflowDraft, error) {
 		return r.inner.GetWorkflowDraftBySlug(ctx, userID, slug)
 	})
 }
 
 func (r *requestResolver) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error) {
+	if got := r.prefetchedDrafts(userID, slug); got != nil {
+		return got.Usable(ctx, slug)
+	}
 	return r.usable.get([2]string{userID, slug}, func() (*db.WorkflowDraft, error) {
 		return r.inner.GetUsableWorkflowBySlug(ctx, userID, slug)
 	})
@@ -223,10 +252,4 @@ func (m *memo[K, V]) get(key K, load func() (V, error)) (V, error) {
 	}
 	m.seen[key] = memoAnswer[V]{v, err}
 	return v, err
-}
-
-// put records key's answer from load unless key already has one: an answer a
-// read already gave this request is never replaced.
-func (m *memo[K, V]) put(key K, load func() (V, error)) {
-	_, _ = m.get(key, load)
 }
