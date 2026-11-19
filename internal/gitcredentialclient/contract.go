@@ -112,7 +112,7 @@ type InstallationRequest struct {
 	Owner string
 	Repo  string
 	// Permissions narrows the token (issues, pull_requests, contents, actions,
-	// statuses, checks -> read|write). Empty means control-plane's default: issues,
+	// checks -> read|write). Empty means control-plane's default: issues,
 	// pull_requests and contents at write.
 	Permissions map[string]string
 	// OrgID, when set, mints through the org's own linked installation only:

@@ -146,7 +146,7 @@ type TokenServiceClient interface {
 	// session's acting user must have push access to the repository, so the bot
 	// is never a way past the user's own permissions. The token is scoped to
 	// that one repository and to the requested permissions (issues,
-	// pull_requests, contents, actions, statuses, checks; default issues,
+	// pull_requests, contents, actions, checks; default issues,
 	// pull_requests and contents at write), expires within an
 	// hour, and is never stored or logged here. control-plane's audit log
 	// records each mint.
@@ -357,7 +357,7 @@ type TokenServiceHandler interface {
 	// session's acting user must have push access to the repository, so the bot
 	// is never a way past the user's own permissions. The token is scoped to
 	// that one repository and to the requested permissions (issues,
-	// pull_requests, contents, actions, statuses, checks; default issues,
+	// pull_requests, contents, actions, checks; default issues,
 	// pull_requests and contents at write), expires within an
 	// hour, and is never stored or logged here. control-plane's audit log
 	// records each mint.
