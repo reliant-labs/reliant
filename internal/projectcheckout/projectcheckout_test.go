@@ -22,8 +22,10 @@ func (i installs) ListProjectDaemonsForProject(context.Context, string) ([]*core
 	return i, nil
 }
 
+// GetDaemon names each machine "<id> box": a name equal to the id is a
+// placeholder (daemonplacement.MachineName), never shown.
 func (installs) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
-	return &db.Daemon{ID: id, UserID: "u", Name: id}, nil
+	return &db.Daemon{ID: id, UserID: "u", Name: id + " box"}, nil
 }
 
 // machines places the named machines it knows; default resolution is def.
@@ -117,7 +119,7 @@ func TestGoneError_NamesTheMachineAndItsPath(t *testing.T) {
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	msg := svcerr.ToConnect(err).Message()
 	assert.Contains(t, msg, "/home/workspace/projects/cp")
-	assert.Contains(t, msg, `"cloud"`)
+	assert.Contains(t, msg, `"cloud box"`)
 	d := detailOf(t, err)
 	assert.Equal(t, "cloud", d.DaemonId)
 	assert.Equal(t, "/home/workspace/projects/cp", d.Path)

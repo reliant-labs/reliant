@@ -50,6 +50,9 @@ WORKDIR /app
 # exist" no matter what this line says. Keep forge out of the replace block.
 ENV GOWORK=off
 COPY go.mod go.sum ./
+# go.mod replaces the Go SDK with ./sdk/go (reliant#2824), so its go.mod
+# must be in place before the module graph is read.
+COPY sdk/go/go.mod sdk/go/go.sum ./sdk/go/
 RUN go mod download
 COPY . .
 # Stamps internal/version so `reliant version` reports the release rather than

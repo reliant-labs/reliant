@@ -9,7 +9,9 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/checkoutstate"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -64,12 +66,11 @@ func (s *Service) checkoutMissingError(
 		State:     reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT,
 	}
 	if detail.DaemonId == "" {
-		// Default resolution picked the machine. Ask the router which one,
-		// so the state describes THAT machine rather than any machine the
-		// project was ever cloned onto.
-		if id, rerr := s.deps.Router.ResolveDaemonID(ctx, userID); rerr == nil {
-			detail.DaemonId = id
-		}
+		// resolveScope pins every request whose main checkout resolved, so
+		// this is a request no machine was named for. Describe the machine
+		// the project's work is placed on — among those that have it — not
+		// project-blind default resolution's, which may be one without it.
+		detail.DaemonId = s.projectMachine(ctx, userID, projectID)
 	}
 	if project, perr := s.deps.Repo.GetProject(ctx, projectID); perr == nil && project != nil && project.RemoteURL != nil {
 		detail.RemoteUrl = strings.TrimSpace(*project.RemoteURL)
@@ -79,8 +80,27 @@ func (s *Service) checkoutMissingError(
 			"error", lerr, "projectID", projectID)
 	} else {
 		detail.State, detail.InstallError = checkoutstate.On(rows, detail.DaemonId)
+		detail.AvailableDaemonIds = projectcheckout.InstalledElsewhere(ctx, s.deps.Repo, userID, rows, detail.DaemonId)
 	}
 
 	missing := svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("project directory %s does not exist on this machine", scope.basePath))
 	return svcerr.WithDetail(svcerr.WithCause(missing, err), detail)
+}
+
+// projectMachine is the machine a project's work goes to when nothing names
+// one (daemonplacement.ProjectDefaultDaemonID: the default when it has the
+// project, else another of the user's machines that does), or "" when it
+// cannot be told.
+func (s *Service) projectMachine(ctx context.Context, userID, projectID string) string {
+	if machines, ok := s.deps.Router.(daemonplacement.Machines); ok {
+		if id, err := daemonplacement.ProjectDefaultDaemonID(ctx, s.deps.Repo, machines, userID, projectID); err == nil {
+			return id
+		}
+		return ""
+	}
+	if s.deps.Router == nil {
+		return ""
+	}
+	id, _ := s.deps.Router.ResolveDaemonID(ctx, userID)
+	return id
 }

@@ -344,8 +344,7 @@ describe("Reliant, once", () => {
     expect(within(card).queryByRole("button", { name: /Add another/ })).not.toBeInTheDocument();
     await userEvent.click(within(card).getByRole("button", { name: "Keys & spend" }));
     expect(mocks.navigate).toHaveBeenCalledWith({
-      to: "/settings/$section",
-      params: { section: "billing" },
+      to: "/settings/billing",
       search: { tab: "ai" },
     });
     // No "Reliant AI" tab on this page any more.

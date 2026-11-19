@@ -147,6 +147,8 @@ func TestActingAsApp_RefusalsNeverFallBackToTheOwner(t *testing.T) {
 		"not connected":     {gitcredentialclient.ErrNotConnected, httpaction.CodeFailedPrecondition, "Connect GitHub"},
 		"needs reconnect":   {gitcredentialclient.ErrNeedsReconnect, httpaction.CodeNeedsReauth, "reconnected"},
 		"outage":            {&gitcredentialclient.RPCError{Code: "unavailable", Message: "http://admin-server:8090 down"}, httpaction.CodeUnavailable, "try again"},
+		"rate limited": {&gitcredentialclient.RateLimitedError{Message: "GitHub's API rate limit for your GitHub account is exhausted until 2026-11-18T15:00:00Z; try again then"},
+			httpaction.CodeUnavailable, "until 2026-11-18T15:00:00Z"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

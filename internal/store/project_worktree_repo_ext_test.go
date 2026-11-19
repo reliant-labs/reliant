@@ -4,6 +4,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -57,6 +58,28 @@ func TestProjectQueries(t *testing.T) {
 	}
 	if _, err := store.GetProject(ctx, env.ORM, "proj-missing"); err == nil || err.Error() != "project not found: proj-missing" {
 		t.Fatalf("GetProject(missing) err = %v, want project not found", err)
+	}
+
+	// The batch read returns what GetProject returns for each id it finds,
+	// and leaves out an id with no project.
+	batch, err := store.ListProjectsByIDs(ctx, env.ORM, []string{"proj-older", "proj-missing", "proj-newer"})
+	if err != nil {
+		t.Fatalf("ListProjectsByIDs: %v", err)
+	}
+	if len(batch) != 2 {
+		t.Fatalf("ListProjectsByIDs = %d projects, want 2", len(batch))
+	}
+	for _, p := range batch {
+		one, err := store.GetProject(ctx, env.ORM, p.ID)
+		if err != nil {
+			t.Fatalf("GetProject(%s): %v", p.ID, err)
+		}
+		if !reflect.DeepEqual(p, one) {
+			t.Fatalf("ListProjectsByIDs row %+v, want GetProject's %+v", p, one)
+		}
+	}
+	if none, err := store.ListProjectsByIDs(ctx, env.ORM, nil); err != nil || len(none) != 0 {
+		t.Fatalf("ListProjectsByIDs(nil) = %v, %v; want none", none, err)
 	}
 
 	if p, err := store.GetProjectByPath(ctx, env.ORM, "/srv/newer"); err != nil || p.ID != "proj-newer" {

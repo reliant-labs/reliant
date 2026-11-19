@@ -41,6 +41,7 @@ import { HealthIndicator, NextFire } from "../automationStatus";
 import { RowMenu, type RowMenuAction } from "../RowMenu";
 import { WORKFLOW_SOURCE_LABEL, WorkflowBadge, WorkflowSourceBadge, type WorkflowSource } from "../WorkflowSourceBadge";
 import type { WorkflowListRow } from "./workflowsView";
+import { runPath, workflowDetailPath } from "@/lib/paths";
 
 export type WorkflowRowAction = RowMenuAction;
 
@@ -216,8 +217,7 @@ function NameCell({ row }: { row: WorkflowsTableRow }) {
       <div className="flex min-w-0 items-center gap-2">
         {view.needsYou && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning-ink" aria-label="Needs you" />}
         <Link
-          to="/workflows/library/$workflowRef"
-          params={{ workflowRef: row.href.workflowRef }}
+          to={workflowDetailPath(row.href.workflowRef)}
           search={row.href.project ? { project: row.href.project } : {}}
           // The description is read on request, not as part of the row: it
           // is clipped to one line on screen and was read out in full.
@@ -370,8 +370,7 @@ function LastRun({ run }: { run?: RunSummary }) {
   const when = formatRelativeTime(new Date(run.createdAt).toISOString());
   return (
     <Link
-      to="/workflows/runs/$runId"
-      params={{ runId: run.chatId }}
+      to={runPath(run.chatId)}
       className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       title={`${status.label} · ${run.title || "Untitled run"}`}
     >

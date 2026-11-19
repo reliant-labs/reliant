@@ -191,9 +191,9 @@ class MonacoFileSyncService {
       const isJavaScript = JAVASCRIPT_EXTENSIONS.some(ext => filePath.endsWith(ext));
 
       if (isTypeScript) {
-        this.monaco.languages.typescript.typescriptDefaults.addExtraLib(content, uri);
+        this.monaco.typescript.typescriptDefaults.addExtraLib(content, uri);
       } else if (isJavaScript) {
-        this.monaco.languages.typescript.javascriptDefaults.addExtraLib(content, uri);
+        this.monaco.typescript.javascriptDefaults.addExtraLib(content, uri);
       }
 
       // Track synced file (content omitted - Monaco retains it via addExtraLib)
@@ -226,9 +226,9 @@ class MonacoFileSyncService {
     const isJavaScript = JAVASCRIPT_EXTENSIONS.some(ext => filePath.endsWith(ext));
 
     if (isTypeScript) {
-      this.monaco.languages.typescript.typescriptDefaults.addExtraLib(content, uri);
+      this.monaco.typescript.typescriptDefaults.addExtraLib(content, uri);
     } else if (isJavaScript) {
-      this.monaco.languages.typescript.javascriptDefaults.addExtraLib(content, uri);
+      this.monaco.typescript.javascriptDefaults.addExtraLib(content, uri);
     }
 
     // Track synced file (content omitted - Monaco retains it via addExtraLib)

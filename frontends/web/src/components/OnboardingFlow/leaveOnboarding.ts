@@ -32,6 +32,7 @@ import { startForIntent } from "@/components/Apps/appStart";
 import { stepsViewedCount } from "./analytics";
 import { isOnboardingReturnTo } from "./onboardingGate";
 import type { OnboardingIntent } from "./types";
+import { authPath, homePath } from "@/lib/paths";
 
 /**
  * The journey picker's `?tour=` value. Finishing onboarding no longer opens it
@@ -56,11 +57,6 @@ export const ONBOARDING_EXIT_REASONS = [
   "returning_user_heal",
   /** The user signed out from the escape hatch. */
   "signed_out",
-  /**
-   * On the forge site, the user took the escape hatch's "Only here to deploy
-   * apps?" skip. Onboarding stays unfinished on the server (markForgeSetupSkipped).
-   */
-  "skipped_to_forge_console",
 ] as const;
 
 export type OnboardingExitReason = (typeof ONBOARDING_EXIT_REASONS)[number];
@@ -116,20 +112,17 @@ export function onboardingExitTarget(
   switch (reason) {
     case "completed_local":
     case "completed_cloud_gate_continue":
-      return { to: "/", search: { start: startForIntent(landing), tour: undefined } };
+      return { to: homePath(), search: { start: startForIntent(landing), tour: undefined } };
     case "already_complete":
     case "returning_user_heal":
-      return { to: "/", search: keepTourHandoff };
+      return { to: homePath(), search: keepTourHandoff };
     case "signed_out":
       // Explicit rather than left to AuthGuard: the guard does bounce an
       // unauthenticated user eventually, but there is a render gap in which
       // this route's own "needs onboarding" logic re-asserts itself and puts
       // the user straight back here.
       // `tour: undefined`: the root route otherwise carries `?tour=` along.
-      return { to: "/auth", search: { redirect: undefined, tour: undefined } };
-    case "skipped_to_forge_console":
-      // The forge site's home: its Apps list.
-      return { to: "/apps", search: {} };
+      return { to: authPath(), search: { redirect: undefined, tour: undefined } };
   }
 }
 
@@ -145,7 +138,6 @@ const RETURNS_TO_APP: ReadonlySet<OnboardingExitReason> = new Set([
   "completed_cloud_gate_continue",
   "already_complete",
   "returning_user_heal",
-  "skipped_to_forge_console",
 ]);
 
 /**

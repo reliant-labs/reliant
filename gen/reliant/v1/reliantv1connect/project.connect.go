@@ -180,9 +180,12 @@ type ProjectServiceClient interface {
 	// PurgeProjectNow deletes a project immediately and irreversibly, scheduled
 	// or not: the path for a person who means it, and for anything that relied
 	// on DeleteProject deleting at once. Only the project's owner may, and
-	// confirm_name must be the project's name. The delete runs in batches; one
-	// that stops part way leaves the project hidden, and running it again (or
-	// the purge worker) finishes it.
+	// confirm_name must be the project's name. It returns once the purge is
+	// claimed: from then on the project is hidden and can no longer be
+	// restored. The batches that delete its rows run after it returns (a large
+	// project takes longer than a request may run); one that stops part way
+	// leaves the project hidden, and the purge worker (or running it again)
+	// finishes it.
 	PurgeProjectNow(context.Context, *connect.Request[v1.PurgeProjectNowRequest]) (*connect.Response[v1.PurgeProjectNowResponse], error)
 	// ListDeletedProjects lists the projects scheduled for deletion that the
 	// caller may restore ("Recently deleted"): their own, and those they
@@ -782,9 +785,12 @@ type ProjectServiceHandler interface {
 	// PurgeProjectNow deletes a project immediately and irreversibly, scheduled
 	// or not: the path for a person who means it, and for anything that relied
 	// on DeleteProject deleting at once. Only the project's owner may, and
-	// confirm_name must be the project's name. The delete runs in batches; one
-	// that stops part way leaves the project hidden, and running it again (or
-	// the purge worker) finishes it.
+	// confirm_name must be the project's name. It returns once the purge is
+	// claimed: from then on the project is hidden and can no longer be
+	// restored. The batches that delete its rows run after it returns (a large
+	// project takes longer than a request may run); one that stops part way
+	// leaves the project hidden, and the purge worker (or running it again)
+	// finishes it.
 	PurgeProjectNow(context.Context, *connect.Request[v1.PurgeProjectNowRequest]) (*connect.Response[v1.PurgeProjectNowResponse], error)
 	// ListDeletedProjects lists the projects scheduled for deletion that the
 	// caller may restore ("Recently deleted"): their own, and those they

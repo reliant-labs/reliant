@@ -4,6 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { globalIgnores } from 'eslint/config'
+import stylingContract from './eslint-rules/styling-contract.js'
 
 export default tseslint.config([
   globalIgnores(['dist']),
@@ -89,6 +90,18 @@ export default tseslint.config([
           ],
         },
       ],
+    },
+  },
+  {
+    // The web-styling contract (eslint-rules/styling-contract.js). Warn-only:
+    // the restyle phases remove the legacy call sites surface by surface.
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: { 'reliant-styling': stylingContract },
+    rules: {
+      'reliant-styling/tiny-text': 'warn',
+      'reliant-styling/uppercase-tracking': 'warn',
+      'reliant-styling/raw-palette': 'warn',
+      'reliant-styling/muted-structure': 'warn',
     },
   },
   {

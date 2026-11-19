@@ -25,6 +25,10 @@ type Deps struct {
 	Repo Repository
 	// Signals delivers a resolved approval to the workflow parked on it.
 	Signals Signaler
+	// Connections checks the connection a person made to approve an agent's
+	// connection proposal (propose_connection). Optional: without it such a
+	// proposal cannot be approved, only denied.
+	Connections ProposalConnections
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

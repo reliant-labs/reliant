@@ -511,7 +511,7 @@ schema DaemonConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonConfig
-# forge:hash=a8e402cf901d34cf3dc88e8cd884f7d33b756ade4fb794220b4103d6f08f51a6
+# forge:hash=407c5fc8b7989b6d8afc333d726c72fbd981cc32b27ee70ca3c32d044cb63f90
 schema DaemonConfig:
     # Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)
     gateway_url: str = ""
@@ -567,6 +567,8 @@ schema DaemonConfig:
     egress_user_max_concurrent: int = 0
     # Egress calls this daemon may have in flight to one destination host (0: default 32; managed daemons: 16, fixed)
     egress_host_max_concurrent: int = 0
+    # Comma-separated key=value durable labels this machine declares (merged into its labels on every connect)
+    labels: str = ""
     # instance config block (DaemonInstanceConfig). Set its fields as `instance.<field> = ...`.
     instance: DaemonConfigInstance = DaemonConfigInstance {}
 
@@ -626,7 +628,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_INSTANCE_WORKSPACE" = c.instance.workspace
 
         # forge:section daemonConfigEnvMap values (root)
-        # forge:hash=37eed5299bd0513631f0fae627e3e69b7844b68e037dfff84cd2c808076976e8
+        # forge:hash=e1503c791c4a49dc99efec72ced4e5791633de13befdf747221ecd9f217c8b2f
         "DAEMON_GRPC_URL" = c.gateway_url
         "TOOLS_DAEMON_PORT" = str(c.gateway_port)
         "DAEMON_TLS_MODE" = c.tls_mode
@@ -654,6 +656,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_DAEMON_EGRESS_USER_BURST" = str(c.egress_user_burst)
         "RELIANT_DAEMON_EGRESS_USER_MAX_CONCURRENT" = str(c.egress_user_max_concurrent)
         "RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT" = str(c.egress_host_max_concurrent)
+        "RELIANT_DAEMON_LABELS" = c.labels
 
         # forge:section daemonConfigEnvMap values (end)
         # forge:hash=06d93ea6019c14e6397469374bab99b5c2725f7353c6e9a894aa0b0ce1f5d421

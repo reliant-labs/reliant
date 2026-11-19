@@ -183,6 +183,23 @@ func (s *Service) ListInbox(
 // from taking more than a slice of the pool.
 const inboxReadConcurrency = 3
 
+// inboxHealthReadConcurrency is the separate budget of failingAutomations'
+// reads (recent outcomes, the failure episodes, registrations), so they never
+// queue behind the reads of inboxReadConcurrency. With one shared budget they
+// waited for whichever token the pending read (2.6s) and the declaration loop
+// (2.2s) left free and ran one after the other: 1.06s and 1.03s, at +520ms
+// and +1718ms, in prod trace ed2301a0… (2026-11-18).
+//
+// One read set may now hold 3+2 = 5 of an api-server's 25 connections, a
+// fifth. That is safe against the 2026-10-23 exhaustion because what
+// exhausted the pool was N concurrent ListInbox calls of one client, each
+// holding a read set of its own; sharedRead, which landed with the budget
+// above, makes those one read set per user and credential, so a burst no
+// longer multiplies it. The pool's two exhaustions since (2026-11-18 08:30Z
+// and 11:40Z) were stream fan-outs, not the inbox. Two tokens let the two
+// firing reads run together.
+const inboxHealthReadConcurrency = 2
+
 // inboxReads is what readInbox gathers: everything ListInbox lists, before
 // dismissals and scoping.
 type inboxReads struct {
@@ -258,10 +275,12 @@ func (l readLimiter) do(ctx context.Context, read func() error) error {
 }
 
 // readInbox runs ListInbox's reads concurrently, at most inboxReadConcurrency
-// at once. The pending rows and automation health are the inbox: either one
-// failing fails the read. Storage and needs-setup are advisory and only warn.
+// at once plus inboxHealthReadConcurrency of automation health. The pending
+// rows and automation health are the inbox: either one failing fails the
+// read. Storage and needs-setup are advisory and only warn.
 func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, error) {
 	lim := make(readLimiter, inboxReadConcurrency)
+	healthLim := make(readLimiter, inboxHealthReadConcurrency)
 	var out inboxReads
 	// One authz reader for the pending and recovery sections, so each chat
 	// and project is read once, and its org kept for the org scope.
@@ -302,7 +321,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 		}
 		tg, tctx := errgroup.WithContext(gctx)
 		tg.Go(func() (err error) {
-			out.failing, err = s.failingAutomations(tctx, lim, userID, stored)
+			out.failing, err = s.failingAutomations(tctx, healthLim, userID, stored)
 			return err
 		})
 		tg.Go(func() error {
@@ -480,7 +499,8 @@ func isInboxItemID(itemID string) bool {
 // keyed by the streak's first failure, so a later successful run, which ends
 // the streak, resolves it. A streak of launch failures alone is the
 // launch-failed item's until it turns FAILING. Its three reads are independent
-// and run together, each holding one of lim's tokens.
+// and run together, each holding one of lim's tokens (readInbox gives them a
+// budget of their own, inboxHealthReadConcurrency).
 func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userID string, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
 	ids := make([]string, 0, len(stored))
 	for _, t := range stored {
@@ -623,7 +643,9 @@ func (s *Service) declarationItems(ctx context.Context, stored []*core.Trigger) 
 	// for the whole list (launch.NewRequestResolver), as ListTriggers does.
 	// Prod ListInbox (2026-11-05, 22 activations): 13 catalog and 24 draft
 	// reads a call, p50 516ms, the most-called slow rpc of the web.
-	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: launch.NewRequestResolver(s.deps.Repo)})
+	resolver := launch.NewRequestResolver(s.deps.Repo)
+	prefetchActivationDrafts(ctx, resolver, stored)
+	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: resolver})
 	var out []*reliantv1.InboxItem
 	broken := &brokenDefinitions{byKey: map[string]*reliantv1.InboxItem{}}
 	for _, t := range stored {

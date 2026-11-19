@@ -56,25 +56,29 @@
  * honours it; a page with an environment in its path pins that one instead.
  *
  * Nothing outside this module spells a console path: pages, the nav and the
- * redirects all build them here, so a URL change is one edit.
+ * redirects all build them here, so a URL change is one edit. The rest of the
+ * app's paths are built the same way, in lib/paths, and both go through its
+ * `withOrg` (the org segment of U3).
  */
 
-import { defaultStringifySearch } from "@tanstack/react-router";
+import { settingsPath, withOrg, withSearch, type PathContext } from "@/lib/paths";
 
 import { isDashboardPageKind, type DashboardPageKind } from "../Observability/Dashboards/dashboardModel";
 import { OBS_SEARCH_KEYS, type ObsSearch, type ObsView } from "../Observability/obsSearch";
 
+/** The console's first segment, for reading a pathname back (consolePageOf, orgPageOf). */
 export const FORGE_ROOT = "/forge";
 
-/** The org's Apps list (components/Apps/AppsPage.tsx): the way out of one app's console to all of them. */
-export const APPS_PATH = "/apps";
+export { withSearch };
 
 /**
  * The organization's usage (its telemetry allowance): the app's Settings ›
  * Billing, which renders the same UsageView the console's retired Project
  * settings page did.
  */
-export const ORG_USAGE_PATH = "/settings/billing";
+export function orgUsagePath(): string {
+  return settingsPath("billing");
+}
 
 /**
  * The Observability sub-pages that are nav entries, in nav order. The first is
@@ -105,13 +109,17 @@ export function isObsNavView(value: string | undefined): value is ObsNavView {
 /** The pages of the org console (not inside one app): org-wide Observability. */
 export type OrgPage = { kind: "observability" } | { kind: "obs-view"; view: ObsNavView };
 
-/** The path of an org page. */
-export function orgPath(page: OrgPage): string {
+/**
+ * The path of an org page. U3 moves it to `/o/<org>/observability[/<view>]`
+ * (design §3.1): the org form is not this path behind a prefix, so it is
+ * rewritten here.
+ */
+export function orgPath(page: OrgPage, ctx?: PathContext): string {
   switch (page.kind) {
     case "observability":
-      return `${FORGE_ROOT}/observability`;
+      return withOrg(`${FORGE_ROOT}/observability`, ctx);
     case "obs-view":
-      return `${FORGE_ROOT}/observability/${page.view}`;
+      return withOrg(`${FORGE_ROOT}/observability/${page.view}`, ctx);
   }
 }
 
@@ -145,13 +153,17 @@ export type ConsolePage =
   | { kind: "domains" }
   | { kind: "activity" };
 
-export function consoleBase(project: string): string {
-  return `${FORGE_ROOT}/p/${encodeURIComponent(project)}`;
+/**
+ * One app's console. U3 moves it to `/o/<org>/apps/<app>` (design §3.1): the
+ * org form is not this path behind a prefix, so it is rewritten here.
+ */
+export function consoleBase(project: string, ctx?: PathContext): string {
+  return withOrg(`${FORGE_ROOT}/p/${encodeURIComponent(project)}`, ctx);
 }
 
 /** The path of `page` in `project`. */
-export function consolePath(project: string, page: ConsolePage): string {
-  const base = consoleBase(project);
+export function consolePath(project: string, page: ConsolePage, ctx?: PathContext): string {
+  const base = consoleBase(project, ctx);
   switch (page.kind) {
     case "overview":
       return base;
@@ -236,32 +248,6 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
 export function pinnedEnvOf(page: ConsolePage): string | null {
   return page.kind === "environment" || page.kind === "workload" ? page.env : null;
 }
-
-/**
- * `path` with `search` as its query string, in the router's own encoding
- * (arrays and objects as JSON), so a built href parses back to the search
- * object it came from. Undefined and empty values are dropped.
- */
-export function withSearch(path: string, search: Record<string, unknown> = {}): string {
-  const kept = Object.entries(search).filter(([, value]) => value !== undefined && value !== null && value !== "");
-  // Every console link builds its href on every render, and the router's
-  // encoder JSON.parses each string value to decide whether to quote it (a
-  // thrown SyntaxError per plain string: about a second of a phone's main
-  // thread per tour). The answer is a pure function of the entries, so it is
-  // remembered by them.
-  let key = path;
-  for (const [name, value] of kept) key += `\u0000${name}\u0001${typeof value}\u0001${typeof value === "object" ? JSON.stringify(value) : String(value)}`;
-  const known = hrefs.get(key);
-  if (known !== undefined) return known;
-  const href = `${path}${defaultStringifySearch(Object.fromEntries(kept))}`;
-  if (hrefs.size >= HREF_LIMIT) hrefs.clear();
-  hrefs.set(key, href);
-  return href;
-}
-
-/** withSearch's answers, by entries. A console visit builds a few hundred distinct hrefs. */
-const hrefs = new Map<string, string>();
-const HREF_LIMIT = 2_000;
 
 // ── The Observability panel's views, as console pages ──────────────────────
 
@@ -368,7 +354,7 @@ export function legacyEnvTarget(project: string, env: string, search: LegacyEnvS
     case "secrets":
       return withSearch(consolePath(project, { kind: "secrets" }), { env, secret: search.secret });
     case "observability":
-      if (search.view === "usage") return ORG_USAGE_PATH;
+      if (search.view === "usage") return orgUsagePath();
       if (search.view === "workloads") return legacyWorkloadsTarget(project, env, search.workload);
       return withSearch(consolePath(project, pageOfObsView(search.view)), {
         env,
@@ -386,7 +372,7 @@ export function legacyEnvTarget(project: string, env: string, search: LegacyEnvS
 
 /** `/forge/observability?view=…&envs=…` → the page hosting that view, scoped. */
 export function legacyObservabilityTarget(project: string, search: LegacyObsSearch): string {
-  if (search.view === "usage") return ORG_USAGE_PATH;
+  if (search.view === "usage") return orgUsagePath();
   if (search.view === "workloads") return legacyWorkloadsTarget(project, envScopeOfEnvs(search.envs), search.workload);
   return withSearch(consolePath(project, pageOfObsView(search.view)), {
     env: envScopeOfEnvs(search.envs),

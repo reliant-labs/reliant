@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 // with the two-card layout — an icon on one row and none on the others is the
 // shape difference that made the free option read as a different kind of
 // answer.
-import { Check, CheckCircle2, ChevronDown, Loader2 } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, Loader2, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   PlanTileRow,
@@ -32,6 +32,7 @@ import { RedeemCouponForm } from "@/components/RedeemCouponForm";
 import { RedeemedCouponKind } from "@/services/controlPlane/reliantAI";
 import { useBundledDaemonPending } from "@/hooks/useBundledDaemonPending";
 import { isCloudCompute } from "../types";
+import type { LaunchPlan } from "../types";
 import type {
   CodeSource,
   ComputeChoice,
@@ -44,6 +45,7 @@ import { trackEvent } from "@/lib/analytics";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { formatPrice } from "@/components/Billing/priceFormat";
 import { formatMachineSeconds } from "@/lib/formatMachineMinutes";
+import { isPhoneViewport } from "@/lib/mobileRedirect";
 
 const HAS_CLOUD_DAEMONS = capabilities.cloudDaemons;
 
@@ -100,7 +102,19 @@ export function ComputeStep({
   updatePlan,
   onNext,
 }: StepProps & { hideHeader?: boolean }) {
-  const [showLocal, setShowLocal] = useState(plan.compute === "local_daemon");
+  // A phone cannot run the desktop app or the CLI, so it cannot finish pairing
+  // a machine, but the free answer still leads and is still the default: the
+  // user sets it up from a laptop (see PhoneLocalSteps) and this step advances
+  // on its own once that computer connects. Read once at mount so a resize
+  // cannot swap the list under the user.
+  const [onPhone] = useState(() => HAS_CLOUD_DAEMONS && isPhoneViewport());
+  // The free answer is the preselected one, unless the user already chose a
+  // hosted machine (Back from checkout lands here with that recorded, and a
+  // size picked before a reload is in the plan too; neither must be flipped).
+  const [showLocal, setShowLocal] = useState(
+    plan.compute === "local_daemon" ||
+      (!isCloudCompute(plan.compute) && !plan.computePlanId),
+  );
   // While the free option is chosen the hosted rows fold into one disclosure so
   // the connect instructions sit right under the list. This is only the user's
   // wish to look at them again; it is meaningless (and ignored) otherwise.
@@ -213,6 +227,7 @@ export function ComputeStep({
   // without removing the question.
   const showPlanChoice = HAS_CLOUD_DAEMONS && !loading;
   const showCloudRows = showPlanChoice && (!showLocal || cloudExpanded);
+  const hostedRowsAvailable = plansQ.isLoading || planOptions.length > 0;
   const cheapestMonthlyCents = planOptions.length
     ? Math.min(...planOptions.map((option) => option.monthlyPriceCents))
     : null;
@@ -574,11 +589,12 @@ export function ComputeStep({
           >
             <span className="min-w-0">
               <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                Use your own computer
+                Your own computer
                 {showLocal && <CheckCircle2 className="h-4 w-4 text-primary-ink" />}
               </span>
               <span className="block text-xs text-muted-foreground">
-                Your laptop or server
+                Runs on your machine, so it&apos;s free. Bring your own model
+                key or subscription. Needs the Reliant desktop app or CLI.
               </span>
             </span>
             <span className="flex-shrink-0 text-sm font-medium tabular-nums text-foreground">
@@ -597,7 +613,19 @@ export function ComputeStep({
           {showPlanChoice && showLocal && (
             <button
               type="button"
-              onClick={() => setCloudExpanded((open) => !open)}
+              onClick={() => {
+                // No catalog (it failed to load, or sells nothing) means no
+                // rows to unfold, so the disclosure would open onto nothing
+                // and the hosted path would be unreachable under the
+                // preselected free row. Choosing it here selects hosted
+                // instead, the same degraded path "Prices didn't load"
+                // describes: continue without a size, or redeem a code.
+                if (!hostedRowsAvailable) {
+                  setShowLocal(false);
+                  return;
+                }
+                setCloudExpanded((open) => !open);
+              }}
               aria-expanded={cloudExpanded}
               aria-controls={
                 cloudExpanded ? "compute-cloud-options" : undefined
@@ -612,7 +640,9 @@ export function ComputeStep({
                     ` · from ${formatPrice(cheapestMonthlyCents)}/mo`}
                 </span>
                 <span className="block text-xs text-muted-foreground">
-                  Hosted, nothing to install
+                  {machineCovered
+                    ? "Keeps running after you close your laptop."
+                    : "Paid. Keeps running after you close your laptop."}
                 </span>
               </span>
               <span className="flex flex-shrink-0 items-center gap-1 text-xs text-muted-foreground">
@@ -780,7 +810,11 @@ export function ComputeStep({
           failures surface at the commit point, where the retry lives. */}
       {showLocal && !activeDaemon && (
         <>
-          <PairMachinePanel mode="bootstrap" onConnected={handleLocalContinue} />
+          {onPhone ? (
+            <PhoneLocalSteps plan={plan} />
+          ) : (
+            <PairMachinePanel mode="bootstrap" onConnected={handleLocalContinue} />
+          )}
           <ConnectWait
             label="Looking for your computer"
             onRetry={() => refreshDaemons?.()}
@@ -825,6 +859,81 @@ export function ComputeStep({
           </button>
         ) : null}
       </StepFooterAction>
+    </div>
+  );
+}
+
+// What "your own computer" means on a phone: the phone cannot install or pair
+// anything, so this says how to do it from a laptop and offers the handoff as
+// the action. It deliberately has no download link or install button. The step
+// keeps waiting underneath (ConnectWait and the footer) and advances by itself
+// when the laptop connects to this account, so choosing this never dead-ends.
+//
+// The handoff link is built from the plan, not copied from the address bar:
+// the onboarding state lives only in the `plan` search param (useOnboardingPlan),
+// so the link names /onboarding with this plan and the free choice recorded in
+// it. Opened on the laptop, AuthGuard's returnHere keeps it across sign-in, and
+// the wizard resumes at the same step with the same answers.
+export function onboardingHandoffLink(origin: string, plan: Partial<LaunchPlan>): string {
+  const handoffPlan: Partial<LaunchPlan> = { ...plan, compute: "local_daemon" };
+  // tanstack-router's default search serialization: each value JSON-encoded.
+  return `${origin}/onboarding?plan=${encodeURIComponent(JSON.stringify(handoffPlan))}`;
+}
+
+function PhoneLocalSteps({ plan }: { plan: Partial<LaunchPlan> }) {
+  const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
+  const appUrl = typeof window === "undefined" ? "" : window.location.origin;
+  const link = onboardingHandoffLink(appUrl, plan);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied("copied");
+    } catch {
+      setCopied("failed");
+    }
+  };
+  const mailto = `mailto:?subject=${encodeURIComponent("Continue setting up Reliant")}&body=${encodeURIComponent(link)}`;
+  return (
+    <div
+      className="space-y-3 rounded-lg border border-border bg-muted/30 px-4 py-3"
+      data-testid="compute-step-phone-local"
+    >
+      <p className="flex items-start gap-2 text-sm font-medium text-foreground">
+        <Smartphone className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />
+        Set up your own computer from a laptop
+      </p>
+      <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-muted-foreground">
+        <li>
+          On your laptop, open the link below (copy or email it) and sign in to
+          this same account. Setup continues where you left off.
+        </li>
+        <li>Install the Reliant desktop app (or run the CLI command shown there).</li>
+        <li>
+          Your computer connects to this account. Come back here, or keep going on the laptop.
+        </li>
+      </ol>
+      <div className="flex flex-wrap items-center gap-3 text-xs">
+        <button
+          type="button"
+          onClick={() => void copy()}
+          className="font-medium text-primary-ink underline-offset-2 hover:underline"
+        >
+          Continue on your computer: copy link
+        </button>
+        <a
+          href={mailto}
+          className="font-medium text-primary-ink underline-offset-2 hover:underline"
+        >
+          Email it to myself
+        </a>
+        <span role="status" aria-live="polite" className="text-muted-foreground">
+          {copied === "copied"
+            ? "Link copied"
+            : copied === "failed"
+              ? "Couldn\u2019t copy. Use the email link."
+              : ""}
+        </span>
+      </div>
     </div>
   );
 }

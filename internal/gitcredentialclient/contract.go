@@ -81,7 +81,9 @@ type Service interface {
 	// (control-plane holds no App key: the caller may fall back to the user's
 	// own token), ErrAppNotInstalled, ErrAppPermissions, ErrOwnerCannotPush,
 	// ErrNotConnected / ErrNeedsReconnect (the user has no usable GitHub token
-	// to prove push access with). Anything else is transient.
+	// to prove push access with). ErrRateLimited (a *RateLimitedError) is
+	// transient with a known end: retry after its RetryAfter. Anything else is
+	// transient.
 	MintInstallationToken(ctx context.Context, req InstallationRequest) (InstallationToken, error)
 
 	// ListOrgGitHubInstallations lists the GitHub App installations an org
@@ -109,8 +111,9 @@ type InstallationRequest struct {
 	// Owner and Repo name the one repository the token is scoped to.
 	Owner string
 	Repo  string
-	// Permissions narrows the token (issues, pull_requests, contents ->
-	// read|write). Empty means control-plane's default: all three at write.
+	// Permissions narrows the token (issues, pull_requests, contents, actions
+	// -> read|write). Empty means control-plane's default: issues,
+	// pull_requests and contents at write.
 	Permissions map[string]string
 	// OrgID, when set, mints through the org's own linked installation only:
 	// the repository's installation must be linked to the org
@@ -190,5 +193,37 @@ var (
 	// ErrNeedsReconnect: the credential exists but the user must re-authorize.
 	ErrNeedsReconnect = svcerr.WithClass(errors.New("gitcredentialclient: the connection needs to be reconnected"), svcerr.ClassUser)
 )
+
+// ErrRateLimited: GitHub's API rate limit on the token control-plane checks
+// with is exhausted (control-plane#2964: resource_exhausted, reason
+// github_rate_limited). It is waited out, not fixed: a user error, so no log
+// layer reports it as our outage. The error returned is a *RateLimitedError,
+// which says when to retry; errors.Is matches it against this sentinel.
+//
+// control-plane answers its App's OWN exhausted quota the same way on the
+// wire and pages on it there; to this client it is the same "wait until",
+// so it is not paged twice.
+var ErrRateLimited = svcerr.WithClass(errors.New("gitcredentialclient: GitHub's API rate limit is exhausted"), svcerr.ClassUser)
+
+// RateLimitedError is ErrRateLimited with control-plane's client-safe message
+// (it names whose limit and until when) and its Retry-After.
+type RateLimitedError struct {
+	// Message is control-plane's text, e.g. "GitHub's API rate limit for your
+	// GitHub account is exhausted until 2026-11-18T15:00:00Z; try again then".
+	Message string
+	// RetryAfter is how long to wait before trying again; zero when
+	// control-plane did not say.
+	RetryAfter time.Duration
+}
+
+func (e *RateLimitedError) Error() string {
+	if e.Message == "" {
+		return ErrRateLimited.Error()
+	}
+	return "gitcredentialclient: " + e.Message
+}
+
+// Unwrap makes errors.Is(err, ErrRateLimited) hold, and carries its class.
+func (e *RateLimitedError) Unwrap() error { return ErrRateLimited }
 
 var _ Service = (*Client)(nil)

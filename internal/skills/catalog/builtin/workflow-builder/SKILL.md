@@ -267,12 +267,15 @@ Use create_trigger_activation, update_trigger_activation, enable_trigger or paus
 activation. The owner's automation-approvals setting (Settings > Automations) decides which changes raise an approval
 card: by default a new activation, or a change that widens its power (a new connection or scope, a different acting
 identity, a new machine, new secrets, a production deploy step); other edits and resumes apply and are recorded.
-Pausing never needs a card. An unattended run reaches these tools only when its step names them, and a change that
+Pausing never needs a card; delete_trigger always does, because deleting cannot be undone. An unattended run reaches these tools only when its step names them, and a change that
 needs a card is refused there. Do not bypass approval through the CLI, HTTP or a script. To change several
 activations, call the tools together in ONE turn: every card the turn needs is raised at once as one batch, which the
 owner approves in one click (or one by one), instead of one card per turn. Enabling says AS WHOM and WHERE:
 their project, the machine whose tools the runs use, and for an integration trigger which of their connected
 accounts it listens through. One declaration can have many activations (one per user or project).
+When the connection it needs does not exist yet, call propose_connection (provider, scope, reason): the owner connects
+it in Reliant's connection dialog from an approval card, and you get back only its status and connection id, never
+the credential.
 
 ```yaml
 name: triage-new-issues
@@ -432,8 +435,8 @@ test its filter and inputs with `cel_eval` and its graph with `run_scenario` →
 **When the workflow is ready**, say it is saved and validated. If asked to activate it in an interactive chat,
 use create_trigger_activation with its declared trigger name, typed params, project_id, explicit machine_id (or
 no_machine) and connection_id. The approval card shows the resolved workflow, identity, machine and privileges.
-Use update_trigger_activation to re-point an existing activation, enable_trigger to resume, and pause_trigger
-to pause. Never claim success before approval and a successful tool result. list_triggers shows the result and health.
+Use update_trigger_activation to re-point an existing activation, enable_trigger to resume, pause_trigger
+to pause, and delete_trigger to remove one for good. Never claim success before approval and a successful tool result. list_triggers shows the result and health.
 The app remains an alternative: **Workflows → Library → open the workflow → Enable** turns on all declared triggers.
 Unattended runs are refused: they cannot grant themselves standing privileges.
 
@@ -898,7 +901,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `title` | string | No | - |
 | `hidden` | boolean | No | *A building block other workflows ref: true keeps it out of every picker and default listing while it stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. Unset means the workflow is listed.* |
 | `automation_only` | boolean | No | *The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat start of it. Its triggers start it, and so does a deliberate start by hand: Run now, `reliant workflow run`, an agent's start_run, or a builder test run. Unset means a chat can start it.* |
-| `concurrency` | WorkflowConcurrency | No | *Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), {per_member: K} (K per machine of the trigger's pool), or both, optionally waiting: latest (only the newest waiting firing per key survives; older ones are recorded skipped, "superseded", never failed) and key (a template over `trigger` grouping the firings that replace each other). See WorkflowConcurrency below.* |
+| `concurrency` | WorkflowConcurrency | No | *Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), {per_member: K} (K per machine of the trigger's pool), {max_running_per_key: N, key: ...} (N per key, e.g. one run per pull request), or a combination, optionally waiting: latest (only the newest waiting firing per key survives; older ones are recorded skipped, "superseded", never failed), key (a template over `trigger` grouping firings) and priority (a CEL integer over `trigger`: waiting firings run highest first). See WorkflowConcurrency below.* |
 | `on_failure` | Workflow | No | *A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends FAILED; an error in the handler is logged and never recursive. To release something however the run ends, cancel included, use `finally`.* |
 | `finally` | Workflow | No | *A handler for however a run ends: an inline graph ({entry, nodes, edges}) that runs once when a run completes, fails (after on_failure) or is cancelled. Never when it pauses or hands off to a successor run. Its nodes read `run.status` ('completed' \| 'failed' \| 'cancelled'), `failure.*` (empty unless the run failed), `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). It cannot change how the run ended; an error in it is logged and never recursive. Release leases, claims and labels here.* |
 | `requires` | WorkflowRequirements | No | - |

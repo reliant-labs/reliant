@@ -47,7 +47,10 @@ type Repository interface {
 	// refuses (store.ErrOrgChanged) a project that moved org since.
 	ScheduleProjectDeletion(ctx context.Context, id, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error)
 	RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error)
-	PurgeProjectNow(ctx context.Context, id string, decided core.ProjectDecision, afterClaim func(ctx context.Context)) ([]string, error)
+	// An immediate purge is claimed in the request and its batches run after
+	// it returns (rpc_purge_project_now.go).
+	ClaimProjectPurgeNow(ctx context.Context, id string, decided core.ProjectDecision) error
+	PurgeClaimedProject(ctx context.Context, id, owner string) ([]string, error)
 	ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error)
 	// ProjectOrgMoveBlockers and ProjectOrgMoveEffects are a move's preview:
 	// the running work that refuses it now, and what it would change.

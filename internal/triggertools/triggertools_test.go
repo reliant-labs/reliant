@@ -201,7 +201,7 @@ func TestTriggerToolMutationClassification(t *testing.T) {
 			}
 		}
 	}
-	assert.Equal(t, []string{tools.ToolListTriggers, tools.ToolFireTrigger, tools.ToolCreateTriggerActivation, tools.ToolUpdateTriggerActivation, tools.ToolEnableTrigger, tools.ToolPauseTrigger, tools.ToolListTriggerEvents}, triggerTools)
+	assert.Equal(t, []string{tools.ToolListTriggers, tools.ToolFireTrigger, tools.ToolCreateTriggerActivation, tools.ToolUpdateTriggerActivation, tools.ToolEnableTrigger, tools.ToolPauseTrigger, tools.ToolDeleteTrigger, tools.ToolListTriggerEvents}, triggerTools)
 }
 
 // The adapter cannot create, enable or change an activation.

@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskguard"
@@ -341,6 +342,18 @@ func Start(ctx context.Context, opts StartOptions) error {
 	defer func() {
 		if releaseErr := lock.Release(); releaseErr != nil {
 			logging.WarnContext(ctx, logPrefix+" Failed to release daemon data dir claim", "error", releaseErr)
+		}
+	}()
+
+	// Credentialed scratch directories moved aside more than a day ago have
+	// been kept for inspection long enough (#2823). In the background: there
+	// can be hundreds, and nothing waits on them.
+	go func() {
+		removed, err := credsandbox.PruneMovedAside()
+		if err != nil {
+			logging.WarnContext(ctx, logPrefix+" Could not prune every moved-aside credentialed scratch directory", "removed", removed, "error", err)
+		} else if removed > 0 {
+			logging.InfoContext(ctx, logPrefix+" Pruned moved-aside credentialed scratch directories", "removed", removed)
 		}
 	}()
 
@@ -888,17 +901,36 @@ func (d *daemonClient) foreignDaemonIDFailure(err error) error {
 		bootstrap.DaemonIDPath(d.bootCfg.DataDir), err)
 }
 
-// registerLabels builds the daemon-registration label map. It advertises the
-// daemon's runtime/sandbox type when known so the server can surface runtime
-// capability limits to the model. Returns nil when there is nothing to report,
-// keeping the registration message unchanged for local daemons.
+// registerLabels builds the daemon-registration label map: the labels this
+// connection is selected by (a workflow's `daemon: labels:`). It carries the
+// machine labels the daemon declares, so a selector matches what the machine
+// was started with, and the daemon's runtime/sandbox type when known (that
+// one wins over a declared key of the same name: it is the platform's fact)
+// so the server can surface runtime capability limits to the model. Returns
+// nil when there is nothing to report, keeping the registration message
+// unchanged for local daemons.
 func (d *daemonClient) registerLabels() map[string]string {
-	if strings.TrimSpace(d.runtimeType) == "" {
+	runtimeType := strings.TrimSpace(d.runtimeType)
+	if runtimeType == "" && len(d.bootCfg.MachineLabels) == 0 {
 		return nil
 	}
-	return map[string]string{
-		config.DaemonRuntimeTypeLabelKey: d.runtimeType,
+	out := make(map[string]string, len(d.bootCfg.MachineLabels)+1)
+	for k, v := range d.bootCfg.MachineLabels {
+		out[k] = v
 	}
+	if runtimeType != "" {
+		out[config.DaemonRuntimeTypeLabelKey] = d.runtimeType
+	}
+	return out
+}
+
+// machineLabels are the durable labels this daemon declares for its machine
+// (DaemonRegister.machine_labels); nil for none.
+func (d *daemonClient) machineLabels() map[string]string {
+	if len(d.bootCfg.MachineLabels) == 0 {
+		return nil
+	}
+	return d.bootCfg.MachineLabels
 }
 
 // recordStream publishes a gateway-stream transition to the daemon's on-disk
@@ -1248,6 +1280,9 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			// resolveDaemonType.
 			DaemonType: resolveDaemonType(d.host.DaemonType, "local"),
 			Labels:     d.registerLabels(),
+			// Declared on every registration, reconnects included: the
+			// server merges them into the machine's durable labels.
+			MachineLabels: d.machineLabels(),
 			// Re-assert our persisted stable identity (empty on first-ever
 			// registration). The gateway trusts it for unbound PATs so identity
 			// survives restarts and hostname changes instead of being re-derived
@@ -2133,14 +2168,15 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		contextMap,
 	)
 
-	if isMCPToolName(req.ToolName) && isMCPAuthError(result) {
+	if isMCPToolName(req.ToolName) {
 		serverName := parseMCPServerName(req.ToolName)
-		if serverName != "" {
+		if restartsMCPServerOnAuthError(serverName, result) {
 			if projectPath == "" {
 				projectPath = resolveProjectPathFromContext(contextMap, "", d.cwd)
 			}
 			if projectPath != "" {
-				if err := d.mcpManager.RemoveProjectServer(projectPath, serverName); err != nil {
+				if err := d.mcpManager.RemoveProjectServer(projectPath, serverName,
+					"restart to reload credentials: the tool result read as an authentication failure"); err != nil {
 					logging.Warn(logPrefix+" Failed removing MCP server before auth retry", "projectPath", projectPath, "server", serverName, "error", err)
 				}
 				d.mcpManager.EnsureProjectServersLoaded(execCtx, projectPath)
@@ -3192,6 +3228,27 @@ func parseMCPServerName(toolName string) string {
 		return ""
 	}
 	return strings.TrimSpace(parts[1])
+}
+
+// restartsMCPServerOnAuthError reports whether a tool result calls for
+// restarting its MCP server so it reloads its credentials.
+//
+// Only a FAILED call qualifies: a successful result is the server answering,
+// so its credentials work, and its text is the tool's output — a web page, a
+// file, a query result — which can say "authentication failed" about anything.
+// And never a server that keeps caller state (the chrome-devtools browser): it
+// holds no credentials to reload, its error text is the page's own, and the
+// restart removes the server for every chat sharing it, taking each one's
+// pages and sign-ins. That is how an agent testing a login form restarted
+// every browser on the machine every minute or two (#2818).
+func restartsMCPServerOnAuthError(serverName string, result *toolexec.ExecutionResult) bool {
+	if serverName == "" || result == nil || mcp.KeepsCallerState(serverName) {
+		return false
+	}
+	if result.Success && !result.IsError {
+		return false
+	}
+	return isMCPAuthError(result)
 }
 
 func isMCPAuthError(result *toolexec.ExecutionResult) bool {

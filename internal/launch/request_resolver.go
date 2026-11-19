@@ -42,6 +42,12 @@ type requestResolver struct {
 	pinnedCatalogs     memo[string, pinnedResult]
 	provenance         memo[string, []config.WorkflowProvenance]
 	machineNames       memo[string, string]
+
+	// prefetched is the batch each prefetched (user, slug) was read in
+	// (PrefetchWorkflowDrafts). It holds the raw rows, never an answer:
+	// each lookup authorizes the row under its own context.
+	prefetchMu sync.Mutex
+	prefetched map[[2]string]*db.WorkflowDraftsBySlug
 }
 
 type syncedJSON struct {
@@ -54,13 +60,76 @@ type pinnedResult struct {
 	found   bool
 }
 
+// workflowDraftsReader reads many of a user's drafts in one query
+// (db.Repo.GetWorkflowDraftsBySlugs).
+type workflowDraftsReader interface {
+	GetWorkflowDraftsBySlugs(ctx context.Context, userID string, slugs []string) (*db.WorkflowDraftsBySlug, error)
+}
+
+// PrefetchWorkflowDrafts reads userID's drafts of slugs in ONE query, when
+// resolver is a NewRequestResolver over a store that can, and answers every
+// later GetWorkflowDraftBySlug and GetUsableWorkflowBySlug of those slugs
+// through resolver from it; any other resolver is left as it is. A list that
+// knows up front which workflows it resolves (each activation's) asks for
+// them together instead of reading each name's draft one round trip at a
+// time: ListInbox made 32 such reads a call in prod (trace ed2301a0…,
+// 2026-11-18), almost all of them misses, because automations run project
+// workflows. A slug nobody prefetched (a child a workflow runs) is still read
+// on its own, once.
+//
+// It keeps the rows, not the answers: visibility depends on the caller's
+// context (org membership), so each lookup decides it under its own context,
+// as the single read would, rather than reusing one made under prefetch's.
+//
+// A failed read seeds nothing, so each lookup then reads, and fails, on its
+// own as before.
+func PrefetchWorkflowDrafts(ctx context.Context, resolver WorkflowResolver, userID string, slugs []string) error {
+	r, ok := resolver.(*requestResolver)
+	if !ok || len(slugs) == 0 {
+		return nil
+	}
+	batch, ok := r.inner.(workflowDraftsReader)
+	if !ok {
+		return nil
+	}
+	got, err := batch.GetWorkflowDraftsBySlugs(ctx, userID, slugs)
+	if err != nil {
+		return err
+	}
+	r.prefetchMu.Lock()
+	defer r.prefetchMu.Unlock()
+	if r.prefetched == nil {
+		r.prefetched = map[[2]string]*db.WorkflowDraftsBySlug{}
+	}
+	for _, slug := range slugs {
+		key := [2]string{userID, slug}
+		if _, ok := r.prefetched[key]; !ok {
+			r.prefetched[key] = got
+		}
+	}
+	return nil
+}
+
+// prefetchedDrafts is the batch (userID, slug) was prefetched in, or nil.
+func (r *requestResolver) prefetchedDrafts(userID, slug string) *db.WorkflowDraftsBySlug {
+	r.prefetchMu.Lock()
+	defer r.prefetchMu.Unlock()
+	return r.prefetched[[2]string{userID, slug}]
+}
+
 func (r *requestResolver) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error) {
+	if got := r.prefetchedDrafts(userID, slug); got != nil {
+		return got.Draft(ctx, slug)
+	}
 	return r.drafts.get([2]string{userID, slug}, func() (*db.WorkflowDraft, error) {
 		return r.inner.GetWorkflowDraftBySlug(ctx, userID, slug)
 	})
 }
 
 func (r *requestResolver) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error) {
+	if got := r.prefetchedDrafts(userID, slug); got != nil {
+		return got.Usable(ctx, slug)
+	}
 	return r.usable.get([2]string{userID, slug}, func() (*db.WorkflowDraft, error) {
 		return r.inner.GetUsableWorkflowBySlug(ctx, userID, slug)
 	})

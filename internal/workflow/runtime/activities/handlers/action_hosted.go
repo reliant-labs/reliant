@@ -18,6 +18,13 @@ type HostedDisabledError struct{ Reason string }
 
 func (e *HostedDisabledError) Error() string { return "hosted HTTP disabled: " + e.Reason }
 
+// publicRefusal is an executor refusal whose text was written for the
+// workflow's author, such as hosteduse.SecretRefusedError (the workflow's
+// secret is missing or no longer granted).
+type publicRefusal interface {
+	PublicRefusal() string
+}
+
 // executeHosted is deliberately not a CredentialSource: tools cannot discover
 // or use hosted grants through the shared saved-connection path.
 func (a *ActionActivity) executeHosted(ctx context.Context, uses, grant string, params map[string]any, rtx RuntimeContext) *reliantv1.ActionOutput {
@@ -64,10 +71,15 @@ func (a *ActionActivity) executeHosted(ctx context.Context, uses, grant string, 
 	result, err := a.hosted.ExecuteAction(ctx, rtx.WorkflowID, rtx.StepID, grant, hostedhttp.Request{URL: rawURL, Method: method, Body: params["body"]})
 	// Remote/storage errors may carry internal details. The executor's own
 	// metadata-only audit records the precise rejection; history gets no cause,
-	// except a HostedDisabledError, which names a configuration reason only.
+	// except a HostedDisabledError, which names a configuration reason only,
+	// and a publicRefusal, whose text the executor wrote for the user.
 	var disabled *HostedDisabledError
 	if errors.As(err, &disabled) {
 		return fail("failed_precondition", disabled.Error())
+	}
+	var refusal publicRefusal
+	if errors.As(err, &refusal) {
+		return fail("failed_precondition", refusal.PublicRefusal())
 	}
 	if err != nil || result == nil {
 		return fail("failed_precondition", "hosted HTTP execution was refused or could not be completed")

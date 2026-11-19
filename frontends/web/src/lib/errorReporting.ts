@@ -61,3 +61,17 @@ export function reportError(error: unknown, context?: ErrorContext): void {
 export function reportFailure(message: string, context?: ErrorContext): void {
   reportError(new Error(message), context);
 }
+
+/**
+ * reportFailure under an exception type of its own: an Error named `type`, so
+ * the issue is titled `<type>: <message>` and the control plane can tell the
+ * kind of failure from the type alone (the type is what the error pipeline
+ * keeps of a report; its attributes stay on the event). The client-side
+ * timeouts use it: `RpcTimeout` and `RpcStall` issues page only once a second
+ * browser session has hit them.
+ */
+export function reportTypedFailure(type: string, message: string, context?: ErrorContext): void {
+  const error = new Error(message);
+  error.name = type;
+  reportError(error, context);
+}

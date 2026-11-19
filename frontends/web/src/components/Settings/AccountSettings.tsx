@@ -6,6 +6,7 @@ import Button from '@/components/forge-ui/button';
 import { LinkedAccounts } from '../LinkedAccounts'
 import { DeleteAccountDialog } from './DeleteAccountDialog'
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import { authPath } from "@/lib/paths";
 
 export function AccountSettings() {
   const {
@@ -72,7 +73,7 @@ export function AccountSettings() {
       // where the (now project-less) main app shell can flash up — driving
       // the navigation here closes that gap, and also clears any onboarding
       // plan still sitting in the URL.
-      navigate({ to: '/auth', search: { redirect: undefined } })
+      navigate({ to: authPath(), search: { redirect: undefined } })
     } catch (error) {
       console.error('Sign out failed:', error)
       setAccountError("Couldn't sign out. Please try again.")
@@ -95,7 +96,7 @@ export function AccountSettings() {
     } catch (error) {
       console.error('Sign out after account deletion failed:', error)
     }
-    navigate({ to: '/auth', search: { redirect: undefined } })
+    navigate({ to: authPath(), search: { redirect: undefined } })
   }
 
   return (

@@ -23,8 +23,9 @@ import { Gauge, LayoutGrid } from "lucide-react";
 import Link from "@/components/forge-ui/link";
 import SidebarLayout, { type SidebarNavItem, type SidebarUserInfo } from "@/components/forge-ui/sidebar_layout";
 
+import { appsPath } from "@/lib/paths";
+
 import {
-  APPS_PATH,
   carriedOrgSearch,
   consolePath,
   OBS_NAV_LABELS,
@@ -66,7 +67,7 @@ export function buildOrgNav({ page, apps, alertsFiring = 0, search = {}, obsOpen
         active: false,
         // An app's console is its own place with its own nav, so these do not carry the org filters.
         children: [
-          { label: "All apps", href: APPS_PATH, active: false },
+          { label: "All apps", href: appsPath(), active: false },
           ...apps.map((app) => ({ label: app, href: consolePath(app, { kind: "overview" }), active: false })),
         ],
       },

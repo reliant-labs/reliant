@@ -19,6 +19,11 @@
  * route tree to find out.
  */
 
+import { automationPath, runsPath, workflowBuilderPath, workflowDetailPath, workflowLibraryPath } from "./paths";
+
+// The constants below are the area's paths as a pathname is MATCHED against
+// them (which tab, is this a workflow page). A link builds its target with
+// lib/paths instead, which is where the org segment (U3) goes.
 export const WORKFLOWS_AREA_PATH = "/workflows";
 /** The Workflows tab's list; a workflow's page is `${this}/<ref>`. */
 export const WORKFLOWS_LIBRARY_PATH = "/workflows/library";
@@ -36,16 +41,18 @@ export type WorkflowsTab = "workflows" | "runs";
 export interface WorkflowsTabInfo {
   key: WorkflowsTab;
   label: string;
-  /** The tab's list path; everything below it is one of its detail pages. */
+  /** The tab's list path; everything below it is one of its detail pages. For matching a pathname. */
   path: string;
+  /** The tab's list, to link to. */
+  href: () => string;
   /** What a detail page's exit returns to. */
   listLabel: string;
 }
 
 /** The tabs, in the order the tab bar renders them. */
 export const WORKFLOWS_TABS: readonly WorkflowsTabInfo[] = [
-  { key: "workflows", label: "Workflows", path: WORKFLOWS_LIBRARY_PATH, listLabel: "All workflows" },
-  { key: "runs", label: "Runs", path: WORKFLOWS_RUNS_PATH, listLabel: "All runs" },
+  { key: "workflows", label: "Workflows", path: WORKFLOWS_LIBRARY_PATH, href: () => workflowLibraryPath(), listLabel: "All workflows" },
+  { key: "runs", label: "Runs", path: WORKFLOWS_RUNS_PATH, href: () => runsPath(), listLabel: "All runs" },
 ];
 
 function isAtOrBelow(pathname: string, path: string): boolean {
@@ -95,16 +102,18 @@ export function isWorkflowSurfacePath(pathname: string): boolean {
  *                                   (automationRedirectPath)
  */
 export function legacyWorkflowsPath(pathname: string): string | null {
-  if (pathname === "/workflow") return WORKFLOWS_LIBRARY_PATH;
+  if (pathname === "/workflow") return workflowLibraryPath();
   if (isAtOrBelow(pathname, "/runs")) return `/workflows${pathname}`;
-  if (pathname === RETIRED_AUTOMATIONS_PATH || pathname === "/automations") return ON_WORKFLOWS_HREF;
+  if (pathname === RETIRED_AUTOMATIONS_PATH || pathname === "/automations") return onWorkflowsHref();
   // /workflows/automations/<id> is the resolving redirect itself.
   if (pathname.startsWith("/automations/")) return `/workflows${pathname}`;
   return null;
 }
 
 /** The Workflows tab narrowed to what runs by itself, in every project. */
-export const ON_WORKFLOWS_HREF = `${WORKFLOWS_LIBRARY_PATH}?show=on&allProjects=true`;
+export function onWorkflowsHref(): string {
+  return `${workflowLibraryPath()}?show=on&allProjects=true`;
+}
 
 /**
  * The redirect an automation id resolves through: the trigger is looked up
@@ -112,7 +121,7 @@ export const ON_WORKFLOWS_HREF = `${WORKFLOWS_LIBRARY_PATH}?show=on&allProjects=
  * automationHref(trigger). Old links and notifications carry only the id.
  */
 export function automationRedirectPath(triggerId: string): string {
-  return `${RETIRED_AUTOMATIONS_PATH}/${encodeURIComponent(triggerId)}`;
+  return automationPath(triggerId);
 }
 
 /** The DOM id of one project's group on a workflow page's Triggers card. */
@@ -134,7 +143,7 @@ export function workflowPageHref(
   projectId?: string,
   options: { automation?: boolean; triggerId?: string } = {},
 ): string {
-  const path = `${WORKFLOWS_LIBRARY_PATH}/${encodeURIComponent(workflowRef)}`;
+  const path = workflowDetailPath(workflowRef);
   const query = projectId ? `?${new URLSearchParams({ project: projectId }).toString()}` : "";
   const hash = options.triggerId
     ? `#${triggerAnchorId(options.triggerId)}`
@@ -157,5 +166,5 @@ export function automationHref(trigger: { id: string; workflow?: string; project
 
 /** The builder for a workflow; a built-in opens read-only there. */
 export function workflowEditHref(workflow: string): string {
-  return `/workflow/${encodeURIComponent(workflow.startsWith("builtin://") ? workflow.slice("builtin://".length) : workflow)}`;
+  return workflowBuilderPath(workflow.startsWith("builtin://") ? workflow.slice("builtin://".length) : workflow);
 }

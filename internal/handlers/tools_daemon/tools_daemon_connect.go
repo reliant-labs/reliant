@@ -353,6 +353,8 @@ func (s *Service) ConnectDaemon(
 		}
 		return svcerr.WrapOr(err, svcerr.Internal("failed to persist daemon registration"))
 	}
+	// Before the list-changed signal below, so a refetch reads the labels.
+	s.persistDeclaredLabels(ctx, userID, daemonID, boundCredential, reg.GetMachineLabels())
 
 	if err := s.deps.Repo.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
 		DaemonID:           daemonID,
@@ -553,6 +555,8 @@ func (s *Service) RegisterOutboundConnection(
 		}
 		return nil, fmt.Errorf("failed to persist daemon registration: %w", err)
 	}
+	// The gateway's dial is as authoritative as a bound credential (above).
+	s.persistDeclaredLabels(ctx, userID, daemonID, true, reg.GetMachineLabels())
 
 	if err := s.deps.Repo.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
 		DaemonID:           daemonID,

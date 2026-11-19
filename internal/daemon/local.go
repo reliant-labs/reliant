@@ -809,15 +809,11 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	switch {
-	case credentials == daemonpolicy.CredentialsNone:
-		cmd.Env = daemonpolicy.WithoutCredentials(os.Environ(), req.Env) //nolint:forbidigo // filtered to the allowlist for a credentials-none child; not configuration
-	case len(req.Env) > 0:
-		cmd.Env = os.Environ() //nolint:forbidigo // passes this process environment to a child process; not configuration
-		for k, v := range req.Env {
-			cmd.Env = append(cmd.Env, k+"="+v)
-		}
-	}
+	// The same environment the daemon's exec and background paths build
+	// (daemonpolicy.ChildEnv): never the daemon's own identity or connection
+	// settings, so nothing the command runs can act as the hosting daemon
+	// (#2823), and always the agent-shell marker.
+	cmd.Env = daemonpolicy.ChildEnv(ctx, req.Env, credentials)
 	// A chat's command finds the gh shim first on PATH (internal/ghshim).
 	cmd.Env = ghshim.Default().Env(cmd.Env)
 

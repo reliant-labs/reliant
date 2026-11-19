@@ -15,7 +15,8 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 
 import { isTriggerNotFound, triggerErrorMessage } from "@/hooks/trigger-model";
 import { useTrigger } from "@/hooks/trigger-queries";
-import { automationHref, WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
+import { automationHref } from "@/lib/workflowsArea";
+import { workflowLibraryPath } from "@/lib/paths";
 import Card from "../forge-ui/card";
 import Button from "@/components/forge-ui/button";
 
@@ -34,7 +35,7 @@ export function AutomationRedirectPage() {
         <p className="text-sm font-medium text-foreground">This automation no longer exists.</p>
         <p className="mt-1 text-sm text-muted-foreground">Its trigger was removed. What still runs by itself is on the Workflows tab.</p>
         <Link
-          to={WORKFLOWS_LIBRARY_PATH}
+          to={workflowLibraryPath()}
           search={{ show: "on", allProjects: true }}
           className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >

@@ -27,13 +27,38 @@ import (
 // transaction and never touch the project's row, and the project row goes
 // last, when the cascade left to it is small.
 //
+// # Batches are bounded by rows, not only by chats
+//
+// A batch of chats is not a bounded amount of work: one chat can hold tens of
+// thousands of messages and many times that in chat_updates and
+// step_executions. A project whose first 25 chats held 33k messages (prod,
+// 2026-11-18) could not delete in a 10s request, and every attempt rolled the
+// whole batch back, so retrying made no progress. So before the chats go, the
+// bulk under them is thinned: their messages (with the content blocks, tool
+// calls and tool results under each), chat_updates, user_updates and
+// step_executions go a bounded slice at a time, each slice its own
+// transaction, until a slice comes back short. The chat batches that follow
+// then find little left, and are still the last word for each chat: they lock
+// it, tombstone it (the chat_write_admission protocol below) and delete what
+// remains, including anything a writer added while the slices ran.
+//
 // # What a failure leaves
 //
 // The delete is not atomic. A batch that fails, or a caller that goes away,
-// leaves the project in place with fewer chats; nothing is half-deleted inside
-// a chat, because one chat's rows go in one transaction. Deleting again
+// leaves the project in place with fewer chats, and the chats still there may
+// have lost some of their messages and history to the thinning. Deleting again
 // resumes from what is left. That is the trade for never holding a lock longer
 // than a batch.
+//
+// A half-thinned chat is never shown to anyone, because every caller deletes
+// a project only once it is hidden: the purge (internal/db project_schedule.go,
+// PurgeProjectNow's claim and the purge worker's) claims the project first,
+// which sets delete_after and purge_started_at, and from then on every read
+// treats the project and its chats as absent and a restore is refused
+// (core.ErrProjectPurgeStarted). The claim is what makes thinning first safe:
+// a restore cannot bring back a chat with half its messages. (internal/db's
+// Repo.DeleteProject, which deletes a project that is not hidden, is called
+// only by tests; a new caller must claim the project first.)
 //
 // # The order inside a batch
 //
@@ -49,9 +74,19 @@ import (
 // once forked from one of its messages.
 const (
 	// projectDeleteChatBatch is how many chats one transaction removes. A chat
-	// averages tens of messages and a few hundred chat_updates, so a batch is
-	// thousands of rows, not millions.
+	// averages tens of messages and a few hundred chat_updates, but one can
+	// hold tens of thousands; the thinning slices below take that bulk first,
+	// so a batch of chats deletes what little is left under them.
 	projectDeleteChatBatch = 25
+	// projectThinMessageSlice is how many of the project's messages one
+	// transaction removes, with the content blocks, tool calls and tool
+	// results under each: a message carries a handful of those, so a slice
+	// is around ten thousand rows.
+	projectThinMessageSlice = 2000
+	// projectThinRowSlice is how many rows of a flat table (chat_updates,
+	// user_updates, step_executions) one transaction removes. Nothing hangs
+	// off those rows.
+	projectThinRowSlice = 5000
 	// projectDeleteWorktreeBatch is how many worktrees one transaction removes.
 	projectDeleteWorktreeBatch = 50
 	// projectDeleteUpdateBatch is how many of the project's remaining
@@ -127,10 +162,27 @@ var chatPurgeSteps = []struct{ name, sql string }{
 // batch into it. A failure leaves the project with whatever was not yet
 // removed; calling it again resumes.
 func DeleteUserProject(ctx context.Context, db orm.Context, id, userID string) error {
-	return deleteUserProject(ctx, db, id, userID, projectDeleteChatBatch, projectDeleteWorktreeBatch, projectDeleteUpdateBatch)
+	return deleteUserProject(ctx, db, id, userID, defaultProjectDeleteSizes)
 }
 
-func deleteUserProject(ctx context.Context, db orm.Context, id, userID string, chatBatch, worktreeBatch, updateBatch int) error {
+// projectDeleteSizes is how much each kind of batch removes: the defaults
+// above, or smaller ones a test passes to cross batch boundaries cheaply.
+type projectDeleteSizes struct {
+	chats, worktrees, updates int
+	// messages and rows size the thinning slices (projectThinMessageSlice,
+	// projectThinRowSlice).
+	messages, rows int
+}
+
+var defaultProjectDeleteSizes = projectDeleteSizes{
+	chats:     projectDeleteChatBatch,
+	worktrees: projectDeleteWorktreeBatch,
+	updates:   projectDeleteUpdateBatch,
+	messages:  projectThinMessageSlice,
+	rows:      projectThinRowSlice,
+}
+
+func deleteUserProject(ctx context.Context, db orm.Context, id, userID string, sizes projectDeleteSizes) error {
 	var owned bool
 	if err := db.Bun().NewRaw(`SELECT EXISTS (SELECT 1 FROM projects WHERE id = ?0 AND user_id = ?1)`, id, userID).Scan(ctx, &owned); err != nil {
 		return fmt.Errorf("delete project: read the project: %w", err)
@@ -139,7 +191,7 @@ func deleteUserProject(ctx context.Context, db orm.Context, id, userID string, c
 		return nil
 	}
 	for round := 1; ; round++ {
-		if err := purgeProjectContents(ctx, db, id, chatBatch, worktreeBatch, updateBatch); err != nil {
+		if err := purgeProjectContents(ctx, db, id, sizes); err != nil {
 			return err
 		}
 		if hook := projectDeleteBeforeFinal.Load(); hook != nil {
@@ -167,9 +219,22 @@ const projectDeleteMaxRounds = 5
 // concurrent write that lands after the loops passed lands.
 var projectDeleteBeforeFinal atomic.Pointer[func(ctx context.Context, projectID string)]
 
-// purgeProjectContents runs the batch loops: the project's chats with
-// everything stored under them, its worktrees, then its remaining updates.
-func purgeProjectContents(ctx context.Context, db orm.Context, id string, chatBatch, worktreeBatch, updateBatch int) error {
+// projectDeleteAfterThin, when set (tests only), runs after the thinning
+// slices and before the chat batches, with the project's id.
+var projectDeleteAfterThin atomic.Pointer[func(ctx context.Context, projectID string)]
+
+// purgeProjectContents runs the batch loops: the bulk under the project's
+// chats in row-bounded slices, then the chats with what is left under them,
+// its worktrees, then its remaining updates.
+func purgeProjectContents(ctx context.Context, db orm.Context, id string, sizes projectDeleteSizes) error {
+	if err := thinProjectChats(ctx, db, id, sizes); err != nil {
+		return fmt.Errorf("delete project: %w", err)
+	}
+	if hook := projectDeleteAfterThin.Load(); hook != nil {
+		(*hook)(ctx, id)
+	}
+	chatBatch, worktreeBatch, updateBatch := sizes.chats, sizes.worktrees, sizes.updates
+
 	// Chats, with everything stored under them.
 	for {
 		var n int
@@ -236,6 +301,90 @@ func purgeProjectContents(ctx context.Context, db orm.Context, id string, chatBa
 	// cascade would leave behind (project_schedule.go).
 	if err := purgeProjectOrphans(ctx, db, id); err != nil {
 		return fmt.Errorf("delete project: %w", err)
+	}
+	return nil
+}
+
+// projectChatIDs selects the project's chats, ?0 being its id, for the
+// thinning slices to select under.
+const projectChatIDs = `SELECT id FROM chats WHERE project_id = ?0`
+
+// messageThinSteps removes a slice of messages, ?0 being their ids, with what
+// hangs off them. As in chatPurgeSteps, what restricts goes first: the fork
+// pointers at these messages, from any chat (a chat of another project
+// included, see the top of this file).
+var messageThinSteps = []struct{ name, sql string }{
+	{"thread fork pointers", `UPDATE threads SET fork_at_message_id = NULL WHERE fork_at_message_id = ANY(?0)`},
+	{"context window fork pointers", `UPDATE context_windows SET fork_at_message_id = NULL WHERE fork_at_message_id = ANY(?0)`},
+	// They cascade, but going first keeps the message delete cheap.
+	{"message_content_blocks", `DELETE FROM message_content_blocks WHERE message_id = ANY(?0)`},
+	{"tool_call_results", `DELETE FROM tool_call_results WHERE message_id = ANY(?0)`},
+	{"tool_calls", `DELETE FROM tool_calls WHERE message_id = ANY(?0)`},
+	// The delivery records of these messages go with them, as
+	// chatPurgeSteps removes agent_messages before messages. Left to
+	// delivered_message_id's ON DELETE SET NULL, a slice would leave a
+	// delivered record naming no message until its chat batch ran (or for
+	// good, after a failed delete). Only records of the messages' own chats:
+	// one of a chat outside the slice keeps its row and loses the pointer.
+	{"agent_messages", `
+		DELETE FROM agent_messages
+		WHERE delivered_message_id = ANY(?0)
+		  AND chat_id IN (SELECT chat_id FROM messages WHERE id = ANY(?0))`},
+	{"messages", `DELETE FROM messages WHERE id = ANY(?0)`},
+}
+
+// flatThinSteps each remove up to ?1 rows of one flat table under the
+// project's chats, ?0 being the project's id: tables nothing restricts and
+// nothing hangs off, which a chat can hold millions of.
+var flatThinSteps = []struct{ name, sql string }{
+	{"chat_updates", `
+		DELETE FROM chat_updates WHERE id IN (
+			SELECT id FROM chat_updates WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
+	{"user_updates", `
+		DELETE FROM user_updates WHERE id IN (
+			SELECT id FROM user_updates WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
+	{"step_executions", `
+		DELETE FROM step_executions WHERE id IN (
+			SELECT id FROM step_executions WHERE workflow_id IN (
+				SELECT id FROM workflows WHERE chat_id IN (` + projectChatIDs + `)) LIMIT ?1)`},
+}
+
+// thinProjectChats removes the bulk stored under the project's chats in
+// slices of bounded rows, each its own transaction, until each comes back
+// short (see the top of this file): the messages with what hangs off them,
+// then the flat tables. It leaves the chats, threads and workflows, which
+// the chat batches remove under their tombstones.
+func thinProjectChats(ctx context.Context, db orm.Context, id string, sizes projectDeleteSizes) error {
+	for {
+		var n int
+		err := projectDeleteBatch(ctx, db, func(ctx context.Context) error {
+			var ids []string
+			if err := db.Bun().NewRaw(`SELECT id FROM messages WHERE chat_id IN (`+projectChatIDs+`) LIMIT ?1`,
+				id, orm.Arg(sizes.messages)).Scan(ctx, &ids); err != nil {
+				return fmt.Errorf("list messages: %w", err)
+			}
+			n = len(ids)
+			if n == 0 {
+				return nil
+			}
+			for _, step := range messageThinSteps {
+				if _, err := db.Bun().NewRaw(step.sql, pgdialect.Array(ids)).Exec(ctx); err != nil {
+					return fmt.Errorf("%s: %w", step.name, err)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("thin messages: %w", err)
+		}
+		if n < sizes.messages {
+			break
+		}
+	}
+	for _, step := range flatThinSteps {
+		if err := projectDeleteUntilShort(ctx, db, sizes.rows, step.sql, id); err != nil {
+			return fmt.Errorf("thin %s: %w", step.name, err)
+		}
 	}
 	return nil
 }

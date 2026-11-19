@@ -9,7 +9,7 @@
  * org's: projects and chats of other orgs showed up in the sidebar.
  */
 import { Code, ConnectError } from "@connectrpc/connect";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { act, cleanup, render, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
@@ -41,7 +41,8 @@ import { bindActiveOrgUser, setEffectiveOrg, useActiveOrgStore } from "@/store/a
 import { useAuthStore } from "@/store/authStore";
 import { metricKeys } from "@/hooks/observability-queries";
 import { sessionKeys } from "@/hooks/observability-session-queries";
-import { getOrgScope, keepPreviousInOrg, keepPreviousInOrgSegment, keyNamesOrg } from "../orgScope";
+import { forgeCloudKeys } from "@/hooks/forge-queries";
+import { getOrgScope, keepPreviousInOrg, keepPreviousInOrgSegment, keyNamesOrg, resetAfterLeavingOrg } from "../orgScope";
 
 const ACME = { id: "org-a", name: "Acme", slug: "acme", role: "owner", isOwner: true, isDefault: true };
 const SIDE = { id: "org-b", name: "Side", slug: "side", role: "member", isOwner: false, isDefault: false };
@@ -259,5 +260,31 @@ describe("org-scoped product lists", () => {
     expect(queryClient.getQueryData(projectsKey(null))).toBeUndefined();
     expect(queryClient.getQueryData(chatKeys.list(null, null))).toBeUndefined();
     expect(queryClient.getQueryData(projectsKey("org-a"))).toEqual({ projects: [], total: 1 });
+  });
+
+  it("leaving an org drops its keyed reads without re-sending them, and re-reads the unkeyed ones", async () => {
+    // A switch resets before the screen's observers move to the new org's key
+    // (TanStack applies new options in an effect, after the binding's): a
+    // refetch of the old org's key would send its request again (main-red
+    // control-plane#2954, the Apps list's ListEnvironments after a switch).
+    const keyedFetches: string[] = [];
+    const unkeyedFetches: string[] = [];
+    const keyed = new QueryObserver(queryClient, {
+      queryKey: forgeCloudKeys.orgEnvs("org-a"),
+      queryFn: () => (keyedFetches.push("org-a"), "a"),
+    });
+    const unkeyed = new QueryObserver(queryClient, {
+      queryKey: forgeCloudKeys.managedSecrets("p", "prod"),
+      queryFn: () => (unkeyedFetches.push("transport org"), "s"),
+    });
+    const unsubscribe = [keyed.subscribe(() => {}), unkeyed.subscribe(() => {})];
+    await waitFor(() => expect([keyedFetches, unkeyedFetches]).toEqual([["org-a"], ["transport org"]]));
+
+    await resetAfterLeavingOrg(queryClient, ["forge"], "org-a");
+
+    expect(keyedFetches).toEqual(["org-a"]);
+    expect(queryClient.getQueryCache().find({ queryKey: forgeCloudKeys.orgEnvs("org-a") })).toBeUndefined();
+    expect(unkeyedFetches).toEqual(["transport org", "transport org"]);
+    unsubscribe.forEach((stop) => stop());
   });
 });

@@ -177,16 +177,25 @@ func MachineName(ctx context.Context, r DaemonReader, daemonID string) string {
 	if d == nil {
 		return fmt.Sprintf("machine %s", short)
 	}
-	if name := strings.TrimSpace(d.Name); name != "" {
+	if name := strings.TrimSpace(d.Name); !isPlaceholderLabel(name, daemonID) {
 		return fmt.Sprintf("%q", name)
 	}
 	if d.DaemonType != nil && *d.DaemonType == "managed" {
 		return fmt.Sprintf("cloud machine %s", short)
 	}
 	if d.Hostname != nil {
-		if host := strings.TrimSpace(*d.Hostname); host != "" && host != daemonID && !uuidPattern.MatchString(host) {
+		if host := strings.TrimSpace(*d.Hostname); !isPlaceholderLabel(host, daemonID) {
 			return fmt.Sprintf("%q", host)
 		}
 	}
 	return fmt.Sprintf("self-hosted machine %s", short)
+}
+
+// isPlaceholderLabel reports whether a machine's name or hostname names
+// nothing a person chose or would recognize: empty, the machine's own id, or
+// a bare UUID. A daemon that connected with neither a name nor a hostname had
+// its id recorded as its name, which then read as "\"46e3682b-…\"" in every
+// sentence naming it.
+func isPlaceholderLabel(label, daemonID string) bool {
+	return label == "" || strings.EqualFold(label, daemonID) || uuidPattern.MatchString(label)
 }

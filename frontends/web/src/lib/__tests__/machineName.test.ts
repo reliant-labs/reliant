@@ -52,6 +52,22 @@ describe("machineDisplayName", () => {
     ).toBe("Self-hosted machine (38181976)");
   });
 
+  // The owner's Mac, 2026-11-18: registered with no name, so the control
+  // plane recorded its id as its name, and every surface said
+  // "reliant-labs isn't on 46e3682b-33cd-4e88-aecb-52a3a919a354".
+  it.each([
+    ["its own id", "46e3682b-33cd-4e88-aecb-52a3a919a354"],
+    ["its own id, upper-cased", "46E3682B-33CD-4E88-AECB-52A3A919A354"],
+    ["another bare UUID", "0f8fad5b-d9cb-469f-a165-70867728950e"],
+  ])("treats a name that is %s as a placeholder", (_, name) => {
+    const daemonId = "46e3682b-33cd-4e88-aecb-52a3a919a354";
+    expect(machineDisplayName({ daemonId, name, hostname: "Seans-MacBook-Pro.local", daemonType: "self_hosted" })).toBe(
+      "Seans-MacBook-Pro.local",
+    );
+    expect(machineDisplayName({ daemonId, name, daemonType: "self_hosted" })).toBe("Self-hosted machine (46e3682b)");
+    expect(machineDisplayName({ daemonId, name, daemonType: "managed" })).toBe("Cloud machine (46e3682b)");
+  });
+
   it("ignores a whitespace-only name", () => {
     expect(machineDisplayName({ daemonId: "abc12345", name: "  ", daemonType: "managed" })).toBe(
       "Cloud machine (abc12345)",

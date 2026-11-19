@@ -29,6 +29,7 @@ import { useReturningUserHeal } from "./useReturningUserHeal";
 import { useArrivedComplete } from "./useArrivedComplete";
 import { leaveOnboarding } from "./leaveOnboarding";
 import { GITHUB_CREDENTIAL_QUERY_KEY } from "@/hooks/useGitHubCredential";
+import { onboardingPath } from "@/lib/paths";
 
 export function OnboardingRoute() {
   const navigate = useNavigate();
@@ -101,7 +102,7 @@ export function OnboardingRoute() {
   useEffect(() => {
     if (!resetOnboarding) return;
     navigate({
-      to: "/onboarding",
+      to: onboardingPath(),
       search: { "reset-onboarding": undefined, plan: undefined, returnTo },
       replace: true,
     });
@@ -121,7 +122,7 @@ export function OnboardingRoute() {
       toast.error(github_error_msg || github_error || "GitHub connection failed");
     }
     navigate({
-      to: "/onboarding",
+      to: onboardingPath(),
       search: (prev) => {
         const { github_connected: _c, github_error: _e, github_error_msg: _m, ...rest } = prev;
         return rest;
