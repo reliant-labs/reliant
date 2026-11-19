@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -1218,6 +1219,9 @@ var infrastructureActivities = []string{
 	// the run would check, not what a scenario tests.
 	"PreflightRequirements",
 	"MachineResumeWake",
+	// A scenario has no machine pools: the stub places nothing, so a pool
+	// or labels-only `daemon:` leaves the run unpinned.
+	machinepool.PlaceRunActivityName,
 	"ValidateThreadOwnership",
 	// QuestionCreate is NOT here: it resolves an ask_question node from the
 	// scenario and is registered explicitly below, like ApprovalCreate.

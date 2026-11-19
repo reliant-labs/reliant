@@ -53,6 +53,12 @@ type ExecutionContext struct {
 	// nil means use default daemon resolution (local → cloud → wake).
 	DaemonSelector *DaemonSelectorValue
 
+	// WorkflowPlacement is where the workflow-level `daemon: {pool:}` or
+	// labels-only selector was placed (run_placement.go), once per run. It
+	// rides the root's context across continue-as-new, so a successor routes
+	// to the same machine without asking again. nil: not placed.
+	WorkflowPlacement *RunPlacement `json:",omitempty"`
+
 	// Loop context - set when executing inside a loop
 	// nil if not in a loop
 	Loop *ExecLoopContext
@@ -99,6 +105,9 @@ type DaemonSelectorValue struct {
 	Name   string            `json:"name,omitempty"`
 	Type   string            `json:"type,omitempty"` // "local", "cloud", "any"
 	Labels map[string]string `json:"labels,omitempty"`
+	// Pool names one of the owner's machine pools. The run (or node) is
+	// placed on a member once (see NeedsPlacement); exclusive with the rest.
+	Pool string `json:"pool,omitempty"`
 	// Session marks the chat's pin (session_daemon_id) rather than a
 	// selector the workflow or node configures. A pin can go stale while the
 	// run lives (its chat moves to the workspace's machine); configured
@@ -195,7 +204,22 @@ func ResolveDaemonSelectorProto(ds *reliantv1.DaemonSelectorProto) *DaemonSelect
 		Name:   ds.GetName(),
 		Type:   ds.GetType(),
 		Labels: ds.GetLabels(),
+		Pool:   ds.GetPool(),
 	}
+}
+
+// NeedsPlacement reports whether this selector is placed once on a machine
+// (run_placement.go) rather than routed by as it is: a pool, or labels with
+// nothing else, which place on a machine whose durable labels hold them.
+// Labels beside an id, name or type keep their per-call filter meaning.
+func (ds *DaemonSelectorValue) NeedsPlacement() bool {
+	if ds == nil {
+		return false
+	}
+	if ds.Pool != "" {
+		return true
+	}
+	return len(ds.Labels) > 0 && ds.ID == "" && ds.Name == "" && ds.Type == ""
 }
 
 // ResolveCelDaemonSelector evaluates a CelDaemonSelector and returns a DaemonSelectorValue.
@@ -260,6 +284,9 @@ func daemonSelectorFromCELResult(result interface{}) (*DaemonSelectorValue, erro
 		}
 		if typ, ok := v["type"].(string); ok {
 			ds.Type = typ
+		}
+		if pool, ok := v["pool"].(string); ok {
+			ds.Pool = pool
 		}
 		if labels, ok := v["labels"].(map[string]interface{}); ok {
 			ds.Labels = make(map[string]string)
@@ -404,6 +431,7 @@ func (ctx *ExecutionContext) Clone() *ExecutionContext {
 		ParentThread:         ctx.ParentThread,
 		ProjectPath:          ctx.ProjectPath,
 		DaemonSelector:       ctx.DaemonSelector,
+		WorkflowPlacement:    ctx.WorkflowPlacement,
 		UserJWT:              ctx.UserJWT, // Reliant provider is JWT-gated; cloned contexts must carry it.
 		CatalogPin:           ctx.CatalogPin,
 		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
