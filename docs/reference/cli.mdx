@@ -42,7 +42,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant db vault`](#reliant-db-vault) | Rotate the credential vault's key-encryption key |
 | [`reliant db vault rewrap`](#reliant-db-vault-rewrap) | Re-wrap every data key under the keyring's primary KEK |
 | [`reliant db vault verify`](#reliant-db-vault-verify) | Prove every data key is wrapped under the primary KEK and opens |
-| [`reliant forge`](#reliant-forge) | Build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first |
+| [`reliant forge`](#reliant-forge) | Reliant Forge: build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first |
 | [`reliant forge agent`](#reliant-forge-agent) | For coding agents: skills, the MCP server, and filing a forge bug |
 | [`reliant forge agent mcp`](#reliant-forge-agent-mcp) | Run forge as an MCP server on stdio, so any agent harness can drive it |
 | [`reliant forge agent report-bug`](#reliant-forge-agent-report-bug) | Report a defect in forge itself to the Reliant engineering team |
@@ -263,6 +263,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge fix config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v1.0.0) |
 | [`reliant forge fix connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
+| [`reliant forge fix derive-contract`](#reliant-forge-fix-derive-contract) | Replace a package's hand-written Service interface with //forge:contract on its one implementation |
 | [`reliant forge fix harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub`<Field>` doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
@@ -287,6 +288,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge lint fix composition-graph`](#reliant-forge-lint-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge lint fix config-proto-package`](#reliant-forge-lint-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v1.0.0) |
 | [`reliant forge lint fix connect-errors`](#reliant-forge-lint-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
+| [`reliant forge lint fix derive-contract`](#reliant-forge-lint-fix-derive-contract) | Replace a package's hand-written Service interface with //forge:contract on its one implementation |
 | [`reliant forge lint fix harness-mocks`](#reliant-forge-lint-fix-harness-mocks) | Rename the harness's Stub`<Field>` doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`reliant forge lint fix narrow-deps`](#reliant-forge-lint-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge lint fix operatorkit`](#reliant-forge-lint-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
@@ -319,6 +321,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs alerts`](#reliant-forge-obs-alerts) | Alert rules declared for an environment |
 | [`reliant forge obs alerts check`](#reliant-forge-obs-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
 | [`reliant forge obs alerts run`](#reliant-forge-obs-alerts-run) | Evaluate the env's alert rules continuously and deliver what fires through the local Alertmanager |
+| [`reliant forge obs blast-radius`](#reliant-forge-obs-blast-radius) | The ops a diff can change — rpcs and component methods — with the commits that changed each and its traffic |
 | [`reliant forge obs changes`](#reliant-forge-obs-changes) | What changed? Promotions, rollbacks, failed deploys and activity, newest first |
 | [`reliant forge obs check`](#reliant-forge-obs-check) | Did the deploy work? Judge a release by the window after it against the window before |
 | [`reliant forge obs dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
@@ -341,6 +344,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs metrics exemplars`](#reliant-forge-obs-metrics-exemplars) | Sampled observations of a metric, each with the trace it came from |
 | [`reliant forge obs metrics list`](#reliant-forge-obs-metrics-list) | The metrics collected in a window |
 | [`reliant forge obs metrics query`](#reliant-forge-obs-metrics-query) | A metrics panel: one or more metrics over time, as the console's explorer runs it |
+| [`reliant forge obs ops`](#reliant-forge-obs-ops) | Every op the project runs — rpcs, endpoints, component methods — by traffic, latency and errors |
 | [`reliant forge obs profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`reliant forge obs query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
 | [`reliant forge obs receivers`](#reliant-forge-obs-receivers) | Route the org's alerts to Slack, a webhook, email or PagerDuty |
@@ -362,6 +366,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs workloads`](#reliant-forge-obs-workloads) | Restarts, crash loops, last termination reasons and failing jobs, per workload |
 | [`reliant forge package`](#reliant-forge-package) | Manage internal packages |
 | [`reliant forge package new`](#reliant-forge-package-new) | Create a new internal package with contract interface |
+| [`reliant forge pgo`](#reliant-forge-pgo) | Profile-guided builds: pull an env's CPU profiles into each Go binary's default.pgo |
+| [`reliant forge pgo pull`](#reliant-forge-pgo-pull) | Write cmd/`<bin>`/default.pgo for each Go binary from an env's CPU profiles |
+| [`reliant forge pgo status`](#reliant-forge-pgo-status) | Show each Go binary's default.pgo: provenance, age and effective PGO config |
 | [`reliant forge project`](#reliant-forge-project) | Create, evolve, and inspect the project as a whole |
 | [`reliant forge project annotations`](#reliant-forge-project-annotations) | Dump forge's authoritative entity-authoring annotation spec |
 | [`reliant forge project audit`](#reliant-forge-project-audit) | Print a comprehensive project state snapshot |
@@ -1237,7 +1244,7 @@ reliant db vault verify
 
 ## reliant forge
 
-Build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first
+Reliant Forge: build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first
 
 Reliant Forge (github.com/reliant-labs/forge) — not Atlassian Forge, Foundry's
 forge (Solidity) or Laravel Forge.
@@ -1249,6 +1256,8 @@ observability and linters from day 0.
 New here? 'forge start' prints, in about 60 lines, the one command for the
 directory you are in: deploy the app already here with no account
 ('forge env deploy prod --claimable'), or create one.
+'forge skill load compare' says where forge fits next to Vercel, Supabase or
+Render: what it replaces, its limits and what hosting costs.
 
 A landing page, docs site, SPA or PWA with no backend is a complete forge
 project: one static frontend on hosted static hosting, no server to run.
@@ -1297,6 +1306,7 @@ reliant forge
 | [`merge-driver`](#reliant-forge-merge-driver) | Install or check the git merge driver for forge-generated files in this checkout |
 | [`obs`](#reliant-forge-obs) | Ask what happened: logs, traces, endpoints, metrics, SQL, profiles and alerts |
 | [`package`](#reliant-forge-package) | Manage internal packages |
+| [`pgo`](#reliant-forge-pgo) | Profile-guided builds: pull an env's CPU profiles into each Go binary's default.pgo |
 | [`project`](#reliant-forge-project) | Create, evolve, and inspect the project as a whole |
 | [`registry`](#reliant-forge-registry) | Log in to and read refs from the registries an env's workloads declare |
 | [`release`](#reliant-forge-release) | Inspect, verify and record release ledgers |
@@ -1361,6 +1371,7 @@ default is the directory the server was started in, or -C):
               libraries      forge/pkg and web-runtime APIs
               audit          what THIS project currently is
               shapes         where every rpc/message/table/handler is, with file:line
+              blast_radius   the ops a diff changes, with their traffic when an env is given
               skill_list     the skill catalog
               skill_search   find a skill by keyword
               skill_load     print one skill
@@ -1829,7 +1840,7 @@ reliant forge build [environment] [flags]
 | `--output`, `-o` | `string` | `bin` | Output directory for binaries |
 | `--parallel` | `bool` | `true` | Build services in parallel |
 | `--plan` | `bool` | - | Resolve the exact build set this invocation would build (same KCL discovery, same --target narrowing) and PREFLIGHT every step without running it: each go-build package exists and is a main package, each Dockerfile and frontend build script exists, each ShellBuild cwd exists, and with --release the ledger would cover everything the env declares. Builds, pushes, generates and writes nothing; exits non-zero on anything the real build would fail on. Pass it the release cut's exact arguments to gate a PR on the cut. |
-| `--rebuild` | `bool` | - | Run every ShellBuild's command, even one whose declared inputs are unchanged since its last successful build and whose image is still in the registry |
+| `--rebuild` | `bool` | - | Run every ShellBuild's command, even one whose declared inputs are unchanged since its last successful build (or, with --release, since the previous release) and whose image is still in the registry |
 | `--tag` | `string` | - | Override the image tag of every image this build writes (default: the tag a workload's image pins, else the env's image_tag, else git describe --tags --always --dirty). Refused when it differs from the tag a selected workload's image pins — the deploy pulls the pin. Recorded in .forge/state so forge env deploy uses the same value. |
 | `--target`, `-t` | `string` | `all` | Build target (all | external | a specific service/frontend name). `external` builds only the KCL services declaring build_cmd; requires the environment argument. |
 | `--target-arch` | `string` | - | Override target GOARCH for cross-compilation (default: the env's declared platform, then forge.yaml deploy.target_arch, then the host arch) |
@@ -6766,7 +6777,7 @@ reliant forge env build <environment> [flags]
 | `--parallel` | `bool` | `true` | Build services in parallel |
 | `--plan` | `bool` | - | Resolve the exact build set this invocation would build (same KCL discovery, same --target narrowing) and PREFLIGHT every step without running it: each go-build package exists and is a main package, each Dockerfile and frontend build script exists, each ShellBuild cwd exists, and with --release the ledger would cover everything the env declares. Builds, pushes, generates and writes nothing; exits non-zero on anything the real build would fail on. Pass it the release's exact arguments to gate a PR on the cut. |
 | `--push` | `bool` | - | Push docker images after build (implies --docker), each to the reference its own workload declares (its image field in deploy/kcl/workloads.k). Takes no value and carries no registry |
-| `--rebuild` | `bool` | - | Run every ShellBuild's command, even one whose declared inputs are unchanged since its last successful build and whose image is still in the registry |
+| `--rebuild` | `bool` | - | Run every ShellBuild's command, even one whose declared inputs are unchanged since its last successful build (or, with --release, since the previous release) and whose image is still in the registry |
 | `--release` | `string` | - | Record an immutable release with this version label (e.g. v1.4.0). IMPLIES --push. The release's artifact SET (project images plus per-env external build_cmd images) is discovered from deploy/kcl/`<env>`/main.k; the built images stay env-agnostic, so promote the release to every env with 'forge env deploy `<env>` `<version>`'. Captures each artifact's digest into a release ledger, which every later deploy pins. |
 | `--run-id` | `string` | - | CI run this write belongs to (default: detected from the CI environment, e.g. github:`<repo>`/`<run>`/`<attempt>`) |
 | `--run-url` | `string` | - | Link to the CI run, for a human reading the ledger (default: detected from the CI environment) |
@@ -7078,6 +7089,17 @@ a pipeline that upgrades without adding --yes exits 5, and even a handler
 that still reads 5 as "the wait timed out" fails the job rather than passing
 it. Pre-1.0, so this is a clean renumber with no alias.
 
+THE LAST LINE SAYS HOW IT ENDED. A deploy that can write ends its text output
+with one RESULT line: the exit code as a word (ok, failed, queued, pending,
+undetermined, unconfirmed), the env, the URL, the release, a claimable deploy's
+claim link, a failure's stage and reason, and the next command:
+
+  RESULT: ok env=prod url=https://shop.example release=v1.4.0 next: forge obs check prod --wait
+  RESULT: failed stage=build env=prod reason="frontend web: build: exit status 1" next: …
+
+A successful hosted deploy prints, just above it, what the release has with no
+setup (from `forge project benefits`) and where its dashboards are.
+
 --json carries the same outcome: `applied`, `confirmed` (whether the gate let
 the write happen), and a `refusal` object naming what was expected and what is
 actually there.
@@ -7227,6 +7249,7 @@ reliant forge env deploy <environment> [version] [flags]
 | `--target-arch` | `string` | - | Override target GOARCH for cross-compilation (default: forge.yaml deploy.target_arch, then amd64) |
 | `--timeout` | `duration` | `0s` | Whole health-gate budget (default 15m hosted, 5m per resource self-managed) |
 | `--to` | `string` | - | With --offline-ledger: deploy this CACHED release instead of the current one — a release version, a cached promotion id, or `previous` (the release before the current one). The rollback for a bad release that took the control plane down. Refused if the release is not in this machine's offline copy (`forge env status <env>` lists what is) |
+| `--verbose` | `bool` | - | Stream every build step's output (docker builds, dependency installs, framework builds) as it runs. By default each step prints one line with its duration, the full output goes to .forge/logs/`<env>`/deploy.log, and a failing step prints its last lines and that path |
 | `--wait` | `bool` | - | Block until the deploy is LIVE even when the control plane queues it on a person (billing): wait for them to act, up to --timeout. Without it a queued deploy prints what it waits on and the action URL, and exits 7 |
 | `--yes` | `bool` | - | Proceed without the interactive confirmation: "I read the plan". The paved CI path. The plan is still computed and printed |
 
@@ -9940,7 +9963,7 @@ reliant forge env up <environment> [-- <dev-server flags>] [flags]
 | `--no-install` | `bool` | - | Skip the pre-dev-serve frontend dependency install. By default 'forge env up' installs a frontend's deps when node_modules is missing or older than its lockfile/manifest. |
 | `--no-seed` | `bool` | - | Skip the first-boot dev auto-seed. By default 'forge env up' seeds a dev database once when it is reachable and all seedable tables are empty. |
 | `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with 'forge env options `<env>`'. |
-| `--rebuild` | `bool` | - | Run every ShellBuild's command, even one whose declared inputs are unchanged since its last successful build and whose image is still in the registry |
+| `--rebuild` | `bool` | - | Run every ShellBuild's command, even one whose declared inputs are unchanged since its last successful build (or, with --release, since the previous release) and whose image is still in the registry |
 | `--target` | `stringArray` | `[]` | Scope the whole run — build, deploy, host and frontend phases — to specific services/operators/frontends by name (repeatable). Targeting only host/frontend apps builds no images. An unknown name is an error listing the env's app names. Default: everything. |
 | `--telemetry` | `string` | - | Where this stack's telemetry is stored: auto (hosted when the env declares a control_plane and you are signed in to Reliant, else local), hosted (fail instead of falling back) or local (the local ClickStack). Overrides FORGE_DEV_TELEMETRY and observability.dev_telemetry; local anywhere wins. |
 | `--watch` | `bool` | - | Hold the foreground and tear the stack down on SIGINT/SIGTERM/SIGHUP even without a TTY: the way an agent or daemon runs env up as a tracked background process. Default without --watch/--background: hold when stdin is a TTY, otherwise return after start (non-TTY agent/CI path). |
@@ -10017,6 +10040,7 @@ reliant forge fix [flags]
 | [`composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v1.0.0) |
 | [`connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
+| [`derive-contract`](#reliant-forge-fix-derive-contract) | Replace a package's hand-written Service interface with //forge:contract on its one implementation |
 | [`harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub`<Field>` doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
@@ -10055,7 +10079,7 @@ which is what `<bin> server` ran. Anything the codemod cannot map without
 deciding for you — an Infra field of your own, a ServeSpec knob, a command
 that calls Serve, code that names Infra or Components — is listed with its
 file:line and the edit that clears it, and then NOTHING is written. Clear
-them (the migrations/v1.0.0 skill walks through each) and run it again.
+them (the migrations/v1.0.0/composition-graph skill walks through each) and run it again.
 
 It replaces files you own, so it runs only on a committed tree
 (--allow-dirty overrides); review with git diff, undo with git checkout.
@@ -10208,6 +10232,57 @@ reliant forge fix connect-errors [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 | `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge fix derive-contract
+
+Replace a package's hand-written Service interface with //forge:contract on its one implementation
+
+Migrate one package from a hand-written contract to a derived one.
+
+The package states its API once instead of twice: the hand-written
+`type Service interface` in contract.go is deleted, its single implementation
+gains `//forge:contract`, and `forge generate` derives Service into contract_gen.go
+from that type's exported methods (mock_gen.go and middleware_gen.go follow).
+Opt-in, per package: an interface with several implementations IS the
+abstraction, and keeps its contract.go.
+
+The contract does not change. Service's method docs move onto the methods
+that have none (a forge:no-observe moves either way), and its own doc onto
+the type. What else contract.go declared stays: the dependency interfaces
+move to deps.go (the `// forge:deps` file forge mocks beside the derived
+Service) and contract.go is removed when nothing else is left in it;
+otherwise contract.go stays with the Deps struct, constants and functions it
+holds. Package comments and directives on contract.go move to doc.go, or the
+implementation's file.
+
+The implementation is the type checker's: the one type whose method set, or
+whose pointer's, implements Service. Refused, with every reason and nothing
+written, when the package does not type-check (or build constraints leave a
+source file out of the build), or when deriving would change the contract:
+no implementation, or several; a Service that embeds an interface or is
+generic; a contract interface not named Service; an implementation that is
+generic, gets a Service method only through an embedded field, or exports a
+method Service does not have; a package that already derives its contract,
+has no contract.go, or opts out with //forge:exclude-contract. Also refused:
+a package directory, or a file it would write, that resolves outside the
+project through a symlink. Before writing, it type-checks the rewritten
+package with the contract_gen.go forge would derive, and compares that
+Service with the one it replaces, method by method. The files are written
+as one transaction: if a write fails, every file is restored.
+
+```
+reliant forge fix derive-contract <package-dir> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-dirty` | `bool` | - | Run over uncommitted changes in the package |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -11230,6 +11305,9 @@ Examples:
                                  # built without its decorator) and rewrite
                                  # each log call to its ...Context form and
                                  # each such New to NewInstrumented
+  forge lint --proto-format      # FAIL on a .proto buf format would rewrite
+                                 # (the pre-commit buf-format hook's check);
+                                 # --fix writes buf's output
   forge lint --proto-options     # Flag a (forge.v1.*) annotation naming an
                                  # option field forge's descriptors do not
                                  # define — it compiles, and forge reads it
@@ -11314,6 +11392,7 @@ reliant forge lint [paths...] [flags]
 | `--migration-safety` | `bool` | - | Run SQL migration safety checks |
 | `--no-fix` | `bool` | - | Same as --check: write nothing, print the diff each fix would apply, and fail if any is pending |
 | `--optional-deps-guard` | `bool` | - | Flag unguarded derefs of // forge:optional-dep Deps fields (warnings by default, lint.rules forge-optional-deps-guard: error gates them; suppress a confirmed-safe site with // forge:optional-checked on the deref line) |
+| `--proto-format` | `bool` | - | Fail on a .proto that buf format would rewrite — the scaffolded pre-commit buf-format hook's own check (buf format -d over the buf workspace), so lint and the commit hook cannot disagree. Runs in every forge lint; with --fix, writes buf's output |
 | `--proto-markers` | `bool` | - | Flag .proto comments containing forge: that match no known proto marker — a misspelled marker is inert and warns nowhere (warnings only) |
 | `--proto-options` | `bool` | - | Flag (forge.v1.*) annotation fields this forge binary's descriptors do not define — a retired or misspelled option field compiles under buf and is read by nothing (warnings only) |
 | `--quiet`, `-q` | `bool` | - | Print only what failed: a one-line summary per failing linter, its error findings, and the verdict as the LAST line (a clean run is one line). With --fix, fixes are applied silently; combines with the targeted flags and --scope |
@@ -11350,6 +11429,7 @@ reliant forge lint fix [flags]
 | [`composition-graph`](#reliant-forge-lint-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`config-proto-package`](#reliant-forge-lint-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v1.0.0) |
 | [`connect-errors`](#reliant-forge-lint-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
+| [`derive-contract`](#reliant-forge-lint-fix-derive-contract) | Replace a package's hand-written Service interface with //forge:contract on its one implementation |
 | [`harness-mocks`](#reliant-forge-lint-fix-harness-mocks) | Rename the harness's Stub`<Field>` doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`narrow-deps`](#reliant-forge-lint-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-lint-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
@@ -11388,7 +11468,7 @@ which is what `<bin> server` ran. Anything the codemod cannot map without
 deciding for you — an Infra field of your own, a ServeSpec knob, a command
 that calls Serve, code that names Infra or Components — is listed with its
 file:line and the edit that clears it, and then NOTHING is written. Clear
-them (the migrations/v1.0.0 skill walks through each) and run it again.
+them (the migrations/v1.0.0/composition-graph skill walks through each) and run it again.
 
 It replaces files you own, so it runs only on a committed tree
 (--allow-dirty overrides); review with git diff, undo with git checkout.
@@ -11541,6 +11621,57 @@ reliant forge lint fix connect-errors [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 | `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge lint fix derive-contract
+
+Replace a package's hand-written Service interface with //forge:contract on its one implementation
+
+Migrate one package from a hand-written contract to a derived one.
+
+The package states its API once instead of twice: the hand-written
+`type Service interface` in contract.go is deleted, its single implementation
+gains `//forge:contract`, and `forge generate` derives Service into contract_gen.go
+from that type's exported methods (mock_gen.go and middleware_gen.go follow).
+Opt-in, per package: an interface with several implementations IS the
+abstraction, and keeps its contract.go.
+
+The contract does not change. Service's method docs move onto the methods
+that have none (a forge:no-observe moves either way), and its own doc onto
+the type. What else contract.go declared stays: the dependency interfaces
+move to deps.go (the `// forge:deps` file forge mocks beside the derived
+Service) and contract.go is removed when nothing else is left in it;
+otherwise contract.go stays with the Deps struct, constants and functions it
+holds. Package comments and directives on contract.go move to doc.go, or the
+implementation's file.
+
+The implementation is the type checker's: the one type whose method set, or
+whose pointer's, implements Service. Refused, with every reason and nothing
+written, when the package does not type-check (or build constraints leave a
+source file out of the build), or when deriving would change the contract:
+no implementation, or several; a Service that embeds an interface or is
+generic; a contract interface not named Service; an implementation that is
+generic, gets a Service method only through an embedded field, or exports a
+method Service does not have; a package that already derives its contract,
+has no contract.go, or opts out with //forge:exclude-contract. Also refused:
+a package directory, or a file it would write, that resolves outside the
+project through a symlink. Before writing, it type-checks the rewritten
+package with the contract_gen.go forge would derive, and compares that
+Service with the one it replaces, method by method. The files are written
+as one transaction: if a write fails, every file is restored.
+
+```
+reliant forge lint fix derive-contract <package-dir> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-dirty` | `bool` | - | Run over uncommitted changes in the package |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -11828,6 +11959,13 @@ Slots per class default to min(CPUs / 2, memory GiB / 8), read from the cgroup l
 there is one, at least 1. FORGE_HEAVY_SLOTS=`<n>` overrides it; FORGE_HEAVY_SLOTS=off turns
 the limit off. FORGE_SLOTS_DIR relocates the slot files (default: the user cache dir).
 
+Two lanes share the slots. bulk, the default, is for anything heavy however long it runs.
+express is for commands bounded to minutes — the tests or lint of named packages: express
+waiters go before bulk ones, and the top R slots are reserved for them (bulk holders never
+lock those), so a one-minute command never waits behind hour-long jobs. R defaults to
+max(1, N/4) (none when N is 1); FORGE_HEAVY_EXPRESS_SLOTS=`<r>` overrides it, at most N-1.
+FORGE_SLOT_LANE=express (or `forge slot run --lane express`) picks the express lane.
+
 `forge generate`, `forge lint` and the heavy checks of `forge ci gate` take a slot on
 their own. Anything running inside a slot passes it to its children (FORGE_SLOT_HELD),
 so a nested heavy command never waits on its own parent.
@@ -11856,8 +11994,13 @@ slots, and repeats that every 30s. Ctrl-C while waiting gives up (exit 130).
 Already inside a slot of the class — a parent ran under `forge slot run`, or a gate
 check — it runs the command at once: a child never queues behind its own parent.
 
+--lane express is for a command bounded to minutes (the tests or lint of named
+packages): it waits apart from bulk work, ahead of it, and may use the slots reserved
+for express. Nothing enforces the bound; long work in the express lane takes slots
+from bulk jobs that queued first. The default lane is FORGE_SLOT_LANE, else bulk.
+
 ```
-reliant forge machine slot run [--class heavy] -- <command> [args...] [flags]
+reliant forge machine slot run [--class heavy] [--lane express|bulk] -- <command> [args...] [flags]
 ```
 
 **Flags:**
@@ -11865,6 +12008,7 @@ reliant forge machine slot run [--class heavy] -- <command> [args...] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--class` | `string` | `heavy` | Slot class |
+| `--lane` | `string` | - | Lane to wait in: express (a command bounded to minutes) or bulk (default: FORGE_SLOT_LANE, else bulk) |
 | `--slots` | `int` | `0` | Slots in the class (default: FORGE_`<CLASS>`_SLOTS, else derived from the machine) |
 
 ---
@@ -12228,6 +12372,7 @@ default is the directory the server was started in, or -C):
               libraries      forge/pkg and web-runtime APIs
               audit          what THIS project currently is
               shapes         where every rpc/message/table/handler is, with file:line
+              blast_radius   the ops a diff changes, with their traffic when an env is given
               skill_list     the skill catalog
               skill_search   find a skill by keyword
               skill_load     print one skill
@@ -12351,6 +12496,7 @@ reliant forge obs [flags]
 | Command | Description |
 |---------|-------------|
 | [`alerts`](#reliant-forge-obs-alerts) | Alert rules declared for an environment |
+| [`blast-radius`](#reliant-forge-obs-blast-radius) | The ops a diff can change — rpcs and component methods — with the commits that changed each and its traffic |
 | [`changes`](#reliant-forge-obs-changes) | What changed? Promotions, rollbacks, failed deploys and activity, newest first |
 | [`check`](#reliant-forge-obs-check) | Did the deploy work? Judge a release by the window after it against the window before |
 | [`dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
@@ -12360,6 +12506,7 @@ reliant forge obs [flags]
 | [`issues`](#reliant-forge-obs-issues) | Grouped errors: what is failing, how often, since which release |
 | [`logs`](#reliant-forge-obs-logs) | Search and tail logs |
 | [`metrics`](#reliant-forge-obs-metrics) | List and query metrics; print the declared schema |
+| [`ops`](#reliant-forge-obs-ops) | Every op the project runs — rpcs, endpoints, component methods — by traffic, latency and errors |
 | [`profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
 | [`receivers`](#reliant-forge-obs-receivers) | Route the org's alerts to Slack, a webhook, email or PagerDuty |
@@ -12484,6 +12631,210 @@ reliant forge obs alerts run [flags]
 
 ---
 
+#### reliant forge obs blast-radius
+
+The ops a diff can change — rpcs and component methods — with the commits that changed each and its traffic
+
+Map a diff to the ops it can change, and weigh each by its traffic in [env].
+
+An op is a unit the running code names a span after:
+  rpc        a Connect rpc, \<proto pkg>.`<Service>`/`<Method>`
+  component  a component method forge's generated decorator wraps, `<pkg>`.`<Method>`
+
+The diff is base..head, read commit by commit, so each op names the commits
+that changed it. --base defaults to the merge base of origin/main (main when
+there is no origin/main) and the head. With --head, the diff is the commits
+base..head, tree to tree: nothing uncommitted is read. Without it, the diff is
+the commits base..HEAD plus the pseudo-commit with sha "" and subject
+"uncommitted changes": HEAD against the working tree, so staged and unstaged
+changes alike (where they disagree, the working tree's content wins), and
+every untracked file .gitignore does not exclude, as a whole-file addition.
+At most the newest 100 commits are mapped (truncated says when the range held
+more).
+
+A changed Go declaration reaches an op through its package's static
+reference graph (via: method, handler, helper, or package when nothing in the
+package reaches it, which names every op of the package); a changed rpc or
+message in a .proto reaches its rpcs (via: proto). Every changed file is
+either in some op's reasons or in unattributed with a reason. The graph never
+crosses packages: a change to a package with no ops is unattributed even when
+an op calls it.
+
+With [env], each op gets its traffic over --since (default 7d): calls,
+errors, p50/p95/p99, per service that runs it, from the same query as
+`cli forge obs ops`. Without [env] the answer is the static mapping alone.
+The mapping is the answer and telemetry only weighs it: a backend that cannot
+be opened or queried leaves telemetry.status "unavailable", notes it on
+stderr, and still exits 0.
+
+  cli forge obs blast-radius                       # this branch vs origin/main, no telemetry
+  cli forge obs blast-radius prod --json            # weighted by prod's last 7 days
+  cli forge obs blast-radius prod --base v1.4.0 --head v1.5.0
+
+Exit status: 0 with the mapping (whatever telemetry did); 1 when the request
+is wrong (--base or --head names no commit, there is no origin/main or main
+to default to, a bad flag); 2 when it cannot look (not a git checkout, git is
+missing, the history cannot be read).
+
+The --json document (fields are stable under the schema name):
+  schema, ok, exit_code, error   the head every obs document leads with
+  base          the resolved base commit
+  base_ref      what base was resolved from: --base as given, or
+                "origin/main" / "main" (the default, via their merge base)
+  head          the resolved head commit; "" for the working tree
+  head_ref      --head as given, or "working tree"
+  commits       the commits mapped, newest first: `{sha, subject, pr}`; pr is
+                the "(#123)" a squash merge's subject ends with, 0 for none.
+                The working tree's pseudo-commit comes first, sha ""
+  total_commits the non-merge commits in base..head (pseudo-commit excluded)
+  truncated     only the newest 100 commits were mapped
+  order         how ops are sorted: "calls" (total calls across services,
+                descending, then name) when telemetry.status is "ok",
+                else "name"
+  ops           each op the diff reaches:
+    name, kind          the span name, and "rpc" or "component"
+    package             project-relative Go package that implements it
+    file, line          the implementing method (the handler of an rpc),
+                        else the interface method or proto rpc line
+    function            the implementing method as Go spells it, (*service).Send
+    rpc_service, rpc_method   an rpc's rpc.service / rpc.method attributes
+    proto_file, proto_line    where an rpc is declared
+    removed             the rpc is not in the working tree any more (read from
+                        the diff's own proto); its traffic is still asked for
+    reasons             each changed declaration that reaches it:
+                        `{via, function, file, line}`; via is method, handler,
+                        helper, package or proto
+    commits             the commits that changed it, newest first
+    traffic             per service that ran it over the window:
+                        \{service, calls, errors, error_ratio, rate_per_second,
+                        p50_ms, p95_ms, p99_ms\}, busiest first; [] when it
+                        had none or telemetry was not "ok". Counts are
+                        weighted for tail sampling
+  unattributed  each changed file no op is mapped from: `{file, reason, commits}`
+  telemetry     `{env, backend, from, to, status, reason, reason_code}`:
+                status "ok", "unavailable" (reason_code backend_unavailable,
+                unsupported or query_failed) or "not_requested" (no_env,
+                no_ops, explain)
+  summary       \{ops, components, rpcs, removed, with_traffic,
+                without_traffic, calls, unattributed_files\}; with_traffic and
+                without_traffic split ops only when telemetry.status is "ok"
+                (else both 0); calls is the total over every op
+  scope         the obs scope the traffic was read in, when it was read
+  warnings      source files the op index could not read or parse (their
+                ops are missing)
+  statements    the compiled query, with --explain
+  suggested     next commands: the busiest changed rpc's traces, the ops view
+
+JSON schema forge.obs.blast_radius/v1. --fields takes dotted paths of:
+  base
+  base_ref
+  commits
+  commits.pr
+  commits.sha
+  commits.subject
+  head
+  head_ref
+  ops
+  ops.commits
+  ops.commits.pr
+  ops.commits.sha
+  ops.commits.subject
+  ops.file
+  ops.function
+  ops.kind
+  ops.line
+  ops.name
+  ops.package
+  ops.proto_file
+  ops.proto_line
+  ops.reasons
+  ops.reasons.file
+  ops.reasons.function
+  ops.reasons.line
+  ops.reasons.via
+  ops.removed
+  ops.rpc_method
+  ops.rpc_service
+  ops.traffic
+  ops.traffic.calls
+  ops.traffic.error_ratio
+  ops.traffic.errors
+  ops.traffic.p50_ms
+  ops.traffic.p95_ms
+  ops.traffic.p99_ms
+  ops.traffic.rate_per_second
+  ops.traffic.service
+  order
+  scope
+  scope.backend
+  scope.env
+  scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+  summary
+  summary.calls
+  summary.components
+  summary.ops
+  summary.removed
+  summary.rpcs
+  summary.unattributed_files
+  summary.with_traffic
+  summary.without_traffic
+  telemetry
+  telemetry.backend
+  telemetry.env
+  telemetry.from
+  telemetry.reason
+  telemetry.reason_code
+  telemetry.status
+  telemetry.to
+  total_commits
+  unattributed
+  unattributed.commits
+  unattributed.commits.pr
+  unattributed.commits.sha
+  unattributed.commits.subject
+  unattributed.file
+  unattributed.reason
+  warnings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs blast-radius [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--base` | `string` | - | the commit the diff starts from (default: the merge base of origin/main, else main, with the head) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.`<k>` (traces), log.attr.`<k>` (logs) or resource.attr.`<k>` |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--head` | `string` | - | the commit the diff ends at, read tree to tree (default: the working tree — HEAD's commits plus staged, unstaged and untracked, unignored files) |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `168h0m0s` | how far back to read (ignored with --from) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
+
+---
+
 #### reliant forge obs changes
 
 What changed? Promotions, rollbacks, failed deploys and activity, newest first
@@ -12581,7 +12932,7 @@ Exit status:
      with a backoff; one that stays down for all of --timeout is exit 2.
 
 Thresholds come from the env's release_health declaration (KCL); --threshold
-name=value overrides one for this call (max_error_rate_increase, max_p95_ratio, min_requests, new_issue_min_events, regressed_issue_min_events, require_baseline, error_rate_min_errors, baseline_window, alert_baseline_min_firings).
+name=value overrides one for this call (max_error_rate_increase, max_p95_ratio, min_requests, new_issue_min_events, regressed_issue_min_events, require_baseline, error_rate_min_errors, baseline_window, alert_baseline_min_firings, changed_op_min_calls, changed_op_max_error_rate_increase, changed_op_min_errors, changed_op_max_p95_ratio).
 The document says where each effective threshold came from: release_shape,
 default or request.
 
@@ -12592,13 +12943,51 @@ must be: any (default; INCONCLUSIVE when none can be compared), every (one
 thin baseline holds the release) or none (compare however thin). New and
 regressed issues, alerts and restarts fail a release whatever the baseline.
 
+The ops the release changed (component methods and rpcs its commits touched,
+read from this checkout: the promotion's commit range, or locally everything
+since P, uncommitted changes included) are judged on their own figures:
+changed_op_errors and changed_op_latency, warn unless --fail-on names them,
+each naming the op and the commit that changed it (changed_ops). On a
+promotion the after figures count only the judged release's service.version
+(changed_ops.after_version) and the before figures only one baseline
+version's (changed_ops.before_version: the previous release, else the version
+that served most of the op's before window, never the judged release); an op
+missing either is not judged. When
+the commits are not in this checkout, or the backend cannot read per-op
+figures, not_evaluated says so (changed_op: ...) and nothing else changes.
+
 JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   baseline_alerts
+  changed_ops
+  changed_ops.after
+  changed_ops.after.error_rate
+  changed_ops.after.p50_ms
+  changed_ops.after.p95_ms
+  changed_ops.after.p99_ms
+  changed_ops.after.requests
+  changed_ops.after_version
+  changed_ops.before
+  changed_ops.before.error_rate
+  changed_ops.before.p50_ms
+  changed_ops.before.p95_ms
+  changed_ops.before.p99_ms
+  changed_ops.before.requests
+  changed_ops.before_version
+  changed_ops.commits
+  changed_ops.commits.pr
+  changed_ops.commits.sha
+  changed_ops.commits.subject
+  changed_ops.kind
+  changed_ops.op
+  changed_ops.service
   early_pass
   findings
   findings.code
+  findings.commit
   findings.message
+  findings.op
   findings.policy
+  findings.pr
   findings.ref
   findings.service
   findings.threshold
@@ -12670,7 +13059,7 @@ reliant forge obs check [env] [flags]
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--early-pass` | `duration` | `0s` | with --wait: PASS before the after window finishes, once at least this much of it is observed with the new version serving all traffic, enough requests, and nothing found (no finding of any policy, issue, alert or restart); 0 waits for the whole window |
 | `--explain` | `bool` | - | local env only: print the compiled statements instead of running them |
-| `--fail-on` | `string` | - | comma-separated finding codes that fail the release (default: the env's release_health.fail_on): error_rate, latency, new_issue, regressed_issue, alert_firing, workload_restarts, browser_errors, browser_failed_requests, browser_page_load, probe_failed, probe_latency |
+| `--fail-on` | `string` | - | comma-separated finding codes that fail the release (default: the env's release_health.fail_on): error_rate, latency, new_issue, regressed_issue, alert_firing, workload_restarts, browser_errors, browser_failed_requests, browser_page_load, probe_failed, probe_latency, changed_op_errors, changed_op_latency |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--gate-json` | `string` | - | also write the verdict to `FILE` as a gate document, for `cli forge gate record --from FILE` |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
@@ -12927,7 +13316,7 @@ reliant forge obs dashboards audit [env] [flags]
 | `--no-probe` | `bool` | - | do not probe empty panels |
 | `--panel` | `string` | - | only this panel (its id) |
 | `--probe-window` | `duration` | `168h0m0s` | the wider window an empty panel is probed over (widened to 4x the panel's window when that is not wider) |
-| `--since` | `duration` | `0s` | run every panel over this window, as a viewer who picked a range (default: each dashboard's own defaultRange, else 1h, as the console opens it) |
+| `--since` | `duration` | - | run every panel over this window, as a viewer who picked a range (default: each dashboard's own defaultRange, else 1h, as the console opens it) |
 
 ---
 
@@ -12982,15 +13371,26 @@ Rank the env's server endpoints (server spans by service and span name) by
 traffic, p95 latency, error ratio or rate: request count, errors, p50/p95/p99.
 [env] defaults to dev. Counts are weighted for tail sampling.
 
+CLIENT P95 is the latency the browser saw for the same rpc: the web
+runtime's client spans (forge.rpc.client), all frontends together, joined to
+the endpoint by rpc.service/rpc.method. "-" when no frontend called it.
+
   cli forge obs endpoints dev --sort p95 --top 5
   cli forge obs endpoints dev --sort errors --service api --since 6h
 
-The table is the busiest 200 endpoints; --sort re-ranks within them.
+The table is the busiest 200 endpoints; --sort re-ranks within them. The gRPC
+health check is listed and marked ("health": true): forge env up calls it once
+a stack is up, so the table has a row before the app has served anyone.
+Release health (forge obs check) and the dashboards leave env up's calls out.
 
 JSON schema forge.obs.endpoints/v1. --fields takes dotted paths of:
+  client_note
   endpoints
+  endpoints.client_calls
+  endpoints.client_p95_ms
   endpoints.error_ratio
   endpoints.errors
+  endpoints.health
   endpoints.name
   endpoints.p50_ms
   endpoints.p95_ms
@@ -14881,6 +15281,92 @@ reliant forge obs metrics query [env] <metric> [flags]
 
 ---
 
+#### reliant forge obs ops
+
+Every op the project runs — rpcs, endpoints, component methods — by traffic, latency and errors
+
+Rank the env's ops by traffic, p95 latency, error ratio or rate: calls,
+errors, p50/p95/p99, and where the op's code is. [env] defaults to dev.
+Counts are weighted for tail sampling.
+
+An op is one of:
+  rpc        a Connect rpc's server span, \<proto pkg>.`<Service>`/`<Method>`
+  endpoint   any other server span (an HTTP route)
+  component  a component method, the span forge's generated decorator opens,
+             `<pkg>`.`<Method>`
+
+CODE is the op's source file: from the span's code.file.path when the build
+reports it (code_source "telemetry"), else found in this checkout by the op's
+name (code_source "static").
+
+  cli forge obs ops dev --sort p95 --top 5
+  cli forge obs ops prod --kind component --sort errors --since 6h
+
+Each kind's table is the busiest 200 ops; --sort re-ranks within them.
+
+JSON schema forge.obs.ops/v1. --fields takes dotted paths of:
+  ops
+  ops.calls
+  ops.code_file_path
+  ops.code_function
+  ops.code_line
+  ops.code_source
+  ops.error_ratio
+  ops.errors
+  ops.kind
+  ops.name
+  ops.p50_ms
+  ops.p95_ms
+  ops.p99_ms
+  ops.rate_per_second
+  ops.service
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
+  scope.services
+  scope.to
+  sort
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs ops [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.`<k>` (traces), log.attr.`<k>` (logs) or resource.attr.`<k>` |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--kind` | `stringSlice` | `[]` | only these kinds, comma-separated: rpc, endpoint, component (default all) |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
+| `--sort` | `string` | `calls` | calls | p95 | errors | rate |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--top` | `int` | `20` | most ops to return |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
+
+---
+
 #### reliant forge obs profile
 
 Export an aggregated continuous profile as pprof, speedscope or collapsed stacks
@@ -15999,7 +16485,7 @@ Manage internal packages
 Manage internal packages with Go interface contracts.
 
 Internal packages live under internal/`<name>`/ and define their boundary
-through a Go interface in contract.go. Unlike proto API services, internal
+through a Go interface, Service. Unlike proto API services, internal
 package contracts use native Go interfaces — supporting channels, complex
 types, factories, and other constructs that proto cannot express.
 
@@ -16029,13 +16515,16 @@ reliant forge package [flags]
 Create a new internal package with contract interface
 
 Create a new internal package under internal/`<name>`/ with:
-  - contract.go  — Go interface that IS the package contract
-  - service.go   — Implementation with unexported concrete type
+  - service.go       — Deps, New, and the unexported service type marked
+                       //forge:contract: its exported methods ARE the contract
+  - contract_gen.go  — the Service interface, derived from that type
+  - deps.go          — the package's dependency interfaces (mocked too)
 
 It ends with a 'forge generate' run, which writes mock_gen.go and
 middleware_gen.go and wires the package into internal/app/compose.go, so
 the project lints clean straight away (--no-generate skips it). After you
-add methods to contract.go, run 'forge generate' again.
+add methods to the service type, run 'forge generate' again.
+(--type adapter and --kind keep a hand-written contract.go.)
 
 package shape: service|adapter (default service)
 
@@ -16071,6 +16560,119 @@ reliant forge package new <name> [flags]
 | `--kind` | `string` | - | package kind template (e.g. eventbus, client) |
 | `--no-generate` | `bool` | - | skip the post-scaffold 'forge generate' run (scaffold-only mode for parallel-agent rounds); run 'forge generate' before 'forge lint' |
 | `--type` | `string` | `service` | package shape: service|adapter (see --help for details) |
+
+---
+
+### reliant forge pgo
+
+Profile-guided builds: pull an env's CPU profiles into each Go binary's default.pgo
+
+Profile-guided optimization (PGO) from the CPU profiles your envs already
+collect. Go applies PGO per main package: `go build ./cmd/<bin>` reads
+cmd/`<bin>`/default.pgo when it exists (Go's default -pgo=auto), so the
+Dockerfile build, host builds and air all use it with no flag changes.
+
+`forge pgo pull` writes that file from an env's profiles; you commit it, and every
+build after that is optimized for how the binary really runs. Builds never
+fetch profiles themselves, so they stay reproducible.
+
+Configure it per build in KCL (`pgo = forge.PGO {...}` on a GoBuild, or
+DockerBuild.pgo keyed by binary); load `forge skill load observability/profiles`.
+
+```
+reliant forge pgo [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`pull`](#reliant-forge-pgo-pull) | Write cmd/`<bin>`/default.pgo for each Go binary from an env's CPU profiles |
+| [`status`](#reliant-forge-pgo-status) | Show each Go binary's default.pgo: provenance, age and effective PGO config |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge pgo pull
+
+Write cmd/`<bin>`/default.pgo for each Go binary from an env's CPU profiles
+
+Merge an env's recent CPU profiles into cmd/`<bin>`/default.pgo, one file per Go
+binary the env builds. Commit the file: Go's default -pgo=auto reads it in every
+`go build ./cmd/<bin>` (the Dockerfile, host builds, air), so builds are optimized
+for how the binary really runs and never fetch anything themselves.
+
+One binary, one profile: a binary that runs as several workloads (a modular
+monolith serving as server, worker and cron) gets the CPU of all of them,
+merged. The workloads come from the rendered env; `pgo.services` overrides them.
+
+Config is read from --env's KCL (default prod): `pgo = forge.PGO {from_env, since,
+min_weight, services, enabled\}` on a GoBuild, or DockerBuild.pgo keyed by binary.
+--since and --from-env override it for this run. Profiles come from the local
+ClickStack when the source env's telemetry is local, else from its control
+plane (needs sign-in and obs:read); both produce the same bytes.
+
+A binary is skipped with a note — its existing file untouched — when PGO is
+off for it, the window holds no profile data, or its edge weight (sampled CPU
+summed over call edges, not unique CPU time) is below min_weight. A source that cannot be read (ClickStack not running, not signed
+in, a control plane without ExportPGOProfile, a ClickStack without the
+profile_pgo_edges table) is a per-binary failure, also leaving the file
+untouched.
+
+Exit status: 0 when every binary was written or skipped with a reason; 2 when
+a source could not be read; 1 for a usage error or a file that could not be
+written.
+
+--json prints one document (schema forge.pgo.pull/v1): per binary its package,
+path, action (written, would_write with --dry-run, skipped, failed), reason,
+edges, dropped, total_weight_ns (the edge weight), oldest, newest, services
+and source (local|cloud).
+
+```
+reliant forge pgo pull [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--binary` | `stringArray` | `[]` | only this Go binary, e.g. ./cmd/api (repeatable; default: every binary the env builds) |
+| `--dry-run` | `bool` | - | resolve and query, but write nothing |
+| `--env` | `string` | - | the env whose KCL build config to read (default: prod) |
+| `--from-env` | `string` | - | read profiles from this env (default: the binary's pgo.from_env, else --env) |
+| `--json` | `bool` | - | print the result as a JSON document |
+| `--since` | `duration` | - | the window to merge, up to 30d (default: the binary's pgo.since, 168h) |
+
+---
+
+#### reliant forge pgo status
+
+Show each Go binary's default.pgo: provenance, age and effective PGO config
+
+Show, per Go binary the env builds, the cmd/`<bin>`/default.pgo its build reads
+(Go's -pgo=auto), where it came from — the env, services and window `forge pgo pull`
+recorded in it — how old its data is, and the effective PGO config read from
+--env's KCL (default prod). It reads only local files and the env's declaration.
+
+--json prints one document (schema forge.pgo.status/v1).
+
+```
+reliant forge pgo status [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | the env whose KCL build config to read (default: prod) |
+| `--json` | `bool` | - | print the result as a JSON document |
 
 ---
 
@@ -17297,7 +17899,7 @@ Print the greenfield brief: empty directory to authored protos, in one call
 Print the greenfield brief.
 
 Everything needed to go from an empty directory to authored protos, and
-nothing else: the end-to-end sequence, the 'project new' flags that matter,
+nothing else: what the project gets with no setup, the end-to-end sequence, the 'project new' flags that matter,
 how an entity is marked and what scaffold births from it, the rule that
 forge injects CRUD rpcs ONLY, the proto->column vocabulary, and the FK
 diamond declaration.
@@ -19150,7 +19752,7 @@ pre-registered in forge.yaml's contracts.exclude so the contract-
 required linter won't fire on it.
 
 This is distinct from 'forge scaffold package `<name>`', which scaffolds a
-contract.go and wires the package into bootstrap. Use 'scaffold library'
+contract package (a //forge:contract service) and wires it into bootstrap. Use 'scaffold library'
 when the code is genuinely library-shaped; use 'scaffold package' when it
 belongs in the Deps graph.
 
@@ -19931,6 +20533,13 @@ Slots per class default to min(CPUs / 2, memory GiB / 8), read from the cgroup l
 there is one, at least 1. FORGE_HEAVY_SLOTS=`<n>` overrides it; FORGE_HEAVY_SLOTS=off turns
 the limit off. FORGE_SLOTS_DIR relocates the slot files (default: the user cache dir).
 
+Two lanes share the slots. bulk, the default, is for anything heavy however long it runs.
+express is for commands bounded to minutes — the tests or lint of named packages: express
+waiters go before bulk ones, and the top R slots are reserved for them (bulk holders never
+lock those), so a one-minute command never waits behind hour-long jobs. R defaults to
+max(1, N/4) (none when N is 1); FORGE_HEAVY_EXPRESS_SLOTS=`<r>` overrides it, at most N-1.
+FORGE_SLOT_LANE=express (or `forge slot run --lane express`) picks the express lane.
+
 `forge generate`, `forge lint` and the heavy checks of `forge ci gate` take a slot on
 their own. Anything running inside a slot passes it to its children (FORGE_SLOT_HELD),
 so a nested heavy command never waits on its own parent.
@@ -19959,8 +20568,13 @@ slots, and repeats that every 30s. Ctrl-C while waiting gives up (exit 130).
 Already inside a slot of the class — a parent ran under `forge slot run`, or a gate
 check — it runs the command at once: a child never queues behind its own parent.
 
+--lane express is for a command bounded to minutes (the tests or lint of named
+packages): it waits apart from bulk work, ahead of it, and may use the slots reserved
+for express. Nothing enforces the bound; long work in the express lane takes slots
+from bulk jobs that queued first. The default lane is FORGE_SLOT_LANE, else bulk.
+
 ```
-reliant forge slot run [--class heavy] -- <command> [args...] [flags]
+reliant forge slot run [--class heavy] [--lane express|bulk] -- <command> [args...] [flags]
 ```
 
 **Flags:**
@@ -19968,6 +20582,7 @@ reliant forge slot run [--class heavy] -- <command> [args...] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--class` | `string` | `heavy` | Slot class |
+| `--lane` | `string` | - | Lane to wait in: express (a command bounded to minutes) or bulk (default: FORGE_SLOT_LANE, else bulk) |
 | `--slots` | `int` | `0` | Slots in the class (default: FORGE_`<CLASS>`_SLOTS, else derived from the machine) |
 
 ---
@@ -20028,7 +20643,7 @@ Print the greenfield brief: empty directory to authored protos, in one call
 Print the greenfield brief.
 
 Everything needed to go from an empty directory to authored protos, and
-nothing else: the end-to-end sequence, the 'project new' flags that matter,
+nothing else: what the project gets with no setup, the end-to-end sequence, the 'project new' flags that matter,
 how an entity is marked and what scaffold births from it, the rule that
 forge injects CRUD rpcs ONLY, the proto->column vocabulary, and the FK
 diamond declaration.
