@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -149,6 +150,33 @@ func TestMachineName(t *testing.T) {
 	assert.Equal(t, `"Seans-MacBook-Pro.local"`, MachineName(ctx, r, "host"))
 	assert.Equal(t, "self-hosted machine uuidhost", MachineName(ctx, r, "uuidhost"))
 	assert.Equal(t, "machine 12345678", MachineName(ctx, r, "1234567890"))
+}
+
+// The owner's Mac, 2026-11-18: it registered with no name, the control plane
+// recorded its id as its name, and every refusal read `isn't checked out on
+// "46e3682b-33cd-…"`. A name that is the machine's id, or any bare UUID, is a
+// placeholder: the hostname or a short tag names the machine instead.
+func TestMachineName_AnIdForANameIsAPlaceholder(t *testing.T) {
+	const mac = "46e3682b-33cd-4e88-aecb-52a3a919a354"
+	selfHosted, managed := "self_hosted", "managed"
+	for _, tc := range []struct {
+		desc   string
+		daemon db.Daemon
+		want   string
+	}{
+		{"its own id, with a real hostname", db.Daemon{Name: mac, DaemonType: &selfHosted, Hostname: strp("Seans-MacBook-Pro.local")}, `"Seans-MacBook-Pro.local"`},
+		{"its own id, upper-cased", db.Daemon{Name: strings.ToUpper(mac), DaemonType: &selfHosted}, "self-hosted machine 46e3682b"},
+		{"another bare UUID", db.Daemon{Name: "0f8fad5b-d9cb-469f-a165-70867728950e", DaemonType: &selfHosted}, "self-hosted machine 46e3682b"},
+		{"its own id, managed", db.Daemon{Name: " " + mac + " ", DaemonType: &managed, Hostname: strp("ws-ws-46e3682b")}, "cloud machine 46e3682b"},
+		{"a real name is kept", db.Daemon{Name: "default", DaemonType: &managed}, `"default"`},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			d := tc.daemon
+			d.ID = mac
+			r := fakeWorkspaces{daemons: map[string]*db.Daemon{mac: &d}}
+			assert.Equal(t, tc.want, MachineName(context.Background(), r, mac))
+		})
+	}
 }
 
 // ChatDaemonID is where the chat's tools run: a branch workspace's owner
