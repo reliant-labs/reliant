@@ -108,6 +108,8 @@ export interface ProjectSelectorPanelProps {
   extraApps?: readonly string[];
   /** The New project / Add an app footer (default on). */
   footer?: boolean;
+  /** A line under the list (what it could not read). */
+  notice?: React.ReactNode;
   placeholder?: string;
 }
 
@@ -225,7 +227,8 @@ function AppEntrySummary({ entry }: { entry: AppEntry }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-ui font-medium text-foreground">{entry.app.name}</span>
         <span className="truncate text-meta text-muted-foreground">
-          {entry.project ? `In ${entry.project.name}` : "App without code here"} · {chipStateLabel(entry.app.state)}
+          {entry.project ? `In ${entry.project.name}` : "App without code here"}
+          {entry.app.state !== "unavailable" ? ` · ${chipStateLabel(entry.app.state)}` : ""}
         </span>
       </div>
       <AppChip app={entry.app} interactive={false} />
@@ -242,6 +245,7 @@ export function ProjectSelectorPanel({
   rowState,
   extraApps,
   footer = true,
+  notice,
   placeholder,
   onClose,
   inputRef: givenInputRef,
@@ -474,6 +478,11 @@ export function ProjectSelectorPanel({
         )}
       </div>
 
+      {notice ? (
+        <p className="border-t border-border px-3 py-2 text-meta text-muted-foreground" data-testid="project-selector-notice">
+          {notice}
+        </p>
+      ) : null}
       {footer ? (
         <div className="flex items-center gap-1 border-t border-border p-1">
           {mode !== "app" ? (
