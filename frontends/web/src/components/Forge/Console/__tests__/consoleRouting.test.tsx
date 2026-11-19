@@ -308,7 +308,7 @@ describe("the way in: /forge", () => {
     const user = userEvent.setup();
     const router = renderAt("/forge?project=gone");
     await screen.findByTestId("forge-project-picker");
-    await user.click(await screen.findByTestId("forge-project-option-project-a"));
+    await user.click(await screen.findByTestId("project-selector-row-project-a"));
     expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-a" }));
     await landsOn(router, "/forge/p/alpha");
   });
