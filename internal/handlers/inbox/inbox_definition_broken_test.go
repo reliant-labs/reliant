@@ -37,9 +37,11 @@ func TestListInbox_OneItemPerBrokenDefinitionVersion(t *testing.T) {
 		require.NoError(t, err)
 		sj, err := config.EncodeCatalogJSON([]config.SyncedRepoState{{Repo: "control-plane", Branch: branch, Commit: commit, DefaultBranch: "main"}})
 		require.NoError(t, err)
+		db.HoldProjectOnMachineForTest(t, f.repo, f.project(), cicdID)
 		_, err = f.repo.SyncProjectConfigSnapshot(f.ctx, &db.ProjectConfigRecord{
 			ProjectID: f.project(), DaemonID: cicdID, ProjectWorkflowsJSON: wj, RepoStatesJSON: sj, PushedAt: time.UnixMilli(at).UTC(),
-		}, false)
+		}, false, nil)
+
 		require.NoError(t, err)
 	}
 	push(1000, "main", releaseWorkflow)

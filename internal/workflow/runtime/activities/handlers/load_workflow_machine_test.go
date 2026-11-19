@@ -64,10 +64,12 @@ nodes:
 			{Name: "impl", RelativePath: "control-plane/.reliant/presets/impl.yaml", YAMLContent: "name: impl\nparams:\n  version: " + version + "\n"},
 		})
 		require.NoError(t, err)
+		db.HoldProjectOnMachineForTest(t, repo, projectID, daemonID)
 		_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 			ProjectID: projectID, DaemonID: daemonID,
 			ProjectWorkflowsJSON: wj, ProjectPresetsJSON: pj, PushedAt: at,
-		}, true)
+		}, true, nil)
+
 		require.NoError(t, err)
 	}
 	push(cicd, now.Add(-time.Hour), "cicd", step("from-cicd"))

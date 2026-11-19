@@ -17,6 +17,9 @@ const (
 	UserRoleContextKey  contextKey = "user_role"
 	UserEmailContextKey contextKey = "user_email"
 	DaemonIDContextKey  contextKey = "daemon_id"
+	// DaemonOrgIDContextKey is the org of the machine a daemon-bound
+	// credential is bound to, as the token authority named it.
+	DaemonOrgIDContextKey contextKey = "daemon_org_id"
 )
 
 // userJWTs stores the latest JWT for each authenticated user.
@@ -111,4 +114,14 @@ func GetUserEmailFromContext(ctx context.Context) (string, bool) {
 func GetDaemonIDFromContext(ctx context.Context) string {
 	daemonID, _ := ctx.Value(DaemonIDContextKey).(string)
 	return daemonID
+}
+
+// GetDaemonOrgIDFromContext is the organization of the machine the daemon
+// credential on ctx is bound to (control-plane's daemons.org_id, named at
+// introspection), or "" when it names none: an unbound credential, a machine
+// with no recorded org, a self-hosted authority, or a control plane that
+// predates the field.
+func GetDaemonOrgIDFromContext(ctx context.Context) string {
+	orgID, _ := ctx.Value(DaemonOrgIDContextKey).(string)
+	return orgID
 }

@@ -1072,6 +1072,32 @@ func (r *Repo) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, user
 	return store.GetProjectByRemoteURLAndUser(ctx, r.ORM(), remoteURL, userID)
 }
 
+// GetProjectByPathAndUserInScope is the user's project at path in scope (an
+// org, with its unassigned rows when it is the user's default); nil scope is
+// every org's. Projects are unique per (org, user, path).
+func (r *Repo) GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*Project, error) {
+	if path == "" {
+		return nil, fmt.Errorf("project path cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.GetProjectByPathAndUserInScope(ctx, r.ORM(), path, userID, scope)
+}
+
+// GetProjectByRemoteURLAndUserInScope is the user's project cloned from
+// remoteURL in scope; nil scope is every org's. Projects are unique per (org,
+// user, remote_url).
+func (r *Repo) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*Project, error) {
+	if remoteURL == "" {
+		return nil, fmt.Errorf("remote URL cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.GetProjectByRemoteURLAndUserInScope(ctx, r.ORM(), remoteURL, userID, scope)
+}
+
 func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error) {
 	if id == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
@@ -1164,7 +1190,7 @@ func (r *Repo) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, pat
 	// Recording the checkout ends a detachment of the pair, in the same
 	// transaction: a pair never has both (project_daemon_detachment.go). It
 	// is the USER's choice (attach, create, clone), so it may; a checkout the
-	// platform merely found goes through RecordObservedProjectDaemon. The
+	// platform merely found goes through RecordObservedProjectDaemonInScope. The
 	// catalog lock orders it against a concurrent detach.
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
@@ -1177,14 +1203,27 @@ func (r *Repo) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, pat
 	})
 }
 
-// RecordObservedProjectDaemon records a checkout the platform found on the
-// machine (the connect reconcile, the plain-folder heal, a discovered folder,
-// a pool member's restore), never one the user chose. A detachment of the
-// pair wins: it records nothing and reports false, and it never clears the
-// detachment. The check runs under the catalog lock DetachProjectFromDaemon
-// holds, so a detach that commits while the caller was probing the machine
-// is seen here rather than undone.
-func (r *Repo) RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error) {
+// RecordObservedProjectDaemonInScope records a checkout the platform found
+// on the machine (the connect reconcile, the plain-folder heal, a discovered
+// folder, a pool member's restore), never one the user chose, for a machine
+// that holds only scope's projects (its org's, or its owner's default org's
+// when its org is not known: authz.MachineScopeFor; nil, every org's, only in
+// a deployment with no orgs).
+//
+// Two things win over the write, each re-read in its transaction:
+//   - a detachment of the pair: it records nothing and reports false, and it
+//     never clears the detachment. The check runs under the catalog lock
+//     DetachProjectFromDaemon holds, so a detach that commits while the caller
+//     was probing the machine is seen here rather than undone;
+//   - the project's org: the project row is locked FOR SHARE — a project's
+//     org move takes it FOR NO KEY UPDATE, so the two serialize — and nothing
+//     is recorded unless the project's org NOW is in scope. A project moved
+//     out of the machine's org while the caller probed or cloned is never
+//     recorded on it.
+//
+// A project gone since is false, not an error. There is deliberately no
+// unscoped form: every caller records for one machine, whose scope it has.
+func (r *Repo) RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error) {
 	if projectID == "" {
 		return false, fmt.Errorf("project ID cannot be empty")
 	}
@@ -1197,7 +1236,8 @@ func (r *Repo) RecordObservedProjectDaemon(ctx context.Context, projectID, daemo
 	recorded := false
 	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		recorded = false
-		if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
 			return err
 		}
 		detached, err := store.ProjectDaemonDetached(ctx, r.ORM(), projectID, daemonID)
@@ -1248,13 +1288,63 @@ func (r *Repo) ResolveQueuedProjectDaemon(ctx context.Context, requestID, instal
 	return store.ResolveQueuedProjectDaemon(ctx, r.ORM(), requestID, installErr)
 }
 
-// MarkProjectDaemonInstalled settles a queued clone from a filesystem
-// announcement, which names the path but carries no request id.
-func (r *Repo) MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error {
+// MarkProjectDaemonInstalledInScope settles the machine's clone of the
+// project as installed, from evidence the machine gave (its filesystem
+// announcement, or a directory at the row's own path for a clone whose outcome
+// was lost), for a machine that holds only scope's projects (nil: every
+// org's). It reports whether the checkout is installed now: false when there
+// is no row, or when the project is gone or no longer in scope.
+//
+// Like RecordObservedProjectDaemonInScope, it re-reads the project's org
+// under the catalog lock and the project row FOR SHARE, so a move out of the
+// machine's org that committed while the caller probed the machine is seen
+// and nothing is settled on it. A detached pair has no row, so it settles
+// nothing. There is deliberately no unscoped form.
+func (r *Repo) MarkProjectDaemonInstalledInScope(ctx context.Context, projectID, daemonID string, scope *core.OrgScope) (bool, error) {
 	if projectID == "" || daemonID == "" {
-		return fmt.Errorf("project ID and daemon ID cannot be empty")
+		return false, fmt.Errorf("project ID and daemon ID cannot be empty")
 	}
-	return store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
+	installed := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		installed = false
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
+			return err
+		}
+		if err := store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID); err != nil {
+			return err
+		}
+		installed, err = store.ProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
+		return err
+	})
+	return installed, err
+}
+
+// lockProjectInScope takes, inside the caller's transaction, the locks every
+// machine-observed checkout or config write holds — the project's catalog
+// lock, then its row FOR SHARE — and reports whether the write may land: the
+// project still exists, is not scheduled for deletion, and its org, read
+// under that lock, is in scope.
+//
+// The row lock conflicts with a project's org move (FOR NO KEY UPDATE) and a
+// deletion schedule (FOR UPDATE), so either is committed and seen here, or
+// waits for this write. Neither takes the catalog lock — their order is the
+// owner's org lock, then the project row (store/project_schedule.go) — and
+// nothing that holds a project row takes it after, so the order cannot
+// deadlock. A project scheduled for deletion gets nothing new from its
+// machines: no checkout recorded or settled, no config synced
+// (project_delete_admission covers chats, workspaces, runs and triggers in
+// the database; these writes are refused here). A restore clears
+// delete_after, and the next connect records and syncs again.
+func (r *Repo) lockProjectInScope(ctx context.Context, projectID string, scope *core.OrgScope) (bool, error) {
+	if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
+		return false, err
+	}
+	org, scheduled, found, err := store.LockProjectOrgForShare(ctx, r.ORM(), projectID)
+	if err != nil || !found || scheduled {
+		return false, err
+	}
+	return scope.Includes(org), nil
 }
 
 // StartQueuedProjectDaemonClones starts the stuck-clone clock of the
@@ -1266,13 +1356,67 @@ func (r *Repo) StartQueuedProjectDaemonClones(ctx context.Context, daemonID stri
 	return store.StartQueuedProjectDaemonClones(ctx, r.ORM(), daemonID)
 }
 
-// FailProjectDaemonInstall settles a clone still installing as failed: one
-// whose outcome was lost.
-func (r *Repo) FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error {
+// FailProjectDaemonInstallInScope settles the machine's clone of the project
+// that is still installing as failed — one whose outcome was lost and whose
+// path is empty on the machine — for a machine that holds only scope's
+// projects (nil: every org's). It reports whether it marked the row failed.
+// The org is re-read under the same locks as MarkProjectDaemonInstalledInScope:
+// a project moved out of the machine's org meanwhile is not the machine's to
+// settle (the machine-org cleanup detaches its row instead).
+func (r *Repo) FailProjectDaemonInstallInScope(ctx context.Context, projectID, daemonID, installErr string, scope *core.OrgScope) (bool, error) {
 	if projectID == "" || daemonID == "" {
-		return fmt.Errorf("project ID and daemon ID cannot be empty")
+		return false, fmt.Errorf("project ID and daemon ID cannot be empty")
 	}
-	return store.FailProjectDaemonInstall(ctx, r.ORM(), projectID, daemonID, installErr)
+	failed := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		failed = false
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
+			return err
+		}
+		failed, err = store.FailProjectDaemonInstall(ctx, r.ORM(), projectID, daemonID, installErr)
+		return err
+	})
+	return failed, err
+}
+
+// RecordFailedProjectDaemonRestoreInScope records that putting a pool
+// member's checkout of the project back failed, with installErr as the
+// reason, so its install state and placement say so instead of waiting on it
+// forever. The restore clones for minutes before it gets here, so, like
+// RecordObservedProjectDaemonInScope, it writes nothing when the project
+// moved out of scope (nil: every org's) or the user detached it from the
+// machine meanwhile — and it never clears a detachment: a restore is the
+// platform's doing, not the user's. It reports whether it recorded the
+// failure.
+func (r *Repo) RecordFailedProjectDaemonRestoreInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, installErr string, scope *core.OrgScope) (bool, error) {
+	if projectID == "" || daemonID == "" || path == "" {
+		return false, fmt.Errorf("project ID, daemon ID and path cannot be empty")
+	}
+	recorded := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		recorded = false
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
+			return err
+		}
+		detached, err := store.ProjectDaemonDetached(ctx, r.ORM(), projectID, daemonID)
+		if err != nil || detached {
+			return err
+		}
+		// Queued and resolved at once, under a request id of its own: a
+		// late outcome of an earlier clone cannot overwrite the failure.
+		requestID := uuid.NewString()
+		if err := store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID); err != nil {
+			return err
+		}
+		if err := store.ResolveQueuedProjectDaemon(ctx, r.ORM(), requestID, installErr); err != nil {
+			return err
+		}
+		recorded = true
+		return nil
+	})
+	return recorded, err
 }
 
 func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
