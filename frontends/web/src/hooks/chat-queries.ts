@@ -3,6 +3,7 @@ import type { Chat } from "../api/client";
 import type { Chat as ProtoChat, ChatSelection, ListArchivedChatsResponse } from "../gen/reliant/v1/chat_pb";
 import type { WorktreeSummary } from "../gen/reliant/v1/worktree_pb";
 import { getOrgScope, orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
+import { chatListScope, projectIdsOfScope, scopeListsProject } from "../lib/chatProjectFilter";
 import { queryClient } from "../lib/query-client";
 import { chatServiceKeys, chatServiceQueries } from "./chat-service-hooks_gen";
 import type { StartChatRequest, UpdateChatRequest } from "../types/api";
@@ -26,7 +27,9 @@ export const chatKeys = {
   /**
    * One project's list, or every project's when `projectId` is null/undefined,
    * in `orgId` (by default the tab's org, lib/orgScope). The org is part of
-   * the key: one org's list is never served as another's.
+   * the key: one org's list is never served as another's. Several projects'
+   * list (the chat filter, lib/chatProjectFilter) is the scope string
+   * chatListScope(ids) builds.
    */
   list: (projectId?: string | null, orgId: string | null = getOrgScope().orgId) =>
     [...chatKeys.lists(), projectId ?? ALL_PROJECTS_SCOPE, orgId ?? NO_ORG_SCOPE] as const,
@@ -57,9 +60,23 @@ function scopeOfListKey(queryKey: readonly unknown[]): string | null {
   return typeof scope === "string" && scope !== ALL_PROJECTS_SCOPE ? scope : null;
 }
 
-/** Whether a list of `scope` (null: every project) holds chats of `projectId`. */
+/** Whether a list of `scope` (null: every project; one; several) holds chats of `projectId`. */
 function scopeHolds(scope: string | null, projectId: string | undefined): boolean {
-  return scope === null || (!!projectId && scope === projectId);
+  return scopeListsProject(scope, projectId);
+}
+
+/**
+ * Re-read every list of `orgId` that lists `projectId`'s chats: its own, every
+ * project's, and each several-project list it is one of.
+ */
+export function invalidateChatListsHolding(projectId: string, orgId: string | null): void {
+  void queryClient.invalidateQueries({
+    queryKey: chatKeys.lists(),
+    predicate: (query) => {
+      const key = query.queryKey;
+      return key[3] === chatKeys.list(null, orgId)[3] && scopeHolds(scopeOfListKey(key), projectId);
+    },
+  });
 }
 
 /**
@@ -174,6 +191,12 @@ export function upsertChatInListCache(
     chatKeys.list(null, orgId),
     (prev: ChatListEnvelope | undefined) => (prev ? upsertInto(prev, chat) : prev),
   );
+  // Each several-project list it is one of (lib/chatProjectFilter), where loaded.
+  for (const [key, envelope] of queryClient.getQueriesData<ChatListEnvelope>({ queryKey: chatKeys.lists() })) {
+    const scope = scopeOfListKey(key);
+    if (!envelope || key[3] !== chatKeys.list(null, orgId)[3] || projectIdsOfScope(scope).length < 2) continue;
+    if (scopeHolds(scope, resolvedProjectId)) queryClient.setQueryData(key, upsertInto(envelope, chat));
+  }
   queryClient.setQueryData(
     chatKeys.list(resolvedProjectId, orgId),
     (prev: ChatListEnvelope | undefined): ChatListEnvelope => {
@@ -314,22 +337,32 @@ export function useChatList(projectId?: string) {
 }
 
 /**
- * The chat list of a scope — one project, or every project when `scope` is
- * null — together with each project's main workspace: everything the sidebar
+ * The chat list of a scope — one project, several (the chat filter's ids,
+ * lib/chatProjectFilter), or every project when `scope` is null — together
+ * with each project's main workspace: everything the sidebar
  * and the mobile list need to group chats by project and workspace, from the
  * one ListChats response. The full worktree list is not involved.
  *
  * In the tab's org, and not before it is known (lib/orgScope): every
  * project's list naming no org is every org's chats.
  */
-export function useChatListWithWorkspaces(scope: string | null, options: { enabled?: boolean } = {}) {
+export function useChatListWithWorkspaces(
+  scope: string | readonly string[] | null,
+  options: { enabled?: boolean } = {},
+) {
   const org = useOrgScope();
+  // One key per set of projects, whatever order they were picked in.
+  const listScope = chatListScope(scope);
   return useQuery(
     withOrgFailure(
       {
-        queryKey: chatKeys.list(scope, org.orgId),
-        queryFn: ({ signal }: { signal: AbortSignal }): Promise<ChatListEnvelope> =>
-          chatActions.listChats(scope ?? undefined, { signal, orgId: org.orgId }),
+        queryKey: chatKeys.list(listScope, org.orgId),
+        queryFn: ({ signal }: { signal: AbortSignal }): Promise<ChatListEnvelope> => {
+          const ids = projectIdsOfScope(listScope);
+          return ids.length > 1
+            ? chatActions.listChatsOfProjects(ids, { signal, orgId: org.orgId })
+            : chatActions.listChats(ids[0], { signal, orgId: org.orgId });
+        },
         enabled: (options.enabled ?? true) && orgQueryEnabled(org),
       },
       org,

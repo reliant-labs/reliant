@@ -55,6 +55,8 @@ import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
 import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
+import { ChatProjectFilterButton, ChatProjectFilterScope } from "../Projects/ChatProjectFilter";
+import { useChatProjectFilter } from "../../hooks/useChatProjectFilter";
 import { OrgSwitcher } from "../Orgs/OrgSwitcher";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import type { RunsSearch } from "../../routeSchemas";
@@ -104,6 +106,7 @@ import {
   ChatRow,
   ChatStateSlot,
   ProjectGroupHeader,
+  SIDEBAR_HEADING_HOVER_ACTION,
   SIDEBAR_ICON_BUTTON,
   SidebarFooter,
   SidebarHeading,
@@ -686,14 +689,16 @@ function SidebarComponent({
   // context project (the open chat's) does not, so opening a chat elsewhere
   // never re-scopes or unmounts the list.
   const projectFilterId = useWorkspaceStateStore((state) => state.projectFilterId);
-  const setProjectFilter = useProjectStore((state) => state.setProjectFilter);
   const { projects } = useProjects();
+  // Several projects (choose N of M, hooks/useChatProjectFilter); one is projectFilterId.
+  const chatFilter = useChatProjectFilter({ sync: { pathname, search } });
+  const severalProjects = chatFilter.mode === "many" ? chatFilter.ids : null;
   const {
     data: chatList,
     isPending: chatListPending,
     isError: chatListFailed,
     refetch: refetchChatList,
-  } = useChatListWithWorkspaces(projectFilterId);
+  } = useChatListWithWorkspaces(severalProjects ?? projectFilterId);
   const newChatShortcut = useShortcutLabel("newChat");
   const chatSearchShortcut = useShortcutLabel("chatSearch");
   const listedChats = useMemo(() => chatList?.chats ?? [], [chatList?.chats]);
@@ -701,8 +706,13 @@ function SidebarComponent({
   // one, so the sidebar groups from this response alone.
   const mainWorktrees = chatList?.mainWorktrees;
   const scopedProjects = useMemo(
-    () => (projectFilterId ? projects.filter((p) => p.id === projectFilterId) : projects),
-    [projects, projectFilterId],
+    () =>
+      projectFilterId
+        ? projects.filter((p) => p.id === projectFilterId)
+        : severalProjects
+          ? projects.filter((p) => severalProjects.includes(p.id))
+          : projects,
+    [projects, projectFilterId, severalProjects],
   );
   const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
   const projectNameOf = useCallback((projectId: string) => projectNames.get(projectId), [projectNames]);
@@ -865,9 +875,10 @@ function SidebarComponent({
 
   // Archived chats in the filter's scope
   const projectArchivedChats = useMemo(() => {
+    if (severalProjects) return archivedChats.filter((c) => severalProjects.includes(c.projectId));
     if (!projectFilterId) return archivedChats;
     return archivedChats.filter((c) => c.projectId === projectFilterId);
-  }, [archivedChats, projectFilterId]);
+  }, [archivedChats, projectFilterId, severalProjects]);
 
   // Activity detection - reads directly from activityStore (SINGLE SOURCE OF TRUTH)
   const getChatActivity = useCallback(
@@ -1106,13 +1117,6 @@ function SidebarComponent({
       void toast.error(error);
     }
   }, []);
-
-  const handleFilterChange = useCallback(
-    (projectId: string | null) => {
-      void setProjectFilter(projectId);
-    },
-    [setProjectFilter],
-  );
 
   // Chats waiting on the user, per project: the switcher shows them so a
   // filtered list never hides that another project needs you.
@@ -1775,7 +1779,9 @@ function SidebarComponent({
   const showAllOffered =
     !projectFilterId && (projectPrefs.showAll || foldedProjectGroups.length > 0 || hiddenProjectCount > 0);
   const headingScope =
-    chatListTab === "archived" ? null : projectFilterName ? (
+    chatListTab === "archived" ? null : severalProjects ? (
+      <ChatProjectFilterScope filter={chatFilter} clearClassName={SIDEBAR_ICON_BUTTON} />
+    ) : projectFilterName ? (
       <>
         <span aria-hidden="true">·</span>
         <span className="min-w-0 truncate text-foreground" data-testid="project-filter-label">
@@ -1784,7 +1790,7 @@ function SidebarComponent({
         <Tooltip content="Show all projects" side="bottom" delay={300} type="label">
           <button
             type="button"
-            onClick={() => handleFilterChange(null)}
+            onClick={chatFilter.clear}
             aria-label="Show all projects"
             data-testid="project-filter-clear"
             className={SIDEBAR_ICON_BUTTON}
@@ -1946,13 +1952,18 @@ function SidebarComponent({
                 />
               </span>
             )}
+            {/* The project filter, choose N of M (Projects/ChatProjectFilter):
+                at rest on hover, like the menu; filtered, it stays. */}
+            <ChatProjectFilterButton
+              filter={chatFilter}
+              needsYouByProject={needsYouByProject}
+              className={cn(SIDEBAR_ICON_BUTTON, chatFilter.mode === "all" && SIDEBAR_HEADING_HOVER_ACTION)}
+            />
             <ChatListMenu
               filterId={projectFilterId}
               projects={projects}
-              onFilterChange={handleFilterChange}
               onAddProject={() => openAddProject()}
               onManageProjects={() => go(settingsPath("projects"))}
-              needsYouByProject={needsYouByProject}
               sortOrder={sortOrder}
               onSortChange={setSortOrder}
               viewMode={viewMode}

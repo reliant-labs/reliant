@@ -195,6 +195,65 @@ describe("ProjectSelectorPanel", () => {
   });
 });
 
+describe("ProjectSelectorPanel, choosing several", () => {
+  function renderMulti(selected: string[] = []) {
+    const onChange = vi.fn();
+    const onClose = vi.fn();
+    render(<ProjectSelectorPanel mode="chat" multiple={{ selected, onChange }} onClose={onClose} />);
+    return { onChange, onClose };
+  }
+
+  it("checks the chosen rows, and toggles one without closing", () => {
+    const { onChange, onClose } = renderMulti(["b"]);
+    expect(screen.getByRole("listbox")).toHaveAttribute("aria-multiselectable", "true");
+    expect(screen.getByTestId("project-selector-row-b")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("project-selector-row-a")).toHaveAttribute("aria-selected", "false");
+    fireEvent.click(screen.getByTestId("project-selector-row-a"));
+    expect(onChange).toHaveBeenLastCalledWith(["b", "a"]);
+    fireEvent.click(screen.getByTestId("project-selector-row-b"));
+    expect(onChange).toHaveBeenLastCalledWith([]);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("toggles with Enter and keeps only the active row with Shift+Enter", () => {
+    const { onChange } = renderMulti(["f", "c"]);
+    const search = screen.getByTestId("project-selector-search");
+    // The first row is f (pinned).
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(onChange).toHaveBeenLastCalledWith(["c"]);
+    fireEvent.keyDown(search, { key: "Enter", shiftKey: true });
+    expect(onChange).toHaveBeenLastCalledWith(["f"]);
+  });
+
+  it("offers Only this on each row", () => {
+    const { onChange } = renderMulti(["a", "b"]);
+    const row = screen.getByTestId("project-selector-row-c");
+    // Shown on the active row (hovered, or reached by the arrows).
+    fireEvent.pointerMove(row);
+    fireEvent.click(within(row).getByTestId("project-selector-only"));
+    expect(onChange).toHaveBeenLastCalledWith(["c"]);
+  });
+
+  it("selects every row listed, or only the matches while searching, and clears", () => {
+    const { onChange } = renderMulti(["a"]);
+    fireEvent.click(screen.getByTestId("project-selector-select-all"));
+    expect(onChange).toHaveBeenLastCalledWith(["a", "f", "b", "c", "d", "e", "g"]);
+    fireEvent.change(screen.getByTestId("project-selector-search"), { target: { value: "project g" } });
+    fireEvent.click(screen.getByTestId("project-selector-select-all"));
+    expect(onChange).toHaveBeenLastCalledWith(["a", "g"]);
+    fireEvent.change(screen.getByTestId("project-selector-search"), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("project-selector-clear"));
+    expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it("says how many are chosen, and Done closes", () => {
+    const { onClose } = renderMulti(["a", "c"]);
+    expect(screen.getByTestId("project-selector-chosen-count")).toHaveTextContent("2 chosen");
+    fireEvent.click(screen.getByTestId("project-selector-done"));
+    expect(onClose).toHaveBeenCalled();
+  });
+});
+
 describe("ProjectSelectorDialog", () => {
   it("is a modal dialog that focuses its search and closes on the backdrop", () => {
     const onClose = vi.fn();
