@@ -1,8 +1,8 @@
 /**
  * Sends a signed-in user who has not finished onboarding to `/onboarding`
- * before any app route that needs it, carrying the page they asked for as
- * `returnTo` so the wizard's exit lands them back there (leaveOnboarding).
- * Which routes, and why the exemptions: ./onboardingGate.ts.
+ * before a chat route, carrying the page they asked for as `returnTo` so the
+ * wizard's exit lands them back there (leaveOnboarding). Which routes (the
+ * chat routes only), and the forge brand's home: ./onboardingGate.ts.
  *
  * Mounted inside the `_authenticated` layout's AuthGuard, so it only ever sees
  * a signed-in user. It never completes onboarding: the wizard is the only
@@ -15,6 +15,7 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { LoadingSpinner } from "@/components/Layout/LoadingSpinner";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { logger } from "@/lib/logger";
+import { isForgeShell } from "@/lib/shell";
 
 import { onboardingGateDecision, onboardingGateTarget } from "./onboardingGate";
 
@@ -28,7 +29,7 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (decision !== "onboard") return;
     logger.info("[Onboarding] gate: not finished, sending to /onboarding", { pathname });
-    void navigate(onboardingGateTarget(href));
+    void navigate(onboardingGateTarget(href, isForgeShell()));
   }, [decision, href, pathname, navigate]);
 
   if (decision !== "allow") return <LoadingSpinner />;
