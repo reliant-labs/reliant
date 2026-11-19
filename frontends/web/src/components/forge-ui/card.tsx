@@ -80,9 +80,9 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const paddingStyles: Record<CardPadding, string> = {
   none: "",
-  sm: "p-3",
-  md: "p-4",
-  lg: "p-6",
+  sm: "p-4",
+  md: "p-5",
+  lg: "p-7",
 };
 
 export default function Card({
@@ -93,7 +93,7 @@ export default function Card({
   ...rest
 }: CardProps) {
   const composed = [
-    "rounded-lg border border-border bg-surface",
+    "rounded-xl border border-border bg-surface",
     paddingStyles[padding],
     interactive ? "transition-colors hover:border-ink-subtle focus-within:border-ink-subtle" : "",
     className ?? "",
@@ -124,14 +124,14 @@ export interface CardHeaderProps {
 }
 
 export function CardHeader({ title, description, actions, className, children }: CardHeaderProps) {
-  const composed = ["mb-3 flex items-start justify-between gap-3", className ?? ""]
+  const composed = ["mb-4 flex items-start justify-between gap-3", className ?? ""]
     .filter(Boolean)
     .join(" ");
   return (
     <div className={composed}>
       <div className="min-w-0">
-        {title ? <div className="text-sm font-medium text-ink">{title}</div> : null}
-        {description ? <div className="mt-0.5 text-xs text-ink-muted">{description}</div> : null}
+        {title ? <div className="text-section text-ink">{title}</div> : null}
+        {description ? <div className="mt-1 text-ui text-ink-muted">{description}</div> : null}
         {children}
       </div>
       {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
@@ -145,7 +145,7 @@ export interface CardBodyProps {
 }
 
 export function CardBody({ className, children }: CardBodyProps) {
-  const composed = ["text-sm text-ink", className ?? ""].filter(Boolean).join(" ");
+  const composed = ["text-ui text-ink", className ?? ""].filter(Boolean).join(" ");
   return <div className={composed}>{children}</div>;
 }
 
@@ -156,7 +156,7 @@ export interface CardFooterProps {
 
 export function CardFooter({ className, children }: CardFooterProps) {
   const composed = [
-    "mt-3 flex items-center justify-end gap-2 border-t border-border pt-3",
+    "mt-5 flex items-center justify-end gap-2",
     className ?? "",
   ]
     .filter(Boolean)
@@ -177,7 +177,7 @@ export interface CardInsetProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function CardInset({ padding = "sm", className, children, ...rest }: CardInsetProps) {
   const composed = [
-    "rounded-md border border-border/60 bg-surface-sunken",
+    "rounded-lg border border-border/60 bg-surface-sunken",
     paddingStyles[padding],
     className ?? "",
   ]
