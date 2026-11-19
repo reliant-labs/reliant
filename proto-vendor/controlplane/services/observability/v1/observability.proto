@@ -2397,7 +2397,9 @@ message ReleasePromotionRef {
 }
 
 // ServiceHealthDelta is one service's before and after, over weighted server
-// spans (tail sampling is corrected for, so the rates are not inflated).
+// spans (tail sampling is corrected for, so the rates are not inflated), and
+// a frontend's browser telemetry beside them or alone (forge
+// pkg/releasehealth Combine).
 message ServiceHealthDelta {
   string service = 1;
   ServiceWindowStats before = 2;
@@ -2405,6 +2407,15 @@ message ServiceHealthDelta {
   // The fraction (0..1) of after-window traffic served by the judged version:
   // rollout and canary progress.
   double version_share = 4;
+  // What before and after were measured from: "spans" (the service's own
+  // server spans) or "browser" (a frontend that sent no server span, judged on
+  // its browser telemetry alone; before and after are empty). An older server
+  // leaves it empty, which means "spans".
+  string signal = 5;
+  // The frontend's own browser telemetry (RUM) over both windows, judged
+  // beside the server figures or alone. Unset when the service sent none, and
+  // from an older server, which never read it.
+  BrowserHealthDelta browser = 6;
 }
 
 message ServiceWindowStats {
@@ -2413,6 +2424,32 @@ message ServiceWindowStats {
   double p50_ms = 3;
   double p95_ms = 4;
   double p99_ms = 5;
+}
+
+// BrowserHealthDelta is one frontend's browser figures before and after.
+// Comparative findings on them need min_requests page views in both windows.
+message BrowserHealthDelta {
+  BrowserWindowStats before = 1;
+  BrowserWindowStats after = 2;
+}
+
+// BrowserWindowStats are one frontend's browser figures over one window
+// (forge pkg/obsquery Overview.BrowserRED): browser spans are never sampled,
+// so these are plain counts.
+message BrowserWindowStats {
+  // Full page loads and client-side route changes.
+  int64 page_views = 1;
+  // Full page loads alone.
+  int64 page_loads = 2;
+  // JavaScript errors: spans of the errors or record-exception scope with an
+  // error status.
+  int64 js_errors = 3;
+  // The page's own fetch and XHR requests, and those that got a 5xx or no
+  // answer.
+  int64 requests = 4;
+  int64 failed_requests = 5;
+  // p95 of the full page loads, 0 when there was none.
+  double page_load_p95_ms = 6;
 }
 
 message ReleaseAlertRef {
@@ -2451,6 +2488,14 @@ enum ReleaseFindingCode {
   RELEASE_FINDING_CODE_REGRESSED_ISSUE = 4;
   RELEASE_FINDING_CODE_ALERT_FIRING = 5;
   RELEASE_FINDING_CODE_WORKLOAD_RESTARTS = 6;
+  // A frontend's JavaScript errors per page view rose by more than
+  // max_error_rate_increase.
+  RELEASE_FINDING_CODE_BROWSER_ERRORS = 7;
+  // The share of a frontend's own fetch/XHR requests that failed rose by more
+  // than max_error_rate_increase.
+  RELEASE_FINDING_CODE_BROWSER_FAILED_REQUESTS = 8;
+  // A frontend's p95 page load grew by more than max_p95_ratio.
+  RELEASE_FINDING_CODE_BROWSER_PAGE_LOAD = 9;
 }
 
 message ReleaseFinding {
