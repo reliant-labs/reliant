@@ -309,7 +309,7 @@ var File_reliant_config_v1_web_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xfd8\n" +
+	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xfa8\n" +
 	"\x10ReliantWebConfig\x12\xa0\x03\n" +
 	"\aapi_url\x18\x01 \x01(\tB\x86\x03\x82\xce\x18\x81\x03\n" +
 	"\aAPI_URL*\xe1\x02Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.r\x12\n" +
@@ -321,9 +321,9 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\vGATEWAY_URL*\xbf\x01Origin of the daemon gateway (ToolsDaemonService). The browser never dials it; the onboarding renders it into the `reliant daemon start` command, which cannot derive it for a loopback server.R\n" +
 	"gatewayUrl\x12\x98\x02\n" +
 	"\aapp_url\x18\x04 \x01(\tB\xfe\x01\x82\xce\x18\xf9\x01\n" +
-	"\aAPP_URL*\xed\x01This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default.R\x06appUrl\x12\xf2\x02\n" +
-	"\x0eforge_app_host\x18\x17 \x01(\tB\xcb\x02\x82\xce\x18\xc6\x02\n" +
-	"\x0eFORGE_APP_HOST\x1a\x14forge.reliantlabs.io*\x9d\x02Hostname that serves the forge-branded shell (ForgeShell) from this same bundle. A document loaded on this host mounts the forge console, claim, sites, usage and settings pages with forge branding; every other host mounts Reliant. Also where Reliant's \"Open Forge console\" link points.R\fforgeAppHost\x12\xd0\x02\n" +
+	"\aAPP_URL*\xed\x01This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default.R\x06appUrl\x12\xef\x02\n" +
+	"\x0eforge_app_host\x18\x17 \x01(\tB\xc8\x02\x82\xce\x18\xc3\x02\n" +
+	"\x0eFORGE_APP_HOST\x1a\x14forge.reliantlabs.io*\x9a\x02Hostname that serves the Forge by Reliant brand of this same bundle. Every host mounts the one shell (the same routes and pages); a document loaded on this host shows it with forge branding, every other host with Reliant's. Also the origin the public demo's links into the app open.R\fforgeAppHost\x12\xd0\x02\n" +
 	"\rdemo_app_host\x18\x18 \x01(\tB\xab\x02\x82\xce\x18\xa4\x02\n" +
 	"\rDEMO_APP_HOST\x1a\x13demo.reliantlabs.io*\xfd\x01Deprecated: hostname on which this bundle still mounts the public forge demo (the demo shell), read-only on sample data. The supported demo is its own build and env (deploy/kcl/demo, the forge-demo frontend); this key keeps working until a future major.\x18\x01R\vdemoAppHost\x12\x81\x03\n" +
 	"\x0edemo_telemetry\x18\x19 \x01(\tB\xd9\x02\x82\xce\x18\xd4\x02\n" +

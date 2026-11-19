@@ -23,6 +23,8 @@ vi.mock("@/hooks/project-queries", () => ({
   useProjects: () => ({ projects: state.projects, isLoading: false }),
 }));
 vi.mock("../../OnboardingFlow/useChatSetup", () => ({ useChatSetup: () => state.setup }));
+const startBuilding = vi.fn();
+vi.mock("../../Apps/startBuilding", () => ({ useStartBuildingApp: () => startBuilding }));
 vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: ReactNode }) => <>{children}</> }));
 // The apps list and the sites list are covered where they live: here, which one shows.
 vi.mock("../../Apps/AppsPage", () => ({
@@ -81,6 +83,22 @@ describe("ProjectsPage", () => {
     expect(screen.getByTestId("sites-list")).toHaveAttribute("data-header", "false");
     expect(screen.queryByTestId("apps-body")).toBeNull();
     expect(screen.queryByTestId("projects-code")).toBeNull();
+  });
+});
+
+describe("ProjectsPage's Build an app", () => {
+  it.each([[{}], [{ show: "apps" }]])("heads the page while it shows apps (%o)", (search) => {
+    state.search = search;
+    render(<ProjectsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Build an app" }));
+    expect(startBuilding).toHaveBeenCalledTimes(1);
+    startBuilding.mockReset();
+  });
+
+  it("is not offered on the sites list", () => {
+    state.search = { show: "sites" };
+    render(<ProjectsPage />);
+    expect(screen.queryByRole("button", { name: "Build an app" })).toBeNull();
   });
 });
 

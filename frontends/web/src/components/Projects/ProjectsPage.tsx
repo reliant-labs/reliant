@@ -13,7 +13,7 @@
  */
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { FolderGit2 } from "lucide-react";
+import { FolderGit2, Plus } from "lucide-react";
 
 import PageHeader from "@/components/forge-ui/page_header";
 import Tabs from "@/components/forge-ui/tabs";
@@ -22,6 +22,7 @@ import { formatRelativeTime } from "@/lib/relativeTime";
 import { projectPath, projectsPath } from "@/lib/paths";
 
 import { AppsBody } from "../Apps/AppsPage";
+import { useStartBuildingApp } from "../Apps/startBuilding";
 import { SitesList } from "../ForgeShell/ForgeSitesPage";
 import { chatSetupNeeded } from "../OnboardingFlow/onboardingGate";
 import { SetUpChatsCard } from "../OnboardingFlow/SetUpChatsCard";
@@ -58,10 +59,21 @@ export function ProjectsBody() {
   // A person who cannot run a chat yet lands here (the daemonless home, U6):
   // the way to set chats up leads the page.
   const setup = useChatSetup();
+  // The apps list's own action, in the page's header now that the page heads the list.
+  const startBuilding = useStartBuildingApp();
 
   return (
     <div className="space-y-6" data-testid="projects-page">
-      <PageHeader title="Projects" meta={<span>Your apps and sites, and the code you work on.</span>} className="mb-0" />
+      <PageHeader
+        title="Projects"
+        meta={<span>Your apps and sites, and the code you work on.</span>}
+        actions={
+          filter === "sites"
+            ? []
+            : [{ label: "Build an app", onClick: startBuilding, variant: "primary", icon: <Plus className="h-4 w-4" aria-hidden="true" /> }]
+        }
+        className="mb-0"
+      />
       {chatSetupNeeded(setup) && (
         <SetUpChatsCard setup={setup} variant="page" onNavigate={(href) => void navigate({ href })} />
       )}
