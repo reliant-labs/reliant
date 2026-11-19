@@ -110,7 +110,7 @@ func TestDetachedProject_StaysOffTheMachine(t *testing.T) {
 	everythingExists := func(context.Context, string) (projectPathState, error) {
 		return projectPathState{Exists: true}, nil
 	}
-	missing, added, err := reconcileProjectDaemons(f.ctx, f.repo, f.laptop, f.userID, everythingExists)
+	missing, added, err := reconcileProjectDaemons(f.ctx, f.repo, f.laptop, f.userID, nil, "", everythingExists)
 	require.NoError(t, err)
 	assert.Empty(t, added)
 	assert.Empty(t, missing, "a detached project is not missing either: nothing restores it")
@@ -120,7 +120,7 @@ func TestDetachedProject_StaysOffTheMachine(t *testing.T) {
 	assert.Equal(t, f.cloud, rows[0].DaemonID)
 
 	// Another machine is unaffected.
-	_, added, err = reconcileProjectDaemons(f.ctx, f.repo, f.cloud, f.userID, everythingExists)
+	_, added, err = reconcileProjectDaemons(f.ctx, f.repo, f.cloud, f.userID, nil, "", everythingExists)
 	require.NoError(t, err)
 	assert.Empty(t, added, "the cloud machine already had its row")
 }
@@ -161,7 +161,8 @@ func TestDetachedProject_AnotherProjectAttachedAtItsPathSyncs(t *testing.T) {
 
 	synced, err := f.repo.SyncProjectConfigSnapshot(f.ctx, &db.ProjectConfigRecord{
 		ProjectID: other.ID, DaemonID: f.laptop, PushedAt: now,
-	}, true)
+	}, true, nil)
+
 	require.NoError(t, err)
 	assert.True(t, synced, "the attached project's snapshot from the machine is synced")
 
@@ -239,7 +240,8 @@ func TestEnsureOwnedProjectForPath_DetachBetweenItsReadsCreatesNoProject(t *test
 	assert.True(t, errors.Is(err, errProjectDetached), "got %v", err)
 	synced, err := f.repo.SyncProjectConfigSnapshot(f.ctx, &db.ProjectConfigRecord{
 		ProjectID: f.project.ID, DaemonID: f.laptop, PushedAt: time.Unix(1_800_000_000, 0).UTC(),
-	}, true)
+	}, true, nil)
+
 	require.NoError(t, err)
 	assert.False(t, synced)
 	_, err = f.repo.GetProjectMachineCatalogPushedAt(f.ctx, f.project.ID, f.laptop)
@@ -259,7 +261,7 @@ func TestReconcile_DetachDuringTheProbeStaysDetached(t *testing.T) {
 		require.NoError(t, f.repo.DetachProjectFromDaemon(ctx, f.project.ID, f.laptop, path, nil))
 		return projectPathState{Exists: true}, nil
 	}
-	_, added, err := reconcileProjectDaemons(f.ctx, f.repo, f.laptop, f.userID, detachDuringProbe)
+	_, added, err := reconcileProjectDaemons(f.ctx, f.repo, f.laptop, f.userID, nil, "", detachDuringProbe)
 	require.NoError(t, err)
 	assert.Empty(t, added)
 

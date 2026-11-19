@@ -199,9 +199,11 @@ func (s *Service) checkoutOn(ctx context.Context, projectID, daemonID string) (*
 	return nil, nil
 }
 
-// projectAtPathOn returns the caller's project whose checkout on the machine
-// is at path, nil when none is.
-func (s *Service) projectAtPathOn(ctx context.Context, userID, daemonID, path string) (*db.Project, error) {
+// projectAtPathOn returns the caller's project in scope whose checkout on the
+// machine is at path, nil when none is. A project outside scope (another
+// org's, recorded there before machines kept to their org) is not this
+// folder's project in scope's org; a nil scope matches every org's.
+func (s *Service) projectAtPathOn(ctx context.Context, userID, daemonID, path string, scope *core.OrgScope) (*db.Project, error) {
 	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, daemonID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the machine's projects"))
@@ -211,7 +213,7 @@ func (s *Service) projectAtPathOn(ctx context.Context, userID, daemonID, path st
 		if row == nil || ospath.Clean(row.Path) != want {
 			continue
 		}
-		if p, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, userID); err == nil && p != nil {
+		if p, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, userID); err == nil && p != nil && scope.Includes(p.OrgID) {
 			return p, nil
 		}
 	}

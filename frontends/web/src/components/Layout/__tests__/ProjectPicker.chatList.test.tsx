@@ -31,7 +31,7 @@ import {
 
 import type { ListChatsRequest } from "../../../gen/reliant/v1/chat_pb";
 import { ProjectFilterRouteSync } from "../ProjectFilterRouteSync";
-import { ProjectFilterMenu } from "../ProjectFilterMenu";
+import { ChatListMenu } from "../ChatListMenu";
 import { useChatListWithWorkspaces } from "../../../hooks/chat-queries";
 import type { Project } from "../../../hooks/project-queries";
 import { setTransport } from "../../../lib/connect";
@@ -61,18 +61,24 @@ function chatsOf(projectId: string) {
   return ids.map((id) => ({ id: `chat-${id}`, title: `Chat in ${id.toUpperCase()}`, projectId: id }));
 }
 
-/** The sidebar's wiring, minus its layout: the picker, the list it scopes. */
+/** The sidebar's wiring, minus its layout: the picker (in the Chats menu), the list it scopes. */
 function ChatListShell() {
   const filterId = useWorkspaceStateStore((state) => state.projectFilterId);
   const { data } = useChatListWithWorkspaces(filterId);
   return (
     <>
-      <ProjectFilterMenu
+      <ChatListMenu
         filterId={filterId}
         projects={projects}
-        onChange={(id) => void useProjectStore.getState().setProjectFilter(id)}
+        onFilterChange={(id) => void useProjectStore.getState().setProjectFilter(id)}
         onAddProject={() => {}}
         onManageProjects={() => {}}
+        sortOrder="newest_first"
+        onSortChange={() => {}}
+        viewMode="grouped"
+        onViewChange={() => {}}
+        archived={false}
+        onArchivedChange={() => {}}
       />
       <ul data-testid="chat-list">
         {(data?.chats ?? []).map((chat) => (

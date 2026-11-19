@@ -16,6 +16,7 @@ import { driverDisplayName } from "../../../hooks/catalog-models";
 import { primaryDriverOfSelection } from "../../../lib/providerPolicy";
 import { OnLimitRow } from "./OnLimitRow";
 import { useSurface } from "../../../lib/surfaceContext";
+import { mobileSettingsPath, settingsPath } from "@/lib/paths";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -317,8 +318,8 @@ export function ModelSettingsPage({
         <button
           onClick={() => {
             onClose();
-            if (mobile) void navigate({ to: '/m/settings', search: { section: 'ai' } });
-            else void navigate({ to: '/settings/$section', params: { section: 'ai' } });
+            if (mobile) void navigate({ to: mobileSettingsPath(), search: { section: 'ai' } });
+            else void navigate({ to: settingsPath('ai') });
           }}
           title="Model preferences"
           aria-label="Model preferences"

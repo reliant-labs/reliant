@@ -15,6 +15,7 @@ import { ChevronDown, ChevronLeft, FolderGit2, Loader2 } from "lucide-react";
 import { ContextUsageIndicator } from "../Chat/ContextUsageIndicator";
 import { FLOATING_BAR_SURFACE, FLOATING_TOP_EDGE, useFloatingChrome } from "../Chat/floatingChrome";
 import { cn } from "../../lib/utils";
+import { mobileChatsPath } from "@/lib/paths";
 
 /**
  * The ring earns a slot in the bar only once compaction is close enough to
@@ -105,7 +106,7 @@ export function MobileChatTopBar({
           <ChevronLeft className="h-5 w-5" />
         </button>
       ) : !listPaneVisible ? (
-        <Link to="/m/chats" className={ICON_BUTTON} aria-label="Back to chats">
+        <Link to={mobileChatsPath()} className={ICON_BUTTON} aria-label="Back to chats">
           <ChevronLeft className="h-5 w-5" />
         </Link>
       ) : null}

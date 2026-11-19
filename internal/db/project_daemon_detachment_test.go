@@ -112,13 +112,13 @@ func TestDetachProjectFromDaemon_GuardOutcomes(t *testing.T) {
 
 // A checkout the platform finds is never recorded over a detachment, and
 // finding it never ends the detachment; the user's own attach does.
-func TestRecordObservedProjectDaemon_LeavesADetachedPairAlone(t *testing.T) {
+func TestRecordObservedProjectDaemonInScope_LeavesADetachedPairAlone(t *testing.T) {
 	p := newTwoMachineProject(t)
 	ctx := context.Background()
 	require.NoError(t, p.repo.UpsertProjectDaemon(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, nil))
 	require.NoError(t, p.repo.DetachProjectFromDaemon(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, nil))
 
-	recorded, err := p.repo.RecordObservedProjectDaemon(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, nil)
+	recorded, err := p.repo.RecordObservedProjectDaemonInScope(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, nil, nil)
 	require.NoError(t, err)
 	assert.False(t, recorded)
 	rows, err := p.repo.ListProjectDaemonsForProject(ctx, p.projectID)
@@ -128,7 +128,7 @@ func TestRecordObservedProjectDaemon_LeavesADetachedPairAlone(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, detached, 1, "the detachment stands")
 
-	recorded, err = p.repo.RecordObservedProjectDaemon(ctx, p.projectID, p.cicdID, "/work/"+p.cicdID, nil)
+	recorded, err = p.repo.RecordObservedProjectDaemonInScope(ctx, p.projectID, p.cicdID, "/work/"+p.cicdID, nil, nil)
 	require.NoError(t, err)
 	assert.True(t, recorded, "another machine's checkout is recorded")
 }

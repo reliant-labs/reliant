@@ -44,9 +44,11 @@ func TestListInbox_ActivationOnAMachineWithoutItsWorkflowIsBroken(t *testing.T) 
 		t.Helper()
 		wj, err := config.EncodeCatalogJSON(workflows)
 		require.NoError(t, err)
+		db.HoldProjectOnMachineForTest(t, f.repo, f.project(), daemonID)
 		_, err = f.repo.SyncProjectConfigSnapshot(f.ctx, &db.ProjectConfigRecord{
 			ProjectID: f.project(), DaemonID: daemonID, ProjectWorkflowsJSON: wj, PushedAt: time.UnixMilli(at).UTC(),
-		}, false)
+		}, false, nil)
+
 		require.NoError(t, err)
 	}
 	const releasePath = "control-plane/.reliant/workflows/release.yaml"
@@ -96,9 +98,11 @@ func TestListInbox_ActivationWhoseWorkflowDoesNotParseIsBroken(t *testing.T) {
 		{RelativePath: brokenPath, YAMLContent: "name: release\nentry: [a\n"},
 	})
 	require.NoError(t, err)
+	db.HoldProjectOnMachineForTest(t, f.repo, f.project(), cicdID)
 	_, err = f.repo.SyncProjectConfigSnapshot(f.ctx, &db.ProjectConfigRecord{
 		ProjectID: f.project(), DaemonID: cicdID, ProjectWorkflowsJSON: wj, PushedAt: time.UnixMilli(1000).UTC(),
-	}, false)
+	}, false, nil)
+
 	require.NoError(t, err)
 
 	name := "merged"

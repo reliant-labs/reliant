@@ -81,6 +81,10 @@ type introspectResponse struct {
 	// ActingUserEmail is the acting user's email, read from control-plane's
 	// users row at introspection. Absent from an older control plane.
 	ActingUserEmail string `json:"actingUserEmail"`
+	// DaemonOrgID is, for a token bound to a daemon, the org that owns that
+	// machine (control-plane's daemons.org_id). Absent for any other token,
+	// a machine with no recorded org, and from an older control plane.
+	DaemonOrgID string `json:"daemonOrgId"`
 }
 
 // wildcardScopes reads a daemon credential's resolved scopes, SKIPPING any
@@ -108,8 +112,9 @@ func (c *Client) Introspect(ctx context.Context, token string) (*fat.Principal, 
 	return a.Principal, err
 }
 
-// IntrospectAccount is Introspect plus the acting user's email, in the same
-// single round trip. The email is "" from a control plane that predates it.
+// IntrospectAccount is Introspect plus the acting user's email and, for a
+// daemon-bound token, its machine's org, in the same single round trip. Each
+// is "" from a control plane that predates it.
 func (c *Client) IntrospectAccount(ctx context.Context, token string) (auth.AccessTokenAccount, error) {
 	if !fat.HasFormat(token) {
 		return auth.AccessTokenAccount{}, ErrInactive
@@ -125,7 +130,13 @@ func (c *Client) IntrospectAccount(ctx context.Context, token string) (auth.Acce
 	if err != nil {
 		return auth.AccessTokenAccount{}, err
 	}
-	return auth.AccessTokenAccount{Principal: p, Email: strings.TrimSpace(out.ActingUserEmail)}, nil
+	account := auth.AccessTokenAccount{Principal: p, Email: strings.TrimSpace(out.ActingUserEmail)}
+	if p.Resource != nil && p.Resource.Kind == fat.ResourceDaemon {
+		// The machine's org is about the machine the token is bound to:
+		// read only for such a token, whatever an authority sends.
+		account.MachineOrgID = strings.TrimSpace(out.DaemonOrgID)
+	}
+	return account, nil
 }
 
 // ErrNoRecognisedScope is an active token that resolved to no scope this

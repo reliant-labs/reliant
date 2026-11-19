@@ -279,7 +279,7 @@ func TestRegisterOutboundConnectionRefusesDaemonIDOwnedByAnotherUser(t *testing.
 	svc.AddConnectionListener(listener)
 
 	out, err := svc.RegisterOutboundConnection(context.Background(), "user-B", daemonID, "10.0.0.1", 9190,
-		&reliantv1.DaemonRegister{Hostname: "h", Platform: "linux"}, nil, nil)
+		&reliantv1.DaemonRegister{Hostname: "h", Platform: "linux"}, nil, nil, MachineOrg{})
 
 	require.Nil(t, out)
 	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
@@ -312,7 +312,7 @@ func TestRegisterOutboundConnectionRefusesSupersedingAnotherUsersLiveConnection(
 	svc.mu.Unlock()
 
 	out, err := svc.RegisterOutboundConnection(context.Background(), "user-B", daemonID, "10.0.0.1", 9190,
-		&reliantv1.DaemonRegister{Hostname: "h", Platform: "linux"}, nil, nil)
+		&reliantv1.DaemonRegister{Hostname: "h", Platform: "linux"}, nil, nil, MachineOrg{})
 
 	require.Nil(t, out)
 	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))

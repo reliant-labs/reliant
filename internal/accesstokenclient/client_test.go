@@ -86,6 +86,32 @@ func TestIntrospectAccount_DecodesTheActingUsersEmail(t *testing.T) {
 	}
 }
 
+// IntrospectAccount decodes the org of the machine a daemon-bound token is
+// bound to; an unbound token never carries one, whatever the response says,
+// and an older control plane's response names none.
+func TestIntrospectAccount_DecodesTheMachinesOrg(t *testing.T) {
+	for name, tc := range map[string]struct{ resource, extra, want string }{
+		"bound, named":          {resource: `,"resource":{"kind":"daemon","id":"d-1"}`, extra: `,"daemonOrgId":"globex"`, want: "globex"},
+		"bound, older control":  {resource: `,"resource":{"kind":"daemon","id":"d-1"}`, want: ""},
+		"unbound, named anyway": {extra: `,"daemonOrgId":"globex"`, want: ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := fakeCP(t, func(string, map[string]any) (int, string) {
+				return 200, `{"active":true,"tokenId":"tok-1","orgId":"acme","actingUserId":"user-1","scopes":["daemon:connect"]` + tc.resource + tc.extra + `}`
+			})
+			defer srv.Close()
+
+			a, err := New(Deps{BaseURL: srv.URL, Sign: sign}).IntrospectAccount(context.Background(), liveToken)
+			if err != nil {
+				t.Fatalf("IntrospectAccount: %v", err)
+			}
+			if a.MachineOrgID != tc.want || a.Principal.OrgID != "acme" {
+				t.Fatalf("machine org %q (token org %q), want %q (acme)", a.MachineOrgID, a.Principal.OrgID, tc.want)
+			}
+		})
+	}
+}
+
 // A daemon credential holds every scope, and the control plane resolves that
 // against its OWN catalog, which may be newer than this binary's. A scope only
 // it knows is skipped, never a reason to refuse the daemon; an explicit list

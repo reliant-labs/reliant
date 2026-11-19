@@ -51,12 +51,14 @@ func (p *twoMachineProject) push(t *testing.T, daemonID string, at int64, workfl
 	require.NoError(t, err)
 	pj, err := config.EncodeCatalogJSON(presets)
 	require.NoError(t, err)
+	HoldProjectOnMachineForTest(t, p.repo, p.projectID, daemonID)
 	stored, err := p.repo.SyncProjectConfigSnapshot(context.Background(), &ProjectConfigRecord{
 		ProjectID: p.projectID, DaemonID: daemonID,
 		UserConfigYAML:       testStringPtr("from " + daemonID),
 		ProjectWorkflowsJSON: wj, ProjectPresetsJSON: pj,
 		PushedAt: time.UnixMilli(at).UTC(),
-	}, false)
+	}, false, nil)
+
 	require.NoError(t, err)
 	return stored
 }

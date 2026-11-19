@@ -21,6 +21,7 @@ import { RunStatusDot } from "../runs/RunStatusIndicator";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { MobileMenuButton } from "./MobileMenuButton";
 import { MobileScreenBody, MobileScreenHeader } from "./MobileChrome";
+import { mobileChatPath } from "@/lib/paths";
 
 const FILTERS = { range: "7d" as const, includeUnlaunched: true };
 
@@ -78,8 +79,7 @@ function MobileRuns() {
           row.kind === "run" ? (
             <li key={`run-${row.run.chatId}`}>
               <Link
-                to="/m/chats/$chatId"
-                params={{ chatId: row.run.chatId }}
+                to={mobileChatPath(row.run.chatId)}
                 className="flex min-h-[56px] items-center gap-3 px-4 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
                 <RunStatusDot status={runStatusFromDisplayState(row.run.displayState, row.run.outcome)} />
