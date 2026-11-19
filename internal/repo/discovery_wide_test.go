@@ -41,7 +41,7 @@ func TestDiscover_WideDirectoryStopsWithinBudget(t *testing.T) {
 	t.Parallel()
 	const budget = 1_000
 	root, wide, open := wideProject(t, 1_000_000_000)
-	d, err := discoverWith(context.Background(), root, Options{MaxEntries: budget}, open)
+	d, err := discoverWith(context.Background(), root, Options{MaxEntries: budget}, open, newTestClock().now)
 	require.NoError(t, err)
 	assert.True(t, d.Truncated, "a scan the budget stopped is partial")
 	assert.Equal(t, fmt.Sprintf("it looked at %d entries", budget), d.TruncatedReason)
@@ -50,7 +50,7 @@ func TestDiscover_WideDirectoryStopsWithinBudget(t *testing.T) {
 
 	// The default budget bounds it the same way.
 	root, wide, open = wideProject(t, 1_000_000_000)
-	d, err = discoverWith(context.Background(), root, Options{}, open)
+	d, err = discoverWith(context.Background(), root, Options{}, open, newTestClock().now)
 	require.NoError(t, err)
 	assert.True(t, d.Truncated)
 	assert.Equal(t, map[string]bool{"aaa": true}, names(d.Repos))
@@ -63,31 +63,27 @@ func TestDiscover_WideDirectoryStopsBetweenBatches(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name, reason string
-		setup        func(t *testing.T, wide *wideFS) (context.Context, Options)
+		setup        func(t *testing.T, wide *wideFS, clock *testClock) (context.Context, Options)
 	}{
-		{"the request ends", "the request ended", func(t *testing.T, wide *wideFS) (context.Context, Options) {
+		{"the request ends", "the request ended", func(t *testing.T, wide *wideFS, _ *testClock) (context.Context, Options) {
 			ctx, cancel := context.WithCancel(context.Background())
 			t.Cleanup(cancel)
 			wide.onBatch = cancel
 			return ctx, Options{}
 		}},
-		{"the deadline passes", "it ran out of time", func(t *testing.T, wide *wideFS) (context.Context, Options) {
-			deadline := time.Now().Add(5 * time.Millisecond)
-			// The first batch outlasts the deadline.
-			wide.onBatch = func() {
-				for time.Now().Before(deadline) {
-					time.Sleep(time.Millisecond)
-				}
-			}
-			return context.Background(), Options{Deadline: deadline}
+		{"the deadline passes", "it ran out of time", func(t *testing.T, wide *wideFS, clock *testClock) (context.Context, Options) {
+			// The first batch takes the clock past the deadline.
+			wide.onBatch = func() { clock.advance(2 * time.Second) }
+			return context.Background(), Options{Deadline: clock.at.Add(time.Second)}
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			root, wide, open := wideProject(t, 1_000_000_000)
-			ctx, opts := tc.setup(t, wide)
+			clock := newTestClock()
+			ctx, opts := tc.setup(t, wide, clock)
 			opts.MaxEntries = 1 << 30
-			d, err := discoverWith(ctx, root, opts, open)
+			d, err := discoverWith(ctx, root, opts, open, clock.now)
 			require.NoError(t, err)
 			assert.True(t, d.Truncated)
 			assert.Equal(t, tc.reason, d.TruncatedReason)
@@ -141,7 +137,7 @@ func TestDiscover_PartialScanIsDeterministic(t *testing.T) {
 	assert.Equal(t, filepath.Join("g00", "r0"), want.Repos[0].RelativePath, "a partial scan walks in name order")
 
 	for seed := range int64(5) {
-		got, err := discoverWith(context.Background(), root, opts, shuffledOpener(seed))
+		got, err := discoverWith(context.Background(), root, opts, shuffledOpener(seed), newTestClock().now)
 		require.NoError(t, err)
 		assert.Equal(t, want, got, "seed %d", seed)
 	}
@@ -166,12 +162,12 @@ func TestDiscover_ListingErrorsKeepTheirMeaning(t *testing.T) {
 		}
 	}
 
-	d, err := discoverWith(context.Background(), root, Options{}, failing(fs.ErrPermission))
+	d, err := discoverWith(context.Background(), root, Options{}, failing(fs.ErrPermission), newTestClock().now)
 	require.NoError(t, err)
 	assert.False(t, d.Truncated, d.TruncatedReason)
 	assert.Equal(t, map[string]bool{"api": true, "web": true}, names(d.Repos))
 
-	_, err = discoverWith(context.Background(), root, Options{}, failing(errors.New("input/output error")))
+	_, err = discoverWith(context.Background(), root, Options{}, failing(errors.New("input/output error")), newTestClock().now)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "scan project")
 }
