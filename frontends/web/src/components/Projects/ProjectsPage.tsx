@@ -146,14 +146,32 @@ export function ProjectsBody() {
   const empty = !!catalog && catalog.rows.length === 0;
   const filtered = filter !== "all" || query.trim() !== "";
 
+  // One action in the header (it must fit a phone beside the title); the
+  // org's Observability and Build an app (the apps list's own action, U6) are
+  // links in the meta line, not more buttons.
   const actions = [
-    ...(isForgeUIEnabled()
-      ? [{ label: "Observability", href: orgPath({ kind: "observability" }), variant: "secondary" as const, icon: <Activity className="h-4 w-4" aria-hidden="true" /> }]
-      : []),
-    // The apps list's own action (U6), now that this page holds the apps.
-    { label: "Build an app", onClick: startBuilding, variant: "secondary" as const, icon: <AppWindow className="h-4 w-4" aria-hidden="true" /> },
     { label: ADD_PROJECT_LABEL, onClick: () => openAddProject(), variant: "primary" as const, icon: <Plus className="h-4 w-4" aria-hidden="true" /> },
   ];
+  const observability = isForgeUIEnabled() ? (
+    <Link
+      to={orgPath({ kind: "observability" })}
+      className="no-color inline-flex items-center gap-1 font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <Activity className="h-3.5 w-3.5" aria-hidden="true" />
+      Observability
+    </Link>
+  ) : null;
+  const buildAnApp = (
+    <button
+      type="button"
+      onClick={startBuilding}
+      className="inline-flex items-center gap-1 font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      data-testid="projects-build-app"
+    >
+      <AppWindow className="h-3.5 w-3.5" aria-hidden="true" />
+      Build an app
+    </button>
+  );
 
   if (several && browse === undefined) {
     return (
@@ -184,14 +202,18 @@ export function ProjectsBody() {
       <PageHeader
         title="Projects"
         meta={
-          catalog && !empty ? (
-            <span data-testid="projects-counts">
-              {projectTotal} {projectTotal === 1 ? "project" : "projects"}
-              {apps > 0 && ` · ${apps} ${apps === 1 ? "app" : "apps"}`}
-            </span>
-          ) : (
-            <span>Your code, the apps it deploys, and what your org shares with you.</span>
-          )
+          <>
+            {catalog && !empty ? (
+              <span data-testid="projects-counts">
+                {projectTotal} {projectTotal === 1 ? "project" : "projects"}
+                {apps > 0 && ` · ${apps} ${apps === 1 ? "app" : "apps"}`}
+              </span>
+            ) : (
+              <span>Your code, the apps it deploys, and what your org shares with you.</span>
+            )}
+            {buildAnApp}
+            {observability}
+          </>
         }
         actions={actions}
         className="mb-0"
