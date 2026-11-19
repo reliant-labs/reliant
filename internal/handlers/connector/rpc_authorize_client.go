@@ -1,4 +1,3 @@
-// Copyright (c) 2025 Reliant Labs
 package connector
 
 import (
@@ -10,7 +9,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -111,71 +109,4 @@ func (s *Service) grantForConsent(
 	default:
 		return nil, "", svcerr.InvalidArgument("choose an existing connector or describe a new one")
 	}
-}
-
-// ListAuthorizedClients returns the applications acting through the caller's
-// connectors.
-func (s *Service) ListAuthorizedClients(
-	ctx context.Context,
-	_ *connect.Request[reliantv1.ListAuthorizedClientsRequest],
-) (*connect.Response[reliantv1.ListAuthorizedClientsResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.ErrUnauthenticated
-	}
-
-	bindings, err := s.deps.Grants.ListBindingsByUser(ctx, userID)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list authorized clients"))
-	}
-
-	// Connector names are resolved so the UI can say "ChatGPT → my-project"
-	// rather than showing an opaque id pair.
-	names := map[string]string{}
-	if grants, err := s.deps.Grants.ListGrantsByUser(ctx, userID); err == nil {
-		for _, g := range grants {
-			names[g.ID] = g.Name
-		}
-	}
-
-	out := make([]*reliantv1.AuthorizedClient, 0, len(bindings))
-	for _, b := range bindings {
-		out = append(out, &reliantv1.AuthorizedClient{
-			ClientId:      b.ClientID,
-			ClientName:    b.ClientName,
-			ConnectorId:   b.GrantID,
-			ConnectorName: names[b.GrantID],
-			AuthorizedAt:  b.CreatedAt.UTC().Format(time.RFC3339),
-		})
-	}
-	return connect.NewResponse(&reliantv1.ListAuthorizedClientsResponse{Clients: out}), nil
-}
-
-// RevokeClientAuthorization disconnects one application.
-//
-// The connector survives: it may serve several applications, and disconnecting
-// one should not cut off the others. Revoking the connector itself is the
-// separate, broader action.
-func (s *Service) RevokeClientAuthorization(
-	ctx context.Context,
-	req *connect.Request[reliantv1.RevokeClientAuthorizationRequest],
-) (*connect.Response[reliantv1.RevokeClientAuthorizationResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.ErrUnauthenticated
-	}
-
-	clientID := strings.TrimSpace(req.Msg.GetClientId())
-	if clientID == "" {
-		return nil, svcerr.InvalidArgument("client id is required")
-	}
-
-	revoked, err := s.deps.Grants.DeleteBinding(ctx, userID, clientID)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to revoke authorization"))
-	}
-	if !revoked {
-		activity.Skip(ctx) // no such authorization: nothing changed
-	}
-	return connect.NewResponse(&reliantv1.RevokeClientAuthorizationResponse{Revoked: revoked}), nil
 }

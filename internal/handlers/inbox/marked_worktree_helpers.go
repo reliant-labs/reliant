@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -70,37 +69,6 @@ func (s *Service) markedItems(ctx context.Context, userID string) ([]*pb.InboxIt
 		})
 	}
 	return out, nil
-}
-
-// KeepMarkedWorktree cancels the mark the person saw (Sweeper.KeepMarked).
-func (s *Service) KeepMarkedWorktree(
-	ctx context.Context,
-	req *connect.Request[pb.KeepMarkedWorktreeRequest],
-) (*connect.Response[pb.KeepMarkedWorktreeResponse], error) {
-	userID, err := s.markDecision(ctx, req.Msg.WorktreeId, req.Msg.MarkId)
-	if err != nil {
-		return nil, err
-	}
-	if err := markDecisionError(s.deps.Sweeper.KeepMarked(ctx, s.deps.Repo, userID, req.Msg.WorktreeId, req.Msg.MarkId)); err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(&pb.KeepMarkedWorktreeResponse{}), nil
-}
-
-// ReclaimMarkedWorktreeNow skips the wait of the mark the person saw
-// (Sweeper.ReclaimMarkedNow).
-func (s *Service) ReclaimMarkedWorktreeNow(
-	ctx context.Context,
-	req *connect.Request[pb.ReclaimMarkedWorktreeNowRequest],
-) (*connect.Response[pb.ReclaimMarkedWorktreeNowResponse], error) {
-	userID, err := s.markDecision(ctx, req.Msg.WorktreeId, req.Msg.MarkId)
-	if err != nil {
-		return nil, err
-	}
-	if err := markDecisionError(s.deps.Sweeper.ReclaimMarkedNow(ctx, s.deps.Repo, userID, req.Msg.WorktreeId, req.Msg.MarkId)); err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(&pb.ReclaimMarkedWorktreeNowResponse{}), nil
 }
 
 // markDecision checks what both decisions need: a caller, the ids, a sweeper.
