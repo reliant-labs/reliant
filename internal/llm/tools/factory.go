@@ -529,6 +529,10 @@ func (f *ToolsFactory) ManageMachine() Tool {
 	return NewManageMachineTool(f.store(), f.opts.MachineController)
 }
 
+func (f *ToolsFactory) ManageMachinePool() Tool {
+	return NewManageMachinePoolTool(f.store(), f.opts.MachineController)
+}
+
 func (f *ToolsFactory) ProposeConnection() Tool {
 	return NewProposeConnectionTool(f.store(), f.opts.ConnectionProposer)
 }
