@@ -150,7 +150,7 @@ export function ShellPageHeader({ children, actions, testId }: { children: React
   const { navDocked } = useShellFrame();
   const { isElectron, trafficLightPadding, dragRegionStyle, noDragRegionStyle } = useTitleBarChrome({
     alignedToWindowEdge: !navDocked,
-    collapsedPadding: navDocked ? "24px" : "12px",
+    collapsedPadding: navDocked ? "32px" : "12px",
   });
   return (
     <header

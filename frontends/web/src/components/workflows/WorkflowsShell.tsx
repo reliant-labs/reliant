@@ -143,7 +143,9 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
           <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-ui text-muted-foreground">
             <span className="hidden md:inline">Workflows</span>
             <span aria-hidden="true" className="hidden md:inline">›</span>
-            <span aria-current="page" className="truncate font-medium text-foreground">{section?.label ?? "Workflows"}</span>
+            <span aria-current="page" className="truncate font-medium text-foreground">
+              {section?.key === "workflows" ? "Library" : (section?.label ?? "Workflows")}
+            </span>
           </nav>
         </ShellPageHeader>
         {fill ? (

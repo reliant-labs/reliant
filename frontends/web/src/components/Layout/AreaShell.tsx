@@ -69,7 +69,7 @@ function ShellArea({ areaPath, areaLabel, children }: AreaShellProps) {
         )}
       </ShellPageHeader>
       <main className="relative min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-5xl px-6 pb-12 pt-2">
+        <div className="mx-auto w-full max-w-5xl px-8 pb-12 pt-2">
           <ErrorBoundary layout="panel">{children}</ErrorBoundary>
         </div>
       </main>
