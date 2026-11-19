@@ -55,8 +55,7 @@ describe.each(cases)('--scrim (%s, %s)', (scheme, mode) => {
 describe('page-covering overlays use bg-scrim', () => {
   // Not yet moved: the shell's own overlays (U6 owns components/Layout) and
   // the onboarding takeovers, which are a deliberately heavier, blurred
-  // full-screen moment rather than a dialog backdrop. Chat's two sheets move
-  // in the chat restyle. The list only shrinks.
+  // full-screen moment rather than a dialog backdrop. The list only shrinks.
   const PENDING = new Set([
     'components/Layout/QuickFileOpen.tsx',
     'components/Layout/CommandPalette.tsx',
@@ -65,8 +64,6 @@ describe('page-covering overlays use bg-scrim', () => {
     'components/Onboarding/JourneyPicker.tsx',
     'components/Onboarding/JourneyTour.tsx',
     'components/Onboarding/journeys/workflowsPhone.tsx',
-    'components/Chat/MessageActionsSheet.tsx',
-    'components/Chat/PromptPicker.tsx',
   ])
 
   function walk(dir: string, out: string[] = []): string[] {
