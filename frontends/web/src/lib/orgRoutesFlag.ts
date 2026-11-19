@@ -1,7 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { loadConfig } from "./config_gen";
-import { getShell } from "./shell";
 
 /**
  * The runtime flag `web.org_routes` (control-plane
@@ -31,11 +30,10 @@ export function isOrgRoutesEnabled(): boolean {
 }
 
 /**
- * Whether this page load's links take the org form: the flag, in the shell
- * whose route tree mounts the org pages. The forge host keeps its org-less
- * tree until the one shell replaces it (U6); its `/o/<org>` URLs resolve the
- * org and land on the org-less page (forgeShellRoutes.tsx).
+ * Whether this page load's links take the org form: the flag. Both hosts
+ * mount the one route tree (routes.tsx), with every org page, so the forge
+ * host's links follow it too (U6).
  */
 export function orgLinksEnabled(): boolean {
-  return isOrgRoutesEnabled() && getShell() === "reliant";
+  return isOrgRoutesEnabled();
 }

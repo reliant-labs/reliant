@@ -91,12 +91,6 @@ const ROWS: Record<string, Row> = {
     template: "/settings/$section",
     params: { section: "org-ai-accounts" },
   },
-  forgeSettingsPath: {
-    build: () => paths.forgeSettingsPath("members"),
-    url: "/settings/members",
-    template: "/settings/$section",
-    params: { section: "members" },
-  },
   machineSettingsPath: {
     build: () => paths.machineSettingsPath("d-1"),
     url: "/settings/machines/d-1",
@@ -356,10 +350,11 @@ describe("the org segment", () => {
       expect(paths.inboxPath()).toBe("/inbox");
     });
 
-    it("keeps today's paths on the forge host, whose tree has no org pages until U6", () => {
+    it("builds the org form on the forge host too, which mounts the same tree (U6)", () => {
       resetShellForTests("forge");
-      expect(paths.appsPath()).toBe("/apps");
-      expect(consoleBase("shop")).toBe("/forge/p/shop");
+      expect(paths.appsPath()).toBe("/o/acme/apps");
+      expect(paths.sitesPath()).toBe("/o/acme/sites");
+      expect(consoleBase("shop")).toBe("/o/acme/apps/shop");
     });
 
     it("never changes a path that is not org-scoped", () => {

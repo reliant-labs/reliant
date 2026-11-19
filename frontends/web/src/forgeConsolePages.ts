@@ -1,8 +1,8 @@
 /**
- * The forge console's pages, as the forge shell (forgeShellRoutes.tsx) and the
- * forge demo (demoShellRoutes.tsx) mount them: the same lazy chunks for every
- * route createForgeConsoleRoutes declares. Reliant's tree (routes.tsx) wraps
- * its own in ForgeGate, so it keeps its own map.
+ * The forge console's pages, as the forge demo (demoShellRoutes.tsx) mounts
+ * them: the same lazy chunks for every route createForgeConsoleRoutes
+ * declares. The app's tree (routes.tsx, on both hosts) wraps its own in
+ * ForgeGate, so it keeps its own map until the gate goes (U6).
  */
 
 import type { ForgeConsoleComponents } from './forgeConsoleRoutes'
