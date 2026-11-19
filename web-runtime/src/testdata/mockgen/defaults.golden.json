@@ -1,0 +1,1146 @@
+{
+  "listTraces": {
+    "traces": [
+      {
+        "traceId": "9a957b28a1830c58dd023d17b6ccd050",
+        "startTime": "2026-11-06T11:57:41.836Z",
+        "endTime": "2026-11-06T11:58:27.726Z",
+        "durationMs": 100.16,
+        "rootService": "root-service-1",
+        "rootSpanName": "Root span 1",
+        "spanCount": 13,
+        "status": "TRACE_STATUS_SLOW",
+        "services": [
+          "service-1",
+          "service-2",
+          "service-3"
+        ],
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3",
+          "attribute-4": "value-4"
+        },
+        "region": "REGION_US",
+        "projectId": "proj-1"
+      },
+      {
+        "traceId": "e29d0e95b6ac97268133433457000b9d",
+        "startTime": "2026-11-06T11:53:54.455Z",
+        "endTime": "2026-11-06T11:55:47.297Z",
+        "durationMs": 1931.45,
+        "rootService": "root-service-2",
+        "rootSpanName": "Root span 2",
+        "spanCount": 35,
+        "status": "TRACE_STATUS_OK",
+        "services": [
+          "service-1",
+          "service-2",
+          "service-3"
+        ],
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3",
+          "attribute-4": "value-4"
+        },
+        "region": "REGION_EU",
+        "projectId": "proj-1"
+      },
+      {
+        "traceId": "c813931b8fb9ccb04886dbc7410a1faa",
+        "startTime": "2026-11-06T11:50:07.326Z",
+        "endTime": "2026-11-06T11:50:18.445Z",
+        "durationMs": 524.66,
+        "rootService": "root-service-3",
+        "rootSpanName": "Root span 3",
+        "spanCount": 83,
+        "status": "TRACE_STATUS_ERROR",
+        "services": [
+          "service-1",
+          "service-2",
+          "service-3"
+        ],
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3",
+          "attribute-4": "value-4",
+          "attribute-5": "value-5"
+        },
+        "region": "REGION_US",
+        "projectId": "proj-1"
+      },
+      {
+        "traceId": "2c742d1e7368b5a2b897ece36fee2b97",
+        "startTime": "2026-11-06T11:47:36.088Z",
+        "endTime": "2026-11-06T11:47:40.829Z",
+        "durationMs": 797.31,
+        "rootService": "root-service-4",
+        "rootSpanName": "Root span 4",
+        "spanCount": 26,
+        "status": "TRACE_STATUS_SLOW",
+        "services": [
+          "service-1",
+          "service-2",
+          "service-3"
+        ],
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3",
+          "attribute-4": "value-4",
+          "attribute-5": "value-5"
+        },
+        "region": "REGION_EU",
+        "projectId": "proj-1"
+      },
+      {
+        "traceId": "b08abe8cb080a47bd0afdbd8d7013b3a",
+        "startTime": "2026-11-06T11:41:12.033Z",
+        "endTime": "2026-11-06T11:42:14.461Z",
+        "durationMs": 651.78,
+        "rootService": "root-service-5",
+        "rootSpanName": "Root span 5",
+        "spanCount": 74,
+        "status": "TRACE_STATUS_OK",
+        "services": [
+          "service-1",
+          "service-2",
+          "service-3"
+        ],
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3",
+          "attribute-4": "value-4"
+        },
+        "region": "REGION_US",
+        "projectId": "proj-1"
+      },
+      {
+        "traceId": "5808a3f61dd3e9d10f14719e5cd8ccc9",
+        "startTime": "2026-11-06T11:37:54.161Z",
+        "endTime": "2026-11-06T11:38:24.223Z",
+        "durationMs": 1582.93,
+        "rootService": "root-service-6",
+        "rootSpanName": "Root span 6",
+        "spanCount": 59,
+        "status": "TRACE_STATUS_ERROR",
+        "services": [
+          "service-1",
+          "service-2",
+          "service-3"
+        ],
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3"
+        },
+        "region": "REGION_EU",
+        "projectId": "proj-1"
+      },
+      {
+        "traceId": "9d40001a45950217c24f77af3a2825e6",
+        "startTime": "2026-11-06T11:33:05.366Z",
+        "endTime": "2026-11-06T11:34:15.028Z",
+        "durationMs": 654.59,
+        "rootService": "root-service-7",
+        "rootSpanName": "Root span 7",
+        "spanCount": 151,
+        "status": "TRACE_STATUS_SLOW",
+        "services": [
+          "service-1",
+          "service-2",
+          "service-3"
+        ],
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3",
+          "attribute-4": "value-4"
+        },
+        "region": "REGION_US",
+        "projectId": "proj-1",
+        "errorsOnly": true
+      },
+      {
+        "traceId": "4367951391eb834dc7b011cbec9b54a3",
+        "startTime": "2026-11-06T11:30:13.008Z",
+        "endTime": "2026-11-06T11:30:39.206Z",
+        "durationMs": 1774.04,
+        "rootService": "root-service-8",
+        "rootSpanName": "Root span 8",
+        "spanCount": 44,
+        "status": "TRACE_STATUS_OK",
+        "services": [
+          "service-1",
+          "service-2",
+          "service-3"
+        ],
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3",
+          "attribute-4": "value-4"
+        },
+        "region": "REGION_EU",
+        "projectId": "proj-1"
+      }
+    ],
+    "totalCount": "8",
+    "red": {
+      "errorRate": 0.29,
+      "requestCount": "734",
+      "p95": "2.315s"
+    }
+  },
+  "getTrace": {
+    "traceId": "07f7bc0d30bd7642c10d0a4bb4fb558a",
+    "spans": [
+      {
+        "spanId": "d71687b0739b5d0b",
+        "parentSpanId": "492720a044e89b83",
+        "name": "Span 1",
+        "startTime": "2026-11-06T11:58:46.418Z",
+        "duration": "0.168s",
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2"
+        },
+        "events": [
+          {
+            "name": "Span event 1",
+            "timeUnixNano": "1793966372614000000",
+            "counters": {
+              "counter-1": "31",
+              "counter-2": "29",
+              "counter-3": "40",
+              "counter-4": "93",
+              "counter-5": "37"
+            }
+          },
+          {
+            "name": "Span event 2",
+            "timeUnixNano": "1793966113561000000",
+            "counters": {
+              "counter-1": "45",
+              "counter-2": "94",
+              "counter-3": "67",
+              "counter-4": "89"
+            }
+          },
+          {
+            "name": "Span event 3",
+            "timeUnixNano": "1793965799586000000",
+            "counters": {
+              "counter-1": "20",
+              "counter-2": "2",
+              "counter-3": "58",
+              "counter-4": "47",
+              "counter-5": "85"
+            }
+          },
+          {
+            "name": "Span event 4",
+            "timeUnixNano": "1793965590793000000",
+            "counters": {
+              "counter-1": "66",
+              "counter-2": "29",
+              "counter-3": "94"
+            }
+          },
+          {
+            "name": "Span event 5",
+            "timeUnixNano": "1793965423034000000",
+            "counters": {
+              "counter-1": "81",
+              "counter-2": "24",
+              "counter-3": "74",
+              "counter-4": "11",
+              "counter-5": "68"
+            }
+          },
+          {
+            "name": "Span event 6",
+            "timeUnixNano": "1793965179288000000",
+            "counters": {
+              "counter-1": "92",
+              "counter-2": "79",
+              "counter-3": "8",
+              "counter-4": "42",
+              "counter-5": "77"
+            }
+          }
+        ],
+        "error": {
+          "message": "Sample span error message 1.",
+          "type": "type-1"
+        },
+        "peerService": "peer-service-1"
+      },
+      {
+        "spanId": "d3decbeeaf4dd551",
+        "parentSpanId": "37659db9d8f021cf",
+        "name": "Span 2",
+        "startTime": "2026-11-06T11:54:21.071Z",
+        "duration": "3.473s",
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3"
+        },
+        "events": [
+          {
+            "name": "Span event 1",
+            "timeUnixNano": "1793966322170000000",
+            "counters": {
+              "counter-1": "2",
+              "counter-2": "73",
+              "counter-3": "40",
+              "counter-4": "33",
+              "counter-5": "29"
+            }
+          },
+          {
+            "name": "Span event 2",
+            "timeUnixNano": "1793966031818000000",
+            "counters": {
+              "counter-1": "74",
+              "counter-2": "79",
+              "counter-3": "77",
+              "counter-4": "47",
+              "counter-5": "23"
+            }
+          },
+          {
+            "name": "Span event 3",
+            "timeUnixNano": "1793965804039000000",
+            "counters": {
+              "counter-1": "88",
+              "counter-2": "87",
+              "counter-3": "40",
+              "counter-4": "6"
+            }
+          },
+          {
+            "name": "Span event 4",
+            "timeUnixNano": "1793965636705000000",
+            "counters": {
+              "counter-1": "53",
+              "counter-2": "46",
+              "counter-3": "1",
+              "counter-4": "44"
+            }
+          },
+          {
+            "name": "Span event 5",
+            "timeUnixNano": "1793965405076000000",
+            "counters": {
+              "counter-1": "93",
+              "counter-2": "75",
+              "counter-3": "90"
+            }
+          }
+        ],
+        "statusMessage": "Sample span status message 2.",
+        "peerService": "peer-service-2"
+      },
+      {
+        "spanId": "f5d754d8f03f0942",
+        "parentSpanId": "3ee8bb8370e67353",
+        "name": "Span 3",
+        "startTime": "2026-11-06T11:48:24.281Z",
+        "duration": "2.637s",
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3"
+        },
+        "events": [
+          {
+            "name": "Span event 1",
+            "timeUnixNano": "1793966331242000000",
+            "counters": {
+              "counter-1": "42",
+              "counter-2": "97",
+              "counter-3": "51",
+              "counter-4": "97"
+            }
+          },
+          {
+            "name": "Span event 2",
+            "timeUnixNano": "1793966125699000000",
+            "counters": {
+              "counter-1": "46",
+              "counter-2": "58",
+              "counter-3": "79"
+            }
+          },
+          {
+            "name": "Span event 3",
+            "timeUnixNano": "1793965857805000000",
+            "counters": {
+              "counter-1": "92",
+              "counter-2": "91",
+              "counter-3": "71",
+              "counter-4": "94",
+              "counter-5": "74"
+            }
+          },
+          {
+            "name": "Span event 4",
+            "timeUnixNano": "1793965647543000000",
+            "counters": {
+              "counter-1": "32",
+              "counter-2": "8",
+              "counter-3": "32",
+              "counter-4": "80"
+            }
+          },
+          {
+            "name": "Span event 5",
+            "timeUnixNano": "1793965373358000000",
+            "counters": {
+              "counter-1": "59",
+              "counter-2": "59",
+              "counter-3": "39",
+              "counter-4": "91",
+              "counter-5": "27"
+            }
+          },
+          {
+            "name": "Span event 6",
+            "timeUnixNano": "1793965074519000000",
+            "counters": {
+              "counter-1": "37",
+              "counter-2": "76",
+              "counter-3": "15",
+              "counter-4": "13",
+              "counter-5": "7"
+            }
+          },
+          {
+            "name": "Span event 7",
+            "timeUnixNano": "1793964890255000000",
+            "counters": {
+              "counter-1": "23",
+              "counter-2": "19",
+              "counter-3": "98"
+            }
+          },
+          {
+            "name": "Span event 8",
+            "timeUnixNano": "1793964677626000000",
+            "counters": {
+              "counter-1": "7",
+              "counter-2": "35",
+              "counter-3": "22",
+              "counter-4": "4",
+              "counter-5": "26"
+            }
+          },
+          {
+            "name": "Span event 9",
+            "timeUnixNano": "1793964335638000000",
+            "counters": {
+              "counter-1": "4",
+              "counter-2": "78",
+              "counter-3": "46",
+              "counter-4": "39"
+            }
+          }
+        ],
+        "httpStatus": 66,
+        "peerService": "peer-service-3"
+      },
+      {
+        "spanId": "9c19080b4f5181aa",
+        "parentSpanId": "a56ae6a71a416749",
+        "name": "Span 4",
+        "startTime": "2026-11-06T11:45:54.035Z",
+        "duration": "3.319s",
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3"
+        },
+        "events": [
+          {
+            "name": "Span event 1",
+            "timeUnixNano": "1793966335754000000",
+            "counters": {
+              "counter-1": "95",
+              "counter-2": "99",
+              "counter-3": "59",
+              "counter-4": "96"
+            }
+          },
+          {
+            "name": "Span event 2",
+            "timeUnixNano": "1793966066101000000",
+            "counters": {
+              "counter-1": "30",
+              "counter-2": "46",
+              "counter-3": "73"
+            }
+          },
+          {
+            "name": "Span event 3",
+            "timeUnixNano": "1793965793539000000",
+            "counters": {
+              "counter-1": "61",
+              "counter-2": "18",
+              "counter-3": "1",
+              "counter-4": "82"
+            }
+          },
+          {
+            "name": "Span event 4",
+            "timeUnixNano": "1793965555477000000",
+            "counters": {
+              "counter-1": "54",
+              "counter-2": "84",
+              "counter-3": "74",
+              "counter-4": "5"
+            }
+          },
+          {
+            "name": "Span event 5",
+            "timeUnixNano": "1793965358196000000",
+            "counters": {
+              "counter-1": "75",
+              "counter-2": "54",
+              "counter-3": "68",
+              "counter-4": "3"
+            }
+          },
+          {
+            "name": "Span event 6",
+            "timeUnixNano": "1793965056454000000",
+            "counters": {
+              "counter-1": "81",
+              "counter-2": "90",
+              "counter-3": "6",
+              "counter-4": "78",
+              "counter-5": "96"
+            }
+          },
+          {
+            "name": "Span event 7",
+            "timeUnixNano": "1793964906365000000",
+            "counters": {
+              "counter-1": "65",
+              "counter-2": "21",
+              "counter-3": "1",
+              "counter-4": "31",
+              "counter-5": "79"
+            }
+          },
+          {
+            "name": "Span event 8",
+            "timeUnixNano": "1793964647820000000",
+            "counters": {
+              "counter-1": "17",
+              "counter-2": "86",
+              "counter-3": "13"
+            }
+          },
+          {
+            "name": "Span event 9",
+            "timeUnixNano": "1793964364868000000",
+            "counters": {
+              "counter-1": "48",
+              "counter-2": "2",
+              "counter-3": "26"
+            }
+          },
+          {
+            "name": "Span event 10",
+            "timeUnixNano": "1793964139830000000",
+            "counters": {
+              "counter-1": "39",
+              "counter-2": "75",
+              "counter-3": "42"
+            }
+          }
+        ],
+        "httpStatus": 12,
+        "peerService": "peer-service-4"
+      },
+      {
+        "spanId": "58827077634378f2",
+        "parentSpanId": "195b05fcedcc7cd0",
+        "name": "Span 5",
+        "startTime": "2026-11-06T11:42:12.650Z",
+        "duration": "0.007s",
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3",
+          "attribute-4": "value-4"
+        },
+        "events": [
+          {
+            "name": "Span event 1",
+            "timeUnixNano": "1793966348835000000",
+            "counters": {
+              "counter-1": "17",
+              "counter-2": "72",
+              "counter-3": "11"
+            }
+          },
+          {
+            "name": "Span event 2",
+            "timeUnixNano": "1793966092489000000",
+            "counters": {
+              "counter-1": "93",
+              "counter-2": "80",
+              "counter-3": "93",
+              "counter-4": "72",
+              "counter-5": "85"
+            }
+          },
+          {
+            "name": "Span event 3",
+            "timeUnixNano": "1793965793943000000",
+            "counters": {
+              "counter-1": "78",
+              "counter-2": "88",
+              "counter-3": "32",
+              "counter-4": "26",
+              "counter-5": "97"
+            }
+          },
+          {
+            "name": "Span event 4",
+            "timeUnixNano": "1793965612321000000",
+            "counters": {
+              "counter-1": "30",
+              "counter-2": "47",
+              "counter-3": "12"
+            }
+          },
+          {
+            "name": "Span event 5",
+            "timeUnixNano": "1793965412803000000",
+            "counters": {
+              "counter-1": "90",
+              "counter-2": "99",
+              "counter-3": "71",
+              "counter-4": "35",
+              "counter-5": "32"
+            }
+          },
+          {
+            "name": "Span event 6",
+            "timeUnixNano": "1793965108410000000",
+            "counters": {
+              "counter-1": "90",
+              "counter-2": "92",
+              "counter-3": "12",
+              "counter-4": "97",
+              "counter-5": "35"
+            }
+          }
+        ],
+        "httpStatus": 58,
+        "peerService": "peer-service-5"
+      },
+      {
+        "spanId": "728672ecd1350ae8",
+        "parentSpanId": "d7c9085d7a17b6cf",
+        "name": "Span 6",
+        "startTime": "2026-11-06T11:36:52.642Z",
+        "duration": "3.572s",
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2"
+        },
+        "events": [
+          {
+            "name": "Span event 1",
+            "timeUnixNano": "1793966296630000000",
+            "counters": {
+              "counter-1": "10",
+              "counter-2": "10",
+              "counter-3": "4",
+              "counter-4": "51"
+            }
+          },
+          {
+            "name": "Span event 2",
+            "timeUnixNano": "1793966079995000000",
+            "counters": {
+              "counter-1": "21",
+              "counter-2": "38",
+              "counter-3": "55"
+            }
+          },
+          {
+            "name": "Span event 3",
+            "timeUnixNano": "1793965864146000000",
+            "counters": {
+              "counter-1": "72",
+              "counter-2": "27",
+              "counter-3": "74"
+            }
+          },
+          {
+            "name": "Span event 4",
+            "timeUnixNano": "1793965565502000000",
+            "counters": {
+              "counter-1": "19",
+              "counter-2": "6",
+              "counter-3": "6",
+              "counter-4": "3"
+            }
+          },
+          {
+            "name": "Span event 5",
+            "timeUnixNano": "1793965394684000000",
+            "counters": {
+              "counter-1": "42",
+              "counter-2": "15",
+              "counter-3": "23",
+              "counter-4": "55",
+              "counter-5": "2"
+            }
+          },
+          {
+            "name": "Span event 6",
+            "timeUnixNano": "1793965071242000000",
+            "counters": {
+              "counter-1": "58",
+              "counter-2": "9",
+              "counter-3": "90",
+              "counter-4": "7",
+              "counter-5": "47"
+            }
+          },
+          {
+            "name": "Span event 7",
+            "timeUnixNano": "1793964909278000000",
+            "counters": {
+              "counter-1": "78",
+              "counter-2": "13",
+              "counter-3": "20",
+              "counter-4": "10"
+            }
+          },
+          {
+            "name": "Span event 8",
+            "timeUnixNano": "1793964643238000000",
+            "counters": {
+              "counter-1": "95",
+              "counter-2": "67",
+              "counter-3": "75",
+              "counter-4": "68"
+            }
+          },
+          {
+            "name": "Span event 9",
+            "timeUnixNano": "1793964466391000000",
+            "counters": {
+              "counter-1": "52",
+              "counter-2": "96",
+              "counter-3": "6",
+              "counter-4": "53",
+              "counter-5": "2"
+            }
+          },
+          {
+            "name": "Span event 10",
+            "timeUnixNano": "1793964228032000000",
+            "counters": {
+              "counter-1": "18",
+              "counter-2": "73",
+              "counter-3": "17",
+              "counter-4": "55"
+            }
+          }
+        ],
+        "statusMessage": "Sample span status message 6.",
+        "peerService": "peer-service-6"
+      },
+      {
+        "spanId": "53b92e762a12d5b1",
+        "parentSpanId": "d094f4cc786ad52d",
+        "name": "Span 7",
+        "startTime": "2026-11-06T11:33:06.847Z",
+        "duration": "2.624s",
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3",
+          "attribute-4": "value-4"
+        },
+        "events": [
+          {
+            "name": "Span event 1",
+            "timeUnixNano": "1793966377214000000",
+            "counters": {
+              "counter-1": "73",
+              "counter-2": "68",
+              "counter-3": "31",
+              "counter-4": "26",
+              "counter-5": "47"
+            }
+          },
+          {
+            "name": "Span event 2",
+            "timeUnixNano": "1793966081682000000",
+            "counters": {
+              "counter-1": "45",
+              "counter-2": "68",
+              "counter-3": "98",
+              "counter-4": "29"
+            }
+          },
+          {
+            "name": "Span event 3",
+            "timeUnixNano": "1793965851160000000",
+            "counters": {
+              "counter-1": "25",
+              "counter-2": "4",
+              "counter-3": "1"
+            }
+          }
+        ],
+        "error": {
+          "message": "Sample span error message 7.",
+          "type": "type-7"
+        },
+        "peerService": "peer-service-7"
+      },
+      {
+        "spanId": "253aaad602f4c93f",
+        "parentSpanId": "8ded37c08a09a94b",
+        "name": "Span 8",
+        "startTime": "2026-11-06T11:30:37.393Z",
+        "duration": "2.546s",
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2",
+          "attribute-3": "value-3",
+          "attribute-4": "value-4"
+        },
+        "events": [
+          {
+            "name": "Span event 1",
+            "timeUnixNano": "1793966377891000000",
+            "counters": {
+              "counter-1": "23",
+              "counter-2": "51",
+              "counter-3": "6",
+              "counter-4": "83"
+            }
+          },
+          {
+            "name": "Span event 2",
+            "timeUnixNano": "1793966054178000000",
+            "counters": {
+              "counter-1": "65",
+              "counter-2": "34",
+              "counter-3": "15",
+              "counter-4": "58",
+              "counter-5": "32"
+            }
+          },
+          {
+            "name": "Span event 3",
+            "timeUnixNano": "1793965892711000000",
+            "counters": {
+              "counter-1": "57",
+              "counter-2": "4",
+              "counter-3": "55",
+              "counter-4": "3"
+            }
+          },
+          {
+            "name": "Span event 4",
+            "timeUnixNano": "1793965607658000000",
+            "counters": {
+              "counter-1": "77",
+              "counter-2": "50",
+              "counter-3": "37"
+            }
+          },
+          {
+            "name": "Span event 5",
+            "timeUnixNano": "1793965366147000000",
+            "counters": {
+              "counter-1": "13",
+              "counter-2": "32",
+              "counter-3": "79"
+            }
+          },
+          {
+            "name": "Span event 6",
+            "timeUnixNano": "1793965071242000000",
+            "counters": {
+              "counter-1": "91",
+              "counter-2": "8",
+              "counter-3": "86",
+              "counter-4": "3"
+            }
+          },
+          {
+            "name": "Span event 7",
+            "timeUnixNano": "1793964869171000000",
+            "counters": {
+              "counter-1": "25",
+              "counter-2": "33",
+              "counter-3": "43",
+              "counter-4": "83"
+            }
+          },
+          {
+            "name": "Span event 8",
+            "timeUnixNano": "1793964701563000000",
+            "counters": {
+              "counter-1": "85",
+              "counter-2": "49",
+              "counter-3": "75",
+              "counter-4": "70",
+              "counter-5": "24"
+            }
+          }
+        ],
+        "httpStatus": 39,
+        "peerService": "peer-service-8"
+      },
+      {
+        "spanId": "e5a161aeaf23b51d",
+        "parentSpanId": "458e45f29c9c8355",
+        "name": "Span 9",
+        "startTime": "2026-11-06T11:26:41.350Z",
+        "duration": "1.973s",
+        "attributes": {
+          "attribute-1": "value-1",
+          "attribute-2": "value-2"
+        },
+        "events": [
+          {
+            "name": "Span event 1",
+            "timeUnixNano": "1793966359088000000",
+            "counters": {
+              "counter-1": "82",
+              "counter-2": "16",
+              "counter-3": "7",
+              "counter-4": "25",
+              "counter-5": "68"
+            }
+          },
+          {
+            "name": "Span event 2",
+            "timeUnixNano": "1793966070037000000",
+            "counters": {
+              "counter-1": "44",
+              "counter-2": "94",
+              "counter-3": "58",
+              "counter-4": "40",
+              "counter-5": "10"
+            }
+          },
+          {
+            "name": "Span event 3",
+            "timeUnixNano": "1793965891400000000",
+            "counters": {
+              "counter-1": "63",
+              "counter-2": "82",
+              "counter-3": "21"
+            }
+          },
+          {
+            "name": "Span event 4",
+            "timeUnixNano": "1793965534029000000",
+            "counters": {
+              "counter-1": "68",
+              "counter-2": "11",
+              "counter-3": "98"
+            }
+          },
+          {
+            "name": "Span event 5",
+            "timeUnixNano": "1793965306896000000",
+            "counters": {
+              "counter-1": "30",
+              "counter-2": "93",
+              "counter-3": "76",
+              "counter-4": "62"
+            }
+          },
+          {
+            "name": "Span event 6",
+            "timeUnixNano": "1793965166535000000",
+            "counters": {
+              "counter-1": "15",
+              "counter-2": "4",
+              "counter-3": "5"
+            }
+          },
+          {
+            "name": "Span event 7",
+            "timeUnixNano": "1793964868126000000",
+            "counters": {
+              "counter-1": "40",
+              "counter-2": "73",
+              "counter-3": "19",
+              "counter-4": "17",
+              "counter-5": "13"
+            }
+          },
+          {
+            "name": "Span event 8",
+            "timeUnixNano": "1793964662335000000",
+            "counters": {
+              "counter-1": "70",
+              "counter-2": "53",
+              "counter-3": "7",
+              "counter-4": "4",
+              "counter-5": "53"
+            }
+          },
+          {
+            "name": "Span event 9",
+            "timeUnixNano": "1793964462793000000",
+            "counters": {
+              "counter-1": "15",
+              "counter-2": "99",
+              "counter-3": "51",
+              "counter-4": "93",
+              "counter-5": "1"
+            }
+          }
+        ],
+        "httpStatus": 50,
+        "peerService": "peer-service-9"
+      }
+    ]
+  },
+  "getRuleShowcase": {
+    "sku": "AKY-3627",
+    "contactEmail": "user-5@example.com",
+    "homepage": "https://example.com/e55a833f",
+    "requestUuid": "7019ebea-6370-4cc9-8daf-37ffdd3f76ea",
+    "tier": "pro",
+    "code": "code-5xxxxxx",
+    "short": "shor",
+    "tag": "tag_tag-2_v1",
+    "bounded": 1001,
+    "fixed": "42",
+    "choice": "11",
+    "ratio": 0.46,
+    "must": true,
+    "digest": "bU8XwbQdsE6e/OM2P9rG35hP04/JZUzyrwiwapU5Sfk=",
+    "labels": [
+      "label-1",
+      "label-2",
+      "label-3",
+      "label-4",
+      "label-5",
+      "label-6",
+      "label-7",
+      "label-8",
+      "label-9",
+      "label-10",
+      "label-11",
+      "label-12"
+    ],
+    "pairs": {
+      "pair-1": "value-1",
+      "pair-2": "value-2"
+    },
+    "timeout": "4.338s",
+    "expiresAt": "2026-11-10T01:12:22.172Z",
+    "region": "REGION_SA",
+    "host": "host-3.example.com",
+    "addr": "10.191.113.234",
+    "scores": [
+      94,
+      93,
+      96,
+      92,
+      93,
+      96,
+      92,
+      97,
+      91
+    ],
+    "salt": "Fw8zwqD1FaondhSuntBAOoRWSHY4rdPK",
+    "nonce": "L0GqIxXi+fU=",
+    "quotas": {
+      "quota-1": 503,
+      "quota-2": 505,
+      "quota-3": 500,
+      "quota-4": 507
+    },
+    "homeRegions": {
+      "home-region-1": "REGION_EU",
+      "home-region-2": "REGION_EU",
+      "home-region-3": "REGION_EU"
+    },
+    "errorsByCode": {
+      "errors-by-code-1": {
+        "message": "Sample span error message 1.",
+        "type": "type-1"
+      },
+      "errors-by-code-2": {
+        "message": "Sample span error message 2.",
+        "type": "type-2"
+      },
+      "errors-by-code-3": {
+        "message": "Sample span error message 3.",
+        "type": "type-3"
+      },
+      "errors-by-code-4": {
+        "message": "Sample span error message 4.",
+        "type": "type-4"
+      },
+      "errors-by-code-5": {
+        "message": "Sample span error message 5.",
+        "type": "type-5"
+      }
+    }
+  },
+  "watch": [
+    {
+      "id": "watch-event-e5e2fdd9",
+      "observedAt": "2026-11-06T11:24:51.930Z",
+      "status": "TRACE_STATUS_OK"
+    },
+    {
+      "id": "watch-event-167a0215",
+      "observedAt": "2026-11-06T11:37:56.930Z",
+      "status": "TRACE_STATUS_SLOW"
+    },
+    {
+      "id": "watch-event-04c75578",
+      "observedAt": "2026-11-06T11:50:01.467Z",
+      "status": "TRACE_STATUS_OK"
+    }
+  ],
+  "getInvoice": {
+    "invoice": {
+      "id": "invoice-9a3e6cd1",
+      "customerEmail": "user-9@example.com",
+      "amountCents": "48460",
+      "createdAt": "2026-11-06T11:34:29.167Z",
+      "lines": {
+        "line-1": {
+          "description": "Sample line item description 1.",
+          "quantity": 11
+        },
+        "line-2": {
+          "description": "Sample line item description 2.",
+          "quantity": 20
+        },
+        "line-3": {
+          "description": "Sample line item description 3.",
+          "quantity": 84
+        }
+      }
+    }
+  }
+}

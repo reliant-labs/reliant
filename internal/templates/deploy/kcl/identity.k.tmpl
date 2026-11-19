@@ -1,0 +1,40 @@
+"""
+The users of {{.ProjectName}}: who can sign in, with which roles.
+
+YOURS. forge scaffolds this file once and never rewrites it.
+
+Every env imports this ONE declaration (as it imports workloads.k), so dev,
+staging and prod declare the same roles and applications. Only WHERE the
+identity runs differs, and each env's main.k says that:
+
+  dev      `forge.IdentityOnHost {infra = "idp"}`: the dev IdP `forge env up`
+           starts. `forge env up` converges this declaration on it with the
+           same library the control plane runs, and fills the API's
+           jwt_issuer, jwt_audience, oidc_client_id, idp_base and
+           idp_broker_token for you (forge.IdentityRef): nothing is copied
+           by hand and no config.k line names them.
+  staging  hosted (the default): the control plane gives the env its own
+  prod     identity instance and delivers the same values.
+
+The application (the API's sign-in) and the consumers (every service
+workload) are DERIVED from the workloads the env binds. Add what you need:
+
+    roles = [
+        forge.IdentityRole {key = "admin", members_from = "declared", members = ["you@example.com"]}
+    ]
+    machine_users = [...]      # non-human accounts and their keys
+    seed_users = [...]         # dev/ephemeral envs only
+
+Bringing your own issuer instead (Auth0, Okta, ...)? Declare no `identity` in
+that env's main.k and set jwt_issuer / oidc_client_id in its config.k.
+`forge skill load deploy/managed-identity` has every field.
+"""
+
+import forge
+
+IDENTITY = forge.ManagedIdentity {
+    roles = [
+        forge.IdentityRole {key = "admin", display_name = "Administrators"}
+        forge.IdentityRole {key = "member", display_name = "Members"}
+    ]
+}

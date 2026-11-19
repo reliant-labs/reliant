@@ -1,0 +1,38 @@
+# Keep every file LF in the working tree, including Windows checkouts, so
+# generated files and forge's hashed files produce clean diffs (forge's
+# hashing already normalises CRLF; this is about diff noise, not correctness).
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary
+*.gz binary
+*.zip binary
+
+# forge-generated files merge through forge's driver: git's normal three-way
+# merge for everything except the lines that FINGERPRINT other files (the
+# forge:hash header, the mock fixtures' SEED_FINGERPRINT). Those would otherwise conflict between any two branches that
+# change a migration, a proto, or a generated body; the driver keeps this
+# side's value and the next `forge generate` refreshes it. Two branches that
+# each add a service also both change forge's state files under .forge/
+# (merged key by key) and its aggregated renders (when both sides are forge's
+# renders, the driver keeps this side's and `forge generate` renders both).
+# forge writes the driver's command into the worktree's own git config (it
+# names one forge binary, and worktrees pin different forges); a clone where
+# forge has not run merges as before.
+*_gen.go merge=forge-generated
+*_gen.ts merge=forge-generated
+*_gen.test.ts merge=forge-generated
+*_gen.json merge=forge-generated
+*_gen.ndjson merge=forge-generated
+forge_service_catalog.json merge=forge-generated
+.forge/scaffolded/** merge=forge-generated
+.forge/hashes/** merge=forge-generated
+.forge/disowned.json merge=forge-generated

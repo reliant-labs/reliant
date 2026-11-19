@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+
+# Native build directories
+ios/
+android/
+
+# ── Generated code is COMMITTED ──
+# src/gen/ (buf's TypeScript client code), src/hooks/*_gen.ts and
+# src/lib/*_gen.ts are checked in, like the Go side's gen/: a checkout
+# must build as-cloned, and `forge ci verify-generated` cannot see an
+# ignored file. See the project root .gitignore for the full rationale.
+# Pre-`_gen` per-service React Query hooks, from a tree generated before
+# forge renamed the emitter's output. Nothing writes these names anymore;
+# the rule stays so an un-upgraded checkout still ignores its leftovers.
+# The current `<svc>-hooks_gen.ts` files and the `index.ts` barrel are
+# committed like every other Tier-1 output — `forge ci verify-generated`
+# diffs a fresh generate against the checkout and cannot see an ignored
+# file. Do NOT widen this to `src/hooks/*_gen.ts` or `src/lib/*_gen.ts`:
+# apiurl_gen.ts is forge-emitted but IS committed.
+src/hooks/*-hooks.ts
+
+# test coverage
+coverage/
+
+# misc
+.DS_Store
+*.pem
+
+# logs
+*.log
+
+# env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
