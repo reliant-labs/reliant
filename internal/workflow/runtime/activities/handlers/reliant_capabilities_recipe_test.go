@@ -75,9 +75,10 @@ func TestPostDeployRecipe_BranchesOnExitCode(t *testing.T) {
 	}
 }
 
-// With a real forge (the pinned one, through forgetest: forge on PATH at the
-// pin, else `reliant forge`), the document an agent branches on carries the
-// fields the recipe reads, even when forge cannot look (no environment here).
+// With a real forge, the document an agent branches on carries the fields the
+// recipe reads, even when forge cannot look (no environment here). It is the
+// pinned forge even in this temp dir, outside the project: forgetest never
+// returns a `reliant forge` that would run reliant's built-in forge there.
 func TestPostDeployRecipe_RealForgeDocumentHasTheBranchedFields(t *testing.T) {
 	forge := forgetest.Pinned(t)
 	cmd := forge.Command(t.Context(), "obs", "check", "dev", "--json")

@@ -18,9 +18,13 @@
 #   2. forge on PATH, then the project's .tools/bin/forge, when its --version
 #      names the pin. Any forge for a pin that names no published forge (`dev`,
 #      a +dirty build): it hands the command to the pin when it can.
-#   3. reliant forge, when reliant is on PATH. Inside a project it hands the
-#      command to the pinned forge (its own cache, or a build of the pin), and
-#      fails rather than run another forge when the pin cannot be had.
+#   3. The pin through reliant, when reliant is on PATH. Inside the project,
+#      `reliant forge`: it hands the command to the pinned forge (its own
+#      cache, or a build of the pin), and fails rather than run another forge
+#      when the pin cannot be had. Outside it (a script in a temp dir run with
+#      this checkout's pin) `reliant forge` would run the forge built into
+#      reliant instead, so it is that only when reliant's forge IS the pin, and
+#      otherwise the pinned build reliant's hand-off keeps (reliant_pinned).
 #   4. go run …/cmd/forge@<pin>, for a published pin: what a CI runner, which
 #      has Go and neither forge nor reliant, runs.
 #
@@ -58,20 +62,53 @@ project_root() {
 }
 
 root=$(project_root)
+# in_project: the working directory is inside the project, where `reliant
+# forge` hands the command to the pin.
+in_project=0
+case "$PWD/" in "$root"/*) in_project=1 ;; esac
 pin=$({ sed -n 's/^forge_version:[[:space:]]*//p' "$root/forge.yaml" 2>/dev/null || true; } |
   head -1 | sed 's/[[:space:]]#.*//' | tr -d "\"' \t\r")
 published=1
 case "$pin" in "" | dev | *+*) published=0 ;; esac
 
-# is_pin: the forge at $1 reports the pinned version (any forge, for an
+# is_pin: the forge "$@" runs reports the pinned version (any forge, for an
 # unpublished pin or a machine-wide command). `forge --version` prints
 # "forge version <v> …".
 is_pin() {
   { [ "$machine" = 0 ] && [ "$published" = 1 ]; } || return 0
   local word
-  for word in $("$1" --version 2>/dev/null); do
+  for word in $("$@" --version 2>/dev/null); do
     [ "$word" = "$pin" ] && return 0
   done
+  return 1
+}
+
+# reliant_pinned: the pinned build reliant's hand-off keeps, for a run outside
+# the project. A no-op project command run in the project root (`lint --help`;
+# `version` and `help` are never handed off) makes reliant obtain the pin from
+# its cache, or build it once; then the executable under that cache that
+# reports the pin is the forge. The cache ($FORGE_PINNED_CACHE, else <user
+# cache dir>/forge/pinned) is forge's hand-off detail, not an interface:
+# neither reliant nor forge prints the pinned forge's path. The version check
+# means a moved cache fails over to the next step, never runs another forge.
+reliant_pinned() {
+  local err cache=${FORGE_PINNED_CACHE:-} f
+  if ! err=$( (cd "$root" && reliant forge lint --help 2>&1 >/dev/null) ); then
+    printf '%s\n' "$err" >&2
+    return 1
+  fi
+  if [ -z "$cache" ]; then
+    case "$(uname -s)" in
+      Darwin) cache=$HOME/Library/Caches/forge/pinned ;;
+      *) cache=${XDG_CACHE_HOME:-$HOME/.cache}/forge/pinned ;;
+    esac
+  fi
+  while IFS= read -r f; do
+    if is_pin "$f"; then
+      cmd=("$f")
+      return 0
+    fi
+  done < <(find "$cache" -maxdepth 3 -type f \( -name forge -o -name forge.exe \) -path "*$pin*" 2>/dev/null)
   return 1
 }
 
@@ -88,8 +125,14 @@ resolve() {
     fi
   done
   if command -v reliant >/dev/null 2>&1; then
-    cmd=(reliant forge)
-    return
+    if [ "$machine" = 1 ] || [ "$published" = 0 ] || [ "$in_project" = 1 ] || is_pin reliant forge; then
+      cmd=(reliant forge)
+      return
+    fi
+    if reliant_pinned; then
+      return
+    fi
+    echo "forge.sh: reliant has no build of forge $pin to run outside $root; trying go run" >&2
   fi
   if [ "$machine" = 0 ] && [ "$published" = 1 ] && command -v go >/dev/null 2>&1; then
     # GOPRIVATE: a fresh pseudo-version is not on proxy.golang.org yet
