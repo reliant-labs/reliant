@@ -1,8 +1,9 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * /projects (U6): the person's apps — All, Apps, or only the ones with a live
- * site — and their code projects, each opening its chats.
+ * /projects (U6): the person's apps — All, Apps, or Sites (every hosted site,
+ * with its domains; the retired /sites page's list) — and their code
+ * projects, each opening its chats.
  */
 
 import { fireEvent, render, screen, within } from "@testing-library/react";
@@ -14,26 +15,21 @@ const state = vi.hoisted(() => ({
   projects: [] as unknown[],
   navigate: vi.fn(),
   search: {} as Record<string, unknown>,
-  bodyFilter: undefined as undefined | ((app: unknown) => boolean),
   setup: "ready" as string,
 }));
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => state.navigate, useSearch: () => state.search }));
-vi.mock("@/hooks/apps-queries", () => ({
-  useApps: () => ({ apps: state.apps, loading: false, availability: "available", detail: "" }),
-}));
 vi.mock("@/hooks/project-queries", () => ({
   useProjects: () => ({ projects: state.projects, isLoading: false }),
 }));
 vi.mock("../../OnboardingFlow/useChatSetup", () => ({ useChatSetup: () => state.setup }));
-vi.mock("@/lib/forgeFeature", () => ({ isForgeUIEnabled: () => true }));
 vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: ReactNode }) => <>{children}</> }));
-// The apps list is the Apps page's (covered there): here it says which apps it was asked for.
+// The apps list and the sites list are covered where they live: here, which one shows.
 vi.mock("../../Apps/AppsPage", () => ({
-  AppsBody: ({ filter }: { filter?: (app: { name: string }) => boolean }) => {
-    const shown = (state.apps as { name: string }[]).filter((app) => !filter || filter(app));
-    return <div data-testid="apps-body">{shown.map((app) => app.name).join(",")}</div>;
-  },
+  AppsBody: () => <div data-testid="apps-body">{(state.apps as { name: string }[]).map((app) => app.name).join(",")}</div>,
+}));
+vi.mock("../../ForgeShell/ForgeSitesPage", () => ({
+  SitesList: ({ header }: { header?: boolean }) => <div data-testid="sites-list" data-header={String(header ?? true)} />,
 }));
 
 import { ProjectsPage } from "../ProjectsPage";
@@ -72,23 +68,19 @@ describe("ProjectsPage", () => {
     expect(replace).toBe(true);
   });
 
-  it("narrows to apps, or to the apps with a live site", () => {
+  it("narrows to apps, or to the sites list (the retired /sites page's)", () => {
     state.search = { show: "apps" };
     const view = render(<ProjectsPage />);
     expect(screen.getByTestId("apps-body")).toHaveTextContent("shop,worker");
     expect(screen.queryByTestId("projects-code")).toBeNull();
+    expect(screen.queryByTestId("sites-list")).toBeNull();
     view.unmount();
     state.search = { show: "sites" };
     render(<ProjectsPage />);
-    expect(screen.getByTestId("apps-body")).toHaveTextContent(/^shop$/);
-  });
-
-  it("says so when nothing is live yet", () => {
-    state.apps = [dark];
-    state.search = { show: "sites" };
-    render(<ProjectsPage />);
-    expect(screen.getByTestId("projects-no-sites")).toBeInTheDocument();
+    // Headed by the page, so the list carries no header of its own.
+    expect(screen.getByTestId("sites-list")).toHaveAttribute("data-header", "false");
     expect(screen.queryByTestId("apps-body")).toBeNull();
+    expect(screen.queryByTestId("projects-code")).toBeNull();
   });
 });
 

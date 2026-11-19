@@ -16,7 +16,7 @@ import { ExternalLink, Gauge } from "lucide-react";
 import Status from "@/components/forge-ui/status";
 import { useApps } from "@/hooks/apps-queries";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
-import { appsPath } from "@/lib/paths";
+import { projectsHref } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 import { primaryLink, type AppSummary } from "@/services/forge/apps";
 
@@ -53,8 +53,9 @@ export function AppsNavSection({ pathname, search, onNavigate }: AppsNavSectionP
     const listed = apps.map((app) => app.name);
     return openApp && !listed.includes(openApp) ? [openApp, ...listed] : listed;
   }, [apps, openApp]);
-  const allApps = appsPath();
-  const onAllApps = isAt(pathname, allApps);
+  // The heading opens every app: Projects, narrowed to the apps.
+  const allApps = projectsHref("apps");
+  const onAllApps = isAt(pathname, allApps) && search.show === "apps";
 
   return (
     <section aria-label="Apps" data-testid="sidebar-apps">

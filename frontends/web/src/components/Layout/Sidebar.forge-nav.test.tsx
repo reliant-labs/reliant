@@ -81,42 +81,12 @@ vi.mock("../../hooks/message-queries", () => ({
   useMarkUnread: () => ({ mutateAsync: vi.fn() }),
 }));
 
-// The gate under test. Mocked at the hook boundary so each case can state the
-// LIVE verdict directly, which is the thing the entry must follow.
-// The EXPERIMENTAL gate, independent of the is-this-a-forge-project question.
-// Mocked separately because the two conditions are independent and the entry
-// requires BOTH — a test that could only vary one of them would pass while the
-// other was ignored. Default true here so the pre-existing cases below exercise
-// the forge-project logic they were written for.
-const experimentalGate = vi.hoisted(() => ({ enabled: true }));
-
-// Pin the build type to a PACKAGED PRODUCTION build. The default-resolution
-// cases below consult the real gate, and under jsdom getIsDev() would otherwise
-// answer true — which is the one setting where the old default already produced
-// the new answer, so the assertions would not discriminate.
+// Pin the build type to a PACKAGED PRODUCTION build: the Apps section must not
+// depend on it (it once did, behind an experimental gate that is gone).
 vi.mock("../../lib/constants", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/constants")>();
   return { ...actual, getIsDev: () => false, isDev: false };
 });
-
-// The mock keeps the real module reachable, so the default-resolution cases at
-// the bottom can drive the gate from the genuine implementation rather than
-// asserting against a value the test itself chose.
-vi.mock("../../lib/forgeFeature", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../lib/forgeFeature")>();
-  return {
-    ...actual,
-    isForgeUIEnabled: () => experimentalGate.enabled,
-  };
-});
-
-const {
-  FORGE_UI_FLAG_KEY,
-  isForgeUIEnabled: realIsForgeUIEnabled,
-  setForgeUIEnabled: realSetForgeUIEnabled,
-} = await vi.importActual<typeof import("../../lib/forgeFeature")>(
-  "../../lib/forgeFeature",
-);
 
 // The org's apps (hooks/apps-queries.ts): two, one with a live site.
 const appsState = vi.hoisted(() => ({ apps: [] as unknown[] }));
@@ -172,7 +142,6 @@ function navEntries() {
 describe("Sidebar forge nav entry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    experimentalGate.enabled = true;
     appsState.apps = [];
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
@@ -229,7 +198,7 @@ describe("Sidebar forge nav entry", () => {
     } as unknown as Partial<ReturnType<typeof useProjectStore.getState>>);
   }
 
-  it("shows the entry whenever the experimental flag is on", () => {
+  it("shows the entry, always: nothing gates the Apps section", () => {
     setProject(true);
     renderSidebar();
     expect(screen.getByTestId("sidebar-forge-button")).toBeInTheDocument();
@@ -251,46 +220,14 @@ describe("Sidebar forge nav entry", () => {
     expect(screen.getByTestId("sidebar-forge-button")).toBeInTheDocument();
   });
 
-  // The flag is the ONLY gate, so turning it off must remove the entry
-  // completely — a packaged build with no opt-in behaves as it did before the
-  // feature existed.
-  it("hides the entry when the experimental gate is off", () => {
-    experimentalGate.enabled = false;
+  // The retired Developer toggle's stored opt-out (`reliant.experimental.forgeUI`)
+  // is ignored: nothing reads it any more.
+  it("ignores the retired forge UI opt-out still in a browser's storage", () => {
+    window.localStorage.setItem("reliant.experimental.forgeUI", "false");
     setProject(true);
     renderSidebar();
-    expect(screen.queryByTestId("sidebar-forge-button")).not.toBeInTheDocument();
-  });
-
-  /**
-   * THE DEFAULT, end to end. Every other case in this file mocks the gate, so
-   * none of them can see which way it actually resolves — this one drives the
-   * mock from the REAL lib/forgeFeature against a clean localStorage, so the
-   * shipped default is what decides the assertion.
-   *
-   * It fails on the previous default (production OFF, dev ON via getIsDev) and
-   * passes now that the feature is on for everyone.
-   */
-  describe("the shipped default decides the entry", () => {
-    it("shows the entry with no stored preference — production included", async () => {
-      window.localStorage.removeItem(FORGE_UI_FLAG_KEY);
-      experimentalGate.enabled = realIsForgeUIEnabled();
-
-      setProject(true);
-      renderSidebar();
-
-      expect(screen.getByTestId("sidebar-forge-button")).toBeInTheDocument();
-    });
-
-    it("hides it once the user explicitly opts out", async () => {
-      realSetForgeUIEnabled(false);
-      experimentalGate.enabled = realIsForgeUIEnabled();
-
-      setProject(true);
-      renderSidebar();
-
-      expect(screen.queryByTestId("sidebar-forge-button")).not.toBeInTheDocument();
-      window.localStorage.removeItem(FORGE_UI_FLAG_KEY);
-    });
+    expect(screen.getByTestId("sidebar-forge-button")).toBeInTheDocument();
+    window.localStorage.removeItem("reliant.experimental.forgeUI");
   });
 
   // The places, in order (U6, design §4.1): New chat, then what needs you,
@@ -303,25 +240,18 @@ describe("Sidebar forge nav entry", () => {
     expect(navEntries()).toEqual(["New chat", "Inbox", "Projects", "Workflows", "Usage", "Search"]);
   });
 
-  it("keeps the same places with Apps gated off", () => {
-    experimentalGate.enabled = false;
-    setProject(true);
-    renderSidebar();
-    expect(navEntries()).toEqual(["New chat", "Inbox", "Projects", "Workflows", "Usage", "Search"]);
-    expect(screen.queryByTestId("sidebar-apps")).not.toBeInTheDocument();
-  });
-
   // The section is LABELLED Apps but is still the forge entry underneath: the
-  // test id (and the route it opens) keep the forge name.
+  // test id keeps the forge name. It opens Projects, narrowed to the apps (the
+  // retired /apps redirects there too).
   it("heads the Apps section with the forge test id, a link to every app", () => {
     setProject(true);
     const onNavigate = vi.fn();
     renderSidebar({ onNavigate });
     const heading = screen.getByTestId("sidebar-forge-button");
     expect(heading).toHaveTextContent("Apps");
-    expect(heading).toHaveAttribute("href", "/apps");
+    expect(heading).toHaveAttribute("href", "/projects?show=apps");
     fireEvent.click(heading);
-    expect(onNavigate).toHaveBeenCalledWith("/apps");
+    expect(onNavigate).toHaveBeenCalledWith("/projects?show=apps");
   });
 
   it("has no separate Observability entry", () => {
@@ -477,14 +407,6 @@ describe("Sidebar forge nav entry", () => {
     expect(chats.className).toContain("min-h-[min(100%,max(40%,calc(5*var(--row-h)+3.25rem)))]");
     expect(chats.className).toMatch(/\bflex-1\b/);
     expect(apps).not.toContainElement(screen.getByTestId("chat-list-heading"));
-  });
-
-  it("gives the chats the whole region with Apps gated off", () => {
-    experimentalGate.enabled = false;
-    renderSidebar();
-    const regions = screen.getByTestId("sidebar-regions");
-    expect(within(regions).queryByTestId("sidebar-apps-scroller")).toBeNull();
-    expect(Array.from(regions.children)).toEqual([screen.getByTestId("sidebar-chats")]);
   });
 
   it("gives the open app its rows before the app list answers", () => {

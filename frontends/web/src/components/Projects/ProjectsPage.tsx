@@ -8,6 +8,8 @@
  * A first cut on purpose. U7 replaces it with the merged list of design §8.3,
  * where a project and the app built from its code are one row; until then the
  * two lists sit one above the other, and the filter narrows to apps or sites.
+ * Apps and Sites were pages of their own; their old URLs (/apps, /sites)
+ * redirect to the filters (lib/paths/legacy.ts).
  */
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -15,14 +17,12 @@ import { FolderGit2 } from "lucide-react";
 
 import PageHeader from "@/components/forge-ui/page_header";
 import Tabs from "@/components/forge-ui/tabs";
-import { useApps } from "@/hooks/apps-queries";
 import { useProjects } from "@/hooks/project-queries";
-import { isForgeUIEnabled } from "@/lib/forgeFeature";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { projectPath, projectsPath } from "@/lib/paths";
-import { isLive } from "@/services/forge/apps";
 
 import { AppsBody } from "../Apps/AppsPage";
+import { SitesList } from "../ForgeShell/ForgeSitesPage";
 import { chatSetupNeeded } from "../OnboardingFlow/onboardingGate";
 import { SetUpChatsCard } from "../OnboardingFlow/SetUpChatsCard";
 import { useChatSetup } from "../OnboardingFlow/useChatSetup";
@@ -45,7 +45,6 @@ export function ProjectsPage() {
 }
 
 export function ProjectsBody() {
-  const showApps = isForgeUIEnabled();
   // The filter is the URL's (`?show=apps|sites`), so a refresh, Back and a shared link keep it.
   const { show } = useSearch({ strict: false }) as { show?: unknown };
   const filter: ProjectsFilter = show === "apps" || show === "sites" ? show : "all";
@@ -56,11 +55,9 @@ export function ProjectsBody() {
       search: (prev: Record<string, unknown>) => ({ ...prev, show: next === "all" ? undefined : next }),
       replace: true,
     } as never);
-  const { apps, loading } = useApps();
   // A person who cannot run a chat yet lands here (the daemonless home, U6):
   // the way to set chats up leads the page.
   const setup = useChatSetup();
-  const noSites = !loading && filter === "sites" && !apps.some(isLive);
 
   return (
     <div className="space-y-6" data-testid="projects-page">
@@ -68,23 +65,9 @@ export function ProjectsBody() {
       {chatSetupNeeded(setup) && (
         <SetUpChatsCard setup={setup} variant="page" onNavigate={(href) => void navigate({ href })} />
       )}
-      {showApps && (
-        <Tabs
-          tabs={FILTERS}
-          activeTab={filter}
-          onChange={(id) => setFilter(id as ProjectsFilter)}
-          ariaLabel="Show"
-        />
-      )}
-      {showApps &&
-        (noSites ? (
-          <p className="text-ui text-muted-foreground" data-testid="projects-no-sites">
-            Nothing is live yet. A site shows here once one of your apps has a deploy with a public address.
-          </p>
-        ) : (
-          <AppsBody header={false} filter={filter === "sites" ? isLive : undefined} />
-        ))}
-      {(filter === "all" || !showApps) && <CodeProjects />}
+      <Tabs tabs={FILTERS} activeTab={filter} onChange={(id) => setFilter(id as ProjectsFilter)} ariaLabel="Show" />
+      {filter === "sites" ? <SitesList header={false} /> : <AppsBody header={false} />}
+      {filter === "all" && <CodeProjects />}
     </div>
   );
 }

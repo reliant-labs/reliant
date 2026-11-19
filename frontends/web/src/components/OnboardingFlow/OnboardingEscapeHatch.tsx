@@ -19,22 +19,19 @@
  * on the settings route.
  *
  * Someone who signed up here only to deploy apps has no use for agent setup, so
- * the hatch also links to the forge console (`/apps` on the forge host, whose
- * shell has no onboarding). The link opens a new tab and leaves this user's
- * onboarding unfinished: the agent side still onboards them if they come back.
- * Hidden in the desktop app, whose window must not navigate away (AppsPage).
+ * the hatch also leads to their apps (Projects, narrowed to them), which no
+ * onboarding gates (OnboardingFlow/onboardingGate.ts gates the chats). It
+ * leaves this user's onboarding unfinished: a chat still onboards them.
  */
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowUpRight, LogOut, Settings } from "lucide-react";
+import { ArrowRight, LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { trackEvent } from "@/lib/analytics";
-import { isElectron } from "@/lib/constants";
-import { forgeAppOrigin } from "@/lib/shell";
 import { useAuthStore } from "@/store/authStore";
 import { leaveOnboarding } from "./leaveOnboarding";
-import { settingsPath } from "@/lib/paths";
+import { projectsHref, settingsPath } from "@/lib/paths";
 
 export function OnboardingEscapeHatch({ className }: { className?: string }) {
   const navigate = useNavigate();
@@ -88,19 +85,21 @@ export function OnboardingEscapeHatch({ className }: { className?: string }) {
           {isSigningOut ? "Signing out…" : "Sign out"}
         </button>
       </div>
-      {!isElectron() && (
-        <a
-          href={`${forgeAppOrigin()}/apps`}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => trackEvent("onboarding_forge_console_opened")}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          data-testid="onboarding-forge-console-link"
-        >
-          Only here to deploy apps? Open the Forge console
-          <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
-        </a>
-      )}
+      <a
+        href={projectsHref("apps")}
+        onClick={(event) => {
+          // The event keeps its name: the product-event contract counts this exit by it.
+          trackEvent("onboarding_forge_console_opened");
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+          event.preventDefault();
+          void navigate({ href: projectsHref("apps") });
+        }}
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        data-testid="onboarding-forge-console-link"
+      >
+        Only here to deploy apps? Go to your apps
+        <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+      </a>
       {error && (
         <p className="text-xs text-destructive-ink" role="alert">
           {error}

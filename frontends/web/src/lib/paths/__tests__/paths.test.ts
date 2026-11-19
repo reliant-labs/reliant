@@ -56,7 +56,6 @@ const ROWS: Record<string, Row> = {
   newChatPath: { build: () => paths.newChatPath(), url: "/new", template: "/new" },
   inboxPath: { build: () => paths.inboxPath(), url: "/inbox", template: "/inbox" },
   appsPath: { build: () => paths.appsPath(), url: "/apps", template: "/apps" },
-  sitesPath: { build: () => paths.sitesPath(), url: "/sites", template: "/sites" },
   usagePath: { build: () => paths.usagePath(), url: "/usage", template: "/usage" },
   projectsPath: { build: () => paths.projectsPath(), url: "/projects", template: "/projects" },
   forgeLandingPath: { build: () => paths.forgeLandingPath(), url: "/forge", template: "/forge" },
@@ -176,7 +175,6 @@ const ORG_URLS: Record<string, string> = {
   newChatPath: "/o/acme/new",
   inboxPath: "/o/acme/inbox",
   appsPath: "/o/acme/apps",
-  sitesPath: "/o/acme/sites",
   usagePath: "/o/acme/usage",
   projectsPath: "/o/acme/projects",
   forgeLandingPath: "/o/acme/forge",
@@ -257,6 +255,12 @@ describe("lib/paths", () => {
 
   it("names only rows that exist in the org table", () => {
     expect(Object.keys(ORG_URLS).filter((name) => !(name in ROWS))).toEqual([]);
+  });
+
+  it("narrows Projects to its apps or its sites, the way the router writes the search", () => {
+    expect(paths.projectsHref()).toBe("/projects");
+    expect(paths.projectsHref("apps")).toBe(hrefOf({ to: "/projects", search: { show: "apps" } } as never));
+    expect(paths.projectsHref("sites")).toBe("/projects?show=sites");
   });
 
   it("joins a search the way the router writes one", () => {
@@ -354,8 +358,8 @@ describe("the org segment", () => {
 
     it("builds the org form on the forge host too, which mounts the same tree (U6)", () => {
       resetShellForTests("forge");
-      expect(paths.appsPath()).toBe("/o/acme/apps");
-      expect(paths.sitesPath()).toBe("/o/acme/sites");
+      expect(paths.projectsHref("apps")).toBe("/o/acme/projects?show=apps");
+      expect(paths.projectsHref("sites")).toBe("/o/acme/projects?show=sites");
       expect(consoleBase("shop")).toBe("/o/acme/apps/shop");
     });
 

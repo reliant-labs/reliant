@@ -10,7 +10,6 @@ import {
   forgeAppHost,
   forgeAppOrigin,
   normalizeHost,
-  reliantAppOrigin,
   isDemoShell,
   isForgeShell,
   resetShellForTests,
@@ -153,12 +152,6 @@ describe("hosts", () => {
     expect(demoAppHost()).toBe("demo.staging.test");
   });
 
-  it("links to Reliant at APP_URL, never back at the forge host itself", () => {
-    setRuntimeConfig({ APP_URL: "https://app.staging.test/" });
-    expect(reliantAppOrigin()).toBe("https://app.staging.test");
-    setRuntimeConfig({ APP_URL: "https://forge.reliantlabs.io" });
-    expect(reliantAppOrigin()).toBe("https://app.reliantlabs.io");
-  });
 });
 
 describe("getAppURL in the forge shell", () => {

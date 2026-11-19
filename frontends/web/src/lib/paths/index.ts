@@ -26,6 +26,7 @@
 
 import type { SettingsSection } from "../../routeSchemas";
 import { orgRootPath, withOrg, type PathContext } from "./org";
+import { withSearch } from "./search";
 
 export { withOrg, type PathContext } from "./org";
 export { withSearch } from "./search";
@@ -101,6 +102,14 @@ export function projectsPath(ctx?: PathContext): string {
   return withOrg("/projects", ctx);
 }
 
+/** What Projects lists: everything (no filter), only the apps, or only the apps with a live site. */
+export type ProjectsShow = "apps" | "sites";
+
+/** Projects as an href, narrowed to its apps or its sites (`?show=`); every project without one. */
+export function projectsHref(show?: ProjectsShow, ctx?: PathContext): string {
+  return withSearch(projectsPath(ctx), { show });
+}
+
 /** Everything waiting on the person, across every chat and project. */
 export function inboxPath(ctx?: PathContext): string {
   return withOrg("/inbox", ctx);
@@ -108,14 +117,16 @@ export function inboxPath(ctx?: PathContext): string {
 
 // ── Apps (forge) ────────────────────────────────────────────────────────────
 
-/** The org's apps (components/Apps/AppsPage.tsx); also the forge brand's home for a person who has not onboarded. */
+/**
+ * The retired Apps page, `/apps`: a redirect to Projects' apps now
+ * (lib/paths/legacy.ts). Link `projectsHref("apps")` instead.
+ *
+ * @deprecated Kept for the forge brand's not-onboarded home
+ * (OnboardingFlow/onboardingGate.ts, forgeBrandHomeTarget), which the
+ * daemonless home replaces (U6 PR3).
+ */
 export function appsPath(ctx?: PathContext): string {
   return withOrg("/apps", ctx);
-}
-
-/** The org's hosted sites (ForgeShell/ForgeSitesPage.tsx). */
-export function sitesPath(ctx?: PathContext): string {
-  return withOrg("/sites", ctx);
 }
 
 /** The org's usage and spend on what forge provisions (ForgeShell/ForgeUsagePage.tsx). */
@@ -125,7 +136,7 @@ export function usagePath(ctx?: PathContext): string {
 
 /**
  * The bare console entry, `/forge`: it resolves `?project=` (an old link's
- * app) to that app's console, and otherwise redirects to the apps.
+ * app) to that app's console, and otherwise redirects to Projects' apps.
  */
 export function forgeLandingPath(ctx?: PathContext): string {
   return withOrg("/forge", ctx);

@@ -58,7 +58,6 @@ import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
 import { OrgSwitcher } from "../Orgs/OrgSwitcher";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import type { RunsSearch } from "../../routeSchemas";
-import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
 import { activityNeedsAttention } from "../../store/chatNavigationStore";
 import { useProjectStore } from "../../store/projectStore";
@@ -783,24 +782,6 @@ function SidebarComponent({
   // The rows the list renders: a run counted here has its own row, so the
   // automation pill does not count it again.
   const listedChatIds = useMemo(() => new Set(chats.map((chat) => chat.id)), [chats]);
-  // ONE condition: the experimental gate. While the forge UI is unreleased this
-  // is off in a packaged build, so the entry does not exist for anyone who has
-  // not opted in.
-  //
-  // IT IS DELIBERATELY NOT ALSO GATED ON THE PROJECT BEING A FORGE PROJECT,
-  // and that is a reversal. Apps and Observability are ORG-level surfaces
-  // (every app the org runs; telemetry across all of them), not views of the
-  // current project, so the entries sit beside New chat / Projects / Workflows
-  // and stay PUT — a nav item that appears and disappears as you switch
-  // projects is harder to learn than one that is always there, and which
-  // project is current has no bearing on where they lead.
-  //
-  // It also removes a failure mode that actually bit us: the old gate required
-  // a LIVE GetTopology call to succeed, so when that RPC broke (a report-type
-  // mismatch, fixed separately) the whole feature silently vanished with
-  // nothing in the UI to say why. A nav entry whose visibility depends on an
-  // RPC is a nav entry that can be deleted by a bug.
-  const showForgeEntry = isForgeUIEnabled();
   // Where each place is, in the form the links use (lib/paths), and whether
   // its page is the one on screen.
   const newChatHref = newChatPath();
@@ -1929,11 +1910,9 @@ function SidebarComponent({
           flex: the apps shrink (min-h-0) and the chats grow from nothing. */}
       <div className="flex min-h-0 flex-1 flex-col" data-testid="sidebar-regions">
       {/* Every app the org runs, one click from its console. */}
-      {showForgeEntry && (
-        <div className="min-h-0 shrink overflow-y-auto overscroll-contain" data-testid="sidebar-apps-scroller">
-          <AppsNavSection pathname={pathname} search={search} onNavigate={go} />
-        </div>
-      )}
+      <div className="min-h-0 shrink overflow-y-auto overscroll-contain" data-testid="sidebar-apps-scroller">
+        <AppsNavSection pathname={pathname} search={search} onNavigate={go} />
+      </div>
 
       <div
         className="flex min-h-[min(100%,max(40%,calc(5*var(--row-h)+3.25rem)))] flex-1 flex-col"

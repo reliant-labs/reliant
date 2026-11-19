@@ -59,10 +59,9 @@ const DIRECT: { url: string; lands: [path: string, leaf: RegExp] }[] = [
   { url: "/o/acme/project/p-1", lands: ["/o/acme/project/p-1", /\/project\/\$projectId$/] },
   { url: "/o/acme/workflows", lands: ["/o/acme/workflows/library", /\/workflows\/library$/] },
   { url: "/o/acme/workflow/new", lands: ["/o/acme/workflow/new", /\/workflow\/new$/] },
-  { url: "/o/acme/apps", lands: ["/o/acme/apps", /_authenticated\/apps$/] },
+  { url: "/o/acme/projects", lands: ["/o/acme/projects", /_authenticated\/projects$/] },
   { url: "/o/acme/apps/shop/releases", lands: ["/o/acme/apps/shop/releases", /\/releases$/] },
   { url: "/o/acme/observability/logs", lands: ["/o/acme/observability/logs", /\/observability\/\$view$/] },
-  { url: "/o/acme/sites", lands: ["/o/acme/sites", /^\/o\/\$org\/_authenticated\/sites$/] },
   { url: "/o/acme/usage", lands: ["/o/acme/usage", /^\/o\/\$org\/_authenticated\/usage$/] },
   { url: "/o/org-a/inbox", lands: ["/o/acme/inbox", /_authenticated\/inbox$/] },
 ];
@@ -216,9 +215,9 @@ describe("org-less paths with the flag on (the Reliant host forwards; R5, R7)", 
   );
 
   it.each([
-    ["/sites", "/o/side/sites"],
+    ["/sites", "/o/side/projects"],
     ["/usage", "/o/side/usage"],
-    ["/apps", "/o/side/apps"],
+    ["/apps", "/o/side/projects"],
   ])("forwards on the forge host too, which mounts the same tree (U6): %s → %s", async (from, to) => {
     const h = createOrgRouteHarness(world("forge", true, { tabOrg: "org-b" }));
     await h.open(from);
@@ -276,8 +275,7 @@ describe("the one shell's pages", () => {
   /** A page: whether its org-less form forwards with the flag on, and its leaf (either form). */
   const PAGES: { url: string; forwards: boolean; leaf: RegExp }[] = [
     { url: "/", forwards: true, leaf: /\/_app\/$/ },
-    { url: "/apps", forwards: true, leaf: /_authenticated\/apps$/ },
-    { url: "/sites", forwards: true, leaf: /_authenticated\/sites$/ },
+    { url: "/projects", forwards: true, leaf: /_authenticated\/projects$/ },
     { url: "/usage", forwards: true, leaf: /_authenticated\/usage$/ },
     // An app by name: its own org decides (the resolver, U4), never the tab's.
     { url: "/forge/p/shop", forwards: false, leaf: /\/forge\/p\/\$project\/$/ },

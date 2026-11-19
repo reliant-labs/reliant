@@ -6,7 +6,7 @@
  */
 
 import type { ClaimRefusal } from "@/services/controlPlane/claim";
-import { appsPath, authPath, claimPath } from "@/lib/paths";
+import { authPath, claimPath, projectsHref } from "@/lib/paths";
 
 export interface RefusalCopy {
   title: string;
@@ -19,7 +19,7 @@ export const REFUSAL_COPY: Record<ClaimRefusal, RefusalCopy> = {
   claimable_claimed: {
     title: "This site has already been claimed",
     body: "Someone claimed it first, so it now belongs to their account. If that was you, sign in to see it.",
-    next: { label: "Go to Reliant", href: appsPath() },
+    next: { label: "Go to Reliant", href: projectsHref("apps") },
   },
   claimable_expired: {
     title: "This site has expired",

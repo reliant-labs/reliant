@@ -32,12 +32,11 @@ import {
   X,
 } from "lucide-react";
 import { useProjectStore } from "../../store/projectStore";
-import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { cn } from "../../lib/utils";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
 import { MobileInstallMenuItem } from "./MobileInstallMenuItem";
 import { MobileOrgSwitcher } from "./MobileOrgSwitcher";
-import { appsPath, mobileAccountPath, mobileGitHubPath, mobileInboxPath, mobileMachinesPath, mobileNewChatPath, mobileProjectsPath, mobileSearchPath, mobileSettingsPath, mobileWorkflowsPath } from "@/lib/paths";
+import { projectsPath, mobileAccountPath, mobileGitHubPath, mobileInboxPath, mobileMachinesPath, mobileNewChatPath, mobileProjectsPath, mobileSearchPath, mobileSettingsPath, mobileWorkflowsPath } from "@/lib/paths";
 import { orgPath } from "@/components/Forge/Console/paths";
 
 interface MobileNavDrawerProps {
@@ -47,6 +46,8 @@ interface MobileNavDrawerProps {
 
 interface NavItem {
   to: string;
+  /** The destination's search (Projects' filter). */
+  search?: Record<string, string>;
   label: string;
   icon: typeof MessageSquarePlus;
   /** The Inbox row carries the Inbox badge. */
@@ -58,22 +59,15 @@ interface NavItem {
  * New chat, then Apps and Observability (the org's apps and their telemetry), then
  * the Inbox, then the rest.
  *
- * Apps and Observability open the forge console itself, outside `/m/*`: its
- * chrome collapses to an off-canvas nav at phone width, so there is one
- * console rather than a second mobile copy of it. They are gated on the same
- * flag as the desktop entries and the routes (`isForgeUIEnabled`), read per
- * render because the Developer setting can change it within a session.
+ * Apps (Projects, narrowed to the apps) and Observability open the desktop
+ * pages, outside `/m/*`: they fit a phone (the console's chrome collapses to
+ * an off-canvas nav), so there is one of each rather than a mobile copy.
  */
 function navItems(): NavItem[] {
-  const forge = isForgeUIEnabled();
   return [
     { to: mobileNewChatPath(), label: "New chat", icon: MessageSquarePlus },
-    ...(forge
-      ? [
-          { to: appsPath(), label: "Apps", icon: Boxes },
-          { to: orgPath({ kind: "observability" }), label: "Observability", icon: Activity },
-        ]
-      : []),
+    { to: projectsPath(), search: { show: "apps" }, label: "Apps", icon: Boxes },
+    { to: orgPath({ kind: "observability" }), label: "Observability", icon: Activity },
     { to: mobileInboxPath(), label: "Inbox", icon: Inbox, inboxBadge: true },
     { to: mobileSearchPath(), label: "Search", icon: Search },
     { to: mobileWorkflowsPath(), label: "Workflows", icon: Workflow },
@@ -247,12 +241,13 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
               64px rows of tiles, which keeps the project switcher below them
               on screen even in landscape. */}
           <nav className="grid grid-cols-3 gap-1 py-2" aria-label="Main">
-            {navItems().map(({ to, label, icon: Icon, inboxBadge }) => {
+            {navItems().map(({ to, search, label, icon: Icon, inboxBadge }) => {
               const active = pathname === to || pathname.startsWith(`${to}/`);
               return (
                 <Link
                   key={to}
                   to={to}
+                  search={search}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "relative flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-lg px-1 text-xs",
