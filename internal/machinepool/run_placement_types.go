@@ -1,0 +1,56 @@
+// Copyright (c) 2025 Reliant Labs
+package machinepool
+
+// A workflow's `daemon: {pool: <name>}` or `daemon: {labels: {…}}` (workflow
+// or node level) is placed ONCE, by the workflow runtime, through the
+// PlaceRunActivityName activity: the same Decide a pool-bound trigger's fire
+// uses (least-loaded member, catalog agreement), the pool's slot guard, and a
+// placement record (run_machine_placements) that makes the activity
+// idempotent and counts the placement among the member's live runs.
+
+// PlaceRunActivityName is the activity that places a run, or one node of it,
+// on a machine pool's member (or on a machine matching durable labels).
+const PlaceRunActivityName = "PlaceRunOnMachinePool"
+
+// PoolNotFoundErrorType is the non-retryable ApplicationError type
+// PlaceRunActivityName fails with when the run's owner has no pool of the
+// requested name. The runtime fails the run with the error's message.
+const PoolNotFoundErrorType = "MachinePoolNotFound"
+
+// PlaceRunInput asks for one placement.
+type PlaceRunInput struct {
+	// ChatID is the run's chat; its user owns the pool and its project is
+	// the one whose checkout and catalog the member must hold.
+	ChatID string `json:"chat_id"`
+	// WorkflowID is the run's workflow id (the workflows row). A placement
+	// counts as a live run on its member while that workflow is live.
+	WorkflowID string `json:"workflow_id"`
+	// Scope is "" for the workflow-level selector, or the node's path for a
+	// node-level one. (WorkflowID, Scope) is the placement's identity: asking
+	// again returns the recorded member, so a retried activity or a
+	// continue-as-new successor never re-places.
+	Scope string `json:"scope,omitempty"`
+	// Pool is the pool's name, exclusive with Labels.
+	Pool string `json:"pool,omitempty"`
+	// Labels place on the owner's machines whose durable labels contain
+	// every pair: an unnamed pool with this selector and no per-member bound.
+	Labels map[string]string `json:"labels,omitempty"`
+}
+
+// PlaceRunOutput is one placement answer. Exactly one of DaemonID and
+// Waiting is set; neither is set only by a stub that places nothing (a
+// scenario), and the runtime then leaves the selector unpinned.
+type PlaceRunOutput struct {
+	// DaemonID is the member the run (or node) is placed on.
+	DaemonID string `json:"daemon_id,omitempty"`
+	// DaemonName is the member's name, for logs and the run's messages.
+	DaemonName string `json:"daemon_name,omitempty"`
+	// PoolID and PoolName name the pool ("" for a labels placement).
+	PoolID   string `json:"pool_id,omitempty"`
+	PoolName string `json:"pool_name,omitempty"`
+	// Waiting: no member can take it now (Decision Queue, or Wake, whose
+	// wake was asked for). The runtime waits and asks again.
+	Waiting bool `json:"waiting,omitempty"`
+	// Reason says why it waits (Decision.Reason: WaitingPrefix…).
+	Reason string `json:"reason,omitempty"`
+}
