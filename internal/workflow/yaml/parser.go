@@ -22,7 +22,14 @@ func ParseWorkflow(data []byte) (*reliantv1.Workflow, error) {
 		return nil, fmt.Errorf("v2yaml: expected document node")
 	}
 
-	wf, err := unmarshalWorkflow(doc.Content[0])
+	// Aliases and merge keys read as the text they point to, so their
+	// templates expand like any other field's (expandYAMLAliases).
+	root, err := expandYAMLAliases(doc.Content[0])
+	if err != nil {
+		return nil, err
+	}
+
+	wf, err := unmarshalWorkflow(root)
 	if err != nil {
 		return nil, withVersionSkewHint(err)
 	}
