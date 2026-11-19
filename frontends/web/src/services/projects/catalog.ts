@@ -182,6 +182,8 @@ export interface ProjectCatalogRow extends RowBase {
   checkouts: CatalogCheckout[];
   /** A machine has the code (an INSTALLED checkout). */
   hasCheckout: boolean;
+  /** Built from a plain project list (catalogFromProjects): repos, apps and checkouts are unknown, not none. */
+  partial?: boolean;
 }
 
 export interface AppOnlyCatalogRow extends RowBase {
@@ -301,6 +303,32 @@ export function catalogFromResponse(response: WireListProjectsWithAppsResponse):
   // The server sends none unless it read the org's apps; trust that, not a stale field.
   if (state === "ok") for (const a of response.unlinkedApps) rows.push(appOnlyRowOf(a, state));
   return { orgId: response.orgId, rows, hostedAppsState: state };
+}
+
+/**
+ * A catalog of plain projects (ListProjects' rows), for when the server
+ * cannot answer ListProjectsWithApps (an older server): every project, no
+ * app chips, no checkouts known, and the org's apps unread. A picker keeps
+ * working; it only knows less.
+ */
+export function catalogFromProjects(orgId: string, projects: readonly Project[]): ProjectCatalog {
+  return {
+    orgId,
+    hostedAppsState: "unavailable",
+    rows: projects.map((project) => ({
+      kind: "project",
+      key: project.id,
+      name: project.name,
+      activityAt: time(project.last_active),
+      project,
+      shared: false,
+      repos: [],
+      apps: [],
+      checkouts: [],
+      hasCheckout: false,
+      partial: true,
+    })),
+  };
 }
 
 // ── Choosing rows ───────────────────────────────────────────────────────────

@@ -63,7 +63,9 @@ export function ProjectRowSummary({ row, pinned = false, interactiveChips = fals
           {pinned ? <Pin aria-label="Pinned" className="h-3 w-3 shrink-0 text-muted-foreground" /> : null}
         </span>
         <span className="flex min-w-0 items-center gap-1.5 text-meta text-muted-foreground">
-          {row.kind === "project" ? (
+          {row.kind === "project" && row.partial ? (
+            <span className="truncate">{row.project.path}</span>
+          ) : row.kind === "project" ? (
             <>
               <span className="truncate">{reposText(row)}</span>
               <span aria-hidden>·</span>
