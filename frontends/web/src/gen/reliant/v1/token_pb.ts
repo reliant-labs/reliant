@@ -438,9 +438,10 @@ export type GetGitHubBotTokenRequest = Message<"reliant.v1.GetGitHubBotTokenRequ
   repo: string;
 
   /**
-   * permissions narrows the token: issues, pull_requests, contents, actions ->
-   * read or write. Empty means issues, pull_requests and contents at write;
-   * actions (cancel and re-run workflow runs) is never in the default.
+   * permissions narrows the token: issues, pull_requests, contents, actions,
+   * statuses, checks -> read or write. Empty means issues, pull_requests and
+   * contents at write; actions (cancel and re-run workflow runs), statuses
+   * (commit statuses) and checks (check runs) are never in the default.
    *
    * @generated from field: map<string, string> permissions = 3;
    */
@@ -690,7 +691,8 @@ export const TokenService: GenService<{
    * session's acting user must have push access to the repository, so the bot
    * is never a way past the user's own permissions. The token is scoped to
    * that one repository and to the requested permissions (issues,
-   * pull_requests, contents; default all three at write), expires within an
+   * pull_requests, contents, actions, statuses, checks; default issues,
+   * pull_requests and contents at write), expires within an
    * hour, and is never stored or logged here. control-plane's audit log
    * records each mint.
    *

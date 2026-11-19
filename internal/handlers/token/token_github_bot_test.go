@@ -126,6 +126,55 @@ func TestGetGitHubBotToken_ActionsPassesThroughWhenNamed(t *testing.T) {
 	}
 }
 
+// statuses and checks pass through when named (the PR pipeline posts the
+// pipeline/cp-merge commit status as the bot); neither is in the default.
+func TestGetGitHubBotToken_StatusesAndChecksPassThroughWhenNamed(t *testing.T) {
+	cases := []struct {
+		name  string
+		perms map[string]string
+		want  map[string]string
+	}{
+		{"statuses write", map[string]string{"statuses": "write"}, map[string]string{"statuses": "write"}},
+		{"checks read", map[string]string{"Checks": "Read"}, map[string]string{"checks": "read"}},
+		{"both beside the defaults", map[string]string{"statuses": "write", "checks": "read", "pull_requests": "write"},
+			map[string]string{"statuses": "write", "checks": "read", "pull_requests": "write"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := &fakeBotTokens{tok: mintedBotToken()}
+			svc, authority := botSvc(t, src)
+			if _, err := svc.GetGitHubBotToken(context.Background(),
+				botReq(daemonBearer(t, authority), "acme", "api", tc.perms)); err != nil {
+				t.Fatal(err)
+			}
+			if len(src.got.Permissions) != len(tc.want) {
+				t.Fatalf("minted with %+v, want %+v", src.got.Permissions, tc.want)
+			}
+			for name, level := range tc.want {
+				if src.got.Permissions[name] != level {
+					t.Errorf("minted with %+v, want %+v", src.got.Permissions, tc.want)
+				}
+			}
+		})
+	}
+}
+
+// An unknown permission is refused, and the refusal names the whole allowed set.
+func TestGetGitHubBotToken_UnknownPermissionNamesAllowedSet(t *testing.T) {
+	src := &fakeBotTokens{tok: mintedBotToken()}
+	svc, authority := botSvc(t, src)
+	_, err := svc.GetGitHubBotToken(context.Background(), botReq(daemonBearer(t, authority), "acme", "api",
+		map[string]string{"administration": "write"}))
+	wantCode(t, err, connect.CodeInvalidArgument, "")
+	const allowed = "(allowed: issues, pull_requests, contents, actions, statuses, checks)"
+	if !strings.Contains(err.Error(), allowed) {
+		t.Errorf("err = %v, want it to list %s", err, allowed)
+	}
+	if src.calls != 0 {
+		t.Error("minted a token for an unknown permission")
+	}
+}
+
 func TestGetGitHubBotToken_InvalidRequestsMintNothing(t *testing.T) {
 	cases := map[string]*connect.Request[reliantv1.GetGitHubBotTokenRequest]{
 		"no owner":         botReq("", "", "api", nil),
