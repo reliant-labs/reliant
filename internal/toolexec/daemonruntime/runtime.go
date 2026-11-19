@@ -901,17 +901,36 @@ func (d *daemonClient) foreignDaemonIDFailure(err error) error {
 		bootstrap.DaemonIDPath(d.bootCfg.DataDir), err)
 }
 
-// registerLabels builds the daemon-registration label map. It advertises the
-// daemon's runtime/sandbox type when known so the server can surface runtime
-// capability limits to the model. Returns nil when there is nothing to report,
-// keeping the registration message unchanged for local daemons.
+// registerLabels builds the daemon-registration label map: the labels this
+// connection is selected by (a workflow's `daemon: labels:`). It carries the
+// machine labels the daemon declares, so a selector matches what the machine
+// was started with, and the daemon's runtime/sandbox type when known (that
+// one wins over a declared key of the same name: it is the platform's fact)
+// so the server can surface runtime capability limits to the model. Returns
+// nil when there is nothing to report, keeping the registration message
+// unchanged for local daemons.
 func (d *daemonClient) registerLabels() map[string]string {
-	if strings.TrimSpace(d.runtimeType) == "" {
+	runtimeType := strings.TrimSpace(d.runtimeType)
+	if runtimeType == "" && len(d.bootCfg.MachineLabels) == 0 {
 		return nil
 	}
-	return map[string]string{
-		config.DaemonRuntimeTypeLabelKey: d.runtimeType,
+	out := make(map[string]string, len(d.bootCfg.MachineLabels)+1)
+	for k, v := range d.bootCfg.MachineLabels {
+		out[k] = v
 	}
+	if runtimeType != "" {
+		out[config.DaemonRuntimeTypeLabelKey] = d.runtimeType
+	}
+	return out
+}
+
+// machineLabels are the durable labels this daemon declares for its machine
+// (DaemonRegister.machine_labels); nil for none.
+func (d *daemonClient) machineLabels() map[string]string {
+	if len(d.bootCfg.MachineLabels) == 0 {
+		return nil
+	}
+	return d.bootCfg.MachineLabels
 }
 
 // recordStream publishes a gateway-stream transition to the daemon's on-disk
@@ -1261,6 +1280,9 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			// resolveDaemonType.
 			DaemonType: resolveDaemonType(d.host.DaemonType, "local"),
 			Labels:     d.registerLabels(),
+			// Declared on every registration, reconnects included: the
+			// server merges them into the machine's durable labels.
+			MachineLabels: d.machineLabels(),
 			// Re-assert our persisted stable identity (empty on first-ever
 			// registration). The gateway trusts it for unbound PATs so identity
 			// survives restarts and hostname changes instead of being re-derived

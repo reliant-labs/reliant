@@ -42,13 +42,37 @@ and failover.
 |---|---|
 | Pool | `machine_pools` row: owner, `name` (unique per owner), label `selector`, `min_members`/`max_members`, `member_size`, `max_runs_per_member`, `member_idle_timeout` (default 10m) |
 | Member | A machine of the pool's owner whose **durable labels** contain the selector (default `pool=<name>`) |
-| Machine label | `daemons.labels` (jsonb), set by the owner (`SetMachineLabels`). It persists across sleep, reconnects and re-registration. Registration and identity upserts name their columns, so they never touch it |
+| Machine label | `daemons.labels` (jsonb), set by the owner (`SetMachineLabels`), or declared by the daemon at start and merged in on registration (below). It persists across sleep, reconnects and re-registration. Registration and identity upserts name their columns, so they never touch it |
 | Placement | The launch-time choice of one member for one run |
 | Pinned run | The chat records `machine_pool_id` + `active_daemon_id` (the member). The run's catalog pin, checkouts, skills and tool calls follow `active_daemon_id`, exactly as for a single-machine trigger |
 
 The labels a daemon reports when it connects (`toolexec.DaemonInfo.Labels`)
 vanish while it sleeps. A pool must count and wake suspended members, so
 membership comes from the durable column.
+
+A daemon can also **declare** durable labels when it starts, so a new box
+joins a pool with no person: `reliant daemon start --label pool=pipeline
+--label gate=yes` (or `RELIANT_DAEMON_LABELS`, `DaemonConfig.labels`). It
+sends them on every registration as `DaemonRegister.machine_labels` (field
+17, distinct from the ephemeral `labels` (9), which it also fills so a
+workflow's `daemon: labels:` selector matches). The gateway merges them into
+`daemons.labels` in `ConnectDaemon` and `RegisterOutboundConnection`, right
+after the registration upsert, with the same guard (the caller's own row; a
+row reserved for bound credentials only from a bound one):
+
+- each declared key is set to its declared value; labels the daemon does not
+  declare (the owner's, from `SetMachineLabels`) are left alone, so dropping a
+  `--label` does not remove the label;
+- no declared labels, or every pair already present (a reconnect), writes
+  nothing; a merge that would pass 32 labels is not written;
+- an invalid set is logged and skipped, never a refused connection; an old
+  daemon sends nothing and an old server ignores the field.
+
+The bootstrap file is the declaration, and the owner's sign-in token (the
+daemon's credential) is the trust step. A declared merge does not apply the
+pool's `member_idle_timeout` (that needs the owner's signed-in session on the
+control plane); it matters only for managed members, whose labels the owner
+sets, and the next pool or label write converges it.
 
 ## Data model
 
@@ -212,6 +236,10 @@ Two limits apply, and they do different jobs:
   state and live runs, plus warnings for a pool with no members or fewer than
   `min_members`), `PutMachinePool`, `DeleteMachinePool` (refused while a
   trigger uses the pool).
+- CLI: `reliant machine label <machine> k=v… [--replace] [--remove k…]`
+  (merges by default), `reliant machine pool put|ls|rm` (`put` overlays only
+  the flags passed onto the stored pool). An agent's shell is refused the
+  writes.
 - `DaemonInfo.labels`, `Trigger.machine_pool_id`/`machine_pool_name`
   (`machine_state` is `pool`). A pooled run's member is its chat's
   `active_daemon_id`; exposing `chats.machine_pool_id` on `Chat` needs the

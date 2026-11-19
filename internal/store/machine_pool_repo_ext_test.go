@@ -189,3 +189,71 @@ func TestMachinePoolQueries(t *testing.T) {
 		t.Fatalf("delete missing = %v", err)
 	}
 }
+
+// TestMergeDeclaredDaemonLabels pins the guard on the labels a daemon
+// declares at registration: merged into its own row only, never another
+// user's or (for an unbound credential) a reserved one; a no-op when already
+// applied; refused past the label limit.
+func TestMergeDeclaredDaemonLabels(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	for _, d := range []*db.Daemon{
+		{ID: "dl-box", UserID: storetest.SeedUserID},
+		{ID: "dl-pod", UserID: storetest.SeedUserID, RequiresBoundToken: true},
+	} {
+		if err := env.Repo.UpsertDaemon(ctx, d); err != nil {
+			t.Fatalf("UpsertDaemon %s: %v", d.ID, err)
+		}
+	}
+	labels := func(id string) map[string]string {
+		t.Helper()
+		d, err := env.Repo.GetDaemon(ctx, id)
+		if err != nil {
+			t.Fatalf("GetDaemon %s: %v", id, err)
+		}
+		return d.Labels
+	}
+	merge := func(userID, id string, bound bool, l map[string]string, max int) bool {
+		t.Helper()
+		ok, err := env.Repo.MergeDeclaredDaemonLabels(ctx, userID, id, bound, l, max)
+		if err != nil {
+			t.Fatalf("MergeDeclaredDaemonLabels %s: %v", id, err)
+		}
+		return ok
+	}
+
+	if ok, _ := env.Repo.SetDaemonLabels(ctx, storetest.SeedUserID, "dl-box", map[string]string{"team": "ci"}); !ok {
+		t.Fatal("SetDaemonLabels dl-box wrote nothing")
+	}
+	if !merge(storetest.SeedUserID, "dl-box", false, map[string]string{"pool": "pipeline"}, 32) {
+		t.Fatal("the owner's merge wrote nothing")
+	}
+	if got := labels("dl-box"); len(got) != 2 || got["team"] != "ci" || got["pool"] != "pipeline" {
+		t.Fatalf("labels after merge = %v, want team=ci,pool=pipeline", got)
+	}
+	if merge(storetest.SeedUserID, "dl-box", false, map[string]string{"pool": "pipeline"}, 32) {
+		t.Fatal("a merge already applied wrote again")
+	}
+	if merge("someone-else", "dl-box", true, map[string]string{"pool": "evil"}, 32) {
+		t.Fatal("another user's credential relabelled the machine")
+	}
+	if merge(storetest.SeedUserID, "dl-box", false, map[string]string{"pool": "gate"}, 2) != true {
+		t.Fatal("a merge within the limit (overwriting a key) was refused")
+	}
+	if merge(storetest.SeedUserID, "dl-box", false, map[string]string{"extra": "x"}, 2) {
+		t.Fatal("a merge past the label limit was written")
+	}
+	if got := labels("dl-box"); len(got) != 2 || got["pool"] != "gate" {
+		t.Fatalf("labels = %v, want team=ci,pool=gate", got)
+	}
+
+	if merge(storetest.SeedUserID, "dl-pod", false, map[string]string{"pool": "pipeline"}, 32) {
+		t.Fatal("an unbound credential labelled a reserved machine")
+	}
+	if !merge(storetest.SeedUserID, "dl-pod", true, map[string]string{"pool": "pipeline"}, 32) {
+		t.Fatal("a bound credential could not label its own reserved machine")
+	}
+	if merge(storetest.SeedUserID, "dl-box", false, nil, 32) {
+		t.Fatal("declaring nothing wrote")
+	}
+}

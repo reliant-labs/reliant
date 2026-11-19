@@ -267,6 +267,16 @@ message DaemonRegister {
   int64 commit_time_unix = 15;
   // forge_version is the forge module version linked into the binary.
   string forge_version = 16;
+  // machine_labels are the durable labels the daemon declares for its machine
+  // (`reliant daemon start --label k=v`, or the daemon config's labels). The
+  // server merges them into the machine's labels (daemons.labels, which decide
+  // machine-pool membership) on every registration: each declared key is set
+  // to its value, keys not declared are left alone, and none declared writes
+  // nothing. Unlike labels (9), which describe this connection and vanish
+  // with it, these hold while the machine sleeps. Keys and values are short
+  // slugs; a server refuses an invalid set by not persisting it, never by
+  // refusing the connection. A server that predates the field ignores it.
+  map<string, string> machine_labels = 17;
 }
 
 // ToolResponse contains the result of tool execution. The daemon keeps it until

@@ -40996,6 +40996,12 @@
             {
               "name": "forge_version",
               "kind": "string"
+            },
+            {
+              "name": "machine_labels",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
             }
           ],
           "reliant.v1.DiscoveredProject": [
