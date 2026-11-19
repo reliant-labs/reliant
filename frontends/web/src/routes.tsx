@@ -53,6 +53,7 @@ import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
 import { ShortcutHost } from './components/Shortcuts/ShortcutHost'
+import { AppShellFrame } from './components/Layout/shell/AppShell'
 import { PageVisitTracker } from './components/PageVisitTracker'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
 import { ForgeLandingJourney } from './components/ForgeShell/ForgeLandingJourney'
@@ -192,6 +193,8 @@ const SitesPage = lazyRoute(
   () => import('./components/ForgeShell/ForgeSitesPage'), 'SitesPage')
 const UsagePage = lazyRoute(
   () => import('./components/ForgeShell/ForgeUsagePage'), 'UsagePage')
+const ProjectsPage = lazyRoute(
+  () => import('./components/Projects/ProjectsPage'), 'ProjectsPage')
 const OnboardingRoute = lazyRoute(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRoute(
@@ -358,7 +361,11 @@ function RootShell() {
       <ActiveOrgBinding onSwitch={followActiveOrg} />
       <PageVisitTracker firstVisitProps={forgeEntry} />
       <ShortcutHost>
-        <Outlet />
+        {/* The one shell: one nav around every app page, above the outlet so
+            moving between pages never remounts it (Layout/shell/AppShell.tsx). */}
+        <AppShellFrame>
+          <Outlet />
+        </AppShellFrame>
       </ShortcutHost>
       <ModalLayer />
       {/* Add project opens over any route (the sidebar, Settings, the
@@ -874,11 +881,11 @@ const forgeConsolePageComponents = {
 //
 //   form 'legacy'   /, /project/$projectId, /c/$chatId[/t/$threadId], /new,
 //                   /workflow/…, /workflows/… (and their retired paths),
-//                   /inbox, /apps, /forge/…
+//                   /inbox, /apps, /sites, /usage, /projects, /forge/…
 //   form 'org'      /o/$org, /o/$org/project/$projectId,
 //                   /o/$org/c/$chatId[/t/$threadId], /o/$org/new, /o/$org/workflow/…,
 //                   /o/$org/workflows/…, /o/$org/inbox, /o/$org/apps,
-//                   /o/$org/sites, /o/$org/usage,
+//                   /o/$org/sites, /o/$org/usage, /o/$org/projects,
 //                   /o/$org/apps/$project/… (the console),
 //                   /o/$org/observability/…, /o/$org/forge (the console's entry)
 function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
@@ -1008,11 +1015,19 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     component: UsagePage,
   })
 
+  // Projects: the nav's Projects entry — the person's apps and sites, and
+  // their code (components/Projects/ProjectsPage.tsx; U7 replaces it).
+  const projectsRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/projects',
+    component: ProjectsPage,
+  })
+
   const forgeConsoleRoutes = createForgeConsoleRoutes(authParent, forgeConsolePageComponents, { form })
 
   return {
     app: [indexRoute, projectRoute, chatRoute, threadRoute, newChatRoute] as const,
-    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, appsRoute, sitesRoute, usageRoute] as const,
+    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, appsRoute, sitesRoute, usageRoute, projectsRoute] as const,
   }
 }
 

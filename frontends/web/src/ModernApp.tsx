@@ -6,7 +6,6 @@ import { GITHUB_CREDENTIAL_QUERY_KEY } from './hooks/useGitHubCredential';
 import { ChatState } from "./gen/reliant/v1/chat_pb";
 import type { Chat } from "./api/client";
 import { logger } from "./lib/logger";
-import { cn } from "./lib/utils";
 import { isWorkflowSurfacePath } from "./lib/workflowsArea";
 import {
   useEffect,
@@ -17,7 +16,6 @@ import {
   startTransition,
 } from "react";
 import { ChatInterface } from "./components/Chat/ChatInterface";
-import { Sidebar } from "./components/Layout/Sidebar";
 import { TabbedViewerPanel } from "./components/Layout/TabbedViewerPanel";
 import { useViewerStore } from "./store/viewerStore";
 import { mostRecentProject, useProjectStore } from "./store/projectStore";
@@ -27,6 +25,7 @@ import { useFileDeletionStore } from "./store/fileDeletionStore";
 import { createFile, createFolder, moveFile, deleteFileOrFolder } from "./api/fileSystem";
 import { toast } from "./lib/toast-manager";
 import { ResizableSidebar } from "./components/Layout/ResizableSidebar";
+import { toggleShellNav, useShellFrame } from "./components/Layout/shell/shellFrame";
 import { RightSidebar } from "./components/FileBrowser/RightSidebar";
 import { GlobalSearch, FindReplace } from "./components/FileBrowser";
 import { QuickFileOpen } from "./components/Layout/QuickFileOpen";
@@ -59,7 +58,6 @@ import { openAddProject } from "./store/addProjectDialogStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useShortcutHost, useShortcutLayer } from "./hooks/useShortcutHost";
 import { useElectronIPC } from "./hooks/useElectronIPC";
-import { useSidebarOverlay } from "./hooks/useSidebarOverlay";
 import { useGitInitialization } from "./hooks/useGitInitialization";
 import { useDaemonStatus } from "./hooks/useDaemonStatus";
 import { useProjectRescan } from "./hooks/useProjectRescan";
@@ -87,7 +85,7 @@ import { useCachedWorkflows } from "./hooks/workflow-queries";
 import { trackEvent } from "./lib/analytics";
 import { useCurrentWorktree, resolveWorktree, useCachedWorktrees, getCurrentWorktree, invalidateWorktreeLists } from "./hooks/worktree-queries";
 import { restoreLastWorktree } from "./hooks/worktree-actions";
-import { appsPath, homePath, inboxPath, onboardingPath, runsPath, settingsPath, workflowBuilderPath, workflowsPath } from "@/lib/paths";
+import { homePath, onboardingPath, settingsPath, workflowBuilderPath, workflowsPath } from "@/lib/paths";
 import { isForgeShell } from "@/lib/shell";
 import { forgeBrandHomeTarget, routeRequiresOnboarding } from "./components/OnboardingFlow/onboardingGate";
 
@@ -163,23 +161,12 @@ function App() {
     return useWorkspaceStateStore.getState().getWorktreeState(projectId, worktreeId).rightPanelState.fileBrowser;
   });
   
-  // Left sidebar (chat sidebar) state - global across all workspaces
-  const showChatSidebar = useWorkspaceStateStore((state) => state.leftSidebarExpanded);
-  const setShowChatSidebar = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
-    const currentValue = useWorkspaceStateStore.getState().leftSidebarExpanded;
-    const newValue = typeof value === 'function' ? value(currentValue) : value;
-    useWorkspaceStateStore.getState().setLeftSidebarExpandedGlobal(newValue);
-  }, []);
+  // The left nav belongs to the one shell (Layout/shell/AppShell.tsx), which
+  // docks, collapses and toggles it on every page; this page only reads
+  // whether it is docked, for the header's traffic-light inset.
+  const { navDocked } = useShellFrame();
   
-  // Sidebar overlay behavior for collapsed sidebar
-  const {
-    showOverlaySidebar,
-    isSidebarHovered,
-    handleSidebarMouseEnter,
-    handleSidebarMouseLeave,
-    handleOverlayMouseEnter,
-    handleOverlayMouseLeave,
-  } = useSidebarOverlay({ isSidebarExpanded: showChatSidebar });
+
 
   // Wrap setters to also persist to workspace state
   const setShowFileBrowser = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
@@ -636,16 +623,6 @@ function App() {
           return next;
         });
       },
-      onToggleSidebar: () => {
-        setShowChatSidebar((prev) => {
-          const next = !prev;
-          if (!next && isFocusWithin("left-sidebar")) {
-            clearPane("left-sidebar");
-            focusPrevious();
-          }
-          return next;
-        });
-      },
       onNextRightSidebarTab: () => {
         const projectId = currentProject?.id;
         if (!projectId) return;
@@ -673,10 +650,6 @@ function App() {
         // The active tab's own arrow/Enter handling takes over from there; we
         // deliberately do not implement sidebar-level item navigation.
         focusPane("right-sidebar");
-      },
-      onFocusLeftSidebar: () => {
-        setShowChatSidebar(true);
-        focusPane("left-sidebar");
       },
       onFocusTranscript: () => {
         focusPane("transcript");
@@ -734,7 +707,6 @@ function App() {
       currentProject?.id,
       currentWorktree?.id,
       setShowFileBrowser,
-      setShowChatSidebar,
       showSidebarTab,
       cycleProject,
     ]
@@ -927,7 +899,6 @@ function App() {
       ["chat-input", "focus-chat-input"],
       ["terminal", "focus-terminal"],
       ["right-sidebar", "focus-right-sidebar"],
-      ["left-sidebar", "focus-left-sidebar"],
       ["transcript", "focus-transcript"],
     ];
 
@@ -1685,84 +1656,6 @@ function App() {
     // chat-shell content below it.
     <div className="flex flex-col flex-1 min-h-0 bg-background font-sans dense-ui">
       <div className="flex flex-1 min-h-0 relative">
-        {/* Hover trigger area - shows when sidebar is closed */}
-        {!showChatSidebar && (
-          <div
-            className="absolute left-0 top-0 bottom-0 w-2 z-40 hover:bg-primary/10 transition-colors"
-            onMouseEnter={handleSidebarMouseEnter}
-            onMouseLeave={handleSidebarMouseLeave}
-          />
-        )}
-
-        {/* Chat Sidebar - Toggle with Shift+Cmd+B */}
-        {showChatSidebar && (
-          <ResizableSidebar storageKey="chat-sidebar-width">
-            <div id="layout-left-sidebar" className="flex flex-col h-full">
-              <Sidebar
-                paddingClass=""
-                onOpenWorkflows={() => {
-                  navigate({ to: workflowsPath() });
-                }}
-                onOpenInbox={() => {
-                  navigate({ to: inboxPath() });
-                }}
-                onOpenRuns={(search) => {
-                  navigate({ to: runsPath(), search: search ?? {} });
-                }}
-                onOpenChatSearch={() => void shortcutHost?.run("onChatSearch")}
-                onNavigateToSettings={() => {
-                  navigate({ to: settingsPath() });
-                }}
-                onManageProjects={() => {
-                  navigate({ to: settingsPath('projects') });
-                }}
-                onOpenForge={() => {
-                  navigate({ to: appsPath() });
-                }}
-              />
-            </div>
-          </ResizableSidebar>
-        )}
-
-        {/* Overlay sidebar - shows on hover when closed */}
-        {!showChatSidebar && showOverlaySidebar && (
-          <div
-            className={cn(
-              "absolute left-0 top-0 bottom-0 z-50 shadow-2xl transition-all duration-300 ease-out",
-              isSidebarHovered ? "translate-x-0 opacity-100" : "-translate-x-full opacity-0"
-            )}
-            onMouseEnter={handleOverlayMouseEnter}
-            onMouseLeave={handleOverlayMouseLeave}
-          >
-            <ResizableSidebar storageKey="chat-sidebar-width">
-              <div className="flex flex-col h-full">
-                <Sidebar
-                  paddingClass=""
-                  onOpenWorkflows={() => {
-                    navigate({ to: workflowsPath() });
-                  }}
-                  onOpenInbox={() => {
-                    navigate({ to: inboxPath() });
-                  }}
-                  onOpenRuns={(search) => {
-                    navigate({ to: runsPath(), search: search ?? {} });
-                  }}
-                  onOpenChatSearch={() => void shortcutHost?.run("onChatSearch")}
-                  onNavigateToSettings={() => {
-                    navigate({ to: settingsPath() });
-                  }}
-                  onManageProjects={() => {
-                    navigate({ to: settingsPath('projects') });
-                  }}
-                  onOpenForge={() => {
-                    navigate({ to: appsPath() });
-                  }}
-                />
-              </div>
-            </ResizableSidebar>
-          </div>
-        )}
-
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0">
           <main className="flex-1 flex overflow-hidden relative">
@@ -1923,12 +1816,13 @@ function App() {
   );
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex h-full min-h-0 flex-col">
       <ProjectFilterRouteSync />
       {showHeader && (
         <Header
           ref={headerRef}
-          windowAligned={true}
+          // Docked, the nav's top holds the macOS traffic lights; collapsed, this bar does.
+          windowAligned={!navDocked}
           onNavigateHome={() => {
             navigate({ to: homePath() });
           }}
@@ -1940,7 +1834,7 @@ function App() {
           }}
           onToggleTerminal={toggleTerminal}
           onToggleFileBrowser={() => setShowFileBrowser((prev) => !prev)}
-          onToggleChatSidebar={() => setShowChatSidebar((prev) => !prev)}
+          onToggleChatSidebar={toggleShellNav}
           onOpenWorkflows={() => {
             navigate({ to: workflowsPath() });
           }}

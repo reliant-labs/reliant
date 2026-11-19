@@ -96,6 +96,11 @@ export function projectPath(projectId: string, ctx?: PathContext): string {
   return withOrg(`/project/${seg(projectId)}`, ctx);
 }
 
+/** The person's projects: their apps and sites, and their code (components/Projects/ProjectsPage.tsx). */
+export function projectsPath(ctx?: PathContext): string {
+  return withOrg("/projects", ctx);
+}
+
 /** Everything waiting on the person, across every chat and project. */
 export function inboxPath(ctx?: PathContext): string {
   return withOrg("/inbox", ctx);

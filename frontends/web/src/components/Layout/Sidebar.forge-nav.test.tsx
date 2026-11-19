@@ -21,7 +21,7 @@
  * is_forge=false while its forge.yaml exists), so neither value may affect
  * the entry either way.
  */
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -118,19 +118,62 @@ const {
   "../../lib/forgeFeature",
 );
 
+// The org's apps (hooks/apps-queries.ts): two, one with a live site.
+const appsState = vi.hoisted(() => ({ apps: [] as unknown[] }));
+vi.mock("../../hooks/apps-queries", () => ({
+  useApps: () => ({ apps: appsState.apps, loading: false, availability: "available", detail: "" }),
+}));
+
+// The open app's console model (Forge/Console/useConsoleNavModel.ts), read
+// from the URL: the page the test names, no network.
+vi.mock("../Forge/Console/useConsoleNavModel", async () => {
+  const { consolePageOf } = await vi.importActual<typeof import("../Forge/Console/paths")>("../Forge/Console/paths");
+  return {
+    useConsoleNavModel: (project: string, pathname: string) => ({
+      project,
+      page: consolePageOf(pathname)?.page ?? { kind: "overview" },
+      env: "prod",
+      envs: [
+        { name: "prod", preview: false },
+        { name: "staging", preview: false },
+      ],
+      alertsFiring: 2,
+      starred: [],
+    }),
+  };
+});
+
+const SHOP = {
+  name: "shop",
+  envs: [{ id: "e1", name: "prod", preview: false, verdict: "converged", release: "v1", links: [{ workload: "web", url: "https://shop.example", host: "shop.example", custom: true }], loading: false }],
+  previews: 0,
+};
+const BLOG = { name: "blog", envs: [], previews: 0 };
+
 function renderSidebar(props: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <Sidebar onOpenForge={vi.fn()} {...props} />
+      <Sidebar pathname="/" onNavigate={vi.fn()} {...props} />
     </QueryClientProvider>
   );
+}
+
+/** A nav entry's name: its label, without the key cap New chat shows. */
+const navLabel = (b: Element) => b.getAttribute("aria-label") ?? b.textContent?.trim();
+
+/** The places, in order: every link and button of the top nav. */
+function navEntries() {
+  return Array.from(
+    screen.getByRole("navigation", { name: /chat sidebar navigation/i }).querySelectorAll("a, button")
+  ).map(navLabel);
 }
 
 describe("Sidebar forge nav entry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     experimentalGate.enabled = true;
+    appsState.apps = [];
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
@@ -250,65 +293,134 @@ describe("Sidebar forge nav entry", () => {
     });
   });
 
-  /** A nav entry's name: its label, without the key cap New chat shows. */
-  const navLabel = (b: Element) => b.getAttribute("aria-label") ?? b.textContent?.trim();
-
-  // Apps (the forge entry) sits directly under the Inbox: New chat first, then
-  // what needs you, then what your code runs as (the side-nav restyle, §11.3,
-  // moved the Inbox above Apps). Pinned because the position is the product
-  // decision, not an accident of where the JSX was appended.
-  it("sits directly under the Inbox", () => {
+  // The places, in order (U6, design §4.1): New chat, then what needs you,
+  // what you work on, what runs by itself, what it costs, and Search. Apps is
+  // no longer a place among them: it is the section below (every app, the
+  // open one's console inline).
+  it("orders the nav New chat, Inbox, Projects, Workflows, Usage, Search", () => {
     setProject(true);
     renderSidebar();
-    const labels = screen
-      .getByRole("navigation", { name: /chat sidebar navigation/i })
-      .querySelectorAll("button");
-    const text = Array.from(labels).map(navLabel);
-    expect(text.slice(0, 3)).toEqual(["New chat", "Inbox", "Apps"]);
+    expect(navEntries()).toEqual(["New chat", "Inbox", "Projects", "Workflows", "Usage", "Search"]);
   });
 
-  // The whole nav, in order. Workflows is ONE entry for the area — Library,
-  // Runs and Automations are its tabs (WORKFLOW_UI.md §1.2) — and still sits
-  // under the Inbox, above Search.
-  it("orders the nav New chat, Inbox, Apps, Workflows, Search", () => {
-    setProject(true);
-    renderSidebar();
-    const labels = screen
-      .getByRole("navigation", { name: /chat sidebar navigation/i })
-      .querySelectorAll("button");
-    const text = Array.from(labels).map(navLabel);
-    expect(text).toEqual(["New chat", "Inbox", "Apps", "Workflows", "Search"]);
-  });
-
-  it("orders the nav New chat, Inbox, Workflows, Search with Apps gated off", () => {
+  it("keeps the same places with Apps gated off", () => {
     experimentalGate.enabled = false;
     setProject(true);
     renderSidebar();
-    const labels = screen
-      .getByRole("navigation", { name: /chat sidebar navigation/i })
-      .querySelectorAll("button");
-    const text = Array.from(labels).map(navLabel);
-    expect(text).toEqual(["New chat", "Inbox", "Workflows", "Search"]);
+    expect(navEntries()).toEqual(["New chat", "Inbox", "Projects", "Workflows", "Usage", "Search"]);
+    expect(screen.queryByTestId("sidebar-apps")).not.toBeInTheDocument();
   });
 
-  // The entry is LABELLED Apps but is still the forge entry underneath: the
+  // The section is LABELLED Apps but is still the forge entry underneath: the
   // test id (and the route it opens) keep the forge name.
-  it("is labelled Apps under the forge test id", () => {
+  it("heads the Apps section with the forge test id, a link to every app", () => {
     setProject(true);
-    renderSidebar();
-    expect(screen.getByTestId("sidebar-forge-button")).toHaveTextContent("Apps");
+    const onNavigate = vi.fn();
+    renderSidebar({ onNavigate });
+    const heading = screen.getByTestId("sidebar-forge-button");
+    expect(heading).toHaveTextContent("Apps");
+    expect(heading).toHaveAttribute("href", "/apps");
+    fireEvent.click(heading);
+    expect(onNavigate).toHaveBeenCalledWith("/apps");
   });
 
-  // Apps remains the ONE forge entry; the global-window project filter replaces
-  // the former Projects navigation row without restoring a second forge entry.
   it("has no separate Observability entry", () => {
     setProject(true);
     renderSidebar();
-    const text = Array.from(
-      screen.getByRole("navigation", { name: /chat sidebar navigation/i }).querySelectorAll("button")
-    ).map(navLabel);
-    expect(text).toEqual(["New chat", "Inbox", "Apps", "Workflows", "Search"]);
+    expect(navEntries()).not.toContain("Observability");
     expect(screen.queryByTestId("sidebar-observability-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sidebar-org-observability")).not.toBeInTheDocument();
+  });
+
+  it("lists every app, each one click from its console, with no sections while none is open", () => {
+    appsState.apps = [SHOP, BLOG];
+    const onNavigate = vi.fn();
+    renderSidebar({ onNavigate });
+    const apps = within(screen.getByTestId("sidebar-apps"));
+    expect(apps.getByTestId("sidebar-app-shop")).toHaveAttribute("href", "/forge/p/shop");
+    expect(apps.getByTestId("sidebar-app-blog")).toHaveAttribute("href", "/forge/p/blog");
+    expect(apps.getByTestId("sidebar-app-link-shop")).toHaveAttribute("href", "https://shop.example");
+    expect(screen.queryByTestId("sidebar-app-sections")).not.toBeInTheDocument();
+    fireEvent.click(apps.getByTestId("sidebar-app-blog"));
+    expect(onNavigate).toHaveBeenCalledWith("/forge/p/blog");
+  });
+
+  // The owner's amendment (2026-11-19): an app's console sections are rows of
+  // the one nav, nested under the open app — never a second column.
+  it("expands the open app into its console sections, the page on screen marked", () => {
+    appsState.apps = [SHOP, BLOG];
+    const onNavigate = vi.fn();
+    renderSidebar({ pathname: "/forge/p/shop/observability/errors", onNavigate });
+    expect(screen.getByTestId("sidebar-app-shop")).toHaveAttribute("aria-expanded", "true");
+    const sections = screen.getByTestId("sidebar-app-sections");
+    expect(sections).toHaveAttribute("data-tour", "forge-console-nav");
+    const labels = Array.from(sections.querySelectorAll("a, button")).map((row) => row.textContent?.trim());
+    expect(labels).toEqual([
+      "Overview",
+      "Issues",
+      "Errors",
+      "Alerts2 firing",
+      "Performance",
+      "Traces",
+      "RPC explorer",
+      "Sessions",
+      "Releases",
+      "Data",
+      "Users",
+      "More tools",
+      "Environments",
+      "Secrets",
+      "Domains",
+      "Activity",
+    ]);
+    expect(within(sections).getByText("Configure")).toBeInTheDocument();
+    const errors = within(sections).getByTestId("sidebar-app-section-errors");
+    expect(errors).toHaveAttribute("aria-current", "page");
+    expect(errors).toHaveAttribute("href", "/forge/p/shop/observability/errors?env=prod");
+    expect(within(sections).getByTestId("sidebar-app-section-overview")).not.toHaveAttribute("aria-current");
+    // Only the open app expands.
+    expect(screen.getByTestId("sidebar-app-blog")).not.toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(within(sections).getByTestId("sidebar-app-section-releases"));
+    expect(onNavigate).toHaveBeenCalledWith("/forge/p/shop/releases?env=prod");
+  });
+
+  it("opens a group in place and shows an environment's page under Environments", () => {
+    appsState.apps = [SHOP];
+    renderSidebar({ pathname: "/forge/p/shop/environments/staging" });
+    const sections = screen.getByTestId("sidebar-app-sections");
+    // More tools has no page of its own: it opens and closes in place.
+    const more = within(sections).getByTestId("sidebar-app-section-more-tools");
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(more);
+    expect(more).toHaveAttribute("aria-expanded", "true");
+    expect(within(sections).getByText("Logs")).toBeInTheDocument();
+    // The open environment's own page, under Environments.
+    expect(within(sections).getByTestId("sidebar-app-section-staging")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("gives the open app its rows before the app list answers", () => {
+    renderSidebar({ pathname: "/forge/p/shop" });
+    expect(screen.getByTestId("sidebar-app-shop")).toHaveAttribute("aria-expanded", "true");
+    expect(within(screen.getByTestId("sidebar-app-sections")).getByTestId("sidebar-app-section-overview")).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+  });
+
+  it("marks the place on screen, and nests Workflows' sections while it is open", () => {
+    const onNavigate = vi.fn();
+    const view = renderSidebar({ pathname: "/inbox", onNavigate });
+    expect(screen.getByTestId("sidebar-inbox-button")).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByTestId("sidebar-workflows-sections")).not.toBeInTheDocument();
+    view.unmount();
+
+    renderSidebar({ pathname: "/workflows/runs", search: { project: "p1" }, onNavigate });
+    expect(screen.getByTestId("sidebar-inbox-button")).not.toHaveAttribute("aria-current");
+    const runs = screen.getByTestId("sidebar-workflows-runs");
+    expect(runs).toHaveAttribute("aria-current", "page");
+    expect(runs).toHaveAttribute("href", "/workflows/runs?project=p1");
+    expect(screen.getByTestId("sidebar-workflows-workflows")).toHaveTextContent("Library");
+    fireEvent.click(screen.getByTestId("sidebar-projects-button"));
+    expect(onNavigate).toHaveBeenCalledWith("/projects");
   });
 });
-
