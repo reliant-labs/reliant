@@ -100,10 +100,10 @@ repo=$(git rev-parse --show-toplevel) || die "not in a git repository"
 remote=${MERGE_REGEN_REMOTE:-origin}
 
 # ── per-repo defaults: the pinned forge, as the repo's own gate runs it ──────
-pin=$({ sed -n 's/^forge_version:[[:space:]]*//p' "$repo/forge.yaml" 2>/dev/null || true; } | head -1 | tr -d "\"'")
 if grep -q '^  generate:forge:' "$repo/Taskfile.yml" 2>/dev/null; then
-  # reliant: `task generate:forge` runs `go run …/cmd/forge@<pin> generate`.
-  forge_cmd="env GOWORK=off go run github.com/reliant-labs/forge/cmd/forge@${pin}"
+  # reliant: `task generate:forge` runs scripts/forge.sh generate: a forge on
+  # PATH at the pin, `reliant forge`, or `go run …/cmd/forge@<pin>`.
+  forge_cmd="env GOWORK=off \"$repo/scripts/forge.sh\""
   default_generate="task generate:forge && task generate:docs"
 else
   # control-plane: `task tools` installs the pinned forge into .tools/bin.

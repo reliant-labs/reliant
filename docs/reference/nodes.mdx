@@ -345,7 +345,7 @@ A sequential loop also exposes each output its body declares, by name, from the 
 
 `type: git_publish`
 
-Commit a worktree's changes and push them to a feature branch. Refuses the default branch, protected branches, main, master and release/*, and any branch outside the allow list; refuses a fork head; never force-pushes. Nothing to commit is not an error (pushed is false). The credential is used for this one push and never reaches a shell, a file or the environment. Pair it with shell credentials: none
+Commit a worktree's changes and push them to a feature branch. Refuses the default branch, protected branches, main, master and release/*, and any branch outside the allow list; refuses a fork head; never force-pushes, unless force_with_lease names the exact commit the remote branch must still be at. Nothing to commit is not an error (pushed is false). The credential is used for this one push and never reaches a shell, a file or the environment. Pair it with shell credentials: none
 
 ### Inputs
 
@@ -357,6 +357,7 @@ Commit a worktree's changes and push them to a feature branch. Refuses the defau
 | `pr_head_of` | integer | No | - | A pull request number: push to that pull request's own head branch. The head must be in this repository, not a fork |
 | `allow` | array | No | - | Glob patterns the branch must match, such as autopilot/*. Empty allows any branch the built-in checks accept |
 | `message` | string | No | - | The commit message. Reliant-Run and Reliant-Workflow trailers are appended |
+| `force_with_lease` | string | No | - | Full sha the remote branch must still be at. Set, the push may replace the branch (non-fast-forward) only if it is still there; otherwise it is refused naming the branch's actual head. Unset: never forced |
 
 ### Outputs
 
@@ -371,6 +372,9 @@ Commit a worktree's changes and push them to a feature branch. Refuses the defau
 | `insertions` | integer | - |
 | `deletions` | integer | - |
 | `base_sha` | string | - |
+| `lease_refused` | boolean | - |
+| `remote_sha` | string | - |
+| `lease_unsupported` | boolean | - |
 
 ---
 

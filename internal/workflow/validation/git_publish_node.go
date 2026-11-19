@@ -55,6 +55,20 @@ func validateGitPublishNode(node *reliantv1.Node, nodePath []string, result *Res
 		}
 	}
 
+	if lease := args.GetForceWithLease(); model.CelStringIsSet(lease) && !model.CelStringIsExpr(lease) {
+		switch v := strings.TrimSpace(model.CelStringValue(lease)); {
+		case v == "":
+			// Empty is unset: the push is never forced.
+		case strings.EqualFold(v, "true") || strings.EqualFold(v, "false"):
+			result.AddErrorWithSuggestion(CategoryStructure, nodePath, "force_with_lease",
+				"force_with_lease takes the sha the remote branch must still be at, not true or false; leave it unset to never force",
+				`force_with_lease: "{{ nodes.pr.head_sha }}"`)
+		case !gitpublish.ValidLeaseSHA(v):
+			result.AddError(CategoryStructure, nodePath, "force_with_lease",
+				"force_with_lease must be a full commit sha (40 or 64 lowercase hex characters, not all zeros)")
+		}
+	}
+
 	if allow := args.GetAllow(); allow != nil && !model.CelStringListIsExpr(allow) {
 		for _, p := range model.CelStringListValue(allow) {
 			if strings.TrimSpace(p) == "*" {

@@ -136,8 +136,11 @@ func (s *Service) StreamChatUpdates(
 		userUpdateCh = userUpdateSub.Events()
 	}
 
-	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
-	lastChatSeq, err := s.sendInitialChatSync(ctx, chat, sinceSeq, toolBodies, out)
+	opts := chatSyncOptions{
+		toolBodies: messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs()),
+		skipTotal:  req.Msg.GetSkipTotal(),
+	}
+	lastChatSeq, err := s.sendInitialChatSync(ctx, chat, sinceSeq, opts, out)
 	if err != nil {
 		return err
 	}
@@ -291,11 +294,21 @@ func (s *Service) StreamChatUpdates(
 	}
 }
 
+// chatSyncOptions is what the stream's request asks of its initial sync.
+type chatSyncOptions struct {
+	// toolBodies is how finished tool calls' bodies are sent, resolved
+	// against the config's kill switch.
+	toolBodies reliantv1.ToolBodyMode
+	// skipTotal leaves the snapshot's total 0 instead of counting the chat's
+	// messages (StreamChatUpdatesRequest.skip_total).
+	skipTotal bool
+}
+
 // sendInitialChatSync sends a snapshot for an initial load (sinceSeq 0),
 // otherwise a replay of (sinceSeq, latest] — unless that replay should not be
 // attempted (see chatCursorNeedsSnapshot), which also gets a snapshot. It
 // returns the chat sequence the sync delivered up to.
-func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sinceSeq int64, toolBodies reliantv1.ToolBodyMode, stream chatSender) (_ int64, err error) {
+func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sinceSeq int64, opts chatSyncOptions, stream chatSender) (_ int64, err error) {
 	chatID := chat.ID
 	ctx, span := startSpan(ctx, "chat_stream.initial_sync", attribute.Int64("chat.since_seq", sinceSeq))
 	defer func() {
@@ -328,7 +341,7 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 		// The cursor comes from the snapshot's own high-water mark, not
 		// chatLatestSeq above: the snapshot reads it again, later, and
 		// anything committed in between is in the snapshot.
-		snapshotSeq, err := s.sendChatSnapshot(ctx, chat, toolBodies, stream)
+		snapshotSeq, err := s.sendChatSnapshot(ctx, chat, opts, stream)
 		if err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat snapshot"))
 		}
@@ -337,7 +350,7 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 
 	span.SetAttributes(attribute.String("chat_stream.sync", "replay"), attribute.Int64("chat.latest_sequence", chatLatestSeq))
 	if chatLatestSeq > sinceSeq {
-		overtaken, err := s.sendChatUpdateBatches(ctx, chatID, sinceSeq, chatLatestSeq, toolBodies, stream)
+		overtaken, err := s.sendChatUpdateBatches(ctx, chatID, sinceSeq, chatLatestSeq, opts.toolBodies, stream)
 		if err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat updates"))
 		}
@@ -346,7 +359,7 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 			// batch it would have sent next may be missing rows, and was
 			// not sent. A snapshot replaces whatever the replay built.
 			span.SetAttributes(attribute.String("chat_stream.sync", "replay+snapshot"))
-			snapshotSeq, err := s.sendChatSnapshot(ctx, chat, toolBodies, stream)
+			snapshotSeq, err := s.sendChatSnapshot(ctx, chat, opts, stream)
 			if err != nil {
 				return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat snapshot"))
 			}
@@ -538,8 +551,8 @@ func (s *Service) sendStreamingDeltas(chatID string, deltas []streaming.Streamin
 
 // sendChatSnapshot builds and sends the chat's snapshot, returning the chat
 // sequence it is current as of.
-func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.ChatRow, toolBodies reliantv1.ToolBodyMode, stream chatSender) (int64, error) {
-	snapshot, latestSeq, err := s.buildChatSnapshot(ctx, chat, toolBodies)
+func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.ChatRow, opts chatSyncOptions, stream chatSender) (int64, error) {
+	snapshot, latestSeq, err := s.buildChatSnapshot(ctx, chat, opts)
 	if err != nil {
 		return 0, err
 	}

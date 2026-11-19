@@ -101,7 +101,7 @@ func TestChatStreamToolBodies(t *testing.T) {
 		chat, err := repo.GetChatRow(ctx, f.ChatID)
 		require.NoError(t, err)
 		marshal := func(mode reliantv1.ToolBodyMode) []byte {
-			snapshot, _, err := svc.buildChatSnapshot(ctx, chat, mode)
+			snapshot, _, err := svc.buildChatSnapshot(ctx, chat, chatSyncOptions{toolBodies: mode})
 			require.NoError(t, err)
 			b, err := proto.MarshalOptions{Deterministic: true}.Marshal(&reliantv1.ChatSyncSnapshot{Messages: snapshot.Messages})
 			require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestChatStreamToolBodies(t *testing.T) {
 		}
 		assert.Equal(t, marshal(reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED), marshal(reliantv1.ToolBodyMode_TOOL_BODY_MODE_FULL))
 
-		snapshot, _, err := svc.buildChatSnapshot(ctx, chat, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
+		snapshot, _, err := svc.buildChatSnapshot(ctx, chat, chatSyncOptions{})
 		require.NoError(t, err)
 		blocks := snapshotBlocks(snapshot)
 		require.Contains(t, blocks, f.DoneCallBlockID)

@@ -290,15 +290,17 @@ func (s *Service) sendSingleUserUpdate(update db.UserUpdate, latestSeq int64, st
 //
 //  1. the sequence high-water mark, alone (see below);
 //  2. everything that needs only the chat: entity heads, the main thread's
-//     window, context usage, live tool calls, the message count — of which
-//     only the window gates round 3; the rest joins at assembly;
+//     window, context usage, live tool calls, the message count (unless
+//     opts.skipTotal) — of which only the window gates round 3; the rest
+//     joins at assembly;
 //  3. the sibling-thread rows inside the window, and the content blocks;
 //  4. what the blocks name: attachments, tool-call rows, sender titles.
 //
 // Each round, and each read inside it, has its own span (chat_snapshot.*), so
 // a slow open shows which read it waited on.
-func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, toolBodies reliantv1.ToolBodyMode) (snapshot *reliantv1.ChatSyncSnapshot, latestSeq int64, err error) {
+func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, opts chatSyncOptions) (snapshot *reliantv1.ChatSyncSnapshot, latestSeq int64, err error) {
 	chatID := chat.ID
+	toolBodies := opts.toolBodies
 	ctx, span := startSpan(ctx, "chat_snapshot.build", attribute.String("chat.id", chatID))
 	defer func() {
 		if snapshot != nil {
@@ -362,17 +364,22 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, toolB
 	// window's blocks and lookups, so waiting on them before the blocks made
 	// the open the sum of the two rather than the longer.
 	late := new(errgroup.Group)
-	late.Go(func() error {
-		_ = traced(ctx, "chat_snapshot.message_count", func(ctx context.Context) error {
-			var err error
-			totalMessageCount, err = s.deps.Repo.CountMessagesInChat(ctx, chatID)
-			if err != nil {
-				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to count messages", "error", err, "chatID", shortID(chatID))
-			}
-			return err // non-fatal; falls back to the assembled count below
+	// The count walks every message the chat has, spawns included: 11.3s on
+	// a chat of a million messages in prod (obs 16122d5e). Only total reads
+	// it, and a client that asked for skip_total does not want that.
+	if !opts.skipTotal {
+		late.Go(func() error {
+			_ = traced(ctx, "chat_snapshot.message_count", func(ctx context.Context) error {
+				var err error
+				totalMessageCount, err = s.deps.Repo.CountMessagesInChat(ctx, chatID)
+				if err != nil {
+					logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to count messages", "error", err, "chatID", shortID(chatID))
+				}
+				return err // non-fatal; falls back to the assembled count below
+			})
+			return nil
 		})
-		return nil
-	})
+	}
 	late.Go(func() error {
 		// A failure degrades to "no out-of-window live calls" rather than
 		// failing the open.
@@ -593,9 +600,10 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, toolB
 	// for scroll-back, so a wrong value here silently skips or repeats a page
 	// of history.
 	totalMessages := totalMessageCount
-	if totalMessages < len(messages) {
+	if !opts.skipTotal && totalMessages < len(messages) {
 		// Count query failed, or raced ahead of the read; never report a total
-		// smaller than what we're actually sending.
+		// smaller than what we're actually sending. A skipped count stays 0,
+		// as skip_total promises.
 		totalMessages = len(messages)
 	}
 
@@ -610,10 +618,11 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, toolB
 	// from the main thread. The chat-wide count can't answer it: it includes
 	// every spawn message, none of which are in the snapshot, so a short chat
 	// with one busy spawn would report history that paging can never deliver.
-	// Only when the main thread could not be read does the count stand in.
+	// Only when the main thread could not be read does the count stand in;
+	// with no count either, there may be more, and a page read finds out.
 	hasMore := mainHasMore
 	if !mainReadOK {
-		hasMore = totalMessages > len(messages)
+		hasMore = opts.skipTotal || totalMessages > len(messages)
 	}
 	if hasMore {
 		otherUpdates = errorsInWindow(otherUpdates, messages)
@@ -628,7 +637,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, toolB
 		Messages:            assembledMessages,
 		OtherUpdates:        otherUpdates,
 		LatestSequence:      latestSeq,
-		Total:               int32(totalMessages),
+		Total:               int32(totalMessages), //nolint:staticcheck // SA1019: still counted for clients that do not set skip_total
 		HasMore:             hasMore,
 		OldestSeq:           oldestSeq,
 		ThreadTokenCount:    threadTokenCount,

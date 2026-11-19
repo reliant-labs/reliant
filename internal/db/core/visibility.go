@@ -96,8 +96,10 @@ type SharedChatFilters struct {
 	ViewerUserID string
 	// ProjectID narrows the list to one project's shared chats.
 	ProjectID *string
-	Limit     int
-	Offset    int
+	// AppName narrows the list to chats tagged with that app (chats.app_name).
+	AppName *string
+	Limit   int
+	Offset  int
 }
 
 // SharedProjectFilters lists the projects shared with an org that a viewer

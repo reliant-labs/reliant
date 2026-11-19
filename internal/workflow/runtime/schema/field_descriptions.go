@@ -33,6 +33,7 @@ func init() {
 	FieldDescriptions["execute_tools.tool_calls"] = "The tool calls to run: wire in the tool_calls output of the Call LLM step that requested them"
 	FieldDescriptions["git_publish.allow"] = "Glob patterns the branch must match, such as autopilot/*. Empty allows any branch the built-in checks accept"
 	FieldDescriptions["git_publish.branch"] = "The branch to push to. Leave it empty when pr_head_of is set"
+	FieldDescriptions["git_publish.force_with_lease"] = "Full sha the remote branch must still be at. Set, the push may replace the branch (non-fast-forward) only if it is still there; otherwise it is refused naming the branch's actual head. Unset: never forced"
 	FieldDescriptions["git_publish.message"] = "The commit message. Reliant-Run and Reliant-Workflow trailers are appended"
 	FieldDescriptions["git_publish.pr_head_of"] = "A pull request number: push to that pull request's own head branch. The head must be in this repository, not a fork"
 	FieldDescriptions["git_publish.repo"] = "The GitHub repository, as owner/name"

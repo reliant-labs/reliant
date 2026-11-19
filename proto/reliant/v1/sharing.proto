@@ -135,6 +135,10 @@ message ListSharedChatsRequest {
     lte: 100
   }];
   int32 offset = 4 [(buf.validate.field).int32.gte = 0];
+  // Narrow the list to chats tagged with this app (Chat.app_name): the
+  // shared half of an app's chat list. A malformed name lists nothing; an
+  // empty one is the same as unset.
+  optional string app_name = 5;
 }
 
 message ListSharedChatsResponse {

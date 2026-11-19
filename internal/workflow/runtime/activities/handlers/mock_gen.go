@@ -3583,7 +3583,7 @@ func (m *MockGenerateTitleStore) RecordLLMCallUsage(ctx context.Context, rec db.
 var _ GenerateTitleStore = (*MockGenerateTitleStore)(nil)
 
 // forge:section MockGitPublishStore
-// forge:hash=3945e607b46624eead247f683338e923c1dc71fa666cc34f3ac2f909a0e993e4
+// forge:hash=67a70134576cc160bb98a11b911daae8b768306fcb85ba495a35f08b94e8fff5
 
 // MockGitPublishStore is a test mock for the GitPublishStore interface.
 //
@@ -3594,6 +3594,7 @@ var _ GenerateTitleStore = (*MockGenerateTitleStore)(nil)
 type MockGitPublishStore struct {
 	contractkit.Recorder
 	GetChatFunc     func(context.Context, string) (*db.Chat, error)
+	GetDaemonFunc   func(context.Context, string) (*db.Daemon, error)
 	GetWorktreeFunc func(context.Context, string) (*db.Worktree, error)
 }
 
@@ -3604,6 +3605,15 @@ func (m *MockGitPublishStore) GetChat(ctx context.Context, id string) (*db.Chat,
 		return m.GetChatFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockGitPublishStore", "GetChat")
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockGitPublishStore) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockGitPublishStore", "GetDaemon")
 }
 
 // GetWorktree records the call and delegates to GetWorktreeFunc when set.
