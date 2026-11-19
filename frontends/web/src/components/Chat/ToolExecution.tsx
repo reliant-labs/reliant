@@ -1055,9 +1055,16 @@ function ToolExecutionComponent({
       ? { label: statusText === "Failed" ? "Failed" : "Stopped", dot: "bg-warning" }
       : isCancelled
         ? { label: "Cancelled", dot: "bg-muted-foreground" }
-        : isCompleted
-          ? { label: "Done", dot: "bg-success" }
-          : { label: "Working", dot: "bg-primary motion-safe:animate-pulse" };
+        : isCancelling
+          ? { label: "Stopping…", dot: "bg-warning motion-safe:animate-pulse" }
+          : isCompleted
+            ? { label: "Done", dot: "bg-success" }
+            : isDenied
+              ? { label: "Denied", dot: "bg-muted-foreground" }
+              : { label: "Working", dot: "bg-primary motion-safe:animate-pulse" };
+    // Stopping a running sub-agent is the card's secondary action, beside
+    // its thread: the same control (and accessible name) as a tool row's.
+    const canCancel = (isExecuting || isCancelling) && !!onCancel;
     return (
       <div className="rounded-xl border border-border p-4 sm:p-5" data-testid="sub-agent-card">
         <div className="flex min-w-0 items-center gap-3">
@@ -1072,6 +1079,19 @@ function ToolExecutionComponent({
               {statusText !== agentState.label && <span className="sr-only">{statusText}</span>}
             </div>
           </div>
+          {canCancel && (
+            <Tooltip content="Stop sub-agent" side="bottom" delay={300} triggerClassName="inline-flex">
+              <button
+                type="button"
+                onClick={() => onCancel?.(toolCall.id)}
+                aria-label="Cancel tool execution"
+                disabled={isCancelling}
+                className="touch-target inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent"
+              >
+                <Square className={cn("size-3", isCancelling && "animate-pulse")} aria-hidden="true" />
+              </button>
+            </Tooltip>
+          )}
           {canOpenThread && (
             <button
               type="button"
@@ -1097,6 +1117,9 @@ function ToolExecutionComponent({
             </button>
             {isExpanded && <div className="mt-2">{detail}</div>}
           </div>
+        )}
+        {isDenied && approval?.denialReason && (
+          <p className="mt-3 pl-7 text-meta text-destructive-ink">Denied: {approval.denialReason}</p>
         )}
       </div>
     );
