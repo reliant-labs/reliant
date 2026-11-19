@@ -91,7 +91,7 @@ export function BarList({ panel, data, unit, keys, trend, compact = false, limit
 
   return (
     <div className="@container" data-testid="obs-panel-barlist">
-      <div className="mb-1 flex items-center gap-3 text-2xs text-ink-muted" aria-hidden="true">
+      <div className="mb-1 flex items-center gap-3 text-meta text-ink-muted" aria-hidden="true">
         <span className="min-w-0 flex-1 truncate">{textKeys[0]}</span>
         {sparkline && <span className="hidden w-16 shrink-0 text-right @md:block">Trend</span>}
         <span className="w-14 shrink-0 text-right">{bar.header}</span>

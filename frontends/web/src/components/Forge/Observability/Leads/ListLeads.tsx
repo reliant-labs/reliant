@@ -378,7 +378,7 @@ function ReplayThumb({ path, errors, replay }: { path: string; errors: number; r
         <span className="h-1.5 w-1.5 rounded-full bg-ink/15" />
         <span className="h-1.5 w-1.5 rounded-full bg-ink/15" />
         <span className="h-1.5 w-1.5 rounded-full bg-ink/15" />
-        <span className="ml-1.5 truncate rounded bg-surface-sunken px-1.5 font-mono text-2xs leading-4 text-ink-muted">{path || "/"}</span>
+        <span className="ml-1.5 truncate rounded bg-surface-sunken px-1.5 font-mono text-meta leading-4 text-ink-muted">{path || "/"}</span>
       </div>
       <div className="space-y-1.5 px-3 py-3">
         <div className="h-2 w-2/3 rounded bg-ink/10" />

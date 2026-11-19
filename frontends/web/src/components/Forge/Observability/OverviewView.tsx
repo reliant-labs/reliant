@@ -407,7 +407,7 @@ function SignalJumps({ service, signals, navigate }: { service: string; signals:
             data-testid={`obs-service-${signal}`}
           >
             {label}
-            {idle && <span className="text-2xs text-ink-muted">{idle.badge}</span>}
+            {idle && <span className="text-meta text-ink-muted">{idle.badge}</span>}
           </Button>
         );
       })}
