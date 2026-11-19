@@ -145,6 +145,7 @@ func staticAnalysisOne(wf *reliantv1.Workflow, opts *ValidationOptions) *Result 
 	validateTriggers(wf, opts, catalogIntegrations{}, result)
 	validateConcurrency(wf.GetConcurrency(), result)
 	validateCheck(wf, result)
+	validateDaemonSelectors(wf, result)
 	validateSecrets(wf, result)
 	validatePermissions(wf, result)
 	for _, msg := range requirements.Validate(wf.GetRequires(), func(id string) bool {
