@@ -270,6 +270,32 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/cloudEnvs")>()),
   getEnvironmentStatus: (id: string) => getEnvironmentStatus(id),
   listEnvironmentPromotions: (id: string) => listEnvironmentPromotions(id),
+  // The Environments page's kept-databases card: none kept.
+  listRetainedDatabases: () => Promise.resolve([]),
+}));
+
+// The observability and identity reads resolve their org through
+// ListMyOrganizations. No org here: those reads stay off, and nothing reaches
+// the network after a test has finished (the request used to land in
+// whichever test ran next).
+vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
+  currentOrgId: () => Promise.resolve(null),
+}));
+
+// The env header asks the caller's role in the active org (orgAuthority.ts).
+vi.mock("@/hooks/useOrgs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useOrgs")>()),
+  useActiveOrg: () => ({
+    orgs: [],
+    active: { id: "org_1", name: "Acme", slug: "acme", role: "owner", isOwner: true, isDefault: true },
+    activeOrgId: "org_1",
+    defaultOrgId: "org_1",
+    canSwitch: false,
+    isLoading: false,
+    error: null,
+    select: () => {},
+  }),
 }));
 
 // The managed store IS the control plane, so the secrets half of Live is a
