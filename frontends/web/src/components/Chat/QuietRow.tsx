@@ -69,7 +69,7 @@ export function QuietRow({
 }: QuietRowProps) {
   const panelId = useId();
   const expandable = Boolean(onToggle);
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (!onToggle || event.target !== event.currentTarget) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
