@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (28 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (73 tools)
+- [Other Tools](#other-tools) (74 tools)
 
 ---
 
@@ -1401,7 +1401,7 @@ Evaluation is bounded (CEL cost limit) and has no side effects.
 
 **Tags:** `workflow`
 
-Manage a declared workflow trigger activation (create_trigger_activation). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged.
+Manage a declared workflow trigger activation (create_trigger_activation). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context, or machine_pool (a pool name) / machine_pool_id to run on one of the owner's machine pools (list_machines lists them) so machines can be swapped without editing the activation; never guess IDs. Re-pointing to the owner's own pool does not widen power; moving from a pool to one machine is a new machine. Every change is audit logged.
 
 ---
 
@@ -1544,7 +1544,7 @@ every current error and warning.
 
 **Tags:** `workflow`
 
-Manage a declared workflow trigger activation (enable_trigger). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged.
+Manage a declared workflow trigger activation (enable_trigger). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context, or machine_pool (a pool name) / machine_pool_id to run on one of the owner's machine pools (list_machines lists them) so machines can be swapped without editing the activation; never guess IDs. Re-pointing to the owner's own pool does not widen power; moving from a pool to one machine is a new machine. Every change is audit logged.
 
 ---
 
@@ -1773,7 +1773,7 @@ Any handle in the Workflow column can be passed straight to get_workflow as id.
 
 **Tags:** `workflow`
 
-Manage a declared workflow trigger activation (pause_trigger). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged.
+Manage a declared workflow trigger activation (pause_trigger). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context, or machine_pool (a pool name) / machine_pool_id to run on one of the owner's machine pools (list_machines lists them) so machines can be swapped without editing the activation; never guess IDs. Re-pointing to the owner's own pool does not widen power; moving from a pool to one machine is a new machine. Every change is audit logged.
 
 ---
 
@@ -1825,7 +1825,7 @@ Core workflow nodes (call_llm, run, loop, ...) are not integrations; use get_sch
 
 **Tags:** `workflow`
 
-Manage a declared workflow trigger activation (update_trigger_activation). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged.
+Manage a declared workflow trigger activation (update_trigger_activation). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context, or machine_pool (a pool name) / machine_pool_id to run on one of the owner's machine pools (list_machines lists them) so machines can be swapped without editing the activation; never guess IDs. Re-pointing to the owner's own pool does not widen power; moving from a pool to one machine is a new machine. Every change is audit logged.
 
 ---
 
@@ -2213,7 +2213,8 @@ _Miscellaneous tools and utilities._
 | [`list_pending_questions`](#list_pending_questions) | readonly | List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered. |
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
-| [`manage_machine`](#manage_machine) | - | Start, stop or resize one of the user's own machines (from list_machines), exactly as Settings ->... |
+| [`manage_machine`](#manage_machine) | - | Start, stop, resize or label one of the user's own machines (from list_machines), exactly as Sett... |
+| [`manage_machine_pool`](#manage_machine_pool) | - | Define or delete one of the user's machine pools: a named set of their machines (those whose labe... |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
 | [`propose_connection`](#propose_connection) | - | Ask the person to connect an integration you need: GitHub, Slack, Gmail, Twilio, or an HTTP API (... |
 | [`report_bug`](#report_bug) | readonly, coding:plan, coding:default | Report a defect in Reliant itself, or in forge, to the Reliant engineering team. One call files i... |
@@ -2698,7 +2699,7 @@ Send an HTTP request to a public http(s) URL and return the status, headers and 
 
 **Tags:** `readonly`
 
-List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected), state and size. The machine this run executes on is marked. Use the id with manage_machine to start, stop or resize one.
+List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected), state, size, labels and the machine pools it is in; then each machine pool: its id, selector, limits and members. The machine this run executes on is marked. Use a machine's id with manage_machine to start, stop, resize or label it, a pool's name with manage_machine_pool to define or delete it, and a pool's name or id with create/update_trigger_activation to run an activation on the pool.
 
 ---
 
@@ -2748,13 +2749,25 @@ Loaded tools become available immediately on the next turn.
 
 ### manage_machine
 
-Start, stop or resize one of the user's own machines (from list_machines), exactly as Settings -> Machines does.
+Start, stop, resize or label one of the user's own machines (from list_machines), exactly as Settings -> Machines does.
 
 - start: wake a suspended machine. Compute is billed while it runs, so an interactive call raises an approval card and runs only once the user approves it.
 - stop: suspend a running machine. No card. Never the machine this run executes on.
 - resize: change a SUSPENDED machine's size (s1, s2, m, l, xl, 2xl, 3xl); it takes effect when it next starts. Needs an approval card. To resize a running machine: stop, resize, then start.
+- label: set labels (merged into the current ones) and/or remove label keys. A machine pool's members are the machines whose labels match its selector, so labelling a machine moves it into or out of pools, and so changes where pool-bound activations run: it needs an approval card showing the exact resulting labels. Use manage_machine_pool to define the pools themselves.
 
 Unattended runs may only start the machine their trigger activation targets.
+
+---
+
+### manage_machine_pool
+
+Define or delete one of the user's machine pools: a named set of their machines (those whose labels match the pool's selector) that a trigger activation can run on instead of one machine (create/update_trigger_activation machine_pool). Each run goes to the least-loaded member, so machines join or leave by their labels with no edit to the activations. list_machines shows the pools, their members and every machine's labels; manage_machine label changes a machine's labels.
+
+- put: create the pool, or change its definition. Fields you omit keep the pool's current values; a new pool takes the defaults (selector `{"pool": `<name>`}`, member_idle_timeout 10m, no limits).
+- delete: remove the pool's definition. Its machines and their labels are untouched. Refused while an activation runs on the pool.
+
+Both change where runs execute, so an interactive call raises an approval card showing the exact resulting definition and members, and runs only once the user approves it. Unattended runs cannot use this tool.
 
 ---
 

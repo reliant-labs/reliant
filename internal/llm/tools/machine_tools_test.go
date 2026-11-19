@@ -20,6 +20,9 @@ type fakeMachines struct {
 	calls      []machineCall
 	activation string
 	listErr    error
+	// labels are each machine's labels, by id; pools the user's pools.
+	labels map[string]map[string]string
+	pools  []MachinePoolSummary
 }
 
 func (f *fakeMachines) ListMachines(context.Context, string) ([]MachineSummary, error) {
@@ -27,9 +30,28 @@ func (f *fakeMachines) ListMachines(context.Context, string) ([]MachineSummary, 
 		return nil, f.listErr
 	}
 	return []MachineSummary{
-		{ID: "cicd-id", Name: "cicd", Type: "managed", State: "suspended", Size: "xl"},
-		{ID: "default-id", Name: "default", Type: "managed", State: "ready", Size: "xl"},
+		{ID: "cicd-id", Name: "cicd", Type: "managed", State: "suspended", Size: "xl", Labels: f.labels["cicd-id"]},
+		{ID: "default-id", Name: "default", Type: "managed", State: "ready", Size: "xl", Labels: f.labels["default-id"]},
 	}, nil
+}
+func (f *fakeMachines) ListMachinePools(context.Context, string) ([]MachinePoolSummary, error) {
+	return f.pools, nil
+}
+func (f *fakeMachines) SetMachineLabels(_ context.Context, user, id string, labels map[string]string) error {
+	f.calls = append(f.calls, machineCall{op: "label " + formatLabels(labels), user: user, id: id})
+	if f.labels == nil {
+		f.labels = map[string]map[string]string{}
+	}
+	f.labels[id] = labels
+	return nil
+}
+func (f *fakeMachines) PutMachinePool(_ context.Context, user string, spec MachinePoolSpec) (MachinePoolSummary, error) {
+	f.calls = append(f.calls, machineCall{op: "put " + spec.Name + ": " + describeSpec(spec), user: user})
+	return MachinePoolSummary{ID: "pool-" + spec.Name, Spec: spec}, nil
+}
+func (f *fakeMachines) DeleteMachinePool(_ context.Context, user, name string) error {
+	f.calls = append(f.calls, machineCall{op: "delete " + name, user: user})
+	return nil
 }
 func (f *fakeMachines) StartMachine(_ context.Context, user, id string, unattended bool) error {
 	f.calls = append(f.calls, machineCall{op: "start", user: user, id: id, unattended: unattended})

@@ -89,18 +89,42 @@ type TriggerSummary struct {
 	DaemonName      string
 	MachineState    string
 	NoMachine       bool
-	ConnectionID    string
-	WebhookURL      string
-	NextFireAt      string
-	Health          string
-	HealthDetail    string
-	Source          string // a one-line description of what fires it
-	Filter          string
+	// MachinePoolID is set when the activation's runs go to one of the
+	// owner's machine pools instead of one machine; MachinePoolName names it
+	// and MachinePoolMembers counts its members (nil when not read).
+	MachinePoolID      string
+	MachinePoolName    string
+	MachinePoolMembers *int
+	ConnectionID       string
+	WebhookURL         string
+	NextFireAt         string
+	Health             string
+	HealthDetail       string
+	Source             string // a one-line description of what fires it
+	Filter             string
 	// Definition is where its runs read the workflow from ("project workflow
 	// at control-plane/.reliant/workflows/release.yaml on machine cicd"), and
 	// DefinitionWarnings what about that the owner should act on.
 	Definition         string
 	DefinitionWarnings []string
+}
+
+// Placement says where the activation's runs execute, in one phrase:
+// "machine=<name> (id <id>)", "machine pool=<name> (id <id>), N members" or
+// "machine=none (no-machine activation)".
+func (s TriggerSummary) Placement() string {
+	switch {
+	case s.MachinePoolID != "":
+		out := fmt.Sprintf("machine pool=%s (id %s)", s.MachinePoolName, s.MachinePoolID)
+		if s.MachinePoolMembers != nil {
+			out += fmt.Sprintf(", %d member(s)", *s.MachinePoolMembers)
+		}
+		return out
+	case s.NoMachine:
+		return "machine=none (no-machine activation)"
+	default:
+		return fmt.Sprintf("machine=%s (id %s)", s.DaemonName, s.DaemonID)
+	}
 }
 
 // =============================================================================
@@ -265,7 +289,9 @@ func (l *listTriggersTool) Execute(rctx *rctx.ToolContext, params ListTriggersPa
 		} else {
 			fmt.Fprintf(&b, "  launches %s (source written on the trigger)\n", t.Workflow)
 		}
-		if t.NoMachine {
+		if t.MachinePoolID != "" {
+			fmt.Fprintf(&b, "  machine pool: %s (id %s); each run goes to one of its members\n", t.MachinePoolName, t.MachinePoolID)
+		} else if t.NoMachine {
 			b.WriteString("  machine: none (no-machine activation)\n")
 		} else {
 			state := t.MachineState

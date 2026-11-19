@@ -42,8 +42,11 @@ type activationCard struct {
 	Inputs map[string]any
 	// Connection is the activation's own connection, nil when it is the
 	// default resolved at run time.
-	Connection   *core.Connection
-	MachineName  string
+	Connection  *core.Connection
+	MachineName string
+	// Pool is the machine pool its runs go to, nil when it names one
+	// machine or none; MachineName is then the pool's disclosure.
+	Pool         *agentPool
 	Capabilities []string
 	// Summary is the dependency closure's disclosure (activation_snapshot.go).
 	Summary []string
@@ -415,6 +418,9 @@ func (c activationCard) details() []string {
 	out := []string{"Operation: " + c.Operation}
 	if !c.Row.NoMachine && c.Row.DaemonID != "" {
 		out = append(out, "Machine id: "+discloseScope(c.Row.DaemonID))
+	}
+	if c.Pool != nil {
+		out = append(out, c.Pool.detail())
 	}
 	out = append(out, "Integration identity: "+string(c.Row.ActingIdentity.OrOwner()))
 	if c.Connection != nil {
