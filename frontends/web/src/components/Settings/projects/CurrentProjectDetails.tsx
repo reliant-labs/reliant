@@ -1,4 +1,5 @@
 import { useEffect, useMemo, type ReactNode } from "react";
+import { navigateToChatUrl } from "@/lib/chatRoute";
 import { ExternalLink, Folder, RefreshCw, Terminal } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
@@ -90,6 +91,7 @@ export function CurrentProjectDetails({
       await switchWorktreeContext(project.id, target);
     }
     navigateToChat(chat.id);
+    navigateToChatUrl(chat.id, { orgId: chat.orgId });
     selectChat(chat);
     onChatOpened?.();
   };

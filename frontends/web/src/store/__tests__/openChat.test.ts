@@ -63,6 +63,7 @@ vi.mock("../../hooks/worktree-queries", () => ({
 }));
 vi.mock("../../hooks/chat-queries", () => ({
   getChatFromCache: () => undefined,
+  seedChatDetail: () => undefined,
 }));
 
 import { useWorkspaceStateStore } from "../workspaceStateStore";

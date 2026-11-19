@@ -60,7 +60,9 @@ async function promptApiKeyIfNeededAfterTour(): Promise<void> {
 /** Whether `pathname` is on a step's page. */
 export function isOnRoute(route: JourneyRoute | undefined, pathname: string): boolean {
   // Both org-less: a step's page is the same page in either form (`/o/<org>/…`).
-  return !route || orgFreePath(pathname).startsWith(orgFreePath(route.path));
+  if (!route) return true;
+  const path = orgFreePath(pathname);
+  return [route.path, ...(route.alsoAt ?? [])].some((prefix) => path.startsWith(orgFreePath(prefix)));
 }
 
 /** Where a route sends the user, given the journey's context; null when it can't be built yet. */

@@ -33,6 +33,7 @@ import {
   mobileChatsPath,
   mobileInboxPath,
   mobileMachinesPath,
+  mobileNewChatPath,
   mobileRunsPath,
   mobileSettingsPath,
   mobileWorkflowPath,
@@ -145,6 +146,11 @@ export function mobilePathFor(pathname: string, search = ""): string {
   // The mobile tree is not under the org yet (U15): an org page maps as its org-less twin.
   const path = orgFreePath(pathname).replace(/\/+$/, "") || "/";
   if (path === "/inbox" || path.startsWith("/inbox/")) return mobileInboxPath();
+
+  // A chat (a thread of it opens as the chat: the phone picks threads in its own sheet), and a draft.
+  const chat = /^\/c\/([^/]+)/.exec(path);
+  if (chat) return mobileChatPath(encodedSegment(chat[1]));
+  if (path === "/new") return mobileNewChatPath();
 
   const run = /^\/workflows\/runs\/([^/]+)/.exec(path);
   if (run) return mobileChatPath(encodedSegment(run[1]));
