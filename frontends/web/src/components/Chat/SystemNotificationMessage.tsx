@@ -65,6 +65,7 @@ export function SystemNotificationMessage({ message }: SystemNotificationMessage
     <div
       data-notice-kind={noticeKind}
       data-testid="system-notice"
+      data-tone={displayStyle === DisplayStyle.WARNING ? 'warning' : displayStyle === DisplayStyle.SUCCESS ? 'success' : 'info'}
       className="group/notice flex min-h-7 min-w-0 items-start gap-2 py-1 text-ui text-muted-foreground"
     >
       <span className={cn(QUIET_ROW_ICON_SLOT_CLASS, 'mt-0.5')} aria-hidden="true">{getIcon()}</span>

@@ -187,6 +187,7 @@ function ToolExecutionGroupComponent({
   // did, how many more, and the group's state in its icon.
   return (
     <QuietRow
+      as="button"
       icon={
         summary.running > 0 ? (
           <Loader2 className="size-3.5 animate-spin text-primary-ink" />

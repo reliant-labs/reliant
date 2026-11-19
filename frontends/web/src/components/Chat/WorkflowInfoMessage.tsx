@@ -17,6 +17,7 @@ export function WorkflowInfoMessage({ info }: WorkflowInfoMessageProps) {
 
   return (
     <QuietRow
+      as="button"
       icon={<Info className="size-4" />}
       expanded={isExpanded}
       onToggle={detailsText ? () => setIsExpanded((open) => !open) : undefined}

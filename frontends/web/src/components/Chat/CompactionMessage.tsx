@@ -94,6 +94,7 @@ export const CompactionMessage = memo(function CompactionMessage({
   
   return (
     <QuietRow
+      as="button"
       icon={<History className="size-4" />}
       expanded={isExpanded}
       onToggle={() => setIsExpanded(!isExpanded)}

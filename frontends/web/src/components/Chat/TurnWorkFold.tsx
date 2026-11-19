@@ -15,7 +15,7 @@ import {
   summarizeTurnWork,
   type TurnWorkExecution,
 } from "./turnWorkSummary";
-import { BranchFromMessageButton } from "./MessageChrome";
+import { BranchFromMessageButton, MessageTimestamp } from "./MessageChrome";
 import { QuietRow } from "./QuietRow";
 import type { MessageSlice, TurnWork } from "./thread-views/simplifiedTurns";
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
@@ -31,6 +31,8 @@ interface TurnWorkFoldProps {
   /** The turn is still being worked on: the header shows live text and ticks. */
   isStreaming?: boolean;
   onSelectThread?: (threadId: string | null) => void;
+  /** The most steps shown as rows of their own; more read as one summary row. */
+  inlineStepsMax?: number;
 }
 
 const NO_APPROVALS: Approval[] = [];
@@ -67,6 +69,7 @@ function TurnWorkFoldComponent({
   approvals = NO_APPROVALS,
   isStreaming = false,
   onSelectThread,
+  inlineStepsMax = INLINE_STEPS_MAX,
 }: TurnWorkFoldProps) {
   const surface = useSurface();
   const canBranch = useCapability("chatBranching");
@@ -188,7 +191,8 @@ function TurnWorkFoldComponent({
   // one is a single summary row ("Read 6 files · ran 4 commands") that opens
   // onto the same rows.
   const steps = executions.length + (work.events?.length ?? 0);
-  const inline = steps <= INLINE_STEPS_MAX;
+  const inline = steps <= inlineStepsMax;
+  const endAt = !live && endMs !== null ? new Date(endMs).toISOString() : undefined;
 
   // Collapsed by default, even while live: the summary carries the live state.
   const [expanded, setExpanded] = useState(false);
@@ -269,14 +273,16 @@ function TurnWorkFoldComponent({
                 {elapsed}
               </span>
             )}
+            {showChrome && endAt && <MessageTimestamp at={endAt} className="shrink-0" />}
             {branchButton}
           </>
         }
+        detailTestId="turn-work-body"
         detail={
-          <div className="flex flex-col gap-0.5" data-testid="turn-work-body">
+          <div className="flex flex-col gap-0.5">
             {summary.failed > 0 && (
               <p className="pb-1 text-ui text-muted-foreground">
-                {summary.failed} {summary.failed === 1 ? "step failed" : "steps failed"}. Open the steps below to see their errors.
+                {summary.failed} {summary.failed === 1 ? "step failed" : "steps failed"}. Expand the steps below to inspect their errors.
               </p>
             )}
             {rows}

@@ -70,11 +70,10 @@ describe("SystemNotificationMessage — spawn completion notice", () => {
       />,
     );
 
-    // INFO is a neutral primary-tinted surface; a completed spawn is routine
-    // and must not read as a problem.
-    const surface = container.querySelector(".border-primary\\/30");
-    expect(surface).not.toBeNull();
-    expect(container.innerHTML).not.toContain("--warning");
+    // INFO is a neutral quiet row; a completed spawn is routine and must not
+    // read as a problem.
+    expect(container.querySelector('[data-tone="info"]')).not.toBeNull();
+    expect(container.innerHTML).not.toContain("warning");
   });
 
   it("does NOT render the raw agent_result envelope text", () => {

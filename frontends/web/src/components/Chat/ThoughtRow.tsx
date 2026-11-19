@@ -15,6 +15,7 @@ export const ThoughtRow = memo(function ThoughtRow({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <QuietRow
+      as="button"
       data-testid="thought-row"
       icon={<Lightbulb className="size-4" />}
       expanded={expanded}

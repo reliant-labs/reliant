@@ -1069,7 +1069,7 @@ function ToolExecutionComponent({
               <span>{actionVerb ?? "Sub-agent"}</span>
               <span aria-hidden="true">·</span>
               <span>{agentState.label}</span>
-              <span className="sr-only">{statusText}</span>
+              {statusText !== agentState.label && <span className="sr-only">{statusText}</span>}
             </div>
           </div>
           {canOpenThread && (

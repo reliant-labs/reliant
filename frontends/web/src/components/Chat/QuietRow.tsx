@@ -44,6 +44,13 @@ interface QuietRowProps {
   tone?: "default" | "destructive";
   className?: string;
   "data-testid"?: string;
+  /** A test id for the open detail (the element `aria-controls` names). */
+  detailTestId?: string;
+  /**
+   * "button": the header is a real `<button>`. Only for a row whose trailing
+   * slot holds no control of its own (a button may not contain another).
+   */
+  as?: "button" | "div";
 }
 
 export function QuietRow({
@@ -57,6 +64,8 @@ export function QuietRow({
   tone = "default",
   className,
   "data-testid": testId,
+  detailTestId,
+  as = "div",
 }: QuietRowProps) {
   const panelId = useId();
   const expandable = Boolean(onToggle);
@@ -68,24 +77,32 @@ export function QuietRow({
     }
   };
 
+  const asButton = as === "button" && expandable;
+  const Header = asButton ? "button" : "div";
+  const headerProps = asButton
+    ? { type: "button" as const }
+    : {
+        role: expandable ? "button" : undefined,
+        tabIndex: expandable ? 0 : undefined,
+        onKeyDown: expandable ? onKeyDown : undefined,
+      };
+
   return (
     <div className={cn("group/row min-w-0", className)} data-testid={testId}>
-      <div
+      <Header
+        {...headerProps}
         className={cn(
           QUIET_ROW_LINE_CLASS,
-          "-mx-1.5 px-1.5 transition-colors duration-150",
+          "-mx-1.5 w-[calc(100%+0.75rem)] px-1.5 text-left transition-colors duration-150",
           tone === "destructive" && "text-destructive-ink",
           expandable &&
             "cursor-pointer hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           expanded && "text-foreground",
         )}
-        role={expandable ? "button" : undefined}
-        tabIndex={expandable ? 0 : undefined}
         aria-expanded={expandable ? expanded : undefined}
         aria-controls={expandable && expanded ? panelId : undefined}
         aria-label={expandable ? ariaLabel : undefined}
         onClick={onToggle}
-        onKeyDown={expandable ? onKeyDown : undefined}
       >
         <span className={QUIET_ROW_ICON_SLOT_CLASS} aria-hidden="true">
           {icon}
@@ -105,15 +122,15 @@ export function QuietRow({
           // opens the row.
           <span
             className="ml-auto flex shrink-0 items-center gap-1.5 pl-2"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
+            onClick={asButton ? undefined : (event) => event.stopPropagation()}
+            onKeyDown={asButton ? undefined : (event) => event.stopPropagation()}
           >
             {trailing}
           </span>
         )}
-      </div>
+      </Header>
       {expanded && detail !== undefined && (
-        <div id={panelId} className={QUIET_ROW_DETAIL_CLASS}>
+        <div id={panelId} className={QUIET_ROW_DETAIL_CLASS} data-testid={detailTestId}>
           {detail}
         </div>
       )}
