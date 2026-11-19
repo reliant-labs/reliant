@@ -128,8 +128,8 @@ if ! command_exists go; then
     MISSING_DEPS+=("Go")
 fi
 
-if ! command_exists npm; then
-    MISSING_DEPS+=("npm")
+if ! command_exists pnpm; then
+    MISSING_DEPS+=("pnpm")
 fi
 
 if ! command_exists node; then
@@ -245,7 +245,7 @@ if [[ "$SKIP_WEB_BUILD" != "true" ]]; then
     fi
     
     echo "Building web application..."
-    run_cmd npm run build
+    run_cmd pnpm run build
     
     if [ ! -d "dist" ]; then
         print_error "Failed to build web application"
@@ -263,7 +263,7 @@ cd "$ELECTRON_DIR"
 
 if [ ! -d "node_modules" ]; then
     echo "Installing Electron dependencies..."
-    run_cmd npm ci
+    run_cmd pnpm install --frozen-lockfile
 fi
 
 # Create app icons if they don't exist
@@ -298,22 +298,22 @@ export NODE_ENV=production
 
 if [[ "$BUILD_ALL_PLATFORMS" == "true" ]]; then
     echo "Building for all platforms..."
-    run_cmd npm run dist -- --publish=never --mac --win --linux
+    run_cmd pnpm run dist -- --publish=never --mac --win --linux
 else
     echo "Building for current platform..."
     case "$PLATFORM" in
         darwin)
-            run_cmd npm run dist -- --publish=never --mac
+            run_cmd pnpm run dist -- --publish=never --mac
             ;;
         linux)
-            run_cmd npm run dist -- --publish=never --linux
+            run_cmd pnpm run dist -- --publish=never --linux
             ;;
         windows)
-            run_cmd npm run dist -- --publish=never --win
+            run_cmd pnpm run dist -- --publish=never --win
             ;;
         *)
             echo "Building for default platform..."
-            run_cmd npm run dist -- --publish=never
+            run_cmd pnpm run dist -- --publish=never
             ;;
     esac
 fi

@@ -92,7 +92,7 @@ func TestMergeGateRunsTheSelectedWebBuild(t *testing.T) {
 	src := string(b)
 	for _, want := range []string{
 		`webbuild=$(j '.web_build.full // false')`,
-		`[ "$webbuild" = true ]; then need+=(. frontends/web); fi`,
+		`[ "$webbuild" = true ]; then need+=(frontends/web); fi`,
 		`phase webbuild scripts/web-release-build.sh`,
 		`web-build $webbuild;`,
 	} {

@@ -39,7 +39,7 @@
 #
 # Phases, each a row of the summary (slot wait vs run, seconds):
 #   plan       tools/test-affected plan: the ONE rule set (dev-docs/testing-affected.md)
-#   npm-*      npm ci (pnpm-* for a pnpm project) where a selected lane needs node_modules it lacks
+#   pnpm-*     pnpm install --frozen-lockfile where a selected lane needs node_modules it lacks
 #   pgtest     tools/pgtest-check: forge pgtest's shared Postgres serves a
 #              scratch database, before generate or a Go test needs one; when
 #              it cannot, the gate stops there (MG_PGTEST_TIMEOUT, default 150s)
@@ -255,11 +255,12 @@ scratch() {
   for d in tools/protoc-gen-es; do
     [ -d "$root/$d/node_modules" ] || continue
     # A copy, not a link: an install in the scratch checkout must never
-    # reach through into the gate's own tree. The fresh checkout's lockfile
-    # is newer than the copied install's stamp, which would make
+    # reach through into the gate's own tree (pnpm's links inside it are
+    # relative, so the copy resolves within itself). The fresh checkout's
+    # lockfile is newer than the copied install's stamp, which would make
     # deps:protoc-gen-es reinstall: give it the original's mtime.
     cp -a "$root/$d/node_modules" "$SCRATCH/$d/node_modules"
-    touch -r "$root/$d/package-lock.json" "$SCRATCH/$d/package-lock.json"
+    touch -r "$root/$d/pnpm-lock.yaml" "$SCRATCH/$d/pnpm-lock.yaml"
   done
   return 0
 }
@@ -335,37 +336,34 @@ load_selection() {
 load_selection || exit 1
 notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo "FULL ($nweb reached file(s))" || echo "$nweb file(s)"); typecheck $typecheck; demo-build $webdemo; web-build $webbuild; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
 
-# ── npm installs a selected lane needs ────────────────────────────────────
-# npm_install <dir>: npm ci in <dir> unless its install is current; pnpm's
-# frozen install for a pnpm project (frontends/web).
+# ── pnpm installs a selected lane needs ───────────────────────────────────
+# npm_install <dir>: pnpm's frozen install in <dir> unless its install is
+# current. Every Node project here is a pnpm project (frontends/web, electron,
+# tools/protoc-gen-es), each its own workspace root.
 npm_install() {
   local d=$1 n scripts
-  if [ -f "$d/pnpm-lock.yaml" ]; then
-    # pnpm rewrites node_modules/.modules.yaml on every install it completes.
-    [ "$d/node_modules/.modules.yaml" -nt "$d/pnpm-lock.yaml" ] && return 0
-    n=pnpm-$(echo "$d" | tr '/.' '-r')
-    phase "$n" pnpm install --dir "$d" --frozen-lockfile --ignore-scripts --config.confirmModulesPurge=false --reporter=silent
-    return
-  fi
-  [ -f "$d/package-lock.json" ] || return 0
-  # An install is current when npm's lockfile copy is newer than the lockfile,
+  [ -f "$d/pnpm-lock.yaml" ] || return 0
+  # Current when node_modules/.modules.yaml is newer than the lockfile (the
+  # touch below dates it after a no-op install, which pnpm 12 leaves alone),
   # and, for electron, its postinstall also fetched the binary: an interrupted
   # install leaves node_modules current but no node_modules/electron/path.txt,
   # and every electron test then fails "Electron failed to install correctly".
-  if [ "$d/node_modules/.package-lock.json" -nt "$d/package-lock.json" ] \
+  if [ "$d/node_modules/.modules.yaml" -nt "$d/pnpm-lock.yaml" ] \
     && { [ "$d" != electron ] || [ -f "$d/node_modules/electron/path.txt" ]; }; then
     return 0
   fi
-  n=npm-$(echo "$d" | tr '/.' '-r')
-  # electron's own install script fetches the Electron binary its tests load.
+  n=pnpm-$(echo "$d" | tr '/.' '-r')
+  # electron's own install script fetches the Electron binary its tests load
+  # (electron/pnpm-workspace.yaml's allowBuilds names what may run).
   scripts=--ignore-scripts; [ "$d" = electron ] && scripts=
-  phase "$n" npm ci --prefix "$d" $scripts --no-audit --no-fund --loglevel=error
+  phase "$n" pnpm install --dir "$d" --frozen-lockfile $scripts --config.confirmModulesPurge=false --reporter=silent \
+    && touch "$d/node_modules/.modules.yaml"
 }
 prepare_dependencies() {
   local d p
   local -a need=() npm_pids=()
-  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ] || [ "$webdemo" = true ] || [ "$webbuild" = true ]; then need+=(. frontends/web); fi
-  if [ "$elec" = true ]; then need+=(. electron); fi
+  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ] || [ "$webdemo" = true ] || [ "$webbuild" = true ]; then need+=(frontends/web); fi
+  if [ "$elec" = true ]; then need+=(electron); fi
   if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
   for d in $(printf '%s\n' ${need[@]+"${need[@]}"} | sort -u); do
     npm_install "$d" & npm_pids+=($!)
@@ -636,7 +634,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo golangci lint proto vet migsafety migorder; do
+  for f in plan pnpm-frontends-web pnpm-electron pnpm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo golangci lint proto vet migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"
