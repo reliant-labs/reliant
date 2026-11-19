@@ -121,7 +121,7 @@ var rules = []Rule{
 	rule(RuleAgentTurnBudget, SeverityWarning, "An agent node leaves the child's max_turns at its default: the turn budget is a decision, not an accident."),
 	rule(RuleLoopUnbounded, SeverityWarning, "A loop's while never reads iter.iteration and the loop has no items, so nothing bounds it."),
 	rule(RuleAgentDecodeFreeText, SeverityError, "An expression json.decode()s an agent's free text; agents have a structured-output contract (response_schema) for that."),
-	rule(RuleSlotUnboundedWait, SeverityError, "A workflow with concurrency.max_running has a step (its own, or a child's) that can run without bound (a run node with no timeout, a loop with no bound), so one run can hold a slot forever."),
+	rule(RuleSlotUnboundedWait, SeverityError, "A workflow with concurrency.max_running or max_running_per_key has a step (its own, or a child's) that can run without bound (a run node with no timeout, a loop with no bound), so one run can hold a slot forever."),
 	rule(RuleSharedCheckoutFetch, SeverityError, "A run step fetches into the shared project checkout's own refs or tags, racing every other step that does (a warning when the directory is not provably the checkout)."),
 	rule(RuleSecretLiteral, SeverityError, "A secret is written into the definition instead of being read through a credential."),
 	rule(RuleApprovalDecider, SeverityWarning, "A step calls Reliant's ApprovalService to approve or deny, so this workflow can decide approvals (including the ones that gate it) with whatever token it holds."),
@@ -219,7 +219,7 @@ func (c *checker) addAt(sev Severity, rule, node, message, fix string) {
 }
 
 func (c *checker) run() {
-	slotBound := c.wf.GetConcurrency().GetMaxRunning() > 0
+	slotBound := c.wf.GetConcurrency().GetMaxRunning() > 0 || c.wf.GetConcurrency().GetMaxRunningPerKey() > 0
 	for _, g := range graphsOf(c.wf) {
 		c.checkGraph(g, slotBound)
 	}

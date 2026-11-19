@@ -240,7 +240,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	if err != nil {
 		return nil, err
 	}
-	maxRunning, capped, err := capacityLimit(ctx, f.pools, trigger, policy)
+	limits, capped, err := capacityLimits(ctx, f.pools, trigger, policy)
 	if err != nil {
 		return nil, err
 	}
@@ -260,13 +260,13 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		if existing != nil {
 			row = existing
 		}
-		row.CapacityKey = capacityKey(ctx, policy, row, func() triggerspec.Scope {
+		capacityAdmission(ctx, policy, row, func() triggerspec.Scope {
 			return ActivationScope(ctx, f.repo, trigger, decl, FilterInput{
 				Kind: string(core.TriggerEventKindSchedule), TriggerID: trigger.ID,
 				OccurredAt: req.ScheduledAt, Payload: ev.Payload, Sender: ev.Sender,
 			}.Root())
 		})
-		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, row, maxRunning, &spec); err != nil {
+		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, row, limits, &spec); err != nil {
 			if capacitySettled(err) {
 				return f.recordSkip(ctx, rec, err.Error())
 			}
@@ -291,6 +291,9 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 			reason = declined.Reason
 		}
 		if reason == capacityWaiting {
+			if capped {
+				f.wake.wakeNext(ctx, f.repo, trigger, limits, ev.Kind, ev.DedupeKey)
+			}
 			return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: reason}, nil
 		}
 		if isPoolWaiting(reason) {
@@ -303,7 +306,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		// transaction as the chat. Writing one here too would either conflict
 		// on (kind, dedupe_key) or, worse, succeed and double-count.
 		if capped {
-			f.wake.wakeNext(ctx, f.repo, trigger, res.EventID)
+			f.wake.wakeNext(ctx, f.repo, trigger, limits, ev.Kind, ev.DedupeKey)
 		}
 		return &FireOutput{
 			Outcome: string(core.TriggerEventLaunched),
