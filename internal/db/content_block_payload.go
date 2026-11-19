@@ -74,6 +74,9 @@ func ContentBlockPayloadsWithToolCalls(
 
 		if block.Content != nil {
 			blockData["content"] = *block.Content
+			if ProviderOnlyContent(block.BlockType) {
+				blockData["content"] = ""
+			}
 		}
 		if block.ToolName != nil {
 			blockData["tool_name"] = *block.ToolName
@@ -107,6 +110,17 @@ func ContentBlockPayloadsWithToolCalls(
 		payloads = append(payloads, blockData)
 	}
 	return payloads
+}
+
+// ProviderOnlyContent reports whether a block type's content is for the model
+// provider alone and must never reach a client. A REDACTED_THINKING block's
+// content is Anthropic's sealed ciphertext: the next turn replays it to the
+// provider unchanged, reading it from this table (messageconv), and no client
+// has a use for it. Every client-facing serialization sends such a block with
+// its type and position and an empty content, so a client still sees that the
+// block exists. The stored row is never changed.
+func ProviderOnlyContent(t reliantv1.ContentBlockType) bool {
+	return t == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING
 }
 
 // AttachmentIDsFromBlocks returns the attachment ids referenced by image and
