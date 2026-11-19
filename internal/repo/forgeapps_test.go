@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"math/rand"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -275,7 +274,7 @@ func (w *wideFS) Open(name string) (fs.File, error) {
 type wideDir struct{ fsys *wideFS }
 
 func (d *wideDir) Stat() (fs.FileInfo, error) {
-	return wideInfo{name: path.Base(d.fsys.wide), dir: true}, nil
+	return wideInfo{name: filepath.Base(d.fsys.wide), dir: true}, nil
 }
 func (d *wideDir) Read([]byte) (int, error) { return 0, io.EOF }
 func (d *wideDir) Close() error             { return nil }
@@ -283,8 +282,8 @@ func (d *wideDir) Close() error             { return nil }
 func (d *wideDir) ReadDir(n int) ([]fs.DirEntry, error) {
 	w := d.fsys
 	// A listing of the whole directory at once is the stall this bounds.
-	if n <= 0 || n > forgeAppReadBatch {
-		w.t.Errorf("ReadDir(%d): a wide directory must be read in batches of at most %d", n, forgeAppReadBatch)
+	if n <= 0 || n > walkReadBatch {
+		w.t.Errorf("ReadDir(%d): a wide directory must be read in batches of at most %d", n, walkReadBatch)
 	}
 	if w.served >= w.size {
 		return nil, io.EOF
@@ -331,7 +330,7 @@ func wideTree(t *testing.T, size int) *wideFS {
 
 // One directory of a billion entries: the entry budget stops the scan within
 // one entry of the budget, never after listing (or sorting) the directory
-// whole, and the scan reports what it found as partial.
+// whole, and the scan reports what it found before it as partial.
 func TestFindForgeApps_WideDirectoryStopsWithinBudget(t *testing.T) {
 	const budget = 1_000
 	fsys := wideTree(t, 1_000_000_000)
@@ -442,9 +441,9 @@ func TestFindForgeApps_PartialScanIsDeterministic(t *testing.T) {
 	for i := range 100 {
 		tree[fmt.Sprintf("apps/a%03d/forge.yaml", i)] = &fstest.MapFile{Data: []byte(forgeManifestYAML(fmt.Sprintf("a%03d", i)))}
 	}
-	// apps/ and its listing are 101 entries; each app directory is one
-	// more, so the budget stops the walk part-way through them.
-	opts := ForgeAppOptions{MaxEntries: 130}
+	// The root and apps/ are two entries, each app directory and its
+	// forge.yaml two more: the budget stops the walk part-way through them.
+	opts := ForgeAppOptions{MaxEntries: 120}
 
 	opts.FS = tree
 	want, err := FindForgeApps(context.Background(), "repo", opts)
