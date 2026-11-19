@@ -171,6 +171,9 @@ func ListSharedChats(ctx context.Context, db orm.Context, f core.SharedChatFilte
 	if f.ProjectID != nil {
 		opts = append(opts, orm.WhereEq(ChatsWithActivityFieldProjectID, *f.ProjectID))
 	}
+	if f.AppName != nil {
+		opts = append(opts, orm.WhereEq(ChatsWithActivityFieldAppName, *f.AppName))
+	}
 	opts = append(opts,
 		orm.WithOrderBy(ChatsWithActivityFieldLastActive, orm.Desc),
 		orm.WithOrderBy(ChatsWithActivityFieldID, orm.Asc),

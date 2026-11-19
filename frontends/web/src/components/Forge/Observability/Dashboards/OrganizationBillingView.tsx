@@ -58,6 +58,7 @@ import {
   UsagePanel,
   UsageViewHeader,
 } from "./usageParts";
+import { settingsPath } from "@/lib/paths";
 
 export interface OrganizationBillingViewProps {
   orgId: string;
@@ -65,7 +66,7 @@ export interface OrganizationBillingViewProps {
   nowMs?: number;
 }
 
-const BILLING_SETTINGS = "/settings/billing";
+const BILLING_SETTINGS = settingsPath("billing");
 const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 1 });
 
 export function OrganizationBillingView({ orgId, nowMs: fixedNow }: OrganizationBillingViewProps) {

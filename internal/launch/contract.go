@@ -89,6 +89,11 @@ type Spec struct {
 	// (see core.Chat.OrgID), as every chat before orgs.
 	DefaultOrgID string
 
+	// AppName tags a new chat with the app it is about (core.Chat.AppName):
+	// a forge.yaml name the caller already validated. nil tags nothing.
+	// Ignored for an existing chat, whose tag was fixed at creation.
+	AppName *string
+
 	// ChatID names an existing PENDING chat to start (a branched chat's first
 	// send). Empty creates a new chat.
 	ChatID string

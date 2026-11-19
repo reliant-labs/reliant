@@ -38,6 +38,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -140,16 +141,21 @@ func StartQueuedProjectDaemonClones(ctx context.Context, db orm.Context, daemonI
 // FailProjectDaemonInstall settles a clone that is still installing as
 // failed, with installErr as the reason: the connect reconcile's answer to a
 // clone whose outcome was lost. A row that settled meanwhile is left alone,
-// and install_request_id is kept so a late outcome still finds the row.
-func FailProjectDaemonInstall(ctx context.Context, db orm.Context, projectID, daemonID, installErr string) error {
-	_, err := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil)).
+// and install_request_id is kept so a late outcome still finds the row. It
+// reports whether it marked the row failed.
+func FailProjectDaemonInstall(ctx context.Context, db orm.Context, projectID, daemonID, installErr string) (bool, error) {
+	res, err := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil)).
 		Set("install_state = ?", core.ProjectInstallFailed).
 		Set("install_error = ?", installErr).
 		Where("project_id = ?", projectID).
 		Where("daemon_id = ?", daemonID).
 		Where("install_state = ?", core.ProjectInstallInstalling).
 		Exec(ctx)
-	return err
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 // ResolveQueuedProjectDaemon records the outcome the daemon reported for a
@@ -187,6 +193,25 @@ func MarkProjectDaemonInstalled(ctx context.Context, db orm.Context, projectID, 
 		Where("install_state <> ?", core.ProjectInstallInstalled).
 		Exec(ctx)
 	return err
+}
+
+// ProjectDaemonExists reports whether the machine has a checkout record of
+// the project, in any install state.
+func ProjectDaemonExists(ctx context.Context, db orm.Context, projectID, daemonID string) (bool, error) {
+	return db.Bun().NewSelect().Model((*ProjectDaemon)(nil)).
+		Where("project_id = ?", projectID).
+		Where("daemon_id = ?", daemonID).
+		Exists(ctx)
+}
+
+// ProjectDaemonInstalled reports whether the project's checkout on the
+// daemon is recorded as installed.
+func ProjectDaemonInstalled(ctx context.Context, db orm.Context, projectID, daemonID string) (bool, error) {
+	return db.Bun().NewSelect().Model((*ProjectDaemon)(nil)).
+		Where("project_id = ?", projectID).
+		Where("daemon_id = ?", daemonID).
+		Where("install_state = ?", core.ProjectInstallInstalled).
+		Exists(ctx)
 }
 
 // ListProjectDaemonsForProject returns every daemon the project is (or is
@@ -239,4 +264,52 @@ func projectDaemonsToCore(rows []*ProjectDaemon) []*core.ProjectDaemon {
 		}
 	}
 	return out
+}
+
+// RecordProjectDaemonOrgCleanup records, in project_daemon_org_cleanups,
+// the project's checkout on the machine that the machine-org cleanup is about
+// to detach — the project_daemons row whole, and the machine's synced config
+// of the project (its project_machine_catalogs row, whole; NULL when it has
+// none) — so dev-docs/machine-org-rollout.md can put both back exactly. It
+// reports whether there was a checkout to record. ctx must carry the
+// cleanup's transaction (db.Repo.DetachProjectDaemonOfOtherOrg), which then
+// removes what was recorded.
+//
+// The catalog row is recorded with to_jsonb of the whole row: it has no
+// entity, and the restore is jsonb_populate_record of the table's own type,
+// so every column — those this release does not name included — comes back.
+func RecordProjectDaemonOrgCleanup(ctx context.Context, db orm.Context, projectID, daemonID, userID, machineOrg string, projectOrg *string) (bool, error) {
+	var ids []int64
+	err := db.Bun().NewRaw(`
+INSERT INTO project_daemon_org_cleanups (project_id, daemon_id, user_id, path, machine_org_id, project_org_id, detached_row, detached_catalog)
+SELECT pd.project_id, pd.daemon_id, ?2, pd.path, ?3, ?4,
+       (SELECT to_jsonb(r) FROM (SELECT `+columnsOf[ProjectDaemon]("pd")+`) r),
+       (SELECT to_jsonb(c) FROM project_machine_catalogs c WHERE c.project_id = pd.project_id AND c.daemon_id = pd.daemon_id)
+FROM project_daemons pd
+WHERE pd.project_id = ?0 AND pd.daemon_id = ?1
+RETURNING id`, projectID, daemonID, userID, machineOrg, projectOrg).Scan(ctx, &ids)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, err
+	}
+	return len(ids) > 0, nil
+}
+
+// LockProjectOrgForShare reads the project's org, and whether it is
+// scheduled for deletion (projects.delete_after), with its row locked FOR
+// SHARE: a concurrent org move (FOR NO KEY UPDATE) or deletion schedule (FOR
+// UPDATE) is either committed and seen, or waits for the caller's
+// transaction. found is false for a project that is gone. ctx must carry a
+// transaction.
+func LockProjectOrgForShare(ctx context.Context, db orm.Context, projectID string) (org *string, scheduled, found bool, err error) {
+	var rows []struct {
+		OrgID     *string `bun:"org_id"`
+		Scheduled bool    `bun:"scheduled"`
+	}
+	if err := db.Bun().NewRaw(`SELECT org_id, delete_after IS NOT NULL AS scheduled FROM projects WHERE id = ? FOR SHARE`, projectID).Scan(ctx, &rows); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, false, false, fmt.Errorf("lock the project's org: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, false, false, nil
+	}
+	return rows[0].OrgID, rows[0].Scheduled, true, nil
 }

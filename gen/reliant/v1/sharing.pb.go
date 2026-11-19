@@ -249,8 +249,12 @@ type ListSharedChatsRequest struct {
 	// Narrow the list to one project's shared chats.
 	ProjectId *string `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	// At most this many (default and cap 100).
-	Limit         int32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
-	Offset        int32 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	Limit  int32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset int32 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Narrow the list to chats tagged with this app (Chat.app_name): the
+	// shared half of an app's chat list. A malformed name lists nothing; an
+	// empty one is the same as unset.
+	AppName       *string `protobuf:"bytes,5,opt,name=app_name,json=appName,proto3,oneof" json:"app_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -311,6 +315,13 @@ func (x *ListSharedChatsRequest) GetOffset() int32 {
 		return x.Offset
 	}
 	return 0
+}
+
+func (x *ListSharedChatsRequest) GetAppName() string {
+	if x != nil && x.AppName != nil {
+		return *x.AppName
+	}
+	return ""
 }
 
 type ListSharedChatsResponse struct {
@@ -489,15 +500,17 @@ const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"visibility\"g\n" +
 	"\x1cSetProjectVisibilityResponse\x12-\n" +
 	"\aproject\x18\x01 \x01(\v2\x13.reliant.v1.ProjectR\aproject\x12\x18\n" +
-	"\achanged\x18\x02 \x01(\bR\achanged\"\xb4\x01\n" +
+	"\achanged\x18\x02 \x01(\bR\achanged\"\xe1\x01\n" +
 	"\x16ListSharedChatsRequest\x12\x1a\n" +
 	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12\"\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tH\x01R\tprojectId\x88\x01\x01\x12\x1f\n" +
 	"\x05limit\x18\x03 \x01(\x05B\t\xbaH\x06\x1a\x04\x18d(\x00R\x05limit\x12\x1f\n" +
-	"\x06offset\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x06offsetB\t\n" +
+	"\x06offset\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x06offset\x12\x1e\n" +
+	"\bapp_name\x18\x05 \x01(\tH\x02R\aappName\x88\x01\x01B\t\n" +
 	"\a_org_idB\r\n" +
-	"\v_project_id\"A\n" +
+	"\v_project_idB\v\n" +
+	"\t_app_name\"A\n" +
 	"\x17ListSharedChatsResponse\x12&\n" +
 	"\x05chats\x18\x01 \x03(\v2\x10.reliant.v1.ChatR\x05chats\"\x84\x01\n" +
 	"\x19ListSharedProjectsRequest\x12\x1a\n" +

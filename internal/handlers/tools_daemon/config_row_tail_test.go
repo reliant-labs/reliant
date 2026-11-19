@@ -73,12 +73,14 @@ func TestDaemonConfigSync_StalenessCheckReadsOnlyPushedAt(t *testing.T) {
 		ID: projectID, UserID: "test-user", Name: "tail", Path: projectPath, IsGitRepo: true,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
+	db.HoldProjectOnMachineForTest(t, repo, projectID, daemonID)
 	_, err := repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 		ProjectID: projectID, DaemonID: daemonID,
 		UserConfigYAML:    testStringPtr("user: existing"),
 		ProjectSkillsJSON: bigSkillsJSON(),
 		PushedAt:          time.UnixMilli(2000).UTC(),
-	}, false)
+	}, false, nil)
+
 	require.NoError(t, err)
 
 	conn := &daemonConnection{
@@ -155,7 +157,6 @@ func TestDaemonConfigSync_SecondMachineDoesNotEraseTheFirstsWorkflows(t *testing
 		ID: projectID, UserID: "test-user", Name: "labs", Path: projectPath, IsGitRepo: true,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-
 	require.NoError(t, svc.persistProjectConfigSnapshot(ctx, conns["default"], &reliantv1.ProjectConfigSnapshot{
 		ProjectPath: projectPath, DaemonTimestampUnixMs: 1000,
 		Workflows: []*reliantv1.IndexedWorkflow{{Slug: "release", Name: "release",

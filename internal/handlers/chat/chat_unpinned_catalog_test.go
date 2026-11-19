@@ -49,9 +49,11 @@ func TestInputsAfterClosedRunPinsAnUnpinnedChatBeforeBuilding(t *testing.T) {
 		cicd:   {now.Add(-time.Hour), "  env: {type: string, default: prod}\n"},
 		laptop: {now, "  env: {type: string, default: staging}\n  region: {type: string, default: eu}\n"},
 	} {
+		db.HoldProjectOnMachineForTest(t, repo, projectID, daemonID)
 		_, err := repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 			ProjectID: projectID, DaemonID: daemonID, ProjectWorkflowsJSON: deploy(push.inputs), PushedAt: push.at,
-		}, true)
+		}, true, nil)
+
 		require.NoError(t, err)
 	}
 

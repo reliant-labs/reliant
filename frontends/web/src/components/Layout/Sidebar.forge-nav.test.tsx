@@ -253,31 +253,31 @@ describe("Sidebar forge nav entry", () => {
   /** A nav entry's name: its label, without the key cap New chat shows. */
   const navLabel = (b: Element) => b.getAttribute("aria-label") ?? b.textContent?.trim();
 
-  // Apps (the forge entry) sits directly under New chat: after writing code,
-  // the next place to go is what that code runs as. Pinned because the
-  // position is the product decision, not an accident of where the JSX was
-  // appended.
-  it("sits directly under New chat", () => {
+  // Apps (the forge entry) sits directly under the Inbox: New chat first, then
+  // what needs you, then what your code runs as (the side-nav restyle, §11.3,
+  // moved the Inbox above Apps). Pinned because the position is the product
+  // decision, not an accident of where the JSX was appended.
+  it("sits directly under the Inbox", () => {
     setProject(true);
     renderSidebar();
     const labels = screen
       .getByRole("navigation", { name: /chat sidebar navigation/i })
       .querySelectorAll("button");
     const text = Array.from(labels).map(navLabel);
-    expect(text.slice(0, 2)).toEqual(["New chat", "Apps"]);
+    expect(text.slice(0, 3)).toEqual(["New chat", "Inbox", "Apps"]);
   });
 
   // The whole nav, in order. Workflows is ONE entry for the area — Library,
   // Runs and Automations are its tabs (WORKFLOW_UI.md §1.2) — and still sits
   // under the Inbox, above Search.
-  it("orders the nav New chat, Apps, Inbox, Workflows, Search", () => {
+  it("orders the nav New chat, Inbox, Apps, Workflows, Search", () => {
     setProject(true);
     renderSidebar();
     const labels = screen
       .getByRole("navigation", { name: /chat sidebar navigation/i })
       .querySelectorAll("button");
     const text = Array.from(labels).map(navLabel);
-    expect(text).toEqual(["New chat", "Apps", "Inbox", "Workflows", "Search"]);
+    expect(text).toEqual(["New chat", "Inbox", "Apps", "Workflows", "Search"]);
   });
 
   it("orders the nav New chat, Inbox, Workflows, Search with Apps gated off", () => {
@@ -307,7 +307,7 @@ describe("Sidebar forge nav entry", () => {
     const text = Array.from(
       screen.getByRole("navigation", { name: /chat sidebar navigation/i }).querySelectorAll("button")
     ).map(navLabel);
-    expect(text).toEqual(["New chat", "Apps", "Inbox", "Workflows", "Search"]);
+    expect(text).toEqual(["New chat", "Inbox", "Apps", "Workflows", "Search"]);
     expect(screen.queryByTestId("sidebar-observability-button")).not.toBeInTheDocument();
   });
 });

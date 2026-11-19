@@ -43,6 +43,7 @@ import { useMyOrgs } from "@/hooks/useOrgs";
 import { baseModelOf, driverOf } from "@/lib/providerPolicy";
 import { formatResumeTime } from "@/lib/usageLimitWait";
 import { useModels } from "@/store/globalDataStore";
+import { settingsPath } from "@/lib/paths";
 
 /** The words of each case: the question, and who it is about. */
 export function fundingQuestionText(q: FundingQuestion, orgName: string, modelName: string, now: number): string {
@@ -187,7 +188,7 @@ function FundingDialog({ question, onClose }: { question: FundingQuestion; onClo
         )}
         <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground">
           Change this any time in{" "}
-          <a href="/settings/ai" className="font-medium text-primary-ink hover:underline">
+          <a href={settingsPath("ai")} className="font-medium text-primary-ink hover:underline">
             Settings › AI providers
           </a>
           .

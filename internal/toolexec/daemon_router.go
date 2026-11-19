@@ -189,7 +189,8 @@ type ProcessOutputEvent struct {
 
 // Transport-failure error codes. These say the request did not complete a
 // round trip to a daemon, so no result of the tool's came back. They are
-// emitted by the transport itself, except ErrorCodeDaemonRestarted:
+// emitted by the transport itself, except ErrorCodeDaemonRestarted and
+// ErrorCodeDaemonUpdating, which the daemon sends:
 //
 //	ErrorCodeDaemonUnreached   — RemoteExecutor, when the router call failed
 //	                             (no daemon connected, NATS timeout, ...)
@@ -205,6 +206,8 @@ type ProcessOutputEvent struct {
 //	                             registered but not yet answered anything, so
 //	                             the gateway held the request and never sent
 //	                             it (ErrDaemonReconnecting)
+//	ErrorCodeDaemonUpdating    — the daemon, when it refused a request
+//	                             unrun because it is draining for a restart
 //
 // Everything the TOOL reports about its own execution — including a command
 // that exited non-zero — comes back Success=true / IsError=false with the exit
@@ -227,6 +230,11 @@ const (
 	// held because the daemon's fresh stream had not yet carried a round
 	// trip, and released unsent. Nothing ran.
 	ErrorCodeDaemonReconnecting = "DAEMON_RECONNECTING"
+	// ErrorCodeDaemonUpdating is the daemon's answer for a tool request that
+	// arrived while it drains for a restart the platform asked for
+	// (RestartRequested): it refused the request without running it.
+	// Nothing ran, so the sender may send it again once the daemon is back.
+	ErrorCodeDaemonUpdating = "DAEMON_UPDATING"
 )
 
 // IsTransportErrorCode reports whether an ErrorCode means no result came back
@@ -237,7 +245,7 @@ const (
 func IsTransportErrorCode(code string) bool {
 	switch code {
 	case ErrorCodeDaemonUnreached, ErrorCodeDaemonRoundTrip, ErrorCodeDaemonInterrupted, ErrorCodeDaemonRestarted,
-		ErrorCodeDaemonReconnecting:
+		ErrorCodeDaemonReconnecting, ErrorCodeDaemonUpdating:
 		return true
 	default:
 		return false
@@ -470,9 +478,12 @@ type DaemonConnectionListener interface {
 //
 // It carries the identity the daemon asserted at registration
 // (name/hostname/platform) for daemonevents.Publisher, which needs a usable
-// machine name for the control plane.
+// machine name for the control plane, and orgID: the org the connecting
+// credential acts in ("" when the gateway dialed the daemon, or the
+// credential named none). A self-hosted machine belongs to the org it was
+// paired in, which is its credential's, and the control plane records it there.
 type DaemonLinkReadyListener interface {
-	OnDaemonLinkReady(userID, daemonID, name, hostname, platform string)
+	OnDaemonLinkReady(userID, daemonID, orgID, name, hostname, platform string)
 }
 
 // DaemonConnectionManager is the subset of ToolsDaemonService needed by NATSToolBridge.
