@@ -17,15 +17,15 @@
 import { useState } from "react";
 import { Search } from "lucide-react";
 
-import Button from "./button";
-import { RowMenu } from "../workflows/RowMenu";
-import { MultiSelectFilter } from "../workflows/FilterMenu";
-import { FormError, FormField } from "./form";
-import Input from "./input";
-import Label from "./label";
-import Modal from "./modal";
-import Textarea from "./textarea";
-import ToggleSwitch from "./toggle_switch";
+import Button from "../../forge-ui/button";
+import { RowMenu } from "../../workflows/RowMenu";
+import { MultiSelectFilter } from "../../workflows/FilterMenu";
+import { FormError, FormField } from "../../forge-ui/form";
+import Input from "../../forge-ui/input";
+import Label from "../../forge-ui/label";
+import Modal from "../../forge-ui/modal";
+import Textarea from "../../forge-ui/textarea";
+import ToggleSwitch from "../../forge-ui/toggle_switch";
 
 const noop = () => undefined;
 

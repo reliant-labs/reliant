@@ -22,11 +22,11 @@
 import { useState } from "react";
 import { Cloud, Copy, Download, FilePlus, FileText, FolderGit2, HelpCircle, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
-import ContextMenu from "./context_menu";
-import { HelpPopover } from "../workflow/HelpPopover";
-import Combobox from "./combobox";
+import ContextMenu from "../../forge-ui/context_menu";
+import { HelpPopover } from "../../workflow/HelpPopover";
+import Combobox from "../../forge-ui/combobox";
 
-import Tooltip from "./tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-3 text-sm font-medium text-foreground">{children}</h2>;
