@@ -593,7 +593,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
         <div className="space-y-6">
           {managedDaemons.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <h3 className="text-xs font-semibold text-muted-foreground">
                 Cloud machines
               </h3>
               <ManagedMachinesTable
@@ -610,7 +610,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
           )}
           {selfHostedDaemons.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <h3 className="text-xs font-semibold text-muted-foreground">
                 Self-hosted machines
               </h3>
               <SelfHostedMachinesTable

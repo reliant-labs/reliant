@@ -222,7 +222,7 @@ export function UsagePanel({ usage: u }: { usage: ObservabilityUsage }) {
 function Stat({ label, value, hint, testId }: { label: string; value: string; hint: string; testId: string }) {
   return (
     <CardInset>
-      <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
+      <dt className="text-xs font-medium text-ink-muted">{label}</dt>
       <dd className="mt-1 text-lg font-semibold tabular-nums text-ink" data-testid={testId}>
         {value}
       </dd>

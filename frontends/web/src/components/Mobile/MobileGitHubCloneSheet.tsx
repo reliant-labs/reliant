@@ -150,7 +150,7 @@ export function MobileGitHubCloneSheet({
               )}
 
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="mb-2 text-xs font-semibold text-muted-foreground">
                   Clone onto
                 </p>
                 {daemonsLoading ? (
@@ -195,7 +195,7 @@ export function MobileGitHubCloneSheet({
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
                   Branch
                 </label>
                 <input

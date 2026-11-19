@@ -252,7 +252,7 @@ export function MobileCreateWorkspaceSheet({
             <div>
               <label
                 htmlFor="mobile-workspace-name"
-                className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                className="mb-1 block text-xs font-semibold text-muted-foreground"
               >
                 Name
               </label>

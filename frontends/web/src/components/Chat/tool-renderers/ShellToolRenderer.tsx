@@ -178,7 +178,7 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
           {/* Legacy plain text format (backwards compat for old results in DB, and shell_output tool) */}
           {isLegacy && (
             <div className={showCommandInput ? "border-t border-border/50" : ""}>
-              <div className="px-2 py-1 text-3xs text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/20 flex items-center justify-between">
+              <div className="px-2 py-1 text-3xs text-muted-foreground bg-muted/40 border-b border-border/20 flex items-center justify-between">
                 <span>output</span>
                 {!result.is_error && result.content && (
                   <CopyButton content={result.content} resolveContent={loadFullResult} className="opacity-100" />
@@ -205,7 +205,7 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
           {structured && hasAnyOutput && (
             <div className={showCommandInput ? "border-t border-border/50" : ""}>
               {/* Output label with optional exit code badge */}
-              <div className="px-2 py-1 text-3xs text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/20 flex items-center gap-1.5">
+              <div className="px-2 py-1 text-3xs text-muted-foreground bg-muted/40 border-b border-border/20 flex items-center gap-1.5">
                 <span>output</span>
                 {hasNonZeroExit && (
                   <span className="text-warning-ink font-medium normal-case tracking-normal">
@@ -237,7 +237,7 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
               {/* Stderr */}
               {hasStderr && (
                 <div className={hasStdout ? "border-t border-border/50" : ""}>
-                  <div className="px-2 py-0.5 text-3xs text-[hsl(var(--warning)/0.8)] uppercase tracking-wider bg-warning/5 flex items-center justify-between">
+                  <div className="px-2 py-0.5 text-3xs text-[hsl(var(--warning)/0.8)] bg-warning/5 flex items-center justify-between">
                     <span>stderr</span>
                     <CopyButton
                       content={structured.stderr}

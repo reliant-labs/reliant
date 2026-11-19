@@ -101,9 +101,12 @@ export default {
       // one of those line boxes by ~1.8px, which reads as the app's spacing
       // having collapsed. Keep the ratio when adding a step.
       fontSize: {
-        "3xs": ["0.643rem",  { lineHeight: "1.0288rem" }], //  9.0px / 14.4px @md
-        "2xs": ["0.714rem",  { lineHeight: "1.1424rem" }], // 10.0px / 16.0px @md
-        xs:    ["0.8125rem", { lineHeight: "1.3rem" }],    // 11.4px / 18.2px @md
+        // Restyle v1 moved the three small steps up (most UI text was
+        // `text-xs` at 12px, which read as a dense technical tool): xs is
+        // now 13px, and the badge/axis steps follow it.
+        "3xs": ["0.6875rem", { lineHeight: "1.1rem" }],    // 10.3px / 16.5px @15px root
+        "2xs": ["0.75rem",   { lineHeight: "1.2rem" }],    // 11.3px / 18.0px @15px root
+        xs:    ["0.875rem",  { lineHeight: "1.375rem" }],  // 13.1px / 20.6px @15px root
         sm:    ["0.9375rem", { lineHeight: "1.5rem" }],    // 13.1px / 21.0px @md
         base:  ["1.0625rem", { lineHeight: "1.625rem" }],  // 14.9px @md
         lg:    ["1.1875rem", { lineHeight: "1.875rem" }],  // 16.6px @md

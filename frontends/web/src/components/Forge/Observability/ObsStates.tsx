@@ -481,7 +481,7 @@ export function OperatorBadge({ provenance }: { provenance: Provenance }) {
   const label = provenance.source || "operator";
   return (
     <span
-      className="shrink-0 rounded border border-border px-1 py-px font-sans text-2xs uppercase tracking-wide text-ink-muted"
+      className="shrink-0 rounded border border-border px-1 py-px font-sans text-2xs text-ink-muted"
       title="Reliant operator data: platform telemetry, not this app's"
       data-testid="obs-operator-badge"
     >
