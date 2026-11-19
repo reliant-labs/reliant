@@ -172,6 +172,8 @@ vi.mock("@/components/Forge/Org", async () => {
 
 import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
 
+import { ShellFrameContext } from "@/components/Layout/shell/shellFrame";
+
 import { ConsoleLayout } from "../ConsoleLayout";
 import { useForgeConsole } from "../consoleContext";
 import {
@@ -204,7 +206,7 @@ function probe(name: string): RouteComponent {
   };
 }
 
-function renderAt(initialEntry: string) {
+function renderAt(initialEntry: string, { inShell = false }: { inShell?: boolean } = {}) {
   const root = createRootRoute({ component: () => <Outlet /> });
   const authenticated = createRoute({ getParentRoute: () => root, id: "_authenticated", component: () => <Outlet /> });
   const forge = createForgeConsoleRoutes(() => authenticated, {
@@ -240,7 +242,9 @@ function renderAt(initialEntry: string) {
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ShellFrameContext.Provider value={{ inShell, navDocked: inShell }}>
+        <RouterProvider router={router} />
+      </ShellFrameContext.Provider>
     </QueryClientProvider>,
   );
   return router;
@@ -540,5 +544,31 @@ describe("leaving the console", () => {
     await screen.findByTestId("page");
     await user.keyboard("{Escape}");
     await landsOn(router, "/");
+  });
+});
+
+// U6: in the product the console renders inside the one shell, whose left nav
+// draws the app's sections (Layout/sidebar/AppsNavSection). The console then
+// has NO nav column of its own: a slim bar with the breadcrumb and the one
+// environment selector, over the page.
+describe("inside the one shell", () => {
+  it("draws no nav column, only the breadcrumb and the scope over the page", async () => {
+    renderAt("/forge/p/alpha/observability/errors?env=prod", { inShell: true });
+    const page = await screen.findByTestId("page");
+    expect(page).toHaveAttribute("data-page", "observability-view");
+    expect(page).toHaveAttribute("data-env", "prod");
+    expect(document.querySelector("aside")).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "alpha" })).toBeNull();
+    expect(screen.queryByTestId("forge-shell")).toBeNull();
+    const frame = screen.getByTestId("forge-console-frame");
+    expect(frame.className).toContain("forge-ui");
+    const header = screen.getByTestId("forge-console-header");
+    expect(within(header).getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("alpha›Issues›Errors");
+    expect(within(frame).getByRole("main")).toContainElement(page);
+  });
+
+  it("still defaults the scope and reflects it into the URL", async () => {
+    const router = renderAt("/forge/p/alpha/releases", { inShell: true });
+    await landsOn(router, "/forge/p/alpha/releases", { env: "prod" });
   });
 });

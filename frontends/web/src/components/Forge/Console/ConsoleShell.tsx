@@ -30,6 +30,11 @@
  * Observability has no home of its own: its health strip is the Overview's,
  * so the parent row opens its first view.
  *
+ * In the product the console renders inside the one shell, whose left nav
+ * draws these sections inline under the open app (ConsoleLayout,
+ * ConsoleFrame.tsx, Layout/sidebar/AppsNavSection.tsx): this column is the
+ * frame of the public demo and the dev preview harnesses only.
+ *
  * Every row is the same style (forge-ui SidebarLayout, the Cloudflare
  * pattern); a parent navigates to its own overview and expands its children
  * inline, and the group holding the current page stays open. Observability
@@ -328,30 +333,7 @@ function ConsoleShellImpl({
         navAppendix={drawerAppendix ? <div className="md:hidden">{drawerAppendix}</div> : undefined}
         headerContent={
           <>
-            <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
-              <Link
-                href={nav.linkTo ? nav.linkTo({ kind: "overview" }) : withSearch(consolePath(nav.project, { kind: "overview" }), { env: nav.env })}
-                className="truncate hover:text-ink"
-              >
-                {nav.project}
-              </Link>
-              {crumbs.map((crumb, index) => (
-                <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">
-                  <span aria-hidden="true" className="text-ink-subtle">
-                    ›
-                  </span>
-                  {crumb.href ? (
-                    <Link href={crumb.href} className="truncate hover:text-ink">
-                      {crumb.label}
-                    </Link>
-                  ) : (
-                    <span aria-current="page" className="truncate font-medium text-ink">
-                      {crumb.label}
-                    </span>
-                  )}
-                </span>
-              ))}
-            </nav>
+            <ConsoleBreadcrumb project={nav.project} env={nav.env} linkTo={nav.linkTo} crumbs={crumbs} />
             {orgSwitcher}
             <EnvScopeControl
               value={nav.env}
@@ -367,6 +349,46 @@ function ConsoleShellImpl({
         {children}
       </SidebarLayout>
     </div>
+  );
+}
+
+/** The console's breadcrumb: the app (its Overview), then the page's trail. */
+export function ConsoleBreadcrumb({
+  project,
+  env,
+  linkTo,
+  crumbs,
+}: {
+  project: string;
+  env: string;
+  linkTo?: (target: ConsolePage) => string;
+  crumbs: { label: string; href?: string }[];
+}) {
+  return (
+    <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
+      <Link
+        href={linkTo ? linkTo({ kind: "overview" }) : withSearch(consolePath(project, { kind: "overview" }), { env })}
+        className="truncate hover:text-ink"
+      >
+        {project}
+      </Link>
+      {crumbs.map((crumb, index) => (
+        <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">
+          <span aria-hidden="true" className="text-ink-subtle">
+            ›
+          </span>
+          {crumb.href ? (
+            <Link href={crumb.href} className="truncate hover:text-ink">
+              {crumb.label}
+            </Link>
+          ) : (
+            <span aria-current="page" className="truncate font-medium text-ink">
+              {crumb.label}
+            </span>
+          )}
+        </span>
+      ))}
+    </nav>
   );
 }
 

@@ -52,9 +52,11 @@ import { cn } from "@/lib/utils";
 import {
   WORKFLOWS_AREA_PATH,
   WORKFLOWS_TABS,
+  isWorkflowsDetailPath,
   workflowsTabForPath,
   type WorkflowsTab,
 } from "@/lib/workflowsArea";
+import { ShellPageHeader, useShellFrame } from "../Layout/shell/shellFrame";
 import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
 import DropdownMenu from "../forge-ui/dropdown_menu";
@@ -103,7 +105,9 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
   // detail page's list, or out of the area from a list.
   const leave = useCallback(() => void navigate({ to: homePath(), search: {} }), [navigate]);
   const stepBack = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
-  useEscapeToLeave(stepBack);
+  // Inside the one shell the nav is the way around: Escape only steps a detail page back to its list.
+  const { inShell } = useShellFrame();
+  useEscapeToLeave(inShell && !isWorkflowsDetailPath(pathname) ? null : stepBack);
 
   const navItems = useMemo(() => {
     const params = new URLSearchParams();
@@ -120,6 +124,38 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
       };
     });
   }, [activeTab, search.project, search.allProjects]);
+
+  if (inShell) {
+    // The area's sections are rows of the one nav (Layout/Sidebar, under
+    // Workflows): no rail and no exit here, just the breadcrumb and the scope.
+    const section = WORKFLOWS_TABS.find((tab) => tab.key === activeTab);
+    const fill = isFillLayout(pathname);
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col bg-background" data-testid="workflows-shell">
+        <ShellPageHeader
+          testId="workflows-header"
+          actions={
+            <div className="flex min-w-0 max-w-xs items-center max-md:max-w-48">
+              <ProjectSwitcher />
+            </div>
+          }
+        >
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-ui text-muted-foreground">
+            <span className="hidden md:inline">Workflows</span>
+            <span aria-hidden="true" className="hidden md:inline">›</span>
+            <span aria-current="page" className="truncate font-medium text-foreground">{section?.label ?? "Workflows"}</span>
+          </nav>
+        </ShellPageHeader>
+        {fill ? (
+          <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+        ) : (
+          <main className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-2 max-md:px-4">
+            <div className="mx-auto w-full max-w-6xl">{children}</div>
+          </main>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-full" data-testid="workflows-shell">
@@ -171,8 +207,9 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
  * runs before a window bubble listener — so a bubble-phase check saw the menu
  * already gone, and one Escape closed the filter menu AND left the area.
  */
-function useEscapeToLeave(onLeave: () => void) {
+function useEscapeToLeave(onLeave: (() => void) | null) {
   useEffect(() => {
+    if (!onLeave) return;
     let overlayOwnsEscape = false;
     const onCapture = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;

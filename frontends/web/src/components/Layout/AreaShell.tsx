@@ -1,9 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Chrome for an app area that lives outside the project shell — the Inbox.
- * A title bar with the way out, and the content below it. (The Workflows
- * area has its own sidebar shell, workflows/WorkflowsShell.tsx.)
+ * Chrome for an app area that lives outside the chat workspace — the Inbox,
+ * Apps, Projects. Inside the one shell (shell/AppShell.tsx) the nav is the way
+ * around, so the area is just a slim page bar (the nav's toggle while the nav
+ * is not docked, the way back from a detail page) and its content; Escape
+ * still steps a detail page back to its list. Outside it — a host with no
+ * shell — it keeps its own title bar with the way out.
  *
  * These routes sit under the bare `_authenticated` layout, which renders no
  * app chrome (the same position /settings and /forge are in), so without this
@@ -22,6 +25,7 @@ import ErrorBoundary from "../ErrorBoundary";
 import Tooltip from "../forge-ui/tooltip";
 import { OrgSwitcher } from "../Orgs/OrgSwitcher";
 import { orgFreePath } from "@/lib/paths/org";
+import { ShellPageHeader, useShellFrame } from "./shell/shellFrame";
 
 interface AreaShellProps {
   /** The area's list path, e.g. "/inbox". Anything below it is a detail page. */
@@ -33,7 +37,71 @@ interface AreaShellProps {
   children: ReactNode;
 }
 
-export function AreaShell({ areaPath, areaLabel, areaNoun, children }: AreaShellProps) {
+export function AreaShell(props: AreaShellProps) {
+  const { inShell } = useShellFrame();
+  return inShell ? <ShellArea {...props} /> : <StandaloneArea {...props} />;
+}
+
+/** The area inside the one shell: no exit, no org switcher, no title-bar chrome of its own. */
+function ShellArea({ areaPath, areaLabel, children }: AreaShellProps) {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const isDetail = orgFreePath(pathname).startsWith(`${orgFreePath(areaPath)}/`);
+  const onBack = useCallback(() => {
+    void navigate(getParentRouteNavigateOptions(pathname));
+  }, [navigate, pathname]);
+  // A detail page steps back to its list on Escape; a list has nowhere to leave to.
+  useEscape(isDetail ? onBack : null);
+
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col bg-background" data-testid="area-shell">
+      <ShellPageHeader>
+        {isDetail && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={`Back to ${areaLabel.toLowerCase()}`}
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            <span>{areaLabel}</span>
+          </button>
+        )}
+      </ShellPageHeader>
+      <main className="relative min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-5xl px-6 pb-12 pt-2">
+          <ErrorBoundary layout="panel">{children}</ErrorBoundary>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+/** Escape runs `onEscape`, except in a field or under an open dialog, which own it. */
+function useEscape(onEscape: (() => void) | null) {
+  useEffect(() => {
+    if (!onEscape) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      if (document.querySelector('[aria-modal="true"]')) return;
+      event.preventDefault();
+      onEscape();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onEscape]);
+}
+
+function StandaloneArea({ areaPath, areaLabel, areaNoun, children }: AreaShellProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { isElectron, trafficLightPadding, dragRegionStyle, noDragRegionStyle } =
@@ -49,25 +117,7 @@ export function AreaShell({ areaPath, areaLabel, areaNoun, children }: AreaShell
   // Escape leaves, matching SettingsPage. It steps aside for text entry and for
   // any open dialog, which owns Escape for itself — otherwise dismissing the
   // edit form would also navigate away from the page underneath it.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      const target = event.target as HTMLElement | null;
-      if (
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.tagName === "SELECT" ||
-        target?.isContentEditable
-      ) {
-        return;
-      }
-      if (document.querySelector('[aria-modal="true"]')) return;
-      event.preventDefault();
-      onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  useEscape(onClose);
 
   const exitLabel = isDetail ? areaLabel : isElectron ? "Close" : "Back";
   const exitTooltip = isDetail
