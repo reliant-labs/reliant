@@ -5,7 +5,8 @@
  * docs/design/unified-shell-and-projects.md §8.5, D4), as a small tag.
  *
  *   ChatAppTag      a chat's own tag: the chat header (a link into the app's
- *                   console) and a chat row (plain: the row is the control).
+ *                   console) and a chat row (plain: the row is the control;
+ *                   `compact`, the glyph alone, so the title keeps its room).
  *   NewChatAppTag   the composer's: "About <app>", with a remove button, for
  *                   a new chat a screen started from an app.
  *
@@ -26,10 +27,19 @@ export interface ChatAppTagProps {
   name: string;
   /** Link into the app's console (default). False inside a row that is itself the control. */
   interactive?: boolean;
+  /** The glyph alone, with the name as its label and tooltip (a dense row). Plain only. */
+  compact?: boolean;
   className?: string;
 }
 
-export function ChatAppTag({ name, interactive = true, className }: ChatAppTagProps) {
+export function ChatAppTag({ name, interactive = true, compact = false, className }: ChatAppTagProps) {
+  if (compact) {
+    return (
+      <span className={cn("inline-flex shrink-0 items-center text-muted-foreground", className)} title={`About ${name}`} aria-label={`About the app ${name}`} role="img" data-testid="chat-app-tag">
+        <Boxes aria-hidden className="size-3" />
+      </span>
+    );
+  }
   const body = (
     <>
       <Boxes aria-hidden className="h-3 w-3 shrink-0" />
@@ -49,7 +59,7 @@ export function ChatAppTag({ name, interactive = true, className }: ChatAppTagPr
         to={appPath(name)}
         aria-label={`About the app ${name}: open it`}
         data-testid="chat-app-tag"
-        className={cn(TAG, "hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring", className)}
+        className={cn(TAG, "no-color hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring", className)}
       >
         {body}
       </Link>

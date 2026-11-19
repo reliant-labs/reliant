@@ -390,7 +390,7 @@ const ChatItem = memo(function ChatItem({
       glyph={
         isRun(chat) || chat.appName ? (
           <>
-            {chat.appName && <ChatAppTag name={chat.appName} interactive={false} className="ml-1 max-w-[6rem]" />}
+            {chat.appName && <ChatAppTag name={chat.appName} interactive={false} compact className="ml-1" />}
             {isRun(chat) && <AutomationOriginGlyph chat={chat} />}
           </>
         ) : undefined
