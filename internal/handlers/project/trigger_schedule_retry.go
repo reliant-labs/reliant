@@ -230,7 +230,8 @@ func (s *Service) runScheduleRetry(ctx context.Context, triggerID string) {
 		}
 		s.scheduleRetries.begin(triggerID)
 		attemptCtx, cancel := context.WithTimeout(ctx, policy.attemptBudget)
-		err = s.deps.Schedules.Sync(attemptCtx, triggerID)
+		// Only convergeTriggerSchedules starts a retry, after its own nil-guard.
+		err = s.deps.Schedules.Sync(attemptCtx, triggerID) // forge:optional-checked
 		cancel()
 		if err == nil {
 			if s.scheduleRetries.finish(triggerID) {
