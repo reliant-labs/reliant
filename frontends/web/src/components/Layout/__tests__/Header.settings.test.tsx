@@ -58,6 +58,7 @@ vi.mock("../DaemonStatusDot", () => ({ DaemonStatusDot: () => null }));
 vi.mock("../DetectedPortsChip", () => ({ DetectedPortsChip: () => null }));
 
 import { Header } from "../Header";
+import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
 
 describe("Header settings escape hatch", () => {
   beforeEach(() => {
@@ -91,6 +92,9 @@ describe("Header settings escape hatch", () => {
   });
 
   it("leads with the Reliant mark, a link home that stays in the SPA on a plain click", async () => {
+    // The mark is the header's while the sidebar is collapsed; open, the
+    // sidebar's top row carries it.
+    useWorkspaceStateStore.setState({ leftSidebarExpanded: false });
     const onNavigateHome = vi.fn();
     render(<Header onNavigateHome={onNavigateHome} />);
 
@@ -104,5 +108,11 @@ describe("Header settings escape hatch", () => {
     // A modifier-click is the browser's (new tab), not the router's.
     fireEvent.click(mark, { metaKey: true });
     expect(onNavigateHome).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the mark to the sidebar while the sidebar is open", () => {
+    useWorkspaceStateStore.setState({ leftSidebarExpanded: true });
+    render(<Header onNavigateHome={vi.fn()} />);
+    expect(screen.queryByRole("link", { name: "Reliant home" })).toBeNull();
   });
 });
