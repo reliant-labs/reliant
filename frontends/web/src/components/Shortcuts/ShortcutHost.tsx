@@ -37,7 +37,8 @@ import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useAuthStore } from "../../store/authStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { openAddProject } from "../../store/addProjectDialogStore";
-import { openProjectSwitcher } from "../../lib/projectSwitcher";
+import { OPEN_PROJECT_SWITCHER_EVENT } from "../../lib/projectSwitcher";
+import { SwitchProjectDialog } from "../Projects/SwitchProjectDialog";
 import {
   useAppKeyboardShortcuts,
   type ShortcutHandlerLookup,
@@ -123,7 +124,8 @@ export function shortcutScope({
 
 type Overlay =
   | { kind: "palette" }
-  | { kind: "chat-search"; mode: "current" | "history" };
+  | { kind: "chat-search"; mode: "current" | "history" }
+  | { kind: "project-selector" };
 
 interface PendingWorkspaceAction {
   action: () => void;
@@ -251,23 +253,15 @@ function createHostCore(
     setOverlay(overlay);
   };
 
-  // Adding a project is a dialog; switching is the sidebar's project menu.
-  // Both open over the chat workspace, which is where they act.
+  // Adding a project is a dialog over the chat workspace, which is where it acts.
   const addProject = () => {
     closeOverlays();
     if (!live.current.workspace) navigateToWorkspace();
     openAddProject();
   };
-  const switchProject = () => {
-    closeOverlays();
-    if (live.current.workspace) {
-      openProjectSwitcher();
-    } else {
-      navigateToWorkspace();
-      // The workspace mounts its sidebar on the next frame.
-      requestAnimationFrame(() => openProjectSwitcher());
-    }
-  };
+  // The project selector floats over whatever page is open; picking acts
+  // from there (Projects/SwitchProjectDialog).
+  const switchProject = () => openOverlay({ kind: "project-selector" });
 
   /**
    * Act on the composer on screen; with none, go to the workspace and act on
@@ -472,6 +466,14 @@ export function ShortcutHost({ children }: { children: ReactNode }) {
 
   const closeOverlay = useCallback(() => setOverlay(null), []);
 
+  // openProjectSwitcher (the header, ⌘K's Switch project…) asks by event.
+  useEffect(() => {
+    if (!enabled) return;
+    const open = () => setOverlay({ kind: "project-selector" });
+    window.addEventListener(OPEN_PROJECT_SWITCHER_EVENT, open);
+    return () => window.removeEventListener(OPEN_PROJECT_SWITCHER_EVENT, open);
+  }, [enabled]);
+
   return (
     <ShortcutHostContext.Provider value={core.host}>
       {children}
@@ -523,6 +525,7 @@ function ActiveShortcuts({
     <>
       <SequenceHint pending={pendingSequence} isAvailable={core.isAvailable} />
       <Suspense fallback={null}>
+        {overlay?.kind === "project-selector" && <SwitchProjectDialog open onClose={onCloseOverlay} />}
         {overlay?.kind === "palette" && (
           <CommandPalette isOpen inWorkspace={workspace} onClose={onCloseOverlay} />
         )}

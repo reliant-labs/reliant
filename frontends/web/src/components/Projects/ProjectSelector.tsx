@@ -36,7 +36,7 @@
 
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { observeElementRect, useVirtualizer } from "@tanstack/react-virtual";
 import { AppWindow, Check, FolderPlus, Plus, Search } from "lucide-react";
 import { createPortal } from "react-dom";
 
@@ -280,6 +280,10 @@ export function ProjectSelectorPanel({
     getItemKey: (i) => items[i].key,
     overscan: 8,
     initialRect: { width: 480, height: LIST_MAX },
+    // A list not laid out yet (opening, or a test's DOM) measures 0 tall and
+    // would render no rows: treat it as full height until it measures.
+    observeElementRect: (instance, cb) =>
+      observeElementRect(instance, (rect) => cb(rect.height > 0 ? rect : { width: rect.width || 480, height: LIST_MAX })),
   });
 
   const move = (from: number, step: number): number => {

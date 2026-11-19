@@ -53,6 +53,15 @@ vi.mock("../../../hooks/project-queries", async (original) => ({
   touchProject,
 }));
 
+// The selector reads the catalog; with none, it lists the plain projects (its fallback).
+vi.mock("@/hooks/project-catalog-queries", () => ({
+  useProjectCatalog: () => ({ catalog: undefined, isLoading: false, error: new Error("no catalog here"), refetch: () => {} }),
+}));
+vi.mock("@/hooks/sidebar-project-queries", () => ({
+  useSidebarProjectPrefs: () => ({ prefs: { pinned: new Set(), hidden: new Set(), showAll: false } }),
+}));
+vi.mock("@/components/Apps/startBuilding", () => ({ useStartBuildingApp: () => () => {} }));
+
 /** Every ListChats request's project id ("" is All projects). */
 let listChatsProjectIds: string[] = [];
 
@@ -114,9 +123,15 @@ async function mountAt(path: string) {
   return router;
 }
 
+/** Pick in the Chats menu: All projects there, any project in the selector it opens. */
 async function pick(testId: string) {
   await userEvent.click(screen.getByTestId("project-filter-trigger"));
-  await userEvent.click(screen.getByTestId(testId));
+  if (testId === "project-filter-all") {
+    await userEvent.click(screen.getByTestId(testId));
+    return;
+  }
+  await userEvent.click(screen.getByTestId("project-filter-choose"));
+  await userEvent.click(await screen.findByTestId(`project-selector-row-${testId.slice("project-filter-".length)}`));
 }
 
 const listed = () => within(screen.getByTestId("chat-list")).queryAllByRole("listitem").map((li) => li.textContent);

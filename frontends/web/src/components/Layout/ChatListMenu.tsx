@@ -11,13 +11,15 @@
  * now, with their own test ids unchanged.
  */
 
+import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 
 import type { ChatSortOption } from "../../store/chatListPreferencesStore";
 import type { Project } from "../../hooks/project-queries";
 import { cn } from "../../lib/utils";
 import DropdownMenu, { type MenuGroup } from "../forge-ui/dropdown_menu";
-import { projectFilterGroups, projectFilterLabel } from "./ProjectFilterMenu";
+import { ProjectSelectorDialog } from "../Projects/ProjectSelector";
+import { ALL_PROJECTS_LABEL, projectFilterGroups, projectFilterLabel } from "./ProjectFilterMenu";
 import { SIDEBAR_HEADING_HOVER_ACTION, SIDEBAR_ICON_BUTTON } from "./sidebar/primitives";
 
 /** The sort orders, in the menu's order. */
@@ -70,6 +72,8 @@ export function ChatListMenu({
   archived,
   onArchivedChange,
 }: ChatListMenuProps) {
+  // The project selector, for every project the menu does not list.
+  const [choosing, setChoosing] = useState(false);
   const listToggles: MenuGroup["items"] = [];
   if (showAll) {
     listToggles.push({
@@ -120,6 +124,7 @@ export function ChatListMenu({
       filterId,
       projects,
       onChange: onFilterChange,
+      onChooseProject: () => setChoosing(true),
       onAddProject,
       onManageProjects,
       needsYouByProject,
@@ -128,23 +133,45 @@ export function ChatListMenu({
 
   const showing = projectFilterLabel(filterId, projects);
   return (
-    <DropdownMenu
-      align="right"
-      density="compact"
-      label="Chat list options"
-      menuClassName="w-64 max-h-[min(32rem,70vh)] overflow-y-auto"
-      groups={groups}
-      trigger={(props) => (
-        <button
-          type="button"
-          {...props}
-          data-testid="project-filter-trigger"
-          aria-label={`Chat list options. Showing ${showing}`}
-          className={cn(SIDEBAR_ICON_BUTTON, SIDEBAR_HEADING_HOVER_ACTION, "aria-expanded:bg-foreground/[0.08]")}
-        >
-          <MoreHorizontal className="size-4" aria-hidden="true" />
-        </button>
-      )}
-    />
+    <>
+      <DropdownMenu
+        align="right"
+        density="compact"
+        label="Chat list options"
+        menuClassName="w-64 max-h-[min(32rem,70vh)] overflow-y-auto"
+        groups={groups}
+        trigger={(props) => (
+          <button
+            type="button"
+            {...props}
+            data-testid="project-filter-trigger"
+            aria-label={`Chat list options. Showing ${showing}`}
+            className={cn(SIDEBAR_ICON_BUTTON, SIDEBAR_HEADING_HOVER_ACTION, "aria-expanded:bg-foreground/[0.08]")}
+          >
+            <MoreHorizontal className="size-4" aria-hidden="true" />
+          </button>
+        )}
+      />
+      <ProjectSelectorDialog
+        open={choosing}
+        onClose={() => setChoosing(false)}
+        mode="chat"
+        label="Show one project's chats"
+        selectedKey={filterId ?? ALL_PROJECTS_KEY}
+        leadItems={[
+          { key: ALL_PROJECTS_KEY, label: ALL_PROJECTS_LABEL, onSelect: () => onFilterChange(null), testId: "project-selector-all-projects" },
+        ]}
+        rowState={(row) => {
+          const waiting = needsYouByProject?.get(row.key);
+          return waiting ? { hint: `${waiting} waiting on you` } : undefined;
+        }}
+        onSelect={(selection) => {
+          if (selection.kind === "project") onFilterChange(selection.row.key);
+        }}
+      />
+    </>
   );
 }
+
+/** The selector's key for All projects: no project id is empty. */
+const ALL_PROJECTS_KEY = "";
