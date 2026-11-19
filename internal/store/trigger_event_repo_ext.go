@@ -285,6 +285,32 @@ ORDER BY event.created_at,event.id`, olderThan, limit).Scan(ctx, &rows)
 	return out, nil
 }
 
+// ExpirePendingTriggerCapacityEvents settles as failed, with detail, the
+// events still waiting for workflow capacity that were recorded before
+// recordedBefore: at most limit of them, oldest first. It returns how many it
+// settled.
+//
+// It sweeps every waiting event, not the scope heads
+// ListStalePendingTriggerEvents returns: a head is chosen by priority, so a
+// low-priority event behind a steady stream of higher ones is never a head,
+// and would otherwise never expire. A waiting event holds no slot, so settling
+// one frees nothing. Conditional on pending, like SettlePendingTriggerEvent,
+// so it never overwrites a launch that won a race.
+func ExpirePendingTriggerCapacityEvents(ctx context.Context, db orm.Context, recordedBefore time.Time, detail string, limit int) (int64, error) {
+	if limit <= 0 {
+		limit = defaultTriggerEventLimit
+	}
+	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET outcome = ?0, outcome_detail = ?1
+WHERE id IN (
+ SELECT id FROM trigger_events WHERE capacity_order IS NOT NULL AND outcome = 'pending' AND created_at < ?2
+ ORDER BY created_at, id LIMIT ?3
+) AND outcome = 'pending'`, core.TriggerEventFailed, detail, recordedBefore.UTC(), limit).Exec(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to expire waiting trigger events: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // ClaimPendingTriggerEvent adopts an inbound event the receiver recorded: the
 // row moves from pending to launched (chat attached later in the same
 // transaction) and takes the launch's start record as its payload. The

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -123,6 +124,21 @@ type TriggerCapacityLimits struct {
 	// MaxRunningPerKey bounds the launched runs of one capacity_running_key.
 	// 0 is no per-key cap. An event with no running key is never held by it.
 	MaxRunningPerKey uint32
+	// ExpiredBefore is the expiry cutoff: a waiting event recorded before it
+	// is never admitted, and the scope admits the next one past it. The zero
+	// time expires nothing. The redriver settles expired events
+	// (ExpirePendingTriggerCapacityEvents); admission only refuses them, so an
+	// event the redriver has not reached yet can never launch late.
+	ExpiredBefore time.Time
+}
+
+// expiredBefore is ExpiredBefore as the admission query binds it: NULL for
+// none.
+func (l TriggerCapacityLimits) expiredBefore() any {
+	if l.ExpiredBefore.IsZero() {
+		return nil
+	}
+	return l.ExpiredBefore.UTC()
 }
 
 // TriggerCapacityUnbounded is the MaxRunning of a policy that caps only per
@@ -159,12 +175,17 @@ const occupiedForKey = `occupied.capacity_order IS NOT NULL AND occupied.outcome
 // keeps its place, and is admitted once its key frees a slot. With no priority
 // and no per-key cap this is exactly the FIFO head, when a slot is free.
 //
+// An expired event (recorded before ExpiredBefore) is passed over too, and
+// never admitted: it is the redriver's to settle.
+//
 // Parameters: ?0 user, ?1 project, ?2 workflow ref, ?3 MaxRunning,
-// ?4 MaxRunningPerKey. The waiting scan is trigger_events_capacity_waiting;
-// the occupied counts read trigger_events_capacity_occupied, a handful of rows.
+// ?4 MaxRunningPerKey, ?5 ExpiredBefore (NULL for none). The waiting scan is
+// trigger_events_capacity_waiting; the occupied counts read
+// trigger_events_capacity_occupied, a handful of rows.
 const nextAdmissibleTriggerCapacitySQL = ` FROM trigger_events event
 WHERE event.user_id = ?0 AND event.capacity_project_id = ?1 AND event.capacity_workflow_ref = ?2
   AND event.capacity_order IS NOT NULL AND event.outcome = 'pending'
+  AND (?5::timestamptz IS NULL OR event.created_at >= ?5::timestamptz)
   AND (SELECT count(*) FROM trigger_events occupied
     WHERE occupied.user_id = ?0 AND occupied.capacity_project_id = ?1 AND occupied.capacity_workflow_ref = ?2
       AND ` + occupiedForAdmission + `
@@ -188,7 +209,7 @@ func NextAdmissibleTriggerCapacityEvent(ctx context.Context, db orm.Context, sco
 	}
 	var rows []*TriggerEvent
 	err := db.Bun().NewRaw(`SELECT `+columnsOf[TriggerEvent]("event")+nextAdmissibleTriggerCapacitySQL,
-		scope.UserID, scope.ProjectID, scope.WorkflowRef, limits.MaxRunning, limits.MaxRunningPerKey).Scan(ctx, &rows)
+		scope.UserID, scope.ProjectID, scope.WorkflowRef, limits.MaxRunning, limits.MaxRunningPerKey, limits.expiredBefore()).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("find the next admissible trigger capacity event: %w", err)
 	}
@@ -220,7 +241,7 @@ func CanLaunchTriggerCapacity(ctx context.Context, db orm.Context, eventID strin
 	}
 	var next []string
 	err := db.Bun().NewRaw(`SELECT event.id`+nextAdmissibleTriggerCapacitySQL,
-		scope.UserID, scope.ProjectID, scope.WorkflowRef, limits.MaxRunning, limits.MaxRunningPerKey).Scan(ctx, &next)
+		scope.UserID, scope.ProjectID, scope.WorkflowRef, limits.MaxRunning, limits.MaxRunningPerKey, limits.expiredBefore()).Scan(ctx, &next)
 	if err != nil {
 		return false, fmt.Errorf("check trigger capacity: %w", err)
 	}

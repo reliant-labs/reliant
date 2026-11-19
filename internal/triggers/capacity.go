@@ -33,6 +33,11 @@ func capacitySettled(err error) bool {
 	return errors.Is(err, errCapacityScopeChanged) || errors.Is(err, errCapacitySuperseded)
 }
 
+// errCapacityExpired is a waiting event recorded before limits.ExpiredBefore:
+// it must never launch. The fire settles it failed with capacityExpiredDetail,
+// as the redriver's expiry sweep would.
+var errCapacityExpired = errors.New(capacityExpiredDetail)
+
 type capacityRepository interface {
 	EnqueueTriggerCapacity(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error
 	CanLaunchTriggerCapacity(context.Context, string, store.TriggerCapacityScope, store.TriggerCapacityLimits) (bool, error)
@@ -225,6 +230,11 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	}
 	if enrolled.Outcome == core.TriggerEventSkipped {
 		return errCapacitySuperseded
+	}
+	// An expired event never launches. Admission refuses it too (under the
+	// lock), so this only spares the launch attempt and settles it now.
+	if enrolled.Outcome == core.TriggerEventPending && !limits.ExpiredBefore.IsZero() && enrolled.CreatedAt.Before(limits.ExpiredBefore) {
+		return errCapacityExpired
 	}
 	// Reconcile only immutable chains in this scope. A missing, mismatched or
 	// unavailable description holds its slot; chat status is never release evidence.

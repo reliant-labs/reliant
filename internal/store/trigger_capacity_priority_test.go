@@ -38,6 +38,10 @@ func (f capacityFiring) event(prefix string) *core.TriggerEvent {
 
 func prio(n int64) *int64 { return &n }
 
+// capacityTestBase is the fixed "now" of these tests: they never read the
+// wall clock.
+var capacityTestBase = time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+
 // claimWithin is claimCapacity under a full admission policy.
 func claimWithin(ctx context.Context, env *storetest.Env, id string, scope store.TriggerCapacityScope, limits store.TriggerCapacityLimits) (bool, error) {
 	claimed := false
@@ -87,7 +91,7 @@ func drainCapacity(t *testing.T, ctx context.Context, env *storetest.Env, scope 
 
 func releaseCapacity(t *testing.T, ctx context.Context, env *storetest.Env, id string) {
 	t.Helper()
-	_, err := env.SQL.ExecContext(ctx, `UPDATE trigger_events SET capacity_released=true,capacity_released_at=now(),capacity_release_reason='closed' WHERE id=$1`, id)
+	_, err := env.SQL.ExecContext(ctx, `UPDATE trigger_events SET capacity_released=true,capacity_released_at=$2,capacity_release_reason='closed' WHERE id=$1`, id, capacityTestBase)
 	require.NoError(t, err)
 }
 
@@ -284,12 +288,72 @@ func TestTriggerCapacityRedriveHeadFollowsPriority(t *testing.T) {
 	scope := capacityScope()
 	for _, f := range []capacityFiring{{id: "old"}, {id: "urgent", priority: prio(3)}, {id: "newer"}} {
 		ev := f.event("")
-		ev.CreatedAt = time.Now().Add(-time.Hour)
+		ev.CreatedAt = capacityTestBase.Add(-time.Hour)
 		require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, ev, scope))
 	}
-	rows, err := store.ListStalePendingTriggerEvents(ctx, env.ORM, time.Now(), 10)
+	rows, err := store.ListStalePendingTriggerEvents(ctx, env.ORM, capacityTestBase, 10)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, "urgent", rows[0].ID)
 	require.Equal(t, int64(3), *rows[0].CapacityPriority, "the enrolled priority reads back")
+}
+
+// An expired waiting event is never admitted, and the expiry sweep settles it
+// although a higher-priority head hides it from the redriver's listing: a low
+// priority event behind a stream of higher ones still expires after a day
+// rather than launching late.
+func TestTriggerCapacityExpiredEventBehindHigherPriorityHead(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	scope := capacityScope()
+	cutoff := capacityTestBase.Add(-24 * time.Hour)
+	for _, f := range []struct {
+		firing  capacityFiring
+		created time.Time
+	}{
+		{capacityFiring{id: "expired-low", priority: prio(0)}, cutoff.Add(-time.Hour)},
+		{capacityFiring{id: "fresh-high", priority: prio(10)}, capacityTestBase.Add(-time.Hour)},
+	} {
+		ev := f.firing.event("")
+		ev.CreatedAt = f.created
+		require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, ev, scope))
+	}
+	ordinary := capacityEvent("ordinary-old")
+	ordinary.CreatedAt = cutoff.Add(-time.Hour)
+	_, err := store.InsertTriggerEventIfAbsent(ctx, env.ORM, ordinary)
+	require.NoError(t, err)
+
+	rows, err := store.ListStalePendingTriggerEvents(ctx, env.ORM, capacityTestBase, 10)
+	require.NoError(t, err)
+	var listed []string
+	for _, row := range rows {
+		listed = append(listed, row.ID)
+	}
+	require.NotContains(t, listed, "expired-low", "the higher-priority head hides it from the listing")
+
+	// Without an expiry cutoff the expired event would be admitted after the
+	// head; with one it never is.
+	next, err := store.NextAdmissibleTriggerCapacityEvent(ctx, env.ORM, scope, store.TriggerCapacityLimits{MaxRunning: 10})
+	require.NoError(t, err)
+	require.Equal(t, "fresh-high", next.ID)
+	limits := store.TriggerCapacityLimits{MaxRunning: 10, ExpiredBefore: cutoff}
+	require.Equal(t, []string{"fresh-high"}, drainCapacity(t, ctx, env, scope, limits, "", []string{"expired-low", "fresh-high"}))
+	claimed, err := claimWithin(ctx, env, "expired-low", scope, limits)
+	require.NoError(t, err)
+	require.False(t, claimed, "an expired event never launches")
+
+	settled, err := store.ExpirePendingTriggerCapacityEvents(ctx, env.ORM, cutoff, "too old", 10)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), settled)
+	outcome, detail := outcomeOf(t, env, "expired-low")
+	require.Equal(t, core.TriggerEventFailed, outcome)
+	require.Equal(t, "too old", detail)
+	outcome, _ = outcomeOf(t, env, "fresh-high")
+	require.Equal(t, core.TriggerEventLaunched, outcome, "a launched event is never expired")
+	outcome, _ = outcomeOf(t, env, "ordinary-old")
+	require.Equal(t, core.TriggerEventPending, outcome, "an ordinary delivery is the listing's to expire")
+
+	settled, err = store.ExpirePendingTriggerCapacityEvents(ctx, env.ORM, cutoff, "too old", 10)
+	require.NoError(t, err)
+	require.Zero(t, settled, "the sweep is idempotent")
 }

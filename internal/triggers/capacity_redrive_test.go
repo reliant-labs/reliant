@@ -27,7 +27,7 @@ func (r *capacityRedriveRepo) SettlePendingTriggerEvent(_ context.Context, id st
 // event, so a queue that never drains surfaces instead of growing forever. A
 // launched start awaiting its binding is not waiting and keeps being redriven.
 func TestCapacityQueueExpiresButLaunchedStartIsRedriven(t *testing.T) {
-	now := time.Now().UTC()
+	now := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
 	triggerID := "activation"
 	order := int64(1)
 	repo := &capacityRedriveRepo{events: []*core.TriggerEvent{
@@ -42,4 +42,37 @@ func TestCapacityQueueExpiresButLaunchedStartIsRedriven(t *testing.T) {
 	require.NoError(t, redriver.RedriveOnce(context.Background()))
 	require.Equal(t, []string{"queued-old", "ordinary-delivery"}, repo.settled)
 	require.Len(t, starter.snapshot(), 2, "the fresh queued intent and the launched start are redriven")
+}
+
+type capacityExpiryRepo struct {
+	*capacityRedriveRepo
+	expiredBefore []time.Time
+}
+
+func (r *capacityExpiryRepo) ExpirePendingTriggerCapacityEvents(_ context.Context, recordedBefore time.Time, detail string, _ int) (int64, error) {
+	if detail != capacityExpiredDetail {
+		return 0, nil
+	}
+	r.expiredBefore = append(r.expiredBefore, recordedBefore)
+	return 1, nil
+}
+
+// The listing returns one head per scope in priority order, so an expired
+// low-priority event behind a fresh higher-priority head is never listed. The
+// redriver sweeps every waiting event past the deadline on its own, so that
+// event expires; the head is still redriven.
+func TestCapacityExpirySweepsBehindPriorityHeads(t *testing.T) {
+	now := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	triggerID := "activation"
+	order := int64(2)
+	repo := &capacityExpiryRepo{capacityRedriveRepo: &capacityRedriveRepo{events: []*core.TriggerEvent{
+		{ID: "fresh-high", TriggerID: &triggerID, Kind: core.TriggerEventKindIntegration, DedupeKey: "fresh-high", Outcome: core.TriggerEventPending, CreatedAt: now.Add(-time.Hour), CapacityOrder: &order},
+	}}}
+	starter := &recordingStarter{}
+	redriver := NewRedriver(repo, starter, "")
+	redriver.now = func() time.Time { return now }
+	require.NoError(t, redriver.RedriveOnce(context.Background()))
+	require.Equal(t, []time.Time{now.Add(-redriveGiveUp)}, repo.expiredBefore)
+	require.Empty(t, repo.settled, "the fresh head is not expired")
+	require.Len(t, starter.snapshot(), 1, "the head is redriven")
 }

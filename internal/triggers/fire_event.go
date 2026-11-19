@@ -82,6 +82,8 @@ type EventFirer struct {
 	pools     Placer
 	pause     *AutoPause
 	checks    CheckOpener
+	// now is the clock capacity expiry is judged by.
+	now func() time.Time
 }
 
 // WithChecks lets the firer open the GitHub check a workflow's `check:`
@@ -114,7 +116,7 @@ func (f *EventFirer) WithPlacer(p Placer) *EventFirer {
 
 // NewEventFirer builds the inbound fire activity's receiver.
 func NewEventFirer(repo EventRepo, launcher Launcher) *EventFirer {
-	return &EventFirer{repo: repo, launcher: launcher}
+	return &EventFirer{repo: repo, launcher: launcher, now: time.Now}
 }
 
 // WithWorkflows lets the firer read an activation's declaration, whose inputs
@@ -247,6 +249,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if ev.Outcome == core.TriggerEventPending && ev.CapacityOrder != nil && !capped {
 		return f.settle(ctx, ev, def, core.TriggerEventSkipped, "queued workflow capacity policy was removed", nil)
 	}
+	limits.ExpiredBefore = capacityExpiredBefore(f.now())
 	if capped {
 		capacityAdmission(ctx, policy, ev, func() triggerspec.Scope {
 			return ActivationScope(ctx, f.repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
@@ -254,6 +257,9 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, ev, limits, &spec); err != nil {
 			if capacitySettled(err) {
 				return f.settle(ctx, ev, def, core.TriggerEventSkipped, err.Error(), nil)
+			}
+			if errors.Is(err, errCapacityExpired) {
+				return f.settle(ctx, ev, def, core.TriggerEventFailed, capacityExpiredDetail, nil)
 			}
 			return nil, err
 		}

@@ -247,6 +247,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	if existing != nil && existing.Outcome == core.TriggerEventPending && existing.CapacityOrder != nil && !capped {
 		return f.recordSkip(ctx, rec, "queued workflow capacity policy was removed")
 	}
+	limits.ExpiredBefore = capacityExpiredBefore(f.now())
 	if !capped && enforcePolicy && sched.SkipOnOverlap() {
 		// Checked inside the launch transaction under a row lock on the
 		// trigger, so fires released together after an outage cannot all
@@ -269,6 +270,9 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, row, limits, &spec); err != nil {
 			if capacitySettled(err) {
 				return f.recordSkip(ctx, rec, err.Error())
+			}
+			if errors.Is(err, errCapacityExpired) {
+				return f.recordOutcome(ctx, rec, core.TriggerEventFailed, capacityExpiredDetail)
 			}
 			return nil, err
 		}
