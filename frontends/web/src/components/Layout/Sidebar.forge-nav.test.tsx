@@ -355,14 +355,13 @@ describe("Sidebar forge nav entry", () => {
     const sections = screen.getByTestId("sidebar-app-sections");
     expect(sections).toHaveAttribute("data-tour", "forge-console-nav");
     const labels = Array.from(sections.querySelectorAll("a, button")).map((row) => row.textContent?.trim());
+    // Only Issues is open: its Errors is the page on screen.
     expect(labels).toEqual([
       "Overview",
       "Issues",
       "Errors",
       "Alerts2 firing",
       "Performance",
-      "Traces",
-      "RPC explorer",
       "Sessions",
       "Releases",
       "Data",
@@ -384,18 +383,108 @@ describe("Sidebar forge nav entry", () => {
     expect(onNavigate).toHaveBeenCalledWith("/forge/p/shop/releases?env=prod");
   });
 
-  it("opens a group in place and shows an environment's page under Environments", () => {
+  // An open app's sections stay short (owner preview 2026-11-19: on a 900px
+  // window an expanded app pushed Chats below the fold): a group's rows show
+  // only while one of them is the page, and the group's row links to its
+  // first row, a real URL.
+  it("keeps every group closed until one of its rows is the page, each group a link to its first row", () => {
     appsState.apps = [SHOP];
-    renderSidebar({ pathname: "/forge/p/shop/environments/staging" });
+    const onNavigate = vi.fn();
+    renderSidebar({ pathname: "/forge/p/shop", onNavigate });
     const sections = screen.getByTestId("sidebar-app-sections");
-    // More tools has no page of its own: it opens and closes in place.
-    const more = within(sections).getByTestId("sidebar-app-section-more-tools");
-    expect(more).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(more);
-    expect(more).toHaveAttribute("aria-expanded", "true");
-    expect(within(sections).getByText("Logs")).toBeInTheDocument();
-    // The open environment's own page, under Environments.
+    const labels = Array.from(sections.querySelectorAll("a, button")).map((row) => row.textContent?.trim());
+    expect(labels).toEqual([
+      "Overview",
+      // Closed, it carries its rows' alerts firing.
+      "Issues2 firing",
+      "Performance",
+      "Sessions",
+      "Releases",
+      "Data",
+      "Users",
+      "More tools",
+      "Environments",
+      "Secrets",
+      "Domains",
+      "Activity",
+    ]);
+    for (const [group, href] of [
+      ["issues", "/forge/p/shop/observability/errors?env=prod"],
+      ["performance", "/forge/p/shop/observability/traces?env=prod"],
+      ["more-tools", "/forge/p/shop/observability/dashboards?env=prod"],
+      ["environments", "/forge/p/shop/environments?env=prod"],
+    ] as const) {
+      const row = within(sections).getByTestId(`sidebar-app-section-${group}`);
+      expect(row.tagName).toBe("A");
+      expect(row).toHaveAttribute("href", href);
+      expect(row).toHaveAttribute("aria-expanded", "false");
+      expect(row).not.toHaveAttribute("aria-current");
+    }
+    expect(within(sections).queryByText("Errors")).toBeNull();
+    expect(within(sections).queryByText("Logs")).toBeNull();
+    expect(within(sections).queryByTestId("sidebar-app-section-staging")).toBeNull();
+    fireEvent.click(within(sections).getByTestId("sidebar-app-section-performance"));
+    expect(onNavigate).toHaveBeenCalledWith("/forge/p/shop/observability/traces?env=prod");
+  });
+
+  it.each([
+    ["/forge/p/shop/observability/logs", "more-tools", "Logs"],
+    ["/forge/p/shop/observability/rpc", "performance", "RPC explorer"],
+  ])("opens the group whose row is the page on %s", (pathname, group, row) => {
+    appsState.apps = [SHOP];
+    renderSidebar({ pathname });
+    const sections = screen.getByTestId("sidebar-app-sections");
+    expect(within(sections).getByTestId(`sidebar-app-section-${group}`)).toHaveAttribute("aria-expanded", "true");
+    expect(within(sections).getByText(row).closest("a")).toHaveAttribute("aria-current", "page");
+    // Every other group stays closed.
+    expect(within(sections).getByTestId("sidebar-app-section-issues")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("shows an environment's page under Environments, and keeps the env rows closed on the environments list", () => {
+    appsState.apps = [SHOP];
+    const view = renderSidebar({ pathname: "/forge/p/shop/environments/staging" });
+    let sections = screen.getByTestId("sidebar-app-sections");
+    expect(within(sections).getByTestId("sidebar-app-section-environments")).toHaveAttribute("aria-expanded", "true");
     expect(within(sections).getByTestId("sidebar-app-section-staging")).toHaveAttribute("aria-current", "page");
+    view.unmount();
+
+    renderSidebar({ pathname: "/forge/p/shop/environments" });
+    sections = screen.getByTestId("sidebar-app-sections");
+    const environments = within(sections).getByTestId("sidebar-app-section-environments");
+    expect(environments).toHaveAttribute("aria-current", "page");
+    expect(environments).toHaveAttribute("aria-expanded", "false");
+    expect(within(sections).queryByTestId("sidebar-app-section-staging")).toBeNull();
+  });
+
+  // The apps and the chats scroll on their own, so an open app's sections
+  // never push the chat list off the window.
+  it("puts the apps and the chats in two regions that scroll on their own", () => {
+    appsState.apps = [SHOP, BLOG];
+    renderSidebar({ pathname: "/forge/p/shop/observability/errors" });
+    const regions = screen.getByTestId("sidebar-regions");
+    const apps = within(regions).getByTestId("sidebar-apps-scroller");
+    const chats = within(regions).getByTestId("sidebar-chats");
+    expect(Array.from(regions.children)).toEqual([apps, chats]);
+    expect(apps).toContainElement(screen.getByTestId("sidebar-app-sections"));
+    expect(apps.className).toMatch(/\boverflow-y-auto\b/);
+    expect(apps.className).toMatch(/\bmin-h-0\b/);
+    // The chats keep their heading in view and scroll their list.
+    expect(chats).toContainElement(screen.getByTestId("chat-list-heading"));
+    const list = within(chats).getByTestId("sidebar-scroller");
+    expect(list.className).toMatch(/\boverflow-y-auto\b/);
+    expect(list).not.toContainElement(screen.getByTestId("chat-list-heading"));
+    // A floor of 40% of the room, and never under the heading plus five rows.
+    expect(chats.className).toContain("min-h-[min(100%,max(40%,calc(5*var(--row-h)+3.25rem)))]");
+    expect(chats.className).toMatch(/\bflex-1\b/);
+    expect(apps).not.toContainElement(screen.getByTestId("chat-list-heading"));
+  });
+
+  it("gives the chats the whole region with Apps gated off", () => {
+    experimentalGate.enabled = false;
+    renderSidebar();
+    const regions = screen.getByTestId("sidebar-regions");
+    expect(within(regions).queryByTestId("sidebar-apps-scroller")).toBeNull();
+    expect(Array.from(regions.children)).toEqual([screen.getByTestId("sidebar-chats")]);
   });
 
   it("gives the open app its rows before the app list answers", () => {

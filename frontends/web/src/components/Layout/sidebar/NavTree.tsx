@@ -6,15 +6,20 @@
  * section list built for the console's own column reads as part of the left
  * nav instead of a second one (U6: one shell, one nav).
  *
- * What it keeps from the forge-ui model: the active row, a group's children
- * (an `href`-less group opens in place; one with a page of its own shows its
- * children while it or one of them is open), `defaultExpanded` groups open on
- * every page, a section label before the first row of a section, a count
- * badge, and a trailing mark. A group opened or closed by hand stays so while
- * the nav is mounted.
+ * What it keeps from the forge-ui model: the active row, a group's children,
+ * a section label before the first row of a section, a count badge, and a
+ * trailing mark.
+ *
+ * What it does not: groups that open on every page (`defaultExpanded`) or by
+ * hand. The open app's sections share the nav's upper region with every other
+ * app, so they stay short (U6, owner preview 2026-11-19: on a 900px window an
+ * expanded app pushed the chats below the fold). A group (Issues, Performance,
+ * More tools, Environments, …) shows its rows only while one of them is the
+ * page on screen; the group's own row is a link — to its own page when it has
+ * one, else to its first row — so it is a real URL that opens the group.
  */
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import type { SidebarBadge, SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 import { cn } from "@/lib/utils";
@@ -24,6 +29,29 @@ import { SidebarSubLabel, SidebarSubRow } from "./primitives";
 /** Whether `item`, or any row under it, is the current page. */
 export function hasActive(item: SidebarNavItem): boolean {
   return !!item.active || (item.children ?? []).some(hasActive);
+}
+
+/**
+ * The badge a closed group carries for its rows: the first one that asks for
+ * attention (alerts firing), so closing Issues never hides that.
+ */
+function rolledUpBadge(items: readonly SidebarNavItem[]): SidebarBadge | undefined {
+  for (const item of items) {
+    if (item.badge && item.badge.type !== "new" && item.badge.tone === "danger") return item.badge;
+    const nested = rolledUpBadge(item.children ?? []);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+/** Where a row goes: its own page, else (a group with none) its first row's. */
+export function rowHref(item: SidebarNavItem): string | undefined {
+  if (item.href) return item.href;
+  for (const child of item.children ?? []) {
+    const href = rowHref(child);
+    if (href) return href;
+  }
+  return undefined;
 }
 
 function Badge({ badge }: { badge: SidebarBadge }) {
@@ -91,19 +119,16 @@ function NavTreeItem({
   onNavigate: (href: string) => void;
   testIdPrefix?: string;
 }) {
-  // A hand-opened or hand-closed group, for this mount; unset follows the page.
-  const [toggled, setToggled] = useState<boolean | undefined>(undefined);
   const children = item.children ?? [];
-  const group = children.length > 0;
-  // A group with no page of its own opens in place; one with a page shows its
-  // rows while it, or one of them, is the page on screen.
-  const opensInPlace = group && !item.href;
-  const open = group && (opensInPlace ? (toggled ?? (!!item.defaultExpanded || item.open === true || hasActive(item))) : hasActive(item));
+  // A group's rows show only while one of them is the page on screen.
+  const open = children.some(hasActive);
+  const href = rowHref(item);
   const testId = testIdPrefix ? `${testIdPrefix}-${item.label.toLowerCase().replace(/\s+/g, "-")}` : undefined;
-  const trail = (item.badge || item.trailing) && (
+  const badge = item.badge ?? (open ? undefined : rolledUpBadge(children));
+  const trail = (badge || item.trailing) && (
     <>
       {item.trailing}
-      {item.badge && <Badge badge={item.badge} />}
+      {badge && <Badge badge={badge} />}
     </>
   );
   const childDepth = Math.min(depth + 1, 3) as 1 | 2 | 3;
@@ -114,11 +139,10 @@ function NavTreeItem({
         depth={depth}
         // Icons only at the first level: below it, labels line up instead.
         icon={depth === 1 ? item.icon : undefined}
-        href={item.href}
-        onClick={opensInPlace ? () => setToggled(!open) : item.href ? () => onNavigate(item.href!) : undefined}
-        // A collapsed group whose page is open is marked, as on the console's rail.
-        current={!!item.active || (opensInPlace && !open && hasActive(item))}
-        expanded={opensInPlace ? open : undefined}
+        href={href}
+        onClick={href ? () => onNavigate(href) : undefined}
+        current={!!item.active}
+        expanded={children.length > 0 ? open : undefined}
         trail={trail || undefined}
         testId={testId}
       />

@@ -76,6 +76,7 @@ export function SidebarPrimaryAction({
   label,
   shortcut,
   onClick,
+  href,
   testId,
 }: {
   icon: ReactNode;
@@ -83,21 +84,22 @@ export function SidebarPrimaryAction({
   /** The action's shortcut, formatted (useShortcutLabel). */
   shortcut?: string;
   onClick: () => void;
+  /** The page it opens. Given, it is a link (a modified click opens a new tab) and a plain click runs `onClick`. */
+  href?: string;
   testId?: string;
 }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-testid={testId}
-      // The label alone names the button; the key cap is a visual hint.
-      aria-label={label}
-      className={cn(
-        // --primary-hover is a real colour per scheme with no Tailwind alias.
-        "mx-2 flex h-8 shrink-0 items-center gap-2 rounded-md bg-primary px-2 text-left text-ui font-medium text-primary-foreground transition-colors hover:bg-[hsl(var(--primary-hover))]",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-      )}
-    >
+  const shared = {
+    "data-testid": testId,
+    // The label alone names the action; the key cap is a visual hint.
+    "aria-label": label,
+    className: cn(
+      // --primary-hover is a real colour per scheme with no Tailwind alias.
+      "no-color mx-2 flex h-8 shrink-0 items-center gap-2 rounded-md bg-primary px-2 text-left text-ui font-medium text-primary-foreground transition-colors hover:bg-[hsl(var(--primary-hover))] hover:text-primary-foreground",
+      "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    ),
+  };
+  const content = (
+    <>
       <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
         {icon}
       </span>
@@ -107,6 +109,15 @@ export function SidebarPrimaryAction({
           {shortcut}
         </kbd>
       )}
+    </>
+  );
+  return href ? (
+    <a {...shared} href={href} onClick={routedClick(onClick)}>
+      {content}
+    </a>
+  ) : (
+    <button type="button" {...shared} onClick={onClick}>
+      {content}
     </button>
   );
 }

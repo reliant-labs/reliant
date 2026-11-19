@@ -334,7 +334,9 @@ describe("Sidebar selected chat scroll", () => {
       </QueryClientProvider>
     );
 
-    expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
+    // New chat is a link to the new-chat view (U5's /new), so a modified
+    // click opens it in a new tab; a plain one runs openNewChat.
+    expect(screen.getByRole("link", { name: "New chat" })).toHaveAttribute("href", "/new");
     // Inbox is in the nav with its badge; the nav's order is pinned in Sidebar.forge-nav.test.tsx.
     const nav = screen.getByRole("navigation", { name: "Chat sidebar navigation" });
     expect(nav).toContainElement(screen.getByTestId("sidebar-inbox-button"));

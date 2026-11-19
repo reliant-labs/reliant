@@ -93,7 +93,7 @@ import type { MenuGroup } from "../forge-ui/dropdown_menu";
 import { contextMenuOpening, type ContextMenuOpening } from "../../lib/contextMenuOpening";
 import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
 import { focusEventName } from "../../lib/keyboard/focus";
-import { inboxPath, projectsPath, settingsPath, usagePath, withSearch, workflowsPath } from "../../lib/paths";
+import { inboxPath, newChatPath, projectsPath, settingsPath, usagePath, withSearch, workflowsPath } from "../../lib/paths";
 import { WORKFLOWS_TABS, isWorkflowsAreaPath, workflowsTabForPath } from "../../lib/workflowsArea";
 import type { Chat } from "../../api/client";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
@@ -800,6 +800,7 @@ function SidebarComponent({
   const showForgeEntry = isForgeUIEnabled();
   // Where each place is, in the form the links use (lib/paths), and whether
   // its page is the one on screen.
+  const newChatHref = newChatPath();
   const inboxHref = inboxPath();
   const projectsHref = projectsPath();
   const workflowsHref = workflowsPath();
@@ -1842,6 +1843,7 @@ function SidebarComponent({
         <SidebarPrimaryAction
           icon={<SquarePen className="size-4" />}
           label="New chat"
+          href={newChatHref}
           onClick={handleNewChat}
           testId="create-chat-button"
           shortcut={newChatShortcut}
@@ -1904,12 +1906,25 @@ function SidebarComponent({
         </div>
       </nav>
 
-      {/* Below the places, one scroller: the apps (the open one's sections
-          inline), then the chats. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" data-testid="sidebar-scroller">
+      {/* Below the places, two regions that scroll on their own: the apps
+          (the open one's sections inline), then the chats. An expanded app
+          never pushes the chats off the window (owner preview 2026-11-19, a
+          900px window): the chats keep at least 40% of the room, and never
+          less than their heading and five rows, unless the window has less;
+          the apps take what they need of the rest and scroll past it. Pure
+          flex: the apps shrink (min-h-0) and the chats grow from nothing. */}
+      <div className="flex min-h-0 flex-1 flex-col" data-testid="sidebar-regions">
       {/* Every app the org runs, one click from its console. */}
-      {showForgeEntry && <AppsNavSection pathname={pathname} search={search} onNavigate={go} />}
+      {showForgeEntry && (
+        <div className="min-h-0 shrink overflow-y-auto overscroll-contain" data-testid="sidebar-apps-scroller">
+          <AppsNavSection pathname={pathname} search={search} onNavigate={go} />
+        </div>
+      )}
 
+      <div
+        className="flex min-h-[min(100%,max(40%,calc(5*var(--row-h)+3.25rem)))] flex-1 flex-col"
+        data-testid="sidebar-chats"
+      >
       {/* The list's heading: its one menu (project, sort, view, every
           project, archived) on hover, and the machine filter when there is
           more than one machine. */}
@@ -1973,7 +1988,7 @@ function SidebarComponent({
         )}
       </SidebarHeading>
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain" data-testid="sidebar-scroller">
         <div
           ref={scrollContainerRef}
           className="flex-1 px-2 pb-3 pt-0.5"
@@ -2177,6 +2192,7 @@ function SidebarComponent({
             </div>
           )}
         </div>
+      </div>
       </div>
       </div>
 
