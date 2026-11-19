@@ -109,6 +109,10 @@ requires:
   repos: [control-plane]        # checkouts that must exist, reach origin, and have no local tag diverged from origin's
 ```
 
+### daemon-machine-pin
+
+**Warning.** A literal `daemon:` on the workflow or on a node pins one machine: by name (`daemon: ci-box-1`, `daemon: {name: ci-box-1}`) or by id (`daemon: {id: …}`). When that box is swapped out, renamed, asleep or busy, every run stalls waiting for it, even while another machine that could do the work is idle. Pin a [machine pool](/machines/choosing#pinning-a-pool-or-labels-instead-of-a-machine) (`daemon: {pool: ci}`) or the machines' labels (`daemon: {labels: {role: gate}}`) instead: the run is placed once on the least-loaded machine that can take it. A pool, labels alone, a kind (`local`, `cloud`, `any`) and a CEL selector (`"{{ inputs.machine }}"`) are not reported. A name pin keeps working; when the workflow really must run on that one machine, allow the finding with the reason.
+
 ### scenario-none
 
 **Warning.** The workflow has no scenarios under `.reliant/workflows/<name>/scenarios/`, so none of its triggers or endings is tested. See [Testing workflows](/workflows/testing).

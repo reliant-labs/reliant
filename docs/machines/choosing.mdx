@@ -59,9 +59,48 @@ nodes:
     command: make build
 ```
 
-A selector may contain `id`, `name`, `type` (`local`, `cloud` or `any`) and `labels`; every label listed must be present on the machine. Machines advertise labels to Reliant when they connect, but `reliant daemon start` has no flag for setting your own, so rely on `id`, `name` and `type` unless you know what a machine advertises.
+A selector may contain `id`, `name`, `type` (`local`, `cloud` or `any`), `labels` and `pool`. Next to `id`, `name` or `type`, `labels` narrows the match: every label listed must be among those the machine advertises when it connects. On its own, `labels` places the work instead, as described below.
 
 The value can also be a CEL expression, such as `"{{ inputs.where }}"`, which may produce a string or a map with the same keys.
+
+## Pinning a pool or labels instead of a machine
+
+A name or an id pins one machine. When that machine is replaced, renamed, asleep or busy, every run that names it waits for it, even while another machine that could do the work sits idle. For work that any of several machines can do, such as a CI gate or a nightly build, pin a group of machines instead:
+
+```yaml
+name: gate
+entry: [test]
+daemon:
+  pool: ci            # one of your machine pools
+
+nodes:
+  - id: test
+    type: run
+    timeout: 30m
+    command: make test
+  - id: bench
+    type: run
+    timeout: 1h
+    daemon:
+      labels:         # alone: any machine whose labels contain every pair
+        gpu: "true"
+    command: make bench
+
+edges:
+  - from: test
+    default: bench
+```
+
+- **`daemon: {pool: <name>}`** places the work on one member of your machine pool of that name. It is chosen the way a pool-bound automation's run is: the least-loaded member that can take work, skipping members that are not synced to the pool's agreed workflow catalog, and never more than the pool's `max_runs_per_member` live runs on one member. When every member is full the run waits for a slot, and a sleeping member is woken. `pool` stands alone: combined with `id`, `name`, `type` or `labels` it is a validation error, because the pool chooses the machine itself. Naming a pool you do not have fails validation when the workflow is saved, and fails the run if the pool is deleted afterwards.
+- **`daemon: {labels: {...}}`**, with no `id`, `name`, `type` or `pool`, places the work the same way on one of your machines whose labels contain every pair listed: an unnamed pool, with no per-machine limit. These are the labels you set on the machine, which persist across sleeps and reconnects, not the ones it advertises when it connects.
+
+Placement happens **once**. A workflow-level `pool` or `labels` picks a machine when the run starts, and every later step of the run uses that machine. A node-level one picks a machine the first time the node runs, and every iteration of a loop around it reuses that machine. The placement holds one of the member's `max_runs_per_member` slots for as long as the run is live.
+
+The order is the one above: a node's `daemon:` wins over the workflow's, which wins over the chat's or automation's machine. A run an automation already placed on a pool stays on the member it was placed on when the workflow names the same pool, so the run never leaves its checkout.
+
+<Note>
+Pinning a machine by name or id keeps working unchanged. [`reliant workflow lint`](/workflows/lint#daemon-machine-pin) warns about it, so a workflow that should survive a machine swap moves to a pool or labels.
+</Note>
 
 <Warning>
 A `daemon:` makes the workflow need a machine. It cannot run as a [no-machine run](/automations/no-machine-runs), and the workflow builder warns you about it.
