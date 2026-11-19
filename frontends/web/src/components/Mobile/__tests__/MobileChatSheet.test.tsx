@@ -200,7 +200,7 @@ describe("MobileChatSheet workflow row", () => {
   it("links to the workflow view with its live status", () => {
     renderSheet({ workflow: execution({}) });
     const link = screen.getByRole("link", { name: /Workflow: Forge One Shot/ });
-    expect(link).toHaveAttribute("href", "/m/chats/$chatId/workflow");
+    expect(link).toHaveAttribute("href", "/m/chats/chat-1/workflow");
     expect(link).toHaveTextContent("Running");
   });
 

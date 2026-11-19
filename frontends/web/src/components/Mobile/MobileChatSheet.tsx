@@ -42,6 +42,7 @@ import type { ThreadInfo } from "../Chat/thread-views";
 import { setChatThreadMode, useChatThreadMode } from "../Chat/thread-views/useChatThreadMode";
 import { MOBILE_ROW, MobileCardGroup, MobileRowIcon } from "./MobileChrome";
 import { contextUsageRatio, type ContextUsage } from "./MobileChatTopBar";
+import { mobileChatWorkflowPath } from "@/lib/paths";
 
 /** One word for where a workflow is, for the sheet's workflow row. */
 export function workflowStatusLabel(execution: Pick<WorkflowExecutionData, "state" | "stopReason">): string {
@@ -197,8 +198,7 @@ export function MobileChatSheet({
         <MobileCardGroup>
           {workflow && workflowName && (
             <Link
-              to="/m/chats/$chatId/workflow"
-              params={{ chatId }}
+              to={mobileChatWorkflowPath(chatId)}
               onClick={onClose}
               className={MOBILE_ROW}
             >

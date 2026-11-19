@@ -18,6 +18,7 @@ import { isLive, primaryLink } from "@/services/forge/apps";
 
 import { consolePath } from "../Forge/Console/paths";
 import { verdictBusy, verdictTone } from "./appParts";
+import { appsPath } from "@/lib/paths";
 
 /** Enough to be a shortcut; the Apps page holds the rest. */
 const MAX_LISTED = 3;
@@ -84,7 +85,7 @@ export function SidebarApps() {
         <li>
           <button
             type="button"
-            onClick={() => void navigate({ to: "/apps" })}
+            onClick={() => void navigate({ to: appsPath() })}
             className="flex h-6 items-center rounded-md px-2 text-xs text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {more} more

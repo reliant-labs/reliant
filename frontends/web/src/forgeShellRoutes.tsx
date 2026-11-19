@@ -61,6 +61,7 @@ import { lazyRoute } from './lib/lazyRoute'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { Toaster } from './lib/toast'
 import { authSearchSchema, oauthCallbackSearchSchema, upgradeSearchSchema } from './routeSchemas'
+import { appsPath } from '@/lib/paths'
 
 // Taken before the router exists: the guard's sign-in redirect replaces the
 // URL the landing handoff arrived on (forgeEntry.ts).
@@ -122,7 +123,7 @@ export function buildForgeShellTree({
 }) {
   const rootRoute = createRootRoute({
     component: ForgeRootShell,
-    notFoundComponent: () => <Navigate to="/apps" search={{}} />,
+    notFoundComponent: () => <Navigate to={appsPath()} search={{}} />,
     errorComponent: RouteErrorFallback,
   })
 
@@ -217,7 +218,7 @@ export function buildForgeShellTree({
     // A redirect, not a <Navigate> component: a second visit to `/` (sign-in
     // lands here from two places at once) must redirect again, not sit blank.
     beforeLoad: () => {
-      throw redirect({ to: '/apps', search: {}, replace: true })
+      throw redirect({ to: appsPath(), search: {}, replace: true })
     },
   })
 
@@ -302,7 +303,7 @@ export const forgeRouteTree = buildForgeShellTree({
     createRoute({
       getParentRoute: () => root,
       path: '/forge-shell-preview',
-      component: () => (getIsDev() ? <ForgeShellPreview /> : <Navigate to="/apps" search={{}} />),
+      component: () => (getIsDev() ? <ForgeShellPreview /> : <Navigate to={appsPath()} search={{}} />),
     }),
   ],
 })

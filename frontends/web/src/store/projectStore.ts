@@ -23,6 +23,7 @@ import { useChatNavigationStore } from "./chatNavigationStore";
 import { trackEvent } from "../lib/analytics";
 import { restoreLastWorktree } from "../hooks/worktree-actions";
 import { openChatInWorkspace, beginWorkspaceOpen } from "../lib/openChatInWorkspace";
+import { homePath, projectPath } from "@/lib/paths";
 
 // Lazy router accessor — importing from ../routes at module-init time creates
 // a cycle (routes.tsx → App → ModernApp → projectStore → routes.tsx), which
@@ -68,7 +69,7 @@ export function syncProjectFilterUrl(projectId: string | null) {
     if (!router) return; // routes.tsx hasn't registered yet — startup window
     const currentPath = router.state.location.pathname;
     if (projectId) {
-      const targetPrefix = `/project/${projectId}`;
+      const targetPrefix = projectPath(projectId);
       if (currentPath === targetPrefix || currentPath.startsWith(`${targetPrefix}/`)) {
         return;
       }
@@ -111,15 +112,14 @@ export function syncProjectFilterUrl(projectId: string | null) {
         return;
       }
       router.navigate({
-        to: "/project/$projectId",
-        params: { projectId },
+        to: projectPath(projectId),
         search: preserveSearch,
       });
     } else {
       // Only the chat shell's own URL carries the filter; every other route
       // keeps its path.
       if (currentPath === "/project" || currentPath.startsWith("/project/")) {
-        router.navigate({ to: "/", search: preserveSearch });
+        router.navigate({ to: homePath(), search: preserveSearch });
       }
     }
   } catch (err) {
