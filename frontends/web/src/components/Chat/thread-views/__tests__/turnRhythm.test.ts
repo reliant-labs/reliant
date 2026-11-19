@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { ContentBlockType, MessageRole, StreamingState } from "../../../../types/chat";
 import type { Message } from "../../../../types/chat";
-import { isTurnEnd, turnRhythmClass } from "../InterleavedTimeline";
+import { failedSendId } from "../../../../lib/pendingSends";
+import { turnEnds, turnRhythm } from "../InterleavedTimeline";
 
 function message(id: string, role: MessageRole, type: ContentBlockType, extra: Partial<Message> = {}): Message {
   return {
@@ -29,10 +30,10 @@ const tools = (id: string) => ({ type: "message", message: message(id, MessageRo
 
 // §2.2 of the chat design: 30px before a person's turn, 18.75px between it
 // and the answer, 11.25px between the rows of one answer.
-describe("turnRhythmClass", () => {
+describe("turnRhythm", () => {
   it("spaces turns apart and keeps a turn's rows together", () => {
     const items = [user("u1"), { type: "work" }, answer("a1"), user("u2"), answer("a2"), { type: "error" }];
-    expect(items.map((_, i) => turnRhythmClass(items, i))).toEqual(["", "pt-5", "pt-3", "pt-8", "pt-5", "pt-3"]);
+    expect(turnRhythm(items)).toEqual(["", "pt-5", "pt-3", "pt-8", "pt-5", "pt-3"]);
   });
 
   it("treats another agent's mail as part of the turn, not a person's message", () => {
@@ -43,16 +44,28 @@ describe("turnRhythmClass", () => {
       }),
     };
     const items = [user("u1"), answer("a1"), mail];
-    expect(turnRhythmClass(items, 2)).toBe("pt-3");
+    expect(turnRhythm(items)[2]).toBe("pt-3");
   });
 
   it("keeps a detailed run of tool-only messages tight", () => {
     const items = [user("u1"), tools("t1"), tools("t2"), answer("a1")];
-    expect(items.map((_, i) => turnRhythmClass(items, i))).toEqual(["", "pt-5", "pt-1", "pt-3"]);
+    expect(turnRhythm(items)).toEqual(["", "pt-5", "pt-1", "pt-3"]);
+  });
+
+  it("keeps each thread's run of tool-only messages its own", () => {
+    const review = { thread: "th-review" };
+    const items = [user("u1"), tools("t1"), { ...tools("r1"), workflow: review }, tools("t2"), tools("t3")];
+    expect(turnRhythm(items)).toEqual(["", "pt-5", "pt-3", "pt-3", "pt-1"]);
+  });
+
+  it("never runs a row with no thread into a run", () => {
+    const stray = { type: "message", message: message("s1", MessageRole.ASSISTANT, ContentBlockType.TOOL_CALL, { thread: "" }) };
+    const items = [user("u1"), tools("t1"), stray, tools("t2")];
+    expect(turnRhythm(items)).toEqual(["", "pt-5", "pt-3", "pt-3"]);
   });
 });
 
-describe("isTurnEnd", () => {
+describe("turnEnds", () => {
   const main = { thread: "chat-1" };
   const review = { thread: "th-review" };
   const at = <T extends object>(item: T, workflow = main) => ({ ...item, workflow });
@@ -62,6 +75,72 @@ describe("isTurnEnd", () => {
       at(user("u1")), at(answer("a1")), at({ type: "work" }), at(answer("a2")), at({ type: "error" }),
       at(answer("r1"), review), at(user("u2")), at(answer("a3")),
     ];
-    expect(items.map((_, i) => isTurnEnd(items, i))).toEqual([false, false, false, true, true, true, false, true]);
+    expect(turnEnds(items)).toEqual([false, false, false, true, true, true, false, true]);
+  });
+
+  // A row with no workflow, or no thread at all, is neutral: it neither joins
+  // a turn nor ends one, and it is its own end.
+  describe("a row with no thread", () => {
+    const strayWork = { type: "work" };
+    const strayMessage = {
+      type: "message",
+      message: message("s1", MessageRole.ASSISTANT, ContentBlockType.TEXT, { thread: "" }),
+    };
+
+    it("does not end the answer it sits inside", () => {
+      const items = [at(user("u1")), at(answer("a1")), strayWork, strayMessage, at(answer("a2"))];
+      expect(turnEnds(items)).toEqual([false, false, true, true, true]);
+    });
+
+    it("does not continue the answer it follows", () => {
+      const items = [at(user("u1")), at(answer("a1")), strayWork, strayMessage, at(user("u2"))];
+      expect(turnEnds(items)).toEqual([false, true, true, true, true]);
+    });
+
+    it("does not answer a prompt", () => {
+      const items = [at(user("u1")), strayWork, strayMessage];
+      expect(turnEnds(items)).toEqual([true, true, true]);
+    });
+  });
+
+  it("gives a main-thread answer its actions row through other threads' rows", () => {
+    const items = [
+      at(user("u1")),
+      at({ type: "thread-start" }, review),
+      at(answer("a1")),
+      at(tools("r1"), review),
+      at({ type: "work" }, review),
+      at(tools("a2")),
+      at(answer("r2"), review),
+      { type: "error" },
+      { type: "info" },
+    ];
+    expect(turnEnds(items)).toEqual([false, false, false, false, false, true, true, true, true]);
+  });
+
+  it("keeps a thread's answer to one prompt apart from its answer to the next", () => {
+    const items = [at(user("u1")), at(answer("a1")), at(answer("r1"), review), at(user("u2")), at(answer("a2"))];
+    expect(turnEnds(items)).toEqual([false, true, true, false, true]);
+  });
+
+  describe("a person's message", () => {
+    it("leaves the actions to the answer that follows it", () => {
+      expect(turnEnds([at(user("u1")), at(answer("a1"))])).toEqual([false, true]);
+    });
+
+    it("leaves them to another thread's answer too", () => {
+      expect(turnEnds([at(user("u1")), at(answer("r1"), review)])).toEqual([false, true]);
+    });
+
+    it("keeps them while it is the latest prompt and nothing has answered it", () => {
+      const items = [at(user("u1")), at(answer("a1")), at(user("u2")), at({ type: "thread-start" }, review), { type: "info" }];
+      expect(turnEnds(items)).toEqual([false, true, true, true, true]);
+    });
+
+    it("keeps them when its send failed, even after a retry is answered", () => {
+      const failed = { type: "message", message: message(failedSendId("c1"), MessageRole.USER, ContentBlockType.TEXT) };
+      const items = [at(failed), { type: "error" }, at(user("u2")), at(answer("a2"))];
+      expect(turnEnds(items)).toEqual([true, true, false, true]);
+    });
   });
 });
