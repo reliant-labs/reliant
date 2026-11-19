@@ -744,7 +744,7 @@ function mapPod(p: WireWorkloadPod): WorkloadPod {
   };
 }
 
-/** Why a declared spec is not recorded; "unknown" from a control plane that predates the reason. */
+/** Why a declared spec is not recorded; "unknown" when no reason is given. */
 function specGapOf(gap: WireDeclaredSpecGap): DeclaredSpecGap {
   switch (gap) {
     case WireDeclaredSpecGap.PENDING:

@@ -270,23 +270,21 @@ describe("what a release changed in one workload", () => {
   const row = { version: "v3", previousVersion: "v2" };
 
   it("names the first release and a re-promotion without a comparison", () => {
-    expect(workloadChange({ version: "v1", previousVersion: null }, undefined, "api")).toEqual({ kind: "first" });
-    expect(workloadChange({ version: "v1", previousVersion: "v1" }, undefined, "api")).toEqual({ kind: "same-release" });
-    expect(workloadChange(row, undefined, "api")).toBeNull();
+    expect(workloadChange({ version: "v1", previousVersion: null }, undefined)).toEqual({ kind: "first" });
+    expect(workloadChange({ version: "v1", previousVersion: "v1" }, undefined)).toEqual({ kind: "same-release" });
+    expect(workloadChange(row, undefined)).toBeNull();
   });
 
-  it("keeps only this workload's objects, even from a server that compared every object", () => {
+  it("lists the workload's objects the server compared", () => {
     const change = workloadChange(
       row,
       comparison({
+        workload: "api",
         deltas: [
           delta({ summary: "image api; env FOO added", images: [{ artifact: "api", from: "sha256:1111", to: "sha256:2222" }] }),
           delta({ kind: "ConfigMap", name: "api", workload: "", change: "added", summary: "keys a" }),
-          delta({ name: "web", workload: "web", summary: "image web" }),
-          delta({ kind: "Service", name: "unrelated", workload: "" }),
         ],
-      }),
-      "api"
+      })
     );
     expect(change).toEqual({
       kind: "changed",
@@ -297,8 +295,8 @@ describe("what a release changed in one workload", () => {
   });
 
   it("says nothing changed, and passes on why objects could not be compared", () => {
-    expect(workloadChange(row, comparison({ deltas: [delta({ name: "web", workload: "web" })], workload: "api", unchanged: 3 }), "api")).toEqual({ kind: "unchanged", unchanged: 3 });
-    expect(workloadChange(row, comparison({ state: "bundle-missing", detail: "no bundle for v2" }), "api")).toEqual({ kind: "not-compared", detail: "no bundle for v2" });
+    expect(workloadChange(row, comparison({ deltas: [], workload: "api", unchanged: 3 }))).toEqual({ kind: "unchanged", unchanged: 3 });
+    expect(workloadChange(row, comparison({ state: "bundle-missing", detail: "no bundle for v2" }))).toEqual({ kind: "not-compared", detail: "no bundle for v2" });
   });
 
   it("takes the digest from the frozen artifact named like the workload, and never guesses another", () => {

@@ -28,31 +28,19 @@
 import type { OAuthStartResult } from '@/lib/oauth-local'
 
 type ProviderOAuthBridge = {
-  startProviderOAuth?: (
+  startProviderOAuth: (
     authorizeUrlTemplate: string,
   ) => Promise<{ flowId: string; redirectUri: string }>
-  waitForProviderOAuth?: (
+  waitForProviderOAuth: (
     flowId: string,
   ) => Promise<{ code: string; state: string; redirectUri: string }>
-  cancelProviderOAuth?: (flowId: string) => Promise<unknown>
+  cancelProviderOAuth: (flowId: string) => Promise<unknown>
 }
 
 const bridge = (): ProviderOAuthBridge | undefined =>
   typeof window === 'undefined'
     ? undefined
     : (window as unknown as { electronAPI?: ProviderOAuthBridge }).electronAPI
-
-/**
- * Whether this build can run the flow locally.
- *
- * Both halves are checked because they ship together and a build with only one
- * is a build that would strand the user halfway through. Builds predating the
- * bridge have neither and fall back to the daemon RPC.
- */
-export const supportsLocalProviderOAuth = (): boolean => {
-  const api = bridge()
-  return Boolean(api?.startProviderOAuth && api?.waitForProviderOAuth)
-}
 
 /**
  * Run a provider sign-in through the desktop app's own loopback receiver.
@@ -67,8 +55,8 @@ export async function startOAuthViaDesktop(
   signal?: AbortSignal,
 ): Promise<OAuthStartResult> {
   const api = bridge()
-  if (!api?.startProviderOAuth || !api?.waitForProviderOAuth) {
-    throw new Error('This build cannot run provider sign-in locally')
+  if (!api) {
+    throw new Error('Provider sign-in through the desktop app needs the desktop app')
   }
 
   const { flowId } = await api.startProviderOAuth(authorizeUrlTemplate)
@@ -77,7 +65,7 @@ export async function startOAuthViaDesktop(
   // timeout — which matters for Codex, whose port 1455 is fixed by OpenAI and
   // would block every later attempt while it leaked.
   const onAbort = () => {
-    void api.cancelProviderOAuth?.(flowId)
+    void api.cancelProviderOAuth(flowId)
   }
   signal?.addEventListener('abort', onAbort, { once: true })
 

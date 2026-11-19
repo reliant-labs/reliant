@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Code, ConnectError } from "@connectrpc/connect";
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { useUsageBillingCheckout } from "@/hooks/useCloudBillingQueries";
@@ -27,9 +26,6 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
     enabled: !!orgId,
     staleTime: 10_000,
     refetchOnWindowFocus: true,
-    // An older server cannot serve this RPC. Avoid automatic retries, but keep
-    // focus/manual refresh so a later backend rollout recovers without a reload.
-    retry: (failures, error) => !(error instanceof ConnectError && error.code === Code.Unimplemented) && failures < 3,
   });
   const checkout = useUsageBillingCheckout();
   const [handoffError, setHandoffError] = useState(false);
@@ -44,11 +40,9 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
     const stop = setTimeout(() => clearInterval(interval), 60_000);
     return () => { clearInterval(interval); clearTimeout(stop); };
   }, [pending, refetch]);
-  const undeployed = state.error instanceof ConnectError && state.error.code === Code.Unimplemented;
   return <div id="app-hosting"><UsageBillingCard
-    unavailableReason={undeployed ? "App hosting billing is not available on this server yet. Buying a machine plan does not enable it." : undefined}
     key={`${state.data?.policyVersion ?? "loading"}:${state.data?.agreement?.id ?? "new"}`}
-    enabled={!undeployed && (state.data?.enabled ?? false)}
+    enabled={state.data?.enabled ?? false}
     policyVersion={state.data?.policyVersion ?? ""}
     agreement={state.data?.agreement}
     // Dollars in the units the price list sells in. The free egress allowance
@@ -61,7 +55,7 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
     minimumLine={hostingMinimumLine((state.data as HostedTerms | undefined)?.minimumMonthlyCents)}
     canManage={canManage}
     isLoading={state.isLoading}
-    error={state.error && !undeployed ? "Could not verify app hosting billing. Try again before authorizing usage." : checkout.error || handoffError ? "Checkout could not be completed. Check billing status and review the policy before retrying." : undefined}
+    error={state.error ? "Could not verify app hosting billing. Try again before authorizing usage." : checkout.error || handoffError ? "Checkout could not be completed. Check billing status and review the policy before retrying." : undefined}
     isSubmitting={checkout.isPending}
     onRetry={() => { checkout.reset(); setHandoffError(false); void refetch(); }}
     onCheckout={async consent => {

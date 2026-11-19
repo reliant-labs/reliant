@@ -165,8 +165,8 @@ function IdentityUsersBody({
   // User verbs open the instance with its owner key, which only a ready (or
   // degraded, still serving) instance has.
   const serving = status.state === "ready" || status.state === "degraded";
-  // "unknown" (a server that predates the field) keeps offering email: it is
-  // what that server does.
+  // "unknown" (the server could not say) keeps offering email rather than
+  // claiming the instance cannot send it.
   const canEmail = status.mailDelivery !== "none";
   // The demo console (and any read-only host) shows the verbs, disabled, with why.
   const { readOnly, reason } = useObsReadOnly();

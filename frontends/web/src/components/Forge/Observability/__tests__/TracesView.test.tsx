@@ -97,30 +97,6 @@ describe("trace list", () => {
     await waitFor(() => expect(screen.getAllByTestId("obs-trace-versions").every((c) => c.textContent?.includes("1.8.16"))).toBe(true));
   });
 
-  it("refuses rows a control plane answered without the client filters", async () => {
-    const api = createFixtureApi();
-    const real = api.listTraces.bind(api);
-    // An older control plane ignores the unknown fields and answers unfiltered.
-    vi.spyOn(api, "listTraces").mockImplementation((req, options) => real({ ...req, browser: undefined }, options));
-    renderPanel(api, { view: "traces", browser: "Firefox" });
-    expect(await screen.findByText(/can't filter traces by browser yet/)).toBeInTheDocument();
-  });
-
-  it("keeps a service's traces from one browser, whose rows carry no client of their own", async () => {
-    const api = createFixtureApi();
-    const real = api.listTraces.bind(api);
-    // Narrowed to a backend service, the rows are that service's spans: the
-    // browser span that names the client is not one of them, so a control
-    // plane that applied the filter answers with the client empty.
-    vi.spyOn(api, "listTraces").mockImplementation(async (req, options) => {
-      const result = await real({ ...req, browser: undefined }, options);
-      return { ...result, traces: result.traces.map((t) => ({ ...t, client: { ...t.client, browserName: "", osName: "" }, frontendVersion: "" })) };
-    });
-    renderPanel(api, { view: "traces", service: "api", browser: "Chrome" });
-    expect((await screen.findAllByTestId("obs-trace-row")).length).toBeGreaterThan(0);
-    expect(screen.queryByTestId("obs-error-filter-unsupported")).not.toBeInTheDocument();
-  });
-
   it("finds a trace by the operation its row is titled with", async () => {
     const user = userEvent.setup();
     const api = createFixtureApi();
@@ -149,22 +125,6 @@ describe("trace list", () => {
     );
     await user.click(within(bar).getByTestId("obs-traces-session-open"));
     expect(harness.current()).toMatchObject({ view: "sessions", session: "sess-001003" });
-  });
-
-  it.each([
-    ["user", { user: "u_8812" }, "can't filter traces by user"],
-    ["browser session", { rsession: "sess-001003" }, "can't filter traces by browser session"],
-  ])("never shows an older control plane's unfiltered traces as one %s's", async (_, search, copy) => {
-    const api = createFixtureApi();
-    const listTraces = api.listTraces;
-    // A control plane from before user_id/session_id: it ignores both fields, and fills neither.
-    api.listTraces = async (req, options) => {
-      const result = await listTraces({ ...req, userId: undefined, sessionId: undefined }, options);
-      return { ...result, traces: result.traces.map((t) => ({ ...t, userId: "", sessionId: "" })) };
-    };
-    renderPanel(api, { view: "traces", ...search });
-    expect(await screen.findByTestId("obs-error-filter-unsupported")).toHaveTextContent(copy);
-    expect(screen.queryAllByTestId("obs-trace-row")).toHaveLength(0);
   });
 
   it("shows the root span's duration, and the whole trace's when work outlived it", async () => {

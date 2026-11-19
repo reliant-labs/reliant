@@ -54,15 +54,9 @@ export type OAuthRedirectState = {
   returnTo?: string;
 };
 
-/**
- * Where the desktop app exposes its loopback callback listener, if it has one.
- *
- * Optional by design: a build whose main process does not implement it (and
- * every build shipped before this change) simply has no `startOAuthRedirect`,
- * and falls back to the hosted URL below rather than throwing.
- */
+/** Where the desktop app exposes its loopback callback listener. */
 type DesktopOAuthBridge = {
-  startOAuthRedirect?: () => Promise<{ redirectUri: string }>;
+  startOAuthRedirect: () => Promise<{ redirectUri: string }>;
 };
 
 const desktopBridge = (): DesktopOAuthBridge | undefined =>
@@ -74,14 +68,14 @@ const desktopBridge = (): DesktopOAuthBridge | undefined =>
  * The redirect target handed to the provider.
  *
  * Desktop: the loopback URI its main process is listening on. Web: the app's
- * own `/auth/callback`, which is also the correct answer for a desktop build
- * that predates the bridge — `getAppURL()` deliberately refuses a `file://` or
- * loopback document origin and falls back to the hosted app, because a
- * packaged origin is unreachable from the system browser.
+ * own `/auth/callback`, which is also the desktop's answer when its listener
+ * cannot start — `getAppURL()` deliberately refuses a `file://` or loopback
+ * document origin and falls back to the hosted app, because a packaged origin
+ * is unreachable from the system browser.
  */
 const resolveRedirectTarget = async (): Promise<string> => {
   const bridge = desktopBridge();
-  if (bridge?.startOAuthRedirect) {
+  if (bridge) {
     try {
       const { redirectUri } = await bridge.startOAuthRedirect();
       if (redirectUri) return redirectUri;
@@ -115,7 +109,7 @@ const withState = (baseUrl: string, state: OAuthRedirectState): string => {
  * embedded webviews, and electron/src/navigation-policy.js would externalize
  * the navigation anyway, stranding the renderer on the old route.
  */
-const opensExternally = (): boolean => Boolean(desktopBridge()?.startOAuthRedirect);
+const opensExternally = (): boolean => desktopBridge() !== undefined;
 
 /**
  * Begin provider sign-in. Identical on every surface up to the two lines that

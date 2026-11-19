@@ -50,9 +50,8 @@ export interface WorktreeState {
   activeChatId: string | null;
   chatQueue: string[]; // LRU navigation history
 
-  // Workflow state removed — the URL (/workflow, /workflow/$name) is now the
-  // source of truth. Persisted blobs from older versions may still contain
-  // `isWorkflowMode` and `activeWorkflowName`; they're ignored.
+  // Workflow mode is not stored here: the URL (/workflow, /workflow/$name) is
+  // the source of truth.
 
   // Viewer state
   openViewers: SerializedViewer[];
@@ -330,56 +329,6 @@ export function createDefaultProjectState(): ProjectWorkspaceState {
 /** Get worktree key from worktreeId (handles null -> MAIN_WORKTREE_KEY) */
 function getWorktreeKey(worktreeId: string | null): string {
   return worktreeId ?? MAIN_WORKTREE_KEY;
-}
-
-// ============================================================================
-// Deprecated Storage Cleanup
-// ============================================================================
-
-/**
- * Keys from deprecated stores that should be removed.
- *
- * Declared BEFORE the store: persist rehydrates synchronously from
- * localStorage while `create()` runs, and onRehydrateStorage calls
- * cleanupDeprecatedStorage() right then. Declared after it (as it used to be),
- * this const was still in its temporal dead zone at that moment, so every load
- * threw "Cannot access 'DEPRECATED_STORAGE_KEYS' before initialization", logged
- * "Post-rehydrate step failed", and never removed a key.
- */
-const DEPRECATED_STORAGE_KEYS = [
-  "tab-store", // Old tab system - replaced by workspaceStateStore
-  "viewer-storage", // Old viewer persistence - now in workspaceStateStore
-];
-
-/**
- * Clean up localStorage keys from deprecated systems.
- * Called during rehydration to ensure old data doesn't accumulate.
- */
-function cleanupDeprecatedStorage(): void {
-  if (typeof window === "undefined") return;
-
-  // Merely *reading* window.localStorage can throw a SecurityError in
-  // restricted-storage contexts (sandboxed iframe, blocked cookies, some
-  // privacy modes). Guard the access itself, not just the per-key ops below.
-  let store: Storage;
-  try {
-    if (!window.localStorage) return;
-    store = window.localStorage;
-  } catch {
-    return;
-  }
-
-  for (const key of DEPRECATED_STORAGE_KEYS) {
-    try {
-      const existing = store.getItem(key);
-      if (existing) {
-        logger.info(`[WorkspaceState] Removing deprecated storage: ${key}`);
-        store.removeItem(key);
-      }
-    } catch (e) {
-      logger.warn(`[WorkspaceState] Failed to remove deprecated key ${key}:`, e);
-    }
-  }
 }
 
 // ============================================================================
@@ -1021,9 +970,6 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
               projectCount: Object.keys(state.projects ?? {}).length,
             });
           }
-
-          // Clean up deprecated localStorage keys from old tab system
-          cleanupDeprecatedStorage();
         } catch (e) {
           // Swallow — a post-rehydrate side-effect failing must not be
           // reported back as a rehydration failure, and must not escape into
@@ -1031,92 +977,12 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
           logger.warn("[WorkspaceState] Post-rehydrate step failed (non-fatal):", e);
         }
       },
-      migrate: (persistedState: unknown, version: number) => {
-        logger.info("[WorkspaceState] Migrating from version", version);
-
-        // Migration v1 -> v2: leftSidebarExpanded moved from per-worktree to global
-        if (version < 2) {
-          const state = persistedState as Partial<WorkspaceStateStore>;
-          // Set global default if not present
-          if (state.leftSidebarExpanded === undefined) {
-            state.leftSidebarExpanded = true;
-          }
-          logger.info("[WorkspaceState] Migrated to v2: leftSidebarExpanded is now global");
-        }
-
-        // Migration v2 -> v3 was a no-op for the current schema. It used to add
-        // isWorkflowMode/activeWorkflowName fields, which have since been
-        // removed in favor of route-based navigation (/workflow/*). We keep
-        // the version bump only so the migration chain is intact.
-        if (version < 3) {
-          logger.info("[WorkspaceState] Migrated to v3: (workflow state fields no longer used)");
-        }
-
-        // Migration v3 -> v4: Add expandedLoops field to worktrees
-        if (version < 4) {
-          const state = persistedState as Partial<WorkspaceStateStore>;
-          // Add default expandedLoops to all existing worktrees
-          if (state.projects) {
-            for (const projectId of Object.keys(state.projects)) {
-              const project = state.projects[projectId];
-              if (project?.worktrees) {
-                for (const worktreeKey of Object.keys(project.worktrees)) {
-                  const worktree = project.worktrees[worktreeKey] as Partial<WorktreeState>;
-                  if (worktree && !worktree.expandedLoops) {
-                    worktree.expandedLoops = {};
-                  }
-                }
-              }
-            }
-          }
-          logger.info("[WorkspaceState] Migrated to v4: Added expandedLoops field");
-        }
-
-        // Migration v4 -> v5: Add workflowViewerOpen and workflowViewerMode fields to worktrees
-        if (version < 5) {
-          const state = persistedState as Partial<WorkspaceStateStore>;
-          // Add default workflow viewer state to all existing worktrees
-          if (state.projects) {
-            for (const projectId of Object.keys(state.projects)) {
-              const project = state.projects[projectId];
-              if (project?.worktrees) {
-                for (const worktreeKey of Object.keys(project.worktrees)) {
-                  const worktree = project.worktrees[worktreeKey] as Partial<WorktreeState>;
-                  if (worktree) {
-                    if (!worktree.workflowViewerOpen) {
-                      worktree.workflowViewerOpen = {};
-                    }
-                    if (!worktree.workflowViewerMode) {
-                      worktree.workflowViewerMode = {};
-                    }
-                  }
-                }
-              }
-            }
-          }
-          logger.info("[WorkspaceState] Migrated to v5: Added workflowViewerOpen and workflowViewerMode fields");
-        }
-
-        // Migration v5 -> v6: Add workflowLayoutDirection field to worktrees
-        if (version < 6) {
-          const state = persistedState as Partial<WorkspaceStateStore>;
-          // Add default workflow layout direction to all existing worktrees
-          if (state.projects) {
-            for (const projectId of Object.keys(state.projects)) {
-              const project = state.projects[projectId];
-              if (project?.worktrees) {
-                for (const worktreeKey of Object.keys(project.worktrees)) {
-                  const worktree = project.worktrees[worktreeKey] as Partial<WorktreeState>;
-                  if (worktree && !worktree.workflowLayoutDirection) {
-                    worktree.workflowLayoutDirection = {};
-                  }
-                }
-              }
-            }
-          }
-          logger.info("[WorkspaceState] Migrated to v6: Added workflowLayoutDirection field");
-        }
-
+      // Every version's fields are optional to the readers: a blob persisted
+      // before a field existed gets that field's default from
+      // getWorktreeState (per worktree) and from persist's merge with the
+      // initial state (top level). So a version bump needs no step here, and
+      // the identity keeps an older blob instead of resetting it.
+      migrate: (persistedState: unknown) => {
         return persistedState as WorkspaceStateStore;
       },
     }

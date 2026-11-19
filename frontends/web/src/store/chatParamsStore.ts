@@ -10,10 +10,6 @@ import { logger } from '../lib/logger';
  * inputs as the user is editing them, `chatPresets` the preset selections
  * (group → preset name), and both are what a send or a sync pushes.
  *
- * What an older build persisted in localStorage (`reliant-chat-params`) is read
- * once per chat by lib/legacyChatParams to seed a chat the server has no
- * selection for, and then deleted.
- *
  * The `tempNewChat*` siblings hold the same shape for a new chat that doesn't
  * have an ID yet, until it is created and they transfer to its id.
  */

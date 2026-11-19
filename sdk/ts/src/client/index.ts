@@ -42,7 +42,6 @@ export {
   type ChatStreamHooks,
   type ChatStreamOptions,
   type ChatSyncKind,
-  type SnapshotTiming,
 } from "./chat-stream.js";
 export {
   ProcessOutputStream,

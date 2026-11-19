@@ -62,9 +62,9 @@ Bodies stay out of `ChatState` (a finished call's body never changes: cache
 them yourself, per block id). The reducer keeps what it holds: a stub never
 displaces a body it has, by block id, in a message or in `toolResults`, and a
 body always replaces a stub, so a reconnect does not blank a call watched live.
-The default is `"full"`, what every client has always had; a server that
-predates the option sends full bodies, so act on each block's `bodyElided`,
-never on the mode asked for.
+The default is `"full"`, what every client has always had; a server may still
+send full bodies, so act on each block's `bodyElided`, never on the mode asked
+for.
 
 ### Peer dependencies
 

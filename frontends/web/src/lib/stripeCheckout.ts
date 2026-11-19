@@ -77,8 +77,7 @@ export function selectCheckoutPresentation(
     return { kind: "embedded", clientSecret, sessionId };
   }
 
-  // UNSPECIFIED and HOSTED are the same thing — a server that predates
-  // embedded checkout leaves the field at zero and means hosted.
+  // UNSPECIFIED (the proto default) and HOSTED are the same thing.
   if (!checkoutUrl) return { kind: "already_complete" };
   return { kind: "hosted", checkoutUrl, sessionId };
 }
@@ -144,8 +143,8 @@ export function buildCheckoutEmbedUrl(
 /**
  * Open embedded checkout in the Electron window, if we are in Electron.
  *
- * Returns the outcome when the desktop window hosted the trip, and `null` when
- * there is no bridge — in a browser the caller should mount
+ * Returns the outcome when the desktop window hosted the trip, and `null` in a
+ * browser — there the caller should mount
  * `EmbeddedCheckoutPanel` in place instead, which is the whole point of
  * embedded mode.
  *
@@ -158,14 +157,14 @@ export async function openEmbeddedCheckoutWindow(
     | { kind: "compute_plan"; planId: string }
     | { kind: "wallet_topup"; amountCents: bigint },
 ): Promise<CheckoutOutcome | null> {
-  const bridge = window.electronAPI?.openStripeCheckout;
-  if (!bridge) return null;
+  const desktop = window.electronAPI;
+  if (!desktop) return null;
 
   const embedUrl = buildCheckoutEmbedUrl(request);
   // The return URL shares the embed URL's origin, which is what
   // `classifyCheckoutReturn` matches on — the page navigates to
   // `?checkout=success` on itself when the SERVER confirms the purchase.
-  const { outcome } = await bridge({
+  const { outcome } = await desktop.openStripeCheckout({
     checkoutUrl: embedUrl,
     returnUrl: embedUrl,
   });
@@ -190,9 +189,9 @@ export async function openCheckout(
   if (!url) return null;
   if (url.startsWith(window.location.origin)) return null;
 
-  const bridge = window.electronAPI?.openStripeCheckout;
-  if (bridge) {
-    const { outcome } = await bridge({ checkoutUrl: url, returnUrl });
+  const desktop = window.electronAPI;
+  if (desktop) {
+    const { outcome } = await desktop.openStripeCheckout({ checkoutUrl: url, returnUrl });
     return outcome;
   }
 

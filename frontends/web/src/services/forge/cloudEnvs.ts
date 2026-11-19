@@ -140,8 +140,7 @@ export interface CloudEnvStatus {
  *   no-access         PermissionDenied: the caller's role in the organization
  *                     may not read deploy state (deploy reads need org admin).
  *   not-configured    Unimplemented: this control plane does not serve the
- *                     deploy domain (a deployment without its database, or one
- *                     that predates it).
+ *                     deploy domain (a deployment without its database).
  *   unreachable       anything else. The only genuinely bad state.
  */
 export type CloudAvailability =

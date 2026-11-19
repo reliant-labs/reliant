@@ -133,16 +133,14 @@ export interface ElectronAPI {
   // decides to open consent in the system browser instead of navigating this
   // window — Google refuses OAuth in an embedded webview.
   //
-  // Still OPTIONAL, deliberately: builds shipped before this existed do not
-  // provide it, and the renderer falls back to the hosted /auth/callback
-  // rather than throwing. Rejects (never resolves falsy) when the listener
-  // cannot start, so the fallback stays on one code path.
+  // Rejects (never resolves falsy) when the listener cannot start; the
+  // renderer then falls back to the hosted /auth/callback, on one code path.
   //
   // The code comes back by NAVIGATING this window to /auth/callback, so there
   // is no callback-event bridge to declare. The previous `onOAuthCallback`
   // here was never implemented in preload.js — `undefined` in every shipped
   // build — so the renderer listener that depended on it could never fire.
-  startOAuthRedirect?: () => Promise<{ redirectUri: string }>;
+  startOAuthRedirect: () => Promise<{ redirectUri: string }>;
 
   // Provider sign-in (Claude Code / Codex) through the desktop app's OWN
   // loopback receiver.
@@ -154,16 +152,13 @@ export interface ElectronAPI {
   // listener, so the browser's redirect hit a closed port. `start` binds the
   // port and returns at once; `wait` spans human time over IPC, which nothing
   // in between can time out.
-  //
-  // Optional like every bridge here: builds predating it fall back to the
-  // daemon RPC rather than throwing (see web/src/lib/oauth-desktop.ts).
-  startProviderOAuth?: (
+  startProviderOAuth: (
     authorizeUrlTemplate: string,
   ) => Promise<{ flowId: string; redirectUri: string }>;
-  waitForProviderOAuth?: (
+  waitForProviderOAuth: (
     flowId: string,
   ) => Promise<{ code: string; state: string; redirectUri: string }>;
-  cancelProviderOAuth?: (flowId: string) => Promise<unknown>;
+  cancelProviderOAuth: (flowId: string) => Promise<unknown>;
 
   // Integration connection (Slack, Gmail, …): a loopback receiver the API
   // relays the provider's code to, because consent runs in the system browser.
@@ -172,9 +167,8 @@ export interface ElectronAPI {
   startConnectionOAuthReceiver?: () => Promise<{ flowId: string; redirectUri: string }>;
 
   // Stripe checkout in a controlled window, so the desktop app can observe the
-  // return instead of losing the purchase to the system browser. Optional: a
-  // build without it falls back to the plain redirect (see lib/stripeCheckout).
-  openStripeCheckout?: (args: {
+  // return instead of losing the purchase to the system browser.
+  openStripeCheckout: (args: {
     checkoutUrl: string;
     returnUrl: string;
   }) => Promise<{ outcome: "success" | "cancelled" | "dismissed" }>;

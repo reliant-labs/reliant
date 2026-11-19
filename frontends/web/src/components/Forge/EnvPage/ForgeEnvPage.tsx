@@ -134,12 +134,6 @@ export function ForgeEnvPage() {
   const machines = useDaemonList({ enabled: tabWantsDaemon });
   const tabDaemon = daemonSideForTab(daemon, (machines.data ?? []).some(isAwakeMachine));
 
-  // The identity status names owners and sharers by control-plane id.
-  const envNameById = useCallback(
-    (id: string) => (live.data?.envs ?? []).find((candidate) => candidate.id === id)?.name,
-    [live.data]
-  );
-
   const forgeEnv = useMemo(() => {
     const report = topology.data?.kind === "report" ? topology.data.report : null;
     return report ? (environments(report).find((candidate) => candidate.env === envName) ?? null) : null;
@@ -384,7 +378,6 @@ export function ForgeEnvPage() {
             lifecycle={lifecycle}
             live={liveEnv}
             liveLoading={live.isLoading}
-            envNameById={envNameById}
           />
         ) : (
           <RunningTab

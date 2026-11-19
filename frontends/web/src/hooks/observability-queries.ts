@@ -22,7 +22,7 @@ import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPl
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope, ReleaseHealth } from "@/services/controlPlane/observability/deliveryTypes";
-import { alertingRetry, FilterUnsupportedError, issuesRetry, obsRetry, obsRetryDelay, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
+import { alertingRetry, issuesRetry, obsRetry, obsRetryDelay, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
 import type {
   AddIssueCommentRequest,
   AssignIssueRequest,
@@ -50,7 +50,6 @@ import type {
   SearchLogsResult,
   Severity,
   TimeWindow,
-  TraceSummary,
 } from "@/services/controlPlane/observability/types";
 import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 import { rangeMs, readRange, resolveWindow, type RangePreset, type RangeRead } from "@/services/controlPlane/observability/window";
@@ -262,36 +261,6 @@ export interface TraceFilters {
 
 export const TRACE_PAGE_SIZE = 100;
 
-/**
- * Refuse rows a control plane older than a filter answered without it (it
- * ignores the unknown field, so the list would look filtered and not be).
- *
- * A row proves the filter was ignored when it names a DIFFERENT value. A list
- * where no row names any value is an older server's signature too, unless
- * the request narrowed the counted spans (a service or an attribute filter):
- * then the browser spans that carry the client, the build and often the user
- * are not part of any row, and a server that applied the filter answers with
- * the fields empty. "The api's traces from Chrome" are api spans only.
- */
-export function assertTraceFiltersApplied(filters: TraceFilters, traces: TraceSummary[], narrowed: boolean) {
-  if (traces.length === 0) return;
-  const ignored = (wanted: string | undefined, valuesOf: (t: TraceSummary) => string[], what: string) => {
-    if (!wanted) return;
-    const contradicted = traces.some((t) => {
-      const values = valuesOf(t).filter(Boolean);
-      return values.length > 0 && !values.includes(wanted);
-    });
-    const neverNamed = !narrowed && traces.every((t) => valuesOf(t).every((v) => !v));
-    if (contradicted || neverNamed) throw new FilterUnsupportedError(what, "traces");
-  };
-  ignored(filters.userId, (t) => [t.userId], "user");
-  ignored(filters.sessionId, (t) => [t.sessionId], "browser session");
-  ignored(filters.browser, (t) => [t.client.browserName], "browser");
-  ignored(filters.os, (t) => [t.client.osName], "OS");
-  ignored(filters.frontendVersion, (t) => [t.frontendVersion], "frontend version");
-  ignored(filters.backendVersion, (t) => t.backendBuilds.map((b) => b.version), "backend version");
-}
-
 export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
   const api = useObsReadApi();
   return useInfiniteQuery({
@@ -315,7 +284,6 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
         limit: TRACE_PAGE_SIZE,
         cursor: pageParam?.cursor,
       }, { signal });
-      assertTraceFiltersApplied(filters, result.traces, filters.services.length > 0 || (scope?.filters.length ?? 0) > 0);
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,
@@ -472,8 +440,7 @@ export function useFlamegraph(scope: ObsScope | null, filters: FlamegraphFilters
  * (pass serviceSignalsRange of the view's window). One request per scope and
  * range, shared by every picker, tab and link that asks, and keyed without
  * the attribute filters: the server ignores them, so a filter change must not
- * re-ask. Never retried on Unimplemented (a control plane that predates the
- * RPC): the caller treats an error as "unknown" and offers every view.
+ * re-ask. The caller treats an error as "unknown" and offers every view.
  */
 export function useServiceSignals(scope: ObsScope | null, range: RangePreset) {
   const api = useObsReadApi();
@@ -907,29 +874,6 @@ export interface IssueFilters {
 export const ISSUE_PAGE_SIZE = 50;
 
 /**
- * A value no one has, which useIssues asks for to learn whether a filter is
- * applied. User ids, browsers, OSes and builds are the application's own
- * strings, so no fixed value is reserved: each read draws a fresh random one
- * (122 bits) nobody can hold. 42 characters, inside every probed field's
- * validated length (ListIssuesRequest's browser and os take at most 64).
- */
-export function issueFilterProbe(): string {
-  return `probe-${crypto.randomUUID()}`;
-}
-
-/**
- * The filters useIssues probes, each by its own request field and its own
- * label. They did not all ship together (user_id came before the client and
- * build fields), so each is asked about alone.
- */
-const ISSUE_PROBED_FILTERS = [
-  { key: "userId", label: "user" },
-  { key: "browser", label: "browser" },
-  { key: "os", label: "OS" },
-  { key: "serviceVersion", label: "build" },
-] as const satisfies readonly { key: keyof IssueFilters; label: string }[];
-
-/**
  * One root for every issue read, so a triage (which can move an issue between
  * lists, change its detail and add to its history) re-reads all of them, and
  * the panel's Refresh does too.
@@ -1002,22 +946,7 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
         pageSize: ISSUE_PAGE_SIZE,
         pageToken: pageParam?.cursor,
       };
-      // An issue row names no user, so whether the server applied user_id is
-      // asked, not inferred: the same first page for a user nobody is. A server
-      // that knows the filter answers it with nothing; one that ignores it
-      // answers with rows. The client and build filters are asked the same way.
-      // Each probe asks about one filter alone, the other probed filters
-      // removed: a server that applies user_id but ignores browser would answer
-      // a combined probe with nothing (the random user matches no one) and pass
-      // off a user-filtered list as a browser-filtered one.
-      const probed = pageParam ? [] : ISSUE_PROBED_FILTERS.filter(({ key }) => !!filters[key]);
-      const unprobed = Object.fromEntries(ISSUE_PROBED_FILTERS.map(({ key }) => [key, undefined]));
-      const [result, ...probes] = await Promise.all([
-        api.listIssues(request, { signal }),
-        ...probed.map(({ key }) => api.listIssues({ ...request, ...unprobed, [key]: issueFilterProbe(), pageSize: 1 }, { signal })),
-      ]);
-      const ignored = probed.find((_, i) => probes[i].issues.length > 0);
-      if (ignored) throw new FilterUnsupportedError(ignored.label, "issues");
+      const result = await api.listIssues(request, { signal });
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,

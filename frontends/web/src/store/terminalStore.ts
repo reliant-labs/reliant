@@ -561,9 +561,7 @@ export const useTerminalStore = create(
       onRehydrateStorage: () => (state) => {
         if (state?.sessions) {
           // Convert createdAt strings back to Date objects after rehydration
-          // persistableSessions also drops daemonSessionId from anything
-          // stored before it stopped being persisted.
-          state.sessions = persistableSessions(state.sessions).map(session => ({
+          state.sessions = state.sessions.map(session => ({
             ...session,
             createdAt: session.createdAt instanceof Date
               ? session.createdAt
