@@ -84,7 +84,6 @@
   --tab-active-foreground: 0 0% 100%;
   --tab-active-accent: 212 91% 40%;
   --info: 212 91% 36%;
-
   --chat-input-bg: hsl(240 0% 99.5%);
   --chat-input-text: hsl(240 10% 12%);
   --chat-input-placeholder: hsl(240 8% 41%);
@@ -133,7 +132,6 @@
   --tab-active-foreground: 0 0% 100%;
   --tab-active-accent: 212 91% 40%;
   --info: 209 100% 68%;
-
   --chat-input-bg: hsl(240 18% 6.5%);
   --chat-input-text: hsl(240 5% 96%);
   --chat-input-placeholder: hsl(240 5% 63%);
@@ -182,7 +180,6 @@
   --tab-active: 221 83% 50%;
   --tab-active-foreground: 0 0% 100%;
   --tab-active-accent: 221 83% 44%;
-
   --chat-input-bg: hsl(220 0% 99.5%);
   --chat-input-text: hsl(220 10% 12%);
   --chat-input-placeholder: hsl(220 12% 41%);
@@ -230,7 +227,6 @@
   --tab-active: 215 92% 70%;
   --tab-active-foreground: 222 47% 9%;
   --tab-active-accent: 215 92% 77%;
-
   --chat-input-bg: hsl(220 12% 11%);
   --chat-input-text: hsl(220 10% 95%);
   --chat-input-placeholder: hsl(220 12% 66%);
@@ -279,7 +275,6 @@
   --tab-active: 25 16% 23%;
   --tab-active-foreground: 0 0% 100%;
   --tab-active-accent: 25 16% 15%;
-
   --chat-input-bg: hsl(30 0% 99.5%);
   --chat-input-text: hsl(30 10% 12%);
   --chat-input-placeholder: hsl(30 10% 41%);
@@ -327,7 +322,6 @@
   --tab-active: 35 14% 88%;
   --tab-active-foreground: 25 16% 10%;
   --tab-active-accent: 35 14% 94%;
-
   --chat-input-bg: hsl(30 7% 11%);
   --chat-input-text: hsl(30 7% 95%);
   --chat-input-placeholder: hsl(30 7% 66%);
@@ -376,7 +370,6 @@
   --tab-active: 215 28% 30%;
   --tab-active-foreground: 0 0% 100%;
   --tab-active-accent: 215 28% 23%;
-
   --chat-input-bg: hsl(215 0% 99.5%);
   --chat-input-text: hsl(215 10% 12%);
   --chat-input-placeholder: hsl(215 12% 41%);
@@ -424,7 +417,6 @@
   --tab-active: 213 80% 72%;
   --tab-active-foreground: 215 35% 9%;
   --tab-active-accent: 213 80% 79%;
-
   --chat-input-bg: hsl(215 14% 11%);
   --chat-input-text: hsl(215 10% 95%);
   --chat-input-placeholder: hsl(215 12% 66%);
@@ -473,7 +465,6 @@
   --tab-active: 178 82% 26%;
   --tab-active-foreground: 0 0% 100%;
   --tab-active-accent: 178 82% 21%;
-
   --chat-input-bg: hsl(190 0% 99.5%);
   --chat-input-text: hsl(190 10% 12%);
   --chat-input-placeholder: hsl(190 12% 41%);
@@ -521,7 +512,6 @@
   --tab-active: 172 62% 50%;
   --tab-active-foreground: 180 45% 7%;
   --tab-active-accent: 172 62% 58%;
-
   --chat-input-bg: hsl(190 10% 11%);
   --chat-input-text: hsl(190 10% 95%);
   --chat-input-placeholder: hsl(190 10% 66%);
@@ -570,7 +560,6 @@
   --tab-active: 262 70% 55%;
   --tab-active-foreground: 0 0% 100%;
   --tab-active-accent: 262 70% 48%;
-
   --chat-input-bg: hsl(260 0% 99.5%);
   --chat-input-text: hsl(260 10% 12%);
   --chat-input-placeholder: hsl(260 12% 41%);
@@ -618,7 +607,6 @@
   --tab-active: 262 88% 76%;
   --tab-active-foreground: 262 45% 10%;
   --tab-active-accent: 262 88% 82%;
-
   --chat-input-bg: hsl(260 12% 11%);
   --chat-input-text: hsl(260 10% 95%);
   --chat-input-placeholder: hsl(260 12% 66%);
@@ -667,7 +655,6 @@
   --tab-active: 0 0% 9%;
   --tab-active-foreground: 0 0% 100%;
   --tab-active-accent: 0 0% 22%;
-
   --chat-input-bg: hsl(0 0% 99.5%);
   --chat-input-text: hsl(0 0% 12%);
   --chat-input-placeholder: hsl(0 0% 41%);
@@ -715,7 +702,6 @@
   --tab-active: 0 0% 98%;
   --tab-active-foreground: 0 0% 4%;
   --tab-active-accent: 0 0% 86%;
-
   --chat-input-bg: hsl(0 0% 6%);
   --chat-input-text: hsl(0 0% 95%);
   --chat-input-placeholder: hsl(0 0% 66%);
