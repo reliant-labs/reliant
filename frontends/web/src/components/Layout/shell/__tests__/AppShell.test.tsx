@@ -125,6 +125,60 @@ describe("the one shell", () => {
     expect(screen.getByTestId("page")).toHaveAttribute("data-in-shell", "true");
   });
 
+  // U5's chat URLs render the chat shell (App) as the home does, one route
+  // each with the very same component (routes.tsx createOrgScopedRoutes):
+  // opening a chat, another, the new-chat view and the home keeps both the
+  // nav and the chat shell; only leaving the chats mounts another page.
+  it("keeps the nav and the chat shell across chats, the new-chat view and the home, then the Inbox", async () => {
+    const chatShellMounts = { count: 0 };
+    function ChatShell() {
+      useEffect(() => {
+        chatShellMounts.count += 1;
+      }, []);
+      return <Page name="chat-shell" />;
+    }
+    const root = createRootRoute({
+      component: () => (
+        <AppShellFrame>
+          <Outlet />
+        </AppShellFrame>
+      ),
+    });
+    const app = createRoute({ getParentRoute: () => root, id: "_app", component: () => <Outlet /> });
+    const authenticated = createRoute({ getParentRoute: () => root, id: "_authenticated", component: () => <Outlet /> });
+    const chats = ["/", "c/$chatId", "c/$chatId/t/$threadId", "new"].map((path) =>
+      createRoute({ getParentRoute: () => app, path, component: ChatShell }),
+    );
+    const inbox = createRoute({ getParentRoute: () => authenticated, path: "/inbox", component: () => <Page name="inbox" /> });
+    const router = createRouter({
+      routeTree: root.addChildren([app.addChildren(chats), authenticated.addChildren([inbox])]),
+      history: createMemoryHistory({ initialEntries: ["/c/a"] }),
+    });
+    render(<RouterProvider router={router} />);
+
+    const nav = await screen.findByTestId("nav-probe");
+    const shell = await screen.findByTestId("page");
+    expect(nav).toHaveTextContent("/c/a");
+
+    for (const href of ["/c/b", "/c/b/t/t-1", "/new", "/"]) {
+      await act(async () => {
+        await router.navigate({ href });
+      });
+      await waitFor(() => expect(nav).toHaveTextContent(new RegExp(`^${href}$`)));
+      // The same chat shell element, never torn down between chats.
+      expect(screen.getByTestId("page")).toBe(shell);
+    }
+    expect(chatShellMounts.count).toBe(1);
+
+    await act(async () => {
+      await router.navigate({ href: "/inbox" });
+    });
+    await waitFor(() => expect(screen.getByTestId("page")).toHaveAttribute("data-name", "inbox"));
+    expect(screen.getByTestId("nav-probe")).toBe(nav);
+    expect(nav).toHaveTextContent("/inbox");
+    expect(probe.navMounts).toBe(1);
+  });
+
   it.each([
     ["/auth", "auth"],
     ["/onboarding", "onboarding"],
