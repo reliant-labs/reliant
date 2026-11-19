@@ -1011,7 +1011,7 @@ export const ChatPresenter = memo(function ChatPresenter({
               />
             </div>
           ) : !(isWorkflowViewerExpanded && workflowViewerMode === 'inline') ? (
-            <div className="p-2 border-t border-border bg-muted/20 text-center text-sm text-muted-foreground flex-shrink-0">
+            <div className="p-2 border-t border-border-subtle text-center text-ui text-muted-foreground flex-shrink-0">
               Click to focus and type a message
             </div>
           ) : null}

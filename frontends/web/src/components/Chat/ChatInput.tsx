@@ -48,7 +48,6 @@ import { type WorkflowInputs } from "../workflow/WorkflowParamsPanel";
 import { ChatSettingsPopover } from "./settings";
 import type { PopoverTriggerProps } from "../forge-ui/popover";
 import { findModelParamKey, type PageId as SettingsPageId } from "./settings/ChatSettingsPopover";
-import { InlinePresetPicker } from "../workflow/InlinePresetPicker";
 import type { InputDef } from "../../lib/inputHelpers";
 import { fetchWorkflow, useWorkflowDefinitionQuery } from "../../hooks/workflow-queries";
 import { AgentMessageKind } from "../../gen/reliant/v1/chat_pb";
@@ -70,7 +69,9 @@ import { questionForThread } from "../../lib/pendingQuestions";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
-import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
+import { getInputDefault, getInputEnumValues, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
+import { isSelectorHidden } from "../../lib/executionMode";
+import { InlineParamInput } from "../workflow/InlineParamInput";
 import { isRequiredInput } from "../workflow/run/runWorkflowValues";
 import {
   adoptServerParams,
@@ -752,6 +753,18 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           schema.type !== "message" &&
           schema.type !== "attachments"
       );
+    }, [workflowInputs]);
+
+    // Get params explicitly marked for toolbar display
+    const toolbarParams = useMemo(() => {
+      if (!workflowInputs) return [];
+      const result: [string, InputDef][] = [];
+      for (const [name, schema] of Object.entries(workflowInputs)) {
+        if (getInputUI(schema) === "toolbar" && !isSelectorHidden(getInputEnumValues(schema))) {
+          result.push([name, schema]);
+        }
+      }
+      return result;
     }, [workflowInputs]);
 
     // Group presets by their tag, filtering out hidden presets
@@ -1542,15 +1555,14 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     // touch layout, at any width, the model lives in ⊕ alone (D1).
     const modelInlineAllowed = !coarsePointer && canConfigure && hasConfigurableParams;
     //
-    // At rest the row holds at most three: the workflow, the mode (the first
-    // preset) and the model. Every other control — further presets, toolbar
-    // params, the account, all settings — lives in ⊕, so the composer reads as
-    // four controls and Send, not a toolbar.
-    const modeTarget = canConfigure ? presetTargets[0] : undefined;
+    // At rest the row holds the workflow, the model and the mode (the
+    // workflow's toolbar params): with ⊕ and Send, four controls. Presets,
+    // the other params and every setting live in ⊕, so the composer reads as
+    // a text box, not a toolbar.
     const toolKeys = [
       ...(isPendingChat ? ["workflow"] : []),
-      ...(modeTarget ? [`preset:${modeTarget.name}`] : []),
       ...(modelInlineAllowed ? ["model"] : []),
+      ...(canConfigure ? toolbarParams.map(([name]) => `param:${name}`) : []),
       // Situational, not a control: renders only when someone other than
       // you pays, or the account is near a limit.
       "account",
@@ -2098,23 +2110,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         </div>
                       )}
 
-                      {/* Note: Presets and params are ALWAYS editable, even while streaming */}
-                      {modeTarget && [modeTarget].map((target) => (
-                        <div key={`preset-${target.name || "workflow"}`} {...toolProps(`preset:${target.name}`)}>
-                          <InlinePresetPicker
-                            presets={presetsByTag.get(target.tag) || []}
-                            value={selectedPresets[target.name]}
-                            onChange={(preset) =>
-                              handlePresetChange(target.name, preset)
-                            }
-                            groupLabel={target.name || undefined} // Empty string = workflow, show "Preset"
-                            isLoading={presetsLoading}
-                            disabled={disabled || !isMessagingAllowed}
-                            isStreaming={false}
-                          />
-                        </div>
-                      ))}
-
                       {/* Model pill - opens settings popover directly to model page */}
                       {modelInlineAllowed && (
                         <div {...toolProps("model")}>
@@ -2147,6 +2142,24 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           })}
                         </div>
                       )}
+
+                      {/* Toolbar Params - explicitly marked with ui: "toolbar" */}
+                      {canConfigure && toolbarParams.map(([paramName, schema]) => (
+                        <div key={paramName} {...toolProps(`param:${paramName}`)}>
+                          <InlineParamInput
+                            name={paramName}
+                            schema={schema}
+                            value={workflowParams[paramName] ?? getInputDefault(schema)}
+                            onChange={(value) => {
+                              // `undefined` resets the param: drop the key so its default applies.
+                              const { [paramName]: _previous, ...rest } = workflowParams;
+                              handleWorkflowParamsChange(value === undefined ? rest : { ...rest, [paramName]: value });
+                            }}
+                            disabled={disabled || !isMessagingAllowed}
+                            isStreaming={false}
+                          />
+                        </div>
+                      ))}
 
                       <div {...toolProps("account")} className="flex items-center gap-1.5">
                         <FundingBadge chatId={chatId} />

@@ -169,8 +169,8 @@ function RunStepExecutionComponent({ runOutput }: RunStepExecutionProps) {
         <div className="space-y-4">
           {/* Command */}
           <div>
-            <div className="px-3 py-2 bg-muted/30 rounded-t-md border border-b-0 border-border">
-              <span className="text-xs font-medium text-muted-foreground">
+            <div className="pb-1">
+              <span className="text-meta text-muted-foreground">
                 Command:
               </span>
             </div>
@@ -193,8 +193,8 @@ function RunStepExecutionComponent({ runOutput }: RunStepExecutionProps) {
           {/* Output */}
           {hasOutput && (
             <div>
-              <div className="px-3 py-2 bg-muted/30 rounded-t-md border border-b-0 border-border">
-                <span className="text-xs font-medium text-muted-foreground">
+              <div className="pb-1">
+                <span className="text-meta text-muted-foreground">
                   Output:
                 </span>
               </div>

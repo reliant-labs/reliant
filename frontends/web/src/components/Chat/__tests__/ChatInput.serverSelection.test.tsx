@@ -196,12 +196,18 @@ describe("composer adopts what the server says runs", () => {
   });
 });
 
+/** Settings live in ⊕: open it, then its Settings row. */
+async function openSettings() {
+  await userEvent.click(await screen.findByRole("button", { name: "Chat options" }));
+  await userEvent.click(await screen.findByTestId("options-settings-row"));
+}
+
 describe("composer pushes edits to the selection", () => {
   it("pushes a reset-only edit as null, then does not resend it on leaving", async () => {
     server.selection = { workflowName: WORKFLOW, params: { mode: "plan" }, version: 4n };
     const view = renderComposer();
     await waitFor(() => expect(storeParams()).toEqual({ mode: "plan" }));
-    await userEvent.click(screen.getByRole("button", { name: "Show all settings" }));
+    await openSettings();
     await userEvent.click(screen.getByRole("button", { name: "default" }));
     await waitFor(() => expect(server.updates).toHaveLength(1), PUSH_DEBOUNCE_WAIT);
     expect(server.updates[0]).toEqual({ params: { mode: null }, expectedVersion: 4n });
@@ -216,9 +222,11 @@ describe("composer pushes edits to the selection", () => {
     const send = vi.fn().mockResolvedValue(undefined);
     renderWithQuery(<ChatInput onSend={send} chatId={CHAT_ID} isStreaming={false} />);
     await waitFor(() => expect(storeParams().mode).toBe("plan"));
-    fireEvent.click(screen.getByRole("button", { name: "Show all settings" }));
+    await openSettings();
     fireEvent.click(screen.getByRole("button", { name: "default" }));
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "continue" } });
+    // Close ⊕ (a modal sheet) to reach the composer again.
+    await userEvent.keyboard("{Escape}");
+    fireEvent.change(await screen.findByRole("textbox"), { target: { value: "continue" } });
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", code: "Enter" });
     expect(server.updates).toHaveLength(0);
     await waitFor(() => expect(send).toHaveBeenCalled());
@@ -227,7 +235,7 @@ describe("composer pushes edits to the selection", () => {
 
   it("pushes a thread settings reset rather than dropping the removed key", async () => {
     renderWithQuery(<ChatInput onSend={vi.fn()} chatId={CHAT_ID} selectedThreadId="thread-1" isStreaming={false} />);
-    await userEvent.click(await screen.findByRole("button", { name: "Show all settings" }));
+    await openSettings();
     await waitFor(() => expect(screen.getByRole("button", { name: "plan" }).className).toContain("border-primary"));
     await userEvent.click(screen.getByRole("button", { name: "default" }));
     await waitFor(() => expect(server.updates).toHaveLength(1), PUSH_DEBOUNCE_WAIT);
@@ -239,7 +247,7 @@ describe("composer pushes edits to the selection", () => {
     let resolve!: () => void;
     server.pending = new Promise<void>((done) => { resolve = done; });
     renderWithQuery(<ChatInput onSend={vi.fn()} chatId={CHAT_ID} selectedThreadId={threadId} isStreaming={false} />);
-    await userEvent.click(await screen.findByRole("button", { name: "Show all settings" }));
+    await openSettings();
     await waitFor(() => expect(screen.getByRole("button", { name: "plan" }).className).toContain("border-primary"));
     await userEvent.click(screen.getByRole("button", { name: "default" }));
     await waitFor(() => expect(server.updates).toHaveLength(1), PUSH_DEBOUNCE_WAIT);
