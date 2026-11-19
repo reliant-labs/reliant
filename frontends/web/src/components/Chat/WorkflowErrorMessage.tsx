@@ -206,7 +206,7 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
         </span>
       )}
       <span
-        className="shrink-0 whitespace-nowrap text-meta font-normal tabular-nums text-muted-foreground"
+        className="shrink-0 whitespace-nowrap text-meta font-normal tabular-nums text-muted-foreground max-sm:hidden"
         data-testid="workflow-error-timestamp"
       >
         {timestampLabel}

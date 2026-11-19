@@ -273,7 +273,12 @@ function TurnWorkFoldComponent({
                 {elapsed}
               </span>
             )}
-            {showChrome && endAt && <MessageTimestamp at={endAt} className="shrink-0" />}
+            {showChrome && endAt && (
+              <MessageTimestamp
+                at={endAt}
+                className="shrink-0 opacity-0 transition-opacity group-hover/fold:opacity-100 group-focus-within/fold:opacity-100"
+              />
+            )}
             {branchButton}
           </>
         }
