@@ -485,7 +485,7 @@ function StepPaletteBody({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[12vh]" data-modal-open="true">
-      <div className="absolute inset-0 bg-black/50" aria-hidden onClick={onClose} />
+      <div className="absolute inset-0 bg-scrim" aria-hidden onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"

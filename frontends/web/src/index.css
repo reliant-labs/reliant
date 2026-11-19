@@ -538,6 +538,14 @@
     --font-sans: var(--font-ui-face), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
     --font-mono: 'Geist Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
 
+    /* THE SCRIM — the one backdrop behind every dialog, sheet and drawer
+       (`bg-scrim`). Black at an alpha per mode: on a white page 40% dims the
+       canvas itself; on a near-black page no black alpha can move the canvas
+       (40% shifts #0a0a0f by ~4/255), so dark dims the CONTENT harder
+       instead (60% takes body text from ~244 to ~98). One token, so every
+       overlay dims the same way (scrimToken.test.ts). */
+    --scrim: 0 0% 0% / 0.4;
+
     /* Neutral elevation */
     --surface-base: 0 0% 98%;
     --surface-raised: 0 0% 99%;
@@ -580,6 +588,7 @@
 
   .dark {
     color-scheme: dark;
+    --scrim: 0 0% 0% / 0.6;
 
     /* VIBRANT BLUE DARK THEME - colorful & modern */
     --background: 220 12% 8.5%;       /* Page — the darkest surface */

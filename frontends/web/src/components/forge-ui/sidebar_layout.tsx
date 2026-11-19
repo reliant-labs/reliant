@@ -482,7 +482,7 @@ export default function SidebarLayout({
         // Escape (above), as in modal.tsx.
         <div
           role="presentation"
-          className="fixed inset-0 z-40 bg-black/50"
+          className="fixed inset-0 z-40 bg-scrim"
           onClick={() => setDrawerOpen(false)}
         />
       )}
