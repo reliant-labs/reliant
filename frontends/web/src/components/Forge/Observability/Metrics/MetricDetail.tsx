@@ -151,7 +151,7 @@ function Attributes({ detail, groupBy, onGroupBy, breakdownKey, onBreakdown }: M
                 )}
                 {suggested && !attribute.highCardinality && <Tag title="A good key to break this metric down by">suggested</Tag>}
                 {attribute.enumerated.length > 0 && (
-                  <span className="truncate text-2xs text-ink-muted" title={attribute.enumerated.join(", ")}>
+                  <span className="truncate text-meta text-ink-muted" title={attribute.enumerated.join(", ")}>
                     {attribute.enumerated.slice(0, 4).join(" · ")}
                     {attribute.enumerated.length > 4 ? " …" : ""}
                   </span>
@@ -192,4 +192,4 @@ function Attributes({ detail, groupBy, onGroupBy, breakdownKey, onBreakdown }: M
 }
 
 const ATTR_BUTTON =
-  "inline-flex h-6 items-center gap-1 rounded px-1.5 text-2xs text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-6 items-center gap-1 rounded px-1.5 text-meta text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
