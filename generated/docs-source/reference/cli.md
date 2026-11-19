@@ -483,7 +483,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ui component search`](#reliant-forge-ui-component-search) | Search components by keyword |
 | [`reliant forge ui sourcemaps`](#reliant-forge-ui-sourcemaps) | File a frontend's source maps so its browser errors can be symbolicated |
 | [`reliant forge ui sourcemaps push`](#reliant-forge-ui-sourcemaps-push) | File the source maps of a built directory forge did not build |
-| [`reliant forge version`](#reliant-forge-version) | Print the forge version and build identity |
+| [`reliant forge version`](#reliant-forge-version) | Print the forge version and build identity (--pinned: the project's pinned forge) |
 | [`reliant github`](#reliant-github) | Act on GitHub as the Reliant bot (reviews, labels, merges) or as yourself |
 | [`reliant github gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
 | [`reliant github token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
@@ -1320,7 +1320,7 @@ reliant forge
 | [`telemetry`](#reliant-forge-telemetry) | Show or change whether forge sends anonymous usage events |
 | [`tools`](#reliant-forge-tools) | Manage developer tooling forge depends on (proto plugins, linters, etc.) |
 | [`ui`](#reliant-forge-ui) | Frontend tooling: the component library and frontend source maps |
-| [`version`](#reliant-forge-version) | Print the forge version and build identity |
+| [`version`](#reliant-forge-version) | Print the forge version and build identity (--pinned: the project's pinned forge) |
 
 **Flags:**
 
@@ -10213,6 +10213,12 @@ change what clients read:
 
 Generated files, vendor/ and testdata/ are left alone, as is every
 connect.NewError in a test (a fixture). Re-running it changes nothing.
+
+connect-go v2 code (a file importing connectrpc.com/connect/v2) is not
+rewritten: v2's NewError takes a message string and its errors meet svcerr
+through a different interceptor, so v1's wire-identity proof does not carry
+over. Each such file is listed instead, and forge lint's
+forgeconv-handler-connect-error classifies its sites.
 --dry-run prints each rewrite as file:line: old → new, and the worklist; after a
 real run every file:line is the rewritten file's.
 
@@ -11602,6 +11608,12 @@ change what clients read:
 
 Generated files, vendor/ and testdata/ are left alone, as is every
 connect.NewError in a test (a fixture). Re-running it changes nothing.
+
+connect-go v2 code (a file importing connectrpc.com/connect/v2) is not
+rewritten: v2's NewError takes a message string and its errors meet svcerr
+through a different interceptor, so v1's wire-identity proof does not carry
+over. Each such file is listed instead, and forge lint's
+forgeconv-handler-connect-error classifies its sites.
 --dry-run prints each rewrite as file:line: old → new, and the worklist; after a
 real run every file:line is the rewritten file's.
 
@@ -12274,7 +12286,10 @@ tools 'forge lint' gates with: golangci-lint and buf.
 Each codegen tool is installed at the version this project's go.mod resolves
 for it (google.golang.org/protobuf, connectrpc.com/connect,
 golang.org/x/tools) — the version the committed generated code was produced
-with — falling back to @latest when go.mod does not contain the module.
+with — falling back to @latest when go.mod does not contain the module. A
+project whose go.mod directly requires connectrpc.com/connect/v2 gets the v2
+protoc-gen-connect-go (connectrpc.com/connect/v2/cmd/protoc-gen-connect-go),
+at the version go.mod resolves for connectrpc.com/connect/v2.
 --version overrides that for every codegen tool.
 
 The lint tools install at forge's pins ('forge tools pins'), never at
@@ -12987,12 +13002,14 @@ JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   changed_ops.service
   early_pass
   findings
+  findings.alert
   findings.code
   findings.commit
   findings.message
   findings.op
   findings.policy
   findings.pr
+  findings.pre_existing
   findings.ref
   findings.service
   findings.threshold
@@ -13002,6 +13019,7 @@ JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   issue_alerts
   new_issues
   not_evaluated
+  pre_existing_alerts
   query_mode
   reason
   reason_code
@@ -15321,10 +15339,19 @@ name (code_source "static").
 
   cli forge obs ops dev --sort p95 --top 5
   cli forge obs ops prod --kind component --sort errors --since 6h
+  cli forge obs ops prod --name billing.Charge --name todo.v1.TodoService/CreateTodo --since 7d
 
 Each kind's table is the busiest 200 ops; --sort re-ranks within them.
 
+--name asks for these ops only, by span name (repeatable or comma-separated,
+at most 200 names of at most 200 characters each). The query is narrowed to
+them, so it is cheap over any window. Every requested op is listed: one with
+no spans in the window and scope has "found": false and zero figures, which
+tells "no traffic" apart from "not asked". With --name, --top defaults to
+every requested op.
+
 JSON schema forge.obs.ops/v1. --fields takes dotted paths of:
+  names
   ops
   ops.calls
   ops.code_file_path
@@ -15333,6 +15360,7 @@ JSON schema forge.obs.ops/v1. --fields takes dotted paths of:
   ops.code_source
   ops.error_ratio
   ops.errors
+  ops.found
   ops.kind
   ops.name
   ops.p50_ms
@@ -15378,12 +15406,13 @@ reliant forge obs ops [env] [flags]
 | `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--kind` | `stringSlice` | `[]` | only these kinds, comma-separated: rpc, endpoint, component (default all) |
+| `--name` | `stringSlice` | `[]` | only these ops, by span name; repeatable or comma-separated (an op with no spans is listed with found false) |
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--sort` | `string` | `calls` | calls | p95 | errors | rate |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
-| `--top` | `int` | `20` | most ops to return |
+| `--top` | `int` | `20` | most ops to return (with --name, default every requested op) |
 | `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
@@ -20999,7 +21028,10 @@ tools 'forge lint' gates with: golangci-lint and buf.
 Each codegen tool is installed at the version this project's go.mod resolves
 for it (google.golang.org/protobuf, connectrpc.com/connect,
 golang.org/x/tools) — the version the committed generated code was produced
-with — falling back to @latest when go.mod does not contain the module.
+with — falling back to @latest when go.mod does not contain the module. A
+project whose go.mod directly requires connectrpc.com/connect/v2 gets the v2
+protoc-gen-connect-go (connectrpc.com/connect/v2/cmd/protoc-gen-connect-go),
+at the version go.mod resolves for connectrpc.com/connect/v2.
 --version overrides that for every codegen tool.
 
 The lint tools install at forge's pins ('forge tools pins'), never at
@@ -21266,11 +21298,33 @@ reliant forge ui sourcemaps push <dist> [flags]
 
 ### reliant forge version
 
-Print the forge version and build identity
+Print the forge version and build identity (--pinned: the project's pinned forge)
+
+Print this forge's version and build identity.
+
+--pinned prints the forge the project pins instead — the project found from
+the working directory or -C — fetching or building it the way a command
+handed to it would, but printing it instead of running it:
+
+  path     the executable (this forge's own when it already is the pin)
+  version  the version it reports
+  source   self | tools (the project's .tools/bin/forge) | cache | built
+
+--json prints it as one forge.version.pinned/v1 document, whose "command"
+is the exec-ready prefix ([path], or [path, "forge"] for an embedded forge).
+It fails when there is no project, no forge_version, or the pinned forge
+cannot be had.
 
 ```
-reliant forge version
+reliant forge version [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | With --pinned: print one forge.version.pinned/v1 document |
+| `--pinned` | `bool` | - | Print the forge the project pins (path, version, source), fetching or building it |
 
 ---
 
