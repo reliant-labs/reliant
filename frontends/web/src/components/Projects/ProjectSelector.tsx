@@ -27,9 +27,10 @@
  * (forge-ui Popover), `ProjectSelectorDialog` floats it top-centre over the
  * page, like the command palette, for ⌘K and a menu item.
  *
- * Data: one ListProjectsWithApps read (useProjectCatalog). On a server that
- * cannot answer it (an older one) the picker falls back to the plain project
- * list (catalogFromProjects): it keeps working, knowing less. Pins and hides
+ * Data: one ListProjectsWithApps read (useProjectCatalog). Until it answers,
+ * and on a server that cannot answer it (an older one), the picker lists the
+ * plain project list the app already holds (catalogFromProjects): it opens
+ * at once and keeps working, knowing less. Pins and hides
  * are the person's `sidebar.projects` setting; a hidden row is left out of
  * browsing but a search still finds it.
  */
@@ -202,17 +203,22 @@ export function buildItems(args: {
 
 // ── Data ────────────────────────────────────────────────────────────────────
 
-/** The catalog, or the plain project list where the server cannot answer it. */
+/**
+ * The catalog; until it answers, or where the server cannot answer it, the
+ * plain project list the app already holds (catalogFromProjects), so the
+ * selector opens on rows at once and fills in apps and checkouts when the
+ * catalog lands.
+ */
 function useSelectorCatalog(orgId: string | null | undefined): { catalog: ProjectCatalog | undefined; loading: boolean } {
   const view = useProjectCatalog(orgId);
-  const fallbackWanted = view.error !== null;
   const plain = useProjects();
   return useMemo(() => {
     if (view.catalog) return { catalog: view.catalog, loading: false };
-    if (fallbackWanted && !plain.isLoading) return { catalog: catalogFromProjects(orgId ?? "", plain.projects), loading: false };
+    const plainReady = !plain.isLoading && (plain.projects.length > 0 || view.error !== null);
+    if (plainReady) return { catalog: catalogFromProjects(orgId ?? "", plain.projects), loading: false };
     if (isForgeShell()) return { catalog: undefined, loading: false };
-    return { catalog: undefined, loading: view.isLoading || (fallbackWanted && plain.isLoading) };
-  }, [view.catalog, view.isLoading, fallbackWanted, plain.isLoading, plain.projects, orgId]);
+    return { catalog: undefined, loading: view.isLoading || plain.isLoading };
+  }, [view.catalog, view.isLoading, view.error, plain.isLoading, plain.projects, orgId]);
 }
 
 // ── The panel ───────────────────────────────────────────────────────────────
@@ -600,7 +606,7 @@ export function ProjectSelectorDialog({ open, onClose, label, ...panel }: Projec
   useModalDialog({ open, panelRef, onClose, initialFocus: () => inputRef.current });
   if (!open || typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-2 pt-[10vh]" data-testid="project-selector-dialog" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-background/70 px-2 pt-[10vh]" data-testid="project-selector-dialog" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={panelRef}
         role="dialog"
