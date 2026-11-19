@@ -44,7 +44,7 @@ const run = (r: RunInit) => ({
   id: r.id, sessionId: r.id, workflowName: r.workflow, thread: r.id, parentId: '', spawnedByNodeId: '', loopIteration: '0',
   state: r.state ?? 'WORKFLOW_STATE_STOPPED', stopReason: 'WORKFLOW_STOP_REASON_COMPLETED', outcome: '',
   createdAtMs: String(Date.parse(iso(r.ago))), completedAtMs: r.took ? String(Date.parse(iso(r.ago)) + r.took) : '0',
-  title: r.title, projectId: IDS.project, launchKind: r.launch ?? 'chat.start', triggerId: r.trigger ?? '', triggerName: r.trigger ? 'Nightly CI triage' : '',
+  title: r.title, projectId: IDS.project, launchKind: r.launch ?? 'chat.start', triggerId: r.trigger ?? '', triggerName: r.trigger === 'trg-weekly' ? 'Weekly dependency bump' : r.trigger ? 'Nightly CI triage' : '',
   daemonId: IDS.cloudDaemon, activity: 'CHAT_ACTIVITY_IDLE', displayState: r.display, archived: false, failureDetail: '',
   runOutcome: r.outcome ?? 'RUN_OUTCOME_SUCCEEDED',
 })
