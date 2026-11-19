@@ -99,6 +99,36 @@ export async function listChats(
   };
 }
 
+/**
+ * The sidebar's chat list of several projects (the chat filter): ListChats'
+ * `project_ids`, the union of those projects, as long as the all-projects
+ * list. A server older than the field ignores it and answers every project,
+ * so the answer is narrowed here too: never a chat of a project not chosen.
+ */
+export async function listChatsOfProjects(
+  projectIds: readonly string[],
+  options: { signal?: AbortSignal; orgId?: string | null } = {},
+): Promise<{
+  chats: Chat[];
+  lastUserUpdateSequence: number;
+  mainWorktrees: WorktreeSummary[];
+}> {
+  const chosen = new Set(projectIds);
+  const response = await client.listChats(
+    {
+      projectIds: [...projectIds],
+      ...(options.orgId ? { orgId: options.orgId } : {}),
+      limit: ALL_PROJECTS_CHAT_LIMIT,
+    },
+    { signal: options.signal },
+  );
+  return {
+    chats: response.chats.map(convertProtoChat).filter((chat) => chosen.has(chat.projectId)),
+    lastUserUpdateSequence: Number(response.lastUserUpdateSequence),
+    mainWorktrees: response.mainWorktrees.filter((w) => chosen.has(w.projectId)),
+  };
+}
+
 /** How many chats the all-projects list asks for: the most recently active. */
 export const ALL_PROJECTS_CHAT_LIMIT = 300;
 

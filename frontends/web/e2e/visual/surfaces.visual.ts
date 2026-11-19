@@ -12,7 +12,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { CHAT_IDS, chatWithoutFailedSend } from './fixtures/chat'
-import { selectorSurfaceFixtures } from './fixtures/projects'
+import { FILTER_PROJECT_IDS, selectorSurfaceFixtures } from './fixtures/projects'
 import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
 
 type Viewport = 'desktop' | 'mobile'
@@ -214,6 +214,28 @@ const SURFACES: Surface[] = [
     act: async (page) => {
       await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-project-switcher')))
     },
+    harness: { fixtures: selectorSurfaceFixtures },
+  },
+  {
+    // The chat list's project filter, choose N of M: the selector in
+    // multi-select mode, three projects of eight chosen. Desktop only, like
+    // the selector: the phone surface's chat list has its own project list.
+    name: 'chat-filter-open',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('project-selector-chosen-count').getByText('3 chosen'),
+    act: async (page) => {
+      await page.getByTestId('chat-project-filter-trigger').click()
+      for (const id of FILTER_PROJECT_IDS) await page.getByTestId(`project-selector-row-${id}`).click()
+    },
+    harness: { fixtures: selectorSurfaceFixtures },
+  },
+  {
+    // The Chats heading once three projects are chosen, from the URL.
+    name: 'chat-filter-heading',
+    path: `/?projects=${FILTER_PROJECT_IDS.join(',')}`,
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('project-filter-label').getByText('3 projects'),
     harness: { fixtures: selectorSurfaceFixtures },
   },
   {

@@ -8,7 +8,16 @@
  * listProjectGroups). It is the user setting `sidebar.projects`, a JSON
  * object keyed by org id, like `provider.org_funding` (lib/orgFunding):
  *
- *   {"<org_id>": {"pinned": ["<project_id>"], "hidden": ["<project_id>"], "show_all": true}}
+ *   {"<org_id>": {"pinned": ["<project_id>"], "hidden": ["<project_id>"], "show_all": true,
+ *                 "filter": ["<project_id>", "<project_id>"]}}
+ *
+ * `filter` (additive) is the chat list's last project filter, choose N of M
+ * (lib/chatProjectFilter): a new tab starts with it. An app with no code here
+ * pins and hides under the key `app:<name>` (services/projects/catalog).
+ * Keys this build does not know are kept as they were on every write, so a
+ * newer build's fields survive an older one's change. (Builds before `filter`
+ * existed drop it when they write: the remembered filter is a convenience,
+ * and the URL still carries the current one.)
  *
  * The key "" holds the choices made with no org (no control plane, or a
  * person in none). A project belongs to one org, so a pin or a hide is per
@@ -24,13 +33,17 @@ export interface SidebarProjectPrefs {
   pinned: ReadonlySet<string>;
   hidden: ReadonlySet<string>;
   showAll: boolean;
+  /** The chat list's last project filter: [] for every project. */
+  filter: readonly string[];
 }
 
-/** One org's stored entry (omitempty fields). */
+/** One org's stored entry (omitempty fields), with any key a newer build wrote. */
 interface StoredEntry {
   pinned?: string[];
   hidden?: string[];
   show_all?: boolean;
+  filter?: string[];
+  [other: string]: unknown;
 }
 
 /** The parsed setting, by org id ("" for no org). */
@@ -40,6 +53,7 @@ export const DEFAULT_SIDEBAR_PROJECT_PREFS: SidebarProjectPrefs = {
   pinned: new Set(),
   hidden: new Set(),
   showAll: false,
+  filter: [],
 };
 
 /** The setting's key for `orgId`: null names no org. */
@@ -63,12 +77,16 @@ export function parseSidebarProjectSettings(value: string | undefined): SidebarP
     for (const [orgKey, entry] of Object.entries(raw as Record<string, unknown>)) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
       const e = entry as Record<string, unknown>;
+      const { pinned: _p, hidden: _h, show_all: _s, filter: _f, ...rest } = e;
       const pinned = ids(e.pinned);
       const hidden = ids(e.hidden);
+      const filter = ids(e.filter);
       out[orgKey] = {
+        ...rest,
         ...(pinned ? { pinned } : {}),
         ...(hidden ? { hidden } : {}),
         ...(e.show_all === true ? { show_all: true } : {}),
+        ...(filter ? { filter } : {}),
       };
     }
     return out;
@@ -88,6 +106,7 @@ export function sidebarProjectPrefsFor(
     pinned: new Set(e.pinned ?? []),
     hidden: new Set(e.hidden ?? []),
     showAll: e.show_all === true,
+    filter: e.filter ?? [],
   };
 }
 
@@ -95,7 +114,8 @@ export function sidebarProjectPrefsFor(
 export type SidebarProjectChange =
   | { kind: "pin"; projectId: string; on: boolean }
   | { kind: "hide"; projectId: string; on: boolean }
-  | { kind: "showAll"; on: boolean };
+  | { kind: "showAll"; on: boolean }
+  | { kind: "filter"; projectIds: readonly string[] };
 
 function toggled(list: readonly string[] | undefined, id: string, on: boolean): string[] | undefined {
   const rest = (list ?? []).filter((x) => x !== id);
@@ -114,10 +134,12 @@ export function withSidebarProjectChange(
   change: SidebarProjectChange,
 ): SidebarProjectSettings {
   const orgKey = sidebarOrgKey(orgId);
+  const { pinned: _p, hidden: _h, show_all: _s, filter: _f, ...rest } = settings[orgKey] ?? {};
   const prev = settings[orgKey] ?? {};
   let pinned = prev.pinned;
   let hidden = prev.hidden;
   let showAll = prev.show_all === true;
+  let filter = prev.filter;
   switch (change.kind) {
     case "pin":
       pinned = toggled(pinned, change.projectId, change.on);
@@ -130,12 +152,19 @@ export function withSidebarProjectChange(
     case "showAll":
       showAll = change.on;
       break;
+    case "filter": {
+      const next = ids(change.projectIds);
+      filter = next;
+      break;
+    }
   }
   const out: SidebarProjectSettings = { ...settings };
   const next: StoredEntry = {
+    ...rest,
     ...(pinned ? { pinned } : {}),
     ...(hidden ? { hidden } : {}),
     ...(showAll ? { show_all: true } : {}),
+    ...(filter ? { filter } : {}),
   };
   if (Object.keys(next).length > 0) out[orgKey] = next;
   else delete out[orgKey];
