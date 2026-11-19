@@ -22,6 +22,7 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 	}
 	for _, n := range g.wf.GetNodes() {
 		id, path := n.GetId(), g.prefix+n.GetId()
+		c.checkMachinePin(path, n.GetDaemon())
 		timed := model.CelStringIsSet(n.GetTimeout())
 		switch n.GetType() {
 		case model.NodeTypeRun:
@@ -368,8 +369,35 @@ func insideQuotes(prefix string) bool {
 	return quote != 0
 }
 
+// checkMachinePin: a literal selector that names one machine (by id, by name,
+// or by the string shorthand that is not local/cloud/any) makes that machine
+// the only one the run or node can use. A pool or labels choose among
+// machines; a type, or a CEL selector, names none.
+func (c *checker) checkMachinePin(path string, sel *reliantv1.CelDaemonSelector) {
+	ds := sel.GetLiteral()
+	if ds == nil || ds.GetPool() != "" {
+		return
+	}
+	var pinned string
+	switch {
+	case ds.GetId() != "":
+		pinned = "id " + ds.GetId()
+	case ds.GetName() != "":
+		pinned = ds.GetName()
+	default:
+		return
+	}
+	what := "this workflow"
+	if path != "" {
+		what = "this step"
+	}
+	c.add(RuleDaemonMachinePin, path, fmt.Sprintf("daemon: pins %s to one machine (%s): when that box is swapped out or busy, every run stalls waiting for it", what, pinned),
+		"pin a machine pool, daemon: {pool: <name>}, or the machines' labels, daemon: {labels: {<key>: <value>}}")
+}
+
 func (c *checker) checkWorkflow() {
 	wf := c.wf
+	c.checkMachinePin("", wf.GetDaemon())
 	// finally runs on a failure too (run.status == 'failed'), so either
 	// handler is a failure path.
 	if len(wf.GetTriggers()) > 0 && wf.GetOnFailure() == nil && wf.GetFinally() == nil {
