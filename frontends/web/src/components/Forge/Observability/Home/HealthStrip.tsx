@@ -27,7 +27,7 @@ import { unionTimestamps } from "../Dashboards/PanelBody";
 import { formatAgo, formatCount, formatDuration, formatPercent } from "../format";
 import type { ObsEnvironment } from "../obsPlace";
 import { useReleaseMarkers } from "../releaseMarkers";
-import { firingCounts, ratioSeries, redPanel, seriesValues } from "./homeModel";
+import { firingCounts, redPanel, seriesValues } from "./homeModel";
 
 export interface HealthStripProps {
   /** Null until the org is known (or when the scope names an unrecorded environment): the cells show their loading state. */
@@ -203,7 +203,7 @@ function Strip({
           />
         </dl>
       </div>
-      <div className="h-[180px]" data-testid="observability-strip-chart">
+      <div className={charted ? "h-[180px]" : "h-24"} data-testid="observability-strip-chart">
         {charted ? (
           <UPlotChart
             height={180}

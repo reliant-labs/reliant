@@ -23,6 +23,7 @@ import type { SessionSummary } from "@/services/controlPlane/observability/rumTy
 import type { ObsScope, TraceSummary } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
+import { UPlotChart } from "../charts/UPlotChart";
 import { affectedNoun } from "../Errors/issueModel";
 import { formatAgo, formatCount, formatDuration } from "../format";
 import { CardOpen, ErrorBadge, FullListLink, LeadCard, ListHeading, ListLeadHeader, RedDot, RowName, SummaryLine, TopRows } from "./leadParts";
@@ -60,24 +61,38 @@ export function ErrorsLead({ scope, env, hrefOf, subtitle, aside, explainIssue }
   const summary = openQuery.isSuccess ? errorsSummary({ open, resolved, env, more: !!openQuery.hasNextPage }) : null;
   const explained = featured ? explainIssue?.(featured) : undefined;
   return (
-    <div className="space-y-4" data-testid="lead-errors">
+    <div className="space-y-10" data-testid="lead-errors">
       <ListLeadHeader title="Errors" subtitle={subtitle} action={<FullListLink href={hrefOf("errors", { isort: "last" })}>All filters</FullListLink>}>
         <SummaryLine tone={summary?.tone}>{openQuery.isError ? "The error inbox could not be read. The full list says why." : (summary?.text ?? "Reading the error inbox…")}</SummaryLine>
       </ListLeadHeader>
 
+      {openQuery.isSuccess && <ErrorsHeadline open={open} more={!!openQuery.hasNextPage} resolved={resolved.length} />}
+
       {featured && (
         <LeadCard label="Newest issue" testId="lead-featured-issue" attrs={{ "data-issue-id": featured.id }}>
-          <p className="flex flex-wrap items-center gap-2 text-xs font-medium text-ink-muted">
+          <p className="flex flex-wrap items-center gap-2 text-meta text-ink-muted">
             <CircleAlert className="h-3.5 w-3.5 text-danger-ink" aria-hidden="true" />
             Newest issue
-            {featured.status === "new" && <span className="rounded-full border border-danger-border bg-danger-surface px-1.5 text-2xs font-medium leading-4 text-danger-ink">New</span>}
+            {featured.status === "new" && (
+              <span className="inline-flex items-center gap-1.5 font-medium text-danger-ink">
+                <span aria-hidden="true">·</span> New
+              </span>
+            )}
           </p>
-          <h2 className="mt-1 text-base font-semibold text-ink [overflow-wrap:anywhere]">{featured.title}</h2>
-          {explained && <p className="max-w-4xl text-sm text-ink-muted">{explained}</p>}
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <p className="min-w-0 text-xs text-ink-muted [overflow-wrap:anywhere]">
-              <span className="font-medium text-ink">{plural(featured.events, "event")}</span> · {formatCount(featured.affected)} {affectedNoun(featured.platform, featured.affected)} affected · {featured.service}
-              {featured.firstSeenMs ? ` · first seen ${formatAgo(featured.firstSeenMs)}${featured.firstVersion ? ` in ${featured.firstVersion}` : ""}` : ""}
+          <h2 className="mt-2 text-section text-ink [overflow-wrap:anywhere]">{featured.title}</h2>
+          {explained && <p className="mt-1 max-w-4xl text-ui text-ink-muted">{explained}</p>}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <p className="min-w-0 text-meta text-ink-muted [overflow-wrap:anywhere]">
+              <span className="font-medium tabular-nums text-ink">{plural(featured.events, "event")}</span> · {formatCount(featured.affected)} {affectedNoun(featured.platform, featured.affected)} affected · {featured.service}
+              {featured.firstSeenMs ? (
+                <>
+                  {" · first seen "}
+                  {/* The release it first appeared in is a hash: on hover, not in the line. */}
+                  <span title={featured.firstVersion ? `First seen in ${featured.firstVersion}` : undefined}>{formatAgo(featured.firstSeenMs)}</span>
+                </>
+              ) : (
+                ""
+              )}
               {featured.assignee ? ` · ${featured.assignee.name} is on it` : ""}
             </p>
             <CardOpen href={issueHref(featured)} label="Open issue" testId="lead-featured-issue-open" />
@@ -86,7 +101,7 @@ export function ErrorsLead({ scope, env, hrefOf, subtitle, aside, explainIssue }
       )}
 
       {rest.length > 0 && (
-        <section className="space-y-2" aria-labelledby="lead-errors-open">
+        <section className="space-y-3" aria-labelledby="lead-errors-open">
           <ListHeading id="lead-errors-open" count={rest.length}>
             Other open issues
           </ListHeading>
@@ -111,7 +126,7 @@ export function ErrorsLead({ scope, env, hrefOf, subtitle, aside, explainIssue }
       {aside}
 
       {resolved.length > 0 && (
-        <section className="space-y-2" aria-labelledby="lead-errors-resolved">
+        <section className="space-y-3" aria-labelledby="lead-errors-resolved">
           <ListHeading id="lead-errors-resolved" count={resolved.length}>
             Resolved recently
           </ListHeading>
@@ -136,6 +151,61 @@ export function ErrorsLead({ scope, env, hrefOf, subtitle, aside, explainIssue }
   );
 }
 
+/**
+ * The Errors page's headline: how many issues are open, over the inbox's
+ * window, and one chart of their events by hour (each issue's own hourly
+ * trend, summed). Events, people affected and resolved issues are a quiet
+ * row beside it. There is no previous-window read here, so it names the
+ * window and makes no comparison.
+ */
+function ErrorsHeadline({ open, more, resolved }: { open: readonly Issue[]; more: boolean; resolved: number }) {
+  const { timestamps, values } = useMemo(() => {
+    const byHour = new Map<number, number>();
+    for (const issue of open) for (const point of issue.trend) if (point.hourMs) byHour.set(point.hourMs, (byHour.get(point.hourMs) ?? 0) + point.events);
+    const hours = [...byHour.keys()].sort((a, b) => a - b);
+    return { timestamps: hours.map((ms) => ms / 1000), values: hours.map((ms) => byHour.get(ms) ?? 0) };
+  }, [open]);
+  const events = open.reduce((sum, issue) => sum + issue.events, 0);
+  const affected = open.reduce((sum, issue) => sum + issue.affected, 0);
+  return (
+    <section className="min-w-0 space-y-5" aria-label="Open issues, last 7 days" data-testid="lead-errors-headline">
+      <div className="flex flex-wrap items-end justify-between gap-x-12 gap-y-6">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-2 text-ui">
+            <span className="font-medium text-ink">Open issues</span>
+            <span className="text-meta text-ink-muted">Last 7 days</span>
+          </div>
+          <div className="mt-1 text-figure tabular-nums text-ink">
+            {formatCount(open.length)}
+            {more ? "+" : ""}
+          </div>
+        </div>
+        <dl className="flex flex-wrap gap-x-10 gap-y-5">
+          {(
+            [
+              ["Events", formatCount(events)],
+              ["Affected", formatCount(affected)],
+              ["Resolved", formatCount(resolved)],
+            ] as const
+          ).map(([label, value]) => (
+            <div key={label} className="min-w-0">
+              <dt className="text-meta text-ink-muted">{label}</dt>
+              <dd className="mt-0.5 text-2xl font-semibold tabular-nums text-ink">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      {timestamps.length > 1 ? (
+        <UPlotChart height={160} area="fill" legend={false} timestamps={timestamps} series={[{ label: "Events", values, color: "--chart-1" }]} unit="count" label="Error events by hour" />
+      ) : (
+        <div className="flex h-[160px] flex-col justify-end" aria-hidden="true">
+          <div className="border-b border-border" />
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Traces ──────────────────────────────────────────────────────────────────
 
 const TRACES: TraceFilters = { range: "1h", rootSpanName: "", services: [], errorsOnly: false, minDurationMs: 0 };
@@ -148,7 +218,7 @@ export function TracesLead({ scope, hrefOf, subtitle, aside }: ListLeadProps) {
   const traceHref = (trace: TraceSummary) => hrefOf("traces", { trace: trace.traceId });
   const summary = traces.isSuccess ? tracesSummary({ traces: all, window: "last hour", more: !!traces.hasNextPage }) : null;
   return (
-    <div className="space-y-4" data-testid="lead-traces">
+    <div className="space-y-10" data-testid="lead-traces">
       <ListLeadHeader title="Traces" subtitle={subtitle} action={<FullListLink href={hrefOf("traces", { range: "1h" })}>Chart and filters</FullListLink>}>
         <SummaryLine tone={summary?.tone}>{traces.isError ? "Traces could not be read. The full list says why." : (summary?.text ?? "Reading the last hour of requests…")}</SummaryLine>
       </ListLeadHeader>
@@ -156,7 +226,7 @@ export function TracesLead({ scope, hrefOf, subtitle, aside }: ListLeadProps) {
       {top && <SlowestTrace scope={scope} trace={top} href={traceHref(top)} />}
 
       {slowest.length > 1 && (
-        <section className="space-y-2" aria-labelledby="lead-traces-slowest">
+        <section className="space-y-3" aria-labelledby="lead-traces-slowest">
           <ListHeading id="lead-traces-slowest" count={slowest.length}>
             Slowest requests, last hour
           </ListHeading>
@@ -192,14 +262,14 @@ function SlowestTrace({ scope, trace, href }: { scope: ObsScope; trace: TraceSum
     <LeadCard label="Slowest request" testId="lead-slowest-trace" attrs={{ "data-trace-id": trace.traceId }}>
       <div className="grid gap-x-6 gap-y-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-xs font-medium text-ink-muted">Slowest request</p>
+          <p className="text-meta text-ink-muted">Slowest request</p>
           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-            <h2 className="min-w-0 text-base font-semibold text-ink [overflow-wrap:anywhere]">{trace.rootOperation || trace.traceId}</h2>
-            <p className="text-xl font-semibold tabular-nums text-ink">{formatDuration(trace.durationMs)}</p>
+            <h2 className="min-w-0 text-section text-ink [overflow-wrap:anywhere]">{trace.rootOperation || trace.traceId}</h2>
+            <p className="text-2xl font-semibold tabular-nums text-ink">{formatDuration(trace.durationMs)}</p>
           </div>
-          {story && <p className="text-sm text-ink-muted [overflow-wrap:anywhere]">{story}</p>}
+          {story && <p className="text-ui text-ink-muted [overflow-wrap:anywhere]">{story}</p>}
           <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-1">
-            <p className="min-w-0 truncate text-xs text-ink-muted">
+            <p className="min-w-0 truncate text-meta text-ink-muted">
               {trace.rootService} · {plural(trace.spanCount, "step")} · {formatAgo(trace.startMs)}
             </p>
             <CardOpen href={href} label="Open the full timeline" testId="lead-slowest-trace-open" />
@@ -225,7 +295,7 @@ export function SessionsLead({ scope, env, hrefOf, subtitle, aside }: ListLeadPr
   const sessionHref = (session: SessionSummary) => hrefOf("sessions", { session: session.sessionId });
   const summary = sessions.isSuccess ? sessionsSummary({ sessions: rows, window: "last 24 hours", more: !!sessions.data?.nextPageToken }) : null;
   return (
-    <div className="space-y-4" data-testid="lead-sessions">
+    <div className="space-y-10" data-testid="lead-sessions">
       <ListLeadHeader title="Sessions" subtitle={subtitle} action={<FullListLink href={hrefOf("sessions", { range: "24h" })}>All filters</FullListLink>}>
         <SummaryLine tone={summary?.tone}>{sessions.isError ? "Sessions could not be read. The full list says why." : (summary?.text ?? "Reading the last day's visits…")}</SummaryLine>
       </ListLeadHeader>
@@ -233,7 +303,7 @@ export function SessionsLead({ scope, env, hrefOf, subtitle, aside }: ListLeadPr
       {featured && <FeaturedReplay session={featured} href={sessionHref(featured)} />}
 
       {rest.length > 0 && (
-        <section className="space-y-2" aria-labelledby="lead-sessions-list">
+        <section className="space-y-3" aria-labelledby="lead-sessions-list">
           <ListHeading id="lead-sessions-list" count={rest.length}>
             Other visits
           </ListHeading>
@@ -252,7 +322,7 @@ export function SessionsLead({ scope, env, hrefOf, subtitle, aside }: ListLeadPr
                   {session.entryPath || "/"}
                 </span>
                 {session.errors > 0 && <ErrorBadge errors={session.errors} />}
-                <span className="min-w-0 shrink truncate text-xs text-ink-muted max-sm:hidden">
+                <span className="min-w-0 shrink truncate text-meta text-ink-muted max-sm:hidden">
                   {session.userId || "Signed-out visitor"}
                   {env ? "" : ` · ${session.envName}`}
                 </span>
@@ -277,19 +347,19 @@ function FeaturedReplay({ session, href }: { session: SessionSummary; href: stri
       <div className="grid gap-4 sm:grid-cols-[18rem_minmax(0,1fr)]">
         <ReplayThumb path={session.entryPath} errors={session.errors} replay={session.hasReplay} />
         <div className="flex min-w-0 flex-col gap-1 py-1">
-          <p className="text-xs font-medium text-ink-muted">{session.errors ? "A visit that hit an error" : "The newest visit"}</p>
-          <h2 className="truncate text-base font-semibold text-ink" title={session.entryPath || "/"}>
+          <p className="text-meta text-ink-muted">{session.errors ? "A visit that hit an error" : "The newest visit"}</p>
+          <h2 className="truncate text-section text-ink" title={session.entryPath || "/"}>
             {session.entryPath || "/"}
           </h2>
-          <p className="text-sm text-ink-muted [overflow-wrap:anywhere]">
+          <p className="text-ui text-ink-muted [overflow-wrap:anywhere]">
             {session.userId || "A signed-out visitor"} looked at {plural(session.pageViews, "page")} over {formatDuration(sessionLength(session))}
             {session.errors ? ` and hit ${plural(session.errors, "error")}.` : "."}
             {session.hasReplay ? (session.errors ? " Watch where it went wrong." : "") : " No replay was recorded."}
           </p>
           <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-1">
-            <p className="min-w-0 truncate text-xs text-ink-muted">
+            {/* The build it ran is a hash: on hover, not in the line. */}
+            <p className="min-w-0 truncate text-meta text-ink-muted" title={session.release || session.serviceVersion ? `Ran ${session.release || session.serviceVersion}` : undefined}>
               {formatAgo(session.startedMs)}
-              {session.release || session.serviceVersion ? ` · ${session.release || session.serviceVersion}` : ""}
               {session.envName ? ` · ${session.envName}` : ""}
             </p>
             <CardOpen href={href} label={session.hasReplay ? "Watch the replay" : "Open the visit"} testId="lead-featured-session-open" />
