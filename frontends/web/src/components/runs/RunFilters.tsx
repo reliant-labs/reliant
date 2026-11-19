@@ -19,7 +19,6 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { X } from "lucide-react";
 
 import { useDebounce } from "@/hooks/useDebounce";
-import { WORKFLOWS_RUNS_PATH } from "@/lib/workflowsArea";
 import type { RunRangeKey, RunStateFilterKey, RunsSearch } from "@/routeSchemas";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { FilterSearch, MultiSelectFilter, SelectFilter } from "../workflows/FilterMenu";
@@ -32,6 +31,7 @@ import {
   clearRunFilters,
   hasActiveRunFilters,
 } from "./runFilterState";
+import { runsPath } from "@/lib/paths";
 
 export { hasActiveRunFilters } from "./runFilterState";
 
@@ -51,7 +51,7 @@ export function useRunsSearch(): [RunsSearch, (next: RunsSearch) => void] {
   const search = useSearch({ strict: false }) as RunsSearch;
   const navigate = useNavigate();
   const set = (next: RunsSearch) => {
-    void navigate({ to: WORKFLOWS_RUNS_PATH, search: applyRunFilter(next, {}), replace: true });
+    void navigate({ to: runsPath(), search: applyRunFilter(next, {}), replace: true });
   };
   return [search, set];
 }

@@ -22,6 +22,7 @@
  */
 
 import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
+import { settingsPath } from '@/lib/paths'
 
 export interface SettingsConnectorComponents {
   consent: RouteComponent
@@ -45,7 +46,7 @@ export function createSettingsConnectorRoutes<TParent extends AnyRoute>(
     getParentRoute,
     path: '/settings/connectors',
     beforeLoad: () => {
-      throw redirect({ href: '/settings/machines?from=connectors', replace: true })
+      throw redirect({ href: `${settingsPath('machines')}?from=connectors`, replace: true })
     },
   })
 

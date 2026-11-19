@@ -5,6 +5,7 @@ import Tooltip from '../forge-ui/tooltip';
 import { isDev } from '../../lib/constants';
 import { openExternalLink } from '../../lib/open-link';
 import { BrandMark } from '../icons/BrandMark';
+import { authPath } from '@/lib/paths';
 
 const STUCK_THRESHOLD_MS = 5000;
 
@@ -29,7 +30,7 @@ export function LoadingSpinner() {
     } catch {
       // ignore — we'll force-redirect below either way
     }
-    window.location.href = '/auth';
+    window.location.href = authPath();
   };
 
   return (

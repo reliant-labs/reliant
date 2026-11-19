@@ -5,6 +5,7 @@ import { getControlPlaneURL } from "../../lib/constants";
 import Button from "@/components/forge-ui/button";
 import { logger } from "../../lib/logger";
 import { AuthorizeOrgPicker, useAuthorizeOrg } from "../Orgs/AuthorizeOrgPicker";
+import { authPath, oauthCliPath } from "@/lib/paths";
 
 /**
  * CLI login consent: the human half of `forge login` / `reliant auth login`.
@@ -82,7 +83,7 @@ export function CliLogin() {
       if (!session) {
         // Keep the whole request across sign-in, or the user comes back to a
         // page that no longer knows which CLI was waiting.
-        window.location.href = `/auth?redirect=${encodeURIComponent(`/oauth/cli${query}`)}`;
+        window.location.href = `${authPath()}?redirect=${encodeURIComponent(`${oauthCliPath()}${query}`)}`;
         return;
       }
       setPhase({ kind: "ready", email: session.user.email ?? "your account" });

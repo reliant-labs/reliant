@@ -35,8 +35,7 @@ import { layoutActions } from "./layoutActions";
 import { EdgeLesson, FOCUS_TARGET, OnCanvas } from "./workflowsCanvas";
 import { APPROVE, LESSONS, LOOP, MERGE, REPORT, REVIEW, SCHEDULE, START, SWITCH } from "./workflowsLessons";
 import { WorkflowsPhoneDeck } from "./workflowsPhone";
-
-const BUILDER_PATH = "/workflow/";
+import { homePath, newWorkflowPath, projectPath, workflowBuilderPath } from "@/lib/paths";
 
 function exampleSlug(context: JourneyContext): string | undefined {
   const slug = context[EXAMPLE_SLUG];
@@ -45,10 +44,10 @@ function exampleSlug(context: JourneyContext): string | undefined {
 
 /** The builder, on the example. */
 const builderRoute: JourneyRoute = {
-  path: BUILDER_PATH,
+  path: "/workflow/",
   open: (context) => {
     const slug = exampleSlug(context);
-    return slug ? { to: "/workflow/$workflowName", params: { workflowName: slug } } : null;
+    return slug ? { to: workflowBuilderPath(slug) } : null;
   },
   label: "Open Fix my PR",
   message: "Open the Fix my PR example to continue.",
@@ -80,7 +79,7 @@ function ExampleIntro() {
     pending
       .then((made) => {
         if (cancelled) return;
-        void navigate({ to: "/workflow/$workflowName", params: { workflowName: made }, search: { tour: tour.current } } as never);
+        void navigate({ to: workflowBuilderPath(made), search: { tour: tour.current } } as never);
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -181,7 +180,7 @@ export const workflowsJourney: Journey = {
   finish: (shell) => {
     const makeOwn = makeOwnRequested;
     makeOwnRequested = false;
-    return shell === "reliant" && makeOwn ? { to: "/workflow/new" } : null;
+    return shell === "reliant" && makeOwn ? { to: newWorkflowPath() } : null;
   },
   // Phones have no builder: the same lessons as a card deck.
   phone: WorkflowsPhoneDeck,
@@ -246,7 +245,7 @@ export const workflowsJourney: Journey = {
         path: "/project/",
         open: () => {
           const projectId = useProjectStore.getState().currentProject?.id;
-          return projectId ? { to: "/project/$projectId", params: { projectId } } : { to: "/" };
+          return projectId ? { to: projectPath(projectId) } : { to: homePath() };
         },
         label: "Open the chat",
       },
