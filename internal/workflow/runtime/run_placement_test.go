@@ -26,6 +26,10 @@ type placementRecorder struct {
 	asks      []machinepool.PlaceRunInput
 	selectors map[string][]*types.DaemonSelector
 	errors    []map[string]interface{}
+	// preflights counts PreflightDaemonCheck calls; with machineGone set
+	// each one fails, as it does for a removed machine.
+	preflights  int
+	machineGone bool
 }
 
 // testWorkflowID is the Temporal test environment's workflow id, which the
@@ -71,6 +75,10 @@ func setupPlacementEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, wf 
 		return map[string]interface{}{"success": true}, nil
 	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+		rec.preflights++
+		if rec.machineGone {
+			return nil, temporal.NewNonRetryableApplicationError("the machine was removed", "", nil)
+		}
 		return map[string]interface{}{"daemon_available": true}, nil
 	}, activity.RegisterOptions{Name: "PreflightDaemonCheck"})
 	env.RegisterActivityWithOptions(func(_ context.Context, in types.ActivityInput) (map[string]interface{}, error) {
@@ -136,6 +144,7 @@ func placementWorkflow(t *testing.T, yamlStr string, selectors map[string]*relia
 				n.Daemon = literal(ds)
 			}
 			walk(n.GetLoop().GetInline().GetNodes())
+			walk(n.GetWorkflow().GetInline().GetNodes())
 		}
 	}
 	walk(wf.GetNodes())
@@ -371,6 +380,238 @@ nodes:
 	require.Len(t, rec.selectors["work"], 3)
 	for i, sel := range rec.selectors["work"] {
 		assert.Equal(t, &types.DaemonSelector{ID: "m-gpus"}, sel, "iteration %d", i)
+	}
+}
+
+// A pool on a structural node — a loop, a `workflow:` node — places the node
+// once and routes its whole body there: the node runs no step of its own, so
+// StepExecutor.Start never places it. A body step's own selector still wins,
+// and a step outside the node keeps the chat's pin.
+func TestDynamicWorkflow_StructuralNodePlacesItsBody(t *testing.T) {
+	t.Parallel()
+	const loopYAML = `
+name: place-test
+entry: [plan]
+nodes:
+  - id: plan
+    type: call_llm
+  - id: fix_loop
+    type: loop
+    while: iter.iteration < 2
+    inline:
+      entry: [work]
+      nodes:
+        - id: work
+          type: call_llm
+        - id: build
+          type: run
+          command: make
+      edges:
+        - from: work
+          default: build
+edges:
+  - from: plan
+    default: fix_loop
+`
+	const subYAML = `
+name: place-test
+entry: [plan]
+nodes:
+  - id: plan
+    type: call_llm
+  - id: sub
+    type: workflow
+    inline:
+      entry: [work]
+      nodes:
+        - id: work
+          type: call_llm
+        - id: build
+          type: run
+          command: make
+      edges:
+        - from: work
+          default: build
+edges:
+  - from: plan
+    default: sub
+`
+	chatPin := &types.DaemonSelector{ID: "chat-pin", Session: true}
+	onGPU := &types.DaemonSelector{ID: "m-gpus"}
+	onBig := &types.DaemonSelector{ID: "m-big"}
+	tests := []struct {
+		name      string
+		yaml      string
+		selectors map[string]*reliantv1.DaemonSelectorProto
+		wantAsks  []string // scopes, in order
+		want      map[string]*types.DaemonSelector
+		wantRuns  int // dispatches of each body step
+	}{
+		{
+			name:      "a pool on a loop places it once and every iteration's body runs there",
+			yaml:      loopYAML,
+			selectors: map[string]*reliantv1.DaemonSelectorProto{"fix_loop": {Pool: "gpus"}},
+			wantAsks:  []string{"fix_loop"},
+			want:      map[string]*types.DaemonSelector{"plan": chatPin, "work": onGPU, "build": onGPU},
+			wantRuns:  2,
+		},
+		{
+			name:      "a body step's own pool wins over its loop's",
+			yaml:      loopYAML,
+			selectors: map[string]*reliantv1.DaemonSelectorProto{"fix_loop": {Pool: "gpus"}, "build": {Pool: "big"}},
+			wantAsks:  []string{"fix_loop", "fix_loop.build"},
+			want:      map[string]*types.DaemonSelector{"plan": chatPin, "work": onGPU, "build": onBig},
+			wantRuns:  2,
+		},
+		{
+			name:      "a pool on a workflow node places its sub-workflow",
+			yaml:      subYAML,
+			selectors: map[string]*reliantv1.DaemonSelectorProto{"sub": {Pool: "gpus"}},
+			wantAsks:  []string{"sub"},
+			want:      map[string]*types.DaemonSelector{"plan": chatPin, "work": onGPU, "build": onGPU},
+			wantRuns:  1,
+		},
+		{
+			// Unchanged from before pools: a name on a structural node does
+			// not route its body.
+			name:      "a name on a loop is not placed",
+			yaml:      loopYAML,
+			selectors: map[string]*reliantv1.DaemonSelectorProto{"fix_loop": {Name: "box"}},
+			want:      map[string]*types.DaemonSelector{"plan": chatPin, "work": chatPin, "build": chatPin},
+			wantRuns:  2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			env := (&temporaltest.WorkflowTestSuite{}).NewTestWorkflowEnvironment()
+			rec := setupPlacementEnv(t, env, placementWorkflow(t, tt.yaml, tt.selectors),
+				placeOn(map[string]string{"gpus": "m-gpus", "big": "m-big"}))
+			in := placementInput(nil)
+			in.Inputs["session_daemon_id"] = "chat-pin"
+
+			env.ExecuteWorkflow(DynamicWorkflow, in)
+
+			require.NoError(t, env.GetWorkflowError())
+			var scopes []string
+			for _, ask := range rec.asks {
+				scopes = append(scopes, ask.Scope)
+			}
+			assert.Equal(t, tt.wantAsks, scopes)
+			for id, want := range tt.want {
+				wantRuns := tt.wantRuns
+				if id == "plan" {
+					wantRuns = 1
+				}
+				require.Len(t, rec.selectors[id], wantRuns, "dispatches of %s", id)
+				for i, sel := range rec.selectors[id] {
+					assert.Equal(t, want, sel, "%s dispatch %d", id, i)
+				}
+			}
+		})
+	}
+}
+
+// A run whose only machine-bound nodes are placed on pools does not wait on,
+// or fail for, the machine it inherits: an unavailable chat machine must not
+// keep a healthy pool member from taking the work. A run with a step that
+// does inherit that machine still checks it first.
+func TestDynamicWorkflow_PreflightSkipsAMachineOnlyPoolsReplace(t *testing.T) {
+	t.Parallel()
+	const poolsOnlyYAML = `
+name: place-test
+entry: [plan]
+nodes:
+  - id: plan
+    type: call_llm
+  - id: build
+    type: run
+    command: make
+  - id: fix_loop
+    type: loop
+    while: iter.iteration < 1
+    inline:
+      entry: [test]
+      nodes:
+        - id: test
+          type: run
+          command: make test
+edges:
+  - from: plan
+    default: build
+  - from: build
+    default: fix_loop
+`
+	tests := []struct {
+		name          string
+		selectors     map[string]*reliantv1.DaemonSelectorProto
+		wantPreflight bool
+	}{
+		{
+			name:      "node and loop pools cover every machine-bound node",
+			selectors: map[string]*reliantv1.DaemonSelectorProto{"build": {Pool: "gpus"}, "fix_loop": {Pool: "gpus"}},
+		},
+		{
+			name:          "a run step that inherits the chat's machine still checks it",
+			selectors:     map[string]*reliantv1.DaemonSelectorProto{"build": {Pool: "gpus"}},
+			wantPreflight: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			env := (&temporaltest.WorkflowTestSuite{}).NewTestWorkflowEnvironment()
+			rec := setupPlacementEnv(t, env, placementWorkflow(t, poolsOnlyYAML, tt.selectors),
+				placeOn(map[string]string{"gpus": "m-gpus"}))
+			rec.machineGone = true
+			in := placementInput(nil)
+			in.Inputs["session_daemon_id"] = "removed-machine"
+
+			env.ExecuteWorkflow(DynamicWorkflow, in)
+
+			if tt.wantPreflight {
+				require.Error(t, env.GetWorkflowError())
+				assert.Equal(t, 1, rec.preflights)
+				assert.Empty(t, rec.selectors["build"], "nothing runs before the inherited machine is checked")
+				return
+			}
+			require.NoError(t, env.GetWorkflowError())
+			assert.Zero(t, rec.preflights, "the removed chat machine is never checked")
+			assert.Equal(t, []*types.DaemonSelector{{ID: "m-gpus"}}, rec.selectors["build"])
+			assert.Equal(t, []*types.DaemonSelector{{ID: "m-gpus"}}, rec.selectors["test"])
+		})
+	}
+}
+
+func TestOnlyPoolsNeedAMachine(t *testing.T) {
+	t.Parallel()
+	pool := func(name string) *reliantv1.CelDaemonSelector {
+		return &reliantv1.CelDaemonSelector{Value: &reliantv1.CelDaemonSelector_Literal{Literal: &reliantv1.DaemonSelectorProto{Pool: name}}}
+	}
+	expr := &reliantv1.CelDaemonSelector{Value: &reliantv1.CelDaemonSelector_Expr{Expr: "{{ inputs.where }}"}}
+	run := func(id string, ds *reliantv1.CelDaemonSelector) *reliantv1.Node {
+		return &reliantv1.Node{Id: id, Type: "run", Daemon: ds, Args: &reliantv1.Node_Run{Run: &reliantv1.RunArgs{}}}
+	}
+	loop := func(id string, ds *reliantv1.CelDaemonSelector, body ...*reliantv1.Node) *reliantv1.Node {
+		return &reliantv1.Node{Id: id, Type: "loop", Daemon: ds, Args: &reliantv1.Node_Loop{Loop: &reliantv1.LoopArgs{Inline: &reliantv1.Workflow{Nodes: body}}}}
+	}
+	llm := &reliantv1.Node{Id: "plan", Type: "call_llm"}
+	for _, tt := range []struct {
+		name  string
+		nodes []*reliantv1.Node
+		want  bool
+	}{
+		{"no machine-bound node", []*reliantv1.Node{llm}, false},
+		{"an unpooled run step", []*reliantv1.Node{llm, run("a", nil)}, false},
+		{"every run step pooled", []*reliantv1.Node{llm, run("a", pool("p"))}, true},
+		{"a pooled loop covers its body", []*reliantv1.Node{loop("l", pool("p"), run("a", nil))}, true},
+		{"an unpooled step inside a loop", []*reliantv1.Node{run("a", pool("p")), loop("l", nil, run("b", nil))}, false},
+		{"a pooled step inside a loop", []*reliantv1.Node{loop("l", nil, run("b", pool("p")))}, true},
+		{"an expression selector may name any machine", []*reliantv1.Node{run("a", pool("p")), run("b", expr)}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, onlyPoolsNeedAMachine(&reliantv1.Workflow{Nodes: tt.nodes}, nil))
+		})
 	}
 }
 

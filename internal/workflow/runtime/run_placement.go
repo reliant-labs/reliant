@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -131,6 +134,61 @@ func placeWorkflowDaemon(ctx workflow.Context, execCtx *ExecutionContext, chatID
 	}
 	execCtx.WorkflowPlacement = placement
 	return placement.selector(), nil
+}
+
+// resolveNodeDaemonSelector is node's own daemon selector, its expression
+// evaluated in scope (built only when it is one), or nil when the node
+// declares none or the expression resolves to nothing.
+func resolveNodeDaemonSelector(node *reliantv1.Node, scope func() *wfcel.NodeResolutionContext) *DaemonSelectorValue {
+	cds := node.GetDaemon()
+	if cds == nil {
+		return nil
+	}
+	if lit := cds.GetLiteral(); lit != nil {
+		return ResolveDaemonSelectorProto(lit)
+	}
+	if cds.GetExpr() == "" {
+		return nil
+	}
+	ds, err := ResolveCelDaemonSelector(cds, scope())
+	if err != nil {
+		logging.Warn("[Workflow Runtime] failed to resolve node-level daemon CEL expression", "stepID", node.GetId(), "error", err)
+		return nil
+	}
+	return ds
+}
+
+// placeStructuralDaemon is placement for a structural node — a loop, a
+// `workflow:` node, or the workflow a router dispatches — which runs no
+// activity of its own and so never reaches StepExecutor.Start, where a step's
+// own selector is placed. When the node's selector names a pool, it is placed
+// once per run at scope (the node's path, as a step's), and the node's body
+// runs under a copy of base routed to the placed machine: every body step
+// that declares no selector of its own routes there, and one that does still
+// wins. Any other selector leaves base as it is. A placement that pinned
+// nothing (a scenario's stub) also leaves base as it is.
+func placeStructuralDaemon(ctx workflow.Context, chatID, workflowID, scope string, node *reliantv1.Node, celScope func() *wfcel.NodeResolutionContext, base *ExecutionContext) (*ExecutionContext, error) {
+	ds := resolveNodeDaemonSelector(node, celScope)
+	if !ds.NeedsPlacement() {
+		return base, nil
+	}
+	placement, err := runPlacementsFrom(ctx).place(ctx, chatID, workflowID, scope, ds)
+	if err != nil {
+		return nil, fmt.Errorf("could not place %s on a machine: %s", scope, preflightFailureMessage(err))
+	}
+	sel := placement.selector()
+	if sel == nil {
+		return base, nil
+	}
+	if base == nil {
+		return nil, fmt.Errorf("could not route %s to its placed machine: the node has no execution context", scope)
+	}
+	// A copy, not Clone: Clone drops fields (RouterDecision, SpawnDepth,
+	// ParentPermission) the body still needs, and base is shared with the
+	// node's parent, which must keep routing as before.
+	placed := *base
+	placed.DaemonSelector = sel
+	return &placed, nil
 }
 
 // runPlacements holds the run's node-level placements, keyed by workflow id

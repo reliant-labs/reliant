@@ -1534,22 +1534,7 @@ func (e *StepExecutor) daemonSelector(node *reliantv1.Node) *DaemonSelectorValue
 // nodeDaemonSelector is the node's own daemon selector resolved in its scope,
 // or nil when it declares none or its expression resolves to nothing.
 func (e *StepExecutor) nodeDaemonSelector(node *reliantv1.Node) *DaemonSelectorValue {
-	cds := node.GetDaemon()
-	if cds == nil {
-		return nil
-	}
-	if lit := cds.GetLiteral(); lit != nil {
-		return ResolveDaemonSelectorProto(lit)
-	}
-	if cds.GetExpr() == "" {
-		return nil
-	}
-	ds, err := ResolveCelDaemonSelector(cds, e.nodeScope())
-	if err != nil {
-		logging.Warn("[StepExecutor] failed to resolve node-level daemon CEL expression", "stepID", node.GetId(), "error", err)
-		return nil
-	}
-	return ds
+	return resolveNodeDaemonSelector(node, e.nodeScope)
 }
 
 // nodePlacementScope is a node's placement scope: its graph path, which

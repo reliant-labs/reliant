@@ -1403,9 +1403,18 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	runNeedsDaemon := RequiresDaemon(wf, buildPreflightConfig())
 	if runNeedsDaemon {
 		preflightAfterStarted = workflow.GetVersion(ctx, preflightAfterStartedChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
+		// A run whose every machine-bound node is placed on a pool (its own
+		// `daemon: {pool:}` or an enclosing loop's or workflow node's) never
+		// routes to the machine it inherits, so it does not wait on or fail
+		// for that one: each pool wakes its member when its node first runs.
+		onlyPools := onlyPoolsNeedAMachine(wf, buildPreflightConfig())
 		runPreflight = func() error {
 			if err := placeWorkflow(); err != nil {
 				return err
+			}
+			if onlyPools {
+				logger.Info("[Workflow Runtime] Skipping the preflight machine check: every machine-bound node is placed on a pool")
+				return nil
 			}
 			return preflightDaemonCheck(ctx, input, execCtx, workflowID, thread)
 		}

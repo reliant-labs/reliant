@@ -201,6 +201,18 @@ func (e *InlineWorkflowExecutor) nodePath() string {
 	return joinNodePath(e.nodePathPrefix, e.nodeID)
 }
 
+// daemonScope is the CEL scope the node's own `daemon:` expression resolves
+// in: the scope the node sits in, as its other fields see it.
+func (e *InlineWorkflowExecutor) daemonScope() *wfcel.NodeResolutionContext {
+	iterMap, _ := e.workflowInputs["iter"].(map[string]interface{})
+	return &wfcel.NodeResolutionContext{
+		Inputs:   e.workflowInputs,
+		Nodes:    e.nodeOutputs,
+		Workflow: workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.execContext)),
+		Iter:     iterContextFromMap(iterMap),
+	}
+}
+
 // WithExecContext sets the unified execution context.
 // Required: This is the source of truth for execution state.
 func (e *InlineWorkflowExecutor) WithExecContext(ctx *ExecutionContext) *InlineWorkflowExecutor {
@@ -628,6 +640,15 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 		"subWorkflow", e.subWorkflowName,
 		"hasExecContext", e.execContext != nil,
 	)
+
+	// A `daemon: {pool:}` on the node places its whole sub-workflow on one
+	// member (run_placement.go): the node runs no step of its own, so
+	// StepExecutor.Start never sees it.
+	placed, err := placeStructuralDaemon(e.ctx, e.chatID, e.workflowID, e.nodePath(), e.node, e.daemonScope, e.execContext)
+	if err != nil {
+		return nil, err
+	}
+	e.execContext = placed
 
 	// Emit thread_created for all threads this node owns
 	if e.execContext != nil {
