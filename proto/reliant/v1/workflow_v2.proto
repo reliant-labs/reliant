@@ -291,9 +291,7 @@ message Node {
   // nodes.<id>.?failed.orValue(false). A cancel, a pause, and a run that is
   // already ending are not failures and are never tolerated. Unset (the
   // default) keeps today's behaviour: the node's failure is the run's.
-  bool tolerate_failure = 9 [(reliant) = {
-    description: "Make the node optional: when it fails the run continues, and nodes.<id>.failed is true with the reason in nodes.<id>.error"
-  }];
+  bool tolerate_failure = 9 [(reliant) = {description: "Make the node optional: when it fails the run continues, and nodes.<id>.failed is true with the reason in nodes.<id>.error"}];
 
   // Type-specific arguments. Exactly one must be set, matching the type field.
   // SecretRefs are the declared secrets this node's activity resolves, written by
