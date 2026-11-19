@@ -5,6 +5,12 @@
  * shared project, machines with and without the code, and two pins (a
  * project and the app-only row) in the person's `sidebar.projects` setting.
  * Fabricated and neutral. Every timestamp is relative to FIXED_NOW.
+ *
+ * One catalog for every surface: the shared table answers it to all of them
+ * (the selector opens from any page). The Projects page and a project's page
+ * read it with the selector's pins, plus a second app with no code here
+ * (`ledger-worker`, cut from a subdirectory of another repo), so their
+ * "Apps without code here" section has two rows.
  */
 import type { Fixtures } from '../rpc'
 import { baseFixtures, DAY, DOCS_PROJECT, HOUR, IDS, iso, MIN, PROJECT, USER } from './base'
@@ -111,4 +117,16 @@ export const selectorSurfaceFixtures: Fixtures = {
     ],
     total: baseSettings.total + 1,
   },
+}
+
+/** A second app with no code here, for the Projects page's own section. */
+const LEDGER_WORKER = hosted('ledger-worker', {
+  lastDeployedAt: iso(4 * DAY),
+  sources: [{ remote: 'github.com/acme/ledger', subpath: 'worker', commit: 'd00d123', lastSeenAt: iso(4 * DAY) }],
+})
+
+/** For the Projects page and a project's page: the selector's pins, and the catalog with LEDGER_WORKER. */
+export const projectsPageSurfaceFixtures: Fixtures = {
+  ...selectorSurfaceFixtures,
+  'reliant.v1.ProjectService/ListProjectsWithApps': { ...CATALOG, unlinkedApps: [...CATALOG.unlinkedApps, LEDGER_WORKER] },
 }

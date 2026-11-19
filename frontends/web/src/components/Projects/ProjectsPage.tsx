@@ -52,6 +52,7 @@ import {
   CATALOG_FILTERS,
   filterCounts,
   listCatalog,
+  rowApps,
   type AppChipModel,
   type AppOnlyCatalogRow,
   type CatalogFilter,
@@ -383,10 +384,17 @@ function CatalogRowItem({ entry, writable, onPin, onHide, onGetTheCode }: RowPro
     >
       <Link
         to={href}
-        className="flex min-w-0 flex-1 items-center gap-3 self-stretch rounded-md py-2.5 pl-4 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="no-color flex min-w-0 flex-1 items-center gap-3 self-stretch rounded-md py-2.5 pl-4 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         aria-label={row.kind === "project" ? `Open ${row.name}` : `Open the ${row.name} app`}
       >
-        {row.kind === "project" ? <ProjectRowSummary row={row} pinned={pinned} maxChips={3} /> : <AppOnlyRowSummary row={row} pinned={pinned} />}
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          {row.kind === "project" ? (
+            <ProjectRowSummary row={row} pinned={pinned} maxChips={3} chipsClassName="max-sm:hidden" />
+          ) : (
+            <AppOnlyRowSummary row={row} pinned={pinned} />
+          )}
+          <NarrowChips apps={rowApps(row)} />
+        </div>
         <span className="hidden w-24 shrink-0 text-right text-meta text-muted-foreground sm:block" title={row.activityAt > 0 ? formatAbsoluteTime(new Date(row.activityAt).toISOString()) : undefined}>
           {hidden ? "Hidden" : activity}
         </span>
@@ -426,8 +434,20 @@ function AppOnlyRowSummary({ row, pinned }: { row: AppOnlyCatalogRow; pinned: bo
           <span className="shrink-0">{envs.length > 0 ? envs.join(", ") : "No environments"}</span>
         </span>
       </div>
-      <AppChip app={row.app} interactive={false} />
+      <AppChip app={row.app} interactive={false} className="max-sm:hidden" />
     </div>
+  );
+}
+
+/** At phone width the chips get their own line under the name, where they have room. */
+function NarrowChips({ apps }: { apps: AppChipModel[] }) {
+  if (apps.length === 0) return null;
+  return (
+    <span className="flex flex-wrap items-center gap-1 pl-7 sm:hidden" data-testid="projects-row-chips-narrow">
+      {apps.map((app) => (
+        <AppChip key={`${app.repoId ?? ""}/${app.subpath ?? ""}/${app.name}`} app={app} interactive={false} />
+      ))}
+    </span>
   );
 }
 

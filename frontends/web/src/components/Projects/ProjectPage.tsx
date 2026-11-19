@@ -208,7 +208,7 @@ function ProjectHeader({ row, tab }: { row: ProjectCatalogRow; tab: Tab }) {
               aria-current={tab === t.id ? "page" : undefined}
               data-testid={`project-tab-${t.id}`}
               className={cn(
-                "-mb-px inline-flex h-9 items-center border-b-2 px-3 text-ui transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "no-color -mb-px inline-flex h-9 items-center border-b-2 px-3 text-ui transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 tab === t.id ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
@@ -249,7 +249,11 @@ function ProjectOverview({ row, hostedAppsState }: { row: ProjectCatalogRow; hos
         <AppsPanel row={row} hostedAppsState={hostedAppsState} />
         <CodePanel row={row} />
       </div>
-      {!row.shared && <ChatsPanel row={row} />}
+      {!row.shared && (
+        <div className="min-w-0 lg:self-start">
+          <ChatsPanel row={row} />
+        </div>
+      )}
     </div>
   );
 }
@@ -438,10 +442,11 @@ function ChatsPanel({ row }: { row: ProjectCatalogRow }) {
         toast.error("Could not open that chat");
       });
   };
+  const total = chats.filter((chat) => chat.projectId === row.key).length;
   return (
     <Panel
       title="Chats"
-      count={chats.length || undefined}
+      count={total || undefined}
       testId="project-chats"
       action={
         <button
