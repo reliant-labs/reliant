@@ -56,20 +56,17 @@ func TestSessionLivenessTripsWhenTheGatewayStopsAcknowledging(t *testing.T) {
 	require.Contains(t, err.Error(), "not acknowledged")
 }
 
-// An acknowledgement of 0 acknowledges nothing: a gateway that has read no
-// heartbeat of the session is not reading it.
-func TestSessionLivenessTreatsAZeroAckAsNoAck(t *testing.T) {
+// A gateway that predates acknowledgements always sends 0; it must never be
+// mistaken for one that stopped reading.
+func TestSessionLivenessIgnoresAGatewayThatNeverAcknowledges(t *testing.T) {
 	t0 := time.Now()
 	l := newSessionLiveness(testTiming, t0)
-	for i := int64(1); i <= 6; i++ {
+	for i := int64(1); i <= 40; i++ {
 		now := t0.Add(time.Duration(i) * 15 * time.Second)
 		l.heartbeatSent(i, now)
 		l.received(serverHeartbeat(0), now)
+		require.NoError(t, l.check(now))
 	}
-	require.NoError(t, l.check(t0.Add(100*time.Second)), "inside the ack timeout")
-	err := l.check(t0.Add(110 * time.Second))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "not acknowledged")
 }
 
 func TestSessionLivenessTripsWhenTheGatewayGoesSilent(t *testing.T) {
@@ -98,6 +95,11 @@ func TestSessionLivenessNilIsInert(t *testing.T) {
 type stopsReadingGateway struct {
 	reliantv1connect.UnimplementedToolsDaemonServiceHandler
 	sessions atomic.Int32
+	// neverAck makes the gateway behave like one that predates
+	// acknowledgements: it reads everything and always acknowledges 0.
+	neverAck bool
+	// heartbeats counts the heartbeats a neverAck gateway has read.
+	heartbeats atomic.Int32
 }
 
 func (g *stopsReadingGateway) ConnectDaemon(ctx context.Context, stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]) error {
@@ -112,7 +114,19 @@ func (g *stopsReadingGateway) ConnectDaemon(ctx context.Context, stream *connect
 	}
 
 	var acked int64
-	if session == 1 {
+	if g.neverAck {
+		go func() {
+			for {
+				msg, err := stream.Receive()
+				if err != nil {
+					return
+				}
+				if msg.GetHeartbeat() != nil {
+					g.heartbeats.Add(1)
+				}
+			}
+		}()
+	} else if session == 1 {
 		for acked == 0 {
 			msg, err := stream.Receive()
 			if err != nil {
@@ -172,4 +186,24 @@ func TestDaemonRedialsWhenTheGatewayStopsReadingItsStream(t *testing.T) {
 	require.Eventually(t, func() bool { return gw.sessions.Load() >= 2 }, 8*time.Second, 20*time.Millisecond,
 		"the daemon kept a stream the gateway had stopped reading; it must detect the unacknowledged "+
 			"heartbeats and redial")
+}
+
+// The same daemon behind a gateway that never acknowledges (older than the
+// ack field) and is otherwise healthy must keep its session.
+func TestDaemonKeepsItsSessionWithAGatewayThatNeverAcknowledges(t *testing.T) {
+	t.Parallel()
+	gw := &stopsReadingGateway{neverAck: true}
+	client := newDaemonClientForTest(t, t.TempDir(), startGateway(t, gw))
+	client.timing = fastTiming
+
+	startDaemon(t, client)
+
+	require.Eventually(t, func() bool { return gw.sessions.Load() == 1 }, 30*time.Second, 10*time.Millisecond)
+	// Wait on the daemon's own clock, not the test's: a session that has sent
+	// this many heartbeats has lived through four ack timeouts, however busy
+	// the machine is.
+	beats := int32(4 * fastTiming.heartbeatAckTimeout / fastTiming.heartbeatInterval)
+	require.Eventually(t, func() bool { return gw.heartbeats.Load() >= beats }, 30*time.Second, 10*time.Millisecond,
+		"the daemon stopped heartbeating")
+	require.Equal(t, int32(1), gw.sessions.Load(), "a gateway that never acknowledges must not be treated as dead")
 }

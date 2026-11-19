@@ -32,8 +32,12 @@ import (
 //   - The gateway sends a ServerHeartbeat every 15s. Nothing at all for
 //     gatewaySilenceTimeout means the other direction is dead.
 //
-// An acknowledgement of 0 means the gateway has read no heartbeat of this
-// session yet; it acknowledges nothing.
+// A gateway that predates acknowledgements (before v1.8.2, #718) always
+// sends 0. The ack check arms only once a non-zero acknowledgement has been
+// seen on the session, so a new daemon behind an old gateway — a self-hosted
+// one included — is never cut off and sent into a redial loop for silence it
+// cannot help. This can go only once gateways older than v1.8.2 are no
+// longer supported anywhere, self-hosted included (a major release).
 
 const (
 	// gatewaySilenceTimeout: the gateway heartbeats every 15s, so 90s is six
@@ -79,7 +83,9 @@ type sessionLiveness struct {
 
 	mu           sync.Mutex
 	lastReceived time.Time
-	acked        int64
+	// acksSupported is set by the first non-zero acknowledgement.
+	acksSupported bool
+	acked         int64
 	// newestSent is the timestamp of the newest heartbeat this daemon sent;
 	// unackedSince is when the oldest heartbeat not yet acknowledged was sent
 	// (zero when every sent heartbeat is acknowledged).
@@ -122,6 +128,7 @@ func (l *sessionLiveness) received(msg *reliantv1.ServerMessage, now time.Time) 
 	if ack <= 0 || ack <= l.acked {
 		return
 	}
+	l.acksSupported = true
 	l.acked = ack
 	switch {
 	case ack >= l.newestSent:
@@ -146,7 +153,7 @@ func (l *sessionLiveness) check(now time.Time) error {
 		return fmt.Errorf("nothing received from the gateway for %s (it heartbeats every 15s); "+
 			"treating the stream as dead", silent.Round(time.Second))
 	}
-	if !l.unackedSince.IsZero() {
+	if l.acksSupported && !l.unackedSince.IsZero() {
 		if waiting := now.Sub(l.unackedSince); waiting > l.timing.heartbeatAckTimeout {
 			return fmt.Errorf("the gateway has not acknowledged a heartbeat sent %s ago, so it is "+
 				"not reading this stream; treating the stream as dead", waiting.Round(time.Second))

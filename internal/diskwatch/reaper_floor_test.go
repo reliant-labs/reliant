@@ -113,7 +113,7 @@ func TestTrimAuditRotatesAndNeverFailsAPass(t *testing.T) {
 	dir := t.TempDir()
 	policy := filepath.Join(dir, "forge", "storage.json")
 	w := New(Options{noDocker: true, reaper: func(context.Context, string) (reaperRun, error) { return reaperRun{}, nil }})
-	rec := trimAuditRecord{At: time.Now(), Verdict: verdictTrimmed, Forge: strings.Repeat("x", 1<<20)}
+	rec := trimAuditRecord{At: time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC), Verdict: verdictTrimmed, Forge: strings.Repeat("x", 1<<20)}
 	for i := 0; i < trimAuditMaxBytes/(1<<20)+2; i++ {
 		w.appendTrimAudit(context.Background(), policy, rec)
 	}
