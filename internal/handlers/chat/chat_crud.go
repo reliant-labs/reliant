@@ -100,6 +100,10 @@ func (s *Service) startChat(
 	if err != nil {
 		return nil, err
 	}
+	appName, err := parseAppName(msg.AppName)
+	if err != nil {
+		return nil, err
+	}
 
 	// An interactive chat start is a trigger event too, of kind chat.start: it
 	// has no stored definition, and its dedupe key is the chat id, which is what
@@ -140,6 +144,7 @@ func (s *Service) startChat(
 		WorktreeID:  msg.WorktreeId,
 		ChatID:      msg.GetChatId(),
 		NewChatID:   newChatID,
+		AppName:     appName,
 		Title:       msg.Title,
 		Workflow:    msg.Workflow,
 		Presets:     msg.SelectedPresets,
@@ -304,6 +309,7 @@ func (s *Service) ListChats(
 		ProjectID:       projectID,
 		Org:             scope,
 		Limit:           limit,
+		AppName:         appNameFilter(req.Msg.AppName),
 		ExcludeArchived: true,
 		// The chat list holds conversations: USER-origin chats and adopted
 		// runs. Every other run lists under Runs (RunService.ListRuns).
