@@ -19,7 +19,7 @@ import {
 } from './auth/sharedSession'
 import { loadConfig } from './config_gen'
 import { getIsDev } from './constants'
-import { demoAppHost, isDemoShell } from './shell'
+import { isDemoShell } from './shell'
 
 // Read per call, not at module scope: the runtime config (config.js) is the
 // one source, and a module-scope copy is what a test resetting it never sees.
@@ -280,7 +280,6 @@ export const authStorageMode = (): AuthStorageMode =>
     cookieDomain: loadConfig().AUTH_COOKIE_DOMAIN,
     hostname: window.location.hostname,
     protocol: window.location.protocol,
-    demoHost: demoAppHost(),
     demoShell: isDemoShell(),
   })
 

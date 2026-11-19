@@ -23,9 +23,8 @@ import (
 // forgepin says why this matters everywhere).
 //
 // So inside a project that pins another forge, the shipped skills come from
-// THAT forge: `forge skill list --json --with-bodies` (one call for the whole
-// catalog), or — from a pin that predates the flag — `skill list --json` and
-// `skill load <path>` per body. forgepin caches them per pinned forge.
+// THAT forge: `forge skill list --json --with-bodies`, one call for the whole
+// catalog. forgepin caches it per pinned forge.
 //
 // What stays on the embedded forge: user (~/.forge/skills) and project
 // (.forge/skills) skills, which are the user's files rather than any forge's
@@ -75,8 +74,7 @@ func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]
 		return e.list, nil
 	}
 	raw, err := pinnedForge.Output(pf, baseDir, "skills-list.json",
-		[]string{"skill", "list", "--json", "--with-bodies"},
-		[]string{"skill", "list", "--json"})
+		[]string{"skill", "list", "--json", "--with-bodies"})
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +104,7 @@ func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]
 	return skills, nil
 }
 
-// pinnedSkillBody is `skill load <path>` as the pinned forge prints it.
+// pinnedSkillBody is the body the pinned forge's catalog lists for path.
 func pinnedSkillBody(pf forgecli.PinnedForge, baseDir, path string) (string, error) {
 	e := pinnedEntry(pf.Key)
 	e.mu.Lock()
@@ -117,13 +115,7 @@ func pinnedSkillBody(pf forgecli.PinnedForge, baseDir, path string) (string, err
 	if body, ok := e.bodies[path]; ok {
 		return body, nil
 	}
-	raw, err := pinnedForge.Output(pf, baseDir, "skill-"+forgepin.Fingerprint([]byte(path))+".md",
-		[]string{"skill", "load", path})
-	if err != nil {
-		return "", err
-	}
-	e.bodies[path] = string(raw)
-	return string(raw), nil
+	return "", fmt.Errorf("%s ships no skill %q", pf.Want, path)
 }
 
 // shippedSkillsFor returns the forge-shipped skills baseDir's agents should

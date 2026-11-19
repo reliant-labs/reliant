@@ -18,16 +18,14 @@ import (
 )
 
 // fakePinnedForge stands in for the forge a project pins: resolve says which
-// one (or why it cannot be had), run plays its `skill list --json` and
-// `skill load`, and counts the calls.
+// one (or why it cannot be had), run plays its `skill list --json
+// --with-bodies`, and counts the calls.
 type fakePinnedForge struct {
 	mu         sync.Mutex
 	resolveErr error
 	unpinned   bool
 	runs       []string
 	resolves   int
-	// withBodies: the pinned forge has `skill list --with-bodies`.
-	withBodies bool
 	// restart stands in for a new process: fresh memory, the same disk cache.
 	restart func()
 }
@@ -57,18 +55,14 @@ func useFakePinnedForge(t *testing.T, f *fakePinnedForge) {
 		f.runs = append(f.runs, strings.Join(args, " "))
 		f.mu.Unlock()
 		switch {
-		case strings.Join(args, " ") == "skill list --json --with-bodies" && f.withBodies:
-			return []byte(`[{"path": "only-in-v104", "name": "only-in-v104", "description": "a skill only the pin ships", "scope": "forge", "body": "# only-in-v104, listed with its body\n"}]`), nil
-		case strings.Join(args, " ") == "skill list --json":
+		case strings.Join(args, " ") == "skill list --json --with-bodies":
 			return []byte(`[
-  {"path": "forge", "name": "forge", "description": "v1.0.4 start here", "scope": "forge"},
-  {"path": "db", "name": "db", "description": "v1.0.4 db", "scope": "forge", "emit": "both"},
-  {"path": "only-in-v104", "name": "only-in-v104", "description": "a skill only the pin ships", "scope": "forge"},
-  {"path": "general-agent", "name": "general-agent", "description": "methodology", "scope": "forge", "emit": "general"},
+  {"path": "forge", "name": "forge", "description": "v1.0.4 start here", "scope": "forge", "body": "# forge as forge v1.0.4 renders it\n"},
+  {"path": "db", "name": "db", "description": "v1.0.4 db", "scope": "forge", "emit": "both", "body": "# db as forge v1.0.4 renders it\n"},
+  {"path": "only-in-v104", "name": "only-in-v104", "description": "a skill only the pin ships", "scope": "forge", "body": "# only-in-v104 as forge v1.0.4 renders it\n"},
+  {"path": "general-agent", "name": "general-agent", "description": "methodology", "scope": "forge", "emit": "general", "body": "# general-agent as forge v1.0.4 renders it\n"},
   {"path": "mine", "name": "mine", "description": "a user skill, read where it is", "scope": "user"}
 ]`), nil
-		case len(args) == 3 && args[0] == "skill" && args[1] == "load":
-			return []byte("# " + args[2] + " as forge v1.0.4 renders it\n"), nil
 		}
 		return nil, errors.New("unexpected " + strings.Join(args, " "))
 	}
@@ -131,7 +125,7 @@ func TestPinnedProject_SkillsComeFromThePinnedForge(t *testing.T) {
 	f.restart()
 	_ = discoverForgeSkills(dir, "", false)
 	_, _ = loadForgeDefinition(defs["forge/only-in-v104"])
-	assert.Equal(t, []string{"skill list --json --with-bodies", "skill list --json", "skill load only-in-v104"}, f.runs, "the pinned forge was asked again for what it already said")
+	assert.Equal(t, []string{"skill list --json --with-bodies"}, f.runs, "the pinned forge was asked again for what it already said")
 	// One resolution per process: the restart asked again.
 	assert.Equal(t, 2, f.resolves, "which forge the project pins was resolved more than once per process")
 }
@@ -173,18 +167,4 @@ func TestPinnedProject_UnobtainablePinSaysSoAndServesNoOtherForge(t *testing.T) 
 
 	_, err := loadForgeDefinition(Definition{Scope: defs["forge"].Scope, Path: forgeSyntheticPath(dir, "db"), SkillPath: "forge/db"})
 	require.Error(t, err, "a framework skill loaded from the embedded forge")
-}
-
-// A pinned forge that lists every body in one call is asked once, for all of
-// them.
-func TestPinnedProject_ACatalogWithBodiesIsReadInOneCall(t *testing.T) {
-	isolateHome(t)
-	f := &fakePinnedForge{withBodies: true}
-	useFakePinnedForge(t, f)
-	dir := pinnedProject(t)
-
-	defs := paths(discoverForgeSkills(dir, "", true))
-	require.Contains(t, defs, "forge/only-in-v104")
-	assert.Equal(t, "# only-in-v104, listed with its body\n", defs["forge/only-in-v104"].Body)
-	assert.Equal(t, []string{"skill list --json --with-bodies"}, f.runs)
 }

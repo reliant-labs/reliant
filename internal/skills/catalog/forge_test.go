@@ -94,7 +94,7 @@ func TestDiscoverForgeSkills_NoForgeYaml(t *testing.T) {
 // dual-audience skills (Emit "both", like `debug`) surface at the bare
 // path "debug" — NOT under the "forge/" namespace prefix — regardless
 // of whether forge.yaml is present. That bare-path placement is what
-// makes preset references like `recommended_skills: [debug]` resolve
+// makes preset references like `params.skills: [debug]` resolve
 // in any project, while the forge framework parent + "forge/*" children
 // stay gated on forge.yaml.
 func TestDiscoverForgeSkills_EmitBothSurfacesAtBarePath(t *testing.T) {

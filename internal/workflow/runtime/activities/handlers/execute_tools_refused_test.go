@@ -14,10 +14,8 @@ import (
 )
 
 // A call the workflow refused is answered with the reason and recorded
-// FAILED, and never reaches the executor. Only a run recorded before the
-// integration action approval prompt was removed still refuses one — a call
-// the person attending did not approve (runtime/action_approval_legacy.go) —
-// and it must keep being honoured until that run is gone.
+// FAILED, and never reaches the executor: an activation change the person
+// attending did not approve (runtime/activation_approval.go).
 func TestExecuteTools_RefusesCallTheWorkflowRefused(t *testing.T) {
 	t.Parallel()
 
@@ -41,7 +39,7 @@ func TestExecuteTools_RefusesCallTheWorkflowRefused(t *testing.T) {
 			{ID: refusedID, Name: slackPost, Input: `{"channel":"#general","text":"hi"}`},
 			{ID: readID, Name: tools.ToolView, Input: `{"file_path":"/tmp/x"}`},
 		},
-		RefusedToolCalls: map[string]string{refusedID: reason},
+		ActivationRefusals: map[string]string{refusedID: reason},
 	}, &output))
 
 	require.Len(t, output.ToolResults, 2)

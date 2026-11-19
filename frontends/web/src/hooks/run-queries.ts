@@ -588,8 +588,8 @@ export function useFirstPrompt(chatId: string | undefined, enabled = true) {
     [id],
   );
   return useListMessages(
-    // Reads the prompt's TEXT only: tool bodies stay out, and no total.
-    { chatId: id, recent: SEED_WINDOW, beforeSeq: BigInt(SEED_WINDOW), toolBodies: TRANSCRIPT_TOOL_BODY_MODE, skipTotal: true },
+    // Reads the prompt's TEXT only: tool bodies stay out.
+    { chatId: id, recent: SEED_WINDOW, beforeSeq: BigInt(SEED_WINDOW), toolBodies: TRANSCRIPT_TOOL_BODY_MODE },
     { enabled: !!chatId && enabled, staleTime: Infinity, select },
   );
 }
