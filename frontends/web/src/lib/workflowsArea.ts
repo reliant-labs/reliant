@@ -19,7 +19,7 @@
  * route tree to find out.
  */
 
-import { automationPath, runsPath, workflowBuilderPath, workflowDetailPath, workflowLibraryPath } from "./paths";
+import { automationPath, automationsPath, runsPath, workflowBuilderPath, workflowDetailPath, workflowLibraryPath } from "./paths";
 import { orgFreePath } from "./paths/org";
 
 // The constants below are the area's paths as a pathname is MATCHED against
@@ -105,13 +105,20 @@ export function isWorkflowSurfacePath(pathname: string): boolean {
  *                                 → the automation redirect, which looks the
  *                                   trigger up and opens its workflow's page
  *                                   (automationRedirectPath)
+ *
+ * The retired paths are MATCHED as literals; every destination is built by
+ * lib/paths, with the rest of the retired path (an id, as the URL carried
+ * it) appended byte for byte. A destination that names a run or an
+ * automation keeps today's org-less form (`{ org: null }`): its own org
+ * decides where it opens (the resolver, U4), not the tab's.
  */
 export function legacyWorkflowsPath(pathname: string): string | null {
   if (pathname === "/workflow") return workflowLibraryPath();
-  if (isAtOrBelow(pathname, "/runs")) return `/workflows${pathname}`;
+  if (pathname === "/runs") return runsPath();
+  if (pathname.startsWith("/runs/")) return `${runsPath({ org: null })}${pathname.slice("/runs".length)}`;
   if (pathname === RETIRED_AUTOMATIONS_PATH || pathname === "/automations") return onWorkflowsHref();
   // /workflows/automations/<id> is the resolving redirect itself.
-  if (pathname.startsWith("/automations/")) return `/workflows${pathname}`;
+  if (pathname.startsWith("/automations/")) return `${automationsPath({ org: null })}${pathname.slice("/automations".length)}`;
   return null;
 }
 
