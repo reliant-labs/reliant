@@ -55,7 +55,6 @@ interface ToolExecutionGroupProps {
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
-  density?: "compact" | "card" | "minimal";
 }
 
 function ToolExecutionGroupComponent({
@@ -64,7 +63,6 @@ function ToolExecutionGroupComponent({
   chatId,
   showRichContent = false,
   onSelectThread,
-  density = "compact",
 }: ToolExecutionGroupProps) {
   const hasPendingApprovals = useMemo(() => {
     return executions.some(execution => execution.approval?.status === ApprovalStatus.PENDING);
@@ -191,9 +189,7 @@ function ToolExecutionGroupComponent({
   return (
     <div
       className={cn(
-        "border overflow-hidden",
-        density === "card" ? "rounded-xl shadow-sm" : "rounded-lg",
-        density === "minimal" && "rounded-md shadow-none",
+        "border overflow-hidden rounded-lg",
         hasAnyErrors
           ? "border-destructive/40 bg-destructive/5"
           : hasAnyCancelled
@@ -210,7 +206,7 @@ function ToolExecutionGroupComponent({
         className={cn(
           "flex w-full items-center justify-between gap-2 text-left cursor-pointer hover:bg-muted/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch:min-h-[44px]",
           surface === "mobile" && "min-h-[44px]",
-          density === "card" ? "px-3 py-2" : "px-1.5 py-1"
+          "px-1.5 py-1"
         )}
         onClick={toggle}
         aria-expanded={expanded}
@@ -259,7 +255,7 @@ function ToolExecutionGroupComponent({
 
       {/* Show all tool calls when expanded */}
       {expanded && (
-        <div id={panelId} className={cn("border-t border-muted/50 p-1", density === "card" ? "space-y-2" : "space-y-1")}>
+        <div id={panelId} className="border-t border-muted/50 p-1 space-y-1">
           {executions.map((execution) => {
             return (
               <ToolExecution
@@ -273,7 +269,6 @@ function ToolExecutionGroupComponent({
                 chatId={chatId}
                 showRichContent={showRichContent}
                 onSelectThread={onSelectThread}
-                density={density}
               />
             );
           })}

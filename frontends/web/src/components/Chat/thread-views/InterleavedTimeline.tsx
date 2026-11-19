@@ -21,7 +21,7 @@ import { useSurface } from "../../../lib/surfaceContext";
 import { transcriptDateLabels } from "./transcriptPresentation";
 import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route, Loader2 } from "lucide-react";
 import Tooltip from "../../forge-ui/tooltip";
-import { ChatMessage, type ChatTimelineVariant } from "../ChatMessage";
+import { ChatMessage } from "../ChatMessage";
 import { CompactionMessage, isCompactionMessage } from "../CompactionMessage";
 import { AgentMessageCard, isAgentMessage } from "../AgentMessageCard";
 import { WorkflowErrorMessage } from "../WorkflowErrorMessage";
@@ -43,7 +43,6 @@ import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resol
 import { useActiveThreads } from "../../../store/threadActivityStore";
 import { useToolResultsByCallId } from "../../../store/chatStoreHooks";
 import { logger } from "../../../lib/logger";
-import { settingsSync, SETTINGS_KEYS } from "../../../services/settingsSync";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
 import { messageText } from "../../../lib/transcript";
 import { pinnedPromptFirstLine, usePinnedPromptForm } from "./pinnedPromptForm";
@@ -373,7 +372,7 @@ const GroupedErrorRow = memo(function GroupedErrorRow({
 }: ErrorGroup) {
   const affectedThreads = errors.length;
   return (
-    <div className="mb-2">
+    <div>
       {affectedThreads > 1 && (
         <div className="px-2 pb-1 text-xs text-muted-foreground">
           ×{affectedThreads} — the same failure hit {affectedThreads} threads at once
@@ -384,7 +383,14 @@ const GroupedErrorRow = memo(function GroupedErrorRow({
   );
 });
 
-const TIMELINE_VARIANTS: ChatTimelineVariant[] = ["compact", "card", "minimal"];
+/**
+ * The conversation column (§2.2 of the chat design): one width for every
+ * transcript row, the pinned prompt and the footer, with the gutter inside
+ * it. The composer and the new-chat screen read the same `--chat-column`.
+ */
+const COLUMN_CLASS = "mx-auto w-full max-w-[var(--chat-column)] px-4 sm:px-6";
+/** The column's gutter alone, for a full-width strip whose text aligns with it. */
+const GUTTER_CLASS = "px-4 sm:px-6";
 
 /**
  * How far past the header's bottom edge an already-pinned user message must
@@ -408,13 +414,6 @@ const PINNED_HEADER_ESTIMATED_PX = 48;
  * Fixed in both states, so the indicator toggling never moves the rows.
  */
 const TIMELINE_HEADER_PX = 32;
-
-function getStoredTimelineVariant(): ChatTimelineVariant {
-  const stored = settingsSync.getSetting(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, "compact");
-  return TIMELINE_VARIANTS.includes(stored as ChatTimelineVariant)
-    ? (stored as ChatTimelineVariant)
-    : "compact";
-}
 
 export function isToolOnlyAssistantMessage(message: Message): boolean {
   if (message.role !== MessageRole.ASSISTANT) return false;
@@ -475,6 +474,119 @@ export function getToolRowSpacing(
     compactBefore,
     compactAfter,
   };
+}
+
+/** A person's own message: role USER, and not another agent's mail. */
+function isUserTurn(item: ToolRowSpacingItem | undefined): boolean {
+  return Boolean(
+    item?.type === "message" &&
+      item.message &&
+      item.message.role === MessageRole.USER &&
+      !isAgentMessage(item.message),
+  );
+}
+
+type TurnItem = ToolRowSpacingItem & { workflow?: { thread?: string } };
+
+/** Where one row sits in the conversation's turns: see rowTurns. */
+interface RowTurn {
+  /** The id of the person's message that opened the row's turn; null before the first one loaded. */
+  turn: string | null;
+  /** The row's thread; undefined when it has none. */
+  thread: string | undefined;
+  /** The person's message that opens `turn`. */
+  opener: boolean;
+  /** A message or fold of work on a known thread: part of that thread's answer to `turn`. */
+  joins: boolean;
+}
+
+/**
+ * Each row's turn and thread, by identity rather than by its neighbours.
+ *
+ * A turn is opened by a person's message and named by its id. Every row up to
+ * the next person's message belongs to it, on whatever thread it is: the
+ * timeline orders rows by time, so that is the prompt the row answers. The
+ * rows above the first prompt loaded form one turn too (`null`), whose prompt
+ * is in a page not loaded yet.
+ *
+ * A row's thread is its workflow's thread, or its message's when it has no
+ * workflow (the builder derives one from the other, so they agree).
+ *
+ * A message or a fold of work on a known thread JOINS its turn: it is part of
+ * that thread's answer to the prompt. Every other row is NEUTRAL — a divider,
+ * a handoff, an error, an info, a run output, and any row whose thread is
+ * unknown. A neutral row neither joins a turn nor ends one: it never continues
+ * a thread's answer, so it can neither move that answer's actions row nor hide
+ * it, and nothing continues it either.
+ */
+function rowTurns(items: readonly TurnItem[]): RowTurn[] {
+  let turn: string | null = null;
+  return items.map((item) => {
+    const opener = isUserTurn(item);
+    if (opener && item.message) turn = item.message.id;
+    const thread = item.workflow?.thread || item.message?.thread || undefined;
+    const joins = !opener && thread !== undefined && (item.type === "message" || item.type === "work");
+    return { turn, thread, opener, joins };
+  });
+}
+
+/**
+ * The space above each transcript row: the turn rhythm (§2.2 of the chat
+ * design). It is row padding, so the virtualizer measures it.
+ *
+ *   a person's message after anything           pt-8  (30px)
+ *   the first row after it                      pt-5  (18.75px)
+ *   every later row in the same turn            pt-3  (11.25px)
+ *   a detailed run of one thread's tool-only    pt-1  (one run, not a turn each)
+ *     messages
+ *   the first row                               none: the header band is above it
+ *
+ * A run is one thread's: a tool-only message from another thread between two
+ * of them starts a run of its own rather than tightening theirs.
+ */
+export function turnRhythm(items: readonly TurnItem[]): string[] {
+  const rows = rowTurns(items);
+  return rows.map((row, index) => {
+    if (index === 0) return "";
+    if (row.opener) return "pt-8";
+    const previous = rows[index - 1];
+    if (previous.opener) return "pt-5";
+    const sameRun = row.joins && previous.joins && row.thread === previous.thread;
+    if (sameRun && getToolRowSpacing(items, index).compactBefore) return "pt-1";
+    return "pt-3";
+  });
+}
+
+/**
+ * Whether each row ends its part of a turn, and so carries the actions row
+ * (§2.1 of the chat design: one per exchange). Only one row of a part does,
+ * so an answer split by its work is not followed by a reserved row per part.
+ *
+ *   a person's message   ends its turn while nothing has joined it yet: the
+ *                        latest prompt with no answer, or a send that failed.
+ *                        Once any thread answers, the answer carries them.
+ *   any other row        ends its thread's part of the turn when no later row
+ *                        of that thread joins the same turn. Other threads'
+ *                        rows, and neutral rows (see rowTurns), between them
+ *                        change nothing.
+ *   a row with no thread is its own end: nothing can continue it.
+ */
+export function turnEnds(items: readonly TurnItem[]): boolean[] {
+  const rows = rowTurns(items);
+  // A thread's part of a turn → the index of its last row to join the turn.
+  const partKey = (row: RowTurn) => `${row.turn ?? ""}\u0000${row.thread}`;
+  const lastJoin = new Map<string, number>();
+  const answered = new Set<string | null>();
+  rows.forEach((row, index) => {
+    if (!row.joins) return;
+    lastJoin.set(partKey(row), index);
+    answered.add(row.turn);
+  });
+  return rows.map((row, index) => {
+    if (row.opener) return !answered.has(row.turn);
+    if (row.thread === undefined) return true;
+    return (lastJoin.get(partKey(row)) ?? index) <= index;
+  });
 }
 
 /**
@@ -663,25 +775,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   hasOlderMessages = false,
 }: InterleavedTimelineProps) {
   const activeThreads = useActiveThreads(chatId);
-  const [timelineVariant, setTimelineVariant] = useState<ChatTimelineVariant>(() => getStoredTimelineVariant());
-
-  useEffect(() => {
-    const handleAppearanceUpdated = () => {
-      setTimelineVariant(getStoredTimelineVariant());
-    };
-
-    window.addEventListener("appearance-updated", handleAppearanceUpdated);
-    return () => window.removeEventListener("appearance-updated", handleAppearanceUpdated);
-  }, []);
-
-  const timelineShellClass = cn(
-    "chat-timeline-shell h-full",
-    timelineVariant === "card" && "chat-timeline-card",
-    timelineVariant === "minimal" && "chat-timeline-minimal"
-  );
-  const contentMaxWidthClass = timelineVariant === "minimal" ? "max-w-[900px]" : "max-w-[1200px]";
-  const timelineHorizontalPaddingClass = timelineVariant === "minimal" ? "px-4 sm:px-8" : "px-4 sm:px-6 lg:px-8";
-  const timelineGapClass = timelineVariant === "card" ? "py-1" : timelineVariant === "minimal" ? "py-0.5" : "";
   const { mode: threadMode } = useChatThreadMode();
   const simplified = threadMode === "simplified";
 
@@ -983,6 +1076,11 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     const last = timelineItems.length - 1;
     return timelineItems[last]?.type === "work" ? last : -1;
   }, [simplified, isStreaming, timelineItems]);
+
+  // Per row, in one pass over the turns: which rows carry the actions row,
+  // and the space above each.
+  const turnEndByRow = useMemo(() => turnEnds(timelineItems), [timelineItems]);
+  const rhythmByRow = useMemo(() => turnRhythm(timelineItems), [timelineItems]);
 
   // `timelineItems` IS the list the virtualizer renders. There is deliberately
   // no per-row wrapper carrying `key`/`isLast`: both are derivable from the
@@ -1359,7 +1457,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   }, [reportScrollEdges, scrollerEl, pinnedHeaderShown, atBottom, chromeInsets.top, chromeInsets.bottom]);
 
   // `index` is a plain index into timelineItems.
-  const renderItem = useCallback((index: number, item: TimelineItem, compactToolSpacing = false) => {
+  const renderItem = useCallback((index: number, item: TimelineItem) => {
     if (item.type === "thread-start") {
       const isFork = item.workflow.origin === "fork";
       const label = isFork ? `forked from ${item.parentName}` : `from ${item.parentName}`;
@@ -1391,18 +1489,14 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
     if (item.type === "info") {
       return (
-        <div className="message-content w-full px-2 mb-1">
+        <div className="message-content w-full">
           <WorkflowInfoMessage info={item.info} />
         </div>
       );
     }
 
     if (item.type === "run_output") {
-      return (
-        <div className="mb-1">
-          <RunStepExecution runOutput={item.runOutput} />
-        </div>
-      );
+      return <RunStepExecution runOutput={item.runOutput} />;
     }
 
     // Indents a non-main thread's row under its thread colour.
@@ -1414,15 +1508,13 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           // every frame of the animation and each one triggers a re-measure
           // and a follow-scroll correction.
           "transition-colors",
-          !workflow.isMain && "pl-3",
-          !workflow.isMain && timelineVariant !== "minimal" && "ml-1",
-          timelineVariant === "card" && !workflow.isMain && "rounded-xl bg-background/30"
+          !workflow.isMain && "ml-1 pl-3",
         )}
         style={
           !workflow.isMain
             ? {
                 borderLeftColor: workflow.color,
-                borderLeftWidth: timelineVariant === "minimal" ? 2 : 3,
+                borderLeftWidth: 3,
                 borderLeftStyle: "solid",
               }
             : undefined
@@ -1441,7 +1533,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           approvals={approvals}
           isStreaming={index === liveWorkIndex}
           onSelectThread={onSelectThread}
-          timelineVariant={timelineVariant}
         />,
       );
     }
@@ -1465,7 +1556,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           chatId={chatId}
           isStreaming={false}
           onSelectThread={onSelectThread}
-          timelineVariant={timelineVariant}
+          turnEnd={turnEndByRow[index]}
         />
       );
     }
@@ -1485,16 +1576,15 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
             chatId={chatId}
             isStreaming={isStreaming && isLastItem}
             onSelectThread={onSelectThread}
-            timelineVariant={timelineVariant}
-            compactToolSpacing={compactToolSpacing}
             slice={item.slice}
+            turnEnd={turnEndByRow[index]}
           />
         )}
       </>,
     );
-  }, [approvals, chatId, isStreaming, lastItemIndex, liveWorkIndex, onSelectThread, timelineVariant]);
+  }, [approvals, chatId, isStreaming, lastItemIndex, liveWorkIndex, onSelectThread, turnEndByRow]);
 
-  // Wrap each row in the padding/max-width container.
+  // Wrap each row in the column, with the turn rhythm above it.
   // One virtual row: absolutely positioned at its measured offset, and handed
   // to the virtualizer to measure. The ref is called for every rendered row;
   // the virtualizer watches it with a ResizeObserver from then on.
@@ -1509,18 +1599,13 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     // landing mid-conversation with no cue makes the jump feel like it failed.
     const rowKey = timelineItemKey(item);
     const isHighlighted = highlightedRowKey !== null && rowKey === highlightedRowKey;
-    const toolRowSpacing = getToolRowSpacing(timelineItems, index);
+    // A message's later prose rows (keyed) never repeat its date.
+    const dateLabel = item.type === "message" && !item.key ? dateLabels.get(item.message.id) : undefined;
 
     return (
       <div
         key={rowKey}
-        className={cn(
-          "absolute inset-x-0 top-0",
-          timelineHorizontalPaddingClass,
-          timelineGapClass,
-          toolRowSpacing.compactBefore && "pt-0.5",
-          toolRowSpacing.compactAfter && "pb-0.5",
-        )}
+        className="absolute inset-x-0 top-0"
         // No `transform` in JSX: with directDomUpdates the virtualizer writes
         // each row's position in a layout effect after every render (before
         // paint), and caches what it wrote. A JSX transform would be re-applied
@@ -1533,27 +1618,25 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         {...{ [TIMELINE_ROW_INDEX_ATTR]: index }}
         ref={measureRow}
       >
-        <div
-          className={cn(
-            contentMaxWidthClass,
-            "mx-auto",
-            isHighlighted &&
-              "rounded-lg ring-2 ring-primary/60 transition-shadow duration-500",
-          )}
-        >
-          {/* A message's later prose rows (keyed) never repeat its date. */}
-          {item.type === "message" && !item.key && dateLabels.has(item.message.id) && (
-            <div className="flex items-center gap-3 py-3 text-xs text-muted-foreground">
-              <span aria-hidden="true" className="h-px flex-1 bg-border" />
-              <time dateTime={item.message.createdAt}>{dateLabels.get(item.message.id)}</time>
-              <span aria-hidden="true" className="h-px flex-1 bg-border" />
+        {/* A date divider carries its own space, so its row adds none. */}
+        <div className={cn(COLUMN_CLASS, !dateLabel && rhythmByRow[index])}>
+          {dateLabel && item.type === "message" && (
+            <div className="py-4 text-center text-meta text-muted-foreground">
+              <time dateTime={item.message.createdAt}>{dateLabel}</time>
             </div>
           )}
-          {renderItem(index, item, toolRowSpacing.compact)}
+          <div
+            className={cn(
+              isHighlighted &&
+                "rounded-lg ring-2 ring-primary/60 transition-shadow duration-500",
+            )}
+          >
+            {renderItem(index, item)}
+          </div>
         </div>
       </div>
     );
-  }, [contentMaxWidthClass, dateLabels, highlightedRowKey, measureRow, renderItem, timelineGapClass, timelineHorizontalPaddingClass, timelineItems]);
+  }, [dateLabels, highlightedRowKey, measureRow, renderItem, rhythmByRow]);
 
   if (timelineItems.length === 0) {
     return (
@@ -1564,7 +1647,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   return (
     <div
       ref={setTimelineShell}
-      className={timelineShellClass}
+      className="chat-timeline-shell h-full"
       style={{ position: "relative" }}
     >
       {/* Pinned user message overlay.
@@ -1588,8 +1671,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           // Directly under a floating top bar; at the top edge otherwise.
           style={{ top: chromeInsets.top }}
         >
-          <div className={timelineHorizontalPaddingClass}>
-            <div className={cn(contentMaxWidthClass, "mx-auto flex items-center gap-2")}>
+          <div>
+            <div className={cn(COLUMN_CLASS, "flex items-center gap-2")}>
               <div className="min-w-0 flex-1">
                 <ChatMessage
                   message={pinnedUserMsg}
@@ -1598,7 +1681,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
                   chatId={chatId}
                   isStreaming={false}
                   onSelectThread={onSelectThread}
-                  timelineVariant={timelineVariant}
                   pinned
                 />
               </div>
@@ -1660,7 +1742,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
             className={cn(
               // pb-2 keeps the label centered in the visible 36px.
               "pointer-events-auto relative flex h-[44px] w-full select-none items-center gap-2 pb-2 text-left text-xs text-muted-foreground",
-              timelineHorizontalPaddingClass,
+              GUTTER_CLASS,
               "transition-colors hover:text-foreground focus-visible:text-foreground",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
             )}
@@ -1762,13 +1844,11 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
               the floating composer band's share of that padding. */}
           <div ref={timeline.footerRef} className="absolute inset-x-0" style={{ bottom: chromeInsets.bottom }}>
             {footer ? (
-              <div className={cn(timelineHorizontalPaddingClass, "pb-3")}>
-                <div className={cn(contentMaxWidthClass, "mx-auto")}>
-                  <LiveTurnFoldContext.Provider value={liveWorkIndex >= 0}>{footer}</LiveTurnFoldContext.Provider>
-                </div>
+              <div className={cn(COLUMN_CLASS, "pb-6")}>
+                <LiveTurnFoldContext.Provider value={liveWorkIndex >= 0}>{footer}</LiveTurnFoldContext.Provider>
               </div>
             ) : (
-              <div className="pb-10" />
+              <div className="pb-6" />
             )}
           </div>
         </div>
