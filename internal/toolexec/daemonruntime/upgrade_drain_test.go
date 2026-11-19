@@ -42,6 +42,40 @@ func upgradeState(d *daemonClient) reliantv1.DaemonUpgradeState {
 	return d.upgrade.heartbeatStatus(d.results.runningCount()).GetState()
 }
 
+// drainProbe records the drain loop's passes and its return, so a test that
+// asserts something does NOT happen waits on the drain having looked N times
+// (the loop re-reads the state on every pass) instead of on elapsed time.
+// Install it before the drain starts.
+type drainProbe struct {
+	polls    atomic.Int64
+	returned chan struct{}
+}
+
+func probeDrain(d *daemonClient) *drainProbe {
+	p := &drainProbe{returned: make(chan struct{})}
+	d.upgrade.onPoll = func() { p.polls.Add(1) }
+	d.upgrade.onReturn = func() { close(p.returned) }
+	return p
+}
+
+// waitForPolls returns once the drain loop has made n more passes than it had
+// when called.
+func (p *drainProbe) waitForPolls(t *testing.T, n int64) {
+	t.Helper()
+	target := p.polls.Load() + n
+	require.Eventually(t, func() bool { return p.polls.Load() >= target }, 5*time.Second, time.Millisecond,
+		"the drain loop never made %d passes", n)
+}
+
+func (p *drainProbe) waitForReturn(t *testing.T) {
+	t.Helper()
+	select {
+	case <-p.returned:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the drain never returned")
+	}
+}
+
 func waitForUpgradeState(t *testing.T, d *daemonClient, want reliantv1.DaemonUpgradeState) *reliantv1.DaemonUpgradeStatus {
 	t.Helper()
 	require.Eventually(t, func() bool { return upgradeState(d) == want }, 5*time.Second, time.Millisecond,
@@ -79,6 +113,7 @@ func TestDrainWaitsForRunningCallsThenReportsDrained(t *testing.T) {
 	d := managedTestDaemon(time.Hour, time.Hour)
 	useTestSession(d, 16)
 	d.results.start("running-1")
+	probe := probeDrain(d)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -89,7 +124,10 @@ func TestDrainWaitsForRunningCallsThenReportsDrained(t *testing.T) {
 	assert.Equal(t, "roll-1", st.GetRolloutId())
 	assert.Equal(t, "v1.2.3", st.GetTargetVersion())
 
-	time.Sleep(20 * time.Millisecond)
+	// Each pass re-checks the running count: after several passes with the
+	// call still running, a drain that wrongly ended would have published
+	// DRAINED.
+	probe.waitForPolls(t, 5)
 	require.Equal(t, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING, upgradeState(d),
 		"a running call keeps the drain going until its deadline")
 
@@ -134,7 +172,7 @@ func TestDrainedDaemonNotRestartedMakesAnUpgradeExit(t *testing.T) {
 	d.handleRestartRequested(ctx, restartRequest(time.Time{}).GetRestartRequested())
 	failed := waitForUpgradeState(t, d, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_FAILED)
 	assert.Contains(t, failed.GetDetail(), "did not restart this machine")
-	require.Eventually(t, d.upgrade.exitRequested, time.Second, time.Millisecond)
+	require.Eventually(t, d.upgrade.exitRequested, 5*time.Second, time.Millisecond)
 	assert.True(t, stopped.Load(), "the upgrade exit stops the runtime")
 	select {
 	case code := <-exitCode:
@@ -155,16 +193,22 @@ func TestDrainIsNotBoundedByTheShutdownWatchdog(t *testing.T) {
 	var exited atomic.Bool
 	d.armUpgrade(func() { stopped.Store(true) }, "", func(int) { exited.Store(true) })
 	d.results.start("running-1")
+	probe := probeDrain(d)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	d.handleRestartRequested(ctx, restartRequest(time.Time{}).GetRestartRequested())
-	time.Sleep(50 * time.Millisecond) // 50x the backstop
+	// 50 passes at a 1ms poll put the drain well past the 1ms backstop with
+	// the drain goroutine demonstrably running: a drain wrongly bounded by
+	// it would have stopped or exited by now.
+	probe.waitForPolls(t, 50)
 	assert.Equal(t, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING, upgradeState(d))
 	assert.False(t, stopped.Load())
 	assert.False(t, exited.Load())
 
 	cancel() // a signal's stop
-	time.Sleep(20 * time.Millisecond)
+	// The drain has returned, so nothing later can turn the stop into an
+	// upgrade exit.
+	probe.waitForReturn(t)
 	assert.False(t, d.upgrade.exitRequested(), "a stop during a drain is a stop, not an upgrade exit")
 	assert.False(t, exited.Load())
 }

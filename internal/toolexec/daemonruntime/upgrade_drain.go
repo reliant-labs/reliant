@@ -108,6 +108,11 @@ type upgradeDrain struct {
 	restartWait time.Duration
 	poll        time.Duration
 	backstop    time.Duration
+	// onPoll runs at each pass of the drain's wait loop, and onReturn when
+	// runUpgradeDrain returns, so a test can wait on the drain having
+	// looked rather than on elapsed time. Set before the drain starts.
+	onPoll   func()
+	onReturn func()
 }
 
 // armUpgrade gives the drain what its upgrade exit needs: how to stop the
@@ -305,10 +310,16 @@ func (d *daemonClient) handleRestartRequested(ctx context.Context, req *reliantv
 // be restarted (see the top of this file).
 func (d *daemonClient) runUpgradeDrain(ctx context.Context, req *reliantv1.RestartRequested) {
 	u := &d.upgrade
+	if u.onReturn != nil {
+		defer u.onReturn()
+	}
 	_, restartWait, poll, _ := u.durations()
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 	for {
+		if u.onPoll != nil {
+			u.onPoll()
+		}
 		running := d.results.runningCount()
 		u.mu.Lock()
 		deadline := u.deadline

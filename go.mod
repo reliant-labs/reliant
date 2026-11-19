@@ -39,7 +39,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
-	github.com/reliant-labs/forge v1.8.1-0.20261119155832-982c391f6293
+	github.com/reliant-labs/forge v1.8.1-0.20261119173027-ff5a370de464
 	github.com/reliant-labs/reliant/sdk/go v0.0.0-20261114064850-2b9cece49b8a
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
