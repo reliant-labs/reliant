@@ -98,6 +98,9 @@ describe("environment controls", () => {
 
     const confirm = screen.getByTestId("delete-environment-confirm") as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);
+    // Destroying the data is an explicit choice: nothing is preselected.
+    await userEvent.click(screen.getByTestId("delete-environment-data-delete"));
+    expect(confirm.disabled).toBe(true);
     await userEvent.type(screen.getByTestId("delete-environment-confirm-input"), "pro");
     expect(confirm.disabled).toBe(true);
     await userEvent.type(screen.getByTestId("delete-environment-confirm-input"), "d");

@@ -45,11 +45,14 @@ export function EnvLifecycleControls({
   project = "",
   status,
   onDeleted,
+  onManageDomains,
 }: {
   environmentId: string;
   envName: string;
   /** The forge project (app) the environment belongs to. */
   project?: string;
+  /** Opens the Domains page: a bound domain is unbound there, never by the delete. */
+  onManageDomains?: () => void;
   status: CloudEnvStatus | undefined;
   onDeleted?: () => void;
 }) {
@@ -164,6 +167,8 @@ export function EnvLifecycleControls({
         environmentId={environmentId}
         envName={envName}
         workloads={workloads.map((workload) => workload.name ?? "").filter((name) => name !== "")}
+        urls={[...new Set(workloads.map((workload) => workload.url ?? "").filter((url) => url !== ""))].sort()}
+        onManageDomains={onManageDomains}
         databases={
           // Known only when every workload states its tier: an unstated one
           // may be a database, and "no data to keep" must never be a guess.

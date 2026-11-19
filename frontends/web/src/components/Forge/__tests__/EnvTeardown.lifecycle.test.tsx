@@ -2,13 +2,14 @@
 
 /**
  * Env teardown in the env header (control-plane unified-shell-and-projects.md,
- * Lifecycle, L1): Keep data on delete, "Unbind domains and delete" with its
- * progress and errors, the storage note on Stop, and who may do what (D19).
+ * Lifecycle, L1): the data choice on delete (explicit, never downgraded), a
+ * bound domain sending the person to the Domains page (no combined unbind),
+ * the storage note on Stop, and who may do what (D19).
  * Every wait is on an event (a call, an element), never a fixed sleep.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -62,6 +63,7 @@ vi.mock("@/hooks/useOrgs", async (importOriginal) => {
 
 import { EnvLifecycleControls } from "../EnvPage/EnvLifecycleControls";
 import { useKeptDataChecks } from "../Overview/keptDataChecks";
+import { forgeCloudKeys } from "@/hooks/forge-queries";
 import type { CloudEnvStatus } from "@/services/forge/cloudEnvs";
 
 const STATUS: CloudEnvStatus = {
@@ -91,14 +93,61 @@ const DOMAIN_REFUSAL = new ConnectError(
   Code.FailedPrecondition
 );
 
+let client: QueryClient;
+let rerenderWith: (status: CloudEnvStatus) => void;
+const onManageDomains = vi.fn();
+
 function wrap(onDeleted = vi.fn(), status: CloudEnvStatus = STATUS) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  render(
+  client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const ui = (s: CloudEnvStatus) => (
     <QueryClientProvider client={client}>
-      <EnvLifecycleControls environmentId="env_1" envName="prod" project="shop" status={status} onDeleted={onDeleted} />
+      <EnvLifecycleControls
+        environmentId="env_1"
+        envName="prod"
+        project="shop"
+        status={s}
+        onDeleted={onDeleted}
+        onManageDomains={onManageDomains}
+      />
     </QueryClientProvider>
   );
+  const view = render(ui(status));
+  rerenderWith = (next) => view.rerender(ui(next));
   return onDeleted;
+}
+
+/** Re-reads the kept-databases list, as a focus or an invalidation would. */
+async function refetchRetained() {
+  await act(async () => {
+    await client.refetchQueries({ queryKey: forgeCloudKeys.retainedDatabases.all });
+  });
+}
+
+function withDatabases(...names: string[]): CloudEnvStatus {
+  return {
+    ...STATUS,
+    workloads: [
+      ...STATUS.workloads.filter((w) => w.tier !== "database"),
+      ...names.map((name, i) => ({
+        name,
+        tier: "database",
+        deployment_id: `dep_db${i}`,
+        declared_run_state: "running" as const,
+        observed_state: "ready",
+        verdict: "converged",
+      })),
+    ],
+  };
+}
+
+function confirmButton() {
+  return screen.getByTestId("delete-environment-confirm") as HTMLButtonElement;
+}
+
+/** No destructive or domain write was sent. */
+function expectNoWrites() {
+  expect(deleteEnvironment).not.toHaveBeenCalled();
+  expect(unbindDomain).not.toHaveBeenCalled();
 }
 
 async function openDelete() {
@@ -117,6 +166,7 @@ beforeEach(() => {
   deleteEnvironment.mockReset().mockResolvedValue(undefined);
   listDomains.mockReset().mockResolvedValue([domain("d_other", "other.acme.dev", "env_2")]);
   unbindDomain.mockReset().mockResolvedValue(undefined);
+  onManageDomains.mockReset();
   listRetainedDatabases.mockReset().mockResolvedValue([]);
   useKeptDataChecks.setState({ checks: [] });
 });
@@ -128,24 +178,47 @@ async function keepOffered() {
 
 describe("delete: what goes, what stays, and Keep data", () => {
   it("names what is deleted and what is kept", async () => {
-    wrap();
+    wrap(vi.fn(), {
+      ...STATUS,
+      workloads: STATUS.workloads.map((w) => (w.name === "web" ? { ...w, url: "https://shop-acme.reliantapps.dev" } : w)),
+    });
     await openDelete();
     const removed = screen.getByTestId("delete-environment-removed").textContent ?? "";
     expect(removed).toContain("api, web, db");
     expect(removed).toContain("namespace");
     expect(removed).toContain("generated hostnames");
+    expect(removed).toContain("https://shop-acme.reliantapps.dev");
+    expect(removed).toContain("charges stop once the teardown finishes");
     const kept = screen.getByTestId("delete-environment-kept").textContent ?? "";
     expect(kept).toContain("Releases and their images");
-    expect(kept).toContain("Secrets in the store");
     expect(kept).toContain("Custom domains");
   });
 
-  it("deletes the data by default", async () => {
+  // L3: a re-created environment does NOT get the old secrets back (design §11.3).
+  it("says secrets must be set again, and never that a new environment gets them back", async () => {
+    wrap();
+    const dialog = await openDelete();
+    expect(screen.getByTestId("delete-environment-removed").textContent).toContain(
+      "A new prod does not get its secrets back: they have to be set again."
+    );
+    expect(screen.getByTestId("delete-environment-kept").textContent).not.toMatch(/secret/i);
+    expect(dialog.textContent).not.toContain("gets them back");
+  });
+
+  it("destroys data only on an explicit Delete: nothing is preselected", async () => {
     const onDeleted = wrap();
     await openDelete();
-    expect((screen.getByTestId("delete-environment-data-delete") as HTMLInputElement).checked).toBe(true);
+    await keepOffered();
+    expect((screen.getByTestId("delete-environment-data-delete") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId("delete-environment-data-keep") as HTMLInputElement).checked).toBe(false);
     await typeName();
-    await userEvent.click(screen.getByTestId("delete-environment-confirm"));
+    expect(confirmButton().disabled).toBe(true);
+    await userEvent.click(confirmButton());
+    expectNoWrites();
+
+    await userEvent.click(screen.getByTestId("delete-environment-data-delete"));
+    expect(confirmButton().disabled).toBe(false);
+    await userEvent.click(confirmButton());
     await waitFor(() => expect(deleteEnvironment).toHaveBeenCalledWith("env_1", { keepData: false }));
     await waitFor(() => expect(onDeleted).toHaveBeenCalled());
   });
@@ -175,10 +248,12 @@ describe("delete: what goes, what stays, and Keep data", () => {
     await openDelete();
     const note = await screen.findByTestId("delete-environment-keep-unavailable");
     expect(note.getAttribute("data-reason")).toBe("unsupported");
-    expect(note.textContent).toContain("deleted with it, data included");
     expect(note.textContent).toContain("Keep data isn't offered");
-    expect(screen.queryByTestId("delete-environment-data-keep")).toBeNull();
+    expect(screen.getByTestId("delete-environment-data-note").textContent).toContain("deleted with it, data included");
+    expect((screen.getByTestId("delete-environment-data-keep") as HTMLInputElement).disabled).toBe(true);
     await typeName();
+    expect(confirmButton().disabled).toBe(true);
+    await userEvent.click(screen.getByTestId("delete-environment-data-delete"));
     await userEvent.click(screen.getByTestId("delete-environment-confirm"));
     await waitFor(() => expect(deleteEnvironment).toHaveBeenCalledWith("env_1", { keepData: false }));
     expect(useKeptDataChecks.getState().checks).toEqual([]);
@@ -199,12 +274,13 @@ describe("delete: what goes, what stays, and Keep data", () => {
     expect(note.getAttribute("data-reason")).toBe(reason);
     expect(note.textContent).toContain("Keep data isn't offered");
     expect(note.textContent).toContain(copy);
-    expect(screen.queryByTestId("delete-environment-data-keep")).toBeNull();
+    expect((screen.getByTestId("delete-environment-data-keep") as HTMLInputElement).disabled).toBe(true);
     // A refusal is the same answer on a retry: asked once. A transient failure: three times.
     expect(listRetainedDatabases).toHaveBeenCalledTimes(reason === "unavailable" ? 3 : 1);
     expect(!!screen.queryByTestId("delete-environment-keep-retry")).toBe(reason === "unavailable");
 
     await typeName();
+    await userEvent.click(screen.getByTestId("delete-environment-data-delete"));
     await userEvent.click(screen.getByTestId("delete-environment-confirm"));
     await waitFor(() => expect(deleteEnvironment).toHaveBeenCalledWith("env_1", { keepData: false }));
     expect(useKeptDataChecks.getState().checks).toEqual([]);
@@ -237,95 +313,168 @@ describe("delete: what goes, what stays, and Keep data", () => {
     await openDelete();
     expect(screen.getByTestId("delete-environment-no-databases")).toBeTruthy();
     expect(screen.queryByTestId("delete-environment-data-keep")).toBeNull();
+    await typeName();
+    await userEvent.click(confirmButton());
+    await waitFor(() => expect(deleteEnvironment).toHaveBeenCalledWith("env_1", { keepData: false }));
   });
 });
 
+// L1: a selected Keep is never turned into a Delete. When what it was chosen
+// against changes, the choice is void: nothing is sent until the person
+// chooses again, and destroying data needs a fresh, explicit Delete.
+describe("a chosen Keep is never downgraded", () => {
+  async function chooseKeep() {
+    await openDelete();
+    await keepOffered();
+    await userEvent.click(screen.getByTestId("delete-environment-data-keep"));
+    await typeName();
+    expect(confirmButton().disabled).toBe(false);
+  }
+
+  it.each([
+    ["PermissionDenied", Code.PermissionDenied, "You can't view kept databases here."],
+    ["Unavailable", Code.Unavailable, "Reliant couldn't check the kept databases."],
+  ])("voids Keep when the kept-databases read then fails with %s", async (_name, code, copy) => {
+    wrap();
+    await chooseKeep();
+    listRetainedDatabases.mockRejectedValue(new ConnectError("refused", code));
+    await refetchRetained();
+
+    const stale = await screen.findByTestId("delete-environment-choice-stale", {}, { timeout: 10_000 });
+    expect(stale.getAttribute("data-kind")).toBe("keep");
+    expect(stale.textContent).toContain("can't be honoured now");
+    expect(stale.textContent).toContain(copy);
+    expect(stale.textContent).toContain("Nothing has been deleted. Choose again.");
+    expect(confirmButton().disabled).toBe(true);
+    await userEvent.click(confirmButton());
+    expect((screen.getByTestId("delete-environment-data-keep") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByTestId("delete-environment-data-delete") as HTMLInputElement).checked).toBe(false);
+    expectNoWrites();
+
+    // Only a fresh, explicit Delete destroys the data.
+    await userEvent.click(screen.getByTestId("delete-environment-data-delete"));
+    await userEvent.click(confirmButton());
+    await waitFor(() => expect(deleteEnvironment).toHaveBeenCalledWith("env_1", { keepData: false }));
+  });
+
+  it("voids Keep when the database inventory changes, and keeps it when chosen again", async () => {
+    wrap();
+    await chooseKeep();
+    rerenderWith(withDatabases("db", "cache"));
+
+    const stale = await screen.findByTestId("delete-environment-choice-stale");
+    expect(stale.textContent).toContain("the databases this environment runs changed since you chose");
+    expect(confirmButton().disabled).toBe(true);
+    await userEvent.click(confirmButton());
+    expectNoWrites();
+
+    await userEvent.click(screen.getByTestId("delete-environment-data-keep"));
+    await userEvent.click(confirmButton());
+    await waitFor(() => expect(deleteEnvironment).toHaveBeenCalledWith("env_1", { keepData: true }));
+    expect(deleteEnvironment).not.toHaveBeenCalledWith("env_1", { keepData: false });
+  });
+
+  it("voids Keep when the inventory then shows no databases, rather than deleting", async () => {
+    wrap();
+    await chooseKeep();
+    rerenderWith(withDatabases());
+    expect(await screen.findByTestId("delete-environment-choice-stale")).toBeTruthy();
+    // The choice stays on screen to be made again; it does not collapse to "no data to keep".
+    expect(screen.queryByTestId("delete-environment-no-databases")).toBeNull();
+    expect(confirmButton().disabled).toBe(true);
+    await userEvent.click(confirmButton());
+    expectNoWrites();
+  });
+
+  it("voids a Delete too when the inventory changes after it was chosen", async () => {
+    wrap();
+    await openDelete();
+    await userEvent.click(screen.getByTestId("delete-environment-data-delete"));
+    await typeName();
+    rerenderWith(withDatabases("db", "cache"));
+    const stale = await screen.findByTestId("delete-environment-choice-stale");
+    expect(stale.getAttribute("data-kind")).toBe("delete");
+    await userEvent.click(confirmButton());
+    expectNoWrites();
+  });
+
+  // The retry after a delete refused for a bound domain, once the person has
+  // unbound some domains elsewhere ("partial unbind").
+  it("retries a domain-refused delete with Keep still sent", async () => {
+    deleteEnvironment.mockRejectedValueOnce(DOMAIN_REFUSAL);
+    const onDeleted = wrap();
+    await chooseKeep();
+    await userEvent.click(confirmButton());
+    await screen.findByTestId("delete-environment-domain-refusal");
+    await userEvent.click(confirmButton());
+    await waitFor(() => expect(onDeleted).toHaveBeenCalled());
+    expect(deleteEnvironment.mock.calls).toEqual([
+      ["env_1", { keepData: true }],
+      ["env_1", { keepData: true }],
+    ]);
+    expect(unbindDomain).not.toHaveBeenCalled();
+  });
+
+  it("sends no retry of a domain-refused Keep delete once Keep can no longer be honoured", async () => {
+    deleteEnvironment.mockRejectedValueOnce(DOMAIN_REFUSAL);
+    wrap();
+    await chooseKeep();
+    await userEvent.click(confirmButton());
+    await screen.findByTestId("delete-environment-domain-refusal");
+    expect(deleteEnvironment).toHaveBeenCalledTimes(1);
+
+    listRetainedDatabases.mockRejectedValue(new ConnectError("refused", Code.PermissionDenied));
+    await refetchRetained();
+    await screen.findByTestId("delete-environment-choice-stale");
+    await userEvent.click(confirmButton());
+    // Still only the first, refused, Keep request: no Delete was sent, no domain touched.
+    expect(deleteEnvironment.mock.calls).toEqual([["env_1", { keepData: true }]]);
+    expect(unbindDomain).not.toHaveBeenCalled();
+  });
+});
+
+// L2: there is no combined "unbind domains and delete". The backend unbinds
+// by domain id and a rebind updates the binding in place, so unbinding from
+// here could take down a domain since rebound to another environment.
 describe("delete with a custom domain bound", () => {
-  it("lists the bound domains, then unbinds each and deletes", async () => {
+  it("lists the bound domains and sends the person to the Domains page; it never unbinds", async () => {
     listDomains.mockResolvedValue([
       domain("d_www", "www.acme.dev", "env_1"),
       domain("d_app", "app.acme.dev", "env_1"),
       domain("d_other", "other.acme.dev", "env_2"),
     ]);
-    const onDeleted = wrap();
+    wrap();
     await openDelete();
     const bound = await screen.findByTestId("delete-environment-bound-domains");
     expect(bound.textContent).toContain("app.acme.dev");
     expect(bound.textContent).toContain("www.acme.dev");
     expect(bound.textContent).not.toContain("other.acme.dev");
+    expect(bound.textContent).toContain("Unbind these domains on the Domains page");
 
-    const confirm = screen.getByTestId("delete-environment-confirm");
-    expect(confirm.textContent).toBe("Unbind domains and delete");
-    await keepOffered();
-    await userEvent.click(screen.getByTestId("delete-environment-data-keep"));
-    await typeName();
-    await userEvent.click(confirm);
-
-    await waitFor(() => expect(onDeleted).toHaveBeenCalled());
-    expect(unbindDomain.mock.calls).toEqual([["d_app"], ["d_www"]]);
-    expect(unbindDomain).not.toHaveBeenCalledWith("d_other");
-    expect(deleteEnvironment).toHaveBeenCalledWith("env_1", { keepData: true });
-    // Every unbind finished before the delete was sent.
-    expect(unbindDomain.mock.invocationCallOrder[1]).toBeLessThan(deleteEnvironment.mock.invocationCallOrder[0]);
+    expect(screen.queryByText(/Unbind domains and delete/)).toBeNull();
+    expect(confirmButton().textContent).toBe("Delete environment");
+    await userEvent.click(screen.getByTestId("delete-environment-open-domains"));
+    expect(onManageDomains).toHaveBeenCalledTimes(1);
+    expect(unbindDomain).not.toHaveBeenCalled();
   });
 
-  it("offers Unbind domains and delete when the delete is refused for a bound domain", async () => {
-    // The dialog's own read missed the binding (made after it loaded): the
-    // server's refusal is what reveals it.
+  it("on a domain refusal, says to unbind on the Domains page and offers no combined action", async () => {
+    // The dialog's own read missed the binding: the server's refusal reveals it.
     deleteEnvironment.mockRejectedValueOnce(DOMAIN_REFUSAL);
     const onDeleted = wrap();
     await openDelete();
+    await userEvent.click(screen.getByTestId("delete-environment-data-delete"));
     await typeName();
-    expect(screen.getByTestId("delete-environment-confirm").textContent).toBe("Delete environment");
-    await userEvent.click(screen.getByTestId("delete-environment-confirm"));
+    await userEvent.click(confirmButton());
 
     const refusal = await screen.findByTestId("delete-environment-domain-refusal");
     expect(refusal.textContent).toContain("app.acme.dev");
-    expect(screen.getByTestId("delete-environment-confirm").textContent).toBe("Unbind domains and delete");
-
-    listDomains.mockResolvedValue([domain("d_app", "app.acme.dev", "env_1")]);
-    await userEvent.click(screen.getByTestId("delete-environment-confirm"));
-    await waitFor(() => expect(onDeleted).toHaveBeenCalled());
-    expect(unbindDomain).toHaveBeenCalledWith("d_app");
-    expect(deleteEnvironment).toHaveBeenCalledTimes(2);
-  });
-
-  it("stops at a failed unbind, shows which step failed, and does not delete", async () => {
-    listDomains.mockResolvedValue([domain("d_app", "app.acme.dev", "env_1"), domain("d_www", "www.acme.dev", "env_1")]);
-    unbindDomain.mockImplementation(async (id: string) => {
-      if (id === "d_www") throw new ConnectError("missing domain:write in target organization", Code.PermissionDenied);
-    });
-    const onDeleted = wrap();
-    await openDelete();
-    await screen.findByTestId("delete-environment-bound-domains");
-    await typeName();
-    await userEvent.click(screen.getByTestId("delete-environment-confirm"));
-
-    const failed = await screen.findByTestId("delete-environment-progress-failed");
-    expect(failed.textContent).toContain("prod was not deleted");
-    expect(failed.textContent).toContain("already unbound stay unbound");
-    const progress = screen.getByTestId("delete-environment-progress");
-    expect(within(progress).getByTestId("teardown-step-unbind:d_app").getAttribute("data-state")).toBe("done");
-    const www = within(progress).getByTestId("teardown-step-unbind:d_www");
-    expect(www.getAttribute("data-state")).toBe("failed");
-    expect(www.textContent).toContain("missing domain:write");
-    expect(within(progress).getByTestId("teardown-step-delete").getAttribute("data-state")).toBe("pending");
-    expect(deleteEnvironment).not.toHaveBeenCalled();
+    expect(refusal.textContent).toContain("Unbind these domains on the Domains page");
+    expect(confirmButton().textContent).toBe("Delete environment");
+    expect(screen.queryByText(/Unbind domains and delete/)).toBeNull();
+    expect(screen.queryByTestId("delete-environment-progress")).toBeNull();
+    expect(unbindDomain).not.toHaveBeenCalled();
     expect(onDeleted).not.toHaveBeenCalled();
-  });
-
-  it("reports a delete that fails after the domains were unbound", async () => {
-    listDomains.mockResolvedValue([domain("d_app", "app.acme.dev", "env_1")]);
-    deleteEnvironment.mockRejectedValue(new ConnectError("the teardown could not be recorded", Code.Unavailable));
-    wrap();
-    await openDelete();
-    await screen.findByTestId("delete-environment-bound-domains");
-    await typeName();
-    await userEvent.click(screen.getByTestId("delete-environment-confirm"));
-
-    const failed = await screen.findByTestId("delete-environment-progress-failed");
-    expect(failed.textContent).toContain("The domains were unbound, but prod was not deleted.");
-    expect(screen.getByTestId("teardown-step-delete").textContent).toContain("the teardown could not be recorded");
   });
 });
 
@@ -348,6 +497,7 @@ describe("who may do what", () => {
     deleteEnvironment.mockRejectedValue(new ConnectError("insufficient role", Code.PermissionDenied));
     wrap();
     await openDelete();
+    await userEvent.click(screen.getByTestId("delete-environment-data-delete"));
     await typeName();
     await userEvent.click(screen.getByTestId("delete-environment-confirm"));
     const error = await screen.findByTestId("delete-environment-error");
