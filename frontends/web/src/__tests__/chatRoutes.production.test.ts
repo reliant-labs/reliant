@@ -21,7 +21,6 @@ vi.mock("@/lib/lazyRoute", async (importOriginal) => ({
 
 import { ConnectError, Code } from "@connectrpc/connect";
 
-import { forgeRouteTree } from "@/forgeShellRoutes";
 import { chatShellRouteOf } from "@/lib/chatRoute";
 import { takeMovedChatNotice, type ChatRouteData } from "@/lib/chatRouteResolve";
 import { setTransport } from "@/lib/connect";
@@ -239,11 +238,14 @@ describe("the org-less chat URL", () => {
   });
 });
 
+// U6: the forge host mounts the same route tree (routes.tsx), so it serves a
+// chat's URL itself, as the Reliant host does — no hand-off.
 describe.each(FLAGS)("the forge host (flag %s)", (flag) => {
-  it("hands a chat's org URL to the Reliant host, which serves chats", async () => {
-    const h = createOrgRouteHarness({ ...world(flag), host: "forge", routeTree: forgeRouteTree });
+  it("opens a chat's org URL on its chat, in its org", async () => {
+    const h = createOrgRouteHarness(world(flag, { host: "forge" }));
     await h.open("/o/acme/c/a-1");
     expect(h.pathname()).toBe("/o/acme/c/a-1");
-    expect(h.leafRouteId()).toMatch(/^\/o\/\$org\/\$$/);
+    expect(h.leafRouteId()).toBe("/o/$org/_app/c/$chatId");
+    expect(chatId(h)).toBe("a-1");
   });
 });

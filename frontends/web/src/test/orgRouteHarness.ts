@@ -5,8 +5,8 @@
  * (control-plane docs/design/unified-shell-and-projects.md §3, §12). Built
  * for U3 and meant to be reused by U4–U6: it answers "where does this URL
  * land, in which org, and what does a request from that page name" against
- * the trees the app really mounts (routes.tsx `routeTree`, forgeShellRoutes.tsx
- * `forgeRouteTree`), not a substitute tree.
+ * the tree the app really mounts (routes.tsx `routeTree`, on both hosts), not
+ * a substitute tree.
  *
  * Headless: the router loads, runs every `beforeLoad`, follows redirects and
  * commits matches (and so the root's commit hooks, lib/routeOrg.ts) without
@@ -77,7 +77,11 @@ export interface WorldChat {
 }
 
 export interface OrgRouteWorld {
-  /** Which host's tree is mounted: the app host (routes.tsx) or the forge host (forgeShellRoutes.tsx). */
+  /**
+   * Which host the page load is on: the app host or the forge host. Both
+   * mount routes.tsx (U6); the host picks the brand (lib/shell.ts), which the
+   * links and redirects read.
+   */
   host: "reliant" | "forge";
   routeTree: AnyRoute;
   /** web.org_routes. */
