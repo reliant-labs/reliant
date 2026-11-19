@@ -2,12 +2,12 @@
 import { describe, expect, it } from "vitest";
 import { ChatActivity } from "../../../gen/reliant/v1/chat_pb";
 import { chatListIndicators } from "../../../lib/runStatus";
-import { CHAT_ROW_CHIP_CLASS, chatRowChip } from "../chatRowStatus";
+import { CHAT_ROW_DOT_CLASS, chatRowChip } from "../chatRowStatus";
 
 const chip = (activity: ChatActivity, workingThreads = 0) =>
   chatRowChip(chatListIndicators({ activity, workingThreads, unread: false }));
 
-describe("chat row status chip", () => {
+describe("chat row state", () => {
   it("says the state in words", () => {
     expect(chip(ChatActivity.RUNNING)).toMatchObject({ label: "Running", tone: "running" });
     expect(chip(ChatActivity.AWAITING_INPUT)).toMatchObject({ label: "Needs you", tone: "attention" });
@@ -21,6 +21,6 @@ describe("chat row status chip", () => {
   });
 
   it("never paints a status green: green is for success", () => {
-    for (const cls of Object.values(CHAT_ROW_CHIP_CLASS)) expect(cls).not.toMatch(/success/);
+    for (const cls of Object.values(CHAT_ROW_DOT_CLASS)) expect(cls).not.toMatch(/success/);
   });
 });
