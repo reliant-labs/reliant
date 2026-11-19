@@ -54,9 +54,20 @@ export function AppsPage() {
  * builds apps there, so the empty state and the header say how to deploy one
  * from a checkout instead of offering "Build an app".
  */
-export function AppsBody({ variant = "reliant" }: { variant?: "reliant" | "forge" }) {
+export function AppsBody({
+  variant = "reliant",
+  header: showHeader = true,
+  filter,
+}: {
+  variant?: "reliant" | "forge";
+  /** False under a page that heads the list itself (Projects). */
+  header?: boolean;
+  /** Only these apps (Projects' Sites filter). */
+  filter?: (app: AppSummary) => boolean;
+}) {
   const forge = variant === "forge";
-  const { apps, loading, availability, detail } = useApps();
+  const { apps: allApps, loading, availability, detail } = useApps();
+  const apps = useMemo(() => (filter ? allApps.filter(filter) : allApps), [allApps, filter]);
   const startBuilding = useStartBuildingApp();
   const claimed = useClaimedApp(apps.map((a) => a.name), loading);
 
@@ -93,7 +104,7 @@ export function AppsBody({ variant = "reliant" }: { variant?: "reliant" | "forge
 
   return (
     <div className="space-y-5" data-testid="apps-page">
-      {header}
+      {showHeader && header}
       {claimed.name && <ClaimedBanner name={claimed.name} listed={claimed.found} loading={loading} paused={claimed.paused} />}
       <AvailabilityNote availability={availability} detail={detail} />
       {!loading && apps.length === 0 ? (

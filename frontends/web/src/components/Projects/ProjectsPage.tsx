@@ -1,0 +1,113 @@
+// Copyright (c) 2026 Reliant Labs
+
+/**
+ * /projects — the nav's Projects entry (U6): what the person has shipped
+ * (their apps, and the sites among them) and the code they work in (their
+ * Reliant projects, each opening its chats).
+ *
+ * A first cut on purpose. U7 replaces it with the merged list of design §8.3,
+ * where a project and the app built from its code are one row; until then the
+ * two lists sit one above the other, and the filter narrows to apps or sites.
+ */
+
+import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { FolderGit2 } from "lucide-react";
+
+import PageHeader from "@/components/forge-ui/page_header";
+import Tabs from "@/components/forge-ui/tabs";
+import { useApps } from "@/hooks/apps-queries";
+import { useProjects } from "@/hooks/project-queries";
+import { isForgeUIEnabled } from "@/lib/forgeFeature";
+import { formatRelativeTime } from "@/lib/relativeTime";
+import { projectPath, projectsPath } from "@/lib/paths";
+import { isLive } from "@/services/forge/apps";
+
+import { AppsBody } from "../Apps/AppsPage";
+import { AreaShell } from "../Layout/AreaShell";
+
+type ProjectsFilter = "all" | "apps" | "sites";
+
+const FILTERS: { id: ProjectsFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "apps", label: "Apps" },
+  { id: "sites", label: "Sites" },
+];
+
+export function ProjectsPage() {
+  return (
+    <AreaShell areaPath={projectsPath()} areaLabel="Projects" areaNoun="projects">
+      <ProjectsBody />
+    </AreaShell>
+  );
+}
+
+export function ProjectsBody() {
+  const showApps = isForgeUIEnabled();
+  const [filter, setFilter] = useState<ProjectsFilter>("all");
+  const { apps, loading } = useApps();
+  const noSites = !loading && filter === "sites" && !apps.some(isLive);
+
+  return (
+    <div className="space-y-6" data-testid="projects-page">
+      <PageHeader title="Projects" meta={<span>Your apps and sites, and the code you work on.</span>} className="mb-0" />
+      {showApps && (
+        <Tabs
+          tabs={FILTERS}
+          activeTab={filter}
+          onChange={(id) => setFilter(id as ProjectsFilter)}
+          ariaLabel="Show"
+        />
+      )}
+      {showApps &&
+        (noSites ? (
+          <p className="text-ui text-muted-foreground" data-testid="projects-no-sites">
+            Nothing is live yet. A site shows here once one of your apps has a deploy with a public address.
+          </p>
+        ) : (
+          <AppsBody header={false} filter={filter === "sites" ? isLive : undefined} />
+        ))}
+      {(filter === "all" || !showApps) && <CodeProjects />}
+    </div>
+  );
+}
+
+/** The person's Reliant projects, each opening its chats. */
+function CodeProjects() {
+  const { projects, isLoading } = useProjects();
+  const navigate = useNavigate();
+  if (isLoading || projects.length === 0) return null;
+  const sorted = [...projects].sort((a, b) => b.last_active.localeCompare(a.last_active));
+  return (
+    <section aria-labelledby="projects-code-heading" data-testid="projects-code">
+      <h2 id="projects-code-heading" className="mb-2 text-section text-foreground">
+        Code
+      </h2>
+      <ul className="divide-y divide-border-subtle rounded-xl border border-border">
+        {sorted.map((project) => {
+          const href = projectPath(project.id);
+          return (
+            <li key={project.id}>
+              <a
+                href={href}
+                onClick={(event) => {
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                  event.preventDefault();
+                  void navigate({ href });
+                }}
+                className="no-color flex h-[var(--table-row-h)] items-center gap-3 px-4 text-ui text-foreground transition-colors hover:bg-foreground/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                data-testid={`projects-code-${project.id}`}
+              >
+                <FolderGit2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate font-medium hover:underline">{project.name}</span>
+                {project.last_active && (
+                  <span className="shrink-0 text-meta text-muted-foreground">{formatRelativeTime(project.last_active)}</span>
+                )}
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
