@@ -1,32 +1,27 @@
 /**
- * Monaco Manager - Singleton pattern for Monaco Editor
+ * Monaco Manager: the one way the app gets the Monaco editor.
  *
- * PROBLEM: Monaco Editor loads JavaScript workers as blob URLs sequentially when loading chats.
- * Each chat load creates NEW blob URLs even when Monaco is already loaded, causing:
- * - Sequential worker loading (slow)
- * - Blob URL accumulation (memory leak)
- * - Second load SLOWER than first load (accumulation overhead)
+ * Monaco is bundled from the `monaco-editor` package (`./monacoBundle`), not
+ * fetched from a CDN: its code, CSS, fonts and workers are files of this
+ * build, served from our own origin by the web host and by Electron's `app://`
+ * handler. The bundle is several megabytes, so it is a chunk of its own,
+ * imported here on first use and never by the entry: a page that never opens
+ * an editor never downloads it.
  *
- * SOLUTION: Global Monaco singleton with per-workspace caching
- * - Single Monaco instance per workspace
- * - Workers loaded once and reused
- * - Blob URLs properly cleaned up
- * - Parallel worker initialization
+ * `getMonaco()` loads that chunk once, hands the instance to
+ * `@monaco-editor/loader` (`loader.config({ monaco })`) so that
+ * `@monaco-editor/react`'s `<Editor>` uses it instead of injecting the
+ * loader's CDN script, and applies the app's theme and CEL language. Every
+ * `<Editor>` therefore mounts through `components/shared/MonacoEditor`, which
+ * waits for this first: the loader reads its config only on its first
+ * `init()`.
  */
 
-import { loader } from '@monaco-editor/react';
 import type { Monaco } from '@monaco-editor/react';
 import { configureMonacoTheme } from './monacoTheme';
 import { registerCELLanguage } from './monaco-cel-language';
 import { logger } from './logger';
 import * as React from 'react';
-
-interface MonacoInstance {
-  monaco: Monaco | null;
-  initTime: number;
-  workerCount: number;
-  blobUrls: Set<string>; // Track blob URLs for cleanup
-}
 
 // Extend Window interface for debugging
 declare global {
@@ -35,223 +30,105 @@ declare global {
   }
 }
 
-interface MonacoConfig {
-  paths?: {
-    vs?: string;
-  };
-}
-
-const MONACO_VS_PATH = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs';
-
-/** `error` as an Error: a DOM Event (a script's load failure) becomes one naming `url`. */
-function asLoadError(error: unknown, url: string): unknown {
-  if (typeof Event !== 'undefined' && error instanceof Event) {
-    return new Error(`Monaco's loader script did not load (${error.type} event): ${url}`);
-  }
-  return error;
+/** `error` as an Error naming what failed to load. */
+function asLoadError(error: unknown): Error {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new Error(`The Monaco editor chunk did not load: ${detail}`, { cause: error });
 }
 
 class MonacoManager {
-  private static instance: MonacoManager;
-  private monacoInstance: MonacoInstance | null = null;
+  private monaco: Monaco | null = null;
   private initPromise: Promise<Monaco> | null = null;
-  private isInitializing = false;
-  private workspaceId: string | null = null;
-
-  // Intercept blob URL creation for tracking
-  private originalCreateObjectURL: typeof URL.createObjectURL | null = null;
-  private originalRevokeObjectURL: typeof URL.revokeObjectURL | null = null;
-  private pendingBlobUrls = new Set<string>();
-
-  private constructor() {
-    this.setupBlobUrlTracking();
-  }
-
-  static getInstance(): MonacoManager {
-    if (!MonacoManager.instance) {
-      MonacoManager.instance = new MonacoManager();
-    }
-    return MonacoManager.instance;
-  }
+  private initTime: number | null = null;
 
   /**
-   * Track blob URLs created by Monaco workers so we can clean them up
+   * The Monaco instance, loading it on the first call. A failed load is not
+   * cached: the next call tries again (a chunk can fail on a flaky network
+   * or across a deploy).
    */
-  private setupBlobUrlTracking(): void {
-    if (typeof window === 'undefined') return;
-
-    // Save original methods
-    this.originalCreateObjectURL = URL.createObjectURL;
-    this.originalRevokeObjectURL = URL.revokeObjectURL;
-
-    // eslint-disable-next-line @typescript-eslint/no-this-alias -- needed for URL method overrides
-    const self = this;
-
-    // Wrap createObjectURL to track Monaco worker blobs
-    URL.createObjectURL = function(blob: Blob | MediaSource): string {
-      const url = self.originalCreateObjectURL!.call(this, blob);
-
-      // Track all JavaScript blobs that might be Monaco workers
-      // Note: Workers can be created even after initialization completes
-      if (blob instanceof Blob && blob.type === 'application/javascript') {
-
-        // Store in current instance if it exists, or create a set for later
-        if (self.monacoInstance) {
-          self.monacoInstance.blobUrls.add(url);
-        } else if (self.isInitializing) {
-          // Instance not created yet but we're initializing - track for transfer later
-          self.pendingBlobUrls.add(url);
-        }
-      }
-
-      return url;
-    };
-
-  }
-
-  /**
-   * Get or create Monaco instance for the current workspace
-   */
-  async getMonaco(workspaceId?: string): Promise<Monaco> {
-    const currentWorkspaceId = workspaceId || 'default';
-
-    // Return existing instance if same workspace (CACHE HIT)
-    if (this.monacoInstance && this.workspaceId === currentWorkspaceId) {
-      return this.monacoInstance.monaco;
-    }
-
-    // If initializing, wait for it
-    if (this.isInitializing && this.initPromise) {
-      return this.initPromise;
-    }
-
-    // Clean up old instance if switching workspaces (CACHE MISS - workspace change)
-    if (this.monacoInstance && this.workspaceId !== currentWorkspaceId) {
-      this.cleanup();
-    }
-
-    return this.initializeMonaco(currentWorkspaceId);
-  }
-
-  /**
-   * Initialize Monaco Editor with optimizations
-   */
-  private async initializeMonaco(workspaceId: string): Promise<Monaco> {
-    this.isInitializing = true;
-    this.workspaceId = workspaceId;
-
-    this.initPromise = (async () => {
-      try {
-        // PHASE 1: Configure loader
-        const config: MonacoConfig = {
-          paths: {
-            vs: MONACO_VS_PATH,
-          },
-        };
-        loader.config(config);
-
-        // PHASE 2: Load Monaco core + workers
-        const loadStart = performance.now();
-
-        // Create instance early so blob tracking can work
-        this.monacoInstance = {
-          monaco: null, // Will be populated below
-          initTime: Date.now(),
-          workerCount: 0,
-          blobUrls: new Set(),
-        };
-
-        const monaco = await loader.init();
-        void loadStart; // Used for timing diagnostics if needed
-
-        // PHASE 3: Configure theme
-        configureMonacoTheme(monaco);
-
-        // PHASE 4: Register custom languages
-        registerCELLanguage(monaco);
-
-        // Update instance with Monaco reference
-        this.monacoInstance.monaco = monaco;
-
-        // Transfer any blob URLs captured during the init window
-        for (const url of this.pendingBlobUrls) {
-          this.monacoInstance.blobUrls.add(url);
-        }
-        this.pendingBlobUrls.clear();
-
-        return monaco;
-      } catch (error) {
-        // A loader script that fails to load (CDN down, or its response
-        // blocked) rejects with the script's DOM error Event, which says
-        // nothing; name what failed instead.
-        const failure = asLoadError(error, `${MONACO_VS_PATH}/loader.js`);
+  getMonaco(): Promise<Monaco> {
+    if (this.monaco) return Promise.resolve(this.monaco);
+    if (!this.initPromise) {
+      this.initPromise = this.load().catch((error: unknown) => {
+        this.initPromise = null;
+        const failure = asLoadError(error);
         logger.error('[MonacoManager] ❌ Failed to initialize Monaco:', failure);
-        // Clean up failed instance
-        this.monacoInstance = null;
         throw failure;
-      } finally {
-        this.isInitializing = false;
-      }
-    })();
-
+      });
+    }
     return this.initPromise;
   }
 
-  /**
-   * Clean up Monaco instance and revoke blob URLs
-   */
-  cleanup(): void {
-    if (!this.monacoInstance) return;
+  /** The instance if it has already loaded, without starting a load. */
+  current(): Monaco | null {
+    return this.monaco;
+  }
 
-    // Revoke all blob URLs
-    if (this.originalRevokeObjectURL) {
-      this.monacoInstance.blobUrls.forEach(url => {
-        try {
-          this.originalRevokeObjectURL!(url);
-        } catch {
-          // Ignore errors revoking blob URLs - may already be revoked
-        }
-      });
-    }
+  private async load(): Promise<Monaco> {
+    const [{ monaco }, { loader }] = await Promise.all([
+      import('./monacoBundle'),
+      import('@monaco-editor/react'),
+    ]);
+    // Before anything calls loader.init(): the loader reads `monaco` only on
+    // its first init, and without it injects a CDN script instead.
+    loader.config({ monaco });
+    await loader.init();
 
-    this.monacoInstance.blobUrls.clear();
-    this.monacoInstance = null;
-    this.initPromise = null;
-    this.workspaceId = null;
+    configureMonacoTheme(monaco);
+    registerCELLanguage(monaco);
+
+    this.monaco = monaco;
+    this.initTime = Date.now();
+    return monaco;
   }
 
   /**
    * Get current Monaco instance status (for debugging)
    */
-  getStatus(): { initialized: boolean; workspaceId: string | null; blobUrls: number; age: number | null } {
+  getStatus(): { initialized: boolean; age: number | null } {
     return {
-      initialized: !!this.monacoInstance,
-      workspaceId: this.workspaceId,
-      blobUrls: this.monacoInstance?.blobUrls.size || 0,
-      age: this.monacoInstance ? Date.now() - this.monacoInstance.initTime : null,
+      initialized: !!this.monaco,
+      age: this.initTime ? Date.now() - this.initTime : null,
     };
-  }
-
-  /**
-   * Force re-initialization (for debugging)
-   */
-  forceReinit(): void {
-    this.cleanup();
   }
 }
 
 // Export singleton instance
-export const monacoManager = MonacoManager.getInstance();
+export const monacoManager = new MonacoManager();
+
+/**
+ * Warm the editor chunk in the background, once the page is idle, so it is
+ * ready by the time someone opens a file or the workflow builder. Never on
+ * the critical path: it waits for the load event and then for an idle period.
+ */
+export function prefetchMonaco(): void {
+  if (typeof window === 'undefined') return;
+  const start = () => {
+    const warm = () => {
+      monacoManager.getMonaco().catch(() => {
+        // Logged by getMonaco; an editor opened later tries again.
+      });
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(warm, { timeout: 5_000 });
+    } else {
+      setTimeout(warm, 1_000);
+    }
+  };
+  if (document.readyState === 'complete') start();
+  else window.addEventListener('load', start, { once: true });
+}
 
 // Export hook for React components
-export function useMonaco(workspaceId?: string): Monaco | null {
-  const [monaco, setMonaco] = React.useState<Monaco | null>(null);
+export function useMonaco(): Monaco | null {
+  const [monaco, setMonaco] = React.useState<Monaco | null>(() => monacoManager.current());
   const [error, setError] = React.useState<Error | null>(null);
 
   React.useEffect(() => {
+    if (monaco) return;
     let mounted = true;
 
-    monacoManager.getMonaco(workspaceId)
+    monacoManager.getMonaco()
       .then(m => {
         if (mounted) {
           setMonaco(m);
@@ -268,7 +145,7 @@ export function useMonaco(workspaceId?: string): Monaco | null {
     return () => {
       mounted = false;
     };
-  }, [workspaceId]);
+  }, [monaco]);
 
   if (error) throw error;
   return monaco;

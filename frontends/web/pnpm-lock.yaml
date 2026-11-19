@@ -166,7 +166,7 @@ overrides:
   monaco-editor>dompurify: ^3.4.17
 
 patchedDependencies:
-  '@monaco-editor/loader@1.7.0': 56b2507ff179e081f78a5355a54ec834b054108388dac8907bb2b791edc43cc3
+  '@monaco-editor/loader@1.7.0': 7b01c13bd2eab0c2dbf203d38eb43fc7b9ece2d470dcb9a60f7d445fede9b7de
 
 importers:
 
@@ -192,7 +192,7 @@ importers:
         version: 5.2.2(react-hook-form@7.71.1(react@19.2.3))
       '@monaco-editor/loader':
         specifier: ^1.7.0
-        version: 1.7.0(patch_hash=56b2507ff179e081f78a5355a54ec834b054108388dac8907bb2b791edc43cc3)
+        version: 1.7.0(patch_hash=7b01c13bd2eab0c2dbf203d38eb43fc7b9ece2d470dcb9a60f7d445fede9b7de)
       '@monaco-editor/react':
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.57.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -4071,13 +4071,13 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@monaco-editor/loader@1.7.0(patch_hash=56b2507ff179e081f78a5355a54ec834b054108388dac8907bb2b791edc43cc3)':
+  '@monaco-editor/loader@1.7.0(patch_hash=7b01c13bd2eab0c2dbf203d38eb43fc7b9ece2d470dcb9a60f7d445fede9b7de)':
     dependencies:
       state-local: 1.0.7
 
   '@monaco-editor/react@4.7.0(monaco-editor@0.57.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
-      '@monaco-editor/loader': 1.7.0(patch_hash=56b2507ff179e081f78a5355a54ec834b054108388dac8907bb2b791edc43cc3)
+      '@monaco-editor/loader': 1.7.0(patch_hash=7b01c13bd2eab0c2dbf203d38eb43fc7b9ece2d470dcb9a60f7d445fede9b7de)
       monaco-editor: 0.57.0
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)

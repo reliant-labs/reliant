@@ -66,19 +66,14 @@ const STRIPE_SCRIPT = "https://js.stripe.com";
 const STRIPE_FRAMES = ["https://js.stripe.com", "https://hooks.stripe.com"];
 
 /**
- * Monaco is loaded from jsDelivr by `frontends/web/src/lib/monacoManager.ts`, which
- * points the AMD loader at `cdn.jsdelivr.net/npm/monaco-editor@…/min/vs`.
- *
- * NOTE the loader probes `new Function("true")` inside a try/catch to decide
- * whether it may eval; under this policy that probe throws, it caches
- * `_canUseEval = false`, and falls back to `importScripts`. So Monaco works
- * WITHOUT `unsafe-eval` — verified against the actual v0.52.2 loader bytes.
- * Do not add `unsafe-eval` to "fix" Monaco; it is not broken.
+ * No Monaco host: the editor is bundled (`src/lib/monacoBundle.ts`), so its
+ * scripts, styles, fonts and workers are all 'self'. Nothing here names a CDN
+ * for it, and `src/lib/__tests__/noCdnRuntime.guard.test.ts` fails a change
+ * that brings jsDelivr back.
  */
-const MONACO_CDN = "https://cdn.jsdelivr.net";
 
 /** Icon CDNs used by the MCP server avatars (`Settings/mcpAvatar.tsx`). */
-const ICON_HOSTS = ["https://cdn.simpleicons.org", "https://cdn.jsdelivr.net"];
+const ICON_HOSTS = ["https://cdn.simpleicons.org"];
 
 /**
  * Loopback, with any port, for BOTH schemes and websockets.
@@ -118,7 +113,6 @@ export const RUNTIME_ORIGIN_KEYS = [
 /** connect-src hosts that are not per environment. */
 const FIXED_CONNECT = [
   ...LOOPBACK,
-  MONACO_CDN,
   ...ICON_HOSTS,
 ];
 
@@ -161,17 +155,18 @@ export function buildCSP(scriptHashes: string[]): string {
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
 
-    // blob: is required for Monaco's web workers, which it instantiates from
-    // generated blob URLs rather than files.
-    "script-src": ["'self'", ...hashes, STRIPE_SCRIPT, MONACO_CDN, "blob:"],
+    // blob: dates from Monaco's CDN build, which started its cross-origin
+    // workers from generated blob URLs. The bundled editor's workers are
+    // same-origin files; dropping blob: is a separate tightening.
+    "script-src": ["'self'", ...hashes, STRIPE_SCRIPT, "blob:"],
 
     // 'unsafe-inline' is unavoidable for styles and is NOT the risk that
     // 'unsafe-inline' poses for scripts: Monaco injects <style> elements at
     // runtime, and every CSS-variable theme write sets an inline style. The
     // script side stays strict, which is where injection actually lands.
-    "style-src": ["'self'", "'unsafe-inline'", MONACO_CDN],
+    "style-src": ["'self'", "'unsafe-inline'"],
 
-    "font-src": ["'self'", "data:", MONACO_CDN],
+    "font-src": ["'self'", "data:"],
 
     // https: broadly, because avatars and MCP server icons are user- and
     // registry-supplied URLs we cannot enumerate. Images are the lowest-risk

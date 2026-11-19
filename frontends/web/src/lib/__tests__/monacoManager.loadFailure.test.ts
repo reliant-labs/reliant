@@ -1,21 +1,26 @@
 /**
- * Monaco is fetched from a CDN (`lib/monacoManager`). When its loader script
- * fails to load — the CDN is down, or its response is blocked — the failure
- * must reach the caller as an Error, and nowhere else.
+ * Monaco is a lazy chunk of this build (`lib/monacoBundle`, loaded by
+ * `lib/monacoManager`). When that chunk fails to load — a flaky network, or
+ * a deploy that replaced it under an open tab — the failure must reach the
+ * caller as an Error naming what failed, and nowhere else: no unhandled
+ * rejection, which fails every e2e page guard.
  *
- * @monaco-editor/loader rejects with the script's DOM error Event, and its
- * makeCancelable left a second, uncaught promise rejected with it: every
- * desktop page load raised an unhandled rejection whose value was an `Event`,
- * which failed the org-switcher e2e guard when jsdelivr's response was
- * blocked in CI. frontends/web/patches/@monaco-editor__loader@1.7.0.patch
- * fixes the library; this pins it, and the Error the manager rethrows.
+ * It used to be a CDN script, whose failure @monaco-editor/loader reported as
+ * a bare DOM `Event` and also left uncaught (frontends/web/patches fixes the
+ * library; e2e/monaco-cdn-unavailable.spec.ts proves the CDN is out of the
+ * picture).
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { setImmediate } from 'node:timers/promises';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../monacoBundle', () => {
+  throw new Error('Failed to fetch dynamically imported module: /assets/monacoBundle-x.js');
+});
 
 import { monacoManager } from '../monacoManager';
 
-describe('Monaco loader script fails to load', () => {
+describe('the Monaco chunk fails to load', () => {
   const unhandled: unknown[] = [];
   const record = (reason: unknown) => unhandled.push(reason);
 
@@ -27,16 +32,17 @@ describe('Monaco loader script fails to load', () => {
     process.off('unhandledRejection', record);
   });
 
-  it('rejects getMonaco with an Error naming the script, and leaves no unhandled rejection', async () => {
-    const loading = monacoManager.getMonaco('load-failure');
-
-    const script = Array.from(document.body.querySelectorAll('script')).find((el) => el.src.endsWith('/vs/loader.js'));
-    expect(script, 'the loader injects its loader.js script').toBeDefined();
-    script!.dispatchEvent(new Event('error'));
-
-    await expect(loading).rejects.toThrow(/loader script did not load \(error event\): https:\/\/cdn\.jsdelivr\.net\/.*\/vs\/loader\.js/);
-    // Unhandled rejections are reported after the microtask queue drains.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  it('rejects getMonaco with an Error naming the chunk, and leaves no unhandled rejection', async () => {
+    await expect(monacoManager.getMonaco()).rejects.toThrow(/^The Monaco editor chunk did not load: ./);
+    // Node's rejection tracking reports an unhandled rejection once the
+    // microtask queue has drained, before the next macrotask runs.
+    await setImmediate();
     expect(unhandled).toEqual([]);
+  });
+
+  it('does not cache the failure: the next call loads again', async () => {
+    await expect(monacoManager.getMonaco()).rejects.toThrow();
+    expect(monacoManager.getStatus().initialized).toBe(false);
+    await expect(monacoManager.getMonaco()).rejects.toThrow(/Monaco editor chunk did not load/);
   });
 });
