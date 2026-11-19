@@ -12,6 +12,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { CHAT_IDS, CHAT_TITLES, chatWithoutFailedSend } from './fixtures/chat'
+import { selectorSurfaceFixtures } from './fixtures/projects'
 import { workflowFixtures } from './fixtures/workflows'
 import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
 
@@ -343,6 +344,32 @@ const SURFACES: Surface[] = [
     path: '/forge/p/shopfront/environments/prod',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('shopfront-prod.reliant.app', { exact: false }).first(),
+  },
+  {
+    // The project selector (Projects/ProjectSelector), as Switch project…
+    // opens it over the page: pinned, recent and all, with app chips of
+    // every link kind and an app with no code here.
+    name: 'project-selector',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('project-selector-row-app:status-page'),
+    act: async (page) => {
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-project-switcher')))
+    },
+    harness: { fixtures: selectorSurfaceFixtures },
+  },
+  {
+    // On a phone the chats are the mobile surface, which has no selector: it
+    // is the console's app switcher there (app mode, one row per app).
+    name: 'project-selector',
+    path: '/forge/p/shopfront',
+    on: ['mobile'],
+    ready: (page) => page.getByTestId('project-selector-app-status-page'),
+    act: async (page) => {
+      await page.getByRole('button', { name: 'Open navigation' }).click()
+      await page.getByTestId('forge-project-switcher').click()
+    },
+    harness: { fixtures: selectorSurfaceFixtures },
   },
   {
     // The chat's settings: scrolled to the "Fonts and size" panel.
