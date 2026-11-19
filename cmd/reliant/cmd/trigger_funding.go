@@ -27,8 +27,8 @@ const orgAccountsOnlyFlag = "org-accounts-only"
 var errLoosenInApp = errors.New("--org-accounts-only=false is not taken from the CLI: letting an automation spend your own AI accounts is done in the app (Workflows, open the workflow, its trigger, AI accounts)")
 
 // unattendedFundingLabel is Trigger.unattended_funding in the words of the
-// stamp, with what it means. A server that predates the field reads as any,
-// which is how such a trigger runs.
+// stamp, with what it means. Unset reads as any, which is how such a trigger
+// runs.
 func unattendedFundingLabel(f reliantv1.UnattendedFunding) string {
 	if f == reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY {
 		return "org_only (its runs spend only the organization's AI accounts)"
