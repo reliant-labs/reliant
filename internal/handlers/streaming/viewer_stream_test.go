@@ -214,6 +214,22 @@ func TestViewerChatEvent(t *testing.T) {
 	assert.Equal(t, true, run["body_elided"])
 	assert.NotContains(t, run, "working_directory")
 
+	// The same shell result in other JSON spellings a client decodes as a
+	// tool result: the type as 3.0 or 3e0, the JSON field names protobuf-es
+	// also reads (contentBlocks, toolCallId), an escaped key. Each used to
+	// reach a viewer whole, because the decision missed the spelling.
+	for name, data := range map[string]string{
+		"3.0, spaced":   `{"message":{"id":"m","content_blocks":[{"type": 3.0,"tool_call_id":"1","content":"SECRET=hunter2"}]}}`,
+		"3e0":           `{"message":{"id":"m","content_blocks":[{"type":3e0,"tool_call_id":"1","content":"SECRET=hunter2"}]}}`,
+		"contentBlocks": `{"message":{"id":"m","contentBlocks":[{"type": 3,"toolCallId":"1","content":"SECRET=hunter2"}]}}`,
+		"escaped key":   `{"message":{"id":"m","content\u005fblocks":[{"type": 3,"tool_call_id":"1","content":"SECRET=hunter2"}]}}`,
+	} {
+		spelled := viewerChatEvent(&reliantv1.ChatStreamEvent{Event: &reliantv1.ChatStreamEvent_Updates{Updates: &reliantv1.ChatUpdateBatch{
+			Updates: []*reliantv1.ChatUpdateData{{UpdateType: reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, DataJson: data}},
+		}}})
+		assert.NotContains(t, spelled.GetUpdates().GetUpdates()[0].GetDataJson(), "SECRET", "%s reaches a viewer", name)
+	}
+
 	user := viewerChatEvent(&reliantv1.ChatStreamEvent{Event: &reliantv1.ChatStreamEvent_UserUpdates{UserUpdates: &reliantv1.ChatUserUpdates{
 		Updates: []*reliantv1.UserUpdateData{{EntityId: "the-owners"}},
 	}}})
