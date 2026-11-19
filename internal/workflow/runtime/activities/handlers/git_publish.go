@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.temporal.io/sdk/temporal"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -161,6 +162,22 @@ func (a *GitPublishActivity) Execute(ctx context.Context, input ActivityInput) (
 	if err != nil {
 		return nil, err
 	}
+	// A lease is enforced by the machine's git, so a daemon that predates it
+	// would ignore the field and make a plain push: one that recreates a
+	// deleted branch, or fast-forwards a branch that moved. Ask its
+	// registration first, and refuse before anything is committed or pushed.
+	if lease != "" {
+		ok, err := a.enforcesLease(ctx, machine.daemonID)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return &reliantv1.GitPublishOutput{Branch: decision.Branch, Refused: true, LeaseUnsupported: true,
+				Refusal: fmt.Sprintf("force_with_lease needs a machine whose daemon enforces it: daemon %s did not register %q "+
+					"(its reliant predates the lease, or it has not reconnected since an upgrade); nothing was committed or pushed",
+					machine.daemonID, gitpublish.CapabilityForceWithLease)}, nil
+		}
+	}
 
 	prep, err := a.prepare(ctx, machine, worktree, message, rtx, chat)
 	if err != nil {
@@ -206,10 +223,10 @@ func (a *GitPublishActivity) Execute(ctx context.Context, input ActivityInput) (
 	}
 	intent.Settle(ctx, writeledger.PushOutcome{Pushed: push.Pushed, Error: push.Refusal})
 	if lease != "" && !push.LeaseChecked {
-		// A daemon older than force_with_lease made its plain push: never
-		// forced, so no commit was lost, but the lease was not enforced either.
-		logging.WarnContext(ctx, "[GitPublish] The machine's daemon does not know force_with_lease; it pushed without a lease",
-			"stepID", rtx.StepID, "repo", repo.String(), "branch", decision.Branch, "pushed", push.Pushed)
+		// Cannot happen with an honest registration: the daemon listed the
+		// capability, then answered as one that does not know the field.
+		logging.ErrorContext(ctx, "[GitPublish] The daemon registered force_with_lease but did not report enforcing it",
+			"stepID", rtx.StepID, "daemonID", machine.daemonID, "repo", repo.String(), "branch", decision.Branch, "pushed", push.Pushed)
 	}
 	if push.Refusal != "" {
 		out.Refused, out.Refusal = true, push.Refusal
@@ -220,6 +237,20 @@ func (a *GitPublishActivity) Execute(ctx context.Context, input ActivityInput) (
 	logging.InfoContext(ctx, "[GitPublish] Completed", "stepID", rtx.StepID, "repo", repo.String(),
 		"branch", decision.Branch, "sha", prep.HeadSHA, "pushed", push.Pushed, "ledger", intent.IDs())
 	return out, nil
+}
+
+// enforcesLease reports whether the daemon's latest registration lists
+// gitpublish.CapabilityForceWithLease. A daemon with no registration row has
+// advertised nothing.
+func (a *GitPublishActivity) enforcesLease(ctx context.Context, daemonID string) (bool, error) {
+	d, err := a.repo.GetDaemon(ctx, daemonID)
+	if svcerr.IsNotFound(err) || (err == nil && d == nil) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("git_publish: reading the machine's registration: %w", err)
+	}
+	return gitpublish.HasCapability(d.Capabilities, gitpublish.CapabilityForceWithLease), nil
 }
 
 // machineFor is the daemon the run's tools execute on, chosen exactly as

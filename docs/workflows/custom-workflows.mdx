@@ -359,7 +359,10 @@ The push is then `git push --force-with-lease=refs/heads/<branch>:<sha>`, one co
 it may be a non-fast-forward, but only while the branch is exactly where you left it. If anyone pushed in
 between, or the branch is gone, nothing is pushed and the node is refused with `lease_refused: true`, the
 branch's actual head in `remote_sha`, and both commits named in `refusal`. It is not retried; route on it. Only
-a sha is accepted (never `true`), and every refusal above still applies.
+a sha is accepted (never `true`), and every refusal above still applies. The lease is enforced by your
+machine's daemon, so the machine must run a reliant that registers it: an older daemon would ignore the lease
+and make a plain push, so the node is refused with `lease_unsupported: true` before anything is committed or
+pushed. Upgrading that machine's reliant fixes it.
 
 ```yaml
 - id: publish
@@ -377,7 +380,7 @@ git process over a private pipe (after a refused lease, one more reads the branc
 reaches a shell. The commit carries `Reliant-Run` and `Reliant-Workflow` trailers, and the push is recorded in
 the write ledger with its sha before it is made, so the `push` and `pull_request.synchronize` events it causes
 are recognized as this run's own (`trigger.origin`). Outputs: `pushed`, `sha`, `branch`, `base_sha`,
-`files_changed`, `insertions`, `deletions`, `refused`, `refusal`, `lease_refused`, `remote_sha`.
+`files_changed`, `insertions`, `deletions`, `refused`, `refusal`, `lease_refused`, `remote_sha`, `lease_unsupported`.
 
 The push is made as whoever the run writes as. By default that is you, through your own GitHub connection, the same one an `action` node uses. An [automation that writes as the Reliant bot](/automations/overview#who-an-automation-acts-as) pushes with the bot's token for that one repository instead; if that token cannot be had, the push is refused and nothing is pushed, never made as you.
 

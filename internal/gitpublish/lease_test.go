@@ -28,3 +28,14 @@ func TestValidLeaseSHA(t *testing.T) {
 		assert.Equal(t, want, ValidLeaseSHA(v), "%q", v)
 	}
 }
+
+func TestHasCapability(t *testing.T) {
+	t.Parallel()
+	js := func(s string) *string { return &s }
+	assert.True(t, HasCapability(js(`["bash","git.publish.force_with_lease"]`), CapabilityForceWithLease))
+	assert.False(t, HasCapability(js(`["bash","read_file"]`), CapabilityForceWithLease))
+	assert.False(t, HasCapability(js(`["git.publish.force_with_lease_v0"]`), CapabilityForceWithLease), "matched exactly")
+	assert.False(t, HasCapability(js(`[]`), CapabilityForceWithLease))
+	assert.False(t, HasCapability(js(`not json`), CapabilityForceWithLease))
+	assert.False(t, HasCapability(nil, CapabilityForceWithLease))
+}

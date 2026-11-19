@@ -2841,7 +2841,8 @@ func (x *ActionCredential) GetSecret() string {
 // commit the branch must still be at on the remote: the push then replaces the
 // branch (a rewritten or rebased history is allowed) only if it is still there,
 // as one compare-and-swap on the remote, and is refused naming the commit the
-// branch is at instead when it is not.
+// branch is at instead when it is not. A lease is sent only to a machine whose
+// daemon registered that it enforces one; any other is refused first.
 //
 // The credential is fetched for this one push, handed to the machine over its
 // command channel, used by the push's git process (and, after a refused lease,
@@ -2857,7 +2858,7 @@ func (x *ActionCredential) GetSecret() string {
 // Output fields accessible via nodes.<id>.*:
 //
 //	pushed, sha, branch, refused, refusal, files_changed, insertions, deletions, base_sha,
-//	lease_refused, remote_sha
+//	lease_refused, remote_sha, lease_unsupported
 type GitPublishArgs struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Worktree is the absolute path of the checkout to publish.
@@ -2887,6 +2888,8 @@ type GitPublishArgs struct {
 	// branch's actual head in remote_sha. Unset (the default): the push is never
 	// forced. Only an explicit sha is accepted, never `true`: the run must name
 	// the commit it built on, typically the pull request head it checked out.
+	// The machine's daemon must register that it enforces a lease; an older one
+	// is refused (lease_unsupported) before anything is committed or pushed.
 	ForceWithLease *CelString `protobuf:"bytes,9,opt,name=force_with_lease,json=forceWithLease,proto3" json:"force_with_lease,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -7290,9 +7293,13 @@ type GitPublishOutput struct {
 	// RemoteSha is the remote branch's head when a lease was refused, read back
 	// after the refusal; empty when the branch does not exist or could not be
 	// read.
-	RemoteSha     string `protobuf:"bytes,11,opt,name=remote_sha,json=remoteSha,proto3" json:"remote_sha,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RemoteSha string `protobuf:"bytes,11,opt,name=remote_sha,json=remoteSha,proto3" json:"remote_sha,omitempty"`
+	// LeaseUnsupported is true when force_with_lease was set but the machine's
+	// daemon did not register that it enforces a lease (an older reliant):
+	// nothing was committed or pushed. Refused is true too.
+	LeaseUnsupported bool `protobuf:"varint,12,opt,name=lease_unsupported,json=leaseUnsupported,proto3" json:"lease_unsupported,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GitPublishOutput) Reset() {
@@ -7400,6 +7407,13 @@ func (x *GitPublishOutput) GetRemoteSha() string {
 		return x.RemoteSha
 	}
 	return ""
+}
+
+func (x *GitPublishOutput) GetLeaseUnsupported() bool {
+	if x != nil {
+		return x.LeaseUnsupported
+	}
+	return false
 }
 
 // CreateWorktreeOutput is the output from the create_worktree activity.
@@ -9791,7 +9805,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"tool_calls\x18\x04 \x03(\v2\x17.reliant.v1.ToolCallMsgR\ttoolCalls\x12<\n" +
 	"\ftool_results\x18\x05 \x03(\v2\x19.reliant.v1.ToolResultMsgR\vtoolResults\x12,\n" +
 	"\x12thread_token_count\x18\x06 \x01(\x05R\x10threadTokenCount\x12#\n" +
-	"\rmessage_count\x18\a \x01(\x05R\fmessageCount\"\xca\x02\n" +
+	"\rmessage_count\x18\a \x01(\x05R\fmessageCount\"\xf7\x02\n" +
 	"\x10GitPublishOutput\x12\x16\n" +
 	"\x06pushed\x18\x01 \x01(\bR\x06pushed\x12\x10\n" +
 	"\x03sha\x18\x02 \x01(\tR\x03sha\x12\x16\n" +
@@ -9807,7 +9821,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\rlease_refused\x18\n" +
 	" \x01(\bR\fleaseRefused\x12\x1d\n" +
 	"\n" +
-	"remote_sha\x18\v \x01(\tR\tremoteSha\"\xb8\x01\n" +
+	"remote_sha\x18\v \x01(\tR\tremoteSha\x12+\n" +
+	"\x11lease_unsupported\x18\f \x01(\bR\x10leaseUnsupported\"\xb8\x01\n" +
 	"\x14CreateWorktreeOutput\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +

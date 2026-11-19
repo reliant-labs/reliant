@@ -176,3 +176,104 @@ func TestGitPublish_ForceWithLease(t *testing.T) {
 		})
 	}
 }
+
+// This daemon tells the server it enforces a lease: the server sends a
+// lease-bearing push to no machine whose registration lacks it.
+func TestGitPublish_RegistrationAdvertisesForceWithLease(t *testing.T) {
+	t.Parallel()
+	assert.Contains(t, daemonFeatures, gitpublish.CapabilityForceWithLease)
+}
+
+// Why an older daemon must never be sent a lease: it ignores the field and
+// makes a plain push, which recreates a deleted branch and fast-forwards a
+// branch that was moved back to an ancestor of the fix. The lease refuses both.
+func TestGitPublish_PlainPushIsNoSubstituteForALease(t *testing.T) {
+	t.Parallel()
+	const branch = "fix/save"
+	for _, tc := range []struct {
+		name string
+		// arrange leaves the remote branch where someone else put it after
+		// the run leased head, and returns head.
+		arrange func(t *testing.T, f publishFixture) (head string)
+		// lease true sends the lease; false is what an old daemon does with it.
+		lease bool
+		check func(t *testing.T, f publishFixture, head string, prep gitpublish.PrepareResponse, res gitpublish.PushResponse)
+	}{
+		{
+			name: "deleted branch, plain push: recreated", lease: false,
+			arrange: deletedAfterLease,
+			check: func(t *testing.T, f publishFixture, _ string, prep gitpublish.PrepareResponse, res gitpublish.PushResponse) {
+				assert.True(t, res.Pushed, res.Refusal)
+				assert.Equal(t, prep.HeadSHA, remoteHead(t, f, branch), "the deleted branch came back")
+			},
+		},
+		{
+			name: "deleted branch, lease: refused", lease: true,
+			arrange: deletedAfterLease,
+			check: func(t *testing.T, f publishFixture, _ string, _ gitpublish.PrepareResponse, res gitpublish.PushResponse) {
+				assert.True(t, res.LeaseRefused, res.Refusal)
+				assert.Empty(t, remoteHead(t, f, branch))
+			},
+		},
+		{
+			name: "moved to an ancestor, plain push: fast-forwarded over it", lease: false,
+			arrange: rewoundAfterLease,
+			check: func(t *testing.T, f publishFixture, _ string, prep gitpublish.PrepareResponse, res gitpublish.PushResponse) {
+				assert.True(t, res.Pushed, res.Refusal)
+				assert.Equal(t, prep.HeadSHA, remoteHead(t, f, branch), "the rewind was overwritten")
+			},
+		},
+		{
+			name: "moved to an ancestor, lease: refused", lease: true,
+			arrange: rewoundAfterLease,
+			check: func(t *testing.T, f publishFixture, head string, _ gitpublish.PrepareResponse, res gitpublish.PushResponse) {
+				assert.True(t, res.LeaseRefused, res.Refusal)
+				ancestor := remoteHead(t, f, branch)
+				assert.NotEqual(t, head, ancestor)
+				assert.Equal(t, ancestor, res.RemoteSHA)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			needGit(t)
+			allowFileRemotes(t)
+			f := newPublishFixture(t)
+			head := tc.arrange(t, f)
+			require.NoError(t, os.WriteFile(filepath.Join(f.clone, "ours.txt"), []byte("ours\n"), 0o644))
+			prep := prepare(t, f.clone, "ours")
+			req := f.pushReq(branch, prep.HeadSHA)
+			if tc.lease {
+				req.ForceWithLease = head
+			}
+			tc.check(t, f, head, prep, push(t, req))
+		})
+	}
+}
+
+// deletedAfterLease: the checkout is at the PR head (two commits on main),
+// and then the branch is deleted on the remote.
+func deletedAfterLease(t *testing.T, f publishFixture) string {
+	t.Helper()
+	head := checkoutTwoCommitHead(t, f)
+	pubGit(t, f.remote, "update-ref", "-d", "refs/heads/fix/save")
+	return head
+}
+
+// rewoundAfterLease: the checkout is at the PR head, and then the branch is
+// moved back to that head's parent on the remote.
+func rewoundAfterLease(t *testing.T, f publishFixture) string {
+	t.Helper()
+	head := checkoutTwoCommitHead(t, f)
+	pubGit(t, f.remote, "update-ref", "refs/heads/fix/save", head+"^")
+	return head
+}
+
+func checkoutTwoCommitHead(t *testing.T, f publishFixture) string {
+	t.Helper()
+	f.commitIn(t, "", "fix/save", "one.txt")
+	head := f.commitIn(t, "fix/save", "fix/save", "two.txt")
+	pubGit(t, f.clone, "fetch", "-q", "origin")
+	pubGit(t, f.clone, "checkout", "-q", "--detach", head)
+	return head
+}

@@ -1,6 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 package gitpublish
 
+import (
+	"encoding/json"
+	"slices"
+)
+
 // The daemon commands a publish is made of. Two, so the credential exists for
 // as short a time as it can: preparing a commit needs none, and only the push
 // does.
@@ -11,7 +16,28 @@ const (
 	// CommandPush pushes the commit CommandPrepare made, with a credential that
 	// is used for that one git process and for nothing else.
 	CommandPush = "git.publish"
+
+	// CapabilityForceWithLease is what a daemon that enforces
+	// PushRequest.ForceWithLease lists in DaemonRegister.capabilities. The
+	// server sends a lease-bearing push only to a machine whose registration
+	// lists it: an older daemon would ignore the field and make a plain push,
+	// which could recreate a deleted branch or fast-forward one that moved.
+	CapabilityForceWithLease = "git.publish.force_with_lease"
 )
+
+// HasCapability reports whether a daemon's registered capabilities, as the
+// daemons table stores them (a JSON array of strings), include capability.
+// Absent or unreadable capabilities include nothing.
+func HasCapability(capabilitiesJSON *string, capability string) bool {
+	if capabilitiesJSON == nil {
+		return false
+	}
+	var caps []string
+	if err := json.Unmarshal([]byte(*capabilitiesJSON), &caps); err != nil {
+		return false
+	}
+	return slices.Contains(caps, capability)
+}
 
 // PrepareRequest is the payload of CommandPrepare.
 type PrepareRequest struct {
@@ -70,9 +96,8 @@ type PushRequest struct {
 	// ForceWithLease, when set, is the full sha the remote branch must still
 	// be at: the push may then replace the branch, as one compare-and-swap on
 	// the remote, and is refused (LeaseRefused) if the branch is elsewhere.
-	// Empty: the push is never forced. A daemon older than the field ignores
-	// it and makes its plain push, which never forces and so never loses a
-	// commit; it does not set LeaseChecked.
+	// Empty: the push is never forced. Sent only to a daemon that registered
+	// CapabilityForceWithLease; one older than the field would ignore it.
 	ForceWithLease string `json:"force_with_lease,omitempty"`
 	Token          string `json:"token"`
 }

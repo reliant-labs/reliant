@@ -591,7 +591,10 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// would describe the wrong machine entirely.
 	toolsFactory := newDaemonToolsFactory(host)
 
+	// Registration lists the tools this machine runs, then the command
+	// features a server must not assume of an older daemon (daemonFeatures).
 	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)
+	caps = append(caps, daemonFeatures...)
 	sort.Strings(caps)
 
 	// The disk guard acts on a filling disk: past its reclaim threshold it

@@ -374,6 +374,7 @@ Commit a worktree's changes and push them to a feature branch. Refuses the defau
 | `base_sha` | string | - |
 | `lease_refused` | boolean | - |
 | `remote_sha` | string | - |
+| `lease_unsupported` | boolean | - |
 
 ---
 
