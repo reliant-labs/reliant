@@ -11,6 +11,7 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 - `pinning.md` — why reliant pins forge by commit pre-launch, and the commands.
 - `forge-upgrade.md` — why reliant always takes the newest forge, the bump procedure, and the log of every bump.
 - `action-pins.md` — the reviewed action-to-commit pins in privileged workflows, how to change one, and the live verification after a change.
+- `cli-release-artifacts.md` — the standalone `reliant` CLI archives, their Sigstore signature and the public `daemon-channels.json` manifest each release tag publishes: schema, verification, pipeline and first-release check.
 - `observability.md` — how reliant's own server binaries export traces, metrics and logs, and the known gaps.
 - `redundant-index-drop-rollout.md` — the post-deploy plan check for the 2026-11-10 `chat_updates`/`messages` index drops, and the fix-forward migration that recreates one.
 - `inbox-firings-rollout.md` — post-deploy ListInbox latency check for reliant#2736's bounded Inbox reads and `idx_chats_daemon_blocked`, its failure criteria, and the application rollback (the index stays).

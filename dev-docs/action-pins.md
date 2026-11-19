@@ -64,6 +64,12 @@ criteria:
   `scripts/verify-release-artifacts.sh` finds every variant and every update
   feed live, and the GitHub Release exists.
 
+**CLI signing: `actions/attest`.** `release.yml`'s `cli-publish` job is the one
+job holding `id-token: write`. Check the first tag run after a pin change:
+"Sign" succeeds, and "Check the signature as a verifier will" verifies every
+subject against the pinned identity. The full criteria are in
+`dev-docs/cli-release-artifacts.md`, "First release after this lands".
+
 **Release gate record (`ci.yml`).** The first push to `main` after the merge
 writes the `refs/notes/release-gate` note in the `Release gate` job. That
 exercises the pinned checkout and download-artifact in a `contents: write`
