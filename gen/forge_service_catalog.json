@@ -40649,6 +40649,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.ToolResultAck"
+            },
+            {
+              "Name": "restart_requested",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.RestartRequested"
             }
           ],
           "WhoAmIRequest": null,
@@ -40827,6 +40833,11 @@
               "name": "health",
               "kind": "message",
               "type_name": "reliant.v1.MachineHealth"
+            },
+            {
+              "name": "upgrade",
+              "kind": "message",
+              "type_name": "reliant.v1.DaemonUpgradeStatus"
             }
           ],
           "reliant.v1.DaemonKillProcessRequest": [
@@ -41002,6 +41013,37 @@
               "kind": "map",
               "map_key_kind": "string",
               "map_value_kind": "string"
+            },
+            {
+              "name": "drains_on_restart_request",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.DaemonUpgradeStatus": [
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.DaemonUpgradeState"
+            },
+            {
+              "name": "deadline_unix_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "rollout_id",
+              "kind": "string"
+            },
+            {
+              "name": "target_version",
+              "kind": "string"
+            },
+            {
+              "name": "tool_calls_running",
+              "kind": "uint32"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
             }
           ],
           "reliant.v1.DiscoveredProject": [
@@ -41770,6 +41812,37 @@
               "kind": "bool"
             }
           ],
+          "reliant.v1.RestartRequested": [
+            {
+              "name": "target_version",
+              "kind": "string"
+            },
+            {
+              "name": "target_commit",
+              "kind": "string"
+            },
+            {
+              "name": "commit_time_unix",
+              "kind": "int64"
+            },
+            {
+              "name": "urgency",
+              "kind": "enum",
+              "type_name": "reliant.v1.RestartUrgency"
+            },
+            {
+              "name": "deadline_unix_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "rollout_id",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.ServerHeartbeat": [
             {
               "name": "timestamp",
@@ -41905,6 +41978,12 @@
               "name": "tool_result_ack",
               "kind": "message",
               "type_name": "reliant.v1.ToolResultAck",
+              "oneof": "message"
+            },
+            {
+              "name": "restart_requested",
+              "kind": "message",
+              "type_name": "reliant.v1.RestartRequested",
               "oneof": "message"
             }
           ],
@@ -42242,6 +42321,7 @@
           "reliant.v1.DaemonKillProcessResponse": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DaemonMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DaemonRegister": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.DaemonUpgradeStatus": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DiscoveredProject": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DiskConsumer": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DiskReport": "reliant/v1/tools_daemon.proto",
@@ -42274,6 +42354,7 @@
           "reliant.v1.RegistrationAck": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ReportToolResultRequest": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ReportToolResultResponse": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.RestartRequested": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ServerHeartbeat": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ServerMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.SyncedRepoState": "reliant/v1/tools_daemon.proto",
@@ -42296,6 +42377,14 @@
           "reliant.v1.WorktreeReclaimProposals": "reliant/v1/tools_daemon.proto"
         },
         "Enums": {
+          "reliant.v1.DaemonUpgradeState": [
+            "DAEMON_UPGRADE_STATE_UNSPECIFIED",
+            "DAEMON_UPGRADE_STATE_CURRENT",
+            "DAEMON_UPGRADE_STATE_UPDATING",
+            "DAEMON_UPGRADE_STATE_DRAINED",
+            "DAEMON_UPGRADE_STATE_AWAITING_OWNER",
+            "DAEMON_UPGRADE_STATE_FAILED"
+          ],
           "reliant.v1.DiskGuardState": [
             "DISK_GUARD_STATE_UNSPECIFIED",
             "DISK_GUARD_STATE_RECLAIMING",
@@ -42312,6 +42401,13 @@
             "MACHINE_HEALTH_STATE_OK",
             "MACHINE_HEALTH_STATE_DEGRADED"
           ],
+          "reliant.v1.RestartUrgency": [
+            "RESTART_URGENCY_UNSPECIFIED",
+            "RESTART_URGENCY_ROUTINE",
+            "RESTART_URGENCY_NORMAL",
+            "RESTART_URGENCY_SECURITY",
+            "RESTART_URGENCY_EMERGENCY"
+          ],
           "reliant.v1.TerminalSessionEvent.EventType": [
             "EVENT_TYPE_UNSPECIFIED",
             "EVENT_TYPE_CREATED",
@@ -42320,6 +42416,14 @@
           ]
         },
         "EnumNumbers": {
+          "reliant.v1.DaemonUpgradeState": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
           "reliant.v1.DiskGuardState": [
             0,
             1,
@@ -42336,6 +42440,13 @@
             1,
             2
           ],
+          "reliant.v1.RestartUrgency": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.TerminalSessionEvent.EventType": [
             0,
             1,
@@ -42344,6 +42455,10 @@
           ]
         },
         "EnumGoRefs": {
+          "reliant.v1.DaemonUpgradeState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "DaemonUpgradeState"
+          },
           "reliant.v1.DiskGuardState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "DiskGuardState"
@@ -42355,6 +42470,10 @@
           "reliant.v1.MachineHealthState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "MachineHealthState"
+          },
+          "reliant.v1.RestartUrgency": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "RestartUrgency"
           },
           "reliant.v1.TerminalSessionEvent.EventType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
