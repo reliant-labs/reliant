@@ -287,9 +287,7 @@ service ChatService {
 
   // SendMessage sends a user message to a chat and continues workflow
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-turn conversation traffic: the chat's own message history records every send"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-turn conversation traffic: the chat's own message history records every send"}};
   }
 
   // SendAgentMessage lets a human queue a message into a SPECIFIC running
@@ -301,9 +299,7 @@ service ChatService {
   // The message is delivered at the target thread's next agent-loop step
   // boundary, same as spawn_send. It is queued, not delivered synchronously.
   rpc SendAgentMessage(SendAgentMessageRequest) returns (SendAgentMessageResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "queues a message for a running thread: per-turn agent traffic the thread's mailbox and history record"}
-    };
+    option (forge.v1.method) = {activity: {none: "queues a message for a running thread: per-turn agent traffic the thread's mailbox and history record"}};
   }
 
   // ListQueuedAgentMessages returns the messages currently sitting in a
@@ -318,9 +314,7 @@ service ChatService {
   // boundary -- see CancelQueuedAgentMessageResponse for the honesty
   // contract when the message was already delivered.
   rpc CancelQueuedAgentMessage(CancelQueuedAgentMessageRequest) returns (CancelQueuedAgentMessageResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "withdraws a queued mailbox message before delivery: per-turn agent traffic"}
-    };
+    option (forge.v1.method) = {activity: {none: "withdraws a queued mailbox message before delivery: per-turn agent traffic"}};
   }
 
   // InterruptThread stops what a thread is doing right now so it reads its
@@ -342,9 +336,7 @@ service ChatService {
   //
   // Queue the message first (SendAgentMessage), then interrupt.
   rpc InterruptThread(InterruptThreadRequest) returns (InterruptThreadResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-turn steering of a running thread; each tool call it cancels records its own outcome"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-turn steering of a running thread; each tool call it cancels records its own outcome"}};
   }
 
   // ListMessages lists messages for a chat with content blocks
@@ -424,9 +416,7 @@ service ChatService {
   // resets ("Retry now"): it retries the step immediately instead of waiting
   // for the reset. A run that is not waiting is left alone (woken = false).
   rpc RetryUsageLimitWait(RetryUsageLimitWaitRequest) returns (RetryUsageLimitWaitResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "wakes a run parked on a provider usage limit early; it retries the step it would retry at the reset anyway"}
-    };
+    option (forge.v1.method) = {activity: {none: "wakes a run parked on a provider usage limit early; it retries the step it would retry at the reset anyway"}};
   }
 
   // REMOVED: UpdateChatAgent - agent is now a workflow param, not stored on chat
@@ -437,16 +427,12 @@ service ChatService {
 
   // DismissChat clears needs_attention state when user views a chat
   rpc DismissChat(DismissChatRequest) returns (DismissChatResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-user read state: clears needs-attention when the chat is viewed"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-user read state: clears needs-attention when the chat is viewed"}};
   }
 
   // MarkUnreadChat marks a chat as needing attention (mark as unread)
   rpc MarkUnreadChat(MarkUnreadChatRequest) returns (MarkUnreadChatResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-user read state: marks the chat unread"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-user read state: marks the chat unread"}};
   }
 
   // CompactChat triggers manual context compaction for a chat
@@ -487,16 +473,12 @@ service ChatService {
   // UpdateWorkflowParams updates workflow parameters for a running chat
   // This signals the running workflow to update its inputs (e.g., mode, temperature)
   rpc UpdateWorkflowParams(UpdateWorkflowParamsRequest) returns (UpdateWorkflowParamsResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "syncs the composer's model, mode and params for the chat's next turns: per-turn configuration, versioned on the chat's selection"}
-    };
+    option (forge.v1.method) = {activity: {none: "syncs the composer's model, mode and params for the chat's next turns: per-turn configuration, versioned on the chat's selection"}};
   }
 
   // UpdateChatProviderPolicy sets what the chat does when its provider is rate-limited.
   rpc UpdateChatProviderPolicy(UpdateChatProviderPolicyRequest) returns (UpdateChatProviderPolicyResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-chat runtime selection (what to do when the provider is rate-limited), versioned on the chat's selection like UpdateWorkflowParams"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-chat runtime selection (what to do when the provider is rate-limited), versioned on the chat's selection like UpdateWorkflowParams"}};
   }
 
   // GetChatUpdates fetches chat updates since a sequence number
