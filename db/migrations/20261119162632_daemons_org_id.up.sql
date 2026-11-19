@@ -1,7 +1,7 @@
 -- forge:backward-compatible — adds one nullable column; the previous release never names daemons.org_id, its upserts leave it NULL (or as this release wrote it), and every column it reads keeps its name and type.
 
 -- Migration: daemons_org_id
--- Created: 2026-11-18T11:16:47Z
+-- Created: 2026-11-19T16:26:32Z
 --
 -- The organization a machine belongs to. control-plane owns it
 -- (controlplane.daemons.org_id); reliant mirrors it here when the machine

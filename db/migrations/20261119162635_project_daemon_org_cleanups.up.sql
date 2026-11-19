@@ -1,7 +1,7 @@
 -- forge:backward-compatible — adds a new table no statement of the previous release names.
 
 -- Migration: project_daemon_org_cleanups
--- Created: 2026-11-18T11:16:47Z
+-- Created: 2026-11-19T16:26:32Z
 --
 -- The audit of the machine-org cleanup: every checkout the connect reconcile
 -- detaches from a machine because its project is in another org than the
