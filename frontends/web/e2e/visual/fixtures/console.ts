@@ -10,10 +10,10 @@ import type { Fixtures } from '../rpc'
 import { DAY, HOUR, MIN, USER, iso } from './base'
 
 const ENVIRONMENTS = [
-  { id: 'env-shop-prod', name: 'prod', project: 'shopfront', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: iso(30 * DAY) },
-  { id: 'env-shop-staging', name: 'staging', project: 'shopfront', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: iso(30 * DAY) },
-  { id: 'env-shop-pr12', name: 'pr-12', project: 'shopfront', kind: 'DEPLOY_ENVIRONMENT_KIND_PREVIEW', createdAt: iso(5 * HOUR) },
-  { id: 'env-ledger-prod', name: 'prod', project: 'ledger', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: iso(9 * DAY) },
+  { id: 'env-shop-prod', name: 'prod', project: 'shopfront', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: iso(30 * DAY) },
+  { id: 'env-shop-staging', name: 'staging', project: 'shopfront', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: iso(30 * DAY) },
+  { id: 'env-shop-pr12', name: 'pr-12', project: 'shopfront', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PREVIEW', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: iso(5 * HOUR) },
+  { id: 'env-ledger-prod', name: 'prod', project: 'ledger', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: iso(9 * DAY) },
 ]
 
 const deployment = (name: string, tier: string, verdict: string, url = '', extra: Record<string, unknown> = {}) => ({

@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
@@ -24,12 +24,14 @@ import {
   DeployConvergenceSchema,
   DeployDriftSchema,
   DeployEnvironmentKind,
+  DeployEnvironmentLifetime,
   DeployEnvironmentSchema,
   DeployHoldKind,
   DeployHoldSchema,
   DeployLiveEnvironmentSchema,
   DeployPromotionSchema,
   DeployRolloutPhase,
+  DeploySecretPosture,
   DeploySourceProvenanceSchema,
 } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 
@@ -242,6 +244,36 @@ describe("kinds", () => {
       })
     );
     expect(env?.kind).toBe("unknown");
+  });
+
+  // DeployEnvironment.kind is deprecated and leaves the wire with
+  // control-plane#3095; every server since #1349 also sends lifetime,
+  // secret_posture and hosted_slot, which the kind is derived from instead.
+  const live = (fields: MessageInitShape<typeof DeployEnvironmentSchema>) =>
+    toLiveEnv(create(DeployLiveEnvironmentSchema, { environment: create(DeployEnvironmentSchema, { id: "e", name: "prod", project: "hounders", ...fields }) }));
+
+  it("prefers a recognised kind over the placement fields, so today's server reads as it always did", () => {
+    const env = live({
+      kind: DeployEnvironmentKind.SELF_MANAGED,
+      lifetime: DeployEnvironmentLifetime.PERSISTENT,
+      secretPosture: DeploySecretPosture.WRITE_ONLY,
+      hostedSlot: true,
+    });
+    expect(env?.kind).toBe("self_managed");
+  });
+
+  it.each([
+    ["local", { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.READABLE }],
+    ["preview", { lifetime: DeployEnvironmentLifetime.PREVIEW, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true }],
+    ["persistent", { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true }],
+    ["self_managed", { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY }],
+  ] as const)("derives %s from the placement fields when kind is absent", (want, fields) => {
+    expect(live(fields)?.kind).toBe(want);
+  });
+
+  it("reads an environment with neither kind nor placement fields as unknown", () => {
+    expect(live({})?.kind).toBe("unknown");
+    expect(live({ hostedSlot: true })?.kind).toBe("unknown");
   });
 
   it("treats only persistent and preview as placed by the platform", () => {

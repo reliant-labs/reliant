@@ -27,7 +27,6 @@ import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
-  ObservabilityQuotaState,
   AttributeOp as WireAttributeOp,
   MetricType as WireMetricType,
   ObservabilityService,
@@ -53,7 +52,9 @@ import {
   type TraceSummary as WireTraceSummary,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { DeclaredSpecGap as WireDeclaredSpecGap, WorkloadKind as WireWorkloadKind, type DeclaredWorkload as WireDeclaredWorkload } from "@/gen/controlplane/controlplane/v1/deploy_pb";
+import { ObservabilityBillingService, ObservabilityQuotaState } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 
+import { getControlPlaneClient } from "../client";
 import { obsClient } from "./obsClient";
 import type {
   AttributeFilter,
@@ -596,9 +597,14 @@ function quotaState(state: ObservabilityQuotaState): QuotaState {
 
 const USAGE_SIGNALS: readonly UsageSignal[] = ["logs", "traces", "metrics", "profiles"];
 
-/** The org's month-to-date usage. Org-scoped (not environment-scoped): the allowance is per org. */
+/**
+ * The org's month-to-date usage. Org-scoped (not environment-scoped): the allowance is per org.
+ * Served by ObservabilityBillingService (a Postgres read, same admission as the
+ * observability reads), not ObservabilityService, whose copy of this rpc is retired.
+ * It spends no ClickHouse read slot, so it bypasses obsClient's read queue.
+ */
 export async function getObservabilityUsage(orgId: string): Promise<ObservabilityUsage> {
-  const res = await client().getObservabilityUsage({ orgId });
+  const res = await getControlPlaneClient(ObservabilityBillingService).getObservabilityUsage({ orgId });
   const signal = (value: string): UsageSignal =>
     (USAGE_SIGNALS as readonly string[]).includes(value) ? (value as UsageSignal) : "logs";
   return {

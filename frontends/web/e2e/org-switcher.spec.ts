@@ -30,7 +30,7 @@ const ACME = { id: 'org_acme', name: 'Acme', slug: 'acme', role: 'owner', isOwne
 const SIDE = { id: 'org_side', name: 'Side Project', slug: 'side', role: 'member', isOwner: false, isDefault: false };
 
 const SIDE_ENVS = [
-  { id: 'env_blog_prod', name: 'prod', project: 'weekend-blog', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: new Date(Date.now() - 9_000_000).toISOString() },
+  { id: 'env_blog_prod', name: 'prod', project: 'weekend-blog', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: new Date(Date.now() - 9_000_000).toISOString() },
 ];
 
 function twoOrgs(onOrgRequest?: (rpc: string, orgId: string | undefined) => void) {

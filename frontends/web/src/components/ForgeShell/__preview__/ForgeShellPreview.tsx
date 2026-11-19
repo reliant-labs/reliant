@@ -33,10 +33,10 @@ const ORG = { id: "org_demo", name: "Acme Labs", slug: "acme", role: "owner", is
 
 /** Two apps: storefront (prod + staging, one static site each) and an API-only app. */
 const ENVS = [
-  { id: "env-sf-prod", name: "prod", project: "storefront", kind: "DEPLOY_ENVIRONMENT_KIND_PERSISTENT", createdAt: iso(-20 * DAY) },
-  { id: "env-sf-stg", name: "staging", project: "storefront", kind: "DEPLOY_ENVIRONMENT_KIND_PERSISTENT", createdAt: iso(-20 * DAY) },
-  { id: "env-blog-prod", name: "prod", project: "blog", kind: "DEPLOY_ENVIRONMENT_KIND_PERSISTENT", createdAt: iso(-9 * DAY) },
-  { id: "env-api-prod", name: "prod", project: "billing-api", kind: "DEPLOY_ENVIRONMENT_KIND_PERSISTENT", createdAt: iso(-4 * DAY) },
+  { id: "env-sf-prod", name: "prod", project: "storefront", lifetime: "DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT", secretPosture: "DEPLOY_SECRET_POSTURE_WRITE_ONLY", hostedSlot: true, createdAt: iso(-20 * DAY) },
+  { id: "env-sf-stg", name: "staging", project: "storefront", lifetime: "DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT", secretPosture: "DEPLOY_SECRET_POSTURE_WRITE_ONLY", hostedSlot: true, createdAt: iso(-20 * DAY) },
+  { id: "env-blog-prod", name: "prod", project: "blog", lifetime: "DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT", secretPosture: "DEPLOY_SECRET_POSTURE_WRITE_ONLY", hostedSlot: true, createdAt: iso(-9 * DAY) },
+  { id: "env-api-prod", name: "prod", project: "billing-api", lifetime: "DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT", secretPosture: "DEPLOY_SECRET_POSTURE_WRITE_ONLY", hostedSlot: true, createdAt: iso(-4 * DAY) },
 ];
 
 function status(envId: string) {
