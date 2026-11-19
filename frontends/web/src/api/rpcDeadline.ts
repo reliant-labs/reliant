@@ -273,14 +273,28 @@ interface Attempt {
 export interface DeadlineInterceptor {
   interceptor: Interceptor;
   describeInFlight(): string;
+  /** Stalls reported whose calls have not all settled yet (diagnostics, tests). */
+  openStallIncidents(): number;
+}
+
+/**
+ * One reported stall. It outlives each member's own settle: the incident, and
+ * every id in it, is released only once all of them have settled, so no
+ * member's later deadline can report it again whatever order they settle in.
+ */
+interface StallIncident {
+  ids: ReadonlySet<number>;
+  pending: number;
 }
 
 export function createDeadlineInterceptor(options: DeadlineInterceptorOptions): DeadlineInterceptor {
   let nextId = 0;
   const inFlight = new Map<number, InFlightEntry>();
-  // Calls already reported as part of a stall: their own timeouts are not
-  // reported again.
-  const inReportedStall = new Set<number>();
+  // The reported stall each call belongs to, until every call of that stall
+  // has settled: their own timeouts are not reported again, and no new stall
+  // takes them in.
+  const incidentOf = new Map<number, StallIncident>();
+  const openIncidents = new Set<StallIncident>();
   const grouping = options.stallGrouping === false ? undefined : (options.stallGrouping ?? {});
 
   const describeInFlight = (): string =>
@@ -295,7 +309,7 @@ export function createDeadlineInterceptor(options: DeadlineInterceptorOptions): 
     const activeNow = options.activity().activeNow();
     const group = [id];
     for (const [other, entry] of inFlight) {
-      if (other === id || inReportedStall.has(other) || entry.startedActive === undefined) continue;
+      if (other === id || incidentOf.has(other) || entry.startedActive === undefined) continue;
       if (entry.startedActive > self.startedActive + skewMs) continue;
       if (activeNow - entry.startedActive < minSilentMs) continue;
       group.push(other);
@@ -308,7 +322,7 @@ export function createDeadlineInterceptor(options: DeadlineInterceptorOptions): 
    * hang too, else alone. A call already reported in a stall is not reported.
    */
   const reportTimeout = (id: number, methodName: string, budgetMs: number, attemptNumber: number) => {
-    if (inReportedStall.has(id)) return;
+    if (incidentOf.has(id)) return;
     // Snapshot BEFORE aborting so the line still includes this call and
     // everything queued behind the same connection.
     const diagnostics = describeInFlight();
@@ -316,8 +330,10 @@ export function createDeadlineInterceptor(options: DeadlineInterceptorOptions): 
     if (group.length >= 2 && options.onStall) {
       const activeNow = options.activity().activeNow();
       let longestSilentMs = 0;
+      const incident: StallIncident = { ids: new Set(group), pending: group.length };
+      openIncidents.add(incident);
       for (const member of group) {
-        inReportedStall.add(member);
+        incidentOf.set(member, incident);
         const started = inFlight.get(member)?.startedActive;
         if (started !== undefined) longestSilentMs = Math.max(longestSilentMs, activeNow - started);
       }
@@ -413,11 +429,21 @@ export function createDeadlineInterceptor(options: DeadlineInterceptorOptions): 
       });
     } finally {
       inFlight.delete(id);
-      inReportedStall.delete(id);
+      settleIncidentMember(id);
     }
   };
 
-  return { interceptor, describeInFlight };
+  /** Call `id` settled: release its stall once that was the last call of it. */
+  const settleIncidentMember = (id: number) => {
+    const incident = incidentOf.get(id);
+    if (!incident) return;
+    incident.pending--;
+    if (incident.pending > 0) return;
+    for (const member of incident.ids) incidentOf.delete(member);
+    openIncidents.delete(incident);
+  };
+
+  return { interceptor, describeInFlight, openStallIncidents: () => openIncidents.size };
 }
 
 type UnaryNext = (req: UnaryRequest) => Promise<UnaryResponse>;

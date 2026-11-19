@@ -439,14 +439,16 @@ describe("a reported stall", () => {
     expect(onStall).toHaveBeenCalledTimes(1);
     expect(onTimeout).not.toHaveBeenCalled();
     expect(deadline.describeInFlight()).toBe("0 in flight");
+    expect(deadline.openStallIncidents()).toBe(0);
   });
 
   it("is released once every member settled, so a new hang is reported", async () => {
-    const { call, onTimeout, onStall } = await stallHarness();
+    const { deadline, call, onTimeout, onStall } = await stallHarness();
     call("UpdateA");
     call("UpdateB");
     await vi.advanceTimersByTimeAsync(10_100);
     expect(onStall).toHaveBeenCalledTimes(1);
+    expect(deadline.openStallIncidents()).toBe(0);
 
     call("UpdateA");
     await vi.advanceTimersByTimeAsync(10_100);
@@ -457,6 +459,7 @@ describe("a reported stall", () => {
     call("UpdateB");
     await vi.advanceTimersByTimeAsync(10_100);
     expect(onStall).toHaveBeenCalledTimes(2);
+    expect(deadline.openStallIncidents()).toBe(0);
   });
 
   it("is not reported again by hedged reads or by members that failed or were aborted", async () => {
@@ -505,6 +508,75 @@ describe("a reported stall", () => {
     expect(onStall).toHaveBeenCalledTimes(1);
     expect(onTimeout).not.toHaveBeenCalled();
     expect(deadline.describeInFlight()).toBe("0 in flight");
+    expect(deadline.openStallIncidents()).toBe(0);
+  });
+
+  // Review of #2929 (B1): the timed-out member is aborted and its promise
+  // settles first, running its own cleanup; only then does another member's
+  // deadline pass. The incident outlives that settle, so it is still one.
+  it("is reported once when the timed-out member settles before another member's deadline", async () => {
+    const { deadline, calls, call, onTimeout, onStall } = await stallHarness();
+    let firstSettled = false;
+    void call("UpdateA").catch(() => {
+      firstSettled = true;
+    });
+    for (const method of ["UpdateB", "UpdateC", "UpdateD"]) {
+      await vi.advanceTimersByTimeAsync(300);
+      call(method);
+    }
+    await flush();
+    expect(calls).toHaveLength(4);
+
+    // A's deadline passes (B's is 300ms away): one stall of all four.
+    await vi.advanceTimersByTimeAsync(10_000 - 900 + 50);
+    await flush();
+    expect(firstSettled).toBe(true);
+    expect(onStall).toHaveBeenCalledTimes(1);
+    expect(onStall.mock.calls[0][0].methods).toEqual(["UpdateA", "UpdateB", "UpdateC", "UpdateD"]);
+    expect(deadline.describeInFlight()).toMatch(/^3 in flight/);
+    expect(deadline.openStallIncidents()).toBe(1);
+
+    // Now B's, C's and D's deadlines pass, one at a time.
+    for (let i = 0; i < 3; i++) {
+      await vi.advanceTimersByTimeAsync(300);
+      await flush();
+    }
+    expect(onStall).toHaveBeenCalledTimes(1);
+    expect(onTimeout).not.toHaveBeenCalled();
+    expect(deadline.describeInFlight()).toBe("0 in flight");
+    expect(deadline.openStallIncidents()).toBe(0);
+  });
+
+  it("does not take in a call that started after it was reported, nor report itself again for it", async () => {
+    const { deadline, calls, call, onTimeout, onStall } = await stallHarness({
+      UpdateB: 20_000,
+      UpdateC: 20_000,
+      UpdateD: 20_000,
+    });
+    for (const method of ["UpdateA", "UpdateB", "UpdateC", "UpdateD"]) {
+      call(method);
+      await vi.advanceTimersByTimeAsync(300);
+    }
+    await vi.advanceTimersByTimeAsync(10_000 - 1_200 + 50);
+    await flush();
+    expect(onStall).toHaveBeenCalledTimes(1);
+    expect(deadline.describeInFlight()).toMatch(/^3 in flight/);
+
+    // A has settled. A new call hangs beside B, C and D, still unanswered.
+    call("ListNew");
+    await flush();
+    expect(calls).toHaveLength(5);
+
+    // The new call's deadline passes first, then B's, C's and D's. B, C and D
+    // belong to the open incident, so the new call is a timeout on its own,
+    // and the incident is never reported again.
+    await vi.advanceTimersByTimeAsync(11_000);
+    await flush();
+    expect(onStall).toHaveBeenCalledTimes(1);
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+    expect(onTimeout.mock.calls[0][0]).toBe("ListNew");
+    expect(deadline.describeInFlight()).toBe("0 in flight");
+    expect(deadline.openStallIncidents()).toBe(0);
   });
 });
 
