@@ -594,7 +594,13 @@ func triggerFiringsByTrigger(ctx context.Context, db orm.Context, what, query, u
 		return out, nil
 	}
 	var rows []triggerFiringRow
-	if err := db.Bun().NewRaw(query, userID, pgdialect.Array(triggerIDs), orm.Arg(perTrigger)).Scan(ctx, &rows); err != nil {
+	// Every value binds (orm.Arg; the user id binds as a string), so each
+	// statement is one prepared statement and one cached plan whatever the
+	// user or triggers. pgdialect.Array renders itself and stayed inline,
+	// which made the text, and so the prepared statement, new for each set
+	// of trigger ids: a Parse and a fresh plan on ListInbox's two slowest
+	// reads (1.06s and 1.03s in prod trace ed2301a0…).
+	if err := db.Bun().NewRaw(query, userID, orm.Arg(triggerIDs), orm.Arg(perTrigger)).Scan(ctx, &rows); err != nil {
 		return nil, fmt.Errorf("failed to %s: %w", what, err)
 	}
 	firings, err := triggerFiringsToCore(rows)

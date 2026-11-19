@@ -52,6 +52,7 @@ var userScopedReads = map[string]string{
 	"GetUsableWorkflowBySlug":  readRepoChecks,
 	"GetWorkflowDraftByName":   readRepoChecks,
 	"GetWorkflowDraftBySlug":   readRepoChecks,
+	"GetWorkflowDraftsBySlugs": readRepoChecks,
 	"ListWorkflowDraftsByUser": readRepoChecks,
 
 	"ListAnswerablePendingQuestionsByUser": readCallersFilter,
