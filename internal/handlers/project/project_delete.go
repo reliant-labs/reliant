@@ -35,7 +35,9 @@ import (
 //     exactly the triggers the delete paused.
 //   - PurgeProjectNow is the immediate, irreversible delete DeleteProject
 //     used to be, for the owner who means it: what an old caller that
-//     relied on the synchronous delete calls now.
+//     relied on the synchronous delete calls now. It claims the project
+//     (hidden, no longer restorable) and answers; the batches run after the
+//     response (rpc_purge_project_now.go).
 //
 // Old clients and the SDK keep calling DeleteProject and get the scheduled
 // delete; its response still says success.

@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
@@ -164,6 +165,9 @@ func TestGetGitHubBotToken_ErrorMapping(t *testing.T) {
 		{"needs reconnect", &fakeBotTokens{err: gitcredentialclient.ErrNeedsReconnect}, connect.CodeFailedPrecondition, "git_credential_needs_reconnect"},
 		{"transient", &fakeBotTokens{err: errors.New("dial tcp: boom " + secretBotToken)}, connect.CodeUnavailable, ""},
 		{"empty token", &fakeBotTokens{}, connect.CodeUnavailable, ""},
+		{"rate limited", &fakeBotTokens{err: &gitcredentialclient.RateLimitedError{}}, connect.CodeResourceExhausted, "github_rate_limited"},
+		// A reason this release does not know keeps today's answer.
+		{"unknown reason", &fakeBotTokens{err: &gitcredentialclient.RPCError{Code: "permission_denied", Reason: "something_new"}}, connect.CodeUnavailable, ""},
 		{"self-hosted", nil, connect.CodeFailedPrecondition, "git_credential_no_control_plane"},
 	}
 	for _, c := range cases {
@@ -175,6 +179,29 @@ func TestGetGitHubBotToken_ErrorMapping(t *testing.T) {
 				t.Errorf("error leaks the token: %v", err)
 			}
 		})
+	}
+}
+
+// GitHub's rate limit (control-plane#2964) is the caller's to wait out:
+// ResourceExhausted with control-plane's message and Retry-After, never an
+// Unavailable outage.
+func TestGetGitHubBotToken_RateLimitPassesThroughWithRetryAfter(t *testing.T) {
+	src := &fakeBotTokens{err: &gitcredentialclient.RateLimitedError{
+		Message:    "GitHub's API rate limit for your GitHub account is exhausted until 2026-11-18T15:00:00Z; try again then",
+		RetryAfter: 89500 * time.Millisecond,
+	}}
+	svc, authority := botSvc(t, src)
+	_, err := svc.GetGitHubBotToken(context.Background(), botReq(daemonBearer(t, authority), "acme", "api", nil))
+	wantCode(t, err, connect.CodeResourceExhausted, "github_rate_limited")
+	ce := svcerr.ToConnect(err)
+	if got := ce.Meta().Get("Retry-After"); got != "90" {
+		t.Errorf("Retry-After = %q, want 90 (rounded up)", got)
+	}
+	if !strings.Contains(ce.Message(), "until 2026-11-18T15:00:00Z") {
+		t.Errorf("message = %q, want control-plane's", ce.Message())
+	}
+	if svcerr.Classify(err) != svcerr.ClassUser {
+		t.Errorf("class = %v, want user", svcerr.Classify(err))
 	}
 }
 

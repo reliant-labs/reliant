@@ -28,9 +28,24 @@ const (
 	// vite-plugin-demo-bundle.ts guard fails on a Reliant-only module in it.
 	// tsc -b cannot see that (#2669 passed it and failed the demo build).
 	laneWebDemo lane = "web-demo"
+	// laneWebBuild is not a test runner either: it builds the renderer as a
+	// release does (frontends/web's production `vite build`) and verifies the
+	// bundle. vitest and tsc -b cannot see what only the bundler resolves:
+	// #2829's supabase-js bump imported `node:module`, passed both, and
+	// failed the release gate's webbuild.
+	laneWebBuild lane = "web-build"
 )
 
-var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen, laneMigOrder, laneWebDemo}
+var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen, laneMigOrder, laneWebDemo, laneWebBuild}
+
+// webBuildInputs are the files the renderer's release build reads that are
+// not web sources: its vite config, the plugins that config imports, and its
+// HTML entry. A change to the web lane's dependencies or build config (the
+// web-config and node-toolchain rules: package.json, pnpm-lock.yaml, ...)
+// runs the build too, through the web lane's FULL reasons.
+var webBuildInputs = []string{
+	"frontends/web/vite.config.ts", "frontends/web/vite-plugin-*.ts", "frontends/web/index.html",
+}
 
 // demoBuildInputs are the files the forge demo build reads that are not
 // modules in its import graph (WebGraph.Demo): its vite config and plugins
@@ -197,6 +212,11 @@ type rule struct {
 
 	// noGraph: do not also map the file to the Go package owning its directory.
 	noGraph bool
+	// replacedModule: the file is in a nested Go module that the root go.mod
+	// replaces with its directory (sdk/go). The root's `go list` does not list
+	// its packages, but the root's packages depend on them by import path, so
+	// a non-test .go file is a code change to <module>/<its directory>.
+	replacedModule bool
 	// protoGen: map proto/<dir>/x.proto to gen/<dir> (Go) and frontends/web/src/gen/<dir>.
 	protoGen bool
 	// dbFan: select every package with DB-backed tests.
@@ -360,14 +380,16 @@ var rules = []rule{
 		// does not see, so no package owns its files. Its generated half is
 		// forge's output (a forge input above), so a change runs
 		// forge-generate; its own tests run as a step in the module (goSteps).
-		// The app does not import it yet; when it does (pinned by version),
-		// a change here reaches the app only through that pin bump.
-		id:       "sdk-go",
-		patterns: []string{"sdk/go/**"},
-		full:     []lane{laneForgeGen},
-		reason:   "the SDK module changed: its generated protos must match proto/, and its own tests run in the module",
-		noGraph:  true,
-		note:     "sdk/go is its own Go module; its tests run with the Go lane",
+		// The app builds against this tree's sdk/go (go.mod replaces it with
+		// ./sdk/go, reliant#2824), so a code change also selects the root
+		// packages that contain the SDK package it is in.
+		id:             "sdk-go",
+		patterns:       []string{"sdk/go/**"},
+		full:           []lane{laneForgeGen},
+		reason:         "the SDK module changed: its generated protos must match proto/, and its own tests run in the module",
+		noGraph:        true,
+		replacedModule: true,
+		note:           "sdk/go is its own Go module; its tests run with the Go lane, and the app packages that contain it run too",
 	},
 	{
 		id: "web-inert",

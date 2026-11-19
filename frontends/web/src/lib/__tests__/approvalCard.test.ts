@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { DECIDES_APPROVALS_REASON, DETAILS_HEADING, LEGACY_ACTIVATION_REASON, parseApprovalCard, planApprovalBatch } from "../approvalCard";
+import { CONNECTION_PROPOSAL_REASON, DECIDES_APPROVALS_REASON, DETAILS_HEADING, LEGACY_ACTIVATION_REASON, parseApprovalCard, planApprovalBatch } from "../approvalCard";
 
 const activation = [
   "Turn on PR review for acme/shopfront: it will run on each GitHub event it watches (pull_request.opened).",
@@ -55,7 +55,32 @@ describe("parseApprovalCard", () => {
       grantsPower: false,
       legacyActivation: false,
       decidesApprovals: false,
+      connectionProposal: false,
     });
+  });
+
+  it("reads an agent's connection proposal as a card that grants nothing and is decided on its own", () => {
+    const proposal = [
+      "The agent asks you to connect Slack.",
+      "Reason: Post the nightly report to #ops.",
+      "Owner: You (a personal connection)",
+      "Credential: You enter it in the connection dialog; the agent never sees it",
+      "",
+      DETAILS_HEADING,
+      "Operation: propose_connection",
+      "Integration: slack",
+    ].join("\n");
+    const card = parseApprovalCard(proposal);
+    expect(card.connectionProposal).toBe(true);
+    expect(card.grantsPower).toBe(false);
+    expect(card.rows[0]).toEqual({ label: "Reason", value: "Post the nightly report to #ops." });
+
+    const plan = planApprovalBatch([{ id: "p", title: proposal }, { id: "r", title: "Deploy to production?" }]);
+    expect(plan.together.map((a) => a.id)).toEqual(["r"]);
+    expect(plan.apart).toEqual([{ approval: { id: "p", title: proposal }, reason: CONNECTION_PROPOSAL_REASON }]);
+    // The structured field alone is enough, whatever the title says.
+    const structured = { id: "s", title: "Connect Slack?", connectionProposal: { integrationId: "slack" } };
+    expect(planApprovalBatch([structured]).apart.map((a) => a.approval.id)).toEqual(["s"]);
   });
 
   it("keeps the extra lines of a plain multi-line approval as notes, not rows", () => {

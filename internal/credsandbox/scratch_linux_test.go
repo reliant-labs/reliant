@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -84,16 +86,78 @@ func TestEnsureCredScratch_ReplacesADirectorySwappedInForTheRecordedOne(t *testi
 	assert.NoFileExists(t, filepath.Join(dir, "planted"))
 }
 
-// Without a data directory, only what this process made is trusted.
+// Without a data directory, only what this process made is trusted: it makes
+// the scratch where there is none and keeps it.
 func TestEnsureCredScratch_WithoutARecordTrustsOnlyWhatThisProcessMade(t *testing.T) {
 	dir, _ := scratchAt(t)
-	require.NoError(t, os.MkdirAll(dir, 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "planted"), nil, 0o600))
 	require.NoError(t, ensureCredScratchAt(dir, ""))
-	assert.NoFileExists(t, filepath.Join(dir, "planted"))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "mine"), nil, 0o600))
 	require.NoError(t, ensureCredScratchAt(dir, ""))
 	assert.FileExists(t, filepath.Join(dir, "mine"))
+}
+
+// #2823: a process with no data directory (a test binary an agent runs) found
+// the daemon's recorded scratch, could not see the record, and moved it aside;
+// the daemon then moved the replacement aside in turn, hundreds of times a
+// day. Now it leaves a scratch it did not make alone, contents and all, and
+// trusts it no more than before: an error, so its command gets no signal.
+func TestEnsureCredScratch_WithoutARecordLeavesAScratchItDidNotMake(t *testing.T) {
+	dir, record := scratchAt(t)
+	require.NoError(t, ensureCredScratchAt(dir, record)) // the daemon's
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "step"), []byte("daemon's"), 0o600))
+	scratchState.made = "" // another process: no record, nothing made
+
+	require.ErrorIs(t, ensureCredScratchAt(dir, ""), errScratchNotMade)
+
+	got, err := os.ReadFile(filepath.Join(dir, "step"))
+	require.NoError(t, err)
+	assert.Equal(t, "daemon's", string(got))
+	aside, _ := filepath.Glob(dir + movedAsideSuffix + "*")
+	assert.Empty(t, aside, "nothing was moved aside")
+	require.NoError(t, ensureCredScratchAt(dir, record), "the daemon still trusts its own")
+}
+
+// What is moved aside is kept for inspection for a day, then pruned; nothing
+// else beside the scratch is touched, and a moved-aside link is unlinked, not
+// followed.
+func TestPruneMovedAside_RemovesOnlyExpiredMovedAsideEntries(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), ".reliant", "cred-scratch")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	now := time.Now()
+	stamp := func(at time.Time) string { return dir + movedAsideSuffix + strconv.FormatInt(at.UnixNano(), 10) }
+
+	old := stamp(now.Add(-25 * time.Hour))
+	require.NoError(t, os.MkdirAll(filepath.Join(old, "pr-fix"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(old, "pr-fix", "run.sh"), nil, 0o600))
+	target := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(target, "keep"), nil, 0o600))
+	oldLink := stamp(now.Add(-48 * time.Hour))
+	require.NoError(t, os.Symlink(target, oldLink))
+	recent := stamp(now.Add(-time.Hour))
+	require.NoError(t, os.Mkdir(recent, 0o700))
+	unrelated := []string{dir + movedAsideSuffix + "notatime", filepath.Join(filepath.Dir(dir), "other.untrusted-1")}
+	for _, p := range unrelated {
+		require.NoError(t, os.Mkdir(p, 0o700))
+	}
+
+	removed, err := pruneMovedAsideAt(dir, now, movedAsideRetention)
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, removed)
+	assert.NoDirExists(t, old)
+	assert.NoFileExists(t, oldLink)
+	assert.FileExists(t, filepath.Join(target, "keep"), "the link was not followed")
+	assert.DirExists(t, recent, "kept for inspection for a day")
+	assert.DirExists(t, dir, "the scratch itself")
+	for _, p := range unrelated {
+		assert.DirExists(t, p)
+	}
+}
+
+func TestPruneMovedAside_NoParentIsNothingToDo(t *testing.T) {
+	removed, err := pruneMovedAsideAt(filepath.Join(t.TempDir(), "absent", "cred-scratch"), time.Now(), movedAsideRetention)
+	require.NoError(t, err)
+	assert.Zero(t, removed)
 }
 
 // R2.B4: the scratch is made only for a credentialed command where the sandbox

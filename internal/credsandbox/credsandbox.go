@@ -318,6 +318,12 @@ const SignalEnv = "RELIANT_CREDSANDBOX_VERSION"
 //     /var/tmp; CredScratchDir hidden.
 const SignalVersion = 2
 
+// errScratchNotMade reports a credentialed scratch directory that a process
+// with no daemon data directory did not make: it is left alone and not
+// trusted (see scratch_linux.go).
+var errScratchNotMade = errors.New("a credentialed scratch directory this process did not make is there; " +
+	"with no daemon data directory it is not this process's to replace")
+
 // CredScratchRel is CredScratchDir under the user's home.
 const CredScratchRel = ".reliant/cred-scratch" //nolint:gosec // a directory name, not a credential
 
@@ -364,7 +370,12 @@ func wrap(cmd *exec.Cmd, credentials string, writable Writable, terminal bool) (
 		// is no signal, so a step that needs one fails closed.
 		signal := false
 		if err == nil && Enabled() && Available(self) == nil {
-			if serr := ensureCredScratch(); serr != nil {
+			if serr := ensureCredScratch(); errors.Is(serr, errScratchNotMade) {
+				// Expected in a process that is not a daemon (a test binary):
+				// the scratch there is the daemon's, and stays its.
+				logging.Debug("credsandbox: the credentialed scratch directory is not this process's, so this credentialed command gets no "+SignalEnv,
+					"path", CredScratchDir())
+			} else if serr != nil {
 				logging.Warn("credsandbox: the credentialed scratch directory could not be prepared, so this credentialed command gets no "+SignalEnv,
 					"path", CredScratchDir(), "error", serr)
 			} else {

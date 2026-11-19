@@ -267,12 +267,15 @@ Use create_trigger_activation, update_trigger_activation, enable_trigger or paus
 activation. The owner's automation-approvals setting (Settings > Automations) decides which changes raise an approval
 card: by default a new activation, or a change that widens its power (a new connection or scope, a different acting
 identity, a new machine, new secrets, a production deploy step); other edits and resumes apply and are recorded.
-Pausing never needs a card. An unattended run reaches these tools only when its step names them, and a change that
+Pausing never needs a card; delete_trigger always does, because deleting cannot be undone. An unattended run reaches these tools only when its step names them, and a change that
 needs a card is refused there. Do not bypass approval through the CLI, HTTP or a script. To change several
 activations, call the tools together in ONE turn: every card the turn needs is raised at once as one batch, which the
 owner approves in one click (or one by one), instead of one card per turn. Enabling says AS WHOM and WHERE:
 their project, the machine whose tools the runs use, and for an integration trigger which of their connected
 accounts it listens through. One declaration can have many activations (one per user or project).
+When the connection it needs does not exist yet, call propose_connection (provider, scope, reason): the owner connects
+it in Reliant's connection dialog from an approval card, and you get back only its status and connection id, never
+the credential.
 
 ```yaml
 name: triage-new-issues
@@ -432,8 +435,8 @@ test its filter and inputs with `cel_eval` and its graph with `run_scenario` →
 **When the workflow is ready**, say it is saved and validated. If asked to activate it in an interactive chat,
 use create_trigger_activation with its declared trigger name, typed params, project_id, explicit machine_id (or
 no_machine) and connection_id. The approval card shows the resolved workflow, identity, machine and privileges.
-Use update_trigger_activation to re-point an existing activation, enable_trigger to resume, and pause_trigger
-to pause. Never claim success before approval and a successful tool result. list_triggers shows the result and health.
+Use update_trigger_activation to re-point an existing activation, enable_trigger to resume, pause_trigger
+to pause, and delete_trigger to remove one for good. Never claim success before approval and a successful tool result. list_triggers shows the result and health.
 The app remains an alternative: **Workflows → Library → open the workflow → Enable** turns on all declared triggers.
 Unattended runs are refused: they cannot grant themselves standing privileges.
 

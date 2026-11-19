@@ -1,11 +1,13 @@
 # Approval-backed activation management
 
 Agents can load `create_trigger_activation`, `update_trigger_activation`,
-`enable_trigger`, and `pause_trigger` in an interactive orchestrator-tier chat.
+`enable_trigger`, `pause_trigger` and `delete_trigger` in an interactive orchestrator-tier chat.
 Creation names a workflow and one declared trigger, a project, an explicit
 `machine_id` (daemon ID) or `no_machine`, typed `params`, and a connection.
 Updates preserve omitted fields; a supplied params map replaces the map.
-Enable and pause accept only `trigger_id`.
+Enable, pause and delete accept only `trigger_id`. Delete calls the same
+`DeleteTrigger` RPC as `reliant trigger delete` and always needs a card, whatever
+the owner's automation-approvals setting (`automationpolicy.OperationDelete`).
 
 The worker's existing tool factory and TriggerService perform the work. A
 preview activity uses the app's definition/setup/match/access validators and

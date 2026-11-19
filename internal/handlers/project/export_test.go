@@ -14,6 +14,10 @@ func SetGitCheckBudget(t *testing.T, d time.Duration) {
 	t.Cleanup(func() { gitCheckBudget = prev })
 }
 
+// WaitForPurges blocks until every immediate purge s started after its
+// request returned has finished.
+func (s *Service) WaitForPurges() { s.purges.Wait() }
+
 // SetMoveWait shrinks how long MoveProjectToOrg waits for a move's saga, and
 // how often it looks, for one test. Not parallel-safe: package state.
 func SetMoveWait(t *testing.T, wait, poll time.Duration) {

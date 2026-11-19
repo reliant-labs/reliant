@@ -53,6 +53,8 @@ type (
 	CompactChatRequest                       = sdk.CompactChatRequest
 	CompactChatResponse                      = sdk.CompactChatResponse
 	ConfigScope                              = sdk.ConfigScope
+	ConnectionProposal                       = sdk.ConnectionProposal
+	ConnectionProposalScope                  = sdk.ConnectionProposalScope
 	ConnectorPolicy                          = sdk.ConnectorPolicy
 	ContentBlock                             = sdk.ContentBlock
 	ContentBlockBody                         = sdk.ContentBlockBody
@@ -326,6 +328,7 @@ type (
 	RunNodeExecution                         = sdk.RunNodeExecution
 	RunNowRequest                            = sdk.RunNowRequest
 	RunNowResponse                           = sdk.RunNowResponse
+	RunOutcome                               = sdk.RunOutcome
 	ScheduleSource                           = sdk.ScheduleSource
 	SearchChatsRequest                       = sdk.SearchChatsRequest
 	SearchChatsResponse                      = sdk.SearchChatsResponse
@@ -520,6 +523,9 @@ const (
 	ConfigScope_CONFIG_SCOPE_PROJECT                                           = sdk.ConfigScope_CONFIG_SCOPE_PROJECT
 	ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL                                     = sdk.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL
 	ConfigScope_CONFIG_SCOPE_UNSPECIFIED                                       = sdk.ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_ORG                      = sdk.ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_ORG
+	ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_PERSONAL                 = sdk.ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_PERSONAL
+	ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED              = sdk.ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED
 	ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT                               = sdk.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT
 	ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE                         = sdk.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE
 	ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE                                  = sdk.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE
@@ -604,6 +610,10 @@ const (
 	RunDisplayState_RUN_DISPLAY_STATE_RUNNING                                  = sdk.RunDisplayState_RUN_DISPLAY_STATE_RUNNING
 	RunDisplayState_RUN_DISPLAY_STATE_UNSPECIFIED                              = sdk.RunDisplayState_RUN_DISPLAY_STATE_UNSPECIFIED
 	RunDisplayState_RUN_DISPLAY_STATE_WAITING_FOR_MACHINE                      = sdk.RunDisplayState_RUN_DISPLAY_STATE_WAITING_FOR_MACHINE
+	RunOutcome_RUN_OUTCOME_FAILED                                              = sdk.RunOutcome_RUN_OUTCOME_FAILED
+	RunOutcome_RUN_OUTCOME_FAILURE_HANDLED                                     = sdk.RunOutcome_RUN_OUTCOME_FAILURE_HANDLED
+	RunOutcome_RUN_OUTCOME_SUCCEEDED                                           = sdk.RunOutcome_RUN_OUTCOME_SUCCEEDED
+	RunOutcome_RUN_OUTCOME_UNSPECIFIED                                         = sdk.RunOutcome_RUN_OUTCOME_UNSPECIFIED
 	StreamingState_STREAMING_STATE_COMPLETE                                    = sdk.StreamingState_STREAMING_STATE_COMPLETE
 	StreamingState_STREAMING_STATE_FAILED                                      = sdk.StreamingState_STREAMING_STATE_FAILED
 	StreamingState_STREAMING_STATE_STREAMING                                   = sdk.StreamingState_STREAMING_STATE_STREAMING
@@ -714,6 +724,8 @@ var (
 	CleanupStorageOutcome_value          = sdk.CleanupStorageOutcome_value
 	ConfigScope_name                     = sdk.ConfigScope_name
 	ConfigScope_value                    = sdk.ConfigScope_value
+	ConnectionProposalScope_name         = sdk.ConnectionProposalScope_name
+	ConnectionProposalScope_value        = sdk.ConnectionProposalScope_value
 	ContentBlockType_name                = sdk.ContentBlockType_name
 	ContentBlockType_value               = sdk.ContentBlockType_value
 	DiskGuardState_name                  = sdk.DiskGuardState_name
@@ -755,6 +767,8 @@ var (
 	ResourceVisibility_value             = sdk.ResourceVisibility_value
 	RunDisplayState_name                 = sdk.RunDisplayState_name
 	RunDisplayState_value                = sdk.RunDisplayState_value
+	RunOutcome_name                      = sdk.RunOutcome_name
+	RunOutcome_value                     = sdk.RunOutcome_value
 	StreamingState_name                  = sdk.StreamingState_name
 	StreamingState_value                 = sdk.StreamingState_value
 	TerminalSessionEvent_EventType_name  = sdk.TerminalSessionEvent_EventType_name

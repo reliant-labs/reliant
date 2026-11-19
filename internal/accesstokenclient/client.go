@@ -7,14 +7,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptrace"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/observe"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
@@ -564,6 +568,60 @@ func (e *RPCError) Error() string {
 	return "accesstokenclient: control-plane " + e.Code + ": " + e.Message
 }
 
+// ErrorClass implements svcerr.Classed, so the log and span layers grade a
+// control-plane refusal by who must act on it, as control-plane itself did:
+// without it every RPCError was an unrecognised error, a server fault at
+// ERROR, even a refusal the user acts on.
+//
+// The codes control-plane answers for the user's state are user errors.
+// permission_denied, unauthenticated and invalid_argument are user errors only
+// with a reason: without one they are control-plane's internal-service door
+// refusing OUR bearer (middleware.RequireInternalService) or our request,
+// which is ours to fix. Any other code has no opinion, which svcerr reads as a
+// server fault.
+func (e *RPCError) ErrorClass() svcerr.Class {
+	switch e.Code {
+	case "canceled":
+		return svcerr.ClassCanceled
+	case "failed_precondition", "not_found", "already_exists", "out_of_range", "resource_exhausted":
+		return svcerr.ClassUser
+	case "permission_denied", "unauthenticated", "invalid_argument":
+		if e.Reason != "" {
+			return svcerr.ClassUser
+		}
+	}
+	return svcerr.ClassNone
+}
+
+// replayable are the methods with no side effect a second delivery could
+// repeat: the reads.
+//
+// net/http retries a request whose keep-alive connection turns out dead on its
+// first read (the peer closed or reset it while it sat in the pool) only when
+// the request is replayable, and a POST is not unless it carries an
+// idempotency key. Marking these lets that one-time blip retry on a fresh
+// connection instead of failing the call: in prod a stale connection's EOF or
+// "connection reset by peer" on ResolveOrgMembership failed a ListChats as
+// "could not resolve your default organization". The transport retries only a
+// REUSED connection, never a fresh one, so a real outage still fails fast.
+// call covers the case net/http leaves out, a dead connection that fails
+// after part of the request was written, with one retry under the same rule.
+//
+// A method belongs here ONLY if its server-side effect is read-only or
+// idempotent, because the server may have run the first delivery before the
+// connection died. Each entry was checked against control-plane's handler and
+// everything it calls (reliant#2915, "Answer to B1"): all five only read,
+// except Introspect's `last_used_at = NOW()`, throttled to one write a
+// minute, so a replay right after the first delivery changes nothing.
+// Adding a method needs the same evidence.
+var replayable = map[string]bool{
+	"Introspect":           true,
+	"ListForUser":          true,
+	"ResolveOrgMembership": true,
+	"ResolveGoneOrgs":      true,
+	"ResolveOrgPolicy":     true,
+}
+
 func (c *Client) call(ctx context.Context, method string, in, out any) error {
 	if c.baseURL == "" {
 		return errors.New("accesstokenclient: control-plane URL is not configured")
@@ -576,14 +634,19 @@ func (c *Client) call(ctx context.Context, method string, in, out any) error {
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+ServicePath+method, bytes.NewReader(payload))
-	if err != nil {
-		return err
+	resp, reused, err := c.post(ctx, method, bearer, payload)
+	if err != nil && replayable[method] && reused && retryableTransportError(ctx, err) {
+		// The pooled connection died under the request after part of it was
+		// written: net/http replays only a dead connection it wrote nothing to,
+		// or one that failed on the response's first read. A dead connection
+		// can fail on the write as well (EPIPE, ECONNRESET, or the transport
+		// closing it once its reader saw the peer's EOF) — most often when
+		// the headers go out in a write of their own, which net/http does for
+		// any body it cannot prove is in memory, as otelhttp's wrapper is.
+		// The method is replayable, so retry it once; a fresh connection
+		// that fails is an outage and is never retried.
+		resp, _, err = c.post(ctx, method, bearer, payload)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Connect-Protocol-Version", "1")
-	req.Header.Set("Authorization", "Bearer "+bearer)
-	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("accesstokenclient: %s: %w", method, err)
 	}
@@ -602,6 +665,41 @@ func (c *Client) call(ctx context.Context, method string, in, out any) error {
 		return fmt.Errorf("accesstokenclient: %s: decoding response: %w", method, err)
 	}
 	return nil
+}
+
+// post sends one request and reports whether the connection it last ran on
+// came from the pool, which is what makes a transport failure a stale
+// connection rather than an outage.
+func (c *Client) post(ctx context.Context, method, bearer string, payload []byte) (*http.Response, bool, error) {
+	var reused atomic.Bool
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) { reused.Store(info.Reused) },
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+ServicePath+method, bytes.NewReader(payload))
+	if err != nil {
+		return nil, false, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Connect-Protocol-Version", "1")
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	if replayable[method] {
+		// A nil value marks the request idempotent without sending the
+		// header (net/http's Transport documents this).
+		req.Header["X-Idempotency-Key"] = nil
+	}
+	resp, err := c.http.Do(req)
+	return resp, reused.Load(), err
+}
+
+// retryableTransportError reports whether a failed Do is a dead connection
+// worth one more attempt: not the caller giving up, and not a timeout, which
+// a retry would only double.
+func retryableTransportError(ctx context.Context, err error) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	var netErr net.Error
+	return !errors.As(err, &netErr) || !netErr.Timeout()
 }
 
 func scopeStrings(scopes []fat.Scope) []string {

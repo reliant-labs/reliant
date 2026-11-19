@@ -320,6 +320,9 @@ load_selection() {
   jq -e . "$run_plan" >/dev/null || return 1
   gofull=$(j .go.full) ngo=$(j '.go.packages|length') ndef=$(j '.go.deferred|length') webfull=$(j .web.full) nweb=$(j '.web.tests|length')
   elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full) webdemo=$(j '.web_demo.full // false')
+  # The renderer's release build (tools/test-affected's web-build lane): a
+  # dependency, lockfile or vite config change (reliant#2850).
+  webbuild=$(j '.web_build.full // false')
   hooks_only=$(j '.forge_generate.hooks_only // false') hooks=$(j '(.forge_generate.hooks // []) | join(" ")')
   [ "$regen" = 1 ] && { fgen=true; hooks_only=false; }
   files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
@@ -328,7 +331,7 @@ load_selection() {
   if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || echo "$files" | grep -q '^frontends/web/'; then typecheck=true; fi
 }
 load_selection || exit 1
-notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo "FULL ($nweb reached file(s))" || echo "$nweb file(s)"); typecheck $typecheck; demo-build $webdemo; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
+notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo "FULL ($nweb reached file(s))" || echo "$nweb file(s)"); typecheck $typecheck; demo-build $webdemo; web-build $webbuild; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
 
 # ── npm installs a selected lane needs ────────────────────────────────────
 # npm_install <dir>: npm ci in <dir> unless its install is current; pnpm's
@@ -359,7 +362,7 @@ npm_install() {
 prepare_dependencies() {
   local d p
   local -a need=() npm_pids=()
-  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ] || [ "$webdemo" = true ]; then need+=(. frontends/web); fi
+  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ] || [ "$webdemo" = true ] || [ "$webbuild" = true ]; then need+=(. frontends/web); fi
   if [ "$elec" = true ]; then need+=(. electron); fi
   if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
   for d in $(printf '%s\n' ${need[@]+"${need[@]}"} | sort -u); do
@@ -529,6 +532,11 @@ if [ "$fail" = 0 ]; then
   fi
   if [ "$webdemo" = true ]; then
     phase demo demo_build & pids+=($!)
+  fi
+  # The renderer's release bundle: what vitest and tsc -b cannot judge, a
+  # dependency the bundler refuses (#2829's `node:module`, reliant#2850).
+  if [ "$webbuild" = true ]; then
+    phase webbuild scripts/web-release-build.sh & pids+=($!)
   fi
   # The changed files' directories, minus nested Go modules (sdk/go): see
   # scripts/lint-scope.sh and its self-test, scripts/test-lint-scope.sh.

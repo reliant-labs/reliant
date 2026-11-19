@@ -62,6 +62,89 @@ func GetProjectMachineCatalog(ctx context.Context, db orm.Context, projectID, da
 	return &row, nil
 }
 
+// A row runs to megabytes: workflows_json alone averaged 325 kB compressed in
+// prod (2026-11-18, up to 616 kB), and every read of a TOASTed column
+// decompresses and ships all of it. The reads below each select only the
+// column their caller uses, so reading a machine's presets, or when it last
+// pushed, no longer moves its workflows too. Before them, ListInbox read the
+// whole catalog row twice per call (once for the workflows, once for the
+// presets), 600–720 ms each in trace ed2301a0….
+
+// GetProjectMachineWorkflowsJSON reads one machine's synced workflows of a
+// project and nothing else of its row. found is false when that machine has
+// synced none.
+func GetProjectMachineWorkflowsJSON(ctx context.Context, db orm.Context, projectID, daemonID string) (workflows *string, found bool, err error) {
+	return machineCatalogColumn(ctx, db, `SELECT workflows_json FROM project_machine_catalogs WHERE project_id = $1 AND daemon_id = $2`,
+		"workflows", projectID, daemonID)
+}
+
+// GetProjectMachinePresetsJSON is GetProjectMachineWorkflowsJSON for presets.
+func GetProjectMachinePresetsJSON(ctx context.Context, db orm.Context, projectID, daemonID string) (presets *string, found bool, err error) {
+	return machineCatalogColumn(ctx, db, `SELECT presets_json FROM project_machine_catalogs WHERE project_id = $1 AND daemon_id = $2`,
+		"presets", projectID, daemonID)
+}
+
+func machineCatalogColumn(ctx context.Context, db orm.Context, query, what, projectID, daemonID string) (*string, bool, error) {
+	var v *string
+	err := db.QueryRow(ctx, query, projectID, daemonID).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to read machine %s's %s of project %s: %w", daemonID, what, projectID, err)
+	}
+	return v, true, nil
+}
+
+// GetProjectMachineCatalogPushedAt is when one machine last pushed its
+// catalog of a project; found is false when it never has.
+func GetProjectMachineCatalogPushedAt(ctx context.Context, db orm.Context, projectID, daemonID string) (pushedAt time.Time, found bool, err error) {
+	err = db.QueryRow(ctx, `SELECT pushed_at FROM project_machine_catalogs WHERE project_id = $1 AND daemon_id = $2`,
+		projectID, daemonID).Scan(&pushedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("failed to read when machine %s last pushed project %s: %w", daemonID, projectID, err)
+	}
+	return pushedAt, true, nil
+}
+
+// MachineWorkflowFiles is what is known of one machine's workflow files of a
+// project: the workflows it synced, those it has removed, and the git state
+// it synced them from. ListProjectMachineWorkflowFiles reads them.
+type MachineWorkflowFiles struct {
+	DaemonID       string
+	WorkflowsJSON  *string
+	RemovedJSON    *string
+	RepoStatesJSON *string
+}
+
+// ListProjectMachineWorkflowFiles reads every machine's workflow files of a
+// project, ordered by daemon id: in one read what saying where a workflow
+// lives needs (db.Repo.WorkflowSourceDiagnostic, ProjectWorkflowProvenance),
+// which read every machine's whole catalog twice before.
+func ListProjectMachineWorkflowFiles(ctx context.Context, db orm.Context, projectID string) ([]*MachineWorkflowFiles, error) {
+	rows, err := db.Query(ctx, `SELECT daemon_id, workflows_json, removed_json, repo_states_json
+FROM project_machine_catalogs WHERE project_id = $1 ORDER BY daemon_id`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list machine workflow files of project %s: %w", projectID, err)
+	}
+	defer rows.Close()
+	var out []*MachineWorkflowFiles
+	for rows.Next() {
+		var row MachineWorkflowFiles
+		if err := rows.Scan(&row.DaemonID, &row.WorkflowsJSON, &row.RemovedJSON, &row.RepoStatesJSON); err != nil {
+			return nil, fmt.Errorf("failed to scan machine workflow files of project %s: %w", projectID, err)
+		}
+		out = append(out, &row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to list machine workflow files of project %s: %w", projectID, err)
+	}
+	return out, nil
+}
+
 // ListProjectMachineCatalogs reads every machine's catalog of a project,
 // ordered by daemon id.
 func ListProjectMachineCatalogs(ctx context.Context, db orm.Context, projectID string) ([]*ProjectMachineCatalog, error) {

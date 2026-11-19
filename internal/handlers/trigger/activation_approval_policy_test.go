@@ -182,3 +182,43 @@ func TestAgentActivationApprovalModes(t *testing.T) {
 	_, err = env.svc.ManageActivation(unattended, env.userID, tools.ToolPauseTrigger, id, "")
 	require.NoError(t, err)
 }
+
+// delete_trigger always needs a card, even under never, is refused unattended,
+// and with its card deletes through the same RPC as `reliant trigger delete`.
+func TestAgentActivationDeleteAlwaysNeedsCard(t *testing.T) {
+	testkit.Slow(t, "DB-backed activation approval policy")
+	env := setupTriggerTest(t)
+	env.svc.deps.ControlPlane = &fakeControlPlaneClient{}
+	env.saveWorkflow(t, "triage", declaringWorkflowYAML)
+	machine := env.daemonID
+	message := "Run nightly checks"
+	create := tools.ActivationParams{Name: "nightly", Workflow: "triage", WorkflowTrigger: "nightly", ProjectID: env.projectID, MachineID: &machine, Message: &message}
+	env.setApprovalMode(t, nil, automationpolicy.ApprovalNever)
+	created, err := env.svc.ManageActivation(env.ctx, env.userID, tools.ToolCreateTriggerActivation, create, "")
+	require.NoError(t, err)
+
+	id := tools.ActivationParams{TriggerID: created.ID}
+	_, err = env.svc.PrepareActivation(env.ctx, env.userID, tools.ToolDeleteTrigger, tools.ActivationParams{TriggerID: created.ID, Name: "x"})
+	require.ErrorContains(t, err, "delete_trigger only accepts trigger_id")
+	card, err := env.svc.PrepareActivation(env.ctx, env.userID, tools.ToolDeleteTrigger, id)
+	require.NoError(t, err)
+	require.True(t, card.CardRequired, "a delete needs a card even under never")
+	require.Contains(t, card.Title, "Delete activation")
+	require.Contains(t, card.Title, created.ID)
+	require.NotContains(t, card.Title, "nightly checks", "the seed message is withheld")
+
+	_, err = env.svc.ManageActivation(env.ctx, env.userID, tools.ToolDeleteTrigger, id, "")
+	require.ErrorContains(t, err, tools.DeleteApprovalRequiredMessage)
+	unattended := automationpolicy.WithExecution(env.ctx, automationpolicy.Execution{Unattended: true})
+	_, err = env.svc.ManageActivation(unattended, env.userID, tools.ToolDeleteTrigger, id, card.Hash)
+	require.ErrorContains(t, err, automationpolicy.Refusal())
+	_, err = env.repo.GetTrigger(env.ctx, created.ID)
+	require.NoError(t, err, "nothing was deleted without a card")
+
+	deleted, err := env.svc.ManageActivation(env.ctx, env.userID, tools.ToolDeleteTrigger, id, card.Hash)
+	require.NoError(t, err)
+	require.Equal(t, created.ID, deleted.ID)
+	require.Equal(t, "nightly", deleted.Name)
+	_, err = env.repo.GetTrigger(env.ctx, created.ID)
+	require.Error(t, err, "the activation is gone")
+}

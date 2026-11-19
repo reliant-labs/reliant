@@ -118,6 +118,7 @@ const (
 	ToolUpdateTriggerActivation = "update_trigger_activation"
 	ToolEnableTrigger           = "enable_trigger"
 	ToolPauseTrigger            = "pause_trigger"
+	ToolDeleteTrigger           = "delete_trigger"
 	ToolListTriggerEvents       = "list_trigger_events"
 
 	// Integration discovery tools
@@ -137,6 +138,9 @@ const (
 	// The user's own machines: list them; start, stop or resize one.
 	ToolListMachines  = "list_machines"
 	ToolManageMachine = "manage_machine"
+
+	// Ask a person to connect an integration, on an approval card.
+	ToolProposeConnection = "propose_connection"
 )
 
 // AllToolNames returns all known tool names for validation.
@@ -144,6 +148,7 @@ var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
 	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
 	ToolWaitForMachine, ToolListMachines, ToolManageMachine,
+	ToolProposeConnection,
 	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,
@@ -170,7 +175,7 @@ var AllToolNames = []string{
 	ToolListWorkflows, ToolGetWorkflow, ToolGetWorkflowSuggestions, ToolListPresets, ToolGetPreset, ToolGetSchema, ToolGetCELRef, ToolCELEval,
 	// Trigger tools
 	ToolListTriggers, ToolFireTrigger, ToolListTriggerEvents,
-	ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger,
+	ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger, ToolDeleteTrigger,
 	// Integration discovery
 	ToolSearchIntegrations, ToolGetIntegrationSchema,
 	// Integration manifests: every exposed action in internal/integrations/catalog.

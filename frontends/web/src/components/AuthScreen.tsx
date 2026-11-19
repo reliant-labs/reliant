@@ -10,6 +10,7 @@ import { isSafeReturnTo } from '@/lib/returnTo'
 import { isClaimReturnTo } from '@/lib/claimLink'
 import { describeAuthError } from '@/lib/authErrors'
 import { trackEvent } from '@/lib/analytics'
+import { isForgeShell } from '@/lib/shell'
 import { AuthLayout, AuthHeader, AuthError, AuthDivider, AuthLegalLinks } from './AuthLayout'
 
 /**
@@ -190,7 +191,9 @@ export function AuthScreen() {
     setError(null)
     try {
       await signInAnonymously()
-      navigate({ to: '/', search: {} })
+      // The forge host has no onboarding to start: a guest goes to Apps, whose
+      // empty state (ForgeFirstRun) is the no-account deploy.
+      navigate({ to: isForgeShell() ? '/apps' : '/', search: {} })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to continue as guest')
       setLoading(false)

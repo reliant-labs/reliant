@@ -21345,6 +21345,13 @@ reliant trigger enable <id-or-name>
 
 List a trigger's firings, newest first
 
+Prints one page: at most --limit firings.
+
+--outcome keeps only firings with that outcome: pending, launched, skipped, failed.
+Repeat it, or separate values with commas, to keep several. The server filters
+before it applies --limit, so "--outcome pending --limit 20" is the 20 newest
+pending firings however long the trigger's history is.
+
 ```
 reliant trigger events <id-or-name> [flags]
 ```
@@ -21354,6 +21361,7 @@ reliant trigger events <id-or-name> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--limit` | `int32` | `0` | Maximum firings to return (0 applies the server default) |
+| `--outcome` | `stringSlice` | `[]` | Only firings with this outcome: pending, launched, skipped, failed (repeatable or comma-separated) |
 
 ---
 

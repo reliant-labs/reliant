@@ -863,6 +863,17 @@ func handleWorktreeForceCleanup(ctx context.Context, payload []byte) ([]byte, er
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
+	// Everything that touches a registration or a checkout's directory runs
+	// under the repository's add lock, exclusive: an add in flight may be
+	// making this very checkout, and removing its directory or registration
+	// mid-checkout breaks it (worktreereclaim/addlock.go). Held through the
+	// prune, which therefore must not take it again.
+	release, err := worktreereclaim.LockWorktreeRemoval(ctx, req.ProjectPath)
+	if err != nil {
+		return json.Marshal(worktreeForceCleanupResponse{Success: false})
+	}
+	defer release()
+
 	// Check if git worktree path exists and remove it
 	if _, err := os.Stat(req.WorktreePath); err == nil {
 		stopProcessesInRemovedWorkspace(req.WorktreePath)
@@ -873,10 +884,8 @@ func handleWorktreeForceCleanup(ctx context.Context, payload []byte) ([]byte, er
 		_ = os.RemoveAll(req.WorktreePath)
 	}
 
-	// Prune stale worktrees
-	pruneCmd := exec.CommandContext(ctx, "git", "worktree", "prune")
-	pruneCmd.Dir = req.ProjectPath
-	_, _ = pruneCmd.CombinedOutput()
+	// Prune stale worktrees.
+	_ = worktreereclaim.PruneWorktreesLocked(ctx, req.ProjectPath)
 
 	// Check if branch exists and delete it
 	branchCheckCmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", req.Branch)
@@ -908,6 +917,15 @@ func handleWorktreeDeleteDirectory(ctx context.Context, payload []byte) ([]byte,
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+
+	// Under the repository's add lock, exclusive, as force_cleanup: never
+	// beside an add that may be making this checkout. Not taken (ctx ended
+	// first), nothing is removed and the caller is told so.
+	release, err := worktreereclaim.LockWorktreeRemoval(ctx, req.ProjectPath)
+	if err != nil {
+		return json.Marshal(worktreeDeleteDirectoryResponse{Deleted: false})
+	}
+	defer release()
 
 	stopProcessesInRemovedWorkspace(req.WorktreePath)
 	worktreereclaim.UnlockForRemoval(ctx, req.WorktreePath)
@@ -1298,8 +1316,10 @@ func handleWorktreePrune(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 		// Plain prune only: it removes git's records of directories that are
 		// already gone. No --expire, and nothing that touches a directory.
-		if out, err := exec.CommandContext(ctx, "git", "-C", repo.Path, "worktree", "prune").CombinedOutput(); err != nil {
-			resp.Errors = append(resp.Errors, fmt.Sprintf("git worktree prune in %s: %s", repo.Path, strings.TrimSpace(string(out))))
+		// It waits for adds in flight: a prune beside one deletes the
+		// registration it is making (worktreereclaim/addlock.go).
+		if err := worktreereclaim.PruneWorktrees(ctx, repo.Path, true); err != nil {
+			resp.Errors = append(resp.Errors, fmt.Sprintf("git worktree prune in %s: %v", repo.Path, err))
 			continue
 		}
 		after, err := listRepoLinkedWorktrees(ctx, repo)
@@ -1483,9 +1503,19 @@ func recreateWorktree(ctx context.Context, req worktreeRecreateRequest) worktree
 		}
 		// A branch that exists only as a remote-tracking ref is created
 		// locally by git's own DWIM, tracking that remote (branchAvailable).
+		// Under the repository's add lock, shared, as handleWorktreeCreate's
+		// add: no prune runs while git makes the registration.
+		releaseAdd, err := worktreereclaim.LockWorktreeAdd(ctx, repo.RepoPath)
+		if err != nil {
+			rollback()
+			resp.Error = fmt.Sprintf("failed to recreate worktree: %v", err)
+			return resp
+		}
 		add := exec.CommandContext(ctx, "git", "worktree", "add", dest, firstNonEmptyStr(repo.Branch, req.Branch))
 		add.Dir = repo.RepoPath
-		if output, err := add.CombinedOutput(); err != nil {
+		output, err := add.CombinedOutput()
+		releaseAdd()
+		if err != nil {
 			rollback()
 			resp.Output = string(output)
 			resp.Error = fmt.Sprintf("failed to recreate worktree: %s", strings.TrimSpace(string(output)))

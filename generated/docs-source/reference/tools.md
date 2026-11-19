@@ -42,9 +42,9 @@ Tools are organized by tags for filtering:
 - [Planning & Task Management](#planning--task-management) (10 tools)
 - [File Operations](#file-operations) (8 tools)
 - [Information Retrieval](#information-retrieval) (6 tools)
-- [Workflow Management](#workflow-management) (27 tools)
+- [Workflow Management](#workflow-management) (28 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (72 tools)
+- [Other Tools](#other-tools) (73 tools)
 
 ---
 
@@ -1339,6 +1339,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`create_trigger_activation`](#create_trigger_activation) | workflow | Manage a declared workflow trigger activation (create_trigger_activation). Uses the app's validat... |
 | [`create_workflow`](#create_workflow) | workflow | Create a new workflow. |
 | [`delete_scenario`](#delete_scenario) | workflow | Delete a test scenario. |
+| [`delete_trigger`](#delete_trigger) | workflow | Permanently delete a declared workflow trigger activation (delete_trigger): its schedule stops an... |
 | [`draft_automation`](#draft_automation) | workflow, readonly | Draft an automation for the user to review: a schedule, webhook, integration event (a GitHub pull... |
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
 | [`edit_workflow`](#edit_workflow) | workflow | Make precise text replacements in the workflow YAML. |
@@ -1438,6 +1439,14 @@ Permanently removes the scenario from the workflow.
 
 Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.
+
+---
+
+### delete_trigger
+
+**Tags:** `workflow`
+
+Permanently delete a declared workflow trigger activation (delete_trigger): its schedule stops and the activation and its configuration history are removed, the same as `reliant trigger delete`. Accepts only trigger_id, from list_triggers; never guess IDs. Deleting cannot be undone, so it always needs the owner's approval card in an interactive chat, whatever their automation-approvals setting, and is refused in an unattended run. To stop an activation without losing it, use pause_trigger.
 
 ---
 
@@ -1720,7 +1729,7 @@ Use after fire_trigger to see whether a firing launched, skipped or failed; acce
 
 List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's machine (name, id and current registry state) and health. Failed launched runs include the failing node's error.
 
-Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; every firing is refused and recorded as failed until the workflow is fixed, and pause_trigger turns it off). A DEGRADED detail that ends "N later run(s) succeeded" is a past failure the trigger has recovered from.
+Narrow by workflow to see a workflow's activations, or by health (UNHEALTHY for everything that needs attention). Unhealthy triggers are listed first. Every trigger is listed unless you page: pass limit (triggers per page), and a page that has more ends with a next_page_token to pass back as page_token. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; every firing is refused and recorded as failed until the workflow is fixed, and pause_trigger turns it off). A DEGRADED detail that ends "N later run(s) succeeded" is a past failure the trigger has recovered from.
 
 ---
 
@@ -2181,6 +2190,7 @@ _Miscellaneous tools and utilities._
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
 | [`manage_machine`](#manage_machine) | - | Start, stop or resize one of the user's own machines (from list_machines), exactly as Settings ->... |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
+| [`propose_connection`](#propose_connection) | - | Ask the person to connect an integration you need: GitHub, Slack, Gmail, Twilio, or an HTTP API (... |
 | [`report_bug`](#report_bug) | readonly, coding:plan, coding:default | Report a defect in Reliant itself, or in forge, to the Reliant engineering team. One call files i... |
 | [`request_machine`](#request_machine) | - | Offer the user the choice to connect a machine, when the task genuinely needs their computer. |
 | [`send_to_run`](#send_to_run) | runs | Send a message to another top-level run that is still going, as if the user had typed it into tha... |
@@ -2729,6 +2739,19 @@ Writes and updates project metadata YAML file
 
 ---
 
+### propose_connection
+
+Ask the person to connect an integration you need: GitHub, Slack, Gmail, Twilio, or an HTTP API (api key or username and password). It raises an approval card in the chat; the person completes the sign-in or enters the key in Reliant's connection dialog, and owns the connection.
+
+You never see the credential. The result is only a status — connected (with the connection's id and name), declined, or not completed — and the provider. Use the connection id wherever a connection is asked for.
+
+- scope: personal (the person's own) or org (their organization's; only its owners and admins may make one). Omit it to let the person choose.
+- reason: say what you need it for; it is shown on the card.
+
+Propose a connection only when a step needs one that is missing (search_integrations shows what is connected). Do not ask again after the person declines unless they ask you to; an identical proposal already waiting, or declined in the last few minutes, is refused. On Reliant hosting GitHub is usually connected through the Reliant GitHub App: propose github only when a saved GitHub connection is needed. Interactive chats only.
+
+---
+
 ### report_bug
 
 **Tags:** `readonly`, `coding:plan`, `coding:default`
@@ -3118,9 +3141,11 @@ ACTIONS:
    Returns the worktree id, the workspace root path, the branch, and the path of each repository's checkout.
    The name must be unique among the project's live worktrees; an archived (deleted) worktree's name can be reused.
 
-2. list - List the project's worktrees (any state: creating, active, failed)
+2. list - List the project's worktrees (any state: creating, active, failed), most recently active first. Without limit or page_token it lists every one.
+   Optional: filter (text in the name or branch), archived (also list archived ones), limit and page_token (to page: limit per page, default 50).
+   A paged result that has more ends with a next_page_token: pass it back as page_token, with the same filter, archived and limit.
 
-3. get - Required: name. Details, paths and owner of one worktree
+3. get - Required: name. Details, paths and owner of one worktree, and the chats bound to it with their state
 
 4. delete - Required: name. Archives the worktree; its directory is removed later, only when it is clean, its work is pushed or already merged, and it is unused. Refuses your own current worktree and any worktree a chat is using.
 
