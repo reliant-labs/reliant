@@ -1,0 +1,227 @@
+# ── Go build outputs ──
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.html
+coverage/
+vendor/
+
+# Go profiling
+*.prof
+*.pprof
+
+# ── Go build cache — a project-local GOCACHE ──
+# GOCACHE is normally per-user (~/Library/Caches/go-build), but an agent or CI
+# job working in parallel worktrees points it at $WORKTREE/.gocache so
+# concurrent builds don't contend on one shared cache. That makes tens of
+# thousands of files appear inside the project, which `git add -A` would
+# otherwise sweep into a commit.
+#
+# `forge lint` does NOT depend on this rule: its generated-file scan skips any
+# directory carrying Go's own GOCACHE sentinel README, whatever it is named
+# (see internal/commitpolicy.IsGoBuildCacheDir). A cache entry is a verbatim
+# copy of compiler input, generated Go source included, so without that skip
+# every entry looked like generated code that had been wrongly ignored.
+.gocache/
+
+# Go workspace — local, per-developer dev-loop wiring; NEVER committed.
+# The root go.mod already carries `replace <module>/gen => ./gen`, so a
+# plain `go build ./...` resolves root↔gen with no go.work at all. A
+# committed go.work is therefore both redundant AND a pollution hazard:
+# the moment someone adds a sibling `use ../forge` (to build against a
+# local, unpublished forge), that absolute/relative path breaks every
+# other clone and CI. Keep it local. `forge new` scaffolds a starter
+# go.work (`use ( . gen )`) for workspace mode on this machine — and
+# `forge project new --link-forge` also adds a `use <local-forge>` so the
+# project builds against your in-development forge checkout. Either way it
+# stays ignored. go.work.sum is a generated lock file.
+go.work
+go.work.sum
+
+# ── Dev web-runtime bridge — the npm twin of go.work above ──
+# A DEV build of forge writes an npm workspace ROOT at the project root
+# (package.json + .forge-link/<symlink>) that points this project's frontends
+# at a local @reliantlabs/forge-web-runtime checkout, so edits there are live
+# here with nothing published. A released forge never writes it.
+#
+# Each frontend's OWN package.json is tracked and keeps the published semver
+# range — the bridge redirects that requirement by workspace name, so no
+# machine-specific path is ever committed. These entries are anchored with a
+# leading "/" on purpose: a bare `package.json` would also ignore
+# frontends/*/package.json, which MUST stay tracked.
+/package.json
+/package-lock.json
+/node_modules/
+/.forge-link/
+
+# ── Node.js / Next.js ──
+node_modules/
+.next/
+.turbo/
+.vercel/
+*.tsbuildinfo
+
+# ── Generated code is COMMITTED ──
+#
+# gen/ (buf's Go stubs, gen/go.mod), every `*_gen.go`, the forge-generated
+# mocks, and each frontend's src/gen/ are checked in deliberately. Nothing here ignores them, and `forge lint` fails if a rule
+# anywhere in the project does.
+#
+# They used to be ignored on the reasoning that `forge generate` re-creates
+# them, so committing them was redundant. What that cost was far worse than
+# the duplication: a fresh clone or `git worktree add` did not compile until
+# someone ran codegen, so CI, every new contributor and every throwaway
+# worktree started from a broken tree — a scaffolded project's CI was red on
+# `undefined: UnauthenticatedProcedures` because pkg/middleware/*_gen.go was
+# ignored and no CI job regenerates. It also made generator upgrades
+# invisible: a forge bump that changes emitted code produced no diff to
+# review, and `forge ci verify-generated` (which diffs with `git status`)
+# cannot see an ignored file at all.
+#
+# The rule is that a checkout builds as-cloned, and regenerating is a no-op:
+# if `forge generate` produces a diff, commit it in the same change that
+# caused it.
+#
+# What is committed is what a COMPILER needs. A file only forge or tooling
+# reads is derived on demand and never committed: gen/forge_descriptor/ (the
+# services and rpcs extracted from proto/) is produced by whichever forge
+# command reads it. Committed, it conflicted between any two branches that
+# touched any proto.
+/gen/forge_descriptor/
+
+# ── Machine-local forge state (NEVER committed) ──
+#
+# .forge-kcl/ is where older forge versions copied their KCL module into the
+# project. forge now supplies `import forge` from the binary that is
+# rendering (docs: forge's ADR 0003), so nothing writes this directory any
+# more and `forge generate` deletes a leftover one. It stays ignored because
+# a committed copy pins one forge build's schemas into every clone and CI
+# checkout; `forge lint` fails if one is tracked.
+.forge-kcl/
+
+# Seed data materializes at RUNTIME (`forge db seed` / `forge env up`
+# auto-seed) — forge writes no seed files into the project. db/seeds/custom/
+# is your hand-authored demo-data overlay and IS committed. Legacy
+# auto-generated db/seeds/*.sql / db/fixtures/ from older forge versions can
+# be deleted.
+
+# ── IDE ──
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Secrets ──
+# secrets/<env>.yaml is the FileSecrets store deploy/kcl/<env>/main.k
+# declares: a flat YAML map of env-var name to value. forge resolves
+# `sensitive` config fields (DATABASE_URL, …) from it for host runs and for
+# the local-cluster Secret it renders. It must never reach git.
+#
+# Set values with `forge secret set <env> <KEY>` (or hand-edit the YAML). A
+# value only reaches a service that DECLARES it via EnvVar.secret_ref, so a
+# key nothing references is inert; non-secret config belongs in
+# deploy/kcl/<env>/config.k where it stays version-controlled.
+secrets/
+
+# ── Environment ──
+# forge projects do NOT use .env files: their contents bypassed KCL (the
+# whole file was injected into every host service), which is what pulled
+# config out of version control. Ignored so a stray one can never be
+# committed; `forge lint` fails on any that appear.
+.env
+.env.*
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── Logs ──
+*.log
+
+# ── Local data / state ──
+# Never commit on-disk databases, Docker volumes, or temp dirs.
+data/
+tmp/
+*.air.toml.bak
+
+# ── Forge internal state ──
+# .forge/ contains debug-session.json, caches, .forge/state/build-<env>.json
+# (handoff from `forge env build --push` to `forge env deploy`), transient side
+# renders (.forge/render/ holds `--explain-drift` diff inputs), and
+# other runtime state. Generated files certify THEMSELVES (each carries
+# an embedded `forge:hash` marker), so there is no generated-state
+# manifest to commit. Three exceptions are negated back in and MUST be
+# committed when they exist:
+#   disowned.json   — one-way ownership transfers (`forge disown`):
+#                     path + reason + timestamp. Travels with the repo
+#                     so forge never regenerates a disowned file in any
+#                     clone or worktree.
+#   hashes/         — one render-hash certificate per generated file
+#                     whose format cannot carry an embedded marker
+#                     (JSON outputs only), at the file's path + .sha256.
+#                     One file each, so parallel branches never conflict
+#                     in a shared manifest.
+#   scaffolded/     — the scaffold-once BIRTH LEDGER, one entry file per
+#                     path: every "yours" file forge has ever scaffolded
+#                     here (one file each, so parallel branches never
+#                     conflict in a shared ledger). It is what makes
+#                     DELETING a scaffold stick — without it, an absent
+#                     file is indistinguishable from one never written
+#                     and the next `forge generate` hands it back. Must
+#                     travel with the repo: a teammate's fresh clone has
+#                     to inherit "we removed that file", not re-acquire
+#                     it on their first generate. To want one back:
+#                     `forge project rescaffold <path>`.
+#   releases/       — the release ledger (`forge env build --release`,
+#   promotions/       `forge env deploy <env> <version>`): what each version
+#                     IS and which version each environment runs, as an
+#                     append-only log
+#                     per env. Only for envs that keep their ledger in the
+#                     repo; an env declaring forge.ControlPlane keeps it on
+#                     the control plane instead.
+# Everything else under .forge/ is per-developer state and intentionally
+# excluded by the broad children rule below.
+#
+# NOTE: this must be `.forge/*` (children), not `.forge/` (the dir):
+# git cannot re-include a file whose parent DIRECTORY is excluded, so a
+# `.forge/` + `!.forge/<file>` pair would silently ignore the file and
+# it would never get committed. (Found the hard way in cp-forge — see
+# its .gitignore fork note.)
+.forge/*
+!.forge/disowned.json
+!.forge/hashes/
+!.forge/scaffolded/
+!.forge/releases/
+!.forge/releases/*.json
+!.forge/promotions/
+!.forge/promotions/*.jsonl
+
+# ── What NOT to ignore ──
+#
+# The following are scaffolded once by `forge new` and then owned by you.
+# `forge upgrade` uses checksum protection (not .gitignore) to detect and
+# preserve your edits. Commit them.
+#
+#   cmd/*.go            — entrypoints (package main)
+#   pkg/middleware/*.go  — non-generated middleware (scaffolded, user-owned)
+#   CHANGELOG.md         — project changelog
+#   docs/                — ADRs, runbook, SLO definitions
+#
+# The following encode shared project conventions for LLM-driven
+# development and are INTENTIONALLY committed:
+#
+#   .reliant/                           — forge-managed conventions, project metadata, skills
+#   AGENTS.md                           — user-owned project guide (every harness)
+#   CLAUDE.md / .claude/skills/forge/   — claude pointers (--harness claude)
+#   .cursorrules / .cursor/rules/       — cursor pointers (--harness cursor)
+#   .github/copilot-instructions.md     — copilot pointer (--harness copilot)
+#   .mcp.json                           — project-level MCP server config
+#   .mcp.json.example                   — documentation of opt-in MCP servers
+#
+# Do not add these to .gitignore. If you need to keep local-only overrides,
+# create a `.mcp.local.json` or similar and ignore that instead.

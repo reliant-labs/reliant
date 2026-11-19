@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package bad.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "example.com/bad/gen/bad/v1;badv1";
+
+service FirstService {
+  rpc Foo(FooRequest) returns (FooResponse) {}
+}
+
+service SecondService {
+  rpc Bar(BarRequest) returns (BarResponse) {}
+}
+
+message FooRequest {}
+message FooResponse {}
+message BarRequest {}
+message BarResponse {}

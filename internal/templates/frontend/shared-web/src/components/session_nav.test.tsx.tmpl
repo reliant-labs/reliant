@@ -1,0 +1,161 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// Pins what the header's user menu (./session_nav.tsx) shows and how it
+// behaves: the person's name and address rather than the issuer's subject
+// id, the theme as radio items inside the menu, and the keyboard contract of
+// a WAI-ARIA menu button. useAuth is stubbed: what the session endpoint
+// sends is the login broker's business, tested in forge.
+
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { SessionNav } from "./session_nav";
+
+import type { AuthContextValue } from "@/lib/auth/use-auth";
+
+const auth = vi.hoisted(() => ({ value: null as unknown as AuthContextValue }));
+vi.mock("@/lib/auth/use-auth", () => ({ useAuth: () => auth.value }));
+
+function signIn(identity: AuthContextValue["identity"]) {
+  auth.value = {
+    identity,
+    isAuthenticated: identity.authenticated,
+    isLoading: false,
+    refresh: vi.fn(async () => {}),
+    logout: vi.fn(async () => {}),
+  };
+}
+
+function trigger() {
+  return screen.getByRole("button", { name: /account menu/ });
+}
+
+async function openWithKeyboard() {
+  const button = trigger();
+  button.focus();
+  await act(async () => {
+    fireEvent.keyDown(button, { key: "ArrowDown" });
+  });
+  return screen.getByRole("menu");
+}
+
+beforeEach(() => {
+  // jsdom has no matchMedia; useTheme reads it for "system".
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+  window.localStorage.clear();
+  document.documentElement.removeAttribute("data-theme");
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe("SessionNav", () => {
+  it("names the person, never the subject id, when the session has a name", async () => {
+    signIn({
+      authenticated: true,
+      name: "Ada Lovelace",
+      email: "ada@example.com",
+      subject: "398437297967866622",
+    });
+    render(<SessionNav />);
+
+    expect(trigger().textContent).toContain("Ada Lovelace");
+    expect(trigger().textContent).toContain("AL");
+    const menu = await openWithKeyboard();
+    expect(menu.getAttribute("aria-label")).toBe("Signed in as Ada Lovelace, ada@example.com");
+    expect(document.body.textContent).toContain("ada@example.com");
+    expect(document.body.textContent).not.toContain("398437297967866622");
+  });
+
+  it("falls back to the address, and to the subject only when there is nothing else", async () => {
+    signIn({ authenticated: true, email: "jane.doe@example.com", subject: "42" });
+    render(<SessionNav />);
+    expect(trigger().textContent).toContain("jane.doe@example.com");
+    expect(trigger().textContent).toContain("JD");
+    cleanup();
+
+    signIn({ authenticated: true, subject: "398437297967866622" });
+    render(<SessionNav />);
+    expect(trigger().textContent).toContain("Signed in");
+    expect(trigger().textContent).not.toContain("398437297967866622");
+    await openWithKeyboard();
+    // The id is the small print inside the menu, where it tells two
+    // nameless accounts apart.
+    expect(document.body.textContent).toContain("398437297967866622");
+  });
+
+  it("is a menu button: arrows move, Escape closes back on the trigger", async () => {
+    signIn({ authenticated: true, name: "Ada Lovelace", email: "ada@example.com" });
+    render(<SessionNav />);
+    expect(trigger().getAttribute("aria-haspopup")).toBe("menu");
+
+    const menu = await openWithKeyboard();
+    expect(trigger().getAttribute("aria-expanded")).toBe("true");
+    const items = Array.from(menu.querySelectorAll<HTMLElement>('[role^="menuitem"]'));
+    expect(items.map((i) => i.textContent?.trim())).toEqual([
+      "Light",
+      "Dark",
+      "System",
+      "Sign out",
+    ]);
+    expect(document.activeElement).toBe(items[0]);
+
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items[1]);
+    fireEvent.keyDown(document.activeElement!, { key: "End" });
+    expect(document.activeElement).toBe(items[3]);
+
+    await act(async () => {
+      fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger());
+  });
+
+  it("holds the theme as radio items that apply, persist and keep the menu open", async () => {
+    signIn({ authenticated: true, name: "Ada Lovelace" });
+    render(<SessionNav />);
+    await openWithKeyboard();
+
+    const system = screen.getByRole("menuitemradio", { name: "System" });
+    expect(system.getAttribute("aria-checked")).toBe("true");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "Dark" }));
+    });
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(window.localStorage.getItem("forge-theme")).toBe("dark");
+    expect(screen.getByRole("menuitemradio", { name: "Dark" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(screen.getByRole("menu")).toBeTruthy();
+  });
+
+  it("signs out from the last item", async () => {
+    signIn({ authenticated: true, name: "Ada Lovelace" });
+    render(<SessionNav />);
+    await openWithKeyboard();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
+    });
+    expect(auth.value.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers only the compact theme toggle when signed out", async () => {
+    signIn({ authenticated: false });
+    render(<SessionNav />);
+    expect(screen.queryByRole("button", { name: /account menu/ })).toBeNull();
+    const toggle = screen.getByRole("button", { name: "Theme: System. Switch to Light" });
+    await act(async () => {
+      fireEvent.click(toggle);
+    });
+    expect(window.localStorage.getItem("forge-theme")).toBe("light");
+    expect(screen.getByRole("button", { name: "Theme: Light. Switch to Dark" })).toBeTruthy();
+  });
+});

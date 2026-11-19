@@ -1,0 +1,464 @@
+{
+  "ledger": "<ledger-home>/test-project",
+  "generated_at": "<generated_at>",
+  "latest_release": "v1.5.15",
+  "latest_release_created_at": "2026-09-10T13:53:22Z",
+  "releases": [
+    "v1.5.15",
+    "v1.4.0",
+    "v1.3.0"
+  ],
+  "images": [
+    "control-plane",
+    "internal-console",
+    "reliant",
+    "web"
+  ],
+  "environments": [
+    {
+      "env": "branchy",
+      "lifecycle": "",
+      "declared": true,
+      "ledger": "memory://promotions",
+      "kind": "promote",
+      "bound": true,
+      "release": "v9.9.9-branch",
+      "promoted_at": "2026-10-01T00:00:00Z",
+      "release_known": false,
+      "kube_context": "test-context",
+      "namespace": "test-ns",
+      "images": [
+        {
+          "image": "control-plane",
+          "digest": "sha256:6272616e63687900000000000000000000000000000000000000000000000000",
+          "state": "drift",
+          "running": "sha256:6161613135000000000000000000000000000000000000000000000000000000",
+          "detail": "declared sha256:6272616e63687900000000000000000000000000000000000000000000000000 but running sha256:6161613135000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "note": "could not render this environment to resolve where it runs: boom"
+    },
+    {
+      "env": "broken",
+      "lifecycle": "",
+      "declared": true,
+      "bound": false,
+      "release_known": false,
+      "images": [],
+      "note": "could not resolve this environment's release ledger: control plane https://cp.example.test: 401 unauthenticated",
+      "destination": "cluster",
+      "placements": [
+        {
+          "name": "api",
+          "kind": "workload",
+          "placement": "cluster",
+          "cluster": "gke-east",
+          "actuator": "hub"
+        },
+        {
+          "name": "site",
+          "kind": "frontend",
+          "placement": "bucket",
+          "actuator": "forge"
+        }
+      ]
+    },
+    {
+      "env": "cloud",
+      "lifecycle": "",
+      "declared": true,
+      "ledger": "memory://promotions",
+      "kind": "promote",
+      "bound": true,
+      "release": "20261014.042859-cd678a0d6531",
+      "promoted_at": "2026-10-14T05:00:00Z",
+      "release_known": true,
+      "git": {
+        "commit": "c-14",
+        "tag": "v2.0.0"
+      },
+      "release_created_at": "2026-10-14T04:28:59Z",
+      "lag": {
+        "latest_release": "20261014.042859-cd678a0d6531",
+        "current": true,
+        "releases_behind": 0
+      },
+      "images": [
+        {
+          "image": "web",
+          "digest": "sha256:6565653100000000000000000000000000000000000000000000000000000000",
+          "state": "unreachable",
+          "detail": "could not read the cluster: no forge.K8sCluster.cluster/namespace resolved for cloud (a host-only or compose env has no cluster to verify)"
+        }
+      ],
+      "destination": "hosted",
+      "control_plane_kind": "persistent",
+      "endpoint": "https://cp.example.test",
+      "environment_id": "env-123",
+      "verdict": "converged",
+      "workloads": [
+        {
+          "name": "web",
+          "tier": "workload",
+          "url": "https://web.example.test",
+          "hostname": "web.example.test",
+          "verdict": "converged",
+          "observed_state": "ready",
+          "observed_digest": "sha256:6565653100000000000000000000000000000000000000000000000000000000",
+          "desired_digest": "sha256:6565653100000000000000000000000000000000000000000000000000000000",
+          "domains": [
+            {
+              "domain": "www.example.test",
+              "state": "pending_dns",
+              "required_records": [
+                {
+                  "type": "CNAME",
+                  "name": "www",
+                  "value": "edge.example.test"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "placements": [
+        {
+          "name": "web",
+          "kind": "workload",
+          "placement": "hosted",
+          "actuator": "platform"
+        }
+      ],
+      "promotion_id": "prm-cloud-7",
+      "rollout_phase": "ROLLOUT_PHASE_SUCCEEDED"
+    },
+    {
+      "env": "cloud2",
+      "lifecycle": "",
+      "declared": true,
+      "ledger": "memory://promotions",
+      "kind": "promote",
+      "bound": true,
+      "release": "20261014.042859-cd678a0d6531",
+      "promoted_at": "2026-10-14T06:00:00Z",
+      "release_known": true,
+      "git": {
+        "commit": "c-14",
+        "tag": "v2.0.0"
+      },
+      "release_created_at": "2026-10-14T04:28:59Z",
+      "kube_context": "test-context",
+      "namespace": "test-ns",
+      "lag": {
+        "latest_release": "20261014.042859-cd678a0d6531",
+        "current": true,
+        "releases_behind": 0
+      },
+      "images": [
+        {
+          "image": "web",
+          "digest": "sha256:6565653100000000000000000000000000000000000000000000000000000000",
+          "state": "missing",
+          "detail": "declared by the binding but no workload in this namespace runs it — never deployed, or deleted since"
+        }
+      ],
+      "note": "rollout phase unavailable: deadline exceeded",
+      "destination": "mixed",
+      "control_plane_kind": "persistent",
+      "endpoint": "https://cp.example.test",
+      "placements": [
+        {
+          "name": "db",
+          "kind": "database",
+          "placement": "cluster",
+          "cluster": "gke-east",
+          "actuator": "forge"
+        },
+        {
+          "name": "web",
+          "kind": "workload",
+          "placement": "hosted",
+          "actuator": "platform"
+        }
+      ],
+      "promotion_id": "prm-cloud2-1"
+    },
+    {
+      "env": "failed",
+      "lifecycle": "",
+      "declared": true,
+      "ledger": "memory://promotions",
+      "kind": "promote",
+      "bound": true,
+      "release": "v1.4.0",
+      "promoted_at": "2026-07-22T00:00:00Z",
+      "release_known": true,
+      "git": {
+        "commit": "commit-v1.4.0"
+      },
+      "release_created_at": "2026-07-20T00:00:00Z",
+      "kube_context": "test-context",
+      "namespace": "test-ns",
+      "lag": {
+        "latest_release": "v1.5.15",
+        "current": false,
+        "releases_behind": 1,
+        "behind_seconds": 4542802,
+        "behind": "52d13h"
+      },
+      "images": [
+        {
+          "image": "control-plane",
+          "digest": "sha256:6161613400000000000000000000000000000000000000000000000000000000",
+          "state": "drift",
+          "running": "sha256:6161613135000000000000000000000000000000000000000000000000000000",
+          "detail": "declared sha256:6161613400000000000000000000000000000000000000000000000000000000 but running sha256:6161613135000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "destination": "cluster",
+      "placements": [
+        {
+          "name": "api",
+          "kind": "workload",
+          "placement": "cluster",
+          "cluster": "gke-east",
+          "actuator": "hub"
+        },
+        {
+          "name": "site",
+          "kind": "frontend",
+          "placement": "bucket",
+          "actuator": "forge"
+        }
+      ],
+      "promotion_id": "prm-failed-1",
+      "gates_summary": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0,
+        "errored": 0
+      },
+      "not_applied": true,
+      "apply_error": "apply: deployment/api: ImagePullBackOff"
+    },
+    {
+      "env": "hotfix",
+      "lifecycle": "",
+      "declared": false,
+      "ledger": "memory://promotions",
+      "kind": "promote",
+      "bound": true,
+      "release": "v1.4.0",
+      "promoted_at": "2026-07-21T00:00:00Z",
+      "release_known": true,
+      "git": {
+        "commit": "commit-v1.4.0"
+      },
+      "release_created_at": "2026-07-20T00:00:00Z",
+      "lag": {
+        "latest_release": "v1.5.15",
+        "current": false,
+        "releases_behind": 1,
+        "behind_seconds": 4542802,
+        "behind": "52d13h"
+      },
+      "images": [
+        {
+          "image": "control-plane",
+          "digest": "sha256:6161613400000000000000000000000000000000000000000000000000000000",
+          "state": "unreachable",
+          "detail": "could not read the cluster: environment hotfix is not declared in this checkout, so there is no KCL to resolve a cluster from"
+        }
+      ],
+      "note": "not declared in this checkout (<project>/deploy/kcl/hotfix/main.k does not exist) — it may be declared on another branch"
+    },
+    {
+      "env": "preprod",
+      "lifecycle": "ephemeral",
+      "declared": true,
+      "ledger": "memory://promotions",
+      "bound": false,
+      "release_known": false,
+      "images": [],
+      "note": "never promoted — no release is bound to this environment",
+      "destination": "cluster",
+      "placements": [
+        {
+          "name": "api",
+          "kind": "workload",
+          "placement": "cluster",
+          "cluster": "gke-east",
+          "actuator": "hub"
+        },
+        {
+          "name": "site",
+          "kind": "frontend",
+          "placement": "bucket",
+          "actuator": "forge"
+        }
+      ]
+    },
+    {
+      "env": "prod",
+      "lifecycle": "",
+      "declared": true,
+      "ledger": "memory://promotions",
+      "kind": "promote",
+      "bound": true,
+      "release": "v1.5.15",
+      "promoted_at": "2026-09-10T13:53:22Z",
+      "release_known": true,
+      "git": {
+        "commit": "commit-v1.5.15"
+      },
+      "release_created_at": "2026-09-10T13:53:22Z",
+      "kube_context": "test-context",
+      "namespace": "test-ns",
+      "lag": {
+        "latest_release": "v1.5.15",
+        "current": true,
+        "releases_behind": 0
+      },
+      "images": [
+        {
+          "image": "control-plane",
+          "digest": "sha256:6161613135000000000000000000000000000000000000000000000000000000",
+          "state": "match",
+          "running": "sha256:6161613135000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "image": "internal-console",
+          "digest": "sha256:6363633135000000000000000000000000000000000000000000000000000000",
+          "state": "missing",
+          "detail": "declared by the binding but no workload in this namespace runs it — never deployed, or deleted since"
+        },
+        {
+          "image": "reliant",
+          "digest": "sha256:6262623135000000000000000000000000000000000000000000000000000000",
+          "state": "drift",
+          "running": "sha256:77726f6e67000000000000000000000000000000000000000000000000000000",
+          "detail": "declared sha256:6262623135000000000000000000000000000000000000000000000000000000 but running sha256:77726f6e67000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "destination": "cluster",
+      "placements": [
+        {
+          "name": "api",
+          "kind": "workload",
+          "placement": "cluster",
+          "cluster": "gke-east",
+          "actuator": "hub"
+        },
+        {
+          "name": "site",
+          "kind": "frontend",
+          "placement": "bucket",
+          "actuator": "forge"
+        }
+      ],
+      "promotion_id": "prm-prod-1",
+      "from_env": "staging",
+      "gates_summary": {
+        "passed": 1,
+        "failed": 1,
+        "skipped": 0,
+        "errored": 0
+      }
+    },
+    {
+      "env": "staging",
+      "lifecycle": "",
+      "declared": true,
+      "ledger": "memory://promotions",
+      "kind": "promote",
+      "bound": true,
+      "release": "v1.3.0",
+      "promoted_at": "2026-07-01T00:25:15Z",
+      "release_known": true,
+      "git": {
+        "commit": "commit-v1.3.0",
+        "dirty": true
+      },
+      "release_created_at": "2026-07-01T00:25:07Z",
+      "kube_context": "test-context",
+      "namespace": "test-ns",
+      "lag": {
+        "latest_release": "v1.5.15",
+        "current": false,
+        "releases_behind": 2,
+        "behind_seconds": 6182895,
+        "behind": "71d13h"
+      },
+      "images": [
+        {
+          "image": "control-plane",
+          "digest": "sha256:6161613300000000000000000000000000000000000000000000000000000000",
+          "state": "drift",
+          "running": "sha256:6161613135000000000000000000000000000000000000000000000000000000",
+          "detail": "declared sha256:6161613300000000000000000000000000000000000000000000000000000000 but running sha256:6161613135000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "image": "reliant",
+          "digest": "sha256:6262623300000000000000000000000000000000000000000000000000000000",
+          "state": "drift",
+          "running": "sha256:77726f6e67000000000000000000000000000000000000000000000000000000",
+          "detail": "declared sha256:6262623300000000000000000000000000000000000000000000000000000000 but running sha256:77726f6e67000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "destination": "cluster",
+      "placements": [
+        {
+          "name": "api",
+          "kind": "workload",
+          "placement": "cluster",
+          "cluster": "gke-east",
+          "actuator": "hub"
+        },
+        {
+          "name": "site",
+          "kind": "frontend",
+          "placement": "bucket",
+          "actuator": "forge"
+        }
+      ]
+    },
+    {
+      "env": "unreadable",
+      "lifecycle": "",
+      "declared": true,
+      "ledger": "memory://promotions",
+      "bound": false,
+      "release_known": false,
+      "images": [],
+      "note": "could not read the promotion ledger: context deadline exceeded",
+      "destination": "cluster",
+      "placements": [
+        {
+          "name": "api",
+          "kind": "workload",
+          "placement": "cluster",
+          "cluster": "gke-east",
+          "actuator": "hub"
+        },
+        {
+          "name": "site",
+          "kind": "frontend",
+          "placement": "bucket",
+          "actuator": "forge"
+        }
+      ]
+    }
+  ],
+  "verified": true,
+  "tally": {
+    "not_verified": 0,
+    "match": 1,
+    "drift": 5,
+    "missing": 2,
+    "untagged": 0,
+    "unreachable": 2
+  },
+  "ok": false,
+  "detail": "5 image(s) drifted and 2 missing across 10 environment(s) — at least one environment is not running the release it is bound to"
+}
+exit: 1
