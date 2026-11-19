@@ -64,6 +64,9 @@ export default {
           DEFAULT: "hsl(var(--accent) / <alpha-value>)",
           foreground: "hsl(var(--accent-foreground) / <alpha-value>)",
         },
+        // The backdrop behind dialogs, sheets and drawers (`bg-scrim`). Its
+        // alpha is part of the token (per mode, index.css), so no /NN here.
+        scrim: "hsl(var(--scrim))",
         popover: {
           DEFAULT: "hsl(var(--popover) / <alpha-value>)",
           foreground: "hsl(var(--popover-foreground) / <alpha-value>)",
