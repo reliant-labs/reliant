@@ -1670,9 +1670,10 @@ jobs:
   # are built in this same run (build-backend), not on a laptop.
   #
   # Only this job holds id-token: write. Tags only (the predicate names a
-  # release), never a dry run, and after Finalize, which creates the Release. A
-  # signature is never replaced: a re-run finds it on the Release, verifies the
-  # Release's own signed set and republishes that. Design, manifest schema and
+  # release), never a dry run, and after Finalize, which creates the Release.
+  # Order: sign once, store the whole set on the GitHub Release, then on R2,
+  # then (only then) the root manifest. A signature is never replaced: a re-run
+  # recovers a signed set from either store and stores it again unchanged. Design, manifest schema and
   # verification commands: dev-docs/cli-release-artifacts.md;
   # tools/test-affected/release_cli_workflow_test.go holds this job to them.
   cli-publish:
@@ -1704,25 +1705,27 @@ jobs:
           name: cli-archives
           path: cli-dist
 
-      - name: Is the Release already signed?
+      # A signed set is signed ONCE. If the GitHub Release or cli/<tag>/ on R2
+      # already holds one (an earlier attempt that stopped part way), it is
+      # recovered and stored again unchanged, never re-signed or regenerated.
+      - name: Recover an already signed set
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           set -euo pipefail
           bash scripts/release-cli.sh verify cli-dist
-          gh release view "$VERSION" --json assets > "$RUNNER_TEMP/release.json"
-          # First signature wins: re-signing would bless whatever the Release
-          # holds NOW, which is exactly what someone who swapped an asset wants.
-          if jq -e --arg a "$SIGNATURE_ASSET" 'any(.assets[]; .name == $a)' "$RUNNER_TEMP/release.json" > /dev/null; then
-            echo "::notice::$VERSION already carries $SIGNATURE_ASSET; a signature is never replaced: republishing the Release's signed set"
-            rm -rf cli-dist
-            gh release download "$VERSION" --dir cli-dist --pattern 'reliant_*.tar.gz' \
-              --pattern checksums.txt --pattern daemon-channels.json --pattern "$SIGNATURE_ASSET"
-            echo "signed=true" >> "$GITHUB_OUTPUT"
-          else
+          FROM="$(bash scripts/release-cli.sh recover "$VERSION" cli-dist)"
+          if [ "$FROM" = none ]; then
             echo "signed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$VERSION already has a signed set (on $FROM); a signature is never replaced: storing that set again"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Write the channel manifest and the predicate
@@ -1769,7 +1772,7 @@ jobs:
         run: |
           set -euo pipefail
           # The certificate must name this workflow at a release tag, and the
-          # signed predicate this repository and THIS release.
+          # signed predicate this repository, THIS release and its commit.
           for f in cli-dist/reliant_*.tar.gz cli-dist/checksums.txt cli-dist/daemon-channels.json; do
             gh attestation verify "$f" --bundle "cli-dist/$SIGNATURE_ASSET" --repo "$GITHUB_REPOSITORY" \
               --cert-identity-regex "$SIGNER_IDENTITY" --cert-oidc-issuer "$SIGNER_ISSUER" \
@@ -1781,28 +1784,36 @@ jobs:
             echo "verified $f"
           done
 
-      - name: Publish to downloads.reliantlabs.io
+      # Durable first: the whole signed set (signature last) on the GitHub
+      # Release, then under cli/<tag>/ on R2. A store already holding a signed
+      # set must hold exactly this one (a no-op) or the step fails, changing
+      # nothing. Only then does the root manifest change.
+      - name: Attach the signed set to the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: bash scripts/release-cli.sh store-github "$VERSION" cli-dist
+
+      - name: Store the signed set on downloads.reliantlabs.io
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           VERSION: ${{ needs.prepare.outputs.version }}
-        # Versioned files under cli/<tag>/ first, the root manifest last; refuses
-        # a manifest that would move any channel backwards.
-        run: bash scripts/release-cli.sh publish "$VERSION" cli-dist
+        run: bash scripts/release-cli.sh store-r2 "$VERSION" cli-dist
 
-      - name: Attach to the GitHub Release
-        if: steps.release.outputs.signed == 'false'
+      - name: Publish the channel manifest
         env:
           GH_TOKEN: ${{ github.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           VERSION: ${{ needs.prepare.outputs.version }}
-        run: |
-          set -euo pipefail
-          # The signed set may be replaced while it is unsigned (a re-run after a
-          # partial upload); the signature goes last and never with --clobber.
-          gh release upload "$VERSION" --clobber cli-dist/reliant_*.tar.gz cli-dist/checksums.txt cli-dist/daemon-channels.json
-          gh release upload "$VERSION" "cli-dist/$SIGNATURE_ASSET"
+        # Refuses unless both stores hold this set, and never moves a channel
+        # backwards.
+        run: bash scripts/release-cli.sh publish-root "$VERSION" cli-dist
 
       - name: Purge the channel manifest from the CDN
         env:

@@ -11,37 +11,59 @@ set -euo pipefail
 src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/release-cli.sh"
 fx="$(mktemp -d)"
 trap 'rm -rf "$fx"' EXIT
-mkdir -p "$fx/bin" "$fx/r2" "$fx/www"
-# The fake aws: head-object answers from $AWS_HEAD (found|missing|error); copying
-# the manifest down reads $FX/r2; every upload is recorded in $AWS_CALLS.
+mkdir -p "$fx/bin" "$fx/r2" "$fx/gh"
+# The fake aws is R2: $FX/r2/<key>. head-object fails with a 403 when
+# AWS_HEAD=error; uploads are recorded in $AWS_CALLS and stored.
 cat > "$fx/bin/aws" << 'AWS'
 #!/usr/bin/env bash
 case "$1 $2" in
   "s3api head-object")
-    case "$AWS_HEAD" in
-      found) exit 0 ;;
-      missing) echo "An error occurred (404) when calling the HeadObject operation: Not Found" >&2; exit 254 ;;
-      *) echo "An error occurred (403) when calling the HeadObject operation: Forbidden" >&2; exit 254 ;;
-    esac ;;
+    [ "${AWS_HEAD:-}" = error ] && { echo "An error occurred (403) when calling the HeadObject operation: Forbidden" >&2; exit 254; }
+    [ -f "$FX/r2/$6" ] && exit 0
+    echo "An error occurred (404) when calling the HeadObject operation: Not Found" >&2; exit 254 ;;
   "s3 cp")
-    if [[ "$3" == s3://* ]]; then cp "$FX/r2/${3#s3://downloads/}" "$4"; exit; fi
-    printf '%s\n' "$*" >> "$AWS_CALLS" ;;
+    if [[ "$3" == s3://* ]]; then cp "$FX/r2/${3#s3://downloads/}" "$4" 2> /dev/null; exit; fi
+    printf '%s\n' "$*" >> "$AWS_CALLS"
+    k="${4#s3://downloads/}"; mkdir -p "$(dirname "$FX/r2/$k")"; cp "$3" "$FX/r2/$k" ;;
   *) echo "unexpected aws: $*" >&2; exit 90 ;;
 esac
 AWS
-# The fake curl serves $FX/www for https://dl.test/: with -w it prints the status.
+# The fake gh is the GitHub Release of each tag: $FX/gh/<tag>/. An upload fails,
+# storing nothing, when GH_UPLOAD_FAIL=1.
+cat > "$fx/bin/gh" << 'GH'
+#!/usr/bin/env bash
+d="$FX/gh/$3"
+case "$1 $2" in
+  "release view") [ -d "$d" ] || exit 1
+    (cd "$d" && find . -type f | sed 's|^\./||') | jq -Rn '{assets: [inputs | {name: .}]}' ;;
+  "release download") shift 3; out=""; pats=()
+    while [ $# -gt 0 ]; do case "$1" in --dir) out="$2"; shift 2 ;; --pattern) pats+=("$2"); shift 2 ;; *) shift ;; esac; done
+    mkdir -p "$out"; for p in "${pats[@]}"; do [ -f "$d/$p" ] && cp "$d/$p" "$out/"; done; exit 0 ;;
+  "release upload") [ "${GH_UPLOAD_FAIL:-}" = 1 ] && { echo "HTTP 502" >&2; exit 1; }
+    shift 3; clobber=""; [ "$1" = --clobber ] && { clobber=1; shift; }
+    for f in "$@"; do [ -e "$d/$(basename "$f")" ] && [ -z "$clobber" ] && { echo "asset exists" >&2; exit 1; }; done
+    for f in "$@"; do printf 'upload %s\n' "$(basename "$f")" >> "$GH_CALLS"; cp "$f" "$d/"; done ;;
+  *) echo "unexpected gh: $*" >&2; exit 90 ;;
+esac
+GH
+# The fake curl: https://dl.test/ is the CDN in front of R2, https://gh.test/ is
+# github.com's release downloads. With -w it prints the status.
 cat > "$fx/bin/curl" << 'CURL'
 #!/usr/bin/env bash
 url="${*: -1}" out="" prev=""
-f="$FX/www/${url#https://dl.test/}"
+case "$url" in
+  https://dl.test/*) f="$FX/r2/${url#https://dl.test/}" ;;
+  https://gh.test/acme/app/releases/download/*) f="${url#https://gh.test/acme/app/releases/download/}"; f="$FX/gh/$f" ;;
+  *) exit 6 ;;
+esac
 for a in "$@"; do [ "$prev" = -o ] && out="$a"; prev="$a"; done
 case " $* " in
   *" -w "*) if [ -f "$f" ]; then printf 200; else printf 404; fi ;;
   *) [ -f "$f" ] || exit 22; if [ -n "$out" ]; then cp "$f" "$out"; else cat "$f"; fi ;;
 esac
 CURL
-chmod +x "$fx/bin/aws" "$fx/bin/curl"
-export PATH="$fx/bin:$PATH" FX="$fx" AWS_CALLS="$fx/aws-calls" BASE_URL=https://dl.test
+chmod +x "$fx/bin/aws" "$fx/bin/gh" "$fx/bin/curl"
+export PATH="$fx/bin:$PATH" FX="$fx" AWS_CALLS="$fx/aws-calls" GH_CALLS="$fx/gh-calls" BASE_URL=https://dl.test
 fail() { echo "FAIL: $*" >&2; exit 1; }
 sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 sha2=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
@@ -61,9 +83,9 @@ bash "$src" verify "$fx/dist" || fail "verify refused what package wrote"
 [ "$(tar -tzf "$fx/dist/reliant_darwin_amd64.tar.gz" | sort | tr '\n' ' ')" = "LICENSE LICENSES.txt reliant " ] ||
   fail "darwin/amd64 holds $(tar -tzf "$fx/dist/reliant_darwin_amd64.tar.gz" | tr '\n' ' ')"
 echo "ok: each archive holds its target's backend as reliant, with the licenses"
-if tar --version 2> /dev/null | grep -q 'GNU tar'; then
-  sleep 1
-  touch "$fx/backend/backend-linux-amd64/reliant-backend"
+if tar --version 2> /dev/null | grep 'GNU tar' > /dev/null; then
+  # A different mtime on an input must not change the archive.
+  touch -d @1600000000 "$fx/backend/backend-linux-amd64/reliant-backend"
   SOURCE_DATE_EPOCH=1700000000 bash "$src" package "$fx/backend" "$fx/dist2" 2> /dev/null
   cmp -s "$fx/dist/checksums.txt" "$fx/dist2/checksums.txt" || fail "packaging the same binaries twice differs"
   echo "ok: packaging is reproducible"
@@ -137,56 +159,98 @@ echo "ok: another schema, an unordered commit, an unknown channel and a tampered
 
 # 5. Reading the published manifest: none yet is not an error, an unreadable one is.
 export R2_ENDPOINT=https://r2.invalid
-AWS_HEAD=missing bash "$src" fetch-manifest "$fx/cur.json" 2> /dev/null || fail "fetch-manifest failed on a bucket with no manifest"
+bash "$src" fetch-manifest "$fx/cur.json" 2> /dev/null || fail "fetch-manifest failed on a bucket with no manifest"
 [ ! -e "$fx/cur.json" ] || fail "fetch-manifest wrote a manifest that does not exist"
 ! AWS_HEAD=error bash "$src" fetch-manifest "$fx/cur.json" 2> "$fx/err" || fail "fetch-manifest treated a 403 as no manifest"
 grep -q 'cannot tell' "$fx/err" || fail "the read refusal does not say why: $(cat "$fx/err")"
 cp "$fx/m1.json" "$fx/r2/daemon-channels.json"
-AWS_HEAD=found bash "$src" fetch-manifest "$fx/cur.json" 2> /dev/null || fail "fetch-manifest"
+bash "$src" fetch-manifest "$fx/cur.json" 2> /dev/null || fail "fetch-manifest"
 cmp -s "$fx/cur.json" "$fx/m1.json" || fail "fetch-manifest did not copy the published manifest"
 echo "ok: no published manifest yet is not an error; an unreadable one is"
 
-# 6. Publishing: versioned files first, the root manifest last; never backwards.
-cp -r "$fx/dist" "$fx/pub"
-cp "$fx/m2.json" "$fx/pub/daemon-channels.json"
-echo '{}' > "$fx/pub/reliant-release.sigstore.json"
-: > "$AWS_CALLS"
-DRY_RUN=true R2_ENDPOINT='' bash "$src" publish v1.2.4-rc.1 "$fx/pub" > "$fx/out" 2> "$fx/err" || fail "dry-run publish: $(cat "$fx/err")"
-[ ! -s "$AWS_CALLS" ] || fail "a dry run uploaded: $(cat "$AWS_CALLS")"
-[ "$(grep -c '^publish ' "$fx/out")" = 10 ] || fail "the dry run's plan: $(cat "$fx/out")"
-[ "$(tail -1 "$fx/out")" = "publish daemon-channels.json" ] || fail "the dry run does not publish the manifest last: $(cat "$fx/out")"
-echo "ok: a dry run prints the plan and uploads nothing"
-AWS_HEAD=found bash "$src" publish v1.2.4-rc.1 "$fx/pub" > /dev/null 2> "$fx/err" || fail "publish: $(cat "$fx/err")"
-[ "$(wc -l < "$AWS_CALLS")" = 10 ] || fail "want 10 uploads: $(cat "$AWS_CALLS")"
-grep -q "^s3 cp $fx/pub/reliant_linux_amd64.tar.gz s3://downloads/cli/v1.2.4-rc.1/reliant_linux_amd64.tar.gz " "$AWS_CALLS" || fail "archives are not versioned: $(cat "$AWS_CALLS")"
-tail -1 "$AWS_CALLS" | grep -q "^s3 cp $fx/pub/daemon-channels.json s3://downloads/daemon-channels.json .*--cache-control" || fail "the root manifest is not uploaded last: $(cat "$AWS_CALLS")"
-echo "ok: the versioned files upload first and the mutable manifest last"
-: > "$AWS_CALLS"
-cp "$fx/m2.json" "$fx/r2/daemon-channels.json"
-jq '.written_by.tag = "v1.2.3"' "$fx/m1.json" > "$fx/pub/daemon-channels.json"
-! AWS_HEAD=found bash "$src" publish v1.2.3 "$fx/pub" > /dev/null 2> "$fx/err" || fail "publish replaced a manifest that has alpha with one that has not"
-grep -q 'backwards' "$fx/err" || fail "the backwards refusal does not say why: $(cat "$fx/err")"
-[ ! -s "$AWS_CALLS" ] || fail "a refused publish uploaded: $(cat "$AWS_CALLS")"
-cp "$fx/m2.json" "$fx/pub/daemon-channels.json"
-! bash "$src" publish v1.2.3 "$fx/pub" > /dev/null 2>&1 || fail "publish took a manifest written by another release"
-rm "$fx/pub/reliant-release.sigstore.json"
-! bash "$src" publish v1.2.4-rc.1 "$fx/pub" > /dev/null 2>&1 || fail "publish went ahead without the signature"
-echo "ok: publish refuses an older manifest, another release's manifest, and an unsigned set"
+# 6. Storing a signed set: both places, signature last, root manifest after both;
+# recovered, never re-signed; never overwritten.
+# signed <dir> <channel> <tag> <commit-time> <signature>: what cli-publish signs,
+# the manifest written against the root manifest R2 serves now.
+signed() {
+  rm -rf "$1"; cp -r "$fx/dist" "$1"
+  bash "$src" fetch-manifest "$fx/cur.json" 2> /dev/null
+  bash "$src" manifest "$fx/cur.json" "$2" "$3" "$sha2" "$4" "$fx/dist" > "$1/daemon-channels.json" 2> /dev/null || fail "manifest for $3"
+  printf '{"sig":"%s"}\n' "$5" > "$1/reliant-release.sigstore.json"
+}
+publish() { # publish <tag> <dir>: cli-publish's order
+  bash "$src" store-github "$1" "$2" && bash "$src" store-r2 "$1" "$2" && bash "$src" publish-root "$1" "$2"
+}
+same() { # same <tag> <dir>: both stores hold exactly <dir>'s set
+  local f
+  for f in $(cd "$2" && ls); do
+    cmp -s "$2/$f" "$fx/r2/cli/$1/$f" || fail "R2 cli/$1/$f is not the signed set's"
+    cmp -s "$2/$f" "$fx/gh/$1/$f" || fail "the GitHub Release $1's $f is not the signed set's"
+  done
+}
+mkdir -p "$fx/gh/v1.2.4-rc.1" "$fx/gh/v1.2.5-rc.1" "$fx/gh/v1.2.6"
+[ "$(bash "$src" recover v1.2.4-rc.1 "$fx/rec" 2> /dev/null)" = none ] || fail "recover found a set nobody stored"
+signed "$fx/A" alpha v1.2.4-rc.1 1700000100 A
+! bash "$src" publish-root v1.2.4-rc.1 "$fx/A" > /dev/null 2>&1 || fail "the root manifest went out before the set was stored"
+cmp -s "$fx/r2/daemon-channels.json" "$fx/m1.json" || fail "a refused publish-root changed the root manifest"
+: > "$AWS_CALLS"; : > "$GH_CALLS"
+publish v1.2.4-rc.1 "$fx/A" > /dev/null 2> "$fx/err" || fail "publish: $(cat "$fx/err")"
+same v1.2.4-rc.1 "$fx/A"
+[ "$(tail -1 "$GH_CALLS")" = "upload reliant-release.sigstore.json" ] || fail "the GitHub signature is not attached last: $(cat "$GH_CALLS")"
+grep -n 'cli/v1.2.4-rc.1/reliant-release.sigstore.json' "$AWS_CALLS" | grep '^9:' > /dev/null || fail "the R2 signature is not stored last of the set: $(cat "$AWS_CALLS")"
+tail -1 "$AWS_CALLS" | grep -q "s3://downloads/daemon-channels.json .*--cache-control" || fail "the root manifest is not uploaded last: $(cat "$AWS_CALLS")"
+cmp -s "$fx/r2/daemon-channels.json" "$fx/A/daemon-channels.json" || fail "the root manifest is not the signed one"
+echo "ok: the set goes to the GitHub Release and R2, signature last in each, then the root manifest"
+: > "$AWS_CALLS"; : > "$GH_CALLS"
+[ "$(bash "$src" recover v1.2.4-rc.1 "$fx/rec" 2> /dev/null)" = github ] || fail "recover did not find the stored set"
+diff -r "$fx/rec" "$fx/A" > /dev/null || fail "recover did not return the stored set"
+publish v1.2.4-rc.1 "$fx/rec" > /dev/null 2> "$fx/err" || fail "re-publishing the same set: $(cat "$fx/err")"
+[ ! -s "$GH_CALLS" ] || fail "an identical set was attached again: $(cat "$GH_CALLS")"
+[ "$(wc -l < "$AWS_CALLS")" = 1 ] || fail "an identical set was uploaded again: $(cat "$AWS_CALLS")"
+echo "ok: a re-run recovers the stored set and stores nothing again"
+signed "$fx/A2" alpha v1.2.4-rc.1 1700000100 A-resigned
+! bash "$src" store-r2 v1.2.4-rc.1 "$fx/A2" > /dev/null 2> "$fx/err" || fail "store-r2 replaced a signed set"
+grep -q 'never replaced' "$fx/err" || fail "the R2 refusal does not say why: $(cat "$fx/err")"
+! bash "$src" store-github v1.2.4-rc.1 "$fx/A2" > /dev/null 2>&1 || fail "store-github replaced a signed set"
+same v1.2.4-rc.1 "$fx/A"
+echo "ok: a different signed set for a published tag is refused in both places"
 
-# 7. verify-published reads the manifest and the files as a client does.
-mkdir -p "$fx/www/cli/v1.2.4-rc.1"
-cp "$fx/dist"/reliant_*.tar.gz "$fx/dist/checksums.txt" "$fx/www/cli/v1.2.4-rc.1/"
-echo '{}' > "$fx/www/cli/v1.2.4-rc.1/reliant-release.sigstore.json"
-bash "$src" manifest "$fx/m1.json" alpha v1.2.4-rc.1 "$sha2" 1700000100 "$fx/dist" > "$fx/www/daemon-channels.json" 2> /dev/null
-bash "$src" verify-published v1.2.4-rc.1 alpha --base https://dl.test --wait 0 > "$fx/out" 2>&1 || fail "verify-published: $(cat "$fx/out")"
-! bash "$src" verify-published v1.2.5 alpha --base https://dl.test --wait 0 > "$fx/out" 2>&1 || fail "verify-published accepted a channel naming another release"
-rm "$fx/www/cli/v1.2.4-rc.1/reliant_darwin_arm64.tar.gz"
-! bash "$src" verify-published v1.2.4-rc.1 alpha --base https://dl.test --wait 0 > "$fx/out" 2>&1 || fail "verify-published accepted a missing archive"
-grep -q '^FAIL  https://dl.test/cli/v1.2.4-rc.1/reliant_darwin_arm64.tar.gz' "$fx/out" || fail "verify-published does not name the missing archive: $(cat "$fx/out")"
-cp "$fx/dist/reliant_darwin_arm64.tar.gz" "$fx/www/cli/v1.2.4-rc.1/"
-sed -i.bak 's/^[0-9a-f]\{4\}/0000/' "$fx/www/cli/v1.2.4-rc.1/checksums.txt"
-! bash "$src" verify-published v1.2.4-rc.1 alpha --base https://dl.test --wait 0 > "$fx/out" 2>&1 || fail "verify-published accepted sha256s that differ from checksums.txt"
-grep -q 'sha256 of checksums.txt differs' "$fx/out" || fail "verify-published does not name checksums.txt's sha256: $(cat "$fx/out")"
-grep -q 'sha256 of reliant_.* differs' "$fx/out" || fail "verify-published does not name an archive's sha256: $(cat "$fx/out")"
-echo "ok: verify-published requires the channel, every file, and matching checksums"
+# The interruption: v1.2.5-rc.1 reaches R2, its GitHub attachment fails; then
+# v1.2.6 (latest) publishes; then v1.2.5-rc.1 is re-run.
+signed "$fx/B" alpha v1.2.5-rc.1 1700000200 B
+cp -r "$fx/B" "$fx/B.orig"
+bash "$src" store-r2 v1.2.5-rc.1 "$fx/B" > /dev/null 2>&1 || fail "store-r2 of v1.2.5-rc.1"
+! GH_UPLOAD_FAIL=1 bash "$src" store-github v1.2.5-rc.1 "$fx/B" > /dev/null 2>&1 || fail "the failing GitHub attachment succeeded"
+signed "$fx/C" latest v1.2.6 1700000300 C
+publish v1.2.6 "$fx/C" > /dev/null 2> "$fx/err" || fail "the intervening release: $(cat "$fx/err")"
+cp "$fx/r2/daemon-channels.json" "$fx/root-after-C.json"
+[ "$(bash "$src" recover v1.2.5-rc.1 "$fx/rec5" 2> /dev/null)" = r2 ] || fail "the re-run did not recover v1.2.5-rc.1's set from R2"
+diff -r "$fx/rec5" "$fx/B.orig" > /dev/null || fail "the re-run's set is not the original signed set"
+bash "$src" store-github v1.2.5-rc.1 "$fx/rec5" > /dev/null 2>&1 || fail "the re-run could not attach the original set"
+bash "$src" store-r2 v1.2.5-rc.1 "$fx/rec5" > /dev/null 2>&1 || fail "the re-run's R2 store of the same set"
+same v1.2.5-rc.1 "$fx/B.orig"
+! bash "$src" publish-root v1.2.5-rc.1 "$fx/rec5" > /dev/null 2> "$fx/err" || fail "the re-run's manifest replaced the newer root manifest"
+grep -q 'backwards' "$fx/err" || fail "the root refusal does not say why: $(cat "$fx/err")"
+cmp -s "$fx/r2/daemon-channels.json" "$fx/root-after-C.json" || fail "the root manifest changed"
+echo "ok: an interrupted publish is recovered as signed, stored unchanged, and never rolls the root manifest back"
+
+# 7. verify-published hashes every copy, on R2 and on the GitHub Release.
+vp() { bash "$src" verify-published "$@" --base https://dl.test --github https://gh.test --wait 0 > "$fx/out" 2>&1; }
+vp v1.2.6 latest || fail "verify-published: $(cat "$fx/out")"
+! vp v1.2.7 latest || fail "verify-published accepted a channel naming another release"
+cp "$fx/r2/cli/v1.2.6/reliant_linux_amd64.tar.gz" "$fx/keep"
+printf 'x' >> "$fx/r2/cli/v1.2.6/reliant_linux_amd64.tar.gz"
+! vp v1.2.6 latest || fail "verify-published accepted corrupted archive bytes on R2"
+grep -q '^FAIL  sha256 of https://dl.test/cli/v1.2.6/reliant_linux_amd64.tar.gz' "$fx/out" || fail "the R2 corruption is not named: $(cat "$fx/out")"
+cp "$fx/keep" "$fx/r2/cli/v1.2.6/reliant_linux_amd64.tar.gz"
+cp "$fx/dist/reliant_linux_amd64.tar.gz" "$fx/gh/v1.2.6/reliant_darwin_arm64.tar.gz"
+! vp v1.2.6 latest || fail "verify-published accepted a replaced archive on the GitHub Release"
+grep -q '^FAIL  sha256 of https://gh.test/acme/app/releases/download/v1.2.6/reliant_darwin_arm64.tar.gz' "$fx/out" || fail "the GitHub replacement is not named: $(cat "$fx/out")"
+cp "$fx/dist/reliant_darwin_arm64.tar.gz" "$fx/gh/v1.2.6/"
+rm "$fx/r2/cli/v1.2.6/reliant_windows_arm64.tar.gz"
+! vp v1.2.6 latest || fail "verify-published accepted a missing archive"
+cp "$fx/dist/reliant_windows_arm64.tar.gz" "$fx/r2/cli/v1.2.6/"
+echo '{"sig":"other"}' > "$fx/gh/v1.2.6/reliant-release.sigstore.json"
+! vp v1.2.6 latest || fail "verify-published accepted different signatures on R2 and GitHub"
+echo "ok: verify-published hashes every copy and compares the signatures"
 echo "PASS: release-cli.sh"

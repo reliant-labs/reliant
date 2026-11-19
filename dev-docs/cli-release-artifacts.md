@@ -156,9 +156,7 @@ not been verified.
 tag. Unlike forge's, the archives are built in that same workflow run
 (`build-backend`), so the signature says that `release.yml` at that tag built and
 published these assets. It also stops anyone from changing a signed release's
-assets after the fact. A signature is never replaced. If a re-run finds
-`reliant-release.sigstore.json` on the Release, it verifies the Release's own
-signed set and republishes that set unchanged. It does not sign again.
+assets after the fact. A signature is never replaced (see "Recovery" below).
 
 **What it does not prove.** It does not prove what the source at that commit
 contains. Someone who can push a release tag gets their release signed too.
@@ -174,23 +172,59 @@ contains. Someone who can push a release tag gets their release signed too.
    dispatches run this job too. It publishes nothing.
 3. `finalize` creates the GitHub Release. This job is unchanged.
 4. `cli-publish` (tag only, never a dry run):
-   1. reads the published manifest from R2 (`fetch-manifest`; "none yet" is not
-      an error, but an unreadable manifest is);
-   2. writes the new manifest (`manifest`) and the predicate;
-   3. signs, then checks the bundle exactly as a verifier will;
-   4. uploads `cli/<tag>/…`, then the root manifest (`publish`);
-   5. attaches the signed set to the GitHub Release, with the signature last;
-   6. purges `daemon-channels.json` from the CDN.
-5. `verify-published` checks, through the CDN, that the manifest names the tag
-   for its channel, that every URL it names returns 200, and that the sha256s
-   match `checksums.txt` (`verify-published`). It now waits for `cli-publish`.
+   1. recovers an already signed set for the tag (`recover`, below); only when
+      there is none does it go on to the next two steps;
+   2. reads the published manifest from R2 (`fetch-manifest`; "none yet" is not
+      an error, but an unreadable manifest is) and writes the new manifest
+      (`manifest`) and the predicate;
+   3. signs;
+   4. checks the bundle exactly as a verifier will (always, recovered sets too);
+   5. stores the whole signed set on the GitHub Release (`store-github`), the
+      signature last;
+   6. stores it under `cli/<tag>/` on R2 (`store-r2`), the signature last;
+   7. only then uploads the root `daemon-channels.json` (`publish-root`), which
+      refuses unless both stores hold this exact set, and refuses to move any
+      channel backwards;
+   8. purges `daemon-channels.json` from the CDN.
+5. `verify-published` reads the manifest through the CDN until it names the tag
+   for its channel. It then downloads every archive and `checksums.txt` from R2
+   (through the CDN) and from the GitHub Release, and requires each copy's bytes
+   to hash to the manifest's digest, which must itself be `checksums.txt`'s. The
+   signature must be the same bytes in both places. A 200 alone proves nothing.
+   It waits for `cli-publish`.
+
+### Recovery: a tag is signed once
+
+The signed set of a tag is its six archives, `checksums.txt`, the tag's
+`daemon-channels.json` and `reliant-release.sigstore.json`. Each store gets the
+signature last, so a store that holds the signature holds the whole set.
+
+- **Recover, never re-sign.** If the GitHub Release or `cli/<tag>/` on R2 holds
+  the signature, `recover` takes that set (GitHub first) and the job stores it
+  again unchanged. The manifest is not regenerated: if another channel moved
+  meanwhile, a regenerated manifest would differ from the one clients may
+  already hold.
+- **Never overwrite.** A store that already holds a signed set must hold exactly
+  this one, byte for byte (a no-op); anything else fails and changes nothing.
+  Unsigned leftovers of an interrupted upload are replaceable.
+- **Durable before visible.** The root manifest changes only after both stores
+  hold the set.
+- **Never backwards.** If a newer release published the root manifest while this
+  one was interrupted, the recovered manifest lacks that release's entry, so
+  `publish-root` refuses: the tag's signed set is complete in both stores, and
+  its channel moves forward with that channel's next release.
+
+`scripts/test-release-cli.sh` replays exactly that: a set reaches R2, its GitHub
+attachment fails, another channel's release publishes, then the re-run recovers
+the original set from R2, attaches it unchanged, and leaves the root manifest
+alone.
 
 The `releases` concurrency group serializes release runs, so the manifest's
 read-modify-write cannot race another release.
 
 `scripts/release-cli.sh` makes every one of these decisions, and
-`scripts/test-release-cli.sh` proves them offline with a fake `aws` and a fake
-`curl`. `TestReleaseCLIScript` runs that test in the release gate.
+`scripts/test-release-cli.sh` proves them offline with a fake `aws` (R2), a
+fake `gh` (the GitHub Release) and a fake `curl` (the CDN and github.com). `TestReleaseCLIScript` runs that test in the release gate.
 `TestReleaseCLIJobs` and `TestReleaseCLISigning`
 (`tools/test-affected/release_cli_workflow_test.go`) evaluate the job conditions
 and hold the signing contract.
@@ -209,7 +243,7 @@ Pass criteria:
 - The `verify-published` step "The CLI archives and the channel manifest are
   live" passes.
 
-If `cli-publish` fails before it uploads the signature, re-run it: an unsigned
-Release is signed again. If it fails after, a re-run republishes the signed set.
-Fix forward. Never delete a signature to get a release signed again. A deletion
+If `cli-publish` fails, re-run it. With no signature stored anywhere it signs
+again; otherwise it recovers the stored set and finishes storing it. Fix
+forward. Never delete a signature to get a release signed again. A deletion
 shows in Rekor.

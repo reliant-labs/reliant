@@ -149,7 +149,7 @@ func TestReleaseCLISigning(t *testing.T) {
 	}
 
 	wf := loadReleaseWorkflow(t)
-	var attest, verify, publish int
+	var attest, verify, recovered, storeGH, storeR2, root int
 	for i, s := range wf.job(t, "cli-publish").Steps {
 		switch {
 		case strings.HasPrefix(s.Uses, "actions/attest@"):
@@ -163,6 +163,9 @@ func TestReleaseCLISigning(t *testing.T) {
 			if s.With["predicate-type"] != "${{ env.PREDICATE_TYPE }}" {
 				t.Errorf("actions/attest predicate-type = %v", s.With["predicate-type"])
 			}
+			if s.If != "steps.release.outputs.signed == 'false'" {
+				t.Errorf("actions/attest runs when %q; it must sign only when no signed set was recovered", s.If)
+			}
 		case strings.Contains(s.Run, "gh attestation verify"):
 			verify = i
 			for _, want := range []string{`--cert-identity-regex "$SIGNER_IDENTITY"`, `--cert-oidc-issuer "$SIGNER_ISSUER"`, `--predicate-type "$PREDICATE_TYPE"`, ".release == $release", ".commit == $commit"} {
@@ -170,12 +173,29 @@ func TestReleaseCLISigning(t *testing.T) {
 					t.Errorf("the signature check does not pin %s", want)
 				}
 			}
-		case strings.Contains(s.Run, "scripts/release-cli.sh publish "):
-			publish = i
+		case strings.Contains(s.Run, "scripts/release-cli.sh recover "):
+			recovered = i
+		case strings.Contains(s.Run, "scripts/release-cli.sh store-github "):
+			storeGH = i
+		case strings.Contains(s.Run, "scripts/release-cli.sh store-r2 "):
+			storeR2 = i
+		case strings.Contains(s.Run, "scripts/release-cli.sh publish-root "):
+			root = i
 		}
 	}
-	if attest == 0 || verify == 0 || publish == 0 || attest >= verify || verify >= publish {
-		t.Errorf("cli-publish must sign (step %d), check the signature (step %d), then publish (step %d)", attest, verify, publish)
+	// Recover before signing; the set durable on the Release, then on R2, before
+	// the root manifest changes. Each store runs on a recovered set too.
+	order := []int{recovered, attest, verify, storeGH, storeR2, root}
+	for k := 1; k < len(order); k++ {
+		if order[k-1] == 0 || order[k] <= order[k-1] {
+			t.Errorf("cli-publish must recover, sign, check, store on the Release, store on R2, then publish the root manifest: steps %v", order)
+			break
+		}
+	}
+	for _, i := range []int{verify, storeGH, storeR2, root} {
+		if s := wf.job(t, "cli-publish").Steps[i]; s.If != "" {
+			t.Errorf("step %q is conditional (%s); a recovered set must be checked and stored too", s.Name, s.If)
+		}
 	}
 
 	vp := wf.job(t, "verify-published")

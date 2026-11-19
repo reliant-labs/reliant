@@ -35,17 +35,32 @@
 #       yet leaves <out-file> absent; any other failure is fatal (never overwrite a
 #       manifest that could not be read). Needs R2_ENDPOINT (and aws creds).
 #
-#   release-cli.sh publish <tag> <dir>
-#       Upload <dir>'s verified archives, checksums.txt, daemon-channels.json and
-#       reliant-release.sigstore.json under cli/<tag>/ on R2, then the manifest to
-#       the bucket root LAST, so no client reads a manifest before its files.
-#       Refuses a manifest that moves any published channel backwards (re-running an
-#       old release). DRY_RUN=true prints the plan and uploads nothing.
+#   The signed set of a tag is the six archives, checksums.txt, the tag's
+#   daemon-channels.json and reliant-release.sigstore.json. It is signed ONCE and
+#   then only copied: a store that holds the signature holds the whole set (the
+#   signature is stored last), and is never overwritten.
 #
-#   release-cli.sh verify-published <tag> <channel> [--base URL] [--wait SECONDS]
+#   release-cli.sh recover <tag> <dir>
+#       If the GitHub Release or s3://downloads/cli/<tag>/ already holds a signed
+#       set, replace <dir> with it and print `github` or `r2`; else print `none`
+#       (only then may the caller sign). Needs gh and R2_ENDPOINT.
+#
+#   release-cli.sh store-github <tag> <dir>
+#   release-cli.sh store-r2 <tag> <dir>
+#       Make the GitHub Release / cli/<tag>/ on R2 hold <dir>'s signed set,
+#       signature last. Where a signed set is already stored it must be
+#       byte-identical (a no-op), or this fails and changes nothing.
+#
+#   release-cli.sh publish-root <tag> <dir>
+#       Upload <dir>'s daemon-channels.json to the bucket root, the one mutable
+#       object, only once both stores hold this exact set, and never when it would
+#       move a published channel backwards.
+#
+#   release-cli.sh verify-published <tag> <channel> [--base URL] [--github URL] [--wait SECONDS]
 #       Read the manifest as a client does, through the CDN, until <channel> names
-#       <tag>; then every URL it names returns 200 and its sha256s equal the
-#       published checksums.txt.
+#       <tag>; then download every archive and checksums.txt from R2 and from the
+#       GitHub Release and require each copy's bytes to hash to the manifest's
+#       digest (itself checksums.txt's), and the signature to be the same on both.
 set -euo pipefail
 
 die() { echo "::error::$*" >&2; exit 1; }
@@ -104,7 +119,7 @@ cmd_package() {
     chmod 0755 "$dir/$bin"
     chmod 0644 "$dir/LICENSE" "$dir/LICENSES.txt"
     name="reliant_${os}_${arch}.tar.gz"
-    if tar --version 2> /dev/null | grep -q 'GNU tar'; then
+    if tar --version 2> /dev/null | grep 'GNU tar' > /dev/null; then
       tar -C "$dir" --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$epoch" \
         -cf - "$bin" LICENSE LICENSES.txt | gzip -n -9 > "$out/$name"
     else
@@ -133,7 +148,8 @@ cmd_verify() {
   done < "$dir/checksums.txt"
   for t in $TARGETS; do
     bin="$(bin_for "${t%/*}")"
-    tar -tzf "$dir/reliant_${t%/*}_${t#*/}.tar.gz" | grep -qx "$bin" ||
+    # Not grep -q: an early exit SIGPIPEs tar, and pipefail fails the check.
+    tar -tzf "$dir/reliant_${t%/*}_${t#*/}.tar.gz" | grep -x "$bin" > /dev/null ||
       die "reliant_${t%/*}_${t#*/}.tar.gz does not hold $bin at its root"
   done
 }
@@ -206,34 +222,56 @@ cmd_manifest() {
   printf '%s\n' "$new"
 }
 
+# r2_has <key>: 0 when the object exists, 1 when it does not; any other answer is
+# fatal (never treat "could not tell" as "absent").
+r2_has() {
+  local err
+  [ -n "${R2_ENDPOINT:-}" ] || die "R2_ENDPOINT is not set"
+  if err="$(aws s3api head-object --bucket "$BUCKET" --key "$1" --endpoint-url "$R2_ENDPOINT" 2>&1 > /dev/null)"; then
+    return 0
+  elif grep -q '(404)\|Not Found' <<< "$err"; then
+    return 1
+  fi
+  die "cannot tell whether s3://$BUCKET/$1 exists: $err"
+}
+
+r2_get() { # r2_get <key> <file>
+  aws s3 cp "s3://$BUCKET/$1" "$2" --endpoint-url "$R2_ENDPOINT" --only-show-errors || die "cannot read s3://$BUCKET/$1"
+}
+
 cmd_fetch_manifest() {
   [ $# -eq 1 ] || die "usage: fetch-manifest <out-file>"
-  local out="$1" err
+  local out="$1"
   rm -f "$out"
-  [ -n "${R2_ENDPOINT:-}" ] || die "R2_ENDPOINT is not set"
-  if err="$(aws s3api head-object --bucket "$BUCKET" --key "$MANIFEST" --endpoint-url "$R2_ENDPOINT" 2>&1 > /dev/null)"; then
-    aws s3 cp "s3://$BUCKET/$MANIFEST" "$out" --endpoint-url "$R2_ENDPOINT" --only-show-errors ||
-      die "cannot read s3://$BUCKET/$MANIFEST"
+  if r2_has "$MANIFEST"; then
+    r2_get "$MANIFEST" "$out"
     jq -e . "$out" > /dev/null || die "s3://$BUCKET/$MANIFEST is not JSON"
     echo "read the published $MANIFEST" >&2
-  elif grep -q '(404)\|Not Found' <<< "$err"; then
-    echo "no $MANIFEST is published yet: this release writes the first" >&2
   else
-    die "cannot tell whether s3://$BUCKET/$MANIFEST exists: $err"
+    echo "no $MANIFEST is published yet: this release writes the first" >&2
   fi
 }
 
-upload() { # upload <file> <key> [aws s3 cp flags...]
-  local f="$1" key="$2"
-  shift 2
-  echo "publish $key"
-  [ "${DRY_RUN:-}" = true ] ||
-    aws s3 cp "$f" "s3://$BUCKET/$key" --endpoint-url "$R2_ENDPOINT" --acl public-read --only-show-errors "$@"
+# The signed set, in the order it is stored: the signature LAST, so a store that
+# holds the signature holds the whole set.
+set_files() {
+  archives
+  echo checksums.txt
+  echo "$MANIFEST"
+  echo "$SIGNATURE"
 }
 
-cmd_publish() {
-  [ $# -eq 2 ] || die "usage: publish <tag> <dir>"
-  local tag="$1" dir="$2" f current
+content_type() {
+  case "$1" in
+    *.json) echo application/json ;;
+    *.txt) echo text/plain ;;
+    *) echo application/gzip ;;
+  esac
+}
+
+# check_set <tag> <dir>: <dir> holds a complete set for <tag>.
+check_set() {
+  local tag="$1" dir="$2" f
   check_tag "$tag"
   cmd_verify "$dir"
   for f in "$MANIFEST" "$SIGNATURE"; do
@@ -241,37 +279,143 @@ cmd_publish() {
   done
   [ "$(jq -r '.written_by.tag' "$dir/$MANIFEST")" = "$tag" ] ||
     die "$dir/$MANIFEST was written by $(jq -r '.written_by.tag' "$dir/$MANIFEST"), not $tag"
-  if [ "${DRY_RUN:-}" != true ]; then
-    [ -n "${R2_ENDPOINT:-}" ] || die "R2_ENDPOINT is not set"
-    current="$(mktemp)"
-    cmd_fetch_manifest "$current"
-    assert_not_backwards "$current" "$dir/$MANIFEST"
-    rm -f "$current"
-  fi
-  while read -r f; do
-    upload "$dir/$f" "cli/$tag/$f"
-  done < <(archives)
-  upload "$dir/checksums.txt" "cli/$tag/checksums.txt" --content-type text/plain
-  upload "$dir/$SIGNATURE" "cli/$tag/$SIGNATURE" --content-type application/json
-  upload "$dir/$MANIFEST" "cli/$tag/$MANIFEST" --content-type application/json
-  # The one mutable object, last.
-  upload "$dir/$MANIFEST" "$MANIFEST" --content-type application/json --cache-control "public, max-age=60"
 }
 
-http_code() { curl -sI -o /dev/null -w '%{http_code}' --max-time 30 "$1" 2> /dev/null || echo 000; }
+gh_signed() { # gh_signed <tag>: 0 when the GitHub Release carries the signature
+  local assets
+  assets="$(gh release view "$1" --json assets)" || die "cannot read the GitHub Release $1"
+  jq -e --arg a "$SIGNATURE" 'any(.assets[]; .name == $a)' <<< "$assets" > /dev/null
+}
+
+gh_get_set() { # gh_get_set <tag> <dir>
+  local -a pats=()
+  local f
+  while read -r f; do pats+=(--pattern "$f"); done < <(set_files)
+  mkdir -p "$2"
+  gh release download "$1" --dir "$2" "${pats[@]}" || die "cannot download the signed set of the GitHub Release $1"
+}
+
+r2_get_set() { # r2_get_set <tag> <dir>
+  local f
+  mkdir -p "$2"
+  while read -r f; do r2_get "cli/$1/$f" "$2/$f"; done < <(set_files)
+}
+
+# same_set <what> <stored-dir> <dir>: the stored set is byte-identical to <dir>'s.
+same_set() {
+  local f
+  while read -r f; do
+    cmp -s "$2/$f" "$3/$f" || die "$1 already holds a different signed $f: a published signed set is never replaced"
+  done < <(set_files)
+  echo "$1 already holds this signed set, byte for byte" >&2
+}
+
+cmd_recover() {
+  [ $# -eq 2 ] || die "usage: recover <tag> <dir>"
+  local tag="$1" dir="$2"
+  check_tag "$tag"
+  if gh_signed "$tag"; then
+    rm -rf "$dir"
+    gh_get_set "$tag" "$dir"
+    check_set "$tag" "$dir"
+    echo "recovered the signed set of $tag from its GitHub Release" >&2
+    echo github
+  elif r2_has "cli/$tag/$SIGNATURE"; then
+    rm -rf "$dir"
+    r2_get_set "$tag" "$dir"
+    check_set "$tag" "$dir"
+    echo "recovered the signed set of $tag from s3://$BUCKET/cli/$tag/" >&2
+    echo r2
+  else
+    echo "$tag has no signed set yet: sign one" >&2
+    echo none
+  fi
+}
+
+cmd_store_github() {
+  [ $# -eq 2 ] || die "usage: store-github <tag> <dir>"
+  local tag="$1" dir="$2" f stored
+  local -a files=()
+  check_set "$tag" "$dir"
+  if gh_signed "$tag"; then
+    stored="$(mktemp -d)"
+    gh_get_set "$tag" "$stored"
+    same_set "the GitHub Release $tag" "$stored" "$dir"
+    rm -rf "$stored"
+    return 0
+  fi
+  # Unsigned assets are a partial upload: replaceable. The signature goes last,
+  # never with --clobber.
+  while read -r f; do [ "$f" = "$SIGNATURE" ] || files+=("$dir/$f"); done < <(set_files)
+  gh release upload "$tag" --clobber "${files[@]}" || die "cannot attach the set to the GitHub Release $tag"
+  gh release upload "$tag" "$dir/$SIGNATURE" || die "cannot attach $SIGNATURE to the GitHub Release $tag"
+}
+
+cmd_store_r2() {
+  [ $# -eq 2 ] || die "usage: store-r2 <tag> <dir>"
+  local tag="$1" dir="$2" f stored
+  check_set "$tag" "$dir"
+  if r2_has "cli/$tag/$SIGNATURE"; then
+    stored="$(mktemp -d)"
+    r2_get_set "$tag" "$stored"
+    same_set "s3://$BUCKET/cli/$tag/" "$stored" "$dir"
+    rm -rf "$stored"
+    return 0
+  fi
+  while read -r f; do
+    echo "publish cli/$tag/$f"
+    aws s3 cp "$dir/$f" "s3://$BUCKET/cli/$tag/$f" --endpoint-url "$R2_ENDPOINT" --acl public-read \
+      --only-show-errors --content-type "$(content_type "$f")" || die "cannot upload cli/$tag/$f"
+  done < <(set_files)
+}
+
+cmd_publish_root() {
+  [ $# -eq 2 ] || die "usage: publish-root <tag> <dir>"
+  local tag="$1" dir="$2" stored current
+  check_set "$tag" "$dir"
+  # Only once the set is durable in both places, and is this set.
+  gh_signed "$tag" || die "the GitHub Release $tag has no $SIGNATURE: store the set first"
+  r2_has "cli/$tag/$SIGNATURE" || die "s3://$BUCKET/cli/$tag/ has no $SIGNATURE: store the set first"
+  stored="$(mktemp -d)"
+  r2_get "cli/$tag/$MANIFEST" "$stored/$MANIFEST"
+  r2_get "cli/$tag/$SIGNATURE" "$stored/$SIGNATURE"
+  if ! { cmp -s "$stored/$MANIFEST" "$dir/$MANIFEST" && cmp -s "$stored/$SIGNATURE" "$dir/$SIGNATURE"; }; then
+    die "s3://$BUCKET/cli/$tag/ holds another signed set than $dir"
+  fi
+  current="$stored/current.json"
+  cmd_fetch_manifest "$current"
+  assert_not_backwards "$current" "$dir/$MANIFEST"
+  rm -rf "$stored"
+  echo "publish $MANIFEST"
+  aws s3 cp "$dir/$MANIFEST" "s3://$BUCKET/$MANIFEST" --endpoint-url "$R2_ENDPOINT" --acl public-read \
+    --only-show-errors --content-type application/json --cache-control "public, max-age=60" ||
+    die "cannot upload $MANIFEST"
+}
+
+# fetch_sha <url>: the sha256 of the bytes <url> serves (redirects followed), or
+# nothing when it cannot be read.
+fetch_sha() {
+  local tmp sum=""
+  tmp="$(mktemp)"
+  if curl -fsSL --max-time 300 -o "$tmp" "$1" 2> /dev/null; then sum="$(sha256_of "$tmp")"; fi
+  rm -f "$tmp"
+  echo "$sum"
+}
 
 cmd_verify_published() {
-  [ $# -ge 2 ] || die "usage: verify-published <tag> <channel> [--base URL] [--wait SECONDS]"
-  local tag="$1" channel="$2" wait=600 base="$BASE_URL" body="" got deadline url fail=0 sums name sum tmp
+  [ $# -ge 2 ] || die "usage: verify-published <tag> <channel> [--base URL] [--github URL] [--wait SECONDS]"
+  local tag="$1" channel="$2" wait=600 base="$BASE_URL" github="https://github.com" body="" got deadline fail=0
+  local repo name want sums_want sig_want url copy sum
   shift 2
   while [ $# -gt 0 ]; do
     case "$1" in
       --base) base="${2:?--base needs a URL}"; shift 2 ;;
+      --github) github="${2:?--github needs a URL}"; shift 2 ;;
       --wait) wait="${2:?--wait needs seconds}"; shift 2 ;;
       *) die "verify-published: unknown argument $1" ;;
     esac
   done
-  base="${base%/}"
+  base="${base%/}" github="${github%/}"
   check_tag "$tag"
   check_channel "$channel"
   deadline=$(($(date +%s) + wait))
@@ -286,24 +430,33 @@ cmd_verify_published() {
   done
   echo "ok    $base/$MANIFEST names $tag for $channel"
   [ "$(jq -r '.schema' <<< "$body")" = "$SCHEMA" ] || die "$base/$MANIFEST is not schema $SCHEMA"
-  while read -r url; do
-    if [ "$(http_code "$url")" = 200 ]; then echo "ok    200 $url"; else echo "FAIL  $url"; fail=1; fi
-  done < <(jq -r --arg ch "$channel" '.channels[$ch] | (.platforms[].url), .checksums.url, .bundle.url' <<< "$body")
-  tmp="$(mktemp)"
-  curl -fsS --max-time 30 -o "$tmp" "$(jq -r --arg ch "$channel" '.channels[$ch].checksums.url' <<< "$body")" 2> /dev/null ||
-    die "cannot read the channel's checksums.txt"
-  sums="$(cat "$tmp")"
-  if [ "$(sha256_of "$tmp")" = "$(jq -r --arg ch "$channel" '.channels[$ch].checksums.sha256' <<< "$body")" ]; then
-    echo "ok    sha256 checksums.txt"
-  else
-    echo "FAIL  sha256 of checksums.txt differs from the manifest"
-    fail=1
-  fi
-  rm -f "$tmp"
-  while read -r name sum; do
-    if grep -Fqx "$sum  $name" <<< "$sums"; then echo "ok    sha256 $name"; else echo "FAIL  sha256 of $name differs from checksums.txt"; fail=1; fi
-  done < <(jq -r --arg ch "$channel" '.channels[$ch].platforms[] | "\(.url | split("/") | last) \(.sha256)"' <<< "$body")
-  [ "$fail" = 0 ] || die "the $channel channel's CLI assets are not all published"
+  repo="$(jq -r '.repository' <<< "$body")"
+  ent() { jq -r --arg ch "$channel" ".channels[\$ch]$1" <<< "$body"; }
+  # Every copy, on R2 (through the CDN) and on the GitHub Release, is hashed:
+  # a 200 proves nothing about the bytes.
+  check_copies() { # check_copies <file> <want-sha256> <r2-url>
+    local copy sum
+    for copy in "$3" "$github/$repo/releases/download/$tag/$1"; do
+      sum="$(fetch_sha "$copy")"
+      if [ "$sum" = "$2" ]; then echo "ok    sha256 $copy"; else echo "FAIL  sha256 of $copy is '${sum:-unreadable}', want $2"; fail=1; fi
+    done
+  }
+  sums_want="$(ent .checksums.sha256)"
+  check_copies checksums.txt "$sums_want" "$(ent .checksums.url)"
+  sums="$(curl -fsS --max-time 30 "$(ent .checksums.url)" 2> /dev/null)" || die "cannot read the channel's checksums.txt"
+  while read -r name want; do
+    # The manifest's digest must be the one checksums.txt records, and every
+    # copy's bytes must hash to it.
+    grep -Fqx "$want  $name" <<< "$sums" || { echo "FAIL  the manifest's sha256 of $name is not checksums.txt's"; fail=1; }
+    check_copies "$name" "$want" "$(ent ".platforms[] | select(.url | endswith(\"/$name\")) | .url")"
+  done < <(ent '.platforms[] | "\(.url | split("/") | last) \(.sha256)"')
+  # The signature: the same bytes in both places.
+  sig_want="$(fetch_sha "$(ent .bundle.url)")"
+  [ -n "$sig_want" ] || { echo "FAIL  cannot read $(ent .bundle.url)"; fail=1; }
+  url="$github/$repo/releases/download/$tag/$SIGNATURE"
+  sum="$(fetch_sha "$url")"
+  if [ -n "$sig_want" ] && [ "$sum" = "$sig_want" ]; then echo "ok    $SIGNATURE identical on both"; else echo "FAIL  $url differs from $(ent .bundle.url)"; fail=1; fi
+  [ "$fail" = 0 ] || die "the $channel channel's CLI assets are not all published intact"
 }
 
 sub="${1:-}"
@@ -314,7 +467,10 @@ case "$sub" in
   predicate) cmd_predicate "$@" ;;
   manifest) cmd_manifest "$@" ;;
   fetch-manifest) cmd_fetch_manifest "$@" ;;
-  publish) cmd_publish "$@" ;;
+  recover) cmd_recover "$@" ;;
+  store-github) cmd_store_github "$@" ;;
+  store-r2) cmd_store_r2 "$@" ;;
+  publish-root) cmd_publish_root "$@" ;;
   verify-published) cmd_verify_published "$@" ;;
-  *) die "usage: release-cli.sh package|verify|predicate|manifest|fetch-manifest|publish|verify-published ... (see the header)" ;;
+  *) die "usage: release-cli.sh package|verify|predicate|manifest|fetch-manifest|recover|store-github|store-r2|publish-root|verify-published ... (see the header)" ;;
 esac
