@@ -57,6 +57,8 @@ const (
 	// DeployServiceListEnvironmentsProcedure is the fully-qualified name of the DeployService's
 	// ListEnvironments RPC.
 	DeployServiceListEnvironmentsProcedure = "/controlplane.v1.DeployService/ListEnvironments"
+	// DeployServiceListAppsProcedure is the fully-qualified name of the DeployService's ListApps RPC.
+	DeployServiceListAppsProcedure = "/controlplane.v1.DeployService/ListApps"
 	// DeployServiceUpdateEnvironmentProcedure is the fully-qualified name of the DeployService's
 	// UpdateEnvironment RPC.
 	DeployServiceUpdateEnvironmentProcedure = "/controlplane.v1.DeployService/UpdateEnvironment"
@@ -212,6 +214,12 @@ type DeployServiceClient interface {
 	CreateEnvironment(context.Context, *connect.Request[v1.CreateDeployEnvironmentRequest]) (*connect.Response[v1.CreateDeployEnvironmentResponse], error)
 	GetEnvironment(context.Context, *connect.Request[v1.GetDeployEnvironmentRequest]) (*connect.Response[v1.GetDeployEnvironmentResponse], error)
 	ListEnvironments(context.Context, *connect.Request[v1.ListDeployEnvironmentsRequest]) (*connect.Response[v1.ListDeployEnvironmentsResponse], error)
+	// ListApps lists the org's apps — its hosted projects, one per forge.yaml
+	// `name` deployed in the org — with where each was cut and deployed from
+	// (docs/design/unified-shell-and-projects.md §8.1, §8.3). Read authority is
+	// ListEnvironments': deploy:read in the org. The reliant project id a source
+	// was reported with is never returned.
+	ListApps(context.Context, *connect.Request[v1.ListDeployAppsRequest]) (*connect.Response[v1.ListDeployAppsResponse], error)
 	UpdateEnvironment(context.Context, *connect.Request[v1.UpdateDeployEnvironmentRequest]) (*connect.Response[v1.UpdateDeployEnvironmentResponse], error)
 	// DeleteEnvironment tears down the environment: its deployments, workloads,
 	// URLs, namespaces and (unless keep_data) its managed databases' data.
@@ -688,6 +696,13 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("ListEnvironments")),
 			connect.WithClientOptions(opts...),
 		),
+		listApps: connect.NewClient[v1.ListDeployAppsRequest, v1.ListDeployAppsResponse](
+			httpClient,
+			baseURL+DeployServiceListAppsProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ListApps")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		updateEnvironment: connect.NewClient[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse](
 			httpClient,
 			baseURL+DeployServiceUpdateEnvironmentProcedure,
@@ -988,6 +1003,7 @@ type deployServiceClient struct {
 	createEnvironment       *connect.Client[v1.CreateDeployEnvironmentRequest, v1.CreateDeployEnvironmentResponse]
 	getEnvironment          *connect.Client[v1.GetDeployEnvironmentRequest, v1.GetDeployEnvironmentResponse]
 	listEnvironments        *connect.Client[v1.ListDeployEnvironmentsRequest, v1.ListDeployEnvironmentsResponse]
+	listApps                *connect.Client[v1.ListDeployAppsRequest, v1.ListDeployAppsResponse]
 	updateEnvironment       *connect.Client[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse]
 	deleteEnvironment       *connect.Client[v1.DeleteDeployEnvironmentRequest, v1.DeleteDeployEnvironmentResponse]
 	listRetainedDatabases   *connect.Client[v1.ListRetainedDatabasesRequest, v1.ListRetainedDatabasesResponse]
@@ -1071,6 +1087,11 @@ func (c *deployServiceClient) GetEnvironment(ctx context.Context, req *connect.R
 // ListEnvironments calls controlplane.v1.DeployService.ListEnvironments.
 func (c *deployServiceClient) ListEnvironments(ctx context.Context, req *connect.Request[v1.ListDeployEnvironmentsRequest]) (*connect.Response[v1.ListDeployEnvironmentsResponse], error) {
 	return c.listEnvironments.CallUnary(ctx, req)
+}
+
+// ListApps calls controlplane.v1.DeployService.ListApps.
+func (c *deployServiceClient) ListApps(ctx context.Context, req *connect.Request[v1.ListDeployAppsRequest]) (*connect.Response[v1.ListDeployAppsResponse], error) {
+	return c.listApps.CallUnary(ctx, req)
 }
 
 // UpdateEnvironment calls controlplane.v1.DeployService.UpdateEnvironment.
@@ -1330,6 +1351,12 @@ type DeployServiceHandler interface {
 	CreateEnvironment(context.Context, *connect.Request[v1.CreateDeployEnvironmentRequest]) (*connect.Response[v1.CreateDeployEnvironmentResponse], error)
 	GetEnvironment(context.Context, *connect.Request[v1.GetDeployEnvironmentRequest]) (*connect.Response[v1.GetDeployEnvironmentResponse], error)
 	ListEnvironments(context.Context, *connect.Request[v1.ListDeployEnvironmentsRequest]) (*connect.Response[v1.ListDeployEnvironmentsResponse], error)
+	// ListApps lists the org's apps — its hosted projects, one per forge.yaml
+	// `name` deployed in the org — with where each was cut and deployed from
+	// (docs/design/unified-shell-and-projects.md §8.1, §8.3). Read authority is
+	// ListEnvironments': deploy:read in the org. The reliant project id a source
+	// was reported with is never returned.
+	ListApps(context.Context, *connect.Request[v1.ListDeployAppsRequest]) (*connect.Response[v1.ListDeployAppsResponse], error)
 	UpdateEnvironment(context.Context, *connect.Request[v1.UpdateDeployEnvironmentRequest]) (*connect.Response[v1.UpdateDeployEnvironmentResponse], error)
 	// DeleteEnvironment tears down the environment: its deployments, workloads,
 	// URLs, namespaces and (unless keep_data) its managed databases' data.
@@ -1802,6 +1829,13 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("ListEnvironments")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceListAppsHandler := connect.NewUnaryHandler(
+		DeployServiceListAppsProcedure,
+		svc.ListApps,
+		connect.WithSchema(deployServiceMethods.ByName("ListApps")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceUpdateEnvironmentHandler := connect.NewUnaryHandler(
 		DeployServiceUpdateEnvironmentProcedure,
 		svc.UpdateEnvironment,
@@ -2106,6 +2140,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetEnvironmentHandler.ServeHTTP(w, r)
 		case DeployServiceListEnvironmentsProcedure:
 			deployServiceListEnvironmentsHandler.ServeHTTP(w, r)
+		case DeployServiceListAppsProcedure:
+			deployServiceListAppsHandler.ServeHTTP(w, r)
 		case DeployServiceUpdateEnvironmentProcedure:
 			deployServiceUpdateEnvironmentHandler.ServeHTTP(w, r)
 		case DeployServiceDeleteEnvironmentProcedure:
@@ -2237,6 +2273,10 @@ func (UnimplementedDeployServiceHandler) GetEnvironment(context.Context, *connec
 
 func (UnimplementedDeployServiceHandler) ListEnvironments(context.Context, *connect.Request[v1.ListDeployEnvironmentsRequest]) (*connect.Response[v1.ListDeployEnvironmentsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListEnvironments is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ListApps(context.Context, *connect.Request[v1.ListDeployAppsRequest]) (*connect.Response[v1.ListDeployAppsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListApps is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) UpdateEnvironment(context.Context, *connect.Request[v1.UpdateDeployEnvironmentRequest]) (*connect.Response[v1.UpdateDeployEnvironmentResponse], error) {

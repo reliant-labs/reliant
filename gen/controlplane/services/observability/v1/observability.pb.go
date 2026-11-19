@@ -10827,14 +10827,23 @@ type GetReleaseHealthResponse struct {
 	// The thresholds actually applied, and where each came from.
 	Thresholds []*EffectiveThreshold `protobuf:"bytes,12,rep,name=thresholds,proto3" json:"thresholds,omitempty"`
 	// Finding codes this server could not check (no alert state, no issue
-	// reader), so a PASS is not read as covering them.
+	// reader), so a PASS is not read as covering them. "alert_baseline" means
+	// the alert history before the promotion could not be read, so every alert
+	// that opened after it counted, including one that was already flapping.
 	NotEvaluated []string `protobuf:"bytes,13,rep,name=not_evaluated,json=notEvaluated,proto3" json:"not_evaluated,omitempty"`
 	// Always unset: this read is never narrowed to dev instances (a release is judged over its whole environment),
 	// so it answers for the whole scope even when scope.instance_ids or
 	// instance_users is set (controlplane.v1.InstanceScope).
 	InstanceScope *v1.InstanceScope `protobuf:"bytes,14,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Alerts that opened at or after the promotion and still fire, but that the
+	// same alert (rule and identifying labels) also fired at least
+	// alert_baseline_min_firings times in the baseline_window before it: they
+	// were flapping before this release, so their alert_firing findings are warn
+	// and say why in unattributed. Never listed in firing_alerts too. Empty from
+	// an older server, which counted every alert.
+	BaselineAlerts []*ReleaseAlertRef `protobuf:"bytes,15,rep,name=baseline_alerts,json=baselineAlerts,proto3" json:"baseline_alerts,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetReleaseHealthResponse) Reset() {
@@ -10961,6 +10970,13 @@ func (x *GetReleaseHealthResponse) GetNotEvaluated() []string {
 func (x *GetReleaseHealthResponse) GetInstanceScope() *v1.InstanceScope {
 	if x != nil {
 		return x.InstanceScope
+	}
+	return nil
+}
+
+func (x *GetReleaseHealthResponse) GetBaselineAlerts() []*ReleaseAlertRef {
+	if x != nil {
+		return x.BaselineAlerts
 	}
 	return nil
 }
@@ -11229,13 +11245,16 @@ func (x *ServiceWindowStats) GetP99Ms() float64 {
 }
 
 type ReleaseAlertRef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Rule          string                 `protobuf:"bytes,1,opt,name=rule,proto3" json:"rule,omitempty"`
-	Fingerprint   string                 `protobuf:"bytes,2,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
-	FiringAt      *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=firing_at,json=firingAt,proto3" json:"firing_at,omitempty"`
-	Labels        map[string]string      `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Rule        string                 `protobuf:"bytes,1,opt,name=rule,proto3" json:"rule,omitempty"`
+	Fingerprint string                 `protobuf:"bytes,2,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
+	FiringAt    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=firing_at,json=firingAt,proto3" json:"firing_at,omitempty"`
+	Labels      map[string]string      `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// How many times the same alert fired in the baseline window before the
+	// promotion. Set only on baseline_alerts.
+	BaselineFirings int32 `protobuf:"varint,5,opt,name=baseline_firings,json=baselineFirings,proto3" json:"baseline_firings,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ReleaseAlertRef) Reset() {
@@ -11294,6 +11313,13 @@ func (x *ReleaseAlertRef) GetLabels() map[string]string {
 		return x.Labels
 	}
 	return nil
+}
+
+func (x *ReleaseAlertRef) GetBaselineFirings() int32 {
+	if x != nil {
+		return x.BaselineFirings
+	}
+	return 0
 }
 
 // WorkloadFinding is a restart or OOM kill during the after window.
@@ -11370,7 +11396,12 @@ type ReleaseFinding struct {
 	// "fail" or "warn".
 	Policy string `protobuf:"bytes,5,opt,name=policy,proto3" json:"policy,omitempty"`
 	// One line a person or an agent can act on.
-	Message       string `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`
+	Message string `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`
+	// Why the finding is not counted against the judged release, when it is not
+	// (its policy is then warn): the release served too little of the traffic,
+	// or the alert was already flapping before the promotion. Empty for a
+	// finding that is the release's, and from an older server.
+	Unattributed  string `protobuf:"bytes,7,opt,name=unattributed,proto3" json:"unattributed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11443,6 +11474,13 @@ func (x *ReleaseFinding) GetPolicy() string {
 func (x *ReleaseFinding) GetMessage() string {
 	if x != nil {
 		return x.Message
+	}
+	return ""
+}
+
+func (x *ReleaseFinding) GetUnattributed() string {
+	if x != nil {
+		return x.Unattributed
 	}
 	return ""
 }
@@ -11982,9 +12020,19 @@ type EnvUserActivity struct {
 	// Where the current window's events came from (app.client), sorted.
 	Clients []string `protobuf:"bytes,9,rep,name=clients,proto3" json:"clients,omitempty"`
 	// How new was counted: "signups" or "first_seen".
-	NewRule       string `protobuf:"bytes,10,opt,name=new_rule,json=newRule,proto3" json:"new_rule,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	NewRule string `protobuf:"bytes,10,opt,name=new_rule,json=newRule,proto3" json:"new_rule,omitempty"`
+	// The moment from which current's new tells a new user from a returning
+	// one (forge obsquery EnvUserActivity.NewDecidedFrom): with new_rule
+	// "signups", the environment's earliest retained sign-up. When it falls
+	// inside the current window, new and returning are counted only from it,
+	// and a reader labels them "since <new_decided_from>". Unset when the
+	// window holds no rows.
+	NewDecidedFrom *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=new_decided_from,json=newDecidedFrom,proto3" json:"new_decided_from,omitempty"`
+	// new_decided_from for previous (the window of the range's length before
+	// the current one).
+	PreviousNewDecidedFrom *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=previous_new_decided_from,json=previousNewDecidedFrom,proto3" json:"previous_new_decided_from,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *EnvUserActivity) Reset() {
@@ -12085,6 +12133,20 @@ func (x *EnvUserActivity) GetNewRule() string {
 		return x.NewRule
 	}
 	return ""
+}
+
+func (x *EnvUserActivity) GetNewDecidedFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NewDecidedFrom
+	}
+	return nil
+}
+
+func (x *EnvUserActivity) GetPreviousNewDecidedFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PreviousNewDecidedFrom
+	}
+	return nil
 }
 
 var File_services_observability_v1_observability_proto protoreflect.FileDescriptor
@@ -13024,7 +13086,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x17ThresholdOverridesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\t\n" +
-	"\asubject\"\xe5\x06\n" +
+	"\asubject\"\xb0\a\n" +
 	"\x18GetReleaseHealthResponse\x12B\n" +
 	"\tpromotion\x18\x01 \x01(\v2$.controlplane.v1.ReleasePromotionRefR\tpromotion\x122\n" +
 	"\x06before\x18\x02 \x01(\v2\x1a.controlplane.v1.TimeRangeR\x06before\x120\n" +
@@ -13043,7 +13105,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"thresholds\x18\f \x03(\v2#.controlplane.v1.EffectiveThresholdR\n" +
 	"thresholds\x12#\n" +
 	"\rnot_evaluated\x18\r \x03(\tR\fnotEvaluated\x12E\n" +
-	"\x0einstance_scope\x18\x0e \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xda\x02\n" +
+	"\x0einstance_scope\x18\x0e \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\x12I\n" +
+	"\x0fbaseline_alerts\x18\x0f \x03(\v2 .controlplane.v1.ReleaseAlertRefR\x0ebaselineAlerts\"\xda\x02\n" +
 	"\x13ReleasePromotionRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0frelease_version\x18\x02 \x01(\tR\x0ereleaseVersion\x12\x1d\n" +
@@ -13066,26 +13129,28 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"error_rate\x18\x02 \x01(\x01R\terrorRate\x12\x15\n" +
 	"\x06p50_ms\x18\x03 \x01(\x01R\x05p50Ms\x12\x15\n" +
 	"\x06p95_ms\x18\x04 \x01(\x01R\x05p95Ms\x12\x15\n" +
-	"\x06p99_ms\x18\x05 \x01(\x01R\x05p99Ms\"\x81\x02\n" +
+	"\x06p99_ms\x18\x05 \x01(\x01R\x05p99Ms\"\xac\x02\n" +
 	"\x0fReleaseAlertRef\x12\x12\n" +
 	"\x04rule\x18\x01 \x01(\tR\x04rule\x12 \n" +
 	"\vfingerprint\x18\x02 \x01(\tR\vfingerprint\x127\n" +
 	"\tfiring_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\bfiringAt\x12D\n" +
-	"\x06labels\x18\x04 \x03(\v2,.controlplane.v1.ReleaseAlertRef.LabelsEntryR\x06labels\x1a9\n" +
+	"\x06labels\x18\x04 \x03(\v2,.controlplane.v1.ReleaseAlertRef.LabelsEntryR\x06labels\x12)\n" +
+	"\x10baseline_firings\x18\x05 \x01(\x05R\x0fbaselineFirings\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x7f\n" +
 	"\x0fWorkloadFinding\x12\x1a\n" +
 	"\bworkload\x18\x01 \x01(\tR\bworkload\x12\x1a\n" +
 	"\brestarts\x18\x02 \x01(\x03R\brestarts\x124\n" +
-	"\x16last_terminated_reason\x18\x03 \x01(\tR\x14lastTerminatedReason\"\xc9\x01\n" +
+	"\x16last_terminated_reason\x18\x03 \x01(\tR\x14lastTerminatedReason\"\xed\x01\n" +
 	"\x0eReleaseFinding\x127\n" +
 	"\x04code\x18\x01 \x01(\x0e2#.controlplane.v1.ReleaseFindingCodeR\x04code\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\x01R\x05value\x12\x1c\n" +
 	"\tthreshold\x18\x04 \x01(\x01R\tthreshold\x12\x16\n" +
 	"\x06policy\x18\x05 \x01(\tR\x06policy\x12\x18\n" +
-	"\amessage\x18\x06 \x01(\tR\amessage\"V\n" +
+	"\amessage\x18\x06 \x01(\tR\amessage\x12\"\n" +
+	"\funattributed\x18\a \x01(\tR\funattributed\"V\n" +
 	"\x12EffectiveThreshold\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x12\x16\n" +
@@ -13122,7 +13187,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x03day\x18\x01 \x01(\tR\x03day\x12\x16\n" +
 	"\x06active\x18\x02 \x01(\x03R\x06active\x12\x10\n" +
 	"\x03new\x18\x03 \x01(\x03R\x03new\x12\x1c\n" +
-	"\treturning\x18\x04 \x01(\x03R\treturning\"\xca\x03\n" +
+	"\treturning\x18\x04 \x01(\x03R\treturning\"\xe7\x04\n" +
 	"\x0fEnvUserActivity\x12\x15\n" +
 	"\x06env_id\x18\x01 \x01(\tR\x05envId\x12\x19\n" +
 	"\benv_name\x18\x02 \x01(\tR\aenvName\x12=\n" +
@@ -13135,7 +13200,9 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x0efirst_event_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\ffirstEventAt\x12\x18\n" +
 	"\aclients\x18\t \x03(\tR\aclients\x12\x19\n" +
 	"\bnew_rule\x18\n" +
-	" \x01(\tR\anewRuleB\r\n" +
+	" \x01(\tR\anewRule\x12D\n" +
+	"\x10new_decided_from\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x0enewDecidedFrom\x12U\n" +
+	"\x19previous_new_decided_from\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x16previousNewDecidedFromB\r\n" +
 	"\v_seen_total*\xbc\x02\n" +
 	"\rGraphNodeKind\x12\x1f\n" +
 	"\x1bGRAPH_NODE_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
@@ -13691,69 +13758,72 @@ var file_services_observability_v1_observability_proto_depIdxs = []int32{
 	126, // 208: controlplane.v1.GetReleaseHealthResponse.findings:type_name -> controlplane.v1.ReleaseFinding
 	127, // 209: controlplane.v1.GetReleaseHealthResponse.thresholds:type_name -> controlplane.v1.EffectiveThreshold
 	152, // 210: controlplane.v1.GetReleaseHealthResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	151, // 211: controlplane.v1.ReleasePromotionRef.promoted_at:type_name -> google.protobuf.Timestamp
-	151, // 212: controlplane.v1.ReleasePromotionRef.live_at:type_name -> google.protobuf.Timestamp
-	123, // 213: controlplane.v1.ServiceHealthDelta.before:type_name -> controlplane.v1.ServiceWindowStats
-	123, // 214: controlplane.v1.ServiceHealthDelta.after:type_name -> controlplane.v1.ServiceWindowStats
-	151, // 215: controlplane.v1.ReleaseAlertRef.firing_at:type_name -> google.protobuf.Timestamp
-	150, // 216: controlplane.v1.ReleaseAlertRef.labels:type_name -> controlplane.v1.ReleaseAlertRef.LabelsEntry
-	19,  // 217: controlplane.v1.ReleaseFinding.code:type_name -> controlplane.v1.ReleaseFindingCode
-	130, // 218: controlplane.v1.ListFrontendReplayResponse.frontends:type_name -> controlplane.v1.FrontendReplay
-	20,  // 219: controlplane.v1.FrontendReplay.state:type_name -> controlplane.v1.FrontendReplayState
-	21,  // 220: controlplane.v1.FrontendReplay.source:type_name -> controlplane.v1.FrontendReplaySource
-	23,  // 221: controlplane.v1.GetUserActivityRequest.scope:type_name -> controlplane.v1.QueryScope
-	135, // 222: controlplane.v1.GetUserActivityResponse.envs:type_name -> controlplane.v1.EnvUserActivity
-	133, // 223: controlplane.v1.EnvUserActivity.current:type_name -> controlplane.v1.UserActivityCounts
-	133, // 224: controlplane.v1.EnvUserActivity.previous:type_name -> controlplane.v1.UserActivityCounts
-	134, // 225: controlplane.v1.EnvUserActivity.days:type_name -> controlplane.v1.UserActivityDay
-	151, // 226: controlplane.v1.EnvUserActivity.first_event_at:type_name -> google.protobuf.Timestamp
-	37,  // 227: controlplane.v1.ObservabilityService.SearchLogs:input_type -> controlplane.v1.SearchLogsRequest
-	40,  // 228: controlplane.v1.ObservabilityService.ListTraces:input_type -> controlplane.v1.ListTracesRequest
-	45,  // 229: controlplane.v1.ObservabilityService.GetTrace:input_type -> controlplane.v1.GetTraceRequest
-	51,  // 230: controlplane.v1.ObservabilityService.ListMetrics:input_type -> controlplane.v1.ListMetricsRequest
-	61,  // 231: controlplane.v1.ObservabilityService.QueryMetric:input_type -> controlplane.v1.QueryMetricRequest
-	55,  // 232: controlplane.v1.ObservabilityService.GetMetric:input_type -> controlplane.v1.GetMetricRequest
-	58,  // 233: controlplane.v1.ObservabilityService.ListMetricExemplars:input_type -> controlplane.v1.ListMetricExemplarsRequest
-	24,  // 234: controlplane.v1.ObservabilityService.GetServiceGraph:input_type -> controlplane.v1.GetServiceGraphRequest
-	31,  // 235: controlplane.v1.ObservabilityService.GetServiceGraphCatalog:input_type -> controlplane.v1.GetServiceGraphCatalogRequest
-	64,  // 236: controlplane.v1.ObservabilityService.GetServiceOverview:input_type -> controlplane.v1.GetServiceOverviewRequest
-	67,  // 237: controlplane.v1.ObservabilityService.GetFlamegraph:input_type -> controlplane.v1.GetFlamegraphRequest
-	89,  // 238: controlplane.v1.ObservabilityService.QueryPanel:input_type -> controlplane.v1.QueryPanelRequest
-	69,  // 239: controlplane.v1.ObservabilityService.ListAttributeValues:input_type -> controlplane.v1.ListAttributeValuesRequest
-	72,  // 240: controlplane.v1.ObservabilityService.GetServiceSignals:input_type -> controlplane.v1.GetServiceSignalsRequest
-	75,  // 241: controlplane.v1.ObservabilityService.ListWorkloads:input_type -> controlplane.v1.ListWorkloadsRequest
-	84,  // 242: controlplane.v1.ObservabilityService.GetWorkload:input_type -> controlplane.v1.GetWorkloadRequest
-	101, // 243: controlplane.v1.ObservabilityService.GetDashboards:input_type -> controlplane.v1.GetDashboardsRequest
-	115, // 244: controlplane.v1.ObservabilityService.GetObservabilityUsage:input_type -> controlplane.v1.GetObservabilityUsageRequest
-	119, // 245: controlplane.v1.ObservabilityService.GetReleaseHealth:input_type -> controlplane.v1.GetReleaseHealthRequest
-	131, // 246: controlplane.v1.ObservabilityService.GetUserActivity:input_type -> controlplane.v1.GetUserActivityRequest
-	128, // 247: controlplane.v1.ObservabilityService.ListFrontendReplay:input_type -> controlplane.v1.ListFrontendReplayRequest
-	38,  // 248: controlplane.v1.ObservabilityService.SearchLogs:output_type -> controlplane.v1.SearchLogsResponse
-	41,  // 249: controlplane.v1.ObservabilityService.ListTraces:output_type -> controlplane.v1.ListTracesResponse
-	46,  // 250: controlplane.v1.ObservabilityService.GetTrace:output_type -> controlplane.v1.GetTraceResponse
-	52,  // 251: controlplane.v1.ObservabilityService.ListMetrics:output_type -> controlplane.v1.ListMetricsResponse
-	62,  // 252: controlplane.v1.ObservabilityService.QueryMetric:output_type -> controlplane.v1.QueryMetricResponse
-	56,  // 253: controlplane.v1.ObservabilityService.GetMetric:output_type -> controlplane.v1.GetMetricResponse
-	59,  // 254: controlplane.v1.ObservabilityService.ListMetricExemplars:output_type -> controlplane.v1.ListMetricExemplarsResponse
-	25,  // 255: controlplane.v1.ObservabilityService.GetServiceGraph:output_type -> controlplane.v1.GetServiceGraphResponse
-	34,  // 256: controlplane.v1.ObservabilityService.GetServiceGraphCatalog:output_type -> controlplane.v1.GetServiceGraphCatalogResponse
-	65,  // 257: controlplane.v1.ObservabilityService.GetServiceOverview:output_type -> controlplane.v1.GetServiceOverviewResponse
-	68,  // 258: controlplane.v1.ObservabilityService.GetFlamegraph:output_type -> controlplane.v1.GetFlamegraphResponse
-	94,  // 259: controlplane.v1.ObservabilityService.QueryPanel:output_type -> controlplane.v1.QueryPanelResponse
-	70,  // 260: controlplane.v1.ObservabilityService.ListAttributeValues:output_type -> controlplane.v1.ListAttributeValuesResponse
-	73,  // 261: controlplane.v1.ObservabilityService.GetServiceSignals:output_type -> controlplane.v1.GetServiceSignalsResponse
-	76,  // 262: controlplane.v1.ObservabilityService.ListWorkloads:output_type -> controlplane.v1.ListWorkloadsResponse
-	85,  // 263: controlplane.v1.ObservabilityService.GetWorkload:output_type -> controlplane.v1.GetWorkloadResponse
-	102, // 264: controlplane.v1.ObservabilityService.GetDashboards:output_type -> controlplane.v1.GetDashboardsResponse
-	116, // 265: controlplane.v1.ObservabilityService.GetObservabilityUsage:output_type -> controlplane.v1.GetObservabilityUsageResponse
-	120, // 266: controlplane.v1.ObservabilityService.GetReleaseHealth:output_type -> controlplane.v1.GetReleaseHealthResponse
-	132, // 267: controlplane.v1.ObservabilityService.GetUserActivity:output_type -> controlplane.v1.GetUserActivityResponse
-	129, // 268: controlplane.v1.ObservabilityService.ListFrontendReplay:output_type -> controlplane.v1.ListFrontendReplayResponse
-	248, // [248:269] is the sub-list for method output_type
-	227, // [227:248] is the sub-list for method input_type
-	227, // [227:227] is the sub-list for extension type_name
-	227, // [227:227] is the sub-list for extension extendee
-	0,   // [0:227] is the sub-list for field type_name
+	124, // 211: controlplane.v1.GetReleaseHealthResponse.baseline_alerts:type_name -> controlplane.v1.ReleaseAlertRef
+	151, // 212: controlplane.v1.ReleasePromotionRef.promoted_at:type_name -> google.protobuf.Timestamp
+	151, // 213: controlplane.v1.ReleasePromotionRef.live_at:type_name -> google.protobuf.Timestamp
+	123, // 214: controlplane.v1.ServiceHealthDelta.before:type_name -> controlplane.v1.ServiceWindowStats
+	123, // 215: controlplane.v1.ServiceHealthDelta.after:type_name -> controlplane.v1.ServiceWindowStats
+	151, // 216: controlplane.v1.ReleaseAlertRef.firing_at:type_name -> google.protobuf.Timestamp
+	150, // 217: controlplane.v1.ReleaseAlertRef.labels:type_name -> controlplane.v1.ReleaseAlertRef.LabelsEntry
+	19,  // 218: controlplane.v1.ReleaseFinding.code:type_name -> controlplane.v1.ReleaseFindingCode
+	130, // 219: controlplane.v1.ListFrontendReplayResponse.frontends:type_name -> controlplane.v1.FrontendReplay
+	20,  // 220: controlplane.v1.FrontendReplay.state:type_name -> controlplane.v1.FrontendReplayState
+	21,  // 221: controlplane.v1.FrontendReplay.source:type_name -> controlplane.v1.FrontendReplaySource
+	23,  // 222: controlplane.v1.GetUserActivityRequest.scope:type_name -> controlplane.v1.QueryScope
+	135, // 223: controlplane.v1.GetUserActivityResponse.envs:type_name -> controlplane.v1.EnvUserActivity
+	133, // 224: controlplane.v1.EnvUserActivity.current:type_name -> controlplane.v1.UserActivityCounts
+	133, // 225: controlplane.v1.EnvUserActivity.previous:type_name -> controlplane.v1.UserActivityCounts
+	134, // 226: controlplane.v1.EnvUserActivity.days:type_name -> controlplane.v1.UserActivityDay
+	151, // 227: controlplane.v1.EnvUserActivity.first_event_at:type_name -> google.protobuf.Timestamp
+	151, // 228: controlplane.v1.EnvUserActivity.new_decided_from:type_name -> google.protobuf.Timestamp
+	151, // 229: controlplane.v1.EnvUserActivity.previous_new_decided_from:type_name -> google.protobuf.Timestamp
+	37,  // 230: controlplane.v1.ObservabilityService.SearchLogs:input_type -> controlplane.v1.SearchLogsRequest
+	40,  // 231: controlplane.v1.ObservabilityService.ListTraces:input_type -> controlplane.v1.ListTracesRequest
+	45,  // 232: controlplane.v1.ObservabilityService.GetTrace:input_type -> controlplane.v1.GetTraceRequest
+	51,  // 233: controlplane.v1.ObservabilityService.ListMetrics:input_type -> controlplane.v1.ListMetricsRequest
+	61,  // 234: controlplane.v1.ObservabilityService.QueryMetric:input_type -> controlplane.v1.QueryMetricRequest
+	55,  // 235: controlplane.v1.ObservabilityService.GetMetric:input_type -> controlplane.v1.GetMetricRequest
+	58,  // 236: controlplane.v1.ObservabilityService.ListMetricExemplars:input_type -> controlplane.v1.ListMetricExemplarsRequest
+	24,  // 237: controlplane.v1.ObservabilityService.GetServiceGraph:input_type -> controlplane.v1.GetServiceGraphRequest
+	31,  // 238: controlplane.v1.ObservabilityService.GetServiceGraphCatalog:input_type -> controlplane.v1.GetServiceGraphCatalogRequest
+	64,  // 239: controlplane.v1.ObservabilityService.GetServiceOverview:input_type -> controlplane.v1.GetServiceOverviewRequest
+	67,  // 240: controlplane.v1.ObservabilityService.GetFlamegraph:input_type -> controlplane.v1.GetFlamegraphRequest
+	89,  // 241: controlplane.v1.ObservabilityService.QueryPanel:input_type -> controlplane.v1.QueryPanelRequest
+	69,  // 242: controlplane.v1.ObservabilityService.ListAttributeValues:input_type -> controlplane.v1.ListAttributeValuesRequest
+	72,  // 243: controlplane.v1.ObservabilityService.GetServiceSignals:input_type -> controlplane.v1.GetServiceSignalsRequest
+	75,  // 244: controlplane.v1.ObservabilityService.ListWorkloads:input_type -> controlplane.v1.ListWorkloadsRequest
+	84,  // 245: controlplane.v1.ObservabilityService.GetWorkload:input_type -> controlplane.v1.GetWorkloadRequest
+	101, // 246: controlplane.v1.ObservabilityService.GetDashboards:input_type -> controlplane.v1.GetDashboardsRequest
+	115, // 247: controlplane.v1.ObservabilityService.GetObservabilityUsage:input_type -> controlplane.v1.GetObservabilityUsageRequest
+	119, // 248: controlplane.v1.ObservabilityService.GetReleaseHealth:input_type -> controlplane.v1.GetReleaseHealthRequest
+	131, // 249: controlplane.v1.ObservabilityService.GetUserActivity:input_type -> controlplane.v1.GetUserActivityRequest
+	128, // 250: controlplane.v1.ObservabilityService.ListFrontendReplay:input_type -> controlplane.v1.ListFrontendReplayRequest
+	38,  // 251: controlplane.v1.ObservabilityService.SearchLogs:output_type -> controlplane.v1.SearchLogsResponse
+	41,  // 252: controlplane.v1.ObservabilityService.ListTraces:output_type -> controlplane.v1.ListTracesResponse
+	46,  // 253: controlplane.v1.ObservabilityService.GetTrace:output_type -> controlplane.v1.GetTraceResponse
+	52,  // 254: controlplane.v1.ObservabilityService.ListMetrics:output_type -> controlplane.v1.ListMetricsResponse
+	62,  // 255: controlplane.v1.ObservabilityService.QueryMetric:output_type -> controlplane.v1.QueryMetricResponse
+	56,  // 256: controlplane.v1.ObservabilityService.GetMetric:output_type -> controlplane.v1.GetMetricResponse
+	59,  // 257: controlplane.v1.ObservabilityService.ListMetricExemplars:output_type -> controlplane.v1.ListMetricExemplarsResponse
+	25,  // 258: controlplane.v1.ObservabilityService.GetServiceGraph:output_type -> controlplane.v1.GetServiceGraphResponse
+	34,  // 259: controlplane.v1.ObservabilityService.GetServiceGraphCatalog:output_type -> controlplane.v1.GetServiceGraphCatalogResponse
+	65,  // 260: controlplane.v1.ObservabilityService.GetServiceOverview:output_type -> controlplane.v1.GetServiceOverviewResponse
+	68,  // 261: controlplane.v1.ObservabilityService.GetFlamegraph:output_type -> controlplane.v1.GetFlamegraphResponse
+	94,  // 262: controlplane.v1.ObservabilityService.QueryPanel:output_type -> controlplane.v1.QueryPanelResponse
+	70,  // 263: controlplane.v1.ObservabilityService.ListAttributeValues:output_type -> controlplane.v1.ListAttributeValuesResponse
+	73,  // 264: controlplane.v1.ObservabilityService.GetServiceSignals:output_type -> controlplane.v1.GetServiceSignalsResponse
+	76,  // 265: controlplane.v1.ObservabilityService.ListWorkloads:output_type -> controlplane.v1.ListWorkloadsResponse
+	85,  // 266: controlplane.v1.ObservabilityService.GetWorkload:output_type -> controlplane.v1.GetWorkloadResponse
+	102, // 267: controlplane.v1.ObservabilityService.GetDashboards:output_type -> controlplane.v1.GetDashboardsResponse
+	116, // 268: controlplane.v1.ObservabilityService.GetObservabilityUsage:output_type -> controlplane.v1.GetObservabilityUsageResponse
+	120, // 269: controlplane.v1.ObservabilityService.GetReleaseHealth:output_type -> controlplane.v1.GetReleaseHealthResponse
+	132, // 270: controlplane.v1.ObservabilityService.GetUserActivity:output_type -> controlplane.v1.GetUserActivityResponse
+	129, // 271: controlplane.v1.ObservabilityService.ListFrontendReplay:output_type -> controlplane.v1.ListFrontendReplayResponse
+	251, // [251:272] is the sub-list for method output_type
+	230, // [230:251] is the sub-list for method input_type
+	230, // [230:230] is the sub-list for extension type_name
+	230, // [230:230] is the sub-list for extension extendee
+	0,   // [0:230] is the sub-list for field type_name
 }
 
 func init() { file_services_observability_v1_observability_proto_init() }

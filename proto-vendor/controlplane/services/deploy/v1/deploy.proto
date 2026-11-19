@@ -125,6 +125,15 @@ service DeployService {
   rpc ListEnvironments(ListDeployEnvironmentsRequest) returns (ListDeployEnvironmentsResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
+  // ListApps lists the org's apps — its hosted projects, one per forge.yaml
+  // `name` deployed in the org — with where each was cut and deployed from
+  // (docs/design/unified-shell-and-projects.md §8.1, §8.3). Read authority is
+  // ListEnvironments': deploy:read in the org. The reliant project id a source
+  // was reported with is never returned.
+  rpc ListApps(ListDeployAppsRequest) returns (ListDeployAppsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {auth_required: true};
+  }
   rpc UpdateEnvironment(UpdateDeployEnvironmentRequest) returns (UpdateDeployEnvironmentResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -1130,6 +1139,47 @@ message ListDeployEnvironmentsRequest {
 
 message ListDeployEnvironmentsResponse {
   repeated DeployEnvironment environments = 1;
+  // Where each app among `environments` was cut and deployed from: one entry
+  // per project that has recorded any source, with the two-repositories
+  // warning when it applies. The app read the Apps page makes until a
+  // dedicated app read exists.
+  repeated controlplane.v1.DeployAppCodeSources app_code_sources = 2;
+}
+
+message ListDeployAppsRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
+
+message ListDeployAppsResponse {
+  // Newest activity first (last_deployed_at, else created_at), then by name.
+  // An app an org move retired (docs/design/org-app-move.md §8.3) is not the
+  // org's any more and is not listed.
+  repeated DeployApp apps = 1;
+}
+
+// DeployApp is one app (a hosted project) of an org.
+message DeployApp {
+  // forge.yaml `name`: the app's immutable identity in its org.
+  string name = 1;
+  google.protobuf.Timestamp created_at = 2;
+  // The newest promotion to any of its live environments. Unset: never
+  // deployed, or every environment it was deployed to has been deleted.
+  google.protobuf.Timestamp last_deployed_at = 3;
+  // Its live environments' names, persistent first (prod, staging, then by
+  // name), then previews and local ones by name.
+  repeated string environments = 4;
+  // True when one of its live environments serves a static site (a frontend
+  // on hosted static hosting): the Projects page's Sites filter. Read from
+  // the stored topology — a live deployment of the static tier, the row the
+  // hosted converge writes for each site a promoted release declares and the
+  // one the static free tier counts — never from a live status call.
+  bool has_static_site = 5;
+  // Where it was cut and deployed from; unset when no source was recorded.
+  // Never carries a reliant_project_id.
+  controlplane.v1.DeployAppCodeSources code_sources = 6;
 }
 
 message UpdateDeployEnvironmentRequest {
@@ -1774,6 +1824,14 @@ message CutReleaseRequest {
   // artifact" rule above stands. In a snapshot_release document the same
   // flag is the document's own record_only field, which must agree.
   bool record_only = 13;
+
+  // Where this release was cut from (DeployCodeSource): recorded on the app,
+  // never part of the release's identity, so a retry from another checkout
+  // is still a retry. Allowed beside snapshot_release, which forge sends
+  // without it, as with migrations. Unset from a forge that predates it.
+  // Recorded only for a caller with deploy:write (a person: that grant, or
+  // admin where grants are not configured); otherwise silently not recorded.
+  controlplane.v1.DeployCodeSource code_source = 14;
 }
 
 // RecordReleaseMigrationsRequest records the migration manifest of a release
@@ -1807,6 +1865,11 @@ message CutReleaseResponse {
   // pipeline that cut a release it believed to be new, and learns it was not,
   // may legitimately want to say so in its summary.
   bool created = 2;
+
+  // Every source the release's app has been cut or deployed from, including
+  // this cut's code_source, and the two-repositories warning when there is
+  // one. Unset when the request carried no source or named no project.
+  controlplane.v1.DeployAppCodeSources code_sources = 3;
 }
 
 message CompareDeployReleasesRequest {
@@ -2310,10 +2373,26 @@ message OpenDeployAttemptRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 10;
+  // The checkout this deploy runs from (DeployCodeSource), recorded on the
+  // app. On the open rather than on a report: it is fixed for the whole
+  // invocation and known when the attempt starts. Unset from a forge that
+  // predates it.
+  //
+  // OPTIONAL EVIDENCE UNDER A STRONGER GATE THAN THE OPEN. The open itself is
+  // unchanged (member, or deploy:read for a token); recording this needs
+  // deploy:write, and from a caller without it the field is silently not
+  // recorded. It is bound to the stored attempt: a retried open (the same
+  // id) records nothing new, and the app is the stored attempt's project.
+  // It never creates an app the org does not already have.
+  controlplane.v1.DeployCodeSource code_source = 11;
 }
 
 message OpenDeployAttemptResponse {
   DeployAttempt attempt = 1;
+  // Every source the app has been cut or deployed from, including this
+  // attempt's code_source, and the two-repositories warning when there is
+  // one. Unset when the request carried no source or named no project.
+  controlplane.v1.DeployAppCodeSources code_sources = 2;
 }
 
 message ReportDeployAttemptRequest {

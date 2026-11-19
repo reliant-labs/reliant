@@ -2353,12 +2353,21 @@ message GetReleaseHealthResponse {
   // The thresholds actually applied, and where each came from.
   repeated EffectiveThreshold thresholds = 12;
   // Finding codes this server could not check (no alert state, no issue
-  // reader), so a PASS is not read as covering them.
+  // reader), so a PASS is not read as covering them. "alert_baseline" means
+  // the alert history before the promotion could not be read, so every alert
+  // that opened after it counted, including one that was already flapping.
   repeated string not_evaluated = 13;
   // Always unset: this read is never narrowed to dev instances (a release is judged over its whole environment),
   // so it answers for the whole scope even when scope.instance_ids or
   // instance_users is set (controlplane.v1.InstanceScope).
   controlplane.v1.InstanceScope instance_scope = 14;
+  // Alerts that opened at or after the promotion and still fire, but that the
+  // same alert (rule and identifying labels) also fired at least
+  // alert_baseline_min_firings times in the baseline_window before it: they
+  // were flapping before this release, so their alert_firing findings are warn
+  // and say why in unattributed. Never listed in firing_alerts too. Empty from
+  // an older server, which counted every alert.
+  repeated ReleaseAlertRef baseline_alerts = 15;
 }
 
 // ReleasePromotionRef names the promotion a health check judged.
@@ -2411,6 +2420,9 @@ message ReleaseAlertRef {
   string fingerprint = 2;
   google.protobuf.Timestamp firing_at = 3;
   map<string, string> labels = 4;
+  // How many times the same alert fired in the baseline window before the
+  // promotion. Set only on baseline_alerts.
+  int32 baseline_firings = 5;
 }
 
 // WorkloadFinding is a restart or OOM kill during the after window.
@@ -2453,6 +2465,11 @@ message ReleaseFinding {
   string policy = 5;
   // One line a person or an agent can act on.
   string message = 6;
+  // Why the finding is not counted against the judged release, when it is not
+  // (its policy is then warn): the release served too little of the traffic,
+  // or the alert was already flapping before the promotion. Empty for a
+  // finding that is the release's, and from an older server.
+  string unattributed = 7;
 }
 
 message EffectiveThreshold {
@@ -2589,4 +2606,14 @@ message EnvUserActivity {
   repeated string clients = 9;
   // How new was counted: "signups" or "first_seen".
   string new_rule = 10;
+  // The moment from which current's new tells a new user from a returning
+  // one (forge obsquery EnvUserActivity.NewDecidedFrom): with new_rule
+  // "signups", the environment's earliest retained sign-up. When it falls
+  // inside the current window, new and returning are counted only from it,
+  // and a reader labels them "since <new_decided_from>". Unset when the
+  // window holds no rows.
+  google.protobuf.Timestamp new_decided_from = 11;
+  // new_decided_from for previous (the window of the range's length before
+  // the current one).
+  google.protobuf.Timestamp previous_new_decided_from = 12;
 }

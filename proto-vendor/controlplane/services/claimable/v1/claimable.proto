@@ -201,6 +201,9 @@ message StartClaimableDeployRequest {
   string pow_challenge = 4;
   // The solution. See GetClaimableChallengeResponse for the exact rule.
   string pow_nonce = 5;
+  // Stable forge.yaml project identity. Empty preserves the legacy name/env namespace.
+  // A canonical UUID; does not change the per-device abuse limits.
+  string project_instance_id = 6;
 }
 
 message StartClaimableDeployResponse {
@@ -258,6 +261,8 @@ message GetClaimableAvailabilityResponse {
   // its checks and the platform's cannot disagree. Set whether or not a
   // deploy is available.
   ClaimableLimits limits = 5;
+  // Whether project_instance_id is supported by both the API and its schema.
+  bool project_instance_ids = 6;
 }
 
 // ClaimableLimits is what one unclaimed deploy may run. Every value is a hard
@@ -336,7 +341,7 @@ message GetClaimRequest {
 // (claimable_deploys.state), in wire form.
 enum ClaimableState {
   CLAIMABLE_STATE_UNSPECIFIED = 0;
-  // Serving; unclaimed; before expires_at.
+  // Active claim; unclaimed; before expires_at. Does not establish publication or readiness.
   CLAIMABLE_STATE_LIVE = 1;
   // Past expires_at: unpublished, kept until purge_after. Still claimable.
   CLAIMABLE_STATE_SUSPENDED = 2;
