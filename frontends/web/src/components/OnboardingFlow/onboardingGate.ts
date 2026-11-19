@@ -13,13 +13,16 @@
  *
  *   /                  the chat home (ModernApp)
  *   /project/<id>      one project's chats (ModernApp)
+ *   /c/<chatId>[/t/<threadId>]
+ *                      a chat by its ID (ModernApp, U5)
+ *   /new               a new chat (ModernApp, U5)
  *   /m                 the phone's chat list, and every chat under it
  *   /m/chats/…           (MobileShell)
  *   /m/new             a new chat on the phone (MobileShell)
  *
  * Three places act on it, all asking routeRequiresOnboarding: OnboardingGate
  * on the `_authenticated` layout (the phone's chat routes sit under it),
- * ModernApp (`/`, `/project/$projectId`, under `_app`) and MobileShell
+ * ModernApp (`/`, `/project/$projectId`, `/c/…`, `/new`, under `_app`) and MobileShell
  * (`/m/*`). Everything else is let through, including the wizard itself.
  *
  * Only a user the server says has NOT finished is redirected by the gate. A
@@ -33,7 +36,7 @@ import { appsPath, onboardingPath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 
 /** The org-less path prefixes of the chat routes, besides the home `/`: the only routes onboarding guards. */
-export const ONBOARDING_GATED_PREFIXES = ["/project", "/m/chats", "/m/new"] as const;
+export const ONBOARDING_GATED_PREFIXES = ["/project", "/c", "/new", "/m/chats", "/m/new"] as const;
 
 const underPrefix = (pathname: string, prefix: string) => pathname === prefix || pathname.startsWith(`${prefix}/`);
 

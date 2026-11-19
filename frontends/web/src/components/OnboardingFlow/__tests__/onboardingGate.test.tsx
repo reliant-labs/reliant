@@ -181,6 +181,12 @@ describe("routeRequiresOnboarding", () => {
     ["/o/acme/", true],
     ["/project/1", true],
     ["/o/acme/project/1", true],
+    ["/c/c-1", true],
+    ["/c/c-1/t/t-2", true],
+    ["/o/acme/c/c-1", true],
+    ["/o/acme/c/c-1/t/t-2", true],
+    ["/new", true],
+    ["/o/acme/new", true],
     ["/m", true],
     ["/m/chats", true],
     ["/m/chats/c-1", true],
@@ -212,6 +218,9 @@ describe("routeRequiresOnboarding", () => {
     ["/projects", false],
     ["/m/newer", false],
     ["/mcp", false],
+    ["/connections", false],
+    ["/news", false],
+    ["/o/acme/connections", false],
   ])("%s → %s", (pathname, expected) => {
     expect(routeRequiresOnboarding(pathname)).toBe(expected);
   });
@@ -239,6 +248,10 @@ describe("onboardingGateDecision", () => {
     ["/", true],
     ["/o/acme/", true],
     ["/project/1", true],
+    ["/c/c-1", true],
+    ["/o/acme/c/c-1/t/t-2", true],
+    ["/new", true],
+    ["/o/acme/new", true],
     ["/m/chats", true],
     ["/forge/p/x", false],
     ["/o/acme/apps/x", false],
@@ -266,6 +279,9 @@ describe("forgeBrandHomeTarget", () => {
     // A chat they asked for still onboards them.
     ["/project/1", true, null],
     ["/m/chats/c-1", true, null],
+    ["/c/c-1", true, null],
+    ["/new", true, null],
+    ["/o/acme/new", true, null],
     // Reliant onboards everyone.
     ["/", false, null],
     ["/m/chats", false, null],
@@ -284,6 +300,8 @@ describe("isOnboardingReturnTo / onboardingGateTarget", () => {
   it.each([
     ["/forge/p/x?env=prod", true],
     ["/inbox", true],
+    ["/c/c-1/t/t-2?panel=files", true],
+    ["/o/acme/new", true],
     ["/", false],
     ["/onboarding?plan=%7B%7D", false],
     ["/auth?redirect=%2Fx", false],
