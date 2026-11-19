@@ -248,7 +248,7 @@ export function ForgeEnvPage() {
   const identityLoading = !backendSettled || (askDaemonForIdentity && envStatus.isLoading && !envStatus.data && !liveEnv);
 
   return (
-    <div className="space-y-6" data-testid="forge-env-page" data-tab={tab} data-lifecycle={lifecycle}>
+    <div className="space-y-8" data-testid="forge-env-page" data-tab={tab} data-lifecycle={lifecycle}>
       <EnvPageHeader
         lifecycleControls={
           liveEnv && placedId ? (
@@ -345,8 +345,8 @@ export function ForgeEnvPage() {
       <div role="tabpanel" id={`env-tab-${tab}`} aria-labelledby={`env-tab-button-${tab}`}>
         {identityLoading && (tab === "overview" || tab === "running") ? (
           <div className="space-y-4" data-testid="live-loading" aria-busy="true">
-            <div className="h-28 animate-pulse rounded-lg border border-border bg-surface motion-reduce:animate-none" />
-            <div className="h-40 animate-pulse rounded-lg border border-border bg-surface motion-reduce:animate-none" />
+            <div className="h-28 animate-pulse rounded-xl bg-ink/5 motion-reduce:animate-none" />
+            <div className="h-40 animate-pulse rounded-xl bg-ink/5 motion-reduce:animate-none" />
           </div>
         ) : tab === "overview" ? (
           <OverviewTab
@@ -451,9 +451,9 @@ function TabButton({
       tabIndex={active ? 0 : -1}
       onClick={() => onSelect(id)}
       className={cn(
-        "-mb-px shrink-0 whitespace-nowrap rounded-sm border-b-2 px-3 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "-mb-px shrink-0 whitespace-nowrap rounded-sm border-b-2 px-3 pb-2.5 pt-1 text-ui transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "border-primary font-medium text-ink"
+          ? "border-ink font-medium text-ink"
           : "border-transparent text-ink-muted hover:text-ink"
       )}
     >
@@ -484,10 +484,10 @@ function ScopedPages({
   ] as const;
   const pages = local ? all.filter((page) => page.kind === "secrets") : all;
   return (
-    <nav aria-label={`More about ${envName}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-muted" data-testid="env-scoped-pages">
+    <nav aria-label={`More about ${envName}`} className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-border pt-6 text-ui text-ink-muted" data-testid="env-scoped-pages">
       <span>Also for {envName}:</span>
       {pages.map((page) => (
-        <Link key={page.kind} href={href({ kind: page.kind }, { env: envName })} className="text-ink underline-offset-2 hover:underline" data-testid={`env-scoped-${page.kind}`}>
+        <Link key={page.kind} href={href({ kind: page.kind }, { env: envName })} className="no-color text-ink underline-offset-4 hover:underline" data-testid={`env-scoped-${page.kind}`}>
           {page.label}
         </Link>
       ))}
