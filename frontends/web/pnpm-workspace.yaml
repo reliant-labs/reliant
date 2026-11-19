@@ -29,3 +29,10 @@ minimumReleaseAgeExclude:
 #   the same patched release as ours.
 overrides:
   monaco-editor>dompurify: ^3.4.17
+# Fixes applied to a dependency until upstream ships them (`pnpm patch`).
+#   @monaco-editor/loader: makeCancelable left a .then(onFulfilled) uncaught,
+#   so a Monaco CDN script that failed to load raised an unhandled rejection
+#   (a DOM Event) on every desktop page load. Drop the patch when an upstream
+#   release fixes makeCancelable (lib/__tests__/monacoManager.loadFailure.test.ts).
+patchedDependencies:
+  '@monaco-editor/loader@1.7.0': patches/@monaco-editor__loader@1.7.0.patch

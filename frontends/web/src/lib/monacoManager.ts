@@ -41,6 +41,16 @@ interface MonacoConfig {
   };
 }
 
+const MONACO_VS_PATH = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs';
+
+/** `error` as an Error: a DOM Event (a script's load failure) becomes one naming `url`. */
+function asLoadError(error: unknown, url: string): unknown {
+  if (typeof Event !== 'undefined' && error instanceof Event) {
+    return new Error(`Monaco's loader script did not load (${error.type} event): ${url}`);
+  }
+  return error;
+}
+
 class MonacoManager {
   private static instance: MonacoManager;
   private monacoInstance: MonacoInstance | null = null;
@@ -135,7 +145,7 @@ class MonacoManager {
         // PHASE 1: Configure loader
         const config: MonacoConfig = {
           paths: {
-            vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs',
+            vs: MONACO_VS_PATH,
           },
         };
         loader.config(config);
@@ -171,10 +181,14 @@ class MonacoManager {
 
         return monaco;
       } catch (error) {
-        logger.error('[MonacoManager] ❌ Failed to initialize Monaco:', error);
+        // A loader script that fails to load (CDN down, or its response
+        // blocked) rejects with the script's DOM error Event, which says
+        // nothing; name what failed instead.
+        const failure = asLoadError(error, `${MONACO_VS_PATH}/loader.js`);
+        logger.error('[MonacoManager] ❌ Failed to initialize Monaco:', failure);
         // Clean up failed instance
         this.monacoInstance = null;
-        throw error;
+        throw failure;
       } finally {
         this.isInitializing = false;
       }

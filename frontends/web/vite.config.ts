@@ -110,6 +110,8 @@ const FORKS_POOL_FILES = [
   "src/lib/__tests__/connect.routing.test.ts",
   "src/lib/__tests__/connection-oauth.test.ts",
   "src/lib/__tests__/github-connect.test.ts",
+  // Watches process 'unhandledRejection', which a vm context's promises do not reach.
+  "src/lib/__tests__/monacoManager.loadFailure.test.ts",
   "src/lib/__tests__/packagedOrigin.test.ts",
   "src/lib/cli-commands.test.ts",
   "src/services/controlPlane/observability/__tests__/rumApi.test.ts",
