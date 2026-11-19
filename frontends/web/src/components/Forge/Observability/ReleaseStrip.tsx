@@ -143,7 +143,7 @@ export function PromotionRow({ promotion: p, onCompare }: { promotion: Promotion
       <span className="inline-flex min-w-[6rem] items-center gap-1.5">
         {rollback && <Undo2 className="h-3.5 w-3.5 text-warning-ink" aria-label="Rollback" />}
         <span className={cn("font-mono font-medium", rollback ? "text-warning-ink" : "text-ink")}>{p.version || p.releaseId.slice(0, 12)}</span>
-        {rollback && <span className="rounded px-1 text-2xs uppercase tracking-wide text-warning-ink ring-1 ring-inset ring-warning/40">rollback</span>}
+        {rollback && <span className="rounded px-1 text-2xs text-warning-ink ring-1 ring-inset ring-warning/40">rollback</span>}
       </span>
       <span className="inline-flex items-center gap-1 font-mono text-ink-muted" title={p.gitCommit || "No commit recorded"}>
         <GitCommitHorizontal className="h-3.5 w-3.5" aria-hidden="true" />

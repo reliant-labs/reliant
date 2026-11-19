@@ -98,7 +98,7 @@ export function CreditBand({
         <Wallet className="h-4 w-4 text-muted-foreground" />
         <h3
           id="credit-band-heading"
-          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+          className="text-xs font-semibold text-muted-foreground"
         >
           AI credit
         </h3>

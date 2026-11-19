@@ -228,7 +228,7 @@ export function PresetPicker({
         {/* User Presets (highest priority) */}
         {userPresets.length > 0 && (
           <>
-            <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
+            <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/30 border-t border-border/30">
               My Presets
             </div>
             {userPresets.map((preset) => (
@@ -249,7 +249,7 @@ export function PresetPicker({
         {/* Project Presets */}
         {projectPresets.length > 0 && (
           <>
-            <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
+            <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/30 border-t border-border/30">
               Project
             </div>
             {projectPresets.map((preset) => (
@@ -270,7 +270,7 @@ export function PresetPicker({
         {/* Builtin Presets */}
         {builtinPresets.length > 0 && (
           <>
-            <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
+            <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/30 border-t border-border/30">
               Built-in
             </div>
             {builtinPresets.map((preset) => (
@@ -345,7 +345,7 @@ export function PresetPicker({
             <>
               <Code2 className="w-4 h-4 flex-shrink-0 text-violet-500" />
               <span className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/30 flex-shrink-0">
+                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/30 flex-shrink-0">
                   Expression
                 </span>
                 <span className="truncate font-mono text-xs text-muted-foreground">

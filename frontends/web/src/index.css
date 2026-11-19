@@ -495,7 +495,8 @@
     /* Config panel input surfaces */
     --config-input-bg: 220 14% 97%;
     --config-input-border: 220 14% 83.5%;
-    --radius: 0.5rem;
+    /* Softer, still restrained (restyle v1): controls ~7.5px, cards xl. */
+    --radius: 0.625rem;
 
     /* Semantic colors for status, success, warning, info.
        FILL vs INK: --success / --warning are FILLS (badge tints, dots, a
@@ -530,7 +531,11 @@
      * web font does not reflow. The system stacks remain as fallbacks (and as
      * an explicit user choice via data-font="system").
      */
-    --font-sans: 'Geist Variable', 'Geist Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    /* THE UI FACE — the one switch. Restyle v1 compares two by eye:
+       A = 'Inter' (vendored, /fonts/Inter-roman.woff2), B = Geist. Change
+       this line to flip it; the Appearance presets below still override. */
+    --font-ui-face: 'Geist Variable', 'Geist Fallback';
+    --font-sans: var(--font-ui-face), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
     --font-mono: 'Geist Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
 
     /* Neutral elevation */
@@ -713,7 +718,7 @@
   /* "default" — the bundled Geist. Same stack as :root, named so the
      Appearance picker has an explicit option for it. */
   :root[data-font="default"] {
-    --font-sans: 'Geist Variable', 'Geist Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    --font-sans: var(--font-ui-face), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
   }
 
   :root[data-font="system"] {

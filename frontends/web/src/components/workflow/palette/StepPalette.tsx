@@ -573,7 +573,7 @@ function StepPaletteBody({
         >
           {builtinRows.length > 0 && (
             <li role="presentation">
-              <div className="px-2.5 pb-1 pt-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground" aria-hidden>
+              <div className="px-2.5 pb-1 pt-1.5 text-xs font-semibold text-muted-foreground" aria-hidden>
                 Built-in
               </div>
               <ul role="group" aria-label="Built-in" className="space-y-0.5">
@@ -585,7 +585,7 @@ function StepPaletteBody({
           {(integrationRows.length > 0 || integrationsLoading || integrationsError) && (
             <li role="presentation" className={cn(builtinRows.length > 0 && "mt-2")}>
               <div className="flex items-baseline justify-between px-2.5 pb-1 pt-1.5" aria-hidden>
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Integrations</span>
+                <span className="text-xs font-semibold text-muted-foreground">Integrations</span>
                 {browsing
                   ? browse.totalSize > 0 && <span className="text-xs text-muted-foreground">{browse.totalSize}</span>
                   : search.totalSize > 0 && (

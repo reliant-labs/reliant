@@ -56,7 +56,7 @@ export function WorkflowHeader({
       {/* Center - Title */}
       <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
         <div
-          className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm"
+          className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm"
           style={noDragRegionStyle}
         >
           <GitBranch className="h-3.5 w-3.5 text-primary-ink" />
