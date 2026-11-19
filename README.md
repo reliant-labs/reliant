@@ -9,9 +9,9 @@ Every surface of the visual lane (`frontends/web/e2e/visual`), captured in the p
 
 Name pattern: `<variant>-<surface>-<project>.png`. The font is one line: `--font-ui-face` in `frontends/web/src/index.css`.
 
-## Which font I'd ship: A, Inter
+## Font: Geist (owner's decision, 2026-11-19)
 
-The owner's complaint is that the app looks *technical*. With everything else equal, Inter is the softer read: rounder bowls, a wider set and more open counters at 13–14px, and less of Geist's geometric, monospace-adjacent rhythm, which is part of what reads as a developer tool (compare `after-A-inter-chat-tools-*` with `after-B-geist-*`, and the dashboard figures). Inter also has the more mature hinting at small UI sizes on Windows and Linux, and it is already vendored (`/fonts/Inter-roman.woff2`), so the switch adds no dependency. Geist stays the code face (Geist Mono) and the site's display face. B is a fine, crisper choice if the owner prefers the brand match with reliantlabs.io; flipping is that one line.
+The owner compared A (Inter) with B (Geist) and chose **Geist**, which is what every branch ships. I had recommended Inter as the softer read at 13–14px. The face is one line, `--font-ui-face` in `frontends/web/src/index.css`.
 
 ## Surfaces
 
