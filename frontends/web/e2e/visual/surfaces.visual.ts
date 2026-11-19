@@ -11,7 +11,8 @@
  */
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
-import { CHAT_IDS, chatWithoutFailedSend } from './fixtures/chat'
+import { CHAT_IDS, CHAT_TITLES, chatWithoutFailedSend } from './fixtures/chat'
+import { workflowFixtures } from './fixtures/workflows'
 import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
 
 type Viewport = 'desktop' | 'mobile'
@@ -105,6 +106,25 @@ async function openFixtureChat(page: Page) {
   await scrollToEnd(page)
 }
 
+/** Open one of the sidebar's chats by title, at its end. */
+async function openChatByTitle(page: Page, title: string, firstLine: string) {
+  await page.getByText(title).first().click()
+  await expect(page.getByText(firstLine).first()).toBeVisible({ timeout: 20_000 })
+  await settle(page)
+  await scrollToEnd(page)
+}
+
+/** The mobile chat screen at its end (a chat with no failed send of its own). */
+async function mobileChatAtEnd(page: Page, firstLine: string) {
+  await expect(page.getByText(firstLine).first()).toBeVisible({ timeout: 20_000 })
+  await settle(page)
+  await scrollToEnd(page)
+}
+
+const TOOLS_LAST_LINE = 'Tax rates now live in'
+const FAILURE_FIRST_LINE = 'Upgrade the Stripe SDK to v18 and fix whatever breaks'
+const APPROVAL_LINE = 'Pushing it needs your approval'
+
 const SURFACES: Surface[] = [
   {
     name: 'home-sidebar',
@@ -181,6 +201,126 @@ const SURFACES: Surface[] = [
       await scrollToEnd(page)
     },
     harness: { fixtures: chatWithoutFailedSend },
+  },
+  {
+    // A finished turn of sixteen tool calls (reads, greps, edits with a diff,
+    // shell) between short narration, with a thinking block and a redacted one.
+    name: 'chat-tools',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByText(TOOLS_LAST_LINE).first(),
+    act: (page) => openChatByTitle(page, CHAT_TITLES.tools, TOOLS_LAST_LINE),
+  },
+  {
+    name: 'chat-tools',
+    path: `/m/chats/${CHAT_IDS.tools}`,
+    on: ['mobile'],
+    ready: (page) => page.getByText(TOOLS_LAST_LINE).first(),
+    act: (page) => mobileChatAtEnd(page, TOOLS_LAST_LINE),
+  },
+  {
+    // The same turn with its first two work folds opened: the tool rows themselves.
+    name: 'chat-tools-open',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByText('src/cart/totals.ts').first(),
+    act: async (page) => {
+      await openChatByTitle(page, CHAT_TITLES.tools, TOOLS_LAST_LINE)
+      await transcript(page).getByRole('button', { name: /^Activity/ }).first().click()
+      // The fold lists its calls in groups ("Explored 5 files ..."): open the first.
+      await transcript(page).getByRole('button', { name: /^Explored/ }).first().click()
+      await settle(page)
+      await scrollToTop(page)
+    },
+  },
+  {
+    // The edits fold opened: four edits, each with its diff.
+    name: 'chat-tools-edits',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('button', { name: 'config.ts' }).first(),
+    act: async (page) => {
+      await openChatByTitle(page, CHAT_TITLES.tools, TOOLS_LAST_LINE)
+      await transcript(page).getByRole('button', { name: /^Activity, 4 files edited/ }).click()
+      await transcript(page).getByRole('button', { name: /^Edited src\/pricing/ }).click()
+      await settle(page)
+      await scrollToText(page, 'Three call sites')
+    },
+  },
+  {
+    // The fixture chat scrolled to the shell call waiting for approval.
+    name: 'chat-approval',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByText(APPROVAL_LINE).first(),
+    act: async (page) => {
+      await openFixtureChat(page)
+      await scrollToText(page, APPROVAL_LINE)
+    },
+  },
+  {
+    name: 'chat-approval',
+    path: `/m/chats/${CHAT_IDS.long}`,
+    on: ['mobile'],
+    ready: (page) => page.getByText(APPROVAL_LINE).first(),
+    act: async (page) => {
+      await expect(page.getByText(FIXTURE_TOP).or(page.getByText(APPROVAL_LINE)).first()).toBeVisible({ timeout: 20_000 })
+      await settle(page)
+      await scrollToText(page, APPROVAL_LINE)
+    },
+    harness: { fixtures: chatWithoutFailedSend },
+  },
+  {
+    // A turn that stopped: the last tool call failed and the provider failed after it.
+    name: 'chat-failure',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByText(FAILURE_FIRST_LINE).first(),
+    act: (page) => openChatByTitle(page, CHAT_TITLES.failure, FAILURE_FIRST_LINE),
+  },
+  {
+    name: 'chat-failure',
+    path: `/m/chats/${CHAT_IDS.failure}`,
+    on: ['mobile'],
+    ready: (page) => page.getByText(FAILURE_FIRST_LINE).first(),
+    act: (page) => mobileChatAtEnd(page, FAILURE_FIRST_LINE),
+  },
+  {
+    // The Workflows tab: built-in and your own workflows, two on a schedule.
+    name: 'workflows',
+    path: '/workflows/library',
+    on: ['desktop'],
+    ready: (page) => page.getByText('Nightly CI triage').first(),
+    harness: { fixtures: workflowFixtures },
+  },
+  {
+    name: 'workflows',
+    path: '/m/workflows',
+    on: ['mobile'],
+    ready: (page) => page.getByText('Nightly CI triage').first(),
+    harness: { fixtures: workflowFixtures },
+  },
+  {
+    // The Runs tab: live, needs-input, finished and failed runs.
+    name: 'runs',
+    path: '/workflows/runs',
+    on: ['desktop'],
+    ready: (page) => page.getByText('Draft release notes for v2.14').first(),
+    harness: { fixtures: workflowFixtures },
+  },
+  {
+    name: 'runs',
+    path: '/m/runs',
+    on: ['mobile'],
+    ready: (page) => page.getByText('Draft release notes for v2.14').first(),
+    harness: { fixtures: workflowFixtures },
+  },
+  {
+    // The org-wide Observability home.
+    name: 'observability-overview',
+    path: '/forge/observability',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('worker', { exact: true }).first(),
   },
   {
     name: 'app-overview',
