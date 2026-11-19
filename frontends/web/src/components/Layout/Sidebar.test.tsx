@@ -266,7 +266,7 @@ describe("Sidebar selected chat scroll", () => {
     for (const [options] of mockUseArchivedChats.mock.calls) expect(options).toEqual({ enabled: false });
     expect(screen.queryByTestId("archived-load-more")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Sort chats"));
+    fireEvent.click(screen.getByTestId("project-filter-trigger"));
     fireEvent.click(screen.getByText("Archived chats"));
     expect(mockUseArchivedChats.mock.calls.at(-1)?.[0]).toEqual({ enabled: true });
 
