@@ -14,7 +14,7 @@ import { createPortal } from "react-dom";
 import { 
   Search, Settings, Keyboard, Info, Palette, Shield, 
   FolderOpen, GitBranch, Workflow, Bot, Terminal,
-  Code, CalendarClock, Activity, Inbox, Compass
+  Code, CalendarClock, Activity, Inbox, Compass, ArrowLeftRight
 } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
@@ -29,6 +29,7 @@ import { useTourNavigation } from "../Onboarding/useTourNavigation";
 import { availableJourneys } from "../Onboarding/journeys/registry";
 import { inboxPath, runsPath, settingsPath, workflowsPath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
+import { openProjectSwitcher } from "@/lib/projectSwitcher";
 
 interface Command {
   id: string;
@@ -119,6 +120,16 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
     // Define all commands
     const commands: Command[] = [
       // Navigation
+      {
+        id: "switch-project",
+        title: "Switch project…",
+        description: "Find a project or app by name, repo or app",
+        icon: <ArrowLeftRight className="w-4 h-4" />,
+        category: "navigation",
+        keywords: ["project", "switch", "app", "repo", "open", "go"],
+        // runCommand closes the palette first; the selector takes its place.
+        action: openProjectSwitcher,
+      },
       {
         id: "projects",
         title: "Projects",

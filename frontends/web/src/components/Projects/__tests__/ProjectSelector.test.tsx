@@ -70,13 +70,7 @@ const ROWS = catalog([
   appOnly("billing", 2),
 ]);
 
-// jsdom lays nothing out: give every element the list's box, so the
-// virtualizer sees a 400px viewport the way a browser would.
-const box = { offsetHeight: 400, offsetWidth: 480 } as const;
-const saved = Object.fromEntries(Object.keys(box).map((k) => [k, Object.getOwnPropertyDescriptor(HTMLElement.prototype, k)]));
-
 beforeEach(() => {
-  for (const [k, v] of Object.entries(box)) Object.defineProperty(HTMLElement.prototype, k, { configurable: true, get: () => v });
   catalogView.catalog = ROWS;
   catalogView.isLoading = false;
   catalogView.error = null;
@@ -85,7 +79,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  for (const [k, d] of Object.entries(saved)) if (d) Object.defineProperty(HTMLElement.prototype, k, d);
   cleanup();
   vi.clearAllMocks();
 });
