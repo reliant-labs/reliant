@@ -126,7 +126,8 @@ type Service interface {
 	// owner's own resume gates (ownership, workspace limit, funding).
 	//
 	// resumed reports whether this call started the wake. A control plane
-	// without the door (404, or Unimplemented), or an adapter with no
+	// without the door (404, or Unimplemented: machine lifecycle is not
+	// configured on that deployment), or an adapter with no
 	// identity to sign with, answers toolexec.ErrRunResumeUnsupported. Other
 	// refusals are a *RunResumeError carrying the control plane's
 	// client-safe message.
