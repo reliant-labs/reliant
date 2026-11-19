@@ -77,6 +77,7 @@ function renderAt(url: string) {
         page("/settings/$section"),
         page("/apps"),
         page("/sites"),
+        page("/projects"),
         page("/usage"),
         page("/inbox"),
         page("/workflows"),
@@ -160,12 +161,12 @@ describe("OnboardingGate", () => {
     expect(await screen.findByTestId("where")).toHaveTextContent("/m/chats");
   });
 
-  it("sends a not-yet-onboarded user on the forge brand from the phone's chat list to their apps, not the wizard", async () => {
+  it("sends a not-yet-onboarded user on the forge brand from the phone's chat list to their projects, not the wizard", async () => {
     resetShellForTests("forge");
     mockUseCurrentUser.mockReturnValue(notOnboarded);
     const router = renderAt("/m/chats");
 
-    await waitFor(() => expect(router.state.location.pathname).toBe("/apps"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/projects"));
     expect(screen.queryByTestId("wizard")).toBeNull();
   });
 
