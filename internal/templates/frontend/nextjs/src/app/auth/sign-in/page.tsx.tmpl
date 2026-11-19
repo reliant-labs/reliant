@@ -1,0 +1,312 @@
+"use client";
+
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// The sign-in screen. An ordinary form that POSTs to this app's own API.
+//
+// There is no identity provider in this file: no issuer URL, no client id,
+// no PKCE, no redirect, no iframe. The server does all of that
+// (internal/app/login_broker.go) and answers with an HttpOnly session
+// cookie. See src/lib/auth/native-login.ts for why that split matters.
+//
+// This is starter code in the theme's neutral tokens. The frame, card, alerts
+// and password field come from src/components/auth-ui.tsx, which every /auth
+// screen shares — restyle sign-in there, once, rather than per screen.
+
+import { useSearchParams } from "next/navigation";
+import { Suspense, useRef, useState } from "react";
+
+import {
+  AuthAlert,
+  AuthCard,
+  AuthInput,
+  AuthLink,
+  AuthPage,
+  AuthTextButton,
+  PasswordInput,
+} from "@/components/auth-ui";
+import { PasswordRequirements } from "@/components/password-requirements";
+import { SignInMethods, UnverifiedNotice } from "@/components/sign-in-methods";
+import Button from "@/components/ui/button";
+import Label from "@/components/ui/label";
+import {
+  AuthError,
+  isVerifySent,
+  signIn,
+  signUp,
+  unmetRules,
+  type PasswordRule,
+} from "@/lib/auth/native-login";
+import { safeReturnTo } from "@/lib/auth/return-to";
+import { useAuth } from "@/lib/auth/use-auth";
+import { useAuthOptions } from "@/lib/auth/use-auth-options";
+import { usePasswordPolicy } from "@/lib/auth/use-password-policy";
+import { joinBasePath } from "@/lib/basepath_gen";
+
+function SignIn() {
+  const searchParams = useSearchParams();
+  const { refresh } = useAuth();
+
+  // Where the visitor was headed before the guard sent them here.
+  //
+  // Same-origin only: this is attacker-supplied input, and handing it to
+  // a navigation unchecked is an open redirect. safeReturnTo parses it the
+  // way the browser will (so `/\evil.com` and `/%09/evil.com` are caught)
+  // and keeps it only on this origin.
+  const requested = searchParams?.get("returnTo") ?? null;
+  const returnTo = safeReturnTo(requested);
+
+  // Whether this deployment serves sign-up at all: off outside development
+  // unless the server's config sets auth_self_signup (see
+  // internal/app/login_broker.go). The screen follows the server, so the two
+  // cannot disagree.
+  // Which methods this deployment offers — password, passkeys, emailed
+  // links, Google/GitHub — from the identity's LOGIN_POLICY. Legacy
+  // servers say password only.
+  const options = useAuthOptions();
+  const { selfSignup } = options;
+  const offersPassword = options.methods.includes("password");
+  const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
+  const signingUp = selfSignup && mode === "signUp";
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [totp, setTotp] = useState("");
+  const [needsTotp, setNeedsTotp] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // The password rules the SERVER found unmet on the last attempt, so the
+  // checklist marks exactly those.
+  const [serverUnmet, setServerUnmet] = useState<PasswordRule[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  // The password was right but the address is unconfirmed: offer a new link.
+  const [unverified, setUnverified] = useState(false);
+  // "Check your email": an open sign-up mails a link before any session.
+  const [notice, setNotice] = useState<string | null>(null);
+  // The provider round trip came back failed (Google/GitHub sign-in).
+  const socialFailed = searchParams?.get("error") === "social";
+  // What a password must contain. Only shown when signing up: signing in
+  // takes whatever the account already has.
+  const policy = usePasswordPolicy();
+  // Whether the typed password misses a rule the policy states. Drawn red
+  // only once the person has tried to submit (`attempted`).
+  const passwordUnmet = policy !== null && unmetRules(policy, password).length > 0;
+  const [attempted, setAttempted] = useState(false);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    // A new password that misses a rule the server's policy states would only
+    // come back refused: say so here, at the checklist, without the round
+    // trip. The server still checks every password it is sent.
+    if (signingUp && offersPassword && passwordUnmet) {
+      setAttempted(true);
+      setError("Your password doesn't meet every requirement yet.");
+      passwordRef.current?.focus();
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    setServerUnmet([]);
+    setUnverified(false);
+    setNotice(null);
+    try {
+      if (signingUp) {
+        const created = await signUp({ email, ...(offersPassword ? { password } : {}) });
+        if (isVerifySent(created)) {
+          // No session yet: the address is confirmed from the email first.
+          setNotice(created.message);
+          setSubmitting(false);
+          return;
+        }
+      } else {
+        await signIn({ email, password, ...(totp ? { totp } : {}) });
+      }
+      // The cookie is set. Tell the app to re-read its auth state, then go
+      // where the visitor was headed. A full navigation rather than a
+      // router push: it guarantees every provider re-initialises with the
+      // session in place.
+      await refresh();
+      window.location.assign(returnTo);
+    } catch (err) {
+      const message = err instanceof AuthError ? err.message : "Sign-in failed. Please try again.";
+      // The issuer reports a missing second factor as a rejection; showing
+      // the field on the retry turns a dead end into a completable form.
+      if (/(totp|factor|otp)/i.test(message)) setNeedsTotp(true);
+      setError(message);
+      setUnverified(err instanceof AuthError && err.code === "email_unverified");
+      setServerUnmet(err instanceof AuthError ? err.unmet : []);
+      if (err instanceof AuthError && err.unmet.length > 0) setAttempted(true);
+      setSubmitting(false);
+    }
+  }
+
+  // The footer's toggle: sign in and sign up share ONE screen, swapping
+  // behaviour rather than navigating. Both post to the same API and land
+  // in the same place, so a second route would add a page transition and
+  // nothing else.
+  //
+  // Shown only when the server serves /auth/register — a deployed app is
+  // invite-only until its config sets auth_self_signup
+  // (internal/app/login_broker.go explains how an invite-only app gets
+  // its users).
+  return (
+    <AuthPage>
+      <AuthCard
+        title={signingUp ? "Create your account" : "Sign in"}
+        description={signingUp ? "Get started with {{.ProjectName}}." : "Welcome back."}
+        footer={
+          selfSignup ? (
+            <p>
+              {signingUp ? "Already have an account?" : "New here?"}{" "}
+              <AuthTextButton
+                onClick={() => {
+                  setMode(signingUp ? "signIn" : "signUp");
+                  setError(null);
+                  setServerUnmet([]);
+                  setAttempted(false);
+                }}
+              >
+                {signingUp ? "Sign in" : "Create an account"}
+              </AuthTextButton>
+            </p>
+          ) : null
+        }
+      >
+        <form onSubmit={onSubmit} aria-busy={submitting} className="mt-6">
+          {socialFailed && !error ? (
+            <AuthAlert tone="error" className="mb-5">
+              That sign-in did not complete. Please try again.
+            </AuthAlert>
+          ) : null}
+
+          <div className="space-y-5">
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <AuthInput
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="username"
+                placeholder="you@example.com"
+                required
+                autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+
+            {offersPassword ? (
+              <div>
+                <Label htmlFor="password">Password</Label>
+                <PasswordInput
+                  ref={passwordRef}
+                  id="password"
+                  name="password"
+                  autoComplete={signingUp ? "new-password" : "current-password"}
+                  required
+                  aria-describedby={signingUp && policy ? "password-requirements" : undefined}
+                  invalid={signingUp && (serverUnmet.length > 0 || (attempted && passwordUnmet))}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    // A changed password is a new one: the server's verdict
+                    // on the last one no longer applies to it.
+                    if (signingUp && (serverUnmet.length > 0 || attempted)) {
+                      setServerUnmet([]);
+                      setError(null);
+                    }
+                  }}
+                />
+
+                {signingUp ? (
+                  <PasswordRequirements
+                    id="password-requirements"
+                    policy={policy}
+                    password={password}
+                    serverUnmet={serverUnmet}
+                    attempted={attempted}
+                  />
+                ) : (
+                  /*
+                    Self-serve reset. The link is emailed only if this app's
+                    identity has SMTP configured (forge.ManagedIdentity.smtp) —
+                    the /auth/forgot screen says so. Delete this link and the
+                    /auth/forgot and /auth/reset routes in login_broker.go to
+                    turn password reset off.
+                  */
+                  <p className="mt-2 text-right text-sm">
+                    <AuthLink href={joinBasePath("/auth/forgot")}>Forgot your password?</AuthLink>
+                  </p>
+                )}
+              </div>
+            ) : null}
+
+            {!signingUp && needsTotp ? (
+              <div>
+                <Label htmlFor="totp">Authentication code</Label>
+                <AuthInput
+                  id="totp"
+                  name="totp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  value={totp}
+                  onChange={(e) => setTotp(e.target.value)}
+                />
+                <p className="mt-2 text-sm text-ink-muted">
+                  Enter the 6-digit code from your authenticator app.
+                </p>
+              </div>
+            ) : null}
+          </div>
+
+          {error ? <AuthAlert tone="error">{error}</AuthAlert> : null}
+
+          {unverified ? <UnverifiedNotice email={email} /> : null}
+
+          {notice ? <AuthAlert tone="success">{notice}</AuthAlert> : null}
+
+          {offersPassword || signingUp ? (
+            <Button type="submit" size="xl" fullWidth loading={submitting} className="mt-6 h-11">
+              {submitting
+                ? signingUp
+                  ? "Creating your account…"
+                  : "Signing in…"
+                : signingUp
+                  ? "Create account"
+                  : "Sign in"}
+            </Button>
+          ) : null}
+
+          {/*
+            Passkeys, an emailed link and Google/GitHub, each shown only when the
+            identity's LOGIN_POLICY offers it (GET /auth/options).
+          */}
+          {signingUp ? null : (
+            <SignInMethods
+              options={options}
+              email={email}
+              returnTo={returnTo}
+              onSignedIn={async () => {
+                await refresh();
+                window.location.assign(returnTo);
+              }}
+            />
+          )}
+        </form>
+      </AuthCard>
+    </AuthPage>
+  );
+}
+
+// useSearchParams bails out of prerendering, and Next requires the opt-in
+// to be explicit. Scoping the boundary here keeps the bailout to this
+// component rather than letting it swallow the whole page.
+export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignIn />
+    </Suspense>
+  );
+}

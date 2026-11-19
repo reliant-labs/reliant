@@ -1,0 +1,95 @@
+{
+  "output": {
+    "applier": null,
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane_secrets": [],
+    "databases": [],
+    "env": "dev",
+    "external_secrets_operators": [],
+    "frontends": [],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "image_tag": "latest",
+    "infra": [],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifest_owners": [],
+    "manifests": [],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "workloads": [
+      {
+        "build": null,
+        "build_image": null,
+        "image": "",
+        "kind": "service",
+        "name": "postgres",
+        "release_inputs": {},
+        "runtime": {
+          "env": {
+            "POSTGRES_PORT": "5433"
+          },
+          "env_file": null,
+          "file": "docker-compose.yml",
+          "service": "postgres",
+          "shared": false,
+          "type": "compose",
+          "wait": true,
+          "wait_timeout": 0
+        },
+        "spec": {
+          "env": [
+            {
+              "name": "POSTGRES_PORT",
+              "value": "5433"
+            }
+          ],
+          "image": "",
+          "kind": "service",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": null,
+        "build_image": null,
+        "image": "",
+        "kind": "service",
+        "name": "nats",
+        "release_inputs": {},
+        "runtime": {
+          "env": {},
+          "env_file": ".env.dev",
+          "file": "docker-compose.yml",
+          "service": "nats",
+          "shared": false,
+          "type": "compose",
+          "wait": true,
+          "wait_timeout": 0
+        },
+        "spec": {
+          "image": "",
+          "kind": "service",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

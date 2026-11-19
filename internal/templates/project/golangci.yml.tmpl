@@ -1,0 +1,292 @@
+# Forge lint configuration — calibrated conservative defaults for
+# Go+Connect projects. The intent is "noise-free out of the box" —
+# every enabled linter has a brief rationale below. Ratchet down per-project
+# as the codebase matures.
+#
+# The rule for what belongs here: a linter earns its place by finding BUGS.
+# A rule that fires constantly on idiomatic code is not finding bugs, it is
+# teaching you to skim past lint output.
+#
+# Adjust thresholds for your project:
+#   Stricter (CRUD APIs):    funlen 60, gocognit 15
+#   Looser (internal/operators/billing): funlen 120, gocognit 30
+# Suppress a complexity finding per-function with an explanatory //nolint,
+# never with a path glob — a glob silently swallows every future finding
+# under that path.
+
+version: "2"
+
+run:
+  # A HANG GUARD, NOT A PERFORMANCE BUDGET. With a cold Go build cache (a
+  # fresh clone, a fresh CI runner) golangci-lint type-checks the whole
+  # module from scratch, and on a busy machine 5m was exceeded by runs that
+  # then reported "0 issues" — a red `forge lint` over clean code. 20m still
+  # catches a wedged run; your CI job's own timeout is the outer bound.
+  timeout: 20m
+  # golangci-lint takes an exclusive OS file lock on $TMPDIR/golangci-lint.lock
+  # for the whole of a run. That is ONE path shared by every golangci-lint on
+  # the machine — not per-project, and not in the cache directory, so pointing
+  # GOLANGCI_LINT_CACHE elsewhere does nothing. By default it waits five
+  # seconds for the lock and then exits 3 with "parallel golangci-lint is
+  # running".
+  #
+  # Five seconds is no patience at all against a lint that takes tens of
+  # seconds, so ordinary things turn into spurious lint failures: an editor's
+  # golangci-lint LSP firing on save, a CI matrix linting two services at
+  # once, a monorepo job running alongside this one.
+  #
+  # allow-serial-runners KEEPS the lock and drops only the five-second
+  # deadline: concurrent invocations queue and run one at a time. The lock
+  # exists because golangci-lint is memory-hungry and two full runs at once
+  # can OOM a small machine, which is why allow-parallel-runners (drop the
+  # serialization entirely) is deliberately NOT what this sets.
+  allow-serial-runners: true
+
+issues:
+  # Report EVERY finding. golangci-lint defaults to max-issues-per-linter:50
+  # and max-same-issues:3, which silently truncate the report — a gate that
+  # hides what it found cannot be trusted to be green for the reason you
+  # think it is.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  enable:
+    # Correctness — high-signal, low-noise.
+    - govet # standard correctness vet set
+    - errcheck # catches unchecked error returns
+    - staticcheck # the SA / ST / S family — broadly accepted lints
+    - unused # dead code detection
+    - ineffassign # unused variable assignments
+    - noctx # http.Request without a context
+    - misspell # English spelling
+    # Style — cross-project consistency.
+    - gocritic # diagnostic + performance tags (see settings — the style tag is off)
+    - revive # broad replacement for golint, configurable per-rule
+    # godot is NOT enabled: it requires a trailing period on every top-level
+    # doc comment. That is punctuation, not correctness, and it fires on
+    # ordinary prose forever — the archetype of a rule that trains you to
+    # ignore lint output.
+    # Complexity — fail-loud when functions get away from us.
+    # cyclop dropped: cyclomatic complexity duplicates gocognit (cognitive
+    # complexity) — the better readability signal and the single complexity
+    # gate. nestif/funlen cover the orthogonal nesting/length smells.
+    - funlen # function length cap
+    - gocognit # cognitive complexity (subjectively closer to readability)
+    - nestif # block-nesting depth
+    - interfacebloat # cap interface method count
+{{- if eq .TypedAccessGuard "error"}}
+    # Typed-config guardrail (config.enforce_typed_access: error) — GATING:
+    # os.Getenv / os.LookupEnv / os.Environ fail the build. Enabling forbidigo
+    # HERE is what gates it: a plain `golangci-lint run` (the command CI runs
+    # directly) fails on these findings. In `warn` mode forbidigo is
+    # intentionally absent from this list and `forge lint` runs it as a
+    # separate advisory (non-failing) step instead.
+    - forbidigo
+{{- end}}
+  settings:
+    staticcheck:
+      checks:
+        - all
+        # golangci-lint's own defaults.
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        # QF* is staticcheck's "quickfix" category: editor refactor
+        # suggestions (De Morgan's law, tagged switch, Fprintf-vs-
+        # WriteString+Sprintf), never bug reports. SA* (bugs), S*
+        # (simplifications) and the remaining ST* stay on.
+        - -QF1001
+        - -QF1002
+        - -QF1003
+        - -QF1006
+        - -QF1007
+        - -QF1008
+        - -QF1009
+        - -QF1010
+        - -QF1011
+        - -QF1012
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        # `shadow` flags idiomatic `if err := f(); err != nil` patterns in
+        # nested scopes that Go style allows — dozens of non-bug findings.
+        - shadow
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        # `exported` is NOT enabled. It requires a doc comment on every
+        # exported symbol, and the symbols it fires hardest on are exactly
+        # the ones the language wants exported: package-level error
+        # sentinels. A caller in another package needs `errors.Is(err,
+        # yours.ErrNotFound)`; the rule's message offers "or be unexported",
+        # and that is the repair it gets taken up on — which silently
+        # deletes the cross-package `errors.Is` seam. That is a rule whose
+        # cheapest fix is a regression.
+        #
+        # Off as a GATE, not as a standard. Everything forge emits — Tier-1
+        # generated files and the scaffold-once files you inherit — carries
+        # a doc comment that starts with the symbol's name and says what the
+        # thing is for, and an e2e gate keeps it that way
+        # (TestE2EScaffoldIsReviveExportedClean). So re-enabling this rule
+        # is a supported choice: add `- name: exported` back and the only
+        # findings you get are on code you wrote. Adopting it is a decision
+        # about your own house style, never a cliff you fall off.
+        - name: increment-decrement
+        - name: var-naming
+        - name: unexported-return
+        - name: argument-limit
+          arguments: [8]
+        - name: function-result-limit
+          arguments: [4]
+        - name: max-public-structs
+          # 25 accommodates the forge-canonical package scaffold:
+          # Service + dep interfaces (Source/Sink/...) + input/output
+          # structs (RunInput/RunResult/Item/...) routinely hit 6+ public
+          # types in a single package before any user code is added. CRUD
+          # services accumulate request/response and entity types similarly.
+          # Bump further if your package legitimately exposes more (e.g. a
+          # flat config module); refactor if you're past 25 without one.
+          #
+          # It was 40 for one reason: a comment citing the interactor/adapter
+          # package kinds and their "collaborator interfaces". Those kinds are
+          # deleted, and 25 measures clean on both a wide scaffold (service +
+          # CRUD entity + custom RPC + package + adapter + library + worker +
+          # binary + operator + CRD + webhook) and on control-plane. A cap
+          # nothing reaches is not a cap.
+          arguments: [25]
+        - name: max-control-nesting
+          arguments: [5]
+    funlen:
+      lines: 150
+      statements: 80
+    gocognit:
+      # Cognitive complexity ≠ cyclomatic complexity: nesting and short-
+      # circuit chains weigh more. 40 catches genuine monsters without
+      # punishing well-structured branchy validators/parsers.
+      min-complexity: 80
+    nestif:
+      min-complexity: 8
+    interfacebloat:
+      max: 12
+    gocritic:
+      # The `style` tag is deliberately OFF. It is where octalLiteral (0644
+      # vs 0o644), regexpSimplify ([^\w] vs \W), builtinShadow (a parameter
+      # named `new`), importShadow and nestingReduce live — none of them a
+      # bug, all of them fired at your own idiomatic code forever. Measured
+      # on forge's own repo, the style tag produced 48 findings and zero
+      # defects. `diagnostic` (weakCond, appendAssign, badCall, filepathJoin
+      # — these DO find real defects) and `performance` stay on.
+      enabled-tags:
+        - diagnostic
+        - performance
+      disabled-checks:
+        # `hugeParam` flags struct-by-value args >80 bytes; we routinely
+        # pass *Request / Deps structs by value as a deliberate API choice.
+        # `rangeValCopy` is the same call on value-receiver ranges.
+        - hugeParam
+        - rangeValCopy
+        # Diagnostic-tag checks that are style in disguise: if/else over
+        # short two-arm branches, and switch-with-one-case for forward-compat.
+        - ifElseChain
+        - singleCaseSwitch
+{{- if .TypedAccessGuard}}
+    forbidigo:
+      # Typed-config guardrail (forge.yaml: config.enforce_typed_access).
+      # Steers humans and LLMs away from reading the environment directly and
+      # toward forge's generated, dependency-injected typed config object.
+      # The allowlisted loader package ({{.LoaderPackage}}) is excluded under
+      # `exclusions.rules` below.
+{{- if eq .TypedAccessGuard "warn"}}
+      # ADVISORY mode. forbidigo is deliberately ABSENT from `linters.enable`
+      # above, so a plain `golangci-lint run` — the command CI invokes
+      # directly via golangci-lint-action — never fails on these findings.
+      # `linters.enable` membership IS the gate, and CI is the consumer, which
+      # is why the warn/error switch lives here (in this file) rather than in
+      # `forge lint`. `forge lint` re-runs forbidigo as a separate non-failing
+      # step (--enable-only=forbidigo --issues-exit-code=0) so the findings are
+      # still visible locally. To make them GATE the build, set
+      # `config.enforce_typed_access: error` in forge.yaml, then re-render this
+      # file (it is scaffold-once / user-owned — `rm .golangci.yml && forge
+      # upgrade`, or `forge project upgrade --force` if you have no local edits).
+{{- end}}
+      forbid:
+        - pattern: 'os\.Getenv'
+          msg: >-
+            Read configuration from the injected forge config object, not the
+            environment directly. Declare new settings in
+            proto/<project>/config/v1/*.proto with the (forge.v1.config) annotation, then
+            run `forge generate` — forge produces a typed loader (pkg/config),
+            fails fast when a required value is missing, and wires secrets
+            automatically. To opt out: add //nolint:forbidigo on this line, or
+            set config.enforce_typed_access to warn/off in forge.yaml.
+        - pattern: 'os\.LookupEnv'
+          msg: >-
+            Read configuration from the injected forge config object, not the
+            environment directly. Declare new settings in
+            proto/<project>/config/v1/*.proto with the (forge.v1.config) annotation, then
+            run `forge generate` — forge produces a typed loader (pkg/config),
+            fails fast when a required value is missing, and wires secrets
+            automatically. To opt out: add //nolint:forbidigo on this line, or
+            set config.enforce_typed_access to warn/off in forge.yaml.
+        - pattern: 'os\.Environ'
+          msg: >-
+            Read configuration from the injected forge config object, not the
+            environment directly. Declare new settings in
+            proto/<project>/config/v1/*.proto with the (forge.v1.config) annotation, then
+            run `forge generate` — forge produces a typed loader (pkg/config),
+            fails fast when a required value is missing, and wires secrets
+            automatically. To opt out: add //nolint:forbidigo on this line, or
+            set config.enforce_typed_access to warn/off in forge.yaml.
+{{- end}}
+  exclusions:
+    paths:
+      # The generated proto package at the project root. ANCHORED on purpose:
+      # a bare `gen` is an unanchored regex that matches any path CONTAINING
+      # it, so `internal/agent/` — a-GEN-t — and every other package whose
+      # name happens to contain those three letters would be silently exempt
+      # from every linter here, reporting green over code nobody checked.
+      - "(^|/)gen/"
+      # Generated, forge-owned files (mock_gen.go, tracing_gen.go, ...).
+      # Never lint or hand-edit generated code —
+      # forge regenerates it and edits would be lost / trip the stomp guard.
+      - ".*_gen\\.go$"
+      - ".*node_modules.*"
+      - ".*frontends.*"
+      - ".*\\.pb\\.go$"
+      - ".*\\.connect\\.go$"
+    rules:
+      # Scoped to the RULE and the reason, never to a path glob alone.
+      - path: _test\.go
+        linters:
+          # A test builds its fixtures inline and fails on the assertion, not
+          # on a helper's error return; its length and branching are the
+          # table, not logic.
+          - errcheck
+          - gocritic
+          - funlen
+          - gocognit
+{{- if .TypedAccessGuard}}
+      # The generated config loader is the ONE package allowed to read the
+      # environment directly (os.Getenv / os.LookupEnv); the typed-access
+      # guardrail allowlists it so the loader itself is not flagged.
+      - path: ^{{.LoaderPackage}}/
+        linters:
+          - forbidigo
+{{- end}}
+
+formatters:
+  enable:
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - {{.Module}}

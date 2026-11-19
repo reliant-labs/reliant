@@ -1,0 +1,388 @@
+{
+  "schema_version": "forge.metrics/v1",
+  "service": "shop",
+  "version": "v1.4.0",
+  "metrics": [
+    {
+      "name": "forge.metrics.rejected_attributes",
+      "type": "counter",
+      "unit": "{attribute}",
+      "description": "Measurements whose attribute was not in the metric's declaration, corrected before export. A rising value means code records an attribute the schema does not list.",
+      "attributes": [
+        {
+          "key": "metric"
+        },
+        {
+          "key": "reason",
+          "values": [
+            "undeclared_key",
+            "undeclared_value"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v0.1.45"
+    },
+    {
+      "name": "forge.server.drain.duration",
+      "type": "histogram",
+      "unit": "s",
+      "description": "How long each phase of a graceful shutdown took: the pre-stop pause, the listener drain (unary requests and long-lived streams), stopping workers and operators, the caller's teardown, each node a lifecyclekit supervisor stops (node), and the whole shutdown (total).",
+      "attributes": [
+        {
+          "key": "phase",
+          "values": [
+            "pre_stop",
+            "listener",
+            "workers",
+            "operators",
+            "teardown",
+            "node",
+            "total"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v0.1.46"
+    },
+    {
+      "name": "go.config.gogc",
+      "type": "updowncounter",
+      "unit": "%",
+      "description": "Heap size target percentage configured by the user, otherwise 100.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.goroutine.count",
+      "type": "updowncounter",
+      "unit": "{goroutine}",
+      "description": "Count of live goroutines.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.memory.allocated",
+      "type": "counter",
+      "unit": "By",
+      "description": "Memory allocated to the heap by the application.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.memory.allocations",
+      "type": "counter",
+      "unit": "{allocation}",
+      "description": "Count of allocations to the heap by the application.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.memory.gc.goal",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "Heap size target for the end of the GC cycle.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.memory.limit",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "Go runtime memory limit configured by the user, when one exists.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.memory.used",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "Memory used by the Go runtime.",
+      "attributes": [
+        {
+          "key": "go.memory.type",
+          "values": [
+            "stack",
+            "other"
+          ]
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.processor.limit",
+      "type": "updowncounter",
+      "unit": "{thread}",
+      "description": "The number of OS threads that can execute user-level Go code simultaneously.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_closed_max_idle",
+      "type": "counter",
+      "unit": "{connection}",
+      "description": "Connections closed because of SetMaxIdleConns.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_closed_max_idle_time",
+      "type": "counter",
+      "unit": "{connection}",
+      "description": "Connections closed because of SetConnMaxIdleTime.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_closed_max_lifetime",
+      "type": "counter",
+      "unit": "{connection}",
+      "description": "Connections closed because of SetConnMaxLifetime.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_idle",
+      "type": "gauge",
+      "unit": "{connection}",
+      "description": "Idle connections.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_in_use",
+      "type": "gauge",
+      "unit": "{connection}",
+      "description": "Connections currently in use.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_max_open",
+      "type": "gauge",
+      "unit": "{connection}",
+      "description": "Maximum number of open connections to the database.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_open",
+      "type": "gauge",
+      "unit": "{connection}",
+      "description": "Established connections, in use and idle.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_wait_count",
+      "type": "counter",
+      "unit": "{wait}",
+      "description": "Total number of times a caller waited for a connection.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_wait_duration",
+      "type": "counter",
+      "unit": "ns",
+      "description": "Total time blocked waiting for a new connection.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.query_timing",
+      "type": "histogram",
+      "unit": "ms",
+      "description": "Timing of processed database queries.",
+      "attributes": [
+        {
+          "key": "db.operation"
+        },
+        {
+          "key": "db.sql.table"
+        },
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "jobs_in_flight",
+      "type": "updowncounter",
+      "unit": "{job}",
+      "description": "Jobs running.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.2.0"
+    },
+    {
+      "name": "order_value",
+      "type": "histogram",
+      "unit": "{USD}",
+      "description": "Order value at creation.",
+      "attributes": [
+        {
+          "key": "channel",
+          "values": [
+            "web",
+            "api"
+          ]
+        }
+      ],
+      "stability": "stable",
+      "since": "v1.1.0"
+    },
+    {
+      "name": "orders_created",
+      "type": "counter",
+      "unit": "{order}",
+      "description": "Orders created.",
+      "attributes": [
+        {
+          "key": "status",
+          "values": [
+            "ok",
+            "failed"
+          ]
+        },
+        {
+          "key": "region"
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.0.0"
+    },
+    {
+      "name": "queue_depth",
+      "type": "gauge",
+      "unit": "{job}",
+      "description": "Jobs waiting.",
+      "attributes": [],
+      "stability": "deprecated",
+      "since": "v1.2.0"
+    },
+    {
+      "name": "rpc.server.calls",
+      "type": "counter",
+      "unit": "{call}",
+      "description": "Total RPC calls received.",
+      "attributes": [
+        {
+          "key": "procedure"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "rpc.server.duration",
+      "type": "histogram",
+      "unit": "s",
+      "description": "RPC duration.",
+      "attributes": [
+        {
+          "key": "procedure"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "rpc.server.errors",
+      "type": "counter",
+      "unit": "{error}",
+      "description": "Total RPC calls that returned an error, by connect code and error class (server fault, user error, canceled). A call the server ended on purpose (svcerr.ExpectedClose) is not counted.",
+      "attributes": [
+        {
+          "key": "procedure"
+        },
+        {
+          "key": "code",
+          "values": [
+            "canceled",
+            "unknown",
+            "invalid_argument",
+            "deadline_exceeded",
+            "not_found",
+            "already_exists",
+            "permission_denied",
+            "resource_exhausted",
+            "failed_precondition",
+            "aborted",
+            "out_of_range",
+            "unimplemented",
+            "internal",
+            "unavailable",
+            "data_loss",
+            "unauthenticated"
+          ]
+        },
+        {
+          "key": "error_class",
+          "values": [
+            "server",
+            "user",
+            "canceled"
+          ]
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    }
+  ]
+}

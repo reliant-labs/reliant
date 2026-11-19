@@ -1,0 +1,47 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+build/
+
+# ── Generated code is COMMITTED ──
+# src/gen/ (buf's TypeScript client code), src/hooks/*_gen.ts and
+# src/lib/*_gen.ts are checked in, like the Go side's gen/: a checkout
+# must build as-cloned, and `forge ci verify-generated` cannot see an
+# ignored file. See the project root .gitignore for the full rationale.
+#
+# ── Machine-local runtime config (NEVER committed) ──
+# public/config.js is the DEV runtime config document. `forge generate`
+# renders it from deploy/kcl/dev/config.k, which resolves machine-local
+# ports, so a committed copy drifts on every machine that regenerates.
+# `forge generate`, `forge build` and `forge env up` materialize it; a
+# deploy writes each environment's own copy beside the bundle.
+public/config.js
+# Pre-`_gen` per-service React Query hooks, from a tree generated before
+# forge renamed the emitter's output. Nothing writes these names anymore;
+# the rule stays so an un-upgraded checkout still ignores its leftovers.
+# The current `<svc>-hooks_gen.ts` files and the `index.ts` barrel are
+# committed like every other Tier-1 output — `forge ci verify-generated`
+# diffs a fresh generate against the checkout and cannot see an ignored
+# file. Do NOT widen this to `src/hooks/*_gen.ts` or `src/lib/*_gen.ts`:
+# apiurl_gen.ts and config_gen.ts are forge-emitted but ARE committed.
+src/hooks/*-hooks.ts
+# Generated route tree (declarative file-based router output, if used)
+src/routes/routeTree.gen.ts
+
+# test coverage
+coverage/
+
+# misc
+.DS_Store
+*.pem
+
+# logs
+*.log
+
+# env files
+.env*.local
+
+# typescript
+*.tsbuildinfo

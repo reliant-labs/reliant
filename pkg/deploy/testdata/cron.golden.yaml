@@ -1,0 +1,74 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: nightly
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: nightly
+  namespace: demo-prod
+spec:
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/managed-by: forge
+            app.kubernetes.io/name: nightly
+            app.kubernetes.io/part-of: demo
+            forge.dev/env: prod
+        spec:
+          automountServiceAccountToken: false
+          containers:
+          - command:
+            - /app/demo
+            - sweep
+            image: ghcr.io/acme/demo:v1.2.3
+            imagePullPolicy: IfNotPresent
+            name: nightly
+            resources:
+              limits:
+                cpu: 250m
+                memory: 1Gi
+              requests:
+                cpu: 250m
+                memory: 1Gi
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+              readOnlyRootFilesystem: true
+              runAsGroup: 65532
+              runAsNonRoot: true
+              runAsUser: 65532
+            volumeMounts:
+            - mountPath: /tmp
+              name: tmp
+          enableServiceLinks: false
+          restartPolicy: OnFailure
+          securityContext:
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          serviceAccountName: nightly
+          volumes:
+          - emptyDir: {}
+            name: tmp
+  schedule: '@daily'
+---
+apiVersion: v1
+automountServiceAccountToken: false
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: nightly
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: nightly
+  namespace: demo-prod
