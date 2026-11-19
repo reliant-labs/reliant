@@ -219,6 +219,35 @@ const SURFACES: Surface[] = [
     act: (page) => mobileChatAtEnd(page, TOOLS_LAST_LINE),
   },
   {
+    // The same turn with its first two work folds opened: the tool rows themselves.
+    name: 'chat-tools-open',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByText('src/cart/totals.ts').first(),
+    act: async (page) => {
+      await openChatByTitle(page, CHAT_TITLES.tools, TOOLS_LAST_LINE)
+      await transcript(page).getByRole('button', { name: /^Activity/ }).first().click()
+      // The fold lists its calls in groups ("Explored 5 files ..."): open the first.
+      await transcript(page).getByRole('button', { name: /^Explored/ }).first().click()
+      await settle(page)
+      await scrollToTop(page)
+    },
+  },
+  {
+    // The edits fold opened: four edits, each with its diff.
+    name: 'chat-tools-edits',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('button', { name: 'config.ts' }).first(),
+    act: async (page) => {
+      await openChatByTitle(page, CHAT_TITLES.tools, TOOLS_LAST_LINE)
+      await transcript(page).getByRole('button', { name: /^Activity, 4 files edited/ }).click()
+      await transcript(page).getByRole('button', { name: /^Edited src\/pricing/ }).click()
+      await settle(page)
+      await scrollToText(page, 'Three call sites')
+    },
+  },
+  {
     // The fixture chat scrolled to the shell call waiting for approval.
     name: 'chat-approval',
     path: '/',
