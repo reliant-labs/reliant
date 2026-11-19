@@ -1,0 +1,165 @@
+// Copyright (c) 2025 Reliant Labs
+package store_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/storetest"
+)
+
+// TestRunMachinePlacements runs the placement record and the live-run counts
+// over it against Postgres: a member's live runs are the distinct chats the
+// pool placed there (a trigger's) or with a live run placement there (a
+// workflow's), and a labels read counts every live run on the machine.
+func TestRunMachinePlacements(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	labels := map[string]map[string]string{
+		"rp-a": {"pool": "gate", "role": "gate"},
+		"rp-b": {"pool": "gate", "role": "gate"},
+		"rp-c": {"role": "gate"},
+	}
+	for _, id := range []string{"rp-a", "rp-b", "rp-c"} {
+		host := id
+		if err := env.Repo.UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: storetest.SeedUserID, Hostname: &host}); err != nil {
+			t.Fatalf("UpsertDaemon %s: %v", id, err)
+		}
+		if ok, err := env.Repo.SetDaemonLabels(ctx, storetest.SeedUserID, id, labels[id]); err != nil || !ok {
+			t.Fatalf("SetDaemonLabels %s = %v, %v", id, ok, err)
+		}
+	}
+	pool, err := env.Repo.PutMachinePool(ctx, &core.MachinePool{UserID: storetest.SeedUserID, Name: "gate", Selector: map[string]string{"pool": "gate"}, MaxRunsPerMember: 5})
+	if err != nil {
+		t.Fatalf("PutMachinePool: %v", err)
+	}
+
+	daemonA, poolID := "rp-a", pool.ID
+	mkChat := func(id string, triggerPlaced bool, status core.WorkflowStatus) {
+		t.Helper()
+		chat := &db.Chat{ID: id, Title: id, ProjectID: storetest.SeedProjectID, UserID: storetest.SeedUserID, ActiveDaemonID: &daemonA,
+			State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now, LastActive: now}
+		if triggerPlaced {
+			chat.MachinePoolID = &poolID
+		}
+		if err := env.Repo.CreateChat(ctx, chat); err != nil {
+			t.Fatalf("CreateChat %s: %v", id, err)
+		}
+		if err := env.Repo.CreateWorkflow(ctx, &db.Workflow{ID: id, ChatID: id, WorkflowName: "gate", Thread: id, Status: status, CreatedAt: now}); err != nil {
+			t.Fatalf("CreateWorkflow %s: %v", id, err)
+		}
+	}
+	place := func(chat, scope, pool, daemon string) *core.RunMachinePlacement {
+		t.Helper()
+		got, err := env.Repo.RecordRunMachinePlacement(ctx, &core.RunMachinePlacement{WorkflowID: chat, Scope: scope, UserID: storetest.SeedUserID,
+			ChatID: chat, MachinePoolID: pool, Selector: map[string]string{"pool": "gate"}, DaemonID: daemon})
+		if err != nil {
+			t.Fatalf("RecordRunMachinePlacement %s/%q: %v", chat, scope, err)
+		}
+		return got
+	}
+
+	// On a: a trigger-placed live chat whose run also recorded its member
+	// (one chat), a workflow-placed live run, a live run with two placed
+	// nodes (one chat), a finished placed run, and a live labels placement.
+	mkChat("rp-trigger", true, core.Active())
+	place("rp-trigger", "", poolID, "rp-a")
+	mkChat("rp-run", false, core.Paused())
+	place("rp-run", "", poolID, "rp-a")
+	mkChat("rp-nodes", false, core.Active())
+	place("rp-nodes", "build", poolID, "rp-a")
+	place("rp-nodes", "test", poolID, "rp-a")
+	mkChat("rp-done", false, core.Completed())
+	place("rp-done", "", poolID, "rp-a")
+	mkChat("rp-labels", false, core.Active())
+	place("rp-labels", "", "", "rp-a")
+
+	tests := []struct {
+		name string
+		got  func() (int, error)
+		want int
+	}{
+		{"the pool's live runs on a: distinct live chats, the trigger's and the workflows'", func() (int, error) {
+			return env.Repo.CountMachinePoolMemberLiveRuns(ctx, pool.ID, "rp-a")
+		}, 3},
+		{"none on b", func() (int, error) { return env.Repo.CountMachinePoolMemberLiveRuns(ctx, pool.ID, "rp-b") }, 0},
+		{"pool members carry the same count", func() (int, error) {
+			ms, err := env.Repo.ListMachinePoolMembers(ctx, pool, storetest.SeedProjectID)
+			return liveRunsOf(ms, "rp-a"), err
+		}, 3},
+		{"a labels read counts every live run on the machine", func() (int, error) {
+			ms, err := env.Repo.ListLabelledMachines(ctx, storetest.SeedUserID, map[string]string{"role": "gate"}, storetest.SeedProjectID)
+			return liveRunsOf(ms, "rp-a"), err
+		}, 4},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.got()
+			if err != nil || got != tt.want {
+				t.Fatalf("got %d, %v; want %d", got, err, tt.want)
+			}
+		})
+	}
+
+	// The labels read is the owner's machines whose durable labels contain
+	// every pair; an empty selector selects nothing.
+	ms, err := env.Repo.ListLabelledMachines(ctx, storetest.SeedUserID, map[string]string{"role": "gate"}, storetest.SeedProjectID)
+	if err != nil || len(ms) != 3 {
+		t.Fatalf("labelled role=gate = %+v, %v; want a, b and c", ms, err)
+	}
+	if ms, err := env.Repo.ListLabelledMachines(ctx, "someone-else", map[string]string{"role": "gate"}, ""); err != nil || len(ms) != 0 {
+		t.Fatalf("another user's labelled machines = %+v, %v; want none", ms, err)
+	}
+	if ms, err := env.Repo.ListLabelledMachines(ctx, storetest.SeedUserID, map[string]string{}, ""); err != nil || len(ms) != 0 {
+		t.Fatalf("empty selector = %+v, %v; want none", ms, err)
+	}
+
+	// A placement, once recorded, never moves: a second record returns it.
+	if again := place("rp-run", "", poolID, "rp-b"); again.DaemonID != "rp-a" || again.MachinePoolID != pool.ID || again.Selector["pool"] != "gate" {
+		t.Fatalf("re-record = %+v, want the first placement on a", again)
+	}
+	if got, err := env.Repo.GetRunMachinePlacement(ctx, "rp-nodes", "test"); err != nil || got.DaemonID != "rp-a" || got.ChatID != "rp-nodes" {
+		t.Fatalf("GetRunMachinePlacement = %+v, %v", got, err)
+	}
+	if _, err := env.Repo.GetRunMachinePlacement(ctx, "rp-nodes", "deploy"); !errors.Is(err, core.ErrRunMachinePlacementNotFound) {
+		t.Fatalf("an unplaced node = %v, want not found", err)
+	}
+
+	// The chat read placement makes: owner, project, trigger placement.
+	chat, err := env.Repo.GetRunPlacementChat(ctx, "rp-trigger")
+	if err != nil || chat.UserID != storetest.SeedUserID || chat.ProjectID != storetest.SeedProjectID || chat.MachinePoolID != pool.ID || chat.ActiveDaemonID != "rp-a" {
+		t.Fatalf("GetRunPlacementChat = %+v, %v", chat, err)
+	}
+	if chat, err := env.Repo.GetRunPlacementChat(ctx, "rp-run"); err != nil || chat.MachinePoolID != "" {
+		t.Fatalf("an unplaced chat = %+v, %v; want no pool", chat, err)
+	}
+	if _, err := env.Repo.GetRunPlacementChat(ctx, "rp-missing"); !errors.Is(err, core.ErrChatNotFound) {
+		t.Fatalf("a missing chat = %v, want not found", err)
+	}
+
+	// Deleting the pool keeps the placements, naming no pool.
+	if _, err := env.ORM.Bun().NewRaw(`UPDATE chats SET machine_pool_id = NULL WHERE machine_pool_id = ?0`, pool.ID).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.Repo.DeleteMachinePoolByName(ctx, storetest.SeedUserID, "gate"); err != nil {
+		t.Fatalf("DeleteMachinePoolByName: %v", err)
+	}
+	if got, err := env.Repo.GetRunMachinePlacement(ctx, "rp-run", ""); err != nil || got.MachinePoolID != "" || got.DaemonID != "rp-a" {
+		t.Fatalf("placement after its pool was deleted = %+v, %v", got, err)
+	}
+}
+
+func liveRunsOf(ms []core.MachinePoolMemberRow, daemonID string) int {
+	for _, m := range ms {
+		if m.DaemonID == daemonID {
+			return m.LiveRuns
+		}
+	}
+	return -1
+}

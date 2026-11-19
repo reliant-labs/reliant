@@ -47,6 +47,30 @@ func (r *Repo) ListMachinePoolMembers(ctx context.Context, pool *MachinePool, pr
 	return store.ListMachinePoolMembers(ctx, r.ORM(), pool, projectID)
 }
 
+// ListLabelledMachines reads userID's machines whose durable labels contain
+// labels, for projectID: the machines a labels-only `daemon: {labels: …}`
+// places on, LiveRuns counting every live run placed on each.
+func (r *Repo) ListLabelledMachines(ctx context.Context, userID string, labels map[string]string, projectID string) ([]MachinePoolMemberRow, error) {
+	return store.ListLabelledMachines(ctx, r.ORM(), userID, labels, projectID, "")
+}
+
+// GetRunMachinePlacement reads the placement of one run (scope "") or one
+// node of it; core.ErrRunMachinePlacementNotFound when none is recorded.
+func (r *Repo) GetRunMachinePlacement(ctx context.Context, workflowID, scope string) (*core.RunMachinePlacement, error) {
+	return store.GetRunMachinePlacement(ctx, r.ORM(), workflowID, scope)
+}
+
+// RecordRunMachinePlacement records p unless its (workflow, scope) already
+// has a placement, and returns the one recorded.
+func (r *Repo) RecordRunMachinePlacement(ctx context.Context, p *core.RunMachinePlacement) (*core.RunMachinePlacement, error) {
+	return store.RecordRunMachinePlacement(ctx, r.ORM(), p)
+}
+
+// GetRunPlacementChat reads a chat's owner, project and trigger placement.
+func (r *Repo) GetRunPlacementChat(ctx context.Context, chatID string) (*core.RunPlacementChat, error) {
+	return store.GetRunPlacementChat(ctx, r.ORM(), chatID)
+}
+
 // LockMachinePool row-locks a pool; ctx must carry a transaction.
 func (r *Repo) LockMachinePool(ctx context.Context, id string) error {
 	return store.LockMachinePool(ctx, r.ORM(), id)
