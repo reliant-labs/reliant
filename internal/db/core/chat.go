@@ -370,14 +370,23 @@ type ChatFilters struct {
 const MaxListProjectIDs = 200
 
 // Projects is the set of projects the list is narrowed to: ProjectID and
-// ProjectIDs together, each once, in the order given. Empty narrows nothing.
+// ProjectIDs together, each once, in the order given. Nil narrows nothing.
 func (f ChatFilters) Projects() []string { return projectUnion(f.ProjectID, f.ProjectIDs) }
 
 // projectUnion is one optional project id and a list of them as one set,
-// each id once, in the order given. Empty ids are not projects.
+// each id once, in the order given; nil narrows nothing.
+//
+// With no list, a set ProjectID is the one project exactly as it was before
+// lists existed, an empty one included: a present-but-empty id narrows to
+// project "" and so lists nothing, never every project. With a list, an
+// empty ProjectID adds nothing to it (the list alone is the set); the
+// handlers refuse an empty id inside the list.
 func projectUnion(one *string, many []string) []string {
-	if (one == nil || *one == "") && len(many) == 0 {
-		return nil
+	if len(many) == 0 {
+		if one == nil {
+			return nil
+		}
+		return []string{*one}
 	}
 	out := make([]string, 0, len(many)+1)
 	seen := make(map[string]struct{}, len(many)+1)
@@ -396,6 +405,10 @@ func projectUnion(one *string, many []string) []string {
 	}
 	for _, id := range many {
 		add(id)
+	}
+	if len(out) == 0 {
+		// A list of only empty ids still narrows; it never widens to all.
+		return []string{""}
 	}
 	return out
 }

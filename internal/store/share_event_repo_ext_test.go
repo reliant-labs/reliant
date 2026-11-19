@@ -117,6 +117,13 @@ func TestListSharedChats(t *testing.T) {
 	}); err != nil || len(none) != 0 {
 		t.Fatalf("a project with nothing shared lists %v, %v; want nothing (never every project)", convChatIDs(none), err)
 	}
+	// A present-but-empty ProjectID still narrows to project "" (nothing),
+	// as before ProjectIDs existed; unset is the whole list.
+	if none, err := env.Repo.ListSharedChats(ctx, core.SharedChatFilters{
+		OrgID: "acme", ViewerUserID: "alice", ProjectID: strp(""),
+	}); err != nil || len(none) != 0 {
+		t.Fatalf("a present empty project lists %v, %v; want nothing (never every project)", convChatIDs(none), err)
+	}
 
 	// bob sees carol's and alice's, never his own.
 	bobs, err := env.Repo.ListSharedChats(ctx, core.SharedChatFilters{OrgID: "acme", ViewerUserID: "bob"})

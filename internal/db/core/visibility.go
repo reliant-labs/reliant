@@ -106,7 +106,9 @@ type SharedChatFilters struct {
 }
 
 // Projects is the set of projects the list is narrowed to: ProjectID and
-// ProjectIDs together, each once. Empty narrows nothing.
+// ProjectIDs together, each once. Nil narrows nothing; a present-but-empty
+// ProjectID with no ProjectIDs narrows to project "" and lists nothing, as
+// it always did (projectUnion).
 func (f SharedChatFilters) Projects() []string { return projectUnion(f.ProjectID, f.ProjectIDs) }
 
 // SharedProjectFilters lists the projects shared with an org that a viewer

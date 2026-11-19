@@ -146,6 +146,10 @@ func TestListChats_SeveralProjects(t *testing.T) {
 			}
 		}
 		assert.Equal(t, newest(projects...), all, "neither set lists every project")
+
+		// ListChats' project_id is a plain string: "" has always meant every
+		// project, and with project_ids it adds nothing to the list.
+		assert.Equal(t, newest(p2), ids(list(&reliantv1.ListChatsRequest{ProjectId: "", ProjectIds: []string{p2}})))
 	})
 
 	t.Run("too many or empty ids are refused", func(t *testing.T) {
