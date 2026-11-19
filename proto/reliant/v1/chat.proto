@@ -1019,11 +1019,13 @@ message RunNowResponse {
   string run_id = 3;
 }
 
-// ListChatsRequest lists the caller's chats: in one project, or in all of them.
+// ListChatsRequest lists the caller's chats: in one project, in several, or in
+// all of them.
 message ListChatsRequest {
-  // The project to list. Empty lists every project the caller owns: the
-  // sidebar's "All projects" view. Chats are scoped by the caller either way,
-  // so a project id that is not the caller's lists nothing.
+  // The project to list. Empty (and no project_ids) lists every project the
+  // caller owns: the sidebar's "All projects" view. Chats are scoped by the
+  // caller either way, so a project id that is not the caller's lists
+  // nothing. Set with project_ids, it is one more project of that set.
   string project_id = 1;
   optional int32 limit = 2;
   // ListChats is the chat list: it returns only chats the sidebar lists
@@ -1044,6 +1046,20 @@ message ListChatsRequest {
   // app's name is its identity only within one org. A malformed name lists
   // nothing; an empty one is the same as unset.
   optional string app_name = 5;
+  // List the chats of several projects at once: the sidebar's multi-project
+  // filter. The projects listed are the union of project_id and project_ids,
+  // so a client may set either or both; with both empty every project is
+  // listed, as before this field existed. One query answers it, ordered and
+  // limited exactly like a single project's list. Chats are still scoped by
+  // the caller, so an id that is not the caller's contributes nothing. At
+  // most 200 ids, none of them empty (INVALID_ARGUMENT otherwise).
+  // main_worktrees then holds the main workspace of each listed project.
+  repeated string project_ids = 6 [(buf.validate.field).repeated = {
+    max_items: 200
+    items: {
+      string: {min_len: 1}
+    }
+  }];
 }
 
 // ListChatsResponse returns the list of chats
