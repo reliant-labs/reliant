@@ -30,10 +30,21 @@ import (
 // (device and inode) of the directory it made, and trusts only that one.
 // Anything else at the path is moved aside, kept for inspection, and replaced.
 //
-// A daemon with no data directory trusts only what this process made. The
-// cost of that, and of a second daemon on the same home: its first credentialed
-// command replaces a scratch another daemon made, so a credentialed step of the
-// other daemon running at that moment loses its scratch (and fails closed).
+// A process with no data directory — not a daemon: a test binary, or anything
+// else that runs commands through this package — trusts only what it made
+// itself, and replaces nothing. The scratch at the path is then almost always
+// the daemon's, recorded where this process cannot look. Moving it aside made
+// that daemon move this process's replacement aside in turn: one machine
+// collected 669 cred-scratch.untrusted-* directories in four days of agents
+// running tests (#2823). So such a process makes the scratch only where there
+// is none; a directory it did not make it leaves where it is, untrusted, and
+// its credentialed commands get no SignalEnv (they fail closed).
+//
+// A second daemon on the same home still replaces a scratch another daemon
+// made, so a credentialed step of the other daemon running at that moment
+// loses its scratch (and fails closed). What is moved aside is kept for
+// inspection for movedAsideRetention, then pruned when a daemon starts
+// (PruneMovedAside).
 
 // credScratchRecordName, in the daemon's data directory, holds the identity of
 // the credentialed scratch it made.
@@ -66,13 +77,22 @@ func credScratchRecord() string {
 	return ""
 }
 
+// movedAsideSuffix is what ensureCredScratchAt appends, with the UnixNano time
+// of the move, to a directory it moves aside.
+const movedAsideSuffix = ".untrusted-"
+
+// movedAsideRetention is how long a moved-aside scratch is kept for inspection.
+const movedAsideRetention = 24 * time.Hour
+
 func ensureCredScratchAt(dir, record string) error {
 	fi, err := os.Lstat(dir)
 	switch {
 	case err == nil && fi.IsDir() && credScratchTrusted(fi, record):
 		return os.Chmod(dir, 0o700)
+	case err == nil && record == "":
+		return errScratchNotMade
 	case err == nil:
-		aside := dir + ".untrusted-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+		aside := dir + movedAsideSuffix + strconv.FormatInt(time.Now().UnixNano(), 10)
 		if err := os.Rename(dir, aside); err != nil {
 			return fmt.Errorf("moving aside a credentialed scratch directory no version-2 daemon made: %w", err)
 		}
@@ -120,6 +140,54 @@ func credScratchTrusted(fi os.FileInfo, record string) bool {
 	}
 	raw, err := os.ReadFile(record)
 	return err == nil && strings.TrimSpace(string(raw)) == id
+}
+
+// PruneMovedAside removes the credentialed scratch directories this package
+// moved aside (CredScratchDir + ".untrusted-<ns>") more than a day ago, and
+// returns how many it removed. The daemon calls it when it starts. Only an
+// entry this user owns is removed, and only by the name the move gave it, so
+// nothing else beside the scratch is touched; a planted link that was moved
+// aside is unlinked, never followed.
+func PruneMovedAside() (int, error) {
+	dir := CredScratchDir()
+	if dir == "" {
+		return 0, nil
+	}
+	return pruneMovedAsideAt(dir, time.Now(), movedAsideRetention)
+}
+
+func pruneMovedAsideAt(dir string, now time.Time, retention time.Duration) (int, error) {
+	parent, prefix := filepath.Dir(dir), filepath.Base(dir)+movedAsideSuffix
+	entries, err := os.ReadDir(parent)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	removed := 0
+	var errs []error
+	for _, e := range entries {
+		ns, ok := strings.CutPrefix(e.Name(), prefix)
+		if !ok {
+			continue
+		}
+		at, err := strconv.ParseInt(ns, 10, 64)
+		if err != nil || now.Sub(time.Unix(0, at)) < retention {
+			continue
+		}
+		path := filepath.Join(parent, e.Name())
+		fi, err := os.Lstat(path)
+		if err != nil || !ownedByUs(fi) {
+			continue
+		}
+		if err := os.RemoveAll(path); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		removed++
+	}
+	return removed, errors.Join(errs...)
 }
 
 // identity is a directory's device and inode.

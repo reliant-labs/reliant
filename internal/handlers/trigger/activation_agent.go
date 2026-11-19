@@ -57,7 +57,7 @@ func savedDefinition(existing *core.Trigger) (*pb.TriggerDefinition, error) {
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	return &pb.TriggerDefinition{Name: rendered.Name, ProjectId: rendered.ProjectId, WorktreeId: rendered.WorktreeId, Enabled: proto.Bool(rendered.Enabled), Workflow: rendered.Workflow, Presets: rendered.Presets, Params: rendered.Params, Message: rendered.Message, DaemonId: rendered.DaemonId, NoMachine: rendered.NoMachine, NotifyOnComplete: rendered.NotifyOnComplete, ConnectionId: rendered.ConnectionId, ActingIdentity: rendered.ActingIdentity, Source: &pb.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: rendered.GetWorkflowTrigger()}}, nil
+	return &pb.TriggerDefinition{Name: rendered.Name, ProjectId: rendered.ProjectId, WorktreeId: rendered.WorktreeId, Enabled: proto.Bool(rendered.Enabled), Workflow: rendered.Workflow, Presets: rendered.Presets, Params: rendered.Params, Message: rendered.Message, DaemonId: rendered.DaemonId, NoMachine: rendered.NoMachine, MachinePoolId: rendered.MachinePoolId, NotifyOnComplete: rendered.NotifyOnComplete, ConnectionId: rendered.ConnectionId, ActingIdentity: rendered.ActingIdentity, Source: &pb.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: rendered.GetWorkflowTrigger()}}, nil
 }
 
 // approvalMode is the owner's automation-approvals setting for a change to
@@ -133,7 +133,7 @@ func (s *Service) savedCapabilities(ctx context.Context, user string, existing *
 	if err != nil {
 		return nil
 	}
-	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(user, def.ProjectId, def.DaemonId), def.Workflow)
+	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(user, def.ProjectId, s.workflowMachine(ctx, user, def)), def.Workflow)
 	if err != nil {
 		return nil
 	}
@@ -193,6 +193,16 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 	if p.MachineID != nil && *p.MachineID != "" && p.NoMachine != nil && *p.NoMachine {
 		return nil, tools.ActivationPreview{}, none, refused("machine_id and no_machine are mutually exclusive")
 	}
+	// The pool the call names, resolved among the caller's own pools; set
+	// is false when it names none.
+	poolID, poolSet, err := s.agentPoolChoice(ctx, user, p)
+	if err != nil {
+		return nil, tools.ActivationPreview{}, none, err
+	}
+	namesMachine := (p.MachineID != nil && *p.MachineID != "") || (p.NoMachine != nil && *p.NoMachine)
+	if poolID != "" && namesMachine {
+		return nil, tools.ActivationPreview{}, none, refused("machine_pool (or machine_pool_id), machine_id and no_machine are mutually exclusive: runs execute on a pool's members, one machine, or none")
+	}
 	if p.MachineID != nil {
 		def.DaemonId = *p.MachineID
 		if *p.MachineID != "" {
@@ -203,6 +213,19 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 		def.NoMachine = *p.NoMachine
 		if *p.NoMachine {
 			def.DaemonId = ""
+		}
+	}
+	// One machine, or none, replaces a pool the activation ran on; a pool
+	// replaces either (trigger.go holds the three mutually exclusive).
+	if namesMachine {
+		def.MachinePoolId = ""
+	}
+	if poolSet {
+		def.MachinePoolId = poolID
+		if poolID != "" {
+			def.DaemonId, def.NoMachine = "", false
+		} else if def.DaemonId == "" && !def.NoMachine {
+			return nil, tools.ActivationPreview{}, none, refused("an empty machine_pool unbinds the pool, so the activation needs machine_id or no_machine: true in the same call")
 		}
 	}
 	if p.ConnectionID != nil {
@@ -245,7 +268,7 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 	// Pausing must remain possible even if the workflow was deleted or its
 	// setup broke. Like the app's pause RPC, it needs ownership, not setup.
 	if operation == tools.ToolPauseTrigger {
-		if p.Name != "" || p.Workflow != "" || p.WorkflowTrigger != "" || p.ProjectID != "" || p.MachineID != nil || p.NoMachine != nil || p.ConnectionID != nil || p.Params != nil || p.Presets != nil || p.Message != nil || p.ActingIdentity != nil {
+		if hasEdits(p) {
 			return nil, tools.ActivationPreview{}, none, refused("pause_trigger only accepts trigger_id")
 		}
 		copy := *existing
@@ -272,7 +295,35 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 		decision := automationpolicy.Decide(automationpolicy.ApprovalAlways, automationpolicy.OperationPause, nil, nil)
 		return def, tools.ActivationPreview{Title: title, Hash: fmt.Sprintf("%x", hash), Revision: revision}, decision, nil
 	}
-	if operation == tools.ToolEnableTrigger && (p.Name != "" || p.Workflow != "" || p.WorkflowTrigger != "" || p.ProjectID != "" || p.MachineID != nil || p.NoMachine != nil || p.ConnectionID != nil || p.Params != nil || p.Presets != nil || p.Message != nil || p.ActingIdentity != nil) {
+	// Deleting, like pausing, needs ownership, not setup: an activation whose
+	// workflow was deleted or broke must still be removable. It cannot be
+	// undone, so it always needs a card (automationpolicy.Decide).
+	if operation == tools.ToolDeleteTrigger {
+		if hasEdits(p) {
+			return nil, tools.ActivationPreview{}, none, refused("delete_trigger only accepts trigger_id")
+		}
+		copy := *existing
+		copy.ProjectName = ""
+		copy.DaemonName = ""
+		saved, _ := json.Marshal(copy) // memory-only digest material
+		safe, _ := automationpolicy.SafeJSON(&copy)
+		machineName := existing.DaemonName
+		if machine, e := s.deps.Repo.GetDaemon(ctx, existing.DaemonID); e == nil && machine != nil {
+			if machine.Name != "" {
+				machineName = machine.Name
+			}
+		}
+		decision := automationpolicy.Decide(automationpolicy.ApprovalAlways, automationpolicy.OperationDelete, nil, nil)
+		title := fmt.Sprintf("Delete activation %s (%s) of workflow %s. Owner: %s. Machine: %s (id %s). Approval needed: %s Saved configuration: %s", "(name withheld)", existing.ID, discloseScope(existing.Workflow), user, machineName, existing.DaemonID, decision.Reason, safe)
+		if len(title) > automationpolicy.MaxDisplayBytes {
+			return nil, tools.ActivationPreview{}, none, refusedPrecondition("Activation approval display size limit exceeded")
+		}
+		// The saved row (with its revision) is in the hash: an activation
+		// edited after the card was raised needs a new one.
+		hash := sha256.Sum256(append([]byte(title), saved...))
+		return def, tools.ActivationPreview{Title: title, Hash: fmt.Sprintf("%x", hash), Revision: existing.UpdatedAt}, decision, nil
+	}
+	if operation == tools.ToolEnableTrigger && hasEdits(p) {
 		return nil, tools.ActivationPreview{}, none, refused("enable_trigger only accepts trigger_id; use update_trigger_activation to edit")
 	}
 	if operation != tools.ToolCreateTriggerActivation && operation != tools.ToolUpdateTriggerActivation && operation != tools.ToolEnableTrigger {
@@ -288,7 +339,7 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 			return nil, tools.ActivationPreview{}, none, tools.RefuseActivation("integration access could not be refreshed ("+svcerr.Code(err).String()+")", err)
 		}
 	}
-	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(user, def.ProjectId, def.DaemonId), def.Workflow)
+	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(user, def.ProjectId, s.workflowMachine(ctx, user, def)), def.Workflow)
 	if err != nil {
 		return nil, tools.ActivationPreview{}, none, tools.RefuseActivation("workflow not found in this project, or it does not validate", err)
 	}
@@ -305,7 +356,16 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 	// Include the full resolved graph: tools, permissions, sources and inputs.
 	// A workflow or activation changed while waiting must be approved again.
 	machineName := "No machine (server-only)"
-	if !row.NoMachine {
+	var pool *agentPool
+	if row.MachinePoolID != "" {
+		// Its runs go to the pool's members, which must all be the
+		// caller's: that is what keeps a re-point to the pool from
+		// widening the activation's power (rowCapabilities).
+		if pool, err = s.ownAgentPool(ctx, user, row.MachinePoolID); err != nil {
+			return nil, tools.ActivationPreview{}, none, err
+		}
+		machineName = pool.disclosure()
+	} else if !row.NoMachine {
 		machine, e := s.deps.Repo.GetDaemon(ctx, row.DaemonID)
 		if e != nil {
 			return nil, tools.ActivationPreview{}, none, tools.RefuseActivation("machine not found", e)
@@ -378,6 +438,7 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 		Inputs:       closure.EffectiveInputs,
 		Connection:   connection,
 		MachineName:  machineName,
+		Pool:         pool,
 		Capabilities: next.Sorted(),
 		Summary:      closure.Summary,
 		SafeRow:      safe,
@@ -447,6 +508,9 @@ func (s *Service) manageActivationAtomic(ctx context.Context, user, operation st
 			return tools.TriggerSummary{}, svcerr.PermissionDenied(automationpolicy.Refusal())
 		}
 		if approvedHash == "" {
+			if operation == tools.ToolDeleteTrigger {
+				return tools.TriggerSummary{}, svcerr.PermissionDenied(tools.DeleteApprovalRequiredMessage)
+			}
 			return tools.TriggerSummary{}, svcerr.PermissionDenied(tools.ApprovalRequiredMessage)
 		}
 		if approvedHash != preview.Hash {
@@ -457,6 +521,16 @@ func (s *Service) manageActivationAtomic(ctx context.Context, user, operation st
 	ctx = context.WithValue(ctx, auth.UserIDContextKey, user)
 	if !preview.Revision.IsZero() {
 		ctx = automationpolicy.WithRevision(ctx, preview.Revision)
+	}
+	if operation == tools.ToolDeleteTrigger {
+		// The same RPC `reliant trigger delete` calls. It drops the schedule
+		// before the row; should this transaction then roll back, the row
+		// survives without a schedule, which only stops it firing until the
+		// next Sync (DeleteTrigger's own ordering argument).
+		if _, err := s.DeleteTrigger(ctx, connect.NewRequest(&pb.DeleteTriggerRequest{Id: p.TriggerID})); err != nil {
+			return tools.TriggerSummary{}, err
+		}
+		return tools.TriggerSummary{ID: p.TriggerID, Name: def.GetName(), Workflow: def.GetWorkflow(), WorkflowTrigger: def.GetWorkflowTrigger(), ProjectID: def.GetProjectId(), DaemonID: def.GetDaemonId(), ConnectionID: def.GetConnectionId()}, nil
 	}
 	var out *pb.Trigger
 	switch operation {
@@ -484,6 +558,15 @@ func (s *Service) manageActivationAtomic(ctx context.Context, user, operation st
 	if err != nil {
 		return tools.TriggerSummary{}, err
 	}
+	summary := tools.TriggerSummary{ID: out.Id, Name: out.Name, Workflow: out.Workflow, WorkflowTrigger: out.GetWorkflowTrigger(), Enabled: out.Enabled, ProjectID: out.ProjectId, DaemonID: out.DaemonId, NoMachine: out.NoMachine, MachinePoolID: out.GetMachinePoolId(), MachinePoolName: out.GetMachinePoolName(), ConnectionID: out.GetConnectionId()}
+	if summary.MachinePoolID != "" {
+		if pool, e := s.ownAgentPool(ctx, user, summary.MachinePoolID); e == nil {
+			summary.MachinePoolName = pool.Name
+			members := len(pool.Members)
+			summary.MachinePoolMembers = &members
+		}
+		return summary, nil
+	}
 	machineName := out.DaemonName
 	if out.DaemonId != "" {
 		if machine, e := s.deps.Repo.GetDaemon(ctx, out.DaemonId); e == nil {
@@ -493,5 +576,6 @@ func (s *Service) manageActivationAtomic(ctx context.Context, user, operation st
 			}
 		}
 	}
-	return tools.TriggerSummary{ID: out.Id, Name: out.Name, Workflow: out.Workflow, WorkflowTrigger: out.GetWorkflowTrigger(), Enabled: out.Enabled, ProjectID: out.ProjectId, DaemonID: out.DaemonId, DaemonName: machineName, ConnectionID: out.GetConnectionId()}, nil
+	summary.DaemonName = machineName
+	return summary, nil
 }

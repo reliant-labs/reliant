@@ -18,6 +18,7 @@ import {
 import Tooltip from "../forge-ui/tooltip";
 
 import { useProjectStore } from "../../store/projectStore";
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { openProjectSwitcher } from "../../lib/projectSwitcher";
 import type { SettingsSection } from "../../routeSchemas";
 import { effectiveBinding, useShortcutsStore } from "../../store/shortcutsStore";
@@ -32,6 +33,7 @@ import { openExternalLink } from "../../lib/open-link";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 import { useCurrentWorktree, useMainWorktree } from "../../hooks/worktree-queries";
 import { BrandMark } from "../icons/BrandMark";
+import { homePath } from "@/lib/paths";
 
 interface HeaderProps {
   /** Home (`/`). When set, the header leads with the Reliant mark linking there. */
@@ -83,6 +85,8 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
       showWindowControls,
     } = useTitleBarChrome({ alignedToWindowEdge: windowAligned });
     const currentProject = useProjectStore((state) => state.currentProject);
+    // The expanded sidebar's top row carries the mark (restyle §11.3).
+    const sidebarExpanded = useWorkspaceStateStore((state) => state.leftSidebarExpanded);
     const currentWorktree = useCurrentWorktree();
     const shortcuts = useShortcutsStore((state) => state.shortcuts);
 
@@ -165,11 +169,12 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
               this is. After the macOS traffic lights (trafficLightPadding), a
               link home. A real <a href> so a modifier-click opens a new tab;
               a plain click stays in the SPA. `no-color`: the global link color
-              rule would otherwise tint it (the mark carries its own colors). */}
-          {onNavigateHome && (
+              rule would otherwise tint it (the mark carries its own colors).
+              Only while the sidebar is collapsed: open, its top row has it. */}
+          {onNavigateHome && !sidebarExpanded && (
             <Tooltip content="Home" side="bottom" delay={300}>
               <a
-                href="/"
+                href={homePath()}
                 onClick={(e) => {
                   if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
                   e.preventDefault();

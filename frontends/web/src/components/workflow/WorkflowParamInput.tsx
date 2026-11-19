@@ -27,6 +27,7 @@ import {
   isIntegrationInput,
 } from "../../lib/inputHelpers";
 import { TypedInputField } from "./inputs/TypedInputField";
+import { settingsPath } from "@/lib/paths";
 
 // JSON Schema property definition
 export interface PropertySchema {
@@ -1164,7 +1165,7 @@ function ModelDropdown({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      navigate({ to: '/settings/$section', params: { section: 'ai' } });
+                      navigate({ to: settingsPath('ai') });
                     }}
                     className="text-primary-ink hover:underline text-xs"
                   >

@@ -20,8 +20,9 @@
 
 import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
 
-import { ON_WORKFLOWS_HREF, legacyWorkflowsPath } from './lib/workflowsArea'
+import { legacyWorkflowsPath, onWorkflowsHref } from './lib/workflowsArea'
 import { librarySearchSchema, runsSearchSchema, workflowsAreaSearchSchema } from './routeSchemas'
+import { workflowLibraryPath } from '@/lib/paths'
 
 export interface WorkflowsAreaComponents {
   layout: RouteComponent
@@ -58,7 +59,7 @@ export function createWorkflowsAreaRoutes<TParent extends AnyRoute>(
     validateSearch: workflowsAreaSearchSchema,
     // The area's landing tab. The search string (`?project=`) rides along.
     beforeLoad: ({ location }) => {
-      throw redirect({ href: `/workflows/library${location.searchStr}`, replace: true })
+      throw redirect({ href: `${workflowLibraryPath()}${location.searchStr}`, replace: true })
     },
   })
 
@@ -103,7 +104,7 @@ export function createWorkflowsAreaRoutes<TParent extends AnyRoute>(
     getParentRoute: () => layoutRoute,
     path: '/workflows/automations',
     beforeLoad: ({ location }) => {
-      throw redirect({ href: withSearch(ON_WORKFLOWS_HREF, location.searchStr), replace: true })
+      throw redirect({ href: withSearch(onWorkflowsHref(), location.searchStr), replace: true })
     },
   })
 

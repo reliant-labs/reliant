@@ -38,10 +38,11 @@ import { AreaShell } from "../Layout/AreaShell";
 import { envHealth, LiveLink } from "./appParts";
 import { useStartBuildingApp } from "./startBuilding";
 import { ForgeFirstRun } from "../ForgeShell/ForgeFirstRun";
+import { appsPath } from "@/lib/paths";
 
 export function AppsPage() {
   return (
-    <AreaShell areaPath="/apps" areaLabel="Apps" areaNoun="apps">
+    <AreaShell areaPath={appsPath()} areaLabel="Apps" areaNoun="apps">
       <AppsBody />
     </AreaShell>
   );
@@ -346,7 +347,7 @@ function useClaimedApp(names: string[], loading: boolean): { name: string | null
     if (!claimed) return;
     setName(claimed);
     setPaused(pausedSite && kept ? { name: pausedSite, kept } : null);
-    void navigate({ to: "/apps", search: {}, replace: true });
+    void navigate({ to: appsPath(), search: {}, replace: true });
   }, [claimed, pausedSite, kept, navigate]);
 
   return { name, found: !loading && name !== null && names.includes(name), paused };

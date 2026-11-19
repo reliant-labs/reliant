@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 
 import { CliLoginsSection } from "./CliLoginsSection";
 import { ForgeTokensSection } from "./ForgeTokensSection";
+import { forgeSettingsPath } from "@/lib/paths";
 
 const BillingSection = lazy(() =>
   import("@/components/Settings/cloud/billing").then((m) => ({ default: m.BillingSection }))
@@ -67,7 +68,7 @@ export function ForgeSettingsPage() {
         {FORGE_SETTINGS_SECTIONS.map((entry) => (
           <a
             key={entry.id}
-            href={`/settings/${entry.id}`}
+            href={forgeSettingsPath(entry.id)}
             aria-current={entry.id === section ? "page" : undefined}
             className={cn(
               "no-color whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors",

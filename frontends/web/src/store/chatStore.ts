@@ -2060,7 +2060,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       );
 
       logger.debug(`[ChatStore] gRPC returned ${messages.length} messages`, {
-        total: response.total,
         firstMessage: messages[0]
           ? {
               id: messages[0].id?.slice(0, 8),
@@ -2124,8 +2123,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // assert that explicitly. Without it a stale hasMore from an earlier
       // bounded snapshot would survive and offer scroll-back that can only ever
       // come back empty.
+      // The whole chat is its own total; the read asks the server for none.
       setMessagesInCache(chatId, messages, {
-        total: response.total,
+        total: messages.length,
         hasMore: response.hasMore,
       });
       set({
@@ -2245,7 +2245,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           kind: "olderPage",
           messages: older as unknown as SdkChatState["messages"],
           errors: pageErrors,
-          total: response.total,
+          // The read skips the server's count (paging is by cursor), so the
+          // total stays the one the chat already holds.
+          total: meta.total ?? 0,
           hasMore: !reachedStart,
         },
         REDUCE_ENV,
@@ -2269,7 +2271,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // prependMessagesCache recomputes oldestSeq from the merged list, so
       // the next page's cursor moves strictly backward.
       prependMessagesCache(chatId, older, {
-        total: response.total,
         hasMore: !reachedStart,
       });
 

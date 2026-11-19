@@ -22,6 +22,7 @@ import { isSafeReturnTo } from "@/lib/returnTo";
 import { useAuthStore } from "@/store/authStore";
 
 import { landingJourneyHoldsSignIn } from "./landingJourney";
+import { authPath, verifyEmailPath } from "@/lib/paths";
 
 export type ForgeAuthDecision = "wait" | "sign-in" | "verify-email" | "allow";
 
@@ -42,8 +43,8 @@ export function forgeAuthDecision(state: { initialized: boolean; loading: boolea
 
 /** The sign-in URL that returns to `returnTo` afterwards (the home page needs no return). */
 export function forgeSignInHref(returnTo: string): string {
-  if (!isSafeReturnTo(returnTo) || returnTo === "/" || returnTo.startsWith("/auth")) return "/auth";
-  return `/auth?${new URLSearchParams({ redirect: returnTo })}`;
+  if (!isSafeReturnTo(returnTo) || returnTo === "/" || returnTo.startsWith("/auth")) return authPath();
+  return `${authPath()}?${new URLSearchParams({ redirect: returnTo })}`;
 }
 
 export function ForgeAuthGuard({ children }: { children: ReactNode }) {
@@ -68,7 +69,7 @@ export function ForgeAuthGuard({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (decision === "sign-in" && !leaveToJourney) void navigate({ href: forgeSignInHref(here), replace: true });
-    if (decision === "verify-email") void navigate({ href: "/verify-email", replace: true });
+    if (decision === "verify-email") void navigate({ href: verifyEmailPath(), replace: true });
   }, [decision, leaveToJourney, here, navigate]);
 
   if (decision !== "allow") return <LoadingSpinner />;

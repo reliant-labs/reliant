@@ -8,9 +8,10 @@ import { logger } from "@/lib/logger";
 import { useAuthStore } from "@/store/authStore";
 
 import { EXISTING_ACCOUNT_COPY } from "./claimCopy";
+import { authPath, claimPath } from "@/lib/paths";
 
 /** Where signing in returns to: the claim page, which picks the claim up from storage. */
-export const SIGN_IN_TO_CLAIM_URL = "/auth?redirect=%2Fclaim";
+export const SIGN_IN_TO_CLAIM_URL = `${authPath()}?redirect=${encodeURIComponent(claimPath())}`;
 
 /**
  * Sign out of whatever this browser holds and go to the sign-in screen, which

@@ -53,6 +53,8 @@ type (
 	CompactChatRequest                       = sdk.CompactChatRequest
 	CompactChatResponse                      = sdk.CompactChatResponse
 	ConfigScope                              = sdk.ConfigScope
+	ConnectionProposal                       = sdk.ConnectionProposal
+	ConnectionProposalScope                  = sdk.ConnectionProposalScope
 	ConnectorPolicy                          = sdk.ConnectorPolicy
 	ContentBlock                             = sdk.ContentBlock
 	ContentBlockBody                         = sdk.ContentBlockBody
@@ -86,6 +88,8 @@ type (
 	DaemonMessage_TerminalSessionEvent       = sdk.DaemonMessage_TerminalSessionEvent
 	DaemonMessage_ToolResponse               = sdk.DaemonMessage_ToolResponse
 	DaemonRegister                           = sdk.DaemonRegister
+	DaemonUpgradeState                       = sdk.DaemonUpgradeState
+	DaemonUpgradeStatus                      = sdk.DaemonUpgradeStatus
 	DeleteChatRequest                        = sdk.DeleteChatRequest
 	DeleteChatResponse                       = sdk.DeleteChatResponse
 	DeleteTriggerRequest                     = sdk.DeleteTriggerRequest
@@ -307,6 +311,8 @@ type (
 	ResolveTriggerSendersResponse            = sdk.ResolveTriggerSendersResponse
 	ResolvedTriggerSender                    = sdk.ResolvedTriggerSender
 	ResourceVisibility                       = sdk.ResourceVisibility
+	RestartRequested                         = sdk.RestartRequested
+	RestartUrgency                           = sdk.RestartUrgency
 	RestoreInboxItemRequest                  = sdk.RestoreInboxItemRequest
 	RestoreInboxItemResponse                 = sdk.RestoreInboxItemResponse
 	RestoreWorktreeRecoveryRequest           = sdk.RestoreWorktreeRecoveryRequest
@@ -348,6 +354,7 @@ type (
 	ServerMessage_ProcessOutputSubscribe     = sdk.ServerMessage_ProcessOutputSubscribe
 	ServerMessage_ProcessOutputUnsubscribe   = sdk.ServerMessage_ProcessOutputUnsubscribe
 	ServerMessage_RegistrationAck            = sdk.ServerMessage_RegistrationAck
+	ServerMessage_RestartRequested           = sdk.ServerMessage_RestartRequested
 	ServerMessage_TerminalInput              = sdk.ServerMessage_TerminalInput
 	ServerMessage_TerminalOutputSubscribe    = sdk.ServerMessage_TerminalOutputSubscribe
 	ServerMessage_TerminalResize             = sdk.ServerMessage_TerminalResize
@@ -521,6 +528,9 @@ const (
 	ConfigScope_CONFIG_SCOPE_PROJECT                                           = sdk.ConfigScope_CONFIG_SCOPE_PROJECT
 	ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL                                     = sdk.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL
 	ConfigScope_CONFIG_SCOPE_UNSPECIFIED                                       = sdk.ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_ORG                      = sdk.ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_ORG
+	ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_PERSONAL                 = sdk.ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_PERSONAL
+	ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED              = sdk.ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED
 	ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT                               = sdk.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT
 	ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE                         = sdk.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE
 	ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE                                  = sdk.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE
@@ -530,6 +540,12 @@ const (
 	ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL                              = sdk.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL
 	ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT                            = sdk.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT
 	ContentBlockType_CONTENT_BLOCK_TYPE_UNSPECIFIED                            = sdk.ContentBlockType_CONTENT_BLOCK_TYPE_UNSPECIFIED
+	DaemonUpgradeState_DAEMON_UPGRADE_STATE_AWAITING_OWNER                     = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_AWAITING_OWNER
+	DaemonUpgradeState_DAEMON_UPGRADE_STATE_CURRENT                            = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_CURRENT
+	DaemonUpgradeState_DAEMON_UPGRADE_STATE_DRAINED                            = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_DRAINED
+	DaemonUpgradeState_DAEMON_UPGRADE_STATE_FAILED                             = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_FAILED
+	DaemonUpgradeState_DAEMON_UPGRADE_STATE_UNSPECIFIED                        = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UNSPECIFIED
+	DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING                           = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING
 	DiskGuardState_DISK_GUARD_STATE_RECLAIMING                                 = sdk.DiskGuardState_DISK_GUARD_STATE_RECLAIMING
 	DiskGuardState_DISK_GUARD_STATE_REFUSING_HEAVY                             = sdk.DiskGuardState_DISK_GUARD_STATE_REFUSING_HEAVY
 	DiskGuardState_DISK_GUARD_STATE_UNSPECIFIED                                = sdk.DiskGuardState_DISK_GUARD_STATE_UNSPECIFIED
@@ -596,6 +612,11 @@ const (
 	ResourceVisibility_RESOURCE_VISIBILITY_ORG                                 = sdk.ResourceVisibility_RESOURCE_VISIBILITY_ORG
 	ResourceVisibility_RESOURCE_VISIBILITY_PRIVATE                             = sdk.ResourceVisibility_RESOURCE_VISIBILITY_PRIVATE
 	ResourceVisibility_RESOURCE_VISIBILITY_UNSPECIFIED                         = sdk.ResourceVisibility_RESOURCE_VISIBILITY_UNSPECIFIED
+	RestartUrgency_RESTART_URGENCY_EMERGENCY                                   = sdk.RestartUrgency_RESTART_URGENCY_EMERGENCY
+	RestartUrgency_RESTART_URGENCY_NORMAL                                      = sdk.RestartUrgency_RESTART_URGENCY_NORMAL
+	RestartUrgency_RESTART_URGENCY_ROUTINE                                     = sdk.RestartUrgency_RESTART_URGENCY_ROUTINE
+	RestartUrgency_RESTART_URGENCY_SECURITY                                    = sdk.RestartUrgency_RESTART_URGENCY_SECURITY
+	RestartUrgency_RESTART_URGENCY_UNSPECIFIED                                 = sdk.RestartUrgency_RESTART_URGENCY_UNSPECIFIED
 	RunDisplayState_RUN_DISPLAY_STATE_CANCELLED                                = sdk.RunDisplayState_RUN_DISPLAY_STATE_CANCELLED
 	RunDisplayState_RUN_DISPLAY_STATE_COMPLETED                                = sdk.RunDisplayState_RUN_DISPLAY_STATE_COMPLETED
 	RunDisplayState_RUN_DISPLAY_STATE_FAILED                                   = sdk.RunDisplayState_RUN_DISPLAY_STATE_FAILED
@@ -719,8 +740,12 @@ var (
 	CleanupStorageOutcome_value          = sdk.CleanupStorageOutcome_value
 	ConfigScope_name                     = sdk.ConfigScope_name
 	ConfigScope_value                    = sdk.ConfigScope_value
+	ConnectionProposalScope_name         = sdk.ConnectionProposalScope_name
+	ConnectionProposalScope_value        = sdk.ConnectionProposalScope_value
 	ContentBlockType_name                = sdk.ContentBlockType_name
 	ContentBlockType_value               = sdk.ContentBlockType_value
+	DaemonUpgradeState_name              = sdk.DaemonUpgradeState_name
+	DaemonUpgradeState_value             = sdk.DaemonUpgradeState_value
 	DiskGuardState_name                  = sdk.DiskGuardState_name
 	DiskGuardState_value                 = sdk.DiskGuardState_value
 	DisplayStyle_name                    = sdk.DisplayStyle_name
@@ -758,6 +783,8 @@ var (
 	RecoveryType_value                   = sdk.RecoveryType_value
 	ResourceVisibility_name              = sdk.ResourceVisibility_name
 	ResourceVisibility_value             = sdk.ResourceVisibility_value
+	RestartUrgency_name                  = sdk.RestartUrgency_name
+	RestartUrgency_value                 = sdk.RestartUrgency_value
 	RunDisplayState_name                 = sdk.RunDisplayState_name
 	RunDisplayState_value                = sdk.RunDisplayState_value
 	RunOutcome_name                      = sdk.RunOutcome_name

@@ -86,19 +86,21 @@ class MonacoLanguageFeaturesService {
   private configureTypeScriptDefaults(): void {
     if (!this.monaco) return;
 
-    const tsDefaults = this.monaco.languages.typescript.typescriptDefaults;
-    const jsDefaults = this.monaco.languages.typescript.javascriptDefaults;
+    // The top-level `typescript` namespace: since monaco-editor 0.55 the old
+    // `languages.typescript` is a deprecation stub in the bundled ESM build.
+    const tsDefaults = this.monaco.typescript.typescriptDefaults;
+    const jsDefaults = this.monaco.typescript.javascriptDefaults;
 
     // Configure compiler options for modern TypeScript/React
     const compilerOptions = {
-      target: this.monaco.languages.typescript.ScriptTarget.ESNext,
+      target: this.monaco.typescript.ScriptTarget.ESNext,
       lib: ['ESNext', 'DOM', 'DOM.Iterable'],
       allowNonTsExtensions: true,
-      moduleResolution: this.monaco.languages.typescript.ModuleResolutionKind.NodeJs,
-      module: this.monaco.languages.typescript.ModuleKind.ESNext,
+      moduleResolution: this.monaco.typescript.ModuleResolutionKind.NodeJs,
+      module: this.monaco.typescript.ModuleKind.ESNext,
       noEmit: true,
       esModuleInterop: true,
-      jsx: this.monaco.languages.typescript.JsxEmit.ReactJSX,
+      jsx: this.monaco.typescript.JsxEmit.ReactJSX,
       jsxImportSource: 'react',
       allowJs: true,
       checkJs: false,
@@ -194,9 +196,9 @@ class MonacoLanguageFeaturesService {
     const isJavaScript = /\.(js|jsx)$/i.test(filePath);
 
     if (isTypeScript) {
-      this.monaco.languages.typescript.typescriptDefaults.addExtraLib(content, uri);
+      this.monaco.typescript.typescriptDefaults.addExtraLib(content, uri);
     } else if (isJavaScript) {
-      this.monaco.languages.typescript.javascriptDefaults.addExtraLib(content, uri);
+      this.monaco.typescript.javascriptDefaults.addExtraLib(content, uri);
     }
 
     this.registeredFiles.set(uri, { uri, version, content });

@@ -11,7 +11,7 @@
  * `/reliant.v1.DaemonRegistryService/*` with HTTP 200 from a DIFFERENT
  * database ("you have no daemon") and does not serve TokenService at all.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
@@ -79,6 +79,17 @@ async function load() {
   });
   return connect;
 }
+
+// The file's first import of connect.ts is cold: it transforms and evaluates
+// the whole transport graph (interceptors, stores, the generated services),
+// 1.3-2.4s on an idle host and over 5s on a loaded CI runner, where it timed
+// out whichever test came first (#2939's merge-queue run 44479646105).
+// Paid here, under a hook budget of its own, every test's import after
+// vi.resetModules is warm (~50ms) and no test's verdict depends on load.
+// The modules it evaluates are discarded by the first vi.resetModules below.
+beforeAll(async () => {
+  await import("../connect");
+}, 60_000);
 
 beforeEach(() => {
   vi.resetModules();

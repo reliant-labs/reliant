@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -280,9 +281,90 @@ func TestPurgeProjectNowNeedsTheOwnerAndItsName(t *testing.T) {
 
 	_, err = svc.PurgeProjectNow(owner, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"}))
 	require.NoError(t, err)
+	svc.WaitForPurges()
 	_, err = f.repo.GetProject(context.Background(), f.project)
-	assert.True(t, svcerr.IsNotFound(err), "the project is gone at once")
+	assert.True(t, svcerr.IsNotFound(err), "the project is gone once its batches finish")
 	assert.Contains(t, f.schedules.synced(), f.trigger, "the purged trigger's schedule is converged away")
+}
+
+// heldPurge is the database with an immediate purge's batches held until
+// release is closed; started closes when they are reached. With fail set
+// they then fail instead of running.
+type heldPurge struct {
+	*db.Repo
+	started, release chan struct{}
+	fail             error
+}
+
+func (h heldPurge) PurgeClaimedProject(ctx context.Context, id, owner string) ([]string, error) {
+	close(h.started)
+	select {
+	case <-h.release:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	if h.fail != nil {
+		return nil, h.fail
+	}
+	return h.Repo.PurgeClaimedProject(ctx, id, owner)
+}
+
+// PurgeProjectNow answers once the project is claimed, before its batches
+// run: a project with large chats takes longer to delete than a request may
+// run (prod: deadline_exceeded after 10s, 2026-11-18). By then the project is
+// hidden and can no longer be restored; the batches finish after the
+// response, and the purged triggers' schedules are converged then. A purge
+// whose batches fail is left to the purge worker, which finishes it once the
+// claim's lease has passed.
+func TestPurgeProjectNowAnswersBeforeItsBatchesRun(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		fail error
+	}{
+		{name: "the batches finish after the response"},
+		{name: "batches that fail are finished by the purge worker", fail: errors.New("test: the batches stopped part way")},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newDeleteAuthFixture(t)
+			m := orgs.New(f.members)
+			clock := func() time.Time { return deleteNow }
+			held := heldPurge{Repo: f.repo, started: make(chan struct{}), release: make(chan struct{}), fail: c.fail}
+			svc := NewTestProject(t, WithProjectDeps(Deps{Repo: held, Orgs: m, Schedules: f.schedules, Now: clock}))
+			owner := as(m, f.owner, auth.CredentialSession, "")
+
+			_, err := svc.PurgeProjectNow(owner, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"}))
+			require.NoError(t, err, "the rpc answers while its batches are held")
+			<-held.started
+
+			p, err := f.repo.GetProject(context.Background(), f.project)
+			require.NoError(t, err, "the batches have not run")
+			require.NotNil(t, p.PurgeStartedAt, "the project is claimed")
+			_, err = svc.GetProject(owner, connect.NewRequest(&reliantv1.GetProjectRequest{ProjectId: f.project}))
+			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "a claimed project is hidden at once")
+			_, err = svc.RestoreProject(owner, connect.NewRequest(&reliantv1.RestoreProjectRequest{ProjectId: f.project}))
+			assert.Error(t, err, "a claimed project can no longer be restored")
+			assert.True(t, f.scheduled(), "the refused restore changed nothing")
+			assert.Empty(t, f.schedules.synced(), "no schedule is converged before the batches finish")
+
+			close(held.release)
+			svc.WaitForPurges()
+			ctx := context.Background()
+			if c.fail == nil {
+				_, err = f.repo.GetProject(ctx, f.project)
+				assert.True(t, svcerr.IsNotFound(err), "the detached batches deleted the project")
+				assert.Contains(t, f.schedules.synced(), f.trigger, "the purged trigger's schedule is converged away")
+				return
+			}
+			_, err = f.repo.GetProject(ctx, f.project)
+			require.NoError(t, err, "a failed purge leaves the project, hidden and claimed")
+			assert.Empty(t, f.schedules.synced(), "nothing was purged, so no schedule moved")
+			res, err := f.repo.PurgeDueProjects(ctx, time.Now().Add(db.ProjectPurgeLease+time.Minute), db.ProjectPurgeLease, 50)
+			require.NoError(t, err)
+			assert.Equal(t, 1, res.Purged, "the worker finishes it once the claim's lease has passed")
+			_, err = f.repo.GetProject(ctx, f.project)
+			assert.True(t, svcerr.IsNotFound(err), "the project is gone")
+		})
+	}
 }
 
 // movesBeforeWrite is the database with a project move landing between the

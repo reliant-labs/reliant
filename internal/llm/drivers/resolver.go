@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
+	"github.com/reliant-labs/reliant/internal/llm/imagefit"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -51,7 +52,7 @@ func (p *baseDriver) Name() string {
 func (p *baseDriver) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) (*llm.DriverResponse, error) {
 	ctx, span := llm.StartGenAISpan(ctx, p.client.Name(), p.model, false)
 	defer span.End()
-	resp, err := p.client.SendMessages(ctx, prompts, messages, tools)
+	resp, err := p.client.SendMessages(ctx, prompts, imagefit.ForRequest(ctx, messages), tools)
 	span.RecordResponse(resp, "")
 	span.RecordError(err)
 	return resp, err
@@ -71,10 +72,14 @@ func (p *baseDriver) SendMessages(ctx context.Context, prompts []string, message
 // each event as it is relayed: tracing in a relay of its own would put a
 // second hop between the driver and a consumer that keeps taking already
 // produced events after it cancels.
+//
+// And it is where a request's images are fit within the provider's
+// many-image limits (imagefit.ForRequest), so no driver can send a history
+// the provider would refuse on every later turn.
 func (p *baseDriver) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) <-chan llm.DriverEvent {
 	ch := make(chan llm.DriverEvent)
 	ctx, span := llm.StartGenAISpan(ctx, p.client.Name(), p.model, true)
-	in := p.client.StreamResponse(ctx, prompts, messages, tools)
+	in := p.client.StreamResponse(ctx, prompts, imagefit.ForRequest(ctx, messages), tools)
 	go func() {
 		defer close(ch)
 		defer span.End()

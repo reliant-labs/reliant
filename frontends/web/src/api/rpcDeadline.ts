@@ -56,20 +56,33 @@ export const MAX_ATTEMPTS = 2;
 /**
  * Reads the server answers fast enough that silence means a lost response,
  * not a slow one. Measured from the prod api-server `rpc completed` log over
- * 24h (2026-10-07/08); the slowest of these never exceeded 1.4s (ListMessages)
- * and most stay under 0.8s, so STALL_RETRY_MS leaves ~3x headroom.
+ * 24h (2026-10-07/08); the slowest of these never exceeded 1.4s and most stay
+ * under 0.8s, so STALL_RETRY_MS leaves ~3x headroom.
  *
  * Deliberately absent: reads the server is genuinely slow on (ListWorkflows,
  * MCP ListServers, ListPresetsForWorkflow — p99 2–10s), where replacing the
  * request would only restart the wait; and reads served by the user's machine
  * (GetFileTree, ListProcesses), whose latency is the machine's, not ours.
+ *
+ * ListMessages left this list on 2026-11-18: its server p99 is 6.1s (7d), all
+ * of it the chat's message COUNT, which is O(chat) and slowest on the biggest,
+ * busiest chats. A hedge there is a second copy of the same slow count: prod
+ * obs 16122d5e, chat 2ee014da at 12:00Z, two ListMessages each hedged at 4s
+ * put four 4-10s counts on the database during a load spike, and the call
+ * still timed out.
+ *
+ * ListInbox, ListChats and ListArchivedChats left it the same day for the
+ * same reason. Under one heavy account's load (2026-11-17 20:00–23:00Z) the
+ * server took ListInbox p50 1.6s / p95 3.6s (24h p95 2.9s), ListChats up to
+ * 2.25s in a single trace (its chats_with_activity scan alone 1.4s), and
+ * ListArchivedChats p50 0.46-0.56s (105-280ms when quiet). A hedge at 4s is a second
+ * copy of that work on the database exactly when it is slowest, and
+ * browser-only ListInbox spans of 6.00s (the hedge, aborted at the 10s
+ * budget) showed the hedges were firing.
  */
 const FAST_READS: ReadonlySet<string> = new Set([
   "reliant.v1.DaemonRegistryService/ListDaemons",
-  "reliant.v1.ChatService/ListChats",
-  "reliant.v1.ChatService/ListArchivedChats",
   "reliant.v1.ChatService/GetChat",
-  "reliant.v1.ChatService/ListMessages",
   "reliant.v1.ChatService/GetContentBlockBodies",
   "reliant.v1.ChatService/GetWorkflowExecutions",
   "reliant.v1.ChatService/ListQueuedAgentMessages",
@@ -79,7 +92,6 @@ const FAST_READS: ReadonlySet<string> = new Set([
   "reliant.v1.PlanService/GetPlanByChatId",
   "reliant.v1.TaskService/ListTasks",
   "reliant.v1.RunService/ListRuns",
-  "reliant.v1.InboxService/ListInbox",
   "reliant.v1.WorkflowService/GetWorkflow",
   "reliant.v1.ProjectService/ListProjects",
   "reliant.v1.SettingsService/GetProviderStatuses",
@@ -202,10 +214,53 @@ export interface DeadlineInterceptorOptions {
   /** Active-time budget for a call; 0 means "no client deadline". */
   timeoutFor: (serviceTypeName: string, methodName: string) => number;
   activity: () => PageActivity;
-  /** Called once per call whose budget ran out, before it is aborted. */
+  /**
+   * Called once per call whose budget ran out, before it is aborted — unless
+   * the call was part of a stall reported to onStall instead.
+   */
   onTimeout?: (method: string, budgetMs: number, diagnostics: string) => void;
+  /**
+   * Called once for a stall: when a call's budget runs out while other calls
+   * that started with it have also gone unanswered (stallGrouping), the
+   * connection under them all stalled, and this is its one report. None of
+   * the calls in it is then reported to onTimeout, now or when its own budget
+   * runs out. Without it every timeout goes to onTimeout.
+   */
+  onStall?: (stall: StalledCalls) => void;
+  /** Which calls make one stall; false reports every timeout alone. On by default. */
+  stallGrouping?: StallGrouping | false;
   /** Called when a stranded or stalled read is replaced. */
   onReplace?: (method: string, why: ReplaceReason, diagnostics: string) => void;
+}
+
+/**
+ * Which in-flight calls share a timed-out call's stall: those that started at
+ * most skewMs (active time) after it — a call queued behind the same dead
+ * connection a moment later — and have had no answer for at least
+ * minSilentMs. Prod, 2026-11-18: four calls of one tab hung together and the
+ * first to run out of budget, ListDeployAttempts, was blamed though the server
+ * had answered it in 22ms.
+ */
+export interface StallGrouping {
+  /** Default 2s. */
+  skewMs?: number;
+  /** Default STALL_RETRY_MS: unanswered past the fast-read stall mark. */
+  minSilentMs?: number;
+}
+
+export const DEFAULT_STALL_SKEW_MS = 2_000;
+
+/** One stall: two or more calls that hung together. */
+export interface StalledCalls {
+  /** The call whose budget ran out first, and that budget. */
+  method: string;
+  budgetMs: number;
+  /** Every call of the stall, the timed-out one included, sorted (a method twice in flight is listed twice). */
+  methods: string[];
+  /** The longest any of them has gone unanswered, in active time. */
+  longestSilentMs: number;
+  /** The in-flight snapshot, taken before the timed-out call is aborted. */
+  diagnostics: string;
 }
 
 export type ReplaceReason = "stalled" | `resumed:${ResumeEvent["reason"]}`;
@@ -224,14 +279,81 @@ interface Attempt {
 export interface DeadlineInterceptor {
   interceptor: Interceptor;
   describeInFlight(): string;
+  /** Stalls reported whose calls have not all settled yet (diagnostics, tests). */
+  openStallIncidents(): number;
+}
+
+/**
+ * One reported stall. It outlives each member's own settle: the incident, and
+ * every id in it, is released only once all of them have settled, so no
+ * member's later deadline can report it again whatever order they settle in.
+ */
+interface StallIncident {
+  ids: ReadonlySet<number>;
+  pending: number;
 }
 
 export function createDeadlineInterceptor(options: DeadlineInterceptorOptions): DeadlineInterceptor {
   let nextId = 0;
   const inFlight = new Map<number, InFlightEntry>();
+  // The reported stall each call belongs to, until every call of that stall
+  // has settled: their own timeouts are not reported again, and no new stall
+  // takes them in.
+  const incidentOf = new Map<number, StallIncident>();
+  const openIncidents = new Set<StallIncident>();
+  const grouping = options.stallGrouping === false ? undefined : (options.stallGrouping ?? {});
 
   const describeInFlight = (): string =>
     formatInFlight([...inFlight.values()], Date.now(), options.activity().activeNow());
+
+  /** The calls of the stall call `id` ran out of budget in, itself first. */
+  const stallOf = (id: number): number[] => {
+    const self = inFlight.get(id);
+    if (!grouping || self?.startedActive === undefined) return [id];
+    const skewMs = grouping.skewMs ?? DEFAULT_STALL_SKEW_MS;
+    const minSilentMs = grouping.minSilentMs ?? STALL_RETRY_MS;
+    const activeNow = options.activity().activeNow();
+    const group = [id];
+    for (const [other, entry] of inFlight) {
+      if (other === id || incidentOf.has(other) || entry.startedActive === undefined) continue;
+      if (entry.startedActive > self.startedActive + skewMs) continue;
+      if (activeNow - entry.startedActive < minSilentMs) continue;
+      group.push(other);
+    }
+    return group;
+  };
+
+  /**
+   * Report call `id`'s timeout: as a stall when calls that started with it
+   * hang too, else alone. A call already reported in a stall is not reported.
+   */
+  const reportTimeout = (id: number, methodName: string, budgetMs: number, attemptNumber: number) => {
+    if (incidentOf.has(id)) return;
+    // Snapshot BEFORE aborting so the line still includes this call and
+    // everything queued behind the same connection.
+    const diagnostics = describeInFlight();
+    const group = options.onStall ? stallOf(id) : [id];
+    if (group.length >= 2 && options.onStall) {
+      const activeNow = options.activity().activeNow();
+      let longestSilentMs = 0;
+      const incident: StallIncident = { ids: new Set(group), pending: group.length };
+      openIncidents.add(incident);
+      for (const member of group) {
+        incidentOf.set(member, incident);
+        const started = inFlight.get(member)?.startedActive;
+        if (started !== undefined) longestSilentMs = Math.max(longestSilentMs, activeNow - started);
+      }
+      options.onStall({
+        method: methodName,
+        budgetMs,
+        methods: group.map((member) => inFlight.get(member)?.method ?? "").sort(),
+        longestSilentMs,
+        diagnostics: `attempt ${attemptNumber}; ${diagnostics}`,
+      });
+      return;
+    }
+    options.onTimeout?.(methodName, budgetMs, `attempt ${attemptNumber}; ${diagnostics}`);
+  };
 
   const interceptor: Interceptor = (next) => async (req) => {
     const methodName = req.method.name;
@@ -285,10 +407,7 @@ export function createDeadlineInterceptor(options: DeadlineInterceptorOptions): 
               // together; it is one timeout.
               if (timeoutReported) return;
               timeoutReported = true;
-              // Snapshot BEFORE aborting so the line still includes this call and
-              // everything queued behind the same connection.
-              const diagnostics = describeInFlight();
-              options.onTimeout?.(methodName, budgetMs, `attempt ${attemptNumber}; ${diagnostics}`);
+              reportTimeout(id, methodName, budgetMs, attemptNumber);
             },
           });
           live.add(attempt);
@@ -316,10 +435,21 @@ export function createDeadlineInterceptor(options: DeadlineInterceptorOptions): 
       });
     } finally {
       inFlight.delete(id);
+      settleIncidentMember(id);
     }
   };
 
-  return { interceptor, describeInFlight };
+  /** Call `id` settled: release its stall once that was the last call of it. */
+  const settleIncidentMember = (id: number) => {
+    const incident = incidentOf.get(id);
+    if (!incident) return;
+    incident.pending--;
+    if (incident.pending > 0) return;
+    for (const member of incident.ids) incidentOf.delete(member);
+    openIncidents.delete(incident);
+  };
+
+  return { interceptor, describeInFlight, openStallIncidents: () => openIncidents.size };
 }
 
 type UnaryNext = (req: UnaryRequest) => Promise<UnaryResponse>;

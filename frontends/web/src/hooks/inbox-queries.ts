@@ -11,9 +11,11 @@
  * arrive as `chat_activity_changed`, and a run stopping arrives as
  * `chat_state_change`; the global updates store asks `inboxInvalidatingUpdate`
  * and marks the query stale (refetching at most once per
- * STREAM_REFETCH_INTERVAL_MS). The automation failure kinds emit NO user
- * update of their own, so it also refetches whenever the window regains
- * focus, even while fresh.
+ * STREAM_REFETCH_INTERVAL_MS, longer when ListInbox itself is slow, and not
+ * at all while the tab is hidden). The automation failure kinds emit NO user
+ * update of their own, so a returning user must not see an old list: the
+ * read goes stale after INBOX_STALE_MS, and the window-focus refetch then
+ * reads it again (see INBOX_STALE_MS for why not on every focus).
  */
 
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
@@ -118,6 +120,17 @@ function inboxRequest(projectId: string | undefined, orgId: string | null) {
   return orgRequest({ projectId }, orgId);
 }
 
+/**
+ * How old the Inbox may be when the window regains focus before it is read
+ * again. It used to refetch on EVERY focus (`refetchOnWindowFocus: "always"`),
+ * for the automation failure kinds, which no update announces. That made each
+ * tab switch a ListInbox — a read that took 1.5–3 s on the server under load
+ * (2026-11-17) — even when the list had been read a second earlier. Short
+ * against the 30 s default, so the failure kinds still show within seconds
+ * of the user coming back.
+ */
+export const INBOX_STALE_MS = 10_000;
+
 /** The Inbox's items in the server's priority order (default limit, 100). */
 export function useInbox(projectId?: string) {
   const org = useOrgScope();
@@ -125,7 +138,7 @@ export function useInbox(projectId?: string) {
     withOrgFailure(
       inboxServiceQueries.listInbox(inboxRequest(projectId, org.orgId), {
         enabled: orgQueryEnabled(org),
-        refetchOnWindowFocus: "always",
+        staleTime: INBOX_STALE_MS,
       }),
       org,
     ),
@@ -148,7 +161,7 @@ export function useInboxCounts(projectId?: string) {
     withOrgFailure(
       inboxServiceQueries.listInbox(inboxRequest(projectId, org.orgId), {
         enabled: orgQueryEnabled(org),
-        refetchOnWindowFocus: "always",
+        staleTime: INBOX_STALE_MS,
         select: countsOf,
       }),
       org,

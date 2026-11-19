@@ -36,6 +36,9 @@ import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { cn } from "../../lib/utils";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
 import { MobileInstallMenuItem } from "./MobileInstallMenuItem";
+import { MobileOrgSwitcher } from "./MobileOrgSwitcher";
+import { appsPath, mobileAccountPath, mobileGitHubPath, mobileInboxPath, mobileMachinesPath, mobileNewChatPath, mobileProjectsPath, mobileSearchPath, mobileSettingsPath, mobileWorkflowsPath } from "@/lib/paths";
+import { orgPath } from "@/components/Forge/Console/paths";
 
 interface MobileNavDrawerProps {
   isOpen: boolean;
@@ -64,20 +67,20 @@ interface NavItem {
 function navItems(): NavItem[] {
   const forge = isForgeUIEnabled();
   return [
-    { to: "/m/new", label: "New chat", icon: MessageSquarePlus },
+    { to: mobileNewChatPath(), label: "New chat", icon: MessageSquarePlus },
     ...(forge
       ? [
-          { to: "/apps", label: "Apps", icon: Boxes },
-          { to: "/forge/observability", label: "Observability", icon: Activity },
+          { to: appsPath(), label: "Apps", icon: Boxes },
+          { to: orgPath({ kind: "observability" }), label: "Observability", icon: Activity },
         ]
       : []),
-    { to: "/m/inbox", label: "Inbox", icon: Inbox, inboxBadge: true },
-    { to: "/m/search", label: "Search", icon: Search },
-    { to: "/m/workflows", label: "Workflows", icon: Workflow },
-    { to: "/m/daemons", label: "Machines", icon: Server },
-    { to: "/m/github", label: "GitHub", icon: Github },
-    { to: "/m/settings", label: "Settings", icon: Settings },
-    { to: "/m/account", label: "Account", icon: User },
+    { to: mobileInboxPath(), label: "Inbox", icon: Inbox, inboxBadge: true },
+    { to: mobileSearchPath(), label: "Search", icon: Search },
+    { to: mobileWorkflowsPath(), label: "Workflows", icon: Workflow },
+    { to: mobileMachinesPath(), label: "Machines", icon: Server },
+    { to: mobileGitHubPath(), label: "GitHub", icon: Github },
+    { to: mobileSettingsPath(), label: "Settings", icon: Settings },
+    { to: mobileAccountPath(), label: "Account", icon: User },
   ];
 }
 
@@ -270,13 +273,19 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
             })}
           </nav>
 
+          {/* The org this tab acts in, above the project it contains: the
+              desktop sidebar's org switcher, on the phone. */}
+          <div className="pt-2">
+            <MobileOrgSwitcher onSwitched={onClose} />
+          </div>
+
           {/* The current project as a card rather than a tile: it is the
-              drawer's only stateful row — it reports something as well as
+              drawer's stateful row — it reports something as well as
               navigating — and the card is what distinguishes it from the
               plain destinations above. */}
           <div className="pt-2">
             <Link
-              to="/m/projects"
+              to={mobileProjectsPath()}
               className="flex min-h-[60px] w-full items-center gap-3 rounded-lg px-3 elevation-1 active:bg-foreground/5"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">

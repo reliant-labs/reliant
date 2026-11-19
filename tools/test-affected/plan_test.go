@@ -210,11 +210,12 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 		// The forge pin and forge's own config reach Go and codegen, never a
 		// vitest file or electron: a forge bump must not run the whole web lane.
 		{"forge.yaml", []lane{laneGo, laneForgeGen}},
-		{"frontends/web/package.json", []lane{laneWeb, laneWebDemo}},
-		{"frontends/web/vite.config.ts", []lane{laneWeb, laneWebDemo}},
-		{"frontends/web/src/test/setup.ts", []lane{laneWeb, laneWebDemo}},
-		{"package-lock.json", []lane{laneWeb, laneElectron, laneWebDemo}},
-		{"proto/buf.yaml", []lane{laneGo, laneWeb, laneForgeGen, laneWebDemo}},
+		{"frontends/web/package.json", []lane{laneWeb, laneWebDemo, laneWebBuild}},
+		{"frontends/web/pnpm-lock.yaml", []lane{laneWeb, laneWebDemo, laneWebBuild}},
+		{"frontends/web/vite.config.ts", []lane{laneWeb, laneWebDemo, laneWebBuild}},
+		{"frontends/web/src/test/setup.ts", []lane{laneWeb, laneWebDemo, laneWebBuild}},
+		{"package-lock.json", []lane{laneWeb, laneElectron, laneWebDemo, laneWebBuild}},
+		{"proto/buf.yaml", []lane{laneGo, laneWeb, laneForgeGen, laneWebDemo, laneWebBuild}},
 		// buf's root configuration reaches tests only through the code it
 		// generates, which the diff carries (or forge-generate fails).
 		{"buf.yaml", []lane{laneForgeGen}},
@@ -238,6 +239,8 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 				got = pl.DocGen.Full
 			case laneWebDemo:
 				got = pl.WebDemo.Full
+			case laneWebBuild:
+				got = pl.WebBuild.Full
 			}
 			if got != want {
 				t.Errorf("%s: lane %s full = %v, want %v", tc.path, l, got, want)
@@ -976,6 +979,31 @@ func TestSDKModuleChangeIsClaimedAndRunsItsOwnTests(t *testing.T) {
 	}
 	if sdk.dir != "/repo/sdk/go" || sdk.argv[len(sdk.argv)-1] != "./..." {
 		t.Fatalf("SDK step = %+v", *sdk)
+	}
+}
+
+// go.mod replaces the SDK with ./sdk/go (reliant#2824), so the app builds the
+// SDK package an edit is in: the root packages containing it run, and the
+// SDK's own test files select only the SDK module's step.
+func TestSDKCodeChangeSelectsTheAppPackagesThatContainIt(t *testing.T) {
+	g := noWalkers()
+	sdkPkg := mod + "/sdk/go/reliant"
+	g.TestDeps[mod+"/cmd/app"][sdkPkg] = true
+	g.BuildDeps[mod+"/cmd/app"] = map[string]bool{mod + "/cmd/app": true, sdkPkg: true}
+
+	pl := classifyIn(g, "sdk/go/reliant/runs.go")
+	if got, want := goPkgs(pl), []string{"./cmd/app"}; !slices.Equal(got, want) {
+		t.Fatalf("an SDK code change selects %v, want %v (the app package that contains it)", got, want)
+	}
+	if !slices.Contains(pl.Go.Build, "./cmd/app") {
+		t.Fatalf("an SDK code change does not build the app package that contains it: %v", pl.Go.Build)
+	}
+	if pl.Go.Full {
+		t.Fatalf("an SDK code change ran the whole Go lane: %v", pl.Go.Reasons)
+	}
+
+	if got := goPkgs(classifyIn(g, "sdk/go/reliant/runs_test.go")); len(got) != 0 {
+		t.Fatalf("an SDK test file selected app packages %v; it runs in the SDK module's step", got)
 	}
 }
 

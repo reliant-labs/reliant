@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  ON_WORKFLOWS_HREF,
+  onWorkflowsHref,
   WORKFLOWS_TABS,
   automationHref,
   automationRedirectPath,
@@ -47,9 +47,9 @@ describe("workflowsArea", () => {
     expect(legacyWorkflowsPath("/workflow")).toBe("/workflows/library");
     expect(legacyWorkflowsPath("/runs/c1")).toBe("/workflows/runs/c1");
     // The Automations tab was the Workflows list narrowed to what is on, everywhere.
-    expect(legacyWorkflowsPath("/automations")).toBe(ON_WORKFLOWS_HREF);
-    expect(legacyWorkflowsPath("/workflows/automations")).toBe(ON_WORKFLOWS_HREF);
-    expect(ON_WORKFLOWS_HREF).toBe("/workflows/library?show=on&allProjects=true");
+    expect(legacyWorkflowsPath("/automations")).toBe(onWorkflowsHref());
+    expect(legacyWorkflowsPath("/workflows/automations")).toBe(onWorkflowsHref());
+    expect(onWorkflowsHref()).toBe("/workflows/library?show=on&allProjects=true");
     expect(legacyWorkflowsPath("/automations/t1")).toBe("/workflows/automations/t1");
     // The resolving redirect itself is a route, not a mapping.
     expect(legacyWorkflowsPath("/workflows/automations/t1")).toBeNull();

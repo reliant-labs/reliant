@@ -140,7 +140,8 @@ const AgentShellEnv = "RELIANT_AGENT_SHELL"
 // caller in ctx.
 //
 // For an unconfined caller it returns the daemon's environment minus the
-// daemon's own connection settings (see daemonConnectionEnvVars).
+// daemon's own connection settings and identity (see daemonConnectionEnvVars
+// and daemonIdentityEnvVars).
 // For a confined one it returns only the allowlisted subset, so a connector
 // cannot read the user's git token or the deployment's internal URLs out of a
 // command's own environment.
@@ -208,11 +209,61 @@ var daemonConnectionEnvVars = map[string]bool{
 	"RELIANT_AUTH_KEY":    true,
 }
 
+// daemonIdentityEnvVars are the `daemon start` settings (DaemonConfig,
+// proto/reliant/config/v1/daemon_config.proto) that say WHICH daemon this
+// process is and how it attaches: its data directory and instance, its
+// gateway and listener, and what the platform declared about the host it
+// serves. The workspace operator sets them on a cloud machine's daemon and
+// Electron on a laptop's.
+//
+// A command must not inherit them, or anything it runs that reads them acts as
+// the hosting daemon. That happened (#2823): a test daemon an agent started for
+// a local dev stack, `HOME=/tmp/x reliant daemon start`, picked up the cloud
+// machine's DAEMON_DATA_DIR, logged into the host daemon's log, resolved the
+// host's daemon id and overwrote its runtime record while the real daemon was
+// still connected. A daemon a command starts derives its own instance, or is
+// told one with --data-dir.
+//
+// RELIANT_DAEMON_TYPE is deliberately NOT here. The `reliant` CLI reads it to
+// recognise a cloud machine (cmd/reliant/cmd: isManagedMachine,
+// loopbackUnreachable): `auth login` and `auth logout` must leave alone the
+// daemon sign-in the platform mounts there, and `auth login` must pick the
+// device flow. It describes the machine every process on it runs on, and
+// `auth login --help` documents it, so scripts may read it too.
+// TestDaemonIdentityEnvCoversDaemonConfig holds every DaemonConfig variable
+// to a decision: stripped here, or passed through for a stated reason.
+var daemonIdentityEnvVars = map[string]bool{
+	// Which instance: its directory, and the key it is derived from.
+	"DAEMON_DATA_DIR":            true,
+	"RELIANT_INSTANCE_ACCOUNT":   true,
+	"RELIANT_INSTANCE_WORKSPACE": true,
+	// How it attaches to the gateway, and how it signs in.
+	"DAEMON_GRPC_URL":                true,
+	"TOOLS_DAEMON_PORT":              true,
+	"DAEMON_TLS_MODE":                true,
+	"DAEMON_SERVER_MODE":             true,
+	"DAEMON_LISTEN_PORT":             true,
+	"RELIANT_DAEMON_NON_INTERACTIVE": true,
+	// What the platform declared to its daemon about the host. A second
+	// daemon given DAEMON_FRONTEND_PORT would also claim the host's preview
+	// port.
+	"DAEMON_WORKING_DIR":   true,
+	"DAEMON_RUNTIME_TYPE":  true,
+	"DAEMON_FRONTEND_PORT": true,
+	// The durable labels this daemon declares for its machine: a test daemon
+	// an agent starts would otherwise declare them for its own machine row
+	// and join the host's pools.
+	"RELIANT_DAEMON_LABELS": true,
+}
+
+// withoutDaemonConnectionEnv drops the daemon's own connection settings
+// (daemonConnectionEnvVars) and its identity (daemonIdentityEnvVars).
 func withoutDaemonConnectionEnv(env []string) []string {
 	filtered := make([]string, 0, len(env))
 	for _, kv := range env {
 		name, _, _ := strings.Cut(kv, "=")
-		if daemonConnectionEnvVars[strings.ToUpper(name)] {
+		upper := strings.ToUpper(name)
+		if daemonConnectionEnvVars[upper] || daemonIdentityEnvVars[upper] {
 			continue
 		}
 		filtered = append(filtered, kv)

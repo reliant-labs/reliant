@@ -84,6 +84,35 @@ func TestUpsertDaemonIdentity_CreatesNamedRowReadByBothReaders(t *testing.T) {
 	}
 }
 
+// TestUpsertDaemonIdentity_NeverRecordsTheIdAsTheName: the control plane
+// names a self-hosted machine that connected with no name or hostname by its
+// own id. That placeholder is never recorded as the name — not on create, and
+// not over a real name already on the row.
+func TestUpsertDaemonIdentity_NeverRecordsTheIdAsTheName(t *testing.T) {
+	t.Parallel()
+
+	repo, _ := registryTestRepo(t)
+	ctx := context.Background()
+	const fresh, named = "46e3682b-33cd-4e88-aecb-52a3a919a354", "7d1c0f2e-9a4b-4c3d-8e5f-0a1b2c3d4e5f"
+
+	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: fresh, UserID: "u-owner", Name: fresh, DaemonType: "self_hosted"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if got := mustGetDaemon(t, repo, fresh); got.Name != "" {
+		t.Errorf("created name = %q, want none: the id is a placeholder", got.Name)
+	}
+
+	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: named, UserID: "u-owner", Name: "laptop"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: named, UserID: "u-owner", Name: strings.ToUpper(named)}); err != nil {
+		t.Fatalf("re-assert: %v", err)
+	}
+	if got := mustGetDaemon(t, repo, named); got.Name != "laptop" {
+		t.Errorf("name = %q, want the real name kept", got.Name)
+	}
+}
+
 // TestUpsertDaemonIdentity_NamesARowTheGatewayRegistered: the common prod
 // case after deploy — the row exists from the daemon's own registration
 // (hostname ws-ws-…, no name) and the control plane supplies the name. The

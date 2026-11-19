@@ -135,6 +135,27 @@ $ reliant daemon stop
 Error: refusing to stop daemon PID 241: it is a managed daemon (record /home/workspace/.reliant-data/daemon-state.json). Reliant runs this machine's daemon and restarts it; stopping it takes the machine offline. Restart the machine from its page under Settings → Machines in the Reliant app instead
 ```
 
+## Join a machine pool when it starts
+
+A machine pool is a named set of your machines: those whose labels contain the pool's selector (by default `pool=<name>`). A trigger or workflow that targets the pool runs on one of its members. To make a new box a member with no one labelling it in the app, have it declare its labels when it starts:
+
+```bash
+reliant daemon start --non-interactive --label pool=pipeline --label gate=yes
+```
+
+`--label` is repeatable and also takes comma-separated pairs (`--label pool=pipeline,gate=yes`); `RELIANT_DAEMON_LABELS=pool=pipeline,gate=yes` declares the same without the flag. Keys and values are lowercase slugs (`a-z`, `0-9`, `.`, `_`, `-`), at most 63 characters, and a bad one stops `daemon start` before it does anything. On every connect, reconnects included, Reliant merges the declared labels into the machine's labels: each declared key is set to its value, and labels the daemon does not declare, such as ones you added in the app, are left alone. Removing a `--label` does not remove the label from the machine; do that with `reliant machine label <machine> --remove <key>`.
+
+The pools themselves are managed from any computer you are logged in on:
+
+```bash
+reliant machine pool put pipeline --max-runs-per-member 2   # define it, or change only the flags you pass
+reliant machine pool ls                                     # pools, members, live runs and warnings
+reliant machine label build-box pool=pipeline               # label a machine yourself (merges; --replace, --remove)
+reliant machine pool rm pipeline                            # refused while a trigger still runs on it
+```
+
+An agent's shell may list pools, but not change labels or pools: a label decides which runs a machine takes, which is your call.
+
 ## Several daemons on one computer
 
 You can run one daemon per checkout, and even one per account in the same checkout. `reliant daemon ls` lists every instance folder on the computer and whether a daemon is alive in it:

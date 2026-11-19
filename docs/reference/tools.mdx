@@ -42,9 +42,9 @@ Tools are organized by tags for filtering:
 - [Planning & Task Management](#planning--task-management) (10 tools)
 - [File Operations](#file-operations) (8 tools)
 - [Information Retrieval](#information-retrieval) (6 tools)
-- [Workflow Management](#workflow-management) (27 tools)
+- [Workflow Management](#workflow-management) (28 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (72 tools)
+- [Other Tools](#other-tools) (74 tools)
 
 ---
 
@@ -1348,6 +1348,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`create_trigger_activation`](#create_trigger_activation) | workflow | Manage a declared workflow trigger activation (create_trigger_activation). Uses the app's validat... |
 | [`create_workflow`](#create_workflow) | workflow | Create a new workflow. |
 | [`delete_scenario`](#delete_scenario) | workflow | Delete a test scenario. |
+| [`delete_trigger`](#delete_trigger) | workflow | Permanently delete a declared workflow trigger activation (delete_trigger): its schedule stops an... |
 | [`draft_automation`](#draft_automation) | workflow, readonly | Draft an automation for the user to review: a schedule, webhook, integration event (a GitHub pull... |
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
 | [`edit_workflow`](#edit_workflow) | workflow | Make precise text replacements in the workflow YAML. |
@@ -1400,7 +1401,7 @@ Evaluation is bounded (CEL cost limit) and has no side effects.
 
 **Tags:** `workflow`
 
-Manage a declared workflow trigger activation (create_trigger_activation). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged.
+Manage a declared workflow trigger activation (create_trigger_activation). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context, or machine_pool (a pool name) / machine_pool_id to run on one of the owner's machine pools (list_machines lists them) so machines can be swapped without editing the activation; never guess IDs. Re-pointing to the owner's own pool does not widen power; moving from a pool to one machine is a new machine. Every change is audit logged.
 
 ---
 
@@ -1451,6 +1452,14 @@ Permanently removes the scenario from the workflow.
 
 Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.
+
+---
+
+### delete_trigger
+
+**Tags:** `workflow`
+
+Permanently delete a declared workflow trigger activation (delete_trigger): its schedule stops and the activation and its configuration history are removed, the same as `reliant trigger delete`. Accepts only trigger_id, from list_triggers; never guess IDs. Deleting cannot be undone, so it always needs the owner's approval card in an interactive chat, whatever their automation-approvals setting, and is refused in an unattended run. To stop an activation without losing it, use pause_trigger.
 
 ---
 
@@ -1535,7 +1544,7 @@ every current error and warning.
 
 **Tags:** `workflow`
 
-Manage a declared workflow trigger activation (enable_trigger). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged.
+Manage a declared workflow trigger activation (enable_trigger). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context, or machine_pool (a pool name) / machine_pool_id to run on one of the owner's machine pools (list_machines lists them) so machines can be swapped without editing the activation; never guess IDs. Re-pointing to the owner's own pool does not widen power; moving from a pool to one machine is a new machine. Every change is audit logged.
 
 ---
 
@@ -1737,7 +1746,7 @@ Use after fire_trigger to see whether a firing launched, skipped or failed; acce
 
 List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's machine (name, id and current registry state) and health. Failed launched runs include the failing node's error.
 
-Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; every firing is refused and recorded as failed until the workflow is fixed, and pause_trigger turns it off). A DEGRADED detail that ends "N later run(s) succeeded" is a past failure the trigger has recovered from.
+Narrow by workflow to see a workflow's activations, or by health (UNHEALTHY for everything that needs attention). Unhealthy triggers are listed first. Every trigger is listed unless you page: pass limit (triggers per page), and a page that has more ends with a next_page_token to pass back as page_token. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; every firing is refused and recorded as failed until the workflow is fixed, and pause_trigger turns it off). A DEGRADED detail that ends "N later run(s) succeeded" is a past failure the trigger has recovered from.
 
 ---
 
@@ -1764,7 +1773,7 @@ Any handle in the Workflow column can be passed straight to get_workflow as id.
 
 **Tags:** `workflow`
 
-Manage a declared workflow trigger activation (pause_trigger). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged.
+Manage a declared workflow trigger activation (pause_trigger). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context, or machine_pool (a pool name) / machine_pool_id to run on one of the owner's machine pools (list_machines lists them) so machines can be swapped without editing the activation; never guess IDs. Re-pointing to the owner's own pool does not widen power; moving from a pool to one machine is a new machine. Every change is audit logged.
 
 ---
 
@@ -1816,7 +1825,7 @@ Core workflow nodes (call_llm, run, loop, ...) are not integrations; use get_sch
 
 **Tags:** `workflow`
 
-Manage a declared workflow trigger activation (update_trigger_activation). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged.
+Manage a declared workflow trigger activation (update_trigger_activation). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context, or machine_pool (a pool name) / machine_pool_id to run on one of the owner's machine pools (list_machines lists them) so machines can be swapped without editing the activation; never guess IDs. Re-pointing to the owner's own pool does not widen power; moving from a pool to one machine is a new machine. Every change is audit logged.
 
 ---
 
@@ -2204,8 +2213,10 @@ _Miscellaneous tools and utilities._
 | [`list_pending_questions`](#list_pending_questions) | readonly | List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered. |
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
-| [`manage_machine`](#manage_machine) | - | Start, stop or resize one of the user's own machines (from list_machines), exactly as Settings ->... |
+| [`manage_machine`](#manage_machine) | - | Start, stop, resize or label one of the user's own machines (from list_machines), exactly as Sett... |
+| [`manage_machine_pool`](#manage_machine_pool) | - | Define or delete one of the user's machine pools: a named set of their machines (those whose labe... |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
+| [`propose_connection`](#propose_connection) | - | Ask the person to connect an integration you need: GitHub, Slack, Gmail, Twilio, or an HTTP API (... |
 | [`report_bug`](#report_bug) | readonly, coding:plan, coding:default | Report a defect in Reliant itself, or in forge, to the Reliant engineering team. One call files i... |
 | [`request_machine`](#request_machine) | - | Offer the user the choice to connect a machine, when the task genuinely needs their computer. |
 | [`send_to_run`](#send_to_run) | runs | Send a message to another top-level run that is still going, as if the user had typed it into tha... |
@@ -2688,7 +2699,7 @@ Send an HTTP request to a public http(s) URL and return the status, headers and 
 
 **Tags:** `readonly`
 
-List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected), state and size. The machine this run executes on is marked. Use the id with manage_machine to start, stop or resize one.
+List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected), state, size, labels and the machine pools it is in; then each machine pool: its id, selector, limits and members. The machine this run executes on is marked. Use a machine's id with manage_machine to start, stop, resize or label it, a pool's name with manage_machine_pool to define or delete it, and a pool's name or id with create/update_trigger_activation to run an activation on the pool.
 
 ---
 
@@ -2738,19 +2749,44 @@ Loaded tools become available immediately on the next turn.
 
 ### manage_machine
 
-Start, stop or resize one of the user's own machines (from list_machines), exactly as Settings -> Machines does.
+Start, stop, resize or label one of the user's own machines (from list_machines), exactly as Settings -> Machines does.
 
 - start: wake a suspended machine. Compute is billed while it runs, so an interactive call raises an approval card and runs only once the user approves it.
 - stop: suspend a running machine. No card. Never the machine this run executes on.
 - resize: change a SUSPENDED machine's size (s1, s2, m, l, xl, 2xl, 3xl); it takes effect when it next starts. Needs an approval card. To resize a running machine: stop, resize, then start.
+- label: set labels (merged into the current ones) and/or remove label keys. A machine pool's members are the machines whose labels match its selector, so labelling a machine moves it into or out of pools, and so changes where pool-bound activations run: it needs an approval card showing the exact resulting labels. Use manage_machine_pool to define the pools themselves.
 
 Unattended runs may only start the machine their trigger activation targets.
+
+---
+
+### manage_machine_pool
+
+Define or delete one of the user's machine pools: a named set of their machines (those whose labels match the pool's selector) that a trigger activation can run on instead of one machine (create/update_trigger_activation machine_pool). Each run goes to the least-loaded member, so machines join or leave by their labels with no edit to the activations. list_machines shows the pools, their members and every machine's labels; manage_machine label changes a machine's labels.
+
+- put: create the pool, or change its definition. Fields you omit keep the pool's current values; a new pool takes the defaults (selector `{"pool": `<name>`}`, member_idle_timeout 10m, no limits).
+- delete: remove the pool's definition. Its machines and their labels are untouched. Refused while an activation runs on the pool.
+
+Both change where runs execute, so an interactive call raises an approval card showing the exact resulting definition and members, and runs only once the user approves it. Unattended runs cannot use this tool.
 
 ---
 
 ### metadata_writer
 
 Writes and updates project metadata YAML file
+
+---
+
+### propose_connection
+
+Ask the person to connect an integration you need: GitHub, Slack, Gmail, Twilio, or an HTTP API (api key or username and password). It raises an approval card in the chat; the person completes the sign-in or enters the key in Reliant's connection dialog, and owns the connection.
+
+You never see the credential. The result is only a status — connected (with the connection's id and name), declined, or not completed — and the provider. Use the connection id wherever a connection is asked for.
+
+- scope: personal (the person's own) or org (their organization's; only its owners and admins may make one). Omit it to let the person choose.
+- reason: say what you need it for; it is shown on the card.
+
+Propose a connection only when a step needs one that is missing (search_integrations shows what is connected). Do not ask again after the person declines unless they ask you to; an identical proposal already waiting, or declined in the last few minutes, is refused. On Reliant hosting GitHub is usually connected through the Reliant GitHub App: propose github only when a saved GitHub connection is needed. Interactive chats only.
 
 ---
 
@@ -3143,9 +3179,11 @@ ACTIONS:
    Returns the worktree id, the workspace root path, the branch, and the path of each repository's checkout.
    The name must be unique among the project's live worktrees; an archived (deleted) worktree's name can be reused.
 
-2. list - List the project's worktrees (any state: creating, active, failed)
+2. list - List the project's worktrees (any state: creating, active, failed), most recently active first. Without limit or page_token it lists every one.
+   Optional: filter (text in the name or branch), archived (also list archived ones), limit and page_token (to page: limit per page, default 50).
+   A paged result that has more ends with a next_page_token: pass it back as page_token, with the same filter, archived and limit.
 
-3. get - Required: name. Details, paths and owner of one worktree
+3. get - Required: name. Details, paths and owner of one worktree, and the chats bound to it with their state
 
 4. delete - Required: name. Archives the worktree; its directory is removed later, only when it is clean, its work is pushed or already merged, and it is unused. Refuses your own current worktree and any worktree a chat is using.
 

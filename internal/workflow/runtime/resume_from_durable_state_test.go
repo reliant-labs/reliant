@@ -157,9 +157,11 @@ func TestFreshRestart_KeepsTheCatalogTheRunStartedWith(t *testing.T) {
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 	push := func(version string, at time.Time) {
 		wj := `[{"slug":"w","name":"w","relative_path":".reliant/workflows/w.yaml","yaml_content":"name: w\ndescription: ` + version + `\n"}]`
+		db.HoldProjectOnMachineForTest(t, repo, projectID, daemonID)
 		_, err := repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 			ProjectID: projectID, DaemonID: daemonID, ProjectWorkflowsJSON: &wj, PushedAt: at,
-		}, true)
+		}, true, nil)
+
 		require.NoError(t, err)
 	}
 	push("v1", now)

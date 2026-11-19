@@ -91,6 +91,11 @@ func TestReleaseTagSelectsTheReleaseCommit(t *testing.T) {
 	rcGood := rcBranch("release/v1.1.0-rc.1", func() { commit("1.1.0", true, "chore: release v1.1.0") })
 	rcWrongVersion := rcBranch("release/v1.1.0-rc.2", func() { commit("1.0.5", true, "chore: release v1.0.5") })
 	rcNoNotes := rcBranch("release/v1.1.0-rc.3", func() { commit("1.1.0", false, "chore: release v1.1.0") })
+	// A set whose pin commit kept main's Go SDK replace (reliant#2824).
+	rcSDKReplace := rcBranch("release/v1.1.0-rc.5", func() {
+		writeFile(t, filepath.Join(dir, "go.mod"), "module github.com/reliant-labs/reliant\n\nrequire github.com/reliant-labs/reliant/sdk/go v1.0.0\n\nreplace github.com/reliant-labs/reliant/sdk/go => ./sdk/go\n", 0o644)
+		commit("1.1.0", true, "chore: release v1.1.0")
+	})
 	// A side branch (no RC-Set pin commit first off main) that heads an RC branch name.
 	git("checkout", "-q", "-b", "side", m1)
 	commit("1.0.0", false, "a PR head")
@@ -111,42 +116,67 @@ func TestReleaseTagSelectsTheReleaseCommit(t *testing.T) {
 		return run(dir, "bash", append([]string{filepath.Join(scripts, "release-tag.sh"), "--dry-run"}, args...)...)
 	}
 
-	for _, tc := range []struct {
+	type tagCase struct {
 		name    string
 		args    []string
 		want    string // the commit it would tag; empty means it must refuse
 		wantErr string // a fragment of the refusal
-	}{
+	}
+	check := func(version string, cases []tagCase) {
+		t.Helper()
+		for _, tc := range cases {
+			out, err := tag(tc.args...)
+			if tc.want == "" {
+				if err == nil {
+					t.Errorf("%s: release-tag.sh succeeded, want a refusal\n%s", tc.name, out)
+				} else if !strings.Contains(out, tc.wantErr) {
+					t.Errorf("%s: refusal does not say %q\n%s", tc.name, tc.wantErr, out)
+				}
+				continue
+			}
+			if err != nil {
+				t.Errorf("%s: release-tag.sh failed: %v\n%s", tc.name, err, out)
+				continue
+			}
+			if !strings.Contains(out, "git tag "+version+" "+tc.want) {
+				t.Errorf("%s: would not tag %s\n%s", tc.name, tc.want[:9], out)
+			}
+			gated, _ := os.ReadFile(gateLog)
+			if strings.TrimSpace(string(gated)) != tc.want {
+				t.Errorf("%s: release gate checked %q, want %s", tc.name, strings.TrimSpace(string(gated)), tc.want)
+			}
+		}
+	}
+
+	check("v1.1.0", []tagCase{
 		{"--rc tags the RC head, not main's bump", []string{"--rc", "--commit", rcGood}, rcGood, ""},
 		{"--rc refuses a head that does not carry main's version", []string{"--rc", "--commit", rcWrongVersion}, "", "does not carry version 1.1.0"},
 		{"--rc refuses a head without the stable notes", []string{"--rc", "--commit", rcNoNotes}, "", "docs/data/releases/v1.1.0.yaml is not present"},
 		{"--rc refuses a head that is not main + pin + fixes", []string{"--rc", "--commit", rcBadShape}, "", "is not main + the train's pin commit"},
+		{"--rc refuses a head whose go.mod replaces the Go SDK", []string{"--rc", "--commit", rcSDKReplace}, "", "replaces github.com/reliant-labs/reliant/sdk/go"},
 		{"no flags tag main's bump", nil, bump, ""},
 		{"--commit tags a later main commit containing the bump", []string{"--commit", later}, later, ""},
 		{"--commit refuses a main commit without the bump", []string{"--commit", m1}, "", "does not contain the version bump"},
 		{"--commit refuses the RC head without --rc", []string{"--commit", rcGood}, "", "does not contain the version bump"},
-	} {
-		out, err := tag(tc.args...)
-		if tc.want == "" {
-			if err == nil {
-				t.Errorf("%s: release-tag.sh succeeded, want a refusal\n%s", tc.name, out)
-			} else if !strings.Contains(out, tc.wantErr) {
-				t.Errorf("%s: refusal does not say %q\n%s", tc.name, tc.wantErr, out)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("%s: release-tag.sh failed: %v\n%s", tc.name, err, out)
-			continue
-		}
-		if !strings.Contains(out, "git tag v1.1.0 "+tc.want) {
-			t.Errorf("%s: would not tag %s\n%s", tc.name, tc.want[:9], out)
-		}
-		gated, _ := os.ReadFile(gateLog)
-		if strings.TrimSpace(string(gated)) != tc.want {
-			t.Errorf("%s: release gate checked %q, want %s", tc.name, strings.TrimSpace(string(gated)), tc.want)
-		}
-	}
+	})
+
+	// main carrying the Go SDK replace (reliant#2824): a tag of such a commit is a
+	// release `go install` refuses, so neither the default nor the --commit path tags
+	// one, and --skip-release-gate does not waive it; a later main commit whose go.mod
+	// requires the SDK by version is still taggable.
+	replaceGoMod := "module github.com/reliant-labs/reliant\n\nrequire github.com/reliant-labs/reliant/sdk/go v1.0.0\n\nreplace github.com/reliant-labs/reliant/sdk/go => ./sdk/go\n"
+	writeFile(t, filepath.Join(dir, "go.mod"), replaceGoMod, 0o644)
+	bump2 := commit("1.2.0", true, "chore: release v1.2.0 (#3)")
+	later2 := commit("1.2.0", true, "fix: after the bump (#4)")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module github.com/reliant-labs/reliant\n\nrequire github.com/reliant-labs/reliant/sdk/go v1.0.0\n", 0o644)
+	pinned := commit("1.2.0", true, "chore: require the SDK by version (#5)")
+	git("push", "-q", "origin", "main")
+	check("v1.2.0", []tagCase{
+		{"no flags refuse main's bump that replaces the Go SDK", nil, "", "replaces github.com/reliant-labs/reliant/sdk/go"},
+		{"--commit refuses a main commit that replaces the Go SDK", []string{"--commit", later2}, "", "replaces github.com/reliant-labs/reliant/sdk/go"},
+		{"--skip-release-gate does not waive the SDK replace", []string{"--skip-release-gate", "--commit", bump2}, "", "replaces github.com/reliant-labs/reliant/sdk/go"},
+		{"--commit tags a main commit that requires the SDK by version", []string{"--commit", pinned}, pinned, ""},
+	})
 }
 
 func writeFile(t *testing.T, path, content string, mode os.FileMode) {

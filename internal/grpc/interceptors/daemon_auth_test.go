@@ -86,12 +86,32 @@ func TestDaemonAuthInterceptorRejectsWrongScope(t *testing.T) {
 // must still refuse, and for an authority that names an email, which neither
 // self-hosted store does.
 type principalIntrospector struct {
-	p     *fat.Principal
-	email string
+	p          *fat.Principal
+	email      string
+	machineOrg string
 }
 
 func (s principalIntrospector) IntrospectAccount(context.Context, string) (auth.AccessTokenAccount, error) {
-	return auth.AccessTokenAccount{Principal: s.p, Email: s.email}, nil
+	return auth.AccessTokenAccount{Principal: s.p, Email: s.email, MachineOrgID: s.machineOrg}, nil
+}
+
+// The org of the machine a bound token is bound to, when the authority names
+// it, rides the context: the gateway records it as the machine's org. An
+// authority that names none leaves it unset.
+func TestDaemonAuthInterceptorCarriesTheMachinesOrg(t *testing.T) {
+	principal := &fat.Principal{TokenID: "t", OrgID: "acme", ActingUserID: "user-123", Scopes: fat.SetOf(fat.ScopeDaemonConnect),
+		Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon-42"}}
+	minted, err := fat.Mint()
+	require.NoError(t, err)
+
+	for _, org := range []string{"globex", ""} {
+		interceptor, err := NewDaemonAuthInterceptor(principalIntrospector{p: principal, machineOrg: org})
+		require.NoError(t, err)
+		ctx, err := interceptor.authenticate(context.Background(), bearer(minted.Plaintext))
+		require.NoError(t, err)
+		require.Equal(t, org, auth.GetDaemonOrgIDFromContext(ctx))
+		require.Equal(t, "daemon-42", auth.GetDaemonIDFromContext(ctx))
+	}
 }
 
 // The account's email, when the authority names one, rides the context so the

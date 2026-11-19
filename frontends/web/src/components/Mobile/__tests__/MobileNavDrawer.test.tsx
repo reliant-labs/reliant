@@ -25,6 +25,12 @@ vi.mock("../../../store/projectStore", () => ({
     selector({ currentProject: { id: "p1", name: "reliant" } }),
 }));
 
+// No org resolved: the org card renders nothing, so these tests need no
+// QueryClient (its own tests are in MobileOrgSwitcher.test.tsx).
+vi.mock("../../../hooks/useOrgs", () => ({
+  useActiveOrg: () => ({ orgs: [], active: null, canSwitch: false, select: vi.fn() }),
+}));
+
 let forgeEnabled = true;
 vi.mock("../../../lib/forgeFeature", () => ({
   isForgeUIEnabled: () => forgeEnabled,

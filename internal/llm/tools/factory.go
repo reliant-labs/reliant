@@ -92,6 +92,11 @@ type ToolsOptions struct {
 	// both report they are unavailable here (self-hosted, or the daemon
 	// runtime).
 	MachineController MachineController
+	// ConnectionProposer checks a propose_connection call (the chat's org,
+	// the person's org role, an identical proposal already waiting) and reads
+	// back the connection the person made. Optional: nil means the tool
+	// reports it is unavailable here (the daemon runtime).
+	ConnectionProposer ConnectionProposer
 	// ShellPlatform is the shell family of the DAEMON that will execute shell
 	// commands, which is frequently not this process's own platform: the
 	// server and worker run Linux while the daemon may be Windows. The shell
@@ -512,6 +517,9 @@ func (f *ToolsFactory) EnableTrigger() Tool {
 func (f *ToolsFactory) PauseTrigger() Tool {
 	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolPauseTrigger)
 }
+func (f *ToolsFactory) DeleteTrigger() Tool {
+	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolDeleteTrigger)
+}
 
 func (f *ToolsFactory) ListMachines() Tool {
 	return NewListMachinesTool(f.store(), f.opts.MachineController)
@@ -519,6 +527,14 @@ func (f *ToolsFactory) ListMachines() Tool {
 
 func (f *ToolsFactory) ManageMachine() Tool {
 	return NewManageMachineTool(f.store(), f.opts.MachineController)
+}
+
+func (f *ToolsFactory) ManageMachinePool() Tool {
+	return NewManageMachinePoolTool(f.store(), f.opts.MachineController)
+}
+
+func (f *ToolsFactory) ProposeConnection() Tool {
+	return NewProposeConnectionTool(f.store(), f.opts.ConnectionProposer)
 }
 
 func (f *ToolsFactory) ListTriggers() Tool {

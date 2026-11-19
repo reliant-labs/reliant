@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger";
 import type { Project } from "@/store/projectStore";
 import { isCloudCompute } from "./types";
 import type { LaunchPlan } from "./types";
+import { homePath, projectPath } from "@/lib/paths";
 
 const DEFAULT_PROJECT_NAME = "my-project";
 const CLOUD_DEFAULT_PROJECT_PATH = `/home/workspace/projects/${DEFAULT_PROJECT_NAME}`;
@@ -124,13 +125,11 @@ export async function finalizeOnboardingSideEffects(): Promise<void> {
  */
 export function chatRouteAfterTour(
   projectId: string | undefined,
-):
-  | { to: "/project/$projectId"; params: { projectId: string }; search: { tour: undefined } }
-  | { to: "/"; search: { tour: undefined } } {
+): { to: string; search: { tour: undefined } } {
   if (projectId) {
-    return { to: "/project/$projectId", params: { projectId }, search: { tour: undefined } };
+    return { to: projectPath(projectId), search: { tour: undefined } };
   }
-  return { to: "/", search: { tour: undefined } };
+  return { to: homePath(), search: { tour: undefined } };
 }
 
 /** Navigate to {@link chatRouteAfterTour} using the app's global router. */
