@@ -59,7 +59,13 @@ vi.mock("@/hooks/useOrgs", async (importOriginal) => {
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 
 import { RetainedDatabases } from "../RetainedDatabases";
-import { CONFIRM_WINDOW_MS, keptDataProgress, startKeptDataCheck, useKeptDataChecks } from "../keptDataChecks";
+import {
+  CONFIRM_WINDOW_MS,
+  keptDataPoll,
+  keptDataProgress,
+  startKeptDataCheck,
+  useKeptDataChecks,
+} from "../keptDataChecks";
 
 function row(id: string, project: string, databaseName: string, environmentName = "staging"): RetainedDatabase {
   return {
@@ -195,15 +201,23 @@ describe("confirming a keep-data delete", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
   });
+  const pollMs = keptDataPoll.intervalMs;
   afterEach(() => {
     vi.useRealTimers();
+    keptDataPoll.intervalMs = pollMs;
   });
+  // The tests that wait on the poll shrink it, rather than wait out the
+  // production interval against the test timeout.
+  const fastPoll = () => {
+    keptDataPoll.intervalMs = 100;
+  };
 
   const check = (since = NOW, databases = ["shop-db"]) =>
     startKeptDataCheck({ environmentId: "env_gone", envName: "staging", project: "shop", databases, since });
   const kept = (id: string, databaseName: string) => ({ ...row(id, "shop", databaseName), environmentId: "env_gone" });
 
   it("says it is confirming, then clears once the databases are listed as kept", async () => {
+    fastPoll();
     check();
     listRetainedDatabases.mockResolvedValue([]);
     wrap();
@@ -263,6 +277,7 @@ describe("confirming a keep-data delete", () => {
   });
 
   it("goes back to confirming when an unavailable read recovers, and ends the check", async () => {
+    fastPoll();
     check();
     listRetainedDatabases.mockRejectedValue(new ConnectError("busy", Code.Unavailable));
     wrap();

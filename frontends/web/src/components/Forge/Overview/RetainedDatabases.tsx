@@ -53,14 +53,12 @@ import {
   CONFIRM_WINDOW_MS,
   RETAINED_READ_FAILURE_COPY,
   endKeptDataCheck,
+  keptDataPoll,
   keptDataProgress,
   useKeptDataChecks,
   type KeptDataCheck,
   type KeptDataProgress,
 } from "./keptDataChecks";
-
-/** How often the list is re-read while a keep-data delete is being confirmed. */
-const CONFIRM_POLL_MS = 5_000;
 
 /** Refusals that mean "nothing to show here", not a fault. */
 const QUIET_CODES: ReadonlySet<Code> = new Set([Code.PermissionDenied, Code.Unimplemented, Code.Unauthenticated]);
@@ -75,7 +73,7 @@ export function RetainedDatabases({ project }: { project: string }) {
   const checks = allChecks.filter((check) => check.project === "" || check.project === project);
   const retained = useRetainedDatabases({
     enabled: project !== "",
-    refetchInterval: checks.length > 0 ? CONFIRM_POLL_MS : false,
+    refetchInterval: checks.length > 0 ? keptDataPoll.intervalMs : false,
   });
   const authority = useOrgAuthority();
   const lock = useObsReadOnly();

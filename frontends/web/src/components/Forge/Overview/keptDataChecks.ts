@@ -34,6 +34,13 @@ export const RETAINED_READ_FAILURE_COPY: Record<RetainedReadFailure, string> = {
 /** How long a teardown may take to list its kept databases before the page warns. */
 export const CONFIRM_WINDOW_MS = 10 * 60_000;
 
+/**
+ * How often the kept-databases list is re-read while a keep-data delete is
+ * being confirmed. Mutable so a test can shrink the poll instead of waiting
+ * out the production interval.
+ */
+export const keptDataPoll = { intervalMs: 5_000 };
+
 export interface KeptDataCheck {
   environmentId: string;
   envName: string;
