@@ -173,8 +173,7 @@ type Service interface {
 	// touch, for the move preview: the source org's secret access, the
 	// hosted project the project deploys as, whether the target can pay and
 	// which machines are in it. It checks the actor as Prepare does and
-	// writes nothing. Errors as the steps above; a control plane that
-	// predates it is ErrProjectOrgMoveUnsupported.
+	// writes nothing. Errors as the steps above.
 	PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
 
 	// NotifyOrgKeyRejected emails orgID's owners and admins that a provider
