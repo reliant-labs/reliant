@@ -7,10 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptrace"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
@@ -601,6 +604,8 @@ func (e *RPCError) ErrorClass() svcerr.Class {
 // "connection reset by peer" on ResolveOrgMembership failed a ListChats as
 // "could not resolve your default organization". The transport retries only a
 // REUSED connection, never a fresh one, so a real outage still fails fast.
+// call covers the case net/http leaves out, a dead connection that fails
+// after part of the request was written, with one retry under the same rule.
 //
 // A method belongs here ONLY if its server-side effect is read-only or
 // idempotent, because the server may have run the first delivery before the
@@ -629,19 +634,19 @@ func (c *Client) call(ctx context.Context, method string, in, out any) error {
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+ServicePath+method, bytes.NewReader(payload))
-	if err != nil {
-		return err
+	resp, reused, err := c.post(ctx, method, bearer, payload)
+	if err != nil && replayable[method] && reused && retryableTransportError(ctx, err) {
+		// The pooled connection died under the request after part of it was
+		// written: net/http replays only a dead connection it wrote nothing to,
+		// or one that failed on the response's first read. A dead connection
+		// can fail on the write as well (EPIPE, ECONNRESET, or the transport
+		// closing it once its reader saw the peer's EOF) — most often when
+		// the headers go out in a write of their own, which net/http does for
+		// any body it cannot prove is in memory, as otelhttp's wrapper is.
+		// The method is replayable, so retry it once; a fresh connection
+		// that fails is an outage and is never retried.
+		resp, _, err = c.post(ctx, method, bearer, payload)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Connect-Protocol-Version", "1")
-	req.Header.Set("Authorization", "Bearer "+bearer)
-	if replayable[method] {
-		// A nil value marks the request idempotent without sending the
-		// header (net/http's Transport documents this).
-		req.Header["X-Idempotency-Key"] = nil
-	}
-	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("accesstokenclient: %s: %w", method, err)
 	}
@@ -660,6 +665,41 @@ func (c *Client) call(ctx context.Context, method string, in, out any) error {
 		return fmt.Errorf("accesstokenclient: %s: decoding response: %w", method, err)
 	}
 	return nil
+}
+
+// post sends one request and reports whether the connection it last ran on
+// came from the pool, which is what makes a transport failure a stale
+// connection rather than an outage.
+func (c *Client) post(ctx context.Context, method, bearer string, payload []byte) (*http.Response, bool, error) {
+	var reused atomic.Bool
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) { reused.Store(info.Reused) },
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+ServicePath+method, bytes.NewReader(payload))
+	if err != nil {
+		return nil, false, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Connect-Protocol-Version", "1")
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	if replayable[method] {
+		// A nil value marks the request idempotent without sending the
+		// header (net/http's Transport documents this).
+		req.Header["X-Idempotency-Key"] = nil
+	}
+	resp, err := c.http.Do(req)
+	return resp, reused.Load(), err
+}
+
+// retryableTransportError reports whether a failed Do is a dead connection
+// worth one more attempt: not the caller giving up, and not a timeout, which
+// a retry would only double.
+func retryableTransportError(ctx context.Context, err error) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	var netErr net.Error
+	return !errors.As(err, &netErr) || !netErr.Timeout()
 }
 
 func scopeStrings(scopes []fat.Scope) []string {
