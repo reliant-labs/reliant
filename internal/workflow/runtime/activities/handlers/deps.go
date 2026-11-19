@@ -330,9 +330,11 @@ type GenerateTitleStore interface {
 	CreateUserUpdate(ctx context.Context, update *db.UserUpdate) error
 }
 
-// GitPublishStore is what GitPublishActivity reads.
+// GitPublishStore is what GitPublishActivity reads. GetDaemon is the
+// machine's registration, whose capabilities say whether it enforces a lease.
 type GitPublishStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	WorktreeOwnerReader
 }
 
