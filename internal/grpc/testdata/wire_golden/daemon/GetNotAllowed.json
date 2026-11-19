@@ -1,0 +1,35 @@
+{
+  "chain": "daemon",
+  "case": "GetNotAllowed",
+  "exchanges": {
+    "get": {
+      "request": "GET /wiregolden.v1.Golden/Success [get]",
+      "status": 405,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Allow": [
+          "POST"
+        ],
+        "Content-Length": [
+          "0"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {}
+    }
+  }
+}

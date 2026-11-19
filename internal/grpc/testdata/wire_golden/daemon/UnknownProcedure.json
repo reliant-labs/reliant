@@ -1,0 +1,68 @@
+{
+  "chain": "daemon",
+  "case": "UnknownProcedure",
+  "exchanges": {
+    "connect-json": {
+      "request": "POST /wiregolden.v1.Golden/NoSuchMethod [connect-json]",
+      "status": 404,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Content-Length": [
+          "19"
+        ],
+        "Content-Type": [
+          "text/plain; charset=utf-8"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "404 page not found\n"
+      }
+    },
+    "grpc": {
+      "request": "POST /wiregolden.v1.Golden/NoSuchMethod [grpc]",
+      "status": 404,
+      "http_proto": "HTTP/2.0",
+      "headers": {
+        "Content-Length": [
+          "19"
+        ],
+        "Content-Type": [
+          "text/plain; charset=utf-8"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "404 page not found\n"
+      }
+    }
+  }
+}

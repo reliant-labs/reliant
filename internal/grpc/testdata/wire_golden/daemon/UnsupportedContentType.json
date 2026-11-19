@@ -1,0 +1,35 @@
+{
+  "chain": "daemon",
+  "case": "UnsupportedContentType",
+  "exchanges": {
+    "text-plain": {
+      "request": "POST /wiregolden.v1.Golden/Success [text-plain]",
+      "status": 415,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Post": [
+          "application/grpc, application/grpc+json, application/grpc+json; charset=utf-8, application/grpc+proto, application/grpc-web, application/grpc-web+json, application/grpc-web+json; charset=utf-8, application/grpc-web+proto, application/json, application/json; charset=utf-8, application/proto"
+        ],
+        "Content-Length": [
+          "0"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {}
+    }
+  }
+}

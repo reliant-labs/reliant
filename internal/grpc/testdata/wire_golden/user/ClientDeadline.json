@@ -1,0 +1,224 @@
+{
+  "chain": "user",
+  "case": "ClientDeadline",
+  "exchanges": {
+    "connect-json": {
+      "request": "POST /wiregolden.v1.Golden/ClientDeadline [connect-json]",
+      "status": 504,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Encoding": [
+          "gzip"
+        ],
+        "Access-Control-Allow-Origin": [
+          "*"
+        ],
+        "Access-Control-Expose-Headers": [
+          "Link, Content-Range, Accept-Ranges, Content-Length, X-Forge-Error-Reason, X-Forge-Error-Scopes, Retry-After, Traceresponse"
+        ],
+        "Content-Length": [
+          "58"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "Vary": [
+          "Origin",
+          "Accept-Encoding"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "{\"code\":\"deadline_exceeded\",\"message\":\"deadline exceeded\"}"
+      }
+    },
+    "connect-json-gzip": {
+      "request": "POST /wiregolden.v1.Golden/ClientDeadline [connect-json-gzip]",
+      "status": 504,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Encoding": [
+          "gzip"
+        ],
+        "Access-Control-Allow-Origin": [
+          "*"
+        ],
+        "Access-Control-Expose-Headers": [
+          "Link, Content-Range, Accept-Ranges, Content-Length, X-Forge-Error-Reason, X-Forge-Error-Scopes, Retry-After, Traceresponse"
+        ],
+        "Content-Length": [
+          "58"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "Vary": [
+          "Origin",
+          "Accept-Encoding"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "{\"code\":\"deadline_exceeded\",\"message\":\"deadline exceeded\"}"
+      }
+    },
+    "connect-proto": {
+      "request": "POST /wiregolden.v1.Golden/ClientDeadline [connect-proto]",
+      "status": 504,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Encoding": [
+          "gzip"
+        ],
+        "Access-Control-Allow-Origin": [
+          "*"
+        ],
+        "Access-Control-Expose-Headers": [
+          "Link, Content-Range, Accept-Ranges, Content-Length, X-Forge-Error-Reason, X-Forge-Error-Scopes, Retry-After, Traceresponse"
+        ],
+        "Content-Length": [
+          "58"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "Vary": [
+          "Origin",
+          "Accept-Encoding"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "{\"code\":\"deadline_exceeded\",\"message\":\"deadline exceeded\"}"
+      }
+    },
+    "grpc": {
+      "request": "POST /wiregolden.v1.Golden/ClientDeadline [grpc]",
+      "status": 200,
+      "http_proto": "HTTP/2.0",
+      "headers": {
+        "Content-Type": [
+          "application/grpc"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Grpc-Accept-Encoding": [
+          "gzip"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "Vary": [
+          "Origin",
+          "Accept-Encoding"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {},
+      "trailers": {
+        "Grpc-Message": [
+          "deadline exceeded"
+        ],
+        "Grpc-Status": [
+          "4"
+        ]
+      }
+    },
+    "grpc-web-proto": {
+      "request": "POST /wiregolden.v1.Golden/ClientDeadline [grpc-web-proto]",
+      "status": 200,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Access-Control-Allow-Origin": [
+          "*"
+        ],
+        "Access-Control-Expose-Headers": [
+          "Link, Content-Range, Accept-Ranges, Content-Length, X-Forge-Error-Reason, X-Forge-Error-Scopes, Retry-After, Traceresponse"
+        ],
+        "Content-Type": [
+          "application/grpc-web+proto"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Grpc-Accept-Encoding": [
+          "gzip"
+        ],
+        "Grpc-Message": [
+          "deadline exceeded"
+        ],
+        "Grpc-Status": [
+          "4"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "Vary": [
+          "Origin",
+          "Accept-Encoding"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {}
+    }
+  }
+}

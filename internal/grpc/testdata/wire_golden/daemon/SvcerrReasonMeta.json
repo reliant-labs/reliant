@@ -1,0 +1,225 @@
+{
+  "chain": "daemon",
+  "case": "SvcerrReasonMeta",
+  "exchanges": {
+    "connect-json": {
+      "request": "POST /wiregolden.v1.Golden/SvcerrReasonMeta [connect-json]",
+      "status": 403,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Encoding": [
+          "gzip"
+        ],
+        "Content-Length": [
+          "91"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Forge-Error-Reason": [
+          "project_locked"
+        ],
+        "X-Forge-Error-Scopes": [
+          "projects:write"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Golden-Extra": [
+          "extra-value"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "{\"code\":\"permission_denied\",\"message\":\"This project is locked. Ask an owner to unlock it.\"}"
+      }
+    },
+    "connect-json-gzip": {
+      "request": "POST /wiregolden.v1.Golden/SvcerrReasonMeta [connect-json-gzip]",
+      "status": 403,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Encoding": [
+          "gzip"
+        ],
+        "Content-Length": [
+          "91"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Forge-Error-Reason": [
+          "project_locked"
+        ],
+        "X-Forge-Error-Scopes": [
+          "projects:write"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Golden-Extra": [
+          "extra-value"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "{\"code\":\"permission_denied\",\"message\":\"This project is locked. Ask an owner to unlock it.\"}"
+      }
+    },
+    "connect-proto": {
+      "request": "POST /wiregolden.v1.Golden/SvcerrReasonMeta [connect-proto]",
+      "status": 403,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Encoding": [
+          "gzip"
+        ],
+        "Content-Length": [
+          "91"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Forge-Error-Reason": [
+          "project_locked"
+        ],
+        "X-Forge-Error-Scopes": [
+          "projects:write"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Golden-Extra": [
+          "extra-value"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "{\"code\":\"permission_denied\",\"message\":\"This project is locked. Ask an owner to unlock it.\"}"
+      }
+    },
+    "grpc": {
+      "request": "POST /wiregolden.v1.Golden/SvcerrReasonMeta [grpc]",
+      "status": 200,
+      "http_proto": "HTTP/2.0",
+      "headers": {
+        "Content-Type": [
+          "application/grpc"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Grpc-Accept-Encoding": [
+          "gzip"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {},
+      "trailers": {
+        "Grpc-Message": [
+          "This project is locked. Ask an owner to unlock it."
+        ],
+        "Grpc-Status": [
+          "7"
+        ],
+        "X-Forge-Error-Reason": [
+          "project_locked"
+        ],
+        "X-Forge-Error-Scopes": [
+          "projects:write"
+        ],
+        "X-Golden-Extra": [
+          "extra-value"
+        ]
+      }
+    },
+    "grpc-web-proto": {
+      "request": "POST /wiregolden.v1.Golden/SvcerrReasonMeta [grpc-web-proto]",
+      "status": 200,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Content-Type": [
+          "application/grpc-web+proto"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Grpc-Accept-Encoding": [
+          "gzip"
+        ],
+        "Grpc-Message": [
+          "This project is locked. Ask an owner to unlock it."
+        ],
+        "Grpc-Status": [
+          "7"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Forge-Error-Reason": [
+          "project_locked"
+        ],
+        "X-Forge-Error-Scopes": [
+          "projects:write"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Golden-Extra": [
+          "extra-value"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {}
+    }
+  }
+}

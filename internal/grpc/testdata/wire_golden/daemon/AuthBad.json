@@ -1,0 +1,180 @@
+{
+  "chain": "daemon",
+  "case": "AuthBad",
+  "exchanges": {
+    "connect-json": {
+      "request": "POST /wiregolden.v1.Golden/Success [connect-json]",
+      "status": 401,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Encoding": [
+          "gzip"
+        ],
+        "Content-Length": [
+          "110"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "{\"code\":\"unauthenticated\",\"message\":\"daemon credential must be an rlat_ access token; re-register the daemon\"}"
+      }
+    },
+    "connect-json-gzip": {
+      "request": "POST /wiregolden.v1.Golden/Success [connect-json-gzip]",
+      "status": 401,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Encoding": [
+          "gzip"
+        ],
+        "Content-Length": [
+          "110"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "{\"code\":\"unauthenticated\",\"message\":\"daemon credential must be an rlat_ access token; re-register the daemon\"}"
+      }
+    },
+    "connect-proto": {
+      "request": "POST /wiregolden.v1.Golden/Success [connect-proto]",
+      "status": 401,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Encoding": [
+          "gzip"
+        ],
+        "Content-Length": [
+          "110"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "{\"code\":\"unauthenticated\",\"message\":\"daemon credential must be an rlat_ access token; re-register the daemon\"}"
+      }
+    },
+    "grpc": {
+      "request": "POST /wiregolden.v1.Golden/Success [grpc]",
+      "status": 200,
+      "http_proto": "HTTP/2.0",
+      "headers": {
+        "Content-Type": [
+          "application/grpc"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Grpc-Accept-Encoding": [
+          "gzip"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {},
+      "trailers": {
+        "Grpc-Message": [
+          "daemon credential must be an rlat_ access token; re-register the daemon"
+        ],
+        "Grpc-Status": [
+          "16"
+        ]
+      }
+    },
+    "grpc-web-proto": {
+      "request": "POST /wiregolden.v1.Golden/Success [grpc-web-proto]",
+      "status": 200,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Content-Type": [
+          "application/grpc-web+proto"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Grpc-Accept-Encoding": [
+          "gzip"
+        ],
+        "Grpc-Message": [
+          "daemon credential must be an rlat_ access token; re-register the daemon"
+        ],
+        "Grpc-Status": [
+          "16"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {}
+    }
+  }
+}

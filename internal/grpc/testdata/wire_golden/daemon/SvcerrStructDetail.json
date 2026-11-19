@@ -1,0 +1,192 @@
+{
+  "chain": "daemon",
+  "case": "SvcerrStructDetail",
+  "exchanges": {
+    "connect-json": {
+      "request": "POST /wiregolden.v1.Golden/SvcerrStructDetail [connect-json]",
+      "status": 400,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Encoding": [
+          "gzip"
+        ],
+        "Content-Length": [
+          "156"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "{\"code\":\"invalid_argument\",\"message\":\"bad field\",\"details\":[{\"type\":\"google.protobuf.Struct\",\"value\":\"ChAKBWZpZWxkEgcaBXZhbHVl\",\"debug\":{\"field\":\"value\"}}]}"
+      }
+    },
+    "connect-json-gzip": {
+      "request": "POST /wiregolden.v1.Golden/SvcerrStructDetail [connect-json-gzip]",
+      "status": 400,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Encoding": [
+          "gzip"
+        ],
+        "Content-Length": [
+          "156"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "{\"code\":\"invalid_argument\",\"message\":\"bad field\",\"details\":[{\"type\":\"google.protobuf.Struct\",\"value\":\"ChAKBWZpZWxkEgcaBXZhbHVl\",\"debug\":{\"field\":\"value\"}}]}"
+      }
+    },
+    "connect-proto": {
+      "request": "POST /wiregolden.v1.Golden/SvcerrStructDetail [connect-proto]",
+      "status": 400,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Accept-Encoding": [
+          "gzip"
+        ],
+        "Content-Length": [
+          "156"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "text": "{\"code\":\"invalid_argument\",\"message\":\"bad field\",\"details\":[{\"type\":\"google.protobuf.Struct\",\"value\":\"ChAKBWZpZWxkEgcaBXZhbHVl\",\"debug\":{\"field\":\"value\"}}]}"
+      }
+    },
+    "grpc": {
+      "request": "POST /wiregolden.v1.Golden/SvcerrStructDetail [grpc]",
+      "status": 200,
+      "http_proto": "HTTP/2.0",
+      "headers": {
+        "Content-Type": [
+          "application/grpc"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Grpc-Accept-Encoding": [
+          "gzip"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {},
+      "trailers": {
+        "Grpc-Message": [
+          "bad field"
+        ],
+        "Grpc-Status": [
+          "3"
+        ],
+        "Grpc-Status-Details-Bin": [
+          "CAMSCWJhZCBmaWVsZBpACip0eXBlLmdvb2dsZWFwaXMuY29tL2dvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEgoQCgVmaWVsZBIHGgV2YWx1ZQ"
+        ]
+      },
+      "annotations": [
+        "grpc-status-details-bin = code=3 message=\"bad field\" details=[{type.googleapis.com/google.protobuf.Struct StringValue(\"\\n\\x05field\\x12\\a\\x1a\\x05value\")}]"
+      ]
+    },
+    "grpc-web-proto": {
+      "request": "POST /wiregolden.v1.Golden/SvcerrStructDetail [grpc-web-proto]",
+      "status": 200,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Content-Type": [
+          "application/grpc-web+proto"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Grpc-Accept-Encoding": [
+          "gzip"
+        ],
+        "Grpc-Message": [
+          "bad field"
+        ],
+        "Grpc-Status": [
+          "3"
+        ],
+        "Grpc-Status-Details-Bin": [
+          "CAMSCWJhZCBmaWVsZBpACip0eXBlLmdvb2dsZWFwaXMuY29tL2dvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEgoQCgVmaWVsZBIHGgV2YWx1ZQ"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {},
+      "annotations": [
+        "grpc-status-details-bin = code=3 message=\"bad field\" details=[{type.googleapis.com/google.protobuf.Struct StringValue(\"\\n\\x05field\\x12\\a\\x1a\\x05value\")}]"
+      ]
+    }
+  }
+}

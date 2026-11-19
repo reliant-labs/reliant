@@ -1,0 +1,300 @@
+{
+  "chain": "user",
+  "case": "StreamConnectErrorDetail",
+  "exchanges": {
+    "connect-stream-json": {
+      "request": "POST /wiregolden.v1.Golden/StreamConnectErrorDetail [connect-stream-json]",
+      "status": 200,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Connect-Accept-Encoding": [
+          "gzip"
+        ],
+        "Content-Type": [
+          "application/connect+json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "Vary": [
+          "Origin",
+          "Accept-Encoding"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Golden-Header": [
+          "header-value"
+        ],
+        "X-Request-Id": [
+          "<normalized: 32 hex>"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "envelopes": [
+          {
+            "flags": "0x00",
+            "kind": "message",
+            "text": "\"one\""
+          },
+          {
+            "flags": "0x02",
+            "kind": "connect-end-stream",
+            "text": "{\"error\":{\"code\":\"aborted\",\"message\":\"raw connect error with a detail\",\"details\":[{\"type\":\"google.protobuf.StringValue\",\"value\":\"Cgtjb25uLWRldGFpbA\",\"debug\":\"conn-detail\"}]},\"metadata\":{\"X-Golden-Trailer\":[\"trailer-value\"]}}"
+          }
+        ]
+      }
+    },
+    "connect-stream-json-browser-gzip": {
+      "request": "POST /wiregolden.v1.Golden/StreamConnectErrorDetail [connect-stream-json-browser-gzip]",
+      "status": 200,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Access-Control-Allow-Origin": [
+          "*"
+        ],
+        "Access-Control-Expose-Headers": [
+          "Link, Content-Range, Accept-Ranges, Content-Length, X-Forge-Error-Reason, X-Forge-Error-Scopes, Retry-After, Traceresponse"
+        ],
+        "Connect-Accept-Encoding": [
+          "gzip"
+        ],
+        "Content-Encoding": [
+          "gzip"
+        ],
+        "Content-Type": [
+          "application/connect+json"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "Vary": [
+          "Origin",
+          "Accept-Encoding"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Golden-Header": [
+          "header-value"
+        ],
+        "X-Request-Id": [
+          "<normalized: 32 hex>"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "gzipped": true,
+        "envelopes": [
+          {
+            "flags": "0x00",
+            "kind": "message",
+            "text": "\"one\""
+          },
+          {
+            "flags": "0x02",
+            "kind": "connect-end-stream",
+            "text": "{\"error\":{\"code\":\"aborted\",\"message\":\"raw connect error with a detail\",\"details\":[{\"type\":\"google.protobuf.StringValue\",\"value\":\"Cgtjb25uLWRldGFpbA\",\"debug\":\"conn-detail\"}]},\"metadata\":{\"X-Golden-Trailer\":[\"trailer-value\"]}}"
+          }
+        ]
+      }
+    },
+    "connect-stream-proto": {
+      "request": "POST /wiregolden.v1.Golden/StreamConnectErrorDetail [connect-stream-proto]",
+      "status": 200,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Connect-Accept-Encoding": [
+          "gzip"
+        ],
+        "Content-Type": [
+          "application/connect+proto"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "Vary": [
+          "Origin",
+          "Accept-Encoding"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Golden-Header": [
+          "header-value"
+        ],
+        "X-Request-Id": [
+          "<normalized: 32 hex>"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "envelopes": [
+          {
+            "flags": "0x00",
+            "kind": "message",
+            "hex": "0a036f6e65",
+            "decoded": "StringValue(\"one\")"
+          },
+          {
+            "flags": "0x02",
+            "kind": "connect-end-stream",
+            "text": "{\"error\":{\"code\":\"aborted\",\"message\":\"raw connect error with a detail\",\"details\":[{\"type\":\"google.protobuf.StringValue\",\"value\":\"Cgtjb25uLWRldGFpbA\",\"debug\":\"conn-detail\"}]},\"metadata\":{\"X-Golden-Trailer\":[\"trailer-value\"]}}"
+          }
+        ]
+      }
+    },
+    "grpc": {
+      "request": "POST /wiregolden.v1.Golden/StreamConnectErrorDetail [grpc]",
+      "status": 200,
+      "http_proto": "HTTP/2.0",
+      "headers": {
+        "Content-Type": [
+          "application/grpc"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Grpc-Accept-Encoding": [
+          "gzip"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "Vary": [
+          "Origin",
+          "Accept-Encoding"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Golden-Header": [
+          "header-value"
+        ],
+        "X-Request-Id": [
+          "<normalized: 32 hex>"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "envelopes": [
+          {
+            "flags": "0x00",
+            "kind": "message",
+            "hex": "0a036f6e65",
+            "decoded": "StringValue(\"one\")"
+          }
+        ]
+      },
+      "trailers": {
+        "Grpc-Message": [
+          "raw connect error with a detail"
+        ],
+        "Grpc-Status": [
+          "10"
+        ],
+        "Grpc-Status-Details-Bin": [
+          "CAoSH3JhdyBjb25uZWN0IGVycm9yIHdpdGggYSBkZXRhaWwaQAovdHlwZS5nb29nbGVhcGlzLmNvbS9nb29nbGUucHJvdG9idWYuU3RyaW5nVmFsdWUSDQoLY29ubi1kZXRhaWw"
+        ],
+        "X-Golden-Trailer": [
+          "trailer-value"
+        ]
+      },
+      "annotations": [
+        "grpc-status-details-bin = code=10 message=\"raw connect error with a detail\" details=[{type.googleapis.com/google.protobuf.StringValue StringValue(\"conn-detail\")}]"
+      ]
+    },
+    "grpc-web-proto": {
+      "request": "POST /wiregolden.v1.Golden/StreamConnectErrorDetail [grpc-web-proto]",
+      "status": 200,
+      "http_proto": "HTTP/1.1",
+      "headers": {
+        "Access-Control-Allow-Origin": [
+          "*"
+        ],
+        "Access-Control-Expose-Headers": [
+          "Link, Content-Range, Accept-Ranges, Content-Length, X-Forge-Error-Reason, X-Forge-Error-Scopes, Retry-After, Traceresponse"
+        ],
+        "Content-Type": [
+          "application/grpc-web+proto"
+        ],
+        "Date": [
+          "<normalized>"
+        ],
+        "Grpc-Accept-Encoding": [
+          "gzip"
+        ],
+        "Referrer-Policy": [
+          "strict-origin-when-cross-origin"
+        ],
+        "Vary": [
+          "Origin",
+          "Accept-Encoding"
+        ],
+        "X-Content-Type-Options": [
+          "nosniff"
+        ],
+        "X-Frame-Options": [
+          "DENY"
+        ],
+        "X-Golden-Header": [
+          "header-value"
+        ],
+        "X-Request-Id": [
+          "<normalized: 32 hex>"
+        ],
+        "X-Xss-Protection": [
+          "1; mode=block"
+        ]
+      },
+      "body": {
+        "envelopes": [
+          {
+            "flags": "0x00",
+            "kind": "message",
+            "hex": "0a036f6e65",
+            "decoded": "StringValue(\"one\")"
+          },
+          {
+            "flags": "0x80",
+            "kind": "grpc-web-trailers",
+            "text": "grpc-message: raw connect error with a detail\r\ngrpc-status: 10\r\ngrpc-status-details-bin: CAoSH3JhdyBjb25uZWN0IGVycm9yIHdpdGggYSBkZXRhaWwaQAovdHlwZS5nb29nbGVhcGlzLmNvbS9nb29nbGUucHJvdG9idWYuU3RyaW5nVmFsdWUSDQoLY29ubi1kZXRhaWw\r\nx-golden-trailer: trailer-value\r\n"
+          }
+        ]
+      },
+      "annotations": [
+        "grpc-status-details-bin = code=10 message=\"raw connect error with a detail\" details=[{type.googleapis.com/google.protobuf.StringValue StringValue(\"conn-detail\")}]"
+      ]
+    }
+  }
+}
