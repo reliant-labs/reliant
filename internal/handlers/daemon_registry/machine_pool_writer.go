@@ -3,6 +3,8 @@ package daemon_registry
 import (
 	"context"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/auth"
 )
 
@@ -20,10 +22,32 @@ import (
 //     approved hash covers exactly this change (auth.WithApprovedCard).
 //
 // The CLI login, API tokens, a daemon's credential, OAuth clients and an
-// unclassified context are refused with reason person_required, fail-closed.
-// A daemon's own connect-time labels (`reliant daemon start --label`) are
+// unclassified context are refused with reason person_required, fail-closed,
+// and the refusal names the paths that do work (poolWriterRefusal). A
+// daemon's own connect-time labels (`reliant daemon start --label`) are
 // written by the registration (tools_daemon.persistDeclaredLabels), on the
 // machine that connected only, and never come through here.
+//
+// These rpcs and the CLI commands over them (#2963, #2964) were gated this way
+// before their first release, so no released client ever wrote with a CLI
+// login.
 func requirePoolWriter(ctx context.Context, action string) error {
-	return auth.RequirePersonOrApprovedCard(ctx, action)
+	if auth.RequirePersonOrApprovedCard(ctx, action) == nil {
+		return nil
+	}
+	return poolWriterRefusal(ctx, action)
+}
+
+// poolWriterRefusal is requirePoolWriter's PermissionDenied: reason
+// person_required, like every person-only refusal, and a message that says
+// how the change can be made instead. The app has no label or pool screen, so
+// "open it in the app" (auth.RequirePerson's advice) would be a dead end.
+func poolWriterRefusal(ctx context.Context, action string) error {
+	return svcerr.WithReason(svcerr.PermissionDenied(
+		"Only a person can "+action+": machine labels and pools decide where pool-bound runs execute. "+
+			"This request was made with an "+auth.CredentialFromContext(ctx).String()+
+			" (such as the CLI login or a machine's own credential), which an agent or a script can hold. "+
+			"Ask an agent in a Reliant chat to make the change and approve its card, "+
+			"or declare a machine's own labels when it starts: reliant daemon start --label key=value."),
+		auth.ReasonPersonRequired)
 }
