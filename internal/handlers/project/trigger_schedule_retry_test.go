@@ -144,6 +144,122 @@ func TestTriggerScheduleRetryGivesUpAfterItsAttempts(t *testing.T) {
 	assert.True(t, paused)
 }
 
+// scriptedSchedules runs sync for each call (numbered from 1), against the
+// context the caller passed.
+type scriptedSchedules struct {
+	mu    sync.Mutex
+	calls int
+	sync  func(ctx context.Context, call int) error
+}
+
+func (s *scriptedSchedules) Sync(ctx context.Context, _ string) error {
+	s.mu.Lock()
+	s.calls++
+	call := s.calls
+	s.mu.Unlock()
+	return s.sync(ctx, call)
+}
+
+func (s *scriptedSchedules) callCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls
+}
+
+// await receives from ch, or fails the test once ctx ends.
+func await[T any](t *testing.T, ctx context.Context, ch <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-ctx.Done():
+		t.Fatalf("%s: %v", what, context.Cause(ctx))
+		var zero T
+		return zero
+	}
+}
+
+// firedTimer is a backoff timer that has already fired.
+func firedTimer(time.Duration) <-chan time.Time {
+	c := make(chan time.Time)
+	close(c)
+	return c
+}
+
+// Closing the service (its lifecycle Close at shutdown) ends a retry waiting
+// out its backoff at once, with no further attempt, and starts no new one.
+func TestCloseStopsATriggerScheduleRetryInItsBackoff(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	temporal := &scriptedSchedules{sync: func(context.Context, int) error { return errTemporalUnavailable }}
+	svc := NewTestProject(t, WithProjectDeps(Deps{Schedules: temporal}))
+	svc.SetScheduleRetry(time.Hour, time.Hour, 5)
+	waits := make(chan time.Duration, 4)
+	// A backoff that never fires: only the close can end the wait.
+	svc.SetScheduleRetryTimer(func(d time.Duration) <-chan time.Time { waits <- d; return nil })
+
+	svc.convergeTriggerSchedules(ctx, []string{"trig-backoff"})
+	assert.Equal(t, time.Hour, await(t, ctx, waits, "the retry never began its backoff"))
+	require.NoError(t, svc.Close(ctx), "close returns once the waiting retry has exited")
+	assert.Equal(t, 1, temporal.callCount(), "the retry made no attempt after the close")
+
+	svc.convergeTriggerSchedules(ctx, []string{"trig-backoff"})
+	svc.WaitForScheduleRetries(t, ctx)
+	assert.Equal(t, 2, temporal.callCount(), "a sync after the close still runs inline")
+	assert.Empty(t, waits, "but no retry starts after the close")
+}
+
+// Closing the service cancels a retry's attempt in flight.
+func TestCloseCancelsATriggerScheduleRetryAttempt(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	attempting := make(chan struct{})
+	temporal := &scriptedSchedules{sync: func(attemptCtx context.Context, call int) error {
+		if call == 1 {
+			return errTemporalUnavailable
+		}
+		close(attempting)
+		<-attemptCtx.Done()
+		return attemptCtx.Err()
+	}}
+	svc := NewTestProject(t, WithProjectDeps(Deps{Schedules: temporal}))
+	svc.SetScheduleRetry(0, 0, 5)
+	svc.SetScheduleRetryTimer(firedTimer)
+
+	svc.convergeTriggerSchedules(ctx, []string{"trig-attempt"})
+	await(t, ctx, attempting, "the retry never attempted")
+	require.NoError(t, svc.Close(ctx), "close returns once the cancelled attempt has exited")
+	assert.Equal(t, 2, temporal.callCount(), "no attempt after the cancelled one")
+}
+
+// Close waits for running retries only as long as its context allows.
+func TestCloseIsBoundedByItsContext(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	attempting, stuck := make(chan struct{}), make(chan struct{})
+	temporal := &scriptedSchedules{sync: func(_ context.Context, call int) error {
+		if call == 1 {
+			return errTemporalUnavailable
+		}
+		// An attempt that ignores cancellation, until the test lets it go.
+		close(attempting)
+		<-stuck
+		return nil
+	}}
+	svc := NewTestProject(t, WithProjectDeps(Deps{Schedules: temporal}))
+	svc.SetScheduleRetry(0, 0, 5)
+	svc.SetScheduleRetryTimer(firedTimer)
+
+	svc.convergeTriggerSchedules(ctx, []string{"trig-stuck"})
+	await(t, ctx, attempting, "the retry never attempted")
+	expired, expire := context.WithCancel(ctx)
+	expire()
+	assert.ErrorIs(t, svc.Close(expired), context.Canceled, "close gives up once its context ends")
+
+	close(stuck)
+	svc.WaitForScheduleRetries(t, ctx)
+}
+
 // A retry's attempt that read the row before a later write must not have the
 // last word: the later converge makes the running retry converge once more.
 func TestTriggerScheduleRetryConvergesAgainAfterALaterWrite(t *testing.T) {

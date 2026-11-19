@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -22,6 +23,13 @@ import (
 // asked for while it runs makes it converge once more after its current
 // attempt, so an attempt that read the row before a later write never has the
 // last word.
+//
+// Retries belong to the service's lifetime, not the request's: they keep the
+// request's values (logging, tracing) but not its cancellation, and they end
+// when the service closes (Service.Close, a lifecycle Close the server's
+// supervisor calls at shutdown). Closing cancels every backoff wait and
+// in-flight attempt, starts no new retry, and waits for the running ones to
+// exit; what they did not converge is the startup sync's.
 
 // scheduleRetryPolicy bounds a trigger's background retries: the wait before
 // the first, which doubles after each failure up to maxWait, and how many
@@ -49,7 +57,69 @@ type scheduleRetries struct {
 	again map[string]bool
 	// policy overrides defaultScheduleRetryPolicy when set (the tests).
 	policy *scheduleRetryPolicy
+	// after, when set, replaces the backoff timer (the tests).
+	after func(d time.Duration) <-chan time.Time
+	// life is the retries' lifetime, ended by stop when the service closes;
+	// made on first use, so the zero value works. closed refuses new
+	// retries once Close began.
+	life   context.Context
+	stop   context.CancelFunc
+	closed bool
 	wg     sync.WaitGroup
+}
+
+// lifetime is the retries' context, made on first use. Callers hold r.mu.
+func (r *scheduleRetries) lifetime() context.Context {
+	if r.life == nil {
+		r.life, r.stop = context.WithCancel(context.Background())
+	}
+	return r.life
+}
+
+// wait blocks for d, or until ctx ends: false then.
+func (r *scheduleRetries) wait(ctx context.Context, d time.Duration) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	r.mu.Lock()
+	after := r.after
+	r.mu.Unlock()
+	var fired <-chan time.Time
+	if after != nil {
+		fired = after(d)
+	} else {
+		timer := time.NewTimer(d)
+		defer timer.Stop()
+		fired = timer.C
+	}
+	select {
+	case <-fired:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// close ends the retries' lifetime and waits, until ctx ends, for the
+// running ones to exit.
+func (r *scheduleRetries) close(ctx context.Context) error {
+	r.mu.Lock()
+	r.closed = true
+	if r.stop != nil {
+		r.stop()
+	}
+	r.mu.Unlock()
+	exited := make(chan struct{})
+	go func() {
+		r.wg.Wait()
+		close(exited)
+	}()
+	select {
+	case <-exited:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("project: trigger schedule retries still running at shutdown: %w", context.Cause(ctx))
+	}
 }
 
 // note records that a converge of triggerID was asked for: true when a retry
@@ -64,21 +134,25 @@ func (r *scheduleRetries) note(triggerID string) bool {
 	return true
 }
 
-// claim starts tracking a retry for triggerID, false when one already runs
-// (which note has told to converge again).
-func (r *scheduleRetries) claim(triggerID string) bool {
+// claim starts tracking a retry for triggerID and returns the retries'
+// lifetime; false when one already runs (now told to converge again) or the
+// service has closed.
+func (r *scheduleRetries) claim(triggerID string) (context.Context, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.closed {
+		return nil, false
+	}
 	if _, running := r.again[triggerID]; running {
 		r.again[triggerID] = true
-		return false
+		return nil, false
 	}
 	if r.again == nil {
 		r.again = map[string]bool{}
 	}
 	r.again[triggerID] = false
 	r.wg.Add(1)
-	return true
+	return r.lifetime(), true
 }
 
 // begin starts an attempt: what was asked for until now, it converges.
@@ -117,15 +191,27 @@ func (r *scheduleRetries) currentPolicy() scheduleRetryPolicy {
 	return defaultScheduleRetryPolicy
 }
 
+// Close ends the background schedule retries and waits, until ctx ends, for
+// them to exit (see the top of this file). The server's lifecycle calls it
+// at shutdown.
+func (s *Service) Close(ctx context.Context) error {
+	return s.scheduleRetries.close(ctx)
+}
+
 // retryScheduleSync retries converging triggerID's schedule in the
-// background, detached from the request that asked for it.
+// background: with the request's values, but ended by the service's
+// lifetime rather than the request's.
 func (s *Service) retryScheduleSync(ctx context.Context, triggerID string) {
-	if !s.scheduleRetries.claim(triggerID) {
+	life, ok := s.scheduleRetries.claim(triggerID)
+	if !ok {
 		return
 	}
-	bg := context.WithoutCancel(ctx)
+	bg, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	unhook := context.AfterFunc(life, cancel)
 	go func() {
 		defer s.scheduleRetries.wg.Done()
+		defer cancel()
+		defer unhook()
 		s.runScheduleRetry(bg, triggerID)
 	}()
 }
@@ -136,8 +222,12 @@ func (s *Service) runScheduleRetry(ctx context.Context, triggerID string) {
 	wait := policy.firstWait
 	var err error
 	for attempt := 1; attempt <= policy.attempts; attempt++ {
-		timer := time.NewTimer(wait)
-		<-timer.C
+		if !s.scheduleRetries.wait(ctx, wait) {
+			s.scheduleRetries.abandon(triggerID)
+			logging.InfoContext(ctx, "[project] stopped retrying a trigger's schedule at shutdown; the next startup sync converges it",
+				"trigger_id", triggerID, "attempt", attempt, "error", err)
+			return
+		}
 		s.scheduleRetries.begin(triggerID)
 		attemptCtx, cancel := context.WithTimeout(ctx, policy.attemptBudget)
 		err = s.deps.Schedules.Sync(attemptCtx, triggerID)

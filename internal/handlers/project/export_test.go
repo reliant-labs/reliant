@@ -28,6 +28,14 @@ func (s *Service) SetScheduleRetry(wait, maxWait time.Duration, attempts int) {
 	s.scheduleRetries.policy = &scheduleRetryPolicy{firstWait: wait, maxWait: maxWait, attempts: attempts, attemptBudget: time.Minute}
 }
 
+// SetScheduleRetryTimer replaces the backoff timer of s's schedule retries:
+// after(d) is the channel a wait of d fires on.
+func (s *Service) SetScheduleRetryTimer(after func(d time.Duration) <-chan time.Time) {
+	s.scheduleRetries.mu.Lock()
+	defer s.scheduleRetries.mu.Unlock()
+	s.scheduleRetries.after = after
+}
+
 // WaitForScheduleRetries blocks until every background schedule retry s
 // started has converged or given up, or fails the test once ctx ends.
 func (s *Service) WaitForScheduleRetries(t *testing.T, ctx context.Context) {
