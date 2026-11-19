@@ -196,20 +196,14 @@ func (s *Service) projectsWithAppsOrg(ctx context.Context, userID, requested str
 }
 
 // projectsWithAppsListed is every project the caller may read in the org:
-// their own, decided as ListProjects decides them, then the ones others
-// shared with the org, decided by the viewer rule as ListSharedProjects
-// decides them. Most recently active first.
+// their own (ListProjects' rows), then the ones others shared with the org
+// (ListSharedProjects' rows), most recently active first. Each is decided
+// ONCE, with ReadProjectAccess, and that Access alone says whether it is
+// listed in the owner's shape or a viewer's.
 func (s *Service) projectsWithAppsListed(ctx context.Context, userID string, scope *core.OrgScope, orgID string) ([]listedProject, error) {
-	own, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Org: scope, Limit: projectsWithAppsLimit})
+	candidates, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Org: scope, Limit: projectsWithAppsLimit})
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list projects"))
-	}
-	own = authz.Visible(ctx, userID, own, authz.CanReadProject)
-	listed := make([]listedProject, 0, len(own))
-	seen := make(map[string]bool, len(own))
-	for _, p := range own {
-		seen[p.ID] = true
-		listed = append(listed, listedProject{project: p})
 	}
 	// Sharing is between people in an org: a machine credential reads its
 	// own projects only, as ListSharedProjects refuses it.
@@ -220,12 +214,23 @@ func (s *Service) projectsWithAppsListed(ctx context.Context, userID string, sco
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list shared projects"))
 		}
-		for _, p := range authz.SharedProjectsFor(authz.WithViewerReads(ctx), userID, shared) {
-			if !seen[p.ID] {
-				seen[p.ID] = true
-				listed = append(listed, listedProject{project: p, viewer: true})
-			}
+		candidates = append(candidates, shared...)
+	}
+	viewing := authz.WithViewerReads(ctx)
+	listed := make([]listedProject, 0, len(candidates))
+	seen := make(map[string]bool, len(candidates))
+	for _, p := range candidates {
+		if seen[p.ID] {
+			continue
 		}
+		// A project of an org the caller has left, or one not shared with
+		// them, is not listed: the list shows what GetProject would.
+		access, err := authz.ReadProjectAccess(viewing, userID, p)
+		if err != nil {
+			continue
+		}
+		seen[p.ID] = true
+		listed = append(listed, listedProject{project: p, viewer: access.Viewer()})
 	}
 	sort.SliceStable(listed, func(i, j int) bool {
 		a, b := listed[i].project, listed[j].project
