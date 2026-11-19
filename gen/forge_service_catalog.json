@@ -48919,6 +48919,14 @@
             {
               "name": "per_member",
               "kind": "uint32"
+            },
+            {
+              "name": "priority",
+              "kind": "string"
+            },
+            {
+              "name": "max_running_per_key",
+              "kind": "uint32"
             }
           ],
           "reliant.v1.WorkflowEventSource": [
