@@ -1382,9 +1382,8 @@ func openForRead(path, root string) (*os.File, error) {
 var viewerOpened = func(string) {}
 
 // viewerGuard marks a reply to a viewer command as having passed the
-// credential guard. The server requires it before it shows a file outside
-// the workspace: a daemon from before the guard ignores viewer_root, and its
-// reply has no mark (internal/handlers/file_system, requireViewerGuard).
+// credential guard. The server shows no file from a reply without it
+// (internal/handlers/file_system, requireViewerGuard).
 type viewerGuard struct {
 	ViewerGuarded bool `json:"viewer_guarded,omitempty"`
 }

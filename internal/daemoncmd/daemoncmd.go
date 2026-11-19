@@ -44,7 +44,7 @@ func (f forwarder) Dispatch(
 
 	respBytes, err := f.sender.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 	if err != nil {
-		return daemonerr.DispatchConnectError(commandType, err)
+		return daemonerr.Error(fmt.Sprintf("daemon command %s", commandType), err)
 	}
 
 	if err := json.Unmarshal(respBytes, resp); err != nil {

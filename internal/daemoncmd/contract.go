@@ -24,8 +24,8 @@ import "context"
 // Service forwards typed requests to the caller's daemon.
 type Service interface {
 	// Dispatch marshals req, forwards it to the daemon as commandType, and
-	// unmarshals the reply into resp. Any failure is mapped onto a loud Connect
-	// error via daemonerr.DispatchConnectError; Dispatch never returns nil
+	// unmarshals the reply into resp. Any failure is mapped onto a loud
+	// classified error via daemonerr.Error; Dispatch never returns nil
 	// while leaving resp unpopulated, so callers can rely on "no error => resp
 	// is valid".
 	Dispatch(ctx context.Context, userID, commandType string, req, resp any, timeoutMs int32) error

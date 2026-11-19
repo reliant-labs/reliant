@@ -25,7 +25,6 @@ package daemonerr
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -87,9 +86,7 @@ func Outdated(err error) error {
 }
 
 // machineCode is the code a daemon-command failure that the machine's state
-// explains calls for, and false for any other failure. MachineState and
-// MachineStateConnectError both decide by it, so the two spellings cannot
-// disagree on a code.
+// explains calls for, and false for any other failure.
 func machineCode(err error) (connect.Code, bool) {
 	switch {
 	case Unreachable(err), toolexec.IsDaemonReconnecting(err):
@@ -228,6 +225,15 @@ func Error(doing string, err error) error {
 	if errors.Is(err, toolexec.ErrDaemonConnectionInterrupted) {
 		return svcerr.WithClass(result, svcerr.ClassCanceled)
 	}
+	// A daemon report that is the user's state, not our fault (a credential
+	// store refused, work refused while a recovery finalizes: the report's own
+	// ErrorClass) keeps that class, which svcerr.Classify cannot read from
+	// behind WithCause. Without it a component chain that logs with plain
+	// svcerr.Classify (daemoncmd.Dispatch's) wrote every such refusal at ERROR
+	// (reliant#2429).
+	if _, ok := toolexec.DaemonReportedText(err); ok && svcerr.Classify(err) == svcerr.ClassUser {
+		return svcerr.WithClass(result, svcerr.ClassUser)
+	}
 	return result
 }
 
@@ -258,56 +264,4 @@ func prefixed(doing, msg string) string {
 		return msg
 	}
 	return doing + ": " + msg
-}
-
-// The *connect.Error spellings below predate Error and MachineState and are
-// kept, byte for byte, for the handlers that still call them: the code is
-// decided by the same rules, and the message is the old one — doing wrapped
-// around err's whole text, router and transport words included. Handlers move
-// to Error / MachineState in their own svcerr lane (research/forge-migration/
-// 11-svcerr-plan.md §4), where the message change is reviewed with the
-// handler's tests; these go when the last caller has.
-
-// MachineStateConnectError is MachineState as the *connect.Error a handler
-// returns, with err's whole text in the message. ok is false for any failure
-// the machine's state does not explain. Deprecated: use MachineState.
-func MachineStateConnectError(doing string, err error) (*connect.Error, bool) {
-	code, ok := machineCode(err)
-	if !ok {
-		return nil, false
-	}
-	reason := machineReason(code, err)
-	if doing != "" {
-		err = fmt.Errorf("%s: %w", doing, err)
-	}
-	cerr := connect.NewError(code, err)
-	if reason != "" {
-		cerr.Meta().Set(svcerr.ReasonHeader, reason)
-	}
-	return cerr, true
-}
-
-// OutdatedConnectError maps a version-skew failure onto FailedPrecondition
-// (see Outdated), with err's whole text as the message. Deprecated: use
-// Outdated.
-func OutdatedConnectError(err error) *connect.Error {
-	return connect.NewError(connect.CodeFailedPrecondition, err)
-}
-
-// DispatchConnectError converts a SendDaemonCommand failure of commandType
-// into a Connect error whose code reflects the failure class (see Error).
-// Deprecated: use Error(fmt.Sprintf("daemon command %s", commandType), err).
-func DispatchConnectError(commandType string, err error) *connect.Error {
-	if IsOutdated(err) {
-		return OutdatedConnectError(err)
-	}
-	if cerr, ok := MachineStateConnectError(fmt.Sprintf("daemon command %s failed", commandType), err); ok {
-		return cerr
-	}
-	if pathMissing(err) {
-		return connect.NewError(connect.CodeNotFound,
-			fmt.Errorf("daemon command %s: %w", commandType, err))
-	}
-	return connect.NewError(connect.CodeUnavailable,
-		fmt.Errorf("daemon command %s failed: %w", commandType, err))
 }

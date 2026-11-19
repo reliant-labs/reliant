@@ -296,32 +296,16 @@ func homeRelative(p string) (string, bool) {
 	return "", false
 }
 
-// requireViewerGuard refuses to show a file outside the workspace unless the
-// daemon's reply says it applied the credential guard (viewer_guarded, which
-// cmd_fs.go sets on every reply to a viewer_root request).
-//
-// A daemon from before the guard ignores viewer_root and would return
-// ~/.ssh/id_rsa like any other file, so a server deploy alone protects
-// nobody whose machine has not updated. Until it updates, such a daemon may
-// show files of the workspace only (a symlink in the project to a store still
-// leaks there, which is what updating fixes), and an absolute path outside it
-// is FailedPrecondition, naming the fix. The warning below is how adoption is
-// verified after a release: it counts, per daemon, the viewer reads an
-// outdated daemon was refused, and falls to zero once every active machine
-// runs a daemon with the guard.
-func (w workspaceScope) requireViewerGuard(ctx context.Context, resolvedPath string, guarded bool) error {
-	if guarded || insideWorkspace(w.basePath, resolvedPath) {
+// requireViewerGuard refuses to show a file unless the daemon's reply says it
+// applied the credential guard (viewer_guarded, which cmd_fs.go sets on every
+// reply to a viewer_root request). A daemon from before the guard ignores
+// viewer_root and would return ~/.ssh/id_rsa like any other file, so a reply
+// without the mark is never shown: FailedPrecondition, naming the fix.
+func requireViewerGuard(guarded bool) error {
+	if guarded {
 		return nil
 	}
-	logging.WarnContext(ctx, "[FSProxy] refused a viewer read outside the workspace: the daemon predates the credential guard",
-		"daemon_id", w.target.DaemonID, "path", resolvedPath)
-	return svcerr.FailedPrecondition("this machine's daemon is out of date: update it to view files outside the workspace")
-}
-
-// insideWorkspace reports whether resolvedPath lies at or beneath basePath.
-func insideWorkspace(basePath, resolvedPath string) bool {
-	rel, err := filepath.Rel(filepath.Clean(basePath), filepath.Clean(resolvedPath))
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	return svcerr.FailedPrecondition("this machine's daemon is outdated: update it to view files")
 }
 
 // validateWorkspacePath is the single place this package applies the shared
@@ -602,7 +586,7 @@ func (s *Service) GetFileContent(
 	if err := s.sendCommand(ctx, userID, scope.target, "fs.read_file", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
-	if err := scope.requireViewerGuard(ctx, resolvedPath, cmdResp.ViewerGuarded); err != nil {
+	if err := requireViewerGuard(cmdResp.ViewerGuarded); err != nil {
 		return nil, err
 	}
 
@@ -685,7 +669,7 @@ func (s *Service) GetFileMetadata(
 	if err := s.sendCommand(ctx, userID, scope.target, "fs.stat", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
-	if err := scope.requireViewerGuard(ctx, resolvedPath, cmdResp.ViewerGuarded); err != nil {
+	if err := requireViewerGuard(cmdResp.ViewerGuarded); err != nil {
 		return nil, err
 	}
 
@@ -781,7 +765,7 @@ func (s *Service) previewInfo(ctx context.Context, userID string, scope workspac
 		}
 		return nil, err
 	}
-	if err := scope.requireViewerGuard(ctx, resolvedPath, info.ViewerGuarded); err != nil {
+	if err := requireViewerGuard(info.ViewerGuarded); err != nil {
 		return nil, err
 	}
 	return &info, nil
@@ -857,7 +841,7 @@ func (s *Service) GetFilePreview(
 		}
 		return nil, err
 	}
-	if err := scope.requireViewerGuard(ctx, resolvedPath, bin.ViewerGuarded); err != nil {
+	if err := requireViewerGuard(bin.ViewerGuarded); err != nil {
 		return nil, err
 	}
 	content, err := base64.StdEncoding.DecodeString(bin.Data)
