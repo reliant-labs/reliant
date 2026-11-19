@@ -7,6 +7,7 @@
 package project_test
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -14,6 +15,9 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 
 	project "github.com/reliant-labs/reliant/internal/handlers/project"
 )
@@ -27,15 +31,26 @@ func TestListProjectsWithApps_Generated(t *testing.T) {
 	// project.NewTestProject (helpers_gen_test.go) returns the
 	// project *Service wired with stubbed dependencies. Override one
 	// with project.WithProjectDeps(...), or per-row via Case.Setup.
-	svc := project.NewTestProject(t)
+	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: &project.MockRepository{
+		ListProjectsFunc:                  func(context.Context, db.ProjectFilters) ([]*db.Project, error) { return nil, nil },
+		ListReposByProjectsFunc:           func(context.Context, []string) ([]*core.Repo, error) { return nil, nil },
+		ListRepoForgeAppsByProjectsFunc:   func(context.Context, []string) ([]core.RepoForgeApp, error) { return nil, nil },
+		ListProjectDaemonsForProjectsFunc: func(context.Context, []string) ([]*core.ProjectDaemon, error) { return nil, nil },
+	}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListProjectsWithAppsRequest, pb.ListProjectsWithAppsResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement ListProjectsWithApps; it only asserts nobody has
+			// A deployment with no orgs and no control plane: the caller's
+			// own projects (none here), and their apps unavailable.
+			Name: "no_orgs_no_control_plane",
 			Req:  connect.NewRequest(&pb.ListProjectsWithAppsRequest{}),
 			Ctx:  project.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.ListProjectsWithAppsResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Check: func(t *testing.T, resp *connect.Response[pb.ListProjectsWithAppsResponse]) {
+				if resp.Msg.GetOrgId() != "" || len(resp.Msg.GetProjects()) != 0 ||
+					resp.Msg.GetHostedAppsState() != pb.HostedAppsState_HOSTED_APPS_STATE_UNAVAILABLE {
+					t.Fatalf("response %+v", resp.Msg)
+				}
+			},
 		},
 	}, svc.ListProjectsWithApps)
 }

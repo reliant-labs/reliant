@@ -39,6 +39,11 @@ type Deps struct {
 	// there.
 	// forge:optional-dep
 	ControlPlane CloneDispatcher
+	// Apps reads the org's hosted apps for ListProjectsWithApps, as the
+	// caller. Nil (self-hosted: no control plane) lists projects with their
+	// apps unlinked and the hosted apps UNAVAILABLE.
+	// forge:optional-dep
+	Apps HostedApps
 	// Orgs says which organization a create acts in and verifies the org a
 	// list names (internal/orgs). Nil, or a nil *orgs.Resolver, is a
 	// deployment with no orgs: projects are created with none and lists

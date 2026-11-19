@@ -55407,6 +55407,15 @@
     },
     {
       "consumer": "Project",
+      "field": "Apps",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.HostedApps",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.CloneDispatcher",
       "methods": [],
@@ -56533,6 +56542,14 @@
       "component": "OrgUsage.Prices",
       "source": {
         "path": "internal/handlers/org_usage/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Apps",
+      "source": {
+        "path": "internal/handlers/project/service.go",
         "symbol": "New"
       }
     },
