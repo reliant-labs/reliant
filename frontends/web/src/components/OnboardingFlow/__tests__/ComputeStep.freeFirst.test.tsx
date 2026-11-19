@@ -194,10 +194,11 @@ describe("ComputeStep — on a phone", () => {
 
     expect(screen.queryByTestId("self-hosted-connect")).toBeNull();
     const steps = screen.getByTestId("compute-step-phone-local");
-    expect(steps).toHaveTextContent(/On your laptop, open .+ and sign in\./);
+    expect(steps).toHaveTextContent(
+      /On your laptop, open the link below \(copy or email it\) and sign in to this same account\. Setup continues where you left off\./,
+    );
     expect(steps).toHaveTextContent(/Install the Reliant desktop app \(or run the CLI command shown there\)\./);
     expect(steps).toHaveTextContent(/Your computer connects to this account\. Come back here, or keep going on the laptop\./);
-    expect(steps).toHaveTextContent(window.location.origin);
     expect(steps.querySelectorAll("li")).toHaveLength(3);
     expect(screen.queryByRole("link", { name: /download/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /download|install/i })).toBeNull();
@@ -212,17 +213,28 @@ describe("ComputeStep — on a phone", () => {
     expect(screen.getByRole("link", { name: /Email it to myself/ })).toBeVisible();
   });
 
-  it("copies the link as the action, and the email link carries it", async () => {
-    const writeText = vi.fn(async () => {});
+  it("copies a link that resumes this onboarding plan, and the email link carries it", async () => {
+    const writeText = vi.fn(async (_text: string) => {});
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    renderStep();
+    const plan: Partial<LaunchPlan> = { projectName: "my project", workflowId: "wf_1" };
+    renderStep(plan);
 
     fireEvent.click(screen.getByRole("button", { name: /Continue on your computer/ }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(window.location.href));
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    const copiedLink = new URL(writeText.mock.calls[0][0]);
+    expect(copiedLink.origin).toBe(window.location.origin);
+    expect(copiedLink.pathname).toBe("/onboarding");
+    // The laptop resumes the same answers, with the free choice recorded.
+    expect(JSON.parse(copiedLink.searchParams.get("plan") ?? "null")).toEqual({
+      ...plan,
+      compute: "local_daemon",
+    });
     expect(await screen.findByText("Link copied")).toBeInTheDocument();
 
     const mail = screen.getByRole("link", { name: /Email it to myself/ });
-    expect(mail.getAttribute("href")).toMatch(/^mailto:\?subject=.*&body=/);
+    const href = mail.getAttribute("href") ?? "";
+    expect(href).toMatch(/^mailto:\?subject=.*&body=/);
+    expect(decodeURIComponent(href.split("&body=")[1])).toBe(copiedLink.href);
   });
 
   it("reports a failed copy and points at the email link", async () => {

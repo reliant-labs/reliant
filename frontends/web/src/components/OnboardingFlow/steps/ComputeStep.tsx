@@ -32,6 +32,7 @@ import { RedeemCouponForm } from "@/components/RedeemCouponForm";
 import { RedeemedCouponKind } from "@/services/controlPlane/reliantAI";
 import { useBundledDaemonPending } from "@/hooks/useBundledDaemonPending";
 import { isCloudCompute } from "../types";
+import type { LaunchPlan } from "../types";
 import type {
   CodeSource,
   ComputeChoice,
@@ -810,7 +811,7 @@ export function ComputeStep({
       {showLocal && !activeDaemon && (
         <>
           {onPhone ? (
-            <PhoneLocalSteps />
+            <PhoneLocalSteps plan={plan} />
           ) : (
             <PairMachinePanel mode="bootstrap" onConnected={handleLocalContinue} />
           )}
@@ -867,10 +868,22 @@ export function ComputeStep({
 // the action. It deliberately has no download link or install button. The step
 // keeps waiting underneath (ConnectWait and the footer) and advances by itself
 // when the laptop connects to this account, so choosing this never dead-ends.
-function PhoneLocalSteps() {
+//
+// The handoff link is built from the plan, not copied from the address bar:
+// the onboarding state lives only in the `plan` search param (useOnboardingPlan),
+// so the link names /onboarding with this plan and the free choice recorded in
+// it. Opened on the laptop, AuthGuard's returnHere keeps it across sign-in, and
+// the wizard resumes at the same step with the same answers.
+export function onboardingHandoffLink(origin: string, plan: Partial<LaunchPlan>): string {
+  const handoffPlan: Partial<LaunchPlan> = { ...plan, compute: "local_daemon" };
+  // tanstack-router's default search serialization: each value JSON-encoded.
+  return `${origin}/onboarding?plan=${encodeURIComponent(JSON.stringify(handoffPlan))}`;
+}
+
+function PhoneLocalSteps({ plan }: { plan: Partial<LaunchPlan> }) {
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
-  const link = typeof window === "undefined" ? "" : window.location.href;
   const appUrl = typeof window === "undefined" ? "" : window.location.origin;
+  const link = onboardingHandoffLink(appUrl, plan);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link);
@@ -891,8 +904,8 @@ function PhoneLocalSteps() {
       </p>
       <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-muted-foreground">
         <li>
-          On your laptop, open{" "}
-          <span className="break-all font-medium text-foreground">{appUrl}</span> and sign in.
+          On your laptop, open the link below (copy or email it) and sign in to
+          this same account. Setup continues where you left off.
         </li>
         <li>Install the Reliant desktop app (or run the CLI command shown there).</li>
         <li>
