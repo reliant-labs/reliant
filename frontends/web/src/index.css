@@ -255,6 +255,38 @@
 :root {
   --forge-accent-src: var(--accent);
   --forge-accent-ink-src: var(--accent-foreground);
+
+  /*
+   * LAYOUT TOKENS — the one density (web-styling skill, "Shell and layout" and
+   * "Density"). Read them through arbitrary values: `h-[var(--shell-bar-h)]`,
+   * `max-w-[var(--chat-column)]`. Values at the default 15px root.
+   *
+   *   --shell-bar-h      every shell bar (view top bars, the right panel's
+   *                      bar), so their bottom edges are one line. px on
+   *                      purpose: it must not drift with the Appearance size
+   *   --sidebar-w        the left nav's default width, and its minimum
+   *   --right-panel-w    the right panel's default width
+   *   --row-h            nav rows, chat rows, tool rows, menu items (32px)
+   *   --control-h        Button md, Input md, Select (34px)
+   *   --table-row-h      a table's body rows (41px); --table-head-h its header
+   *   --chat-column      transcript, composer and new-chat screen (768px)
+   *   --page-max         dashboards and lists (1200px)
+   *   --form-max         settings and forms (720px)
+   *
+   * Additive: nothing reads them until a surface adopts them.
+   */
+
+  --shell-bar-h: 48px;
+  --sidebar-w: 256px;
+  --sidebar-min-w: 224px;
+  --right-panel-w: 400px;
+  --row-h: 2.1333rem;
+  --control-h: 2.25rem;
+  --table-row-h: 2.75rem;
+  --table-head-h: 2.25rem;
+  --chat-column: 51.2rem;
+  --page-max: 80rem;
+  --form-max: 48rem;
 }
 
 /*
@@ -450,6 +482,8 @@
     --destructive-ink: 0 70% 40%;
     --destructive-foreground: 0 0% 100%;
     --border: 220 14% 89.5%;           /* Light blue-gray border */
+    --border-subtle: 220 14% 93%;      /* Row rules, fold indent, gridlines */
+    --bubble: 220 14% 94%;             /* The user chat message's fill */
     --input: 220 14% 83.5%;
     --ring: 221 83% 50%;
 
@@ -567,6 +601,8 @@
     --destructive-ink: 0 90% 74%;
     --destructive-foreground: 0 0% 100%;
     --border: 220 12% 21.5%;           /* Carries the card edge on its own */
+    --border-subtle: 220 12% 16%;
+    --bubble: 220 12% 17%;
     --input: 220 12% 27%;
     --ring: 215 92% 70%;
 

@@ -17,6 +17,7 @@ import { REQUIRED_ITEMS, BONUS_ITEMS, CHECKLIST_ITEMS } from "./constants";
 import type { ChecklistItem, ChecklistItemId } from "./types";
 import { trackEvent } from "../../lib/analytics";
 import { useTourNavigation } from "./useTourNavigation";
+import { settingsPath, workflowLibraryPath } from "@/lib/paths";
 
 // ─── Action Handlers ──────────────────────────────────────────────────────────
 
@@ -37,10 +38,10 @@ function executeItemAction(item: ChecklistItem, deps: ItemActionDeps) {
       document.querySelector<HTMLElement>("[data-chat-input]")?.focus();
       break;
     case "use-custom-workflow":
-      void deps.navigate({ to: "/workflows/library", search: {} });
+      void deps.navigate({ to: workflowLibraryPath(), search: {} });
       break;
     case "create-workflow":
-      void deps.navigate({ to: "/workflows/library", search: {} });
+      void deps.navigate({ to: workflowLibraryPath(), search: {} });
       break;
     case "take-product-tour":
       deps.startTour();
@@ -49,10 +50,10 @@ function executeItemAction(item: ChecklistItem, deps: ItemActionDeps) {
       window.dispatchEvent(new CustomEvent("open-create-worktree-modal"));
       break;
     case "create-preset":
-      void deps.navigate({ to: "/workflows/library", search: {} });
+      void deps.navigate({ to: workflowLibraryPath(), search: {} });
       break;
     case "install-mcp":
-      void deps.navigate({ to: "/settings/$section", params: { section: "mcp" } });
+      void deps.navigate({ to: settingsPath("mcp") });
       break;
     case "read-docs":
       window.open("https://docs.reliantlabs.io/", "_blank");

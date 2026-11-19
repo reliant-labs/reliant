@@ -110,6 +110,8 @@ const FORKS_POOL_FILES = [
   "src/lib/__tests__/connect.routing.test.ts",
   "src/lib/__tests__/connection-oauth.test.ts",
   "src/lib/__tests__/github-connect.test.ts",
+  // Watches process 'unhandledRejection', which a vm context's promises do not reach.
+  "src/lib/__tests__/monacoManager.loadFailure.test.ts",
   "src/lib/__tests__/packagedOrigin.test.ts",
   "src/lib/cli-commands.test.ts",
   "src/services/controlPlane/observability/__tests__/rumApi.test.ts",
@@ -248,7 +250,9 @@ const appConfig: ViteUserConfig = {
           // Heavy dependencies
           'vendor-markdown': ['react-markdown', 'remark-gfm', 'rehype-highlight'],
           'vendor-highlight': ['highlight.js'],
-          // Monaco Editor - separate chunk for lazy loading
+          // The React wrapper around Monaco, imported only by lib/monacoManager
+          // and components/shared/MonacoEditor, lazily. Monaco itself
+          // (lib/monacoBundle) is left to Rollup's own lazy chunks.
           'vendor-monaco': ['@monaco-editor/react', '@monaco-editor/loader'],
           // Date and form libraries
           'vendor-utils': ['date-fns', 'react-hook-form', '@hookform/resolvers'],
@@ -294,8 +298,8 @@ const appConfig: ViteUserConfig = {
       '@monaco-editor/react',
       '@monaco-editor/loader',
     ],
-    // Exclude Monaco Editor's web workers from optimization
-    // They need to be loaded dynamically as blob URLs
+    // Monaco (lib/monacoBundle) is served unbundled in dev: its ESM build
+    // imports CSS and its workers are separate `?worker` entries.
     exclude: ['monaco-editor'],
   },
   server: {

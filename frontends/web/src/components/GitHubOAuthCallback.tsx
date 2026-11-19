@@ -9,6 +9,7 @@ import { isSafeReturnTo } from '@/lib/returnTo'
 import { forgeShellReturnUrl } from '@/lib/crossShellReturn'
 import { GradientBackground } from './GradientBackground'
 import { BrandMark } from './icons/BrandMark'
+import { homePath } from '@/lib/paths'
 
 /**
  * GitHubOAuthCallback owns the app-side `/auth/github/callback` route — the
@@ -300,7 +301,7 @@ export function GitHubOAuthCallback() {
               <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
             </div>
             <button
-              onClick={() => navigate({ to: '/', search: {} })}
+              onClick={() => navigate({ to: homePath(), search: {} })}
               className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors"
             >
               Back to App

@@ -187,11 +187,15 @@ describe("Sidebar activity indicators", () => {
     expect(screen.getByTestId("chat-unread-dot-blocked")).toBeInTheDocument();
   });
 
-  it("labels a failed chat Failed, in a chip, and paints no row green", async () => {
+  it("marks a failed chat with a dot named Failed, and paints no row green", async () => {
     renderSidebar();
     const failed = await screen.findByTestId("chat-activity-dot-failed");
-    expect(within(failed).getByRole("img", { name: "Failed" })).toBeInTheDocument();
-    expect(failed).toHaveTextContent("Failed");
+    expect(failed).toHaveAttribute("data-tone", "failed");
+    const dot = within(failed).getByRole("img", { name: "Failed" });
+    // A dot with its word as its name and tooltip, not a chip with the word in it.
+    expect(dot).toHaveAttribute("title", "Failed");
+    expect(dot).toHaveClass("bg-destructive");
+    expect(failed).toHaveTextContent("");
     // Running is a small spinner, not a chip with a word in it.
     const running = screen.getByTestId("chat-activity-dot-running");
     expect(running).toHaveAccessibleName("Running");
@@ -223,10 +227,12 @@ describe("Sidebar activity indicators", () => {
     expect(rowButtons[rowButtons.length - 2]).toHaveFocus();
   });
 
-  it("names its hover controls", async () => {
+  it("names its hover control, and keeps Archive in the menu it opens", async () => {
     renderSidebar();
     await screen.findByTestId("chat-activity-dot-running");
-    expect(screen.getByRole("button", { name: "Archive Chat running" })).toBeInTheDocument();
+    // One hover control: More options. Archive is the menu's first action,
+    // not one stray click away on every row.
+    expect(screen.queryByRole("button", { name: "Archive Chat running" })).toBeNull();
     expect(screen.getByRole("button", { name: "More options for Chat running" })).toBeInTheDocument();
   });
 

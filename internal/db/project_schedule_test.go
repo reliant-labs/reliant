@@ -3,6 +3,7 @@ package db
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,6 +26,10 @@ import (
 // wall clock.
 var deleteClock = time.Date(2026, time.January, 5, 12, 0, 0, 0, time.UTC)
 
+// lockRaceBudget bounds a fixture's whole test: every query, and every wait
+// for a racing write's result, ends with the fixture's context.
+const lockRaceBudget = 2 * time.Minute
+
 type deleteFixture struct {
 	repo                       *Repo
 	ctx                        context.Context
@@ -37,8 +42,10 @@ func newDeleteFixture(t *testing.T) *deleteFixture {
 	repo, cleanup := SetupTestDB(t)
 	t.Cleanup(cleanup)
 	suffix := uuid.NewString()[:8]
+	ctx, cancel := context.WithTimeout(t.Context(), lockRaceBudget)
+	t.Cleanup(cancel)
 	f := &deleteFixture{
-		repo: repo, ctx: context.Background(),
+		repo: repo, ctx: ctx,
 		owner: "owner-" + suffix, project: "proj-" + suffix, chat: "chat-" + suffix,
 		enabledTrigger: "trig-on-" + suffix, userPaused: "trig-off-" + suffix,
 	}
@@ -359,18 +366,16 @@ func claimPurge(f *deleteFixture, now time.Time) (string, bool, error) {
 // on an ungranted lock (pg_locks; a row lock's wait is on the holder's
 // transaction id, which names no database, so the backend's is read): the write a test started in a goroutine has
 // reached the lock the transaction it races holds. It polls the server's own
-// state, each poll a round trip, under a deadline; nothing waits a fixed
-// duration, so no ordering rests on timing.
-func awaitLockWait(t *testing.T, repo *Repo) {
+// state, each poll a round trip, under the fixture's deadline; nothing waits
+// a fixed duration, so no ordering rests on timing.
+func awaitLockWait(t *testing.T, f *deleteFixture) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	for {
 		var waiting int
-		err := repo.ORM().Bun().NewRaw(`SELECT count(*) FROM pg_locks l
+		err := f.repo.ORM().Bun().NewRaw(`SELECT count(*) FROM pg_locks l
 JOIN pg_stat_activity a ON a.pid = l.pid
-WHERE NOT l.granted AND a.datname = current_database() AND l.pid <> pg_backend_pid()`).Scan(ctx, &waiting)
-		if ctx.Err() != nil {
+WHERE NOT l.granted AND a.datname = current_database() AND l.pid <> pg_backend_pid()`).Scan(f.ctx, &waiting)
+		if f.ctx.Err() != nil {
 			t.Fatal("the racing write never waited on the lock")
 		}
 		require.NoError(t, err)
@@ -380,20 +385,58 @@ WHERE NOT l.granted AND a.datname = current_database() AND l.pid <> pg_backend_p
 	}
 }
 
-// holdTx runs write in a transaction it keeps open until release is closed,
-// and reports write's error, then the commit's, on the returned channel.
-// ready closes once write has run.
-func holdTx(f *deleteFixture, write func(ctx context.Context) error) (ready chan struct{}, release chan struct{}, done chan error) {
-	ready, release, done = make(chan struct{}), make(chan struct{}), make(chan error, 1)
+// receive returns the next value on ch, or fails the test once ctx ends, so
+// no wait for a racing write's result outlives the test's budget.
+func receive[T any](t *testing.T, ctx context.Context, ch <-chan T) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-ctx.Done():
+		t.Fatalf("gave up waiting for a result: %v", context.Cause(ctx))
+		var zero T
+		return zero
+	}
+}
+
+// result is what a write a test runs in a goroutine returned.
+type result[T any] struct {
+	v   T
+	err error
+}
+
+// holdTx runs write in a transaction it keeps open until release is called,
+// and reports write's error, then the commit's, on done. ready closes once
+// write has run. release is idempotent and also runs at cleanup, so a test
+// that fails before releasing never strands the transaction (or the writes
+// queued behind its locks); the cleanup waits for the transaction to end.
+func holdTx(t *testing.T, f *deleteFixture, write func(ctx context.Context) error) (ready <-chan struct{}, release func(), done <-chan error) {
+	t.Helper()
+	readyc, releasec, donec, exited := make(chan struct{}), make(chan struct{}), make(chan error, 1), make(chan struct{})
+	var once sync.Once
+	release = func() { once.Do(func() { close(releasec) }) }
 	go func() {
-		done <- f.repo.RunTx(f.ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		defer close(exited)
+		donec <- f.repo.RunTx(f.ctx, orm.ReadCommitted, func(ctx context.Context) error {
 			err := write(ctx)
-			close(ready)
-			<-release
+			close(readyc)
+			<-releasec
 			return err
 		})
 	}()
-	return ready, release, done
+	t.Cleanup(func() {
+		release()
+		// The fixture's context has ended by now (it derives from
+		// t.Context), so the transaction's remaining calls return at once.
+		timer := time.NewTimer(lockRaceBudget)
+		defer timer.Stop()
+		select {
+		case <-exited:
+		case <-timer.C:
+			t.Errorf("the held transaction did not end within %s of its release", lockRaceBudget)
+		}
+	})
+	return readyc, release, donec
 }
 
 func (f *deleteFixture) newTrigger(id string, enabled bool) *core.Trigger {
@@ -413,21 +456,21 @@ func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
 	t.Run("a create that commits first is paused by the schedule", func(t *testing.T) {
 		f := newDeleteFixture(t)
 		created := "trig-new-" + uuid.NewString()[:8]
-		ready, release, done := holdTx(f, func(ctx context.Context) error {
+		ready, release, done := holdTx(t, f, func(ctx context.Context) error {
 			return store.InsertTrigger(ctx, f.repo.ORM(), f.newTrigger(created, true))
 		})
-		<-ready
-		scheduled := make(chan core.ProjectDeletion, 1)
+		receive(t, f.ctx, ready)
+		scheduled := make(chan result[core.ProjectDeletion], 1)
 		go func() {
 			d, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after, f.decided())
-			assert.NoError(t, err)
-			scheduled <- d
+			scheduled <- result[core.ProjectDeletion]{d, err}
 		}()
-		awaitLockWait(t, f.repo)
-		close(release)
-		require.NoError(t, <-done)
-		got := <-scheduled
-		assert.ElementsMatch(t, []string{f.enabledTrigger, created}, got.PausedTriggerIDs)
+		awaitLockWait(t, f)
+		release()
+		require.NoError(t, receive(t, f.ctx, done))
+		got := receive(t, f.ctx, scheduled)
+		require.NoError(t, got.err)
+		assert.ElementsMatch(t, []string{f.enabledTrigger, created}, got.v.PausedTriggerIDs)
 		tr := f.trigger(t, created)
 		assert.False(t, tr.Enabled)
 		assert.Equal(t, core.TriggerPausedProjectDeleted, tr.PausedReason)
@@ -435,38 +478,39 @@ func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
 
 	t.Run("a create that comes after the schedule is refused", func(t *testing.T) {
 		f := newDeleteFixture(t)
-		ready, release, done := holdTx(f, func(ctx context.Context) error {
+		ready, release, done := holdTx(t, f, func(ctx context.Context) error {
 			_, err := store.ScheduleProjectDeletion(ctx, f.repo.ORM(), f.project, f.owner, after, f.decided())
 			return err
 		})
-		<-ready
+		receive(t, f.ctx, ready)
 		created := "trig-new-" + uuid.NewString()[:8]
 		creating := make(chan error, 1)
 		go func() { creating <- f.repo.CreateTrigger(f.ctx, f.newTrigger(created, true)) }()
-		awaitLockWait(t, f.repo)
-		close(release)
-		require.NoError(t, <-done)
-		assert.ErrorIs(t, <-creating, core.ErrProjectScheduledForDeletion)
+		awaitLockWait(t, f)
+		release()
+		require.NoError(t, receive(t, f.ctx, done))
+		assert.ErrorIs(t, receive(t, f.ctx, creating), core.ErrProjectScheduledForDeletion)
 		_, err := f.repo.GetTrigger(f.ctx, created)
 		assert.ErrorIs(t, err, core.ErrTriggerNotFound)
 	})
 
 	t.Run("an enable that commits first is paused by the schedule, and restored with it", func(t *testing.T) {
 		f := newDeleteFixture(t)
-		ready, release, done := holdTx(f, func(ctx context.Context) error {
+		ready, release, done := holdTx(t, f, func(ctx context.Context) error {
 			return store.SetTriggerEnabled(ctx, f.repo.ORM(), f.userPaused, true)
 		})
-		<-ready
-		scheduled := make(chan core.ProjectDeletion, 1)
+		receive(t, f.ctx, ready)
+		scheduled := make(chan result[core.ProjectDeletion], 1)
 		go func() {
 			d, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after, f.decided())
-			assert.NoError(t, err)
-			scheduled <- d
+			scheduled <- result[core.ProjectDeletion]{d, err}
 		}()
-		awaitLockWait(t, f.repo)
-		close(release)
-		require.NoError(t, <-done)
-		assert.ElementsMatch(t, []string{f.enabledTrigger, f.userPaused}, (<-scheduled).PausedTriggerIDs)
+		awaitLockWait(t, f)
+		release()
+		require.NoError(t, receive(t, f.ctx, done))
+		got := receive(t, f.ctx, scheduled)
+		require.NoError(t, got.err)
+		assert.ElementsMatch(t, []string{f.enabledTrigger, f.userPaused}, got.v.PausedTriggerIDs)
 		assert.False(t, f.trigger(t, f.userPaused).Enabled)
 
 		resumed, err := f.repo.RestoreProject(f.ctx, f.project, f.decided())
@@ -476,17 +520,17 @@ func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
 
 	t.Run("an enable that comes after the schedule is refused, and restore leaves it off", func(t *testing.T) {
 		f := newDeleteFixture(t)
-		ready, release, done := holdTx(f, func(ctx context.Context) error {
+		ready, release, done := holdTx(t, f, func(ctx context.Context) error {
 			_, err := store.ScheduleProjectDeletion(ctx, f.repo.ORM(), f.project, f.owner, after, f.decided())
 			return err
 		})
-		<-ready
+		receive(t, f.ctx, ready)
 		enabling := make(chan error, 1)
 		go func() { enabling <- f.repo.SetTriggerEnabled(f.ctx, f.userPaused, true) }()
-		awaitLockWait(t, f.repo)
-		close(release)
-		require.NoError(t, <-done)
-		assert.ErrorIs(t, <-enabling, core.ErrProjectScheduledForDeletion)
+		awaitLockWait(t, f)
+		release()
+		require.NoError(t, receive(t, f.ctx, done))
+		assert.ErrorIs(t, receive(t, f.ctx, enabling), core.ErrProjectScheduledForDeletion)
 		assert.False(t, f.trigger(t, f.userPaused).Enabled)
 
 		// An edit that would turn it on is refused too; one that leaves it
@@ -574,8 +618,8 @@ func TestDeleteRestoreAndPurgeRefuseAProjectThatMovedOrg(t *testing.T) {
 	// moving holds a move's lock-and-restamp of the project open (the owner's
 	// org lock, then the project row, as MoveProjectOrg takes them) until
 	// release; the decided write is then started against it.
-	moving := func(f *deleteFixture) (chan struct{}, chan struct{}, chan error) {
-		return holdTx(f, func(ctx context.Context) error {
+	moving := func(t *testing.T, f *deleteFixture) (<-chan struct{}, func(), <-chan error) {
+		return holdTx(t, f, func(ctx context.Context) error {
 			if err := store.LockUserOrgs(ctx, f.repo.ORM(), f.owner); err != nil {
 				return err
 			}
@@ -584,14 +628,14 @@ func TestDeleteRestoreAndPurgeRefuseAProjectThatMovedOrg(t *testing.T) {
 		})
 	}
 	race := func(t *testing.T, f *deleteFixture, write func() error) error {
-		ready, release, done := moving(f)
-		<-ready
+		ready, release, done := moving(t, f)
+		receive(t, f.ctx, ready)
 		got := make(chan error, 1)
 		go func() { got <- write() }()
-		awaitLockWait(t, f.repo)
-		close(release)
-		require.NoError(t, <-done, "the move commits")
-		return <-got
+		awaitLockWait(t, f)
+		release()
+		require.NoError(t, receive(t, f.ctx, done), "the move commits")
+		return receive(t, f.ctx, got)
 	}
 
 	t.Run("a delete decided in the source org is refused once the move commits", func(t *testing.T) {

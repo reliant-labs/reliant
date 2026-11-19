@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"strings"
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -40,6 +41,42 @@ func TestWorkflowConcurrencyKeyIsCheckedForProtoCallers(t *testing.T) {
 				}
 			}
 			require.Equal(t, !tc.ok, found)
+		})
+	}
+}
+
+func TestWorkflowConcurrencyPriorityAndPerKeyCapForProtoCallers(t *testing.T) {
+	latest := reliantv1.WorkflowConcurrencyWaiting_WORKFLOW_CONCURRENCY_WAITING_LATEST
+	pr := "{{ trigger.payload.pull_request.number }}"
+	for _, tc := range []struct {
+		name   string
+		policy *reliantv1.WorkflowConcurrency
+		field  string // the field that must carry an error; "" for none
+	}{
+		{"priority", &reliantv1.WorkflowConcurrency{MaxRunning: 2, Priority: "'main-red' in trigger.payload.labels ? 10 : 0"}, ""},
+		{"priority constant", &reliantv1.WorkflowConcurrency{MaxRunning: 2, Priority: "5"}, ""},
+		{"priority not numeric", &reliantv1.WorkflowConcurrency{MaxRunning: 2, Priority: "'high'"}, "concurrency.priority"},
+		{"priority does not compile", &reliantv1.WorkflowConcurrency{MaxRunning: 2, Priority: "trigger.payload."}, "concurrency.priority"},
+		{"priority as template", &reliantv1.WorkflowConcurrency{MaxRunning: 2, Priority: "{{ 1 }}"}, "concurrency.priority"},
+		{"per-key fifo", &reliantv1.WorkflowConcurrency{MaxRunning: 4, MaxRunningPerKey: 1, Key: pr}, ""},
+		{"per-key latest", &reliantv1.WorkflowConcurrency{MaxRunning: 4, MaxRunningPerKey: 1, Key: pr, Waiting: latest}, ""},
+		{"per-key alone", &reliantv1.WorkflowConcurrency{MaxRunningPerKey: 1, Key: pr}, ""},
+		{"per-key without key", &reliantv1.WorkflowConcurrency{MaxRunning: 4, MaxRunningPerKey: 1}, "concurrency.max_running_per_key"},
+		{"per-key key does not compile", &reliantv1.WorkflowConcurrency{MaxRunningPerKey: 1, Key: "{{ trigger.payload. }}"}, "concurrency.key"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := StaticAnalysis(&reliantv1.Workflow{Name: "bounded", Concurrency: tc.policy}, nil)
+			var fields []string
+			for _, issue := range result.Errors() {
+				if strings.HasPrefix(issue.Field, "concurrency") {
+					fields = append(fields, issue.Field)
+				}
+			}
+			if tc.field == "" {
+				require.Empty(t, fields)
+				return
+			}
+			require.Contains(t, fields, tc.field)
 		})
 	}
 }

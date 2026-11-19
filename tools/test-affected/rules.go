@@ -273,6 +273,9 @@ var rules = []rule{
 			"frontends/web/package.json", "frontends/web/pnpm-lock.yaml", "frontends/web/pnpm-workspace.yaml", "frontends/web/.nvmrc",
 			"frontends/web/vite.config.ts", "frontends/web/tsconfig*.json", "frontends/web/tailwind.config.js", "frontends/web/postcss.config.js",
 			"frontends/web/src/test/setup.ts",
+			// pnpm-workspace.yaml's patchedDependencies: a patch rewrites an
+			// installed dependency that any vitest file may load.
+			"frontends/web/patches/**",
 			// frontends/web installs sdk/ts as a workspace member: its manifest is
 			// part of web's lockfile and dependency graph.
 			"sdk/ts/package.json",
@@ -394,7 +397,7 @@ var rules = []rule{
 	{
 		id: "web-inert",
 		patterns: []string{
-			"frontends/web/.gitignore", "frontends/web/README.md", "frontends/web/eslint.config.js", "frontends/web/stylelint.config.js",
+			"frontends/web/.gitignore", "frontends/web/README.md", "frontends/web/eslint.config.js", "frontends/web/eslint-rules/**", "frontends/web/stylelint.config.js",
 			"frontends/web/playwright.config.ts", "frontends/web/playwright.visual.config.ts", "frontends/web/e2e/**",
 		},
 		note: "lint config and Playwright specs: no vitest file reads them (run Playwright separately)",

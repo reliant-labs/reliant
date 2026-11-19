@@ -8960,18 +8960,30 @@ type WorkflowConcurrency struct {
 	// per key, and each older one it replaces is recorded skipped with the
 	// detail "superseded", never failed. Running runs are never touched.
 	Waiting WorkflowConcurrencyWaiting `protobuf:"varint,2,opt,name=waiting,proto3,enum=reliant.v1.WorkflowConcurrencyWaiting" json:"waiting,omitempty"`
-	// Key groups waiting firings for waiting: latest, a template over `trigger`
-	// like a webhook dedupe_key, e.g. '{{ trigger.payload.attributes.repository }}'.
-	// Unset: every firing of the workflow shares one key. It only decides which
-	// waiting firings replace each other; the cap still bounds the whole
-	// workflow. A firing whose key cannot be rendered waits and is never
-	// superseded.
+	// Key groups firings, a template over `trigger` like a webhook dedupe_key,
+	// e.g. '{{ trigger.payload.attributes.repository }}'. Under waiting: latest
+	// it decides which waiting firings replace each other (unset: every firing
+	// of the workflow shares one key); with max_running_per_key it is the group
+	// whose running runs are capped. The workflow-wide cap still bounds the
+	// whole workflow. A firing whose key cannot be rendered waits, is never
+	// superseded, and counts only against the workflow-wide cap.
 	Key string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
 	// PerMember scales the cap with the trigger's machine pool: this many runs
 	// per member that can take work (dev-docs/design/machine-pools.md).
-	PerMember     uint32 `protobuf:"varint,4,opt,name=per_member,json=perMember,proto3" json:"per_member,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	PerMember uint32 `protobuf:"varint,4,opt,name=per_member,json=perMember,proto3" json:"per_member,omitempty"`
+	// Priority is a CEL expression over `trigger` (no {{ }}), evaluated once per
+	// firing when it starts waiting, that yields an integer. Waiting firings
+	// are admitted highest priority first, then in arrival order. Unset, or a
+	// firing whose expression fails to evaluate: priority 0. A low-priority
+	// firing can wait behind higher ones until it expires (a day).
+	Priority string `protobuf:"bytes,5,opt,name=priority,proto3" json:"priority,omitempty"`
+	// MaxRunningPerKey caps the running runs of one key (requires key), e.g. 1
+	// for one run per pull request. A waiting firing whose key is at its cap
+	// does not hold back firings of other keys behind it. Alone (no max_running
+	// or per_member), only the per-key cap applies.
+	MaxRunningPerKey uint32 `protobuf:"varint,6,opt,name=max_running_per_key,json=maxRunningPerKey,proto3" json:"max_running_per_key,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *WorkflowConcurrency) Reset() {
@@ -9028,6 +9040,20 @@ func (x *WorkflowConcurrency) GetKey() string {
 func (x *WorkflowConcurrency) GetPerMember() uint32 {
 	if x != nil {
 		return x.PerMember
+	}
+	return 0
+}
+
+func (x *WorkflowConcurrency) GetPriority() string {
+	if x != nil {
+		return x.Priority
+	}
+	return ""
+}
+
+func (x *WorkflowConcurrency) GetMaxRunningPerKey() uint32 {
+	if x != nil {
+		return x.MaxRunningPerKey
 	}
 	return 0
 }
@@ -9960,14 +9986,16 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x14WorkflowRequirements\x12\x14\n" +
 	"\x05tools\x18\x01 \x03(\tR\x05tools\x12\"\n" +
 	"\fintegrations\x18\x02 \x03(\tR\fintegrations\x12\x14\n" +
-	"\x05repos\x18\x03 \x03(\tR\x05repos\"\xa9\x01\n" +
+	"\x05repos\x18\x03 \x03(\tR\x05repos\"\xf4\x01\n" +
 	"\x13WorkflowConcurrency\x12\x1f\n" +
 	"\vmax_running\x18\x01 \x01(\rR\n" +
 	"maxRunning\x12@\n" +
 	"\awaiting\x18\x02 \x01(\x0e2&.reliant.v1.WorkflowConcurrencyWaitingR\awaiting\x12\x10\n" +
 	"\x03key\x18\x03 \x01(\tR\x03key\x12\x1d\n" +
 	"\n" +
-	"per_member\x18\x04 \x01(\rR\tperMember*\x9a\x01\n" +
+	"per_member\x18\x04 \x01(\rR\tperMember\x12\x1a\n" +
+	"\bpriority\x18\x05 \x01(\tR\bpriority\x12-\n" +
+	"\x13max_running_per_key\x18\x06 \x01(\rR\x10maxRunningPerKey*\x9a\x01\n" +
 	"\x1aWorkflowConcurrencyWaiting\x12,\n" +
 	"(WORKFLOW_CONCURRENCY_WAITING_UNSPECIFIED\x10\x00\x12%\n" +
 	"!WORKFLOW_CONCURRENCY_WAITING_FIFO\x10\x01\x12'\n" +

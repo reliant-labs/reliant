@@ -33,6 +33,7 @@ import { errorTextClass, hintClass, labelClass, textareaClass } from "./runFormS
 import { EMPTY_RUN_VALUE, type RunWorkflowValue } from "./runWorkflowValues";
 import "../config/config-panel.css";
 import * as chatActions from "@/hooks/chat-actions";
+import { runPath } from "@/lib/paths";
 
 /** What a test run was started with; "Run again" starts the next one with the same. */
 export interface TestRunRequest {
@@ -178,8 +179,7 @@ export function BuilderTestRunPanel({
               <div className="flex flex-wrap items-center gap-2">
                 {runState && <RunStatusBadge status={runState} size="md" />}
                 <Link
-                  to="/workflows/runs/$runId"
-                  params={{ runId: testChatId }}
+                  to={runPath(testChatId)}
                   className="text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Watch full run

@@ -224,7 +224,7 @@ export async function addTypeDefinitions(monaco: Monaco): Promise<void> {
       }
     `;
     
-    monaco.languages.typescript.typescriptDefaults.addExtraLib(
+    monaco.typescript.typescriptDefaults.addExtraLib(
       basicReactTypes,
       'file:///node_modules/@types/react/index.d.ts'
     );

@@ -24,6 +24,7 @@ import { RunWorkflowForm, type RunWorkflowFormStatus } from "./RunWorkflowForm";
 import { errorTextClass, hintClass, labelClass, textareaClass } from "./runFormStyles";
 import { EMPTY_RUN_VALUE, type RunWorkflowValue } from "./runWorkflowValues";
 import * as chatActions from "@/hooks/chat-actions";
+import { projectPath } from "@/lib/paths";
 
 export interface RunWorkflowDialogProps {
   open: boolean;
@@ -92,7 +93,7 @@ function RunWorkflowDialogBody({
       return;
     }
     await loadRunContext(chat.id);
-    await navigate({ to: "/project/$projectId", params: { projectId: chat.projectId }, search: {} });
+    await navigate({ to: projectPath(chat.projectId), search: {} });
   };
 
   const onSubmit = async (event: FormEvent) => {

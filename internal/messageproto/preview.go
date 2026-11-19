@@ -302,8 +302,8 @@ func shortenStrings(v any, limit int) any {
 // tell a finished call from a running one.
 //
 // In every mode a REDACTED_THINKING block's content is blanked
-// (db.ProviderOnlyContent), in the blocks at the top level and under
-// "message" alike. New updates are written blank; this also covers the rows
+// (db.ProviderOnlyContent), in every block list a client reads (blockLists:
+// both levels, both field spellings). New updates are written blank; this also covers the rows
 // written before they were. Whether a payload holds such a block is decided
 // by decoding it (holdsSealedBlock), never by searching its bytes: JSON spells
 // one block many ways ("type":8, "type": 8, "type":8.0, escaped keys), and a
@@ -313,9 +313,7 @@ func shortenStrings(v any, limit int) any {
 // not a payload this understands.
 func PreviewMessageUpdate(raw []byte, mode reliantv1.ToolBodyMode) []byte {
 	stub := mode == reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB
-	// Without the literal key and without a single escape, no key in raw can
-	// decode to "content_blocks", so there are no blocks.
-	if !bytes.Contains(raw, []byte(`content_blocks`)) && bytes.IndexByte(raw, '\\') < 0 {
+	if !mayHoldBlocks(raw) {
 		return raw
 	}
 	sealed := holdsSealedBlock(raw)
@@ -392,23 +390,43 @@ func PreviewMessageUpdate(raw []byte, mode reliantv1.ToolBodyMode) []byte {
 	return out
 }
 
-// blockLists is every content_blocks list a client may read in a decoded
-// message update: the top level's, and the one under "message".
-func blockLists(payload map[string]any) [][]any {
-	var lists [][]any
-	if blocks, ok := payload["content_blocks"].([]any); ok {
-		lists = append(lists, blocks)
+// blockListKeys are the keys a client reads a message's blocks under: the
+// SDK decodes a message update with protobuf-es fromJson, which takes a field
+// by its proto name and by its JSON name, and appends both lists.
+var blockListKeys = []string{"content_blocks", "contentBlocks"}
+
+// mayHoldBlocks reports whether a key in raw could decode to one of
+// blockListKeys. Without either literal key and without a single escape, none
+// can, so raw holds no blocks.
+func mayHoldBlocks(raw []byte) bool {
+	for _, k := range blockListKeys {
+		if bytes.Contains(raw, []byte(k)) {
+			return true
+		}
 	}
+	return bytes.IndexByte(raw, '\\') >= 0
+}
+
+// blockLists is every block list a client may read in a decoded message
+// update: under each of blockListKeys, at the top level and under "message".
+func blockLists(payload map[string]any) [][]any {
+	levels := []map[string]any{payload}
 	if wrapped, ok := payload["message"].(map[string]any); ok {
-		if blocks, ok := wrapped["content_blocks"].([]any); ok {
-			lists = append(lists, blocks)
+		levels = append(levels, wrapped)
+	}
+	var lists [][]any
+	for _, level := range levels {
+		for _, k := range blockListKeys {
+			if blocks, ok := level[k].([]any); ok {
+				lists = append(lists, blocks)
+			}
 		}
 	}
 	return lists
 }
 
 // holdsSealedBlock reports whether a message update holds a REDACTED_THINKING
-// block (isSealedBlockType) with non-empty content, in either block list
+// block (isSealedBlockType) with non-empty content, in any block list
 // blockLists names. It decodes the payload with keys matched exactly, as a
 // client's JSON.parse matches them, so no spelling of the JSON can hide a
 // block from it. Like the full decode in PreviewMessageUpdate it reads the
@@ -420,17 +438,22 @@ func holdsSealedBlock(raw []byte) bool {
 	if json.NewDecoder(bytes.NewReader(raw)).Decode(&top) != nil {
 		return false
 	}
-	if blocksHoldSealed(top["content_blocks"]) {
-		return true
-	}
+	levels := []map[string]json.RawMessage{top}
 	var wrapped map[string]json.RawMessage
 	if m, ok := top["message"]; ok && json.Unmarshal(m, &wrapped) == nil {
-		return blocksHoldSealed(wrapped["content_blocks"])
+		levels = append(levels, wrapped)
+	}
+	for _, level := range levels {
+		for _, k := range blockListKeys {
+			if blocksHoldSealed(level[k]) {
+				return true
+			}
+		}
 	}
 	return false
 }
 
-// blocksHoldSealed is holdsSealedBlock for one content_blocks value. Each
+// blocksHoldSealed is holdsSealedBlock for one block list's value. Each
 // element is decoded on its own, so one that is not an object hides nothing.
 func blocksHoldSealed(raw json.RawMessage) bool {
 	var blocks []json.RawMessage
@@ -454,12 +477,17 @@ func blocksHoldSealed(raw json.RawMessage) bool {
 }
 
 // isSealedBlockType reports whether a decoded block "type" may name
-// REDACTED_THINKING to a client, erring wide: any JSON number equal to it
-// (8, 8.0, 8e0), its enum name or the name without its prefix in any case,
-// or a string holding such a number. A false positive only blanks a block's
-// content; a false negative ships ciphertext.
+// REDACTED_THINKING to a client (mayNameBlockType).
 func isSealedBlockType(v any) bool {
-	want := reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING
+	return mayNameBlockType(v, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING)
+}
+
+// mayNameBlockType reports whether a decoded block "type" may name want to a
+// client, erring wide: any JSON number equal to it (8, 8.0, 8e0), its enum
+// name or the name without its prefix in any case, or a string holding such
+// a number. It is for decisions that withhold a body, where a false positive
+// only withholds and a false negative discloses.
+func mayNameBlockType(v any, want reliantv1.ContentBlockType) bool {
 	var number string
 	switch t := v.(type) {
 	case float64:

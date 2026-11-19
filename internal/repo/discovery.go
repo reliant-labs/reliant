@@ -102,13 +102,14 @@ type Discovery struct {
 // not answer inside its caller's deadline. The bounds hold within one
 // directory as well as across them: a directory is listed in batches, never
 // further than the budget could visit (walkBounds.list), so one very wide
-// directory cannot stall the walk. Remotes are read from each
+// directory cannot hold the walk past its bounds. (A single read blocked in
+// the kernel still can: see walkReadBatch.) Remotes are read from each
 // repository's config file, never by running git.
 //
 // An empty result is not an error: a project may legitimately contain no
 // git repos (e.g. a docs folder), and project init must still succeed.
 func Discover(ctx context.Context, projectPath string, opts Options) (Discovery, error) {
-	return discoverWith(ctx, projectPath, opts, openDir)
+	return discoverWith(ctx, projectPath, opts, openDir, time.Now)
 }
 
 // openDir opens a directory for listing: os.Open, as a dirOpener.
@@ -119,8 +120,9 @@ func openDir(name string) (fs.File, error) { return os.Open(name) }
 // through.
 type dirOpener func(name string) (fs.File, error)
 
-// discoverWith is Discover, listing directories through open.
-func discoverWith(ctx context.Context, projectPath string, opts Options, open dirOpener) (Discovery, error) {
+// discoverWith is Discover, listing directories through open and reading the
+// time for its deadline from now.
+func discoverWith(ctx context.Context, projectPath string, opts Options, open dirOpener, now func() time.Time) (Discovery, error) {
 	maxDepth := opts.MaxDepth
 	if maxDepth <= 0 {
 		maxDepth = DefaultMaxDepth
@@ -154,7 +156,7 @@ func discoverWith(ctx context.Context, projectPath string, opts Options, open di
 	rootIsGit := isGitDir(abs)
 
 	w := &discoverWalk{
-		walkBounds: walkBounds{ctx: ctx, deadline: opts.Deadline, maxEntries: maxEntries},
+		walkBounds: walkBounds{ctx: ctx, deadline: opts.Deadline, now: now, maxEntries: maxEntries},
 		open:       open,
 		abs:        abs,
 		maxDepth:   maxDepth,

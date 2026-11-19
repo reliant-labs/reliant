@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * A statement editor for sql and postgres panels: Monaco (already in the
- * bundle for the file viewer, loaded on first use here), with a monospace
+ * A statement editor for sql and postgres panels: Monaco (the same lazy
+ * chunk as the file viewer's, loaded on first use), with a monospace
  * textarea standing in while it loads, so the statement is editable at once.
  *
  *   ⌘/Ctrl+Enter   runs the statement (`onRun`)
@@ -11,13 +11,12 @@
  *                  author is typing.
  */
 
-import { forwardRef, lazy, Suspense, useEffect, useImperativeHandle, useRef, type Ref } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import type { OnMount } from "@monaco-editor/react";
 
+import { MonacoEditor } from "@/components/shared/MonacoEditor";
 import { configureMonacoTheme, getCurrentMonacoTheme, MONACO_FONT_FAMILY } from "@/lib/monacoTheme";
 import { cn } from "@/lib/utils";
-
-const MonacoEditor = lazy(() => import("@monaco-editor/react").then((m) => ({ default: m.Editor })));
 
 export interface QueryEditorHandle {
   insert: (text: string) => void;
@@ -100,40 +99,38 @@ export const QueryEditor = forwardRef(function QueryEditor({ value, onChange, on
 
   return (
     <div className={cn(FRAME)} data-testid={testId ? `${testId}-frame` : undefined}>
-      <Suspense fallback={fallback}>
-        <MonacoEditor
-          height={HEIGHT}
-          language={language}
-          value={value}
-          theme={getCurrentMonacoTheme()}
-          loading={fallback}
-          onChange={(next) => latest.current.onChange(next ?? "")}
-          onMount={(instance, monaco) => {
-            editor.current = instance;
-            namespace.current = monaco;
-            configureMonacoTheme(monaco);
-            monaco.editor.setTheme(getCurrentMonacoTheme());
-            instance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => latest.current.onRun?.());
-          }}
-          options={{
-            readOnly,
-            ariaLabel: label,
-            minimap: { enabled: false },
-            lineNumbers: "off",
-            folding: false,
-            glyphMargin: false,
-            lineDecorationsWidth: 8,
-            scrollBeyondLastLine: false,
-            wordWrap: "on",
-            fontFamily: MONACO_FONT_FAMILY,
-            fontSize: 12,
-            renderLineHighlight: "none",
-            overviewRulerLanes: 0,
-            automaticLayout: true,
-            padding: { top: 8, bottom: 8 },
-          }}
-        />
-      </Suspense>
+      <MonacoEditor
+        height={HEIGHT}
+        language={language}
+        value={value}
+        theme={getCurrentMonacoTheme()}
+        loading={fallback}
+        onChange={(next) => latest.current.onChange(next ?? "")}
+        onMount={(instance, monaco) => {
+          editor.current = instance;
+          namespace.current = monaco;
+          configureMonacoTheme(monaco);
+          monaco.editor.setTheme(getCurrentMonacoTheme());
+          instance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => latest.current.onRun?.());
+        }}
+        options={{
+          readOnly,
+          ariaLabel: label,
+          minimap: { enabled: false },
+          lineNumbers: "off",
+          folding: false,
+          glyphMargin: false,
+          lineDecorationsWidth: 8,
+          scrollBeyondLastLine: false,
+          wordWrap: "on",
+          fontFamily: MONACO_FONT_FAMILY,
+          fontSize: 12,
+          renderLineHighlight: "none",
+          overviewRulerLanes: 0,
+          automaticLayout: true,
+          padding: { top: 8, bottom: 8 },
+        }}
+      />
     </div>
   );
 });

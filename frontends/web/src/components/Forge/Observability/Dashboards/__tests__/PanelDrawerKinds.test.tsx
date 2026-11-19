@@ -25,8 +25,8 @@ import { starterPanel, VISUALIZATIONS } from "../panelBuilder";
 
 vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
 // Monaco loads from a CDN in the app; here the editor is a textarea with Monaco's props.
-vi.mock("@monaco-editor/react", () => ({
-  Editor: ({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { ariaLabel: string } }) => (
+vi.mock("@/components/shared/MonacoEditor", () => ({
+  MonacoEditor: ({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { ariaLabel: string } }) => (
     <textarea aria-label={options.ariaLabel} value={value} onChange={(e) => onChange(e.target.value)} />
   ),
 }));

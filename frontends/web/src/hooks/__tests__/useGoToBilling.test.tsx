@@ -32,8 +32,7 @@ describe("useGoToBilling", () => {
     act(() => result.current());
 
     expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/settings/$section",
-      params: { section: "billing" },
+      to: "/settings/billing",
       search: { tab: "plans", from: "chat", returnTo: "/chat/c1" },
     });
     // The /upgrade interstitial is gone: the ask now happens at purchase.
@@ -59,8 +58,7 @@ describe("useGoToBilling", () => {
 
     expect(mockNavigate).toHaveBeenCalledWith(
       expect.objectContaining({
-        to: "/settings/$section",
-        params: { section: "billing" },
+        to: "/settings/billing",
         search: expect.objectContaining({ tab: "plans", from: "onboarding" }),
       }),
     );

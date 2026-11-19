@@ -33,7 +33,12 @@ const org = (id: string, name: string, isDefault = false) => ({ id, name, slug: 
 const ACME = org("acme", "Acme", true);
 const GLOBEX = org("globex", "Globex");
 const MAP = new Map([["m-acme", "acme"], ["m-globex", "globex"], ["m-legacy", ""]]);
-const machine = (daemonId: string) => ({ daemonId, hostname: daemonId, name: daemonId, status: DaemonStatus.ACTIVE });
+// A machine named by its owner: "m-acme" is called "acme-box". (A name equal
+// to the id is a placeholder the UI does not show; lib/machineName pins that.)
+const machine = (daemonId: string) => {
+  const name = `${daemonId.replace(/^m-/, "")}-box`;
+  return { daemonId, hostname: `${name}.local`, name, status: DaemonStatus.ACTIVE };
+};
 
 describe("machineOrgId / machinesInOrg", () => {
   it("names a machine's org, the default for one recorded before orgs, and nothing for an unknown one", () => {
@@ -72,7 +77,7 @@ describe("MachineSelect with orgs", () => {
     renderWithQuery(
       <MachineSelect machines={["m-acme", "m-globex", "m-legacy"].map(machine)} value="m-globex" onChange={() => {}} />,
     );
-    await waitFor(() => expect(options()).toEqual(["m-globex · online · Globex"]));
+    await waitFor(() => expect(options()).toEqual(["globex-box · online · Globex"]));
   });
 
   it("changes nothing for a person with one org, and asks the control plane nothing", async () => {
@@ -81,7 +86,7 @@ describe("MachineSelect with orgs", () => {
       <MachineSelect machines={["m-acme", "m-globex"].map(machine)} value="m-acme" onChange={() => {}} />,
     );
     await waitFor(() => expect(listMyOrganizations).toHaveBeenCalled());
-    expect(options()).toEqual(["m-acme · online", "m-globex · online"]);
+    expect(options()).toEqual(["acme-box · online", "globex-box · online"]);
     expect(listMachineOrgs).not.toHaveBeenCalled();
   });
 

@@ -14,7 +14,9 @@
  * it just makes the bundle heavy. This walks the real `import ... from`
  * graph from each mobile workflow entry point and fails if it ever reaches
  * a file that imports `monaco-editor` or `@monaco-editor/*` as a VALUE
- * (type-only imports are erased by the bundler and don't count).
+ * (type-only imports are erased by the bundler and don't count), or
+ * `lib/monacoManager`, which loads the bundled Monaco lazily and is the only
+ * way to it (lib/__tests__/monacoImports.guard.test.ts).
  */
 
 import { describe, expect, it } from "vitest";
@@ -39,7 +41,7 @@ const ENTRY_POINTS = [
 const VALUE_IMPORT_RE = /^import\s+(?!type\s)(?:[^;]*?from\s+)?['"]([^'"]+)['"]/gm;
 
 function resolveImport(fromFile: string, spec: string): string | null {
-  if (spec.startsWith("monaco-editor") || spec.startsWith("@monaco-editor")) {
+  if (spec.startsWith("monaco-editor") || spec.startsWith("@monaco-editor") || /(^|\/)monacoManager$/.test(spec)) {
     return "__MONACO__";
   }
   if (!spec.startsWith(".")) return null; // external package, not our source
