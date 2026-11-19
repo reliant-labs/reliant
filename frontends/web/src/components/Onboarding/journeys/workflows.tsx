@@ -24,6 +24,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 
+import { CHAT_SHELL_PREFIXES } from "../../../lib/chatRoute";
 import { reliantAppOrigin } from "../../../lib/shell";
 import { useProjectStore } from "../../../store/projectStore";
 import { useTourStore } from "../../../store/tourStore";
@@ -244,6 +245,8 @@ export const workflowsJourney: Journey = {
       ],
       route: {
         path: "/project/",
+        // The chat shell, open on a chat or a draft, is the same page (lib/chatRoute.ts).
+        alsoAt: CHAT_SHELL_PREFIXES,
         open: () => {
           const projectId = useProjectStore.getState().currentProject?.id;
           return projectId ? { to: projectPath(projectId) } : { to: homePath() };

@@ -31,6 +31,8 @@ import { RightSidebar } from "./components/FileBrowser/RightSidebar";
 import { GlobalSearch, FindReplace } from "./components/FileBrowser";
 import { QuickFileOpen } from "./components/Layout/QuickFileOpen";
 import { HomeNewChat } from "./components/Apps/HomeNewChat";
+import { ChatRouteNotice } from "./components/Chat/ChatRouteNotice";
+import { useChatRoute } from "./hooks/useChatRoute";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { approveAllPendingApprovals, pendingApprovalBatch, type Approval } from "./hooks/approval-queries";
 import type { ApprovalBatchPlan } from "./lib/approvalCard";
@@ -1289,9 +1291,26 @@ function App() {
     // In Electron, skip project restoration - let useWindowContext handle it.
     // Also skip if the URL deep-links to a specific project (`/project/$projectId`) —
     // ProjectFilterRouteSync owns project selection in that case so we
-    // don't race lastProjectId vs the URL.
+    // don't race lastProjectId vs the URL. A chat's URL (`/c/<id>`) opens
+    // that chat and its project itself (useWorkspaceRestore, step 0).
     skipProjectRestore: isElectron || Boolean(routeProjectId),
   });
+
+  // The open chat, its thread and the new-chat view follow the URL; the
+  // right panel and Detailed mode are kept in it (hooks/useChatRoute.ts).
+  const chatRoute = useChatRoute({
+    ready: isBackendReady && !isWorkspaceRestoring,
+    panelOpen: showFileBrowser,
+    setPanelOpen: setShowFileBrowser,
+    projectId: currentProject?.id ?? null,
+    worktreeId: currentWorktree?.id ?? null,
+  });
+  const { thread: routeThread, onSelectThread: onSelectRouteThread } = chatRoute;
+  const routedThread = useMemo(
+    () => (routeThread ? { ...routeThread, onSelectThread: onSelectRouteThread } : null),
+    [routeThread, onSelectRouteThread],
+  );
+  const routeNotice = chatRoute.data?.kind === "missing" || chatRoute.data?.kind === "error" ? chatRoute.data.kind : null;
 
   // With projects but none in context (the last one was removed in another
   // window, a restore that found nothing), open the most recent one: the
@@ -1517,10 +1536,13 @@ function App() {
         <div className="flex-1 overflow-hidden min-h-0">
           {/* NOTE: Using overflow-hidden instead of overflow-auto to allow sticky positioning to work in ChatMessagesContainer */}
           <div className="h-full overflow-hidden min-h-0">
-            {activeChatId ? (
+            {routeNotice ? (
+              <ChatRouteNotice kind={routeNotice} />
+            ) : activeChatId ? (
               <ChatInterface
                 tabId={activeChatId}
                 onNavigateToWorktrees={noopNavigateWorktrees}
+                routedThread={routedThread}
               />
             ) : (
               <HomeNewChat onNavigateToWorktrees={noopNavigateWorktrees} />

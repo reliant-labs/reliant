@@ -11,17 +11,28 @@ import { NewChatView } from "./NewChatView";
 import { useActiveChatId, useActiveChat, useChat } from "../../store/chatStoreHooks";
 import { logger } from "../../lib/logger";
 
+/** The thread a host's route opens, for the chat it names (hooks/useChatRoute.ts). */
+export interface RoutedThread {
+  chatId: string;
+  /** null: all threads. */
+  threadId: string | null;
+  onSelectThread: (threadId: string | null) => void;
+}
+
 interface ChatInterfaceProps {
   onNavigateToWorktrees?: () => void;
   paneId?: string;
   worktreeId?: string;
   tabId?: string;  // Legacy - ignored in new implementation
   isFocused?: boolean;
+  /** The URL's thread: given to the chat it belongs to only, and controls its thread selection. */
+  routedThread?: RoutedThread | null;
 }
 
 export function ChatInterface({
   onNavigateToWorktrees,
   isFocused = true,
+  routedThread = null,
 }: ChatInterfaceProps = {}) {
   // Get active chat from navigation queue
   const activeChatId = useActiveChatId();
@@ -50,8 +61,8 @@ export function ChatInterface({
   const shownChatId = useDeferredValue(activeChatId);
   const shownChat = useChat(shownChatId ?? undefined);
   const shownView = useMemo(
-    () => shownChatId ? chatView(shownChatId, isFocused) : null,
-    [shownChatId, isFocused],
+    () => shownChatId ? chatView(shownChatId, isFocused, routedThread) : null,
+    [shownChatId, isFocused, routedThread],
   );
 
   // If no active chat, show new chat view
@@ -74,7 +85,7 @@ export function ChatInterface({
   // from the new-chat view, or the previous chat is gone) the active chat,
   // rendered at once as before.
   if (shownView && shownChat) return shownView;
-  return chatView(activeChatId, isFocused);
+  return chatView(activeChatId, isFocused, routedThread);
 }
 
 // IMPORTANT: key={chatId} forces React to create a new ChatContainer instance
@@ -85,13 +96,17 @@ export function ChatInterface({
 // `data-context="chat-view"`: a conversation is on screen, which is what
 // makes Cmd+F search it (lib/keyboard/contexts). The new-chat view above
 // has nothing to search, so there Cmd+F stays the browser's.
-function chatView(chatId: string, isFocused: boolean) {
+function chatView(chatId: string, isFocused: boolean, routedThread: RoutedThread | null) {
+  // The deferred chat may still be the previous one: the URL's thread is only ever its own chat's.
+  const thread = routedThread?.chatId === chatId ? routedThread : null;
   return (
     <div className="h-full w-full min-h-0" data-context="chat-view">
       <ChatContainer
         key={chatId}
         tabId={chatId}  // Use chatId as tabId for compatibility
         isFocused={isFocused}
+        selectedThreadId={thread ? thread.threadId : undefined}
+        onSelectThread={thread?.onSelectThread}
       />
     </div>
   );

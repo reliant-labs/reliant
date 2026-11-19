@@ -16,6 +16,9 @@
  *
  * What does NOT forward, and stays where it is, each for a reason:
  *
+ *   - a chat's (`/c/<id>`, and a thread of it): the chat names its own org
+ *     (`Chat.org_id`), and its route's loader redirects there
+ *     (lib/chatRouteResolve.ts), not into the tab's.
  *   - links that name a resource by id or by app name: `/project/<id>`,
  *     `/workflows/runs/<id>`, `/workflows/automations/<id>`, `/forge/p/<app>`,
  *     `/forge?project=`, `/forge/env/<env>?forgeProject=`, and the org
@@ -43,6 +46,8 @@ const FORWARDED = new Set([
   "/workflows/runs",
   "/workflows/automations",
   "/workflow/new",
+  // The new-chat view (R3): its draft context is its search, kept by the forward.
+  "/new",
 ]);
 
 /** The query keys that name an app: a link carrying one is the resolver's (U4). */
