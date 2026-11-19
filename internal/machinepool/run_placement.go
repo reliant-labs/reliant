@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
-	"strings"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
@@ -18,9 +16,10 @@ import (
 type RunStore interface {
 	Store
 	GetMachinePoolByName(ctx context.Context, userID, name string) (*core.MachinePool, error)
-	// ListLabelledMachines is the owner's machines whose durable labels
-	// contain labels, LiveRuns counting every live run placed on each.
-	ListLabelledMachines(ctx context.Context, userID string, labels map[string]string, projectID string) ([]core.MachinePoolMemberRow, error)
+	// ListChatHeldPoolMembers is the members of poolID on which chatID
+	// already holds a live run (a trigger placed the chat there, or a live
+	// placement of one of its runs is there): each holds the chat's one slot.
+	ListChatHeldPoolMembers(ctx context.Context, poolID, chatID string) ([]string, error)
 	// GetRunMachinePlacement is core.ErrRunMachinePlacementNotFound when
 	// nothing is recorded.
 	GetRunMachinePlacement(ctx context.Context, workflowID, scope string) (*core.RunMachinePlacement, error)
@@ -31,7 +30,7 @@ type RunStore interface {
 }
 
 // RunPlacer places a workflow's run, or one node of it, on a member of a
-// machine pool or on a machine matching durable labels: the same Decide and
+// machine pool: the same Decide and
 // slot guard a pool-bound trigger's launch uses, recorded so the answer never
 // moves.
 type RunPlacer struct {
@@ -70,8 +69,8 @@ type RunRequest struct {
 // chosen member's last slot (MemberBusy), as a trigger's launch does.
 const runPlaceAttempts = 3
 
-// ErrInvalidRunRequest is a request that names no run, or not exactly one
-// of a pool and labels. The runtime never sends one; it is not retried.
+// ErrInvalidRunRequest is a request that names no run or no pool. The
+// runtime never sends one; it is not retried.
 var ErrInvalidRunRequest = errors.New("invalid run placement request")
 
 // PlaceRun places req once and records it. Asking again for the same
@@ -82,11 +81,12 @@ var ErrInvalidRunRequest = errors.New("invalid run placement request")
 // transaction with the record (the pool's row lock orders concurrent
 // placements), and a lost race re-places, up to runPlaceAttempts; Queue
 // waits, with why; Wake asks for the member to wake and waits (wake, then
-// place). A workflow-level placement on the pool a trigger placed the chat on
-// stays on that member. An unknown pool wraps core.ErrMachinePoolNotFound.
-//
-// Labels: the same over the owner's machines whose durable labels contain
-// them, an unnamed pool with no per-member bound.
+// place). A member on which the run's chat already holds a live run (its
+// trigger placed it there, or an earlier placement of the run, workflow- or
+// node-level, is there) is preferred and admits it with no extra slot: a
+// chat counts once among a member's live runs, so a second placement of the
+// same chat must never wait on the slot the chat itself holds. An unknown
+// pool wraps core.ErrMachinePoolNotFound.
 func (p *RunPlacer) PlaceRun(ctx context.Context, req RunRequest) (PlaceRunOutput, error) {
 	if err := req.validate(); err != nil {
 		return PlaceRunOutput{}, err
@@ -98,20 +98,15 @@ func (p *RunPlacer) PlaceRun(ctx context.Context, req RunRequest) (PlaceRunOutpu
 	case !errors.Is(err, core.ErrRunMachinePlacementNotFound):
 		return PlaceRunOutput{}, fmt.Errorf("read placement of %s/%q: %w", req.WorkflowID, req.Scope, err)
 	}
-	if req.Pool != "" {
-		return p.placeOnPool(ctx, req)
-	}
-	return p.placeOnLabels(ctx, req)
+	return p.placeOnPool(ctx, req)
 }
 
 func (r RunRequest) validate() error {
 	switch {
 	case r.WorkflowID == "" || r.ChatID == "" || r.UserID == "":
 		return fmt.Errorf("%w: a placement names its workflow, chat and owner", ErrInvalidRunRequest)
-	case r.Pool != "" && len(r.Labels) > 0:
-		return fmt.Errorf("%w: a pool and labels are exclusive", ErrInvalidRunRequest)
-	case r.Pool == "" && len(r.Labels) == 0:
-		return fmt.Errorf("%w: a pool or labels to place on", ErrInvalidRunRequest)
+	case r.Pool == "":
+		return fmt.Errorf("%w: a placement names its pool", ErrInvalidRunRequest)
 	}
 	return nil
 }
@@ -127,6 +122,18 @@ func (p *RunPlacer) placeOnPool(ctx context.Context, req RunRequest) (PlaceRunOu
 		if err != nil {
 			return PlaceRunOutput{}, err
 		}
+		held, err := p.heldMembers(ctx, req, pool)
+		if err != nil {
+			return PlaceRunOutput{}, err
+		}
+		members = withoutOwnSlot(members, held)
+		if m, ok := preferHeld(pool, members, held); ok {
+			out, err := p.record(ctx, req, pool, m, p.chatSlotGuard(pool, m, req))
+			if errors.Is(err, errMemberBusy) {
+				continue
+			}
+			return out, err
+		}
 		if m, ok := stickyMember(req, pool, members); ok {
 			// The chat's run is already on m: record it there, never split
 			// it from its checkout. The chat holds its slot already (live
@@ -137,7 +144,7 @@ func (p *RunPlacer) placeOnPool(ctx context.Context, req RunRequest) (PlaceRunOu
 		if d.Kind != Run {
 			return p.wait(ctx, pool, d), nil
 		}
-		out, err := p.record(ctx, req, pool, d.Member, p.SlotGuard(pool, d.Member))
+		out, err := p.record(ctx, req, pool, d.Member, p.chatSlotGuard(pool, d.Member, req))
 		if errors.Is(err, errMemberBusy) {
 			continue
 		}
@@ -147,38 +154,94 @@ func (p *RunPlacer) placeOnPool(ctx context.Context, req RunRequest) (PlaceRunOu
 		Reason: WaitingPrefix + pool.Name + " (every free member was taken by a concurrent placement)"}, nil
 }
 
-func (p *RunPlacer) placeOnLabels(ctx context.Context, req RunRequest) (PlaceRunOutput, error) {
-	members, err := p.labelledMembers(ctx, req)
+// heldMembers is the set of pool's members on which the run's chat already
+// holds a live run: its trigger's member, and its runs' live placements.
+func (p *RunPlacer) heldMembers(ctx context.Context, req RunRequest, pool Pool) (map[string]bool, error) {
+	ids, err := p.runs.ListChatHeldPoolMembers(ctx, pool.ID, req.ChatID)
 	if err != nil {
-		return PlaceRunOutput{}, err
+		return nil, fmt.Errorf("read the members chat %s holds in pool %s: %w", req.ChatID, pool.Name, err)
 	}
-	pool := Pool{UserID: req.UserID, Name: LabelsPoolName(req.Labels), Selector: req.Labels}
-	d := Decide(pool, members)
-	if d.Kind != Run {
-		return p.wait(ctx, pool, d), nil
+	held := make(map[string]bool, len(ids)+1)
+	for _, id := range ids {
+		held[id] = true
 	}
-	return p.record(ctx, req, pool, d.Member, nil)
+	if req.ChatPoolID != "" && req.ChatPoolID == pool.ID && req.ChatDaemonID != "" {
+		held[req.ChatDaemonID] = true
+	}
+	return held, nil
 }
 
-func (p *RunPlacer) labelledMembers(ctx context.Context, req RunRequest) ([]Member, error) {
-	rows, err := p.runs.ListLabelledMachines(ctx, req.UserID, req.Labels, req.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	members := make([]Member, 0, len(rows))
-	for _, r := range rows {
-		m, err := memberFromRow(r)
-		if err != nil {
-			return nil, err
+// withoutOwnSlot is members with the chat's own slot taken off each member
+// it holds: placing the chat there again takes no extra slot, so Decide must
+// not see that member as full of the chat itself.
+func withoutOwnSlot(members []Member, held map[string]bool) []Member {
+	out := make([]Member, len(members))
+	for i, m := range members {
+		if held[m.DaemonID] && m.LiveRuns > 0 {
+			m.LiveRuns--
 		}
-		members = append(members, m)
+		out[i] = m
 	}
-	return members, nil
+	return out
+}
+
+// preferHeld is a member the chat already holds that could take the run now
+// (Decide's Run rules: eligible, connected, verified, a slot free once the
+// chat's own is not counted twice), least loaded first.
+func preferHeld(pool Pool, members []Member, held map[string]bool) (Member, bool) {
+	if len(held) == 0 {
+		return Member{}, false
+	}
+	expected := ExpectedCatalog(members)
+	var runnable []Member
+	for _, m := range sortedByName(members) {
+		if !held[m.DaemonID] || ineligible(m, expected) != "" || m.Phase != PhaseConnected || !m.Verified {
+			continue
+		}
+		if pool.MaxRunsPerMember > 0 && m.LiveRuns >= pool.MaxRunsPerMember {
+			continue
+		}
+		runnable = append(runnable, m)
+	}
+	if len(runnable) == 0 {
+		return Member{}, false
+	}
+	return leastLoaded(runnable), true
+}
+
+// chatSlotGuard is SlotGuard for a placement of req's chat: under the pool's
+// row lock it counts member's live runs, unless the chat already holds a live
+// run there (heldMembers, read again under the lock): a chat counts once, and
+// keeps that slot.
+func (p *RunPlacer) chatSlotGuard(pool Pool, member Member, req RunRequest) func(ctx context.Context) (string, error) {
+	return func(ctx context.Context) (string, error) {
+		if err := p.runs.LockMachinePool(ctx, pool.ID); err != nil {
+			return "", fmt.Errorf("lock machine pool %s: %w", pool.Name, err)
+		}
+		if pool.MaxRunsPerMember <= 0 {
+			return "", nil
+		}
+		held, err := p.heldMembers(ctx, req, pool)
+		if err != nil {
+			return "", err
+		}
+		if held[member.DaemonID] {
+			return "", nil
+		}
+		n, err := p.runs.CountMachinePoolMemberLiveRuns(ctx, pool.ID, member.DaemonID)
+		if err != nil {
+			return "", err
+		}
+		if n >= pool.MaxRunsPerMember {
+			return MemberBusy, nil
+		}
+		return "", nil
+	}
 }
 
 // stickyMember is the member a trigger placed the chat on, when this is the
 // run's workflow-level placement on that same pool and the machine is still
-// one of its members.
+// one of its members, even one that cannot take new work now.
 func stickyMember(req RunRequest, pool Pool, members []Member) (Member, bool) {
 	if req.Scope != "" || req.ChatPoolID == "" || req.ChatPoolID != pool.ID || req.ChatDaemonID == "" {
 		return Member{}, false
@@ -261,13 +324,9 @@ func named(out PlaceRunOutput, pool Pool) PlaceRunOutput {
 func (p *RunPlacer) answerRecorded(ctx context.Context, req RunRequest, rec *core.RunMachinePlacement) PlaceRunOutput {
 	out := PlaceRunOutput{DaemonID: rec.DaemonID}
 	var rows []core.MachinePoolMemberRow
-	if req.Pool != "" {
-		out.PoolID, out.PoolName = rec.MachinePoolID, req.Pool
-		if row, err := p.runs.GetMachinePoolByName(ctx, req.UserID, req.Pool); err == nil {
-			rows, _ = p.runs.ListMachinePoolMembers(ctx, row, req.ProjectID)
-		}
-	} else {
-		rows, _ = p.runs.ListLabelledMachines(ctx, req.UserID, req.Labels, req.ProjectID)
+	out.PoolID, out.PoolName = rec.MachinePoolID, req.Pool
+	if row, err := p.runs.GetMachinePoolByName(ctx, req.UserID, req.Pool); err == nil {
+		rows, _ = p.runs.ListMachinePoolMembers(ctx, row, req.ProjectID)
 	}
 	for _, r := range rows {
 		if r.DaemonID == rec.DaemonID {
@@ -275,15 +334,4 @@ func (p *RunPlacer) answerRecorded(ctx context.Context, req RunRequest, rec *cor
 		}
 	}
 	return out
-}
-
-// LabelsPoolName names the unnamed pool a labels-only selector places on, in
-// reasons: "labelled os=linux, size=2xl".
-func LabelsPoolName(labels map[string]string) string {
-	pairs := make([]string, 0, len(labels))
-	for k, v := range labels {
-		pairs = append(pairs, k+"="+v)
-	}
-	sort.Strings(pairs)
-	return "labelled " + strings.Join(pairs, ", ")
 }

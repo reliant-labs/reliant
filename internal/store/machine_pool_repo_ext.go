@@ -189,6 +189,27 @@ func memberLiveRunsSQL(daemonExpr, poolExpr string) string {
 ) live)`
 }
 
+// ListChatHeldPoolMembers is the members of poolID on which chatID already
+// holds a live run, by the same predicates memberLiveRunsSQL counts: the
+// member a pool-bound trigger placed the chat on while its root run is live,
+// and the members its live run placements are on. A chat counts once among a
+// member's live runs, so placing it there again takes no extra slot.
+func ListChatHeldPoolMembers(ctx context.Context, db orm.Context, poolID, chatID string) ([]string, error) {
+	var ids []string
+	err := db.Bun().NewRaw(`
+SELECT DISTINCT held.daemon_id FROM (
+    SELECT ch.active_daemon_id AS daemon_id FROM chats ch
+    WHERE ch.id = ?1 AND ch.machine_pool_id = ?0 AND ch.active_daemon_id IS NOT NULL AND `+liveRootSQL+`
+    UNION ALL
+    SELECT p.daemon_id FROM run_machine_placements p
+    WHERE p.chat_id = ?1 AND p.machine_pool_id = ?0 AND `+livePlacementSQL+`
+) held ORDER BY held.daemon_id`, poolID, chatID).Scan(ctx, &ids)
+	if err != nil {
+		return nil, fmt.Errorf("list the members of pool %s chat %s holds: %w", poolID, chatID, err)
+	}
+	return ids, nil
+}
+
 // CountMachinePoolMemberLiveRuns counts the live runs pool placed on daemonID
 // (memberLiveRunsSQL): its pool-placed chats and its run placements.
 func CountMachinePoolMemberLiveRuns(ctx context.Context, db orm.Context, poolID, daemonID string) (int, error) {

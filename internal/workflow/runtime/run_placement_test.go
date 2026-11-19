@@ -36,14 +36,10 @@ const testWorkflowID = "default-test-workflow-id"
 // index in the run.
 type placeFunc func(in machinepool.PlaceRunInput, n int) (machinepool.PlaceRunOutput, error)
 
-// placeOn places every ask on the member its pool (or "labels") maps to.
+// placeOn places every ask on the member its pool maps to.
 func placeOn(members map[string]string) placeFunc {
 	return func(in machinepool.PlaceRunInput, _ int) (machinepool.PlaceRunOutput, error) {
-		key := in.Pool
-		if key == "" {
-			key = "labels"
-		}
-		return machinepool.PlaceRunOutput{DaemonID: members[key], PoolName: in.Pool}, nil
+		return machinepool.PlaceRunOutput{DaemonID: members[in.Pool], PoolName: in.Pool}, nil
 	}
 }
 
@@ -180,10 +176,19 @@ func TestDynamicWorkflow_PlacesDaemonSelectors(t *testing.T) {
 			want:      map[string]*types.DaemonSelector{"plan": pin("m-builders"), "work": pin("m-builders"), "build": pin("m-builders")},
 		},
 		{
-			name:      "workflow-level labels-only selector places on the labels",
-			selectors: map[string]*reliantv1.DaemonSelectorProto{"": {Labels: map[string]string{"gpu": "a100"}}},
-			wantAsks:  []machinepool.PlaceRunInput{{ChatID: "chat-place", WorkflowID: testWorkflowID, Labels: map[string]string{"gpu": "a100"}}},
-			want:      map[string]*types.DaemonSelector{"plan": pin("m-labels"), "work": pin("m-labels"), "build": pin("m-labels")},
+			// An existing v1 labels-only workflow started after the upgrade
+			// routes exactly as before: a per-call filter on advertised
+			// labels, never a placement.
+			name: "labels-only selectors keep their per-call meaning and are never placed",
+			selectors: map[string]*reliantv1.DaemonSelectorProto{
+				"":      {Labels: map[string]string{"gpu": "a100"}},
+				"build": {Labels: map[string]string{"os": "linux"}},
+			},
+			want: map[string]*types.DaemonSelector{
+				"plan":  {Labels: map[string]string{"gpu": "a100"}},
+				"work":  {Labels: map[string]string{"gpu": "a100"}},
+				"build": {Labels: map[string]string{"os": "linux"}},
+			},
 		},
 		{
 			name: "a node-level pool overrides the workflow's for that node only",
@@ -216,7 +221,7 @@ func TestDynamicWorkflow_PlacesDaemonSelectors(t *testing.T) {
 			t.Parallel()
 			env := (&temporaltest.WorkflowTestSuite{}).NewTestWorkflowEnvironment()
 			rec := setupPlacementEnv(t, env, placementWorkflow(t, placementSeqYAML, tt.selectors),
-				placeOn(map[string]string{"builders": "m-builders", "gpus": "m-gpus", "labels": "m-labels"}))
+				placeOn(map[string]string{"builders": "m-builders", "gpus": "m-gpus"}))
 
 			env.ExecuteWorkflow(DynamicWorkflow, placementInput(nil))
 
@@ -400,7 +405,7 @@ func TestDaemonSelectorNeedsPlacement(t *testing.T) {
 		{nil, false},
 		{&DaemonSelectorValue{}, false},
 		{&DaemonSelectorValue{Pool: "builders"}, true},
-		{&DaemonSelectorValue{Labels: labels}, true},
+		{&DaemonSelectorValue{Labels: labels}, false},
 		{&DaemonSelectorValue{Labels: labels, Name: "box"}, false},
 		{&DaemonSelectorValue{Labels: labels, ID: "d1"}, false},
 		{&DaemonSelectorValue{Labels: labels, Type: "cloud"}, false},

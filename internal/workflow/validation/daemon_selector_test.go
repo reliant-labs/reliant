@@ -88,8 +88,8 @@ func TestDaemonSelectorValidation(t *testing.T) {
 		{"pool with type", "{pool: gate, type: cloud}", "daemon.pool: pool cannot be combined with type"},
 		{"pool with labels", "{pool: gate, labels: {role: gate}}", "daemon.pool: pool cannot be combined with labels"},
 		{"pool with several", "{pool: gate, name: box-1, labels: {a: b}}", "pool cannot be combined with name, labels"},
-		{"labels-only blank key", `{labels: {"": gate}}`, "daemon.labels: a label key is blank"},
-		{"labels-only whitespace key", `{labels: {" ": gate}}`, "daemon.labels: a label key is blank"},
+		// Labels keep their v1 meaning, so their keys are not newly checked.
+		{"labels-only blank key is unchanged from v1", `{labels: {"": gate}}`, ""},
 	}
 	wherePath := map[string]string{
 		"workflow":   "daemon.",

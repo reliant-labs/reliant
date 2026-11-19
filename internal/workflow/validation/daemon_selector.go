@@ -14,9 +14,8 @@ import (
 //
 // `{pool: <name>}` places the run (or the node) once on a member of the
 // owner's machine pool, so it chooses the machine itself: it cannot also
-// name one (id, name), filter by kind (type) or by labels. A labels-only
-// selector places the same way over the machines whose durable labels
-// contain every pair, so an empty key matches nothing anyone can set.
+// name one (id, name), filter by kind (type) or by labels. Labels keep their
+// v1 meaning (a per-call filter on advertised labels) and are not checked.
 //
 // Whether the named pool exists is the server's question (it needs the
 // owner); a CEL selector (`daemon: "{{ ... }}"`) names nothing until the run
@@ -69,17 +68,5 @@ func validateDaemonSelector(sel *reliantv1.CelDaemonSelector, path []string, res
 				fmt.Sprintf("use daemon: {pool: %s} alone, or drop pool and select the machine by %s", ds.GetPool(), strings.Join(also, ", ")))
 		}
 		return
-	}
-	labelsOnly := ds.GetId() == "" && ds.GetName() == "" && ds.GetType() == ""
-	if !labelsOnly {
-		return
-	}
-	for k := range ds.GetLabels() {
-		if strings.TrimSpace(k) == "" {
-			result.AddErrorWithSuggestion(CategoryStructure, path, "daemon.labels",
-				"a label key is blank, so no machine can carry it",
-				"name the label, e.g. daemon: {labels: {role: gate}}")
-			return
-		}
 	}
 }

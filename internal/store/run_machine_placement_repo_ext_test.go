@@ -4,6 +4,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 func TestRunMachinePlacements(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := time.Date(2026, 11, 19, 9, 0, 0, 0, time.UTC)
 
 	labels := map[string]map[string]string{
 		"rp-a": {"pool": "gate", "role": "gate"},
@@ -67,7 +68,8 @@ func TestRunMachinePlacements(t *testing.T) {
 
 	// On a: a trigger-placed live chat whose run also recorded its member
 	// (one chat), a workflow-placed live run, a live run with two placed
-	// nodes (one chat), a finished placed run, and a live labels placement.
+	// nodes (one chat), a finished placed run, and a live placement on no
+	// pool (its pool deleted), which no pool counts.
 	mkChat("rp-trigger", true, core.Active())
 	place("rp-trigger", "", poolID, "rp-a")
 	mkChat("rp-run", false, core.Paused())
@@ -93,10 +95,6 @@ func TestRunMachinePlacements(t *testing.T) {
 			ms, err := env.Repo.ListMachinePoolMembers(ctx, pool, storetest.SeedProjectID)
 			return liveRunsOf(ms, "rp-a"), err
 		}, 3},
-		{"a labels read counts every live run on the machine", func() (int, error) {
-			ms, err := env.Repo.ListLabelledMachines(ctx, storetest.SeedUserID, map[string]string{"role": "gate"}, storetest.SeedProjectID)
-			return liveRunsOf(ms, "rp-a"), err
-		}, 4},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -107,17 +105,24 @@ func TestRunMachinePlacements(t *testing.T) {
 		})
 	}
 
-	// The labels read is the owner's machines whose durable labels contain
-	// every pair; an empty selector selects nothing.
-	ms, err := env.Repo.ListLabelledMachines(ctx, storetest.SeedUserID, map[string]string{"role": "gate"}, storetest.SeedProjectID)
-	if err != nil || len(ms) != 3 {
-		t.Fatalf("labelled role=gate = %+v, %v; want a, b and c", ms, err)
-	}
-	if ms, err := env.Repo.ListLabelledMachines(ctx, "someone-else", map[string]string{"role": "gate"}, ""); err != nil || len(ms) != 0 {
-		t.Fatalf("another user's labelled machines = %+v, %v; want none", ms, err)
-	}
-	if ms, err := env.Repo.ListLabelledMachines(ctx, storetest.SeedUserID, map[string]string{}, ""); err != nil || len(ms) != 0 {
-		t.Fatalf("empty selector = %+v, %v; want none", ms, err)
+	// The members a chat already holds a live run on, which placing it again
+	// takes no extra slot of: its trigger's member while its root run is
+	// live, and its live placements' members; never a finished run's.
+	for _, tt := range []struct {
+		chat string
+		want []string
+	}{
+		{"rp-trigger", []string{"rp-a"}},
+		{"rp-nodes", []string{"rp-a"}},
+		{"rp-run", []string{"rp-a"}},
+		{"rp-done", nil},
+		{"rp-labels", nil},
+		{"rp-missing", nil},
+	} {
+		got, err := env.Repo.ListChatHeldPoolMembers(ctx, pool.ID, tt.chat)
+		if err != nil || !slices.Equal(got, tt.want) {
+			t.Fatalf("ListChatHeldPoolMembers(%s) = %v, %v; want %v", tt.chat, got, err, tt.want)
+		}
 	}
 
 	// A placement, once recorded, never moves: a second record returns it.

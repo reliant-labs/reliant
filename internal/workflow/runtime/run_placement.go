@@ -10,8 +10,8 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// A `daemon: {pool: <name>}` selector, or `daemon: {labels: {…}}` with nothing
-// else, does not route each call: it is PLACED once on one machine — the
+// A `daemon: {pool: <name>}` selector does not route each call: it is PLACED
+// once on one machine — the
 // workflow-level one once per run, a node-level one once per node per run —
 // and the run (or node) then routes to that machine as to any configured id
 // pin. The placement is the PlaceRunOnMachinePool activity's
@@ -80,9 +80,6 @@ func placeDaemonSelector(ctx workflow.Context, chatID, workflowID, scope string,
 		WorkflowID: workflowID,
 		Scope:      scope,
 		Pool:       ds.Pool,
-	}
-	if ds.Pool == "" {
-		in.Labels = ds.Labels
 	}
 
 	start := workflow.Now(ctx)

@@ -47,11 +47,10 @@ func (r *Repo) ListMachinePoolMembers(ctx context.Context, pool *MachinePool, pr
 	return store.ListMachinePoolMembers(ctx, r.ORM(), pool, projectID)
 }
 
-// ListLabelledMachines reads userID's machines whose durable labels contain
-// labels, for projectID: the machines a labels-only `daemon: {labels: …}`
-// places on, LiveRuns counting every live run placed on each.
-func (r *Repo) ListLabelledMachines(ctx context.Context, userID string, labels map[string]string, projectID string) ([]MachinePoolMemberRow, error) {
-	return store.ListLabelledMachines(ctx, r.ORM(), userID, labels, projectID, "")
+// ListChatHeldPoolMembers is the members of a pool on which a chat already
+// holds a live run (store.ListChatHeldPoolMembers).
+func (r *Repo) ListChatHeldPoolMembers(ctx context.Context, poolID, chatID string) ([]string, error) {
+	return store.ListChatHeldPoolMembers(ctx, r.ORM(), poolID, chatID)
 }
 
 // GetRunMachinePlacement reads the placement of one run (scope "") or one

@@ -20,13 +20,12 @@ func memberRow(name, phase string, live int) core.MachinePoolMemberRow {
 		Installed: true, Verified: phase == "connected", WorkflowsJSON: &runCatalog, CatalogPushedAt: &t0}
 }
 
-// fakeRunStore is a RunStore over maps: one pool ("cicd"), its members, the
-// owner's labelled machines, and the recorded placements.
+// fakeRunStore is a RunStore over maps: one pool ("cicd"), its members and
+// the recorded placements (every one live).
 type fakeRunStore struct {
-	pools    map[string]*core.MachinePool
-	members  []core.MachinePoolMemberRow
-	labelled []core.MachinePoolMemberRow
-	placed   map[string]*core.RunMachinePlacement
+	pools   map[string]*core.MachinePool
+	members []core.MachinePoolMemberRow
+	placed  map[string]*core.RunMachinePlacement
 	// slotCount is what the slot guard counts for a member, by attempt; nil
 	// counts the member's row.
 	slotCount func(daemonID string) int
@@ -62,11 +61,14 @@ func (f *fakeRunStore) ListMachinePoolMembers(context.Context, *core.MachinePool
 	return f.members, nil
 }
 
-func (f *fakeRunStore) ListLabelledMachines(_ context.Context, _ string, labels map[string]string, _ string) ([]core.MachinePoolMemberRow, error) {
-	if len(labels) == 0 {
-		return nil, nil
+func (f *fakeRunStore) ListChatHeldPoolMembers(_ context.Context, poolID, chatID string) ([]string, error) {
+	var ids []string
+	for _, p := range f.placed {
+		if p.ChatID == chatID && p.MachinePoolID == poolID {
+			ids = append(ids, p.DaemonID)
+		}
 	}
-	return f.labelled, nil
+	return ids, nil
 }
 
 func (f *fakeRunStore) LockMachinePool(context.Context, string) error {
@@ -123,10 +125,6 @@ func poolRequest(scope string) RunRequest {
 	return RunRequest{PlaceRunInput: PlaceRunInput{ChatID: "chat-1", WorkflowID: "wf-1", Scope: scope, Pool: "cicd"}, UserID: "u", ProjectID: "proj"}
 }
 
-func labelsRequest() RunRequest {
-	return RunRequest{PlaceRunInput: PlaceRunInput{ChatID: "chat-1", WorkflowID: "wf-1", Labels: map[string]string{"role": "gate"}}, UserID: "u", ProjectID: "proj"}
-}
-
 func TestPlaceRun(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -149,28 +147,6 @@ func TestPlaceRun(t *testing.T) {
 			req:        poolRequest(""),
 			want:       PlaceRunOutput{DaemonID: "id-b", DaemonName: "b", PoolID: "pool-1", PoolName: "cicd"},
 			wantRecord: "id-b", wantRecordPool: "pool-1",
-		},
-		{
-			name: "labels place on the least-loaded labelled machine, naming no pool",
-			store: func() *fakeRunStore {
-				s := newFakeRunStore()
-				s.labelled = []core.MachinePoolMemberRow{memberRow("x", "connected", 3), memberRow("y", "connected", 1)}
-				return s
-			},
-			req:        labelsRequest(),
-			want:       PlaceRunOutput{DaemonID: "id-y", DaemonName: "y"},
-			wantRecord: "id-y",
-		},
-		{
-			name: "labels have no per-member bound",
-			store: func() *fakeRunStore {
-				s := newFakeRunStore()
-				s.labelled = []core.MachinePoolMemberRow{memberRow("x", "connected", 50)}
-				return s
-			},
-			req:        labelsRequest(),
-			want:       PlaceRunOutput{DaemonID: "id-x", DaemonName: "x"},
-			wantRecord: "id-x",
 		},
 		{
 			name: "a recorded placement is the answer, whatever the members are now",
@@ -203,15 +179,6 @@ func TestPlaceRun(t *testing.T) {
 			wantWoke:   []string{"id-a"},
 		},
 		{
-			name: "no labelled machine waits, naming the labels",
-			store: func() *fakeRunStore {
-				return newFakeRunStore()
-			},
-			req:        labelsRequest(),
-			want:       PlaceRunOutput{Waiting: true},
-			wantReason: WaitingPrefix + "labelled role=gate: it has no members",
-		},
-		{
 			name: "a trigger-placed chat keeps its member for the workflow-level placement",
 			store: func() *fakeRunStore {
 				return newFakeRunStore(memberRow("a", "connected", 0), memberRow("b", "connected", 2))
@@ -225,17 +192,17 @@ func TestPlaceRun(t *testing.T) {
 			wantRecord: "id-b", wantRecordPool: "pool-1",
 		},
 		{
-			name: "a node of a trigger-placed chat is placed like any other",
+			name: "a node of a trigger-placed chat stays on the chat's member, which it holds",
 			store: func() *fakeRunStore {
-				return newFakeRunStore(memberRow("a", "connected", 0), memberRow("b", "connected", 1))
+				return newFakeRunStore(memberRow("a", "connected", 0), memberRow("b", "connected", 2))
 			},
 			req: func() RunRequest {
 				r := poolRequest("review")
 				r.ChatPoolID, r.ChatDaemonID = "pool-1", "id-b"
 				return r
 			}(),
-			want:       PlaceRunOutput{DaemonID: "id-a", DaemonName: "a", PoolID: "pool-1", PoolName: "cicd"},
-			wantRecord: "id-a", wantRecordPool: "pool-1",
+			want:       PlaceRunOutput{DaemonID: "id-b", DaemonName: "b", PoolID: "pool-1", PoolName: "cicd"},
+			wantRecord: "id-b", wantRecordPool: "pool-1",
 		},
 		{
 			name: "a chat placed on another pool is placed afresh",
@@ -287,17 +254,7 @@ func TestPlaceRun(t *testing.T) {
 			wantErr: core.ErrMachinePoolNotFound,
 		},
 		{
-			name:  "a pool and labels together are refused",
-			store: func() *fakeRunStore { return newFakeRunStore(memberRow("a", "connected", 0)) },
-			req: func() RunRequest {
-				r := poolRequest("")
-				r.Labels = map[string]string{"role": "gate"}
-				return r
-			}(),
-			wantErr: ErrInvalidRunRequest,
-		},
-		{
-			name:    "neither a pool nor labels is refused",
+			name:    "a request naming no pool is refused",
 			store:   func() *fakeRunStore { return newFakeRunStore() },
 			req:     func() RunRequest { r := poolRequest(""); r.Pool = ""; return r }(),
 			wantErr: ErrInvalidRunRequest,
@@ -360,19 +317,50 @@ func TestPlaceRun_IsIdempotent(t *testing.T) {
 	}
 }
 
-// The labels selector is recorded on a labels placement, with no pool.
-func TestPlaceRun_LabelsRecordTheirSelector(t *testing.T) {
-	store := newFakeRunStore()
-	store.labelled = []core.MachinePoolMemberRow{memberRow("x", "connected", 0)}
-	if _, err := NewRunPlacer(store).PlaceRun(context.Background(), labelsRequest()); err != nil {
-		t.Fatal(err)
-	}
-	rec := store.placed["wf-1/"]
-	if rec == nil || rec.MachinePoolID != "" || rec.Selector["role"] != "gate" || rec.ChatID != "chat-1" || rec.UserID != "u" {
-		t.Fatalf("recorded %+v", rec)
-	}
-	if store.locks != 0 {
-		t.Fatalf("a labels placement took %d pool locks; it has no pool", store.locks)
+// A chat counts once among its member's live runs, so placing the same chat
+// again on a member where it already holds a live run takes no extra slot:
+// with one member and max_runs_per_member 1, a run's second placement —
+// another node, or a node beside the workflow-level placement on the same
+// pool — is placed at once, never waiting on the slot its own chat holds.
+func TestPlaceRun_SameChatNeverWaitsOnItsOwnSlot(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		first, second string // scopes
+	}{
+		{"sequential nodes on one pool", "build", "test"},
+		{"workflow-level then node-level on the same pool", "", "build"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newFakeRunStore(memberRow("a", "connected", 0))
+			store.pools["cicd"].MaxRunsPerMember = 1
+			placer := NewRunPlacer(store)
+			first, err := placer.PlaceRun(context.Background(), poolRequest(tt.first))
+			if err != nil || first.DaemonID != "id-a" {
+				t.Fatalf("first = %+v, %v; want a", first, err)
+			}
+			// The member now counts the chat's live run, as the database
+			// would: it is full for every other chat.
+			store.members[0].LiveRuns = 1
+
+			second, err := placer.PlaceRun(context.Background(), poolRequest(tt.second))
+			if err != nil {
+				t.Fatalf("second: %v", err)
+			}
+			if second.Waiting || second.DaemonID != "id-a" {
+				t.Fatalf("second = %+v; want placed on a without waiting", second)
+			}
+			if rec := store.placed["wf-1/"+tt.second]; rec == nil || rec.DaemonID != "id-a" {
+				t.Fatalf("second recorded %+v, want id-a", rec)
+			}
+
+			// Another chat still finds the member full.
+			other := poolRequest("x")
+			other.ChatID, other.WorkflowID = "chat-2", "wf-2"
+			got, err := placer.PlaceRun(context.Background(), other)
+			if err != nil || !got.Waiting {
+				t.Fatalf("another chat = %+v, %v; want it to wait for the full member", got, err)
+			}
+		})
 	}
 }
 

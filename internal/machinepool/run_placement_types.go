@@ -1,15 +1,15 @@
 // Copyright (c) 2025 Reliant Labs
 package machinepool
 
-// A workflow's `daemon: {pool: <name>}` or `daemon: {labels: {…}}` (workflow
-// or node level) is placed ONCE, by the workflow runtime, through the
+// A workflow's `daemon: {pool: <name>}` (workflow or node level) is placed
+// ONCE, by the workflow runtime, through the
 // PlaceRunActivityName activity: the same Decide a pool-bound trigger's fire
 // uses (least-loaded member, catalog agreement), the pool's slot guard, and a
 // placement record (run_machine_placements) that makes the activity
 // idempotent and counts the placement among the member's live runs.
 
 // PlaceRunActivityName is the activity that places a run, or one node of it,
-// on a machine pool's member (or on a machine matching durable labels).
+// on a machine pool's member.
 const PlaceRunActivityName = "PlaceRunOnMachinePool"
 
 // PoolNotFoundErrorType is the non-retryable ApplicationError type
@@ -30,11 +30,10 @@ type PlaceRunInput struct {
 	// again returns the recorded member, so a retried activity or a
 	// continue-as-new successor never re-places.
 	Scope string `json:"scope,omitempty"`
-	// Pool is the pool's name, exclusive with Labels.
+	// Pool is the pool's name. (Labels-only selectors keep their v1
+	// per-call meaning and are never placed; an explicit durable-label
+	// selector can add a field here later.)
 	Pool string `json:"pool,omitempty"`
-	// Labels place on the owner's machines whose durable labels contain
-	// every pair: an unnamed pool with this selector and no per-member bound.
-	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // PlaceRunOutput is one placement answer. Exactly one of DaemonID and
@@ -45,7 +44,7 @@ type PlaceRunOutput struct {
 	DaemonID string `json:"daemon_id,omitempty"`
 	// DaemonName is the member's name, for logs and the run's messages.
 	DaemonName string `json:"daemon_name,omitempty"`
-	// PoolID and PoolName name the pool ("" for a labels placement).
+	// PoolID and PoolName name the pool.
 	PoolID   string `json:"pool_id,omitempty"`
 	PoolName string `json:"pool_name,omitempty"`
 	// Waiting: no member can take it now (Decision Queue, or Wake, whose

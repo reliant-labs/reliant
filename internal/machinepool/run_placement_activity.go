@@ -19,7 +19,7 @@ type ChatReader interface {
 
 // invalidPlaceRunErrorType is the non-retryable ApplicationError type of a
 // request that cannot be placed however often it is asked: it names no run,
-// or not exactly one of a pool and labels, or its chat is gone.
+// or no pool, or its chat is gone.
 const invalidPlaceRunErrorType = "InvalidRunPlacement"
 
 // PlaceRunActivity is the PlaceRunActivityName activity: it reads the run's

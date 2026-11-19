@@ -372,7 +372,8 @@ func insideQuotes(prefix string) bool {
 // checkMachinePin: a literal selector that names one machine (by id, by name,
 // or by the string shorthand that is not local/cloud/any) makes that machine
 // the only one the run or node can use. A pool or labels choose among
-// machines; a type, or a CEL selector, names none.
+// machines; a type, or a CEL selector, names none. The fix is a pool: it is
+// placed once on whichever member is free.
 func (c *checker) checkMachinePin(path string, sel *reliantv1.CelDaemonSelector) {
 	ds := sel.GetLiteral()
 	if ds == nil || ds.GetPool() != "" {
@@ -392,7 +393,7 @@ func (c *checker) checkMachinePin(path string, sel *reliantv1.CelDaemonSelector)
 		what = "this step"
 	}
 	c.add(RuleDaemonMachinePin, path, fmt.Sprintf("daemon: pins %s to one machine (%s): when that box is swapped out or busy, every run stalls waiting for it", what, pinned),
-		"pin a machine pool, daemon: {pool: <name>}, or the machines' labels, daemon: {labels: {<key>: <value>}}")
+		"pin a machine pool instead: daemon: {pool: <name>}")
 }
 
 func (c *checker) checkWorkflow() {

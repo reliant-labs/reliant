@@ -209,17 +209,12 @@ func ResolveDaemonSelectorProto(ds *reliantv1.DaemonSelectorProto) *DaemonSelect
 }
 
 // NeedsPlacement reports whether this selector is placed once on a machine
-// (run_placement.go) rather than routed by as it is: a pool, or labels with
-// nothing else, which place on a machine whose durable labels hold them.
-// Labels beside an id, name or type keep their per-call filter meaning.
+// (run_placement.go) rather than routed by as it is: only an explicit pool.
+// Labels, alone or beside an id, name or type, keep their v1 meaning — a
+// per-call filter on the labels connected daemons advertise — and are never
+// placed.
 func (ds *DaemonSelectorValue) NeedsPlacement() bool {
-	if ds == nil {
-		return false
-	}
-	if ds.Pool != "" {
-		return true
-	}
-	return len(ds.Labels) > 0 && ds.ID == "" && ds.Name == "" && ds.Type == ""
+	return ds != nil && ds.Pool != ""
 }
 
 // ResolveCelDaemonSelector evaluates a CelDaemonSelector and returns a DaemonSelectorValue.

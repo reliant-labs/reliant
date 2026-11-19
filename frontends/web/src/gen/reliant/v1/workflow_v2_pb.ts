@@ -313,8 +313,8 @@ export const ModelSelectorSchema: GenMessage<ModelSelector> = /*@__PURE__*/
  * machine pool. In YAML, a plain string like "local" is shorthand for
  * {type: "local"}, and any other string is a machine id or name.
  *
- * {pool: <name>} and {labels: {k: v}} place the run (a workflow-level
- * selector) or the node (a node-level one) ONCE on one machine, chosen like a
+ * {pool: <name>} places the run (a workflow-level selector) or the node (a
+ * node-level one) ONCE on one machine, chosen like a
  * pool-bound trigger's run: the least-loaded member that can take work, under
  * the pool's max_runs_per_member, on the pool's agreed workflow catalog. Every
  * later step of that run or node runs on the chosen machine.
@@ -344,9 +344,8 @@ export type DaemonSelectorProto = Message<"reliant.v1.DaemonSelectorProto"> & {
   type: string;
 
   /**
-   * Place on one of the owner's machines whose durable labels contain every
-   * one of these (`reliant machine label`, Settings → Machines). Alone, it is
-   * placed once like a pool; with id, name or type it narrows those.
+   * Match by labels (all must match): the labels a machine advertises when
+   * it connects, on each call. Never placed.
    *
    * @generated from field: map<string, string> labels = 4;
    */
