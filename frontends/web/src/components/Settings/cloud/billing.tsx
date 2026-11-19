@@ -119,7 +119,7 @@ import { exactCentsLabel, exactHours } from "@/lib/exact-rational";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { formatPrice } from "@/components/Billing/priceFormat";
 import { isSafeReturnTo } from "@/lib/returnTo";
-import { onboardingPath, projectsHref, settingsPath } from "@/lib/paths";
+import { onboardingPath, projectsPath, settingsPath } from "@/lib/paths";
 
 /**
  * Overview, plans, usage — and Reliant AI, the managed keys and spend that
@@ -456,7 +456,7 @@ function BackToEnvironment({ returnTo }: { returnTo?: string }) {
             void navigate({ href: safeReturnTo });
             return;
           }
-          void navigate({ href: projectsHref("apps") });
+          void navigate({ to: projectsPath(), search: { show: "apps" } });
         }}
         leftIcon={<ArrowLeft />}
       >
