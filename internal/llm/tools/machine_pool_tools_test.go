@@ -25,13 +25,13 @@ func TestManageMachineLabelNeedsACardForTheExactResult(t *testing.T) {
 	require.True(t, ask)
 	require.Contains(t, preview.Title, "Set the labels of machine cicd (cicd-id) to: pool=pipeline, team=infra (now: old=x, team=infra)")
 	require.Contains(t, preview.Title, "It joins machine pool(s): pipeline; it leaves: none")
-	require.Equal(t, labelApprovalHash("cicd-id", map[string]string{"pool": "pipeline", "team": "infra"}), preview.Hash)
+	require.Equal(t, labelApprovalHash("owner", "cicd-id", map[string]string{"pool": "pipeline", "team": "infra"}, []string{"pipeline"}, nil), preview.Hash)
 
 	// No approval, or one for another label set, runs nothing.
 	resp, err := tool.Run(machineToolCtx(automationpolicy.Execution{}), call)
 	require.NoError(t, err)
 	require.True(t, resp.IsError)
-	other := labelApprovalHash("cicd-id", map[string]string{"pool": "gate", "team": "infra"})
+	other := labelApprovalHash("owner", "cicd-id", map[string]string{"pool": "gate", "team": "infra"}, nil, nil)
 	resp, err = tool.Run(machineToolCtx(automationpolicy.Execution{Approvals: map[string]string{"call": other}}), call)
 	require.NoError(t, err)
 	require.True(t, resp.IsError)
@@ -46,6 +46,36 @@ func TestManageMachineLabelNeedsACardForTheExactResult(t *testing.T) {
 	_, ask, err = tool.(AutomationApprovalTool).PrepareAutomation(machineToolCtx(automationpolicy.Execution{}), call, false)
 	require.NoError(t, err)
 	require.False(t, ask)
+}
+
+// The label card names the pools the machine joins and leaves, and its
+// approval is bound to them: a pool whose selector changed after the card
+// would move the machine somewhere nobody approved, so the apply is refused.
+func TestManageMachineLabelRefusedWhenItsPoolMovesChangedAfterApproval(t *testing.T) {
+	f := &fakeMachines{pools: []MachinePoolSummary{pipelinePool()}}
+	tool := newTestMachineTool(f)
+	call := ToolCall{ID: "call", Name: ToolManageMachine, Input: `{"machine_id":"cicd-id","action":"label","labels":{"pool":"pipeline"}}`}
+	preview, ask, err := tool.(AutomationApprovalTool).PrepareAutomation(machineToolCtx(automationpolicy.Execution{}), call, false)
+	require.NoError(t, err)
+	require.True(t, ask)
+	require.Contains(t, preview.Title, "It joins machine pool(s): pipeline; it leaves: none")
+
+	// After approval, another pool starts selecting the same label.
+	gate := MachinePoolSummary{ID: "pool-gate", Spec: MachinePoolSpec{Name: "gate", Selector: map[string]string{"pool": "pipeline"}, MemberIdleTimeout: "10m"}}
+	f.pools = []MachinePoolSummary{pipelinePool(), gate}
+	approved := machineToolCtx(automationpolicy.Execution{Approvals: map[string]string{"call": preview.Hash}})
+	resp, err := tool.Run(approved, call)
+	require.NoError(t, err)
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "changed since you approved (now it joins: pipeline, gate;")
+	require.Contains(t, resp.Content, "ask again")
+	require.Empty(t, f.calls)
+
+	f.pools = []MachinePoolSummary{pipelinePool()}
+	resp, err = tool.Run(approved, call)
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+	require.Equal(t, []machineCall{{op: "label pool=pipeline", user: "owner", id: "cicd-id"}}, f.calls)
 }
 
 // Labels the registry would refuse are refused before a card is raised, and
@@ -126,6 +156,56 @@ func TestManageMachinePoolPutNeedsACardForTheExactDefinition(t *testing.T) {
 		ToolCall{ID: "call", Name: ToolManageMachinePool, Input: `{"action":"put","name":"pipeline","max_runs_per_member":8}`}, false)
 	require.NoError(t, err)
 	require.False(t, ask)
+}
+
+// A pool approval is bound to the members its card showed: a machine
+// labelled into or out of the pool after the card was approved refuses the
+// apply, for put and for delete, until the card is asked again.
+func TestManageMachinePoolRefusedWhenMembersChangedAfterApproval(t *testing.T) {
+	f := &fakeMachines{labels: map[string]map[string]string{"cicd-id": {"pool": "gate"}}}
+	tool := newTestPoolTool(f)
+	put := ToolCall{ID: "call", Name: ToolManageMachinePool, Input: `{"action":"put","name":"gate","max_runs_per_member":1}`}
+	card, ask, err := tool.(AutomationApprovalTool).PrepareAutomation(machineToolCtx(automationpolicy.Execution{}), put, false)
+	require.NoError(t, err)
+	require.True(t, ask)
+	require.Contains(t, card.Title, "Members: cicd (cicd-id).")
+	approved := machineToolCtx(automationpolicy.Execution{Approvals: map[string]string{"call": card.Hash}})
+
+	// A machine is labelled into the pool after approval.
+	f.labels["default-id"] = map[string]string{"pool": "gate"}
+	resp, err := tool.Run(approved, put)
+	require.NoError(t, err)
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "The pool's members changed since you approved (now: cicd-id, default-id); ask again")
+	// ...or the approved one is labelled out of it.
+	f.labels = map[string]map[string]string{}
+	resp, err = tool.Run(approved, put)
+	require.NoError(t, err)
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "The pool's members changed since you approved (now: none)")
+	require.Empty(t, f.calls)
+
+	// The members the card showed: it applies.
+	f.labels = map[string]map[string]string{"cicd-id": {"pool": "gate"}}
+	resp, err = tool.Run(approved, put)
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+	require.Len(t, f.calls, 1)
+
+	// delete names the pool's members too.
+	f.calls = nil
+	f.pools = []MachinePoolSummary{pipelinePool()}
+	del := ToolCall{ID: "call", Name: ToolManageMachinePool, Input: `{"action":"delete","name":"pipeline"}`}
+	card, _, err = tool.(AutomationApprovalTool).PrepareAutomation(machineToolCtx(automationpolicy.Execution{}), del, false)
+	require.NoError(t, err)
+	moved := pipelinePool()
+	moved.Members = append(moved.Members, MachinePoolMember{ID: "cicd-id", Name: "cicd"})
+	f.pools = []MachinePoolSummary{moved}
+	resp, err = tool.Run(machineToolCtx(automationpolicy.Execution{Approvals: map[string]string{"call": card.Hash}}), del)
+	require.NoError(t, err)
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "members changed since you approved")
+	require.Empty(t, f.calls)
 }
 
 func TestManageMachinePoolDeleteAndRefusals(t *testing.T) {

@@ -26,6 +26,14 @@ import (
 // refuses one whose pool holds anyone else's machine, rather than treating
 // such a pool as merely widening, because the invariant broke and no card
 // can say what the activation would then run on.
+//
+// The check is made at write time, not only at preview: ManageActivation
+// runs the whole preparation again inside its serializable transaction
+// (manageActivationAtomic), so a card-free re-point is decided on the
+// members as they are when the row is written. A card's title names the
+// member count and its details every member id, and the approval hash covers
+// the title, so a machine labelled into or out of the pool after a card was
+// approved voids it ("changed after approval").
 
 // hasEdits reports whether p changes anything beyond naming the activation:
 // pause, delete and enable accept trigger_id alone.

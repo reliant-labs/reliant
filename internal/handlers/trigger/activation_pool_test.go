@@ -201,6 +201,49 @@ func TestAgentActivationMachinePool(t *testing.T) {
 			require.NoError(t, err)
 			require.Empty(t, stored.MachinePoolID)
 		}},
+		{"re-point with no card: every member is checked again at write time, not only at preview", func(t *testing.T, env *triggerTestEnv, _ *core.MachinePool) {
+			created := env.createOnMachine(t)
+			p := tools.ActivationParams{TriggerID: created.ID, MachinePool: &pipeline}
+			preview, err := env.svc.PrepareActivation(env.ctx, env.userID, tools.ToolUpdateTriggerActivation, p)
+			require.NoError(t, err)
+			require.False(t, preview.CardRequired, preview.Reason)
+			// Between the preview and the write, the pool gains another
+			// user's machine: the write, deciding again inside its
+			// transaction, refuses.
+			theirs := uuid.NewString()
+			require.NoError(t, env.repo.UpsertDaemon(env.ctx, &db.Daemon{ID: theirs, UserID: uuid.NewString()}))
+			env.configure(t, func(d *Deps) { d.Repo = foreignMemberRepo{Repo: env.repo, foreign: theirs} })
+			_, err = env.svc.ManageActivation(unattendedCtx(env.ctx), env.userID, tools.ToolUpdateTriggerActivation, p, "")
+			require.ErrorContains(t, err, "has a member that is not one of your machines")
+			stored, err := env.repo.GetTrigger(env.ctx, created.ID)
+			require.NoError(t, err)
+			require.Empty(t, stored.MachinePoolID)
+			require.Equal(t, env.daemonID, stored.DaemonID)
+		}},
+		{"a pool card is bound to the members it showed: a machine labelled in after approval voids it", func(t *testing.T, env *triggerTestEnv, pool *core.MachinePool) {
+			created := env.createOnMachine(t)
+			env.setApprovalMode(t, nil, automationpolicy.ApprovalAlways)
+			p := tools.ActivationParams{TriggerID: created.ID, MachinePool: &pipeline}
+			card, err := env.svc.PrepareActivation(env.ctx, env.userID, tools.ToolUpdateTriggerActivation, p)
+			require.NoError(t, err)
+			require.True(t, card.CardRequired)
+			require.Contains(t, card.Title, "1 member(s)")
+			other := uuid.NewString()
+			require.NoError(t, env.repo.UpsertDaemon(env.ctx, &db.Daemon{ID: other, UserID: env.userID}))
+			env.addPool(t, "pipeline", other)
+			_, err = env.svc.ManageActivation(env.ctx, env.userID, tools.ToolUpdateTriggerActivation, p, card.Hash)
+			require.ErrorContains(t, err, "changed after approval")
+			stored, err := env.repo.GetTrigger(env.ctx, created.ID)
+			require.NoError(t, err)
+			require.Empty(t, stored.MachinePoolID)
+
+			again, err := env.svc.PrepareActivation(env.ctx, env.userID, tools.ToolUpdateTriggerActivation, p)
+			require.NoError(t, err)
+			require.Contains(t, again.Title, "2 member(s)")
+			got, err := env.svc.ManageActivation(env.ctx, env.userID, tools.ToolUpdateTriggerActivation, p, again.Hash)
+			require.NoError(t, err)
+			require.Equal(t, pool.ID, got.MachinePoolID)
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			env := setupTriggerTest(t)

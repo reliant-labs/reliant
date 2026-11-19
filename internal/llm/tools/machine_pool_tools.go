@@ -122,14 +122,52 @@ func (p ManageMachineParams) nextLabels(current map[string]string) map[string]st
 	return next
 }
 
-// labelApprovalHash binds a label approval to one machine and its exact
-// resulting label set.
-func labelApprovalHash(machineID string, labels map[string]string) string {
+// An approval of a label or pool change is two digests, "<kind>:<what>:<where>":
+// <what> is the change itself (the machine's resulting labels; the pool's
+// resulting definition and the pool it replaces) and <where> is which
+// machines that puts in which pools, exactly as the card showed it. Both are
+// recomputed at apply time; a change to either refuses the call, and the
+// split lets the refusal say which moved.
+
+// approvalDigest is the digest of one approval part.
+func approvalDigest(v any) string {
+	raw, _ := json.Marshal(v) // struct fields in order, map keys sorted
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+// approvalParts splits a two-part approval hash of kind into its parts.
+func approvalParts(kind, hash string) (what, where string, ok bool) {
+	rest, ok := strings.CutPrefix(hash, kind+":")
+	if !ok {
+		return "", "", false
+	}
+	return strings.Cut(rest, ":")
+}
+
+// labelApprovalHash binds a label approval to one of owner's machines, its
+// exact resulting label set, and the pools that label set moves it into and
+// out of (the card's "joins" and "leaves"): a pool whose selector changed
+// since the card would move the machine somewhere nobody approved.
+func labelApprovalHash(owner, machineID string, labels map[string]string, joins, leaves []string) string {
 	if labels == nil {
 		labels = map[string]string{}
 	}
-	canonical, _ := json.Marshal(labels) // map keys marshal sorted
-	return machineApprovalHash("label", machineID, string(canonical))
+	what := approvalDigest(struct {
+		Owner, Machine string
+		Labels         map[string]string
+	}{owner, strings.TrimSpace(machineID), labels})
+	where := approvalDigest(struct{ Joins, Leaves []string }{sortedCopy(joins), sortedCopy(leaves)})
+	return "machine_label:" + what + ":" + where
+}
+
+func sortedCopy(s []string) []string {
+	out := slices.Clone(s)
+	if out == nil {
+		out = []string{}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // labelRefusal is the refusal for a label set the registry would not store.
@@ -173,11 +211,12 @@ func (t *machineTool) prepareLabel(ctx context.Context, userID, id string, p Man
 	joins, leaves := poolMoves(pools, machine.Labels, next)
 	title := fmt.Sprintf("Set the labels of machine %s (%s) to: %s (now: %s)? It joins machine pool(s): %s; it leaves: %s. A pool's members run the activations bound to it.",
 		machine.Name, machine.ID, orNone(formatLabels(next)), orNone(formatLabels(machine.Labels)), orNone(strings.Join(joins, ", ")), orNone(strings.Join(leaves, ", ")))
-	return ActivationPreview{Title: title, Hash: labelApprovalHash(id, next)}, true, nil
+	return ActivationPreview{Title: title, Hash: labelApprovalHash(userID, id, next, joins, leaves)}, true, nil
 }
 
 // label applies an approved label call: the label set approved is the one
-// written, and a machine whose labels changed since the card needs a new one.
+// written, and a machine whose labels, or the pools they put it in, changed
+// since the card needs a new one.
 func (t *machineTool) label(ctx *rctx.ToolContext, userID, id string, p ManageMachineParams, approved string) ToolResponse {
 	machine, err := t.ownedMachine(ctx.Context, userID, id)
 	if err != nil {
@@ -187,7 +226,18 @@ func (t *machineTool) label(ctx *rctx.ToolContext, userID, id string, p ManageMa
 	if maps.Equal(next, machine.Labels) {
 		return NewTextResponse(fmt.Sprintf("Machine %s already has those labels (%s); nothing changed.", id, orNone(formatLabels(next))))
 	}
-	if approved != labelApprovalHash(id, next) {
+	pools, err := t.controller.ListMachinePools(ctx.Context, userID)
+	if err != nil {
+		return NewTextErrorResponse("Could not read the user's machine pools to check which pools machine " + id + " would join or leave: " + err.Error() + ". Nothing changed.")
+	}
+	joins, leaves := poolMoves(pools, machine.Labels, next)
+	if want := labelApprovalHash(userID, id, next, joins, leaves); approved != want {
+		gotWhat, _, ok := approvalParts("machine_label", approved)
+		wantWhat, _, _ := approvalParts("machine_label", want)
+		if ok && gotWhat == wantWhat {
+			return NewTextErrorResponse(fmt.Sprintf("The machine pools machine %s would join or leave changed since you approved (now it joins: %s; leaves: %s); ask again. It was not run.",
+				id, orNone(strings.Join(joins, ", ")), orNone(strings.Join(leaves, ", "))))
+		}
 		return NewTextErrorResponse(fmt.Sprintf("Labelling machine %s requires the user's approval card in an interactive chat, for exactly the resulting labels (they may have changed since a card was approved). It was not run.", id))
 	}
 	if err := t.controller.SetMachineLabels(ctx.Context, userID, id, next); err != nil {
@@ -253,7 +303,11 @@ func NewManageMachinePoolTool(repo runCallerStore, controller MachineController)
 // poolChange is one validated manage_machine_pool call against the pools as
 // they are now: what the card shows and the hash binds.
 type poolChange struct {
-	action  string
+	action string
+	// owner is the user the pool and every member belong to: members come
+	// from ListMachines(owner), which lists only that user's machines, as the
+	// registry's member query reads only the pool owner's machines.
+	owner   string
 	current *MachinePoolSummary // nil: put creates the pool
 	next    MachinePoolSpec     // put's resulting definition
 	members []MachineSummary    // put: the machines its selector matches now
@@ -269,9 +323,26 @@ func specEqual(a, b MachinePoolSpec) bool {
 		a.MemberSize == b.MemberSize && a.MaxRunsPerMember == b.MaxRunsPerMember && a.MemberIdleTimeout == b.MemberIdleTimeout
 }
 
-// hash binds an approval to the exact resulting definition and to the pool
-// as it was when the card was raised, so a pool changed since needs a new
-// card.
+// memberIDs are the machines the card names as the pool's members, sorted:
+// put's members after the change, delete's members now.
+func (c poolChange) memberIDs() []string {
+	var ids []string
+	if c.action == "delete" {
+		for _, m := range c.current.Members {
+			ids = append(ids, m.ID)
+		}
+	} else {
+		for _, m := range c.members {
+			ids = append(ids, m.ID)
+		}
+	}
+	return sortedCopy(ids)
+}
+
+// hash binds an approval to the exact resulting definition, to the pool as
+// it was when the card was raised, and to the members the card showed (and
+// whose they are), so a pool changed since, or a machine labelled into or
+// out of it, needs a new card.
 func (c poolChange) hash() string {
 	var current any
 	if c.current != nil {
@@ -280,13 +351,25 @@ func (c poolChange) hash() string {
 			Spec MachinePoolSpec
 		}{c.current.ID, c.current.Spec}
 	}
-	raw, _ := json.Marshal(struct {
-		Action  string
-		Current any
-		Next    MachinePoolSpec
-	}{c.action, current, c.next})
-	sum := sha256.Sum256(raw)
-	return "machine_pool:" + hex.EncodeToString(sum[:])
+	what := approvalDigest(struct {
+		Action, Owner string
+		Current       any
+		Next          MachinePoolSpec
+	}{c.action, c.owner, current, c.next})
+	where := approvalDigest(struct {
+		Owner   string
+		Members []string
+	}{c.owner, c.memberIDs()})
+	return "machine_pool:" + what + ":" + where
+}
+
+// membersChanged reports whether approved approves this very change but
+// with other members: a machine was labelled into or out of the pool since
+// the card.
+func (c poolChange) membersChanged(approved string) bool {
+	gotWhat, gotWhere, ok := approvalParts("machine_pool", approved)
+	wantWhat, wantWhere, _ := approvalParts("machine_pool", c.hash())
+	return ok && gotWhat == wantWhat && gotWhere != wantWhere
 }
 
 // title is the card.
@@ -335,7 +418,7 @@ func (t *machinePoolTool) change(ctx context.Context, userID string, p ManageMac
 	if err != nil {
 		return poolChange{}, fmt.Errorf("could not read the user's machine pools: %w", err)
 	}
-	c := poolChange{action: action}
+	c := poolChange{action: action, owner: userID}
 	for i := range pools {
 		if pools[i].Spec.Name == name {
 			c.current = &pools[i]
@@ -477,7 +560,10 @@ func (t *machinePoolTypedTool) Execute(ctx *rctx.ToolContext, p ManageMachinePoo
 	if call, ok := ctx.Value(ctxkeys.ToolCallContextKey).(*ctxkeys.ToolCallContext); ok && call != nil {
 		callID = call.CurrentToolCallID
 	}
-	if exec.Approvals[callID] != c.hash() {
+	if approved := exec.Approvals[callID]; approved != c.hash() {
+		if c.membersChanged(approved) {
+			return NewTextErrorResponse(fmt.Sprintf("The pool's members changed since you approved (now: %s); ask again. It was not run.", orNone(strings.Join(c.memberIDs(), ", ")))), nil
+		}
 		return NewTextErrorResponse("Changing a machine pool requires the user's approval card in an interactive chat, for exactly this definition (the pool may have changed since a card was approved). It was not run."), nil
 	}
 	if c.action == "delete" {
@@ -497,5 +583,15 @@ func (t *machinePoolTypedTool) Execute(ctx *rctx.ToolContext, p ManageMachinePoo
 	}
 	fmt.Fprintf(&b, "%s machine pool:\n", verb)
 	writeMachinePools(&b, []MachinePoolSummary{stored})
+	// The registry computes members itself; one labelled in or out between
+	// the check above and the write is reported, never hidden.
+	written := make([]string, 0, len(stored.Members))
+	for _, m := range stored.Members {
+		written = append(written, m.ID)
+	}
+	if approvedMembers := c.memberIDs(); !slices.Equal(sortedCopy(written), approvedMembers) {
+		fmt.Fprintf(&b, "warning: the pool's members changed while it was written: approved %s, now %s; review them with list_machines.\n",
+			orNone(strings.Join(approvedMembers, ", ")), orNone(strings.Join(sortedCopy(written), ", ")))
+	}
 	return WithResponseMetadata(NewTextResponse(strings.TrimRight(b.String(), "\n")), stored), nil
 }
