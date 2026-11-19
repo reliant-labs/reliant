@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/gitpublish"
 	"github.com/reliant-labs/reliant/internal/gitutil"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 func init() {
@@ -378,8 +379,17 @@ func handleGitPublish(ctx context.Context, payload []byte) ([]byte, error) {
 	if head != req.ExpectSHA {
 		return refuse("the checkout moved on after it was prepared (head %s, expected %s): nothing was pushed", short(head), short(req.ExpectSHA))
 	}
-	if key := dangerousKey(ctx, req.Worktree, env); key != "" {
-		return refuse("the checkout's git config sets %s, which could redirect the push or read the credential: nothing was pushed", key)
+	// A clone an older daemon made still carries the credential.helper it wrote
+	// there; remove exactly that before judging the config (git_credential.go).
+	if healManagedCheckoutHelper(ctx, req.Worktree, env) {
+		logging.InfoContext(ctx, logPrefix+" Removed the credential.helper an older release wrote into this clone", "repo", req.Worktree)
+	}
+	key, origin, err := dangerousKey(ctx, req.Worktree, env)
+	if err != nil {
+		return refuse("the checkout's git config could not be read: nothing was pushed")
+	}
+	if key != "" {
+		return refuse("%s", dangerousConfigRefusal(key, origin))
 	}
 
 	// The credential rides a pipe the push inherits as fd 3. Written and closed
@@ -479,19 +489,44 @@ func remoteBranchHead(ctx context.Context, dir string, env []string, host, remot
 }
 
 // dangerousKey returns the first configured key in the checkout that could
-// redirect a push or capture a credential, or "".
-func dangerousKey(ctx context.Context, dir string, env []string) string {
-	res, err := pubRunGit(ctx, dir, env, "", false, nil, "config", "--list", "--null")
-	if err != nil || res.exit != 0 {
-		return "git config could not be read"
+// redirect a push or capture a credential, and where git read it from (its
+// --show-origin, e.g. "file:/repo/.git/config"), or "" when there is none.
+// Values are never returned: one may be a credential.
+func dangerousKey(ctx context.Context, dir string, env []string) (key, origin string, err error) {
+	res, err := pubRunGit(ctx, dir, env, "", false, nil, "config", "--list", "--null", "--show-origin")
+	if err != nil {
+		return "", "", err
 	}
-	for _, entry := range strings.Split(res.stdout, "\x00") {
-		key, _, _ := strings.Cut(entry, "\n")
-		if dangerousConfig.MatchString(strings.ToLower(key)) {
-			return key
+	if res.exit != 0 {
+		return "", "", fmt.Errorf("git config --list exited %d", res.exit)
+	}
+	// With --null --show-origin, each entry is "<origin>\0<key>\n<value>\0".
+	fields := strings.Split(res.stdout, "\x00")
+	for i := 0; i+1 < len(fields); i += 2 {
+		k, _, _ := strings.Cut(fields[i+1], "\n")
+		if dangerousConfig.MatchString(strings.ToLower(k)) {
+			return k, fields[i], nil
 		}
 	}
-	return ""
+	return "", "", nil
+}
+
+// dangerousConfigRefusal tells the user which key refused the publish, where
+// it is set, and how to remove it when it is not needed. It never names the
+// value. The daemon removes only the credential.helper it once wrote itself;
+// anything else is the user's to keep or drop.
+func dangerousConfigRefusal(key, origin string) string {
+	msg := "the checkout's git config sets " + key
+	if file, ok := strings.CutPrefix(origin, "file:"); ok && file != "" {
+		msg += " in " + file + ", which could redirect the push or read the credential: nothing was pushed. " +
+			"A publish never uses a repository's own helpers, proxies or URL rewrites; if this checkout does not need it, remove it with: " +
+			"git config --file " + shellQuote(file) + " --unset-all " + shellQuote(key)
+		return msg
+	}
+	if origin != "" {
+		msg += " (from " + origin + ")"
+	}
+	return msg + ", which could redirect the push or read the credential: nothing was pushed"
 }
 
 func short(sha string) string {

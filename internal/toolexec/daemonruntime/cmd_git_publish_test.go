@@ -53,7 +53,12 @@ type publishFixture struct {
 
 func newPublishFixture(t *testing.T) publishFixture {
 	t.Helper()
-	root := t.TempDir()
+	return newPublishFixtureIn(t, t.TempDir())
+}
+
+// newPublishFixtureIn is newPublishFixture with its remote and clone in root.
+func newPublishFixtureIn(t *testing.T, root string) publishFixture {
+	t.Helper()
 	f := publishFixture{remote: filepath.Join(root, "remote.git"), clone: filepath.Join(root, "clone")}
 	pubGit(t, root, "init", "-q", "--bare", "-b", "main", f.remote)
 	pubGit(t, root, "clone", "-q", f.remote, f.clone)
