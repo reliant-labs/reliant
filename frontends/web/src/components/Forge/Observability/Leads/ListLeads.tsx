@@ -23,7 +23,7 @@ import type { SessionSummary } from "@/services/controlPlane/observability/rumTy
 import type { ObsScope, TraceSummary } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
-import { UPlotChart } from "../charts/UPlotChart";
+import { HeadlineBars } from "../charts/HeadlineBars";
 import { affectedNoun } from "../Errors/issueModel";
 import { formatAgo, formatCount, formatDuration } from "../format";
 import { CardOpen, ErrorBadge, FullListLink, LeadCard, ListHeading, ListLeadHeader, RedDot, RowName, SummaryLine, TopRows } from "./leadParts";
@@ -196,9 +196,9 @@ function ErrorsHeadline({ open, more, resolved }: { open: readonly Issue[]; more
         </dl>
       </div>
       {timestamps.length > 1 ? (
-        <UPlotChart height={160} area="fill" legend={false} timestamps={timestamps} series={[{ label: "Events", values, color: "--chart-1" }]} unit="count" label="Error events by hour" />
+        <HeadlineBars values={values} timestamps={timestamps} label="Error events by hour" testId="lead-errors-chart" />
       ) : (
-        <div className="flex h-[160px] flex-col justify-end" aria-hidden="true">
+        <div className="flex h-28 flex-col justify-end" aria-hidden="true">
           <div className="border-b border-border" />
         </div>
       )}

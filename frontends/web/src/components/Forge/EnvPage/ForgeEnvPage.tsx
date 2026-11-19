@@ -453,7 +453,7 @@ function TabButton({
       className={cn(
         "-mb-px shrink-0 whitespace-nowrap rounded-sm border-b-2 px-3 pb-2.5 pt-1 text-ui transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "border-ink font-medium text-ink"
+          ? "border-ink font-medium text-ink aria-selected:text-ink"
           : "border-transparent text-ink-muted hover:text-ink"
       )}
     >
