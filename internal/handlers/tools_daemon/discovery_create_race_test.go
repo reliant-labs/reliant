@@ -34,7 +34,7 @@ func (r *createRaceRepo) CreateProject(ctx context.Context, p *db.Project) error
 }
 
 func (r *createRaceRepo) WithMachineCheckoutsLocked(ctx context.Context, _ string, fn func(ctx context.Context) error) error {
-	return r.Repo.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(1), fn)
+	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(1), fn)
 }
 
 // Review round 9 (B1): two machines discover the same new folder at once. The

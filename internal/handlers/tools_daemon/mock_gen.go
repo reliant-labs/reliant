@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=5e09e1f9128f4b5dc8d9b3c53feaa0316f240f40e65ad4fb6d78fda057580292
+// forge:hash=55388fc5f55b08647a2767a1d0d1c190d9aa13884f5c72531b8409b2135aa170
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -30,6 +30,7 @@ type MockRepository struct {
 	contractkit.Recorder
 	GetDaemonFunc                               func(context.Context, string) (*db.Daemon, error)
 	UpsertDaemonFunc                            func(context.Context, *db.Daemon) error
+	MergeDeclaredDaemonLabelsFunc               func(context.Context, string, string, bool, map[string]string, int) (bool, error)
 	GetDaemonStorageStateFunc                   func(context.Context, string) (string, error)
 	SetDaemonStorageStateFunc                   func(context.Context, string, string) error
 	SetDaemonLocalModelsFunc                    func(context.Context, string, string) error
@@ -82,6 +83,15 @@ func (m *MockRepository) UpsertDaemon(ctx context.Context, daemon *db.Daemon) er
 		return m.UpsertDaemonFunc(ctx, daemon)
 	}
 	return contractkit.MockNotSet("MockRepository", "UpsertDaemon")
+}
+
+// MergeDeclaredDaemonLabels records the call and delegates to MergeDeclaredDaemonLabelsFunc when set.
+func (m *MockRepository) MergeDeclaredDaemonLabels(ctx context.Context, userID string, daemonID string, boundCredential bool, labels map[string]string, maxLabels int) (bool, error) {
+	m.Recorder.Record("MergeDeclaredDaemonLabels", ctx, userID, daemonID, boundCredential, labels, maxLabels)
+	if m.MergeDeclaredDaemonLabelsFunc != nil {
+		return m.MergeDeclaredDaemonLabelsFunc(ctx, userID, daemonID, boundCredential, labels, maxLabels)
+	}
+	return false, contractkit.MockNotSet("MockRepository", "MergeDeclaredDaemonLabels")
 }
 
 // GetDaemonStorageState records the call and delegates to GetDaemonStorageStateFunc when set.
