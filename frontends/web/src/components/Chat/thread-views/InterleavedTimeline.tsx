@@ -486,42 +486,107 @@ function isUserTurn(item: ToolRowSpacingItem | undefined): boolean {
   );
 }
 
-/**
- * The space above a transcript row: the turn rhythm (§2.2 of the chat
- * design). It is row padding, so the virtualizer measures it.
- *
- *   a user message after anything               pt-8  (30px)
- *   the first row of the answer after it        pt-5  (18.75px)
- *   every later row in the same turn            pt-3  (11.25px)
- *   a detailed run of tool-only messages        pt-1  (one run, not a turn each)
- *   the first row                               none: the header band is above it
- */
-export function turnRhythmClass(items: readonly ToolRowSpacingItem[], index: number): string {
-  if (index === 0) return "";
-  if (isUserTurn(items[index])) return "pt-8";
-  if (isUserTurn(items[index - 1])) return "pt-5";
-  if (getToolRowSpacing(items, index).compactBefore) return "pt-1";
-  return "pt-3";
+type TurnItem = ToolRowSpacingItem & { workflow?: { thread?: string } };
+
+/** Where one row sits in the conversation's turns: see rowTurns. */
+interface RowTurn {
+  /** The id of the person's message that opened the row's turn; null before the first one loaded. */
+  turn: string | null;
+  /** The row's thread; undefined when it has none. */
+  thread: string | undefined;
+  /** The person's message that opens `turn`. */
+  opener: boolean;
+  /** A message or fold of work on a known thread: part of that thread's answer to `turn`. */
+  joins: boolean;
 }
 
-type TurnEndItem = ToolRowSpacingItem & { workflow?: { thread: string } };
+/**
+ * Each row's turn and thread, by identity rather than by its neighbours.
+ *
+ * A turn is opened by a person's message and named by its id. Every row up to
+ * the next person's message belongs to it, on whatever thread it is: the
+ * timeline orders rows by time, so that is the prompt the row answers. The
+ * rows above the first prompt loaded form one turn too (`null`), whose prompt
+ * is in a page not loaded yet.
+ *
+ * A row's thread is its workflow's thread, or its message's when it has no
+ * workflow (the builder derives one from the other, so they agree).
+ *
+ * A message or a fold of work on a known thread JOINS its turn: it is part of
+ * that thread's answer to the prompt. Every other row is NEUTRAL — a divider,
+ * a handoff, an error, an info, a run output, and any row whose thread is
+ * unknown. A neutral row neither joins a turn nor ends one: it never continues
+ * a thread's answer, so it can neither move that answer's actions row nor hide
+ * it, and nothing continues it either.
+ */
+function rowTurns(items: readonly TurnItem[]): RowTurn[] {
+  let turn: string | null = null;
+  return items.map((item) => {
+    const opener = isUserTurn(item);
+    if (opener && item.message) turn = item.message.id;
+    const thread = item.workflow?.thread || item.message?.thread || undefined;
+    const joins = !opener && thread !== undefined && (item.type === "message" || item.type === "work");
+    return { turn, thread, opener, joins };
+  });
+}
 
 /**
- * Whether a row closes its thread's part of a turn: no later message or fold
- * of the same thread comes before the next person's message. Only that row
- * carries the actions row (§2.1 of the chat design: one per exchange, under
- * the answer), so an answer split by its work is not followed by a reserved
- * row per part.
+ * The space above each transcript row: the turn rhythm (§2.2 of the chat
+ * design). It is row padding, so the virtualizer measures it.
+ *
+ *   a person's message after anything           pt-8  (30px)
+ *   the first row after it                      pt-5  (18.75px)
+ *   every later row in the same turn            pt-3  (11.25px)
+ *   a detailed run of one thread's tool-only    pt-1  (one run, not a turn each)
+ *     messages
+ *   the first row                               none: the header band is above it
+ *
+ * A run is one thread's: a tool-only message from another thread between two
+ * of them starts a run of its own rather than tightening theirs.
  */
-export function isTurnEnd(items: readonly TurnEndItem[], index: number): boolean {
-  const thread = items[index]?.workflow?.thread;
-  for (let i = index + 1; i < items.length; i++) {
-    const item = items[i];
-    if (isUserTurn(item)) return true;
-    if (item.type !== "message" && item.type !== "work") continue;
-    if (thread === undefined || item.workflow?.thread === thread) return false;
-  }
-  return true;
+export function turnRhythm(items: readonly TurnItem[]): string[] {
+  const rows = rowTurns(items);
+  return rows.map((row, index) => {
+    if (index === 0) return "";
+    if (row.opener) return "pt-8";
+    const previous = rows[index - 1];
+    if (previous.opener) return "pt-5";
+    const sameRun = row.joins && previous.joins && row.thread === previous.thread;
+    if (sameRun && getToolRowSpacing(items, index).compactBefore) return "pt-1";
+    return "pt-3";
+  });
+}
+
+/**
+ * Whether each row ends its part of a turn, and so carries the actions row
+ * (§2.1 of the chat design: one per exchange). Only one row of a part does,
+ * so an answer split by its work is not followed by a reserved row per part.
+ *
+ *   a person's message   ends its turn while nothing has joined it yet: the
+ *                        latest prompt with no answer, or a send that failed.
+ *                        Once any thread answers, the answer carries them.
+ *   any other row        ends its thread's part of the turn when no later row
+ *                        of that thread joins the same turn. Other threads'
+ *                        rows, and neutral rows (see rowTurns), between them
+ *                        change nothing.
+ *   a row with no thread is its own end: nothing can continue it.
+ */
+export function turnEnds(items: readonly TurnItem[]): boolean[] {
+  const rows = rowTurns(items);
+  // A thread's part of a turn → the index of its last row to join the turn.
+  const partKey = (row: RowTurn) => `${row.turn ?? ""}\u0000${row.thread}`;
+  const lastJoin = new Map<string, number>();
+  const answered = new Set<string | null>();
+  rows.forEach((row, index) => {
+    if (!row.joins) return;
+    lastJoin.set(partKey(row), index);
+    answered.add(row.turn);
+  });
+  return rows.map((row, index) => {
+    if (row.opener) return !answered.has(row.turn);
+    if (row.thread === undefined) return true;
+    return (lastJoin.get(partKey(row)) ?? index) <= index;
+  });
 }
 
 /**
@@ -981,6 +1046,11 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     const last = timelineItems.length - 1;
     return timelineItems[last]?.type === "work" ? last : -1;
   }, [simplified, isStreaming, timelineItems]);
+
+  // Per row, in one pass over the turns: which rows carry the actions row,
+  // and the space above each.
+  const turnEndByRow = useMemo(() => turnEnds(timelineItems), [timelineItems]);
+  const rhythmByRow = useMemo(() => turnRhythm(timelineItems), [timelineItems]);
 
   // `timelineItems` IS the list the virtualizer renders. There is deliberately
   // no per-row wrapper carrying `key`/`isLast`: both are derivable from the
@@ -1458,6 +1528,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           chatId={chatId}
           isStreaming={false}
           onSelectThread={onSelectThread}
+          turnEnd={turnEndByRow[index]}
         />
       );
     }
@@ -1478,12 +1549,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
             isStreaming={isStreaming && isLastItem}
             onSelectThread={onSelectThread}
             slice={item.slice}
-            turnEnd={isTurnEnd(timelineItems, index)}
+            turnEnd={turnEndByRow[index]}
           />
         )}
       </>,
     );
-  }, [approvals, chatId, isStreaming, lastItemIndex, liveWorkIndex, onSelectThread, timelineItems]);
+  }, [approvals, chatId, isStreaming, lastItemIndex, liveWorkIndex, onSelectThread, turnEndByRow]);
 
   // Wrap each row in the column, with the turn rhythm above it.
   // One virtual row: absolutely positioned at its measured offset, and handed
@@ -1520,7 +1591,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         ref={measureRow}
       >
         {/* A date divider carries its own space, so its row adds none. */}
-        <div className={cn(COLUMN_CLASS, !dateLabel && turnRhythmClass(timelineItems, index))}>
+        <div className={cn(COLUMN_CLASS, !dateLabel && rhythmByRow[index])}>
           {dateLabel && item.type === "message" && (
             <div className="py-4 text-center text-meta text-muted-foreground">
               <time dateTime={item.message.createdAt}>{dateLabel}</time>
@@ -1537,7 +1608,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         </div>
       </div>
     );
-  }, [dateLabels, highlightedRowKey, measureRow, renderItem, timelineItems]);
+  }, [dateLabels, highlightedRowKey, measureRow, renderItem, rhythmByRow]);
 
   if (timelineItems.length === 0) {
     return (

@@ -4,6 +4,7 @@ import { ChatMessage } from "../ChatMessage";
 import { ContentBlockType, MessageRole, StreamingState } from "../../../types/chat";
 import type { Message } from "../../../types/chat";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
+import { failedSendId } from "../../../lib/pendingSends";
 
 vi.mock("../MarkdownRenderer", () => ({
   MarkdownRenderer: ({ content }: { content: string }) => <div>{content}</div>,
@@ -25,6 +26,8 @@ vi.mock("../../../store/projectStore", () => ({
 
 vi.mock("../../../store/chatStore", () => ({
   useChatStore: { getState: () => ({ branchChat: vi.fn() }) },
+  canRetryFailedSend: () => false,
+  failedSendRecipients: () => [],
 }));
 
 vi.mock("../../../api/client", () => ({
@@ -48,9 +51,9 @@ vi.mock("../BranchToExistingWorktreeModal", () => ({
 }));
 vi.mock("../CodeContextPill", () => ({ CodeContextPill: () => null }));
 
-function buildMessage(role: MessageRole): Message {
+function buildMessage(role: MessageRole, id = "msg-1"): Message {
   return {
-    id: "msg-1",
+    id,
     chatId: "chat-1",
     seq: BigInt(1),
     thread: "chat-1",
@@ -123,6 +126,24 @@ describe("ChatMessage actions row", () => {
 
   it("leaves the actions to the row that ends the turn", () => {
     render(<ChatMessage message={buildMessage(MessageRole.ASSISTANT)} chatId="chat-1" turnEnd={false} />);
+    expect(screen.queryByRole("button", { name: "Copy message" })).not.toBeInTheDocument();
+  });
+
+  it("leaves a prompt's actions to the answer that follows it", () => {
+    render(<ChatMessage message={buildMessage(MessageRole.USER)} chatId="chat-1" turnEnd={false} />);
+    expect(screen.queryByRole("button", { name: "Copy message" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the actions under the latest prompt while nothing has answered it", () => {
+    render(<ChatMessage message={buildMessage(MessageRole.USER)} chatId="chat-1" isLatestMessage turnEnd />);
+    expect(actionsRow()).not.toHaveClass("opacity-0");
+  });
+
+  it("puts the not-sent line under a failed send in the actions row's place", () => {
+    render(
+      <ChatMessage message={buildMessage(MessageRole.USER, failedSendId("c1"))} chatId="chat-1" isLatestMessage turnEnd />,
+    );
+    expect(screen.getByTestId("failed-send-status")).toHaveTextContent("Not sent");
     expect(screen.queryByRole("button", { name: "Copy message" })).not.toBeInTheDocument();
   });
 
