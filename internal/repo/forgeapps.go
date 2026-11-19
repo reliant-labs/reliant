@@ -96,7 +96,9 @@ type ForgeAppOptions struct {
 // The walk is bounded the way Discover's is (ForgeAppOptions; a bound that
 // stops it is reported, never hidden), within one directory as well as across
 // them: a directory is listed in batches, never further than the budget
-// could visit (walkBounds.list), so one very wide directory cannot stall it.
+// could visit (walkBounds.list), so one very wide directory cannot hold it
+// past its bounds. (A single read blocked in the kernel still can: see
+// walkReadBatch.)
 // It never follows a symlink, and never
 // enters a directory skipDir or forgeAppSkipDirs names, nor a nested git
 // checkout: a repository inside this one is its own repository, whose apps
@@ -114,6 +116,11 @@ type ForgeAppOptions struct {
 // not one (no name, not YAML, too large, not a forge manifest) is simply not
 // an app.
 func FindForgeApps(ctx context.Context, repoRoot string, opts ForgeAppOptions) (ForgeAppScan, error) {
+	return findForgeApps(ctx, repoRoot, opts, time.Now)
+}
+
+// findForgeApps is FindForgeApps, reading the time for its deadline from now.
+func findForgeApps(ctx context.Context, repoRoot string, opts ForgeAppOptions, now func() time.Time) (ForgeAppScan, error) {
 	maxDepth := opts.MaxDepth
 	if maxDepth <= 0 {
 		maxDepth = ForgeAppMaxDepth
@@ -145,7 +152,7 @@ func FindForgeApps(ctx context.Context, repoRoot string, opts ForgeAppOptions) (
 	}
 
 	w := &forgeAppWalk{
-		walkBounds: walkBounds{ctx: ctx, deadline: opts.Deadline, maxEntries: maxEntries},
+		walkBounds: walkBounds{ctx: ctx, deadline: opts.Deadline, now: now, maxEntries: maxEntries},
 		fsys:       fsys,
 		maxDepth:   maxDepth,
 	}

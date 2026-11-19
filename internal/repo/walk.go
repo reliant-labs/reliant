@@ -12,18 +12,26 @@ import (
 )
 
 // walkReadBatch is the most entries a bounded walk asks a directory for at
-// once. The walk checks its context and deadline between batches, and never
-// lists further than its entry budget allows, so a directory of a million
-// entries costs at most one batch past a bound: not a read and sort of the
-// whole listing before any bound is checked, which is what fs.WalkDir and
-// filepath.WalkDir do.
+// once. The walk checks its context and deadline before every batch and every
+// entry, and never lists further than its entry budget allows, so a directory
+// of a million entries is never read whole before a bound is checked, which
+// is what fs.WalkDir and filepath.WalkDir do.
+//
+// The bound is per batch and per entry, not per system call: one ReadDir (or
+// Stat, or manifest read) blocked in the kernel, on a hung network mount say,
+// cannot be interrupted, exactly as with WalkDir before. Go has no way to
+// cancel a blocked syscall short of abandoning the goroutine in it, which
+// these walks do not do; a caller that must answer by a deadline enforces it
+// itself (the daemon's repo.discover runs each command in its own goroutine,
+// and the server waits for it no longer than its own deadline).
 const walkReadBatch = 256
 
 // errWalkStopped ends a walk a bound stopped; walkBounds.stopped says which.
 var errWalkStopped = errors.New("walk stopped")
 
 // walkBounds are the bounds one directory walk checks (Discover's and
-// FindForgeApps'): its context, its deadline and its entry budget.
+// FindForgeApps'): its context, its deadline (read from now) and its entry
+// budget.
 //
 // The budget is charged per entry VISITED, exactly as the walks charged it
 // when they were fs.WalkDir callbacks (the root, every entry of every
@@ -42,6 +50,7 @@ var errWalkStopped = errors.New("walk stopped")
 type walkBounds struct {
 	ctx        context.Context
 	deadline   time.Time
+	now        func() time.Time // time.Now outside tests
 	maxEntries int
 
 	entries int
@@ -58,7 +67,7 @@ func (b *walkBounds) bounded() bool {
 		b.stopped = "the request ended"
 		return true
 	}
-	if !b.deadline.IsZero() && !time.Now().Before(b.deadline) {
+	if !b.deadline.IsZero() && !b.now().Before(b.deadline) {
 		b.stopped = "it ran out of time"
 		return true
 	}
