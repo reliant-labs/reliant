@@ -111,11 +111,17 @@ type daemonConnection struct {
 	// reconcile, no cleanup, no by-path project resolution — until the next
 	// connect resolves it (machineProjectScope).
 	orgUnresolved bool
-	name          string
-	hostname      string
-	platform      string
-	labels        map[string]string
-	daemonType    string // "local" or "cloud"
+	// credentialOrgID is the org the connecting credential acts in
+	// (auth.GetCredentialOrgFromContext), "" for a daemon the gateway
+	// dialed. The connected event names it, so the control plane records a
+	// self-paired machine in the org it was paired in. It is not orgID: on a
+	// first connect no machine row records an org yet.
+	credentialOrgID string
+	name            string
+	hostname        string
+	platform        string
+	labels          map[string]string
+	daemonType      string // "local" or "cloud"
 	// boundCredential: the connection was made with a credential bound to
 	// this daemon id, or dialed in by the gateway for a pod the control
 	// plane named. An unbound credential may never supersede such a
