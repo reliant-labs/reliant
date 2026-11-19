@@ -39,6 +39,7 @@ vi.mock("../SettingsContent", () => ({
 }));
 
 import { SettingsPage } from "../SettingsPage";
+import { ShellFrameContext } from "../../Layout/shell/shellFrame";
 
 let resize: ResizeObserverCallback;
 beforeEach(() => {
@@ -150,5 +151,26 @@ describe("settings navigation chrome", () => {
     view.rerender(<SettingsPage />);
     expect(sidebar.className).toContain("w-16");
     expect(sidebar.firstElementChild).toBe(header);
+  });
+
+  // Inside the one shell (U6): the shell's nav is the way out and holds the
+  // org switcher, so Settings keeps only its section list beside the section.
+  it("inside the one shell, drops its exit, org switcher and drag spacer but keeps its sections", async () => {
+    state.isElectron = true;
+    state.isMac = true;
+    render(
+      <ShellFrameContext.Provider value={{ inShell: true, navDocked: true }}>
+        <SettingsPage />
+      </ShellFrameContext.Provider>,
+    );
+    await screen.findByTestId("settings-content");
+    expect(screen.queryByRole("button", { name: "Close Settings" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Back to app" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Switch organization" })).toBeNull();
+    const sections = screen.getByRole("complementary", { name: "Settings" });
+    expect(sections.querySelector("[aria-hidden='true'].h-10")).toBeNull();
+    expect(within(sections).getByRole("button", { name: "Account" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("settings-header")).toHaveTextContent("Settings");
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 });

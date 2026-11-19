@@ -10,8 +10,7 @@
  * two lists sit one above the other, and the filter narrows to apps or sites.
  */
 
-import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { FolderGit2 } from "lucide-react";
 
 import PageHeader from "@/components/forge-ui/page_header";
@@ -44,7 +43,16 @@ export function ProjectsPage() {
 
 export function ProjectsBody() {
   const showApps = isForgeUIEnabled();
-  const [filter, setFilter] = useState<ProjectsFilter>("all");
+  // The filter is the URL's (`?show=apps|sites`), so a refresh, Back and a shared link keep it.
+  const { show } = useSearch({ strict: false }) as { show?: unknown };
+  const filter: ProjectsFilter = show === "apps" || show === "sites" ? show : "all";
+  const navigate = useNavigate();
+  const setFilter = (next: ProjectsFilter) =>
+    void navigate({
+      to: ".",
+      search: (prev: Record<string, unknown>) => ({ ...prev, show: next === "all" ? undefined : next }),
+      replace: true,
+    } as never);
   const { apps, loading } = useApps();
   const noSites = !loading && filter === "sites" && !apps.some(isLive);
 

@@ -16,9 +16,9 @@
  *
  * WHAT IT IS ON. Signed in, on the desktop surface, under one of the two app
  * layouts — never /auth, /onboarding, the phone's /m/*, the workflow builder
- * (its own full-screen chrome) or the forge demo (its own console frame). The
- * same rule as the keyboard host's (Shortcuts/ShortcutHost.tsx), read from
- * the same rendered matches. Off it, the frame renders nothing of its own and
+ * (its own full-screen chrome) or the public forge demo (its own console
+ * frame). The same rule as the keyboard host's (Shortcuts/ShortcutHost.tsx),
+ * read from the same rendered matches. Off it, the frame renders nothing of its own and
  * its children sit where they always did (`display: contents`), so turning it
  * on or off never remounts the page under it.
  *

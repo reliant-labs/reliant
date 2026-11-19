@@ -27,18 +27,23 @@ import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 const APP_LAYOUTS = new Set(["/_app", "/_authenticated"]);
 /**
  * Under `_authenticated`, but not a page of the shell: onboarding (a setup
- * flow), the phone surface, the workflow builder (a full-screen editor with
- * its own header) and the forge demo (its own console frame).
+ * flow), the phone surface and the workflow builder (a full-screen editor
+ * with its own header). The forge demo is a public root route with its own
+ * console frame, under neither layout.
  */
 const OUTSIDE_SHELL = new Set([
   "/_authenticated/onboarding",
   "/_authenticated/_mobile",
   "/_authenticated/workflow/new",
   "/_authenticated/workflow/$workflowName",
-  "/_authenticated/forge/demo",
 ]);
 
-/** Whether the page with these matched routes is a page of the one shell. */
+/**
+ * Whether the page with these matched routes is a page of the one shell.
+ * Decided by the route tree, not by path: any page mounted under the two app
+ * layouts is one (the chat URLs of U5, `/c/<chat>` and `/new`, included), so
+ * the frame never depends on how the workspace picks the open chat.
+ */
 export function shellFrameScope({
   routeIds,
   pathname,
