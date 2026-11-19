@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -69,7 +70,7 @@ func TestFileSystemProxy_AChatPinnedToAMachineWithoutTheCheckoutIsRefused(t *tes
 	repo, projectID, _ := seedFSProxyProjectOn(t, "cicd")
 	ctx := fsProxyContext()
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: mac, UserID: fsProxyTestUser}))
-	now := time.Now().UTC()
+	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC) // a fixture, not the wall clock
 	pinned := mac
 	chatID := uuid.NewString()
 	require.NoError(t, repo.CreateChat(ctx, &db.Chat{ID: chatID, ProjectID: projectID, UserID: fsProxyTestUser,
@@ -102,4 +103,61 @@ func TestFileSystemProxy_MissingRootListsTheOtherMachinesThatHaveIt(t *testing.T
 	other := map[string]string{"2aab1465": "cicd", "cicd": "2aab1465"}[d.GetDaemonId()]
 	require.NotEmpty(t, other, "reached one of the machines with a checkout, got %q", d.GetDaemonId())
 	assert.Equal(t, []string{other}, d.GetAvailableDaemonIds(), "the other machine, never the one reached")
+}
+
+// orgMembership answers every membership question with member.
+type orgMembership struct{ member bool }
+
+func (m orgMembership) IsMember(context.Context, string, string) (bool, bool, error) {
+	return m.member, true, nil
+}
+
+func (orgMembership) DefaultOrg(context.Context, string) (string, error) { return "home", nil }
+
+// A request no chat or worktree placed names only a project id, so the
+// project must be the caller's to work in before any checkout is resolved:
+// a refusal's detail names the project and its remote. Another user's
+// project, and the caller's own when their org membership or credential does
+// not reach it, are not found, with no project metadata and nothing sent.
+func TestFileSystemProxy_ChatlessRequestForAProjectTheCallerMayNotUseIsNotFound(t *testing.T) {
+	const mac = "46e3682b-33cd-4e88-aecb-52a3a919a354"
+	org := func(s string) *string { return &s }
+	for _, tc := range []struct {
+		desc  string
+		owner string
+		orgID *string
+		ctx   func(context.Context) context.Context
+	}{
+		{"another user's project", "someone-else", nil, func(ctx context.Context) context.Context { return ctx }},
+		{"the owner's project in an org they left", fsProxyTestUser, org("acme"), func(ctx context.Context) context.Context {
+			return authz.WithMembership(ctx, orgMembership{member: false})
+		}},
+		{"the owner's project in an org their credential is not bound to", fsProxyTestUser, org("acme"), func(ctx context.Context) context.Context {
+			return authz.WithCredentialOrg(authz.WithMembership(ctx, orgMembership{member: true}), "home")
+		}},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			repo, cleanup := db.SetupTestDB(t)
+			t.Cleanup(cleanup)
+			setup := authz.WithMembership(context.Background(), authz.NoOrgs{})
+			projectID := "fs-proxy-" + uuid.NewString()
+			remote := "https://github.com/secret-org/secret-repo"
+			require.NoError(t, repo.CreateProject(setup, &db.Project{
+				ID: projectID, Name: "secret-project", Path: t.TempDir(), UserID: tc.owner, OrgID: tc.orgID, RemoteURL: &remote,
+			}))
+			require.NoError(t, repo.UpsertDaemon(setup, &db.Daemon{ID: mac, UserID: fsProxyTestUser}))
+
+			router := &placingRouter{def: mac}
+			svc := newProxy(t, router, repo)
+			_, err := svc.GetFileTree(tc.ctx(fsProxyContext()), connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "/"}))
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+			cerr := svcerr.ToConnect(err)
+			assert.Empty(t, cerr.Details(), "no detail for a project the caller may not use")
+			msg := cerr.Message()
+			assert.NotContains(t, msg, "secret-project")
+			assert.NotContains(t, msg, remote)
+			assert.Empty(t, router.sent, "nothing is sent for a project the caller may not use")
+		})
+	}
 }

@@ -78,11 +78,18 @@ func (s *Service) requireProjectBase(ctx context.Context, userID, projectID stri
 	if strings.TrimSpace(projectID) == "" {
 		return "", "", svcerr.InvalidArgument("project_id is required to scope a filesystem request")
 	}
+	// The project is the caller's to work in before anything about it is
+	// resolved: a refusal's detail names the project and its remote, and a
+	// request no chat or worktree placed reaches here with nothing else
+	// checking the project id.
+	project, err := s.deps.Repo.GetProject(ctx, projectID)
+	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
+		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to load the project"))
+	}
+	if !authz.CanWriteProject(ctx, userID, project) {
+		return "", "", svcerr.NotFound("project")
+	}
 	mainCheckout := func(ctx context.Context) (string, error) {
-		project, err := s.deps.Repo.GetProject(ctx, projectID)
-		if err != nil {
-			return "", err
-		}
 		// A request no chat or workspace placed (target.DaemonID "") is
 		// resolved among the machines that HAVE the project — the default
 		// when it is one of them, else another of the user's — never on
