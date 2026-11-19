@@ -2,8 +2,8 @@
 # Hermetic self-test of scripts/release-prebuild.sh, the decisions behind release.yml's
 # Electron prebuild reuse: the marker carries the renderer's identity and refuses a
 # renderer that does not report the version; a tag reuses only a successful prebuild of
-# exactly its version on exactly its commit, with all three platforms' artifacts, and
-# builds otherwise; publishing refuses a prebuild missing any update feed its clients
+# exactly its version on exactly its commit, with all three platforms' artifacts and the
+# CLI archives, and builds otherwise; publishing refuses a prebuild missing any update feed its clients
 # poll (Windows' <channel>.yml, both Linux architectures), uploads feeds last, and a dry
 # run uploads nothing. A fake gh and a fake aws; no network.
 set -euo pipefail
@@ -40,7 +40,8 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 all='prebuild-v1.2.3
 macos-builds
 linux-builds
-windows-builds'
+windows-builds
+cli-archives'
 # run <id> <artifact names> <marker json>
 run() { mkdir -p "$fx/runs/$1"; printf '%s\n' "$2" > "$fx/runs/$1/artifacts"; printf '%s\n' "$3" > "$fx/runs/$1/prebuild.json"; }
 good="{\"version\":\"v1.2.3\",\"sha\":\"$sha\",\"renderer\":\"1.2.3\"}"
@@ -98,6 +99,11 @@ run 15 "prebuild-v1.2.3
 macos-builds
 linux-builds" "$good"
 find_is "" "a prebuild missing a platform's artifacts is not reused" 15
+run 17 "prebuild-v1.2.3
+macos-builds
+linux-builds
+windows-builds" "$good"
+find_is "" "a prebuild missing its CLI archives is not reused" 17
 find_is 11 "a bad run is skipped for a good one" "15 13 11"
 find_is 11 "a dry run (another dispatch) without a marker is skipped" "$(run 16 'macos-builds' '{}'; echo 16 11)"
 

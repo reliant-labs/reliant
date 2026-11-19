@@ -575,6 +575,67 @@ jobs:
           du -sh "$RUNNER_TEMP" "$HOME/.cache/go-build" "$HOME/go/pkg/mod" 2>/dev/null || true
 
   # ============================================================================
+  # STANDALONE CLI: the backend binaries as `reliant` archives
+  # ============================================================================
+  # The same six binaries the installers bundle, repackaged as
+  # reliant_<os>_<arch>.tar.gz + checksums.txt for self-run daemons and the
+  # self-upgrade path (forge docs/proposals/self-upgrade.md §6, R0; reliant
+  # dev-docs/cli-release-artifacts.md). Nothing is built twice: this job only
+  # packages build-backend's artifacts. A prebuild run packages them too, and a
+  # tag that reuses the prebuild takes its archives (release-prebuild.sh find
+  # requires them), so the CLI and the installers always carry one binary.
+  # Publishing and signing are cli-publish's, after Finalize.
+  cli-archives:
+    name: Package CLI archives
+    needs: [prepare, build-backend]
+    if: always() && needs.prepare.result == 'success' && (needs.prepare.outputs.prebuilt_run != '' || needs.build-backend.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 1
+
+      - name: Download the backend binaries
+        if: needs.prepare.outputs.prebuilt_run == ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          # One directory per artifact: backend/backend-<os>-<arch>/.
+          pattern: backend-*
+          path: backend
+
+      - name: Package the CLI archives
+        if: needs.prepare.outputs.prebuilt_run == ''
+        run: |
+          set -euo pipefail
+          # Reproducible archives: every entry is stamped with the commit time.
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" bash scripts/release-cli.sh package backend cli-dist
+
+      - name: Take the prebuild's CLI archives
+        if: needs.prepare.outputs.prebuilt_run != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cli-archives
+          path: cli-dist
+          run-id: ${{ needs.prepare.outputs.prebuilt_run }}
+          github-token: ${{ github.token }}
+
+      - name: Verify the CLI archives
+        run: bash scripts/release-cli.sh verify cli-dist
+
+      - name: Upload the CLI archives
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cli-archives
+          path: |
+            cli-dist/reliant_*.tar.gz
+            cli-dist/checksums.txt
+          # As long as the platform builds: a tag reuses a prebuild's.
+          retention-days: 90
+          compression-level: 0
+
+  # ============================================================================
   # macOS: Build, Sign, Notarize, and Publish
   # ============================================================================
   release-macos:
@@ -1594,6 +1655,187 @@ jobs:
           EOF
 
   # ============================================================================
+  # CLI: sign, attach to the GitHub Release, publish the channel manifest
+  # ============================================================================
+  # One keyless Sigstore attestation (actions/attest) over the six CLI archives,
+  # checksums.txt and daemon-channels.json, attached to the GitHub Release as
+  # reliant-release.sigstore.json, the shape forge's release-attest.yml signs
+  # forge's releases with. Then everything goes to downloads.reliantlabs.io under
+  # cli/<tag>/, and daemon-channels.json, the public channel manifest self-run
+  # daemons read their target from, at the bucket root, last.
+  #
+  # The certificate names THIS workflow at the release tag
+  # (SIGNER_IDENTITY); the predicate names {repository, release, commit}, so a
+  # signed set cannot be replayed under another tag. Unlike forge's, the archives
+  # are built in this same run (build-backend), not on a laptop.
+  #
+  # Only this job holds id-token: write. Tags only (the predicate names a
+  # release), never a dry run, and after Finalize, which creates the Release. A
+  # signature is never replaced: a re-run finds it on the Release, verifies the
+  # Release's own signed set and republishes that. Design, manifest schema and
+  # verification commands: dev-docs/cli-release-artifacts.md;
+  # tools/test-affected/release_cli_workflow_test.go holds this job to them.
+  cli-publish:
+    name: Sign and publish the CLI
+    needs: [prepare, cli-archives, finalize]
+    if: always() && needs.prepare.result == 'success' && needs.cli-archives.result == 'success' && needs.finalize.result == 'success' && github.ref_type == 'tag' && github.event.inputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # gh release view/upload/download of the Release's assets.
+      contents: write
+      # The OIDC token Fulcio certifies, and the attestations API that stores it.
+      id-token: write
+      attestations: write
+    env:
+      SIGNATURE_ASSET: reliant-release.sigstore.json
+      SIGNER_IDENTITY: '^https://github\.com/reliant-labs/reliant/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+      SIGNER_ISSUER: https://token.actions.githubusercontent.com
+      PREDICATE_TYPE: https://github.com/reliant-labs/reliant/attestations/release-assets/v1
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 1
+
+      - name: Download the CLI archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cli-archives
+          path: cli-dist
+
+      - name: Is the Release already signed?
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          bash scripts/release-cli.sh verify cli-dist
+          gh release view "$VERSION" --json assets > "$RUNNER_TEMP/release.json"
+          # First signature wins: re-signing would bless whatever the Release
+          # holds NOW, which is exactly what someone who swapped an asset wants.
+          if jq -e --arg a "$SIGNATURE_ASSET" 'any(.assets[]; .name == $a)' "$RUNNER_TEMP/release.json" > /dev/null; then
+            echo "::notice::$VERSION already carries $SIGNATURE_ASSET; a signature is never replaced: republishing the Release's signed set"
+            rm -rf cli-dist
+            gh release download "$VERSION" --dir cli-dist --pattern 'reliant_*.tar.gz' \
+              --pattern checksums.txt --pattern daemon-channels.json --pattern "$SIGNATURE_ASSET"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write the channel manifest and the predicate
+        if: steps.release.outputs.signed == 'false'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+        run: |
+          set -euo pipefail
+          COMMIT="$(git rev-parse HEAD)"
+          COMMIT_TIME="$(bash scripts/release-identity.sh --commit-time --commit "$COMMIT")"
+          bash scripts/release-cli.sh fetch-manifest "$RUNNER_TEMP/current.json"
+          bash scripts/release-cli.sh manifest "$RUNNER_TEMP/current.json" "$CHANNEL" "$VERSION" "$COMMIT" "$COMMIT_TIME" cli-dist > "$RUNNER_TEMP/daemon-channels.json"
+          mv "$RUNNER_TEMP/daemon-channels.json" cli-dist/daemon-channels.json
+          bash scripts/release-cli.sh predicate "$GITHUB_REPOSITORY" "$VERSION" "$COMMIT" > "$RUNNER_TEMP/predicate.json"
+          cat cli-dist/daemon-channels.json "$RUNNER_TEMP/predicate.json"
+
+      - name: Sign
+        id: attest
+        if: steps.release.outputs.signed == 'false'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            cli-dist/reliant_*.tar.gz
+            cli-dist/checksums.txt
+            cli-dist/daemon-channels.json
+          predicate-type: ${{ env.PREDICATE_TYPE }}
+          predicate-path: ${{ runner.temp }}/predicate.json
+
+      - name: Take the new signature
+        if: steps.release.outputs.signed == 'false'
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: cp "$BUNDLE" "cli-dist/$SIGNATURE_ASSET"
+
+      - name: Check the signature as a verifier will
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          # The certificate must name this workflow at a release tag, and the
+          # signed predicate this repository and THIS release.
+          for f in cli-dist/reliant_*.tar.gz cli-dist/checksums.txt cli-dist/daemon-channels.json; do
+            gh attestation verify "$f" --bundle "cli-dist/$SIGNATURE_ASSET" --repo "$GITHUB_REPOSITORY" \
+              --cert-identity-regex "$SIGNER_IDENTITY" --cert-oidc-issuer "$SIGNER_ISSUER" \
+              --predicate-type "$PREDICATE_TYPE" --deny-self-hosted-runners \
+              --format json > "$RUNNER_TEMP/verified.json"
+            jq -e --arg release "$VERSION" --arg repo "$GITHUB_REPOSITORY" --arg commit "$GITHUB_SHA" \
+              'length > 0 and all(.[]; .verificationResult.statement.predicate | .release == $release and .repository == $repo and .commit == $commit)' \
+              "$RUNNER_TEMP/verified.json" > /dev/null
+            echo "verified $f"
+          done
+
+      - name: Publish to downloads.reliantlabs.io
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        # Versioned files under cli/<tag>/ first, the root manifest last; refuses
+        # a manifest that would move any channel backwards.
+        run: bash scripts/release-cli.sh publish "$VERSION" cli-dist
+
+      - name: Attach to the GitHub Release
+        if: steps.release.outputs.signed == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          # The signed set may be replaced while it is unsigned (a re-run after a
+          # partial upload); the signature goes last and never with --clobber.
+          gh release upload "$VERSION" --clobber cli-dist/reliant_*.tar.gz cli-dist/checksums.txt cli-dist/daemon-channels.json
+          gh release upload "$VERSION" "cli-dist/$SIGNATURE_ASSET"
+
+      - name: Purge the channel manifest from the CDN
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          # The one mutable URL; everything under cli/<tag>/ is immutable.
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"files":["https://downloads.reliantlabs.io/daemon-channels.json"]}' || true)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          if [[ "$HTTP_CODE" -ne 200 ]]; then
+            echo "::warning::Cache purge of daemon-channels.json returned HTTP ${HTTP_CODE}: $(echo "$RESPONSE" | head -n -1)"
+          fi
+
+      - name: CLI summary
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+        run: |
+          {
+            echo "## :package: Standalone CLI (${CHANNEL})"
+            echo ""
+            echo "| Platform | Archive |"
+            echo "|:---------|:--------|"
+            jq -r --arg ch "$CHANNEL" '.channels[$ch].platforms | to_entries[] | "| \(.key) | [\(.value.url | split("/") | last)](\(.value.url)) |"' cli-dist/daemon-channels.json
+            echo ""
+            echo "Channel manifest: https://downloads.reliantlabs.io/daemon-channels.json · signature: \`${SIGNATURE_ASSET}\` on the [GitHub Release](https://github.com/${GITHUB_REPOSITORY}/releases/tag/${VERSION})"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ============================================================================
   # VERIFY: the release is downloadable, as a client sees it
   # ============================================================================
   # A green build has not meant "released": v1.8.1 failed late and v1.8.6's
@@ -1609,7 +1851,7 @@ jobs:
   # SPA never calls RPCs the deployed API does not have yet.
   verify-published:
     name: Verify published release
-    needs: [prepare, finalize]
+    needs: [prepare, finalize, cli-publish]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: always() && needs.prepare.result == 'success' && github.event.inputs.dry_run != 'true'
@@ -1624,6 +1866,15 @@ jobs:
           VERSION: ${{ needs.prepare.outputs.version }}
           CHANNEL: ${{ needs.prepare.outputs.channel }}
         run: scripts/verify-release-artifacts.sh "$VERSION" --channel "$CHANNEL" --wait 600
+
+      # The standalone CLI (cli-publish): daemon-channels.json names this release
+      # for its channel, and every archive, checksums.txt and the signature it
+      # names are live with the sha256s checksums.txt records.
+      - name: The CLI archives and the channel manifest are live
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+        run: bash scripts/release-cli.sh verify-published "$VERSION" "$CHANNEL" --wait 600
 
       - name: The GitHub Release exists
         env:

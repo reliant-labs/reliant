@@ -20,7 +20,8 @@
 #   release-prebuild.sh find <owner/repo> <tag> <sha>
 #       Print the id of a successful prebuild run of <tag> on exactly <sha> whose
 #       marker matches (version, commit, renderer identity) and whose three platform
-#       artifacts are still there. Prints nothing when there is none: build instead.
+#       artifacts and CLI archives (cli-archives, scripts/release-cli.sh) are still
+#       there. Prints nothing when there is none: build instead.
 #
 #   release-prebuild.sh publish <mac|linux|win> <channel> <version> <dist-dir>
 #       Upload a platform's prebuilt artifacts to R2 exactly where electron-builder
@@ -87,7 +88,9 @@ cmd_find() {
       --jq '.artifacts[] | select(.expired | not) | .name')" || continue
     grep -qx "prebuild-$tag" <<< "$names" || continue
     local missing=""
-    for a in macos-builds linux-builds windows-builds; do
+    # cli-archives: the tag publishes the prebuild's CLI too, so the CLI and the
+    # installers carry the same backend binary (release.yml cli-archives).
+    for a in macos-builds linux-builds windows-builds cli-archives; do
       grep -qx "$a" <<< "$names" || missing="$missing $a"
     done
     if [ -n "$missing" ]; then
