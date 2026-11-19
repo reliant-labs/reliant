@@ -1956,7 +1956,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   "relative rounded-2xl border bg-background p-2 chat-input-container cursor-text transition-[border-color,box-shadow] duration-200",
                   hasPendingQuestion
                     ? "border-warning/70"
-                    : "border-border focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/40",
+                    : "border-border focus-within:border-ring focus-within:ring-1 focus-within:ring-ring",
                   isDragging && "bg-[var(--chat-drag-bg,var(--transparent-button-hover))]",
                 )}
                 data-onboarding="chat-input"

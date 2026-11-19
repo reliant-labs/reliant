@@ -791,7 +791,9 @@ const AXIS_FONT_REM = 0.8125;
 function axisFont(): string {
   const root = parseFloat(getComputedStyle(document.documentElement).fontSize) || 14;
   const family = getComputedStyle(document.body).fontFamily || "system-ui, sans-serif";
-  return `${Math.round(root * AXIS_FONT_REM * 10) / 10}px ${family}`;
+  // Whole pixels: uPlot reads the size with /(\d+)px/, so "12.2px" parses as
+  // 2px and the time axis stacks its date line on top of its hour line.
+  return `${Math.round(root * AXIS_FONT_REM)}px ${family}`;
 }
 
 /** `hsl(217 91% 60%)` → `hsl(217 91% 60% / 0.12)`. Anything else passes through. */
