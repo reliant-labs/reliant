@@ -42,9 +42,8 @@ func loadDaemonConfig(cmd *cobra.Command) (*config.DaemonConfig, error) {
 			return nil, fmt.Errorf("config: %s = %d is not a TCP port (1-65535)", p.name, p.port)
 		}
 	}
-	if _, err := machinepool.ParseLabels(cfg.GetLabels(), "labels"); err != nil {
-		return nil, fmt.Errorf("config: RELIANT_DAEMON_LABELS (labels): %w", err)
-	}
+	// labels is not checked here: --label replaces it, so only the list in
+	// effect is checked, by daemonMachineLabels.
 	return cfg, nil
 }
 
@@ -76,12 +75,18 @@ func (f *labelsFlag) labels() (map[string]string, error) {
 
 // daemonMachineLabels are the durable labels `daemon start` declares for its
 // machine: --label when given (it replaces the config's list, as a flag
-// overrides its config value), else DaemonConfig.labels.
+// overrides its config value), else DaemonConfig.labels. Only the list in
+// effect is checked, so a bad config list that --label replaces does not stop
+// the daemon; a bad list in effect does, before the daemon does anything.
 func daemonMachineLabels(cmd *cobra.Command, cfg *config.DaemonConfig, flag *labelsFlag) (map[string]string, error) {
 	if cmd.Flags().Changed(flag.name) {
 		return flag.labels()
 	}
-	return machinepool.ParseLabels(cfg.GetLabels(), "labels")
+	labels, err := machinepool.ParseLabels(cfg.GetLabels(), "labels")
+	if err != nil {
+		return nil, fmt.Errorf("config: RELIANT_DAEMON_LABELS (labels): %w", err)
+	}
+	return labels, nil
 }
 
 // daemonHost is what the platform declared about where this daemon runs, in

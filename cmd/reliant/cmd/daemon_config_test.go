@@ -121,10 +121,6 @@ func TestDaemonStartMachineLabels(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"pool": "pipeline"}, got, "the flag replaces the env list")
 
-	t.Setenv("RELIANT_DAEMON_LABELS", "Pool=x")
-	_, err = loadDaemonConfig(daemonCommandWithArgs(t, "start"))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "RELIANT_DAEMON_LABELS")
 	t.Setenv("RELIANT_DAEMON_LABELS", "")
 
 	for _, bad := range []string{"pool", "Pool=pipeline", "pool=pipeline,gate"} {
@@ -134,4 +130,39 @@ func TestDaemonStartMachineLabels(t *testing.T) {
 		require.Error(t, err, bad)
 		assert.Contains(t, err.Error(), "--label", bad)
 	}
+}
+
+// Only the label list in effect is checked: an invalid env/config list that
+// --label replaces does not stop the daemon, and with no --label it does.
+func TestDaemonStartLabelsCheckOnlyTheListInEffect(t *testing.T) {
+	resolve := func(args ...string) (map[string]string, error) {
+		cmd := daemonCommandWithArgs(t, "start", args...)
+		cfg, err := loadDaemonConfig(cmd)
+		if err != nil {
+			return nil, err
+		}
+		return daemonMachineLabels(cmd, cfg, cmd.Flags().Lookup("label").Value.(*labelsFlag))
+	}
+	for _, bad := range []string{"Pool=x", "pool", "pool=pipeline,gate"} {
+		t.Run(bad, func(t *testing.T) {
+			t.Setenv("RELIANT_DAEMON_LABELS", bad)
+
+			got, err := resolve("--label", "pool=pipeline")
+			require.NoError(t, err, "--label replaces the invalid env list")
+			assert.Equal(t, map[string]string{"pool": "pipeline"}, got)
+
+			_, err = resolve()
+			require.Error(t, err, "the invalid env list is in effect without --label")
+			assert.Contains(t, err.Error(), "RELIANT_DAEMON_LABELS")
+		})
+	}
+}
+
+// The same through `daemon start` itself: with an invalid env list and no
+// --label it stops before doing anything, naming the setting.
+func TestDaemonStartRefusesInvalidConfiguredLabels(t *testing.T) {
+	t.Setenv("RELIANT_DAEMON_LABELS", "Pool=x")
+	_, err := executeRoot(t, "daemon", "start", "--data-dir", t.TempDir())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "RELIANT_DAEMON_LABELS")
 }
