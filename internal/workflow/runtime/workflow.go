@@ -1120,7 +1120,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// the rows first, exactly as a self-resume does.
 		if endedUnattendedPause(retErr) &&
 			workflow.GetVersion(ctx, unattendedGiveUpUnpausesChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
-			notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
+			_ = notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
 		}
 		// A failed run gets its on_failure handler, once, before the run is
 		// reported failed. The run still fails: see on_failure.go.
