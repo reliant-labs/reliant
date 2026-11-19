@@ -8,6 +8,10 @@
  *   light  page 98% < card 100%; muted 95.5% (hover/selected only — never
  *          structure, see the web-styling skill); border 89.5%
  *   dark   page 8.5% < card 12% < popover 15.5% < muted 18.5%; border 21.5%
+ *   both   --border-subtle (table row rules, a tool fold's indent rule,
+ *          chart gridlines) sits between the card and --border; --bubble
+ *          (the user chat message) is its own fill, never --muted or --card
+ *          (bubbleToken.test.ts, borderContrast.test.ts)
  *
  * Every pair is held by tests: muted text AA on every surface
  * (mutedForegroundContrast), status inks AA on every page and card
@@ -72,6 +76,8 @@
   --accent-foreground: 240 10% 12%;
   --ring: 211 92% 46%;
   --border: 240 14% 89.5%;
+  --border-subtle: 240 12% 93%;
+  --bubble: 240 12% 94%;
   --config-input-bg: 240 14% 97%;
   --config-input-border: 240 14% 83.5%;
   --tab-active: 211 92% 46%;
@@ -119,6 +125,8 @@
   --accent-foreground: 240 5% 96%;
   --ring: 208.5 100% 52.5%;
   --border: 234 12% 16.5%;
+  --border-subtle: 240 12% 12.5%;
+  --bubble: 240 12% 13%;
   --config-input-bg: 240 18% 6.5%;
   --config-input-border: 234 9% 21%;
   --tab-active: 211 92% 46%;
@@ -167,6 +175,8 @@
   --accent-foreground: 220 10% 12%;
   --ring: 221 83% 50%;
   --border: 220 14% 89.5%;
+  --border-subtle: 220 14% 93%;
+  --bubble: 220 14% 94%;
   --config-input-bg: 220 14% 97%;
   --config-input-border: 220 14% 83.5%;
   --tab-active: 221 83% 50%;
@@ -213,6 +223,8 @@
   --accent-foreground: 220 10% 95%;
   --ring: 215 92% 70%;
   --border: 220 12% 21.5%;
+  --border-subtle: 220 12% 16%;
+  --bubble: 220 12% 17%;
   --config-input-bg: 220 12% 9.5%;
   --config-input-border: 220 12% 27%;
   --tab-active: 215 92% 70%;
@@ -260,6 +272,8 @@
   --accent-foreground: 30 10% 12%;
   --ring: 25 16% 23%;
   --border: 30 10% 89.5%;
+  --border-subtle: 30 10% 93%;
+  --bubble: 30 10% 94%;
   --config-input-bg: 30 10% 97%;
   --config-input-border: 30 10% 83.5%;
   --tab-active: 25 16% 23%;
@@ -306,6 +320,8 @@
   --accent-foreground: 30 7% 95%;
   --ring: 35 14% 88%;
   --border: 30 7% 21.5%;
+  --border-subtle: 30 7% 16%;
+  --bubble: 30 7% 17%;
   --config-input-bg: 30 7% 9.5%;
   --config-input-border: 30 7% 27%;
   --tab-active: 35 14% 88%;
@@ -353,6 +369,8 @@
   --accent-foreground: 215 10% 12%;
   --ring: 215 28% 30%;
   --border: 215 18% 89.5%;
+  --border-subtle: 215 18% 93%;
+  --bubble: 215 18% 94%;
   --config-input-bg: 215 18% 97%;
   --config-input-border: 215 18% 83.5%;
   --tab-active: 215 28% 30%;
@@ -399,6 +417,8 @@
   --accent-foreground: 215 10% 95%;
   --ring: 213 80% 72%;
   --border: 215 14% 21.5%;
+  --border-subtle: 215 14% 16%;
+  --bubble: 215 14% 17%;
   --config-input-bg: 215 14% 9.5%;
   --config-input-border: 215 14% 27%;
   --tab-active: 213 80% 72%;
@@ -446,6 +466,8 @@
   --accent-foreground: 190 10% 12%;
   --ring: 178 82% 26%;
   --border: 190 12% 89.5%;
+  --border-subtle: 190 12% 93%;
+  --bubble: 190 12% 94%;
   --config-input-bg: 190 12% 97%;
   --config-input-border: 190 12% 83.5%;
   --tab-active: 178 82% 26%;
@@ -492,6 +514,8 @@
   --accent-foreground: 190 10% 95%;
   --ring: 172 62% 50%;
   --border: 190 10% 21.5%;
+  --border-subtle: 190 10% 16%;
+  --bubble: 190 10% 17%;
   --config-input-bg: 190 10% 9.5%;
   --config-input-border: 190 10% 27%;
   --tab-active: 172 62% 50%;
@@ -539,6 +563,8 @@
   --accent-foreground: 260 10% 12%;
   --ring: 262 70% 55%;
   --border: 260 12% 89.5%;
+  --border-subtle: 260 12% 93%;
+  --bubble: 260 12% 94%;
   --config-input-bg: 260 12% 97%;
   --config-input-border: 260 12% 83.5%;
   --tab-active: 262 70% 55%;
@@ -585,6 +611,8 @@
   --accent-foreground: 260 10% 95%;
   --ring: 262 88% 76%;
   --border: 260 12% 21.5%;
+  --border-subtle: 260 12% 16%;
+  --bubble: 260 12% 17%;
   --config-input-bg: 260 12% 9.5%;
   --config-input-border: 260 12% 27%;
   --tab-active: 262 88% 76%;
@@ -632,6 +660,8 @@
   --accent-foreground: 0 0% 12%;
   --ring: 0 0% 9%;
   --border: 0 0% 89.5%;
+  --border-subtle: 0 0% 93%;
+  --bubble: 0 0% 94%;
   --config-input-bg: 0 0% 97%;
   --config-input-border: 0 0% 83.5%;
   --tab-active: 0 0% 9%;
@@ -678,6 +708,8 @@
   --accent-foreground: 0 0% 95%;
   --ring: 0 0% 98%;
   --border: 0 0% 18%;
+  --border-subtle: 0 0% 11%;
+  --bubble: 0 0% 12%;
   --config-input-bg: 0 0% 3%;
   --config-input-border: 0 0% 24%;
   --tab-active: 0 0% 98%;
