@@ -158,19 +158,19 @@ describe("buildCSP (the build-time policy)", () => {
     expect(directive(policy, "frame-src")).toContain("https://hooks.stripe.com");
   });
 
-  it("allows the Monaco CDN as script, style and worker source", () => {
+  it("serves Monaco from 'self': no CDN in any directive", () => {
     const policy = buildCSP([]);
 
-    expect(directive(policy, "script-src")).toContain("https://cdn.jsdelivr.net");
-    expect(directive(policy, "style-src")).toContain("https://cdn.jsdelivr.net");
-    // Monaco spawns its language workers from generated blob URLs.
-    expect(directive(policy, "worker-src")).toContain("blob:");
+    // The editor, its styles, fonts and workers are files of this build
+    // (lib/monacoBundle.ts).
+    expect(policy).not.toContain("jsdelivr");
+    expect(directive(policy, "worker-src")).toContain("'self'");
+    expect(directive(policy, "font-src")).toContain("'self'");
   });
 
   it("keeps script-src strict: no unsafe-inline, no unsafe-eval", () => {
-    // This is the whole point of the policy. Monaco's AMD loader probes
-    // `new Function` in a try/catch and falls back to importScripts, so
-    // unsafe-eval is NOT needed — do not add it to "fix" the editor.
+    // This is the whole point of the policy. The bundled Monaco evaluates no
+    // strings, so unsafe-eval is NOT needed — do not add it to "fix" the editor.
     const scriptSrc = directive(buildCSP([]), "script-src");
 
     expect(scriptSrc).not.toContain("'unsafe-inline'");
