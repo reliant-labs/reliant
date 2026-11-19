@@ -2729,8 +2729,10 @@ export type ListProjectsWithAppsResponse = Message<"reliant.v1.ListProjectsWithA
   orgId: string;
 
   /**
-   * The caller's own projects in the org, then projects shared with them in
-   * it, most recently active first.
+   * The caller's own projects in the org and the projects shared with them in
+   * it, together in one list, most recently active first (ties by id).
+   * Project.viewer_access tells a shared one from the caller's own. Each half
+   * is capped at 500: past that, the most recently active of each.
    *
    * @generated from field: repeated reliant.v1.ProjectWithApps projects = 2;
    */
@@ -2804,6 +2806,10 @@ export const ProjectWithAppsSchema: GenMessage<ProjectWithApps> = /*@__PURE__*/
  */
 export type ProjectRepoSummary = Message<"reliant.v1.ProjectRepoSummary"> & {
   /**
+   * The repo's id: an opaque identifier, set for a viewer too, because
+   * ProjectApp.repo_id joins an app to its repo by it. It names nothing about
+   * where the repo lives.
+   *
    * @generated from field: string id = 1;
    */
   id: string;

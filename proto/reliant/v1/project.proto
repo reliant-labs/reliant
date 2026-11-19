@@ -1245,8 +1245,10 @@ message ListProjectsWithAppsRequest {
 message ListProjectsWithAppsResponse {
   // The org listed.
   string org_id = 1;
-  // The caller's own projects in the org, then projects shared with them in
-  // it, most recently active first.
+  // The caller's own projects in the org and the projects shared with them in
+  // it, together in one list, most recently active first (ties by id).
+  // Project.viewer_access tells a shared one from the caller's own. Each half
+  // is capped at 500: past that, the most recently active of each.
   repeated ProjectWithApps projects = 2;
   // The org's apps that no project in `projects` contains: app-only rows.
   repeated HostedApp unlinked_apps = 3;
@@ -1276,6 +1278,9 @@ message ProjectWithApps {
 }
 
 message ProjectRepoSummary {
+  // The repo's id: an opaque identifier, set for a viewer too, because
+  // ProjectApp.repo_id joins an app to its repo by it. It names nothing about
+  // where the repo lives.
   string id = 1;
   string name = 2;
   string relative_path = 3;
