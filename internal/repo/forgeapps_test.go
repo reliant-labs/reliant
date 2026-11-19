@@ -129,13 +129,22 @@ func TestFindForgeApps_AppCapStopsAndSaysSo(t *testing.T) {
 	assert.Contains(t, scan.TruncatedReason, "forge apps")
 }
 
-// fixedPast is a deadline every run is already past, read from no clock.
-var fixedPast = time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
+// testClock is the time a bounded walk reads, set by its test: no test of
+// the walks reads the wall clock or sleeps.
+type testClock struct{ at time.Time }
+
+// newTestClock is a clock at a fixed instant.
+func newTestClock() *testClock { return &testClock{at: time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)} }
+
+func (c *testClock) now() time.Time { return c.at }
+
+func (c *testClock) advance(d time.Duration) { c.at = c.at.Add(d) }
 
 func TestFindForgeApps_DeadlineStopsAndSaysSo(t *testing.T) {
 	repoRoot := t.TempDir()
 	writeFile(t, repoRoot, "forge.yaml", forgeManifestYAML("shop"))
-	scan, err := FindForgeApps(context.Background(), repoRoot, ForgeAppOptions{Deadline: fixedPast})
+	clock := newTestClock()
+	scan, err := findForgeApps(context.Background(), repoRoot, ForgeAppOptions{Deadline: clock.at}, clock.now)
 	require.NoError(t, err)
 	assert.True(t, scan.Truncated)
 	assert.Equal(t, "it ran out of time", scan.TruncatedReason)
@@ -355,31 +364,27 @@ func TestFindForgeApps_WideDirectoryStopsWithinBudget(t *testing.T) {
 func TestFindForgeApps_WideDirectoryStopsBetweenBatches(t *testing.T) {
 	for _, tc := range []struct {
 		name, reason string
-		setup        func(t *testing.T, fsys *wideFS) (context.Context, ForgeAppOptions)
+		setup        func(t *testing.T, fsys *wideFS, clock *testClock) (context.Context, ForgeAppOptions)
 	}{
-		{"the request ends", "the request ended", func(t *testing.T, fsys *wideFS) (context.Context, ForgeAppOptions) {
+		{"the request ends", "the request ended", func(t *testing.T, fsys *wideFS, _ *testClock) (context.Context, ForgeAppOptions) {
 			ctx, cancel := context.WithCancel(context.Background())
 			t.Cleanup(cancel)
 			fsys.onBatch = cancel
 			return ctx, ForgeAppOptions{}
 		}},
-		{"the deadline passes", "it ran out of time", func(t *testing.T, fsys *wideFS) (context.Context, ForgeAppOptions) {
-			deadline := time.Now().Add(5 * time.Millisecond)
-			// The first batch outlasts the deadline.
-			fsys.onBatch = func() {
-				for time.Now().Before(deadline) {
-					time.Sleep(time.Millisecond)
-				}
-			}
-			return context.Background(), ForgeAppOptions{Deadline: deadline}
+		{"the deadline passes", "it ran out of time", func(t *testing.T, fsys *wideFS, clock *testClock) (context.Context, ForgeAppOptions) {
+			// The first batch takes the clock past the deadline.
+			fsys.onBatch = func() { clock.advance(2 * time.Second) }
+			return context.Background(), ForgeAppOptions{Deadline: clock.at.Add(time.Second)}
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fsys := wideTree(t, 1_000_000_000)
-			ctx, opts := tc.setup(t, fsys)
+			clock := newTestClock()
+			ctx, opts := tc.setup(t, fsys, clock)
 			opts.FS = fsys
 			opts.MaxEntries = 1 << 30
-			scan, err := FindForgeApps(ctx, "repo", opts)
+			scan, err := findForgeApps(ctx, "repo", opts, clock.now)
 			require.NoError(t, err)
 			assert.True(t, scan.Truncated)
 			assert.Equal(t, tc.reason, scan.TruncatedReason)

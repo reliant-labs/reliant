@@ -22,6 +22,7 @@ import { daemonLabel } from "../Automations/daemonChoices";
 import { RunStatusDot } from "./RunStatusIndicator";
 import { formatDuration } from "./runSections";
 import { LaunchKindIcon } from "./LaunchKindIcon";
+import { runPath } from "@/lib/paths";
 
 interface RunRowProps {
   run: RunSummary;
@@ -86,8 +87,7 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
 
       <div className="min-w-0">
         <Link
-          to="/workflows/runs/$runId"
-          params={{ runId: run.chatId }}
+          to={runPath(run.chatId)}
           className="block truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {run.title || "Untitled run"}

@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/hosteduse"
@@ -483,6 +484,10 @@ type WorkerToolsFactoryDeps struct {
 	// Membership names a person's org role for propose_connection, which
 	// offers an org-wide connection only to an org owner or admin.
 	Membership *orgs.Resolver
+	// Logger and Config build the daemon registry service the machine label
+	// and pool tools write through (machinePoolAdmin).
+	Logger *slog.Logger
+	Config *config.Config
 }
 
 // NewWorkerToolsFactory builds the factory.
@@ -491,6 +496,17 @@ type WorkerToolsFactoryDeps struct {
 func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	runMachine := toolexec.NewRunMachine(d.Router)
+	// The registry service is a library here, not a mount: the label and
+	// pool tools call its rpcs in-process, as the run's owner. Its
+	// IdleTimeouts is the worker's control plane (nil when self-hosted).
+	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo}
+	if d.Router != nil && d.Router.ControlPlane != nil {
+		registryDeps.IdleTimeouts = d.Router.ControlPlane
+	}
+	registry, err := daemon_registry.New(registryDeps)
+	if err != nil {
+		return nil, err
+	}
 	return &WorkerToolsFactory{tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
@@ -525,7 +541,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(repo, d.Router),
+		MachineController: newMachineController(repo, d.Router, registry),
 		// propose_connection raises its card and reads back the connection
 		// the person made (metadata only, never the credential).
 		ConnectionProposer: newConnectionProposer(repo, d.Membership),

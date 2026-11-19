@@ -552,6 +552,8 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		Router:        g.WorkerDaemonRouter(),
 		DB:            g.Database(),
 		Membership:    g.OrgResolver(),
+		Logger:        g.Log,
+		Config:        g.Cfg,
 	})
 }
 

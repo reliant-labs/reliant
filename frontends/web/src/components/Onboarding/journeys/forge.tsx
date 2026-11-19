@@ -44,6 +44,8 @@ import { notOnShortDemo, onDemo, onDemoFull } from "../../../lib/demoTour";
 import { DemoCta } from "../../Forge/Demo/DemoCta";
 import type { Journey, JourneyRoute, RouteTarget } from "../types";
 import { TourCommands } from "./TourCommand";
+import { appsPath, forgeLandingPath, workflowDetailPath } from "@/lib/paths";
+import { consoleBase } from "@/components/Forge/Console/paths";
 
 /** The CreateOrder trace the tour opens (FIXTURE_TRACE_ID): two failed payment calls, then the worker. */
 export const DEMO_TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -57,7 +59,7 @@ export const DEMO_INSIDE_SPAN_IDS = { method: "a2", query: "b1", worker: "d1" } 
 /** fg-built's view: the recorded forge run. Its own chunk, so the fixtures stay out of the main one. */
 const BuiltTourStep = lazy(() => import("../../Forge/Demo/howBuilt/BuiltTourStep"));
 
-const AUTOPILOT_PATH = "/workflows/library/builtin%3A%2F%2Fautopilot-oncall";
+const AUTOPILOT_PATH = workflowDetailPath("builtin://autopilot-oncall");
 const RELIANT_APP_URL = "https://app.reliantlabs.io";
 const QUICK_START_URL = "https://docs.reliantlabs.io/forge/quick-start";
 
@@ -75,7 +77,7 @@ function demo(search: Record<string, unknown>): JourneyRoute {
  * FIXTURE_PROJECT): there the tour walks the console's own pages, the ones a
  * visitor explores, instead of the /forge/demo panel the other shells keep.
  */
-const SHOP_CONSOLE = "/forge/p/shop";
+const SHOP_CONSOLE = consoleBase("shop");
 type StopView = "overview" | "traces" | "errors" | "graph" | "alerts";
 
 /**
@@ -238,7 +240,7 @@ export const forgeJourney: Journey = {
   isAvailable: isForgeUIEnabled,
   // Reliant: forge's Apps (the bare /forge lands there). The forge shell: its project picker, which signs a visitor in first.
   // The demo: nowhere to go, so the visitor stays on the console with the tour closed.
-  finish: (shell) => (shell === "reliant" ? { to: "/forge" } : isDemoShell() ? null : { to: "/apps" }),
+  finish: (shell) => (shell === "reliant" ? { to: forgeLandingPath() } : isDemoShell() ? null : { to: appsPath() }),
   steps: [
     {
       id: "fg-intro",

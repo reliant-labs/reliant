@@ -245,7 +245,10 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 	// one head per scope by last-attempt time, so a large blocked pool cannot
 	// monopolize every tenant's redrive or expiry sweep. An unbound launch is a
 	// candidate only while it still holds its slot: a released one has nothing
-	// left to recover, and redriving it forever would starve the heads.
+	// left to recover, and redriving it forever would starve the heads. A
+	// scope's head is in admission order (priority, then arrival); a head held
+	// back by its key's running cap hands its turn on when its fire declines
+	// (triggers.capacityWake.wakeNext), as the redriver does not know the cap.
 	var rows []*TriggerEvent
 	err := db.Bun().NewRaw(`WITH ordinary AS (
  SELECT id FROM trigger_events WHERE capacity_order IS NULL AND outcome = 'pending' AND created_at < ?0
@@ -254,7 +257,7 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
  SELECT DISTINCT ON (user_id,capacity_project_id,capacity_workflow_ref) id,capacity_redriven_at,created_at
  FROM trigger_events WHERE capacity_order IS NOT NULL AND created_at < ?0
  AND outcome = 'pending'
- ORDER BY user_id,capacity_project_id,capacity_workflow_ref,capacity_order
+ ORDER BY user_id,capacity_project_id,capacity_workflow_ref,COALESCE(capacity_priority,0) DESC,capacity_order
 ), candidates AS (
  SELECT id,capacity_redriven_at,created_at FROM heads
  UNION ALL
@@ -280,6 +283,32 @@ ORDER BY event.created_at,event.id`, olderThan, limit).Scan(ctx, &rows)
 		out = append(out, ev)
 	}
 	return out, nil
+}
+
+// ExpirePendingTriggerCapacityEvents settles as failed, with detail, the
+// events still waiting for workflow capacity that were recorded before
+// recordedBefore: at most limit of them, oldest first. It returns how many it
+// settled.
+//
+// It sweeps every waiting event, not the scope heads
+// ListStalePendingTriggerEvents returns: a head is chosen by priority, so a
+// low-priority event behind a steady stream of higher ones is never a head,
+// and would otherwise never expire. A waiting event holds no slot, so settling
+// one frees nothing. Conditional on pending, like SettlePendingTriggerEvent,
+// so it never overwrites a launch that won a race.
+func ExpirePendingTriggerCapacityEvents(ctx context.Context, db orm.Context, recordedBefore time.Time, detail string, limit int) (int64, error) {
+	if limit <= 0 {
+		limit = defaultTriggerEventLimit
+	}
+	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET outcome = ?0, outcome_detail = ?1
+WHERE id IN (
+ SELECT id FROM trigger_events WHERE capacity_order IS NOT NULL AND outcome = 'pending' AND created_at < ?2
+ ORDER BY created_at, id LIMIT ?3
+) AND outcome = 'pending'`, core.TriggerEventFailed, detail, recordedBefore.UTC(), limit).Exec(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to expire waiting trigger events: %w", err)
+	}
+	return res.RowsAffected()
 }
 
 // ClaimPendingTriggerEvent adopts an inbound event the receiver recorded: the
@@ -741,6 +770,8 @@ func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
 		CapacityProjectID:   row.CapacityProjectID,
 		CapacityWorkflowRef: row.CapacityWorkflowRef,
 		CapacityKey:         row.CapacityKey,
+		CapacityRunningKey:  row.CapacityRunningKey,
+		CapacityPriority:    row.CapacityPriority,
 	}
 	if row.RunStatus != nil {
 		ev.RunStatus = *row.RunStatus

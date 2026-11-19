@@ -30,6 +30,7 @@ import { hasErrorReason } from "../../lib/errorReasons";
 import { sourceCase, type DeclaredTrigger } from "../../lib/declaredTriggers";
 import { tourEvents } from "../Onboarding/tourEvents";
 import { isWorkflowsTour } from "../Onboarding/journeys/workflowsTour";
+import { workflowBuilderPath, workflowLibraryPath } from "@/lib/paths";
 
 interface WorkflowBuilderPageProps {
   selectedWorkflow?: Workflow | null;
@@ -157,7 +158,7 @@ export function WorkflowBuilderPage({
       // if none resolves, the Library is where a project is chosen. Rendering
       // builder chrome meanwhile would lie about what the user is looking at.
       if (projectResolved) {
-        navigate({ to: "/workflows/library", replace: true });
+        navigate({ to: workflowLibraryPath(), replace: true });
       }
       return;
     }
@@ -240,14 +241,14 @@ export function WorkflowBuilderPage({
         } else {
           toast.error(`Workflow "${workflowName}" not found`);
           // Workflow was deleted or does not exist - back to the Library
-          navigate({ to: "/workflows/library" });
+          navigate({ to: workflowLibraryPath() });
         }
       } catch (err) {
         if (cancelled) return;
         console.error("Failed to load workflow:", err);
         toast.error(`Failed to load workflow "${workflowName}"`);
         // Same fallback logic for errors
-        navigate({ to: "/workflows/library" });
+        navigate({ to: workflowLibraryPath() });
       }
     };
 
@@ -381,8 +382,7 @@ export function WorkflowBuilderPage({
       if (response.slug && response.slug !== routeWorkflowName) {
         loadedRouteNameRef.current = loadKey(response.slug);
         navigate({
-          to: "/workflow/$workflowName",
-          params: { workflowName: response.slug },
+          to: workflowBuilderPath(response.slug),
           search: (prev: Record<string, unknown>) => prev,
           // Keep the history state: it records where Back returns to.
           state: true,
@@ -550,12 +550,11 @@ export function WorkflowBuilderPage({
           open
           projectId={projectId}
           guided={isWorkflowsTour((search as { tour?: unknown }).tour)}
-          onClose={() => navigate({ to: "/workflows/library", replace: true })}
+          onClose={() => navigate({ to: workflowLibraryPath(), replace: true })}
           onCreated={(created) => {
             trackEvent("workflow_created");
             navigate({
-              to: "/workflow/$workflowName",
-              params: { workflowName: created.slug },
+              to: workflowBuilderPath(created.slug),
               search: (prev: Record<string, unknown>) => {
                 // ?chat= named whatever was open before; it is not this workflow's.
                 const { chat: _chat, ...rest } = prev;
@@ -600,7 +599,7 @@ export function WorkflowBuilderPage({
       setRawDefinition(undefined);
       setErrorWorkflowName(undefined);
       setDraftId(undefined);
-      navigate({ to: "/workflows/library" });
+      navigate({ to: workflowLibraryPath() });
     } catch (err) {
       console.error("Failed to clear workflow:", err);
       toast.error("Failed to clear workflow");
@@ -683,7 +682,7 @@ export function WorkflowBuilderPage({
         onChatIdChange={onChatIdChange}
         onDraftStatusChange={setDraftStatus}
         draftId={draftId}
-        onWorkflowDeleted={() => navigate({ to: "/workflows/library" })}
+        onWorkflowDeleted={() => navigate({ to: workflowLibraryPath() })}
         onVersionChange={setWorkflowVersion}
         yamlDefinition={yamlDefinition}
         onYamlDefinitionChange={setYamlDefinition}

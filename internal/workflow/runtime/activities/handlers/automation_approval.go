@@ -57,6 +57,8 @@ func (a *AutomationApprovalActivity) Execute(ctx context.Context, in types.Autom
 		switch in.ToolName {
 		case tools.ToolManageMachine:
 			subject = "Machine change"
+		case tools.ToolManageMachinePool:
+			subject = "Machine pool change"
 		case tools.ToolProposeConnection:
 			// Its refusals are written for the model whole: a status and
 			// what to do instead (connection_proposal_tool.go).

@@ -81,6 +81,7 @@ import { consolePath } from "@/components/Forge/Console/paths";
 
 import { UPGRADE_STILL_REQUIRED_MESSAGE } from "./claimCopy";
 import { claimSituation, type ClaimSituation } from "./claimSituation";
+import { appsPath, upgradePath } from "@/lib/paths";
 
 export type ClaimView =
   | { kind: "loading" }
@@ -172,7 +173,7 @@ export function useClaimFlow(): ClaimFlow {
         void navigate({ href: consolePath(project, { kind: "overview" }), replace: true });
         return;
       }
-      void navigate({ to: "/apps", search, replace: true });
+      void navigate({ to: appsPath(), search, replace: true });
     },
     [navigate],
   );
@@ -248,7 +249,7 @@ export function useClaimFlow(): ClaimFlow {
             return;
           }
           updatePendingClaim({ upgradeSent: true });
-          void navigate({ to: "/upgrade", search: { returnTo: CLAIM_RETURN_TO } });
+          void navigate({ to: upgradePath(), search: { returnTo: CLAIM_RETURN_TO } });
           return;
         }
         if (isDeclined(err)) {
@@ -333,7 +334,7 @@ export function useClaimFlow(): ClaimFlow {
     // Asking the server for it again is refused by design.
     if (situation === "resume-upgrade") {
       trackEvent("claim_started", { situation });
-      void navigate({ to: "/upgrade", search: { returnTo: CLAIM_RETURN_TO } });
+      void navigate({ to: upgradePath(), search: { returnTo: CLAIM_RETURN_TO } });
       return;
     }
     const fail = (stage: string, err: unknown, message: string) => {
@@ -364,7 +365,7 @@ export function useClaimFlow(): ClaimFlow {
         const adopted = await adoptSession(session);
         released.current = null;
         updatePendingClaim({ anonUserId: adopted.id });
-        void navigate({ to: "/upgrade", search: { returnTo: CLAIM_RETURN_TO } });
+        void navigate({ to: upgradePath(), search: { returnTo: CLAIM_RETURN_TO } });
       } catch (err) {
         // The session was released and is only in memory now: say so, and keep
         // it for the retry instead of asking the server for a second one.

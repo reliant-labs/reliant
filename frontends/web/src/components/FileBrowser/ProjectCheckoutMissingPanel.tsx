@@ -10,6 +10,57 @@ import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { machineDisplayName } from "../../lib/machineName";
 import { describeCloneError } from "../Projects/cloneTargets";
 
+type NamedMachine = Parameters<typeof machineDisplayName>[0];
+
+/**
+ * The names of the user's other machines that have the project
+ * (`availableDaemonIds`, empty from a server that predates it). An id the
+ * machine list does not know yet is left out rather than shown raw.
+ */
+function machinesThatHaveIt(missing: ProjectCheckoutMissing, daemons: NamedMachine[]): string[] {
+  const names: string[] = [];
+  for (const id of missing.availableDaemonIds ?? []) {
+    if (id === missing.daemonId) continue;
+    const d = daemons.find((m) => m.daemonId === id);
+    if (d) names.push(machineDisplayName(d));
+  }
+  return names;
+}
+
+/** "default", "default and cicd", "a, b and c". */
+function listMachines(names: string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * Why the project is not on this machine, and where it is. A plain folder's
+ * path is named only when the server knows it: a machine with no record of
+ * the project has none, and "Its folder, , doesn't exist" is what the owner
+ * saw on 2026-11-18.
+ */
+function absentExplanation({
+  machine,
+  path,
+  canClone,
+  elsewhere,
+}: {
+  machine: string;
+  path: string;
+  canClone: boolean;
+  elsewhere: string[];
+}): string {
+  const where = elsewhere.length > 0 ? `It's on ${listMachines(elsewhere)}.` : "";
+  if (canClone) {
+    const why = where || "It was cloned onto another machine, or its folder was removed.";
+    return `${why} Clone it here to work on it on ${machine}.`;
+  }
+  const folder = path.trim()
+    ? `Its folder, ${path.trim()}, doesn't exist on ${machine}.`
+    : `Its folder isn't on ${machine}.`;
+  return where ? `${folder} ${where}` : folder;
+}
+
 /**
  * What the file tree shows when the project's directory is not on the machine
  * it reached — instead of the raw "read dir …: no such file or directory" it
@@ -43,6 +94,7 @@ export function ProjectCheckoutMissingPanel({
   const daemon = daemons.find((d) => d.daemonId === missing.daemonId);
   const machine = daemon ? machineDisplayName(daemon) : "this machine";
   const canClone = Boolean(missing.remoteUrl && missing.daemonId);
+  const elsewhere = machinesThatHaveIt(missing, daemons);
 
   if (missing.state === ProjectCheckoutState.CLONING) {
     return (
@@ -93,9 +145,7 @@ export function ProjectCheckoutMissingPanel({
           <p className="text-xs text-muted-foreground">
             {failed && missing.installError
               ? missing.installError
-              : canClone
-                ? `It was cloned onto another machine, or its folder was removed. Clone it here to work on it on ${machine}.`
-                : `Its folder, ${missing.path}, doesn't exist on ${machine}.`}
+              : absentExplanation({ machine, path: missing.path, canClone, elsewhere })}
           </p>
         </div>
         {canClone && (

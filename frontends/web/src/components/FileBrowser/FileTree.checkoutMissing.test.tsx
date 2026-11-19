@@ -47,6 +47,15 @@ vi.mock("../../hooks/useDaemonStatus", () => ({
         daemonType: "managed",
         status: 1,
       },
+      { daemonId: "c1cd0001", name: "cicd", daemonType: "managed", status: 1 },
+      {
+        // Named by its own id in the registry: a placeholder, never shown.
+        daemonId: "46e3682b-33cd-4e88-aecb-52a3a919a354",
+        name: "46e3682b-33cd-4e88-aecb-52a3a919a354",
+        hostname: "Seans-MacBook-Pro.local",
+        daemonType: "self_hosted",
+        status: 1,
+      },
     ],
     activeDaemon: undefined,
     loading: false,
@@ -69,13 +78,18 @@ vi.mock("../../store/fileDeletionStore", () => ({
 vi.mock("../../lib/toast-manager", () => ({ toast: { notify: vi.fn() } }));
 vi.mock("./FileOperationsModal", () => ({ FileOperationsModal: () => null }));
 
-function checkoutMissing(state: ProjectCheckoutState, remoteUrl = "https://github.com/acme/houndersclub.git") {
+function checkoutMissing(
+  state: ProjectCheckoutState,
+  remoteUrl = "https://github.com/acme/houndersclub.git",
+  overrides: { path?: string; availableDaemonIds?: string[] } = {},
+) {
   const detail = create(ProjectCheckoutMissingSchema, {
     projectId: "proj-1",
     daemonId: "2aab1465",
     path: "/home/workspace/projects/houndersclub",
     state,
     remoteUrl,
+    ...overrides,
   });
   return new ConnectError(
     "project directory /home/workspace/projects/houndersclub does not exist on this machine",
@@ -141,5 +155,35 @@ describe("FileTree — the project's directory is not on this machine", () => {
     const panel = await screen.findByTestId("project-checkout-missing");
     expect(panel).toHaveTextContent("doesn't exist on default");
     expect(screen.queryByTestId("project-checkout-clone-here")).not.toBeInTheDocument();
+  });
+
+  // The owner, 2026-11-18: "reliant-labs isn't on 46e3682b-… — Its folder, ,
+  // doesn't exist on 46e3682b-…". A machine with no record of a plain folder
+  // has no path for it, and the server knows where the project IS.
+  it("never names an empty folder path, and names the machines that have it", async () => {
+    apiMocks.getFileTree.mockRejectedValue(
+      checkoutMissing(ProjectCheckoutState.ABSENT, "", { path: "", availableDaemonIds: ["c1cd0001"] }),
+    );
+    renderTree();
+
+    const panel = await screen.findByTestId("project-checkout-missing");
+    expect(panel).toHaveTextContent("Its folder isn't on default. It's on cicd.");
+    expect(panel.textContent).not.toMatch(/,\s*,/);
+  });
+
+  it("says where a repository project is before offering to clone it here", async () => {
+    apiMocks.getFileTree.mockRejectedValue(
+      checkoutMissing(ProjectCheckoutState.ABSENT, undefined, {
+        availableDaemonIds: ["c1cd0001", "46e3682b-33cd-4e88-aecb-52a3a919a354", "unknown-machine"],
+      }),
+    );
+    renderTree();
+
+    const panel = await screen.findByTestId("project-checkout-missing");
+    expect(panel).toHaveTextContent(
+      "It's on cicd and Seans-MacBook-Pro.local. Clone it here to work on it on default.",
+    );
+    expect(panel).not.toHaveTextContent("46e3682b");
+    expect(panel).not.toHaveTextContent("unknown-machine");
   });
 });

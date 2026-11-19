@@ -49,8 +49,8 @@ const fileSystemMocks = vi.hoisted(() => ({
 }));
 
 // An editable stand-in for Monaco, so a test can dirty the buffer.
-vi.mock("@monaco-editor/react", () => ({
-  default: ({ value, onChange }: { value?: string; onChange?: (v: string) => void }) => (
+vi.mock("../shared/MonacoEditor", () => ({
+  MonacoEditor: ({ value, onChange }: { value?: string; onChange?: (v: string) => void }) => (
     <textarea data-testid="monaco-editor" value={value} onChange={(e) => onChange?.(e.target.value)} />
   ),
 }));

@@ -61,8 +61,10 @@ type Deps struct {
 	MoveFacts MoveFacts
 	// Schedules pauses and resumes the Temporal Schedules of the triggers a
 	// project delete pauses and a restore resumes, and removes those of a
-	// purged project's triggers. Nil converges only the rows: a paused
-	// trigger's fires skip on its row until the startup sync converges it.
+	// purged project's triggers; a sync that fails is retried in the
+	// background (trigger_schedule_retry.go). Nil converges only the rows: a
+	// paused trigger's fires skip on its row until the startup sync
+	// converges it.
 	// forge:optional-dep
 	Schedules TriggerSchedules
 	// Now is the clock a delete's restore window starts from; nil is
@@ -97,6 +99,9 @@ type Service struct {
 	// purges tracks the immediate purges whose batches run after their
 	// request returned (rpc_purge_project_now.go startPurge).
 	purges sync.WaitGroup
+	// scheduleRetries retries the trigger schedules a delete, restore or
+	// purge could not converge (trigger_schedule_retry.go).
+	scheduleRetries scheduleRetries
 }
 
 // New creates a new project service instance with the supplied Deps.

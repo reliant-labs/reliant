@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"strings"
 
+	"connectrpc.com/connect"
+
+	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
@@ -28,6 +31,18 @@ type machineRegistry interface {
 	// The owner's machine pools, to show each machine's pools.
 	ListMachinePoolsForUser(ctx context.Context, userID string) ([]*core.MachinePool, error)
 	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
+}
+
+// machinePoolAdmin is the DaemonRegistryService rpcs the app labels machines
+// and defines pools with (*daemon_registry.Service): the label and pool tools
+// write through them, as the user, so an agent's change follows exactly the
+// rules, side effects (pool members' idle timeouts) and refusals the web's
+// does. The caller's id is on the ctx, as the auth middleware puts it.
+type machinePoolAdmin interface {
+	SetMachineLabels(context.Context, *connect.Request[pb.SetMachineLabelsRequest]) (*connect.Response[pb.SetMachineLabelsResponse], error)
+	ListMachinePools(context.Context, *connect.Request[pb.ListMachinePoolsRequest]) (*connect.Response[pb.ListMachinePoolsResponse], error)
+	PutMachinePool(context.Context, *connect.Request[pb.PutMachinePoolRequest]) (*connect.Response[pb.PutMachinePoolResponse], error)
+	DeleteMachinePool(context.Context, *connect.Request[pb.DeleteMachinePoolRequest]) (*connect.Response[pb.DeleteMachinePoolResponse], error)
 }
 
 // machineWaker wakes one machine; *toolexec.NATSDaemonRouter is it.
@@ -54,15 +69,16 @@ type machineController struct {
 	repo    machineRegistry
 	waker   machineWaker
 	actions machineActions
+	pools   machinePoolAdmin
 }
 
 // newMachineController is nil when self-hosted: there is no control plane
 // to act on a machine with, and the tools say so.
-func newMachineController(repo machineRegistry, router *WorkerDaemonRouter) tools.MachineController {
+func newMachineController(repo machineRegistry, router *WorkerDaemonRouter, pools machinePoolAdmin) tools.MachineController {
 	if router == nil || router.NATSDaemonRouter == nil || router.ControlPlane == nil {
 		return nil
 	}
-	return &machineController{repo: repo, waker: router.NATSDaemonRouter, actions: router.ControlPlane}
+	return &machineController{repo: repo, waker: router.NATSDaemonRouter, actions: router.ControlPlane, pools: pools}
 }
 
 func (m *machineController) ListMachines(ctx context.Context, userID string) ([]tools.MachineSummary, error) {
@@ -139,6 +155,80 @@ func (m *machineController) ResizeMachine(ctx context.Context, userID, daemonID,
 		return err
 	}
 	return m.actions.ResizeDaemon(ctx, jwt, daemonID, size)
+}
+
+func (m *machineController) ListMachinePools(ctx context.Context, userID string) ([]tools.MachinePoolSummary, error) {
+	if m.pools == nil {
+		return nil, errNoPoolAdmin
+	}
+	resp, err := m.pools.ListMachinePools(asUser(ctx, userID), connect.NewRequest(&pb.ListMachinePoolsRequest{}))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]tools.MachinePoolSummary, 0, len(resp.Msg.GetPools()))
+	for _, p := range resp.Msg.GetPools() {
+		out = append(out, poolSummary(p))
+	}
+	return out, nil
+}
+
+func (m *machineController) SetMachineLabels(ctx context.Context, userID, daemonID string, labels map[string]string) error {
+	if m.pools == nil {
+		return errNoPoolAdmin
+	}
+	if err := m.owned(ctx, userID, daemonID); err != nil {
+		return err
+	}
+	_, err := m.pools.SetMachineLabels(asUser(ctx, userID), connect.NewRequest(&pb.SetMachineLabelsRequest{DaemonId: daemonID, Labels: labels}))
+	return err
+}
+
+func (m *machineController) PutMachinePool(ctx context.Context, userID string, spec tools.MachinePoolSpec) (tools.MachinePoolSummary, error) {
+	if m.pools == nil {
+		return tools.MachinePoolSummary{}, errNoPoolAdmin
+	}
+	resp, err := m.pools.PutMachinePool(asUser(ctx, userID), connect.NewRequest(&pb.PutMachinePoolRequest{Pool: &pb.MachinePoolSpec{
+		Name: spec.Name, Selector: spec.Selector,
+		MinMembers: uint32(max(spec.MinMembers, 0)), MaxMembers: uint32(max(spec.MaxMembers, 0)),
+		MemberSize: spec.MemberSize, MaxRunsPerMember: uint32(max(spec.MaxRunsPerMember, 0)),
+		MemberIdleTimeout: spec.MemberIdleTimeout,
+	}}))
+	if err != nil {
+		return tools.MachinePoolSummary{}, err
+	}
+	return poolSummary(resp.Msg.GetPool()), nil
+}
+
+func (m *machineController) DeleteMachinePool(ctx context.Context, userID, name string) error {
+	if m.pools == nil {
+		return errNoPoolAdmin
+	}
+	_, err := m.pools.DeleteMachinePool(asUser(ctx, userID), connect.NewRequest(&pb.DeleteMachinePoolRequest{Name: name}))
+	return err
+}
+
+// errNoPoolAdmin: the worker was wired without the registry service.
+var errNoPoolAdmin = errors.New("machine labels and pools are not available in this runtime")
+
+// asUser is ctx carrying userID as the caller, as the auth middleware sets
+// it for the registry rpcs.
+func asUser(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, auth.UserIDContextKey, userID)
+}
+
+// poolSummary is a registry pool as the tools show it.
+func poolSummary(p *pb.MachinePool) tools.MachinePoolSummary {
+	spec := p.GetSpec()
+	out := tools.MachinePoolSummary{ID: p.GetId(), Warnings: p.GetWarnings(), Spec: tools.MachinePoolSpec{
+		Name: spec.GetName(), Selector: spec.GetSelector(),
+		MinMembers: int(spec.GetMinMembers()), MaxMembers: int(spec.GetMaxMembers()),
+		MemberSize: spec.GetMemberSize(), MaxRunsPerMember: int(spec.GetMaxRunsPerMember()),
+		MemberIdleTimeout: spec.GetMemberIdleTimeout(),
+	}}
+	for _, mem := range p.GetMembers() {
+		out.Members = append(out.Members, tools.MachinePoolMember{ID: mem.GetDaemonId(), Name: mem.GetName(), State: mem.GetState(), LiveRuns: int(mem.GetLiveRuns())})
+	}
+	return out
 }
 
 func (m *machineController) ActivationMachine(ctx context.Context, chatID string) (string, error) {

@@ -128,8 +128,7 @@ describe("workflows journey: the steps", () => {
   it("the builder steps open the example the first step recorded", () => {
     const route = step("wf-loop").route!;
     expect(typeof route.open === "function" && route.open({ [EXAMPLE_SLUG]: "fix-my-pr-2" })).toEqual({
-      to: "/workflow/$workflowName",
-      params: { workflowName: "fix-my-pr-2" },
+      to: "/workflow/fix-my-pr-2",
     });
     // Never the unfinished draft the previous version of the tour made.
     expect(typeof route.open === "function" && route.open({ workflowSlug: "fix-my-pr" })).toBeNull();

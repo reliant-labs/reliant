@@ -31,6 +31,7 @@
 import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
 
 import { SETTINGS_SECTION_ALIASES, isSettingsSection, settingsSearchSchema } from './routeSchemas'
+import { machineSettingsPath, settingsPath } from '@/lib/paths'
 
 export interface SettingsSectionComponents {
   page: RouteComponent
@@ -54,7 +55,7 @@ export function createSettingsSectionRoutes<TParent extends AnyRoute>(
     path: '/settings/environments/$machineId',
     beforeLoad: ({ params, location }) => {
       throw redirect({
-        href: `/settings/machines/${encodeURIComponent(params.machineId)}${location.searchStr}`,
+        href: `${machineSettingsPath(params.machineId)}${location.searchStr}`,
         replace: true,
       })
     },
@@ -69,11 +70,11 @@ export function createSettingsSectionRoutes<TParent extends AnyRoute>(
       const slug = params.section
       const alias = SETTINGS_SECTION_ALIASES[slug.toLowerCase()]
       if (alias) {
-        throw redirect({ href: `/settings/${alias}${location.searchStr}`, replace: true })
+        throw redirect({ href: `${settingsPath(alias)}${location.searchStr}`, replace: true })
       }
       if (!isSettingsSection(slug)) {
         const query = new URLSearchParams({ notFound: slug })
-        throw redirect({ href: `/settings?${query}`, replace: true })
+        throw redirect({ href: `${settingsPath()}?${query}`, replace: true })
       }
       // The pre-path deep link into one machine (`?daemon=<id>`), still sent
       // by older links and bookmarks: move it onto the path.
@@ -83,7 +84,7 @@ export function createSettingsSectionRoutes<TParent extends AnyRoute>(
         query.delete('daemon')
         const rest = query.toString()
         throw redirect({
-          href: `/settings/machines/${encodeURIComponent(daemon)}${rest ? `?${rest}` : ''}`,
+          href: `${machineSettingsPath(daemon)}${rest ? `?${rest}` : ''}`,
           replace: true,
         })
       }

@@ -171,6 +171,24 @@ nodes:
 	assert.Contains(t, got[0].Message, "project://release → cut → tag")
 }
 
+// A per-key cap is a slot too: a run that never ends holds its key forever, so
+// a workflow with only max_running_per_key gets the same check.
+func TestSlotUnboundedWaitCoversPerKeyCap(t *testing.T) {
+	wf, err := wfyaml.ParseWorkflow([]byte(`
+name: review
+concurrency: {max_running_per_key: 1, key: '{{ trigger.payload.number }}'}
+entry: [review]
+nodes:
+- id: review
+  type: run
+  args: {command: 'make review'}
+`))
+	require.NoError(t, err)
+	got := findingsOf(Check(Input{Workflow: wf}), RuleSlotUnboundedWait)
+	require.Len(t, got, 1, "%v", got)
+	assert.Equal(t, "review", got[0].Node)
+}
+
 // Cases that are complements cover every value: no default is needed.
 func TestComplementaryCasesNeedNoDefault(t *testing.T) {
 	for _, pair := range [][2]string{

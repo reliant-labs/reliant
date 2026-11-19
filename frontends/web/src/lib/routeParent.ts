@@ -44,12 +44,12 @@
 import type { HistoryState } from "@tanstack/react-router";
 import { isSafeReturnTo } from "./returnTo";
 import {
-  WORKFLOWS_LIBRARY_PATH,
   WORKFLOWS_TABS,
   isWorkflowBuilderPath,
   isWorkflowsDetailPath,
   workflowsTabForPath,
 } from "./workflowsArea";
+import { homePath, workflowLibraryPath } from "@/lib/paths";
 
 export type RouteParentNavigateOptions = {
   to: string;
@@ -60,18 +60,19 @@ export function getParentRouteNavigateOptions(
   pathname: string,
 ): RouteParentNavigateOptions {
   if (isWorkflowBuilderPath(pathname)) {
-    const name = pathname.slice("/workflow/".length).split("/")[0] ?? "";
-    if (!name || name === "new") return { to: WORKFLOWS_LIBRARY_PATH };
-    return { to: `${WORKFLOWS_LIBRARY_PATH}/${name}` };
+    // `/workflow/<name>[/…]`: the name is already encoded, as the URL has it.
+    const name = pathname.split("/")[2] ?? "";
+    if (!name || name === "new") return { to: workflowLibraryPath() };
+    return { to: `${workflowLibraryPath()}/${name}` };
   }
   if (pathname === "/forge" || pathname.startsWith("/forge/")) {
-    return { to: "/", search: {} };
+    return { to: homePath(), search: {} };
   }
   if (isWorkflowsDetailPath(pathname)) {
     const tab = WORKFLOWS_TABS.find((candidate) => candidate.key === workflowsTabForPath(pathname));
-    if (tab) return { to: tab.path };
+    if (tab) return { to: tab.href() };
   }
-  return { to: "/", search: {} };
+  return { to: homePath(), search: {} };
 }
 
 /**

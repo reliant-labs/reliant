@@ -28,21 +28,30 @@ func On(ctx context.Context, r Reader, userID string, project *db.Project, daemo
 	}
 	t := Target{Project: project, DaemonID: daemonID, roots: installedRoots(rows)}
 	var mine *core.ProjectDaemon
-	var elsewhere []string
 	for _, row := range rows {
-		switch {
-		case row == nil:
-		case row.DaemonID == daemonID:
+		if row != nil && row.DaemonID == daemonID {
 			mine = row
-		case row.InstallState == core.ProjectInstallInstalled && ownedBy(ctx, r, row.DaemonID, userID):
-			elsewhere = append(elsewhere, row.DaemonID)
 		}
 	}
 	if mine != nil && mine.InstallState == core.ProjectInstallInstalled && strings.TrimSpace(mine.Path) != "" && ownedBy(ctx, r, daemonID, userID) {
 		t.Path = mine.Path
 		return t, nil
 	}
-	return Target{}, NotOnError(ctx, ownNames{r, userID}, project, daemonID, mine, elsewhere, purpose)
+	return Target{}, NotOnError(ctx, ownNames{r, userID}, project, daemonID, mine, InstalledElsewhere(ctx, r, userID, rows, daemonID), purpose)
+}
+
+// InstalledElsewhere is, among rows (a project's project_daemons), the
+// machines of userID's other than except that hold an installed checkout, in
+// row order: the machines a refusal offers to switch to.
+func InstalledElsewhere(ctx context.Context, r daemonplacement.DaemonReader, userID string, rows []*core.ProjectDaemon, except string) []string {
+	var out []string
+	for _, row := range rows {
+		if row != nil && row.DaemonID != except && row.InstallState == core.ProjectInstallInstalled &&
+			ownedBy(ctx, r, row.DaemonID, userID) {
+			out = append(out, row.DaemonID)
+		}
+	}
+	return out
 }
 
 // ownNames reads only userID's machines for the refusal's wording: a pin that
@@ -154,6 +163,9 @@ func NotOnError(ctx context.Context, names daemonplacement.DaemonReader, project
 		DaemonId:  daemonID,
 		State:     reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT,
 		RemoteUrl: remoteURL(project),
+		// The panel names them ("It's on default and cicd"), as the
+		// sentence below does.
+		AvailableDaemonIds: elsewhere,
 	}
 	if row != nil {
 		detail.Path = row.Path
@@ -195,7 +207,7 @@ func NotOnError(ctx context.Context, names daemonplacement.DaemonReader, project
 }
 
 // ownedBy reports whether daemonID is a machine of userID's.
-func ownedBy(ctx context.Context, r Reader, daemonID, userID string) bool {
+func ownedBy(ctx context.Context, r daemonplacement.DaemonReader, daemonID, userID string) bool {
 	d, err := r.GetDaemon(ctx, daemonID)
 	return err == nil && authz.CanWriteMachine(ctx, userID, d)
 }

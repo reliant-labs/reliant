@@ -40996,6 +40996,12 @@
             {
               "name": "forge_version",
               "kind": "string"
+            },
+            {
+              "name": "machine_labels",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
             }
           ],
           "reliant.v1.DiscoveredProject": [
@@ -48916,6 +48922,14 @@
             },
             {
               "name": "per_member",
+              "kind": "uint32"
+            },
+            {
+              "name": "priority",
+              "kind": "string"
+            },
+            {
+              "name": "max_running_per_key",
               "kind": "uint32"
             }
           ],

@@ -59,6 +59,16 @@ type MachineSummary struct {
 // plane, none of which this package may import.
 type MachineController interface {
 	ListMachines(ctx context.Context, userID string) ([]MachineSummary, error)
+	// ListMachinePools lists the user's machine pools with their members.
+	ListMachinePools(ctx context.Context, userID string) ([]MachinePoolSummary, error)
+	// SetMachineLabels replaces daemonID's durable labels with labels, as
+	// DaemonRegistryService.SetMachineLabels does for the user.
+	SetMachineLabels(ctx context.Context, userID, daemonID string, labels map[string]string) error
+	// PutMachinePool creates the user's pool spec.Name or replaces its
+	// definition with spec; DeleteMachinePool deletes it. As
+	// DaemonRegistryService.PutMachinePool / DeleteMachinePool do.
+	PutMachinePool(ctx context.Context, userID string, spec MachinePoolSpec) (MachinePoolSummary, error)
+	DeleteMachinePool(ctx context.Context, userID, name string) error
 	// StartMachine wakes daemonID as the signed-in user. Unattended, it may
 	// instead present the delegated token bound to exactly daemonID.
 	StartMachine(ctx context.Context, userID, daemonID string, unattended bool) error
@@ -78,7 +88,7 @@ var machineSizes = []string{"s1", "s2", "m", "l", "xl", "2xl", "3xl"}
 
 type ListMachinesParams struct{}
 
-const listMachinesDescription = `List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected), state and size. The machine this run executes on is marked. Use the id with manage_machine to start, stop or resize one.`
+const listMachinesDescription = `List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected), state, size, labels and the machine pools it is in; then each machine pool: its id, selector, limits and members. The machine this run executes on is marked. Use a machine's id with manage_machine to start, stop, resize or label it, a pool's name with manage_machine_pool to define or delete it, and a pool's name or id with create/update_trigger_activation to run an activation on the pool.`
 
 type listMachinesTool struct {
 	repo       runCallerStore
@@ -125,7 +135,17 @@ func (l *listMachinesTool) Execute(ctx *rctx.ToolContext, _ ListMachinesParams) 
 			b.WriteString(" — this run executes on it")
 		}
 		b.WriteString("\n")
+		if len(m.Labels) > 0 || len(m.Pools) > 0 {
+			fmt.Fprintf(&b, "  labels: %s; pools: %s\n", orNone(formatLabels(m.Labels)), orNone(strings.Join(m.Pools, ", ")))
+		}
 	}
+	pools, err := l.controller.ListMachinePools(ctx.Context, caller.userID)
+	if err != nil {
+		fmt.Fprintf(&b, "\nMachine pools could not be read: %s\n", err.Error())
+	} else {
+		writeMachinePools(&b, pools)
+	}
+	// The metadata stays the machine list it always was; pools are in the text.
 	return WithResponseMetadata(NewTextResponse(strings.TrimRight(b.String(), "\n")), list), nil
 }
 
@@ -135,15 +155,20 @@ func (l *listMachinesTool) Execute(ctx *rctx.ToolContext, _ ListMachinesParams) 
 
 type ManageMachineParams struct {
 	MachineID string `json:"machine_id" jsonschema:"required,description=Machine id from list_machines. Never guess one."`
-	Action    string `json:"action" jsonschema:"required,enum=start,enum=stop,enum=resize,description=start wakes a suspended machine. stop suspends a running one. resize changes a suspended machine's size; it takes effect at its next start."`
+	Action    string `json:"action" jsonschema:"required,enum=start,enum=stop,enum=resize,enum=label,description=start wakes a suspended machine. stop suspends a running one. resize changes a suspended machine's size; it takes effect at its next start. label sets or removes the machine's durable labels\\, which decide the machine pools it is in."`
 	Size      string `json:"size,omitempty" jsonschema:"enum=s1,enum=s2,enum=m,enum=l,enum=xl,enum=2xl,enum=3xl,description=The new size. resize only."`
+	// Labels and Remove are label's: merged into the machine's current
+	// labels, the result replaces them (DaemonRegistryService.SetMachineLabels).
+	Labels map[string]string `json:"labels,omitempty" jsonschema:"description=label only: labels to add or change\\, merged into the machine's current labels (e.g. {\"pool\": \"pipeline\"}). Keys and values are lowercase slugs (a-z 0-9 . _ -)."`
+	Remove []string          `json:"remove,omitempty" jsonschema:"description=label only: label keys to remove from the machine."`
 }
 
-const manageMachineDescription = `Start, stop or resize one of the user's own machines (from list_machines), exactly as Settings -> Machines does.
+const manageMachineDescription = `Start, stop, resize or label one of the user's own machines (from list_machines), exactly as Settings -> Machines does.
 
 - start: wake a suspended machine. Compute is billed while it runs, so an interactive call raises an approval card and runs only once the user approves it.
 - stop: suspend a running machine. No card. Never the machine this run executes on.
 - resize: change a SUSPENDED machine's size (s1, s2, m, l, xl, 2xl, 3xl); it takes effect when it next starts. Needs an approval card. To resize a running machine: stop, resize, then start.
+- label: set labels (merged into the current ones) and/or remove label keys. A machine pool's members are the machines whose labels match its selector, so labelling a machine moves it into or out of pools, and so changes where pool-bound activations run: it needs an approval card showing the exact resulting labels. Use manage_machine_pool to define the pools themselves.
 
 Unattended runs may only start the machine their trigger activation targets.`
 
@@ -186,10 +211,25 @@ func (p ManageMachineParams) normalize() (action, size string, err error) {
 	if strings.TrimSpace(p.MachineID) == "" {
 		return "", "", errors.New("machine_id is required")
 	}
+	if action != "label" && (len(p.Labels) > 0 || len(p.Remove) > 0) {
+		return "", "", fmt.Errorf("labels and remove apply only to label, not %s", action)
+	}
 	switch action {
 	case "start", "stop":
 		if size != "" {
 			return "", "", fmt.Errorf("size applies only to resize, not %s", action)
+		}
+	case "label":
+		if size != "" {
+			return "", "", errors.New("size applies only to resize, not label")
+		}
+		if len(p.Labels) == 0 && len(p.Remove) == 0 {
+			return "", "", errors.New("label needs labels to set or remove keys to remove")
+		}
+		for _, k := range p.Remove {
+			if _, ok := p.Labels[k]; ok {
+				return "", "", fmt.Errorf("label %q is both set and removed", k)
+			}
 		}
 	case "resize":
 		known := false
@@ -200,7 +240,7 @@ func (p ManageMachineParams) normalize() (action, size string, err error) {
 			return "", "", fmt.Errorf("resize needs size, one of %s", strings.Join(machineSizes, ", "))
 		}
 	default:
-		return "", "", fmt.Errorf("action %q is not one of start, stop, resize", p.Action)
+		return "", "", fmt.Errorf("action %q is not one of start, stop, resize, label", p.Action)
 	}
 	return action, size, nil
 }
@@ -279,6 +319,9 @@ func (t *machineTool) PrepareAutomation(ctx *rctx.ToolContext, call ToolCall, un
 	if action == "stop" {
 		return ActivationPreview{}, false, nil
 	}
+	if action == "label" {
+		return t.prepareLabel(ctx.Context, caller.userID, id, p)
+	}
 	machine, err := t.ownedMachine(ctx.Context, caller.userID, id)
 	if err != nil {
 		return ActivationPreview{}, false, RefuseActivation(err.Error(), err)
@@ -316,7 +359,8 @@ func (t *machineTool) ownedMachine(ctx context.Context, userID, machineID string
 }
 
 // unattendedStartAllowed is nil only for a start of the machine the run's
-// trigger activation targets.
+// trigger activation targets. Labelling is never unattended: it moves the
+// machine between pools, and so where unattended runs execute.
 func (t *machineTool) unattendedStartAllowed(ctx *rctx.ToolContext, action, machineID string) error {
 	if action != "start" {
 		return fmt.Errorf("unattended runs cannot %s machines; ask the user in an interactive chat", action)
@@ -379,6 +423,9 @@ func (t *machineTypedTool) Execute(ctx *rctx.ToolContext, p ManageMachineParams)
 	callID := ""
 	if call, ok := ctx.Value(ctxkeys.ToolCallContextKey).(*ctxkeys.ToolCallContext); ok && call != nil {
 		callID = call.CurrentToolCallID
+	}
+	if action == "label" {
+		return o.label(ctx, caller.userID, id, p, exec.Approvals[callID]), nil
 	}
 	if exec.Approvals[callID] != machineApprovalHash(action, id, size) {
 		return NewTextErrorResponse(fmt.Sprintf("Machine %s requires the user's approval card in an interactive chat. It was not run.", action)), nil

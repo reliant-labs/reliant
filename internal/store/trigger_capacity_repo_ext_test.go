@@ -29,7 +29,7 @@ func capacityScope() store.TriggerCapacityScope {
 func claimCapacity(ctx context.Context, env *storetest.Env, id string, scope store.TriggerCapacityScope, n uint32) (bool, error) {
 	claimed := false
 	err := env.ORM.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		allowed, err := store.CanLaunchTriggerCapacity(ctx, env.ORM, id, scope, n)
+		allowed, err := store.CanLaunchTriggerCapacity(ctx, env.ORM, id, scope, store.TriggerCapacityLimits{MaxRunning: n})
 		if err != nil || !allowed {
 			return err
 		}
@@ -189,7 +189,7 @@ func TestTriggerCapacityFIFOAndCrashRetry(t *testing.T) {
 	// Crash before transaction commit cannot consume capacity.
 	crashed := errors.New("simulated crash before commit")
 	require.ErrorIs(t, env.ORM.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		allowed, err := store.CanLaunchTriggerCapacity(ctx, env.ORM, first.ID, scope, 1)
+		allowed, err := store.CanLaunchTriggerCapacity(ctx, env.ORM, first.ID, scope, store.TriggerCapacityLimits{MaxRunning: 1})
 		require.NoError(t, err)
 		require.True(t, allowed)
 		claimed, err := store.ClaimPendingTriggerEvent(ctx, env.ORM, first.ID, map[string]any{}, nil)
@@ -222,7 +222,7 @@ func TestTriggerCapacityFIFOAndCrashRetry(t *testing.T) {
 		_, err := env.SQL.ExecContext(ctx, `UPDATE trigger_events SET run_status=$1 WHERE id=$2`, status, first.ID)
 		require.NoError(t, err)
 		require.NoError(t, env.ORM.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-			allowed, err := store.CanLaunchTriggerCapacity(ctx, env.ORM, second.ID, scope, 1)
+			allowed, err := store.CanLaunchTriggerCapacity(ctx, env.ORM, second.ID, scope, store.TriggerCapacityLimits{MaxRunning: 1})
 			require.NoError(t, err)
 			require.False(t, allowed, "best-effort terminal status must not release capacity: %s", status)
 			return nil
@@ -335,7 +335,7 @@ func TestTriggerCapacityScopeAndTransactionFences(t *testing.T) {
 	scope := capacityScope()
 	ev := capacityEvent("scope-first")
 	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, ev, scope))
-	_, err := store.CanLaunchTriggerCapacity(ctx, env.ORM, ev.ID, scope, 1)
+	_, err := store.CanLaunchTriggerCapacity(ctx, env.ORM, ev.ID, scope, store.TriggerCapacityLimits{MaxRunning: 1})
 	require.ErrorContains(t, err, "transaction")
 	changed := scope
 	changed.WorkflowRef = "project://other"

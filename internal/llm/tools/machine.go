@@ -110,7 +110,7 @@ var serverSafeTools = map[string]struct{}{
 	ToolReportBug: {},
 	// The user's machines are acted on through the control plane, not by
 	// the run's own machine.
-	ToolListMachines: {}, ToolManageMachine: {},
+	ToolListMachines: {}, ToolManageMachine: {}, ToolManageMachinePool: {},
 	// Raises an approval card and reads the connection the person made.
 	ToolProposeConnection: {},
 }

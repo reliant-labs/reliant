@@ -33,9 +33,14 @@ func capacitySettled(err error) bool {
 	return errors.Is(err, errCapacityScopeChanged) || errors.Is(err, errCapacitySuperseded)
 }
 
+// errCapacityExpired is a waiting event recorded before limits.ExpiredBefore:
+// it must never launch. The fire settles it failed with capacityExpiredDetail,
+// as the redriver's expiry sweep would.
+var errCapacityExpired = errors.New(capacityExpiredDetail)
+
 type capacityRepository interface {
 	EnqueueTriggerCapacity(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error
-	CanLaunchTriggerCapacity(context.Context, string, store.TriggerCapacityScope, uint32) (bool, error)
+	CanLaunchTriggerCapacity(context.Context, string, store.TriggerCapacityScope, store.TriggerCapacityLimits) (bool, error)
 	BindTriggerCapacityExecution(context.Context, string, string, string) error
 	PrepareTriggerCapacityExecution(context.Context, string, string) error
 	ListTriggerCapacityExecutions(context.Context, store.TriggerCapacityScope) ([]store.TriggerCapacityExecution, error)
@@ -62,21 +67,72 @@ func capacityPolicy(ctx context.Context, resolver WorkflowResolver, t *core.Trig
 	return wf.GetConcurrency(), nil
 }
 
-// capacityKey is the key a not-yet-enrolled event supersedes by under
-// `waiting: latest`, rendered against the same `trigger` root the run sees;
-// nil under FIFO. A key that cannot be rendered is logged and leaves the
-// event FIFO: losing the coalescing is safe, dropping an event is not.
-func capacityKey(ctx context.Context, policy *reliantv1.WorkflowConcurrency, event *core.TriggerEvent, scope func() triggerspec.Scope) *string {
-	if policy.GetWaiting() != reliantv1.WorkflowConcurrencyWaiting_WORKFLOW_CONCURRENCY_WAITING_LATEST || event.CapacityOrder != nil {
-		return nil
-	}
-	key, err := triggerspec.RenderConcurrencyKey(policy.GetKey(), scope())
+// capacityLimits resolves a workflow's concurrency policy to the caps for
+// this trigger now; ok is false when the workflow declares no policy. A policy
+// that caps only per key has no workflow-wide cap.
+func capacityLimits(ctx context.Context, placer Placer, t *core.Trigger, policy *reliantv1.WorkflowConcurrency) (store.TriggerCapacityLimits, bool, error) {
+	limit, ok, err := capacityLimit(ctx, placer, t, policy)
 	if err != nil {
-		slog.WarnContext(ctx, "workflow capacity: concurrency key did not render; the event waits FIFO and is never superseded",
-			"event_id", event.ID, "error", err)
-		return nil
+		return store.TriggerCapacityLimits{}, ok, err
 	}
-	return &key
+	perKey := policy.GetMaxRunningPerKey()
+	if !ok {
+		if perKey == 0 {
+			return store.TriggerCapacityLimits{}, false, nil
+		}
+		limit = store.TriggerCapacityUnbounded
+	}
+	return store.TriggerCapacityLimits{MaxRunning: limit, MaxRunningPerKey: perKey}, true, nil
+}
+
+// capacityAdmission fixes a not-yet-enrolled event's place in its scope's
+// queue, rendered against the same `trigger` root the run sees: its
+// CapacityKey (the waiting: latest supersede group), CapacityRunningKey (the
+// max_running_per_key group) and CapacityPriority. An enrolled event keeps
+// what it enrolled with. Whatever cannot be rendered is logged and left unset:
+// a key that does not render leaves the event FIFO, never superseded and held
+// only by the workflow-wide cap, and a priority that does not evaluate is 0.
+// Losing an ordering is safe; dropping an event is not.
+func capacityAdmission(ctx context.Context, policy *reliantv1.WorkflowConcurrency, event *core.TriggerEvent, scopeOf func() triggerspec.Scope) {
+	if event.CapacityOrder != nil {
+		return
+	}
+	var scope *triggerspec.Scope
+	render := func() triggerspec.Scope {
+		if scope == nil {
+			s := scopeOf()
+			scope = &s
+		}
+		return *scope
+	}
+	latest := policy.GetWaiting() == reliantv1.WorkflowConcurrencyWaiting_WORKFLOW_CONCURRENCY_WAITING_LATEST
+	if latest || policy.GetMaxRunningPerKey() > 0 {
+		key, err := triggerspec.RenderConcurrencyKey(policy.GetKey(), render())
+		if err != nil {
+			slog.WarnContext(ctx, "workflow capacity: concurrency key did not render; the event waits FIFO, is never superseded and counts only against the workflow-wide cap",
+				"event_id", event.ID, "error", err)
+		} else {
+			if latest {
+				event.CapacityKey = &key
+			}
+			if policy.GetMaxRunningPerKey() > 0 {
+				event.CapacityRunningKey = &key
+			}
+		}
+	}
+	if policy.GetPriority() != "" {
+		priority, err := triggerspec.CompileConcurrencyPriority(policy.GetPriority())
+		var value int64
+		if err == nil {
+			value, err = priority.Evaluate(render())
+		}
+		if err != nil {
+			slog.WarnContext(ctx, "workflow capacity: concurrency priority did not evaluate; the event waits at priority 0",
+				"event_id", event.ID, "error", err)
+			return
+		}
+		event.CapacityPriority = &value
+	}
 }
 
 // capacityScope is the pool a trigger's capped runs share: its owner, project
@@ -89,9 +145,9 @@ func capacityScope(t *core.Trigger) (store.TriggerCapacityScope, error) {
 	return store.TriggerCapacityScope{UserID: t.UserID, ProjectID: t.ProjectID, WorkflowRef: ref.Key()}, nil
 }
 
-// capacityQueue finds a scope's FIFO head. *db.Repo satisfies it.
+// capacityQueue finds the event a scope admits next. *db.Repo satisfies it.
 type capacityQueue interface {
-	NextWaitingTriggerCapacityEvent(context.Context, store.TriggerCapacityScope) (*core.TriggerEvent, error)
+	NextAdmissibleTriggerCapacityEvent(context.Context, store.TriggerCapacityScope, store.TriggerCapacityLimits) (*core.TriggerEvent, error)
 }
 
 // capacityWake hands a freed or still-free slot straight to the next waiting
@@ -105,13 +161,24 @@ type capacityWake struct {
 	taskQueue string
 }
 
-// wakeNext fires the scope's waiting head after a capped launch. That fire
-// launches if a slot is still free, and wakes the next in turn, so a burst of
-// free slots fills in one cascade; it declines (and the cascade stops) once
-// the scope is full. Best effort: a failure is logged, and the redriver still
-// fires the head on its next pass.
-func (w *capacityWake) wakeNext(ctx context.Context, repo any, t *core.Trigger, launchedEventID string) {
-	if w == nil || w.starter == nil {
+// wakeNext fires the event the scope admits next, unless that is the firing
+// itself (kind, dedupeKey).
+//
+// After a capped launch it hands a still-free slot on: that fire launches and
+// wakes the next in turn, so a burst of free slots fills in one cascade, which
+// stops once the scope is full (nothing is admissible).
+//
+// After a capped fire declines to wait, it hands the turn on: the declined
+// event may be the redriver's head yet not admissible, because a higher
+// priority firing arrived after the redriver's cutoff or its own key is at its
+// max_running_per_key cap, while another waiting event could run now. The
+// redriver does not know the policy, so without this that event would wait
+// until something else launched.
+//
+// Best effort: a failure is logged, and the redriver still fires the head on
+// its next pass.
+func (w *capacityWake) wakeNext(ctx context.Context, repo any, t *core.Trigger, limits store.TriggerCapacityLimits, kind core.TriggerEventKind, dedupeKey string) {
+	if w == nil || w.starter == nil || limits.MaxRunning == 0 {
 		return
 	}
 	queue, ok := repo.(capacityQueue)
@@ -122,13 +189,13 @@ func (w *capacityWake) wakeNext(ctx context.Context, repo any, t *core.Trigger, 
 	if err != nil {
 		return
 	}
-	next, err := queue.NextWaitingTriggerCapacityEvent(ctx, scope)
+	next, err := queue.NextAdmissibleTriggerCapacityEvent(ctx, scope, limits)
 	if err != nil {
 		slog.WarnContext(ctx, "workflow capacity: cannot find the next waiting event; the redriver will fire it",
 			"trigger_id", t.ID, "error", err)
 		return
 	}
-	if next == nil || next.ID == launchedEventID || next.TriggerID == nil {
+	if next == nil || (next.Kind == kind && next.DedupeKey == dedupeKey) || next.TriggerID == nil {
 		return
 	}
 	if err := refireEvent(ctx, w.starter, w.taskQueue, next, time.Now()); err != nil {
@@ -137,7 +204,7 @@ func (w *capacityWake) wakeNext(ctx context.Context, repo any, t *core.Trigger, 
 	}
 }
 
-func prepareCapacity(ctx context.Context, repository any, descriptions capacityDescriptions, t *core.Trigger, event *core.TriggerEvent, n uint32, spec *launch.Spec) error {
+func prepareCapacity(ctx context.Context, repository any, descriptions capacityDescriptions, t *core.Trigger, event *core.TriggerEvent, limits store.TriggerCapacityLimits, spec *launch.Spec) error {
 	repo, ok := repository.(capacityRepository)
 	if !ok {
 		return errors.New("workflow capacity storage is unavailable")
@@ -164,6 +231,11 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	if enrolled.Outcome == core.TriggerEventSkipped {
 		return errCapacitySuperseded
 	}
+	// An expired event never launches. Admission refuses it too (under the
+	// lock), so this only spares the launch attempt and settles it now.
+	if enrolled.Outcome == core.TriggerEventPending && !limits.ExpiredBefore.IsZero() && enrolled.CreatedAt.Before(limits.ExpiredBefore) {
+		return errCapacityExpired
+	}
 	// Reconcile only immutable chains in this scope. A missing, mismatched or
 	// unavailable description holds its slot; chat status is never release evidence.
 	occupied, err := repo.ListTriggerCapacityExecutions(ctx, scope)
@@ -175,10 +247,10 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	spec.Guard = func(ctx context.Context) (string, error) {
 		// A per-member policy on a pool with no member able to take work
 		// resolves to 0: wait, as for a full scope.
-		if n == 0 {
+		if limits.MaxRunning == 0 {
 			return capacityWaiting, nil
 		}
-		allowed, err := repo.CanLaunchTriggerCapacity(ctx, enrolled.ID, scope, n)
+		allowed, err := repo.CanLaunchTriggerCapacity(ctx, enrolled.ID, scope, limits)
 		if err != nil {
 			return "", err
 		}

@@ -84,6 +84,24 @@ function forgeServiceTripwires(): MockHandlers {
   );
 }
 
+/**
+ * The control-plane reads these pages make that the service mocks below do
+ * not cover, answered so that none fails into a retry. Unanswered, they did:
+ * the org lookup's retry ran on the app's QueryClient timer, after this
+ * file's afterEach had put the transport away, and was sent for real in
+ * whichever test ran next (#2937).
+ *
+ * The person belongs to no org, so the org-scoped observability reads stay
+ * off (orgs.ts currentOrgId resolves null); they are their own tests' subject.
+ * The release ledger, promotions and deploy runs are empty.
+ */
+const CONTROL_PLANE_READS: MockHandlers = {
+  "OrganizationService.ListMyOrganizations": { response: { organizations: [], defaultOrgId: "" } },
+  "DeployService.ListReleases": { response: {} },
+  "DeployService.ListPromotions": { response: {} },
+  "DeployService.ListDeployAttempts": { response: {} },
+};
+
 const routeState: { env: string; tab?: string } = { env: "prod" };
 const navigate = vi.fn();
 
@@ -369,7 +387,7 @@ afterEach(() => setTransport(null));
 
 beforeEach(() => {
   daemonCalls.length = 0;
-  setTransport(mockTransport(forgeServiceTripwires()));
+  setTransport(mockTransport({ ...forgeServiceTripwires(), ...CONTROL_PLANE_READS }));
   routeState.env = "prod";
   routeState.tab = undefined;
   consoleState.forgeProject = "hounders";
@@ -642,8 +660,7 @@ describe("a queued deploy", () => {
     await user.click(within(banner).getByTestId("queued-deploy-set-up-billing"));
     expect(navigate).toHaveBeenCalledWith(
       expect.objectContaining({
-        to: "/settings/$section",
-        params: { section: "billing" },
+        to: "/settings/billing",
         search: expect.objectContaining({ tab: "usage", from: "forge", returnTo: expect.stringMatching(/^\//) }),
       })
     );

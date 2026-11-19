@@ -18,6 +18,7 @@ import { workflowSummary } from "../../../lib/workflowSummary";
 import { WorkflowBadge } from "../WorkflowSourceBadge";
 import { integrationsNeeded } from "./readyMade";
 import type { WorkflowListRow } from "./workflowsView";
+import { workflowDetailPath } from "@/lib/paths";
 
 export function ReadyMadeStrip({ rows, projectId }: { rows: WorkflowListRow[]; projectId?: string }) {
   if (rows.length === 0) return null;
@@ -50,8 +51,7 @@ function ReadyMadeCard({ row, projectId }: { row: WorkflowListRow; projectId?: s
     <li className="min-w-0">
       <Card padding="sm" className="flex h-full flex-col gap-2" data-testid={`ready-made-${workflow.name}`}>
         <Link
-          to="/workflows/library/$workflowRef"
-          params={{ workflowRef: workflow.name }}
+          to={workflowDetailPath(workflow.name)}
           search={projectId ? { project: projectId } : {}}
           className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >

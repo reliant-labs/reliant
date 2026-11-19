@@ -1214,7 +1214,17 @@ type DaemonRegister struct {
 	// key that orders builds. 0 means unordered (a dirty or unstamped build).
 	CommitTimeUnix int64 `protobuf:"varint,15,opt,name=commit_time_unix,json=commitTimeUnix,proto3" json:"commit_time_unix,omitempty"`
 	// forge_version is the forge module version linked into the binary.
-	ForgeVersion  string `protobuf:"bytes,16,opt,name=forge_version,json=forgeVersion,proto3" json:"forge_version,omitempty"`
+	ForgeVersion string `protobuf:"bytes,16,opt,name=forge_version,json=forgeVersion,proto3" json:"forge_version,omitempty"`
+	// machine_labels are the durable labels the daemon declares for its machine
+	// (`reliant daemon start --label k=v`, or the daemon config's labels). The
+	// server merges them into the machine's labels (daemons.labels, which decide
+	// machine-pool membership) on every registration: each declared key is set
+	// to its value, keys not declared are left alone, and none declared writes
+	// nothing. Unlike labels (9), which describe this connection and vanish
+	// with it, these hold while the machine sleeps. Keys and values are short
+	// slugs; a server refuses an invalid set by not persisting it, never by
+	// refusing the connection. A server that predates the field ignores it.
+	MachineLabels map[string]string `protobuf:"bytes,17,rep,name=machine_labels,json=machineLabels,proto3" json:"machine_labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1338,6 +1348,13 @@ func (x *DaemonRegister) GetForgeVersion() string {
 		return x.ForgeVersion
 	}
 	return ""
+}
+
+func (x *DaemonRegister) GetMachineLabels() map[string]string {
+	if x != nil {
+		return x.MachineLabels
+	}
+	return nil
 }
 
 // ToolResponse contains the result of tool execution. The daemon keeps it until
@@ -5875,7 +5892,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x05error\x18\a \x01(\tR\x05error\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x81\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x99\x05\n" +
 	"\x0eDaemonRegister\x12\x1a\n" +
 	"\bhostname\x18\x03 \x01(\tR\bhostname\x12\x1a\n" +
 	"\bplatform\x18\x04 \x01(\tR\bplatform\x12\x1f\n" +
@@ -5892,8 +5909,12 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\aversion\x18\r \x01(\tR\aversion\x12\x16\n" +
 	"\x06commit\x18\x0e \x01(\tR\x06commit\x12(\n" +
 	"\x10commit_time_unix\x18\x0f \x01(\x03R\x0ecommitTimeUnix\x12#\n" +
-	"\rforge_version\x18\x10 \x01(\tR\fforgeVersion\x1a9\n" +
+	"\rforge_version\x18\x10 \x01(\tR\fforgeVersion\x12T\n" +
+	"\x0emachine_labels\x18\x11 \x03(\v2-.reliant.v1.DaemonRegister.MachineLabelsEntryR\rmachineLabels\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a@\n" +
+	"\x12MachineLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb5\x02\n" +
 	"\fToolResponse\x12\x1d\n" +
@@ -6319,7 +6340,7 @@ func file_reliant_v1_tools_daemon_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_tools_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_reliant_v1_tools_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 70)
+var file_reliant_v1_tools_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 71)
 var file_reliant_v1_tools_daemon_proto_goTypes = []any{
 	(FileChangeType)(0),                     // 0: reliant.v1.FileChangeType
 	(MachineHealthState)(0),                 // 1: reliant.v1.MachineHealthState
@@ -6390,11 +6411,12 @@ var file_reliant_v1_tools_daemon_proto_goTypes = []any{
 	nil,                                     // 66: reliant.v1.LocalModelHTTPRequest.HeadersEntry
 	nil,                                     // 67: reliant.v1.LocalModelHTTPChunk.HeadersEntry
 	nil,                                     // 68: reliant.v1.DaemonRegister.LabelsEntry
-	nil,                                     // 69: reliant.v1.ToolRequest.TraceContextEntry
-	nil,                                     // 70: reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
-	nil,                                     // 71: reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
-	nil,                                     // 72: reliant.v1.IndexedSkill.MetadataEntry
-	nil,                                     // 73: reliant.v1.DaemonCommandRequest.TraceContextEntry
+	nil,                                     // 69: reliant.v1.DaemonRegister.MachineLabelsEntry
+	nil,                                     // 70: reliant.v1.ToolRequest.TraceContextEntry
+	nil,                                     // 71: reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
+	nil,                                     // 72: reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
+	nil,                                     // 73: reliant.v1.IndexedSkill.MetadataEntry
+	nil,                                     // 74: reliant.v1.DaemonCommandRequest.TraceContextEntry
 }
 var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	14, // 0: reliant.v1.DaemonMessage.register:type_name -> reliant.v1.DaemonRegister
@@ -6417,68 +6439,69 @@ var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	66, // 17: reliant.v1.LocalModelHTTPRequest.headers:type_name -> reliant.v1.LocalModelHTTPRequest.HeadersEntry
 	67, // 18: reliant.v1.LocalModelHTTPChunk.headers:type_name -> reliant.v1.LocalModelHTTPChunk.HeadersEntry
 	68, // 19: reliant.v1.DaemonRegister.labels:type_name -> reliant.v1.DaemonRegister.LabelsEntry
-	16, // 20: reliant.v1.ToolResponse.media:type_name -> reliant.v1.ToolResponseMedia
-	18, // 21: reliant.v1.DaemonHeartbeat.disk:type_name -> reliant.v1.DiskReport
-	23, // 22: reliant.v1.DaemonHeartbeat.health:type_name -> reliant.v1.MachineHealth
-	24, // 23: reliant.v1.DiskReport.volumes:type_name -> reliant.v1.DiskVolume
-	21, // 24: reliant.v1.DiskReport.processes:type_name -> reliant.v1.ProcessReport
-	19, // 25: reliant.v1.DiskReport.worktree_reclaim:type_name -> reliant.v1.WorktreeReclaimProposals
-	20, // 26: reliant.v1.WorktreeReclaimProposals.proposals:type_name -> reliant.v1.WorktreeReclaimProposal
-	22, // 27: reliant.v1.ProcessReport.top:type_name -> reliant.v1.ProcessTree
-	1,  // 28: reliant.v1.MachineHealth.state:type_name -> reliant.v1.MachineHealthState
-	25, // 29: reliant.v1.DiskVolume.consumers:type_name -> reliant.v1.DiskConsumer
-	2,  // 30: reliant.v1.DiskVolume.guard:type_name -> reliant.v1.DiskGuardState
-	30, // 31: reliant.v1.ServerMessage.tool_request:type_name -> reliant.v1.ToolRequest
-	31, // 32: reliant.v1.ServerMessage.heartbeat:type_name -> reliant.v1.ServerHeartbeat
-	32, // 33: reliant.v1.ServerMessage.registration_ack:type_name -> reliant.v1.RegistrationAck
-	49, // 34: reliant.v1.ServerMessage.tool_cancel:type_name -> reliant.v1.ToolExecutionCancel
-	33, // 35: reliant.v1.ServerMessage.load_project_configs:type_name -> reliant.v1.LoadProjectConfigsRequest
-	35, // 36: reliant.v1.ServerMessage.watch_project_configs:type_name -> reliant.v1.WatchProjectConfigsRequest
-	36, // 37: reliant.v1.ServerMessage.unwatch_project_configs:type_name -> reliant.v1.UnwatchProjectConfigsRequest
-	53, // 38: reliant.v1.ServerMessage.kill_process:type_name -> reliant.v1.DaemonKillProcessRequest
-	55, // 39: reliant.v1.ServerMessage.daemon_command:type_name -> reliant.v1.DaemonCommandRequest
-	58, // 40: reliant.v1.ServerMessage.terminal_input:type_name -> reliant.v1.TerminalInputMessage
-	59, // 41: reliant.v1.ServerMessage.terminal_resize:type_name -> reliant.v1.TerminalResizeMessage
-	63, // 42: reliant.v1.ServerMessage.process_output_subscribe:type_name -> reliant.v1.ProcessOutputSubscribeMessage
-	64, // 43: reliant.v1.ServerMessage.process_output_unsubscribe:type_name -> reliant.v1.ProcessOutputUnsubscribeMessage
-	62, // 44: reliant.v1.ServerMessage.terminal_output_subscribe:type_name -> reliant.v1.TerminalOutputSubscribeMessage
-	27, // 45: reliant.v1.ServerMessage.hello:type_name -> reliant.v1.GatewayHello
-	50, // 46: reliant.v1.ServerMessage.tool_background:type_name -> reliant.v1.ToolExecutionBackground
-	11, // 47: reliant.v1.ServerMessage.local_model_http_request:type_name -> reliant.v1.LocalModelHTTPRequest
-	12, // 48: reliant.v1.ServerMessage.local_model_http_cancel:type_name -> reliant.v1.LocalModelHTTPCancel
-	10, // 49: reliant.v1.ServerMessage.local_model_refresh:type_name -> reliant.v1.LocalModelRefresh
-	28, // 50: reliant.v1.ServerMessage.drain:type_name -> reliant.v1.GatewayDrain
-	29, // 51: reliant.v1.ServerMessage.tool_result_ack:type_name -> reliant.v1.ToolResultAck
-	69, // 52: reliant.v1.ToolRequest.trace_context:type_name -> reliant.v1.ToolRequest.TraceContextEntry
-	37, // 53: reliant.v1.LoadProjectConfigsResponse.snapshot:type_name -> reliant.v1.ProjectConfigSnapshot
-	70, // 54: reliant.v1.ProjectConfigSnapshot.mcp_configs:type_name -> reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
-	43, // 55: reliant.v1.ProjectConfigSnapshot.workflows:type_name -> reliant.v1.IndexedWorkflow
-	44, // 56: reliant.v1.ProjectConfigSnapshot.presets:type_name -> reliant.v1.IndexedPreset
-	45, // 57: reliant.v1.ProjectConfigSnapshot.scenarios:type_name -> reliant.v1.IndexedScenario
-	46, // 58: reliant.v1.ProjectConfigSnapshot.skills:type_name -> reliant.v1.IndexedSkill
-	71, // 59: reliant.v1.ProjectConfigSnapshot.repo_memories_md:type_name -> reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
-	38, // 60: reliant.v1.ProjectConfigSnapshot.repo_states:type_name -> reliant.v1.SyncedRepoState
-	40, // 61: reliant.v1.ProjectConfigDelta.changed_files:type_name -> reliant.v1.ChangedFile
-	37, // 62: reliant.v1.ProjectConfigDelta.snapshot_if_compacted:type_name -> reliant.v1.ProjectConfigSnapshot
-	0,  // 63: reliant.v1.ChangedFile.change_type:type_name -> reliant.v1.FileChangeType
-	72, // 64: reliant.v1.IndexedSkill.metadata:type_name -> reliant.v1.IndexedSkill.MetadataEntry
-	48, // 65: reliant.v1.ProjectDiscovery.projects:type_name -> reliant.v1.DiscoveredProject
-	56, // 66: reliant.v1.DaemonCommandRequest.policy:type_name -> reliant.v1.ConnectorPolicy
-	73, // 67: reliant.v1.DaemonCommandRequest.trace_context:type_name -> reliant.v1.DaemonCommandRequest.TraceContextEntry
-	3,  // 68: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
-	6,  // 69: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
-	26, // 70: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
-	51, // 71: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
-	4,  // 72: reliant.v1.ToolsDaemonService.WhoAmI:input_type -> reliant.v1.WhoAmIRequest
-	26, // 73: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
-	6,  // 74: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
-	52, // 75: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
-	5,  // 76: reliant.v1.ToolsDaemonService.WhoAmI:output_type -> reliant.v1.WhoAmIResponse
-	73, // [73:77] is the sub-list for method output_type
-	69, // [69:73] is the sub-list for method input_type
-	69, // [69:69] is the sub-list for extension type_name
-	69, // [69:69] is the sub-list for extension extendee
-	0,  // [0:69] is the sub-list for field type_name
+	69, // 20: reliant.v1.DaemonRegister.machine_labels:type_name -> reliant.v1.DaemonRegister.MachineLabelsEntry
+	16, // 21: reliant.v1.ToolResponse.media:type_name -> reliant.v1.ToolResponseMedia
+	18, // 22: reliant.v1.DaemonHeartbeat.disk:type_name -> reliant.v1.DiskReport
+	23, // 23: reliant.v1.DaemonHeartbeat.health:type_name -> reliant.v1.MachineHealth
+	24, // 24: reliant.v1.DiskReport.volumes:type_name -> reliant.v1.DiskVolume
+	21, // 25: reliant.v1.DiskReport.processes:type_name -> reliant.v1.ProcessReport
+	19, // 26: reliant.v1.DiskReport.worktree_reclaim:type_name -> reliant.v1.WorktreeReclaimProposals
+	20, // 27: reliant.v1.WorktreeReclaimProposals.proposals:type_name -> reliant.v1.WorktreeReclaimProposal
+	22, // 28: reliant.v1.ProcessReport.top:type_name -> reliant.v1.ProcessTree
+	1,  // 29: reliant.v1.MachineHealth.state:type_name -> reliant.v1.MachineHealthState
+	25, // 30: reliant.v1.DiskVolume.consumers:type_name -> reliant.v1.DiskConsumer
+	2,  // 31: reliant.v1.DiskVolume.guard:type_name -> reliant.v1.DiskGuardState
+	30, // 32: reliant.v1.ServerMessage.tool_request:type_name -> reliant.v1.ToolRequest
+	31, // 33: reliant.v1.ServerMessage.heartbeat:type_name -> reliant.v1.ServerHeartbeat
+	32, // 34: reliant.v1.ServerMessage.registration_ack:type_name -> reliant.v1.RegistrationAck
+	49, // 35: reliant.v1.ServerMessage.tool_cancel:type_name -> reliant.v1.ToolExecutionCancel
+	33, // 36: reliant.v1.ServerMessage.load_project_configs:type_name -> reliant.v1.LoadProjectConfigsRequest
+	35, // 37: reliant.v1.ServerMessage.watch_project_configs:type_name -> reliant.v1.WatchProjectConfigsRequest
+	36, // 38: reliant.v1.ServerMessage.unwatch_project_configs:type_name -> reliant.v1.UnwatchProjectConfigsRequest
+	53, // 39: reliant.v1.ServerMessage.kill_process:type_name -> reliant.v1.DaemonKillProcessRequest
+	55, // 40: reliant.v1.ServerMessage.daemon_command:type_name -> reliant.v1.DaemonCommandRequest
+	58, // 41: reliant.v1.ServerMessage.terminal_input:type_name -> reliant.v1.TerminalInputMessage
+	59, // 42: reliant.v1.ServerMessage.terminal_resize:type_name -> reliant.v1.TerminalResizeMessage
+	63, // 43: reliant.v1.ServerMessage.process_output_subscribe:type_name -> reliant.v1.ProcessOutputSubscribeMessage
+	64, // 44: reliant.v1.ServerMessage.process_output_unsubscribe:type_name -> reliant.v1.ProcessOutputUnsubscribeMessage
+	62, // 45: reliant.v1.ServerMessage.terminal_output_subscribe:type_name -> reliant.v1.TerminalOutputSubscribeMessage
+	27, // 46: reliant.v1.ServerMessage.hello:type_name -> reliant.v1.GatewayHello
+	50, // 47: reliant.v1.ServerMessage.tool_background:type_name -> reliant.v1.ToolExecutionBackground
+	11, // 48: reliant.v1.ServerMessage.local_model_http_request:type_name -> reliant.v1.LocalModelHTTPRequest
+	12, // 49: reliant.v1.ServerMessage.local_model_http_cancel:type_name -> reliant.v1.LocalModelHTTPCancel
+	10, // 50: reliant.v1.ServerMessage.local_model_refresh:type_name -> reliant.v1.LocalModelRefresh
+	28, // 51: reliant.v1.ServerMessage.drain:type_name -> reliant.v1.GatewayDrain
+	29, // 52: reliant.v1.ServerMessage.tool_result_ack:type_name -> reliant.v1.ToolResultAck
+	70, // 53: reliant.v1.ToolRequest.trace_context:type_name -> reliant.v1.ToolRequest.TraceContextEntry
+	37, // 54: reliant.v1.LoadProjectConfigsResponse.snapshot:type_name -> reliant.v1.ProjectConfigSnapshot
+	71, // 55: reliant.v1.ProjectConfigSnapshot.mcp_configs:type_name -> reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
+	43, // 56: reliant.v1.ProjectConfigSnapshot.workflows:type_name -> reliant.v1.IndexedWorkflow
+	44, // 57: reliant.v1.ProjectConfigSnapshot.presets:type_name -> reliant.v1.IndexedPreset
+	45, // 58: reliant.v1.ProjectConfigSnapshot.scenarios:type_name -> reliant.v1.IndexedScenario
+	46, // 59: reliant.v1.ProjectConfigSnapshot.skills:type_name -> reliant.v1.IndexedSkill
+	72, // 60: reliant.v1.ProjectConfigSnapshot.repo_memories_md:type_name -> reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
+	38, // 61: reliant.v1.ProjectConfigSnapshot.repo_states:type_name -> reliant.v1.SyncedRepoState
+	40, // 62: reliant.v1.ProjectConfigDelta.changed_files:type_name -> reliant.v1.ChangedFile
+	37, // 63: reliant.v1.ProjectConfigDelta.snapshot_if_compacted:type_name -> reliant.v1.ProjectConfigSnapshot
+	0,  // 64: reliant.v1.ChangedFile.change_type:type_name -> reliant.v1.FileChangeType
+	73, // 65: reliant.v1.IndexedSkill.metadata:type_name -> reliant.v1.IndexedSkill.MetadataEntry
+	48, // 66: reliant.v1.ProjectDiscovery.projects:type_name -> reliant.v1.DiscoveredProject
+	56, // 67: reliant.v1.DaemonCommandRequest.policy:type_name -> reliant.v1.ConnectorPolicy
+	74, // 68: reliant.v1.DaemonCommandRequest.trace_context:type_name -> reliant.v1.DaemonCommandRequest.TraceContextEntry
+	3,  // 69: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
+	6,  // 70: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
+	26, // 71: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
+	51, // 72: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
+	4,  // 73: reliant.v1.ToolsDaemonService.WhoAmI:input_type -> reliant.v1.WhoAmIRequest
+	26, // 74: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
+	6,  // 75: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
+	52, // 76: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
+	5,  // 77: reliant.v1.ToolsDaemonService.WhoAmI:output_type -> reliant.v1.WhoAmIResponse
+	74, // [74:78] is the sub-list for method output_type
+	70, // [70:74] is the sub-list for method input_type
+	70, // [70:70] is the sub-list for extension type_name
+	70, // [70:70] is the sub-list for extension extendee
+	0,  // [0:70] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_tools_daemon_proto_init() }
@@ -6533,7 +6556,7 @@ func file_reliant_v1_tools_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_tools_daemon_proto_rawDesc), len(file_reliant_v1_tools_daemon_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   70,
+			NumMessages:   71,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 
 import { lowCreditLabel } from "./lowCredit";
 import { useLowCreditStatus } from "./useLowCreditStatus";
+import { settingsPath } from "@/lib/paths";
 
 export function LowCreditIndicator({ className }: { className?: string }) {
   const navigate = useNavigate();
@@ -65,8 +66,7 @@ export function LowCreditIndicator({ className }: { className?: string }) {
       <button
         onClick={() =>
           void navigate({
-            to: "/settings/$section",
-            params: { section: "billing" },
+            to: settingsPath("billing"),
           })
         }
         className={cn(

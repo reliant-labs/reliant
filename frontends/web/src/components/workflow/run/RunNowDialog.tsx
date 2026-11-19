@@ -48,6 +48,7 @@ import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from
 import { candidateLabel, formatPayload, parsePayload, REPLAY_KINDS } from "./runNowReplay";
 import { EMPTY_RUN_VALUE, type RunWorkflowValue } from "./runWorkflowValues";
 import * as chatActions from "@/hooks/chat-actions";
+import { projectPath, runPath } from "@/lib/paths";
 
 export interface RunNowDialogProps {
   open: boolean;
@@ -193,11 +194,11 @@ function RunNowDialogBody({ onClose, projectId, workflowRef, opensIn = "chat" }:
 
   const openChat = async (chatId: string, chatProjectId: string) => {
     if (opensIn === "run") {
-      await navigate({ to: "/workflows/runs/$runId", params: { runId: chatId }, search: { project: chatProjectId } });
+      await navigate({ to: runPath(chatId), search: { project: chatProjectId } });
       return;
     }
     await loadRunContext(chatId);
-    await navigate({ to: "/project/$projectId", params: { projectId: chatProjectId }, search: {} });
+    await navigate({ to: projectPath(chatProjectId), search: {} });
   };
 
   const onSubmit = async (event: FormEvent) => {
