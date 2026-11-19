@@ -8,6 +8,7 @@ import { HostedAppsState, ProjectAppLink, ProjectInstallState, ProjectSchema } f
 import {
   appEntries,
   appRowKey,
+  catalogFromProjects,
   catalogFromResponse,
   catalogGroups,
   chipStateOf,
@@ -331,5 +332,16 @@ describe("appEntries", () => {
       ["shop", "a"],
       ["solo", null],
     ]);
+  });
+});
+
+describe("catalogFromProjects", () => {
+  it("lists plain projects as partial rows with no apps, by their last use", () => {
+    const c = catalogFromProjects("org-1", [
+      { id: "a", name: "A", path: "/a", is_git_repo: true, is_forge: false, last_active: "2026-01-01T00:00:00Z", created_at: "", updated_at: "" },
+    ]);
+    expect(c.hostedAppsState).toBe("unavailable");
+    expect(c.rows).toMatchObject([{ kind: "project", key: "a", partial: true, apps: [], activityAt: Date.parse("2026-01-01T00:00:00Z") }]);
+    expect(keys(listCatalog(c, NO_PREFS, { filter: "code_only" }))).toEqual(["a"]);
   });
 });
