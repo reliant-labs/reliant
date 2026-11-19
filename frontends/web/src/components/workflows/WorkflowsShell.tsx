@@ -59,7 +59,7 @@ import {
 import { ShellPageHeader, useShellFrame } from "../Layout/shell/shellFrame";
 import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
-import DropdownMenu from "../forge-ui/dropdown_menu";
+import { ProjectSelector } from "../Projects/ProjectSelector";
 import Tooltip from "../forge-ui/tooltip";
 import { useWorkflowsScope } from "./useWorkflowsScope";
 import { homePath } from "@/lib/paths";
@@ -293,7 +293,8 @@ function WorkflowsHeader({ onClose, activeTab, showExit }: {
 
 /**
  * The area's scope: one project, or All projects. Every page honours it
- * (useWorkflowsScope). Choosing a project makes it current and narrows to it;
+ * (useWorkflowsScope). The list is the project selector (Projects/ProjectSelector).
+ * Choosing a project makes it current and narrows to it;
  * All projects keeps the current project as background (`?project=`) and sets
  * `?allProjects=true`.
  */
@@ -313,12 +314,30 @@ function ProjectSwitcher() {
     } as never);
 
   return (
-    <DropdownMenu
+    <ProjectSelector
       open={open}
       onOpenChange={setOpen}
+      mode="chat"
       align="left"
-      label="Projects"
-      menuClassName="max-h-80 w-72 overflow-y-auto"
+      selectedKey={scope.allProjects ? ALL_PROJECTS_KEY : (currentProject?.id ?? ALL_PROJECTS_KEY)}
+      leadItems={[
+        {
+          key: ALL_PROJECTS_KEY,
+          label: "All projects",
+          testId: "workflows-project-all",
+          onSelect: () => {
+            if (!scope.allProjects) setAllProjects(true);
+          },
+        },
+      ]}
+      onSelect={(selection) => {
+        if (selection.kind !== "project") return;
+        const project = projects.find((p) => p.id === selection.row.key) ?? selection.row.project;
+        const active = !scope.allProjects && project.id === currentProject?.id;
+        if (active) return;
+        if (scope.allProjects) setAllProjects(false);
+        if (project.id !== currentProject?.id) void selectProject(project);
+      }}
       trigger={(props) => (
         <button
           type="button"
@@ -331,35 +350,12 @@ function ProjectSwitcher() {
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       )}
-      groups={[
-        {
-          selection: "single",
-          items: [
-            {
-              label: "All projects",
-              checked: scope.allProjects,
-              onClick: () => {
-                if (!scope.allProjects) setAllProjects(true);
-              },
-            },
-            ...projects.map((project) => {
-              const active = !scope.allProjects && project.id === currentProject?.id;
-              return {
-                label: project.name,
-                checked: active,
-                onClick: () => {
-                  if (active) return;
-                  if (scope.allProjects) setAllProjects(false);
-                  if (project.id !== currentProject?.id) void selectProject(project);
-                },
-              };
-            }),
-          ],
-        },
-      ]}
     />
   );
 }
+
+/** The selector's key for All projects. */
+const ALL_PROJECTS_KEY = "";
 
 /** The resolution ladder in the header comment. Runs once per mount of the area. */
 function useWorkflowsProjectResolution() {

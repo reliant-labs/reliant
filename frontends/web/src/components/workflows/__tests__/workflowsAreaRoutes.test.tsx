@@ -183,10 +183,10 @@ describe("Workflows area routes render inside the shell with the right tab", () 
     const router = renderAt("/workflows/library");
     await screen.findByTestId("page-library");
     fireEvent.click(screen.getByTestId("workflows-project-switcher"));
-    expect(await screen.findByRole("menu", { name: "Projects" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Choose a project" })).toBeInTheDocument();
     // As a real keypress does: dispatched at the focused element, bubbling to document and window.
     fireEvent.keyDown(document.body, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("menu", { name: "Projects" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose a project" })).toBeNull());
     expect(router.state.location.pathname).toBe("/workflows/library");
   });
 
@@ -271,8 +271,7 @@ describe("Workflows area routes render inside the shell with the right tab", () 
     const switcher = await screen.findByTestId("workflows-project-switcher");
     expect(switcher).toHaveTextContent("Reliant");
     fireEvent.click(switcher);
-    const menu = await screen.findByRole("menu", { name: "Projects" });
-    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /All projects/ }));
+    fireEvent.click(await screen.findByTestId("workflows-project-all"));
     await waitFor(() => expect(router.state.location.search).toMatchObject({ allProjects: true }));
     expect(await screen.findByTestId("workflows-project-switcher")).toHaveTextContent("All projects");
   });
