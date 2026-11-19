@@ -324,6 +324,7 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 	} else {
 		observe := a.observeMachine(execCtx)
 		result, err = executeUntilDelivered(withRunRequestID(ctx, requestID), executor, wait, observe, input.Command, commandDir, timeout)
+		result, err = reattachAfterTransportDrop(ctx, executor, input, requestID, timeout, result, err)
 	}
 	a.stopCommandIfCancelled(ctx, execCtx, input, requestID)
 	stdout, stderr, exitCode, interrupted := result.Stdout, result.Stderr, result.ExitCode, result.Interrupted
@@ -347,9 +348,20 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 		}
 		// A transport failure is not a command verdict: fail the activity
 		// rather than return a synthetic exit code the workflow would read
-		// as one. Not retryable either way — see runStepTransportFailure.
+		// as one. Not retryable — see runStepTransportFailure — unless this
+		// attempt itself was released while it waited (runStepReleased).
 		var transportErr *toolexec.TransportError
 		if errors.As(err, &transportErr) {
+			if attemptReleased(ctx) {
+				activity.GetLogger(ctx).Info("[RunStep] attempt released while its command runs; the retry reattaches to it",
+					"chat_id", input.ChatID,
+					"step_id", input.StepID,
+					"attempt", attempt,
+					"request_id", requestID,
+					"cause", context.Cause(ctx),
+				)
+				return ExecuteRunStepOutput{}, runStepReleased(transportErr)
+			}
 			activity.GetLogger(ctx).Warn("[RunStep] no result came back from the machine",
 				"chat_id", input.ChatID,
 				"step_id", input.StepID,
@@ -562,7 +574,89 @@ const (
 	// runStepOutcomeUnknownErrType: the command was sent and no result came
 	// back; it may have run.
 	runStepOutcomeUnknownErrType = "RunStepOutcomeUnknown"
+	// runStepReleasedErrType: the attempt was released (its worker stopped)
+	// while the command ran. Retryable: the retry reattaches to it.
+	runStepReleasedErrType = "RunStepReleased"
 )
+
+// A command outlives the attempt waiting for it.
+//
+// The machine runs every command decoupled from the request that sent it, and
+// keeps its result until a gateway acknowledges it (toolexec's
+// tool_result_redelivery.go). So "no result came back" is rarely the end:
+//
+//   - The wait broke but this attempt is still live (a round trip that timed
+//     out, a stream that dropped for longer than the router rides out): the
+//     attempt asks the machine about the command it sent, by its request id,
+//     and waits for that command's real verdict (reattachAfterTransportDrop).
+//   - The attempt itself was released while waiting — a worker rollout
+//     drains its activities, which is what every prod deploy does to the
+//     run step that deploys it (2026-11-19, rc-train's `deploy`): the step
+//     fails RETRYABLY (runStepReleased), and the retry reattaches
+//     (ReattachCommand). Before, that attempt reported "outcome unknown,
+//     retryable: false" and only the worker-shutdown rewrite in the
+//     ActivityWrapper kept it from pausing the run.
+//
+// A machine that cannot vouch for the command — it restarted, no longer holds
+// the result, or is too old to be asked (no tool.status) — leaves today's
+// verdict: outcome unknown, not retried.
+
+// reattachAfterTransportDrop is the first half of that: given what
+// executeUntilDelivered returned, it waits for the command's own verdict when
+// the command may have run, no result came back, and this attempt is still
+// live. Anything else is returned unchanged.
+func reattachAfterTransportDrop(ctx context.Context, executor RunExecutor, input ExecuteRunStepInput, requestID string, timeoutMs int, result CommandResult, err error) (CommandResult, error) {
+	var transportErr *toolexec.TransportError
+	if err == nil || !errors.As(err, &transportErr) || transportErr.NotDispatched || ctx.Err() != nil || requestID == "" {
+		return result, err
+	}
+	reattacher, ok := executor.(RunReattacher)
+	if !ok {
+		return result, err
+	}
+	logger := activity.GetLogger(ctx)
+	logger.Info("[RunStep] no result came back; asking the machine about the command it was sent",
+		"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID,
+		"code", transportErr.Code, "detail", transportErr.Detail)
+	reattached, attached, reattachErr := reattacher.ReattachCommand(ctx, requestID, timeoutMs)
+	if !attached {
+		logger.Info("[RunStep] the machine cannot vouch for the command; its outcome is unknown",
+			"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID)
+		return result, err
+	}
+	logger.Info("[RunStep] reattached to the command after the transport dropped",
+		"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID,
+		"exit_code", reattached.ExitCode, "error", reattachErr)
+	return reattached, reattachErr
+}
+
+// attemptReleased reports whether ctx ended because this attempt was let go —
+// its worker stopping, a heartbeat RPC that failed, an attempt the server has
+// already timed out — rather than because the step was told to stop (a
+// cancel, a pause, a reset). Only a released attempt leaves its command to a
+// retry.
+func attemptReleased(ctx context.Context) bool {
+	if !errors.Is(ctx.Err(), context.Canceled) {
+		return false
+	}
+	cause := context.Cause(ctx)
+	return !temporal.IsCanceledError(cause) &&
+		!errors.Is(cause, activity.ErrActivityPaused) &&
+		!errors.Is(cause, activity.ErrActivityReset)
+}
+
+// runStepReleased is the activity error for an attempt released while its
+// command ran: retryable, so the retry reattaches to the command (and is
+// refused, as any retry is, if the machine cannot vouch for it).
+func runStepReleased(transportErr *toolexec.TransportError) error {
+	return temporal.NewApplicationErrorWithOptions(
+		"this attempt was released before the command's result came back; the command keeps running on its machine and the retry reattaches to it",
+		runStepReleasedErrType, temporal.ApplicationErrorOptions{
+			Cause: transportErr,
+			// Benign: a worker rollout is not a fault of the step.
+			Category: temporal.ApplicationErrorCategoryBenign,
+		})
+}
 
 // A command that provably never reached a machine (TransportError.
 // NotDispatched) is held, inside the attempt that knows it never ran, until

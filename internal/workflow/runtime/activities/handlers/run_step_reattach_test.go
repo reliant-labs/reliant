@@ -3,13 +3,16 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -34,7 +37,20 @@ type fakeMachine struct {
 	// lost makes an attached wait end without the result (the daemon went
 	// away for good meanwhile).
 	lost error
+	// dropOnly makes a send lose only its transport: the attempt that sent
+	// it stays live (a round trip that broke), instead of being released.
+	dropOnly bool
+	// finishOnSend, when set, is the result of a command that finishes
+	// while its transport is down: it is held before anyone reattaches.
+	finishOnSend *CommandResult
+	// forgets makes the machine not know any command (it restarted, or is
+	// too old to answer tool.status).
+	forgets bool
 }
+
+// releaseAttemptKey carries, on a test attempt's ctx, the func that releases
+// the attempt the way a draining worker does (a plain cancel).
+type releaseAttemptKey struct{}
 
 type fakeCommand struct {
 	done   chan struct{}
@@ -45,8 +61,9 @@ func newFakeMachine() *fakeMachine {
 	return &fakeMachine{commands: map[string]*fakeCommand{}}
 }
 
-// ExecuteCommand starts command, and the attempt that sent it goes away
-// before its result: the worker was released by its drain.
+// ExecuteCommand starts command, and no result comes back: by default the
+// attempt that sent it goes away (the worker was released by its drain);
+// with dropOnly only the transport does.
 func (m *fakeMachine) ExecuteCommand(ctx context.Context, command, _ string, _ int, _ map[string]string) (CommandResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -54,18 +71,31 @@ func (m *fakeMachine) ExecuteCommand(ctx context.Context, command, _ string, _ i
 	m.runs = append(m.runs, command)
 	m.ids = append(m.ids, id)
 	if id != "" {
-		m.commands[id] = &fakeCommand{done: make(chan struct{})}
+		c := &fakeCommand{done: make(chan struct{})}
+		if m.finishOnSend != nil {
+			c.result = *m.finishOnSend
+			close(c.done)
+		}
+		m.commands[id] = c
 	}
-	return CommandResult{ExitCode: -1}, &toolexec.TransportError{Code: toolexec.ErrorCodeDaemonUnreached,
-		Command: command, Detail: "tool request via NATS failed: context canceled"}
+	detail := "daemon connection interrupted (the machine did not reconnect within 1m0s)"
+	code := toolexec.ErrorCodeDaemonInterrupted
+	if !m.dropOnly {
+		if release, ok := ctx.Value(releaseAttemptKey{}).(func()); ok {
+			release()
+		}
+		detail, code = "tool request via NATS failed: context canceled", toolexec.ErrorCodeDaemonUnreached
+	}
+	return CommandResult{ExitCode: -1}, &toolexec.TransportError{Code: code, Command: command, Detail: detail}
 }
 
 func (m *fakeMachine) ReattachCommand(ctx context.Context, requestID string, _ int) (CommandResult, bool, error) {
 	m.mu.Lock()
 	c, ok := m.commands[requestID]
 	lost := m.lost
+	forgets := m.forgets
 	m.mu.Unlock()
-	if !ok {
+	if !ok || forgets {
 		return CommandResult{}, false, nil
 	}
 	if lost != nil {
@@ -100,6 +130,11 @@ func runStepAttempt(t *testing.T, act *ExecuteRunStepActivity, chatID string, at
 	t.Helper()
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivityWithOptions(func(ctx context.Context, in ExecuteRunStepInput) (ExecuteRunStepOutput, error) {
+		// The ActivityWrapper releases an attempt on worker stop with a
+		// plain cancel; the fake machine pulls this trigger.
+		ctx, release := context.WithCancel(ctx)
+		defer release()
+		ctx = context.WithValue(ctx, releaseAttemptKey{}, func() { release() })
 		return act.execute(ctx, in, attempt, requestID)
 	}, activity.RegisterOptions{Name: "RunStepAttempt"})
 	val, err := env.ExecuteActivity("RunStepAttempt", ExecuteRunStepInput{
@@ -229,6 +264,163 @@ func TestRunStep_ReattachToADaemonRestartResultIsOutcomeUnknown(t *testing.T) {
 	require.NotNil(t, tools.req, "the retry reattached")
 	assert.Equal(t, stepRequestID, tools.req.RequestID)
 	assert.Empty(t, tools.requests(), "nothing is sent to the machine")
+}
+
+// A transport that drops under a live attempt does not end the step: the
+// attempt asks the machine about the command it sent, by its request id, and
+// the step's verdict is that command's. A machine that cannot vouch for it —
+// it restarted, or it is too old to be asked — leaves today's verdict: outcome
+// unknown, not retried. Nothing is ever sent twice.
+func TestRunStep_TransportDropReattachesWithinTheAttempt(t *testing.T) {
+	t.Parallel()
+	finished := CommandResult{Stdout: "rolled out prod", Stderr: "warn: slow", ExitCode: 3}
+	cases := []struct {
+		name string
+		// setup configures the machine before the attempt sends.
+		setup func(m *fakeMachine)
+		// finishLater, when set, ends the command after the drop, while the
+		// attempt waits.
+		finishLater *CommandResult
+		// want is the step's verdict; wantErrType, when set, its failure.
+		want        CommandResult
+		wantErrType string
+	}{
+		{
+			name:        "command still running when the transport drops",
+			setup:       func(m *fakeMachine) { m.dropOnly = true },
+			finishLater: &finished,
+			want:        finished,
+		},
+		{
+			name: "command finished while the transport was down",
+			setup: func(m *fakeMachine) {
+				m.dropOnly = true
+				m.finishOnSend = &finished
+			},
+			want: finished,
+		},
+		{
+			name: "machine restarted or too old to answer tool.status",
+			setup: func(m *fakeMachine) {
+				m.dropOnly = true
+				m.forgets = true
+			},
+			wantErrType: runStepOutcomeUnknownErrType,
+		},
+		{
+			name: "reattached, then the machine went away for good",
+			setup: func(m *fakeMachine) {
+				m.dropOnly = true
+				m.lost = &toolexec.TransportError{Code: toolexec.ErrorCodeDaemonInterrupted, Detail: "the machine no longer knows the request"}
+			},
+			wantErrType: runStepOutcomeUnknownErrType,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			machine := newFakeMachine()
+			tc.setup(machine)
+			act, chatID := newRunStepOn(t, machine)
+			if tc.finishLater != nil {
+				result := *tc.finishLater
+				go func() {
+					for {
+						machine.mu.Lock()
+						_, sent := machine.commands[stepRequestID]
+						machine.mu.Unlock()
+						if sent {
+							machine.finish(stepRequestID, result)
+							return
+						}
+						time.Sleep(5 * time.Millisecond)
+					}
+				}()
+			}
+
+			out, err := runStepAttempt(t, act, chatID, 1, stepRequestID)
+
+			assert.Len(t, machine.ran(), 1, "the command is never sent again")
+			if tc.wantErrType != "" {
+				requireNonRetryable(t, err, tc.wantErrType)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want.Stdout, out.Stdout)
+			assert.Equal(t, tc.want.Stderr, out.Stderr)
+			assert.Equal(t, tc.want.ExitCode, out.ExitCode, "the command's real exit code, not a synthetic one")
+		})
+	}
+}
+
+// An executor that cannot reattach — a daemon or router from before
+// tool.status — keeps today's verdict for a dropped transport.
+func TestRunStep_TransportDropWithoutReattachIsOutcomeUnknown(t *testing.T) {
+	t.Parallel()
+	mock := &mockRunExecutor{responses: []mockRunResponse{{exitCode: -1, err: &toolexec.TransportError{
+		Code: toolexec.ErrorCodeDaemonInterrupted, Command: "task ci", Detail: "daemon connection interrupted"}}}}
+	act, chatID := newRunStepOn(t, mock)
+
+	_, err := runStepAttempt(t, act, chatID, 1, stepRequestID)
+	requireNonRetryable(t, err, runStepOutcomeUnknownErrType)
+	assert.Len(t, mock.calls, 1)
+}
+
+// The worker running a step stops (a rollout drains it — on 2026-11-19 the
+// rollout rc-train's own `deploy` step started): the attempt fails
+// RETRYABLY, saying the command keeps running, and the retry reattaches to
+// it. A step the server told to stop is not released: its failure stays
+// final.
+func TestRunStep_ReleasedAttemptIsRetriedNotFinal(t *testing.T) {
+	t.Parallel()
+	machine := newFakeMachine()
+	act, chatID := newRunStepOn(t, machine)
+
+	_, err := runStepAttempt(t, act, chatID, 1, stepRequestID)
+	require.Error(t, err)
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, runStepReleasedErrType, appErr.Type())
+	assert.False(t, appErr.NonRetryable(), "the retry reattaches; it must be allowed to run")
+	assert.Contains(t, err.Error(), "the retry reattaches")
+
+	machine.finish(stepRequestID, CommandResult{Stdout: "deployed", ExitCode: 0})
+	out, err := runStepAttempt(t, act, chatID, 2, stepRequestID)
+	require.NoError(t, err)
+	assert.Equal(t, "deployed", out.Stdout)
+	assert.Len(t, machine.ran(), 1)
+}
+
+func TestAttemptReleased(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		cause    error // nil: the context is live
+		released bool
+	}{
+		{name: "live"},
+		{name: "worker stopping (plain cancel)", cause: context.Canceled, released: true},
+		{name: "heartbeat RPC failed", cause: errors.New("rpc deadline"), released: true},
+		{name: "attempt the server timed out", cause: serviceerror.NewNotFound("activity not found"), released: true},
+		{name: "server cancel", cause: temporal.NewCanceledError()},
+		{name: "paused", cause: activity.ErrActivityPaused},
+		{name: "reset", cause: activity.ErrActivityReset},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancelCause(context.Background())
+			defer cancel(nil)
+			if tc.cause != nil {
+				cancel(tc.cause)
+			}
+			child, stop := context.WithCancel(ctx)
+			defer stop()
+			assert.Equal(t, tc.released, attemptReleased(child))
+		})
+	}
+	deadline, cancel := context.WithTimeout(context.Background(), 0)
+	defer cancel()
+	assert.False(t, attemptReleased(deadline), "the step's own timeout is not a release")
 }
 
 // The step's command travels under its request id; the log-file write after
