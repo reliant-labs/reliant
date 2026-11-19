@@ -227,8 +227,8 @@ const SURFACES: Surface[] = [
     act: async (page) => {
       await openChatByTitle(page, CHAT_TITLES.tools, TOOLS_LAST_LINE)
       await transcript(page).getByRole('button', { name: /^Activity/ }).first().click()
-      // The fold lists its calls in groups ("Explored 5 files ..."): open the first.
-      await transcript(page).getByRole('button', { name: /^Explored/ }).first().click()
+      // The run lists each call as a quiet row: open the first read.
+      await transcript(page).getByRole('button', { name: /^Toggle tool details for (view|read)/ }).first().click()
       await settle(page)
       await scrollToTop(page)
     },
@@ -241,8 +241,8 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByRole('button', { name: 'config.ts' }).first(),
     act: async (page) => {
       await openChatByTitle(page, CHAT_TITLES.tools, TOOLS_LAST_LINE)
-      await transcript(page).getByRole('button', { name: /^Activity, 4 files edited/ }).click()
-      await transcript(page).getByRole('button', { name: /^Edited src\/pricing/ }).click()
+      // A run of five steps or fewer shows its rows in place: open the first edit.
+      await transcript(page).getByRole('button', { name: /^Toggle tool details for edit/ }).first().click()
       await settle(page)
       await scrollToText(page, 'Three call sites')
     },

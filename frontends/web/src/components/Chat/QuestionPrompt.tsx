@@ -146,7 +146,7 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
   }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className={cn("px-2 py-3", !inline && "max-h-[40vh] overflow-y-auto overscroll-contain")}>
+    <div className={cn(inline ? "" : "px-2 py-3", !inline && "max-h-[40vh] overflow-y-auto overscroll-contain")}>
       {/* Step indicator (multi-question only) */}
       {isMultiStep && (
         <div className="flex items-center gap-1.5 mb-2">
@@ -163,20 +163,20 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
               )}
             />
           ))}
-          <span className="text-xs text-muted-foreground ml-1.5">
+          <span className="text-meta tabular-nums text-muted-foreground ml-1.5">
             {currentStep + 1} / {totalSteps}
           </span>
         </div>
       )}
 
       {/* Question text */}
-      <p className="text-sm font-medium text-foreground mb-3 leading-relaxed">
+      <p className="text-ui font-medium text-foreground mb-3 leading-relaxed">
         {current.question}
       </p>
 
       <div>
         {/* Options + Other + Navigation */}
-        <div className="flex flex-col gap-1.5 min-w-0 w-full">
+        <div className="flex flex-col gap-2 min-w-0 w-full">
           {/* Option buttons */}
           {hasOptions &&
             current.options.map((option) => {
@@ -187,13 +187,13 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
                   type="button"
                   onClick={() => toggleOption(option.label)}
                   className={cn(
-                    "group flex items-start gap-2.5 w-full text-left rounded-lg px-3 py-2",
+                    "group flex items-start gap-3 w-full text-left rounded-lg px-3 py-2.5",
                     "touch:min-h-[44px] touch:py-2.5",
-                    "border transition-all duration-150 cursor-pointer",
+                    "border transition-colors duration-150 cursor-pointer",
                     "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background",
                     isSelected
-                      ? "border-primary/50 bg-primary/10"
-                      : "border-border/50 hover:border-border hover:bg-muted/50"
+                      ? "border-ring"
+                      : "border-border hover:bg-foreground/[0.03]"
                   )}
                   aria-pressed={isSelected}
                   role={current.allowMultiple ? "checkbox" : "radio"}
@@ -216,13 +216,13 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
                   {/* Label + Description */}
                   <div className="min-w-0 flex-1">
                     <span className={cn(
-                      "text-sm font-medium block",
+                      "text-ui block",
                       isSelected ? "text-foreground" : "text-foreground/80"
                     )}>
                       {option.label}
                     </span>
                     {option.description && (
-                      <span className="text-xs text-muted-foreground leading-relaxed block mt-0.5">
+                      <span className="text-ui text-muted-foreground leading-relaxed block mt-0.5">
                         {option.description}
                       </span>
                     )}
@@ -253,14 +253,14 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
             placeholder="Or type your own answer..."
             rows={1}
             className={cn(
-              "w-full rounded-md border bg-background px-3 py-2 text-sm",
+              "w-full rounded-lg border bg-background px-3 py-2.5 text-ui",
               "touch:min-h-[44px]",
               "placeholder:text-muted-foreground/50",
-              "focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary/50",
+              "focus:outline-none focus:border-ring",
               "resize-none transition-colors",
               isOtherActive
-                ? "border-primary/50"
-                : "border-border/40"
+                ? "border-ring"
+                : "border-border"
             )}
           />
 
@@ -272,7 +272,7 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
                   type="button"
                   onClick={handleBack}
                   className={cn(
-                    "text-xs text-muted-foreground hover:text-foreground",
+                    "text-ui text-muted-foreground hover:text-foreground",
                     "transition-colors cursor-pointer",
                     "touch-target inline-flex items-center touch:px-2 touch:text-sm"
                   )}
@@ -286,18 +286,14 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
               onClick={isLastStep ? handleSubmit : handleNext}
               disabled={!canAdvance}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium",
+                "inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-ui font-medium",
                 "touch:min-h-[44px] touch:px-5 touch:text-sm",
                 "transition-all duration-150",
                 "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background",
                 canAdvance
                   ? "bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
-                  : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
+                  : "border border-border text-muted-foreground cursor-not-allowed opacity-60"
               )}
-              style={canAdvance ? {
-                backgroundColor: 'hsl(var(--primary))',
-                color: 'hsl(var(--primary-foreground))',
-              } : undefined}
             >
               {submitting ? (
                 <MessageSquare className="w-3.5 h-3.5 animate-pulse" />

@@ -35,7 +35,7 @@ vi.mock("../../../store/chatStoreHooks", () => ({
   useContextUsageByThread: () => ({}),
 }));
 vi.mock("../thread-views", () => ({ useThreads: () => [], ThreadTabs: () => null }));
-vi.mock("../../runs/ChildRunsStrip", () => ({ ChildRunsStrip: () => null }));
+vi.mock("../../../hooks/run-queries", () => ({ useChildRuns: () => ({ data: undefined }) }));
 vi.mock("../NoMachine", () => ({ NoMachinePill: () => null }));
 vi.mock("../WorkspaceRecoveryMenuItems", () => ({ WorkspaceRecoveryMenuItems: () => null }));
 vi.mock("../MoveChatToProjectDialog", () => ({

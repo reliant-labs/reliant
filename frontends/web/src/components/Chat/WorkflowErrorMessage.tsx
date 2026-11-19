@@ -2,10 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import Tooltip from "../forge-ui/tooltip";
 import { cn } from '../../lib/utils';
-import { ChevronDown, ChevronRight, AlertTriangle, RotateCw, Copy, Check, ArrowUpRight } from 'lucide-react';
+import { ChevronRight, AlertTriangle, RotateCw, Copy, Check, ArrowUpRight } from 'lucide-react';
 import type { ErrorUpdate } from '../../types/streaming';
 import { cleanTemporalErrorMessage, hasTemporalScaffolding } from '../../lib/temporalErrors';
-import { settingsPath } from "@/lib/paths";
 
 interface WorkflowErrorMessageProps {
   error: ErrorUpdate;
@@ -40,12 +39,12 @@ function OpenProviderSettingsButton() {
       type="button"
       onClick={() =>
         // The AI section opens on its Providers tab.
-        navigate({ to: settingsPath('ai') })
+        navigate({ to: '/settings/$section', params: { section: 'ai' } })
       }
-      className="inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-background/60 px-2 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-destructive/10"
+      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-ui font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       Open Settings → Providers
-      <ArrowUpRight className="h-3 w-3" />
+      <ArrowUpRight className="size-3.5" />
     </button>
   );
 }
@@ -148,116 +147,98 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
   // clear on its own.
   const offerProviderSettings = !isRetrying && needsProviderSettings(summary, cleanedMessage);
 
-  return (
-    <div className={cn(
-      "rounded-md border overflow-hidden my-1",
-      isRetrying
-        ? "border-warning/30 bg-warning/5"
-        : "border-destructive/30 bg-destructive/5"
-    )}>
-      {/* Error header — one line, always visible. The border-b only appears
-          when expanded; collapsed, the background shift already separates it. */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        aria-expanded={isExpanded}
-        aria-label={`${summary} at ${timestampLabel}. Click for details`}
-        className={cn(
-          "flex items-center gap-1.5 w-full text-left px-2 py-1 transition-colors duration-200 hover:elevation-1",
-          isExpanded && "border-b",
-          isRetrying
-            ? "border-warning/30 bg-warning/10"
-            : "border-destructive/30 bg-destructive/10"
+  const details = (
+    <div className="space-y-3">
+      <pre className="whitespace-pre-wrap break-words font-mono text-code text-muted-foreground">
+        {cleanedMessage}
+      </pre>
+      <div className="flex items-center gap-3">
+        <Tooltip content={copied ? 'Copied!' : 'Copy error details'} side="bottom" delay={300} triggerClassName="inline-flex">
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="inline-flex items-center gap-1.5 rounded-md text-ui text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={copied ? 'Copied!' : 'Copy error details'}
+          >
+            {copied ? <Check className="size-3.5 text-success-ink" /> : <Copy className="size-3.5" />}
+            <span>{copied ? 'Copied' : 'Copy'}</span>
+          </button>
+        </Tooltip>
+        {canShowRaw && (
+          <button
+            type="button"
+            onClick={() => setShowRaw(!showRaw)}
+            className="text-ui text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {showRaw ? 'Hide raw error' : 'Show raw error'}
+          </button>
         )}
-      >
-        <Icon className={cn(
-          "w-3.5 h-3.5 flex-shrink-0",
-          isRetrying ? "text-warning animate-spin" : "text-destructive"
-        )} data-testid={isRetrying ? "rotate-cw" : "alert-triangle"} />
-        <span className="text-xs font-medium text-foreground truncate min-w-0 flex-1">
-          {summary}
-        </span>
-        {retryLabel && (
-          <span className={cn(
-            "text-xs font-normal px-1.5 rounded-full whitespace-nowrap flex-shrink-0",
-            isRetrying
-              ? "bg-warning/20 text-warning-ink"
-              : "bg-destructive/20 text-destructive-ink"
-          )}>
-            {isRetrying ? `Retrying (${retryLabel})` : retryLabel}
-          </span>
-        )}
-        <span
-          className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0"
-          data-testid="workflow-error-timestamp"
-        >
-          {timestampLabel}
-        </span>
-        {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" data-testid="workflow-error-chevron" />
-        ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" data-testid="workflow-error-chevron" />
-        )}
-      </button>
+      </div>
+      {canShowRaw && showRaw && (
+        <pre className="whitespace-pre-wrap break-words font-mono text-code text-muted-foreground">
+          {error.error_message}
+        </pre>
+      )}
+    </div>
+  );
 
-      {/* The way out, one click away — outside the header, which is itself a
-          button (expand/collapse) and cannot contain another. */}
+  const disclosure = (
+    <button
+      type="button"
+      onClick={() => setIsExpanded(!isExpanded)}
+      aria-expanded={isExpanded}
+      aria-label={`${summary} at ${timestampLabel}. Click for details`}
+      className={cn(
+        'group/err flex w-full min-w-0 items-center gap-2 rounded-md text-left text-ui transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:min-h-[44px]',
+        isRetrying ? 'min-h-7 text-muted-foreground hover:text-foreground' : 'font-medium text-foreground',
+      )}
+    >
+      <span className="inline-flex size-4 shrink-0 items-center justify-center">
+        <Icon
+          className={cn('size-4', isRetrying ? 'text-warning-ink motion-safe:animate-spin' : 'text-destructive-ink')}
+          data-testid={isRetrying ? 'rotate-cw' : 'alert-triangle'}
+        />
+      </span>
+      <span className="min-w-0 flex-1 truncate">{summary}</span>
+      {retryLabel && (
+        <span className="shrink-0 whitespace-nowrap text-meta font-normal text-muted-foreground">
+          {isRetrying ? `Retrying (${retryLabel})` : retryLabel}
+        </span>
+      )}
+      <span
+        className="shrink-0 whitespace-nowrap text-meta font-normal tabular-nums text-muted-foreground max-sm:hidden"
+        data-testid="workflow-error-timestamp"
+      >
+        {timestampLabel}
+      </span>
+      <ChevronRight
+        className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', isExpanded && 'rotate-90')}
+        data-testid="workflow-error-chevron"
+      />
+    </button>
+  );
+
+  // A provider still being retried is a quiet row: it may clear on its own.
+  if (isRetrying) {
+    return (
+      <div className="min-w-0">
+        {disclosure}
+        {isExpanded && <div className="mb-3 ml-2 mt-1 border-l border-border-subtle pl-4">{details}</div>}
+      </div>
+    );
+  }
+
+  // The failure that stopped the turn is a card: what went wrong, and the
+  // way out when there is one.
+  return (
+    <div className="rounded-xl border border-border p-4 sm:p-5" data-testid="workflow-error-card">
+      {disclosure}
       {offerProviderSettings && (
-        <div className="flex justify-end border-t border-destructive/20 px-2 py-1">
+        <div className="mt-3 pl-6">
           <OpenProviderSettingsButton />
         </div>
       )}
-
-      {/* Expandable Error Details */}
-      {isExpanded && (
-        <div className="p-3 elevation-1 space-y-2">
-          <div className="flex justify-end mb-2">
-            <Tooltip content={copied ? 'Copied!' : 'Copy error details'} side="bottom" delay={300} triggerClassName="inline-flex">
-<button
-              onClick={handleCopy}
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-background/50 transition-colors text-muted-foreground"
-              aria-label={copied ? 'Copied!' : 'Copy error details'}
-            >
-              {copied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-green-500" />
-                  <span className="text-green-500">Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
-</Tooltip>
-          </div>
-
-          <div>
-            <div className="text-xs text-muted-foreground mb-1 font-medium">
-              Error:
-            </div>
-            <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words bg-background/50 p-2 rounded border border-border/50">
-              {cleanedMessage}
-            </pre>
-          </div>
-
-          {canShowRaw && (
-            <div>
-              <button
-                onClick={() => setShowRaw(!showRaw)}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {showRaw ? 'Hide raw error' : 'Show raw error'}
-              </button>
-              {showRaw && (
-                <pre className="mt-1 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words bg-background/50 p-2 rounded border border-border/50">
-                  {error.error_message}
-                </pre>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {isExpanded && <div className="mt-3 pl-6">{details}</div>}
     </div>
   );
 }

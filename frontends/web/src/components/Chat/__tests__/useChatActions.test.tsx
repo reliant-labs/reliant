@@ -69,7 +69,7 @@ vi.mock("../../../store/chatStoreHooks", () => ({
   useContextUsageByThread: () => ({}),
 }));
 vi.mock("../thread-views", () => ({ useThreads: () => [], ThreadTabs: () => null }));
-vi.mock("../../runs/ChildRunsStrip", () => ({ ChildRunsStrip: () => null }));
+vi.mock("../../../hooks/run-queries", () => ({ useChildRuns: () => ({ data: undefined }) }));
 vi.mock("../NoMachine", () => ({ NoMachinePill: () => null }));
 vi.mock("../WorkspaceRecoveryMenuItems", () => ({ WorkspaceRecoveryMenuItems: () => null }));
 
@@ -139,7 +139,7 @@ describe("ChatHeader menu runs the shared actions", () => {
     render(<ChatHeader chatId="chat-1" />, { wrapper: wrapperFor("desktop") });
 
     await user.click(screen.getByRole("button", { name: "More options" }));
-    expect(await screen.findByRole("button", { name: "Open Terminal" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Open terminal" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Archive chat" }));
     expect(mocks.archive).toHaveBeenCalledWith("chat-1");
     await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith("Chat archived", expect.anything()));

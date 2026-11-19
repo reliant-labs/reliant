@@ -7,7 +7,9 @@
  * folded into one "Activity" row. Assistant prose is never folded: it is the
  * agent talking to the user. So a message [text, tools, text] renders as
  * prose / fold / prose, and a turn of many LLM calls reads as its narration
- * with a fold wherever the agent went quiet and worked.
+ * with a fold wherever the agent went quiet and worked. The model's thinking
+ * (a `thinking` segment) travels with the prose: it is its own quiet
+ * "Thought" row, at its place, never inside a fold.
  *
  * A tool call the user must see — a question, an approval, a generated image,
  * a deploy — is a boundary just like prose: [tool, ask_user, tool] renders as
