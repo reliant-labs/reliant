@@ -68,6 +68,30 @@ export function orgHomePath(org: string): string {
   return orgRootPath(org);
 }
 
+/**
+ * One chat (R1, control-plane docs/design/unified-shell-and-projects.md §3.1,
+ * §9): `/c/<chatId>`, `/o/<org>/c/<chatId>` in the org form. Flat, not under
+ * its project: chat ids are global, and a chat can move between projects.
+ * Its view state rides in the search (routeSchemas.ts, ChatViewSearch).
+ */
+export function chatPath(chatId: Segment, ctx?: PathContext): string {
+  return withOrg(`/c/${seg(chatId)}`, ctx);
+}
+
+/** One thread of a chat, in full view (R2): a spawned agent's or a workflow step's. */
+export function threadPath(chatId: Segment, threadId: Segment, ctx?: PathContext): string {
+  return withOrg(`/c/${seg(chatId)}/t/${seg(threadId)}`, ctx);
+}
+
+/**
+ * The new-chat view (R3). Its draft context — the project, machine and
+ * workspace it starts in — rides in the search (`?project=&machine=&ws=`,
+ * routeSchemas.ts NewChatSearch), so a refresh keeps it.
+ */
+export function newChatPath(ctx?: PathContext): string {
+  return withOrg("/new", ctx);
+}
+
 /** The chat home filtered to one project (the sidebar's project filter). */
 export function projectPath(projectId: string, ctx?: PathContext): string {
   return withOrg(`/project/${seg(projectId)}`, ctx);

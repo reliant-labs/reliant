@@ -18,10 +18,13 @@ import { createSettingsSectionRoutes } from './settingsSectionRoutes'
 import { createOrgHandoffRoute, createOrgLayoutRoute } from './orgRoutes'
 import { routeOrgScopeHooks, useRouteOrgScope } from './lib/routeOrg'
 import { mobileHandoffAllowed } from './lib/mobileRedirect'
-import { forwardIntoOrg } from './lib/orgRouting'
+import { forwardIntoOrg, type LocationLike } from './lib/orgRouting'
+import type { OrgRouteState } from './lib/routeOrg'
 import {
   appsSearchSchema,
   authSearchSchema,
+  chatViewSearchSchema,
+  newChatSearchSchema,
   connectionOAuthCallbackSearchSchema,
   githubOAuthCallbackSearchSchema,
   indexSearchSchema,
@@ -36,6 +39,7 @@ import {
 import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundary'
 import { lazyRoute } from './lib/lazyRoute'
 import { watchRoutedChatOpens } from './lib/routedChatOpen'
+import { listenForOpenRouteLinks } from './lib/openRouteLink'
 import { AuthGuard } from './components/AuthGuard'
 import { OnboardingGate } from './components/OnboardingFlow/OnboardingGate'
 import { ModalLayer } from './components/Modals/ModalLayer'
@@ -549,8 +553,9 @@ const acceptInviteRoute = createRoute({
 // Kept as a direct child of rootRoute (not nested under _authenticated) so its
 // full id remains '/_app' — call sites use useSearch({ from: '/_app' }).
 function AppLayout() {
+  // returnHere: a signed-out chat link (`/c/<id>`) comes back to its chat after sign-in.
   return (
-    <AuthGuard requireAuth={true} requireEmailVerification={true}>
+    <AuthGuard requireAuth={true} requireEmailVerification={true} returnHere>
       <Outlet />
     </AuthGuard>
   )
@@ -806,9 +811,11 @@ const forgeConsolePageComponents = {
 // params or search do so without a route id (`strict: false`), so the same
 // page serves both trees.
 //
-//   form 'legacy'   /, /project/$projectId, /workflow/…, /workflows/… (and
-//                   their retired paths), /inbox, /apps, /forge/…
-//   form 'org'      /o/$org, /o/$org/project/$projectId, /o/$org/workflow/…,
+//   form 'legacy'   /, /project/$projectId, /c/$chatId[/t/$threadId], /new,
+//                   /workflow/…, /workflows/… (and their retired paths),
+//                   /inbox, /apps, /forge/…
+//   form 'org'      /o/$org, /o/$org/project/$projectId,
+//                   /o/$org/c/$chatId[/t/$threadId], /o/$org/new, /o/$org/workflow/…,
 //                   /o/$org/workflows/…, /o/$org/inbox, /o/$org/apps,
 //                   /o/$org/apps/$project/… (the console),
 //                   /o/$org/observability/…, /o/$org/forge (the console's entry)
@@ -831,6 +838,39 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   const projectRoute = createRoute({
     getParentRoute: appParent,
     path: 'project/$projectId',
+    component: App,
+  })
+
+  // A chat, one of its threads in full view, and the new-chat view (R1–R3 of
+  // the design's §9): the chat shell open on what the URL names — the stores
+  // follow it (hooks/useChatRoute.ts). The same component as the home above,
+  // with no options that change how the router wraps it, so moving between
+  // chats (or from the home to a chat) never remounts the shell. The loader
+  // finds the chat and its org: a chat in another org redirects there, an
+  // unknown one is the shell's not-found page (lib/chatRouteResolve.ts).
+  // Loaded on demand like the screens above: the entry chunk stays free of the chat client.
+  const chatLoader = async ({ params, location, context }: { params: { chatId: string }; location: LocationLike; context: unknown }) => {
+    const { resolveChatRoute } = await import('./lib/chatRouteResolve')
+    return resolveChatRoute(params.chatId, location, { orgRoute: (context as { orgRoute?: OrgRouteState }).orgRoute })
+  }
+  const chatRoute = createRoute({
+    getParentRoute: appParent,
+    path: 'c/$chatId',
+    validateSearch: chatViewSearchSchema,
+    loader: chatLoader,
+    component: App,
+  })
+  const threadRoute = createRoute({
+    getParentRoute: appParent,
+    path: 'c/$chatId/t/$threadId',
+    validateSearch: chatViewSearchSchema,
+    loader: chatLoader,
+    component: App,
+  })
+  const newChatRoute = createRoute({
+    getParentRoute: appParent,
+    path: 'new',
+    validateSearch: newChatSearchSchema,
     component: App,
   })
 
@@ -892,7 +932,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   const forgeConsoleRoutes = createForgeConsoleRoutes(authParent, forgeConsolePageComponents, { form })
 
   return {
-    app: [indexRoute, projectRoute] as const,
+    app: [indexRoute, projectRoute, chatRoute, threadRoute, newChatRoute] as const,
     authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, appsRoute] as const,
   }
 }
@@ -1198,6 +1238,10 @@ watchRoutedChatOpens(router, (pathname) => {
   const { foundRoute, routeParams } = router.getMatchedRoutes(pathname)
   return foundRoute?.id === mobileChatRoute.id ? routeParams.chatId : undefined
 })
+
+// The desktop app's `reliant://open?url=` links (a chat, from the web's "Open
+// in desktop") navigate this router (lib/openRouteLink).
+listenForOpenRouteLinks(router)
 
 // Register the router on globalThis so non-React modules (e.g. projectStore)
 // can drive URL changes without importing this file. Static-importing the

@@ -3,6 +3,7 @@ import { useWorktreeStore } from '../store/worktreeStore';
 import { useProjectStore } from '../store/projectStore';
 import { resolveWorktree, type Worktree } from './worktree-queries';
 import { fetchProjects, useProjects } from "./project-queries";
+import { routeOwnsChat } from "../lib/chatRoute";
 
 interface WindowContext {
   worktreeId: string | null;
@@ -45,6 +46,9 @@ export function useWindowContext() {
           projectName: context.projectName || null
         };
         setWindowContext(windowCtx);
+        // A chat's URL (a reload on `/c/<id>`, a deep link) opens that chat and
+        // its project: the window's saved project would open another over it.
+        if (routeOwnsChat()) return;
 
         // Load projects first
         const currentProjects = await fetchProjects();

@@ -76,6 +76,23 @@ ipcRenderer.on('menu-shortcut', (_event, shortcutId) => {
   heldMenuShortcuts = heldMenuShortcuts.slice(-MENU_SHORTCUT_HOLD_MAX);
 });
 
+// An app page a `reliant://open?url=` link asked for (deep-link.js), held the
+// same way as a menu shortcut: it can arrive once the page has loaded but
+// before the router's listener is mounted. Only the latest is kept, and only
+// for a while: a link clicked long ago is not where the person wants to be now.
+const OPEN_ROUTE_HOLD_MS = 10000;
+const openRouteSubscriptions = new Set();
+let heldOpenRoute = null; // { route, at }
+
+ipcRenderer.on('open-route', (_event, route) => {
+  if (typeof route !== 'string' || !route.startsWith('/') || route.startsWith('//')) return;
+  if (openRouteSubscriptions.size > 0) {
+    for (const callback of [...openRouteSubscriptions]) callback(route);
+    return;
+  }
+  heldOpenRoute = { route, at: Date.now() };
+});
+
 // The desktop app's versions, for the web runtime's telemetry: it reads
 // window.forgeDesktop once at startup and reports them as app.desktop.version,
 // app.desktop.electron.version and app.desktop.chromium.version, so the console
@@ -418,6 +435,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (event, port) => callback(port);
     ipcRenderer.on('backend-port', listener);
     return () => ipcRenderer.removeListener('backend-port', listener);
+  },
+
+  // Open an app page (a chat) a `reliant://open?url=` link named. A page that
+  // arrived before anyone subscribed goes to the first subscriber, a turn later.
+  onOpenRoute: (callback) => {
+    openRouteSubscriptions.add(callback);
+    // A turn later, so a subscription torn down and redone at once (React
+    // StrictMode) gets it once, by whoever is subscribed then.
+    if (heldOpenRoute) {
+      setTimeout(() => {
+        const held = heldOpenRoute;
+        if (!held || openRouteSubscriptions.size === 0) return;
+        heldOpenRoute = null;
+        if (Date.now() - held.at > OPEN_ROUTE_HOLD_MS) return;
+        for (const subscriber of [...openRouteSubscriptions]) subscriber(held.route);
+      }, 0);
+    }
+    return () => openRouteSubscriptions.delete(callback);
   },
 
   // Listen for open project events

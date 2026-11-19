@@ -480,6 +480,49 @@ export const settingsSearchSchema = z.object({
 // `/m/new` accepts an optional `worktreeId` so the chat-list group header's
 // "new chat in this workspace" action can target a non-main workspace —
 // without it, every mobile chat could only ever be created against main.
+// ── The chat shell's own search (control-plane docs/design/unified-shell-and-projects.md §9 R1–R3) ──
+//
+// Only view state a person would expect a refresh or a Back to keep, and
+// nothing else: scroll position, drafts and the file and diff tabs stay
+// client state. Each value is optional and an unknown one is dropped (never
+// a route error), so a link from a newer build opens on an older one.
+
+/** The right panel's tabs (store/workspaceStateStore.ts RightSidebarTab; held equal by hooks/useChatRoute.ts). */
+export const CHAT_PANELS = ["files", "changes", "processes", "tasks", "browser"] as const;
+export type ChatPanel = (typeof CHAT_PANELS)[number];
+
+/** How the transcript shows a turn (Chat/thread-views/useChatThreadMode.ts). */
+export const CHAT_VIEWS = ["detailed", "simplified"] as const;
+export type ChatView = (typeof CHAT_VIEWS)[number];
+
+/**
+ * `/c/<chatId>[/t/<threadId>]`:
+ *   panel  the right panel, open on this tab (absent: as this workspace last had it)
+ *   view   Detailed or Simplified transcript (absent: the person's preference)
+ * The open thread is the path's `/t/<threadId>`, not a search value.
+ */
+export const chatViewSearchSchema = z.object({
+  panel: z.enum(CHAT_PANELS).optional().catch(undefined),
+  view: z.enum(CHAT_VIEWS).optional().catch(undefined),
+});
+export type ChatViewSearch = z.infer<typeof chatViewSearchSchema>;
+
+// An id arrives JSON-parsed (a numeric-looking id as a number): read it back as text.
+const idParam = z.preprocess((value) => (typeof value === "number" ? String(value) : value), z.string().min(1).optional()).catch(undefined);
+
+/**
+ * `/new`: the draft's context, so a refresh keeps it and "new chat in X" is a link.
+ *   project  the project it starts in
+ *   machine  the machine it runs on (a daemon id)
+ *   ws       the workspace (worktree id); absent: the project's main checkout
+ */
+export const newChatSearchSchema = z.object({
+  project: idParam,
+  machine: idParam,
+  ws: idParam,
+});
+export type NewChatSearch = z.infer<typeof newChatSearchSchema>;
+
 export const mobileNewChatSearchSchema = z.object({
   worktreeId: z.string().optional(),
 });

@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { navigateToChatUrl } from "@/lib/chatRoute";
 import { usePreferences } from "../../hooks/settings-queries";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
@@ -75,6 +76,7 @@ export function useOpenWorkspace(onAfterOpen?: () => void) {
         ? await resolveWorktree(chat.worktreeId)
         : null;
       await switchWorktreeContext(projectId, worktree);
+      navigateToChatUrl(chat.id, { orgId: chat.orgId });
       useChatStore.getState().selectChat(chat);
       useChatNavigationStore.getState().navigateToChat(chat.id);
       onAfterOpen?.();

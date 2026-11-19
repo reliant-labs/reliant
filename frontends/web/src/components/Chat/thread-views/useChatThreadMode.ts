@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { create } from "zustand";
 import { settingsSync, SETTINGS_KEYS } from "../../../services/settingsSync";
 import { useSurface } from "../../../lib/surfaceContext";
 import type { Surface } from "../../../lib/surface";
@@ -44,8 +45,21 @@ export function resolveChatThreadMode(
   return env.surface !== "desktop" || env.narrowViewport ? "simplified" : "detailed";
 }
 
+/**
+ * The mode the open chat's URL names (`?view=detailed|simplified`,
+ * routeSchemas.ts ChatViewSearch), over the person's preference. `routed` is
+ * true while a chat route is on screen (hooks/useChatRoute.ts keeps both in
+ * step with the URL); off it, nothing overrides.
+ */
+export const useChatViewOverride = create<{ routed: boolean; view: ChatThreadMode | null }>(() => ({ routed: false, view: null }));
+
 export function setChatThreadMode(preference: ChatThreadModePreference): void {
   void settingsSync.setSettingIfChanged(SETTINGS_KEYS.CHAT_THREAD_MODE, preference).catch(console.error);
+  // On a chat's page the choice is also that page's: its URL records it, so a
+  // refresh or a Back returns to it. Auto names no mode of its own.
+  if (useChatViewOverride.getState().routed) {
+    useChatViewOverride.setState({ view: preference === "auto" ? null : preference });
+  }
   window.dispatchEvent(new CustomEvent("appearance-updated"));
 }
 
@@ -60,5 +74,6 @@ export function useChatThreadMode(): { mode: ChatThreadMode; preference: ChatThr
     return () => window.removeEventListener("appearance-updated", handle);
   }, []);
 
-  return { mode: resolveChatThreadMode(preference, { surface, narrowViewport }), preference };
+  const routed = useChatViewOverride((state) => state.view);
+  return { mode: routed ?? resolveChatThreadMode(preference, { surface, narrowViewport }), preference };
 }

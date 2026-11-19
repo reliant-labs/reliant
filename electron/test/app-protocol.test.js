@@ -53,7 +53,7 @@ test('falls back to index.html for SPA routes so deep links and reloads work', (
   // The other half of what file:// could not do: history.pushState under
   // file:// produces file:///chat/abc, and reloading that 404s. A route with
   // no file behind it must return the app shell.
-  for (const route of ['/chat/abc', '/auth/github/callback', '/settings']) {
+  for (const route of ['/chat/abc', '/auth/github/callback', '/settings', '/c/chat-1', '/c/chat-1/t/thread-2', '/o/acme/c/chat-1', '/new']) {
     const resolved = resolveRequestPath(`${APP_ORIGIN}${route}`, WEB_ROOT, isFile);
     assert.ok(resolved, `route ${route} must resolve`);
     assert.strictEqual(resolved.filePath, path.join(WEB_ROOT, 'index.html'));
