@@ -60,6 +60,7 @@ import { useProjectStore } from '../../store/projectStore'
 import { saveWorkflow } from '../../hooks/workflow-queries'
 import { cn } from '../../lib/utils'
 import { useCurrentWorktree } from '../../hooks/worktree-queries'
+import { workflowBuilderPath } from '@/lib/paths'
 
 interface WorkflowViewerProps {
   /** The workflow definition to visualize */
@@ -800,10 +801,7 @@ function WorkflowViewerInner({
                   const name = workflowName || workflow.name;
                   if (!name) return;
                   navigate({
-                    to: '/workflow/$workflowName',
-                    params: { workflowName: name },
-                    // The builder's Back returns here (a chat), not to the
-                    // workflow's page.
+                    to: workflowBuilderPath(name),
                     state: router ? builderReturnState(router.state.location.href) : undefined,
                   });
                 }}

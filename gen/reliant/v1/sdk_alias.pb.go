@@ -53,6 +53,8 @@ type (
 	CompactChatRequest                       = sdk.CompactChatRequest
 	CompactChatResponse                      = sdk.CompactChatResponse
 	ConfigScope                              = sdk.ConfigScope
+	ConnectionProposal                       = sdk.ConnectionProposal
+	ConnectionProposalScope                  = sdk.ConnectionProposalScope
 	ConnectorPolicy                          = sdk.ConnectorPolicy
 	ContentBlock                             = sdk.ContentBlock
 	ContentBlockBody                         = sdk.ContentBlockBody
@@ -521,6 +523,9 @@ const (
 	ConfigScope_CONFIG_SCOPE_PROJECT                                           = sdk.ConfigScope_CONFIG_SCOPE_PROJECT
 	ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL                                     = sdk.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL
 	ConfigScope_CONFIG_SCOPE_UNSPECIFIED                                       = sdk.ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_ORG                      = sdk.ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_ORG
+	ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_PERSONAL                 = sdk.ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_PERSONAL
+	ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED              = sdk.ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED
 	ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT                               = sdk.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT
 	ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE                         = sdk.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE
 	ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE                                  = sdk.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE
@@ -719,6 +724,8 @@ var (
 	CleanupStorageOutcome_value          = sdk.CleanupStorageOutcome_value
 	ConfigScope_name                     = sdk.ConfigScope_name
 	ConfigScope_value                    = sdk.ConfigScope_value
+	ConnectionProposalScope_name         = sdk.ConnectionProposalScope_name
+	ConnectionProposalScope_value        = sdk.ConnectionProposalScope_value
 	ContentBlockType_name                = sdk.ContentBlockType_name
 	ContentBlockType_value               = sdk.ContentBlockType_value
 	DiskGuardState_name                  = sdk.DiskGuardState_name

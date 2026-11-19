@@ -19,37 +19,22 @@ import {
   type WorkspaceGroup,
 } from "../../lib/sidebarGroups";
 import { useSidebarProjectPrefs } from "../../hooks/sidebar-project-queries";
-import { ProjectListToggle } from "./ProjectListToggle";
 import {
   Plus,
   Trash2,
   Archive,
-  ChevronDown,
   ChevronRight,
   Edit,
   Copy,
-  MoreVertical,
   RotateCcw,
   Mail,
-  FolderGit2,
-  LayoutList,
-  LayoutGrid,
-  Clock,
-  ArrowDownWideNarrow,
-  ArrowUpWideNarrow,
-  SortAsc,
-  SortDesc,
-  Bell,
   GitBranch,
-  Folder,
-  MessageSquare,
   Search,
   Settings,
+  SquarePen,
   Workflow,
-  Boxes,
+  AppWindow,
   Activity,
-  MessageCircleQuestion,
-  Loader2,
   FolderInput,
   Server,
   Pin,
@@ -57,6 +42,7 @@ import {
   Eye,
   EyeOff,
   MoreHorizontal,
+  X,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -80,7 +66,8 @@ import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { openChat, openNewChat } from "../../store/openChat";
 import { openAddProject } from "../../store/addProjectDialogStore";
 import { useProjectDaemonInstalls, useProjects } from "../../hooks/project-queries";
-import { ProjectFilterMenu } from "./ProjectFilterMenu";
+import { ChatListMenu } from "./ChatListMenu";
+import { projectFilterLabel } from "./ProjectFilterMenu";
 import { MachineFilterMenu, machineFilterLabel } from "./MachineFilterMenu";
 import { useDaemonList } from "../../hooks/useOnboardingQueries";
 import { useMachineOrgs } from "../../hooks/useMachineOrgs";
@@ -96,7 +83,6 @@ import {
 } from "../../lib/sidebarMachineFilter";
 import { ProjectMark } from "./ProjectMark";
 import { useShortcutLabel } from "../../store/shortcutsStore";
-import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import Tooltip from "../forge-ui/tooltip";
 import Button from "@/components/forge-ui/button";
@@ -107,14 +93,26 @@ import type { MenuGroup } from "../forge-ui/dropdown_menu";
 import { contextMenuOpening, type ContextMenuOpening } from "../../lib/contextMenuOpening";
 import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
 import type { Chat } from "../../api/client";
-import {
-  useChatListPreferencesStore,
-  type ChatSortOption,
-} from "../../store/chatListPreferencesStore";
+import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
+import { cn } from "../../lib/utils";
 import DropdownMenu from "../forge-ui/dropdown_menu";
+import {
+  ChatRow,
+  ChatStateSlot,
+  ProjectGroupHeader,
+  SIDEBAR_ICON_BUTTON,
+  SidebarFooter,
+  SidebarHeading,
+  SidebarOrgLabel,
+  SidebarOrgRow,
+  SidebarPrimaryAction,
+  SidebarRow,
+  SIDEBAR_ORG_TRIGGER,
+  WorkspaceSubheading,
+} from "./sidebar/primitives";
 import { chatListIndicators, launchKindDisplay } from "../../lib/runStatus";
-import { CHAT_ROW_CHIP_CLASS, chatRowChip, type ChatRowChip } from "./chatRowStatus";
+import { chatRowChip } from "./chatRowStatus";
 import {
   useActivityStore,
   activityToDotState,
@@ -124,49 +122,6 @@ import {
 
 import { archiveWorktree } from "../../hooks/worktree-actions";
 import { MoveChatToProjectDialog } from "../Chat/MoveChatToProjectDialog";
-
-const CHAT_HEADER_ACTION_BUTTON_CLASS =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring";
-const CHAT_HEADER_ACTION_ICON_CLASS = "h-4 w-4 shrink-0";
-const CHAT_HEADER_ACTION_TOOLTIP_CLASS = "flex shrink-0";
-
-// Sort options configuration
-const SORT_OPTIONS: {
-  value: ChatSortOption;
-  label: string;
-  icon: React.ReactNode;
-}[] = [
-  {
-    value: "recent_activity",
-    label: "Recent Activity",
-    icon: <Clock className={CHAT_HEADER_ACTION_ICON_CLASS} />,
-  },
-  {
-    value: "needs_attention_first",
-    label: "Needs Attention",
-    icon: <Bell className={CHAT_HEADER_ACTION_ICON_CLASS} />,
-  },
-  {
-    value: "newest_first",
-    label: "Newest First",
-    icon: <ArrowDownWideNarrow className={CHAT_HEADER_ACTION_ICON_CLASS} />,
-  },
-  {
-    value: "oldest_first",
-    label: "Oldest First",
-    icon: <ArrowUpWideNarrow className={CHAT_HEADER_ACTION_ICON_CLASS} />,
-  },
-  {
-    value: "alphabetical_asc",
-    label: "A → Z",
-    icon: <SortAsc className={CHAT_HEADER_ACTION_ICON_CLASS} />,
-  },
-  {
-    value: "alphabetical_desc",
-    label: "Z → A",
-    icon: <SortDesc className={CHAT_HEADER_ACTION_ICON_CLASS} />,
-  },
-];
 
 interface SidebarProps {
   paddingClass?: string;
@@ -206,46 +161,6 @@ function AutomationOriginGlyph({ chat }: { chat: Chat }) {
         <LaunchKindIcon kind={launch.kind} className="h-3 w-3" />
       </span>
     </Tooltip>
-  );
-}
-
-interface SidebarNavButtonProps {
-  icon: ReactNode;
-  label: string;
-  onClick?: () => void;
-  testId?: string;
-  onboardingId?: string;
-  /** The action's shortcut, formatted (useShortcutLabel); shown at the end. */
-  shortcut?: string;
-}
-
-function SidebarNavButton({ icon, label, onClick, testId, onboardingId, shortcut }: SidebarNavButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={!onClick}
-      className={cn(
-        "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
-        "text-foreground/85 hover:bg-muted/50 hover:text-foreground",
-        "focus:outline-none focus:ring-2 focus:ring-ring",
-        "disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
-      )}
-      data-testid={testId}
-      data-onboarding={onboardingId}
-      // The label alone names the button; the key cap is a visual hint.
-      aria-label={label}
-    >
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
-        {icon}
-      </span>
-      <span className="min-w-0 truncate">{label}</span>
-      {shortcut && (
-        <kbd aria-hidden="true" className="ml-auto shrink-0 font-mono text-xs text-muted-foreground">
-          {shortcut}
-        </kbd>
-      )}
-    </button>
   );
 }
 
@@ -335,6 +250,32 @@ function getRelativeTime(timestamp: string): string {
   }
 }
 
+/**
+ * A row's tooltip: its full title, and when it last changed. The row has no
+ * time column (restyle §11.4); the time is here.
+ */
+function rowTooltip(title: string, chat: Chat): string {
+  const relative = getRelativeTime(chat.updatedAt || chat.createdAt);
+  return `${title}\nUpdated ${relative === "now" ? "just now" : `${relative} ago`}`;
+}
+
+/** The row's hover-only "More options": the context menu, whose first group holds Archive. */
+function ChatMoreButton({ title, onOpen }: { title: string; onOpen: (e: React.MouseEvent) => void }) {
+  return (
+    <Tooltip content="More options" side="left" delay={300} type="label">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-label={`More options for ${title}`}
+        onClick={onOpen}
+        className={SIDEBAR_ICON_BUTTON}
+      >
+        <MoreHorizontal className="size-4" aria-hidden="true" />
+      </button>
+    </Tooltip>
+  );
+}
+
 // --- Extracted ChatItem (module-level for stable identity + React.memo) ---
 
 interface ChatItemProps {
@@ -354,7 +295,6 @@ interface ChatItemProps {
   onEditingTitleChange: (title: string) => void;
   onSaveRename: (chatId: string) => void;
   onCancelRename: () => void;
-  onArchiveChat: (chatId: string) => void;
 }
 
 const ChatItem = memo(function ChatItem({
@@ -371,7 +311,6 @@ const ChatItem = memo(function ChatItem({
   onEditingTitleChange,
   onSaveRename,
   onCancelRename,
-  onArchiveChat,
 }: ChatItemProps) {
   const isActive = activeChatId === chat.id;
   // Needs-input, the run status and unread are separate indicators: a chat
@@ -382,250 +321,83 @@ const ChatItem = memo(function ChatItem({
     workingThreads: chat.liveWorkingThreads,
     unread: chat.unread,
   });
-  const chip = chatRowChip({ needsInput, status: runStatus });
+  const state = chatRowChip({ needsInput, status: runStatus });
   const chatTitle = chat.title || UNTITLED_CHAT;
   const isEditing = editingChatId === chat.id;
-  const relativeTime = getRelativeTime(chat.updatedAt || chat.createdAt);
 
-  const content = (
-    <>
-      {unread && (
-        <span
-          className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-card"
-          data-testid={`chat-unread-dot-${chat.id}`}
-          role="img"
-          aria-label="Unread messages"
-        />
-      )}
+  const editor = isEditing ? (
+    <input
+      type="text"
+      aria-label="Chat title"
+      value={propsEditingTitle}
+      onChange={(e) => onEditingTitleChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          onSaveRename(chat.id);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          onCancelRename();
+        }
+      }}
+      onBlur={() => onSaveRename(chat.id)}
+      onClick={(e) => e.stopPropagation()}
+      autoFocus
+      className="h-7 min-w-0 flex-1 rounded-md border border-ring bg-background px-2 text-ui focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    />
+  ) : undefined;
 
-      <span className="flex-1 min-w-0">
-        {isEditing ? (
-          <input
-            type="text"
-            aria-label="Chat title"
-            value={propsEditingTitle}
-            onChange={(e) => onEditingTitleChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                onSaveRename(chat.id);
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                onCancelRename();
-              }
-            }}
-            onBlur={() => onSaveRename(chat.id)}
-            onClick={(e) => e.stopPropagation()}
-            autoFocus
-            className="w-full px-2 py-1 bg-background border border-primary rounded text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        ) : (
-          <span className="flex min-w-0 items-center gap-1.5">
-            {isRun(chat) && <AutomationOriginGlyph chat={chat} />}
-            <span className="truncate group-hover:text-foreground transition-colors duration-200" title={chatTitle}>
-              {chatTitle}
-            </span>
-          </span>
-        )}
-        {!inGroup && (projectName || workspaceBranch) && (
-          <ChatWhere chatId={chat.id} projectName={projectName} workspaceBranch={workspaceBranch} />
-        )}
-      </span>
-
-      {chip && <ChatStatusChip chatId={chat.id} chip={chip} activityState={chat.activityState} runningBeside={!!needsInput && !!runStatus} />}
-    </>
-  );
+  // Out of a group, the row says where the chat is, after its title: the
+  // project, then the branch (restyle §11.5, flat view).
+  const where =
+    !inGroup && (projectName || workspaceBranch) ? (
+      <>
+        <span aria-hidden="true">· </span>
+        {projectName && <span data-testid={`chat-project-${chat.id}`}>{projectName}</span>}
+        {projectName && workspaceBranch && " / "}
+        {workspaceBranch}
+      </>
+    ) : undefined;
 
   return (
-    <div
-      data-chat-id={chat.id}
-      className={cn(
-        "group relative flex w-full items-center gap-1 overflow-hidden rounded-md border-l-2 border-transparent font-sans text-xs transition-colors duration-150",
-        // Only "needs you" tints a row; running and failed say so in their
-        // chip. Green is for success, and no row is painted for one.
-        isActive
-          ? "border-primary bg-primary/10 text-foreground font-semibold"
-          : needsInput
-            ? "border-warning/40 bg-warning/5 text-foreground hover:bg-warning/10"
-            : "bg-transparent text-foreground/80 hover:bg-muted/50 hover:text-foreground",
-      )}
+    <ChatRow
+      chatId={chat.id}
+      title={chatTitle}
+      tooltip={rowTooltip(chatTitle, chat)}
+      current={isActive}
+      unread={unread}
+      inProject={inGroup}
+      slot={
+        <>
+          {state && (
+            <ChatStateSlot
+              chatId={chat.id}
+              state={state}
+              activityState={chat.activityState}
+              runningBeside={!!needsInput && !!runStatus}
+            />
+          )}
+          {/* Unread is the title's weight; this names it for a screen reader. */}
+          {unread && (
+            <span
+              className="sr-only"
+              data-testid={`chat-unread-dot-${chat.id}`}
+              role="img"
+              aria-label="Unread messages"
+            />
+          )}
+        </>
+      }
+      suffix={where}
+      glyph={isRun(chat) ? <AutomationOriginGlyph chat={chat} /> : undefined}
+      editor={editor}
+      isTabStop={isTabStop}
+      onClick={() => onChatClick(chat)}
       onContextMenu={(e) => onContextMenu(e, chat)}
-    >
-      {isEditing ? (
-        <div className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5">{content}</div>
-      ) : (
-        // The row's primary action is a real button: focusable, announced
-        // with its status, and Up/Down move between rows (the list's keydown
-        // handler). Only one row is in the tab order.
-        <button
-          type="button"
-          data-chat-row
-          tabIndex={isTabStop ? 0 : -1}
-          aria-current={isActive ? "true" : undefined}
-          onClick={() => onChatClick(chat)}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:scale-[0.99]"
-        >
-          {content}
-        </button>
-      )}
-
-      {/* Hover-only, and out of the layout until then (hidden, not
-          invisible): an invisible button still takes the title's width. */}
-      <div className="hidden flex-shrink-0 group-hover:block group-focus-within:block">
-        <Tooltip content="More options" side="left" delay={300} type="label">
-          <button
-            type="button"
-            aria-haspopup="menu"
-            aria-label={`More options for ${chatTitle}`}
-            onClick={(e) => onContextMenu(e, chat)}
-            className="hover:bg-muted/70 rounded p-1 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <MoreVertical className="w-3 h-3 text-muted-foreground hover:text-foreground transition-colors duration-200" />
-          </button>
-        </Tooltip>
-      </div>
-
-      <div className="flex-shrink-0 relative mr-1 flex items-center justify-center min-w-[2rem]">
-        <time
-          dateTime={chat.updatedAt || chat.createdAt}
-          title={new Date(chat.updatedAt || chat.createdAt).toLocaleString()}
-          className="text-xs text-muted-foreground transition-opacity duration-200 group-hover:opacity-0 group-focus-within:opacity-0"
-        >
-          {relativeTime}
-        </time>
-        <Tooltip content="Archive chat" side="left" delay={300}>
-          <button
-            type="button"
-            aria-label={`Archive ${chatTitle}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onArchiveChat(chat.id);
-            }}
-            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-200 hover:bg-muted/70 rounded p-0.5 absolute inset-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Archive className="w-3 h-3 text-muted-foreground hover:text-foreground transition-colors duration-200" />
-          </button>
-        </Tooltip>
-      </div>
-    </div>
+      hoverActions={!isEditing && <ChatMoreButton title={chatTitle} onOpen={(e) => onContextMenu(e, chat)} />}
+    />
   );
 });
-
-/**
- * A row's status as a word in a chip. The testids are the indicators the
- * activity tests pin: needs-input (with the "agents still running" dot when
- * work continues beside the question) and the run status.
- */
-function ChatStatusChip({
-  chatId,
-  chip,
-  activityState,
-  runningBeside,
-}: {
-  chatId: string;
-  chip: ChatRowChip;
-  activityState: string;
-  runningBeside: boolean;
-}) {
-  const tone = chip.tone;
-  if (tone === "running") {
-    // Running is the common state, so it is a small spinner, not a chip.
-    return (
-      <RunningSpinner
-        testId={`chat-activity-dot-${chatId}`}
-        label={chip.detail ?? chip.label}
-        activityState={activityState}
-      />
-    );
-  }
-  const attention = tone === "attention";
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-px text-2xs font-medium leading-4",
-        CHAT_ROW_CHIP_CLASS[tone],
-      )}
-      data-testid={attention ? `chat-needs-input-${chatId}` : `chat-activity-dot-${chatId}`}
-      data-activity-state={activityState}
-      data-tone={tone}
-    >
-      <span role="img" aria-label={chip.detail ?? chip.label} className="inline-flex items-center gap-1">
-        {attention ? (
-          <MessageCircleQuestion className="h-3 w-3" aria-hidden="true" />
-        ) : (
-          <span
-            aria-hidden="true"
-            className={cn("h-1.5 w-1.5 rounded-full", tone === "failed" ? "bg-destructive" : "bg-muted-foreground")}
-          />
-        )}
-        <span aria-hidden="true">{chip.label}</span>
-      </span>
-      {/* Agents still running beside the question. The label above says it. */}
-      {runningBeside && <RunningSpinner testId={`chat-needs-input-running-${chatId}`} decorative />}
-    </span>
-  );
-}
-
-/**
- * The small spinner a running chat shows in place of a chip. Beside a
- * needs-input chip it is decorative: that chip's label already says agents
- * are still running.
- */
-function RunningSpinner({
-  testId,
-  label,
-  activityState,
-  decorative = false,
-}: {
-  testId: string;
-  label?: string;
-  activityState?: string;
-  decorative?: boolean;
-}) {
-  return (
-    <Loader2
-      className="h-3 w-3 shrink-0 animate-spin text-primary-ink motion-reduce:animate-none"
-      data-testid={testId}
-      data-activity-state={activityState}
-      data-tone="running"
-      {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": label })}
-    >
-      {!decorative && label && <title>{label}</title>}
-    </Loader2>
-  );
-}
-
-/**
- * A row's "where", under its title when no header above it says so: the
- * project first (a folder glyph and its name, the stronger of the two), then
- * the workspace branch. Real text, so a screen reader hears it with the title.
- */
-function ChatWhere({
-  chatId,
-  projectName,
-  workspaceBranch,
-}: {
-  chatId: string;
-  projectName?: string;
-  workspaceBranch?: string;
-}) {
-  return (
-    <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground">
-      {projectName && (
-        <span className="flex min-w-0 items-center gap-1" data-testid={`chat-project-${chatId}`}>
-          <Folder className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
-          <span className="truncate font-medium text-foreground/70">{projectName}</span>
-        </span>
-      )}
-      {workspaceBranch && (
-        <span className="flex min-w-0 items-center gap-1">
-          <GitBranch className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
-          <span className="truncate">{workspaceBranch}</span>
-        </span>
-      )}
-    </div>
-  );
-}
 
 // --- Extracted ArchivedChatItem (module-level for stable identity + React.memo) ---
 
@@ -634,6 +406,8 @@ interface ArchivedChatItemProps {
   activeChatId: string | null;
   /** The one row in the tab order (the open chat, else the first). */
   isTabStop?: boolean;
+  /** Under a group header (not the flat list): indented to line up with it. */
+  inGroup?: boolean;
   /** The chat's project, when no header above the row names it. */
   projectName?: string;
   /** The chat's workspace, when no header above the row names it. */
@@ -644,13 +418,13 @@ const ArchivedChatItem = memo(function ArchivedChatItem({
   chat,
   activeChatId,
   isTabStop = false,
+  inGroup = false,
   projectName,
   workspaceName,
 }: ArchivedChatItemProps) {
   const chatId = chat.id;
   const chatTitle = chat.title || UNTITLED_CHAT;
   const isActive = activeChatId === chatId;
-  const relativeTime = getRelativeTime(chat.updatedAt || chat.createdAt);
   const deleteChatMutation = usePermanentlyDeleteChat();
   const unarchiveMutation = useUnarchiveChat();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -677,71 +451,61 @@ const ArchivedChatItem = memo(function ArchivedChatItem({
     }
   };
 
+  const where =
+    projectName || workspaceName ? (
+      <>
+        <span aria-hidden="true">· </span>
+        {projectName && <span data-testid={`chat-project-${chatId}`}>{projectName}</span>}
+        {projectName && workspaceName && " / "}
+        {workspaceName}
+      </>
+    ) : undefined;
+
   return (
-    <div
-      data-chat-id={chatId}
-      className={cn(
-        "group relative flex w-full items-center gap-1 overflow-hidden rounded-md border-l-2 border-transparent font-sans text-xs transition-colors duration-150",
-        isActive
-          ? "border-primary bg-primary/10 text-foreground font-semibold"
-          : "bg-transparent text-foreground/80 hover:bg-muted/50 hover:text-foreground",
-      )}
-    >
-      <button
-        type="button"
-        data-chat-row
-        tabIndex={isTabStop ? 0 : -1}
-        aria-current={isActive ? "true" : undefined}
+    <>
+      <ChatRow
+        chatId={chatId}
+        title={chatTitle}
+        tooltip={rowTooltip(chatTitle, chat)}
+        current={isActive}
+        inProject={inGroup}
+        suffix={where}
+        isTabStop={isTabStop}
         onClick={handleViewChat}
-        className="flex min-w-0 flex-1 cursor-pointer flex-col items-stretch rounded-md px-2.5 py-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:scale-[0.99]"
-      >
-        <span className="truncate group-hover:text-foreground transition-colors duration-200" title={chatTitle}>{chatTitle}</span>
-        {(projectName || workspaceName) && (
-          <ChatWhere chatId={chatId} projectName={projectName} workspaceBranch={workspaceName} />
-        )}
-      </button>
+        hoverActions={
+          <>
+            <Tooltip content="Restore chat" side="left" delay={300}>
+              <button
+                type="button"
+                aria-label={`Restore ${chatTitle}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRestore();
+                }}
+                className={SIDEBAR_ICON_BUTTON}
+              >
+                <RotateCcw className="size-3.5" aria-hidden="true" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Delete permanently" side="left" delay={300}>
+              <button
+                type="button"
+                aria-label={`Delete ${chatTitle} permanently`}
+                aria-haspopup="dialog"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmingDelete(true);
+                }}
+                className={cn(SIDEBAR_ICON_BUTTON, "hover:text-destructive-ink")}
+              >
+                <Trash2 className="size-3.5" aria-hidden="true" />
+              </button>
+            </Tooltip>
+          </>
+        }
+      />
 
-      <div className="hidden flex-shrink-0 group-hover:block group-focus-within:block">
-        <Tooltip content="Restore chat" side="left" delay={300}>
-          <button
-            type="button"
-            aria-label={`Restore ${chatTitle}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleRestore();
-            }}
-            className="hover:bg-muted/70 rounded p-1 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <RotateCcw className="w-3 h-3 text-muted-foreground hover:text-foreground transition-colors duration-200" />
-          </button>
-        </Tooltip>
-      </div>
-
-      <div className="flex-shrink-0 relative mr-1 flex items-center justify-center min-w-[2rem]">
-        <time
-          dateTime={chat.updatedAt || chat.createdAt}
-          title={new Date(chat.updatedAt || chat.createdAt).toLocaleString()}
-          className="text-xs text-muted-foreground transition-opacity duration-200 group-hover:opacity-0 group-focus-within:opacity-0"
-        >
-          {relativeTime}
-        </time>
-        <Tooltip content="Delete permanently" side="left" delay={300}>
-          <button
-            type="button"
-            aria-label={`Delete ${chatTitle} permanently`}
-            aria-haspopup="dialog"
-            onClick={(e) => {
-              e.stopPropagation();
-              setConfirmingDelete(true);
-            }}
-            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-200 hover:bg-muted/70 rounded p-0.5 absolute inset-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Trash2 className="w-3 h-3 text-destructive hover:text-destructive/80 transition-colors duration-200" />
-          </button>
-        </Tooltip>
-      </div>
-
-      {/* Portalled: a row clips its overflow, and the list scrolls. */}
+      {/* Portalled: the list scrolls. */}
       {confirmingDelete && createPortal(
       <ConfirmationDialog
         open={confirmingDelete}
@@ -754,7 +518,7 @@ const ArchivedChatItem = memo(function ArchivedChatItem({
       />,
       document.body,
       )}
-    </div>
+    </>
   );
 });
 
@@ -763,14 +527,14 @@ const ArchivedChatItem = memo(function ArchivedChatItem({
 interface WorktreeGroupComponentProps {
   id: string;
   title: string;
-  subtitle?: string | ReactNode;
+  /** A quiet mark after the title (an archived workspace's glyph). */
+  subtitle?: ReactNode;
+  /** The header's mark when it is a top-level group (a workspace's branch, an archived project's mark). */
   icon: ReactNode;
   chats: ChatWithActivity[];
   isExpanded: boolean;
   onToggle: () => void;
-  chatCount: number;
   renderChat: (chat: ChatWithActivity) => ReactNode;
-  hasActiveChat?: boolean;
   onNewChat?: () => void;
   onArchiveWorktree?: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
@@ -791,9 +555,6 @@ interface WorktreeGroupComponentProps {
   hideHeader?: boolean;
 }
 
-/** A workspace header's hover-only action: no box at all until the header is hovered or focused. */
-const HEADER_HOVER_ACTION = "hidden group-hover/header:inline-flex group-focus-within/header:inline-flex";
-
 const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   id: _id,
   title,
@@ -802,9 +563,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   chats,
   isExpanded,
   onToggle,
-  chatCount,
   renderChat,
-  hasActiveChat,
   onNewChat,
   onArchiveWorktree,
   onContextMenu,
@@ -821,159 +580,91 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
       </div>
     );
   }
+
+  // New chat and Archive show on hover or focus, and take no width until
+  // then: the branch keeps the row.
+  const actions =
+    onNewChat || onArchiveWorktree ? (
+      <>
+        {onNewChat && (
+          <Tooltip content="New chat in this workspace" side="left" delay={300}>
+            <button
+              type="button"
+              aria-label={`New chat in ${title}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onNewChat();
+              }}
+              className={SIDEBAR_ICON_BUTTON}
+            >
+              <Plus className="size-3.5" aria-hidden="true" />
+            </button>
+          </Tooltip>
+        )}
+        {onArchiveWorktree && (
+          <Tooltip content="Archive this workspace" side="left" delay={300}>
+            <button
+              type="button"
+              aria-label={`Archive ${title}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onArchiveWorktree();
+              }}
+              className={SIDEBAR_ICON_BUTTON}
+            >
+              <Archive className="size-3.5" aria-hidden="true" />
+            </button>
+          </Tooltip>
+        )}
+      </>
+    ) : undefined;
+
   return (
-    <div className="mb-1">
-      {/* Worktree Container */}
-      <div
-        className={cn(
-          "overflow-hidden rounded-md transition-all duration-150",
-          nested
-            ? "bg-transparent"
-            : hasActiveChat
-              ? "bg-foreground/5"
-              : "bg-transparent hover:bg-muted/30"
-        )}
-      >
-        {/* Header */}
-        <div
-          className={cn("group/header flex w-full items-center gap-1", nested ? "h-7" : "h-8")}
-          onContextMenu={(e) => onContextMenu?.(e)}
-        >
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-expanded={isExpanded}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-              {icon}
-            </span>
+    <div className="space-y-0.5">
+      {nested ? (
+        <WorkspaceSubheading
+          branch={title}
+          expanded={isExpanded}
+          onToggle={onToggle}
+          actions={actions}
+          onContextMenu={onContextMenu}
+        />
+      ) : (
+        <ProjectGroupHeader
+          name={title}
+          mark={icon}
+          expanded={isExpanded}
+          onToggle={onToggle}
+          trail={subtitle}
+          actions={actions}
+          onContextMenu={onContextMenu}
+        />
+      )}
 
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-              <div
-                className={cn(
-                  "min-w-0 flex-1 truncate text-xs",
-                  // Sentence case, one weight: a group label, not a heading
-                  // that shouts. The active group is foreground, not the
-                  // accent, so it does not read as a link.
-                  "font-medium",
-                  hasActiveChat ? "text-foreground" : "text-muted-foreground"
-                )}
-                title={title}
-              >
-                {title}
-              </div>
-              {subtitle && (
-                <div className="flex-shrink-0 text-xs leading-none">
-                  {typeof subtitle === "string" ? (
-                    <span className="truncate text-muted-foreground">
-                      {subtitle}
-                    </span>
-                  ) : (
-                    subtitle
-                  )}
-                </div>
-              )}
-            </div>
-          </button>
-
-          {chatCount > 0 && (
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-0.5 text-2xs font-medium",
-                hasActiveChat ? "bg-primary/10 text-primary-ink" : "bg-muted text-muted-foreground"
-              )}
-            >
-              {chatCount}
-            </span>
-          )}
-
-          {/* New Chat and Archive show on hover or focus, and take no width
-              until then (hidden, not opacity-0): at the default sidebar width
-              two invisible buttons left a workspace's name ~87px. */}
-          {onNewChat && (
-            <Tooltip
-              content="New chat in this workspace"
-              side="left"
-              delay={300}
-              triggerClassName={HEADER_HOVER_ACTION}
-            >
-              <button
-                type="button"
-                aria-label={`New chat in ${title}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onNewChat();
-                }}
-                className="flex-shrink-0 rounded p-1 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Plus className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground transition-colors duration-200" />
-              </button>
-            </Tooltip>
-          )}
-
-          {onArchiveWorktree && (
-            <Tooltip
-              content="Archive this workspace"
-              side="left"
-              delay={300}
-              triggerClassName={HEADER_HOVER_ACTION}
-            >
-              <button
-                type="button"
-                aria-label={`Archive ${title}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onArchiveWorktree();
-                }}
-                className="flex-shrink-0 rounded p-1 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Archive className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground transition-colors duration-200" />
-              </button>
-            </Tooltip>
-          )}
-
-          {/* The same toggle as the title, for the mouse: one tab stop is enough. */}
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-hidden="true"
-            onClick={onToggle}
-            className="flex flex-shrink-0 items-center rounded p-1 transition-all duration-150 hover:bg-muted/60"
-          >
-            {isExpanded ? (
-              <ChevronDown className="w-3.5 h-3.5 text-foreground/60 transition-transform" />
-            ) : (
-              <ChevronRight className="w-3.5 h-3.5 text-foreground/60 transition-transform" />
-            )}
-          </button>
+      {isExpanded && chats.length > 0 && (
+        <div className="space-y-0.5">
+          {chats.map((chat) => (
+            <div key={chat.id}>{renderChat(chat)}</div>
+          ))}
         </div>
+      )}
 
-        {/* Chats List */}
-        {isExpanded && chats.length > 0 && (
-          <div className={cn("space-y-0.5 pb-1 pt-0.5", nested ? "pl-4" : "pl-6")}>
-            {chats.map((chat) => (
-              <div key={chat.id}>{renderChat(chat)}</div>
-            ))}
-          </div>
-        )}
-
-        {/* Empty state for workspace with no chats */}
-        {isExpanded && chats.length === 0 && emptyState && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              emptyState.onClick?.();
-            }}
-            className={cn(
-              "mb-1 ml-6 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors",
-              emptyState.onClick ? "hover:bg-muted/50 hover:text-foreground cursor-pointer" : "cursor-default"
-            )}
-          >
-            {emptyState.message}
-          </button>
-        )}
-      </div>
+      {/* Empty state for workspace with no chats */}
+      {isExpanded && chats.length === 0 && emptyState && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            emptyState.onClick?.();
+          }}
+          className={cn(
+            "flex h-7 w-full items-center rounded-md pl-14 text-left text-meta text-muted-foreground transition-colors",
+            emptyState.onClick ? "cursor-pointer hover:bg-foreground/5 hover:text-foreground" : "cursor-default",
+          )}
+        >
+          {emptyState.message}
+        </button>
+      )}
     </div>
   );
 });
@@ -1001,6 +692,7 @@ function SidebarComponent({
     refetch: refetchChatList,
   } = useChatListWithWorkspaces(projectFilterId);
   const newChatShortcut = useShortcutLabel("newChat");
+  const chatSearchShortcut = useShortcutLabel("chatSearch");
   const listedChats = useMemo(() => chatList?.chats ?? [], [chatList?.chats]);
   // The list carries each chat's workspace and every listed project's main
   // one, so the sidebar groups from this response alone.
@@ -1749,13 +1441,10 @@ function SidebarComponent({
   };
 
 
-  // Memoized icon to avoid new JSX reference each render
+  // Memoized icon to avoid new JSX reference each render: a top-level
+  // workspace group's mark (the list filtered to one project).
   const worktreeIcon = useMemo(
-    () => <FolderGit2 className="w-3.5 h-3.5 text-primary-ink/80 flex-shrink-0" />,
-    []
-  );
-  const nestedWorktreeIcon = useMemo(
-    () => <GitBranch className="w-3 h-3 text-muted-foreground flex-shrink-0" aria-hidden="true" />,
+    () => <GitBranch className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />,
     []
   );
 
@@ -1776,11 +1465,6 @@ function SidebarComponent({
           toggleWorktreeGroup(group.worktreeId);
         }
       };
-
-      // Check if this group contains the active chat
-      const hasActiveChat = group.chats.some(
-        (chat) => chat.id === activeChatId
-      );
 
       // Handlers for worktree actions
       const handleNewChat = isNoWorktree
@@ -1816,14 +1500,12 @@ function SidebarComponent({
           key={group.worktreeId}
           id={group.worktreeId}
           title={group.worktreeBranch}
-          subtitle={null}
-          icon={layout.nested ? nestedWorktreeIcon : worktreeIcon}
+          icon={worktreeIcon}
           nested={layout.nested}
           hideHeader={layout.hideHeader}
           chats={group.chats}
           isExpanded={isExpanded}
           onToggle={handleToggle}
-          chatCount={group.chats.length}
           renderChat={(chat) => (
             <ChatItem
               chat={chat}
@@ -1837,10 +1519,8 @@ function SidebarComponent({
               onEditingTitleChange={setEditingTitle}
               onSaveRename={handleSaveRename}
               onCancelRename={handleCancelRename}
-              onArchiveChat={handleArchiveChat}
             />
           )}
-          hasActiveChat={hasActiveChat}
           onNewChat={handleNewChat}
           onArchiveWorktree={handleArchiveWorktree}
           onContextMenu={handleWorktreeMenu}
@@ -1856,32 +1536,31 @@ function SidebarComponent({
       editingChatId,
       editingTitle,
       worktreeIcon,
-      nestedWorktreeIcon,
       handleChatClick,
       handleChatContextMenu,
       handleSaveRename,
-      handleArchiveChat,
       handleSwitchToWorktreeNewChat,
       handleCancelRename,
       handleWorktreeContextMenu,
     ]
   );
 
-  // A project section of the All projects view: the project's name, its chat
-  // count, New chat in this project, and its workspace groups.
+  // A project section of the All projects view: the project's name, New
+  // chat in this project, its menu (pin, hide), and its workspace groups.
   //
   // The project is the strongest level of the list, so which project a chat
-  // is in reads at a glance: a project mark and the name at body size, a
-  // header that stays pinned while its chats scroll under it, and a guide
-  // line down the chats it holds. Its workspaces are quiet branch labels
+  // is in reads at a glance: a project mark and the name, a header that stays
+  // pinned while its chats scroll under it, and its chats indented so their
+  // titles line up with its name. Its workspaces are quiet branch labels
   // under it, and a project whose only workspace is main lists its chats
   // directly: a "main" header under every project said nothing.
   const renderProjectSection = (group: (typeof projectGroups)[number]) => {
     const isExpanded = expandedProjects[group.projectId] ?? group.chats.length > 0;
-    const hasActiveChat = group.chats.some((chat) => chat.id === activeChatId);
     const isPinned = projectPrefs.pinned.has(group.projectId);
     // Listed while hidden: under show-all, or as the current project.
     const isHidden = projectPrefs.hidden.has(group.projectId);
+    // A chat here waits on the user: the header says so, folded or not.
+    const needsYou = group.chats.some((chat) => chat.liveActivity === ChatActivity.AWAITING_INPUT);
     const projectActions: MenuGroup[] = [
       {
         items: [
@@ -1906,15 +1585,52 @@ function SidebarComponent({
       setExpandedProjects((prev) => ({ ...prev, [group.projectId]: !isExpanded }));
     const onlyMain = group.workspaces.length === 1 && group.workspaces[0]?.isMain === true;
     const mainWorkspace = onlyMain ? group.workspaces[0] : undefined;
+    // At rest, in this order: pinned, hidden, needs you (restyle §12a).
+    const trail =
+      isPinned || isHidden || needsYou ? (
+        <>
+          {isPinned && (
+            <span className="flex shrink-0" title="Pinned" data-testid={`sidebar-project-pinned-${group.projectId}`}>
+              <Pin className="size-3 text-muted-foreground" aria-hidden="true" />
+              <span className="sr-only">Pinned</span>
+            </span>
+          )}
+          {isHidden && (
+            <span
+              className="flex shrink-0"
+              title={projectPrefs.showAll ? "Hidden" : "Hidden, shown while you are in it"}
+              data-testid={`sidebar-project-hidden-${group.projectId}`}
+            >
+              <EyeOff className="size-3 text-muted-foreground" aria-hidden="true" />
+              <span className="sr-only">Hidden</span>
+            </span>
+          )}
+          {needsYou && (
+            <span
+              role="img"
+              aria-label="A chat needs you"
+              title="A chat needs you"
+              className="size-2 shrink-0 rounded-full bg-warning"
+              data-testid={`sidebar-project-needs-you-${group.projectId}`}
+            />
+          )}
+        </>
+      ) : undefined;
     return (
       <section
         key={group.projectId}
         aria-label={group.projectName}
         data-testid={`sidebar-project-${group.projectId}`}
+        className="space-y-0.5"
       >
-        <div
-          className="group/project sticky top-0 z-10 -mx-1 flex h-8 items-center gap-1 bg-card px-1"
-          data-testid={`sidebar-project-header-${group.projectId}`}
+        <ProjectGroupHeader
+          name={group.projectName}
+          mark={<ProjectMark name={group.projectName} />}
+          expanded={isExpanded}
+          onToggle={toggle}
+          muted={isHidden}
+          trail={trail}
+          testId={`sidebar-project-header-${group.projectId}`}
           // The main workspace's header is folded into the project's, so its
           // actions are here.
           onContextMenu={
@@ -1922,84 +1638,41 @@ function SidebarComponent({
               ? (e) => handleWorktreeContextMenu(e, mainWorkspace.worktreeId)
               : undefined
           }
-        >
-          <button
-            type="button"
-            onClick={toggle}
-            aria-expanded={isExpanded}
-            className={cn(
-              "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 text-left text-sm font-semibold transition-colors",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              hasActiveChat ? "text-primary-ink" : "text-foreground",
-            )}
-          >
-            <ProjectMark name={group.projectName} active={hasActiveChat} />
-            <span className={cn("min-w-0 truncate", isHidden && "text-muted-foreground")}>{group.projectName}</span>
-            {isPinned && (
-              <span className="shrink-0" title="Pinned" data-testid={`sidebar-project-pinned-${group.projectId}`}>
-                <Pin className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-                <span className="sr-only">Pinned</span>
-              </span>
-            )}
-            {isHidden && (
-              <span
-                className="shrink-0"
-                title={projectPrefs.showAll ? "Hidden" : "Hidden, shown while you are in it"}
-                data-testid={`sidebar-project-hidden-${group.projectId}`}
-              >
-                <EyeOff className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-                <span className="sr-only">Hidden</span>
-              </span>
-            )}
-            {isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            )}
-          </button>
-          {group.chats.length > 0 && (
-            <span className="rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
-              {group.chats.length}
-            </span>
-          )}
-          <Tooltip
-            content="New chat in this project"
-            side="left"
-            delay={300}
-            // Out of the layout until hover or focus, like a workspace's.
-            triggerClassName="hidden group-hover/project:inline-flex group-focus-within/project:inline-flex"
-          >
-            <button
-              type="button"
-              aria-label={`New chat in ${group.projectName}`}
-              onClick={() => void openNewChat({ projectId: group.projectId })}
-              className="flex-shrink-0 rounded p-1 hover:bg-muted/70"
-            >
-              <Plus className="h-3.5 w-3.5 text-muted-foreground" />
-            </button>
-          </Tooltip>
-          <DropdownMenu
-            align="right"
-            density="compact"
-            label={`${group.projectName} actions`}
-            menuClassName="min-w-[170px]"
-            groups={projectActions}
-            trigger={(props) => (
-              <button
-                type="button"
-                {...props}
-                aria-label={`${group.projectName} actions`}
-                data-testid={`sidebar-project-actions-${group.projectId}`}
-                // Out of the layout until hover or focus, like New chat beside it.
-                className="hidden flex-shrink-0 rounded p-1 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/project:inline-flex group-focus-within/project:inline-flex aria-expanded:inline-flex"
-              >
-                <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
-            )}
-          />
-        </div>
+          actions={
+            <>
+              <Tooltip content="New chat in this project" side="left" delay={300}>
+                <button
+                  type="button"
+                  aria-label={`New chat in ${group.projectName}`}
+                  onClick={() => void openNewChat({ projectId: group.projectId })}
+                  className={SIDEBAR_ICON_BUTTON}
+                >
+                  <Plus className="size-3.5" aria-hidden="true" />
+                </button>
+              </Tooltip>
+              <DropdownMenu
+                align="right"
+                density="compact"
+                label={`${group.projectName} actions`}
+                menuClassName="min-w-[170px]"
+                groups={projectActions}
+                trigger={(props) => (
+                  <button
+                    type="button"
+                    {...props}
+                    aria-label={`${group.projectName} actions`}
+                    data-testid={`sidebar-project-actions-${group.projectId}`}
+                    className={SIDEBAR_ICON_BUTTON}
+                  >
+                    <MoreHorizontal className="size-4" aria-hidden="true" />
+                  </button>
+                )}
+              />
+            </>
+          }
+        />
         {isExpanded && (
-          <div className="ml-3.5 space-y-0.5 border-l border-border/60 pb-1 pl-2 pt-0.5">
+          <div className="space-y-0.5">
             {group.workspaces.map((workspace) =>
               renderWorktreeGroup(workspace, { nested: true, hideHeader: onlyMain }),
             )}
@@ -2007,7 +1680,7 @@ function SidebarComponent({
               <button
                 type="button"
                 onClick={() => void openNewChat({ projectId: group.projectId })}
-                className="rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                className="flex h-7 w-full items-center rounded-md pl-14 text-left text-meta text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
                 No chats yet · start one
               </button>
@@ -2036,17 +1709,13 @@ function SidebarComponent({
         toggleArchivedGroup(groupKey);
       };
 
-      // Check if this group contains the active chat
-      const hasActiveChat = group.chats.some(
-        (chat) => chat.id === activeChatId
-      );
-
       // Icon showing this workspace is archived
       const subtitle = group.isWorktreeArchived ? (
-        <Tooltip content="Workspace archived" side="right" delay={300}>
-          <Archive className="w-3 h-3 text-muted-foreground/60" />
-        </Tooltip>
-      ) : null;
+        <span className="flex shrink-0 text-muted-foreground" title="Workspace archived">
+          <Archive className="size-3" aria-hidden="true" />
+          <span className="sr-only">Workspace archived</span>
+        </span>
+      ) : undefined;
 
       const handleWorktreeMenu = group.worktreeId
         ? (e: React.MouseEvent) => handleWorktreeContextMenu(e, group.worktreeId as string)
@@ -2062,24 +1731,23 @@ function SidebarComponent({
           subtitle={subtitle}
           icon={
             isProject ? (
-              <ProjectMark name={group.worktreeName} active={hasActiveChat} className="h-4 w-4" />
+              <ProjectMark name={group.worktreeName} />
             ) : (
-              <FolderGit2 className="w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0" />
+              <GitBranch className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             )
           }
           chats={group.chats}
           isExpanded={isExpanded}
           onToggle={handleToggle}
-          chatCount={group.chats.length}
           renderChat={(chat) => (
             <ArchivedChatItem
               chat={chat}
               activeChatId={activeChatId}
               isTabStop={chat.id === tabStopChatId}
+              inGroup
               workspaceName={isProject ? chat.worktreeName || undefined : undefined}
             />
           )}
-          hasActiveChat={hasActiveChat}
           onContextMenu={handleWorktreeMenu}
         />
       );
@@ -2105,16 +1773,56 @@ function SidebarComponent({
   const hiddenByMachineCount = chatListTab === "active" ? hiddenByMachine.active : hiddenByMachine.archived;
   const machineFilterName = machineFilter ? machineFilterLabel(machineFilter, machines ?? []) : "";
   const hiddenByMachineText = `${hiddenByMachineCount} ${hiddenByMachineCount === 1 ? "chat" : "chats"} on other machines`;
-  const currentSortOption =
-    SORT_OPTIONS.find((option) => option.value === sortOrder) ?? SORT_OPTIONS[0];
-  if (!currentSortOption) {
-    return null;
-  }
+
+  // What the Chats heading says the list shows, besides the chats: one
+  // project (the filter), or every project (show-all), each with an X that
+  // undoes it. A list narrower or longer than usual always says why.
+  const projectFilterName = projectFilterId ? projectFilterLabel(projectFilterId, projects) : null;
+  const showAllOffered =
+    !projectFilterId && (projectPrefs.showAll || foldedProjectGroups.length > 0 || hiddenProjectCount > 0);
+  const headingScope =
+    chatListTab === "archived" ? null : projectFilterName ? (
+      <>
+        <span aria-hidden="true">·</span>
+        <span className="min-w-0 truncate text-foreground" data-testid="project-filter-label">
+          {projectFilterName}
+        </span>
+        <Tooltip content="Show all projects" side="bottom" delay={300} type="label">
+          <button
+            type="button"
+            onClick={() => handleFilterChange(null)}
+            aria-label="Show all projects"
+            data-testid="project-filter-clear"
+            className={SIDEBAR_ICON_BUTTON}
+          >
+            <X className="size-3.5" aria-hidden="true" />
+          </button>
+        </Tooltip>
+      </>
+    ) : projectPrefs.showAll ? (
+      <>
+        <span aria-hidden="true">·</span>
+        <span className="min-w-0 truncate text-foreground" data-testid="project-list-showing-all">
+          every project
+        </span>
+        <Tooltip content="Show active projects only" side="bottom" delay={300} type="label">
+          <button
+            type="button"
+            onClick={() => setShowAllProjects(false)}
+            disabled={!projectPrefsWritable}
+            aria-label="Show active projects only"
+            className={SIDEBAR_ICON_BUTTON}
+          >
+            <X className="size-3.5" aria-hidden="true" />
+          </button>
+        </Tooltip>
+      </>
+    ) : null;
 
   return (
     <div
       ref={sidebarRootRef}
-      className="flex h-full flex-col bg-card dense-ui"
+      className="flex h-full flex-col bg-background"
       data-onboarding="left-sidebar"
       // Marks the focus context for the keyboard dispatcher and gives the pane
       // something focusable, so "focus the chat list" has a target.
@@ -2122,27 +1830,37 @@ function SidebarComponent({
       tabIndex={-1}
     >
       {/* Header section - only when not fullscreen */}
-      {paddingClass && (
-        <div className="h-12 border-b border-border/40 bg-card"></div>
-      )}
+      {paddingClass && <div className="h-12"></div>}
 
-      <div className="border-b border-border/50 bg-card px-3 pb-3 pt-2">
-        <nav className="space-y-1" aria-label="Chat sidebar navigation">
-          <SidebarNavButton
-            icon={<Edit className="h-4 w-4" />}
-            label="New chat"
-            onClick={handleNewChat}
-            testId="create-chat-button"
-            shortcut={newChatShortcut}
-          />
+      {/* The org the app acts in, and the way to change it (restyle §11.3).
+          With no org (no control plane) the row names the product. */}
+      <SidebarOrgRow>
+        <OrgSwitcher
+          variant="sidebar-top"
+          fallback={
+            <div className={cn(SIDEBAR_ORG_TRIGGER, "hover:bg-transparent")}>
+              <SidebarOrgLabel name="Reliant" />
+            </div>
+          }
+        />
+      </SidebarOrgRow>
+
+      <nav className="flex shrink-0 flex-col" aria-label="Chat sidebar navigation">
+        <SidebarPrimaryAction
+          icon={<SquarePen className="size-4" />}
+          label="New chat"
+          onClick={handleNewChat}
+          testId="create-chat-button"
+          shortcut={newChatShortcut}
+        />
+        <div className="mt-3 space-y-0.5 px-2">
+          <InboxNavItem onOpen={onOpenInbox} />
           {/* Apps (/apps) is the org's index of every app it runs, each one a
               drill-in to its console (environments, releases, observability) —
-              the ONE entry into the running side — so it sits directly under
-              New chat: after writing code, the next place to go is what that
-              code runs as. */}
+              the ONE entry into the running side. */}
           {showForgeEntry && (
-            <SidebarNavButton
-              icon={<Boxes className="h-4 w-4" />}
+            <SidebarRow
+              icon={<AppWindow className="size-4" />}
               label="Apps"
               onClick={onOpenForge}
               testId="sidebar-forge-button"
@@ -2151,173 +1869,92 @@ function SidebarComponent({
           )}
           {/* What is live, one click from anywhere: each app's console and its site. */}
           {showForgeEntry && <SidebarApps />}
-          <InboxNavItem onOpen={onOpenInbox} />
-          {/* One entry for the whole area: Workflows and Runs are
-              its tabs (WORKFLOW_UI.md §1.2), so they get no entries here. */}
-          <SidebarNavButton
-            icon={<Workflow className="h-4 w-4" />}
+          {/* One entry for the whole area: Workflows and Runs are its tabs
+              (WORKFLOW_UI.md §1.2), so they get no entries here. Live
+              automations are its trail, with their own link to Runs. */}
+          <SidebarRow
+            icon={<Workflow className="size-4" />}
             label="Workflows"
             onClick={onOpenWorkflows}
             onboardingId="workflow-button"
+            action={<AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />}
           />
-          <SidebarNavButton
-            icon={<Search className="h-4 w-4" />}
+          <SidebarRow
+            icon={<Search className="size-4" />}
             label="Search"
             onClick={onOpenChatSearch}
+            trail={chatSearchShortcut ? <kbd className="font-sans">{chatSearchShortcut}</kbd> : undefined}
           />
-        </nav>
-      </div>
+        </div>
+      </nav>
 
-      <div className="bg-card px-3 pb-2 pt-3">
-        <div className="mb-2 flex items-center gap-2">
-          {/* The project is a filter on the list, never a gate in front of it. */}
-          <div className="flex min-w-0 flex-1 items-center" data-onboarding="project-filter">
-            <ProjectFilterMenu
+      {/* The list's heading: its one menu (project, sort, view, every
+          project, archived) on hover, and the machine filter when there is
+          more than one machine. */}
+      <SidebarHeading
+        onboardingId="project-filter"
+        testId="chat-list-heading"
+        actions={
+          <>
+            {showMachineFilter && (
+              // At rest it shows only on hover, like the menu; filtered, it
+              // names what it shows and stays.
+              <span className={cn("flex min-w-0", !machineFilter && "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 has-[[aria-expanded=true]]:opacity-100")}>
+                <MachineFilterMenu
+                  filter={machineFilter}
+                  machines={menuMachines}
+                  onChange={handleMachineFilterChange}
+                  includeNoMachine={hasNoMachineChats || !!machineFilter?.includes(NO_MACHINE)}
+                  needsYouByMachine={needsYouByMachine}
+                />
+              </span>
+            )}
+            <ChatListMenu
               filterId={projectFilterId}
               projects={projects}
-              onChange={handleFilterChange}
+              onFilterChange={handleFilterChange}
               onAddProject={() => openAddProject()}
               onManageProjects={() => onManageProjects?.()}
               needsYouByProject={needsYouByProject}
+              sortOrder={sortOrder}
+              onSortChange={setSortOrder}
+              viewMode={viewMode}
+              onViewChange={setViewMode}
+              showAll={
+                showAllOffered
+                  ? { on: projectPrefs.showAll, onChange: setShowAllProjects, disabled: !projectPrefsWritable }
+                  : undefined
+              }
+              archived={chatListTab === "archived"}
+              onArchivedChange={(archived) => setChatListTab(archived ? "archived" : "active")}
             />
-          </div>
-
-          {/* Across projects, and only while it would change something. */}
-          {!projectFilterId &&
-            (projectPrefs.showAll || foldedProjectGroups.length > 0 || hiddenProjectCount > 0) && (
-              <ProjectListToggle
-                showAll={projectPrefs.showAll}
-                onChange={setShowAllProjects}
-                disabled={!projectPrefsWritable}
-              />
-            )}
-
-          {/* Hidden while there is one machine: nothing to choose between. */}
-          {showMachineFilter && (
-            <MachineFilterMenu
-              filter={machineFilter}
-              machines={menuMachines}
-              onChange={handleMachineFilterChange}
-              includeNoMachine={hasNoMachineChats || !!machineFilter?.includes(NO_MACHINE)}
-              needsYouByMachine={needsYouByMachine}
-            />
-          )}
-
-          <DropdownMenu
-            align="right"
-            density="compact"
-            label="Sort chats"
-            menuClassName="min-w-[190px]"
-            trigger={(props) => (
-              <Tooltip
-                content={`Sort: ${currentSortOption.label}`}
-                side="bottom"
-                delay={300}
-                triggerClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
-              >
-                <button
-                  type="button"
-                  {...props}
-                  className={cn(
-                    CHAT_HEADER_ACTION_BUTTON_CLASS,
-                    "h-6 w-6 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                  )}
-                  aria-label="Sort chats"
-                >
-                  {currentSortOption.icon}
-                </button>
-              </Tooltip>
-            )}
-            groups={[
-              {
-                label: "List",
-                selection: "single",
-                items: [
-                  {
-                    label: "Active chats",
-                    icon: <MessageSquare className="h-3.5 w-3.5" />,
-                    checked: chatListTab === "active",
-                    onClick: () => setChatListTab("active"),
-                  },
-                  {
-                    label: "Archived chats",
-                    icon: <Archive className="h-3.5 w-3.5" />,
-                    checked: chatListTab === "archived",
-                    onClick: () => setChatListTab("archived"),
-                  },
-                ],
-              },
-              {
-                label: "Sort by",
-                selection: "single",
-                items: SORT_OPTIONS.map((option) => ({
-                  label: option.label,
-                  icon: option.icon,
-                  checked: sortOrder === option.value,
-                  onClick: () => setSortOrder(option.value),
-                })),
-              },
-            ]}
-          />
-
-          <DropdownMenu
-            align="right"
-            density="compact"
-            label="View options"
-            menuClassName="min-w-[220px]"
-            trigger={(props) => (
-              <Tooltip
-                content="View options"
-                side="bottom"
-                delay={300}
-                triggerClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
-              >
-                <button
-                  type="button"
-                  {...props}
-                  className={cn(
-                    CHAT_HEADER_ACTION_BUTTON_CLASS,
-                    "h-6 w-6 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                  )}
-                  aria-label="View options"
-                >
-                  {viewMode === "grouped" ? (
-                    <LayoutGrid className={CHAT_HEADER_ACTION_ICON_CLASS} />
-                  ) : (
-                    <LayoutList className={CHAT_HEADER_ACTION_ICON_CLASS} />
-                  )}
-                </button>
-              </Tooltip>
-            )}
-            groups={[
-              {
-                label: "View",
-                selection: "single",
-                items: [
-                  {
-                    label: projectFilterId ? "Grouped by workspace" : "Grouped by project",
-                    icon: <LayoutGrid className="h-3.5 w-3.5" />,
-                    checked: viewMode === "grouped",
-                    onClick: () => setViewMode("grouped"),
-                  },
-                  {
-                    label: "Flat list",
-                    icon: <LayoutList className="h-3.5 w-3.5" />,
-                    checked: viewMode === "flat",
-                    onClick: () => setViewMode("flat"),
-                  },
-                ],
-              },
-            ]}
-          />
-
-        </div>
-      </div>
+          </>
+        }
+      >
+        {chatListTab === "archived" ? (
+          <>
+            <span className="truncate">Archived</span>
+            <button
+              type="button"
+              onClick={() => setChatListTab("active")}
+              data-testid="chat-list-back"
+              className="ml-auto shrink-0 rounded-md px-1 text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Back
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="shrink-0">Chats</span>
+            {headingScope}
+          </>
+        )}
+      </SidebarHeading>
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <div
           ref={scrollContainerRef}
-          className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1"
+          className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 pt-0.5"
           onKeyDown={onChatListKeyDown}
           aria-label={chatListTab === "active" ? "Chats" : "Archived chats"}
           role="region"
@@ -2326,7 +1963,7 @@ function SidebarComponent({
               defaults, and changing them waits for a read. One quiet line. */}
           {chatListTab === "active" && !projectFilterId && projectPrefsLoadFailed && (
             <div
-              className="mb-1 flex items-center justify-between gap-2 px-2 text-2xs text-muted-foreground"
+              className="mb-1 flex items-center justify-between gap-2 px-2 text-meta text-muted-foreground"
               data-testid="project-prefs-load-failed"
             >
               <span className="min-w-0 truncate">Couldn't load pinned and hidden projects</span>
@@ -2343,7 +1980,7 @@ function SidebarComponent({
             viewMode === "grouped" ? (
               projectFilterId ? (
                 activeGroups.length > 0 && (
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {activeGroups.map((group) => renderWorktreeGroup(group))}
                   </div>
                 )
@@ -2353,23 +1990,20 @@ function SidebarComponent({
                     {projectGroups.map((group) => renderProjectSection(group))}
                     {/* Projects with no chats, unused for a while and unpinned. */}
                     {foldedProjectGroups.length > 0 && (
-                      <div data-testid="sidebar-more-projects">
-                        <button
-                          type="button"
+                      <div data-testid="sidebar-more-projects" className="space-y-2">
+                        <SidebarRow
+                          icon={
+                            <ChevronRight
+                              className={cn("size-3.5 transition-transform", moreProjectsOpen && "rotate-90")}
+                            />
+                          }
+                          label={`More projects (${foldedProjectGroups.length})`}
                           onClick={() => setMoreProjectsOpen((open) => !open)}
-                          aria-expanded={moreProjectsOpen}
-                          data-testid="sidebar-more-projects-toggle"
-                          className="-mx-1 flex h-7 w-[calc(100%+0.5rem)] items-center gap-1.5 rounded-md px-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          {moreProjectsOpen ? (
-                            <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          ) : (
-                            <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          )}
-                          <span className="min-w-0 truncate">More projects ({foldedProjectGroups.length})</span>
-                        </button>
+                          expanded={moreProjectsOpen}
+                          testId="sidebar-more-projects-toggle"
+                        />
                         {moreProjectsOpen && (
-                          <div className="mt-1 space-y-2">
+                          <div className="space-y-2">
                             {foldedProjectGroups.map((group) => renderProjectSection(group))}
                           </div>
                         )}
@@ -2380,7 +2014,7 @@ function SidebarComponent({
               )
             ) : (
               flatList.length > 0 && (
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {flatList.map((chat) => {
                     const worktree = getWorktreeForChat(chat);
                     // Across projects, the row names its project first; the
@@ -2403,7 +2037,6 @@ function SidebarComponent({
                         onEditingTitleChange={setEditingTitle}
                         onSaveRename={handleSaveRename}
                         onCancelRename={handleCancelRename}
-                        onArchiveChat={handleArchiveChat}
                       />
                     );
                   })}
@@ -2416,7 +2049,7 @@ function SidebarComponent({
                 {archivedGroups.map((group) => renderArchivedGroup(group))}
               </div>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {filteredArchivedChats.map((chat) => (
                   <ArchivedChatItem
                     key={chat.id}
@@ -2457,8 +2090,8 @@ function SidebarComponent({
           )}
 
           {listFailed && (
-            <div role="alert" className="mx-1 my-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs">
-              <p className="font-medium text-destructive-ink">Couldn't load your chats</p>
+            <div role="alert" className="mx-1 my-3 rounded-md border border-border px-3 py-2.5 text-meta">
+              <p className="text-ui font-medium text-destructive-ink">Couldn't load your chats</p>
               <p className="mt-0.5 text-muted-foreground">Your chats are safe; the list didn't arrive.</p>
               <Button className="mt-2" variant="outline" size="sm" onClick={retryList}>
                 Retry
@@ -2469,13 +2102,13 @@ function SidebarComponent({
           {/* The machine filter hides everything here: say so, and undo it. */}
           {!hasAnyVisibleChats && !listLoading && !listFailed && machineFilter && hiddenByMachineCount > 0 && (
             <div className="px-2 py-8 text-center text-muted-foreground" data-testid="machine-filter-empty">
-              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-border/50 bg-muted/30">
+              <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full border border-border">
                 <Server className="h-4 w-4" />
               </div>
-              <p className="mb-1 text-sm font-medium text-foreground/75">
+              <p className="mb-1 text-ui font-medium text-foreground/75">
                 No {chatListTab === "active" ? "active" : "archived"} chats on {machineFilterName}
               </p>
-              <p className="text-xs text-muted-foreground/70">
+              <p className="text-meta text-muted-foreground">
                 {hiddenByMachineText} {hiddenByMachineCount === 1 ? "is" : "are"} hidden by the machine filter.
               </p>
               <Button className="mt-3" onClick={() => setMachineFilterIds(null)} variant="ghost" size="sm">
@@ -2487,7 +2120,7 @@ function SidebarComponent({
           {/* Some chats are on other machines: one line says so, with the way back. */}
           {hasAnyVisibleChats && machineFilter && hiddenByMachineCount > 0 && (
             <div
-              className="mt-2 flex items-center justify-between gap-2 px-2 text-2xs text-muted-foreground"
+              className="mt-2 flex items-center justify-between gap-2 px-2 text-meta text-muted-foreground"
               data-testid="machine-filter-hidden"
             >
               <span className="min-w-0 truncate">{hiddenByMachineText} hidden</span>
@@ -2504,11 +2137,11 @@ function SidebarComponent({
           {/* Empty State */}
           {!hasAnyVisibleChats && !listLoading && !listFailed && !(machineFilter && hiddenByMachineCount > 0) && (
             <div className="px-2 py-8 text-center text-muted-foreground">
-              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-border/50 bg-muted/30">
+              <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full border border-border">
                 {chatListTab === "active" ? <Plus className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
               </div>
-              <p className="mb-1 text-sm font-medium text-foreground/75">{emptyTitle}</p>
-              <p className="text-xs text-muted-foreground/70">{emptyDescription}</p>
+              <p className="mb-1 text-ui font-medium text-foreground/75">{emptyTitle}</p>
+              <p className="text-meta text-muted-foreground">{emptyDescription}</p>
               {chatListTab === "active" && (
                 <div className="mt-3 flex flex-col items-center gap-2">
                   <Button
@@ -2539,22 +2172,17 @@ function SidebarComponent({
         </div>
       </div>
 
-      <div className="border-t border-border/40 bg-card px-3 py-2">
-        <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />
-        {/* Renders nothing for a person with one org. */}
-        <OrgSwitcher />
-        <div className="flex items-center gap-1">
-          <div className="min-w-0 flex-1">
-            <SidebarNavButton
-              icon={<Settings className="h-4 w-4" />}
-              label="Settings"
-              onClick={onNavigateToSettings}
-            />
-          </div>
-          {/* Renders nothing unless the desktop app has an update waiting. */}
-          <SidebarUpdateButton />
-        </div>
-      </div>
+      {/* Settings only: the org switcher is the top row, and live
+          automations are the Workflows row's trail. */}
+      <SidebarFooter>
+        <SidebarRow
+          icon={<Settings className="size-4" />}
+          label="Settings"
+          onClick={onNavigateToSettings}
+          // Renders nothing unless the desktop app has an update waiting.
+          action={<SidebarUpdateButton />}
+        />
+      </SidebarFooter>
 
       {/* One context menu for every row; its items follow the row. */}
       {contextMenu && (

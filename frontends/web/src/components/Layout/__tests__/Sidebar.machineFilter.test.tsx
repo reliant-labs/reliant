@@ -55,7 +55,7 @@ vi.mock("../../../hooks/useOnboardingQueries", async (original) => ({
   ...(await original<typeof import("../../../hooks/useOnboardingQueries")>()),
   useDaemonList: () => ({ data: machines.list }),
 }));
-const LAPTOP = { daemonId: "laptop", hostname: "laptop", name: "Laptop", status: DaemonStatus.ACTIVE, daemonType: "self_hosted", isDefault: true };
+const LAPTOP = { daemonId: "laptop", hostname: "work-laptop.local", name: "Work laptop", status: DaemonStatus.ACTIVE, daemonType: "self_hosted", isDefault: true };
 const CLOUD = { daemonId: "cloud", hostname: "cloud", name: "Cloud box", status: DaemonStatus.ACTIVE, daemonType: "managed", isDefault: false };
 
 const MAIN = { id: "w-main", name: "main", branch: "main", path: "/p/api", isMain: true, projectId: "p-api", status: WorktreeStatus.ACTIVE };
@@ -140,7 +140,7 @@ describe("Sidebar: the machine filter", () => {
     useWorkspaceStateStore.setState({ machineFilterIds: ["laptop"] });
     renderSidebar();
     expect(listedChats()).toEqual(["unpinned"]);
-    expect(screen.getByTestId("machine-filter-label")).toHaveTextContent("Laptop");
+    expect(screen.getByTestId("machine-filter-label")).toHaveTextContent("Work laptop");
     expect(screen.getByTestId("machine-filter-hidden")).toHaveTextContent("2 chats on other machines hidden");
   });
 

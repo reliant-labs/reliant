@@ -1,0 +1,485 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * The side nav's building blocks (restyle design §11.2). Version (a) of the
+ * nav composes them under today's global header; U6 recomposes them at full
+ * height. Each one owns its classes, so U6's sidebar is a rearrangement of
+ * these, not a restyle.
+ *
+ * One surface (`bg-background`), whitespace between blocks rather than
+ * borders, rows at `--row-h`, hover and selection as an ink wash
+ * (`bg-foreground/5`, `/[0.08]`), and status as a dot, never a chip or a
+ * tinted row (web-styling: "Status colour is a dot, an icon or a count").
+ */
+
+import type React from "react";
+import type { ReactNode } from "react";
+import { ChevronDown, ChevronRight, ChevronsUpDown, GitBranch, Loader2 } from "lucide-react";
+
+import { cn } from "../../../lib/utils";
+import { BrandMark } from "../../icons/BrandMark";
+import { CHAT_ROW_DOT_CLASS, type ChatRowChip } from "../chatRowStatus";
+
+/** A 24px icon button in a row's trailing slot (New chat in a project, More options). */
+export const SIDEBAR_ICON_BUTTON =
+  "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+const FOCUS_INSET = "focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+
+// --- The org row ----------------------------------------------------------
+
+/** The top row: 48px, the org switcher (or the product's name) in it. */
+export function SidebarOrgRow({ children }: { children: ReactNode }) {
+  return <div className="flex h-[var(--shell-bar-h)] shrink-0 items-center px-2">{children}</div>;
+}
+
+/** The org row's control: a button when it opens a menu, a plain row when it does not. */
+export const SIDEBAR_ORG_TRIGGER =
+  "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-ui text-foreground transition-colors hover:bg-foreground/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+/** What the org row shows: the mark, the name, and the switcher's chevron when there is a menu. */
+export function SidebarOrgLabel({
+  name,
+  menu = false,
+  nameTestId,
+}: {
+  name: string;
+  menu?: boolean;
+  nameTestId?: string;
+}) {
+  return (
+    <>
+      <BrandMark className="size-5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate font-semibold" data-testid={nameTestId}>
+        {name}
+      </span>
+      {menu && <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+    </>
+  );
+}
+
+// --- The primary action ---------------------------------------------------
+
+/** The one filled button in the nav: New chat. */
+export function SidebarPrimaryAction({
+  icon,
+  label,
+  shortcut,
+  onClick,
+  testId,
+}: {
+  icon: ReactNode;
+  label: string;
+  /** The action's shortcut, formatted (useShortcutLabel). */
+  shortcut?: string;
+  onClick: () => void;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      // The label alone names the button; the key cap is a visual hint.
+      aria-label={label}
+      className={cn(
+        // --primary-hover is a real colour per scheme with no Tailwind alias.
+        "mx-2 flex h-8 shrink-0 items-center gap-2 rounded-md bg-primary px-2 text-left text-ui font-medium text-primary-foreground transition-colors hover:bg-[hsl(var(--primary-hover))]",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+      )}
+    >
+      <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="min-w-0 truncate">{label}</span>
+      {shortcut && (
+        <kbd aria-hidden="true" className="ml-auto shrink-0 font-sans text-meta text-primary-foreground">
+          {shortcut}
+        </kbd>
+      )}
+    </button>
+  );
+}
+
+// --- Rows -----------------------------------------------------------------
+
+export interface SidebarRowProps {
+  icon: ReactNode;
+  label: string;
+  onClick?: () => void;
+  /** Quiet trailing text inside the row: a count, a shortcut, a dot. */
+  trail?: ReactNode;
+  /** A control of its own after the row (it cannot nest in the row's button). */
+  action?: ReactNode;
+  current?: boolean;
+  /** For a row that opens and closes something below it. */
+  expanded?: boolean;
+  /**
+   * The button's accessible name; defaults to the label. null names it by
+   * its content instead (a row whose children say more, like Inbox's count).
+   */
+  ariaLabel?: string | null;
+  testId?: string;
+  onboardingId?: string;
+  className?: string;
+  /** More content inside the button, after the trail (a live region). */
+  children?: ReactNode;
+}
+
+/** A nav row: Inbox, Apps, Workflows, Search, Settings, More projects. */
+export function SidebarRow({
+  icon,
+  label,
+  onClick,
+  trail,
+  action,
+  current = false,
+  expanded,
+  ariaLabel,
+  testId,
+  onboardingId,
+  className,
+  children,
+}: SidebarRowProps) {
+  return (
+    <div
+      className={cn(
+        "flex h-[var(--row-h)] min-w-0 items-center rounded-md text-ui text-foreground transition-colors hover:bg-foreground/5",
+        current && "bg-foreground/[0.08]",
+        className,
+      )}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={!onClick}
+        aria-current={current ? "page" : undefined}
+        aria-expanded={expanded}
+        aria-label={ariaLabel === null ? undefined : (ariaLabel ?? label)}
+        data-testid={testId}
+        data-onboarding={onboardingId}
+        className={cn(
+          "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left disabled:cursor-default disabled:opacity-50",
+          FOCUS_INSET,
+        )}
+      >
+        <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground" aria-hidden="true">
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {trail && (
+          <span className="ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground">{trail}</span>
+        )}
+        {children}
+      </button>
+      {action && <span className="flex shrink-0 items-center pr-1">{action}</span>}
+    </div>
+  );
+}
+
+/** The footer block under the list: whitespace above it, no rule. */
+export function SidebarFooter({ children }: { children: ReactNode }) {
+  return <div className="shrink-0 space-y-0.5 p-2">{children}</div>;
+}
+
+// --- The Chats heading ----------------------------------------------------
+
+/** A heading control that shows on hover or focus, and stays while its menu is open. */
+export const SIDEBAR_HEADING_HOVER_ACTION =
+  "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100";
+
+/** "Chats" over the list, with its controls at the right. */
+export function SidebarHeading({
+  children,
+  actions,
+  onboardingId,
+  testId,
+}: {
+  children: ReactNode;
+  actions?: ReactNode;
+  onboardingId?: string;
+  testId?: string;
+}) {
+  return (
+    <div
+      className="group/heading mt-6 flex h-7 shrink-0 items-center gap-1 pl-4 pr-3 text-meta text-muted-foreground"
+      data-onboarding={onboardingId}
+      data-testid={testId}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-1">{children}</div>
+      {actions && <div className="ml-auto flex shrink-0 items-center gap-0.5">{actions}</div>}
+    </div>
+  );
+}
+
+// --- Groups ---------------------------------------------------------------
+
+/**
+ * A project's header in the grouped list (or a workspace's, when the list is
+ * filtered to one project): the chevron, a mark, the name, what stays in the
+ * trail (pinned, needs you), and hover-only actions. Sticky, so the project
+ * a chat belongs to stays in view while its chats scroll under it.
+ */
+export function ProjectGroupHeader({
+  name,
+  mark,
+  expanded,
+  onToggle,
+  trail,
+  actions,
+  muted = false,
+  testId,
+  onContextMenu,
+}: {
+  name: string;
+  mark: ReactNode;
+  expanded: boolean;
+  onToggle: () => void;
+  /** At rest: a pin, the needs-you dot. */
+  trail?: ReactNode;
+  /** On hover or focus only: New chat here, the project's menu. */
+  actions?: ReactNode;
+  /** The name in muted ink (a hidden project, listed anyway). */
+  muted?: boolean;
+  testId?: string;
+  onContextMenu?: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      className="group/proj sticky top-0 z-10 flex h-8 items-center rounded-md bg-background text-ui font-medium text-foreground"
+      data-testid={testId}
+      onContextMenu={onContextMenu}
+    >
+      {/* The wash is a layer, so the sticky header stays opaque over the rows under it. */}
+      <div className="pointer-events-none absolute inset-0 rounded-md transition-colors group-hover/proj:bg-foreground/5" />
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className={cn("relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-2 pr-1 text-left", FOCUS_INSET)}
+      >
+        <ChevronDown
+          className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", !expanded && "-rotate-90")}
+          aria-hidden="true"
+        />
+        {mark}
+        <span className={cn("min-w-0 truncate", muted && "text-muted-foreground")} title={name}>
+          {name}
+        </span>
+        {trail && <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">{trail}</span>}
+      </button>
+      {actions && (
+        <span
+          className={cn(
+            "relative hidden shrink-0 items-center pr-1",
+            "group-hover/proj:flex group-focus-within/proj:flex has-[[aria-expanded=true]]:flex",
+          )}
+        >
+          {actions}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** A workspace (branch) inside a project: a quiet label, not a second heading. */
+export function WorkspaceSubheading({
+  branch,
+  expanded,
+  onToggle,
+  actions,
+  onContextMenu,
+}: {
+  branch: string;
+  expanded: boolean;
+  onToggle: () => void;
+  /** On hover or focus only: New chat here, Archive. */
+  actions?: ReactNode;
+  onContextMenu?: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      className="group/ws flex h-7 items-center gap-1 rounded-md pl-8 pr-1 text-meta text-muted-foreground"
+      onContextMenu={onContextMenu}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className={cn("flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-md text-left hover:text-foreground", FOCUS_INSET)}
+      >
+        <GitBranch className="size-3 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 truncate" title={branch}>
+          {branch}
+        </span>
+        {/* A folded workspace says so at rest; an open one only on hover. */}
+        <ChevronRight
+          className={cn(
+            "size-3 shrink-0 transition-transform",
+            expanded ? "hidden rotate-90 group-hover/ws:block group-focus-within/ws:block" : "block",
+          )}
+          aria-hidden="true"
+        />
+      </button>
+      {actions && (
+        <span className="hidden shrink-0 items-center group-hover/ws:flex group-focus-within/ws:flex">{actions}</span>
+      )}
+    </div>
+  );
+}
+
+// --- Chat rows ------------------------------------------------------------
+
+export interface ChatRowProps {
+  chatId: string;
+  title: string;
+  /** The title's native tooltip: the full title and when it last changed. */
+  tooltip?: string;
+  current?: boolean;
+  unread?: boolean;
+  /** Indented under a project's header, so titles line up with its name. */
+  inProject?: boolean;
+  /** The 16px state slot at the left (ChatStateSlot). */
+  slot?: ReactNode;
+  /** After the title, in meta: where the chat is, in the flat list. */
+  suffix?: ReactNode;
+  /** A quiet glyph after the title (the automation origin). */
+  glyph?: ReactNode;
+  /** Hover-only controls at the right (More options). */
+  hoverActions?: ReactNode;
+  /** Replaces the row's button while the title is being edited. */
+  editor?: ReactNode;
+  /** The one row in the tab order (the open chat, else the first). */
+  isTabStop?: boolean;
+  onClick: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
+}
+
+/**
+ * A chat in the list. The row's primary action is a real button: focusable,
+ * announced with its state, and Up/Down move between rows (the list's keydown
+ * handler reads `data-chat-row`). Only one row is in the tab order.
+ */
+export function ChatRow({
+  chatId,
+  title,
+  tooltip,
+  current = false,
+  unread = false,
+  inProject = false,
+  slot,
+  suffix,
+  glyph,
+  hoverActions,
+  editor,
+  isTabStop = false,
+  onClick,
+  onContextMenu,
+}: ChatRowProps) {
+  const indent = inProject ? "pl-8" : "pl-2";
+  return (
+    <div
+      data-chat-id={chatId}
+      className={cn(
+        "group/chat relative flex h-[var(--row-h)] w-full min-w-0 items-center rounded-md pr-1 text-ui transition-colors hover:bg-foreground/5",
+        current && "bg-foreground/[0.08]",
+      )}
+      onContextMenu={onContextMenu}
+    >
+      {editor ? (
+        <div className={cn("flex min-w-0 flex-1 items-center gap-2", indent)}>
+          <span className="w-4 shrink-0" />
+          {editor}
+        </div>
+      ) : (
+        <button
+          type="button"
+          data-chat-row
+          tabIndex={isTabStop ? 0 : -1}
+          aria-current={current ? "true" : undefined}
+          onClick={onClick}
+          className={cn("flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md text-left", indent, FOCUS_INSET)}
+        >
+          <span className="relative flex w-4 shrink-0 items-center justify-center">{slot}</span>
+          <span className="flex min-w-0 flex-1 items-baseline gap-1">
+            <span
+              className={cn(
+                "min-w-0 truncate transition-colors group-hover/chat:text-foreground",
+                current || unread ? "text-foreground" : "text-foreground/80",
+                unread && "font-medium",
+              )}
+              title={tooltip ?? title}
+            >
+              {title}
+            </span>
+            {suffix && <span className="min-w-0 shrink-[2] truncate text-meta text-muted-foreground">{suffix}</span>}
+          </span>
+          {glyph}
+        </button>
+      )}
+      {hoverActions && (
+        <div className="hidden shrink-0 items-center group-hover/chat:flex group-focus-within/chat:flex has-[[aria-expanded=true]]:flex">
+          {hoverActions}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A chat's state in the row's 16px slot (§11.4): a spinner while it runs, a
+ * warning dot when it needs you (ringed by a spinner while its other agents
+ * still run), a destructive dot when it failed, a muted one when paused.
+ * Each carries its words as its accessible name and its tooltip.
+ */
+export function ChatStateSlot({
+  chatId,
+  state,
+  activityState,
+  runningBeside = false,
+}: {
+  chatId: string;
+  state: ChatRowChip;
+  activityState: string;
+  /** Agents still running beside the question. */
+  runningBeside?: boolean;
+}) {
+  const label = state.detail ?? state.label;
+  if (state.tone === "running") {
+    return (
+      <Loader2
+        className="size-3 shrink-0 animate-spin text-primary-ink motion-reduce:animate-none"
+        data-testid={`chat-activity-dot-${chatId}`}
+        data-activity-state={activityState}
+        data-tone="running"
+        role="img"
+        aria-label={label}
+      >
+        <title>{label}</title>
+      </Loader2>
+    );
+  }
+  const attention = state.tone === "attention";
+  return (
+    <span
+      className="relative flex size-3.5 items-center justify-center"
+      data-testid={attention ? `chat-needs-input-${chatId}` : `chat-activity-dot-${chatId}`}
+      data-activity-state={activityState}
+      data-tone={state.tone}
+    >
+      <span
+        role="img"
+        aria-label={label}
+        title={label}
+        className={cn("size-2 rounded-full", CHAT_ROW_DOT_CLASS[state.tone])}
+      />
+      {runningBeside && (
+        <span
+          aria-hidden="true"
+          data-testid={`chat-needs-input-running-${chatId}`}
+          className="absolute inset-0 animate-spin rounded-full border-[1.5px] border-transparent border-t-primary-ink motion-reduce:animate-none"
+        />
+      )}
+    </span>
+  );
+}

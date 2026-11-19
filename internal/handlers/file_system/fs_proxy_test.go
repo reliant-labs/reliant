@@ -281,6 +281,16 @@ func fsProxyContext() context.Context {
 // returns the repository, the project id, and that workspace root.
 func seedFSProxyProject(t *testing.T) (*db.Repo, string, string) {
 	t.Helper()
+	// The checkout is on the machines the test routers resolve to by default
+	// (toolexectest.Stub, machineRecordingRouter): the Files tab scopes to
+	// the request machine's own project_daemons row.
+	return seedFSProxyProjectOn(t, "test-daemon-id", "default")
+}
+
+// seedFSProxyProjectOn is seedFSProxyProject with the project checked out on
+// exactly the named machines of the test user (none: on no machine).
+func seedFSProxyProjectOn(t *testing.T, machines ...string) (*db.Repo, string, string) {
+	t.Helper()
 
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
@@ -293,10 +303,7 @@ func seedFSProxyProject(t *testing.T) (*db.Repo, string, string) {
 		Path:   base,
 		UserID: fsProxyTestUser,
 	}))
-	// The checkout is on the machines the test routers resolve to by default
-	// (toolexectest.Stub, machineRecordingRouter): the Files tab scopes to
-	// the request machine's own project_daemons row.
-	for _, machine := range []string{"test-daemon-id", "default"} {
+	for _, machine := range machines {
 		require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{ID: machine, UserID: fsProxyTestUser}))
 		require.NoError(t, repo.UpsertProjectDaemon(context.Background(), projectID, machine, base, nil))
 	}

@@ -24,6 +24,7 @@ import type { CatalogEntry } from "../../../hooks/catalog-queries";
 import { methodsUnavailableHere } from "../../../lib/integrationAvailability";
 import { useConnections, type Connection } from "../../../hooks/connection-queries";
 import { cn } from "../../../lib/utils";
+import { settingsPath } from "@/lib/paths";
 
 export interface ConnectionPickerProps {
   entry: CatalogEntry;
@@ -98,7 +99,7 @@ export function ConnectionPicker({ entry, value, onChange, onConnect, disabled =
               Change
             </button>
           ) : (
-            <a href="/settings/git-connections" className="shrink-0 text-xs font-medium text-primary-ink hover:underline">
+            <a href={settingsPath("git-connections")} className="shrink-0 text-xs font-medium text-primary-ink hover:underline">
               Manage
             </a>
           )}
@@ -129,7 +130,7 @@ export function ConnectionPicker({ entry, value, onChange, onConnect, disabled =
       ) : state === "delegated" ? (
         <CardInset className="text-sm">
           <p className="text-foreground">Uses your connected {integration.displayName} account.</p>
-          <a href="/settings/git-connections" className="text-xs font-medium text-primary-ink hover:underline">
+          <a href={settingsPath("git-connections")} className="text-xs font-medium text-primary-ink hover:underline">
             Manage in Settings
           </a>
         </CardInset>

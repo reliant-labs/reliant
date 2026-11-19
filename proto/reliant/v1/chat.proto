@@ -1299,11 +1299,24 @@ message ListMessagesRequest {
   // How finished tool calls' bodies are sent. Unset is
   // TOOL_BODY_MODE_FULL: inputs whole, results previewed.
   optional ToolBodyMode tool_bodies = 5;
+
+  // Leave ListMessagesResponse.total unset (0) instead of counting the
+  // chat's messages. Paging needs no total: before_seq, oldest_seq and
+  // has_more are the cursor. The count walks every message the chat has, so
+  // on a chat of a million messages it took longer than the read it rode on.
+  // A caller that pages by cursor and reads no total should set this; unset
+  // keeps the exact total for clients that read it. A server older than this field ignores it and
+  // counts as before.
+  bool skip_total = 6;
 }
 
 // ListMessagesResponse returns messages with content blocks
 message ListMessagesResponse {
   repeated Message messages = 1;
+  // Deprecated: set only when requested (skip_total unset); prefer cursors
+  // (oldest_seq, has_more). The number of messages in the transcript this
+  // page is a window into, or in the one thread a thread_id read names.
+  // 0 when the request set skip_total.
   int32 total = 2;
   int32 count = 3;
   bool has_more = 4;

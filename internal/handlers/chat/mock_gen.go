@@ -70,7 +70,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=f60a02a6a9ee2dcbdcf9d20bec99f10a9ec25bb284a337fab377b85e87967ffe
+// forge:hash=b53469447dfc4cd569e2b34bb4b7e97a2d09a13e6360a35db9490bc5c758bb0e
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -139,6 +139,7 @@ type MockRepository struct {
 	GetLatestUserUpdateSequenceFunc                          func(context.Context, string) (int64, error)
 	ListWorktreesByIDsFunc                                   func(context.Context, []string) ([]*db.Worktree, error)
 	ListMainWorktreesForUserFunc                             func(context.Context, string, *string) ([]*db.Worktree, error)
+	ListProjectsByIDsFunc                                    func(context.Context, []string) ([]*db.Project, error)
 	UnarchiveWorktreeFunc                                    func(context.Context, string) error
 	GetWorkflowCheckpointFunc                                func(context.Context, string) (*db.WorkflowCheckpoint, error)
 	ListLiveBackgroundSpawnsFunc                             func(context.Context, string) ([]*db.LiveBackgroundSpawn, error)
@@ -769,6 +770,15 @@ func (m *MockRepository) ListMainWorktreesForUser(ctx context.Context, userID st
 		return m.ListMainWorktreesForUserFunc(ctx, userID, projectID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListMainWorktreesForUser")
+}
+
+// ListProjectsByIDs records the call and delegates to ListProjectsByIDsFunc when set.
+func (m *MockRepository) ListProjectsByIDs(ctx context.Context, ids []string) ([]*db.Project, error) {
+	m.Recorder.Record("ListProjectsByIDs", ctx, ids)
+	if m.ListProjectsByIDsFunc != nil {
+		return m.ListProjectsByIDsFunc(ctx, ids)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListProjectsByIDs")
 }
 
 // UnarchiveWorktree records the call and delegates to UnarchiveWorktreeFunc when set.

@@ -45,7 +45,7 @@ import { STREAM_INVALIDATED_SCOPES } from "./streamInvalidatedScopes";
 import { showWorkflowCompletionNotification, showWorkflowFailedNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
 import { triggerRefetch, type RefetchType } from "./refetchStore";
-import { createCoalescedInvalidator } from "../lib/coalescedInvalidation";
+import { createCoalescedInvalidator, documentVisibility } from "../lib/coalescedInvalidation";
 import { setDaemonLastSeen } from "../api/transport";
 import { toast } from "../lib/toast-manager";
 import { publishDraftUpdate } from "./workflowDraftUpdates";
@@ -123,7 +123,21 @@ export function resetDaemonHeartbeatWatchdogs(): void {
  */
 export const STREAM_REFETCH_INTERVAL_MS = 2_000;
 
-const streamInvalidation = createCoalescedInvalidator(queryClient, STREAM_REFETCH_INTERVAL_MS);
+/**
+ * A slow list waits longer: the next stream-driven refetch starts no sooner
+ * than this multiple of the last one's duration after it started, so a list
+ * the server takes 3 s to answer is refetched every 6 s, not back to back.
+ * ListInbox's server p50 reached 1.6 s and p95 3.6 s on 2026-11-17, at about
+ * one call every 2.4 s from one user's tabs.
+ */
+export const STREAM_REFETCH_LATENCY_MULTIPLE = 2;
+
+// Hidden tabs and minimised windows refetch nothing: the stream marks their
+// lists stale, and they read them once when shown (coalescedInvalidation).
+const streamInvalidation = createCoalescedInvalidator(queryClient, STREAM_REFETCH_INTERVAL_MS, {
+  visibility: documentVisibility,
+  latencyMultiple: STREAM_REFETCH_LATENCY_MULTIPLE,
+});
 
 /** Drop pending stream-driven refetches. Exported for tests. */
 export function resetStreamInvalidation(): void {

@@ -59,7 +59,7 @@ nodes:
     command: make build
 ```
 
-A selector may contain `id`, `name`, `type` (`local`, `cloud` or `any`) and `labels`; every label listed must be present on the machine. Machines advertise labels to Reliant when they connect, but `reliant daemon start` has no flag for setting your own, so rely on `id`, `name` and `type` unless you know what a machine advertises.
+A selector may contain `id`, `name`, `type` (`local`, `cloud` or `any`) and `labels`; every label listed must be present on the machine. A machine advertises the labels it was started with (`reliant daemon start --label gpu=true`) when it connects, and a selector's `labels` match those while it is connected.
 
 The value can also be a CEL expression, such as `"{{ inputs.where }}"`, which may produce a string or a map with the same keys.
 

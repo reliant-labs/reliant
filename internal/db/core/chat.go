@@ -394,6 +394,15 @@ type ChatUpdate struct {
 	CreatedAt      time.Time                `json:"created_at"`
 }
 
+// WorktreeChat is a chat bound to a worktree (chats.worktree_id), as the
+// worktree tool's get shows it.
+type WorktreeChat struct {
+	ChatID     string
+	Title      string
+	State      ChatState
+	LastActive time.Time
+}
+
 // QueuedForMachineChat is a chat holding a message queued for its machine: its
 // last run ended because the machine never came up, and the message it was
 // started for is still owed a reply (chats.queued_for_machine_at).

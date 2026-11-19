@@ -1,6 +1,7 @@
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback } from 'react';
 import type { LaunchPlan } from './types';
+import { onboardingPath } from '@/lib/paths';
 
 // URL-backed onboarding plan state.
 //
@@ -26,7 +27,7 @@ export function useOnboardingPlan() {
       // React state. Returns the navigate promise so callers that follow
       // updatePlan with onNext() can `await` it.
       return navigate({
-        to: '/onboarding',
+        to: onboardingPath(),
         search: (prev) => {
           const current = (prev.plan ?? EMPTY_PLAN) as Partial<LaunchPlan>;
           const merged = { ...current, ...updates };
@@ -49,7 +50,7 @@ export function useOnboardingPlan() {
 
   const resetPlan = useCallback(() => {
     navigate({
-      to: '/onboarding',
+      to: onboardingPath(),
       search: (prev) => {
         const { plan: _omit, ...rest } = prev;
         return rest;

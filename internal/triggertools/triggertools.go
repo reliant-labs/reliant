@@ -145,6 +145,8 @@ func summarize(tr *reliantv1.Trigger) tools.TriggerSummary {
 		DaemonName:         tr.GetDaemonName(),
 		MachineState:       tr.GetMachineState(),
 		NoMachine:          tr.GetNoMachine(),
+		MachinePoolID:      tr.GetMachinePoolId(),
+		MachinePoolName:    tr.GetMachinePoolName(),
 		ConnectionID:       tr.GetConnectionId(),
 		WebhookURL:         tr.GetWebhookUrl(),
 		NextFireAt:         tr.GetNextFireAt(),

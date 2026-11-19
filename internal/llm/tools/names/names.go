@@ -135,16 +135,22 @@ const (
 
 	// Machine tools
 	ToolWaitForMachine = "wait_for_machine"
-	// The user's own machines: list them; start, stop or resize one.
-	ToolListMachines  = "list_machines"
-	ToolManageMachine = "manage_machine"
+	// The user's own machines: list them; start, stop, resize or label one;
+	// define or delete a machine pool.
+	ToolListMachines      = "list_machines"
+	ToolManageMachine     = "manage_machine"
+	ToolManageMachinePool = "manage_machine_pool"
+
+	// Ask a person to connect an integration, on an approval card.
+	ToolProposeConnection = "propose_connection"
 )
 
 // AllToolNames returns all known tool names for validation.
 var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
 	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
-	ToolWaitForMachine, ToolListMachines, ToolManageMachine,
+	ToolWaitForMachine, ToolListMachines, ToolManageMachine, ToolManageMachinePool,
+	ToolProposeConnection,
 	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,

@@ -10,7 +10,7 @@ const (
 	// every screenshot an agent ever took rides along on every later turn.
 	// That is not only cost: providers reject requests past a media budget —
 	// Anthropic refuses more than 100 images, and past 20 shrinks the per-image
-	// limit to 2000px, which a full-page screenshot exceeds — and a rejected
+	// limit to 3000px (which every request now fits, imagefit.ForRequest) — and a rejected
 	// request would be rebuilt from the same history on every retry, wedging
 	// the chat. Ten keeps the screenshots an agent is actively comparing.
 	MaxReplayedToolMediaParts = 10

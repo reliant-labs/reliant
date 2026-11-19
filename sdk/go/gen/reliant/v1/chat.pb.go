@@ -4433,7 +4433,15 @@ type ListMessagesRequest struct {
 	ThreadId *string `protobuf:"bytes,4,opt,name=thread_id,json=threadId,proto3,oneof" json:"thread_id,omitempty"`
 	// How finished tool calls' bodies are sent. Unset is
 	// TOOL_BODY_MODE_FULL: inputs whole, results previewed.
-	ToolBodies    *ToolBodyMode `protobuf:"varint,5,opt,name=tool_bodies,json=toolBodies,proto3,enum=reliant.v1.ToolBodyMode,oneof" json:"tool_bodies,omitempty"`
+	ToolBodies *ToolBodyMode `protobuf:"varint,5,opt,name=tool_bodies,json=toolBodies,proto3,enum=reliant.v1.ToolBodyMode,oneof" json:"tool_bodies,omitempty"`
+	// Leave ListMessagesResponse.total unset (0) instead of counting the
+	// chat's messages. Paging needs no total: before_seq, oldest_seq and
+	// has_more are the cursor. The count walks every message the chat has, so
+	// on a chat of a million messages it took longer than the read it rode on.
+	// A caller that pages by cursor and reads no total should set this; unset
+	// keeps the exact total for clients that read it. A server older than this field ignores it and
+	// counts as before.
+	SkipTotal     bool `protobuf:"varint,6,opt,name=skip_total,json=skipTotal,proto3" json:"skip_total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4503,14 +4511,25 @@ func (x *ListMessagesRequest) GetToolBodies() ToolBodyMode {
 	return ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED
 }
 
+func (x *ListMessagesRequest) GetSkipTotal() bool {
+	if x != nil {
+		return x.SkipTotal
+	}
+	return false
+}
+
 // ListMessagesResponse returns messages with content blocks
 type ListMessagesResponse struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Messages  []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
-	Total     int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
-	Count     int32                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
-	HasMore   bool                   `protobuf:"varint,4,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
-	OldestSeq int64                  `protobuf:"varint,5,opt,name=oldest_seq,json=oldestSeq,proto3" json:"oldest_seq,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Messages []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	// Deprecated: set only when requested (skip_total unset); prefer cursors
+	// (oldest_seq, has_more). The number of messages in the transcript this
+	// page is a window into, or in the one thread a thread_id read names.
+	// 0 when the request set skip_total.
+	Total     int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	Count     int32 `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	HasMore   bool  `protobuf:"varint,4,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	OldestSeq int64 `protobuf:"varint,5,opt,name=oldest_seq,json=oldestSeq,proto3" json:"oldest_seq,omitempty"`
 	// On a scroll-back page (before_seq set, no thread_id): the errors raised in
 	// the stretch of history this page loads, each at its place in the
 	// timeline. The chat snapshot carries only the errors of its own window.
@@ -8338,7 +8357,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\tthread_id\x18\x02 \x01(\tR\bthreadId\"\x85\x01\n" +
 	"\x17InterruptThreadResponse\x120\n" +
 	"\x14cancelled_tool_calls\x18\x01 \x01(\x05R\x12cancelledToolCalls\x128\n" +
-	"\x18undeliverable_tool_calls\x18\x02 \x03(\tR\x16undeliverableToolCalls\"\x91\x02\n" +
+	"\x18undeliverable_tool_calls\x18\x02 \x03(\tR\x16undeliverableToolCalls\"\xb0\x02\n" +
 	"\x13ListMessagesRequest\x12\x1f\n" +
 	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\x12\x1b\n" +
 	"\x06recent\x18\x02 \x01(\x05H\x00R\x06recent\x88\x01\x01\x12\"\n" +
@@ -8346,7 +8365,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"before_seq\x18\x03 \x01(\x03H\x01R\tbeforeSeq\x88\x01\x01\x12 \n" +
 	"\tthread_id\x18\x04 \x01(\tH\x02R\bthreadId\x88\x01\x01\x12>\n" +
 	"\vtool_bodies\x18\x05 \x01(\x0e2\x18.reliant.v1.ToolBodyModeH\x03R\n" +
-	"toolBodies\x88\x01\x01B\t\n" +
+	"toolBodies\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"skip_total\x18\x06 \x01(\bR\tskipTotalB\t\n" +
 	"\a_recentB\r\n" +
 	"\v_before_seqB\f\n" +
 	"\n" +

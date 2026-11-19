@@ -662,9 +662,14 @@ type ProjectCheckoutMissing struct {
 	InstallError string `protobuf:"bytes,5,opt,name=install_error,json=installError,proto3" json:"install_error,omitempty"`
 	// The repository the project comes from. Empty for a plain folder, which
 	// cannot be cloned anywhere.
-	RemoteUrl     string `protobuf:"bytes,6,opt,name=remote_url,json=remoteUrl,proto3" json:"remote_url,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RemoteUrl string `protobuf:"bytes,6,opt,name=remote_url,json=remoteUrl,proto3" json:"remote_url,omitempty"`
+	// The requesting user's other machines that DO have an installed checkout
+	// of the project, oldest install first: where to switch to. Empty when no
+	// other machine of theirs has it, and from a server that predates the
+	// field.
+	AvailableDaemonIds []string `protobuf:"bytes,7,rep,name=available_daemon_ids,json=availableDaemonIds,proto3" json:"available_daemon_ids,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ProjectCheckoutMissing) Reset() {
@@ -737,6 +742,13 @@ func (x *ProjectCheckoutMissing) GetRemoteUrl() string {
 		return x.RemoteUrl
 	}
 	return ""
+}
+
+func (x *ProjectCheckoutMissing) GetAvailableDaemonIds() []string {
+	if x != nil {
+		return x.AvailableDaemonIds
+	}
+	return nil
 }
 
 type GetFileContentRequest struct {
@@ -2603,7 +2615,7 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\x05files\x18\x01 \x03(\v2\x14.reliant.v1.FileNodeR\x05files\x12\x1c\n" +
 	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12\x1d\n" +
 	"\n" +
-	"node_count\x18\x03 \x01(\x05R\tnodeCount\"\xe4\x01\n" +
+	"node_count\x18\x03 \x01(\x05R\tnodeCount\"\x96\x02\n" +
 	"\x16ProjectCheckoutMissing\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
@@ -2612,7 +2624,8 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\x05state\x18\x04 \x01(\x0e2 .reliant.v1.ProjectCheckoutStateR\x05state\x12#\n" +
 	"\rinstall_error\x18\x05 \x01(\tR\finstallError\x12\x1d\n" +
 	"\n" +
-	"remote_url\x18\x06 \x01(\tR\tremoteUrl\"\xaa\x01\n" +
+	"remote_url\x18\x06 \x01(\tR\tremoteUrl\x120\n" +
+	"\x14available_daemon_ids\x18\a \x03(\tR\x12availableDaemonIds\"\xaa\x01\n" +
 	"\x15GetFileContentRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +

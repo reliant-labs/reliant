@@ -20,6 +20,7 @@ import { cn } from "../lib/utils";
 import type { DaemonWaitState as WaitState } from "../lib/daemon-wait";
 import { useDaemonWaitSpeaker } from "../hooks/useDaemonWaitSpeaker";
 import { AddMachineSheet } from "./Machines/AddMachineSheet";
+import { settingsPath } from "@/lib/paths";
 
 export interface DaemonWaitStateProps {
   state: WaitState;
@@ -86,7 +87,7 @@ export function DaemonWaitState({
   });
 
   const goToMachines = () =>
-    navigate({ to: "/settings/$section", params: { section: "machines" } });
+    navigate({ to: settingsPath("machines") });
 
   // Only the speaker is a live region. Three echoes of one state announced
   // three times bury the phase change that is the thing worth hearing.

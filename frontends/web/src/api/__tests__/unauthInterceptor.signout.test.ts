@@ -25,7 +25,7 @@
  *   - a 401 on a request that presented NO token must not sign out;
  *   - a 401 on a request that DID present one still must.
  */
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { ConnectError, Code } from '@connectrpc/connect'
 
 const mocks = vi.hoisted(() => ({
@@ -100,6 +100,15 @@ async function loadUnauthInterceptor(): Promise<LooseInterceptor> {
   return chain[chain.length - 3] as unknown as LooseInterceptor
 }
 
+// The first import of transport.ts transforms its whole module graph, ~1s on
+// an idle machine and over 5s on a loaded CI runner. Paid inside a test body,
+// that cost timed out whichever test ran first (merge queue, 2026-11-18). Paid
+// here, under the hook timeout, every test only re-evaluates cached modules
+// after vi.resetModules().
+beforeAll(async () => {
+  await import('../transport')
+})
+
 describe('unauthInterceptor — 401 sign-out discrimination', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -122,7 +131,7 @@ describe('unauthInterceptor — 401 sign-out discrimination', () => {
     vi.unstubAllGlobals()
   })
 
-  it('does NOT sign out on a 401 for a request that carried no token', async () => {
+  it('keeps the session on a 401 for a request that presented no token', async () => {
     const interceptor = await loadUnauthInterceptor()
     const req = buildRequest() // no Authorization header — the reported bug
     const next = vi.fn(async () => {

@@ -1,6 +1,6 @@
 /**
- * `main.tsx` preloads Monaco at startup, before React mounts. Monaco is
- * fetched from a CDN (see `lib/monacoManager`), so on a phone that is multiple
+ * `main.tsx` prefetches Monaco once the page is idle. Monaco is its own
+ * chunk of this build (see `lib/monacoManager`), so on a phone that is multiple
  * megabytes for something no `/m/*` screen ever renders — mobile diffs and file
  * views go through the Prism-based `LightweightDiffViewer`.
  *

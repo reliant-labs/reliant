@@ -17,6 +17,7 @@ import { useChildRuns } from "@/hooks/run-queries";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { useCapability } from "@/lib/surfaceContext";
 import { RunStatusDot } from "./RunStatusIndicator";
+import { runPath, runsPath } from "@/lib/paths";
 
 export function ChildRunsStrip({ chatId }: { chatId: string }) {
   // No Runs area on this surface (the /m header): nothing to link to, so do
@@ -37,7 +38,7 @@ export function ChildRunsStrip({ chatId }: { chatId: string }) {
     >
       <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       <Link
-        to="/workflows/runs"
+        to={runsPath()}
         search={{ parent: chatId }}
         className="rounded-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
@@ -49,8 +50,7 @@ export function ChildRunsStrip({ chatId }: { chatId: string }) {
           return (
             <li key={run.chatId} className="min-w-0">
               <Link
-                to="/workflows/runs/$runId"
-                params={{ runId: run.chatId }}
+                to={runPath(run.chatId)}
                 title={`${run.title || "Untitled run"} · ${status.label}`}
                 className="inline-flex max-w-[12rem] items-center gap-1.5 rounded-full border border-border/60 bg-background px-2 py-0.5 hover:bg-muted/50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >

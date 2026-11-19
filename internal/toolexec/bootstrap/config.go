@@ -82,6 +82,12 @@ type DaemonBootstrapConfig struct {
 	DataDir   string
 	Name      string // Human-friendly daemon name (default: hostname)
 
+	// MachineLabels are the durable labels this machine declares
+	// (`reliant daemon start --label k=v`, DaemonConfig.labels), sent on every
+	// registration. The server merges them into the machine's labels, which
+	// decide machine-pool membership. Nil declares none.
+	MachineLabels map[string]string
+
 	// ServerURL is the API server origin (scheme://host:port) these
 	// credentials belong to. Empty in server mode (the gateway dials in and
 	// already knows our identity).

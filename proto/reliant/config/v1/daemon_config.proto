@@ -328,6 +328,19 @@ message DaemonConfig {
     },
     (buf.validate.field).int32 = {gte: 0}
   ];
+
+  // Durable labels this machine declares, each "key=value" (a short slug on
+  // each side). The daemon sends them on every registration and the server
+  // merges them into the machine's labels: each key is set to its value,
+  // labels not named here are left alone. Labels decide machine-pool
+  // membership, so a box started with pool=pipeline joins the pipeline pool
+  // when it first connects. `reliant daemon start --label k=v` (repeatable,
+  // or comma-separated) replaces this list; the flag is registered by hand
+  // because a generated flag for a repeated field takes only its last use.
+  repeated string labels = 31 [(forge.v1.config) = {
+    env_var: "RELIANT_DAEMON_LABELS"
+    description: "Comma-separated key=value durable labels this machine declares (merged into its labels on every connect)"
+  }];
 }
 
 // DaemonStatusConfig is `reliant daemon status`'s config.

@@ -84,6 +84,24 @@ function forgeServiceTripwires(): MockHandlers {
   );
 }
 
+/**
+ * The control-plane reads these pages make that the service mocks below do
+ * not cover, answered so that none fails into a retry. Unanswered, they did:
+ * the org lookup's retry ran on the app's QueryClient timer, after this
+ * file's afterEach had put the transport away, and was sent for real in
+ * whichever test ran next (#2937).
+ *
+ * The person belongs to no org, so the org-scoped observability reads stay
+ * off (orgs.ts currentOrgId resolves null); they are their own tests' subject.
+ * The release ledger, promotions and deploy runs are empty.
+ */
+const CONTROL_PLANE_READS: MockHandlers = {
+  "OrganizationService.ListMyOrganizations": { response: { organizations: [], defaultOrgId: "" } },
+  "DeployService.ListReleases": { response: {} },
+  "DeployService.ListPromotions": { response: {} },
+  "DeployService.ListDeployAttempts": { response: {} },
+};
+
 const routeState: { env: string; tab?: string } = { env: "prod" };
 const navigate = vi.fn();
 
@@ -270,6 +288,32 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/cloudEnvs")>()),
   getEnvironmentStatus: (id: string) => getEnvironmentStatus(id),
   listEnvironmentPromotions: (id: string) => listEnvironmentPromotions(id),
+  // The Environments page's kept-databases card: none kept.
+  listRetainedDatabases: () => Promise.resolve([]),
+}));
+
+// The observability and identity reads resolve their org through
+// ListMyOrganizations. No org here: those reads stay off, and nothing reaches
+// the network after a test has finished (the request used to land in
+// whichever test ran next).
+vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
+  currentOrgId: () => Promise.resolve(null),
+}));
+
+// The env header asks the caller's role in the active org (orgAuthority.ts).
+vi.mock("@/hooks/useOrgs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useOrgs")>()),
+  useActiveOrg: () => ({
+    orgs: [],
+    active: { id: "org_1", name: "Acme", slug: "acme", role: "owner", isOwner: true, isDefault: true },
+    activeOrgId: "org_1",
+    defaultOrgId: "org_1",
+    canSwitch: false,
+    isLoading: false,
+    error: null,
+    select: () => {},
+  }),
 }));
 
 // The managed store IS the control plane, so the secrets half of Live is a
@@ -343,7 +387,7 @@ afterEach(() => setTransport(null));
 
 beforeEach(() => {
   daemonCalls.length = 0;
-  setTransport(mockTransport(forgeServiceTripwires()));
+  setTransport(mockTransport({ ...forgeServiceTripwires(), ...CONTROL_PLANE_READS }));
   routeState.env = "prod";
   routeState.tab = undefined;
   consoleState.forgeProject = "hounders";
@@ -616,8 +660,7 @@ describe("a queued deploy", () => {
     await user.click(within(banner).getByTestId("queued-deploy-set-up-billing"));
     expect(navigate).toHaveBeenCalledWith(
       expect.objectContaining({
-        to: "/settings/$section",
-        params: { section: "billing" },
+        to: "/settings/billing",
         search: expect.objectContaining({ tab: "usage", from: "forge", returnTo: expect.stringMatching(/^\//) }),
       })
     );

@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
-import { ON_WORKFLOWS_HREF } from "../../lib/workflowsArea";
+import { onWorkflowsHref } from "../../lib/workflowsArea";
 import { useViewerStore } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
 import { focusChatInput } from "../../hooks/useFocusManager";
@@ -27,6 +27,7 @@ import type { SettingsSection } from "../../routeSchemas";
 import { showDeveloperSettings } from "../Settings/SettingsNavigation";
 import { useTourNavigation } from "../Onboarding/useTourNavigation";
 import { availableJourneys } from "../Onboarding/journeys/registry";
+import { inboxPath, runsPath, settingsPath, workflowsPath } from "@/lib/paths";
 
 interface Command {
   id: string;
@@ -103,7 +104,7 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
     }, [close]);
 
     const goTo = (section: SettingsSection) => () =>
-      navigate({ to: '/settings/$section', params: { section } });
+      navigate({ to: settingsPath(section) });
     const isAt = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
 
     /** Open a workspace viewer for the current project, going there first if needed. */
@@ -144,7 +145,7 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         category: "navigation",
         keywords: ["workflow", "automation", "flow"],
         available: pathname !== "/workflows" && !isAt("/workflows/library"),
-        action: () => navigate({ to: '/workflows' }),
+        action: () => navigate({ to: workflowsPath() }),
       },
       {
         id: "automations",
@@ -154,7 +155,7 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         category: "navigation",
         keywords: ["schedule", "trigger", "cron", "automation"],
         available: true,
-        action: () => navigate({ href: ON_WORKFLOWS_HREF }),
+        action: () => navigate({ href: onWorkflowsHref() }),
       },
       {
         id: "inbox",
@@ -164,7 +165,7 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         category: "navigation",
         keywords: ["approval", "question", "waiting", "needs you", "notifications"],
         available: !isAt("/inbox"),
-        action: () => navigate({ to: '/inbox' }),
+        action: () => navigate({ to: inboxPath() }),
       },
       {
         id: "runs",
@@ -174,7 +175,7 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         category: "navigation",
         keywords: ["run", "history", "execution", "agent", "started"],
         available: !isAt("/workflows/runs"),
-        action: () => navigate({ to: '/workflows/runs' }),
+        action: () => navigate({ to: runsPath() }),
       },
       // Settings sections
       {
@@ -185,7 +186,7 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         category: "settings",
         keywords: ["preferences", "config", "configuration"],
         available: !isAt("/settings"),
-        action: () => navigate({ to: '/settings' }),
+        action: () => navigate({ to: settingsPath() }),
       },
       {
         id: "shortcuts",

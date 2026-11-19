@@ -30,7 +30,7 @@
 
 import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
 
-import { isObsNavView, OBS_NAV_VIEWS, ORG_USAGE_PATH } from './components/Forge/Console/paths'
+import { isObsNavView, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
 import {
   forgeConsoleActivitySearchSchema,
   forgeConsoleDashboardSearchSchema,
@@ -286,7 +286,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     getParentRoute: () => consoleRoute,
     path: 'settings',
     beforeLoad: () => {
-      throw redirect({ href: ORG_USAGE_PATH, replace: true })
+      throw redirect({ href: orgUsagePath(), replace: true })
     },
   })
 

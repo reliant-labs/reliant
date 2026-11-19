@@ -667,9 +667,15 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolWaitForMachine, (*ToolsFactory).WaitForMachine, []ToolTag{TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementServer, true},
 		// The user's own machines, through the control plane as the user
 		// (machine_tools.go). Loaded on demand; manage_machine's start and
-		// resize need an approval card.
+		// resize need an approval card, as do its label action and every
+		// manage_machine_pool change (machine_pool_tools.go).
 		{ToolListMachines, (*ToolsFactory).ListMachines, []ToolTag{TagReadOnly}, PlacementServer, false},
 		{ToolManageMachine, (*ToolsFactory).ManageMachine, nil, PlacementServer, false},
+		{ToolManageMachinePool, (*ToolsFactory).ManageMachinePool, nil, PlacementServer, false},
+		// Asks a person, on an approval card, to connect an integration in
+		// the connection dialog (connection_proposal_tool.go). Loaded on
+		// demand; the agent never sees the credential.
+		{ToolProposeConnection, (*ToolsFactory).ProposeConnection, nil, PlacementServer, false},
 		{ToolShellKill, (*ToolsFactory).ShellKill, []ToolTag{TagExecution, TagShell, TagCodingDefault}, PlacementDaemon, false},
 
 		// prove_test reverts the fix, runs a test expecting failure, restores,

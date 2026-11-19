@@ -38,6 +38,13 @@ import (
 // stream stays open until the test ends.
 func connectAs(t *testing.T, svc *Service, userID, boundID, assertedID string) (*connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], error) {
 	t.Helper()
+	return connectRegistering(t, svc, userID, boundID,
+		&reliantv1.DaemonRegister{DaemonId: assertedID, Hostname: "h-" + userID, Platform: "linux", DaemonType: "local"})
+}
+
+// connectRegistering is connectAs with the whole registration message.
+func connectRegistering(t *testing.T, svc *Service, userID, boundID string, reg *reliantv1.DaemonRegister) (*connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], error) {
+	t.Helper()
 	routes := http.NewServeMux()
 	svc.Register(routes, connect.WithInterceptors(svcerr.Interceptor()))
 	mux := serverkit.NewStreams().Install(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,9 +74,7 @@ func connectAs(t *testing.T, svc *Service, userID, boundID, assertedID string) (
 		stream.RequestHeader().Set("X-Test-Bound-Daemon", boundID)
 	}
 	t.Cleanup(func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() })
-	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
-		Register: &reliantv1.DaemonRegister{DaemonId: assertedID, Hostname: "h-" + userID, Platform: "linux", DaemonType: "local"},
-	}}))
+	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{Register: reg}}))
 	msg, err := stream.Receive()
 	if err != nil {
 		return nil, err
@@ -277,6 +282,13 @@ func (parkedPodHandler) ConnectGateway(ctx context.Context, _ *connect.BidiStrea
 // DaemonConnector does after the pod's DaemonRegister arrives.
 func dialInPod(t *testing.T, svc *Service, userID, daemonID string) *OutboundConn {
 	t.Helper()
+	return dialInPodRegistering(t, svc, userID, daemonID,
+		&reliantv1.DaemonRegister{Hostname: "ws-pod", Platform: "linux", DaemonType: "cloud"})
+}
+
+// dialInPodRegistering is dialInPod with the pod's whole registration message.
+func dialInPodRegistering(t *testing.T, svc *Service, userID, daemonID string, reg *reliantv1.DaemonRegister) *OutboundConn {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(parkedPodHandler{}))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
@@ -297,8 +309,7 @@ func dialInPod(t *testing.T, svc *Service, userID, daemonID string) *OutboundCon
 
 	regCtx, regCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer regCancel()
-	out, err := svc.RegisterOutboundConnection(regCtx, userID, daemonID, "10.0.0.1", 9190,
-		&reliantv1.DaemonRegister{Hostname: "ws-pod", Platform: "linux", DaemonType: "cloud"}, stream, cancel)
+	out, err := svc.RegisterOutboundConnection(regCtx, userID, daemonID, "10.0.0.1", 9190, reg, stream, cancel)
 	require.NoError(t, err)
 	return out
 }

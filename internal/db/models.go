@@ -68,6 +68,9 @@ type (
 	ArchivedChatCursor = core.ArchivedChatCursor
 )
 
+// WorktreeChat is a chat bound to a worktree: see core.
+type WorktreeChat = core.WorktreeChat
+
 // QueuedForMachineChat, QueuedMachine, PausedForMachineChat and
 // WaitingForMachineRun: see core.
 type (
@@ -538,9 +541,9 @@ type ChatStepExecution = core.ChatStepExecution
 // (position truth for resume-at-position).
 type WorkflowCheckpoint = core.WorkflowCheckpoint
 
-// ============================================================================
+// =====================================================================
 // Node Execution State Types
-// ============================================================================
+// =====================================================================
 // These types support real-time streaming of workflow execution state for UI visualization
 
 // NodeExecutionStatus represents the lifecycle state of a workflow node.
@@ -575,16 +578,16 @@ type NodeExecutionState struct {
 	Metadata      map[string]string   `json:"metadata,omitempty"`       // Additional node-specific metadata
 }
 
-// ============================================================================
+// =====================================================================
 // Preset Types
-// ============================================================================
+// =====================================================================
 
 // Preset is an alias to the shared core preset model.
 type Preset = core.Preset
 
-// ============================================================================
+// =====================================================================
 // Trigger Types
-// ============================================================================
+// =====================================================================
 
 // Trigger is an alias to the shared core trigger model — a standing
 // instruction to start a run without a human typing.
@@ -597,9 +600,9 @@ type TriggerEvent = core.TriggerEvent
 // TriggerFilters contains options for filtering triggers.
 type TriggerFilters = core.TriggerFilters
 
-// ============================================================================
+// =====================================================================
 // Question Types
-// ============================================================================
+// =====================================================================
 
 // QuestionStatus represents the status of a question (stored as INTEGER in DB)
 const (

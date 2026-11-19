@@ -8,19 +8,18 @@ import { cn } from "../../lib/utils";
  * chats rather than as one more label beside them. Decorative — the project's
  * name is always rendered beside it.
  *
- * An inset (bg-background + border) on the sidebar's bg-card, per the
- * web-styling elevation rule; the project holding the open chat takes the
- * primary tint, as its name does.
+ * A badge glyph (16px, the letter at the badge size) in an ink wash. It does not
+ * turn blue for the project holding the open chat: the open chat's row says
+ * that, and a selection is not a link.
  */
-export function ProjectMark({ name, active = false, className }: { name: string; active?: boolean; className?: string }) {
+export function ProjectMark({ name, className }: { name: string; className?: string }) {
   const initial = Array.from(name.trim())[0]?.toUpperCase() ?? "?";
   return (
     <span
       aria-hidden="true"
       data-testid="project-mark"
       className={cn(
-        "flex h-5 w-5 shrink-0 items-center justify-center rounded border text-2xs font-semibold leading-none",
-        active ? "border-primary/40 bg-primary/10 text-primary-ink" : "border-border/60 bg-background text-muted-foreground",
+        "flex size-4 shrink-0 items-center justify-center rounded-md bg-foreground/[0.08] text-2xs font-semibold leading-none text-foreground",
         className,
       )}
     >

@@ -15,6 +15,7 @@ import { AddProviderPicker, type ReliantOffer } from "./AddProviderPicker";
 import { ConnectPanel } from "./ConnectPanel";
 import { providerConfigs } from "./providerCatalog";
 import { ProviderLogo } from "../../icons/ProviderLogo";
+import { settingsPath } from "@/lib/paths";
 
 /**
  * Reliant credits as the picker and the empty state offer them: connected,
@@ -53,7 +54,7 @@ function useReliantOffer(accounts: ProviderAccount[], onError: (message: string)
         }
       })();
     },
-    onOpenBilling: () => void navigate({ to: "/settings/$section", params: { section: "billing" } }),
+    onOpenBilling: () => void navigate({ to: settingsPath("billing") }),
   };
 }
 
@@ -87,7 +88,7 @@ export function ProvidersSection({ variant = "desktop", pickerOpen, onPickerOpen
   const reliant = useReliantOffer(accounts, setError);
 
   const openReliantBilling = reliantAIAvailable
-    ? () => void navigate({ to: "/settings/$section", params: { section: "billing" }, search: { tab: "ai" } })
+    ? () => void navigate({ to: settingsPath("billing"), search: { tab: "ai" } })
     : undefined;
 
   const picker = pickerOpen && (

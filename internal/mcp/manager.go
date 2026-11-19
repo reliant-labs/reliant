@@ -56,6 +56,11 @@ const (
 	// other half of the same incident, and that is what RequiresFiles (a server
 	// never starts where it has nothing to index) addresses.
 	maxDirScopedClients = 4
+
+	// maxSessionRestartNotes bounds Manager.sessionRestarts: a note waits for a
+	// session's next call, and a session that never calls again must not hold
+	// one for the daemon's lifetime.
+	maxSessionRestartNotes = 1024
 )
 
 // isLazyStartServer reports whether a server should be started on first tool
@@ -150,6 +155,14 @@ type Manager struct {
 	// chrome-devtools, not one per thread.
 	sessionClients map[string]Client
 
+	// sessionRestarts remembers, per session key, why a session's private
+	// client was dropped after it had run (the server was removed, or the
+	// client was reaped idle), until that session's next client takes it. The
+	// replacement is a new process with none of the old one's pages or
+	// storage, and its first tool result says so (lazyClient.restartReason).
+	// Bounded by maxSessionRestartNotes.
+	sessionRestarts map[string]string
+
 	// dirClients holds per-project private clients for dir-scoped servers (see
 	// dirscope.go), keyed by dirClientKey. Separate from clients for the same
 	// reason sessionClients is: these are the same logical server spawned again
@@ -243,6 +256,7 @@ func NewManager(role Role, opts ...ManagerOption) *Manager {
 		projectServers:      make(map[string]map[string]bool),
 		serverConfigs:       make(map[string]config.MCPServer),
 		sessionClients:      make(map[string]Client),
+		sessionRestarts:     make(map[string]string),
 		dirClients:          make(map[string]Client),
 		dirClientLastUse:    make(map[string]time.Time),
 		preconditions:       make(map[string]preconditionVerdict),
@@ -453,10 +467,21 @@ func (m *Manager) AddServer(ctx context.Context, name string, cfg config.MCPServ
 	}
 
 	m.mu.Lock()
+	replaced := m.clients[name]
 	m.clients[name] = client
 	m.serverConfigs[name] = cfg
 	delete(m.nextRetryAt, name)
 	m.mu.Unlock()
+
+	// A second registration under a live name used to overwrite the map entry
+	// and leak the first client's process, silently. Close it, and say so.
+	if replaced != nil && replaced != client {
+		logging.WarnContext(ctx, "Replacing a running MCP server that was registered again without being removed",
+			"name", name, "type", cfg.Type)
+		if err := replaced.Close(); err != nil {
+			logging.WarnContext(ctx, "Failed to close the replaced MCP server", "name", name, "error", err)
+		}
+	}
 
 	m.healthMu.Lock()
 	m.healthChecks[name] = &healthStatus{
@@ -480,19 +505,34 @@ func (m *Manager) AddServer(ctx context.Context, name string, cfg config.MCPServ
 
 // RemoveServer removes and closes an MCP server connection, along with any
 // per-session and per-project clients spawned from it.
-func (m *Manager) RemoveServer(name string) error {
+//
+// reason says who asked and why ("disabled in project X's MCP config",
+// "manage_server remove", …). It is logged with every removal — a removal used
+// to leave no trace, so a browser that vanished mid-session could not be told
+// apart from one whose process died (#2818) — and each session that loses a
+// running client is told, on its next call, that its server restarted.
+func (m *Manager) RemoveServer(name, reason string) error {
 	m.mu.Lock()
 	client, exists := m.clients[name]
 	if exists {
 		delete(m.clients, name)
 	}
 	delete(m.serverConfigs, name)
+	var projects []string
+	for projectPath, servers := range m.projectServers {
+		if servers[name] {
+			projects = append(projects, projectPath)
+		}
+	}
 	sessionPrefix := name + sessionKeySeparator
 	var sessionClients []Client
 	for key, sc := range m.sessionClients {
 		if strings.HasPrefix(key, sessionPrefix) {
 			sessionClients = append(sessionClients, sc)
 			delete(m.sessionClients, key)
+			if lc, ok := sc.(*lazyClient); ok && lc.hasStarted() {
+				m.rememberSessionRestartLocked(key, "the MCP server was removed: "+reason)
+			}
 		}
 	}
 	// A dir-scoped server's real processes live here, one per project, and they
@@ -516,6 +556,15 @@ func (m *Manager) RemoveServer(name string) error {
 	delete(m.nextRetryAt, name)
 	m.untrackProjectServer(name)
 	m.mu.Unlock()
+
+	if exists || len(sessionClients) > 0 || len(dirClients) > 0 {
+		logging.Info("Removing MCP server",
+			"name", name,
+			"reason", reason,
+			"projects", projects,
+			"session_clients", len(sessionClients),
+			"dir_clients", len(dirClients))
+	}
 
 	for _, sc := range sessionClients {
 		if err := sc.Close(); err != nil {
@@ -626,6 +675,10 @@ func (m *Manager) sessionClientFor(serverName, session string) (Client, bool) {
 		return m.clientFactory(serverName, cfg)
 	})
 	lc.onReap = func() { m.evictSessionClient(key, lc) }
+	if reason, ok := m.sessionRestarts[key]; ok {
+		delete(m.sessionRestarts, key)
+		lc.setRestartReason(reason)
+	}
 	m.sessionClients[key] = lc
 	m.mu.Unlock()
 
@@ -791,12 +844,32 @@ func (m *Manager) evictDirClient(key string, client Client) {
 // evictSessionClient drops a session client once its subprocess has been reaped
 // for inactivity. The pointer check keeps a late callback from a superseded
 // client from removing its replacement.
+//
+// The reaped client's restart reason moves to sessionRestarts, so the
+// session's next client — a new process — reports it.
 func (m *Manager) evictSessionClient(key string, client Client) {
 	m.mu.Lock()
 	if current, ok := m.sessionClients[key]; ok && current == client {
 		delete(m.sessionClients, key)
+		if lc, ok := client.(*lazyClient); ok {
+			if reason := lc.takeRestartReason(); reason != "" {
+				m.rememberSessionRestartLocked(key, reason)
+			}
+		}
 	}
 	m.mu.Unlock()
+}
+
+// rememberSessionRestartLocked records why a session's client was dropped, for
+// its next client to report. m.mu must be held.
+func (m *Manager) rememberSessionRestartLocked(key, reason string) {
+	if _, ok := m.sessionRestarts[key]; !ok && len(m.sessionRestarts) >= maxSessionRestartNotes {
+		for stale := range m.sessionRestarts {
+			delete(m.sessionRestarts, stale)
+			break
+		}
+	}
+	m.sessionRestarts[key] = reason
 }
 
 // CallTool calls a tool on a specific MCP server.
@@ -883,6 +956,7 @@ func (m *Manager) Close() error {
 	}
 	m.clients = make(map[string]Client)
 	m.sessionClients = make(map[string]Client)
+	m.sessionRestarts = make(map[string]string)
 	m.dirClients = make(map[string]Client)
 	m.dirClientLastUse = make(map[string]time.Time)
 	m.preconditions = make(map[string]preconditionVerdict)
@@ -1207,7 +1281,8 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 		if !serverCfg.Enabled {
 			logging.DebugContext(ctx, "Skipping disabled MCP server from project config", "name", name)
 			if runningServers[name] {
-				if err := m.RemoveServer(name); err != nil && !strings.Contains(err.Error(), "not found") {
+				reason := fmt.Sprintf("disabled in the MCP config of project %s", normalizedProjectPath)
+				if err := m.RemoveServer(name, reason); err != nil && !strings.Contains(err.Error(), "not found") {
 					logging.WarnContext(ctx, "Failed to stop disabled MCP server", "name", name, "error", err)
 				}
 			}
@@ -1325,7 +1400,8 @@ func (m *Manager) AddProjectServer(ctx context.Context, projectPath, serverName 
 		return fmt.Errorf("project path is required")
 	}
 
-	if err := m.RemoveProjectServer(normalizedProjectPath, serverName); err != nil && !strings.Contains(err.Error(), "not found") {
+	reason := "replaced by a new registration"
+	if err := m.RemoveProjectServer(normalizedProjectPath, serverName, reason); err != nil && !strings.Contains(err.Error(), "not found") {
 		return err
 	}
 
@@ -1338,16 +1414,20 @@ func (m *Manager) AddProjectServer(ctx context.Context, projectPath, serverName 
 }
 
 // RemoveProjectServer removes and closes a project-scoped server connection.
-func (m *Manager) RemoveProjectServer(projectPath, serverName string) error {
+// reason is logged as RemoveServer's is.
+//
+// The server is name-scoped, so removing it for one project removes it for
+// every project and session sharing it; the log names them all.
+func (m *Manager) RemoveProjectServer(projectPath, serverName, reason string) error {
 	if !m.isProjectServer(projectPath, serverName) {
 		return fmt.Errorf("server %s not found", serverName)
 	}
-	return m.RemoveServer(serverName)
+	return m.RemoveServer(serverName, fmt.Sprintf("%s (requested for project %s)", reason, normalizeProjectPath(projectPath)))
 }
 
 // RestartProjectServer restarts a project-scoped server with updated config.
 func (m *Manager) RestartProjectServer(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error {
-	if err := m.RemoveProjectServer(projectPath, serverName); err != nil && !strings.Contains(err.Error(), "not found") {
+	if err := m.RemoveProjectServer(projectPath, serverName, "restart"); err != nil && !strings.Contains(err.Error(), "not found") {
 		return err
 	}
 	if !cfg.Enabled {

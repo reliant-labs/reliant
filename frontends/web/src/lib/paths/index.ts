@@ -1,0 +1,295 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * EVERY APP DESTINATION'S PATH, built in one place.
+ *
+ * A link, a `navigate`, a redirect or a `window.location` hop to a page of
+ * this app names its target with one of these builders, never with a string:
+ * `navigate({ to: runPath(chatId) })`, `<Link to={settingsPath("ai")}>`,
+ * `href={inboxPath()}`. The guard `__tests__/navPaths.guard.test.ts` fails on
+ * a path literal anywhere else. The console's pages are built the same way, by
+ * `components/Forge/Console/paths.ts` (consolePath, orgPath).
+ *
+ * Why: the unified-shell design (control-plane
+ * docs/design/unified-shell-and-projects.md, U3) puts the org in the URL of
+ * every org-scoped page. With every path built here, that is a change to
+ * `withOrg` (./org.ts) and to the few builders whose org form is not their
+ * path behind a prefix, rather than to ~300 call sites.
+ *
+ * Each builder returns a PATH (no query string): TanStack's `to` takes the
+ * search separately (`navigate({ to: settingsPath("billing"), search: { tab } })`),
+ * and `withSearch` (./search.ts) joins the two for an href. Path segments are
+ * encoded with encodeURIComponent, which is what the router does to a `$param`,
+ * so `to: runPath(id)` and the old `to: "/workflows/runs/$runId", params` are
+ * the same URL (`paths.test.ts` holds every builder to today's URL).
+ */
+
+import type { ForgeSettingsSection } from "../../components/ForgeShell/ForgeSettingsPage";
+import type { SettingsSection } from "../../routeSchemas";
+import { withOrg, type PathContext } from "./org";
+
+export { withOrg, type PathContext } from "./org";
+export { withSearch } from "./search";
+
+const seg = encodeURIComponent;
+
+// ── Chats and projects ──────────────────────────────────────────────────────
+
+/** The chat home: every project's chats. (`/o/<org>/` in U3.) */
+export function homePath(ctx?: PathContext): string {
+  return withOrg("/", ctx);
+}
+
+/** The chat home filtered to one project (the sidebar's project filter). */
+export function projectPath(projectId: string, ctx?: PathContext): string {
+  return withOrg(`/project/${seg(projectId)}`, ctx);
+}
+
+/** Everything waiting on the person, across every chat and project. */
+export function inboxPath(ctx?: PathContext): string {
+  return withOrg("/inbox", ctx);
+}
+
+// ── Apps (forge) ────────────────────────────────────────────────────────────
+
+/** The org's apps (components/Apps/AppsPage.tsx); also the forge shell's home. */
+export function appsPath(ctx?: PathContext): string {
+  return withOrg("/apps", ctx);
+}
+
+/** The forge shell's hosted sites (ForgeShell/ForgeSitesPage.tsx). */
+export function sitesPath(ctx?: PathContext): string {
+  return withOrg("/sites", ctx);
+}
+
+/** The forge shell's usage and spend (ForgeShell). */
+export function usagePath(ctx?: PathContext): string {
+  return withOrg("/usage", ctx);
+}
+
+/**
+ * The bare console entry, `/forge`: it resolves `?project=` (an old link's
+ * app) to that app's console, and otherwise redirects to the apps.
+ */
+export function forgeLandingPath(ctx?: PathContext): string {
+  return withOrg("/forge", ctx);
+}
+
+/** The forge demo console, on fixture data (components/Forge/Demo). Not org-scoped: it reads nothing of the person's. */
+export function forgeDemoPath(): string {
+  return "/forge/demo";
+}
+
+// ── Workflows ───────────────────────────────────────────────────────────────
+
+/** The Workflows area's entry: redirects to its Workflows tab. */
+export function workflowsPath(ctx?: PathContext): string {
+  return withOrg("/workflows", ctx);
+}
+
+/** The Workflows tab: every workflow, with its triggers. */
+export function workflowLibraryPath(ctx?: PathContext): string {
+  return withOrg("/workflows/library", ctx);
+}
+
+/** One workflow's page in the Workflows area, by its ref (`builtin://get-it-right`, a user workflow's name). */
+export function workflowDetailPath(workflowRef: string, ctx?: PathContext): string {
+  return withOrg(`/workflows/library/${seg(workflowRef)}`, ctx);
+}
+
+/** The Runs tab: every execution. */
+export function runsPath(ctx?: PathContext): string {
+  return withOrg("/workflows/runs", ctx);
+}
+
+/** One run's page. A run is a chat: `runId` is its chat id. */
+export function runPath(runId: string, ctx?: PathContext): string {
+  return withOrg(`/workflows/runs/${seg(runId)}`, ctx);
+}
+
+/** The retired Automations tab; redirects to the Workflows tab filtered to what runs by itself. */
+export function automationsPath(ctx?: PathContext): string {
+  return withOrg("/workflows/automations", ctx);
+}
+
+/** The redirect an automation id resolves through, to its row on its workflow's page. */
+export function automationPath(triggerId: string, ctx?: PathContext): string {
+  return withOrg(`/workflows/automations/${seg(triggerId)}`, ctx);
+}
+
+/** The workflow builder's New workflow dialog. */
+export function newWorkflowPath(ctx?: PathContext): string {
+  return withOrg("/workflow/new", ctx);
+}
+
+/** The workflow builder, open on one workflow (`builtin://…` or a user workflow's name). */
+export function workflowBuilderPath(workflowName: string, ctx?: PathContext): string {
+  return withOrg(`/workflow/${seg(workflowName)}`, ctx);
+}
+
+// ── Settings ────────────────────────────────────────────────────────────────
+//
+// Not org-scoped yet: personal and org sections share /settings/<section>
+// until the settings split (D10, U8) moves the org ones to /o/<org>/settings
+// and machines to /o/<org>/machines.
+
+/** Settings, at one section; bare `/settings` opens the last-visited one. */
+export function settingsPath(section?: SettingsSection): string {
+  return section ? `/settings/${section}` : "/settings";
+}
+
+/** The forge shell's own Settings sections (ForgeShell/ForgeSettingsPage.tsx), at the same paths. */
+export function forgeSettingsPath(section: ForgeSettingsSection): string {
+  return `/settings/${section}`;
+}
+
+/** One machine's page in Settings › Machines. */
+export function machineSettingsPath(machineId: string): string {
+  return `/settings/machines/${seg(machineId)}`;
+}
+
+// ── Onboarding ──────────────────────────────────────────────────────────────
+
+/** Setting up chats (a machine, a model). `/o/<org>/setup` in the design (R11); not moved by U3. */
+export function onboardingPath(): string {
+  return "/onboarding";
+}
+
+// ── Signing in, and links into the app from outside it ─────────────────────
+//
+// Never org-scoped: they come before an org is known, or choose one.
+
+/** Sign in or sign up (`?redirect=` returns there afterwards). */
+export function authPath(): string {
+  return "/auth";
+}
+
+/** Verify the email address a session signed up with. */
+export function verifyEmailPath(): string {
+  return "/verify-email";
+}
+
+/** Set a new password (the reset email's link lands here signed in). */
+export function resetPasswordPath(): string {
+  return "/reset-password";
+}
+
+/** The workspace proxy's sign-in hop (`?return=` is the proxied URL to go back to). */
+export function proxyAuthPath(): string {
+  return "/auth/proxy";
+}
+
+/** Give an anonymous session an email (`?returnTo=`). */
+export function upgradePath(): string {
+  return "/upgrade";
+}
+
+/** Claim a no-signup deploy (`/claim#rcl_<token>`). */
+export function claimPath(): string {
+  return "/claim";
+}
+
+/** Accept an org invitation (`/accept-invite#rinv_<token>`). */
+export function acceptInvitePath(): string {
+  return "/accept-invite";
+}
+
+/** CLI login consent (`forge login`, `reliant auth login`). */
+export function oauthCliPath(): string {
+  return "/oauth/cli";
+}
+
+/** Self-hosted machine pairing (`reliant daemon start` prints it with its code). */
+export function oauthDevicePath(): string {
+  return "/oauth/device";
+}
+
+/** The OAuth 2.1 consent screen (Supabase's OAuth server redirects here). */
+export function oauthConsentPath(): string {
+  return "/oauth/consent";
+}
+
+/** Where an integration connection's OAuth flow returns (Go: connections.AppCallbackPath). */
+export function connectionOAuthCallbackPath(): string {
+  return "/connections/oauth/callback";
+}
+
+// ── Mobile (`/m/*`) ─────────────────────────────────────────────────────────
+//
+// Not org-scoped yet: the tree moves under /o/<org>/m in U15 (D11).
+
+/** The mobile entry; redirects to the chat list. */
+export function mobileHomePath(): string {
+  return "/m";
+}
+
+export function mobileChatsPath(): string {
+  return "/m/chats";
+}
+
+export function mobileChatPath(chatId: string): string {
+  return `/m/chats/${seg(chatId)}`;
+}
+
+/** A workflow chat's run, as the mobile surface shows it. */
+export function mobileChatWorkflowPath(chatId: string): string {
+  return `/m/chats/${seg(chatId)}/workflow`;
+}
+
+export function mobileNewChatPath(): string {
+  return "/m/new";
+}
+
+export function mobileMachinesPath(): string {
+  return "/m/daemons";
+}
+
+export function mobileMachinePath(daemonId: string): string {
+  return `/m/daemons/${seg(daemonId)}`;
+}
+
+export function mobileAccountPath(): string {
+  return "/m/account";
+}
+
+export function mobileProjectsPath(): string {
+  return "/m/projects";
+}
+
+export function mobileSearchPath(): string {
+  return "/m/search";
+}
+
+export function mobileWorkflowsPath(): string {
+  return "/m/workflows";
+}
+
+export function mobileWorkflowPath(workflowName: string): string {
+  return `/m/workflows/${seg(workflowName)}`;
+}
+
+export function mobileInboxPath(): string {
+  return "/m/inbox";
+}
+
+export function mobileRunsPath(): string {
+  return "/m/runs";
+}
+
+/** Resolves an automation id to its workflow, on the mobile surface. */
+export function mobileAutomationPath(triggerId: string): string {
+  return `/m/automations/${seg(triggerId)}`;
+}
+
+export function mobileDiagnosticsPath(): string {
+  return "/m/diagnostics";
+}
+
+/** Mobile settings; one section is `?section=`, not a path segment. */
+export function mobileSettingsPath(): string {
+  return "/m/settings";
+}
+
+export function mobileGitHubPath(): string {
+  return "/m/github";
+}

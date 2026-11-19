@@ -99,6 +99,12 @@ func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) 
 	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
 }
 
+// ListChatsForWorktree lists userID's chats bound to worktreeID, archived ones
+// included, most recently active first, at most limit.
+func (r *Repo) ListChatsForWorktree(ctx context.Context, userID, worktreeID string, limit int) ([]WorktreeChat, error) {
+	return store.ListChatsForWorktree(ctx, r.ORM(), userID, worktreeID, limit)
+}
+
 // ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
 // in them: a bound chat's run, or a bound thread's own (store.WorktreeRunActivities).
 func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error) {
@@ -1030,6 +1036,12 @@ func (r *Repo) GetProject(ctx context.Context, id string) (*Project, error) {
 	}
 
 	return store.GetProject(ctx, r.ORM(), id)
+}
+
+// ListProjectsByIDs returns the projects with these ids in one query; an id
+// with no project is absent. It checks no owner: the caller decides each row.
+func (r *Repo) ListProjectsByIDs(ctx context.Context, ids []string) ([]*Project, error) {
+	return store.ListProjectsByIDs(ctx, r.ORM(), ids)
 }
 
 func (r *Repo) GetProjectByPath(ctx context.Context, path string) (*Project, error) {
@@ -3670,6 +3682,10 @@ func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time
 	return store.ListStalePendingTriggerEvents(ctx, r.ORM(), olderThan, limit)
 }
 
+func (r *Repo) ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) (int64, error) {
+	return store.ExpirePendingTriggerCapacityEvents(ctx, r.ORM(), recordedBefore, detail, limit)
+}
+
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
 }
@@ -4243,10 +4259,61 @@ func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string)
 	if err != nil {
 		return nil, err
 	}
+	return nil, notRunnableWorkflow(slug, draft)
+}
+
+// notRunnableWorkflow is GetUsableWorkflowBySlug's answer when no usable
+// workflow has the slug and draft (visible to the caller, or nil) does: a
+// visible draft that is not complete is reported, anything else is nothing.
+func notRunnableWorkflow(slug string, draft *WorkflowDraft) error {
 	if draft != nil && !draft.IsHidden && draft.Status != WorkflowDraftStatusComplete {
-		return nil, &WorkflowDraftNotRunnableError{Slug: slug}
+		return &WorkflowDraftNotRunnableError{Slug: slug}
 	}
-	return nil, nil
+	return nil
+}
+
+// WorkflowDraftsBySlug is one user's drafts of a set of slugs, read in one
+// query (GetWorkflowDraftsBySlugs). For each slug it was read for, it gives
+// exactly what GetWorkflowDraftBySlug and GetUsableWorkflowBySlug give, so a
+// reader that resolves many workflows (ListInbox: 32 lookups a call in prod,
+// trace ed2301a0…) asks once instead of twice per name.
+type WorkflowDraftsBySlug struct {
+	userID string
+	bySlug map[string]*WorkflowDraft
+}
+
+// GetWorkflowDraftsBySlugs reads userID's drafts of slugs in one query.
+func (r *Repo) GetWorkflowDraftsBySlugs(ctx context.Context, userID string, slugs []string) (*WorkflowDraftsBySlug, error) {
+	rows, err := store.ListWorkflowDraftsBySlugs(ctx, r.ORM(), userID, slugs)
+	if err != nil {
+		return nil, err
+	}
+	out := &WorkflowDraftsBySlug{userID: userID, bySlug: make(map[string]*WorkflowDraft, len(rows))}
+	for _, row := range rows {
+		out.bySlug[row.Slug] = row
+	}
+	return out, nil
+}
+
+// Draft is GetWorkflowDraftBySlug's answer for slug, which must be one of the
+// slugs b was read for.
+func (b *WorkflowDraftsBySlug) Draft(ctx context.Context, slug string) (*WorkflowDraft, error) {
+	return visibleWorkflowDraft(ctx, b.userID, b.bySlug[slug], nil)
+}
+
+// Usable is GetUsableWorkflowBySlug's answer for slug, which must be one of
+// the slugs b was read for. The usable row is the slug's one row when it is
+// complete and not hidden (store.FindUsableWorkflowBySlug's predicate).
+func (b *WorkflowDraftsBySlug) Usable(ctx context.Context, slug string) (*WorkflowDraft, error) {
+	row := b.bySlug[slug]
+	if row != nil && row.Status == WorkflowDraftStatusComplete && !row.IsHidden {
+		return visibleWorkflowDraft(ctx, b.userID, row, nil)
+	}
+	draft, err := b.Draft(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	return nil, notRunnableWorkflow(slug, draft)
 }
 
 // ListWorkflowDraftsByUser is the drafts userID owns and may still see: a

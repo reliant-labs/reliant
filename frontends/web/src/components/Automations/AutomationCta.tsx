@@ -19,6 +19,7 @@ import ConfirmationDialog from "../forge-ui/confirmation_dialog";
 import Button from "@/components/forge-ui/button";
 import { RunNowDialog } from "../workflow/run/RunNowDialog";
 import { openAutomationDialog } from "./dialog/openAutomationDialog";
+import { runPath } from "@/lib/paths";
 
 export interface AutomationCtaProps {
   cta: AutomationCtaSpec;
@@ -78,7 +79,7 @@ export function AutomationCta({ cta, triggers, workflowRef, projectId, size = "s
       case "open_last_run":
       case "open_run": {
         const chatId = newestRunChat(triggers);
-        if (chatId) void navigate({ to: "/workflows/runs/$runId", params: { runId: chatId } });
+        if (chatId) void navigate({ to: runPath(chatId) });
         else void navigate({ href: automationHref(triggers[0]!) });
         return;
       }
