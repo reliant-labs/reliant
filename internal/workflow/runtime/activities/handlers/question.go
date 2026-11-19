@@ -190,8 +190,17 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 		CreatedAt:          time.Now().UTC(),
 	}
 
-	// Dual-write: create question record + mark chat unread + emit update atomically
-	err = a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	// Dual-write: create question record + mark chat unread + emit update atomically.
+	//
+	// READ COMMITTED, for the reason ApprovalCreateActivity.Execute gives: a
+	// turn that asks several questions at once runs one of these per question
+	// on one chat, and under SERIALIZABLE each commit on the chats row or the
+	// update counters aborts the others with 40001. The correctness argument
+	// is the same lock-based one (counter row locks, an idempotent unread
+	// UPDATE, EmitBlocked's count after its FOR UPDATE on the chat). The
+	// idempotency read was already outside the transaction, so the level
+	// never protected it.
+	err = a.repo.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		if err := a.repo.CreateQuestion(txCtx, question); err != nil {
 			return fmt.Errorf("failed to create question: %w", err)
 		}

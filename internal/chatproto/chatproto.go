@@ -88,6 +88,8 @@ func Chat(c *core.Chat) *reliantv1.Chat {
 		shared := c.SharedAt.UTC().Format(time.RFC3339)
 		proto.SharedAt = &shared
 	}
+	// The app tag is what the conversation is about, so a viewer reads it too.
+	proto.AppName = c.AppName
 	return proto
 }
 

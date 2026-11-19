@@ -13,6 +13,7 @@ import { Loader2 } from "lucide-react";
 
 import { isTriggerNotFound } from "@/hooks/trigger-model";
 import { useTrigger } from "@/hooks/trigger-queries";
+import { mobileWorkflowPath, mobileWorkflowsPath } from "@/lib/paths";
 
 export function MobileAutomationRedirect() {
   const { triggerId } = useParams({ strict: false }) as { triggerId?: string };
@@ -21,7 +22,7 @@ export function MobileAutomationRedirect() {
 
   useEffect(() => {
     if (trigger.data) {
-      void navigate({ to: "/m/workflows/$workflowName", params: { workflowName: trigger.data.workflow }, replace: true });
+      void navigate({ to: mobileWorkflowPath(trigger.data.workflow), replace: true });
     }
   }, [trigger.data, navigate]);
 
@@ -31,7 +32,7 @@ export function MobileAutomationRedirect() {
         <p>{isTriggerNotFound(trigger.error) || !triggerId ? "This automation no longer exists." : "This automation could not be loaded."}</p>
         <button
           type="button"
-          onClick={() => void navigate({ to: "/m/workflows", replace: true })}
+          onClick={() => void navigate({ to: mobileWorkflowsPath(), replace: true })}
           className="min-h-[44px] rounded-lg border border-border px-4 font-medium text-foreground"
         >
           Show workflows

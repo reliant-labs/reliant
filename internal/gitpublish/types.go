@@ -19,7 +19,9 @@
 //   - a pull request head in a fork, a closed pull request, or a head whose
 //     name differs from the one the pull request names.
 //
-// It never decides to force-push, because the push command has no force path.
+// It never decides to force-push. The push command's only force path is a
+// lease the node names explicitly (force_with_lease: the exact commit the
+// branch must still be at), and every check above applies to it unchanged.
 //
 //forge:exclude-contract: pure branch policy over a consumer-declared GitHub reader; no state, no I/O of its own
 package gitpublish

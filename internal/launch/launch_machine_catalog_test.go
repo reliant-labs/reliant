@@ -35,9 +35,11 @@ func TestLaunchOnAMachineReadsThatMachinesCatalog(t *testing.T) {
 		require.NoError(t, err)
 		wj, err := config.EncodeCatalogJSON(workflows)
 		require.NoError(t, err)
+		db.HoldProjectOnMachineForTest(t, repo, projectID, daemonID)
 		_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 			ProjectID: projectID, DaemonID: daemonID, ProjectPresetsJSON: pj, ProjectWorkflowsJSON: wj, PushedAt: at,
-		}, true)
+		}, true, nil)
+
 		require.NoError(t, err)
 	}
 	now := time.Now().UTC()
@@ -106,9 +108,11 @@ func TestLaunchRefusesAPresetOnlyAnotherMachineSynced(t *testing.T) {
 	} {
 		pj, err := config.EncodeCatalogJSON(presets)
 		require.NoError(t, err)
+		db.HoldProjectOnMachineForTest(t, repo, projectID, daemonID)
 		_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 			ProjectID: projectID, DaemonID: daemonID, ProjectPresetsJSON: pj, PushedAt: now,
-		}, true)
+		}, true, nil)
+
 		require.NoError(t, err)
 	}
 
@@ -147,9 +151,11 @@ func TestResolveProviderPolicyKeepsTheRunsPolicyWhenAPresetIsGone(t *testing.T) 
 		YAMLContent: "name: guarded\ntag: agent\nproviders:\n  prefer: [\"claude:work@acme.com\"]\n  on_limit: wait\n",
 	}})
 	require.NoError(t, err)
+	db.HoldProjectOnMachineForTest(t, repo, projectID, cicd)
 	_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 		ProjectID: projectID, DaemonID: cicd, ProjectPresetsJSON: pj, PushedAt: time.Now().UTC(),
-	}, true)
+	}, true, nil)
+
 	require.NoError(t, err)
 	now := time.Now().UTC()
 	require.NoError(t, repo.CreateSetting(ctx, &db.Setting{
@@ -211,9 +217,11 @@ func TestLaunchUnpinnedPendingChatReadsTheMachineItWillBePinnedTo(t *testing.T) 
 		wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{{Slug: "deploy", Name: "deploy", RelativePath: ".reliant/workflows/deploy.yaml",
 			YAMLContent: "name: deploy\napiVersion: v2\ninputs:\n" + push.inputs + "entry: [x]\nnodes:\n  - id: x\n    type: save_message\n    args: {role: assistant, content: hi}\n"}})
 		require.NoError(t, err)
+		db.HoldProjectOnMachineForTest(t, repo, projectID, daemonID)
 		_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 			ProjectID: projectID, DaemonID: daemonID, ProjectWorkflowsJSON: wj, PushedAt: push.at,
-		}, true)
+		}, true, nil)
+
 		require.NoError(t, err)
 	}
 	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
@@ -258,9 +266,11 @@ func TestLaunchPendingNoMachineBranchStartedOnAMachineReadsThatMachine(t *testin
 		cicd:   {now.Add(-time.Hour), "  env: {type: string, default: prod}\n"},
 		laptop: {now, "  env: {type: string, required: true}\n"},
 	} {
+		db.HoldProjectOnMachineForTest(t, repo, projectID, daemonID)
 		_, err := repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 			ProjectID: projectID, DaemonID: daemonID, ProjectWorkflowsJSON: deploy(push.inputs), PushedAt: push.at,
-		}, true)
+		}, true, nil)
+
 		require.NoError(t, err)
 	}
 	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)

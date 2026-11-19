@@ -30,6 +30,7 @@ import { RANGE_LABELS, rangeMs, type RangePreset } from "@/services/controlPlane
 
 import { DeployWithAgentButton } from "./AskReliant/AskReliant";
 import type { ObsView } from "./obsSearch";
+import { settingsPath } from "@/lib/paths";
 
 /** The frame for Observability, Data and Storage states: an icon, title, words and actions. */
 export function StateFrame({
@@ -545,7 +546,7 @@ export function ObsAsOf({ updatedAt, className }: { updatedAt?: number; classNam
 }
 
 const BILLING_USAGE_TAB = "usage" satisfies BillingTab;
-const BILLING_USAGE_HREF = `/settings/billing?${new URLSearchParams({ tab: BILLING_USAGE_TAB })}#billing-observability-usage`;
+const BILLING_USAGE_HREF = `${settingsPath("billing")}?${new URLSearchParams({ tab: BILLING_USAGE_TAB })}#billing-observability-usage`;
 
 /**
  * The one banner per page, said once instead of once per panel. Renders nothing

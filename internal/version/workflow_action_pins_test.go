@@ -76,6 +76,7 @@ var reviewedActionPins = map[string]string{
 	"actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830":                      "v4.3.0",
 	"actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02":            "v4.6.2",
 	"actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093":          "v4.3.0",
+	"actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6":                     "v4.2.2",
 	"pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1":                  "v4.3.0",
 	"docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f":         "v3.12.0",
 	"docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051":             "v5.10.0",

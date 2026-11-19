@@ -90,6 +90,10 @@ var userScopedReads = map[string]string{
 	"GetUserUpdatesSince":          readCallersFilter,
 	"GetProjectByPathAndUser":      readCallersFilter,
 	"GetProjectByRemoteURLAndUser": readCallersFilter,
+	// The same lookups kept to one org (a request's or a machine's): its
+	// callers decide the row exactly as they do the unscoped ones.
+	"GetProjectByPathAndUserInScope":      readCallersFilter,
+	"GetProjectByRemoteURLAndUserInScope": readCallersFilter,
 
 	// The shared lists read OTHER users' rows of one org; SharingService
 	// passes each through authz.SharedChatsFor / SharedProjectsFor,

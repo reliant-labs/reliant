@@ -4,10 +4,11 @@ package handlers
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/forgetest"
 )
 
 // recipeActions parses the post-deploy recipe's exit-code bullets out of the
@@ -74,17 +75,13 @@ func TestPostDeployRecipe_BranchesOnExitCode(t *testing.T) {
 	}
 }
 
-// With a real forge on PATH, the document an agent branches on carries the
-// fields the recipe reads, even when forge cannot look (no environment here).
+// With a real forge, the document an agent branches on carries the fields the
+// recipe reads, even when forge cannot look (no environment here). It is the
+// pinned forge even in this temp dir, outside the project: forgetest never
+// returns a `reliant forge` that would run reliant's built-in forge there.
 func TestPostDeployRecipe_RealForgeDocumentHasTheBranchedFields(t *testing.T) {
-	if testing.Short() {
-		t.Skip("execs forge; runs in the full lane")
-	}
-	forge, err := exec.LookPath("forge")
-	if err != nil {
-		t.Skip("no forge on PATH")
-	}
-	cmd := exec.Command(forge, "obs", "check", "dev", "--json")
+	forge := forgetest.Pinned(t)
+	cmd := forge.Command(t.Context(), "obs", "check", "dev", "--json")
 	cmd.Dir = t.TempDir()
 	cmd.Env = append(os.Environ(), "FORGE_CREDENTIAL_HELPER=")
 	out, _ := cmd.Output() // a non-zero exit is the point; the document is on stdout

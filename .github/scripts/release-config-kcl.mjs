@@ -19,8 +19,8 @@
 //
 // ## How it renders
 //
-// 1. `forge kcl eval` evaluates the entrypoint with control-plane's pinned
-//    forge, which materializes forge's KCL module into FORGE_KCL_MODULE_CACHE.
+// 1. `forge kcl eval` (or `reliant forge kcl eval`, when no forge is on PATH)
+//    evaluates the entrypoint with control-plane's pinned forge, which materializes forge's KCL module into FORGE_KCL_MODULE_CACHE.
 //    Pointing that at a scratch dir means the module used is exactly the one
 //    this forge supplies, never whatever happens to be cached already.
 // 2. `kcl run -E forge=<that module>` renders the same file again for the
@@ -59,15 +59,23 @@ export function renderReleaseConfig(controlPlaneDir, env) {
   const scratch = mkdtempSync(join(tmpdir(), "release-config-"));
   const moduleCache = join(scratch, "forge-kcl");
   try {
-    try {
-      run("forge", ["kcl", "eval", KCL_ENTRYPOINT, "-D", `env=${env}`, "-S", "release_config"], {
-        cwd: controlPlaneDir,
-        env: { ...process.env, FORGE_KCL_MODULE_CACHE: moduleCache, FORGE_SILENCE_EXPERIMENTAL: "1" },
-      });
-    } catch (err) {
-      if (err.code === "ENOENT") return { unavailable: "forge is not installed" };
-      throw new ReleaseConfigRenderError(`forge kcl eval failed for env=${env}:\n${err.stderr || err.message}`);
+    // forge on PATH, else `reliant forge`: run in the checkout, either hands
+    // the command to the forge control-plane pins.
+    let rendered = false;
+    for (const [command, ...route] of [["forge"], ["reliant", "forge"]]) {
+      try {
+        run(command, [...route, "kcl", "eval", KCL_ENTRYPOINT, "-D", `env=${env}`, "-S", "release_config"], {
+          cwd: controlPlaneDir,
+          env: { ...process.env, FORGE_KCL_MODULE_CACHE: moduleCache, FORGE_SILENCE_EXPERIMENTAL: "1" },
+        });
+        rendered = true;
+        break;
+      } catch (err) {
+        if (err.code === "ENOENT") continue;
+        throw new ReleaseConfigRenderError(`forge kcl eval failed for env=${env}:\n${err.stderr || err.message}`);
+      }
     }
+    if (!rendered) return { unavailable: "neither forge nor reliant is installed" };
 
     // The module lands in <cache>/<content-hash>/, with `.complete` written last.
     const forgeModule = existsSync(moduleCache)

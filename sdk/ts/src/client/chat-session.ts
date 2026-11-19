@@ -117,6 +117,9 @@ export class ChatSession {
       projectId: options.projectId,
       hooks: options.hooks,
       toolBodies: options.toolBodies,
+      // Paging is by hasMore/oldestSeq; counting a long chat cost more than
+      // the rest of its snapshot. state.pagination.total is 0.
+      skipTotal: true,
       callbacks: {
         onChatSnapshot: (_chatId, updates) =>
           this.dispatch({ kind: "snapshot", updates, cursor: this.cursor() }),

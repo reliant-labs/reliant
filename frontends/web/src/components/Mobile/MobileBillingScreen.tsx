@@ -56,6 +56,7 @@ import {
 } from "../Settings/cloud/billingUtils";
 import { MobileSettingsSectionHeader } from "./MobileSettingsSectionHeader";
 import { formatPrice } from "@/components/Billing/priceFormat";
+import { settingsPath } from "@/lib/paths";
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
@@ -283,7 +284,7 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
                     // phone is no longer a dead end.
                     <LinkIdentityModal
                       message={message}
-                      returnTo="/settings/billing"
+                      returnTo={settingsPath("billing")}
                       onLinked={() => setLinkAttempt((n) => n + 1)}
                       onDismiss={() => undefined}
                     />

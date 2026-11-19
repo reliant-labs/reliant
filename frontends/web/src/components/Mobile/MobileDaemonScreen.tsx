@@ -40,6 +40,7 @@ import {
   MobileScreenHeader,
 } from "./MobileChrome";
 import { machineDisplayName } from "@/lib/machineName";
+import { mobileMachinesPath } from "@/lib/paths";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -89,7 +90,7 @@ function LifecycleActions({ daemon }: { daemon: DaemonInfo }) {
   });
   const remove = useDeleteDaemon({
     onSuccess: async () => {
-      navigate({ to: "/m/daemons", replace: true });
+      navigate({ to: mobileMachinesPath(), replace: true });
     },
     onError: (err) =>
       setError(err instanceof Error ? err.message : "Failed to delete"),
@@ -237,7 +238,7 @@ export function MobileDaemonScreen() {
       title={daemon ? machineDisplayName(daemon) : "Machine"}
       leading={
         <Link
-          to="/m/daemons"
+          to={mobileMachinesPath()}
           // Explicit px, not `h-10 w-10`: rem sizing resolves against the root
           // font-size, and at the smallest Appearance step `h-10` measures
           // under 44px — on the only way out of this screen.

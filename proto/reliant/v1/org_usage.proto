@@ -36,9 +36,7 @@ service OrgUsageService {
   // the org's chats (members' own accounts are left out by design), and its
   // costs are list-price estimates, not what the org was billed.
   rpc GetOrgLLMUsage(GetOrgLLMUsageRequest) returns (GetOrgLLMUsageResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "read-only: the org's usage totals; changes nothing"}
-    };
+    option (forge.v1.method) = {activity: {none: "read-only: the org's usage totals; changes nothing"}};
   }
 }
 

@@ -40,10 +40,11 @@ import SkeletonLoader from "../forge-ui/skeleton_loader";
 import Button from "@/components/forge-ui/button";
 import { AreaShell } from "../Layout/AreaShell";
 import { InboxApprovalBatch, InboxItem, subjectName } from "./InboxItem";
+import { inboxPath } from "@/lib/paths";
 
 export function InboxPage() {
   return (
-    <AreaShell areaPath="/inbox" areaLabel="Inbox" areaNoun="inbox">
+    <AreaShell areaPath={inboxPath()} areaLabel="Inbox" areaNoun="inbox">
       <InboxView />
     </AreaShell>
   );

@@ -51,8 +51,7 @@ describe('WorkflowErrorMessage → Settings → Providers', () => {
     await user.click(screen.getByRole('button', { name: /open settings → providers/i }))
 
     expect(mocks.navigate).toHaveBeenCalledWith({
-      to: '/settings/$section',
-      params: { section: 'ai' },
+      to: '/settings/ai',
     })
   })
 

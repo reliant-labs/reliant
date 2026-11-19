@@ -13,9 +13,9 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/netguard"
 
+	readability "codeberg.org/readeck/go-readability/v2"
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/PuerkitoBio/goquery"
-	readability "github.com/go-shiori/go-readability"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -361,19 +361,40 @@ func (t *fetchTool) Execute(rctx *rctx.ToolContext, params FetchParams) (ToolRes
 	return WithResponseMetadata(NewTextResponse(result), metadata), nil
 }
 
+// readableArticle is the main content Readability extracted from a page.
+type readableArticle struct {
+	Title       string
+	Content     string // the cleaned-up article HTML
+	TextContent string // the article's plain text
+}
+
 // extractWithReadability uses Mozilla Readability to extract the main content from HTML.
-func extractWithReadability(htmlContent string, pageURL string) (readability.Article, error) {
+// An article with no content comes back with empty Content and TextContent.
+func extractWithReadability(htmlContent string, pageURL string) (readableArticle, error) {
 	parsedURL, err := url.Parse(pageURL)
 	if err != nil {
-		return readability.Article{}, fmt.Errorf("failed to parse URL: %w", err)
+		return readableArticle{}, fmt.Errorf("failed to parse URL: %w", err)
 	}
 
 	article, err := readability.FromReader(strings.NewReader(htmlContent), parsedURL)
 	if err != nil {
-		return readability.Article{}, fmt.Errorf("readability extraction failed: %w", err)
+		return readableArticle{}, fmt.Errorf("readability extraction failed: %w", err)
 	}
 
-	return article, nil
+	out := readableArticle{Title: article.Title()}
+	if article.Node == nil {
+		return out, nil
+	}
+	var content, text strings.Builder
+	if err := article.RenderHTML(&content); err != nil {
+		return readableArticle{}, fmt.Errorf("render readability HTML: %w", err)
+	}
+	if err := article.RenderText(&text); err != nil {
+		return readableArticle{}, fmt.Errorf("render readability text: %w", err)
+	}
+	out.Content = content.String()
+	out.TextContent = text.String()
+	return out, nil
 }
 
 func extractTextFromHTML(html string) (string, error) {

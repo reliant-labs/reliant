@@ -38,9 +38,11 @@ func TestLoadPresetParams_ReadsTheRunsMachinesPreset(t *testing.T) {
 			{Name: "impl", RelativePath: "control-plane/.reliant/presets/impl.yaml", YAMLContent: "name: impl\nparams:\n  mode: " + mode + "\n"},
 		})
 		require.NoError(t, err)
+		db.HoldProjectOnMachineForTest(t, repo, projectID, daemonID)
 		_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 			ProjectID: projectID, DaemonID: daemonID, ProjectPresetsJSON: pj, PushedAt: at,
-		}, true)
+		}, true, nil)
+
 		require.NoError(t, err)
 	}
 	push(cicd, now.Add(-time.Hour), "plan")

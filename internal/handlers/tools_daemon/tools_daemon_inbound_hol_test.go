@@ -9,6 +9,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,8 +46,8 @@ func (r *stallingRepo) UpdateDaemonAttachmentPorts(context.Context, string, []ui
 	return nil
 }
 
-func (r *stallingRepo) GetProjectByPathAndUser(context.Context, string, string) (*db.Project, error) {
-	r.stall("GetProjectByPathAndUser")
+func (r *stallingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*db.Project, error) {
+	r.stall("GetProjectByPathAndUserInScope")
 	return nil, nil
 }
 

@@ -3,6 +3,7 @@ package validation
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,6 +15,7 @@ name: pv
 inputs:
   issue: {type: integer, default: 1}
   pr: {type: integer, default: 7}
+  head: {type: string, default: ""}
 entry: [p]
 nodes:
   - id: p
@@ -34,6 +36,9 @@ func TestGitPublishValidation_ValidNodesAreClean(t *testing.T) {
 		"a literal branch":   `      branch: "autopilot/fixed"` + "\n",
 		"a pull request":     `      pr_head_of: "{{ inputs.pr }}"` + "\n",
 		"an allow list":      `      branch: "autopilot/x"` + "\n" + `      allow: ["autopilot/*"]` + "\n",
+		"a templated lease":  `      pr_head_of: "{{ inputs.pr }}"` + "\n" + `      force_with_lease: "{{ inputs.head }}"` + "\n",
+		"a literal lease":    `      branch: "autopilot/x"` + "\n" + `      force_with_lease: "` + strings.Repeat("ab", 20) + `"` + "\n",
+		"an empty lease":     `      branch: "autopilot/x"` + "\n" + `      force_with_lease: ""` + "\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert.Empty(t, computeFindings(t, publishWorkflow(publishBase+extra)))
@@ -54,6 +59,10 @@ func TestGitPublishValidation_Refusals(t *testing.T) {
 		"no message":            {"      worktree: /w\n      repo: acme/app\n      branch: x\n", "message"},
 		"no repo":               {"      worktree: /w\n      message: m\n      branch: x\n", "repo"},
 		"no worktree":           {"      repo: acme/app\n      message: m\n      branch: x\n", "worktree"},
+		"a boolean lease":       {publishBase + "      branch: x\n      force_with_lease: \"true\"\n", "not true or false"},
+		"an unquoted true":      {publishBase + "      branch: x\n      force_with_lease: true\n", "true"},
+		"an abbreviated lease":  {publishBase + "      branch: x\n      force_with_lease: abc1234\n", "full commit sha"},
+		"a ref as the lease":    {publishBase + "      branch: x\n      force_with_lease: refs/heads/x\n", "full commit sha"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			errs := computeFindings(t, publishWorkflow(tc.args))

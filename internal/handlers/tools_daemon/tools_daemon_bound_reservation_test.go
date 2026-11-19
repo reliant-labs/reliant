@@ -282,12 +282,27 @@ func (parkedPodHandler) ConnectGateway(ctx context.Context, _ *connect.BidiStrea
 // DaemonConnector does after the pod's DaemonRegister arrives.
 func dialInPod(t *testing.T, svc *Service, userID, daemonID string) *OutboundConn {
 	t.Helper()
-	return dialInPodRegistering(t, svc, userID, daemonID,
-		&reliantv1.DaemonRegister{Hostname: "ws-pod", Platform: "linux", DaemonType: "cloud"})
+	return dialInPodOfOrg(t, svc, userID, daemonID, MachineOrg{})
+}
+
+// dialInPodOfOrg is dialInPod with the machine org the control plane's
+// snapshot names for the pod.
+func dialInPodOfOrg(t *testing.T, svc *Service, userID, daemonID string, org MachineOrg) *OutboundConn {
+	t.Helper()
+	return dialInPodRegisteringOfOrg(t, svc, userID, daemonID,
+		&reliantv1.DaemonRegister{Hostname: "ws-pod", Platform: "linux", DaemonType: "cloud"}, org)
 }
 
 // dialInPodRegistering is dialInPod with the pod's whole registration message.
 func dialInPodRegistering(t *testing.T, svc *Service, userID, daemonID string, reg *reliantv1.DaemonRegister) *OutboundConn {
+	t.Helper()
+	return dialInPodRegisteringOfOrg(t, svc, userID, daemonID, reg, MachineOrg{})
+}
+
+// dialInPodRegisteringOfOrg is dialInPod with both the pod's whole
+// registration message and the machine org the control plane's snapshot
+// names for the pod.
+func dialInPodRegisteringOfOrg(t *testing.T, svc *Service, userID, daemonID string, reg *reliantv1.DaemonRegister, org MachineOrg) *OutboundConn {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(parkedPodHandler{}))
@@ -309,7 +324,7 @@ func dialInPodRegistering(t *testing.T, svc *Service, userID, daemonID string, r
 
 	regCtx, regCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer regCancel()
-	out, err := svc.RegisterOutboundConnection(regCtx, userID, daemonID, "10.0.0.1", 9190, reg, stream, cancel)
+	out, err := svc.RegisterOutboundConnection(regCtx, userID, daemonID, "10.0.0.1", 9190, reg, stream, cancel, org)
 	require.NoError(t, err)
 	return out
 }

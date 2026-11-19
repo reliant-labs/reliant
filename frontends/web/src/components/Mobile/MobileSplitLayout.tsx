@@ -28,6 +28,7 @@ import { cn } from "../../lib/utils";
 import { MobileChatList } from "./MobileChatList";
 import { MOBILE_PRIMARY_ACTION, MobileEmptyState } from "./MobileChrome";
 import { ChatListPaneContext, useExpandedLayout } from "./mobileSplitPane";
+import { mobileNewChatPath } from "@/lib/paths";
 
 export function MobileSplitLayout() {
   const expanded = useExpandedLayout();
@@ -71,7 +72,7 @@ export function MobileChatsEmptyDetail() {
       title="Select a chat"
       description="Pick a chat from the list, or start a new one."
       action={
-        <Link to="/m/new" className={MOBILE_PRIMARY_ACTION}>
+        <Link to={mobileNewChatPath()} className={MOBILE_PRIMARY_ACTION}>
           <MessageSquarePlus className="h-4 w-4" />
           New chat
         </Link>
