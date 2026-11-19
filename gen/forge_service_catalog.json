@@ -6884,6 +6884,11 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "app_name",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListChatsResponse": [
@@ -7493,6 +7498,11 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "app_name",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "StartChatResponse": [
@@ -7969,6 +7979,11 @@
             },
             {
               "name": "shared_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "app_name",
               "kind": "string",
               "optional": true
             }
@@ -8555,6 +8570,11 @@
             },
             {
               "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "app_name",
               "kind": "string",
               "optional": true
             }
@@ -9305,6 +9325,11 @@
             },
             {
               "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "app_name",
               "kind": "string",
               "optional": true
             }
@@ -35792,6 +35817,11 @@
               "Name": "offset",
               "ProtoType": "int32",
               "IsOptional": false
+            },
+            {
+              "Name": "app_name",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListSharedChatsResponse": [
@@ -36043,6 +36073,11 @@
               "name": "shared_at",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "app_name",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ChatSelection": [
@@ -36094,6 +36129,11 @@
               "validate": {
                 "gte": "0"
               }
+            },
+            {
+              "name": "app_name",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListSharedChatsResponse": [

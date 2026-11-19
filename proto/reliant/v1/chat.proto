@@ -656,6 +656,12 @@ message Chat {
   bool viewer_access = 46;
   // When the chat was shared (RFC 3339); unset while private.
   optional string shared_at = 47;
+  // The app this chat is about: a forge.yaml `name` in the chat's org, set
+  // when the chat was started from that app (its page, Ask Reliant, an alert;
+  // StartChatRequest.app_name) and never inferred. Fixed for the chat's life;
+  // a branch of the chat carries it. Unset: a chat about no particular app,
+  // which is every chat started from the sidebar.
+  optional string app_name = 48;
 }
 
 // ChatOrigin is who started a chat. It is the chat list's policy key: a USER
@@ -934,6 +940,16 @@ message StartChatRequest {
   // FAILED_PRECONDITION. Ignored when chat_id names an existing chat, whose
   // org never changes.
   optional string org_id = 23;
+
+  // The app the new chat is about (Chat.app_name): a forge.yaml `name` in the
+  // chat's org, sent when a chat starts from an app (its page, Ask Reliant,
+  // an alert). The server stores it as given and never infers one. It must
+  // have forge's project-name shape: a letter, then letters, digits, `_` or
+  // `-`, at most 128 characters (INVALID_ARGUMENT otherwise). Whether the org
+  // has an app of that name is not checked: a chat may be about an app that
+  // was never deployed. Ignored when chat_id names an existing chat, whose
+  // tag was fixed when it was created.
+  optional string app_name = 24;
 }
 
 // StartChatResponse returns the started chat and the ids of its root run.
@@ -1022,6 +1038,12 @@ message ListChatsRequest {
   // list under the caller's default org. Unset lists every chat the caller
   // owns, in any org, as before this field existed.
   optional string org_id = 4;
+  // List only chats tagged with this app (Chat.app_name): an app's chat
+  // list. Still only the caller's own chats, and still narrowed by
+  // project_id and org_id when they are set; pair it with org_id, since an
+  // app's name is its identity only within one org. A malformed name lists
+  // nothing; an empty one is the same as unset.
+  optional string app_name = 5;
 }
 
 // ListChatsResponse returns the list of chats
