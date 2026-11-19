@@ -222,7 +222,7 @@ function NameCell({ row }: { row: WorkflowsTableRow }) {
           // The description is read on request, not as part of the row: it
           // is clipped to one line on screen and was read out in full.
           aria-description={summary || undefined}
-          className="truncate rounded-sm text-ui font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="no-color truncate rounded-sm text-ui font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {workflowDisplayName(workflow)}
         </Link>

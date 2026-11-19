@@ -48,7 +48,7 @@ export function HeadlineBars({
         {values.map((value, index) => {
           if (value <= 0) return null;
           const h = Math.max(2, (value / max) * (plot - 4));
-          return <rect key={index} x={index * 10 + 1.5} width={7} y={plot - h} height={h} rx={1.5} fill="currentColor" opacity={0.85} />;
+          return <rect key={index} x={index * 10 + 3} width={4} y={plot - h} height={h} rx={1} fill="currentColor" opacity={0.7} />;
         })}
       </svg>
       <figcaption className="flex justify-between text-meta tabular-nums text-ink-muted" aria-hidden="true">

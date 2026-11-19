@@ -53,7 +53,7 @@ function ReadyMadeCard({ row, projectId }: { row: WorkflowListRow; projectId?: s
         <Link
           to={workflowDetailPath(workflow.name)}
           search={projectId ? { project: projectId } : {}}
-          className="truncate rounded-sm text-ui font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="no-color truncate rounded-sm text-ui font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {name}
         </Link>
